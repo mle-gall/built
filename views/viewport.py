@@ -5667,6 +5667,19 @@ class Viewport(QOpenGLWidget):
                         "_placement_tops", "_arc_mid_by_mesh",
                         "_billboard_extents", "_figure_tokens")
 
+    def refresh_after_edit(self) -> None:
+        """Refresh an externally executed command without discarding geometry.
+
+        Commands must bump the scene version and use the mesh mutation APIs,
+        just as interactive tools do. The renderer compares mesh, material
+        and placement signatures and rebuilds only changed payloads. Keep
+        reset_document_caches() for New/Open, not individual bridge edits.
+        Call once after a batch, outside an active transform preview.
+        This does not create an undo step or mark a clean document dirty.
+        """
+        self.scene.bump_view()
+        self.notify_scene_changed()
+
     def reset_document_caches(self) -> None:
         """Forget the previous document's chunks at the document boundary.
 
@@ -11259,7 +11272,7 @@ class Viewport(QOpenGLWidget):
         """Where the face under the cursor meets another face that crosses
         it with no edge between them — a box sunk into the floor, a beam
         through a wall: ``(world point, context)`` or ``None`` (#819,
-        SketchUp's «Intersection»). A face that goes THROUGH the one in
+        the modeller's «Intersection»). A face that goes THROUGH the one in
         front is met by the cursor's own ray a little behind it, so the
         candidates come free from that ray's hits (already cast for this
         hover); a crossing counts only if, either side of it on screen,
