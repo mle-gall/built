@@ -757,6 +757,8 @@ class MainWindow(QMainWindow):
         keep, and never under the user's hands (a 283k-face save takes real
         time; mid-drag it would read as a freeze)."""
         from PySide6.QtWidgets import QApplication
+        if getattr(self, "_opening_document", False):
+            return  # Progress pumps events; never autosave a partial load.
         # Housekeeping that rides the same slow tick: a clean collection
         # now and then — never mid-gesture (over a big model it is ~0.3 s).
         import sys
@@ -6832,6 +6834,7 @@ class MainWindow(QMainWindow):
         # half loaded built every drawing chunk in one go — 61 s without
         # answering the desktop on the model of #158.
         self.viewport.setUpdatesEnabled(False)
+        self._opening_document = True
         try:
             try:
                 igz_format.load_into(self.viewport.scene,
@@ -6851,6 +6854,7 @@ class MainWindow(QMainWindow):
             except Exception:  # noqa: BLE001 - the first paint builds it anyway
                 pass
         finally:
+            self._opening_document = False
             self.viewport.setUpdatesEnabled(True)
         dlg.close()
         # Painting was off while it loaded: turning it back on does not ask
@@ -7171,7 +7175,7 @@ class MainWindow(QMainWindow):
         Each pick read the file again and added a new, independent piece:
         four of the same 12 600-face cabinet were 50 400 faces in the model,
         and its 2 s read came back every time (Marco, 18-10). A copy now
-        shares the definition, as in SketchUp — an edit inside one reaches
+        shares the definition, as in .skp — an edit inside one reaches
         them all, Make Unique parts one off — so the next pick is instant
         and the model does not swell. ``build`` reads the file; it is called
         only when no copy of ``source`` is left in the model."""
