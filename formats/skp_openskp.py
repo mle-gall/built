@@ -97,7 +97,7 @@ def _matrix(m) -> QMatrix4x4:
     """An OpenSKP instance ``matrix`` (row-major 3×3 + translation, in inches)
     as a ``QMatrix4x4`` whose translation is already in metres.
 
-    Element 12 is the placement's homogeneous scalar (SketchUp's w): when
+    Element 12 is the placement's homogeneous scalar (the modeller's w): when
     it is not 1, the 3×3 AND the translation are stored multiplied by it
     and the real transform divides them back out. Ignoring it brought a
     component scaled through w = 100 in 100x large and 100x away (#865)."""
@@ -1474,7 +1474,7 @@ def _adapt(model, name: str, skp_path=None):
                         if a and "texture" in a), None)
             # A cut-out turns to face the camera — unless it is stuck on a
             # face, like a logo on a device (#429): the file has no face-me
-            # flag for images, SketchUp never turns one.
+            # flag for images, .skp never turns one.
             billboard = bool(tex and _image_has_cutout(tex)
                              and not _rests_on_a_face(roots, by_id,
                                                       faces[0][0]))
@@ -1513,6 +1513,15 @@ def _adapt(model, name: str, skp_path=None):
     file_layers = file_layer_records(model)
     if file_layers:
         payload["layers"] = file_layers
+    # .skp 2021+ tag folders (openskp_compat decodes them): the
+    # importer rebuilds them as tag folders, nested as in the file.
+    try:
+        from formats.openskp_compat import tag_folder_records
+        folders = tag_folder_records()
+    except Exception:  # noqa: BLE001 — folders are a nicety, never fatal
+        folders = []
+    if folders:
+        payload["layer_folders"] = folders
     # The file's saved scenes (camera + hidden layers), inches → metres.
     scenes = []
     for pg in getattr(model, "pages", []) or []:
