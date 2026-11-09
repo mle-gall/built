@@ -4,6 +4,22 @@ All notable changes to IngeTrazo are documented here.
 Format inspired by [Keep a Changelog](https://keepachangelog.com); versions
 follow [SemVer](https://semver.org).
 
+## [Unreleased]
+
+### Añadido
+
+- **Navegación con el trackpad y la pantalla táctil** (#248): el pellizco
+  hace zoom hacia los dedos con el mismo zoom que la rueda (antes no hacía
+  nada en un trackpad de Mac); deslizar con dos dedos en el trackpad, o
+  con un dedo en la pantalla táctil de un Mac, **orbita** alrededor del
+  punto donde empezó el gesto, con Mayús desplaza y con Cmd/Ctrl hace
+  zoom; el doble toque con dos dedos encuadra el modelo como Zoom
+  Extensión y un segundo vuelve a la vista anterior. La vista sigue
+  girando un poco al levantar los dedos (inercia). *Dónde:* Ventana ▸
+  Preferencias… ▸ «Deslizar con dos dedos en el trackpad» elige orbitar,
+  desplazar o hacer zoom (lo de antes), y la casilla de inercia. Vale
+  igual en la vista OpenGL y en la nativa Metal.
+
 ## [0.6.0] — 2026-11-01
 
 **Varios proyectos en pestañas en la misma ventana; IngeTrazo ya habla 17
@@ -692,7 +708,7 @@ extensiones ya no se cae con un OpenSSL ajeno (#564).
   mueble de 12 600 caras eran 50 400 caras en el modelo y la lectura de
   2 s se repetía cada vez. Ahora la primera vez se coloca un componente y
   las siguientes son copias que comparten su definición, como en
-  SketchUp (editar una cambia todas; «Hacer único» separa una). Vale para
+  .skp (editar una cambia todas; «Hacer único» separa una). Vale para
   la biblioteca en línea y para los componentes incluidos. Medido con 40
   inserciones de 10 modelos: cargar el modelo pasa de 440 a 30 ms
   (mediana; el peor, de 2,2 a 0,13 s) y colocarlo de 286 a 118 ms. La
@@ -706,7 +722,7 @@ extensiones ya no se cae con un OpenSSL ajeno (#564).
   IngeTrazo está abierto y las demás se preparan en segundo plano; no se
   descarga nada que antes no se descargara.
 - **El plano de Rectángulo, Círculo y Arco en espacio vacío lo elige la
-  cámara, por el origen de los ejes** (#719, @pacaeiro), como en SketchUp:
+  cámara, por el origen de los ejes** (#719, @pacaeiro), como en .skp:
   el suelo al mirar hacia abajo y los planos verticales rojo o verde según
   hacia dónde mira la vista; antes iban al plano por el centro del modelo.
   En vistas casi a ras, donde antes el clic no daba punto, ahora sí lo da.
