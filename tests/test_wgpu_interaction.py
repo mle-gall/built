@@ -207,3 +207,54 @@ def test_worker_warms_first_hover_for_the_captured_camera(view):
     view.camera.distance *= 1.2
     assert snap(index, 0, view, *view._world_to_pixel(point)).kind == 'endpoint'
     assert index.screen_cache is not cache
+
+
+def test_idle_document_edits_refresh_native_view(monkeypatch):
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QStackedWidget
+    from core import renderer_settings
+    from core.history import HideCommand, DeleteGroupCommand
+    from views.main_window import MainWindow
+    from views.viewport import Viewport
+
+    # Exercise the document timers and real packed rows without a GPU.
+    stack = QStackedWidget()
+    viewport = Viewport(stack)
+    stack.addWidget(viewport)
+    doc = SimpleNamespace(viewport=viewport)
+    stack._doc_stack = stack
+    stack._doc = doc
+    stack._document_first_frame = lambda *_: None
+    monkeypatch.setattr(renderer_settings, 'arm', lambda: None)
+    monkeypatch.setattr(WgpuView, '_upload', lambda self: None)
+    mesh = Mesh()
+    mesh.add_edge(QVector3D(), QVector3D(1, 0, 0))
+    group = Group(mesh)
+    viewport.scene.groups.append(group)
+    MainWindow._install_wgpu_display(stack, doc)
+    display = doc.stand_in
+    stack.show()
+    assert not viewport.isVisible()
+
+    def wait_for(predicate):
+        for _ in range(100):
+            if predicate():
+                return
+            QTest.qWait(10)
+        assert predicate()
+
+    def visible():
+        return display.resolve(0) is not None
+
+    try:
+        wait_for(visible)
+        for command in (HideCommand([group]), DeleteGroupCommand(group)):
+            viewport.history.execute(command)
+            viewport.update()
+            wait_for(lambda: not visible())
+            viewport.history.undo()
+            viewport.update()
+            wait_for(visible)
+    finally:
+        display.close()
+        stack.close()

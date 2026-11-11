@@ -223,7 +223,8 @@ for _name, _properties, _required in [
 
 for _name, _props, _required, _mutates in [
     ('query_links', {}, [], False),
-    ('link_document', {'path': {'type': 'string'}, 'select': {'type': 'object'}}, ['path'], True),
+    ('link_document', {'path': {'type': 'string'}, 'select': {'type': 'object'},
+                       'include_nested': {'type': 'boolean'}}, ['path'], True),
     ('reload_link', {'path': {'type': 'string'}}, ['path'], True),
     ('query_worksession', {}, [], False),
     ('query_recent', {}, [], False),

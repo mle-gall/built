@@ -6313,30 +6313,47 @@ class MainWindow(WorksessionMixin, QMainWindow):
         display.frameReady.connect(lambda *_: self._document_first_frame(doc))
         display.source_viewport = doc.viewport
         display.camera = doc.viewport.camera
-        # Menu presets mutate the shared camera. A light repaint timer also
-        # presents changes made by document actions while the GL view is hidden.
-        repaint = QTimer(display)
-        repaint.timeout.connect(display.update)
-        repaint.start(33)
-        display._repaint_timer = repaint
         doc.stand_in = display
         self._doc_stack.addWidget(display)
         display.installEventFilter(self)       # re-place the handles on resize
         refresh = QTimer(display)
         refresh.setSingleShot(True)
+        resident_version = None
+
         def rebuild():
+            nonlocal resident_version
             if getattr(self, "_opening_document", False):
                 return
             from core import renderer_settings
             renderer_settings.arm()
             doc._renderer_starting = True
-            display.set_scene(doc.viewport.scene)
+            scene = doc.viewport.scene
+            version = scene.version
+            display.set_scene(scene)
+            resident_version = version
             doc._resident_scene_ready = True
             if not len(display.packed.instances):
                 self._document_first_frame(doc)
         refresh.timeout.connect(rebuild)
         doc.viewport.sceneVersionChanged.connect(lambda *_: refresh.start(0))
         display._refresh_timer = refresh
+        def present():
+            if not display.isVisible():
+                return
+            # Outliner and editing commands can request a paint on the hidden
+            # GL viewport. Its paint would normally announce the new version.
+            scene = doc.viewport.scene
+            if (not refresh.isActive() and not getattr(self, "_opening_document", False)
+                    and (scene is not getattr(display, "scene", None)
+                         or scene.version != resident_version)):
+                doc.viewport.notify_scene_changed()
+            else:
+                display.update()  # camera presets also use the shared viewport
+
+        repaint = QTimer(display)
+        repaint.timeout.connect(present)
+        repaint.start(33)
+        display._repaint_timer = repaint
         doc.viewport.set_active_tool(None)
         doc.viewport.setEnabled(False)
         if doc is self._doc:
@@ -8085,19 +8102,45 @@ class MainWindow(WorksessionMixin, QMainWindow):
     def _on_link_igz(self) -> None:
         """Place another document as a live link (core/links.py)."""
         from core import links
-        start = (str(self._current_path.parent)
-                 if self._current_path is not None else "")
-        path_str, _ = file_dialogs.getOpenFileName(
-            self, tr("Link IngeTrazo document"), start, IGZ_FILE_FILTER)
-        if not path_str:
-            return
+        from PySide6.QtWidgets import QCheckBox, QFileDialog
+        from views.filedialogs import remember, start_in
+
+        start = self._current_path.parent if self._current_path else None
+        dialog = QFileDialog(self)
+        # The system file picker cannot display our placement options.
+        dialog.setOption(QFileDialog.Option.DontUseNativeDialog)
+        dialog.setWindowTitle(tr("Link IngeTrazo document"))
+        dialog.setDirectory(start_in(start))
+        dialog.setNameFilters(tr(IGZ_FILE_FILTER).split(";;"))
+        dialog.setFileMode(QFileDialog.FileMode.ExistingFile)
+        nested = QCheckBox(tr("Include nested linked files"), dialog)
+        nested.setChecked(True)
+        grid = dialog.layout()
+        grid.addWidget(nested, grid.rowCount(), 0, 1, grid.columnCount())
         try:
-            self.link_igz_path(path_str)
+            if not dialog.exec():
+                return
+            path = dialog.selectedFiles()[0]
+            include_nested = nested.isChecked()
+        finally:
+            dialog.deleteLater()
+        remember(path)
+        try:
+            self.link_igz_path(path, include_nested=include_nested)
         except links.LinkError as exc:
             QMessageBox.warning(self, tr("Link IngeTrazo document"),
                                 str(exc))
 
-    def link_igz_path(self, path, at=None, select=None):
+    def _choose_link_contents(self, path, select=None):
+        from PySide6.QtWidgets import QInputDialog
+        options = [tr("Include nested linked files"), tr("Source geometry only")]
+        value, ok = QInputDialog.getItem(self, tr("Link IngeTrazo document"),
+                                         tr("Contents of {name}", name=Path(path).name),
+                                         options, 0, False)
+        if ok:
+            self.link_igz_path(path, select=select, include_nested=value == options[0])
+
+    def link_igz_path(self, path, at=None, select=None, *, include_nested=True):
         """Place the document at ``path`` as a linked copy — following the
         cursor (``at=None``) or at once at ``at``. Raises LinkError."""
         from PySide6.QtCore import Qt as _Qt
@@ -8113,7 +8156,8 @@ class MainWindow(WorksessionMixin, QMainWindow):
         QApplication.processEvents()
         try:
             comp = links.make_link(self.viewport.scene, Path(path),
-                                   host_path=self._current_path, select=select)
+                                   host_path=self._current_path, select=select,
+                                   include_nested=include_nested)
         finally:
             QApplication.restoreOverrideCursor()
         self.statusBar().showMessage(
@@ -8153,6 +8197,14 @@ class MainWindow(WorksessionMixin, QMainWindow):
             sub.setToolTipsVisible(True)
             sub.addAction(tr("Open"), lambda p=path: self.open_path(Path(p)))
             sub.addAction(tr("Reload"), lambda p=path: self._reload_link(p))
+            placements = links.linked_groups(scene, path)
+            for index, group in enumerate(placements, 1):
+                target = sub if len(placements) == 1 else sub.addMenu(
+                    f"{index}. {group.name or name}")
+                nested = target.addAction(tr("Include nested linked files"))
+                nested.setCheckable(True)
+                nested.setChecked(links.link_of(group).get("include_nested", True))
+                nested.toggled.connect(lambda on, g=group: self._set_link_nested(g, on))
             pack = sub.addAction(tr("Pack into this document"))
             pack.setCheckable(True)
             pack.setChecked(links.is_packed(scene, path))
@@ -8164,6 +8216,16 @@ class MainWindow(WorksessionMixin, QMainWindow):
                           lambda p=path: self._reset_link_tags(p))
         menu.addSeparator()
         menu.addAction(tr("Reload all"), self._reload_all_links)
+
+    def _set_link_nested(self, group, enabled):
+        from core import links
+        try:
+            links.set_include_nested(self.viewport.scene, group, enabled)
+        except (links.LinkError, OSError) as exc:
+            QMessageBox.warning(self, tr("Linked files"), str(exc))
+            return False
+        self._relink_done("")
+        return True
 
     def _relink_done(self, note: str) -> None:
         from core.history import _dirty_group_chunks

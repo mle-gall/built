@@ -1130,7 +1130,7 @@ def _empty_mesh():
     return _EMPTY[0]
 
 
-def load_into(scene, path: Path, progress=None) -> None:
+def load_into(scene, path: Path, progress=None, *, include_links=True) -> None:
     """Replace ``scene`` contents with what's stored at ``path``.
 
     ``progress(fraction, text)``, when given, is called at the loader's
@@ -1160,7 +1160,20 @@ def load_into(scene, path: Path, progress=None) -> None:
     except (OSError, ValueError) as exc:
         scene.project_warning = str(exc)
     scene.link_errors = {}
-    if links.linked_groups(scene):
+    if not include_links:
+        # Packed links can already have children on disk. Drop the placement
+        # itself (at any depth) before resolving paths or evaluating subsets.
+        def local_groups(groups):
+            kept = []
+            for group in groups:
+                if links.is_linked(group):
+                    continue
+                if group.children:
+                    group.adopt(local_groups(group.children))
+                kept.append(group)
+            return kept
+        scene.groups = local_groups(scene.groups)
+    elif links.linked_groups(scene):
         try:
             links.resolve(scene, Path(path))
         except Exception as exc:  # noqa: BLE001 — never fail the open

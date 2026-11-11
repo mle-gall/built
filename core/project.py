@@ -105,8 +105,11 @@ def sync_files(scene, host_path):
         rec = link_of(group)
         source = relative(rec['path'])
         files.setdefault(source, dict(path=source, role='linked'))
-        edges.append(dict(host=host, source=source, placement_uid=group.uid,
-                          select=deepcopy(rec.get('select'))))
+        edge = dict(host=host, source=source, placement_uid=group.uid,
+                    select=deepcopy(rec.get('select')))
+        if not rec.get('include_nested', True):
+            edge['include_nested'] = False
+        edges.append(edge)
     value['files'], value['links'] = list(files.values()), edges
     _write(scene, path, value)
 

@@ -7,8 +7,9 @@ class LinkTools:
     def _tool_query_links(self):
         return links.query(self._viewport.scene)
 
-    def _tool_link_document(self, path, select=None):
-        group = self._viewport.window().link_igz_path(path, at=(0, 0, 0), select=select)
+    def _tool_link_document(self, path, select=None, include_nested=True):
+        group = self._viewport.window().link_igz_path(path, at=(0, 0, 0), select=select,
+                                                     include_nested=include_nested)
         return {'uid': group.uid}
 
     def _tool_reload_link(self, path):

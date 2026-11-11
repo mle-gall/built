@@ -59,7 +59,7 @@ writers. The local registry fallback is updated after successful writes.
 ## Link selection and identity
 
 A placement stores ext.link = {"path": "...", "rel": "...", "select": ...}.
-Absent or null select links the full document. Exactly one selector is allowed:
+Absent or null select links the full document. When placing a link, choose **Source geometry only** to omit all nested link placements, including packed links. This stores `include_nested: false` on that placement and applies on reload. Existing links default to **Include nested linked files**. Exactly one selector is allowed:
 
 * {"uids": ["source-group-uid", "..."]}
 * {"filter": {"facet": "name", "glob": "Track*"}}

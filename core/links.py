@@ -167,7 +167,7 @@ def locate(link: dict, host_path=None) -> Path | None:
     return p if p.is_file() else None
 
 
-def load_source(path, select=None):
+def load_source(path, select=None, *, include_nested=True):
     """``(definition, source scene)`` for the .igz at ``path``: the whole
     document as one component definition (``core.insert``), its own links
     resolved first. Raises :class:`LinkError`."""
@@ -185,7 +185,7 @@ def load_source(path, select=None):
     stack.append(key)
     try:
         src = Scene()
-        igz.load_into(src, Path(path))
+        igz.load_into(src, Path(path), include_links=include_nested)
         # A cycle further down is this link's failure too; a source of the
         # source that is merely missing is not (its copies show empty).
         for err in (getattr(src, "link_errors", None) or {}).values():
@@ -486,18 +486,20 @@ def _populate(placement, source):
 
 # ---- the entry points --------------------------------------------------------------
 
-def make_link(scene, path, host_path=None, select=None):
+def make_link(scene, path, host_path=None, select=None, *, include_nested=True):
     """A copy of the .igz at ``path`` ready to place in ``scene`` (by the
     placement tool, like an imported component), its tags brought in.
     Raises :class:`LinkError`."""
     path = Path(path).resolve()
     if host_path is not None and _norm(path) == _norm(host_path):
         raise LinkError("a document cannot link itself")
-    comp, tags, materials = load_source(path, select)
+    comp, tags, materials = load_source(path, select, include_nested=include_nested)
     _rename_tags(comp, path)
     _merge_materials(scene, materials, comp)
     _apply_tags(scene, path, tags)
     comp.ext = {LINK_KEY: _link_record(path, host_path)}
+    if not include_nested:
+        comp.ext[LINK_KEY]["include_nested"] = False
     if select is not None:
         from copy import deepcopy
         comp.ext[LINK_KEY]['select'] = deepcopy(select)
@@ -524,13 +526,28 @@ def _merge_materials(scene, materials, comp) -> None:
         merge_materials(materials, scene.materials, comp)
 
 
+def set_include_nested(scene, group, enabled):
+    """Refresh one placement from disk with the chosen nested-link policy."""
+    rec = link_of(group)
+    path = rec["path"]
+    comp, tags, materials = load_source(path, rec.get("select"), include_nested=enabled)
+    _rename_tags(comp, path)
+    _merge_materials(scene, materials, comp)
+    _apply_tags(scene, path, tags)
+    _populate(group, comp)
+    rec["include_nested"] = enabled
+    scene.version += 1
+
+
 def reload(scene, path, host_path=None) -> None:
     """Read ``path`` again and show it in every copy. Raises
     :class:`LinkError` (the copies keep what they showed)."""
     # Prepare every subset before changing any placement.
     prepared = []
     for group in linked_groups(scene, path):
-        comp, tags, materials = load_source(path, link_of(group).get('select'))
+        rec = link_of(group)
+        comp, tags, materials = load_source(path, rec.get('select'),
+                                           include_nested=rec.get('include_nested', True))
         _rename_tags(comp, path)
         _merge_materials(scene, materials, comp)
         prepared.append((group, comp, tags))
@@ -629,5 +646,6 @@ def query(scene):
                  else 'modified' if stamp != _entry(scene, path).get('loaded_mtime_ns')
                  else 'resolved')
         rows.append(dict(uid=group.uid, path=str(path), status=state,
+                         include_nested=rec.get('include_nested', True),
                          select=rec.get('select'), stable_uid_count=sum(1 for _ in iter_placements(group)) - 1))
     return rows

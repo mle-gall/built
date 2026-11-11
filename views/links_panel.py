@@ -4,8 +4,9 @@ import json
 from pathlib import Path
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QGridLayout, QTreeWidget,
                                QTreeWidgetItem, QPushButton, QInputDialog,
-                               QFileDialog, QMessageBox, QSizePolicy)
+                               QFileDialog, QMessageBox, QSizePolicy, QCheckBox)
 from core import links, project
+from core.i18n import tr
 
 
 class LinksPanel(QWidget):
@@ -39,6 +40,32 @@ class LinksPanel(QWidget):
             button.clicked.connect(lambda checked=False, fn=action: self.run(fn))
             grid.addWidget(button, i // 2, i % 2)
 
+        self.nested = QCheckBox(tr("Include nested linked files"))
+        layout.addWidget(self.nested)
+        self.nested.setEnabled(False)
+        self.tree.currentItemChanged.connect(self._sync_nested)
+        self.nested.clicked.connect(self._change_nested)
+
+    def _sync_nested(self):
+        item = self.tree.currentItem()
+        self.nested.setEnabled(item is not None)
+        if item is not None:
+            row = self.rows[self.tree.indexOfTopLevelItem(item)]
+            self.nested.setChecked(row["include_nested"])
+        else:
+            self.nested.setChecked(False)
+
+    def _change_nested(self, enabled):
+        group, _ = self.selected()
+        if self.window._set_link_nested(group, enabled):
+            self.refresh()
+            for index, row in enumerate(self.rows):
+                if row["uid"] == group.uid:
+                    self.tree.setCurrentItem(self.tree.topLevelItem(index))
+                    break
+        else:
+            self._sync_nested()
+
     @property
     def scene(self):
         return self.window.viewport.scene
@@ -56,6 +83,8 @@ class LinksPanel(QWidget):
             subset = row['select']
             summary = 'Full document' if subset is None else (
                 str(len(subset['uids'])) + ' UIDs' if 'uids' in subset else 'Navigator filter')
+            if not row["include_nested"]:
+                summary += " (source only)"
             self.tree.addTopLevelItem(QTreeWidgetItem([
                 row['path'], row['status'], summary, str(row['stable_uid_count'])]))
 
@@ -134,7 +163,7 @@ class LinksPanel(QWidget):
         uids = [g.uid for g in doc.viewport.scene.selection if isinstance(g, Group)]
         if not uids:
             raise ValueError('Select groups in the source document first and save it')
-        self.window.link_igz_path(doc.path, select={'uids': uids})
+        self.window._choose_link_contents(doc.path, select={'uids': uids})
         self.refresh()
 
     def move_registry(self):

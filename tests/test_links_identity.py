@@ -80,3 +80,58 @@ def test_portable_synthetic_fixture(tmp_path):
     igz.load_into(scene, tmp_path / 'two-parts.igz')
     assert not scene.link_errors
     assert [g.name for g in scene.groups[0].children] == ['Part 0', 'Part 1']
+
+
+def test_nested_link_policy_per_placement(tmp_path):
+    leaf, leaf_path = source(tmp_path)
+    middle = Scene()
+    parent = Group(name='local assembly')
+    parent.adopt([Group(name='local part'), links.make_link(middle, leaf_path)])
+    middle.groups = [parent]
+    links.set_packed(middle, leaf_path, True)
+    middle_path = tmp_path / 'middle.igz'
+    igz.save_scene(middle, middle_path)
+
+    host = Scene()
+    host.groups = [links.make_link(host, middle_path, include_nested=False),
+                   links.make_link(host, middle_path)]
+    file = tmp_path / 'host.igz'
+    igz.save_scene(host, file)
+    igz.load_into(host, file)
+    links.reload(host, middle_path)
+    local, full = host.groups
+    assert [g.name for g in local.children[0].children] == ['local part']
+    nested = full.children[0].children[1]
+    assert len(nested.children) == len(leaf.groups)
+    assert links.link_of(local)['include_nested'] is False
+    links.set_include_nested(host, full, False)
+    assert [g.name for g in full.children[0].children] == ['local part']
+    links.set_include_nested(host, local, True)
+    igz.save_scene(host, file)
+    igz.load_into(host, file)
+    local, full = host.groups
+    assert len(local.children[0].children[1].children) == len(leaf.groups)
+    assert [g.name for g in full.children[0].children] == ['local part']
+
+
+def test_source_only_skips_nested_file_before_selecting(tmp_path, monkeypatch):
+    _, leaf_path = source(tmp_path)
+    middle = Scene()
+    link = links.make_link(middle, leaf_path)
+    local = Group(name='local')
+    middle.groups = [local, link]
+    middle_path = tmp_path / 'middle.igz'
+    igz.save_scene(middle, middle_path)
+    opened = []
+    read = igz._load_into_inner
+
+    def record_read(scene, path, progress):
+        opened.append(path)
+        return read(scene, path, progress)
+
+    monkeypatch.setattr(igz, '_load_into_inner', record_read)
+    host = Scene()
+    placed = links.make_link(host, middle_path, include_nested=False,
+                             select={'uids': [link.uid, local.uid]})
+    assert opened == [middle_path]
+    assert [child.name for child in placed.children] == ['local']

@@ -69,8 +69,8 @@ def test_agent_links_and_project(tmp_path):
     source = tmp_path / 'source.igz'
     igz.save_scene(src, source)
     from core import links
-    def place(path, at, select):
-        group = links.make_link(scene, path, select=select)
+    def place(path, at, select, include_nested):
+        group = links.make_link(scene, path, select=select, include_nested=include_nested)
         scene.groups.append(group)
         return group
     window = SimpleNamespace(link_igz_path=place, _current_path=None, _relink_done=lambda text: None)

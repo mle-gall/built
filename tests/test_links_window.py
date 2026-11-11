@@ -120,3 +120,31 @@ def test_links_tab_subset_and_agent_surface(win, tmp_path):
     panel.pack()
     assert panel.tree.topLevelItem(0).text(1) == 'packed'
     assert {'query_links', 'link_document', 'reload_link', 'query_project', 'set_project'} <= {t['name'] for t in BUILTIN_TOOLS}
+
+
+@pytest.mark.parametrize("choice", [True, False, None])
+def test_link_document_action_shows_nested_choice(win, tmp_path, monkeypatch, choice):
+    from PySide6.QtWidgets import QCheckBox, QFileDialog
+    from core.i18n import tr
+    from views import filedialogs
+
+    path = _source(tmp_path / "building.igz")
+    placements = []
+    monkeypatch.setattr(win, "link_igz_path", lambda path, include_nested:
+                        placements.append((path, include_nested)))
+    monkeypatch.setattr(filedialogs, "remember", lambda path: None)
+
+    def choose(dialog):
+        assert dialog.testOption(QFileDialog.Option.DontUseNativeDialog)
+        checkbox = next(box for box in dialog.findChildren(QCheckBox)
+                        if box.text() == tr("Include nested linked files"))
+        assert checkbox.isChecked()
+        if choice is None:
+            return QFileDialog.DialogCode.Rejected
+        checkbox.setChecked(choice)
+        dialog.selectFile(str(path))
+        return QFileDialog.DialogCode.Accepted
+
+    monkeypatch.setattr(QFileDialog, "exec", choose)
+    win._act_link_document.trigger()
+    assert placements == ([] if choice is None else [(str(path), choice)])
