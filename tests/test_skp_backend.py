@@ -646,7 +646,10 @@ def test_a_cutout_image_stuck_on_a_face_stays_put(tmp_path):
     assert by_name["toro"]["billboard"] is True         # free -> face-me
 
 
-def test_openskp_adapter_default_mapping_is_local(tmp_path):
+def test_openskp_adapter_default_mapping_is_local(tmp_path, monkeypatch):
+    # Two flattened copies (the legacy path); exact-tree copies share one
+    # prototype, so they sample the same patch by construction.
+    monkeypatch.setattr(skp_openskp, "EXACT_TREE", False)
     # The .skp format's default texture mapping runs in the component's LOCAL frame:
     # two copies of the same textured component must sample the same patch of
     # the tile (identical UVs), regardless of where each copy sits in world.

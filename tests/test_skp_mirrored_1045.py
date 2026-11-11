@@ -15,6 +15,15 @@ from PySide6.QtGui import QMatrix4x4
 from formats import skp_openskp
 
 
+@pytest.fixture(autouse=True)
+def _legacy_flattening(monkeypatch):
+    """These cases cover the old flattening of small shared definitions,
+    kept behind ``EXACT_TREE = False``; the default tree is checked by
+    test_skp_exact_tree.py."""
+    monkeypatch.setattr(skp_openskp, "EXACT_TREE", False)
+
+
+
 def _square_def(id, name, instances=()):
     # A 10 in square in the XY plane, wound counter-clockwise seen from +Z,
     # so its front faces up (the fake face's stored normal says so too).

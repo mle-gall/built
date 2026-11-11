@@ -18,6 +18,15 @@ pytest.importorskip("openskp")
 
 from formats import openskp_compat, skp_openskp  # noqa: E402
 
+
+@pytest.fixture(autouse=True)
+def _legacy_flattening(monkeypatch):
+    """These cases cover the old flattening of small shared definitions,
+    kept behind ``EXACT_TREE = False``; the default tree is checked by
+    test_skp_exact_tree.py."""
+    monkeypatch.setattr(skp_openskp, "EXACT_TREE", False)
+
+
 _ID = [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1]
 
 

@@ -41,6 +41,10 @@ from core.texture import fit_uv_affine, projection_basis
 
 _INCH = 0.0254          # .skp internal unit → metres
 _MAX_DEPTH = 32         # guard against pathological instance nesting
+#: Copy the file's group/component tree exactly: every placement becomes its
+#: own object (see the #exact-tree note in ``_adapt``). Off only restores the
+#: old memory-driven flattening of small shared definitions.
+EXACT_TREE = True
 
 
 def _ring_raw(defn, loop):
@@ -1311,6 +1315,24 @@ def _adapt(model, name: str, skp_path=None):
                     or not _shareable(child):
                 continue
             proto_ids.add(cid)
+
+    # The file's tree, copied as it is (#exact-tree). Every group and
+    # component the .skp places becomes its own object, at its own depth,
+    # however small and however often it is placed. The thresholds above
+    # answer "does sharing this save memory"; an as-built model asks a
+    # different question — "is this the tree I drew" — and melting a 52-face
+    # beam placed twice into its parent's mesh answered it wrong for half of
+    # a 42 000-placement file (asbuilt.skp: 4 088 definitions, 19 931
+    # placements gone into their parents' meshes). Only what cannot be a
+    # placement stays out: image entities and face-camera components, which
+    # leave as world-space billboards.
+    if EXACT_TREE:
+        for did in uses:
+            d = by_id.get(did)
+            if d is None or getattr(d, "is_image", False) or \
+                    getattr(d, "always_faces_camera", False):
+                continue
+            proto_ids.add(did)
 
     groups: list = []
     proto_uses: dict = {}
