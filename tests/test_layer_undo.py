@@ -105,18 +105,32 @@ def _nested_document():
 # ---- Rename (not on the undo stack) -----------------------------------------
 
 def test_rename_reaches_groups_kept_definitions_and_scenes():
+    """A rename changes the label only (#tags-by-key): groups, kept
+    definitions and the scenes that hide the tag still name it by its key,
+    and through it they all wear the new label."""
     scene, tagged = _nested_document()
+    ly = scene.layer("Muros")
     assert rename_layer(scene, "Muros", "Tabiques")
-    assert scene.layer("Muros") is None
-    assert not scene.layer("Tabiques").visible
-    assert all(layer_of(e) == "Tabiques" for e in tagged)
-    assert scene.saved_views[0].hidden_layers == ["Tabiques"]
+    assert scene.layer("Tabiques") is ly and ly.key == "Muros"
+    assert not ly.visible
+    assert all(layer_of(e) == "Muros" for e in tagged)
+    assert all(scene.layer(layer_of(e)).name == "Tabiques" for e in tagged)
+    assert scene.saved_views[0].hidden_layers == ["Muros"]
+
+
+def test_two_tags_may_share_a_label():
+    """Labels are free to repeat: «Beams» in every folder."""
+    scene = Scene()
+    scene.layers += [Layer("Deck - Beams"), Layer("Hall - Beams")]
+    assert rename_layer(scene, "Deck - Beams", "Beams")
+    assert rename_layer(scene, "Hall - Beams", "Beams")
+    keys = {ly.key for ly in scene.layers if ly.name == "Beams"}
+    assert keys == {"Deck - Beams", "Hall - Beams"}
 
 
 @pytest.mark.parametrize("old,new", [
     (DEFAULT_LAYER, "Otra"),        # the default is permanent
     ("Muros", DEFAULT_LAYER),       # cannot take the default's name
-    ("Muros", "Losas"),             # name already in use
     ("Muros", ""),
     ("No existe", "Otra"),
 ])
@@ -165,9 +179,10 @@ def test_delete_default_or_missing_is_refused():
 
 
 def test_undo_delete_after_a_new_layer_took_the_name_makes_no_twin():
-    """Renaming is not on the stack, so a layer with the deleted name can
-    exist again by the time the delete is undone: the entities go back
-    onto it, and the list never holds two layers with one name."""
+    """Renaming is not on the stack, so a layer LABELLED like the deleted
+    one can exist by the time the delete is undone. Labels may repeat
+    (#tags-by-key): the deleted tag comes back under its own key and the
+    entities go back onto IT, not onto the look-alike."""
     scene = Scene()
     history = History(scene)
     scene.layers.append(Layer("Muros"))
@@ -177,8 +192,9 @@ def test_undo_delete_after_a_new_layer_took_the_name_makes_no_twin():
     scene.layers.append(Layer("Capa 1"))
     assert rename_layer(scene, "Capa 1", "Muros")
     history.undo()
-    assert [ly.name for ly in scene.layers].count("Muros") == 1
+    assert [ly.key for ly in scene.layers].count("Muros") == 1
     assert layer_of(face) == "Muros"
+    assert scene.layer_by_key("Muros") is not scene.layer_by_key("Capa 1")
 
 
 @pytest.mark.parametrize("seed", range(40))
@@ -209,13 +225,14 @@ def test_random_deletes_undo_to_the_start_and_redo_to_the_end(seed):
 def test_random_renames_keep_every_label_on_a_real_layer(seed):
     scene, rng = _document(seed)
     for k in range(rng.randint(1, 6)):
-        names = [ly.name for ly in scene.layers if ly.name != DEFAULT_LAYER]
-        old = rng.choice(names)
+        keys = [ly.key for ly in scene.layers if ly.key != DEFAULT_LAYER]
+        old = rng.choice(keys)
         count = sum(1 for e in layer_carriers(scene) if layer_of(e) == old)
         assert rename_layer(scene, old, f"R{k}")
+        assert scene.layer_by_key(old).name == f"R{k}"
         assert sum(1 for e in layer_carriers(scene)
-                   if layer_of(e) == f"R{k}") == count
-        known = {ly.name for ly in scene.layers}
+                   if layer_of(e) == old) == count
+        known = {ly.key for ly in scene.layers}
         assert {layer_of(e) for e in layer_carriers(scene)} <= known
         for view in scene.saved_views:
             assert set(view.hidden_layers) <= known

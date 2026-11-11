@@ -1049,7 +1049,7 @@ class EnsureLayersCommand(Command):
     def do(self, scene) -> None:
         from core.layers import add_missing
         layers, folders = add_missing(scene, self._template)
-        self._added = ([scene.layer(n).uid for n in layers],
+        self._added = ([scene.layer_by_key(n).uid for n in layers],
                        [scene.layer_folder_uids[n] for n in folders])
         if any(self._added):
             scene.version += 1
@@ -1079,9 +1079,13 @@ class AssignLayerCommand(Command):
 
     def do(self, scene) -> None:
         from core.layers import Layer, assign_layer, layer_of
-        if scene.layer(self._layer) is None:
-            scene.layers.append(Layer(self._layer))
+        ly = scene.layer(self._layer)
+        if ly is None:
+            ly = Layer(self._layer)
+            scene.layers.append(ly)
             self._created = True
+        # The tag's key is what the entities carry; ``layer`` may be a label.
+        self._layer = ly.key
         self._prev = [layer_of(e) for e in self._entities]
         for e in self._entities:
             assign_layer(e, self._layer)
@@ -1093,7 +1097,7 @@ class AssignLayerCommand(Command):
         for e, prev in zip(self._entities, self._prev):
             assign_layer(e, prev)
         if self._created:
-            ly = scene.layer(self._layer)
+            ly = scene.layer_by_key(self._layer)
             if ly is not None:
                 scene.layers.remove(ly)
         _dirty_group_chunks(scene)
@@ -1125,11 +1129,14 @@ class DeleteLayerCommand(Command):
         from core.layers import DEFAULT_LAYER, assign_layer, layer_of
         from core.purge import layer_carriers
         ly = scene.layer(self.name)
-        if ly is None or self.name == DEFAULT_LAYER:
+        if ly is None or ly.key == DEFAULT_LAYER:
             raise CommandRejected("layer cannot be deleted")
-        target = self.into or DEFAULT_LAYER
-        if target == self.name or scene.layer(target) is None:
+        # Entities carry the tag's KEY; ``name`` may be its label.
+        self.name = ly.key
+        into = scene.layer(self.into or DEFAULT_LAYER)
+        if into is None or into is ly:
             raise CommandRejected("no layer to merge into")
+        target = into.key
         self._layer = ly
         self._index = scene.layers.index(ly)
         self._carriers = [e for e in layer_carriers(scene)
@@ -1153,7 +1160,7 @@ class DeleteLayerCommand(Command):
         from core.layers import assign_layer
         # A layer made and named the same after the delete (renaming is not
         # on the stack) takes the entities back instead of a twin.
-        if self._layer not in scene.layers and scene.layer(self.name) is None:
+        if self._layer not in scene.layers and scene.layer_by_key(self.name) is None:
             scene.layers.insert(min(self._index, len(scene.layers)),
                                 self._layer)
         for e in self._carriers:

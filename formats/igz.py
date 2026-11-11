@@ -784,6 +784,13 @@ def prepare_scene_steps(scene, mesh_steps=None):
                if folder_parent(scene, f)}
     if parents:
         payload["layer_folder_parents"] = parents
+    # Folder labels that differ from the folder's key (#tags-by-key). An
+    # older reader ignores them and shows each folder by its key.
+    labels = {f: n for f, n in (getattr(scene, "layer_folder_names", None)
+                                or {}).items()
+              if f in (folders or ()) and isinstance(n, str) and n and n != f}
+    if labels:
+        payload["layer_folder_names"] = labels
     views = getattr(scene, "saved_views", None)
     if views:
         payload["saved_views"] = [v.to_dict() for v in views]
@@ -1355,11 +1362,11 @@ def _load_into_inner(scene, path: Path, progress=None) -> None:
     if raw_layers:
         from core.layers import DEFAULT_LAYER, Layer
         scene.layers = [Layer.from_dict(r) for r in raw_layers]
-        if not any(ly.name == DEFAULT_LAYER for ly in scene.layers):
+        if not any(ly.key == DEFAULT_LAYER for ly in scene.layers):
             scene.layers.insert(0, Layer(DEFAULT_LAYER))
     active = payload.get("active_layer")
     if isinstance(active, str) and scene.layer(active) is not None:
-        scene.active_layer = active
+        scene.active_layer = scene.layer(active).key
     raw_folders = payload.get("layer_folders")
     if isinstance(raw_folders, list):
         scene.layer_folders = [f for f in raw_folders
@@ -1370,6 +1377,11 @@ def _load_into_inner(scene, path: Path, progress=None) -> None:
     if isinstance(raw_parents, dict):
         scene.folder_parents = {f: p for f, p in raw_parents.items()
                                 if isinstance(f, str) and isinstance(p, str)}
+    raw_labels = payload.get("layer_folder_names")
+    scene.layer_folder_names = (
+        {f: n for f, n in raw_labels.items()
+         if isinstance(f, str) and isinstance(n, str) and n}
+        if isinstance(raw_labels, dict) else {})
     raw_tiles = payload.get("tile_layer")
     if raw_tiles:
         from georef.tiles import TileLayer

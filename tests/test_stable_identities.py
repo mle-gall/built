@@ -94,9 +94,10 @@ def test_layer_folder_rename_save_and_template(tmp_path):
     assert L.rename_layer(s, 'Wall', 'Walls')
     assert L.rename_folder(s, f, 'Architecture')
     assert s.layer('Walls').uid == uid
-    assert s.layer_folder_uids['Architecture'] == fuid
+    # A rename relabels: the folder keeps its key, so its uid stays put.
+    assert s.layer_folder_uids[f] == fuid and L.folder_label(s, f) == 'Architecture'
     assert L.apply_template(s, data)[0] == 0
-    assert s.layer('Walls').folder == 'Architecture'
+    assert s.layer('Walls').folder == f
     assert L.add_missing(s, data) == ([], [])
     igz.save_scene(s, tmp_path / 'layers.igz')
     other = Scene()

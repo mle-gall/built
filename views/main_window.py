@@ -5183,12 +5183,13 @@ class MainWindow(WorksessionMixin, QMainWindow):
         from PySide6.QtWidgets import QMenu
         sub = QMenu(tr("Layer"), menu)
         menu.addMenu(sub)
+        from core.layers import path_label
         for ly in self.viewport.scene.layers:
-            act = sub.addAction(ly.name)
+            act = sub.addAction(path_label(self.viewport.scene, ly.key))
             act.setCheckable(True)
-            act.setChecked(len(current) == 1 and ly.name in current)
+            act.setChecked(len(current) == 1 and ly.key in current)
             act.triggered.connect(
-                lambda _c=False, name=ly.name: self._assign_layer(name))
+                lambda _c=False, name=ly.key: self._assign_layer(name))
         sub.addSeparator()
         sub.addAction(tr("New layer…"), self._assign_new_layer)
         # The layer of what was clicked, without looking for it in the
@@ -9344,6 +9345,8 @@ class MainWindow(WorksessionMixin, QMainWindow):
                 from views.composer import dxf_groups_by_layer
                 d = hlr_drawing(vp.scene, vp.camera, layers=True)
                 d.styles = line_styles(vp.scene, True)
+                from core.layers import export_labels
+                d.labels = export_labels(vp.scene)
                 groups = dxf_groups_by_layer(d, "VISTA", hidden_lines=False)
             else:
                 d = hlr_drawing(vp.scene, vp.camera, geometry=geometry)

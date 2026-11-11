@@ -183,11 +183,12 @@ def test_rename_and_delete_follow_the_active_layer():
     scene.layers.append(Layer("A"))
     L.set_active(scene, "A")
     assert L.rename_layer(scene, "A", "Z")
-    assert scene.active_layer == "Z"
-    history.execute(DeleteLayerCommand("Z"))
+    assert scene.active_layer == "A"                 # the key stays
+    assert scene.layer(scene.active_layer).name == "Z"
+    history.execute(DeleteLayerCommand("Z"))         # found by its label
     assert scene.active_layer is None
     history.undo()
-    assert scene.active_layer == "Z"
+    assert scene.active_layer == "A"
 
 
 # ---- Isolate, merge, folders, scenes, templates -----------------------------
@@ -238,10 +239,13 @@ def test_folders_add_rename_move_and_remove():
     L.move_to_folder(scene, ["A", "B", DEFAULT_LAYER], name)
     assert scene.layer("A").folder == name and scene.layer(DEFAULT_LAYER).folder is None
     assert L.rename_folder(scene, name, "Arq")
-    assert scene.layer("B").folder == "Arq"
-    assert not L.rename_folder(scene, "Arq", "Carpeta 2")      # taken
-    L.remove_folder(scene, "Arq")
-    assert scene.layer("A").folder is None and "Arq" not in L.folders_of(scene)
+    assert scene.layer("B").folder == name           # layers name its key
+    assert L.folder_label(scene, name) == "Arq"
+    assert L.rename_folder(scene, "Carpeta 2", "Arq")  # labels may repeat
+    assert not L.rename_folder(scene, name, "")
+    L.remove_folder(scene, name)
+    assert scene.layer("A").folder is None and name not in L.folders_of(scene)
+    assert name not in scene.layer_folder_names
 
 
 def test_hide_in_every_scene_and_back():
@@ -633,9 +637,9 @@ def test_nested_folders_move_rename_remove():
     assert not L.move_folder(scene, a, c)             # no loops
     assert not L.move_folder(scene, a, a)
     assert L.rename_folder(scene, b, "Bee")
-    assert L.folder_parent(scene, c) == "Bee"
+    assert L.folder_parent(scene, c) == b and L.folder_label(scene, b) == "Bee"
     assert L.layers_in_folder(scene, a) == ["x"]
-    L.remove_folder(scene, "Bee")                     # contents move up
+    L.remove_folder(scene, b)                         # contents move up
     assert scene.layer("x").folder == a
     assert L.folder_parent(scene, c) == a
     assert L.move_folder(scene, c, None) and L.folder_parent(scene, c) is None
@@ -1494,11 +1498,13 @@ def test_a_new_row_opens_its_name_without_a_half_lit_highlight(win):
         _app.processEvents()
         _app.processEvents()
         assert tree.state() != QAbstractItemView.EditingState
-        assert [panel._key(i) for i in tree.selectedItems()] == [
-            (kind, kind + " nueva")]
+        # The row keeps its key (#tags-by-key); the typed text is its label.
+        assert [panel._key(i) for i in tree.selectedItems()] == [(kind, name)]
+        assert [i.text(0) for i in tree.selectedItems()] == [kind + " nueva"]
+        made = name
     # The folder just made is selected: the next layer goes into it.
     inner = panel.add_layer()
-    assert win.viewport.scene.layer(inner).folder == "folder nueva"
+    assert win.viewport.scene.layer(inner).folder == made
 
 
 def test_the_delete_key_deletes_the_current_row(win, monkeypatch):

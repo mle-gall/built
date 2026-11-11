@@ -19,7 +19,7 @@ def _paint_key(scene):
     from core.layers import layer_color
     return (by_layer, bool(getattr(scene, 'show_hidden_geometry', False)),
             bool(getattr(scene, 'show_hidden_objects', False)), tuple(
-        (ly.name, tuple(layer_color(ly)) if by_layer else None,
+        (ly.key, tuple(layer_color(ly)) if by_layer else None,
          float(getattr(ly, 'opacity', 1.0)), bool(getattr(ly, 'locked', False)))
         for ly in getattr(scene, 'layers', ())))
 

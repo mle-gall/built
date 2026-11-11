@@ -148,7 +148,7 @@ def _collect_stats(scene) -> dict:
         "bbox": bbox,
         "colors": list(colors.values()),
         "textures": list(textures.values()),
-        "layers": [{"name": ly.name, "visible": ly.visible,
+        "layers": [{"name": ly.name, "key": ly.key, "visible": ly.visible,
                     "locked": ly.locked} for ly in scene.layers],
         "bim_objects": objects,
         "bim_by_class": by_class,

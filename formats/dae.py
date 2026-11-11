@@ -1753,7 +1753,7 @@ def _load_structured(scene, dae: _Dae, root, tick) -> None:
         layer = _own_extra(node_el, "layer")
         if layer:
             g.layer = layer
-            if all(ly.name != layer for ly in scene.layers):
+            if all(ly.key != layer for ly in scene.layers):
                 scene.layers.append(Layer(layer))
         if depth < 32:
             kids = [group_from(c, depth + 1)
@@ -2076,7 +2076,7 @@ def _load_dae_inner(scene, path, progress=None):
         tick(1.0, "Done")
         return offset
 
-    # A top-level node is the model itself (SketchUp's "SketchUp" root, a
+    # A top-level node is the model itself (the modeller's ".skp" root, a
     # bare exporter's only node): its own geometry is the loose mesh. The
     # nodes nested in it are the model's groups and import as Groups,
     # nested as the file nests them (_node_group).

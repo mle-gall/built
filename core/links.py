@@ -137,8 +137,8 @@ def tag_name(path, tag: str) -> str:
 def link_tags(scene, path) -> list:
     """The host tags that stand for ``path``'s tags."""
     prefix = stem(path) + SEP
-    return [ly.name for ly in scene.layers if ly.name.startswith(prefix)
-            and ly.name in _entry(scene, path).get("tags", ())]
+    return [ly.key for ly in scene.layers if ly.key.startswith(prefix)
+            and ly.key in _entry(scene, path).get("tags", ())]
 
 
 def source_of_tag(scene, name: str):
@@ -195,6 +195,8 @@ def load_source(path, select=None, *, include_nested=True):
         # scene's meshes, not its tags).
         tags = {"layers": [ly.to_dict() for ly in src.layers],
                 "folders": list(getattr(src, "layer_folders", ()) or ()),
+                "folder_names": dict(getattr(src, "layer_folder_names", None)
+                                     or {}),
                 "parents": dict(getattr(src, "folder_parents", {}) or {})}
         from core import bim_registry, structure
         vocabulary = bim_registry.get(src)
@@ -336,7 +338,8 @@ def _apply_tags(scene, path, tags) -> None:
     this file the source no longer has are dropped when nothing uses
     them. The ride-model agent (2026-11-09) also found empty mirror
     folders left behind when the source reorganised its tags."""
-    from core.layers import Layer, folders_of, move_folder, remove_folder
+    from core.layers import (DEFAULT_LAYER, Layer, folders_of, move_folder,
+                             remove_folder)
     entry = _entry(scene, path)
     if tags.get('structure'):
         entry['structure'] = tags['structure']
@@ -365,7 +368,7 @@ def _apply_tags(scene, path, tags) -> None:
         owned = set()
         old_tags = set(entry.get("tags", ()))
         for ly in scene.layers:
-            f = ly.folder if ly.name in old_tags else None
+            f = ly.folder if ly.key in old_tags else None
             chain = set()
             while f in existing and f.startswith(own + SEP) and f not in chain:
                 chain.add(f)
@@ -378,22 +381,34 @@ def _apply_tags(scene, path, tags) -> None:
         scene.layer_folders = folders_of(scene) + added
         folders_of(scene)  # assign identities before placing children
         owned.update(scene.layer_folder_uids[name] for name in added)
+    # The host's folder keys are namespaced by the file; their labels are
+    # the source's own (#tags-by-key), so the tree reads as in the source.
+    src_labels = tags.get("folder_names") or {}
+    labels = dict(getattr(scene, "layer_folder_names", None) or {})
     for f, name in src_folders.items():
         parent = tags.get("parents", {}).get(f)
         move_folder(scene, name, src_folders.get(parent, own))
+        label = src_labels.get(f) or f
+        if label != name:
+            labels[name] = label
+    scene.layer_folder_names = labels
 
     wanted = []
     for raw in tags.get("layers") or ():
         src = Layer.from_dict(raw)
-        name = tag_name(path, src.name)
+        # Keyed by the source tag's KEY — what the source's entities carry
+        # (see _relabel) — and labelled like the source shows it.
+        name = tag_name(path, src.key)
         wanted.append(name)
-        ly = scene.layer(name)
+        ly = scene.layer_by_key(name)
         if ly is None:
             ly = Layer(name)
             scene.layers.append(ly)
         elif name in last and name not in overrides \
                 and bool(ly.visible) != bool(last[name]):
             overrides[name] = bool(ly.visible)
+        if src.key != DEFAULT_LAYER:
+            ly.name = src.name
         last[name] = bool(src.visible)
         ly.color = src.color
         ly.linetype = src.linetype
@@ -406,7 +421,7 @@ def _apply_tags(scene, path, tags) -> None:
     if old:
         used = _used_tags(scene)
         scene.layers[:] = [ly for ly in scene.layers
-                           if ly.name not in old or ly.name in used]
+                           if ly.key not in old or ly.key in used]
         for name in old:
             overrides.pop(name, None)
             last.pop(name, None)

@@ -210,12 +210,13 @@ def test_deleting_and_renaming_a_layer_take_its_guides_along():
     assert g in list(layer_carriers(scene))
     assert "Guías" in used_layers(scene)
     assert L.rename_layer(scene, "Guías", "Replanteo")
-    assert g.layer == "Replanteo"
+    assert g.layer == "Guías"                     # the key; the label moved
+    assert scene.layer(g.layer).name == "Replanteo"
     history = History(scene)
     history.execute(DeleteLayerCommand("Replanteo", into="Otra"))
     assert g.layer == "Otra"
     history.undo()
-    assert g.layer == "Replanteo"
+    assert g.layer == "Guías"
     history.execute(DeleteLayerCommand("Replanteo"))
     assert layer_of(g) == DEFAULT_LAYER
 

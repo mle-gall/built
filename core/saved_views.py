@@ -86,7 +86,7 @@ class SavedView:
                    pitch=camera.pitch, fov_deg=camera.fov_deg,
                    perspective=camera.perspective,
                    two_point=bool(getattr(camera, "two_point", False)),
-                   hidden_layers=[ly.name for ly in scene.layers
+                   hidden_layers=[ly.key for ly in scene.layers
                                   if not ly.visible],
                    style=(scene.display_style.to_dict()
                           if getattr(scene, "display_style", None) else None),
@@ -128,7 +128,7 @@ class SavedView:
         camera.two_point = self.two_point
         hidden = set(self.hidden_layers)
         for ly in scene.layers:
-            ly.visible = ly.name not in hidden
+            ly.visible = ly.key not in hidden
         if self.style:
             from core.style import Style
             scene.display_style = Style.from_dict(self.style)
@@ -237,7 +237,7 @@ def shown_state(scene) -> tuple:
     shadows = getattr(scene, "shadows", None)
     section = (scene.active_section()
                if hasattr(scene, "active_section") else None)
-    return (tuple((ly.name, ly.visible) for ly in scene.layers),
+    return (tuple((ly.key, ly.visible) for ly in scene.layers),
             style.to_dict() if style is not None else None,
             getattr(section, "uid", None),
             getattr(scene, "show_section_planes", None),

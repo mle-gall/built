@@ -601,6 +601,9 @@ def dxf_groups_by_layer(drawing, view_layer: str, hidden_lines: bool) -> list:
     from core.hlr import KIND_CUT, KIND_HIDDEN, KIND_PROFILE
     from core.layers import DXF_LINETYPES
     styles = getattr(drawing, "styles", None) or {}
+    # Tags go out under their folder path (core.layers.export_labels), not
+    # their key — a key may be a uid, and two tags may share a label.
+    labels = getattr(drawing, "labels", None) or {}
     k = drawing.kinds
     tags = drawing.layers
     groups = [(f"{view_layer}-CORTE", drawing.segs[k == KIND_CUT])]
@@ -615,7 +618,7 @@ def dxf_groups_by_layer(drawing, view_layer: str, hidden_lines: bool) -> list:
         by_tag.setdefault((tags[i] or view_layer, suffix), []).append(i)
     for (tag, suffix), ids in by_tag.items():
         rgb, linetype, _w = styles.get(tag, (None, "continuous", None))
-        groups.append((tag + suffix, drawing.segs[ids],
+        groups.append((labels.get(tag, tag) + suffix, drawing.segs[ids],
                        DXF_LINETYPES.get(linetype, "CONTINUOUS"), rgb))
     return groups
 
@@ -12647,6 +12650,8 @@ class ComposerWindow(QMainWindow):
                 drawing.styles = line_styles(
                     vp.scene, for_dxf
                     or bool(getattr(style, "color_by_layer", False)))
+                from core.layers import export_labels
+                drawing.labels = export_labels(vp.scene)
             return drawing
 
         return self._with_frame_camera(frame, run)

@@ -1072,7 +1072,8 @@ class BaseMapPanel(QWidget):
         if mesh is None or not name:
             return
         from core.layers import DEFAULT_LAYER
-        mesh.layer = None if name == DEFAULT_LAYER else name
+        key = self._photo_layer.currentData() or name
+        mesh.layer = None if key == DEFAULT_LAYER else key
         self._window.viewport.update()
 
     def sync_photo_mesh(self) -> None:
@@ -1090,9 +1091,11 @@ class BaseMapPanel(QWidget):
             self._photo_layer.setEnabled(mesh is not None)
             if mesh is None:
                 return
-            self._photo_layer.addItems([ly.name for ly in scene.layers])
+            from core.layers import path_label
+            for ly in scene.layers:
+                self._photo_layer.addItem(path_label(scene, ly.key), ly.key)
             current = getattr(mesh, "layer", None) or DEFAULT_LAYER
-            index = self._photo_layer.findText(current)
+            index = self._photo_layer.findData(current)
             if index >= 0:
                 self._photo_layer.setCurrentIndex(index)
 
@@ -4127,7 +4130,7 @@ class EntityInfoPanel(QWidget):
         if not show:
             return
         scene = self._window.viewport.scene
-        names = [ly.name for ly in scene.layers]
+        names = [ly.key for ly in scene.layers]
         current = {layer_of(e) for e in tagged}
         self._updating = True
         try:
@@ -4136,8 +4139,9 @@ class EntityInfoPanel(QWidget):
                 # A mixed selection reads as such; picking a layer moves
                 # everything onto it.
                 self._layer_box.addItem(tr("(several)"), None)
+            from core.layers import path_label
             for name in names:
-                self._layer_box.addItem(name, name)
+                self._layer_box.addItem(path_label(scene, name), name)
             if len(current) == 1:
                 idx = self._layer_box.findData(next(iter(current)))
                 self._layer_box.setCurrentIndex(max(idx, 0))
@@ -4167,7 +4171,8 @@ class EntityInfoPanel(QWidget):
         self._window.viewport.history.execute(AssignLayerCommand(targets, name))
         self._window.viewport.update()
         self._window.statusBar().showMessage(
-            tr("{n} entities moved to '{layer}'", n=len(targets), layer=name),
+            tr("{n} entities moved to '{layer}'", n=len(targets),
+               layer=self._layer_box.currentText()),
             2500)
 
     #: Past this many selected entities the totals are left out (#274).

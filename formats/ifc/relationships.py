@@ -66,9 +66,13 @@ class Appearance:
             names = {a.get('layer') or getattr(group, 'layer', None) or DEFAULT_LAYER for a in attributes}
             if group is not None:
                 names.add(group.layer or DEFAULT_LAYER)
+            from core.layers import path_label
             for layer in self.scene.layers:
-                if layer.name in names:
-                    self.layers[(layer.name, layer.uid)].add(representation)
+                if layer.key in names:
+                    # The folder path: unique and readable, where a bare
+                    # label may repeat and a key may be a uid.
+                    self.layers[(path_label(self.scene, layer.key),
+                                 layer.uid)].add(representation)
 
     def finish(self):
         for (name, uid), representations in self.layers.items():

@@ -168,12 +168,15 @@ class InspectionTools:
         rows = []
         for layer in scene.layers:
             path, folder = [], layer.folder
+            from core.layers import folder_label
             while folder and folder not in path:
                 path.insert(0, folder)
                 folder = getattr(scene, "folder_parents", {}).get(folder)
-            rows.append(dict(uid=layer.uid, name=layer.name, visible=layer.visible,
-                             folder_path=path, groups=group_counts[layer.name],
-                             faces=face_counts[layer.name]))
+            path = [folder_label(scene, f) for f in path]
+            rows.append(dict(uid=layer.uid, key=layer.key, name=layer.name,
+                             visible=layer.visible,
+                             folder_path=path, groups=group_counts[layer.key],
+                             faces=face_counts[layer.key]))
         return {"layers": rows}
 
     def _tool_set_layer_visibility(self, uids_or_names, visible):

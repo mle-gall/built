@@ -141,8 +141,8 @@ def layer_outline(scene) -> list:
     folders = L.folders_of(scene)
     held: dict = {}
     for ly in layers:
-        if ly.name != L.DEFAULT_LAYER:
-            held.setdefault(ly.folder, []).append(ly.name)
+        if ly.key != L.DEFAULT_LAYER:
+            held.setdefault(ly.folder, []).append(ly.key)
     below: dict = {}
     for f in folders:
         below.setdefault(L.folder_parent(scene, f), []).append(f)
@@ -155,7 +155,7 @@ def layer_outline(scene) -> list:
             block(f, depth + 1)
         out.extend(("layer", n, depth) for n in held.get(folder, ()))
 
-    if any(ly.name == L.DEFAULT_LAYER for ly in layers):
+    if any(ly.key == L.DEFAULT_LAYER for ly in layers):
         out.append(("layer", L.DEFAULT_LAYER, 0))
     block(None, 0)
     return out

@@ -453,7 +453,9 @@ def bootstrap(scene, registry):
         if source and not mount and source in source_trees:
             continue
         parent = folder_keys.get(scene.folder_parents.get(f))
-        add(folder_keys[f], f.split(links.SEP, 1)[-1] if source else f, parent,
+        from core.layers import folder_label
+        label = folder_label(scene, f)
+        add(folder_keys[f], label.split(links.SEP, 1)[-1] if source else label, parent,
             **({'source': source, 'mount': mount} if source else {}))
     for stem, src in source_paths.items():
         key = 'link:' + stem
@@ -465,22 +467,22 @@ def bootstrap(scene, registry):
             nodes[key + '/' + sk] = dict(name=sn['name'], parent=parent, order=sn['order'],
                                          source=src, source_node=sk, source_recipe=deepcopy(sn['recipe']))
     for layer in scene.layers:
-        if layer.name == DEFAULT_LAYER:
+        if layer.key == DEFAULT_LAYER:
             continue
         src = folder_sources.get(layer.folder)
         if src in source_trees:
             continue
         key = 'layer:' + layer.uid
-        pairs = by_tag.pop(layer.name, [])
+        pairs = by_tag.pop(layer.key, [])
         groups = [g for g, source in pairs if source == src and not links.is_linked(g)]
         recipe = _infer(groups, key, conflicts)
-        recipe['tag'] = layer.name
+        recipe['tag'] = layer.key
         name = layer.name.split(links.SEP, 1)[-1] if src else layer.name
         if name.casefold().startswith('_to review'):
             conflicts.append(dict(node=key, reason='review layer', count=len(groups),
                                   placements=[dict(uid=g.uid, name=g.name) for g in groups]))
         add(key, name, folder_keys.get(layer.folder),
-            **(dict(source=src, source_tag=layer.name, source_recipe=recipe) if src else dict(recipe=recipe)))
+            **(dict(source=src, source_tag=layer.key, source_recipe=recipe) if src else dict(recipe=recipe)))
         if groups and not src:
             filing[key] = [g.uid for g in groups]
     for tag, pairs in by_tag.items():

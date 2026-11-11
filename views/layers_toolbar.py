@@ -122,13 +122,13 @@ class _LayerDelegate(QStyledItemDelegate):
                 painter, QRect(r.left() + _EYE_X, cy, _GLYPH, _GLYPH))
             node_icon("lock" if ly.locked else "lock_open").paint(
                 painter, QRect(r.left() + _LOCK_X, cy, _GLYPH, _GLYPH))
-            if ly.name != L.DEFAULT_LAYER:          # always on: nothing to do
-                isolate_icon(L.is_isolated(scene, ly.name)).paint(
+            if ly.key != L.DEFAULT_LAYER:           # always on: nothing to do
+                isolate_icon(L.is_isolated(scene, ly.key)).paint(
                     painter, QRect(r.left() + _ISO_X, cy, _GLYPH, _GLYPH))
             layer_swatch(ly).paint(
                 painter, QRect(r.left() + _SWATCH_X, cy, _GLYPH, _GLYPH))
         font = option.font
-        if ly is not None and L.active_layer(scene) == ly.name:
+        if ly is not None and L.active_layer(scene) == ly.key:
             font.setBold(True)
         painter.save()
         painter.setFont(font)
@@ -198,8 +198,8 @@ class LayerCombo(QComboBox):
         self.selection_layers = selection_layers
         self.clear()
         for ly in scene.layers:
-            self.addItem(_row_icon(ly, scene), ly.name)
-            self.setItemData(self.count() - 1, ly.name, _NAME)
+            self.addItem(_row_icon(ly, scene), L.path_label(scene, ly.key))
+            self.setItemData(self.count() - 1, ly.key, _NAME)
         current = self.selection_layers
         if not current:
             shown = L.active_layer(scene)
@@ -304,8 +304,8 @@ def _row_icon(ly, scene) -> QIcon:
     icons = [(node_icon("eye" if ly.visible else "eye_off"), _EYE_X - 4),
              (node_icon("lock" if ly.locked else "lock_open"), _LOCK_X - 4),
              (layer_swatch(ly), _SWATCH_X - 4)]
-    if ly.name != L.DEFAULT_LAYER:
-        icons.append((isolate_icon(L.is_isolated(scene, ly.name)),
+    if ly.key != L.DEFAULT_LAYER:
+        icons.append((isolate_icon(L.is_isolated(scene, ly.key)),
                       _ISO_X - 4))
     for icon, x in icons:
         icon.paint(p, QRect(x, 0, _GLYPH, _GLYPH))

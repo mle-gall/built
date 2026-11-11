@@ -360,7 +360,7 @@ def _apply_payload_inner(scene, payload, progress=None) -> str:
         from core.layers import Layer
         folder_of, folder_hidden = _import_tag_folders(
             scene, payload.get("layer_folders") or ())
-        known = {ly.name for ly in scene.layers}
+        known = {ly.key for ly in scene.layers}
         for raw in payload["layers"]:
             name = raw.get("name")
             if name and name not in known:

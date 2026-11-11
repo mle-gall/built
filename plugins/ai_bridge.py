@@ -298,7 +298,10 @@ class _Bridge(QObject, InspectionTools, RecordTools, FacetTools, StructureTools)
             "component_instances": insts,
             "group_names": [g.name for g in scene.groups][:100],
             "materials": sorted(getattr(scene, "materials", {}) or {})[:100],
-            "layers": [ly.name for ly in scene.layers],
+            # Keys are what g.layer takes; labels may repeat.
+            "layers": [ly.key for ly in scene.layers],
+            "layer_labels": {ly.key: ly.name for ly in scene.layers
+                             if ly.name != ly.key},
             "dimensions": len(getattr(scene, "dimensions", []) or []),
             "section_planes": len(getattr(scene, "section_planes", []) or []),
             "selection": len(scene.selection),

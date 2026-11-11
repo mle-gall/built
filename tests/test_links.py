@@ -51,7 +51,8 @@ def test_linking_brings_the_tags_namespaced_in_their_folders(tmp_path):
     assert wood.folder == "Site / Structure"
     assert folder_parent(host, "Site / Structure") == "Site"
     assert folder_parent(host, "Site") == links.LINKED_FOLDER
-    assert host.layer("Wood") is None                # never mixed with ours
+    assert host.layer_by_key("Wood") is None         # never mixed with ours
+    assert wood.name == "Wood"                       # shown as in the source
     from core.group import iter_placements
     names = {layer_of(f) for g, _m in iter_placements(comp)
              for f in g.mesh.faces}

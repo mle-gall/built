@@ -135,7 +135,8 @@ def test_tree_entity_selection_and_layers(model):
 
 def test_layer_usage_includes_untagged_groups_and_shared_faces(model):
     win, bridge, parent, child, layer = model
-    layer.name = child.layer = "A"
+    layer.name = "A"                      # a label; entities carry the key
+    child.layer = layer.key
     win.viewport.scene.groups.append(Group(child.mesh))
     child.mesh.faces[0].attrs["layer"] = None
     rows = {r["name"]: r for r in call(bridge, "query_layers")["layers"]}

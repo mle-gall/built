@@ -61,7 +61,7 @@ def build(scene):
     from core.links import link_of
     from core.record import role
     index = Index(scene)
-    layers = {layer.name: layer for layer in scene.layers}
+    layers = {layer.key: layer for layer in scene.layers}
 
     def walk(groups, names, uids, spatial=None, source=None):
         for group in groups:

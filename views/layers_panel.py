@@ -151,6 +151,7 @@ def layers_signature(scene) -> tuple:
     folders = tuple(L.folders_of(scene))
     return (tuple(repr(sorted(vars(ly).items())) for ly in scene.layers),
             folders, tuple(L.folder_parent(scene, f) for f in folders),
+            tuple(L.folder_label(scene, f) for f in folders),
             L.active_layer(scene),
             bool(getattr(style, "color_by_layer", False)))
 
@@ -160,7 +161,7 @@ def layer_swatch(ly) -> QIcon:
     of its own, and must not pass for one: an empty (base-coloured) swatch
     crossed by a red slash from the top-left corner to the bottom-right —
     the usual «none» mark."""
-    if ly is None or ly.color is not None or ly.name != L.DEFAULT_LAYER:
+    if ly is None or ly.color is not None or ly.key != L.DEFAULT_LAYER:
         return swatch_icon(L.layer_color(ly))
     from PySide6.QtGui import QPainterPath
     from PySide6.QtWidgets import QApplication
@@ -729,7 +730,8 @@ class LayersPanel(QWidget):
         self.tree.clear()
         folders = {}
         for order, name in enumerate(L.folders_of(scene)):
-            item = _Row([name])
+            # Rows know folders and tags by KEY; the text is the label.
+            item = _Row([L.folder_label(scene, name)])
             item.setData(COL_NAME, Qt.UserRole, (KIND_FOLDER, name))
             item.setData(COL_NAME, ROLE_ORDER, order)
             item.setIcon(COL_NAME, node_icon("folder"))
@@ -746,11 +748,11 @@ class LayersPanel(QWidget):
         folder_layers = {name: [] for name in folders}
         for order, ly in enumerate(scene.layers):
             item = _Row([ly.name])
-            item.setData(COL_NAME, Qt.UserRole, (KIND_LAYER, ly.name))
+            item.setData(COL_NAME, Qt.UserRole, (KIND_LAYER, ly.key))
             item.setData(COL_NAME, ROLE_ORDER, order)
-            if ly.name != L.DEFAULT_LAYER:
+            if ly.key != L.DEFAULT_LAYER:
                 item.setFlags(item.flags() | Qt.ItemIsEditable)
-            self._paint_layer_row(item, ly, ly.name == active)
+            self._paint_layer_row(item, ly, ly.key == active)
             parent = folders.get(ly.folder)
             if parent is not None:
                 parent.addChild(item)
@@ -827,7 +829,7 @@ class LayersPanel(QWidget):
         unlocked (all of them hidden or locked → all back). Any other
         header: sort by it, twice to turn the order."""
         scene = self._scene()
-        names = [ly.name for ly in scene.layers]
+        names = [ly.key for ly in scene.layers]
         if col == COL_EYE:
             self.set_visible(names, not all(ly.visible for ly in scene.layers))
             return
@@ -861,10 +863,10 @@ class LayersPanel(QWidget):
         toolbar, or one layer left on its own however it came to be."""
         scene = self._scene()
         if self._isolated_now():
-            return {ly.name for ly in scene.layers
-                    if ly.visible and ly.name != L.DEFAULT_LAYER}
-        return {ly.name for ly in scene.layers
-                if L.is_isolated(scene, ly.name)}
+            return {ly.key for ly in scene.layers
+                    if ly.visible and ly.key != L.DEFAULT_LAYER}
+        return {ly.key for ly in scene.layers
+                if L.is_isolated(scene, ly.key)}
 
     def toggle_isolate(self, names) -> None:
         """A click on a target: show only ``names``; on the ones already
@@ -992,9 +994,9 @@ class LayersPanel(QWidget):
         item.setData(COL_OPACITY, Qt.UserRole + 1, clear)
         item.setToolTip(COL_OPACITY, tr("Opaque") if not clear else
                         f"{tr('Transparency')} {clear} %")
-        if ly.name != L.DEFAULT_LAYER:              # always on: no target
+        if ly.key != L.DEFAULT_LAYER:               # always on: no target
             from views.layers_toolbar import isolate_icon
-            alone = ly.name in self._alone
+            alone = ly.key in self._alone
             item.setIcon(COL_ISOLATE, isolate_icon(alone))
             item.setToolTip(COL_ISOLATE, tr(
                 "Shown alone — click to show back what Isolate hid")
@@ -1005,11 +1007,11 @@ class LayersPanel(QWidget):
         if ly.opacity < 1.0 and self.tree.isColumnHidden(COL_OPACITY):
             look.append(f"{tr('Transparency')} {round((1 - ly.opacity) * 100)} %")
         if ly.folder:
-            look.append(ly.folder)
+            look.append(L.folder_label(self._scene(), ly.folder))
         item.setToolTip(COL_NAME, "\n".join([ly.name, " · ".join(look)])
                         if look else ly.name)
-        if ly.name in self._counts:
-            self._set_count(item, self._counts[ly.name])
+        if ly.key in self._counts:
+            self._set_count(item, self._counts[ly.key])
 
     def _paint_folder_row(self, item, layers=None) -> None:
         scene = self._scene()
@@ -1025,7 +1027,7 @@ class LayersPanel(QWidget):
                    or any(getattr(ly, "printable", True) for ly in layers))
         item.setIcon(COL_PRINT, printer_icon(printed))
         from views.layers_toolbar import isolate_icon
-        names = {ly.name for ly in layers} - {L.DEFAULT_LAYER}
+        names = {ly.key for ly in layers} - {L.DEFAULT_LAYER}
         alone = bool(names) and names == self._alone
         item.setIcon(COL_ISOLATE, isolate_icon(alone))
         item.setToolTip(COL_ISOLATE, tr(
@@ -1092,6 +1094,17 @@ class LayersPanel(QWidget):
     @staticmethod
     def _children(item):
         return [item.child(i) for i in range(item.childCount())]
+
+    def _folder_path(self, key) -> str:
+        """A folder's labels from the top down to it — «Deck/Steel» — so
+        two folders labelled alike read apart in a menu."""
+        scene = self._scene()
+        parts, seen = [], set()
+        while key and key not in seen:
+            seen.add(key)
+            parts.append(L.folder_label(scene, key))
+            key = L.folder_parent(scene, key)
+        return "/".join(reversed(parts))
 
     def item_for(self, name: str, kind: str = KIND_LAYER):
         return next((it for it in self._all_items()
@@ -1195,7 +1208,7 @@ class LayersPanel(QWidget):
             names = used_layers(scene)
         else:
             from core.purge import unused_layers
-            names = {ly.name for ly in unused_layers(scene)}
+            names = {ly.key for ly in unused_layers(scene)}
         return lambda name: name in names
 
     def _apply_filter(self) -> None:
@@ -1555,16 +1568,16 @@ class LayersPanel(QWidget):
         # Isolating another layer while isolated: the way out still shows
         # back everything the first Isolate hid, not only the last one.
         self._isolated = list(dict.fromkeys(
-            self._isolated_now() + [ly.name for ly in scene.layers
-                                    if ly.visible and ly.name not in keep]))
+            self._isolated_now() + [ly.key for ly in scene.layers
+                                    if ly.visible and ly.key not in keep]))
         released = L.isolate(scene, names)
-        self._prune_selection([ly.name for ly in scene.layers
+        self._prune_selection([ly.key for ly in scene.layers
                                if not ly.visible])
         self._released(released)
         self._touch()
 
     def show_all(self) -> None:
-        self.set_visible([ly.name for ly in self._scene().layers], True)
+        self.set_visible([ly.key for ly in self._scene().layers], True)
 
     def pick_color(self, names) -> None:
         """Pick one colour for the layers ``names`` (one name or several —
@@ -1620,16 +1633,18 @@ class LayersPanel(QWidget):
     def _on_item_changed(self, item, column) -> None:
         if self._updating or column != COL_NAME:
             return
+        # ``old`` is the row's KEY, which a rename keeps: only the label
+        # changes, so the folded folders and the row just made still match.
         kind, old = self._key(item)
         new = item.text(COL_NAME).strip()
         scene = self._scene()
-        if new and new != old and self._just_made == (kind, old):
-            self._just_made = (kind, new)
-        if new and new != old:
+        if kind == KIND_FOLDER:
+            label = L.folder_label(scene, old)
+        else:
+            ly = scene.layer_by_key(old)
+            label = ly.name if ly is not None else old
+        if new and new != label:
             if kind == KIND_FOLDER:
-                if old in self._collapsed:
-                    self._collapsed.discard(old)
-                    self._collapsed.add(new)
                 L.rename_folder(scene, old, new)
             else:
                 L.rename_layer(scene, old, new)
@@ -1667,7 +1682,9 @@ class LayersPanel(QWidget):
         its name open for typing. Returns its name."""
         scene = self._scene()
         folder = folder or self._selected_folder()
-        name = L.unique_name([ly.name for ly in scene.layers], tr("Layer"))
+        # Unique among labels AND keys: a new tag's key is its first label.
+        name = L.unique_name([ly.name for ly in scene.layers]
+                             + [ly.key for ly in scene.layers], tr("Layer"))
         scene.layers.append(L.Layer(name, folder=folder or None))
         # A layer made after the plans were set up stays out of them.
         if self.new_layers_hidden_in_scenes():
@@ -2028,7 +2045,8 @@ class LayersPanel(QWidget):
             if movable:
                 sub = _submenu(menu, tr("Move to folder"))
                 for folder in L.folders_of(scene):
-                    sub.addAction(folder, lambda f=folder:
+                    sub.addAction(self._folder_path(folder),
+                                  lambda f=folder:
                                   self.move_to_folder(movable, f))
                 sub.addSeparator()
                 sub.addAction(tr("New folder…"), lambda: QTimer.singleShot(
@@ -2040,8 +2058,9 @@ class LayersPanel(QWidget):
             if name != L.DEFAULT_LAYER:
                 merge = _submenu(menu, tr("Merge into"))
                 for other in scene.layers:
-                    if other.name != name:
-                        merge.addAction(other.name, lambda o=other.name:
+                    if other.key != name:
+                        merge.addAction(L.path_label(scene, other.key),
+                                        lambda o=other.key:
                                         self.merge(name, o))
         else:
             menu.addAction(tr("New layer in this folder"),
@@ -2052,7 +2071,7 @@ class LayersPanel(QWidget):
             sub = _submenu(menu, tr("Move to folder"))
             for folder in L.folders_of(scene):
                 if folder not in inside:
-                    sub.addAction(folder, lambda f=folder:
+                    sub.addAction(self._folder_path(folder), lambda f=folder:
                                   self.move_folder(name, f))
             sub.addSeparator()
             top = sub.addAction(tr("Out of any folder"),

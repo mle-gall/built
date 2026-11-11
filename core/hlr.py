@@ -581,7 +581,8 @@ class HlrDrawing:
     for — is the layer each segment is inked with ((N,) object array of
     names; ``None`` for a section-cut chord, which keeps the cut's pen)."""
 
-    __slots__ = ("segs", "world", "kinds", "loops", "layers", "styles")
+    __slots__ = ("segs", "world", "kinds", "loops", "layers", "styles",
+                 "labels")
 
     def __init__(self, segs, world, kinds, loops, layers=None):
         self.segs = segs
@@ -592,6 +593,9 @@ class HlrDrawing:
         #: ``{layer: (rgb, linetype, weight)}`` a sheet fills in for the
         #: exporters (core.layers.line_styles); ``None`` until it does.
         self.styles = None
+        #: ``{tag key: name}`` the exporters write tags under
+        #: (core.layers.export_labels); ``None`` until set.
+        self.labels = None
 
     def __len__(self) -> int:
         return len(self.segs)

@@ -2099,7 +2099,9 @@ class OutlinerPanel(QWidget):
             else:
                 count = on_layer[name]
             # The count of top-level objects, seen without unfolding.
-            item = QTreeWidgetItem([f"{name} · {count}"])
+            text = (L.folder_label(scene, name) if kind == "folder"
+                    else L.layer_label(scene, name))
+            item = QTreeWidgetItem([f"{text} · {count}"])
             item.setData(COL_NAME, Qt.UserRole, ("heading", kind, name))
             item.setFlags(Qt.ItemIsEnabled)
             item.setToolTip(COL_NAME, tip)
@@ -3674,11 +3676,13 @@ class OutlinerPanel(QWidget):
     def _batch_menu(self, menu, targets) -> None:
         layers = menu.addMenu(tr("Layer"))
         current = {outliner.layer_name(g) for g in targets}
+        from core.layers import path_label
         for ly in self._scene().layers:
-            act = layers.addAction(ly.name, lambda n=ly.name:
+            act = layers.addAction(path_label(self._scene(), ly.key),
+                                   lambda n=ly.key:
                                    self.assign_layer(targets, n))
             act.setCheckable(True)
-            act.setChecked(current == {ly.name})
+            act.setChecked(current == {ly.key})
         layers.addSeparator()
         from PySide6.QtCore import QTimer
         layers.addAction(tr("New layer…"), lambda: QTimer.singleShot(

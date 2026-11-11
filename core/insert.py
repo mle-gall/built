@@ -127,7 +127,7 @@ def used_layers(face_attrs, edge_layers, groups) -> list:
 def ensure_layers(dst_scene, comp) -> list:
     """Create, visible, every layer the component's entities carry that
     the document does not have yet. Returns the names added."""
-    have = {ly.name for ly in dst_scene.layers}
+    have = {ly.key for ly in dst_scene.layers}
     needed: list = []
 
     def want(ent):

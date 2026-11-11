@@ -692,7 +692,7 @@ def _layer_look_sig(scene) -> tuple:
     style = getattr(scene, "display_style", None)
     by_layer = bool(getattr(style, "color_by_layer", False))
     return (by_layer, getattr(style, "face_mode", None) if by_layer else None,
-            tuple((ly.name, ly.color, ly.opacity)
+            tuple((ly.key, ly.color, ly.opacity)
                   for ly in getattr(scene, "layers", ())),
             _front_tint(style))
 
@@ -3822,7 +3822,7 @@ class Viewport(QOpenGLWidget):
                  getattr(self, "_edit_rest_mode", None),
                  bool(getattr(sc, "show_hidden_objects", False)),
                  bool(getattr(sc, "show_hidden_geometry", False)),
-                 tuple((ly.name, ly.visible, ly.locked) for ly in sc.layers),
+                 tuple((ly.key, ly.visible, ly.locked) for ly in sc.layers),
                  _layer_look_sig(sc),
                  len(sc.groups))
         live = getattr(self, "_frozen_cache_version", None) is None
@@ -3846,7 +3846,7 @@ class Viewport(QOpenGLWidget):
                        bool(getattr(sc, "show_hidden_geometry", False)),
                        # Hide Similar Components drops placements too.
                        bool(getattr(sc, "hide_similar_components", False)),
-                       tuple((ly.name, ly.visible, ly.locked) for ly in sc.layers),
+                       tuple((ly.key, ly.visible, ly.locked) for ly in sc.layers),
                        # Colour by layer and each layer's colour and
                        # transparency change the paint a placement draws in.
                        _layer_look_sig(sc),
@@ -7360,7 +7360,7 @@ class Viewport(QOpenGLWidget):
             cache = self._hidden_edge_draws = {}
         base = self._proto_base_chunk(mesh)
         key = (base["uid"], base.get("rev", 0),
-               tuple((ly.name, ly.visible) for ly in self.scene.layers))
+               tuple((ly.key, ly.visible) for ly in self.scene.layers))
         cache_id = (id(mesh), edge_kind)
         entry = cache.get(cache_id)
         if entry is not None and entry["mesh"] is mesh and entry["key"] == key:

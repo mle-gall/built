@@ -63,7 +63,8 @@ class Scene:
     # reason (invariant #4): reference to draw on top of, never topology.
     image_planes: list = field(default_factory=list)
     # Layers / tags: labels with visibility + lock. The default
-    # layer always exists; entities reference layers by name.
+    # layer always exists; entities reference layers by KEY (Layer.key —
+    # the name they were made with), the name being only a label.
     layers: list = field(default_factory=lambda: [
         __import__("core.layers", fromlist=["Layer"]).Layer(
             __import__("core.layers", fromlist=["DEFAULT_LAYER"]).DEFAULT_LAYER)
@@ -77,6 +78,9 @@ class Scene:
     # Folder → the folder it sits in (absent: at the top).
     folder_parents: dict = field(default_factory=dict)
     layer_folder_uids: dict = field(default_factory=dict)
+    # Folder key → its label, for the folders whose label is not their key
+    # (core.layers.folder_label).
+    layer_folder_names: dict = field(default_factory=dict)
     # Named materials (core.materials.Material), name → Material. The
     # registry gives identity to paint recipes; faces keep their baked
     # attrs (color/texture) as the render truth and optionally carry
@@ -211,7 +215,21 @@ class Scene:
         return self.mesh.faces
 
     # ---- Layers --------------------------------------------------------------
+    def layer_by_key(self, key: str):
+        """The tag whose key is ``key`` — what entities carry."""
+        for ly in self.layers:
+            if ly.key == key:
+                return ly
+        return None
+
     def layer(self, name: str):
+        """The tag ``name`` names: by its key (what entities carry), else
+        by its label — the first with it, labels being free to repeat."""
+        if not name:
+            return None
+        ly = self.layer_by_key(name)
+        if ly is not None:
+            return ly
         for ly in self.layers:
             if ly.name == name:
                 return ly
@@ -224,7 +242,7 @@ class Scene:
         name = layer_of(entity)
         if name == DEFAULT_LAYER and self._edit_stack:
             name = self._open_group_layer(entity) or name
-        ly = self.layer(name)
+        ly = self.layer_by_key(name)
         if ly is None:
             return True, False
         return ly.visible, ly.locked
@@ -691,7 +709,8 @@ class Scene:
                 seen.add(id(g))
                 stack.extend((child, id(g)) for child in g.children or ())
         key = (self.content_version, rows, repr([vars(layer) for layer in self.layers]),
-               repr(self.layer_folders), repr(self.folder_parents))
+               repr(self.layer_folders), repr(self.folder_parents),
+               repr(self.layer_folder_names))
         if key != self.__dict__.get("_revision_key"):
             self.__dict__["_revision_key"] = key
             self.__dict__["_revision"] = self.__dict__.get("_revision", 0) + 1
@@ -777,6 +796,7 @@ class Scene:
             self.layer_folders = []
             self.folder_parents = {}
             self.layer_folder_uids = {}
+            self.layer_folder_names = {}
             self.georef = None
             self.tile_layer = None
             self.terrain = None
@@ -870,7 +890,7 @@ class Scene:
         return (self.content_version,
                 tuple(id(level["group"]) for level in self._edit_stack),
                 id(self.mesh), bool(self.hide_similar_components),
-                tuple((ly.name, bool(ly.visible)) for ly in self.layers))
+                tuple((ly.key, bool(ly.visible)) for ly in self.layers))
 
     def bounds(self) -> tuple[QVector3D, QVector3D] | tuple[None, None]:
         """Axis-aligned bounding box of all geometry. ``(None, None)`` if empty.
