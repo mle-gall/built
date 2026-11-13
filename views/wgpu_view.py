@@ -111,7 +111,10 @@ class WgpuView(QWidget):
                 and paint_key == getattr(self, "_paint_key", None)):
             tracker = getattr(self, '_instance_updates', None)
             if tracker is not None:
-                tracker.version = version  # only the context bump was skipped
+                # Only the context bump was skipped.
+                tracker.version = version - scene._placement_context_bumps
+                if scene._edit_stack:
+                    self._reserve_edit_room(tracker)
             self.update()
             return
         if getattr(self, "_billboards", None) is not None:
@@ -125,21 +128,32 @@ class WgpuView(QWidget):
                                       for level in scene._edit_stack if level.get('world_copy')]
         self._selection_rows = {}
         self._selection_signature = None
+        kept_boxes = self.__dict__.get('_container_boxes', {})
+        kept_box_rows = self.__dict__.get('_container_box_rows', {})
         self._container_boxes = {}
+        self._container_box_rows = {}
         self._pick_frame_dirty = True
         start = time.perf_counter()
         tracker = getattr(self, '_instance_updates', None)
         if tracker is not None:
             visibility_changed = previous_token is not None and (
                 previous_token[1][1:] != token[1][1:] or previous_token[2] != token[2])
-            if sharing_restored or visibility_changed:
+            # A group left on its definition again (or its world copy) is a
+            # swap of one row when the tracker knows the path it was opened
+            # on; anything else rescans every placement.
+            restored = [group for group, mesh in resident_copies if group.mesh is not mesh]
+            if visibility_changed or not all(tracker.queue_swap(g) for g in restored):
                 tracker.journal_valid = False
+            tracker.remember_edit_path()
             tracker.observe(getattr(self.source_viewport, 'history', None))
         delta = (tracker.diff(scene) if tracker is not None and len(self.packed.instances)
                  and not repaint else None)
         if delta is not None:
             ids, rows = delta
             tracker.apply(ids, rows, self.renderer)
+            self._keep_container_boxes(tracker, ids, kept_boxes, kept_box_rows)
+            if scene._edit_stack:
+                self._reserve_edit_room(tracker)
             from views.wgpu_parity import hidden_geometry, face_ranges
             if tracker.changed:
                 self.packed.__dict__.pop("_face_ranges", None)
@@ -196,6 +210,7 @@ class WgpuView(QWidget):
         self._resident_count = len(self.packed.instances)
         self._instance_updates = InstanceUpdates(scene, self.packed)
         self._instance_updates.observe(getattr(self.source_viewport, 'history', None))
+        self._instance_updates.remember_edit_path()
         # Measure the big containers' edit boxes ahead of the first edit
         # (863 ms on the ride's first double-click otherwise). The world
         # geometry and the group's own axes survive entering/leaving a
@@ -208,9 +223,8 @@ class WgpuView(QWidget):
             if opening:
                 self.after_open.append(lambda: self._measure_boxes_later(scene, big))
             else:
-                from views.viewport import Viewport
                 for group in big:
-                    self._container_boxes[group] = Viewport._compute_obb(group)
+                    self._group_obb(group)
         # The batched native build releases the GIL, so it can overlap upload
         # and the first frame. Full repacks also need a fresh index on edits.
         if not opening:
@@ -229,6 +243,34 @@ class WgpuView(QWidget):
             self._upload()
         self._content_token = token
         self._paint_key = paint_key
+
+    def _reserve_edit_room(self, tracker):
+        """Entering a group: give the resident arrays spare room on the
+        worker (InstanceUpdates.reserve), adopted once copied."""
+        from concurrent.futures import ThreadPoolExecutor
+        if tracker._store is not None or tracker._reserving is not None:
+            return
+        if not hasattr(self, '_inference_worker'):
+            self._inference_worker = ThreadPoolExecutor(max_workers=1)
+        # Behind a snap index build still running: they would compete.
+        tracker.reserve(self._inference_worker)
+
+        def adopt():
+            if getattr(self, '_closed', False) or self._instance_updates is not tracker:
+                return
+            old = tracker.adopt_reserved()
+            if old is False:
+                QTimer.singleShot(50, self, adopt)
+                return
+            index = self.inference_index
+            packed = getattr(index, 'packed', None)
+            if old and packed is not None and packed is not self.packed and packed.vertices is old[0]:
+                # The index's open-time snapshot shares the old arrays;
+                # same contents, so let it read the new ones and free those.
+                from dataclasses import replace
+                index.packed = replace(packed, vertices=self.packed.vertices,
+                                       indices=self.packed.indices)
+        QTimer.singleShot(50, self, adopt)
 
     def _measure_boxes_later(self, scene, groups):
         """One container box per idle slice, from a few seconds after the
@@ -698,7 +740,32 @@ class WgpuView(QWidget):
         boxes = self.__dict__.setdefault('_container_boxes', {})
         if group not in boxes:
             boxes[group] = Viewport._compute_obb(group)
+            # Which rows it measured: an edit elsewhere keeps the box.
+            if getattr(self, 'uid_rows', None) is not None:
+                self.__dict__.setdefault('_container_box_rows', {})[group] = np.asarray(
+                    self._rows_for_group(group), np.int64)
         return boxes[group]
+
+    def _keep_container_boxes(self, tracker, ids, boxes, box_rows):
+        """Keep the container boxes an incremental edit did not touch.
+
+        Clearing them all on every edit threw away the big containers'
+        boxes measured after the open (0.9 s each on the ride, measured
+        again at the next double-click). A box stays when none of its rows
+        moved or changed prototype; rows added (or a diff that walked every
+        placement) may land inside any container, so then none stays."""
+        if not boxes or not tracker.last_local or tracker.added:
+            return
+        touched = [np.asarray(ids, np.int64), np.asarray(tracker.removed, np.int64)]
+        if tracker.changed:
+            codes = [code for _, _, code in tracker.changed]
+            touched.append(np.flatnonzero(np.isin(self.packed.instances['info'][:, 0], codes)))
+        touched = np.concatenate(touched)
+        for group, box in boxes.items():
+            rows = box_rows.get(group)
+            if rows is not None and not np.isin(rows, touched).any():
+                self._container_boxes[group] = box
+                self._container_box_rows[group] = rows
 
     def _edit_group_box_corners(self):
         from views.viewport import Viewport

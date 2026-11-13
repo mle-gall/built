@@ -555,3 +555,155 @@ def test_native_incremental_matches_full_rebuild():
     for a, b in zip(index.ray_cands(rows, (.25, .25, 4), (0., 0., -1.), 10.),
                     fresh.ray_cands(rows, (.25, .25, 4), (0., 0., -1.), 10.)):
         np.testing.assert_allclose(a, b)
+
+
+def _nested_component_scene():
+    """root ▸ inner ▸ leaf, the leaf a component instance (an ``xform`` and
+    a definition a top-level sibling shares), every level transformed: the
+    probe's ride edit (a support column five levels deep) in miniature."""
+    def moved(x, y, z):
+        m = QMatrix4x4()
+        m.translate(x, y, z)
+        return m
+    mesh = Mesh()
+    mesh.add_face([QVector3D(0, 0, 0), QVector3D(1, 0, 0), QVector3D(1, 1, 0), QVector3D(0, 1, 0)])
+    leaf, sibling = Group(mesh, name='leaf'), Group(mesh, name='sibling')
+    leaf.xform, sibling.xform = moved(1, 0, 0), moved(5, 0, 0)
+    inner, root = Group(name='inner'), Group(name='root')
+    inner.adopt([leaf])
+    inner.xform = moved(0, 2, 0)
+    root.adopt([inner])
+    root.xform = moved(0, 0, 3)
+    scene = Scene(groups=[root, sibling])
+    return scene, leaf, inner, root, mesh
+
+
+def test_component_edit_deep_in_nested_groups_rewrites_one_row(monkeypatch):
+    """Entering a component instance swaps its mesh for a world copy the
+    tracker never saw; the first edit used to walk every placement of the
+    model (2 s on the ride) and the last append copied the resident arrays
+    (0.5-1.4 s). The swap is one row from the edit path, a rebake that keeps
+    its size goes back in place, and leaving shares back without a walk."""
+    from core.history import History, MoveVerticesCommand, ReshareInstanceCommand
+    scene, leaf, inner, root, proto = _nested_component_scene()
+    updates = InstanceUpdates(scene, pack_scene(scene))
+    history = History(scene)
+    updates.observe(history)
+    for group in (root, inner, leaf):
+        scene.begin_group_edit(group)
+    assert scene.mesh is not proto                       # the world copy
+    from views import wgpu_scene
+
+    def records(scene, roots, *rest):
+        assert not roots, 'placement walk'
+        return wgpu_scene._placement_records(scene, roots, *rest)
+    monkeypatch.setattr('views.wgpu_updates._placement_records', records)
+    bakes = []
+    original = pack_scene
+    monkeypatch.setattr('views.wgpu_updates.pack_scene',
+                        lambda s, **kw: (bakes.append(len(s.groups)), original(s, **kw))[1])
+
+    def move():
+        face = scene.mesh.faces[0]
+        history.execute(MoveVerticesCommand(list(face.vertices), face.normal() * .01,
+                                            carry_textures=True))
+        delta = updates.diff(scene)
+        assert delta is not None
+        updates.apply(*delta)
+        assert updates.last_local
+
+    move()
+    assert bakes == [1]
+    assert [int(r) for r in updates.diff(scene)[0]] == []          # settled
+    assert_matches_fresh_pack(updates, scene)
+    size = len(updates.packed.vertices)
+    move()                                                         # same counts
+    assert len(updates.packed.vertices) == size
+    assert_matches_fresh_pack(updates, scene)
+
+    group, definition, xform, _ = scene.take_edit_share()
+    edited = group.mesh
+    scene.end_group_edit()
+    history.execute(ReshareInstanceCommand(group, definition, xform, edited))
+    updates.apply(*updates.diff(scene))
+    assert updates.last_local and leaf.mesh is proto
+    assert_matches_fresh_pack(updates, scene)                      # the sibling too
+    history.undo()
+    updates.apply(*updates.diff(scene))
+    assert updates.last_local
+    assert_matches_fresh_pack(updates, scene)
+
+
+def test_reserved_room_takes_the_first_append_without_a_copy():
+    from concurrent.futures import ThreadPoolExecutor
+    scene, updates = fixture_scene()
+    size = len(updates.packed.vertices)
+    with ThreadPoolExecutor(1) as pool:
+        updates.reserve(pool)
+        old = updates.adopt_reserved(wait=True)
+    assert old is not None and updates._store is not None
+    store = updates._store[0]
+    mesh = scene.groups[0].mesh
+    mesh.add_face([QVector3D(0, 0, 1), QVector3D(1, 0, 1), QVector3D(0, 1, 1)])
+    updates.apply(*updates.diff(scene))
+    assert updates.packed.vertices.base is store and len(updates.packed.vertices) > size
+    assert_matches_fresh_pack(updates, scene)
+
+
+def _soft_quads():
+    def quad(x):
+        m = Mesh()
+        m.add_face([QVector3D(x, 0, 0), QVector3D(x+1, 0, 0), QVector3D(x+1, 1, 0), QVector3D(x, 1, 0)])
+        m.add_face([QVector3D(x+1, 0, 0), QVector3D(x+2, 0, 1), QVector3D(x+2, 1, 1), QVector3D(x+1, 1, 0)])
+        for edge in m.edges:
+            if len(edge.faces) == 2:
+                edge.soft = True
+        return m
+    scene = Scene(groups=[Group(quad(0)), Group(quad(5))])
+    return scene, InstanceUpdates(scene, pack_scene(scene))
+
+
+def test_edit_sends_only_its_own_profile_exclusions():
+    """A native module that keeps exclusions per prototype gets only the
+    rebaked ones: sending the whole list cost 0.45 s per edit on the ride."""
+    scene, updates = _soft_quads()
+    assert len(updates.packed.profile_exclusions) == 2
+    renderer = Renderer()
+    mesh = scene.groups[0].mesh
+    mesh.move_vertex(mesh.vertices[0], QVector3D(0, 0, .5))
+    updates.apply(*updates.diff(scene), renderer)
+    sent = [args[0] for name, args in renderer.calls if name == 'set_profile_exclusions']
+    code = updates.changed[0][2]
+    assert len(sent) == 1 and [c for c, _ in sent[0]] == [code]
+
+
+def test_older_module_gets_the_whole_list_when_an_exclusion_moved():
+    class Older(Renderer):
+        incremental_profile_exclusions = False
+    scene, updates = _soft_quads()
+    renderer = Older()
+    mesh = scene.groups[0].mesh
+    soft = next(e for e in mesh.edges if e.soft)
+    vertex = next(v for v in mesh.vertices if v.position == soft.a)
+    mesh.move_vertex(vertex, QVector3D(0, 0, .5))
+    updates.apply(*updates.diff(scene), renderer)
+    sent = [args[0] for name, args in renderer.calls if name == 'set_profile_exclusions']
+    assert len(sent) == 1 and len(sent[0]) == 2
+
+
+def test_an_edit_keeps_the_container_boxes_it_did_not_touch():
+    """Every set_scene used to drop the container boxes measured after the
+    open (0.9 s each on the ride, measured again at the next double-click)."""
+    from views.wgpu_view import WgpuView
+    scene, updates = fixture_scene()
+    view = SimpleNamespace(packed=updates.packed, _container_boxes={}, _container_box_rows={})
+    far, near = object(), object()
+    boxes = {far: 'far box', near: 'near box'}
+    rows = {far: np.array([1]), near: np.array([0])}
+    tracker = SimpleNamespace(last_local=True, added=0, removed=[], changed=[])
+    WgpuView._keep_container_boxes(view, tracker, np.array([0]), boxes, rows)
+    assert view._container_boxes == {far: 'far box'}
+    view._container_boxes = {}
+    tracker.added = 1                       # a new row may sit in any container
+    WgpuView._keep_container_boxes(view, tracker, np.array([0]), boxes, rows)
+    assert view._container_boxes == {}
