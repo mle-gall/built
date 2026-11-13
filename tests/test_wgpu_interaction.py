@@ -258,3 +258,13 @@ def test_idle_document_edits_refresh_native_view(monkeypatch):
     finally:
         display.close()
         stack.close()
+
+
+def test_orbit_pivot_is_under_cursor_without_snap_index(view):
+    # The snap index is built on a worker and dropped on edits and at open;
+    # meanwhile the pivot fell back to the middle of the model.
+    view.inference_index = None
+    target = QVector3D(5.5, 3.5, 0)
+    px = view._world_to_pixel(target)
+    pivot = view._orbit_pivot_at(*px)
+    assert (pivot - target).length() < 1e-3

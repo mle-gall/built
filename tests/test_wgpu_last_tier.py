@@ -95,9 +95,9 @@ def test_solid_click_results_and_undo(tool_type, monkeypatch):
     import views.wgpu_updates as update_module
     original_pack = update_module.pack_scene
     baked_meshes = []
-    def record_pack(scene):
+    def record_pack(scene, **kw):
         baked_meshes.extend(g.mesh for g in scene.groups)
-        return original_pack(scene)
+        return original_pack(scene, **kw)
     monkeypatch.setattr(update_module, 'pack_scene', record_pack)
     for group, ref in [(a, ra), (b, rb)]:
         native.pick_group = lambda *args: group

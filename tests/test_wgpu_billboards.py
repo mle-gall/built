@@ -161,7 +161,9 @@ def test_shared_billboard_prototype_edit_rebuilds_without_affecting_ordinary():
     updates.apply(*updates.diff(scene))
     np.testing.assert_array_equal(packed.instances, pack_scene(scene, texture_images=False).instances)
     sprite.mesh.move_vertex(sprite.mesh.vertices[0], QVector3D(0, 0, 1))
-    assert updates.diff(scene) is None
+    updates.apply(*updates.diff(scene))
+    from tests.test_wgpu_updates import assert_matches_fresh_pack
+    assert_matches_fresh_pack(updates, scene, texture_images=False)
 
 
 def test_capture_keeps_cutout_flag_and_camera_independence():

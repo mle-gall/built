@@ -303,6 +303,34 @@ def surface(index, row, origin, direction, limit=float('inf')):
     return origin + direction * float(valid.min())
 
 
+def packed_surface(packed, row, origin, direction):
+    """:func:`surface` without the snap index: the picked placement's own
+    triangles, straight from the pack. The index is built on a worker
+    (seconds on the ride) and dropped on edits and at open; the orbit pivot
+    and the zoom fell back to the middle of the model meanwhile, so the view
+    turned about a point nowhere near the cursor."""
+    from views.viewport import _moller_trumbore
+    if row is None or not 0 <= int(row) < len(packed.instances):
+        return None
+    info = packed.instances['info'][int(row)]
+    if info[2] & 129:
+        return None
+    face = packed.commands[int(info[0])]
+    start, count = int(face['base']), int(face['count'])
+    if count < 3:
+        return None
+    tris = packed.vertices['pos'][start:start + count - count % 3].astype(np.float64).reshape(-1, 3, 3)
+    matrix = packed.instances['world'][int(row)].astype(np.float64).reshape(4, 4).T
+    world = tris @ matrix[:3, :3].T + matrix[:3, 3]
+    v0 = world[:, 0]
+    t, hit = _moller_trumbore(np.array(origin.toTuple()), np.array(direction.toTuple()),
+                              v0, world[:, 1] - v0, world[:, 2] - v0)
+    valid = t[hit]
+    if not len(valid):
+        return None
+    return origin + direction * float(valid.min())
+
+
 def eligible_rows(index, packed=None):
     """Visible placements, including overrides from incremental/billboard updates."""
     values = (index.packed if packed is None else packed).instances

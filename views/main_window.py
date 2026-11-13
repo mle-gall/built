@@ -3127,6 +3127,14 @@ class MainWindow(WorksessionMixin, QMainWindow):
           must be stable across versions;
         - **a first place** when there is none: tabbed with the trays;
         - **a way back** when closed: Window ▸ Panels lists every tab."""
+        if self.isVisible() and not dock.isFloating():
+            # Shown before the dock layout places it, a new dock sat at the
+            # window's (0, 0) until the next layout pass parked it behind
+            # its tab. Under the Metal view every dock is a native view, so
+            # that spot was drawn: the Solid Inspector flashed over the
+            # toolbar for ~300 ms before Home came up. Start off-screen;
+            # the layout (or restoreDockWidget for a floating one) moves it.
+            dock.move(-32000, -32000)
         if not self.restoreDockWidget(dock):
             # Tabbed with Properties, on whichever side it is: the last
             # tray of the list may have been moved to the other side, and
@@ -6321,21 +6329,24 @@ class MainWindow(WorksessionMixin, QMainWindow):
         refresh.setSingleShot(True)
         resident_version = None
 
-        def rebuild():
+        def rebuild(progress=None):
+            # ``progress``: the opening document's bar is still up and this
+            # is its last stage (MainWindow._open_path_here).
             nonlocal resident_version
-            if getattr(self, "_opening_document", False):
+            if getattr(self, "_opening_document", False) and progress is None:
                 return
             from core import renderer_settings
             renderer_settings.arm()
             doc._renderer_starting = True
             scene = doc.viewport.scene
             version = scene.version
-            display.set_scene(scene)
+            display.set_scene(scene, progress=progress, opening=progress is not None)
             resident_version = version
             doc._resident_scene_ready = True
             if not len(display.packed.instances):
                 self._document_first_frame(doc)
-        refresh.timeout.connect(rebuild)
+        refresh.timeout.connect(lambda: rebuild())
+        display._rebuild = rebuild
         doc.viewport.sceneVersionChanged.connect(lambda *_: refresh.start(0))
         display._refresh_timer = refresh
         def present():
@@ -7118,7 +7129,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             try:
                 igz_format.load_into(self.viewport.scene,
                                      slot if recovered else path,
-                                     progress=lambda f, t: cb(0.25 * f, t))
+                                     progress=lambda f, t: cb(0.6 * f, t))
             except Exception as exc:  # noqa: BLE001 - surface any IO/parse error to the user
                 dlg.close()
                 QMessageBox.critical(self, tr("Open failed"), str(exc))
@@ -7184,6 +7195,19 @@ class MainWindow(WorksessionMixin, QMainWindow):
             self.viewport.notify_scene_changed()
             self._update_title()
             self._doc._after_picture.append(self.settle_heap)
+            display = getattr(self._doc, "stand_in", None)
+            if (getattr(self._doc, "_renderer_wgpu", False)
+                    and getattr(display, "_rebuild", None) is not None):
+                # The bar used to close here, and the window then showed an
+                # empty view while the model was packed and sent to the
+                # graphics card — 23 s on the ride with nothing saying so.
+                # That is the last stage of the opening now, under the bar.
+                display._refresh_timer.stop()
+                display._rebuild(progress=lambda f, text: cb(0.6 + 0.38 * f, text))
+                # The snap index and the containers' boxes, left for after
+                # the first picture.
+                self._doc._after_picture.extend(getattr(display, "after_open", ()))
+                display.after_open = []
             cb(1.0, "Document loaded")
             # Returning to Qt lets the selected renderer present before any
             # optional panel/cache work. A timer alone is not a frame barrier.

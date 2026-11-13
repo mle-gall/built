@@ -272,3 +272,33 @@ def test_sliced_refresh_cannot_publish_after_replacement_or_document_switch(monk
     panel_refresh.refresh_steps(panel, stages("new document"), deferred=False,
                                 current=lambda: True)
     assert published == ["new document"]
+
+
+def test_a_geometry_edit_leaves_the_browser_rows_as_they_are(win, monkeypatch):
+    """A push/pull or a drawn edge changes one mesh, not what a row shows:
+    on the ride (85 000 rows) each one read them all again, 0.5–1.6 s."""
+    from PySide6.QtGui import QVector3D as V
+    from core.group import Group
+    from core.history import AddEdgeCommand, MoveGroupCommand, SnapshotMutation
+    from core.mesh import Mesh
+    m = Mesh()
+    m.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0)])
+    g = Group(m, "edited")
+    vp = win.viewport
+    vp.scene.groups.append(g)
+    vp.scene.version += 1
+    outliner = win.project_browser.outliner
+    outliner.refresh()
+    rows = _count_calls(monkeypatch, outliner, "_update_rows")
+    vp.history.execute(SnapshotMutation(
+        lambda s: m.add_edge(V(0, 0, 1), V(1, 0, 1)), mesh=m))
+    outliner.refresh(rows_if_changed=True)
+    vp.history.execute(AddEdgeCommand(V(3, 0, 0), V(4, 0, 0)))
+    outliner.refresh(rows_if_changed=True)
+    vp.history.undo()
+    outliner.refresh(rows_if_changed=True)
+    assert rows == []
+    from core.history import RenameGroupCommand
+    vp.history.execute(RenameGroupCommand(g, "renamed"))
+    outliner.refresh(rows_if_changed=True)
+    assert len(rows) == 1

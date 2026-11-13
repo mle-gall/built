@@ -130,14 +130,17 @@ def test_audit_fixture_matches_gl_and_retains_hidden():
     assert packed.instances['info'][packed.uids.index(hidden.uid), 2] & OBJECT_HIDDEN
 
 
-def test_incremental_hidden_change_requests_atomic_repack():
+def test_incremental_hidden_change_rebakes_hidden_ranges_without_repack():
     from views.wgpu_updates import InstanceUpdates
+    from tests.test_wgpu_updates import assert_matches_fresh_pack
     g = Group(triangle()); scene = Scene(groups=[g]); updates = InstanceUpdates(scene, pack_scene(scene))
     g.mesh.faces[0].attrs['hidden'] = True
     g.mesh.move_vertex(g.mesh.vertices[0], QVector3D(0, 0, 1))
-    assert updates.diff(scene) is None
-    refreshed = pack_scene(scene)
-    assert refreshed.hidden_commands[0]['count'] == 3
+    updates.apply(*updates.diff(scene))
+    code = int(updates.packed.instances['info'][updates.rows[g.uid], 0])
+    assert updates.packed.hidden_commands[code]['count'] == 3
+    assert updates.packed.commands[code]['count'] == 0
+    assert_matches_fresh_pack(updates, scene)
 
 
 def test_incremental_paint_alpha_and_hidden_transform():

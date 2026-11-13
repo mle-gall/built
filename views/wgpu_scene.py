@@ -52,6 +52,9 @@ class PackedScene:
     reveal_hidden: tuple = (False, False)
 
     prototype_lookup: dict | None = None
+    # Code -> the baked paint its vertices carry (None: plain). An edit
+    # rebakes each variant of a changed mesh with its own paint.
+    prototype_paints: dict | None = None
 
     def upload(self, renderer):
         renderer.set_scene(tuple(a.view(np.uint8).reshape(-1) for a in
@@ -258,7 +261,13 @@ def _placement_records(scene, roots, vp, state):
             yield g, matrix, proxy, flags
 
 
-def pack_scene(scene, view_tint=None, *, face_overrides=None, texture_images=True):
+def pack_scene(scene, view_tint=None, *, face_overrides=None, texture_images=True,
+               baked_paints=None, progress=None):
+    """``baked_paints`` (id(group) -> paint) bakes those groups with that
+    paint instead of the one they resolve to: the incremental bake of a
+    changed prototype variant (views.wgpu_updates). ``progress(fraction,
+    text)`` is called as the placements are read (the native bake that
+    follows reports at 0.9)."""
     from time import perf_counter
     try:
         import resource
@@ -272,22 +281,33 @@ def pack_scene(scene, view_tint=None, *, face_overrides=None, texture_images=Tru
     meshes, lookup, rows, uids, paints = [], {}, [], [], []
     billboard_codes = set()
     groups = []
+    prototype_paints = {}
     from itertools import chain
     placements = chain([(None, None, None, 0)], _placement_records(scene, scene.groups, vp, state))
-    for group, matrix, paint_group, flags in placements:
+    total = 0
+    if progress is not None:
+        total = max(1, sum(1 for root in scene.groups for _ in iter_placements(root)))
+        progress(0.0, "Preparing the view…")
+    for index, (group, matrix, paint_group, flags) in enumerate(placements):
+        if progress is not None and index % 2048 == 2047:
+            progress(0.9 * index / total, "Preparing the view…")
         mesh = scene.loose_mesh if group is None else group.mesh
         paint_attrs = _paint_of(vp, paint_group)
         if paint_attrs and paint_attrs.get('front_only'):
             paint_attrs = None  # style tint stays dynamic
         # Texture mapping, opacity and tag effects create paint variants.
         # Opaque plain container RGB stays in the instance packed RGBA word.
-        baked_paint = _baked_paint(paint_attrs)
+        if baked_paints is not None and id(group) in baked_paints:
+            baked_paint = baked_paints[id(group)]
+        else:
+            baked_paint = _baked_paint(paint_attrs)
         billboard = getattr(group, "billboard", False)
         key = (id(mesh), repr(baked_paint), billboard)
         if key not in lookup:
             arrays = _source_arrays(mesh, baked_paint, texture_ids, face_overrides, billboard)
             lookup[key] = len(meshes) if len(arrays[0]) else -1
             if len(arrays[0]):
+                prototype_paints[len(meshes)] = baked_paint
                 meshes.append(arrays)
         code = lookup[key]
         if code < 0:
@@ -321,6 +341,8 @@ def pack_scene(scene, view_tint=None, *, face_overrides=None, texture_images=Tru
     # Drop the per-prototype copies BEFORE native output allocation, not just
     # before decoding textures. Deferred source arrays remain owned by meshes.
     del meshes
+    if progress is not None:
+        progress(0.9, "Preparing the view…")
     handoff = perf_counter()
     raw, indices, bounds, table, materials = _native.available().bake_scene(
         *arrays[:4], arrays[6], arrays[7], arrays[4], arrays[5], offsets, attributes, _native.qt_hypot(),
@@ -364,7 +386,7 @@ def pack_scene(scene, view_tint=None, *, face_overrides=None, texture_images=Tru
         shown = instances[(instances['info'][:, 2] & 1) == 0]
         if not len(shown):
             return PackedScene(vertices, indices, bounds, commands, edge_commands, instances, uids, world_bounds, dict(handoff=handoff-begin, native=baked-handoff, finish=perf_counter()-baked, peak_build_rss_bytes=(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss if resource is not None else None)), groups, materials, textures, tuple(texture_ids), hidden_commands, hidden_edge_commands, profile_exclusions,
-                               (bool(getattr(scene, 'show_hidden_geometry', False)), bool(getattr(scene, 'show_hidden_objects', False))), lookup)
+                               (bool(getattr(scene, 'show_hidden_geometry', False)), bool(getattr(scene, 'show_hidden_objects', False))), lookup, prototype_paints)
         b = bounds[shown['info'][:, 0], :, :3]
         center, extent = (b[:, 0]+b[:, 1])/2, (b[:, 1]-b[:, 0])/2
         mat = shown['world'].transpose(0, 2, 1)
@@ -372,7 +394,7 @@ def pack_scene(scene, view_tint=None, *, face_overrides=None, texture_images=Tru
         we = np.einsum('nij,nj->ni', abs(mat[:, :3, :3]), extent)
         world_bounds = np.array([(wc-we).min(axis=0), (wc+we).max(axis=0)])
     return PackedScene(vertices, indices, bounds, commands, edge_commands, instances, uids, world_bounds, dict(handoff=handoff-begin, native=baked-handoff, finish=perf_counter()-baked, peak_build_rss_bytes=(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss if resource is not None else None)), groups, materials, textures, tuple(texture_ids), hidden_commands, hidden_edge_commands, profile_exclusions,
-                               (bool(getattr(scene, 'show_hidden_geometry', False)), bool(getattr(scene, 'show_hidden_objects', False))), lookup)
+                               (bool(getattr(scene, 'show_hidden_geometry', False)), bool(getattr(scene, 'show_hidden_objects', False))), lookup, prototype_paints)
 
 
 def _material_columns(pos, corners, sizes, counts, table, attributes, texture_ids):

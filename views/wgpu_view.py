@@ -89,8 +89,15 @@ class WgpuView(QWidget):
         self.tools.cancel()
         super().hideEvent(event)
 
-    def set_scene(self, scene):
+    def set_scene(self, scene, *, progress=None, opening=False):
+        """Make ``scene`` resident. ``progress(fraction, text)`` reports the
+        pack; ``opening`` (a document coming in, its bar still up) leaves
+        the work the first picture does not need — the snap index and the
+        big containers' edit boxes — until after it."""
         self._observe_tool_source()
+        if opening:
+            # What the window runs after the first picture (see above).
+            self.after_open = []
         self.scene = scene
         allowed = getattr(scene, '_navigator_allowed', None)
         version, stack, _, similar, layers = scene._bounds_key()
@@ -173,7 +180,8 @@ class WgpuView(QWidget):
             self.build_seconds = time.perf_counter() - start
             self.update()
             return
-        self.packed = pack_scene(scene, getattr(self.source_viewport, 'view_tint', None))
+        self.packed = pack_scene(scene, getattr(self.source_viewport, 'view_tint', None),
+                                 progress=progress)
         from views.wgpu_billboards import Billboards
         self._billboards = Billboards(self.packed)
         self._scene_dirty = True
@@ -188,22 +196,64 @@ class WgpuView(QWidget):
         self._resident_count = len(self.packed.instances)
         self._instance_updates = InstanceUpdates(scene, self.packed)
         self._instance_updates.observe(getattr(self.source_viewport, 'history', None))
-        # Compute expensive edit boxes in the load pass. The world geometry
-        # and the group's own axes survive entering/leaving a container.
+        # Measure the big containers' edit boxes ahead of the first edit
+        # (863 ms on the ride's first double-click otherwise). The world
+        # geometry and the group's own axes survive entering/leaving a
+        # container. Opening a document, they wait for idle time: 2.9 s
+        # of an empty view on the ride, for boxes nobody had asked for yet
+        # (_group_obb still measures one on demand).
         if len(self.packed.instances) > 4096:
-            from views.viewport import Viewport
-            for group in scene.groups:
-                if group.children and len(self._rows_for_group(group)) > 4096:
+            big = [group for group in scene.groups
+                   if group.children and len(self._rows_for_group(group)) > 4096]
+            if opening:
+                self.after_open.append(lambda: self._measure_boxes_later(scene, big))
+            else:
+                from views.viewport import Viewport
+                for group in big:
                     self._container_boxes[group] = Viewport._compute_obb(group)
-        self._prepare_inference()
-        self.build_seconds = time.perf_counter()-start
+        if opening:
+            # The snap index is built on a worker that holds the GIL for
+            # seconds (5–10 s on the ride): started now, it slowed the
+            # upload and the first frame. Hover works without it meanwhile;
+            # the window starts it once the picture is up (after_open).
+            previous = getattr(self, '_inference_future', None)
+            if previous is not None:
+                previous.cancel()
+                self._inference_future = None
+            self.inference_index = None
+            self.after_open.append(self._refresh_inference)
+        else:
+            self.build_seconds = time.perf_counter()-start
         lo, hi = self.packed.world_bounds
         if self.source_viewport is None:
             self.camera.target = QVector3D(*((lo+hi)/2))
             self.camera.distance = max(float(np.linalg.norm(hi-lo))*1.4, 1.)
-        self._upload()
+        if progress is not None:
+            # The bar's repaint may present a frame, and a frame uploads a
+            # dirty pack itself: then it is up already (2.5 s twice on the
+            # ride otherwise).
+            progress(1.0, "Sending the model to the graphics card…")
+        if self._scene_dirty or self.renderer is None:
+            self._upload()
         self._content_token = token
         self._paint_key = paint_key
+
+    def _measure_boxes_later(self, scene, groups):
+        """One container box per idle slice, from a few seconds after the
+        document is on screen; a box measured on demand meanwhile is kept."""
+        pending = list(groups)
+
+        def step():
+            if getattr(self, '_closed', False) or self.scene is not scene:
+                return
+            boxes = self.__dict__.setdefault('_container_boxes', {})
+            while pending and pending[0] in boxes:
+                pending.pop(0)
+            if not pending:
+                return
+            self._group_obb(pending.pop(0))
+            QTimer.singleShot(250, self, step)
+        QTimer.singleShot(3000, self, step)
 
     def blank(self):
         """Only the background, while another document loads into this
@@ -1014,12 +1064,20 @@ class WgpuView(QWidget):
         return Viewport._project_to_lock_line(self, start, direction, x, y)
 
     def _depth_world_at(self, x, y):
-        from views.wgpu_inference import surface
+        from views.wgpu_inference import surface, packed_surface
         row = self.pick_row(x, y)
-        if row is not None and self.inference_index is not None:
-            point = surface(self.inference_index, row, *self._pixel_to_ray(x, y))
-            if point is not None:
-                return 'hit', point
+        if row is None:
+            return 'miss', None
+        ray = self._pixel_to_ray(x, y)
+        point = None
+        if self.inference_index is not None:
+            point = surface(self.inference_index, row, *ray)
+        if point is None:
+            # No snap index yet (worker still building it, or dropped by an
+            # edit): the picked placement's triangles answer on their own.
+            point = packed_surface(self.packed, row, *ray)
+        if point is not None:
+            return 'hit', point
         return 'miss', None
 
     def _world_under_cursor(self, x, y):

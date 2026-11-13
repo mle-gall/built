@@ -100,7 +100,17 @@ def image_has_cutout(path, cache={}) -> bool:
     if cached is not None:
         return cached
     from PySide6.QtCore import Qt
-    from PySide6.QtGui import QImage
+    from PySide6.QtGui import QImage, QImageReader
+    # A format without alpha (every JPEG) cannot see through: read the
+    # header, not the pixels — decoding each photo texture just to ask
+    # cost the ride's first picture ~0.8 s.
+    # (Not an indexed one: its palette may hold a transparent entry.)
+    opaque = {QImage.Format_RGB32, QImage.Format_RGB888, QImage.Format_BGR888,
+              QImage.Format_RGB16, QImage.Format_RGBX8888, QImage.Format_RGBX64,
+              QImage.Format_Grayscale8, QImage.Format_Grayscale16}
+    if QImageReader(str(path)).imageFormat() in opaque:
+        cache[path] = False
+        return False
     img = QImage(str(path))
     ok = False
     if not img.isNull() and img.hasAlphaChannel():

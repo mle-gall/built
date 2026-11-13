@@ -25,6 +25,36 @@ def fixture_scene():
     return scene, InstanceUpdates(scene, pack_scene(scene))
 
 
+def _prototype(packed, code):
+    """What a prototype draws: its four ranges' vertices and indices."""
+    parts = []
+    for commands in (packed.commands, packed.edge_commands,
+                     packed.hidden_commands, packed.hidden_edge_commands):
+        c = commands[code]
+        first, count = int(c['first']), int(c['count'])
+        parts.append((packed.vertices[int(c['base']) + packed.indices[first:first+count].astype(np.int64)].tobytes(),
+                      count))
+    return parts, packed.bounds[code].tobytes()
+
+
+def assert_matches_fresh_pack(updates, scene, **kw):
+    """The resident pack after incremental edits draws what a fresh pack
+    of the scene draws: same rows (by uid), same flags and paint, same
+    prototype geometry, colours and hidden ranges."""
+    fresh = pack_scene(scene, **kw)
+    packed = updates.packed
+    live = [r for r in range(len(packed.instances)) if r not in set(updates.removed)
+            and packed.uids[r] in updates.active]
+    assert sorted(packed.uids[r] for r in live) == sorted(fresh.uids)
+    for uid in fresh.uids:
+        f = fresh.uids.index(uid)
+        r = updates.rows[uid]
+        np.testing.assert_array_equal(packed.instances[r]['world'], fresh.instances[f]['world'])
+        np.testing.assert_array_equal(packed.instances[r]['info'][1:], fresh.instances[f]['info'][1:])
+        assert (_prototype(packed, int(packed.instances[r]['info'][0]))
+                == _prototype(fresh, int(fresh.instances[f]['info'][0])))
+
+
 class Renderer:
     def __init__(self):
         self.calls = []
@@ -73,7 +103,7 @@ def test_shared_mutation_bakes_once(monkeypatch):
     scene, updates = fixture_scene()
     calls = []
     original = pack_scene
-    monkeypatch.setattr('views.wgpu_updates.pack_scene', lambda scene: (calls.append(scene), original(scene))[1])
+    monkeypatch.setattr('views.wgpu_updates.pack_scene', lambda scene, **kw: (calls.append(scene), original(scene, **kw))[1])
     mesh = scene.groups[0].mesh
     mesh.move_vertex(mesh.vertices[0], QVector3D(0, 0, 2))
     renderer = Renderer()
@@ -410,7 +440,10 @@ def test_nested_row_edits_preserve_painted_variants_and_inherited_flags():
     updates.apply(ids, rows)
     np.testing.assert_array_equal(updates.packed.instances, pack_scene(scene).instances)
     a.mesh.move_vertex(a.mesh.vertices[0], QVector3D(0, 0, 2))
-    assert updates.diff(scene) is None
+    # The mesh is drawn twice, plain (b) and under the root's opacity (a):
+    # both variants rebake, neither one repacks the scene.
+    updates.apply(*updates.diff(scene))
+    assert_matches_fresh_pack(updates, scene)
 
 
 def test_hide_command_on_nested_container_updates_only_instance_flags():
@@ -428,3 +461,79 @@ def test_hide_command_on_nested_container_updates_only_instance_flags():
     history.undo()
     updates.apply(*updates.diff(scene))
     np.testing.assert_array_equal(updates.packed.instances, pack_scene(scene).instances)
+
+
+def test_new_paint_variant_bakes_without_repack(monkeypatch):
+    """Painting a container with opacity gives its nested mesh a baked
+    variant it never had: one prototype bake, not a scene repack."""
+    scene, _ = fixture_scene()
+    a, b = scene.groups
+    root = Group()
+    root.adopt([a])
+    scene.groups[:] = [root, b]
+    updates = InstanceUpdates(scene, pack_scene(scene))
+    root.material = {'opacity': .5, 'color': [.2, .3, .4]}
+    ids, rows = updates.diff(scene)
+    assert [m for m, _, _ in updates.changed] == [a.mesh]
+    updates.apply(ids, rows)
+    assert_matches_fresh_pack(updates, scene)
+    # Both variants follow a later geometry edit.
+    a.mesh.move_vertex(a.mesh.vertices[1], QVector3D(5, 0, 0))
+    updates.apply(*updates.diff(scene))
+    assert len(updates.changed) == 2
+    assert_matches_fresh_pack(updates, scene)
+
+
+def test_attribute_only_edit_without_journal_rebakes_that_mesh():
+    scene, updates = fixture_scene()
+    mesh = scene.groups[0].mesh
+    face = mesh.faces[0]
+    face.attrs['color'] = (1.0, 0.0, 0.0)
+    mesh.bump_revision()                     # what the paint commands do
+    updates.apply(*updates.diff(scene))
+    assert [m for m, _, _ in updates.changed] == [mesh]
+    assert_matches_fresh_pack(updates, scene)
+
+
+def test_mesh_history_edit_inside_nested_container_does_not_repack(monkeypatch):
+    from core.history import History, SnapshotMutation
+    scene, _ = fixture_scene()
+    a, b = scene.groups
+    root = Group()
+    root.adopt([a])
+    scene.groups[:] = [root, b]
+    updates = InstanceUpdates(scene, pack_scene(scene))
+    history = History(scene)
+    updates.observe(history)
+    scene.begin_group_edit(root)
+    scene.begin_group_edit(a)
+    history.execute(SnapshotMutation(lambda s: s.mesh.move_vertex(
+        s.mesh.vertices[0], QVector3D(0, 0, 4))))
+    scene.end_group_edit()
+    scene.end_group_edit()
+    calls = []
+    original = pack_scene
+    monkeypatch.setattr('views.wgpu_updates.pack_scene',
+                        lambda s, **kw: (calls.append(len(s.groups)), original(s, **kw))[1])
+    updates.apply(*updates.diff(scene))
+    assert calls == [1]                       # one prototype, not the scene
+    assert_matches_fresh_pack(updates, scene)
+
+
+def test_a_rebake_the_size_of_the_scene_falls_back_to_a_full_pack():
+    """Revisions also move without an edit (a lazy mesh built, commands that
+    flag every group mesh). Rebaking most of the scene in place is slower
+    than one pack and left a blank GPU scene on the facilities model."""
+    meshes = []
+    for i in range(300):
+        m = Mesh()
+        m.add_face([QVector3D(i, 0, 0), QVector3D(i + 1, 0, 0), QVector3D(i, 1, 0)])
+        meshes.append(m)
+    scene = Scene(groups=[Group(m) for m in meshes])
+    updates = InstanceUpdates(scene, pack_scene(scene))
+    for m in meshes[:10]:
+        m.bump_revision()
+    assert updates.diff(scene) is not None and len(updates.changed) == 10
+    for m in meshes:
+        m.bump_revision()
+    assert updates.diff(scene) is None

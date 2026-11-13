@@ -416,10 +416,10 @@ def test_geometry_repack_keeps_previous_frame_until_upload(view, monkeypatch):
     events = []
     pack = wgpu_view.pack_scene
 
-    def replacement(*args):
+    def replacement(*args, **kw):
         assert view.packed is old
         events.append("pack")
-        return pack(*args)
+        return pack(*args, **kw)
 
     def upload():
         assert view.packed is not old
@@ -430,6 +430,9 @@ def test_geometry_repack_keeps_previous_frame_until_upload(view, monkeypatch):
     monkeypatch.setattr(view, '_upload', upload)
     monkeypatch.setattr(view, 'blank', lambda: pytest.fail("cleared resident frame"))
     mesh.add_edge(QVector3D(1, 0, 0), QVector3D(2, 0, 0))
+    # A geometry edit alone rebakes its prototype in place now; showing
+    # hidden geometry changes the baked paint and still packs it all.
+    scene.show_hidden_geometry = True
     scene.version += 1
     view.set_scene(scene)
     assert events == ["pack", "upload"]

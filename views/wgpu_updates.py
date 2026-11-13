@@ -2,6 +2,9 @@
 
 Removed rows are tombstones: selections and GPU pick IDs never shift. A batch
 of mutated prototypes uses one R1b bake; transform previews only write rows.
+A prototype is (mesh, baked paint, billboard): a changed mesh rebakes every
+variant it has, each with its own paint, hidden faces/edges included, so an
+edit in a nested, painted or hidden-geometry model never repacks the scene.
 """
 import numpy as np
 from core.group import Group, iter_placements
@@ -15,24 +18,16 @@ class InstanceUpdates:
         self.scene = scene
         self.packed = packed
         self.meshes = {}
-        # The same mesh may have ordinary and face-me prototypes. The legacy
-        # incremental bake indexes by mesh alone; repack scene edits in that
-        # uncommon case, never camera updates.
-        self.billboard_modes = {}
-        self.shared_variants = False
-        # The replacement API currently accepts visible faces/edges only.
-        # Repack hidden streams and inherited paint variants atomically until
-        # the renderer supports replacing all four ranges together.
-        self.hidden_streams = bool(np.any(packed.hidden_commands['count'])
-                                   or np.any(packed.hidden_edge_commands['count']))
-        self.parity_repack = (any(key[1] != repr(None) for key in packed.prototype_lookup)
-                              or any(g.children for g in scene.groups))
+        # id(mesh) -> {code: (baked paint, billboard)}: every resident
+        # prototype a mesh has. One mesh may be drawn plain, under an
+        # inherited texture/opacity/tag effect and as a face-me sprite.
+        self.variants = {}
+        paints = packed.prototype_paints or {}
+        for key, code in (packed.prototype_lookup or {}).items():
+            if code >= 0:
+                self.variants.setdefault(key[0], {})[code] = (paints.get(code), key[2])
         for row, group in enumerate(packed.groups):
             mesh = group.mesh if group is not None else scene.loose_mesh
-            mode = getattr(group, 'billboard', False)
-            if id(mesh) in self.billboard_modes and self.billboard_modes[id(mesh)] != mode:
-                self.shared_variants = True
-            self.billboard_modes[id(mesh)] = mode
             self.meshes[id(mesh)] = (mesh, mesh._mut_serial,
                                     int(packed.instances['info'][row, 0]))
         # Empty containers have no GPU row, but still need a serial sentinel.
@@ -141,16 +136,16 @@ class InstanceUpdates:
             self.version = self.scene.content_version
         self.unsubscribe = history.add_listener(before=before, after=after)
 
+    def rebake_limit(self) -> int:
+        """Most prototypes one edit rebakes in place; past it, a full pack."""
+        return max(256, len(self.packed.commands) // 8)
+
     def diff(self, scene):
         """Return changed resident rows, retaining prototype and placement IDs."""
         if scene is not self.scene:
             return None
         local = self.unsubscribe is not None and self.journal_valid and scene.content_version == self.version
         placements = [] if local else [(None, None, None, 0)]
-        if not local and self.parity_repack and any(
-                mesh.revision != self.mesh_revisions.get(key)
-                for key, (mesh, _, _) in self.meshes.items()):
-            return None  # attribute-only changes also invalidate baked variants
         state = _placement_state(scene)
         loose = self.meshes.get(id(scene.loose_mesh))
         if local and (loose is None or loose[1] != scene.loose_mesh._mut_serial):
@@ -165,30 +160,39 @@ class InstanceUpdates:
             changed.update((key, self.meshes[key]) for key in self.pending_meshes
                            if self.meshes[key][0]._mut_serial != self.meshes[key][1])
         changed.update((key, self.meshes[key]) for key in self.pending_materials)
+        if not local:
+            # Attribute-only edits (paint, hidden faces) leave the geometry
+            # serial alone but move the revision: rebake those meshes too.
+            changed.update((key, (mesh, serial, code))
+                           for key, (mesh, serial, code) in self.meshes.items()
+                           if code >= 0 and mesh.revision != self.mesh_revisions.get(key))
         self.pending_materials.clear()
         self.pending_meshes.clear()
         additions = []
+        fresh = {}      # code -> mesh: variants that exist from this edit on
         for group, matrix, proxy, flags in placements:
             mesh = group.mesh if group is not None else scene.loose_mesh
             mode = getattr(group, 'billboard', False)
-            key = (id(mesh), repr(_baked_paint(_paint_of(vp, proxy))), mode)
+            paint = _baked_paint(_paint_of(vp, proxy))
+            key = (id(mesh), repr(paint), mode)
             old = self.meshes.get(id(mesh))
             code = self.packed.prototype_lookup.get(key)
-            if old is not None and code is None:
-                return None  # new paint or billboard variant
-            if old is None and (self.parity_repack or self.shared_variants or key[1] != 'None'):
-                return None
-            self.billboard_modes[id(mesh)] = mode
             uid = getattr(group, 'uid', 'loose')
-            if old is not None and old[2] == -1:
-                if old[1] == mesh._mut_serial:
-                    continue
-                old = None
-            if old is None:
+            if (old is not None and old[2] < 0 and old[1] == mesh._mut_serial
+                    and (code is None or code < 0)):
+                continue    # empty when packed, under any paint: no row
+            if code == -1:
+                code = None
+            if code is None:
+                # A new mesh, or a known mesh under a paint or billboard
+                # mode it was never drawn with: a prototype of its own.
                 code = len(self.packed.bounds)
-                old = (mesh, -1, code)
-                self.meshes[id(mesh)] = old
+                if old is None or old[2] < 0:
+                    old = (mesh, -1, code)
+                    self.meshes[id(mesh)] = old
                 self.packed.prototype_lookup[key] = code
+                self.variants.setdefault(id(mesh), {})[code] = (paint, mode)
+                fresh[code] = mesh
                 self.packed.bounds = np.concatenate((self.packed.bounds, np.zeros((1, 2, 4), np.float32)))
                 self.packed.commands = np.concatenate((self.packed.commands, np.zeros(1, COMMAND)))
                 self.packed.edge_commands = np.concatenate((self.packed.edge_commands, np.zeros(1, COMMAND)))
@@ -227,20 +231,21 @@ class InstanceUpdates:
         self.version = scene.content_version
         self.journal_valid = True
         self.roots = set(scene.groups) if not local else self.roots
-        if changed and (self.hidden_streams or self.parity_repack or self.shared_variants):
+        # Every variant of a changed mesh, and each new variant, rebakes.
+        bake = dict(fresh)
+        for key, (mesh, _, _) in changed.items():
+            for code in self.variants.get(key, ()):
+                bake[code] = mesh
+        if len(bake) > self.rebake_limit():
+            # Revisions and serials also move without an edit (a lazy mesh
+            # built, commands that flag every group mesh), and a batch the
+            # size of the scene costs more than one full pack. It also broke
+            # the resident GPU scene (facilities, 4 432 prototypes replaced:
+            # a blank frame, no error), so the full pack it is.
             return None
-        for mesh, _, _ in changed.values():
-            src = mesh.__dict__.get('_deferred_source')
-            if src is not None:
-                from views.array_bake import _attrs_table
-                hidden_geometry = (any(a.get('hidden') for a in _attrs_table(src))
-                                   or (src['flags'] is not None and np.any(src['flags'] & 2)))
-            else:
-                hidden_geometry = (any(f.attrs.get('hidden') for f in mesh.faces)
-                                   or any(e.hidden for e in mesh.edges))
-            if hidden_geometry:
-                return None
-        self.changed = list(changed.values())
+        self.changed = [(mesh, self.meshes[id(mesh)][1], code) for code, mesh in bake.items()]
+        for mesh in {id(m): m for m in bake.values()}.values():
+            self.mesh_revisions[id(mesh)] = mesh.revision
         self.removed = removed if local else [self.rows[uid] for uid in self.active - seen]
         self.active = seen
         if additions:
@@ -254,12 +259,15 @@ class InstanceUpdates:
     def apply(self, ids, rows, renderer=None):
         if self.changed:
             # A single native bake for the changed set, including shared meshes.
-            prototypes = []
-            for mesh, _, _ in self.changed:
+            prototypes, paints = [], {}
+            for mesh, _, code in self.changed:
+                paint, billboard = self.variants[id(mesh)][code]
                 prototype = Group(mesh, name="Resident prototype")
-                prototype.billboard = self.billboard_modes.get(id(mesh), False)
+                prototype.billboard = billboard
+                paints[id(prototype)] = paint
                 prototypes.append(prototype)
-            baked = pack_scene(Scene(groups=prototypes))
+            baked = pack_scene(Scene(groups=prototypes), baked_paints=paints)
+            baked_row = {id(group): j for j, group in enumerate(baked.groups)}
             from views.wgpu_parity import has_transparency
             if renderer is not None and hasattr(renderer, 'set_material_transparency') and has_transparency(baked):
                 renderer.set_material_transparency(True)
@@ -275,23 +283,30 @@ class InstanceUpdates:
                 self.packed.textures = _texture_array(paths)
                 if renderer is not None:
                     renderer.set_textures(*self.packed.textures)
+            baked_exclusions = dict(baked.profile_exclusions)
             for i, (mesh, _, code) in enumerate(self.changed):
-                uid = next((j for j, group in enumerate(baked.groups) if group.mesh is mesh), None)
+                uid = baked_row.get(id(prototypes[i]))
                 if uid is None:
-                    face = edge = np.zeros((), COMMAND)
+                    face = edge = hidden_face = hidden_edge = np.zeros((), COMMAND)
                     bounds = np.zeros((2, 4), np.float32)
                 else:
                     prototype = int(baked.instances['info'][uid, 0])
                     face, edge = baked.commands[prototype], baked.edge_commands[prototype]
+                    hidden_face = baked.hidden_commands[prototype]
+                    hidden_edge = baked.hidden_edge_commands[prototype]
                     bounds = baked.bounds[prototype]
-                exclusions[code] = dict(baked.profile_exclusions).get(prototype, []) if uid is not None else []
+                exclusions[code] = baked_exclusions.get(prototype, []) if uid is not None else []
                 start = int(face['base'])
                 count = int(face['count'] + edge['count'])
-                vertices = baked.vertices[start:start+count]
-                indices = baked.indices[start:start+count]
+                # Hidden faces and edges follow the visible ones in the bake;
+                # the renderer takes the visible range, the resident arrays
+                # keep all four for Show hidden geometry.
+                total = count + int(hidden_face['count'] + hidden_edge['count'])
+                vertices = baked.vertices[start:start+total]
+                indices = baked.indices[start:start+total]
                 if renderer is not None:
-                    renderer.replace_prototype(code, vertices.view(np.uint8).reshape(-1),
-                                               indices.view(np.uint8).reshape(-1),
+                    renderer.replace_prototype(code, vertices[:count].view(np.uint8).reshape(-1),
+                                               indices[:count].view(np.uint8).reshape(-1),
                                                bounds.view(np.uint8).reshape(-1), int(face['count']))
                 if renderer is not None:
                     material = np.empty(0, np.uint8)
@@ -313,14 +328,22 @@ class InstanceUpdates:
                 self.packed.vertices = np.concatenate((self.packed.vertices, vertices))
                 self.packed.indices = np.concatenate((self.packed.indices, indices))
                 self.packed.bounds[code] = bounds
-                for target, source in ((self.packed.commands, face), (self.packed.edge_commands, edge)):
+                first = offset
+                for target, source in ((self.packed.commands, face), (self.packed.edge_commands, edge),
+                                       (self.packed.hidden_commands, hidden_face),
+                                       (self.packed.hidden_edge_commands, hidden_edge)):
                     target[code]['count'] = source['count']
                     target[code]['base'] = offset
-                    target[code]['first'] = offset + (int(face['count']) if target is self.packed.edge_commands else 0)
+                    target[code]['first'] = first
+                    first += int(source['count'])
                 self.meshes[id(mesh)] = (mesh, mesh._mut_serial, code)
-            had_exclusions = bool(self.packed.profile_exclusions)
+            # The renderer takes the whole list (0.5 s on the ride): send it
+            # only when an edited prototype's own exclusions moved.
+            before = dict(self.packed.profile_exclusions)
+            moved = any((before.get(code) or []) != (exclusions.get(code) or [])
+                        for _, _, code in self.changed)
             self.packed.profile_exclusions = tuple((c, p) for c, p in exclusions.items() if p)
-            if renderer is not None and hasattr(renderer, 'set_profile_exclusions') and (had_exclusions or self.packed.profile_exclusions):
+            if renderer is not None and hasattr(renderer, 'set_profile_exclusions') and moved:
                 renderer.set_profile_exclusions(self.packed.profile_exclusions)
         if len(ids):
             if renderer is not None:

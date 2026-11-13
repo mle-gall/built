@@ -104,6 +104,11 @@ class Command(ABC):
     #: them out, whole, and leaves every group that stays as it was — its
     #: Browser row, the paint of its faces (see ``History.groups_cv``).
     keeps_groups = False
+    #: Whether it only changes the geometry of the mesh it edits: no group
+    #: comes or goes, and nothing a Browser row shows (name, tag, material,
+    #: copies, IFC class, hidden, locked) changes (see ``History.rows_cv``).
+    #: A push/pull on the ride no longer reads its 85 000 rows again.
+    keeps_rows = False
 
     @abstractmethod
     def do(self, scene) -> None:
@@ -275,18 +280,20 @@ class History:
         if before is None:
             return
         keeps = getattr(cmd, "keeps_paint", False)
-        if not (keeps or getattr(cmd, "keeps_groups", False)):
+        rows = keeps or getattr(cmd, "keeps_rows", False)
+        groups = keeps or getattr(cmd, "keeps_groups", False)
+        if not (rows or groups):
             return
         cv = getattr(self.scene, "content_version", None)
         if keeps:
             if self.paint_cv == before:
                 self.paint_cv = cv
-            if self.rows_cv == before:
-                self.rows_cv = cv
             if self.tags_cv == before:
                 self.tags_cv = cv
+        if rows and self.rows_cv == before:
+            self.rows_cv = cv
         for k, v in self.groups_cv.items():
-            if v == before:
+            if v == before and (groups or (rows and k == "rows")):
                 self.groups_cv[k] = cv
 
     def context_changed(self, before) -> None:
@@ -457,6 +464,8 @@ class AddEdgeCommand(Command):
     command actually created the edge, so undo only removes an edge it owns
     (never the pre-existing one it merged into)."""
 
+    keeps_rows = True
+
     def __init__(self, a: QVector3D, b: QVector3D, merge: bool = True,
                  soft: bool | None = None, curve: int | None = None,
                  layer: str | None = None) -> None:
@@ -517,6 +526,8 @@ class DeleteEdgesCommand(Command):
     bounding edge — erasing an edge takes its faces with it — so every
     face that used a deleted edge on its *outer* boundary is removed too (its
     other edges stay, now free). Hole edges are left alone."""
+
+    keeps_rows = True
 
     def __init__(self, edges: Iterable, cascade_faces: bool = True) -> None:
         self._endpoints = [(QVector3D(e.a), QVector3D(e.b)) for e in edges]
@@ -772,6 +783,8 @@ class AddFaceCommand(Command):
     undo removes exactly the loop this command punched.
     """
 
+    keeps_rows = True
+
     def __init__(
         self,
         vertices: Iterable[QVector3D],
@@ -948,6 +961,8 @@ class DeleteFaceCommand(Command):
     """Remove a face (resolved by its outer loop). Holes travel with it, so undo
     restores them via relink."""
 
+    keeps_rows = True
+
     def __init__(self, face) -> None:
         self._loop = [QVector3D(v) for v in face.vertices]
         self.face: Optional[Face] = None
@@ -1000,6 +1015,8 @@ class FlipFacesCommand(Command):
     selection and snapshots stay valid). The operation is an involution:
     undo simply flips again. Faces may live in the loose mesh or inside a
     group's mesh — the flip is per-object, so both work."""
+
+    keeps_rows = True
 
     def __init__(self, faces) -> None:
         self._faces = [f for f in faces if hasattr(f, "loop")]
@@ -2759,6 +2776,8 @@ class MoveVerticesCommand(Command):
     flattened to nothing. Only a landing
     pays for the check, and only over the faces it touches."""
 
+    keeps_rows = True
+
     def __init__(self, positions: Iterable[QVector3D], delta: QVector3D,
                  carry_textures: bool = False) -> None:
         self.src = [QVector3D(p) for p in positions]
@@ -3441,6 +3460,8 @@ class SnapshotMutation(Command):
 
     ``mesh`` (when given) is the mesh to snapshot instead of the scene's loose
     one — a push/pull aimed at a Group edits that group's isolated mesh."""
+
+    keeps_rows = True
 
     def __init__(self, mutate, mesh: Optional[Mesh] = None) -> None:
         self.mutate = mutate
@@ -5405,6 +5426,12 @@ class CompoundCommand(Command):
     def keeps_groups(self) -> bool:
         return all(getattr(c, "keeps_paint", False)
                    or getattr(c, "keeps_groups", False)
+                   for c in self.commands)
+
+    @property
+    def keeps_rows(self) -> bool:
+        return all(getattr(c, "keeps_paint", False)
+                   or getattr(c, "keeps_rows", False)
                    for c in self.commands)
 
     def do(self, scene) -> None:

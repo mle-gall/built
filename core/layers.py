@@ -313,8 +313,10 @@ def folders_of(scene) -> list[str]:
     from that list."""
     out = [f for f in getattr(scene, "layer_folders", None) or ()
            if isinstance(f, str) and f]
+    seen = set(out)
     for ly in getattr(scene, "layers", None) or ():
-        if ly.folder and ly.folder not in out:
+        if ly.folder and ly.folder not in seen:
+            seen.add(ly.folder)
             out.append(ly.folder)
     # Importers may still assign folder names directly.
     uids = getattr(scene, "layer_folder_uids", {})
@@ -371,12 +373,10 @@ def unique_name(taken, base: str) -> str:
     return f"{base} {n}"
 
 
-def folder_parent(scene, name: str) -> str | None:
-    """The folder ``name`` sits in, or ``None`` at the top. A parent that
-    no longer exists, or one that would make a loop, reads as the top."""
-    parents = getattr(scene, "folder_parents", None) or {}
+def _parent_in(parents: dict, known: set, name: str) -> str | None:
+    """:func:`folder_parent` against an already-read folder set."""
     parent = parents.get(name)
-    if not parent or parent not in folders_of(scene):
+    if not parent or parent not in known:
         return None
     seen = {name}
     up = parent
@@ -384,17 +384,36 @@ def folder_parent(scene, name: str) -> str | None:
         if up in seen:
             return None
         seen.add(up)
-        up = parents.get(up) if parents.get(up) in folders_of(scene) else None
+        up = parents.get(up) if parents.get(up) in known else None
     return parent
 
 
+def folder_parent(scene, name: str) -> str | None:
+    """The folder ``name`` sits in, or ``None`` at the top. A parent that
+    no longer exists, or one that would make a loop, reads as the top."""
+    return _parent_in(getattr(scene, "folder_parents", None) or {},
+                      set(folders_of(scene)), name)
+
+
 def subfolders(scene, name: str, deep: bool = False) -> list[str]:
-    """The folders directly in ``name`` — or, ``deep``, at any depth."""
-    out = [f for f in folders_of(scene) if folder_parent(scene, f) == name]
-    if deep:
-        for f in list(out):
-            out += subfolders(scene, f, deep=True)
-    return out
+    """The folders directly in ``name`` — or, ``deep``, at any depth.
+
+    The folder list is read once: reading it again for every folder and
+    every level made opening the ride (hundreds of linked tag folders,
+    placed one by one by core.links) take 15 s more."""
+    folders = folders_of(scene)
+    parents = getattr(scene, "folder_parents", None) or {}
+    known = set(folders)
+    below: dict = {}
+    for f in folders:
+        below.setdefault(_parent_in(parents, known, f), []).append(f)
+    def walk(folder) -> list[str]:
+        out = list(below.get(folder, ()))
+        if deep:
+            for f in list(out):
+                out += walk(f)
+        return out
+    return walk(name)
 
 
 def layers_in_folder(scene, name: str) -> list[str]:

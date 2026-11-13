@@ -4166,7 +4166,8 @@ class Viewport(QOpenGLWidget):
                 proxy = cache.get(id(child))
                 if proxy is None:
                     proxy = cache[id(child)] = Group(child.mesh,
-                                                     name=child.name)
+                                                     name=child.name,
+                                                     uid=child.uid)
                 if seen is not None:
                     seen.add(id(child))
                 tops[id(proxy)] = id(group)

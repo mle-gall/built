@@ -82,7 +82,8 @@ class Group:
                  "material", "axes", "component", "exploded",
                  "explode_offset", "ext", "locked")
 
-    def __init__(self, mesh: Mesh | None = None, name: str | None = None) -> None:
+    def __init__(self, mesh: Mesh | None = None, name: str | None = None,
+                 uid: str | None = None) -> None:
         self.mesh = mesh if mesh is not None else Mesh()
         self.name = name or f"Group {next(_counter)}"
         # Layer / tag name (None = default layer).
@@ -116,7 +117,10 @@ class Group:
         # Stable identity that survives save/load — what a scene names when
         # it remembers which objects it hides. Fresh per object; a copy gets
         # its own (see ``copy_group``).
-        self.uid = new_uid()
+        # ``uid``: a stand-in that carries another group's identity (the
+        # viewport's placement proxies, 100k of them on the ride: a random
+        # uid each was 0.75 s of every resident pack).
+        self.uid = uid or new_uid()
         #: The container's own paint (the usual convention: a group or component
         #: instance takes a material, and every face inside that wears the
         #: default material shows it; a face painted itself keeps its own —
