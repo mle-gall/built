@@ -97,6 +97,27 @@ def _fresh_skp_parse_tables():
     yield
 
 
+@pytest.fixture(autouse=True)
+def _native_resolved_per_test():
+    """``core._native.native`` is resolved on first read and then FIXED for
+    the session (a module global written by ``_native.__getattr__``). A
+    test that patches ``_native.wanted`` to False and reads ``native``
+    meanwhile (``tests/test_deferred_mesh.py`` does, through the loader)
+    fixed it to None; monkeypatch then put ``wanted`` back but knew nothing
+    of the global, so every later test in the batch ran without the Rust
+    engine and the store tests failed. Each test now starts with
+    ``native`` as the previous one found it, and what a test resolves or
+    patches there goes with it."""
+    import core._native as native_mod
+    d = native_mod.__dict__
+    had, before = "native" in d, d.get("native")
+    yield
+    if had:
+        d["native"] = before
+    else:
+        d.pop("native", None)
+
+
 _exit_status = [0]
 
 
