@@ -67,10 +67,19 @@ def plan_edge_commands(
     commands such as a tool-managed face, in a single ``CompoundCommand``).
     """
     commands: list[Command] = []
-    simulated: list[Edge] = list(scene.edges)
-    faces_snapshot: list[Face] = list(scene.faces)
-    near = _Nearby(simulated, faces_snapshot)
+    from core import scan_index
     from core.topology import KeyMemo
+    sc = scan_index.scan(scene.mesh)
+    if sc is not None:
+        # The mesh as arrays (core.scan_index): the lists below are the
+        # scan's, edited as the plan goes, and their searches ask it.
+        simulated = _ScanEdges(sc)
+        faces_snapshot = _ScanFaces(sc)
+        near = _ScanNearby()
+    else:
+        simulated = list(scene.edges)
+        faces_snapshot = list(scene.faces)
+        near = _Nearby(simulated, faces_snapshot)
     near.key = KeyMemo()            # nothing moves while a plan is made
 
     for a, b in segments:
@@ -253,6 +262,224 @@ class _Nearby:
         return self._pick(faces, list(pts))
 
 
+class _ScanList:
+    """A plan's running copy of the mesh's edge or face list over a mesh
+    scan (``core.scan_index``): the list at the scan's revision, less what
+    the plan removed, with what it replaced in place and what it appended
+    after — the operations :func:`plan_edge_commands` makes on its
+    ``simulated`` / ``faces_snapshot`` lists — without copying a list of
+    half a million elements per click. :meth:`pick` is ``_Nearby._pick``:
+    the items whose box (``_Nearby._points_box``, the same floats) meets
+    the window, in list order."""
+
+    _kind = ""
+
+    def __init__(self, sc) -> None:
+        self._sc = sc
+        self._got: dict = {}          # scan index -> element handed out
+        self._at: dict = {}           # element_identity -> scan index
+        self._dead: set = set()       # scan indices removed
+        self._repl: dict = {}         # scan index -> replacement item
+        self._extra: list = []        # appended items, in order
+        self._boxes: dict = {}
+
+    def _elements(self, idx) -> list:
+        new = [i for i in idx if i not in self._got]
+        if new:
+            for i, e in zip(new, self._elements_of(new)):
+                self._got[i] = e
+                self._at[element_identity(e)] = i
+        return [self._got[i] for i in idx]
+
+    def _elements_of(self, idx):
+        raise NotImplementedError
+
+    def _scan_hits(self, w) -> list:
+        raise NotImplementedError
+
+    def _base(self, item):
+        """The scan index ``item`` stands at, or None (not a scan element)."""
+        i = self._at.get(element_identity(item))
+        if i is not None and self._got[i] is item:
+            return i
+        return None
+
+    def _box(self, item):
+        hit = self._boxes.get(id(item))
+        if hit is not None and hit[0] is item:
+            return hit[1]
+        pts = item.vertices if hasattr(item, "vertices") else (item.a, item.b)
+        box = _Nearby._points_box(pts)
+        self._boxes[id(item)] = (item, box)
+        return box
+
+    @staticmethod
+    def _meets(box, w) -> bool:
+        x0, y0, z0, x1, y1, z1 = box
+        return (x1 >= w[0] and x0 <= w[3] and y1 >= w[1]
+                and y0 <= w[4] and z1 >= w[2] and z0 <= w[5])
+
+    def pick(self, pts) -> list:
+        w = _Nearby._window(pts)
+        idx = [i for i in self._scan_hits(w)
+               if i not in self._dead and i not in self._repl]
+        keyed = list(zip(idx, self._elements(idx)))
+        if self._repl:
+            # A replacement stands where the element it replaced stood,
+            # boxed afresh (``_Nearby._box`` of a new item).
+            keyed += [(i, r) for i, r in self._repl.items()
+                      if i not in self._dead and self._meets(self._box(r), w)]
+            keyed.sort(key=lambda t: t[0])
+        out = [x for _i, x in keyed]
+        out.extend(x for x in self._extra if self._meets(self._box(x), w))
+        return out
+
+    # ---- the list operations the planner makes --------------------------
+    def __contains__(self, item) -> bool:
+        i = self._base(item)
+        if i is not None and i not in self._dead and i not in self._repl:
+            return True
+        if any(r is item for j, r in self._repl.items() if j not in self._dead):
+            return True
+        return item in self._extra
+
+    def remove(self, item) -> None:
+        i = self._base(item)
+        if i is not None and i not in self._dead and i not in self._repl:
+            self._dead.add(i)
+            return
+        for j, r in self._repl.items():
+            if r is item and j not in self._dead:
+                self._dead.add(j)
+                return
+        self._extra.remove(item)
+
+    def append(self, item) -> None:
+        self._extra.append(item)
+
+    def index(self, item):
+        """A position token for ``__setitem__`` (the planner replaces what
+        it found, ``l[l.index(f)] = g``)."""
+        i = self._base(item)
+        if i is not None and i not in self._dead and i not in self._repl:
+            return ("base", i)
+        for j, r in self._repl.items():
+            if r is item and j not in self._dead:
+                return ("base", j)
+        return ("extra", self._extra.index(item))
+
+    def __setitem__(self, where, item) -> None:
+        kind, i = where
+        if kind == "base":
+            self._repl[i] = item
+        else:
+            self._extra[i] = item
+
+
+class _ScanEdges(_ScanList):
+    """``simulated``: the plan's edge list over the scan."""
+
+    def _elements_of(self, idx):
+        return self._sc.edges(idx)
+
+    def _scan_hits(self, w) -> list:
+        return self._sc.native.edges_meeting(w[:3], w[3:])
+
+    def cycle_adjacency(self, ka, kb):
+        """``topology._cycle_adjacency`` of this list, built per node as the
+        search asks (``_LazyAdjacency``)."""
+        return _LazyAdjacency(self, ka, kb)
+
+
+class _ScanFaces(_ScanList):
+    """``faces_snapshot``: the plan's face list over the scan."""
+
+    def _elements_of(self, idx):
+        return self._sc.faces(idx)
+
+    def _scan_hits(self, w) -> list:
+        return self._sc.native.faces_meeting(w[:3], w[3:])
+
+
+class _LazyAdjacency:
+    """``adj`` of ``topology._cycle_adjacency(edges, ka, kb)`` for a
+    :class:`_ScanEdges` list, made node by node: a node's list holds, in
+    list order, every edge with an end of that key (not degenerate, not a
+    copy of ``ka``–``kb``) — the scan's edges that may end there (the scan
+    files them by key cell), less those the plan removed, then the plan's
+    own pieces. Each entry is ``(other end's key, its position)``, the
+    position the same float32 value the edge's end holds. A breadth-first
+    search over it visits what the full adjacency would let it visit, in
+    the same order, so it finds the same cycle."""
+
+    def __init__(self, edges: _ScanEdges, ka, kb) -> None:
+        from core.topology import _key
+        self._edges = edges
+        self._pair = {ka, kb}
+        self._lists: dict = {}
+        self._extra: dict = {}
+        for e in edges._extra:
+            ea, eb = _key(e.a), _key(e.b)
+            if ea == eb or {ea, eb} == self._pair:
+                continue
+            self._extra.setdefault(ea, []).append((eb, e.b))
+            self._extra.setdefault(eb, []).append((ea, e.a))
+        # Replaced edges are not something the planner does to edges.
+        assert not edges._repl
+
+    def _list(self, u) -> list:
+        hit = self._lists.get(u)
+        if hit is not None:
+            return hit
+        sc = self._edges._sc
+        dead = self._edges._dead
+        out = []
+        for e, va, vb in sc.edges_ending_at(u):
+            if e in dead:
+                continue
+            ea, eb = sc.tkey(va), sc.tkey(vb)
+            if ea == eb or {ea, eb} == self._pair:
+                continue
+            if ea == u:
+                out.append((eb, sc.vec(vb)))
+            elif eb == u:
+                out.append((ea, sc.vec(va)))
+        out.extend(self._extra.get(u, ()))
+        self._lists[u] = out
+        return out
+
+    def __contains__(self, u) -> bool:
+        return bool(self._list(u))
+
+    def __getitem__(self, u) -> list:
+        lst = self._list(u)
+        if not lst:
+            raise KeyError(u)
+        return lst
+
+    def get(self, u, default=()):
+        lst = self._list(u)
+        return lst if lst else default
+
+
+class _ScanNearby:
+    """``_Nearby`` for the scan's lists: their own :meth:`_ScanList.pick`."""
+
+    key = None
+
+    @staticmethod
+    def edges(edges, a, b):
+        return edges.pick((a, b))
+
+    @staticmethod
+    def faces(faces, a, b):
+        return faces.pick((a, b))
+
+    @staticmethod
+    def faces_around(faces, pts):
+        return faces.pick(list(pts))
+
+
 def _around(near, faces, loop):
     """The faces a same-vertex face can be among: an equal face has the same
     corners, hence the same box (``face_exists`` compares vertex sets)."""
@@ -304,6 +531,10 @@ def _plan_faces(commands, faces_snapshot, simulated, sa, sb, eye=None,
 
 
 def _scene_has_curves(scene) -> bool:
+    from core import scan_index
+    sc = scan_index.scan(scene.mesh)
+    if sc is not None:
+        return sc.native.any_curve()
     return any(getattr(e, "curve", None) is not None for e in scene.edges)
 
 
@@ -330,8 +561,7 @@ def _append_flat_curve_rebuild(scene, commands, points) -> None:
     from core.arrangement import coplanar_plane
 
     has_curves = _scene_has_curves(scene)
-    verts = [v.position for v in scene.mesh.vertices] + list(points)
-    if coplanar_plane(verts) is not None:
+    if _whole_drawing_plane(scene, points) is not None:
         if has_curves:
             # Whole-flat drawing with curves: the full rebuild (every minimal
             # region gets a face — how a lone circle yields its disc).
@@ -343,7 +573,7 @@ def _append_flat_curve_rebuild(scene, commands, points) -> None:
             # the first rectangle whole over the lens (rect.igz report) — but
             # regions nobody covered stay empty (no resurrecting faces the
             # user deleted).
-            origin, normal = coplanar_plane(verts)
+            origin, normal = _whole_drawing_plane(scene, points)
             if scene.mesh.faces:
                 normal = scene.mesh.faces[0].normal()
                 origin = scene.mesh.faces[0].vertices[0]
@@ -360,9 +590,86 @@ def _append_flat_curve_rebuild(scene, commands, points) -> None:
     def on_plane(p):
         return abs(QVector3D.dotProduct(p - origin, normal)) < tol
 
+    from core import scan_index
+    sc = scan_index.scan(scene.mesh)
+    if sc is None:
+        edges = scene.mesh.edges
+    else:
+        edges = sc.edges(sc.native.edges_on_plane(
+            (origin.x(), origin.y(), origin.z()),
+            (normal.x(), normal.y(), normal.z()), tol, True))
     if any(e.curve is not None and on_plane(e.a) and on_plane(e.b)
-           for e in scene.mesh.edges):
+           for e in edges):
         commands.append(RebuildPlaneFacesCommand(origin, normal))
+
+
+def _whole_drawing_plane(scene, points):
+    """``coplanar_plane(every vertex of the mesh + points)``: whether the
+    whole drawing is flat. Its answer hangs on the first few points (they
+    fix the plane) and then on whether ANY point leaves it, so with a mesh
+    scan the first points are walked as the function walks them and the
+    rest are judged in one array pass — a point clearly off the plane, by
+    more than the float32 error of the test, decides; the doubtful ones go
+    through the test itself. Without a scan, the call on the full list."""
+    from core.arrangement import coplanar_plane
+    from core import scan_index
+    sc = scan_index.scan(scene.mesh)
+    if sc is None:
+        verts = [v.position for v in scene.mesh.vertices] + list(points)
+        return coplanar_plane(verts)
+    import numpy as np
+    P = sc.native.vertex_positions()
+    extra = [QVector3D(p) for p in points]
+    n_mesh = len(P)
+    total = n_mesh + len(extra)
+
+    def at(i):
+        return sc.vec(i) if i < n_mesh else extra[i - n_mesh]
+
+    if total < 3:
+        return coplanar_plane([at(i) for i in range(total)])
+    o = at(0)
+    # The direction and the normal: the first points that give them, in
+    # the function's own float32 arithmetic, found by walking from the
+    # start (a flat drawing settles them within its first points; the
+    # array pass below only skips points that cannot qualify).
+    allp = np.vstack([P, np.array([(q.x(), q.y(), q.z()) for q in extra],
+                                  dtype=np.float64).reshape(-1, 3)])
+    rel = allp - np.array([o.x(), o.y(), o.z()])
+    dist = np.sqrt((rel * rel).sum(axis=1))
+    d1 = None
+    for i in np.flatnonzero(dist > 0.99e-6).tolist():
+        if i == 0:
+            continue
+        p = at(i)
+        if (p - o).length() > 1e-6:
+            d1 = (p - o).normalized()
+            break
+    if d1 is None:
+        return (o, QVector3D(0, 0, 1))
+    dv = np.array([d1.x(), d1.y(), d1.z()])
+    cross = np.cross(dv, rel)
+    clen = np.sqrt((cross * cross).sum(axis=1))
+    n = None
+    for i in np.flatnonzero(clen > 0.99e-6 - 1e-6 * dist).tolist():
+        if i == 0:
+            continue
+        c = QVector3D.crossProduct(d1, at(i) - o)
+        if c.length() > 1e-6:
+            n = c.normalized()
+            break
+    if n is None:
+        return (o, QVector3D(0, 0, 1))
+    tol = 1e-4
+    nv = np.array([n.x(), n.y(), n.z()])
+    off = np.abs(rel @ nv)
+    slack = 1e-5 * dist + 1e-7
+    if bool((off > tol + slack).any()):
+        return None
+    for i in np.flatnonzero(off > tol - slack).tolist():
+        if abs(QVector3D.dotProduct(n, at(i) - o)) > tol:
+            return None
+    return (o, n)
 
 
 def _append_face_plane_rebuild(scene, commands, points) -> None:
@@ -382,7 +689,15 @@ def _append_face_plane_rebuild(scene, commands, points) -> None:
            for c in commands):
         return
     tol = 1e-4
-    for f in scene.mesh.faces:
+    from core import scan_index
+    sc = scan_index.scan(scene.mesh)
+    faces = scene.mesh.faces
+    if sc is not None:
+        import numpy as np
+        pts = np.array([(p.x(), p.y(), p.z()) for p in points],
+                       dtype=np.float64).reshape(-1, 3)
+        faces = sc.faces(sc.native.faces_through(pts, tol))
+    for f in faces:
         origin = f.vertices[0]
         normal = f.normal()
         # A degenerate normal is a WILDCARD here: dot(anything, zero) is 0,
@@ -398,8 +713,13 @@ def _append_face_plane_rebuild(scene, commands, points) -> None:
             # the arrangement over all of them — minutes, reads as a hang.
             # Hand-drawn planes stay far below this; past it, keep the naive
             # path (imports should live in a Group anyway).
+            others = scene.mesh.faces
+            if sc is not None:
+                others = sc.faces(sc.native.faces_coplanar(
+                    (origin.x(), origin.y(), origin.z()),
+                    (normal.x(), normal.y(), normal.z()), tol, 0.999 - 1e-5))
             on_plane = sum(
-                1 for g in scene.mesh.faces
+                1 for g in others
                 if abs(QVector3D.dotProduct(g.vertices[0] - origin,
                                             normal)) < tol
                 and abs(QVector3D.dotProduct(g.normal(), normal)) > 0.999)

@@ -83,10 +83,31 @@ def _find_face_by_loop(mesh, loop_positions) -> Optional[Face]:
     """The mesh face whose outer loop matches ``loop_positions`` (by key), or
     ``None``. Used to resolve a command's target face against the live mesh."""
     target = frozenset(_key(p) for p in loop_positions)
-    for f in mesh.faces:
+    for f in _faces_keyed_like(mesh, loop_positions):
         if frozenset(_key(p) for p in f.vertices) == target:
             return f
     return None
+
+
+#: A point whose ``_key`` is one of a loop's lies within one key cell
+#: (1e-4) of that loop's corner; the scans look this far and a bit more.
+_KEY_REACH = 2e-4
+
+
+def _faces_keyed_like(mesh, loop_positions, sc=None) -> list:
+    """The faces, in list order, that can have the same corner keys as
+    ``loop_positions``: every corner of such a face lies within a key cell
+    of the loop's, so its box lies within the loop's grown by that. From
+    the mesh scan when there is one (``core.scan_index``), else every face
+    — the caller's key test decides either way. ``sc``: a scan taken
+    earlier (the faces of THAT revision)."""
+    pts = list(loop_positions)
+    from core import scan_index
+    if sc is None:
+        sc = scan_index.scan(mesh) if pts else None
+    if sc is None or not pts:
+        return mesh.faces
+    return sc.faces(sc.faces_within(scan_index.box_of(pts, _KEY_REACH)))
 
 
 class CommandRejected(Exception):
@@ -550,7 +571,8 @@ class DeleteEdgesCommand(Command):
         if self.cascade_faces:
             gone = {frozenset((_key(a), _key(b))) for a, b in self._endpoints}
             self.removed_faces = [
-                f for f in m.faces if set(_loop_edges(f.vertices)) & gone
+                f for f in _faces_by_segments(m, self._endpoints)
+                if set(_loop_edges(f.vertices)) & gone
             ]
             for f in self.removed_faces:
                 m.remove_face(f)
@@ -571,6 +593,23 @@ class DeleteEdgesCommand(Command):
         scene.version += 1
 
 
+def _faces_by_segments(mesh, segments) -> list:
+    """The faces, in list order, whose outer loop can run along one of
+    ``segments`` (``(a, b)`` points) by key: such a face has a corner
+    within a key cell of each end, so its box meets the segment's grown by
+    that. Every face when there is no scan (or too many segments for
+    single queries to beat one pass)."""
+    from core import scan_index
+    segs = list(segments)
+    sc = scan_index.scan(mesh) if 0 < len(segs) <= 256 else None
+    if sc is None:
+        return mesh.faces
+    hit: set = set()
+    for a, b in segs:
+        hit.update(sc.faces_meeting(scan_index.box_of((a, b), _KEY_REACH)))
+    return sc.faces(sorted(hit))
+
+
 def _single_coplanar_pair(faces) -> Optional[tuple]:
     """The one pair of ``faces`` that face the same way (they share an edge,
     so that makes them coplanar), or ``None`` when there is no such pair,
@@ -584,6 +623,128 @@ def _single_coplanar_pair(faces) -> Optional[tuple]:
            for f in faces if f not in pairs[0]):
         return None
     return pairs[0]
+
+
+class _LoopIndex:
+    """``{corner keys: [faces with them, in list order]}`` of the mesh as
+    it is now — what the erase used to build over every face — filled only
+    for the keys of ``loops`` (the faces being erased), from the mesh scan.
+    Without a scan (or for many loops) it is that full index."""
+
+    def __init__(self, mesh, loops) -> None:
+        self._d: dict = {}
+        from core import scan_index
+        loops = [list(lp) for lp in loops]
+        sc = scan_index.scan(mesh) if 0 < len(loops) <= 256 else None
+        if sc is None:
+            if loops:
+                for f in mesh.faces:
+                    self._d.setdefault(
+                        frozenset(_key(p) for p in f.vertices), []).append(f)
+            return
+        for loop in loops:
+            target = frozenset(_key(p) for p in loop)
+            if target in self._d:
+                continue
+            self._d[target] = [
+                f for f in _faces_keyed_like(mesh, loop, sc)
+                if frozenset(_key(p) for p in f.vertices) == target]
+
+    def get(self, target):
+        return self._d.get(target)
+
+
+class _SegmentIndex:
+    """``seg_faces.get(segment keys)`` of the erase: the faces, in list
+    order AT CONSTRUCTION, whose outer loop runs along that segment (once
+    per run), then the faces :meth:`add` filed since. Built over every face
+    without a scan; with one, only the segments asked for are looked up —
+    candidates near the erased edges' ends at construction, keyed by THAT
+    revision's positions (the scan's), as the full index was."""
+
+    def __init__(self, mesh, endpoints) -> None:
+        from core import scan_index
+        self._full: Optional[dict] = None
+        self._extra: dict = {}
+        ends = list(endpoints)
+        sc = scan_index.scan(mesh) if len(ends) <= 256 else None
+        self._sc = sc
+        if sc is None:
+            self._full = {}
+            for f in mesh.faces:
+                for ek in _loop_edges(f.vertices):
+                    self._full.setdefault(ek, []).append(f)
+            return
+        # The edge found at an end may be a weld away from the clicked
+        # point; one more key cell covers it.
+        hit: set = set()
+        for a, b in ends:
+            hit.update(sc.faces_meeting(scan_index.box_of((a, b), 2 * _KEY_REACH)))
+        self._cand = sorted(hit)
+        self._loops = dict(zip(self._cand, sc.native.face_loops(self._cand)))
+        self._faces = dict(zip(self._cand, sc.faces(self._cand)))
+        self._ends = [(QVector3D(a), QVector3D(b)) for a, b in ends]
+        self._memo: dict = {}
+
+    def add(self, f) -> None:
+        for ek in _loop_edges(f.vertices):
+            self._extra.setdefault(ek, []).append(f)
+
+    def get(self, ek, default=()):
+        if self._full is not None:
+            base = self._full.get(ek, [])
+        else:
+            base = self._memo.get(ek)
+            if base is None:
+                base = self._memo[ek] = self._lookup(ek)
+        more = self._extra.get(ek, [])
+        if not base and not more:
+            return default
+        return base + more
+
+    def _lookup(self, ek) -> list:
+        sc = self._sc
+        if self._covers(list(ek)):
+            cand, loops, faces = self._cand, self._loops, self._faces
+        else:
+            # A segment away from every erased end (the cascade only asks
+            # for erased edges): every face of the scan.
+            cand = list(range(sc.native.counts()[2]))
+            loops = dict(zip(cand, sc.native.face_loops(cand)))
+            faces = None
+        out = []
+        for i in cand:
+            loop = loops[i]
+            n = len(loop)
+            ks = [sc.tkey(v) for v in loop]
+            for j in range(n):
+                if frozenset((ks[j], ks[(j + 1) % n])) == ek:
+                    out.append(i)
+        if faces is None:
+            return sc.faces(out)
+        return [faces[i] for i in out]
+
+    def _covers(self, keys) -> bool:
+        """Whether every face with a segment of these keys is among the
+        candidates: each key lies within a cell of one erased edge's end
+        (two of the same edge for a two-key segment)."""
+        def near(k, p) -> bool:
+            return all(abs(k[i] - c) <= _KEY_REACH
+                       for i, c in enumerate((p.x(), p.y(), p.z())))
+        for a, b in self._ends:
+            if all(near(k, a) or near(k, b) for k in keys):
+                return True
+        return False
+
+
+def _soft_faceless_edges(mesh) -> list:
+    """The soft edges bounding no face, in list order (a superset from the
+    scan; every edge without it): what the erase sweeps up."""
+    from core import scan_index
+    sc = scan_index.scan(mesh)
+    if sc is None:
+        return list(mesh.edges)
+    return sc.edges(sc.native.edges_faceless(True))
 
 
 class EraseSelectionCommand(Command):
@@ -607,10 +768,7 @@ class EraseSelectionCommand(Command):
         # Loop->face lookups through ONE index: _find_face_by_loop scans the
         # whole mesh per call, and deleting thousands of box-selected faces
         # froze for ~26 s on a 28k-face mesh (piscina.igz report, round 2).
-        by_loop: dict = {}
-        for f in m.faces:
-            by_loop.setdefault(
-                frozenset(_key(p) for p in f.vertices), []).append(f)
+        by_loop = _LoopIndex(m, self._face_loops)
         for loop in self._face_loops:
             bucket = by_loop.get(frozenset(_key(p) for p in loop))
             f = bucket.pop(0) if bucket else None
@@ -621,14 +779,10 @@ class EraseSelectionCommand(Command):
         # over every face was O(edges x faces) — deleting a curved tiled
         # wall (hundreds of curve segments) took 30+ s on an exploded
         # 28k-face mesh (piscina.igz report). Kept live as faces merge/die.
-        seg_faces: dict = {}
+        seg_faces = _SegmentIndex(m, self._edge_endpoints)
 
         def _index_face(f) -> None:
-            for ek in _loop_edges(f.vertices):
-                seg_faces.setdefault(ek, []).append(f)
-
-        for f in m.faces:
-            _index_face(f)
+            seg_faces.add(f)
         dead_faces: set = set()
         slit_planes: list = []
         across: list = []
@@ -715,7 +869,7 @@ class EraseSelectionCommand(Command):
         # left bordering no face is a dangling curve segment (a cylinder side's
         # vertical seam) — prune it so no stray vertical lines remain. Hard
         # orphan edges stay (an erased flat face keeps its outline).
-        for e in list(m.edges):
+        for e in _soft_faceless_edges(m):
             if e.soft and not e.faces:
                 m.remove_edge(e)
         # A merge can leave the big enclosing face overlapping its subdivisions;
@@ -775,6 +929,74 @@ def _inherit_paint(face, mother) -> None:
         if k in src and k not in face.attrs:
             v = src[k]
             face.attrs[k] = dict(v) if isinstance(v, dict) else v
+
+
+#: How far off a face's plane its containment tests let a point sit
+#: (``topology._PLANAR_TOLERANCE``, 1e-3), with room to spare.
+_PLANE_REACH = 2e-3
+
+
+def _faces_holding(mesh, loop) -> list:
+    """The faces, in list order, that can hold ``loop`` the way the
+    containment tests ask (``loop_inside_face``, ``find_subdividing_chain``,
+    ``carve_loop_by_chords``): every corner of the loop on the face's plane
+    within the planar tolerance and projected inside it, or on its
+    boundary. Such a face's box, grown by that tolerance and by how far its
+    own corners stray from its plane, holds the loop's box. A list taken
+    now, as ``list(m.faces)`` was: the caller may edit the mesh as it goes.
+    Every face when there is no scan."""
+    from core import scan_index
+    pts = list(loop)
+    sc = scan_index.scan(mesh) if pts else None
+    if sc is None:
+        return list(mesh.faces)
+    # The loop's own box, not grown: the FACE's grows (a bigger loop box
+    # would hold fewer faces).
+    lo, hi = scan_index.raw_box(pts)
+    pad = _PLANE_REACH + 1e-6 * max(abs(c) for c in lo + hi)
+    return sc.faces(sc.native.faces_holding(lo, hi, pad))
+
+
+def _faces_inside(mesh, face) -> list:
+    """The faces, in list order, that can lie strictly inside ``face``
+    (``loop_inside_face(face, other.vertices)``): every corner of theirs
+    within the planar tolerance of its plane and projected inside its
+    outer loop, so within its box grown by that tolerance and by how far
+    its corners stray from its plane. A list taken now; every face without
+    a scan (or for a face whose plane Python may read differently)."""
+    from core import scan_index
+    pts = face.vertices
+    sc = scan_index.scan(mesh) if len(pts) >= 3 else None
+    reach = _plane_reach(face) if sc is not None else None
+    if reach is None:
+        return list(mesh.faces)
+    return sc.faces(sc.faces_within(scan_index.box_of(pts, reach)))
+
+
+def _plane_reach(face) -> Optional[float]:
+    """How far from ``face``'s box a point projected inside it can lie:
+    the planar tolerance plus the farthest corner off the face's plane,
+    with slack for float32. ``None`` when the Newell vector is too short
+    to be sure which normal Python picks."""
+    pts = face.vertices
+    nx = ny = nz = 0.0
+    k = len(pts)
+    for i in range(k):
+        p, q = pts[i], pts[(i + 1) % k]
+        nx += (p.y() - q.y()) * (p.z() + q.z())
+        ny += (p.z() - q.z()) * (p.x() + q.x())
+        nz += (p.x() - q.x()) * (p.y() + q.y())
+    length = (nx * nx + ny * ny + nz * nz) ** 0.5
+    if length < 1e-8:
+        return None
+    nx, ny, nz = nx / length, ny / length, nz / length
+    o = pts[0]
+    off = span = 0.0
+    for p in pts:
+        dx, dy, dz = p.x() - o.x(), p.y() - o.y(), p.z() - o.z()
+        off = max(off, abs(dx * nx + dy * ny + dz * nz))
+        span = max(span, (dx * dx + dy * dy + dz * dz) ** 0.5)
+    return _PLANE_REACH + off + 1e-5 * span + 1e-7
 
 
 class AddFaceCommand(Command):
@@ -861,7 +1083,8 @@ class AddFaceCommand(Command):
 
         # Direction A: the new face falls inside an existing mother → the mother
         # gains the new loop as a hole.
-        mother = find_containing_face(m.faces, self.face.vertices, exclude=self.face)
+        mother = find_containing_face(_faces_holding(m, self.face.vertices),
+                                      self.face.vertices, exclude=self.face)
         if mother is not None:
             grown = hole_merged_with_loop(mother, self.face.vertices)
             if grown is not None:
@@ -877,7 +1100,7 @@ class AddFaceCommand(Command):
 
         # Direction B: the new face encloses existing smaller faces → it gains
         # each of them as a hole.
-        for other in list(m.faces):
+        for other in _faces_inside(m, self.face):
             if other == self.face:
                 continue
             if loop_inside_face(self.face, other.vertices):
@@ -887,7 +1110,7 @@ class AddFaceCommand(Command):
         # Direction C: drawn against an existing face's boundary (corner / edge
         # rectangle) → carve a connected sub-region. Only when no hole applied.
         if not self._punches and not self._hole_swaps:
-            for other in list(m.faces):
+            for other in _faces_holding(m, self.face.vertices):
                 if other == self.face:
                     continue
                 remainder = subtract_loop_from_face(other, self.face.vertices)
@@ -5313,6 +5536,21 @@ class RebuildPlaneFacesCommand(Command):
     def _on_plane(self, p: QVector3D) -> bool:
         return abs(QVector3D.dotProduct(p - self.origin, self.normal)) < self._TOL
 
+    def _near_plane(self, mesh, kind: str) -> list:
+        """The edges (both ends) or faces (outer corners) of ``mesh`` near
+        enough the plane for :meth:`_on_plane` to accept, in list order —
+        a superset from the mesh scan, every one without it. The caller's
+        own test decides."""
+        from core import scan_index
+        sc = scan_index.scan(mesh)
+        if sc is None:
+            return mesh.edges if kind == "edge" else mesh.faces
+        o = (self.origin.x(), self.origin.y(), self.origin.z())
+        n = (self.normal.x(), self.normal.y(), self.normal.z())
+        if kind == "edge":
+            return sc.edges(sc.native.edges_on_plane(o, n, self._TOL, False))
+        return sc.faces(sc.native.faces_on_plane(o, n, self._TOL))
+
     def do(self, scene) -> None:
         from core.arrangement import planar_rebuild
         from core.triangulate import triangulate
@@ -5336,7 +5574,7 @@ class RebuildPlaneFacesCommand(Command):
                         if e is not None and e not in plane_edges:
                             plane_edges.append(e)
         else:
-            plane_edges = [e for e in mesh.edges
+            plane_edges = [e for e in self._near_plane(mesh, "edge")
                            if self._on_plane(e.a) and self._on_plane(e.b)]
         if not plane_edges:
             if self.faces is not None:
@@ -5345,7 +5583,7 @@ class RebuildPlaneFacesCommand(Command):
             return
         if self.faces is None:
             plane_faces = [
-                f for f in mesh.faces
+                f for f in self._near_plane(mesh, "face")
                 if all(self._on_plane(v.position) for v in f.loop)
                 and all(self._on_plane(v.position)
                         for h in f.hole_loops for v in h)

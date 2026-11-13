@@ -26,6 +26,7 @@ mod weld;
 mod snap_build;
 mod pack;
 mod store;
+mod scans;
 
 #[pymodule]
 fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -57,6 +58,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // keep the store's PyO3 glue (and its Python symbols) alive.
     #[cfg(not(test))]
     store::py::register(m)?;
+    m.add_class::<scans::MeshScan>()?;
     Ok(())
 }
 

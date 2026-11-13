@@ -1,0 +1,720 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
+//! `MeshScan`: one mesh at one revision as flat arrays, for the drawing
+//! commands' searches over every face and edge (`core/scan_index.py`).
+//!
+//! Drawing one line across a face of a 267k-face mesh spent 20–25 s in
+//! Python loops that asked each face and edge a question most of them
+//! cannot answer yes to: is your box near the segment, is this loop inside
+//! you, do you lie on this plane, does an edge end at this point. Here those
+//! loops run over arrays, and every query is a PREFILTER: it returns, in
+//! list order, a superset of the elements the Python predicate can accept
+//! (its tolerances widened, never narrowed), and the caller runs that
+//! predicate, unchanged, on what comes back. So the answer is the full
+//! scan's, element for element, whatever the arithmetic differences
+//! between f64 here and Qt's float32 there.
+//!
+//! A scan is built either straight off a `MeshStore` (no Python object
+//! read) or from a Python mesh's three lists; it never changes after that.
+//! Keys of a store-backed scan come from a clone of the store state taken
+//! at build (O(chunks)), so an index stays meaningful after the mesh moves
+//! on.
+
+use crate::store::keys::{full_key, local_key, Kind, NONE};
+use crate::store::py::PyMeshStore;
+use crate::store::State;
+use numpy::ndarray::Array2;
+use numpy::{IntoPyArray, PyArray2, PyReadonlyArray2};
+use pyo3::exceptions::PyValueError;
+use pyo3::prelude::*;
+use pyo3::types::{PyList, PyString};
+use crate::store::cow::FxHashMap;
+use std::collections::HashMap;
+
+/// Edge flag bits in `MeshScan::eflag`.
+const SOFT: u8 = 1;
+const CURVE: u8 = 2;
+
+/// Parts of a scan (`MeshScan::have`): a Python mesh's are read from its
+/// objects only when a query needs them.
+const VERTS: u8 = 1;
+const EFLAGS: u8 = 2;
+const EDGES: u8 = 4;
+const FACES: u8 = 8;
+const ALL: u8 = VERTS | EFLAGS | EDGES | FACES;
+
+/// Outer-loop box of a face / box of an edge: `[lo; hi]`.
+type Box6 = [f64; 6];
+
+/// A face's plane as `Face.normal()` makes it, in f64.
+#[derive(Clone, Copy)]
+struct Plane {
+    /// First outer corner.
+    o: [f64; 3],
+    /// Unit Newell normal of the outer loop, `(0, 0, 1)` when degenerate.
+    n: [f64; 3],
+    /// Farthest outer corner from that plane, plus slack: a point Python
+    /// projects inside the face lies within the face's box grown by this
+    /// (and the loop's own distance to the plane).
+    reach: f64,
+    /// Newell vector so short that Python's float32 length may fall on the
+    /// other side of its 1e-9 guard (and pick ``(0, 0, 1)``): no plane
+    /// query may leave this face out.
+    vague: bool,
+}
+
+#[pyclass(module = "ingetrazo_core", name = "MeshScan")]
+pub struct MeshScan {
+    /// Vertex positions: the mesh's vertices in list order, then any vertex
+    /// an edge or face references that the list does not hold (a corner
+    /// whose edges were erased, still in its face's loop).
+    pos: Vec<[f64; 3]>,
+    /// Vertices in the mesh's own list (the rest are extras).
+    n_listed: usize,
+    ends: Vec<[u32; 2]>,
+    /// `len(edge.faces)`, multiplicity included.
+    enf: Vec<u32>,
+    eflag: Vec<u8>,
+    /// Outer loops: face `f` has corners `corners[fstart[f]..fstart[f+1]]`.
+    fstart: Vec<u32>,
+    corners: Vec<u32>,
+    /// Store-backed: the state at build (for keys) and dense -> slot.
+    state: Option<State>,
+    live: [Vec<u32>; 3],
+    /// Python-backed: the element lists at build (index -> element), read
+    /// part by part as queries need them (``have``).
+    lists: Option<[Py<PyList>; 3]>,
+    have: u8,
+    vindex: HashMap<usize, u32>,
+    // Derived on first use.
+    fbox: Option<Vec<Box6>>,
+    ebox: Option<Vec<Box6>>,
+    fplane: Option<Vec<Plane>>,
+    ecells: Option<FxHashMap<(i64, i64, i64), Vec<u32>>>,
+}
+
+fn kind_of(s: &str) -> PyResult<Kind> {
+    Kind::parse(s).ok_or_else(|| PyValueError::new_err(format!("kind {s:?}: vertex, edge or face")))
+}
+
+impl MeshScan {
+    fn empty() -> Self {
+        Self {
+            pos: Vec::new(),
+            n_listed: 0,
+            ends: Vec::new(),
+            enf: Vec::new(),
+            eflag: Vec::new(),
+            fstart: vec![0],
+            corners: Vec::new(),
+            state: None,
+            live: Default::default(),
+            lists: None,
+            have: ALL,
+            vindex: HashMap::new(),
+            fbox: None,
+            ebox: None,
+            fplane: None,
+            ecells: None,
+        }
+    }
+
+    fn n_faces(&self) -> usize {
+        self.fstart.len() - 1
+    }
+
+    fn face_corners(&self, f: usize) -> &[u32] {
+        &self.corners[self.fstart[f] as usize..self.fstart[f + 1] as usize]
+    }
+
+    fn fboxes(&mut self) -> &Vec<Box6> {
+        if self.fbox.is_none() {
+            let mut out = Vec::with_capacity(self.n_faces());
+            for f in 0..self.n_faces() {
+                out.push(box_of(self.face_corners(f).iter().map(|&v| &self.pos[v as usize])));
+            }
+            self.fbox = Some(out);
+        }
+        self.fbox.as_ref().unwrap()
+    }
+
+    fn eboxes(&mut self) -> &Vec<Box6> {
+        if self.ebox.is_none() {
+            let out = self
+                .ends
+                .iter()
+                .map(|[a, b]| box_of([&self.pos[*a as usize], &self.pos[*b as usize]].into_iter()))
+                .collect();
+            self.ebox = Some(out);
+        }
+        self.ebox.as_ref().unwrap()
+    }
+
+    /// Per face: its plane (see [`Plane`]).
+    fn fplanes(&mut self) -> &Vec<Plane> {
+        if self.fplane.is_none() {
+            let mut out = Vec::with_capacity(self.n_faces());
+            for f in 0..self.n_faces() {
+                let c = self.face_corners(f);
+                let o = c.first().map(|&v| self.pos[v as usize]).unwrap_or([0.0; 3]);
+                let mut n = [0.0f64, 0.0, 1.0];
+                let mut vague = false;
+                if c.len() >= 3 {
+                    let (mut nx, mut ny, mut nz) = (0.0f64, 0.0f64, 0.0f64);
+                    for i in 0..c.len() {
+                        let p = self.pos[c[i] as usize];
+                        let q = self.pos[c[(i + 1) % c.len()] as usize];
+                        nx += (p[1] - q[1]) * (p[2] + q[2]);
+                        ny += (p[2] - q[2]) * (p[0] + q[0]);
+                        nz += (p[0] - q[0]) * (p[1] + q[1]);
+                    }
+                    let len = (nx * nx + ny * ny + nz * nz).sqrt();
+                    vague = len < 1e-8;
+                    if len >= 1e-9 {
+                        n = [nx / len, ny / len, nz / len];
+                    }
+                }
+                let mut reach = 0.0f64;
+                let mut diag = 0.0f64;
+                for &v in c {
+                    let (d, span) = dot_rel(&self.pos[v as usize], &o, &n);
+                    reach = reach.max(d.abs());
+                    diag = diag.max(span);
+                }
+                reach += slack(diag);
+                out.push(Plane { o, n, reach, vague });
+            }
+            self.fplane = Some(out);
+        }
+        self.fplane.as_ref().unwrap()
+    }
+
+    /// Edges by the topology key cell of their ends (`core.topology._key`:
+    /// `round(x, 4)` per axis, as the integer `round(x * 1e4)`). A
+    /// coordinate whose product lands within float error of a half is filed
+    /// under both neighbouring cells, so the map holds every edge that can
+    /// end at a key (the caller compares exact keys).
+    fn edge_cells(&mut self) -> &FxHashMap<(i64, i64, i64), Vec<u32>> {
+        if self.ecells.is_none() {
+            // One cell per vertex; the rare doubtful one keeps all its
+            // candidates aside.
+            let mut cell: Vec<(i64, i64, i64)> = Vec::with_capacity(self.pos.len());
+            let mut doubt: FxHashMap<u32, Vec<(i64, i64, i64)>> = FxHashMap::default();
+            for (v, p) in self.pos.iter().enumerate() {
+                let (cx, cy, cz) = (axis_cells(p[0]), axis_cells(p[1]), axis_cells(p[2]));
+                cell.push((cx[0], cy[0], cz[0]));
+                if cx[0] != cx[1] || cy[0] != cy[1] || cz[0] != cz[1] {
+                    doubt.insert(v as u32, cells_of(p));
+                }
+            }
+            let mut map: FxHashMap<(i64, i64, i64), Vec<u32>> = FxHashMap::default();
+            map.reserve(self.pos.len());
+            for (e, [a, b]) in self.ends.iter().enumerate() {
+                let e = e as u32;
+                for v in [*a, *b] {
+                    match doubt.get(&v) {
+                        None => {
+                            let list = map.entry(cell[v as usize]).or_default();
+                            if list.last() != Some(&e) {
+                                list.push(e);
+                            }
+                        }
+                        Some(cs) => {
+                            for c in cs {
+                                let list = map.entry(*c).or_default();
+                                if list.last() != Some(&e) {
+                                    list.push(e);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            self.ecells = Some(map);
+        }
+        self.ecells.as_ref().unwrap()
+    }
+}
+
+fn box_of<'a>(pts: impl Iterator<Item = &'a [f64; 3]>) -> Box6 {
+    let mut b = [f64::INFINITY, f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY];
+    let mut any = false;
+    for p in pts {
+        any = true;
+        for k in 0..3 {
+            b[k] = b[k].min(p[k]);
+            b[k + 3] = b[k + 3].max(p[k]);
+        }
+    }
+    if !any {
+        // ``_points_box`` of nothing: the origin.
+        return [0.0; 6];
+    }
+    b
+}
+
+/// The candidate integer cells of one coordinate of `round(x, 4)`.
+fn axis_cells(x: f64) -> [i64; 2] {
+    let y = x * 1e4;
+    let fl = y.floor();
+    let frac = y - fl;
+    if !(y.abs() < 1e9) || (frac - 0.5).abs() < 1e-6 {
+        [fl as i64, fl as i64 + 1]
+    } else {
+        let n = y.round() as i64;
+        [n, n]
+    }
+}
+
+fn cells_of(p: &[f64; 3]) -> Vec<(i64, i64, i64)> {
+    let (cx, cy, cz) = (axis_cells(p[0]), axis_cells(p[1]), axis_cells(p[2]));
+    if cx[0] == cx[1] && cy[0] == cy[1] && cz[0] == cz[1] {
+        return vec![(cx[0], cy[0], cz[0])];
+    }
+    let mut out = Vec::with_capacity(8);
+    for &x in cx.iter() {
+        for &y in cy.iter() {
+            for &z in cz.iter() {
+                let c = (x, y, z);
+                if !out.contains(&c) {
+                    out.push(c);
+                }
+            }
+        }
+    }
+    out
+}
+
+#[inline]
+fn meets(b: &Box6, w: &Box6) -> bool {
+    b[3] >= w[0] && b[0] <= w[3] && b[4] >= w[1] && b[1] <= w[4] && b[5] >= w[2] && b[2] <= w[5]
+}
+
+fn window(lo: (f64, f64, f64), hi: (f64, f64, f64)) -> Box6 {
+    [lo.0, lo.1, lo.2, hi.0, hi.1, hi.2]
+}
+
+#[inline]
+fn dot_rel(p: &[f64; 3], o: &[f64; 3], n: &[f64; 3]) -> (f64, f64) {
+    let d = [p[0] - o[0], p[1] - o[1], p[2] - o[2]];
+    let dist = d[0] * n[0] + d[1] * n[1] + d[2] * n[2];
+    (dist, (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt())
+}
+
+/// The float32 work of a Python plane test (`QVector3D` difference, unit
+/// normal and dot product) is off the exact value by a few float32 ulps of
+/// the distance between the points; this slack is several times that, so a
+/// point Python calls on the plane is never left out here.
+#[inline]
+fn slack(span: f64) -> f64 {
+    1e-5 * span + 1e-7
+}
+
+fn py_xyz(obj: &Bound<'_, PyAny>, to_tuple: &Bound<'_, PyString>) -> PyResult<[f64; 3]> {
+    let (x, y, z): (f64, f64, f64) = obj.call_method0(to_tuple)?.extract()?;
+    Ok([x, y, z])
+}
+
+#[pymethods]
+impl MeshScan {
+    /// The scan of a store's current state, in list order (the
+    /// `MeshStore.arrays()` indices), outer loops only.
+    #[staticmethod]
+    fn from_store(py: Python<'_>, store: PyRef<'_, PyMeshStore>) -> Self {
+        let state = store.inner.state.clone();
+        drop(store);
+        py.detach(move || {
+            let st = &state;
+            let mut s = MeshScan::empty();
+            let live: [Vec<u32>; 3] = [
+                st.order[0].live(&st.slots[0]),
+                st.order[1].live(&st.slots[1]),
+                st.order[2].live(&st.slots[2]),
+            ];
+            let mut vdense = vec![NONE; st.slots[0].len()];
+            s.pos.reserve(live[0].len());
+            for (i, &v) in live[0].iter().enumerate() {
+                vdense[v as usize] = i as u32;
+                s.pos.push(*st.vpos.get(v as usize));
+            }
+            s.n_listed = s.pos.len();
+            let mut dense = |slot: u32, pos: &mut Vec<[f64; 3]>| -> u32 {
+                let d = vdense[slot as usize];
+                if d != NONE {
+                    return d;
+                }
+                let i = pos.len() as u32;
+                pos.push(*st.vpos.get(slot as usize));
+                vdense[slot as usize] = i;
+                i
+            };
+            s.ends.reserve(live[1].len());
+            for &e in &live[1] {
+                let [a, b] = *st.ends.get(e as usize);
+                let da = dense(a, &mut s.pos);
+                let db = dense(b, &mut s.pos);
+                s.ends.push([da, db]);
+                let inc = st.efaces.get(e as usize);
+                let nf = if inc.len <= 2 { inc.len as usize } else { st.ef_spill.get(inc.a[0] as usize).len() };
+                s.enf.push(nf as u32);
+                let mut fl = 0u8;
+                if *st.eflags.get(e as usize) & crate::store::SOFT != 0 {
+                    fl |= SOFT;
+                }
+                if *st.ecurve.get(e as usize) >= 0 {
+                    fl |= CURVE;
+                }
+                s.eflag.push(fl);
+            }
+            s.fstart.reserve(live[2].len());
+            for &f in &live[2] {
+                let r = *st.frings.get(f as usize);
+                if r.n_rings > 0 {
+                    let size = *st.ring_sizes.get(r.ring_start as usize) as usize;
+                    for j in 0..size {
+                        let c = *st.corners.get(r.corner_start as usize + j);
+                        let d = dense(c, &mut s.pos);
+                        s.corners.push(d);
+                    }
+                }
+                s.fstart.push(s.corners.len() as u32);
+            }
+            s.live = live;
+            s.state = Some(state.clone());
+            s
+        })
+    }
+
+    /// The scan of a Python mesh from its three lists (``mesh.vertices``,
+    /// ``mesh.edges``, ``mesh.faces``), held so an index names the element
+    /// the list had at build. Nothing is read from the objects yet.
+    #[staticmethod]
+    fn from_objects(vertices: Bound<'_, PyList>, edges: Bound<'_, PyList>, faces: Bound<'_, PyList>) -> Self {
+        let mut s = MeshScan::empty();
+        s.n_listed = vertices.len();
+        s.lists = Some([vertices.unbind(), edges.unbind(), faces.unbind()]);
+        s.have = 0;
+        s
+    }
+
+    /// ``(vertices, edges, faces)`` counts (listed vertices only).
+    fn counts(&self, py: Python<'_>) -> (usize, usize, usize) {
+        match &self.lists {
+            Some(l) => (l[0].bind(py).len(), l[1].bind(py).len(), l[2].bind(py).len()),
+            None => (self.n_listed, self.ends.len(), self.n_faces()),
+        }
+    }
+
+    /// The elements at ``indices`` of the lists at build: Python objects of
+    /// a Python-backed scan, store keys (ints) of a store-backed one.
+    fn keys_at(&self, py: Python<'_>, kind: &str, indices: Vec<usize>) -> PyResult<Vec<Py<PyAny>>> {
+        let k = kind_of(kind)?;
+        let mut out = Vec::with_capacity(indices.len());
+        if let Some(lists) = &self.lists {
+            let l = lists[k as usize].bind(py);
+            for i in indices {
+                out.push(l.get_item(i)?.unbind());
+            }
+            return Ok(out);
+        }
+        let st = self.state.as_ref().unwrap();
+        let live = &self.live[k as usize];
+        for i in indices {
+            let slot = *live.get(i).ok_or_else(|| PyValueError::new_err("index out of range"))?;
+            let gen = st.slots[k as usize].gen(slot);
+            let key = full_key(st.ns, local_key(k, gen, slot));
+            out.push(key.into_pyobject(py)?.into_any().unbind());
+        }
+        Ok(out)
+    }
+
+    /// Faces whose outer-loop box meets ``[lo, hi]``.
+    fn faces_meeting(&mut self, py: Python<'_>, lo: (f64, f64, f64), hi: (f64, f64, f64)) -> PyResult<Vec<u32>> {
+        self.need(py, FACES)?;
+        let w = window(lo, hi);
+        let b = self.fboxes();
+        Ok((0..b.len() as u32).filter(|&i| meets(&b[i as usize], &w)).collect())
+    }
+
+    /// Faces whose outer-loop box, grown by ``pad`` plus the face's own
+    /// reach off its plane (see [`Plane`]), holds ``[lo, hi]``: every face
+    /// a loop with all its corners within ``pad`` of the face's plane, and
+    /// projected inside it, can lie in.
+    fn faces_holding(&mut self, py: Python<'_>, lo: (f64, f64, f64), hi: (f64, f64, f64), pad: f64) -> PyResult<Vec<u32>> {
+        self.need(py, FACES)?;
+        let w = window(lo, hi);
+        self.fboxes();
+        self.fplanes();
+        let (b, pl) = (self.fbox.as_ref().unwrap(), self.fplane.as_ref().unwrap());
+        Ok((0..b.len() as u32)
+            .filter(|&i| {
+                let x = &b[i as usize];
+                let p = &pl[i as usize];
+                let g = pad + p.reach;
+                p.vague || (0..3).all(|k| x[k] - g <= w[k] && x[k + 3] + g >= w[k + 3])
+            })
+            .collect())
+    }
+
+    /// Faces whose outer-loop box lies within ``[lo, hi]``.
+    fn faces_within(&mut self, py: Python<'_>, lo: (f64, f64, f64), hi: (f64, f64, f64)) -> PyResult<Vec<u32>> {
+        self.need(py, FACES)?;
+        let w = window(lo, hi);
+        let b = self.fboxes();
+        Ok((0..b.len() as u32)
+            .filter(|&i| {
+                let x = &b[i as usize];
+                (0..3).all(|k| x[k] >= w[k] && x[k + 3] <= w[k + 3])
+            })
+            .collect())
+    }
+
+    /// Edges whose box meets ``[lo, hi]``.
+    fn edges_meeting(&mut self, py: Python<'_>, lo: (f64, f64, f64), hi: (f64, f64, f64)) -> PyResult<Vec<u32>> {
+        self.need(py, EDGES)?;
+        let w = window(lo, hi);
+        let b = self.eboxes();
+        Ok((0..b.len() as u32).filter(|&i| meets(&b[i as usize], &w)).collect())
+    }
+
+    /// For each row ``[lo, hi]`` of ``boxes`` (N, 6), the edges whose box
+    /// meets it — one grid for all rows (``boxes.touching``).
+    fn edges_meeting_many(&mut self, py: Python<'_>, boxes: PyReadonlyArray2<'_, f64>) -> PyResult<Vec<Vec<u32>>> {
+        self.need(py, EDGES)?;
+        let q = boxes.as_array();
+        if q.shape()[1] != 6 {
+            return Err(PyValueError::new_err("boxes must be (N, 6)"));
+        }
+        let a: Vec<crate::boxes::Box3> =
+            q.rows().into_iter().map(|r| ([r[0], r[1], r[2]], [r[3], r[4], r[5]])).collect();
+        let b: Vec<crate::boxes::Box3> =
+            self.eboxes().iter().map(|x| ([x[0], x[1], x[2]], [x[3], x[4], x[5]])).collect();
+        let (ii, jj) = py.detach(|| crate::boxes::touching(&a, &b, false, 0.0));
+        let mut out = vec![Vec::new(); a.len()];
+        for (i, j) in ii.into_iter().zip(jj) {
+            out[i as usize].push(j as u32);
+        }
+        Ok(out)
+    }
+
+    /// Faces every outer corner of which lies within ``tol`` (+ the float32
+    /// slack) of the plane through ``origin`` with unit ``normal``.
+    fn faces_on_plane(&mut self, py: Python<'_>, origin: (f64, f64, f64), normal: (f64, f64, f64), tol: f64) -> PyResult<Vec<u32>> {
+        self.need(py, FACES)?;
+        let o = [origin.0, origin.1, origin.2];
+        let n = [normal.0, normal.1, normal.2];
+        let near = self.near_plane(&o, &n, tol);
+        Ok((0..self.n_faces() as u32)
+            .filter(|&f| self.face_corners(f as usize).iter().all(|&v| near[v as usize]))
+            .collect())
+    }
+
+    /// Edges both ends of which lie on that plane (``curve_only``: edges of
+    /// a curve only).
+    fn edges_on_plane(&mut self, py: Python<'_>, origin: (f64, f64, f64), normal: (f64, f64, f64), tol: f64, curve_only: bool) -> PyResult<Vec<u32>> {
+        self.need(py, EDGES | EFLAGS)?;
+        let o = [origin.0, origin.1, origin.2];
+        let n = [normal.0, normal.1, normal.2];
+        let near = self.near_plane(&o, &n, tol);
+        Ok((0..self.ends.len() as u32)
+            .filter(|&e| {
+                let [a, b] = self.ends[e as usize];
+                (!curve_only || self.eflag[e as usize] & CURVE != 0) && near[a as usize] && near[b as usize]
+            })
+            .collect())
+    }
+
+    /// Faces whose own plane (first corner, unit Newell normal) passes
+    /// within ``tol`` (+ slack) of every row of ``points`` (K, 3).
+    fn faces_through(&mut self, py: Python<'_>, points: PyReadonlyArray2<'_, f64>, tol: f64) -> PyResult<Vec<u32>> {
+        self.need(py, FACES)?;
+        let pts: Vec<[f64; 3]> = points.as_array().rows().into_iter().map(|r| [r[0], r[1], r[2]]).collect();
+        let planes = self.fplanes();
+        Ok((0..planes.len() as u32)
+            .filter(|&f| {
+                let pl = &planes[f as usize];
+                pl.vague
+                    || pts.iter().all(|p| {
+                        let (d, span) = dot_rel(p, &pl.o, &pl.n);
+                        d.abs() <= tol + slack(span)
+                    })
+            })
+            .collect())
+    }
+
+    /// Faces whose first corner lies within ``tol`` (+ slack) of the plane
+    /// and whose unit normal has ``|n · normal| >= dot_min``.
+    fn faces_coplanar(&mut self, py: Python<'_>, origin: (f64, f64, f64), normal: (f64, f64, f64), tol: f64, dot_min: f64) -> PyResult<Vec<u32>> {
+        self.need(py, FACES)?;
+        let o = [origin.0, origin.1, origin.2];
+        let n = [normal.0, normal.1, normal.2];
+        let planes = self.fplanes();
+        Ok((0..planes.len() as u32)
+            .filter(|&f| {
+                let pl = &planes[f as usize];
+                let (d, span) = dot_rel(&pl.o, &o, &n);
+                let c = pl.n[0] * n[0] + pl.n[1] * n[1] + pl.n[2] * n[2];
+                d.abs() <= tol + slack(span) && (pl.vague || c.abs() >= dot_min)
+            })
+            .collect())
+    }
+
+    /// Edges with an end whose topology key cell may be ``cell``:
+    /// ``(edge, end_a, end_b)`` rows, ascending.
+    fn edges_at_cell(&mut self, py: Python<'_>, cell: (i64, i64, i64)) -> PyResult<Vec<(u32, u32, u32)>> {
+        self.need(py, EDGES)?;
+        self.edge_cells();
+        let (map, ends) = (self.ecells.as_ref().unwrap(), &self.ends);
+        match map.get(&cell) {
+            None => Ok(Vec::new()),
+            Some(list) => Ok(list.iter().map(|&e| (e, ends[e as usize][0], ends[e as usize][1])).collect()),
+        }
+    }
+
+    /// The outer loops of faces ``indices`` as scan vertex indices.
+    fn face_loops(&mut self, py: Python<'_>, indices: Vec<usize>) -> PyResult<Vec<Vec<u32>>> {
+        self.need(py, FACES)?;
+        indices
+            .into_iter()
+            .map(|f| {
+                if f >= self.n_faces() {
+                    return Err(PyValueError::new_err("face out of range"));
+                }
+                Ok(self.face_corners(f).to_vec())
+            })
+            .collect()
+    }
+
+    /// The position of scan vertex ``v``.
+    fn position(&mut self, py: Python<'_>, v: usize) -> PyResult<(f64, f64, f64)> {
+        self.need(py, VERTS)?;
+        let p = self.pos.get(v).ok_or_else(|| PyValueError::new_err("vertex out of range"))?;
+        Ok((p[0], p[1], p[2]))
+    }
+
+    /// Edges bounding no face (``soft_only``: soft ones only).
+    fn edges_faceless(&mut self, py: Python<'_>, soft_only: bool) -> PyResult<Vec<u32>> {
+        self.need(py, EFLAGS)?;
+        Ok((0..self.enf.len() as u32)
+            .filter(|&e| self.enf[e as usize] == 0 && (!soft_only || self.eflag[e as usize] & SOFT != 0))
+            .collect())
+    }
+
+    /// Whether any edge belongs to a curve.
+    fn any_curve(&mut self, py: Python<'_>) -> PyResult<bool> {
+        self.need(py, EFLAGS)?;
+        Ok(self.eflag.iter().any(|f| f & CURVE != 0))
+    }
+
+    /// The listed vertices' positions, (V, 3).
+    fn vertex_positions<'py>(&mut self, py: Python<'py>) -> PyResult<Bound<'py, PyArray2<f64>>> {
+        self.need(py, VERTS)?;
+        let flat: Vec<f64> = self.pos[..self.n_listed].iter().flat_map(|p| p.iter().copied()).collect();
+        Ok(Array2::from_shape_vec((self.n_listed, 3), flat).unwrap().into_pyarray(py))
+    }
+
+    /// Per edge, its box ``(E, 6)`` (``lo`` then ``hi``).
+    fn edge_boxes<'py>(&mut self, py: Python<'py>) -> PyResult<Bound<'py, PyArray2<f64>>> {
+        self.need(py, EDGES)?;
+        let b = self.eboxes();
+        let flat: Vec<f64> = b.iter().flat_map(|x| x.iter().copied()).collect();
+        Ok(Array2::from_shape_vec((b.len(), 6), flat).unwrap().into_pyarray(py))
+    }
+}
+
+impl MeshScan {
+    /// Read the parts ``what`` of a Python-backed scan from its objects.
+    fn need(&mut self, py: Python<'_>, what: u8) -> PyResult<()> {
+        let missing = what & !self.have;
+        if missing == 0 {
+            return Ok(());
+        }
+        let lists = match &self.lists {
+            Some(l) => [l[0].clone_ref(py), l[1].clone_ref(py), l[2].clone_ref(py)],
+            None => return Ok(()),
+        };
+        let a_position = PyString::intern(py, "position");
+        let a_to_tuple = PyString::intern(py, "toTuple");
+        if missing & (VERTS | EDGES | FACES) != 0 && self.have & VERTS == 0 {
+            let vs = lists[0].bind(py);
+            self.pos.reserve(vs.len());
+            self.vindex.reserve(vs.len());
+            for v in vs.iter() {
+                let p = py_xyz(&v.getattr(&a_position)?, &a_to_tuple)?;
+                self.vindex.entry(v.as_ptr() as usize).or_insert(self.pos.len() as u32);
+                self.pos.push(p);
+            }
+            self.have |= VERTS;
+        }
+        if missing & EFLAGS != 0 {
+            let a_faces = PyString::intern(py, "faces");
+            let a_soft = PyString::intern(py, "soft");
+            let a_curve = PyString::intern(py, "curve");
+            let es = lists[1].bind(py);
+            self.enf.reserve(es.len());
+            self.eflag.reserve(es.len());
+            for e in es.iter() {
+                self.enf.push(e.getattr(&a_faces)?.len()? as u32);
+                let mut fl = 0u8;
+                if e.getattr(&a_soft)?.is_truthy()? {
+                    fl |= SOFT;
+                }
+                if !e.getattr(&a_curve)?.is_none() {
+                    fl |= CURVE;
+                }
+                self.eflag.push(fl);
+            }
+            self.have |= EFLAGS;
+        }
+        // Vertices held by edges / faces but not listed (a corner whose
+        // edges were erased): alive while the element holding them is.
+        if missing & EDGES != 0 {
+            let a_v0 = PyString::intern(py, "v0");
+            let a_v1 = PyString::intern(py, "v1");
+            let es = lists[1].bind(py);
+            self.ends.reserve(es.len());
+            for e in es.iter() {
+                let a = self.vid(&e.getattr(&a_v0)?, &a_position, &a_to_tuple)?;
+                let b = self.vid(&e.getattr(&a_v1)?, &a_position, &a_to_tuple)?;
+                self.ends.push([a, b]);
+            }
+            self.have |= EDGES;
+        }
+        if missing & FACES != 0 {
+            let a_loop = PyString::intern(py, "loop");
+            let fs = lists[2].bind(py);
+            self.fstart.reserve(fs.len());
+            for f in fs.iter() {
+                let lp = f.getattr(&a_loop)?;
+                for v in lp.try_iter()? {
+                    let d = self.vid(&v?, &a_position, &a_to_tuple)?;
+                    self.corners.push(d);
+                }
+                self.fstart.push(self.corners.len() as u32);
+            }
+            self.have |= FACES;
+        }
+        Ok(())
+    }
+
+    fn vid(&mut self, v: &Bound<'_, PyAny>, a_position: &Bound<'_, PyString>, a_to_tuple: &Bound<'_, PyString>) -> PyResult<u32> {
+        let k = v.as_ptr() as usize;
+        if let Some(&i) = self.vindex.get(&k) {
+            return Ok(i);
+        }
+        let i = self.pos.len() as u32;
+        self.pos.push(py_xyz(&v.getattr(a_position)?, a_to_tuple)?);
+        self.vindex.insert(k, i);
+        Ok(i)
+    }
+
+    fn near_plane(&self, o: &[f64; 3], n: &[f64; 3], tol: f64) -> Vec<bool> {
+        self.pos
+            .iter()
+            .map(|p| {
+                let (d, span) = dot_rel(p, o, n);
+                d.abs() <= tol + slack(span)
+            })
+            .collect()
+    }
+}

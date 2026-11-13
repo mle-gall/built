@@ -1105,7 +1105,12 @@ def find_cycles_through(
     ka, kb = _key(a), _key(b)
     if ka == kb:
         return []
-    adj = _cycle_adjacency(edges, ka, kb, key)
+    # The planner's simulated edge list over a mesh scan builds each node's
+    # list when the search reaches it (``core.edits._ScanEdges``): the same
+    # lists, without walking the half-million edges of a big mesh per click.
+    lazy = getattr(edges, "cycle_adjacency", None)
+    adj = (lazy(ka, kb) if lazy is not None
+           else _cycle_adjacency(edges, ka, kb, key))
     first = _smallest_cycle(adj, a, b, ka, kb)
     if first is None:
         return []
@@ -1702,6 +1707,10 @@ def prune_collinear_orphan_edges(mesh) -> list:
     the stretch the other edges run along goes: the rest of a loose line stays,
     as new edges carrying its flags. Returns the removed edges."""
     removed = []
+    from core import scan_index
+    sc = scan_index.scan(mesh)
+    if sc is not None:
+        return _prune_collinear_orphans_scanned(mesh, sc)
     edges = list(mesh.edges)
     orphans = [e for e in edges if len(e.faces) == 0]
     if not orphans:
@@ -1742,6 +1751,67 @@ def prune_collinear_orphan_edges(mesh) -> list:
                     and mesh.find_edge(va, vb) is not None):
                 continue                     # already there: leave it as it is
             stamp_edge_flags(mesh.add_edge(p, q), flags)
+            curved = curved or e.curve is not None
+    if curved:
+        mesh.resplit_curves()   # each piece of a trimmed curve is a curve
+    return removed
+
+
+def _prune_collinear_orphans_scanned(mesh, sc) -> list:
+    """:func:`prune_collinear_orphan_edges` over a mesh scan: the faceless
+    edges and the boxes they meet come from the scan (the plane rebuild
+    after every line on a populated plane read all 534k edges of the ride's
+    largest mesh through Python for its handful of orphans). The pairs the
+    grid would give are found natively with a margin, then put through the
+    very box test of :func:`_box_grid` (same float expressions) and the
+    collinearity predicate, so the cover lists are the loop's."""
+    import numpy as np
+    from core.mesh import edge_flags, stamp_edge_flags
+    removed: list = []
+    orphan_idx = sc.native.edges_faceless(False)
+    if not orphan_idx:
+        return removed
+    t = _PLANAR_TOLERANCE
+    boxes = sc.native.edge_boxes()
+    # The grid's boxes grow each side by the tolerance; meeting ones are
+    # within twice that, raw. The extra margin only lets more pairs reach
+    # the exact test below.
+    reach = 2.0 * t + 1e-9 + 1e-12 * float(np.abs(boxes).max(initial=0.0))
+    q = boxes[orphan_idx].copy()
+    q[:, :3] -= reach
+    q[:, 3:] += reach
+    near = sc.native.edges_meeting_many(q)
+    lo = boxes[:, :3] - t
+    hi = boxes[:, 3:] + t
+    need = sorted(set(orphan_idx).union(*near))
+    elem = dict(zip(need, sc.edges(need)))
+    gone: set = set()
+    curved = False
+    for i, cand in zip(orphan_idx, near):
+        e = elem[i]
+        (ax, ay, az), (bx, by, bz) = lo[i].tolist(), hi[i].tolist()
+        cover = []
+        for j in cand:
+            (px, py, pz), (qx, qy, qz) = lo[j].tolist(), hi[j].tolist()
+            if not (qx >= ax and qy >= ay and qz >= az
+                    and px <= bx and py <= by and pz <= bz):
+                continue
+            g = elem[j]
+            if g != e and g.key not in gone and _collinear_overlapping(e, g):
+                cover.append(g)
+        if not cover:
+            continue
+        pieces = _uncovered_stretches(e.a, e.b, cover)
+        flags = edge_flags(e)
+        mesh.remove_edge(e)
+        removed.append(e)
+        gone.add(e.key)
+        for p, q2 in pieces:
+            va, vb = mesh.vertex_at(p), mesh.vertex_at(q2)
+            if (va is not None and vb is not None
+                    and mesh.find_edge(va, vb) is not None):
+                continue                     # already there: leave it as it is
+            stamp_edge_flags(mesh.add_edge(p, q2), flags)
             curved = curved or e.curve is not None
     if curved:
         mesh.resplit_curves()   # each piece of a trimmed curve is a curve
