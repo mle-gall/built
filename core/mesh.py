@@ -25,6 +25,7 @@ into the running app yet.
 from __future__ import annotations
 
 from typing import Iterable, Optional
+from itertools import count
 
 from PySide6.QtGui import QVector3D
 
@@ -37,6 +38,12 @@ _KEY_DECIMALS = 4
 # selection groups them as one curve. Session-scoped; ``.igz`` load bumps it
 # past any stored ids so new curves stay unique.
 _CURVE_COUNTER = 1
+
+# Separate namespaces keep keys unambiguous in scene-wide selections as well
+# as within a mesh. Consumers must treat the resulting int as opaque.
+_KEY_NAMESPACES = count(1)
+_STANDALONE_KEYS = count(-1, -1)
+
 
 # Distance tolerance for the stitch pass (a point this close to an edge counts
 # as on it). Matches the weld key resolution.
@@ -65,9 +72,10 @@ class Vertex:
     ``edges`` holds the incident edges, maintained by the mesh.
     """
 
-    __slots__ = ("position", "edges")
+    __slots__ = ("position", "edges", "key")
 
-    def __init__(self, position: QVector3D) -> None:
+    def __init__(self, position: QVector3D, *, key: int | None = None) -> None:
+        self.key = next(_STANDALONE_KEYS) if key is None else key
         self.position = QVector3D(position)
         self.edges: set[Edge] = set()
 
@@ -91,10 +99,11 @@ class Edge:
     architecture). Maintained by the mesh.
     """
 
-    __slots__ = ("v0", "v1", "faces", "soft", "curve", "layer",
+    __slots__ = ("key", "v0", "v1", "faces", "soft", "curve", "layer",
                  "hidden")
 
-    def __init__(self, v0: Vertex, v1: Vertex) -> None:
+    def __init__(self, v0: Vertex, v1: Vertex, *, key: int | None = None) -> None:
+        self.key = next(_STANDALONE_KEYS) if key is None else key
         self.v0 = v0
         self.v1 = v1
         self.faces: list[Face] = []
@@ -186,11 +195,13 @@ class Face:
     rendering, bounds and ``.igz`` save consume a ``mesh.Face`` unchanged (M1).
     """
 
-    __slots__ = ("loop", "hole_loops", "interior", "attrs")
+    __slots__ = ("key", "loop", "hole_loops", "interior", "attrs")
 
     def __init__(
-        self, loop: list[Vertex], hole_loops: Optional[list[list[Vertex]]] = None
+        self, loop: list[Vertex], hole_loops: Optional[list[list[Vertex]]] = None,
+        *, key: int | None = None
     ) -> None:
+        self.key = next(_STANDALONE_KEYS) if key is None else key
         self.loop = list(loop)
         self.hole_loops = [list(h) for h in hole_loops] if hole_loops else []
         # Interior partition: a face *inside* a solid (the slab a Ctrl-push
@@ -319,6 +330,7 @@ class Mesh:
     """
 
     def __init__(self) -> None:
+        self._keys = count(next(_KEY_NAMESPACES) << 40)
         self._registry: dict[tuple, Vertex] = {}
         # Moved vertices waiting for a key another vertex still holds (see
         # _rekey).
@@ -334,6 +346,20 @@ class Mesh:
         self.vertices: list[Vertex] = []
         self.edges: list[Edge] = []
         self.faces: list[Face] = []
+
+    def __deepcopy__(self, memo):
+        # A copied mesh is a new owner, not an undo snapshot. Give its elements
+        # a separate namespace so scene-wide caches cannot confuse the copies.
+        from copy import deepcopy
+        if isinstance(self, DeferredMesh):
+            self._materialize()
+        copied = Mesh()
+        memo[id(self)] = copied
+        copied.__dict__.update(deepcopy(
+            {k: v for k, v in self.__dict__.items() if k != "_keys"}, memo))
+        for element in (*copied.vertices, *copied.edges, *copied.faces):
+            element.key = next(copied._keys)
+        return copied
 
     @property
     def revision(self) -> int:
@@ -416,7 +442,7 @@ class Mesh:
         if v is None:
             v = self._probe_neighbours(k, position)
         if v is None:
-            v = Vertex(position)
+            v = Vertex(position, key=next(self._keys))
             self._registry[k] = v
             self.vertices.append(v)
         return v
@@ -584,7 +610,7 @@ class Mesh:
         e = self.find_edge(v0, v1)
         if e is not None:
             return e
-        e = Edge(v0, v1)
+        e = Edge(v0, v1, key=next(self._keys))
         v0.edges.add(e)
         v1.edges.add(e)
         self.edges.append(e)
@@ -655,16 +681,16 @@ class Mesh:
         used = set()
         for f in self.faces:
             for v in f.loop:
-                used.add(id(v))
+                used.add(v.key)
             for hole in f.hole_loops:
                 for v in hole:
-                    used.add(id(v))
-        doomed = {id(v) for v in self.vertices
-                  if not v.edges and id(v) not in used}
-        live = {id(v) for v in self.vertices if id(v) not in doomed}
-        ghosts = [k for k, v in self._registry.items() if id(v) not in live]
+                    used.add(v.key)
+        doomed = {v.key for v in self.vertices
+                  if not v.edges and v.key not in used}
+        live = {v.key for v in self.vertices if v.key not in doomed}
+        ghosts = [k for k, v in self._registry.items() if v.key not in live]
         for k in list(self._displaced):
-            waiting = [v for v in self._displaced[k] if id(v) in live]
+            waiting = [v for v in self._displaced[k] if v.key in live]
             if waiting:
                 self._displaced[k] = waiting
             else:
@@ -673,7 +699,7 @@ class Mesh:
             return 0, 0
         if doomed:
             self.vertices[:] = [v for v in self.vertices
-                                if id(v) not in doomed]
+                                if v.key not in doomed]
         for k in ghosts:
             del self._registry[k]
         self._chunk_dirty = True
@@ -684,12 +710,12 @@ class Mesh:
         """Re-attach vertices a previous :meth:`drop_orphan_vertices` took
         out (redo), preserving their identity; a position already filed
         under another vertex keeps that one."""
-        present = {id(v) for v in self.vertices}
+        present = {v.key for v in self.vertices}
         for v in vertices:
-            if id(v) in present:
+            if v.key in present:
                 continue
             self.vertices.append(v)
-            present.add(id(v))
+            present.add(v.key)
             self._registry.setdefault(_key(v.position), v)
         self._chunk_dirty = True
         self._mut_serial += 1
@@ -700,13 +726,13 @@ class Mesh:
         knows exactly which vertices it created (no pass over the model).
         A face's corners always carry its boundary edges, so a vertex with
         no edges is in no face. The registry is cleaned by identity."""
-        doomed = {id(v) for v in vertices if not v.edges}
-        doomed &= {id(v) for v in self.vertices}
+        doomed = {v.key for v in vertices if not v.edges}
+        doomed &= {v.key for v in self.vertices}
         if not doomed:
             return 0
-        self.vertices[:] = [v for v in self.vertices if id(v) not in doomed]
+        self.vertices[:] = [v for v in self.vertices if v.key not in doomed]
         for v in vertices:
-            if id(v) in doomed:
+            if v.key in doomed:
                 k = _key(v.position)
                 if self._registry.get(k) is v:
                     del self._registry[k]
@@ -810,10 +836,10 @@ class Mesh:
         vindex: dict = {}
 
         def _vid(v):
-            i = vindex.get(id(v))
+            i = vindex.get(v.key)
             if i is None:
                 i = len(vobjs)
-                vindex[id(v)] = i
+                vindex[v.key] = i
                 vobjs.append(v)
             return i
 
@@ -827,7 +853,7 @@ class Mesh:
             nc_pos = pos[first[nc_cells]].tolist()
             ids = np.empty(len(nc_cells), dtype=np.int64)
             for j, (k3, p3) in enumerate(zip(nc_keys, nc_pos)):
-                v = Vertex(QVector3D(p3[0], p3[1], p3[2]))
+                v = Vertex(QVector3D(p3[0], p3[1], p3[2]), key=next(self._keys))
                 registry[(k3[0], k3[1], k3[2])] = v
                 vertices.append(v)
                 ids[j] = _vid(v)
@@ -851,7 +877,7 @@ class Mesh:
                     p = QVector3D(p3[0], p3[1], p3[2])
                     v = probe(k, p)
                     if v is None:
-                        v = Vertex(p)
+                        v = Vertex(p, key=next(self._keys))
                         registry[k] = v
                         vertices.append(v)
                 point_ids[i] = _vid(v)
@@ -881,7 +907,7 @@ class Mesh:
             key = a * u + b if a <= b else b * u + a
             e = emap.get(key)
             if e is None:
-                e = Edge(v0, v1)
+                e = Edge(v0, v1, key=next(self._keys))
                 v0.edges.add(e)
                 v1.edges.add(e)
                 self.edges.append(e)
@@ -934,10 +960,10 @@ class Mesh:
         if edge_map is None:
             edge_map = {}
             if self.edges:
-                vid_of = {id(v): i for i, v in enumerate(vobjs)}
+                vid_of = {v.key: i for i, v in enumerate(vobjs)}
                 for e in self.edges:
-                    i0 = vid_of.get(id(e.v0))
-                    i1 = vid_of.get(id(e.v1))
+                    i0 = vid_of.get(e.v0.key)
+                    i1 = vid_of.get(e.v1.key)
                     if i0 is not None and i1 is not None:
                         key = i0 * u + i1 if i0 <= i1 else i1 * u + i0
                         edge_map.setdefault(key, e)
@@ -957,7 +983,7 @@ class Mesh:
             if e is None:
                 v0 = vobjs[seg_a_list[src]]    # first occurrence's orientation
                 v1 = vobjs[seg_b_list[src]]
-                e = Edge(v0, v1)
+                e = Edge(v0, v1, key=next(self._keys))
                 v0.edges.add(e)
                 v1.edges.add(e)
                 self.edges.append(e)
@@ -975,7 +1001,7 @@ class Mesh:
             holes = [corner_list[rs_list[ri + k]:re_list[ri + k]]
                      for k in range(1, nr)]
             ri += nr
-            face = Face(loop, holes or None)
+            face = Face(loop, holes or None, key=next(self._keys))
             if attrs is not None:
                 a = attrs[len(faces_out)]
                 if a:
@@ -1031,7 +1057,7 @@ class Mesh:
 
             raw_holes = _maximal_holes(raw_holes)
         holes = [[self.vertex(p) for p in h] for h in raw_holes]
-        face = Face(loop, holes)  # Face stores them as hole_loops (vertices)
+        face = Face(loop, holes, key=next(self._keys))  # Face stores them as hole_loops (vertices)
         for lp in (loop, *holes):
             n = len(lp)
             for i in range(n):
@@ -1130,7 +1156,8 @@ class Mesh:
     def capture_state(self) -> dict:
         """Snapshot the mesh keeping *object identity*: the same vertex/edge/face
         objects, plus a copy of every mutable field. :meth:`restore_state` brings
-        the exact objects back, so delta commands holding references stay valid.
+        the exact objects back, including their stable keys. The allocation
+        counter is deliberately not restored: discarded edits never free keys.
 
         Used by the stitch pass, whose splits/merges/collapses interact too much
         for a clean per-op inverse — restoring the whole touched mesh is robust."""
@@ -1139,19 +1166,19 @@ class Mesh:
             "edges": list(self.edges),
             "faces": list(self.faces),
             "registry": dict(self._registry),
-            "vpos": {v: QVector3D(v.position) for v in self.vertices},
-            "vedges": {v: set(v.edges) for v in self.vertices},
-            "efaces": {e: list(e.faces) for e in self.edges},
-            "esoft": {e: e.soft for e in self.edges},
-            "ehidden": {e: e.hidden for e in self.edges},
-            "elayer": {e: e.layer for e in self.edges},
-            "ecurve": {e: e.curve for e in self.edges},
-            "floop": {f: list(f.loop) for f in self.faces},
-            "fholes": {f: [list(h) for h in f.hole_loops] for f in self.faces},
-            "fattrs": {f: dict(f.attrs) for f in self.faces},
+            "vpos": {v.key: QVector3D(v.position) for v in self.vertices},
+            "vedges": {v.key: set(v.edges) for v in self.vertices},
+            "efaces": {e.key: list(e.faces) for e in self.edges},
+            "esoft": {e.key: e.soft for e in self.edges},
+            "ehidden": {e.key: e.hidden for e in self.edges},
+            "elayer": {e.key: e.layer for e in self.edges},
+            "ecurve": {e.key: e.curve for e in self.edges},
+            "floop": {f.key: list(f.loop) for f in self.faces},
+            "fholes": {f.key: [list(h) for h in f.hole_loops] for f in self.faces},
+            "fattrs": {f.key: dict(f.attrs) for f in self.faces},
             # orient_outward re-marks interior partitions inside a push, so a
             # restore that skipped the flag could leave it changed after Esc.
-            "finterior": {f: f.interior for f in self.faces},
+            "finterior": {f.key: f.interior for f in self.faces},
         }
 
     def restore_state(self, snap: dict) -> None:
@@ -1165,27 +1192,39 @@ class Mesh:
         self._registry.clear()
         self._registry.update(snap["registry"])
         self._displaced.clear()
+        by_key = {e.key: e for e in (*self.vertices, *self.edges, *self.faces)}
         for v, p in snap["vpos"].items():
+            v = by_key[v]
             v.position = QVector3D(p)
         for v, es in snap["vedges"].items():
+            v = by_key[v]
             v.edges = set(es)
         for e, fs in snap["efaces"].items():
+            e = by_key[e]
             e.faces = list(fs)
         for e, soft in snap.get("esoft", {}).items():
+            e = by_key[e]
             e.soft = soft
         for e, hidden in snap.get("ehidden", {}).items():
+            e = by_key[e]
             e.hidden = hidden
         for e, layer in snap.get("elayer", {}).items():
+            e = by_key[e]
             e.layer = layer
         for e, cid in snap.get("ecurve", {}).items():
+            e = by_key[e]
             e.curve = cid
         for f, loop in snap["floop"].items():
+            f = by_key[f]
             f.loop = list(loop)
         for f, holes in snap["fholes"].items():
+            f = by_key[f]
             f.hole_loops = [list(h) for h in holes]
         for f, attrs in snap.get("fattrs", {}).items():
+            f = by_key[f]
             f.attrs = dict(attrs)
         for f, interior in snap.get("finterior", {}).items():
+            f = by_key[f]
             f.interior = interior
 
     # ---- Reset --------------------------------------------------------------
@@ -1278,7 +1317,9 @@ class Mesh:
 
     def split_edge(self, edge: Edge, position: QVector3D) -> tuple[Edge, Edge]:
         """Split ``edge`` at ``position``, inserting a shared vertex, and return
-        the two sub-edges.
+        the two sub-edges. A new first half (v0 to mid) keeps the original
+        key; an existing first half keeps its own key. The second half keeps
+        its existing key or gets a fresh one. Faces and endpoints keep keys.
 
         Every incident face gains the new vertex in its loop, between the edge's
         endpoints — for *any* number of faces (non-manifold). This is the
@@ -1298,9 +1339,12 @@ class Mesh:
         if mid is v0 or mid is v1:
             # position coincides with an endpoint → nothing to split
             return edge, edge
-        incident = list({id(f): f for f in edge.faces}.values())
+        incident = list({f.key: f for f in edge.faces}.values())
         self.remove_edge(edge)
+        e0_new = self.find_edge(v0, mid) is None
         e0 = self._link_edge(v0, mid)
+        if e0_new:
+            e0.key = edge.key
         e1 = self._link_edge(mid, v1)
         for face in incident:
             self._insert_at_every_use(face, v0, v1, mid)
@@ -1364,7 +1408,10 @@ class Mesh:
         onto the kept vertex; zero-length edges vanish, duplicate edges merge
         their incidence, and faces degenerated below three distinct vertices
         are dropped. Returns whether anything merged. No undo bookkeeping —
-        callers run under a snapshot, like the rest of the stitch."""
+        callers run under a snapshot, like the rest of the stitch.
+        The first vertex in mesh order keeps its key within a cell; across
+        cells the lexicographically smaller position cell wins. Redirected
+        edges follow _weld_into; surviving faces keep their keys."""
         self._chunk_dirty = True
         self._mut_serial += 1
         groups: dict = {}
@@ -1424,14 +1471,15 @@ class Mesh:
         differs in holes (a plain cap collapsed onto a subdivided base), the
         one with more holes survives — it carries the user's subdivision, and
         its holes are filled by their own faces. Returns how many were
-        removed."""
+        removed. The face with more holes keeps its key; ties keep the
+        first face in mesh order. Removed faces retire their keys."""
         self._chunk_dirty = True
         self._mut_serial += 1
         seen: dict = {}
         removed = 0
         for f in list(self.faces):
             sig = frozenset(
-                frozenset((id(f.loop[i]), id(f.loop[(i + 1) % len(f.loop)])))
+                frozenset((f.loop[i].key, f.loop[(i + 1) % len(f.loop)].key))
                 for i in range(len(f.loop))
             )
             other = seen.get(sig)
@@ -1448,6 +1496,11 @@ class Mesh:
         return removed
 
     def _weld_into(self, keep: Vertex, dup: Vertex) -> None:
+        """Keep ``keep``'s key and retire ``dup``. Surviving faces keep keys.
+
+        An existing destination edge keeps its key; otherwise the redirected
+        edge keeps its old key. Zero-length edges and sliver faces retire.
+        """
         affected = {f for e in dup.edges for f in e.faces}
         for e in list(dup.edges):
             other = e.other(dup)
@@ -1455,7 +1508,10 @@ class Mesh:
             self.remove_edge(e)
             if other is keep:
                 continue  # zero-length edge vanishes
+            existed = self.find_edge(keep, other) is not None
             kept_edge = self._link_edge(keep, other)
+            if not existed:
+                kept_edge.key = e.key
             for f in incident:
                 if f not in kept_edge.faces:
                     kept_edge.faces.append(f)
@@ -1470,7 +1526,7 @@ class Mesh:
                         loop.pop(i if i + 1 < len(loop) else i + 1 - len(loop))
                     else:
                         i += 1
-            if len({id(x) for x in f.loop}) < 3:
+            if len({x.key for x in f.loop}) < 3:
                 self.remove_face(f)  # collapsed to a sliver
         if dup in self.vertices:
             self.vertices.remove(dup)
@@ -1501,6 +1557,8 @@ class Mesh:
     def split_edge_at(self, edge: Edge, mid: Vertex) -> dict:
         """Split ``edge`` at the *existing* vertex ``mid`` on its interior.
         Returns a reversible record consumed by :meth:`revert_stitch`.
+        A new first half keeps the original key; existing halves keep theirs.
+        A new second half gets a fresh key. Faces and vertices keep keys.
 
         A sub-edge may already exist — the T-junction's other face owns it — in
         which case :meth:`_link_edge` reuses it. The record tracks which sub-edges
@@ -1511,6 +1569,8 @@ class Mesh:
         self.remove_edge(edge)
         e0_new = self.find_edge(v0, mid) is None
         e0 = self._link_edge(v0, mid)
+        if e0_new:
+            e0.key = edge.key
         e1_new = self.find_edge(mid, v1) is None
         e1 = self._link_edge(mid, v1)
         # Sub-edges continue the split edge's curve/soft/layer identity.
@@ -1547,7 +1607,9 @@ class Mesh:
     def collapse_vertex(self, v: Vertex) -> dict:
         """Remove the redundant valence-2 collinear vertex ``v`` (see
         :meth:`collapsible_vertex`), merging its two edges into one. Returns a
-        reversible record."""
+        reversible record. Surviving faces/endpoints keep their keys. An
+        existing joined edge keeps its key; a new joined edge gets a fresh
+        key, retiring both old edges and the removed vertex."""
         e1, e2 = list(v.edges)
         n1, n2 = e1.other(v), e2.other(v)
         faces = list(set(e1.faces))
@@ -1571,7 +1633,9 @@ class Mesh:
 
     def dissolve_edge_recorded(self, edge: Edge) -> Optional[dict]:
         """:meth:`dissolve_edge`, but returning a reversible record (the removed
-        faces, the edge, and the merged face) instead of just the new face."""
+        faces, the edge, and the merged face) instead of just the new face.
+        The merged face gets a fresh key; both old faces and the shared edge
+        retire. Other edges and vertices keep their keys."""
         if len(edge.faces) != 2:
             return None
         face_a, face_b = edge.faces[0], edge.faces[1]
@@ -1611,21 +1675,21 @@ class Mesh:
             for loop in loops:
                 n = len(loop)
                 for i in range(n):
-                    key = frozenset((id(loop[i]), id(loop[(i + 1) % n])))
+                    key = frozenset((loop[i].key, loop[(i + 1) % n].key))
                     counts[key] = counts.get(key, 0) + 1
         # Edges interior to the union appear in both faces; the outline is the
         # edges that appear exactly once.
         shared = [k for k, c in counts.items() if c >= 2]
         if not shared:
             return None  # not adjacent
-        by_id = {id(v): v for loop in (a_loops + b_loops) for v in loop}
+        by_id = {v.key: v for loop in (a_loops + b_loops) for v in loop}
         outline: list[tuple[Vertex, Vertex]] = []
         for loops in (a_loops, b_loops):
             for loop in loops:
                 n = len(loop)
                 for i in range(n):
                     u, w = loop[i], loop[(i + 1) % n]
-                    if counts[frozenset((id(u), id(w)))] == 1:
+                    if counts[frozenset((u.key, w.key))] == 1:
                         outline.append((u, w))
         loops_out = _trace_loops(outline)
         if loops_out is None:
@@ -1670,18 +1734,18 @@ class Mesh:
             for loop in (f.loop, *f.hole_loops):
                 n = len(loop)
                 for i in range(n):
-                    key = frozenset((id(loop[i]), id(loop[(i + 1) % n])))
+                    key = frozenset((loop[i].key, loop[(i + 1) % n].key))
                     counts[key] = counts.get(key, 0) + 1
         if not any(c >= 2 for c in counts.values()):
             return None  # not edge-connected
-        by_id = {id(v): v for f in faces
+        by_id = {v.key: v for f in faces
                  for loop in (f.loop, *f.hole_loops) for v in loop}
         outline = [
             (u, w)
             for f in faces
             for loop in (f.loop, *f.hole_loops)
             for u, w in zip(loop, loop[1:] + loop[:1])
-            if counts[frozenset((id(u), id(w)))] == 1
+            if counts[frozenset((u.key, w.key))] == 1
         ]
         loops_out = _trace_loops(outline)
         if loops_out is None:
@@ -1970,7 +2034,7 @@ def _splice_loops(
     sb = (ib + 1) % nb                          # rotate B to start at u → [u … w]
     b_path = loop_b[sb:] + loop_b[:sb]
     merged = a_path[:-1] + b_path[:-1]          # drop the duplicated u and w
-    if len({id(v) for v in merged}) != len(merged):
+    if len({v.key for v in merged}) != len(merged):
         return None                             # a vertex repeats → not simple
     return merged
 
@@ -2039,3 +2103,12 @@ def _loop_area(loop: list[Vertex]) -> float:
             (cur.x() - nxt.x()) * (cur.y() + nxt.y()),
         )
     return 0.5 * n.length()
+
+
+def element_identity(item):
+    """Identity for heterogeneous UI lists and legacy geometry planners.
+
+    Mesh elements use stable keys; groups, Qt items and temporary legacy
+    geometry still use Python identity.
+    """
+    return item.key if isinstance(item, (Vertex, Edge, Face)) else id(item)

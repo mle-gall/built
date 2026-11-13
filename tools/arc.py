@@ -559,7 +559,7 @@ class ArcTool(SegmentCount, AxisMagnet, PlaneLock, Tool):
             pts: dict = {}
             for c in chain:
                 for vv in (c.v0, c.v1):
-                    pts[id(vv)] = vv.position
+                    pts[vv.key] = vv.position
             fit = fit_circle(list(pts.values())) if len(pts) >= 3 else None
             if fit is None:
                 continue

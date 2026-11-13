@@ -315,7 +315,7 @@ class RotateTool(ProtractorBase):
         edges: set[int] = set()
         for v in self._verts:
             for e in getattr(v, "edges", ()):
-                edges.add(id(e))
+                edges.add(e.key)
         groups = {id(g) for g in self._groups}
         if not edges and not groups:
             return None

@@ -61,7 +61,7 @@ def geometry_steps(mesh):
     attrs, layer_names = [], []
 
     def vertex(v):
-        key = id(v)
+        key = v.key
         if key not in vertices:
             vertices[key] = len(vertices)
             pos.extend(v.position.toTuple())

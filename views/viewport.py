@@ -34,6 +34,8 @@ Tool input (when a tool is active):
 - Other keys: tool gets first shot via ``tool.on_key(...)``
 """
 from __future__ import annotations
+from core.mesh import element_identity
+from core.element_set import ElementSet
 
 import copy
 import itertools
@@ -854,7 +856,7 @@ def _snap_dropped_loose(vp):
     memo = getattr(vp, "_loose_snap_drops_cache", None)
     if memo is not None and memo[0] == key:
         return memo[1]
-    drops = {id(e) for e in scene.edges if not scene.edge_snappable(e)}
+    drops = {element_identity(e) for e in scene.edges if not scene.edge_snappable(e)}
     vp._loose_snap_drops_cache = (key, drops)
     return drops
 
@@ -1700,7 +1702,7 @@ def _face_geometry(f, memo, triangulate):
     else:
         key = (tuple((p.x(), p.y(), p.z()) for p in loop),
                tuple(tuple((p.x(), p.y(), p.z()) for p in h) for h in holes))
-        hit = memo.get(id(f))
+        hit = memo.get(element_identity(f))
         if hit is not None and hit[0] == key:
             return hit
     if len(loop) < 3:
@@ -1718,7 +1720,7 @@ def _face_geometry(f, memo, triangulate):
         # · 7: the soft-edge silhouette props (normal, centroid)
         geom = (key, normal, 0.5 * ln, tris, c, {}, flat, props)
     if memo is not None:
-        memo[id(f)] = geom
+        memo[element_identity(f)] = geom
     return geom
 
 
@@ -2023,7 +2025,7 @@ class Viewport(QOpenGLWidget):
         # Faces hidden from the normal pass while a tool previews — Push/Pull
         # hides the flat inner face it's pushing in (a window/door) so the recess
         # forming behind it is visible instead of covered. Keyed by identity.
-        self._suppressed_faces: set = set()
+        self._suppressed_faces: ElementSet = ElementSet()
 
         # Offscreen FBO with depth attachment. QOpenGLWidget's default target
         # on some Mesa/Wayland stacks has no depth buffer, which silently
@@ -7531,9 +7533,9 @@ class Viewport(QOpenGLWidget):
         memo = getattr(self, "_newell_memo", None)
         if memo is None or memo[0] != _cache_ver(self):
             memo = self._newell_memo = (_cache_ver(self), {})
-        hit = memo[1].get(id(face))
+        hit = memo[1].get(element_identity(face))
         if hit is None or hit[0] is not face:
-            hit = memo[1][id(face)] = (face, face._newell())
+            hit = memo[1][element_identity(face)] = (face, face._newell())
         return hit[1]
 
     def _area_of(self, face) -> float:
@@ -7554,9 +7556,9 @@ class Viewport(QOpenGLWidget):
         memo = getattr(self, "_tri_memo", None)
         if memo is None or memo[0] != _cache_ver(self):
             memo = self._tri_memo = (_cache_ver(self), {})
-        hit = memo[1].get(id(face))
+        hit = memo[1].get(element_identity(face))
         if hit is None or hit[0] is not face:
-            hit = memo[1][id(face)] = (
+            hit = memo[1][element_identity(face)] = (
                 face, face.triangulate(self._normal_of(face)))
         return hit[1]
 
@@ -7585,7 +7587,7 @@ class Viewport(QOpenGLWidget):
         for f in faces:
             if not hasattr(f, "loop") or len(f.loop) < 3:
                 continue
-            hit = memo[1].get(id(f))
+            hit = memo[1].get(element_identity(f))
             if hit is not None and hit[0] is f:
                 continue
             rings = [f.vertices] + [h for h in f.holes if len(h) >= 3]
@@ -7612,7 +7614,7 @@ class Viewport(QOpenGLWidget):
         for (a, b, c), fi in zip(tris_u.tolist(), tri_face_u.tolist()):
             per_face[fi].append((pts[a], pts[b], pts[c]))
         for (f, _rings), tris in zip(big, per_face):
-            memo[1][id(f)] = (f, tris)
+            memo[1][element_identity(f)] = (f, tris)
 
     def _normal_of(self, face):
         """``face.normal()`` memoised per scene version (see _tris_of):
@@ -7791,11 +7793,11 @@ class Viewport(QOpenGLWidget):
                 # active mesh (loose, or the group being edited) — the old
                 # render_edges()/render_faces() sets walked EVERY group's
                 # entities (~283k) per edit frame after an explode.
-                alive_e: set = set(map(id, self.scene.mesh.edges))
-                alive_f: set = set(map(id, self.scene.mesh.faces))
+                alive_e: set = set(map(element_identity, self.scene.mesh.edges))
+                alive_f: set = set(map(element_identity, self.scene.mesh.faces))
 
                 def alive(ent):
-                    return id(ent) in (alive_e if isinstance(ent, Edge)
+                    return ent.key in (alive_e if isinstance(ent, Edge)
                                        else alive_f)
             else:
                 # A mesh the experimental engine has not built yet holds no
@@ -8422,7 +8424,7 @@ class Viewport(QOpenGLWidget):
         return (_content_ver(self), self._placements_epoch(), id(sc.mesh),
                 id(sc.edit_group), self._rest_is_hidden(),
                 tuple(sorted(getattr(self, "_preview_groups", None) or ())),
-                frozenset(map(id, sup)) if sup else None,
+                frozenset(map(element_identity, sup)) if sup else None,
                 bool(getattr(sc, "show_hidden_objects", False)),
                 bool(getattr(sc, "show_hidden_geometry", False)),
                 getattr(self, "_edges_front_tint", None))
@@ -9567,7 +9569,7 @@ class Viewport(QOpenGLWidget):
         """Hide a set of scene faces from the normal pass (e.g. the flat inner
         face a Push/Pull is recessing). Identity-keyed; empty set restores.
         No-op when unchanged so the drag doesn't rebuild every frame."""
-        faces = set(faces)
+        faces = ElementSet(faces)
         if faces == self._suppressed_faces:
             return
         self._suppressed_faces = faces
@@ -12019,7 +12021,7 @@ class Viewport(QOpenGLWidget):
         f_face, f_place = f[0], f[1]
         g_face, g_place = g[0], g[1]
         x, probes = found
-        want = {(id(f_face), id(f_place)), (id(g_face), id(g_place))}
+        want = {(element_identity(f_face), id(f_place)), (element_identity(g_face), id(g_place))}
         ids = set()
         for q in probes:
             # Each side must show one of the two, the sides not the same
@@ -12027,9 +12029,9 @@ class Viewport(QOpenGLWidget):
             # is a ray through the model, ~2 ms over the plant of #158,
             # and dense spots try five crossings a move that fail).
             h = self._front_face_at(*q)
-            if h is None or (id(h[0]), id(h[1])) not in want:
+            if h is None or (element_identity(h[0]), id(h[1])) not in want:
                 return None
-            ids.add((id(h[0]), id(h[1])))
+            ids.add((element_identity(h[0]), id(h[1])))
         if ids != want:
             return None
         context = None
@@ -12050,7 +12052,7 @@ class Viewport(QOpenGLWidget):
         if face is None:
             return False
         moving = getattr(self.active_tool, "moving_face_ids", None)
-        return not (grp is None and callable(moving) and id(face) in moving())
+        return not (grp is None and callable(moving) and element_identity(face) in moving())
 
     def _hover_face_plane(self, cursor):
         """World plane of the face under the cursor, or None.
@@ -12074,7 +12076,7 @@ class Viewport(QOpenGLWidget):
             # the face the point, and the geometry shook under a still
             # mouse.
             moving = getattr(self.active_tool, "moving_face_ids", None)
-            if callable(moving) and id(face) in moving():
+            if callable(moving) and element_identity(face) in moving():
                 return None
         from core.snap import face_plane_world
         return face_plane_world(face, getattr(grp, "xform", None))
@@ -12992,10 +12994,10 @@ class Viewport(QOpenGLWidget):
             faces.append(f)
             geom = _face_geometry(f, memo, _triangulate)
             if memo is None:
-                built[id(f)] = geom     # this build's, for the soft edges
+                built[element_identity(f)] = geom     # this build's, for the soft edges
             normal, area, tri_list = geom[1], geom[2], geom[3]
             areas.append(area)
-            fprops[id(f)] = normal
+            fprops[element_identity(f)] = normal
             back = fattrs.get("back")
             fcull = 0
             if isinstance(back, dict):
@@ -13056,17 +13058,17 @@ class Viewport(QOpenGLWidget):
         sprops: dict = {}
 
         def props(f):
-            r = sprops.get(id(f))
+            r = sprops.get(element_identity(f))
             if r is None:
-                hit = built.get(id(f))
+                hit = built.get(element_identity(f))
                 if hit is not None and hit[7] is not None:
-                    r = sprops[id(f)] = hit[7]
+                    r = sprops[element_identity(f)] = hit[7]
                     return r
-                n = fprops.get(id(f))
+                n = fprops.get(element_identity(f))
                 if n is None:
                     n = f.normal()
                 c = f.centroid()
-                r = sprops[id(f)] = ((n.x(), n.y(), n.z()),
+                r = sprops[element_identity(f)] = ((n.x(), n.y(), n.z()),
                                      (c.x(), c.y(), c.z()))
             return r
 
@@ -15704,8 +15706,8 @@ class Viewport(QOpenGLWidget):
                             pos[v] = QVector3D(*plan.pos[v])
                     continue
                 for v in (e.v0, e.v1):
-                    degree[id(v)] = degree.get(id(v), 0) + 1
-                    pos[id(v)] = v.position
+                    degree[element_identity(v)] = degree.get(element_identity(v), 0) + 1
+                    pos[element_identity(v)] = v.position
             ends = [pos[k] for k, n in degree.items() if n == 1]
             if len(ends) != 2 or len(pos) < 3:
                 continue                     # a circle, or not a chain
@@ -15859,9 +15861,9 @@ class Viewport(QOpenGLWidget):
             loose = list(self.scene.edges)
             drops = _snap_dropped_loose(self)
             if drops:
-                loose = [e for e in loose if id(e) not in drops]
+                loose = [e for e in loose if element_identity(e) not in drops]
         if excl is not None and excl[0]:
-            loose = [e for e in loose if id(e) not in excl[0]]
+            loose = [e for e in loose if element_identity(e) not in excl[0]]
         if sp is not None:
             loose = [e for e in loose if _kept(e)]
         from types import SimpleNamespace
@@ -16091,8 +16093,8 @@ class Viewport(QOpenGLWidget):
         from core.snap import fit_circle
         pts = {}
         for e in mesh.curve_edges(edge):
-            pts[id(e.v0)] = e.v0.position
-            pts[id(e.v1)] = e.v1.position
+            pts[element_identity(e.v0)] = e.v0.position
+            pts[element_identity(e.v1)] = e.v1.position
         fit = fit_circle(list(pts.values())) if len(pts) >= 3 else None
         if fit is None:
             return None
@@ -16121,7 +16123,7 @@ class Viewport(QOpenGLWidget):
             if best is None:
                 return None
             _d, c, r, key = best
-        return (c, r, (id(face), key), self.scene.version, face, mesh, group)
+        return (c, r, (element_identity(face), key), self.scene.version, face, mesh, group)
 
     def _center_hint_px(self, ref, pc) -> float:
         """How close (px) the cursor must come for the centre's dot to show:

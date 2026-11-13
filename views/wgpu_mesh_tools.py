@@ -104,7 +104,7 @@ class MeshToolAccess:
         best, distance = None, float('inf')
         excluded = getattr(self.tool, 'moving_face_ids', lambda: set())()
         for face in mesh.faces:
-            if id(face) in excluded:
+            if face.key in excluded:
                 continue
             if getattr(face, 'hidden', False):
                 continue
@@ -218,7 +218,7 @@ class MeshToolAccess:
             # suppressing the base would also suppress its mapped preview.
             return
         faces = tuple(faces or ())
-        if {id(f) for f in faces} == {id(f) for f in getattr(self.view, 'suppressed_faces', ())}:
+        if {f.key for f in faces} == {f.key for f in getattr(self.view, 'suppressed_faces', ())}:
             return
         self.view.suppressed_faces = faces
         renderer = getattr(self.view, 'renderer', None)

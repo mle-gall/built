@@ -69,9 +69,8 @@ class RebuildCache:
     Safe because the fixpoint loop never mutates a face in place: a rebuild
     *removes* faces and *adds* new ones, so an identity key is either still
     the same geometry or gone. (The trailing ``run_stitch``, which does mutate
-    loops, runs after the loop and takes no cache.) Faces are kept as keys, not
-    ``id()``s, so a dead face can never have its address reused under a live
-    entry."""
+    loops, runs after the loop and takes no cache.) Stable face keys cannot be reused by later geometry, so a dead face
+    cannot alias a live cache entry."""
 
     __slots__ = ("tris", "norm", "cent", "token", "_packed", "_comp",
                  "_comp_token", "seed_faces", "_scope", "_scope_token",
@@ -99,10 +98,10 @@ class RebuildCache:
         self._scope_token = -1
 
     def components(self, mesh) -> dict:
-        """Face → edge-connected component label, recomputed when the mesh
+        """Face key → edge-connected component label, recomputed when the mesh
         changes."""
         if self._comp is None or self._comp_token != self.token:
-            self._comp = _face_components(mesh)
+            self._comp = {f.key: c for f, c in _face_components(mesh).items()}
             self._comp_token = self.token
         return self._comp
 
@@ -126,11 +125,11 @@ class RebuildCache:
         if self._scope is not None and self._scope_token == self.token:
             return self._scope
         comp = self.components(mesh)
-        live = {comp[f] for f in self.seed_faces if f in comp}
+        live = {comp[f.key] for f in self.seed_faces if f.key in comp}
         if not live:
             self._scope, self._scope_token = None, self.token
             return None
-        faces = [f for f in mesh.faces if comp.get(f) in live]
+        faces = [f for f in mesh.faces if comp.get(f.key) in live]
         fset = set(faces)
         # An edge belongs to the scope when a face of it does. A faceless edge
         # is plane debris a rebuild may still need to re-trace, so it stays.
@@ -141,31 +140,31 @@ class RebuildCache:
         return self._scope
 
     def triangles(self, f):
-        t = self.tris.get(f)
+        t = self.tris.get(f.key)
         if t is None:
             t = f.triangulate()
-            self.tris[f] = t
+            self.tris[f.key] = t
         return t
 
     def normal(self, f):
-        n = self.norm.get(f)
+        n = self.norm.get(f.key)
         if n is None:
             n = f.normal().normalized()
-            self.norm[f] = n
+            self.norm[f.key] = n
         return n
 
     def centroid(self, f):
-        c = self.cent.get(f)
+        c = self.cent.get(f.key)
         if c is None:
             c = f.centroid()
-            self.cent[f] = c
+            self.cent[f.key] = c
         return c
 
     def packed(self, mesh, shadowed, want=None):
         """The packed parity triangles of the counted faces (boundary, not
         shadowed, and — when ``want`` is given — in one of those components),
         memoised until the mesh changes."""
-        key = (frozenset(shadowed) if shadowed else None,
+        key = (frozenset(f.key for f in shadowed) if shadowed else None,
                frozenset(want) if want is not None else None)
         tok, k, val = self._packed
         if tok == self.token and k == key and val is not None:
@@ -174,7 +173,7 @@ class RebuildCache:
         val = _pack_lists([
             self.triangles(f) for f in mesh.faces
             if not f.interior and f not in shadowed
-            and (want is None or comp.get(f) in want)])
+            and (want is None or comp.get(f.key) in want)])
         self._packed = (self.token, key, val)
         return val
 
@@ -496,10 +495,10 @@ def rebuild_plane(mesh, origin: QVector3D, normal: QVector3D,
                               if not f.interior and f not in shadowed])
     else:
         comp = cache.components(mesh)
-        want = {comp[f] for f in scope_faces
-                if f in comp and _coplanar_on(f, origin, normal, cache)}
+        want = {comp[f.key] for f in scope_faces
+                if f.key in comp and _coplanar_on(f, origin, normal, cache)}
         # A push welding a new wall onto a neighbouring solid must see both.
-        want |= {comp[f] for f in fresh_set if f in comp}
+        want |= {comp[f.key] for f in fresh_set if f.key in comp}
         packed = cache.packed(mesh, shadowed, want or None)
     rng = random.Random(54321)
 

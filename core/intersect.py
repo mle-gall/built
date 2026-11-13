@@ -15,6 +15,7 @@ even-odd rule) and what both keep is the new edge. Coplanar faces do not
 cross — nothing is drawn for them.
 """
 from __future__ import annotations
+from core.mesh import element_identity
 
 import math
 
@@ -275,13 +276,13 @@ def segments_for(scene, mode: str) -> list:
     mine = polys_of(sel)
     if mode == WITH_SELECTION:
         return intersect(mine, mine, same=True)
-    selected = set(map(id, sel))
-    rest = [f for f in scene.mesh.faces if id(f) not in selected]
+    selected = set(map(element_identity, sel))
+    rest = [f for f in scene.mesh.faces if element_identity(f) not in selected]
     if mode == WITH_MODEL:
         owner = scene.edit_group
         kids = (getattr(owner, "children", None) or []) if owner is not None \
             else scene.groups
-        rest += [g for g in kids if id(g) not in selected]
+        rest += [g for g in kids if element_identity(g) not in selected]
     others = polys_of(rest)
     if mode == WITH_MODEL:
         # The selection is part of the model: Select All + With Model is the

@@ -19,6 +19,7 @@ Kept in its own module to avoid an import cycle: ``history`` imports
 ``topology``, so the command-building glue can't live in either of them.
 """
 from __future__ import annotations
+from core.mesh import element_identity
 
 import math
 from typing import Iterable, Optional, Sequence
@@ -171,14 +172,14 @@ class _Nearby:
         self._row: dict = {}
         rows = []
         for e in edges:
-            self._row[id(e)] = len(self._items)
+            self._row[element_identity(e)] = len(self._items)
             self._items.append(e)
             a, b = e.a, e.b
             ax, ay, az, bx, by, bz = a.x(), a.y(), a.z(), b.x(), b.y(), b.z()
             rows.append((min(ax, bx), min(ay, by), min(az, bz),
                          max(ax, bx), max(ay, by), max(az, bz)))
         for f in faces:
-            self._row[id(f)] = len(self._items)
+            self._row[element_identity(f)] = len(self._items)
             self._items.append(f)
             rows.append(self._points_box(f.vertices))
         self._arr = (np.asarray(rows, dtype=np.float64) if rows
@@ -195,12 +196,12 @@ class _Nearby:
         return (min(xs), min(ys), min(zs), max(xs), max(ys), max(zs))
 
     def _box(self, item):
-        hit = self._extra.get(id(item))
+        hit = self._extra.get(element_identity(item))
         if hit is not None and hit[0] is item:
             return hit[1]
         pts = item.vertices if hasattr(item, "vertices") else (item.a, item.b)
         box = self._points_box(pts)
-        self._extra[id(item)] = (item, box)
+        self._extra[element_identity(item)] = (item, box)
         return box
 
     @staticmethod
@@ -228,16 +229,16 @@ class _Nearby:
         # reused): the mask says. The plan's own new pieces are boxed here.
         # The set work runs in C; only the hits and the new pieces reach
         # Python, and the result keeps the order of ``items``.
-        keep = {id(known[r]) for r in np.flatnonzero(mask)}
-        ids = list(map(id, items))
+        keep = {element_identity(known[r]) for r in np.flatnonzero(mask)}
+        ids = list(map(element_identity, items))
         new = set(ids).difference(self._row)
         if new:
             for it in items:
-                if id(it) in new:
+                if element_identity(it) in new:
                     x0, y0, z0, x1, y1, z1 = self._box(it)
                     if (x1 >= w[0] and x0 <= w[3] and y1 >= w[1]
                             and y0 <= w[4] and z1 >= w[2] and z0 <= w[5]):
-                        keep.add(id(it))
+                        keep.add(element_identity(it))
         if not keep:
             return []
         return [it for it, i in zip(items, ids) if i in keep]
@@ -528,13 +529,13 @@ def divide_edges(mesh, edges, n: int) -> int:
     done: set = set()
     cuts = 0
     for edge in list(edges):
-        if id(edge) in done:
+        if element_identity(edge) in done:
             continue
         is_curve = getattr(edge, "curve", None) is not None
         chain = mesh.curve_edges(edge) if is_curve else [edge]
         walk = _order_chain(chain, edge)
         for e, _, _ in walk:
-            done.add(id(e))
+            done.add(element_identity(e))
         total = sum((vt.position - vf.position).length() for _, vf, vt in walk)
         if total < 1e-9:
             continue
@@ -637,7 +638,7 @@ def _kink_deg(v, a, b) -> float:
 def _straight_through(v, picked) -> bool:
     """Whether two of the ``picked`` edges at ``v`` run on in one straight
     line through it — a T or a cross whose bar Join Segments must keep."""
-    ends = [e.other(v) for e in v.edges if id(e) in picked]
+    ends = [e.other(v) for e in v.edges if element_identity(e) in picked]
     for i, a in enumerate(ends):
         for b in ends[i + 1:]:
             off, tol = _off_line(v.position, a.position, b.position)
@@ -664,13 +665,13 @@ def join_edges(mesh, edges, verdicts: Optional[dict] = None) -> list:
     :func:`join_preview` shows."""
     from core.mesh import edge_flags, stamp_edge_flags
     live = [e for e in edges if e in mesh.edges]
-    picked = set(map(id, live))
+    picked = set(map(element_identity, live))
     seen: set = set()
     candidates = []
     for e in live:
         for v in (e.v0, e.v1):
-            if id(v) not in seen:
-                seen.add(id(v))
+            if element_identity(v) not in seen:
+                seen.add(element_identity(v))
                 candidates.append(v)
 
     def keep(v, reason):
@@ -683,7 +684,7 @@ def join_edges(mesh, edges, verdicts: Optional[dict] = None) -> list:
                 keep(v, "branch")
             continue
         e1, e2 = list(v.edges)
-        if id(e1) not in picked or id(e2) not in picked:
+        if element_identity(e1) not in picked or element_identity(e2) not in picked:
             continue
         a, b = e1.other(v), e2.other(v)
         off, tol = _off_line(v.position, a.position, b.position)
@@ -705,11 +706,11 @@ def join_edges(mesh, edges, verdicts: Optional[dict] = None) -> list:
         joined = mesh.collapse_vertex(v)["new_edge"]
         stamp_edge_flags(joined, flags)
         keep(v, "join")
-        picked.discard(id(e1))
-        picked.discard(id(e2))
-        picked.add(id(joined))
+        picked.discard(element_identity(e1))
+        picked.discard(element_identity(e2))
+        picked.add(element_identity(joined))
         live.append(joined)
-    return [e for e in live if id(e) in picked and e in mesh.edges]
+    return [e for e in live if element_identity(e) in picked and e in mesh.edges]
 
 
 def join_preview(mesh, edges) -> dict:
@@ -739,15 +740,15 @@ def _order_chain(chain, seed):
     by_vertex: dict = {}
     for e in chain:
         for v in (e.v0, e.v1):
-            by_vertex.setdefault(id(v), (v, []))[1].append(e)
+            by_vertex.setdefault(element_identity(v), (v, []))[1].append(e)
     ends = [v for v, es in by_vertex.values() if len(es) == 1]
     v = ends[0] if ends else seed.v0
     ordered, seen = [], set()
     while True:
-        nxt = next((e for e in by_vertex[id(v)][1] if id(e) not in seen), None)
+        nxt = next((e for e in by_vertex[element_identity(v)][1] if element_identity(e) not in seen), None)
         if nxt is None:
             break
-        seen.add(id(nxt))
+        seen.add(element_identity(nxt))
         w = nxt.other(v)
         ordered.append((nxt, v, w))
         v = w

@@ -694,6 +694,6 @@ def _incoherent_edges(faces) -> int:
             n = len(loop)
             for i in range(n):
                 a, b = loop[i], loop[(i + 1) % n]
-                uses.setdefault(frozenset((id(a), id(b))), []).append(
-                    (id(a), id(b)))
+                uses.setdefault(frozenset((a.key, b.key)), []).append(
+                    (a.key, b.key))
     return sum(1 for u in uses.values() if len(u) == 2 and u[0] == u[1])

@@ -52,13 +52,13 @@ def test_the_seams_read_the_same_uv_from_both_facets():
         shared = [p for p in a.vertices if any((p - q).length() < 1e-9 for q in b.vertices)]
         assert len(shared) == 2
         for p in shared:
-            ua = _uv(maps[id(a)], a, p)
-            ub = _uv(maps[id(b)], b, p)
+            ua = _uv(maps[a.key], a, p)
+            ub = _uv(maps[b.key], b, p)
             assert ua == pytest.approx(ub, abs=1e-6)
     # The seed keeps its planar projection; the image is not stretched:
     # one tile still spans 0.5 m along every facet.
     for f in faces:
-        gu, _cu, gv, _cv = face_uv_axes(maps[id(f)], f.normal())
+        gu, _cu, gv, _cv = face_uv_axes(maps[f.key], f.normal())
         assert gu.length() == pytest.approx(2.0, abs=1e-6)
         assert gv.length() == pytest.approx(2.0, abs=1e-6)
         assert abs(QVector3D.dotProduct(gu, f.normal().normalized())) < 1e-6

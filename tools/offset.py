@@ -585,7 +585,7 @@ def _run_from_edges(edges: list):
     nbrs: dict = {}
     for e in edges:
         for v in (e.v0, e.v1):
-            nbrs.setdefault(id(v), (v, []))[1].append(e)
+            nbrs.setdefault(v.key, (v, []))[1].append(e)
     if any(len(es) > 2 for _v, es in nbrs.values()):
         return None
     ends = [v for v, es in nbrs.values() if len(es) == 1]
@@ -597,10 +597,10 @@ def _run_from_edges(edges: list):
     seen: set = set()
     v = start
     while True:
-        nxt = next((e for e in nbrs[id(v)][1] if id(e) not in seen), None)
+        nxt = next((e for e in nbrs[v.key][1] if e.key not in seen), None)
         if nxt is None:
             break
-        seen.add(id(nxt))
+        seen.add(nxt.key)
         v = nxt.other(v)
         if closed and v is start:
             break

@@ -105,13 +105,13 @@ def gather_dimensions(ctx: ToolContext, groups, verts) -> dict:
         d = pick(ctx.screen.x(), ctx.screen.y()) if pick else None
         if d is not None:
             dims = [d]
-    moving_verts = {id(v) for v in verts}
+    moving_verts = {v.key for v in verts}
     moving_groups = {id(g) for g in groups}
     out: dict = {}
     for d in dims:
         anchors = [an for an in (d.anchor_a, d.anchor_b) if an is not None]
         riding = [an for an in anchors
-                  if id(an.vertex) in moving_verts
+                  if an.vertex.key in moving_verts
                   or any(id(g) in moving_groups for g in an.chain)]
         if len(anchors) == 2 and len(riding) == 2:
             continue                          # follows its vertices
@@ -688,7 +688,7 @@ class MoveTool(Tool):
         edges: set[int] = set()
         for v in self._verts:
             for e in getattr(v, "edges", ()):
-                edges.add(id(e))
+                edges.add(e.key)
         groups = {id(g) for g in self._groups}
         if not edges and not groups:
             return None
@@ -700,7 +700,7 @@ class MoveTool(Tool):
         them (it chased its own face and shook)."""
         if self.grab is None or self._copy:
             return set()
-        return {id(f) for v in self._verts
+        return {f.key for v in self._verts
                 for e in getattr(v, "edges", ()) for f in e.faces}
 
     def moving_guide_ids(self) -> set:

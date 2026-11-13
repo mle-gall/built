@@ -22,7 +22,7 @@ class TexturePreview:
             self.restore()
             return
         texture = tool.result_texture()
-        signature = (id(tool.face), tool.side, repr(texture))
+        signature = (tool.face.key, tool.side, repr(texture))
         if signature == self.signature:
             return
         if self.overlay_only and tool._drag is not None:
@@ -45,7 +45,7 @@ class TexturePreview:
             own['back'] = dict(own.get('back') or {}, texture=texture)
         else:
             own['texture'] = texture
-        baked = pack_scene(scene, face_overrides={id(tool.face): own}, texture_images=False)
+        baked = pack_scene(scene, face_overrides={tool.face.key: own}, texture_images=False)
         view.renderer.update_prototype_materials(self.code, self._materials(baked))
         elapsed = (perf_counter() - start) * 1000
         self.samples_ms.append(elapsed)

@@ -506,19 +506,19 @@ def continuous_maps(mesh, faces, seed, tex: dict) -> dict:
     into the neighbour's plane, so bricks wrap around the bend instead of
     restarting on every facet (Marco's rounded corner, 2026-09-15).
 
-    Returns ``{id(face): tex dict with uvw}`` for the faces reached from
+    Returns ``{face.key: tex dict with uvw}`` for the faces reached from
     ``seed``; faces of the set not connected to it are left out (the
     caller paints them the ordinary way)."""
     faces = list(faces)
     if seed is None or not faces:
         return {}
-    ids = {id(f) for f in faces}
+    ids = {f.key for f in faces}
     gu, cu, gv, cv = face_uv_axes(tex, seed.normal())
-    out = {id(seed): (gu, cu, gv, cv)}
+    out = {seed.key: (gu, cu, gv, cv)}
     stack = [seed]
     while stack:
         f = stack.pop()
-        g_u, c_u, g_v, c_v = out[id(f)]
+        g_u, c_u, g_v, c_v = out[f.key]
         n1 = f.normal()
         if n1.lengthSquared() < 1e-18:
             continue
@@ -530,7 +530,7 @@ def continuous_maps(mesh, faces, seed, tex: dict) -> dict:
                 if e is None or not e.soft:
                     continue
                 for g in e.faces:
-                    if g is f or id(g) not in ids or id(g) in out:
+                    if g is f or g.key not in ids or g.key in out:
                         continue
                     n2 = g.normal()
                     d = e.b - e.a
@@ -542,17 +542,17 @@ def continuous_maps(mesh, faces, seed, tex: dict) -> dict:
                     sin_t = QVector3D.dotProduct(d, QVector3D.crossProduct(n1, n2))
                     if cos_t < -0.999:
                         continue                # folded back: no hinge
-                    out[id(g)] = _rotated_map(g_u, c_u, g_v, c_v, e.a, d,
+                    out[g.key] = _rotated_map(g_u, c_u, g_v, c_v, e.a, d,
                                               cos_t, sin_t)
                     stack.append(g)
     result = {}
     base = {k: v for k, v in tex.items() if k not in ("uvw", "rot")}
     for f in faces:
-        m = out.get(id(f))
+        m = out.get(f.key)
         if m is None:
             continue
         gu, cu, gv, cv = m
-        result[id(f)] = {**base, "uvw": [gu.x(), gu.y(), gu.z(), float(cu),
+        result[f.key] = {**base, "uvw": [gu.x(), gu.y(), gu.z(), float(cu),
                                          gv.x(), gv.y(), gv.z(), float(cv)]}
     return result
 

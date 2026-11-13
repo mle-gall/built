@@ -141,17 +141,17 @@ def _source_arrays(mesh, paint=None, texture_ids=None, face_overrides=None, bill
         # arrays_of stores face vertices only. Append legacy edge endpoints and
         # unused vertices so edge-only prototypes retain their original bounds.
         extra = np.asarray([v.position.toTuple() for v in mesh.vertices], np.float32).reshape(-1, 3)
-        lookup = {id(v): i+len(arrays.pos) for i, v in enumerate(mesh.vertices)}
+        lookup = {v.key: i+len(arrays.pos) for i, v in enumerate(mesh.vertices)}
         pos = np.concatenate((arrays.pos, extra))
         corners, sizes, counts = arrays.corners, arrays.ring_sizes, arrays.ring_counts
-        edges = np.asarray([(lookup[id(e.v0)], lookup[id(e.v1)]) for e in mesh.edges], np.int64).reshape(-1, 2)
+        edges = np.asarray([(lookup[e.v0.key], lookup[e.v1.key]) for e in mesh.edges], np.int64).reshape(-1, 2)
         # Face corners and edges must share indices for boundary deduplication.
         positions = {tuple(p): i for i, p in enumerate(pos.tolist())}
         remap = np.fromiter((positions[tuple(p)] for p in arrays.pos.tolist()),
                             dtype=np.int64, count=len(arrays.pos))
         corners = remap[corners]
         flags = np.asarray([int(e.soft) | (int(e.hidden) << 1) for e in mesh.edges], np.uint8)
-        table = [(face_overrides or {}).get(id(f), f.attrs) for f in mesh.faces]
+        table = [(face_overrides or {}).get(f.key, f.attrs) for f in mesh.faces]
         attr = np.arange(len(table))
     # IGZ source streams can repeat a coordinate for each face/edge. Soft fan
     # adjacency requires common vertex IDs; weld only prototypes that need it.

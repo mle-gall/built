@@ -82,7 +82,7 @@ def plan_vertex_bevel(mesh, vertices, size: float, segments: int = 8,
         return tr("The profile must be between 0 and 1.")
     segments = max(int(segments), 1)
     r = _exponent(profile)
-    chosen = {id(v) for v in verts}
+    chosen = {v.key for v in verts}
     plan = FilletPlan(size, segments, profile, "offset", "round")
 
     # The cut point on each (corner, edge) and the edge vector to it.
@@ -98,14 +98,14 @@ def plan_vertex_bevel(mesh, vertices, size: float, segments: int = 8,
                 return tr("The corner at {p} has too many faces to round.",
                           p=_fmt(v.position))
             w = e.other(v)
-            need = size * (2.0 if id(w) in chosen else 1.0)
+            need = size * (2.0 if w.key in chosen else 1.0)
             if need >= e.length() - 1e-9:
                 return tr("The size is too large for the edge at {p}.",
                           p=_fmt(v.position))
             d = _unit(w.position - v.position)
             if d is None:
                 return tr("A zero-length edge cannot be rounded.")
-            cut[(id(v), id(e))] = d * size
+            cut[(v.key, e.key)] = d * size
 
     def edge_between(a, b):
         return mesh.find_edge(a, b)
@@ -115,7 +115,7 @@ def plan_vertex_bevel(mesh, vertices, size: float, segments: int = 8,
     touched: dict[int, object] = {}
     for v in verts:
         for f in v.faces():
-            touched[id(f)] = f
+            touched[f.key] = f
             for loop in [f.loop] + list(f.hole_loops):
                 m = len(loop)
                 for i, x in enumerate(loop):
@@ -125,12 +125,12 @@ def plan_vertex_bevel(mesh, vertices, size: float, segments: int = 8,
                     en = edge_between(v, loop[(i + 1) % m])
                     if ep is None or en is None:
                         return tr("Could not read the faces around the edge.")
-                    ua, ub = cut[(id(v), id(ep))], cut[(id(v), id(en))]
+                    ua, ub = cut[(v.key, ep.key)], cut[(v.key, en.key)]
                     cos_a = QVector3D.dotProduct(ua, ub) / (size * size)
                     if cos_a < -math.cos(math.radians(MIN_ANGLE_DEG)):
                         return tr("The edges at {p} are too flat to bevel.",
                                   p=_fmt(v.position))
-                    curves[(id(f), id(v), id(ep))] = _face_curve(
+                    curves[(f.key, v.key, ep.key)] = _face_curve(
                         v.position, ua, ub, r, segments)
 
     # Rebuild every face that loses a corner.
@@ -138,11 +138,11 @@ def plan_vertex_bevel(mesh, vertices, size: float, segments: int = 8,
         out = []
         m = len(loop)
         for i, x in enumerate(loop):
-            if id(x) not in chosen:
+            if x.key not in chosen:
                 out.append(QVector3D(x.position))
                 continue
             ep = edge_between(loop[i - 1], x)
-            out.extend(QVector3D(p) for p in curves[(id(face), id(x), id(ep))])
+            out.extend(QVector3D(p) for p in curves[(face.key, x.key, ep.key)])
         clean = []
         for p in out:
             if not clean or (p - clean[-1]).length() > 1e-7:
@@ -168,7 +168,7 @@ def plan_vertex_bevel(mesh, vertices, size: float, segments: int = 8,
     for v in verts:
         faces = list(v.faces())
         closed = all(len(e.faces) == 2 for e in v.edges)
-        face_curves = [pts for key, pts in curves.items() if key[1] == id(v)]
+        face_curves = [pts for key, pts in curves.items() if key[1] == v.key]
         if not closed:
             for pts in face_curves:
                 if segments > 1:
@@ -179,7 +179,7 @@ def plan_vertex_bevel(mesh, vertices, size: float, segments: int = 8,
         out = QVector3D()
         for f in faces:
             out += f.normal()
-        tips = [v.position + cut[(id(v), id(e))] for e in v.edges]
+        tips = [v.position + cut[(v.key, e.key)] for e in v.edges]
         centre = QVector3D()
         for p in tips:
             centre += p
@@ -206,14 +206,14 @@ def plan_vertex_bevel(mesh, vertices, size: float, segments: int = 8,
     seen = set()
     for v in verts:
         for e in v.edges:
-            if id(e) in seen:
+            if e.key in seen:
                 continue
-            seen.add(id(e))
+            seen.add(e.key)
             plan.removed_edges.append(e)
             a, b = e.v0, e.v1
-            pa = (a.position + cut[(id(a), id(e))] if id(a) in chosen
+            pa = (a.position + cut[(a.key, e.key)] if a.key in chosen
                   else QVector3D(a.position))
-            pb = (b.position + cut[(id(b), id(e))] if id(b) in chosen
+            pb = (b.position + cut[(b.key, e.key)] if b.key in chosen
                   else QVector3D(b.position))
             plan.flags.append((pa, pb, edge_flags(e)))
     return plan
@@ -225,7 +225,7 @@ def _three_edge_cap(v, cut, face_curves, r, segments, sign):
     :func:`_cap_point`."""
     n = segments
     edges = list(v.edges)
-    us = [cut[(id(v), id(e))] for e in edges]
+    us = [cut[(v.key, e.key)] for e in edges]
     tips = [v.position + u for u in us]
 
     def arc(i, j):

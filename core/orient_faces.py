@@ -45,28 +45,28 @@ def _walks(face, a, b) -> bool:
 def faces_to_flip(seed) -> list:
     """The faces connected to ``seed`` that must be reversed so they all
     wind like it. ``seed`` itself is never in the list."""
-    flip = {id(seed): False}
-    faces = {id(seed): seed}
+    flip = {seed.key: False}
+    faces = {seed.key: seed}
     todo = deque([seed])
     while todo:
         face = todo.popleft()
-        for a, b in _directed_edges(face, flip[id(face)]):
+        for a, b in _directed_edges(face, flip[face.key]):
             edge = _edge_between(a, b)
             if edge is None or len(edge.faces) != 2:
                 continue
             other = next((f for f in edge.faces if f is not face), None)
-            if other is None or id(other) in flip:
+            if other is None or other.key in flip:
                 continue
             # Agreement = the neighbour walks this edge the other way, b → a.
-            flip[id(other)] = _walks(other, a, b)
-            faces[id(other)] = other
+            flip[other.key] = _walks(other, a, b)
+            faces[other.key] = other
             todo.append(other)
     return [faces[k] for k, f in flip.items() if f]
 
 
 def connected_count(seed) -> int:
     """How many faces the orientation reached, ``seed`` included."""
-    seen = {id(seed)}
+    seen = {seed.key}
     todo = deque([seed])
     while todo:
         face = todo.popleft()
@@ -75,7 +75,7 @@ def connected_count(seed) -> int:
             if edge is None or len(edge.faces) != 2:
                 continue
             for other in edge.faces:
-                if id(other) not in seen:
-                    seen.add(id(other))
+                if other.key not in seen:
+                    seen.add(other.key)
                     todo.append(other)
     return len(seen)

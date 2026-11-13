@@ -142,7 +142,7 @@ class FilletTool(Tool):
             else:
                 continue
             for v in vs:
-                out.setdefault(id(v), v)
+                out.setdefault(v.key, v)
         return list(out.values())
 
     @staticmethod
@@ -449,7 +449,7 @@ class FilletTool(Tool):
             self._plan_key = None
             self._message = None
             return
-        key = (tuple(id(e) for e in edges), round(FilletTool.radius, 6),
+        key = (tuple(e.key for e in edges), round(FilletTool.radius, 6),
                FilletTool.segments, FilletTool.profile, FilletTool.measure,
                FilletTool.corners, FilletTool.affect, FilletTool.shape,
                getattr(mesh, "_mut_serial", 0))

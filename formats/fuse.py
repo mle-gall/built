@@ -419,11 +419,11 @@ def soften_smooth_edges(mesh, cos_threshold: float = 0.85) -> None:
             continue
         if _smooth_sig(f0.attrs) != _smooth_sig(f1.attrs):
             continue                      # material boundary: keep the line
-        n0 = normals.get(id(f0))
+        n0 = normals.get(f0.key)
         if n0 is None:
-            n0 = normals[id(f0)] = f0.normal()
-        n1 = normals.get(id(f1))
+            n0 = normals[f0.key] = f0.normal()
+        n1 = normals.get(f1.key)
         if n1 is None:
-            n1 = normals[id(f1)] = f1.normal()
+            n1 = normals[f1.key] = f1.normal()
         if abs(QVector3D.dotProduct(n0, n1)) > cos_threshold:
             e.soft = True

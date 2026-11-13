@@ -31,7 +31,7 @@ def faces_arrays(faces):
         for loop in loops:
             sizes.append(len(loop))
             for vertex in loop:
-                key = id(vertex)
+                key = vertex.key
                 if key not in lookup:
                     lookup[key] = len(vertices)
                     p = vertex.position

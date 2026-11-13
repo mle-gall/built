@@ -68,17 +68,17 @@ def profiles_from_selection(mesh, selection) -> list[Profile]:
     edges too) are chained into lines or closed loops."""
     # Sets of ids, not ``in mesh.faces``: those are lists, and checking each
     # selected element against them made a big selection quadratic.
-    mesh_faces = {id(f) for f in mesh.faces}
-    mesh_edges = {id(e) for e in mesh.edges}
+    mesh_faces = {f.key for f in mesh.faces}
+    mesh_edges = {e.key for e in mesh.edges}
     faces = [e for e in selection
-             if isinstance(e, Face) and id(e) in mesh_faces]
+             if isinstance(e, Face) and e.key in mesh_faces]
     if len(faces) > 2:
         raise BridgeError("Select two faces, a face and a line, or two "
                           "lines to bridge")
-    face_ids = {id(f) for f in faces}
+    face_ids = {f.key for f in faces}
     edges = [e for e in selection
-             if isinstance(e, Edge) and id(e) in mesh_edges
-             and not any(id(f) in face_ids for f in e.faces)]
+             if isinstance(e, Edge) and e.key in mesh_edges
+             and not any(f.key in face_ids for f in e.faces)]
     profiles = [Profile([f.vertices] + f.holes, True, f) for f in faces]
     chains = _connected(edges, most=2 - len(faces))
     if chains is None:
@@ -363,7 +363,7 @@ def bridge(mesh, profiles) -> list[Face]:
     them stay, as caps. Returns the new faces. No undo bookkeeping: the
     caller snapshots."""
     polys = plan(profiles)
-    before = {id(f) for f in mesh.faces}
+    before = {f.key for f in mesh.faces}
     diagonals = []
     for poly in polys:
         faces, diag = _polygons(poly)
@@ -372,9 +372,9 @@ def bridge(mesh, profiles) -> list[Face]:
         if diag is not None:
             diagonals.append(diag)
     seed = {_key(pt) for poly in polys for pt in poly}
-    new = [f for f in mesh.faces if id(f) not in before]
+    new = [f for f in mesh.faces if f.key not in before]
     run_stitch(mesh, seed, set(new), coplanar_merge=True)
-    new = [f for f in mesh.faces if id(f) not in before]
+    new = [f for f in mesh.faces if f.key not in before]
     for a, b in diagonals:
         va, vb = mesh.vertex_at(a), mesh.vertex_at(b)
         e = mesh.find_edge(va, vb) if va and vb else None
@@ -382,10 +382,10 @@ def bridge(mesh, profiles) -> list[Face]:
             e.soft = True
     # Soften the seams of a curved bridge (two circles make a smooth
     # cylinder); real corners stay hard. Same rule as Follow Me's.
-    new_ids = {id(f) for f in new}
+    new_ids = {f.key for f in new}
     for e in mesh.edges:
         if e.soft or len(e.faces) != 2 or \
-                not all(id(f) in new_ids for f in e.faces):
+                not all(f.key in new_ids for f in e.faces):
             continue
         d = QVector3D.dotProduct(e.faces[0].normal().normalized(),
                                  e.faces[1].normal().normalized())
@@ -433,7 +433,7 @@ def follow_neighbours(mesh, new, caps=()) -> list:
     sides came out wound by the order the profiles happened to be walked,
     against their neighbours half the time (issue #1043)."""
     from collections import deque
-    new_ids = {id(f) for f in new}
+    new_ids = {f.key for f in new}
     settled: set = set()
     turned = []
 
@@ -445,13 +445,13 @@ def follow_neighbours(mesh, new, caps=()) -> list:
                 if dg == 0:
                     continue
                 for f in e.faces:
-                    if id(f) not in new_ids or id(f) in settled:
+                    if f.key not in new_ids or f.key in settled:
                         continue
                     df = _walks(f, e.v0, e.v1)
                     if df == dg:              # same way: f is turned over
                         turn_face_over(f)
                         turned.append(f)
-                    settled.add(id(f))
+                    settled.add(f.key)
                     queue.append(f)
 
     spread(deque(caps))
@@ -459,12 +459,12 @@ def follow_neighbours(mesh, new, caps=()) -> list:
         others = []
         seen = set()
         for f in new:
-            if id(f) in settled:
+            if f.key in settled:
                 continue
             for e in _edges_of(mesh, f):
                 for g in e.faces:
-                    if id(g) not in new_ids and id(g) not in seen:
-                        seen.add(id(g))
+                    if g.key not in new_ids and g.key not in seen:
+                        seen.add(g.key)
                         others.append(g)
         spread(deque(others))
     return turned

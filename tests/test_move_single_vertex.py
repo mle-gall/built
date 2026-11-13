@@ -144,7 +144,7 @@ def test_the_faces_in_motion_are_the_ones_on_the_grabbed_corner():
     assert tool.moving_face_ids() == set()        # nothing grabbed yet
     tool.on_click(_ctx(vp, P[6]))
     corner = sc.mesh.vertex_at(P[6])
-    assert tool.moving_face_ids() == {id(f) for f in corner.faces()}
+    assert tool.moving_face_ids() == {f.key for f in corner.faces()}
     assert len(tool.moving_face_ids()) == 3
 
 

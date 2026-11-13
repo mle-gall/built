@@ -15,6 +15,7 @@ A ``QDockWidget`` gives docking/floating/closing for free; the sections are a
 vertical stack of lightweight collapsibles inside a scroll area.
 """
 from __future__ import annotations
+from core.mesh import element_identity
 
 from views import prompts as _prompts
 
@@ -1483,7 +1484,7 @@ class ComponentsPanel(QWidget):
         scene, and the refresh that follows rebuilt the list -- the row lit
         for a fraction of a second and went dark (#636). Read from the
         selection, the highlight also goes when the selection does."""
-        selected = {id(e) for e in self._window.viewport.scene.selection}
+        selected = {element_identity(e) for e in self._window.viewport.scene.selection}
         if not selected:
             self._in_model.setCurrentItem(None)
             return

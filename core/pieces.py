@@ -43,9 +43,9 @@ def connected_parts(mesh: Mesh) -> list:
         return root
 
     def join(vs) -> None:
-        r = find(id(vs[0]))
+        r = find(vs[0].key)
         for v in vs[1:]:
-            k = find(id(v))
+            k = find(v.key)
             if k != r:
                 parent[k] = r
 
@@ -56,9 +56,9 @@ def connected_parts(mesh: Mesh) -> list:
 
     parts: dict = {}
     for f in mesh.faces:
-        parts.setdefault(find(id(f.loop[0])), ([], []))[0].append(f)
+        parts.setdefault(find(f.loop[0].key), ([], []))[0].append(f)
     for e in mesh.edges:
-        parts.setdefault(find(id(e.v0)), ([], []))[1].append(e)
+        parts.setdefault(find(e.v0.key), ([], []))[1].append(e)
     return sorted(parts.values(), key=lambda p: (-len(p[0]), -len(p[1])))
 
 
@@ -84,7 +84,7 @@ def _is_solid(faces) -> bool:
         for ring in _rings(f):
             n = len(ring)
             for i in range(n):
-                a, b = id(ring[i]), id(ring[(i + 1) % n])
+                a, b = ring[i].key, ring[(i + 1) % n].key
                 key = (a, b) if a < b else (b, a)
                 uses[key] = uses.get(key, 0) + 1
     if any(c % 2 for c in uses.values()):
@@ -223,13 +223,13 @@ def solid_parts(mesh: Mesh) -> list:
             # Where solids meet, trust a pairing only when it is mutual: a
             # face wound the wrong way turns into the neighbour's material
             # and picks the neighbour, but the neighbour does not pick it.
-            chosen = {id(f): g for f, g in pairs}
-            pairs = [(f, g) for f, g in pairs if chosen.get(id(g)) is f]
+            chosen = {f.key: g for f, g in pairs}
+            pairs = [(f, g) for f, g in pairs if chosen.get(g.key) is f]
         for f, g in pairs:
-            join(id(f), id(g))
+            join(f.key, g.key)
     groups: dict = {}
     for f in mesh.faces:
-        groups.setdefault(find(id(f)), []).append(f)
+        groups.setdefault(find(f.key), []).append(f)
     comps = list(groups.values())
     solid = [_is_solid(c) for c in comps]
 
@@ -239,7 +239,7 @@ def solid_parts(mesh: Mesh) -> list:
             for f in c:
                 for ring in _rings(f):
                     for v in ring:
-                        owner.setdefault(id(v), i)
+                        owner.setdefault(v.key, i)
 
     # Fragments cluster through shared vertices — among themselves only.
     parent.clear()
@@ -249,7 +249,7 @@ def solid_parts(mesh: Mesh) -> list:
         for f in c:
             for ring in _rings(f):
                 for v in ring:
-                    join(("v", id(v)), ("c", i))
+                    join(("v", v.key), ("c", i))
     clusters: dict = {}
     for i, c in enumerate(comps):
         if not solid[i]:
@@ -258,7 +258,7 @@ def solid_parts(mesh: Mesh) -> list:
     pieces: dict = {i: list(c) for i, c in enumerate(comps) if solid[i]}
     for members in clusters.values():
         fs = [f for i in members for f in comps[i]]
-        corners = {id(v) for f in fs for ring in _rings(f) for v in ring}
+        corners = {v.key for f in fs for ring in _rings(f) for v in ring}
         votes: dict = {}
         for vid in corners:
             k = owner.get(vid)
@@ -271,13 +271,13 @@ def solid_parts(mesh: Mesh) -> list:
             pieces[("fragment", members[0])] = fs
 
     keys = list(pieces)
-    face_piece = {id(f): n for n, k in enumerate(keys) for f in pieces[k]}
+    face_piece = {f.key: n for n, k in enumerate(keys) for f in pieces[k]}
     vertex_piece = {}
     for n, k in enumerate(keys):
         for f in pieces[k]:
             for ring in _rings(f):
                 for v in ring:
-                    vertex_piece.setdefault(id(v), n)
+                    vertex_piece.setdefault(v.key, n)
     out = [(pieces[k], []) for k in keys]
     wires: dict = {}
     for e in mesh.edges:
@@ -286,11 +286,11 @@ def solid_parts(mesh: Mesh) -> list:
             # with a piece that merely shares one of its corners (that
             # dragged a neighbour's edges along and stretched the piece's
             # box to the neighbour's far end).
-            for n in {face_piece[id(f)] for f in e.faces
-                      if id(f) in face_piece}:
+            for n in {face_piece[f.key] for f in e.faces
+                      if f.key in face_piece}:
                 out[n][1].append(e)
             continue
-        n = vertex_piece.get(id(e.v0), vertex_piece.get(id(e.v1)))
+        n = vertex_piece.get(e.v0.key, vertex_piece.get(e.v1.key))
         if n is not None:
             out[n][1].append(e)            # a loose wire hanging off a piece
         else:

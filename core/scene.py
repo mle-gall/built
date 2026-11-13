@@ -12,6 +12,8 @@ position-matching to rediscover topology.
 to rebuild its dynamic VBOs.
 """
 from __future__ import annotations
+from core.mesh import element_identity
+from core.element_set import ElementSet
 
 from dataclasses import dataclass, field
 from typing import Iterable
@@ -33,8 +35,14 @@ def _make_shadows():
 
 @dataclass
 class Scene:
+    def __setattr__(self, name, value):
+        # All command/tool assignments share the same key-based membership.
+        if name == "selection" and not isinstance(value, ElementSet):
+            value = ElementSet(value)
+        object.__setattr__(self, name, value)
+
     mesh: Mesh = field(default_factory=Mesh)
-    selection: set = field(default_factory=set)
+    selection: ElementSet = field(default_factory=ElementSet)
     version: int = 0
     #: How many of ``version``'s bumps changed only what is SHOWN -- the
     #: selection -- and not the document. The GL caches key on ``version``
@@ -268,10 +276,10 @@ class Scene:
                len(self.mesh.edges))
         memo = getattr(self, "_open_mesh_ids", None)
         if memo is None or memo[0] != key:
-            ids = {id(f) for f in self.mesh.faces}
-            ids.update(id(e) for e in self.mesh.edges)
+            ids = {element_identity(f) for f in self.mesh.faces}
+            ids.update(element_identity(e) for e in self.mesh.edges)
             memo = self._open_mesh_ids = (key, ids)
-        return group_layer if id(entity) in memo[1] else None
+        return group_layer if element_identity(entity) in memo[1] else None
 
     @staticmethod
     def _object_hidden(entity) -> bool:

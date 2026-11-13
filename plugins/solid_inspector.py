@@ -85,13 +85,13 @@ def _steps(face):
 
 
 def _step_key(a, b) -> frozenset:
-    return frozenset((id(a), id(b)))
+    return frozenset((a.key, b.key))
 
 
 def _face_key(face) -> tuple:
     """Same key ⇔ same corners, whatever the starting point or winding."""
-    return (frozenset(id(v) for v in face.loop),
-            frozenset(frozenset(id(v) for v in h) for h in face.hole_loops))
+    return (frozenset(v.key for v in face.loop),
+            frozenset(frozenset(v.key for v in h) for h in face.hole_loops))
 
 
 def internal_faces(mesh) -> list:
@@ -132,7 +132,7 @@ def _copy_faces(faces):
         g = copy.add_face([v.position for v in f.loop],
                           [[v.position for v in h] for h in f.hole_loops])
         g.interior = f.interior
-        origin[id(g)] = f
+        origin[g.key] = f
     return copy, origin
 
 
@@ -159,7 +159,7 @@ def reversed_faces(mesh) -> list:
     if not suspect:
         return []
     copy, origin = _copy_faces(suspect)
-    return [origin[id(g)] for g in orient_outward(copy)]
+    return [origin[g.key] for g in orient_outward(copy)]
 
 
 def _signed_volume(faces) -> float:
@@ -249,10 +249,10 @@ def _edge_clusters(edges) -> list:
         return x
 
     for e in edges:
-        parent[find(id(e.v0))] = find(id(e.v1))
+        parent[find(e.v0.key)] = find(e.v1.key)
     runs: dict = {}
     for e in edges:
-        runs.setdefault(find(id(e.v0)), []).append(e)
+        runs.setdefault(find(e.v0.key), []).append(e)
     return list(runs.values())
 
 
@@ -310,25 +310,25 @@ def _border_loops(mesh, edges=None) -> list:
                   if sum(1 for f in e.faces if _live(f)) == 1]
     at: dict = {}
     for e in open_edges:
-        at.setdefault(id(e.v0), []).append(e)
-        at.setdefault(id(e.v1), []).append(e)
+        at.setdefault(e.v0.key, []).append(e)
+        at.setdefault(e.v1.key, []).append(e)
     used: set = set()
     loops = []
     for e in open_edges:
-        if id(e) in used:
+        if e.key in used:
             continue
-        used.add(id(e))
+        used.add(e.key)
         start, cur = e.v0, e.v1
         loop = [start]
-        ok = len(at[id(start)]) == 2
+        ok = len(at[start.key]) == 2
         while ok and cur is not start:
-            ways = at[id(cur)]
-            nxt = [x for x in ways if id(x) not in used]
+            ways = at[cur.key]
+            nxt = [x for x in ways if x.key not in used]
             if len(ways) != 2 or not nxt:
                 ok = False
                 break
             loop.append(cur)
-            used.add(id(nxt[0]))
+            used.add(nxt[0].key)
             cur = nxt[0].v1 if nxt[0].v0 is cur else nxt[0].v0
         if ok and len(loop) >= 3:
             loops.append(loop)
@@ -462,11 +462,11 @@ def repair_mesh(mesh) -> dict:
 
     # 4. The engine's own pass: partitions marked interior, the skin
     #    turned outward (on a closed mesh; an open one has no outside).
-    before = {id(f) for f in mesh.faces if not _live(f)}
+    before = {f.key for f in mesh.faces if not _live(f)}
     flipped = orient_outward(mesh)
     done["reversed"] = len(flipped)
     done["partitions"] = sum(1 for f in mesh.faces
-                             if not _live(f) and id(f) not in before)
+                             if not _live(f) and f.key not in before)
     if flipped:
         mesh._winding_rev = getattr(mesh, "_winding_rev", 0) + 1
 

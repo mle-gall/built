@@ -100,7 +100,7 @@ def read_curve(mesh, edge) -> CurveShape | None:
     closed = verts[-1] is verts[0]
     if closed:
         verts = verts[:-1]
-    if len({id(v) for v in verts}) != len(verts):
+    if len({v.key for v in verts}) != len(verts):
         return None                                  # crosses itself
     pts = [v.position for v in verts]
     if len(pts) < 3:
@@ -180,7 +180,7 @@ def _splice(loop, shape: CurveShape, new_pts):
     if verts[0] not in loop:
         return None
     if shape.closed:
-        if L != len(verts) or {id(v) for v in loop} != {id(v) for v in verts}:
+        if L != len(verts) or {v.key for v in loop} != {v.key for v in verts}:
             return None
         i = loop.index(verts[0])
         forward = loop[(i + 1) % L] is verts[1]

@@ -17,6 +17,8 @@ Why a command stack and not snapshots? Commands store only the delta, so memory
 cost stays proportional to the action, not to the model size.
 """
 from __future__ import annotations
+from core.mesh import element_identity
+from core.element_set import ElementSet
 
 import os as _os
 import time as _time_mod
@@ -656,7 +658,7 @@ class EraseSelectionCommand(Command):
             ) > 0.999:
                 merged = m.dissolve_coplanar_region(faces)  # reunite the split
                 if merged is not None:
-                    dead_faces.update(id(f) for f in faces)
+                    dead_faces.update(f.key for f in faces)
                     _index_face(merged)
             elif len(faces) > 2:
                 # A wall raised against a taller neighbour leaves its inner
@@ -670,7 +672,7 @@ class EraseSelectionCommand(Command):
                 if pair is not None:
                     merged = m.dissolve_coplanar_region(pair)
                 if merged is not None:
-                    dead_faces.update(id(f) for f in pair)
+                    dead_faces.update(f.key for f in pair)
                     _index_face(merged)
                     across.extend(f for f in faces if f not in pair)
                     m.remove_edge(edge)
@@ -679,9 +681,9 @@ class EraseSelectionCommand(Command):
                 # outlive a bounding edge) go away.
                 ekey = frozenset((_key(edge.v0.position), _key(edge.v1.position)))
                 for f in seg_faces.get(ekey, ()):
-                    if id(f) in dead_faces:
+                    if f.key in dead_faces:
                         continue
-                    dead_faces.add(id(f))
+                    dead_faces.add(f.key)
                     m.remove_face(f)
                     scene.selection.discard(f)
                 m.remove_edge(edge)
@@ -820,7 +822,7 @@ class AddFaceCommand(Command):
             loops = [self.vertices] + (holes or [])
             pairs = [(lp[i], lp[(i + 1) % len(lp)])
                      for lp in loops for i in range(len(lp))]
-            had_v = {id(v) for p in self.vertices + [q for h in holes or []
+            had_v = {v.key for p in self.vertices + [q for h in holes or []
                                                      for q in h]
                      for v in [m.vertex_at(p)] if v is not None}
             had_e = set()
@@ -828,25 +830,29 @@ class AddFaceCommand(Command):
                 va, vb = m.vertex_at(a), m.vertex_at(b)
                 e = m.find_edge(va, vb) if va is not None and vb is not None else None
                 if e is not None:
-                    had_e.add(id(e))
+                    had_e.add(e.key)
             self.face = m.add_face(self.vertices, holes)
-            # Edges are remembered by the corners they join, not as
-            # objects: redo's relink_face builds fresh Edge objects.
+            # Keep created boundary handles by key so redo restores their
+            # stable identities before relinking the face.
             self._made_pairs = set()
+            self._made_edges = {}
             self._made_vertices = []
             for lp in (self.face.loop, *self.face.hole_loops):
                 for i in range(len(lp)):
                     a, b = lp[i], lp[(i + 1) % len(lp)]
                     e = m.find_edge(a, b)
-                    if e is not None and id(e) not in had_e:
-                        self._made_pairs.add(frozenset((id(a), id(b))))
+                    if e is not None and e.key not in had_e:
+                        self._made_pairs.add(frozenset((a.key, b.key)))
+                        self._made_edges[e.key] = e
                 for v in lp:
-                    if id(v) not in had_v:
+                    if v.key not in had_v:
                         self._made_vertices.append(v)
             if self.attrs:
                 self.face.attrs.update(self.attrs)
         else:
             m.relink_vertices(getattr(self, "_made_vertices", ()))
+            for edge in self._made_edges.values():
+                m.relink_edge(edge)
             m.relink_face(self.face)  # redo
 
         if not self.auto:
@@ -945,7 +951,7 @@ class AddFaceCommand(Command):
             for lp in (self.face.loop, *self.face.hole_loops):
                 for i in range(len(lp)):
                     a, b = lp[i], lp[(i + 1) % len(lp)]
-                    if frozenset((id(a), id(b))) not in made:
+                    if frozenset((a.key, b.key)) not in made:
                         continue
                     e = m.find_edge(a, b)
                     if e is not None and not e.faces:
@@ -1031,7 +1037,7 @@ class FlipFacesCommand(Command):
         # drawing the old winding until some edit changed a count (#197).
         # Each mesh holding a flipped face says so; the others keep theirs.
         from core.group import iter_placements
-        ids = {id(f) for f in self._faces}
+        ids = {f.key for f in self._faces}
         meshes = [getattr(scene, "mesh", None),
                   getattr(scene, "loose_mesh", None)]
         meshes += [pg.mesh for g in getattr(scene, "groups", [])
@@ -1041,7 +1047,7 @@ class FlipFacesCommand(Command):
             if m is None or id(m) in seen:
                 continue
             seen.add(id(m))
-            if any(id(f) in ids for f in m.faces):
+            if any(f.key in ids for f in m.faces):
                 m._winding_rev = getattr(m, "_winding_rev", 0) + 1
         _dirty_group_chunks(scene)
         scene.version += 1
@@ -2731,11 +2737,11 @@ def _weld_landed(mesh, moving: set) -> bool:
     edge whose ends were now one vertex (#341, @pacaeiro). Only a move that
     actually lands pays for the weld: the check is one pass over the
     vertices, the weld runs when two of them share a point."""
-    moved_keys = {_key(v.position) for v in mesh.vertices if id(v) in moving}
+    moved_keys = {_key(v.position) for v in mesh.vertices if v.key in moving}
     if not moved_keys:
         return False
     if not any(_key(v.position) in moved_keys for v in mesh.vertices
-               if id(v) not in moving):
+               if v.key not in moving):
         return False
     mesh.weld_coincident()
     return True
@@ -2751,7 +2757,7 @@ def _carried_faces(mesh, moving: set) -> list:
         if not (f.attrs and f.attrs.get("texture")):
             continue
         loops = [f.loop] + list(getattr(f, "hole_loops", []) or [])
-        if all(id(v) in moving for lp in loops for v in lp):
+        if all(v.key in moving for lp in loops for v in lp):
             out.append(f)
     return out
 
@@ -2797,12 +2803,12 @@ class MoveVerticesCommand(Command):
             return
         self._before = scene.mesh.capture_state()
         keys = {_key(p) for p in self.src}
-        moving = {id(v) for v in scene.mesh.vertices
+        moving = {v.key for v in scene.mesh.vertices
                   if _key(v.position) in keys}
         landing = {_key(p + self.delta) for p in self.src}
         before = None
         if any(_key(v.position) in landing for v in scene.mesh.vertices
-               if id(v) not in moving):
+               if v.key not in moving):
             # Something stands where the move lands: note how healthy the
             # neighbourhood is now, to judge the join against it.
             before = defects_near(
@@ -2978,7 +2984,7 @@ class RotateVerticesCommand(Command):
         m = rotation_matrix(self.center, self.axis, self.degrees)
         keys = {_key(p) for p in self.src}
         carried = (_carried_faces(
-            scene.mesh, {id(v) for v in scene.mesh.vertices
+            scene.mesh, {v.key for v in scene.mesh.vertices
                          if _key(v.position) in keys})
             if self.carry_textures else [])
         rotate_points(scene, keys, m)
@@ -3402,10 +3408,10 @@ def _coplanar_component(mesh, f0, seedkeys: set,
         scache = {}
 
     def nrm(f):
-        v = ncache.get(f)
+        v = ncache.get(f.key)
         if v is None:
             v = f.normal().normalized()
-            ncache[f] = v
+            ncache[f.key] = v
         return v
 
     key = scache.get("__keymemo__")
@@ -3414,10 +3420,10 @@ def _coplanar_component(mesh, f0, seedkeys: set,
         key = scache["__keymemo__"] = KeyMemo()
 
     def seeded(f):
-        v = scache.get(f)
+        v = scache.get(f.key)
         if v is None:
             v = any(key(p) in seedkeys for p in f.vertices)
-            scache[f] = v
+            scache[f.key] = v
         return v
 
     if not seeded(f0):
@@ -3513,7 +3519,7 @@ class SimplifyMeshCommand(Command):
         if self.after is None:
             from formats.fuse import simplify_mesh
             self.before = scene.mesh.capture_state()
-            self.before_selection = set(scene.selection)
+            self.before_selection = ElementSet(scene.selection)
             self.faces_removed = simplify_mesh(
                 scene.mesh, self.max_angle_degrees)
             self.after = scene.mesh.capture_state()
@@ -4534,7 +4540,7 @@ class ExplodeGroupCommand(Command):
         g = self.group
         self.snapshot = m.capture_state()
         self.index = scene.groups.index(g)
-        self._selection = set(scene.selection)
+        self._selection = ElementSet(scene.selection)
         P = getattr(g, "xform", None)
         paint = getattr(g, "material", None)
 
@@ -4630,8 +4636,8 @@ def _merge_overlapping_planes(scene, before, added) -> int:
         return 0
     mesh = scene.mesh
     tol = RebuildPlaneFacesCommand._TOL
-    live = set(map(id, mesh.faces))
-    added = [f for f in added if id(f) in live]
+    live = set(map(element_identity, mesh.faces))
+    added = [f for f in added if f.key in live]
     if not added:
         return 0
 
@@ -4667,10 +4673,10 @@ def _merge_overlapping_planes(scene, before, added) -> int:
         ghi = [max(a, b) for a, b in zip(ghi, hi)]
     if not new:
         return 0
-    added_ids = set(map(id, added))
+    added_ids = set(map(element_identity, added))
     planes: list = []          # [origin, normal, [old faces], [new faces]]
     for f in before:
-        if id(f) not in live or id(f) in added_ids:
+        if f.key not in live or f.key in added_ids:
             continue
         lo, hi = box(f)
         if not all(lo[i] <= ghi[i] + tol and glo[i] <= hi[i] + tol
@@ -4704,7 +4710,7 @@ def _merge_overlapping_planes(scene, before, added) -> int:
                 entry[3].append(nf)
     if not planes:
         return 0
-    keep = set(scene.selection)
+    keep = ElementSet(scene.selection)
     for origin, n, old_faces, new_faces in planes:
         # The new faces on that plane that overlap NO older face stay as
         # they are; the rest rebuild with the older faces they cover.
@@ -4712,11 +4718,11 @@ def _merge_overlapping_planes(scene, before, added) -> int:
                                        faces=old_faces + new_faces)
         cmd.take_snapshot = False
         cmd.do(scene)
-    live = set(map(id, mesh.faces))
-    live_e = set(map(id, mesh.edges))
+    live = set(map(element_identity, mesh.faces))
+    live_e = set(map(element_identity, mesh.edges))
     scene.selection = {s for s in keep
                        if not isinstance(s, (Face, Edge))
-                       or id(s) in (live if isinstance(s, Face) else live_e)}
+                       or s.key in (live if isinstance(s, Face) else live_e)}
     return len(planes)
 
 
@@ -5305,8 +5311,8 @@ class RebuildPlaneFacesCommand(Command):
             return
         mesh = scene.mesh
         if self.faces is not None:
-            live = set(map(id, mesh.faces))
-            plane_faces = [f for f in self.faces if id(f) in live]
+            live = set(map(element_identity, mesh.faces))
+            plane_faces = [f for f in self.faces if f.key in live]
             plane_edges = []
             for f in plane_faces:
                 for loop in (f.loop, *f.hole_loops):

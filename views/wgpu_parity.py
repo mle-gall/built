@@ -62,7 +62,7 @@ def face_ranges(view, faces):
             if f.attrs.get('hidden'):
                 continue
             count = len(f.triangulate())
-            mapping[id(f)] = (first, count)
+            mapping[f.key] = (first, count)
             first += count
         codes = sorted({int(packed.instances['info'][i, 0]) for i in rows})
         # Refuse an invalid range rather than suppress unrelated geometry.
@@ -70,7 +70,7 @@ def face_ranges(view, faces):
             raise ValueError('editable face triangulation differs from resident pack')
         cache[key] = codes, mapping
     codes, mapping = cache[key]
-    return [(c, *mapping[id(f)]) for f in faces if id(f) in mapping for c in codes]
+    return [(c, *mapping[f.key]) for f in faces if f.key in mapping for c in codes]
 
 
 def face_marks(view, faces):

@@ -137,8 +137,8 @@ def _surface_commands(mesh, faces, seed, tex, plane) -> list | None:
     maps = continuous_maps(mesh, faces, seed, look)
     if len(maps) < 2:
         return None
-    cmds = [SetFaceTextureCommand([f], maps[id(f)]) for f in faces if id(f) in maps]
-    rest = [f for f in faces if id(f) not in maps]
+    cmds = [SetFaceTextureCommand([f], maps[f.key]) for f in faces if f.key in maps]
+    rest = [f for f in faces if f.key not in maps]
     if rest:
         cmds.extend(_texture_commands(rest, tex, plane))
     return cmds
@@ -377,7 +377,7 @@ class PaintTool(Tool):
                 if self._every_face_painted(obj):
                     # Nothing on screen changes: say why, and how (#807,
                     # components from a .skp whose faces carry their own
-                    # material — the SketchUp rule, as in #408).
+                    # material — the .skp rule, as in #408).
                     flash(tr("{name}: every face has its own material, so "
                              "nothing changed — open it and paint the "
                              "faces", name=name))

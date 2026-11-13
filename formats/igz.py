@@ -437,7 +437,7 @@ def _pack_geometry(mesh, sink: dict) -> dict:
             face_attr.append(-1)
 
     # Number the vertex objects by first appearance.
-    ids = np.fromiter((id(v) for v in corners), dtype=np.uint64,
+    ids = np.fromiter((v.key for v in corners), dtype=np.uint64,
                       count=len(corners))
     _u, first, inverse = np.unique(ids, return_index=True,
                                    return_inverse=True)

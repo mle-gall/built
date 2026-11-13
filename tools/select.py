@@ -117,19 +117,19 @@ def _box_loose_fast(viewport, rect, crossing):
         seen = set()
         for i in hit_idx:
             for f in edges_all[int(i)].faces:
-                if id(f) not in seen:
-                    seen.add(id(f))
+                if f.key not in seen:
+                    seen.add(f.key)
                     if sel(f):
                         faces.append(f)
     else:
-        hit_ids = {id(edges_all[int(i)]) for i in hit_idx}
+        hit_ids = {edges_all[int(i)].key for i in hit_idx}
         face_edges: dict = {}
         for e in edges_all:
             for f in e.faces:
-                face_edges.setdefault(id(f), []).append(e)
+                face_edges.setdefault(f.key, []).append(e)
         for f in viewport.scene.faces:
-            es = face_edges.get(id(f))
-            if es and all(id(e) in hit_ids for e in es) and sel(f):
+            es = face_edges.get(f.key)
+            if es and all(e.key in hit_ids for e in es) and sel(f):
                 faces.append(f)
     return edges, faces
 
@@ -563,7 +563,7 @@ class SelectTool(Tool):
     def on_hover(self, ctx: ToolContext) -> None:
         viewport = ctx.viewport
         entity = self._pick(viewport, ctx.screen.x(), ctx.screen.y())
-        # A face under the cursor is not marked, as in SketchUp (#832:
+        # A face under the cursor is not marked, as in .skp (#832:
         # «very visually distracting»); edges still light up, thin lines
         # being hard to hit. Unmarked, a face is also never what Delete
         # erases with nothing selected.

@@ -8,6 +8,7 @@ draw), and a click stamps them into the scene ONCE and returns to Select.
 The clipboard is kept — paste again for another copy.
 """
 from __future__ import annotations
+from core.mesh import element_identity
 
 
 from PySide6.QtGui import QVector3D
@@ -63,9 +64,9 @@ class _PruneOnUndo(Command):
 
     def undo(self, scene) -> None:
         m = scene.mesh
-        before = {id(v): v for v in m.vertices}
+        before = {v.key: v for v in m.vertices}
         m.prune_orphan_vertices()
-        kept = {id(v) for v in m.vertices}
+        kept = {v.key for v in m.vertices}
         self._gone = [v for k, v in before.items() if k not in kept]
         scene.version += 1
 
@@ -249,10 +250,10 @@ class PasteTool(Tool):
         viewport.history.execute(CompoundCommand(commands))
         picked = list(pasted_groups)
         if select_all:
-            live = set(map(id, viewport.scene.mesh.faces))
+            live = set(map(element_identity, viewport.scene.mesh.faces))
             picked += [c.face for c in commands
                        if isinstance(c, AddFaceCommand)
-                       and c.face is not None and id(c.face) in live]
+                       and c.face is not None and c.face.key in live]
             # The copied edges themselves (looked up by position: a copy
             # pasted in place welds onto the original's edges, so the
             # command may own none of them).

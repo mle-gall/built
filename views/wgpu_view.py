@@ -731,14 +731,14 @@ class WgpuView(QWidget):
     def sync_selection(self):
         if self.renderer is None:
             return
-        from core.mesh import Face, Edge
+        from core.mesh import Face, Edge, element_identity
         from core.group import Group
         from views.wgpu_parity import face_marks
         selected = self.scene.selection
         hover = tuple(getattr(self, 'hover_rows', ()) or ())
         faces = [f for f in selected if isinstance(f, Face)]
         hovered = getattr(self.tools, '_mesh_hover', getattr(self.source_viewport, '_hover_entity', None))
-        signature = (frozenset(map(id, selected)), hover, id(hovered), id(self.packed),
+        signature = (frozenset(map(element_identity, selected)), hover, element_identity(hovered), id(self.packed),
                      tuple(self.camera.eye().toTuple()) if faces else ())
         if signature != self._selection_signature:
             indices = set()

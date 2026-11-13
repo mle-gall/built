@@ -344,21 +344,21 @@ def manual_path_extend(chain, edge, skip=None, limit=400) -> bool:
         return False
     last = chain[-1]
     v0, v1 = edge.v0, edge.v1
-    ids = {id(v): i for i, v in enumerate(chain)}
+    ids = {v.key: i for i, v in enumerate(chain)}
     if last is v0 or last is v1:
         other = v1 if last is v0 else v0
         if len(chain) >= 2 and other is chain[-2]:
             chain.pop()                              # backing up
             return True
-        if id(other) in ids:
+        if other.key in ids:
             if other is chain[0] and len(chain) >= 3:
                 chain.append(other)                  # the loop closes
                 return True
             return False
         chain.append(other)
         return True
-    if id(v0) in ids and id(v1) in ids:
-        del chain[max(ids[id(v0)], ids[id(v1)]) + 1:]   # back to that edge
+    if v0.key in ids and v1.key in ids:
+        del chain[max(ids[v0.key], ids[v1.key]) + 1:]   # back to that edge
         return True
     route = _route(last, (v0, v1), skip, ids, limit)
     if route is None:
@@ -366,7 +366,7 @@ def manual_path_extend(chain, edge, skip=None, limit=400) -> bool:
     chain.extend(route)
     reached = route[-1]
     other = v1 if reached is v0 else v0
-    if id(other) not in ids and other is not reached:
+    if other.key not in ids and other is not reached:
         chain.append(other)
     return True
 
@@ -375,8 +375,8 @@ def _route(start, targets, skip, blocked_ids, limit):
     """Shortest run of edges (breadth-first) from ``start`` to either of
     ``targets``, never through vertices already on the chain."""
     from collections import deque
-    prev = {id(start): None}
-    seen = {id(start)}
+    prev = {start.key: None}
+    seen = {start.key}
     q = deque([start])
     hit = None
     steps = 0
@@ -387,10 +387,10 @@ def _route(start, targets, skip, blocked_ids, limit):
             if skip is not None and skip(e):
                 continue
             w = e.v1 if e.v0 is v else e.v0
-            if id(w) in seen or (id(w) in blocked_ids and w is not start):
+            if w.key in seen or (w.key in blocked_ids and w is not start):
                 continue
-            seen.add(id(w))
-            prev[id(w)] = v
+            seen.add(w.key)
+            prev[w.key] = v
             if w is targets[0] or w is targets[1]:
                 hit = w
                 break
@@ -401,7 +401,7 @@ def _route(start, targets, skip, blocked_ids, limit):
     v = hit
     while v is not None and v is not start:
         route.append(v)
-        v = prev[id(v)]
+        v = prev[v.key]
     route.reverse()
     return route
 
@@ -444,7 +444,7 @@ def sweep_profile(mesh, face, path, closed) -> bool:
     # Build: walls per span per loop edge; the closed path's last span goes
     # straight back to ring 0 (exact weld, no seam).
     before_edges = set(mesh.edges)
-    before_faces = {id(f) for f in mesh.faces}
+    before_faces = {f.key for f in mesh.faces}
     profile_loops = [list(face.loop)] + [list(h) for h in face.hole_loops]
     # Which profile edges and path segments were curves (circles, arcs): the
     # caps and the rails the sweep builds from them become curves too.
@@ -493,7 +493,7 @@ def sweep_profile(mesh, face, path, closed) -> bool:
     for e in mesh.edges:
         if e.soft or len(e.faces) != 2:
             continue
-        if e in before_edges and any(id(f) in before_faces for f in e.faces):
+        if e in before_edges and any(f.key in before_faces for f in e.faces):
             continue
         d = QVector3D.dotProduct(e.faces[0].normal().normalized(),
                                  e.faces[1].normal().normalized())

@@ -317,7 +317,7 @@ class ScaleTool(Tool):
         ids)`` as Move gives it."""
         if self._grip is None:
             return None
-        edges = {id(e) for v in self._verts for e in getattr(v, "edges", ())}
+        edges = {e.key for v in self._verts for e in getattr(v, "edges", ())}
         return edges, {id(g) for g in self._groups}
 
     def _snapped_point(self, ctx):

@@ -123,7 +123,7 @@ def _to_manifold(group, sources: _Sources, index_in_op: int = 0):
         if getattr(f, "interior", False):
             continue
         fid = len(sources.attrs)
-        face_id[id(f)] = fid
+        face_id[f.key] = fid
         attrs = effective_attrs(dict(f.attrs or {}), paint)
         sources.attrs.append({k: (dict(v) if isinstance(v, dict) else v)
                               for k, v in attrs.items()})
@@ -133,7 +133,7 @@ def _to_manifold(group, sources: _Sources, index_in_op: int = 0):
             fids.append(fid)
     for e in mesh.edges:
         if getattr(e, "soft", False):
-            fs = [face_id.get(id(f)) for f in e.faces]
+            fs = [face_id.get(f.key) for f in e.faces]
             fs = [x for x in fs if x is not None]
             if len(fs) == 2:
                 sources.soft_pairs.add((min(fs), max(fs)))
@@ -305,9 +305,9 @@ def _group_from_loops(loops, sources: _Sources, name: str, layer):
                     pass
         for face in made:
             face.attrs.update(clean)
-            face_src[id(face)] = src
+            face_src[face.key] = src
     for e in mesh.edges:
-        fs = [face_src.get(id(f)) for f in e.faces]
+        fs = [face_src.get(f.key) for f in e.faces]
         if len(fs) == 2 and None not in fs:
             if (min(fs), max(fs)) in sources.soft_pairs:
                 e.soft = True

@@ -343,7 +343,7 @@ def plan_fillet(mesh, edges, radius: float, segments: int = 8,
             c_off, offsets = _outline_offsets(w1, w2, t, pts)
         elif not circular:
             c_off, offsets = _superellipse_offsets(w1, w2, t, profile, segments)
-        rounds[id(e)] = _EdgeRound(e, f1, f2, d, w1, w2, t, c_off, offsets,
+        rounds[e.key] = _EdgeRound(e, f1, f2, d, w1, w2, t, c_off, offsets,
                                    sign, arc_radius)
 
     # Which rounded edges meet at each vertex.
@@ -351,8 +351,8 @@ def plan_fillet(mesh, edges, radius: float, segments: int = 8,
     verts: dict[int, object] = {}
     for r in rounds.values():
         for v in (r.edge.v0, r.edge.v1):
-            at_vertex.setdefault(id(v), []).append(r)
-            verts[id(v)] = v
+            at_vertex.setdefault(v.key, []).append(r)
+            verts[v.key] = v
 
     # Replacement of each (face, vertex): ordered points, filled below.
     replace: dict[tuple[int, int], list] = {}
@@ -375,7 +375,7 @@ def plan_fillet(mesh, edges, radius: float, segments: int = 8,
             q = p + ((mid - p) - w * r.t) * 1e-3
             if not _point_in_face_solid(face, q):
                 return "outside"
-        key = (id(face), id(v))
+        key = (face.key, v.key)
         cur = replace.get(key)
         if cur is None:
             replace[key] = [QVector3D(p) for p in pts]
@@ -423,8 +423,8 @@ def plan_fillet(mesh, edges, radius: float, segments: int = 8,
                 return tr("Conflicting cuts at {p}.", p=_fmt(v.position))
         elif len(group) == 2:
             ra, rb = group
-            allowed = {id(ra.f1), id(ra.f2), id(rb.f1), id(rb.f2)}
-            if any(id(g) not in allowed for g in faces_here):
+            allowed = {ra.f1.key, ra.f2.key, rb.f1.key, rb.f2.key}
+            if any(g.key not in allowed for g in faces_here):
                 return tr("The corner at {p} has too many faces to round.",
                           p=_fmt(v.position))
             u = _unit(ra.edge.other(v).position - v.position)
@@ -461,9 +461,9 @@ def plan_fillet(mesh, edges, radius: float, segments: int = 8,
         elif len(group) == 3:
             allowed = set()
             for r in group:
-                allowed.add(id(r.f1))
-                allowed.add(id(r.f2))
-            if any(id(g) not in allowed for g in faces_here):
+                allowed.add(r.f1.key)
+                allowed.add(r.f2.key)
+            if any(g.key not in allowed for g in faces_here):
                 return tr("The corner at {p} has too many faces to round.",
                           p=_fmt(v.position))
             sections = []
@@ -512,17 +512,17 @@ def plan_fillet(mesh, edges, radius: float, segments: int = 8,
     touched: dict[int, object] = {}
     for vid, v in verts.items():
         for f in v.faces():
-            touched[id(f)] = f
+            touched[f.key] = f
     replaced_vertices = set(verts)
 
     def rebuilt_loop(face, loop):
         out = []
         n = len(loop)
         for i, x in enumerate(loop):
-            if id(x) not in replaced_vertices:
+            if x.key not in replaced_vertices:
                 out.append(QVector3D(x.position))
                 continue
-            seq = replace.get((id(face), id(x)))
+            seq = replace.get((face.key, x.key))
             if seq is None:
                 return None
             if len(seq) > 1:
@@ -562,8 +562,8 @@ def plan_fillet(mesh, edges, radius: float, segments: int = 8,
 
     # Strips.
     for r in rounds.values():
-        a = r.ends.get(id(r.edge.v0))
-        b = r.ends.get(id(r.edge.v1))
+        a = r.ends.get(r.edge.v0.key)
+        b = r.ends.get(r.edge.v1.key)
         if a is None or b is None:
             return tr("Internal error: an edge end was not resolved.")
         # Too short: the two ends cross.
@@ -653,12 +653,12 @@ def plan_fillet(mesh, edges, radius: float, segments: int = 8,
 
     # Old edges that lose an endpoint go too (their faces are rebuilt on
     # the new points); a free edge (no face) at the vertex stays.
-    seen = {id(e) for e in plan.removed_edges}
+    seen = {e.key for e in plan.removed_edges}
     for v in verts.values():
         for e in v.edges:
-            if id(e) in seen or not e.faces:
+            if e.key in seen or not e.faces:
                 continue
-            seen.add(id(e))
+            seen.add(e.key)
             plan.removed_edges.append(e)
     return plan
 

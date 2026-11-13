@@ -36,6 +36,7 @@ reaches it); pushing out grows the solid. A free-standing face keeps its base
 as the cap of the new box.
 """
 from __future__ import annotations
+from core.element_set import ElementSet
 
 import math
 import time
@@ -1179,7 +1180,7 @@ class PushPullTool(Tool):
         try:
             if self._preview_snapshot is None:
                 self._preview_snapshot = mesh.capture_state()
-                self._preview_selection = set(scene.selection)
+                self._preview_selection = ElementSet(scene.selection)
             elif self._stage_d is not None:
                 self._restore_clean(viewport)
             self._mutate(scene)
@@ -1214,7 +1215,7 @@ class PushPullTool(Tool):
         at its own distance."""
         snap = self._preview_snapshot
         n, anchor, d = self._normal, self._anchor, self.extrusion
-        movers = [v for v in mesh.vertices if v not in snap["vpos"]
+        movers = [v for v in mesh.vertices if v.key not in snap["vpos"]
                   and abs(QVector3D.dotProduct(v.position - anchor, n) - d)
                   < _STITCH_TOL]
         moving = set(movers)
@@ -1249,7 +1250,7 @@ class PushPullTool(Tool):
             self._stage_verts = movers
             self._stage_pos = [(QVector3D(v.position), r)
                                for v, r in zip(movers, rates)]
-        self._stage_new = ((set(mesh.faces) - set(snap["faces"]))
+        self._stage_new = ((ElementSet(mesh.faces) - ElementSet(snap["faces"]))
                            | (set(mesh.edges) - set(snap["edges"])))
         return True
 
@@ -1934,11 +1935,11 @@ class PushPullTool(Tool):
         the surface it was cut out of. See :meth:`_outward_normal` for when
         this is the right question to ask."""
         n = face.normal().normalized()
-        on_loop = {id(v) for v in face.loop}
+        on_loop = {v.key for v in face.loop}
         agree = disagree = 0
         for v in face.loop:
             for edge in v.edges:
-                if id(edge.v0) not in on_loop or id(edge.v1) not in on_loop:
+                if edge.v0.key not in on_loop or edge.v1.key not in on_loop:
                     continue                      # not a boundary edge
                 for other in edge.faces:
                     if other is face:
@@ -1993,13 +1994,13 @@ class PushPullTool(Tool):
             # isn't a wall the push stretches: dragging its corner skews it.
             # Unless the position only slides along a straight edge of it that
             # runs with the push (a T-point on the host wall's top edge).
-            walls = {id(nb) for _, nb in kinds}
+            walls = {nb.key for _, nb in kinds}
             rim = {_key(p) for loop in [self.base_face.vertices]
                    + self.base_face.holes for p in loop}
             prism_cap = not any(
                 _corner_dragged(g, rim, normal)
                 for g in faces
-                if g is not self.base_face and id(g) not in walls)
+                if g is not self.base_face and g.key not in walls)
         return attached, prism_cap
 
     def _commit(self, viewport) -> None:
@@ -2149,7 +2150,7 @@ class PushPullTool(Tool):
             if t:
                 base_tag = dict(t)
             base_paint = _paint_of(self.base_face)
-        before_verts = ({id(v) for v in mesh.vertices}
+        before_verts = ({v.key for v in mesh.vertices}
                         if base_tag is not None or base_paint else None)
         curve_runs = (self._curve_runs(mesh, self.base_face)
                       if self.base_face is not None else [])
@@ -2183,7 +2184,7 @@ class PushPullTool(Tool):
             # push rather than the mesh.
             fresh: set = set()
             for v in mesh.vertices:
-                if id(v) not in before_verts:
+                if v.key not in before_verts:
                     fresh.update(v.faces())
             for f in fresh:
                 if base_tag is not None and not f.attrs.get("ifc"):
@@ -2596,7 +2597,7 @@ class PushPullTool(Tool):
         for _ in range(4):  # converges in 1-2 rounds; hard cap for safety
             # The op's own faces name the solids it may touch, so the plane
             # scans narrow to them instead of walking the whole group.
-            cache.seed_faces = set(fresh)
+            cache.seed_faces = ElementSet(fresh)
             planes: dict = {}
             for origin, plane_n in seam_planes(mesh, fresh):
                 planes.setdefault(plane_key(origin, plane_n)[0],

@@ -174,7 +174,7 @@ def face_set_volume(faces):
         for lp in (f.loop, *f.hole_loops):
             n = len(lp)
             for i in range(n):
-                key = frozenset((id(lp[i]), id(lp[(i + 1) % n])))
+                key = frozenset((lp[i].key, lp[(i + 1) % n].key))
                 counts[key] = counts.get(key, 0) + 1
     if any(c != 2 for c in counts.values()):
         return None

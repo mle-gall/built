@@ -1413,7 +1413,7 @@ def orient_coplanar_faces(mesh, footprint=None) -> list:
         dist = round(abs(QVector3D.dotProduct(n, f.centroid())), 2)
         groups.setdefault((axis, dist), []).append(f)
 
-    owned = {id(f) for f, *_ in footprint} if footprint is not None else set()
+    owned = {f.key for f, *_ in footprint} if footprint is not None else set()
     flipped: list = []
     for fs in groups.values():
         if len(fs) < 2:
@@ -1424,7 +1424,7 @@ def orient_coplanar_faces(mesh, footprint=None) -> list:
         for f in fs:
             target = dominant
             if footprint is not None:
-                if id(f) in owned:
+                if f.key in owned:
                     continue                      # the user's, as it stands
                 old_n = _footprint_normal(footprint, f)
                 target = dominant if old_n is None else old_n
@@ -1494,8 +1494,8 @@ def sweep_tjunctions(mesh, seedkeys=None) -> None:
             break
         vpos = np.array([[v.position.x(), v.position.y(), v.position.z()]
                          for v in verts])
-        vslot = {id(v): i for i, v in enumerate(verts)}
-        ends = np.array([(vslot[id(e.v0)], vslot[id(e.v1)]) for e in edges],
+        vslot = {v.key: i for i, v in enumerate(verts)}
+        ends = np.array([(vslot[e.v0.key], vslot[e.v1.key]) for e in edges],
                         dtype=np.int64)
         va, vb = vpos[ends[:, 0]], vpos[ends[:, 1]]
         elo, ehi = np.minimum(va, vb), np.maximum(va, vb)
@@ -1709,16 +1709,16 @@ def prune_collinear_orphan_edges(mesh) -> list:
                   for e in edges], dtype=np.float64)
     lo = np.minimum(P[:, :3], P[:, 3:]) - _PLANAR_TOLERANCE
     hi = np.maximum(P[:, :3], P[:, 3:]) + _PLANAR_TOLERANCE
-    slot = {id(e): i for i, e in enumerate(edges)}
+    slot = {e.key: i for i, e in enumerate(edges)}
     meeting = _box_grid(lo, hi)
     # An orphan already pruned must not prune the one it lay on: the bare
     # loop read the LIVE edge list, so the partner had to still be there.
     gone: set = set()
     curved = False
     for e in orphans:
-        i = slot[id(e)]
+        i = slot[e.key]
         cover = [edges[j] for j in meeting(i)
-                 if edges[j] is not e and id(edges[j]) not in gone
+                 if edges[j] is not e and edges[j].key not in gone
                  and _collinear_overlapping(e, edges[j])]
         if not cover:
             continue
@@ -1729,7 +1729,7 @@ def prune_collinear_orphan_edges(mesh) -> list:
         flags = edge_flags(e)
         mesh.remove_edge(e)
         removed.append(e)
-        gone.add(id(e))
+        gone.add(e.key)
         for p, q in pieces:
             va, vb = mesh.vertex_at(p), mesh.vertex_at(q)
             if (va is not None and vb is not None
@@ -1923,7 +1923,7 @@ def heal_overlapping_faces(mesh, coverage: float = 0.5, partial=None,
         covered = 0.0
         for j in cand:
             g = snap[j]
-            if g is face or id(g) in gone:
+            if g is face or g.key in gone:
                 continue
             if (loop_inside_face(face, g.vertices)
                     and not _g_inside_a_hole(face, g.vertices)):
@@ -1931,7 +1931,7 @@ def heal_overlapping_faces(mesh, coverage: float = 0.5, partial=None,
         if covered > coverage * a_face:
             mesh.remove_face(face)
             removed.append(face)
-            gone.add(id(face))
+            gone.add(face.key)
 
     # 3. (Flat plans) A small face whose body lies in a bigger coplanar face's
     #    solid region is a partial overlap the auto-divide missed (a door piece
@@ -1950,7 +1950,7 @@ def heal_overlapping_faces(mesh, coverage: float = 0.5, partial=None,
         LO3, HI3 = _outer_boxes(snap3)
         punch: dict = defaultdict(list)
         for i3, face in enumerate(snap3):
-            if id(face) in gone:
+            if face.key in gone:
                 continue
             # Guaranteed-interior probes: triangle centroids. A concave face's
             # polygon centroid can fall OUTSIDE itself (an L around a circular
@@ -1970,7 +1970,7 @@ def heal_overlapping_faces(mesh, coverage: float = 0.5, partial=None,
                                      & (LO3 <= HI3[i3] + _BOX_PAD).all(axis=1)
                                      & (HI3 >= LO3[i3] - _BOX_PAD).all(axis=1)):
                 g = snap3[j3]
-                if g is face or id(g) in gone:
+                if g is face or g.key in gone:
                     continue
                 if _g_inside_a_hole(g, face.vertices):
                     continue  # already filling a hole — no overlap
@@ -2114,33 +2114,33 @@ def defects_near(vertices, area_eps: float = 1e-10) -> dict:
     faces: dict = {}
     for v in vertices:
         for e in v.edges:
-            edges[id(e)] = e
+            edges[e.key] = e
             for f in e.faces:
-                faces[id(f)] = f
+                faces[f.key] = f
     for e in edges.values():
         if (e.v0 is e.v1 or
                 (e.v0.position - e.v1.position).lengthSquared() < 1e-18):
             counts["zero_edge"] += 1
-        if len({id(f) for f in e.faces}) < len(e.faces):
+        if len({f.key for f in e.faces}) < len(e.faces):
             counts["pinched_face"] += 1
     seen: set = set()
     for f in faces.values():
         loops = [f.loop, *f.hole_loops]
-        distinct = {id(x) for x in f.loop}
+        distinct = {x.key for x in f.loop}
         if len(distinct) < 3 or f.area() < area_eps:
             counts["flat_face"] += 1
         for loop in loops:
-            if len({id(x) for x in loop}) < len(loop):
+            if len({x.key for x in loop}) < len(loop):
                 counts["pinched_face"] += 1
             elif len(loop) >= 4 and _loop_crosses_itself(loop, f.normal()):
                 counts["crossed_face"] += 1
         sig = frozenset(
-            frozenset((id(f.loop[i]), id(f.loop[(i + 1) % len(f.loop)])))
+            frozenset((f.loop[i].key, f.loop[(i + 1) % len(f.loop)].key))
             for i in range(len(f.loop)))
         if sig in seen:
             counts["duplicate_face"] += 1
         seen.add(sig)
-    flat = [f for f in faces.values() if len({id(x) for x in f.loop}) >= 3
+    flat = [f for f in faces.values() if len({x.key for x in f.loop}) >= 3
             and f.area() >= area_eps]
     for i, f in enumerate(flat):
         for g in flat[i + 1:]:
