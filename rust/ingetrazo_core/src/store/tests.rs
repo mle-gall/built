@@ -282,3 +282,126 @@ fn snapshots_are_cheap_on_a_big_store() {
     let (rs, rt) = s.state.registry.shared_with(&snap.state.registry);
     assert!(rt - rs <= 2, "{rs}/{rt}");
 }
+
+// ---- port step 2: incidence ops ------------------------------------------
+
+fn grid_store(n: usize) -> Store {
+    let mut st = Store::empty(7, Weld::default());
+    let mut ch = super::edit::Change::default();
+    for i in 0..n {
+        for j in 0..n {
+            let (x, y) = (i as f64, j as f64);
+            let ring = vec![[x, y, 0.0], [x + 1.0, y, 0.0], [x + 1.0, y + 1.0, 0.0], [x, y + 1.0, 0.0]];
+            st.add_face(&[ring], &mut ch).unwrap();
+        }
+    }
+    st.check().unwrap();
+    st
+}
+
+#[test]
+fn removing_the_last_entries_keeps_an_explicit_order_free_of_stale_ones() {
+    let mut st = grid_store(3);
+    let mut ch = super::edit::Change::default();
+    // Relinking a low face makes the order explicit (it goes last)...
+    st.remove_face(0, &mut ch);
+    st.relink_face(0, &mut ch).unwrap();
+    assert!(st.state.order[2].explicit.is_some());
+    assert_eq!(*st.live_slots(Kind::Face).last().unwrap(), 0);
+    // ...and LIFO removals pop, so indexing stays O(1).
+    let n = st.n(Kind::Face);
+    st.add_face(&[vec![[50.0, 0.0, 0.0], [51.0, 0.0, 0.0], [51.0, 1.0, 0.0]]], &mut ch).unwrap();
+    let top = *st.live_slots(Kind::Face).last().unwrap();
+    st.remove_face(top, &mut ch);
+    st.remove_face(0, &mut ch);
+    assert_eq!(st.state.order[2].stale(), 0);
+    assert_eq!(st.n(Kind::Face), n - 1);
+    assert!(st.state.order[2].nth_fast(&st.state.slots[2], 0).is_some());
+    st.check().unwrap();
+}
+
+#[test]
+fn a_tombstone_keeps_its_key_and_data_and_its_slot_is_never_reused() {
+    let mut st = grid_store(2);
+    let mut ch = super::edit::Change::default();
+    let e = st.find_edge(0, 1).unwrap();
+    let key = st.key(Kind::Edge, e);
+    st.remove_edge(e, &mut ch);
+    assert_eq!(st.slot(Kind::Edge, key), None);
+    assert_eq!(st.slot_any(Kind::Edge, key), Some(e));
+    assert_eq!(st.edge_faces(e), &[0]); // its faces list stays
+    let before = st.state.slots[1].len();
+    st.add_edge([9.0, 9.0, 0.0], [9.0, 8.0, 0.0], &mut ch).unwrap();
+    assert_eq!(st.state.slots[1].len(), before + 1); // a new slot, not e's
+    // Back while face 0 is listed: its faces list is as it was.
+    assert_eq!(st.relink_edge(e, &mut ch), Ok(true));
+    // Removed again, then face 0 goes: e would name a gone face.
+    st.remove_edge(e, &mut ch);
+    st.remove_face(0, &mut ch);
+    assert_eq!(st.relink_edge(e, &mut ch), Err(super::topo::OpError::Fallback("relink_edge listing a gone face")));
+    // relink_face makes the missing edge again: e would be a second one.
+    st.relink_face(0, &mut ch).unwrap();
+    assert_eq!(
+        st.relink_edge(e, &mut ch),
+        Err(super::topo::OpError::Fallback("relink_edge beside another edge between its ends"))
+    );
+    st.check().unwrap();
+    assert_eq!(st.slot(Kind::Edge, key), None);
+    assert_eq!(st.slot_any(Kind::Edge, key), Some(e));
+}
+
+#[test]
+fn a_relinked_edge_is_its_own_key_again() {
+    let mut st = grid_store(2);
+    let mut ch = super::edit::Change::default();
+    let e = st.find_edge(0, 1).unwrap();
+    let key = st.key(Kind::Edge, e);
+    st.remove_edge(e, &mut ch);
+    assert_eq!(st.relink_edge(e, &mut ch), Ok(true));
+    assert_eq!(st.slot(Kind::Edge, key), Some(e));
+    st.check().unwrap();
+}
+
+#[test]
+fn unlinking_from_the_middle_of_a_disk_cycle() {
+    let mut st = grid_store(3);
+    let mut ch = super::edit::Change::default();
+    // The centre-ish vertex (1, 1) has four edges.
+    let v = st.lookup([1.0, 1.0, 0.0]).unwrap();
+    let around: Vec<u32> = st.edges_at(v).collect();
+    assert_eq!(around.len(), 4);
+    st.remove_edge(around[2], &mut ch);
+    st.remove_edge(around[0], &mut ch);
+    let left: Vec<u32> = st.edges_at(v).collect();
+    assert_eq!(left, vec![around[1], around[3]]);
+    st.check().unwrap();
+}
+
+#[test]
+fn rewritten_rings_are_compacted_with_the_tombstones() {
+    let mut st = grid_store(1);
+    let mut ch = super::edit::Change::default();
+    let f = 0;
+    for k in 0..40_000 {
+        let x = 0.1 + (k % 7) as f64 * 1e-3;
+        let ring = st
+            .add_hole(f, &[[x, 0.2, 0.0], [x + 0.01, 0.2, 0.0], [x + 0.01, 0.3, 0.0]], &mut ch)
+            .unwrap();
+        st.remove_hole(f, &ring, &mut ch);
+    }
+    assert!(st.state.pool_garbage < 200_000);
+    assert_eq!(st.face_rings(f).len(), 1);
+    st.check().unwrap();
+}
+
+#[test]
+fn cowvec_pop_drops_empty_chunks() {
+    let mut a = CowVec::from_vec((0..CHUNK as u32 + 2).collect::<Vec<_>>());
+    let snap = a.clone();
+    assert_eq!(a.pop(), Some(CHUNK as u32 + 1));
+    assert_eq!(a.pop(), Some(CHUNK as u32));
+    assert_eq!(a.n_chunks(), 1);
+    a.push(5);
+    assert_eq!(*a.get(CHUNK), 5);
+    assert_eq!(*snap.get(CHUNK + 1), CHUNK as u32 + 1);
+}

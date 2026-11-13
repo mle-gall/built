@@ -290,7 +290,8 @@ impl Store {
     /// (a removed face's loop is still read and relinked).
     fn compact_pools(&mut self) {
         let n = self.state.slots[Kind::Face as usize].len();
-        let mut corners = Vec::with_capacity(self.state.corners.len() - self.state.pool_garbage);
+        // `pool_garbage` counts both pools, so it can exceed the corners.
+        let mut corners = Vec::with_capacity(self.state.corners.len().saturating_sub(self.state.pool_garbage));
         let mut sizes = Vec::new();
         let mut fr = Vec::with_capacity(n);
         for f in 0..n as u32 {
