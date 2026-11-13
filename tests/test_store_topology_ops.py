@@ -524,7 +524,15 @@ def _engine_run(monkeypatch, scenario, seed, store):
                     next(M._KEY_NAMESPACES), **S._weld_args()), [])
             made.append(self)
     monkeypatch.setattr(FE, "Scene", _Scene)
+    mats = []
+    real = S._materialise
+
+    def counted(m):
+        mats.append(m)
+        return real(m)
+    monkeypatch.setattr(S, "_materialise", counted)
     FE.run_sequence(scenario, seed)
+    _engine_run.materialised = len(mats)
     return made
 
 
@@ -533,11 +541,13 @@ def _engine_run(monkeypatch, scenario, seed, store):
 def test_engine_fuzz_on_a_store_backed_mesh(monkeypatch, scenario, seed):
     """The engine certifier (draw on faces, push/pull, undo/redo, with its
     invariants after every commit) with the loose mesh starting in the
-    store: drawing stays there, a push materialises, undo restores store
+    store: drawing and pushing stay there (port step 3: the stitch, the
+    plane rebuild's drop, turning a face over), undo restores store
     snapshots. Same final model as the Python run of the same seed."""
     import tests.test_fuzz_engine as FE
     py = _engine_run(monkeypatch, scenario, seed, False)[0]
     st = _engine_run(monkeypatch, scenario, seed, True)[0]
+    assert _engine_run.materialised == 0
     assert FE._scene_fingerprint(st) == FE._scene_fingerprint(py)
 
 
