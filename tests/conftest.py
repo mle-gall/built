@@ -97,25 +97,27 @@ def _fresh_skp_parse_tables():
     yield
 
 
-@pytest.fixture(autouse=True)
-def _native_resolved_per_test():
-    """``core._native.native`` is resolved on first read and then FIXED for
-    the session (a module global written by ``_native.__getattr__``). A
-    test that patches ``_native.wanted`` to False and reads ``native``
-    meanwhile (``tests/test_deferred_mesh.py`` does, through the loader)
-    fixed it to None; monkeypatch then put ``wanted`` back but knew nothing
-    of the global, so every later test in the batch ran without the Rust
-    engine and the store tests failed. Each test now starts with
-    ``native`` as the previous one found it, and what a test resolves or
-    patches there goes with it."""
+@pytest.fixture(autouse=True, scope="session")
+def _session_native():
+    """``core._native.native`` as the app has it: resolved once, at start,
+    from the environment and the saved preference."""
     import core._native as native_mod
-    d = native_mod.__dict__
-    had, before = "native" in d, d.get("native")
+    return native_mod.native
+
+
+@pytest.fixture(autouse=True)
+def _native_per_test(_session_native):
+    """``core._native.native`` is resolved on first read and then FIXED for
+    the session (a module global written by ``_native.__getattr__``). Tests
+    that patch ``_native.wanted`` and read ``native`` meanwhile
+    (``tests/test_deferred_mesh.py``, through the loader), or reload the
+    module and leave the preference off (``tests/test_rust_engine_switch``),
+    fixed it to what THEY had: when one of them ran first in a batch,
+    ``native`` was None for the rest of the session and the store tests
+    failed. Every test now ends with the session's value put back."""
     yield
-    if had:
-        d["native"] = before
-    else:
-        d.pop("native", None)
+    import core._native as native_mod
+    native_mod.__dict__["native"] = _session_native
 
 
 _exit_status = [0]
