@@ -17,6 +17,7 @@ mod scene_bake;
 mod smooth;
 mod gltape;
 mod hlr;
+mod igz;
 mod instances;
 mod occlusion;
 mod parity;
@@ -45,6 +46,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<GlReplay>()?;
     m.add_class::<InstanceProto>()?;
     m.add_class::<InstanceSet>()?;
+    m.add_function(wrap_pyfunction!(igz::igz_read_geometry, m)?)?;
     Ok(())
 }
 
