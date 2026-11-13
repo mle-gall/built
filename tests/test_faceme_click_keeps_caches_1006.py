@@ -167,7 +167,7 @@ def test_big_figure_faces_go_to_the_native_earcut_with_the_same_triangles():
         vp.scene.version += 1
         vp._tri_memo = None
         vp._seed_tris_native([f])
-        seeded = (vp._tri_memo or (None, {}))[1].get(id(f))
+        seeded = (vp._tri_memo or (None, {}))[1].get(f.key)
         if _native.native is None or _native.qt_hypot() is None:
             assert seeded is None
             return

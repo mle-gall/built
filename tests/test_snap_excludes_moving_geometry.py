@@ -62,10 +62,10 @@ def test_move_names_the_edges_it_drags():
     tool.on_click(_ctx(vp, 0, 0))
     edges, groups = tool.snap_excluded()
     assert groups == set()
-    moving_ids = {id(e) for e in scene.mesh.edges
+    moving_ids = {e.key for e in scene.mesh.edges
                   if any(v in moving.vertices for v in (e.a, e.b))}
     assert edges == moving_ids
-    assert not any(id(e) in edges for e in scene.mesh.edges
+    assert not any(e.key in edges for e in scene.mesh.edges
                    if e.a in still.vertices and e.b in still.vertices)
 
 
