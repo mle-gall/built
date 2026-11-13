@@ -66,7 +66,7 @@ LOCAL_MASK = (1 << 40) - 1
 #: ``mesh.__dict__`` entries that belong to the store side and never travel
 #: with a deep copy of the Python state.
 STORE_SIDE = ("_store", "_objmap", "_attr_table", "_attr_own", "_bulk",
-              "_py_base")
+              "_py_base", "_pos_cache")
 
 
 def enabled() -> bool:
@@ -200,13 +200,10 @@ class VertexView(_ViewMixin, Vertex):
 
     @property
     def position(self):
-        st = _store_of(self._m)
-        if st is None:
+        m = self._m
+        if m.__class__ is not StoreMesh:
             return self._obj().position
-        try:
-            return QVector3D(*st.vertex_position(self.key))
-        except KeyError:
-            return self._stale().position
+        return _position(m, self.key)
 
     @position.setter
     def position(self, value):
@@ -339,11 +336,25 @@ class EdgeView(_ViewMixin, Edge):
 
     @property
     def a(self) -> QVector3D:
-        return self.v0.position
+        m = self._m
+        if m.__class__ is not StoreMesh:
+            return self._obj().a
+        try:
+            k = m.__dict__["_store"].edge_ends(self.key)[0]
+        except KeyError:
+            return self._stale().a
+        return _position(m, k)
 
     @property
     def b(self) -> QVector3D:
-        return self.v1.position
+        m = self._m
+        if m.__class__ is not StoreMesh:
+            return self._obj().b
+        try:
+            k = m.__dict__["_store"].edge_ends(self.key)[1]
+        except KeyError:
+            return self._stale().b
+        return _position(m, k)
 
     def other(self, v):
         """The endpoint that is not ``v`` (by key: views are never
@@ -362,6 +373,31 @@ class EdgeView(_ViewMixin, Edge):
         p = QVector3D(*st.vertex_position(a))
         q = QVector3D(*st.vertex_position(b))
         return (q - p).length()
+
+
+def _position(m, key) -> QVector3D:
+    """A vertex's position as ONE ``QVector3D`` per vertex until the store
+    changes (any op bumps its revision), as a Python vertex hands out its
+    own object: scans that memoise by point object
+    (``topology.KeyMemo``) hit again, and a planner pass over every edge
+    builds each vector once instead of once per read."""
+    d = m.__dict__
+    st = d["_store"]
+    rev = st.revision
+    cache = d.get("_pos_cache")
+    if cache is None or cache[0] != rev or cache[2] is not st:
+        cache = d["_pos_cache"] = (rev, {}, st)
+    p = cache[1].get(key)
+    if p is None:
+        try:
+            p = QVector3D(*st.vertex_position(key))
+        except KeyError:
+            obj = d.get("_objmap", {}).get(key)
+            if obj is None:
+                raise KeyError(f"element {key} is not in this mesh") from None
+            return obj.position
+        cache[1][key] = p
+    return p
 
 
 def _newell(ring) -> QVector3D:
