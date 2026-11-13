@@ -3366,16 +3366,10 @@ def run_stitch(mesh, seedkeys: set, new_faces: Optional[set] = None,
     # edge's box meets the seed box.
     from core.topology import sweep_tjunctions
     sweep_tjunctions(mesh, seedkeys)
-    # Phase 2 — collapse redundant valence-2 collinear vertices (global).
-    while True:
-        collapsed = False
-        for v in list(mesh.vertices):
-            if mesh.collapsible_vertex(v):
-                mesh.collapse_vertex(v)
-                collapsed = True
-                break
-        if not collapsed:
-            break
+    # Phase 2 — collapse redundant valence-2 collinear vertices (global): the
+    # first collapsible vertex in list order, until none is left
+    # (``Mesh.collapse_collinear``; a store-backed mesh does it natively).
+    mesh.collapse_collinear()
     if not coplanar_merge:
         return
     # Phase 3 — coplanar-merge, seeded to the operation. Fuses the whole coplanar
