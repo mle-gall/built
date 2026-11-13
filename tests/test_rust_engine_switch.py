@@ -157,7 +157,7 @@ def test_asking_for_rust_without_the_module_fails():
 def _source_hash(src):
     """build.rs's fingerprint of the sources (FNV-1a 64, CR dropped)."""
     files = ["Cargo.toml", "Cargo.lock"] + sorted(
-        f"src/{p.name}" for p in (src / "src").glob("*.rs"))
+        p.relative_to(src).as_posix() for p in (src / "src").rglob("*.rs"))
     h = 0xcbf29ce484222325
     for f in files:
         data = f.encode() + b"\0" + (src / f).read_bytes()
