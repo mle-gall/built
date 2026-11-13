@@ -74,29 +74,27 @@ def component_from_scene(src, name: str):
     return comp
 
 
-def _faces_of(comp):
-    for g, _m in iter_placements(comp):
-        yield from g.mesh.faces
-
-
 def merge_materials(src_materials: dict, dst_materials: dict, comp) -> dict:
     """Register the file's materials in the document, restamping the
-    component's faces where a name had to change. Returns the rename map."""
+    component's faces where a name had to change. Returns the rename map.
+
+    Each mesh is restamped once, however many times it is placed: walking
+    every placement renamed a shared mesh's faces again, and a name moved
+    twice when the new name of one was the old name of another. A mesh
+    still deferred is restamped in its tables, not built
+    (:func:`core.links.restamp_materials`)."""
     renamed: dict = {}
     for old, mat in list(src_materials.items()):
         final = register(dst_materials, mat)
         if final != old:
             renamed[old] = final
     if renamed:
-        for f in _faces_of(comp):
-            a = f.attrs
-            if not a:
-                continue
-            if a.get("mat") in renamed:
-                a["mat"] = renamed[a["mat"]]
-            back = a.get("back")
-            if isinstance(back, dict) and back.get("mat") in renamed:
-                back["mat"] = renamed[back["mat"]]
+        from core.links import restamp_materials
+        seen: set = set()
+        for g, _m in iter_placements(comp):
+            if id(g.mesh) not in seen:
+                seen.add(id(g.mesh))
+                restamp_materials(g.mesh, renamed)
     return renamed
 
 
