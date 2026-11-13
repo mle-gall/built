@@ -1611,6 +1611,19 @@ class StoreMesh(Mesh):
         new.attrs = dict(_mesh._dominant_attrs(views))
         return new
 
+    def stitch_arrays(self):
+        """``(positions (V, 3) float64, edge ends (E, 2) int64 as list
+        indices, vertices, edges)`` for ``topology.sweep_tjunctions``: the
+        store's arrays, and the elements as sequences that make a view
+        only for the index asked (the sweep splits a handful of edges out
+        of hundreds of thousands)."""
+        st = self._store
+        a = st.arrays()
+        return (np.asarray(a["pos"], dtype=np.float64),
+                np.asarray(a["edges"], dtype=np.int64),
+                _Indexed(self, st.keys("vertex"), VertexView),
+                _Indexed(self, st.keys("edge"), EdgeView))
+
     def revert_stitch(self, rec) -> None:
         """A record made by the store goes back by its snapshot (LIFO, as
         the Python per-op inverse assumes too); a Python record runs the
@@ -1736,6 +1749,21 @@ def _fallback():
     when ``_native.native`` was fixed to None for the session."""
     from core import _native
     return _native.available().StoreFallback
+
+
+class _Indexed:
+    """A list of views made on demand: ``len`` and ``[i]``."""
+
+    __slots__ = ("_m", "_keys", "_cls")
+
+    def __init__(self, m, keys, cls):
+        self._m, self._keys, self._cls = m, keys, cls
+
+    def __len__(self):
+        return len(self._keys)
+
+    def __getitem__(self, i):
+        return self._cls(self._m, self._keys[i])
 
 
 def _hypot():
