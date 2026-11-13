@@ -29,10 +29,16 @@ def test_open_does_not_prepare_before_picture(tmp_path, monkeypatch):
         win.viewport.frameSwapped.emit()
         assert not win._doc._awaiting_picture
         # Use a bounded Qt loop to drain paced jobs without needing a GL driver.
+        # The jobs run one per 16 ms slice and the georef syncs between
+        # 'links' and 'heap' can take a while late in a full run: wait for
+        # the last one (bounded) instead of a fixed 500 ms.
+        import time
         from PySide6.QtCore import QEventLoop
-        loop = QEventLoop()
-        QTimer.singleShot(500, loop.quit)
-        loop.exec()
+        deadline = time.monotonic() + 5.0
+        while 'heap' not in order and time.monotonic() < deadline:
+            loop = QEventLoop()
+            QTimer.singleShot(50, loop.quit)
+            loop.exec()
         assert order == ['frame', 'links', 'heap']
     finally:
         win._saved_version = win.viewport.scene.version
