@@ -1138,24 +1138,170 @@ class StoreMesh(Mesh):
         return [FaceView(self, k)
                 for k in self._store.nonplanar_faces(tolerance)]
 
-    def purge_debris(self):
-        """Nothing to drop is answered from the arrays; a store has no
-        ghost entries (design decision 4), so only an unreferenced vertex
-        (an edge welded shut at build) needs the Python sweep."""
-        a = self._store.arrays()
-        nv = len(a["pos"])
-        used = np.zeros(nv, dtype=bool)
-        if len(a["edges"]):
-            used[a["edges"].ravel()] = True
-        if len(a["corners"]):
-            used[a["corners"]] = True
-        if used.all():
-            return 0, 0
+    # -- port step 2: the incidence primitives as store ops ---------------
+    # Each is its Mesh method's semantics (store/topo.rs), with the same
+    # dirty / revision bumps on the Python side (`_dirty(n)` = n times
+    # ``_chunk_dirty = True; _mut_serial += 1``), so readers keyed on them
+    # see the same thing. An element of another mesh, or a result the
+    # store does not represent (``StoreFallback``, raised before anything
+    # changed), runs the Python kernel instead (`_py`).
+
+    def _dirty(self, n=1) -> None:
+        d = self.__dict__
+        d.pop("_bulk", None)
+        if n:
+            d["_chunk_dirty_value"] = True
+            d["_revision"] = d.get("_revision", 0) + n
+            d["_mut_serial"] = d.get("_mut_serial", 0) + n
+
+    def _py(self, name, *args):
         self._materialise()
-        return self.purge_debris()
+        return getattr(self, name)(*args)
+
+    def _own(self, x, kind):
+        """``x``'s key when it names an element of this store of ``kind``
+        (0 vertex, 1 edge, 2 face), listed or removed; else None."""
+        k = getattr(x, "key", None)
+        if type(k) is not int or k < 0 or (k >> 38) & 3 != kind:
+            return None
+        return k if self._store.knows(k) else None
+
+    def vertex(self, position):
+        self.__dict__.pop("_bulk", None)
+        k, _ch = self._store.vertex(_xyz(position))
+        return VertexView(self, k)
+
+    def _probe_neighbours(self, k, position):
+        hit = self._store.probe(tuple(k), _xyz(position))
+        return None if hit is None else VertexView(self, hit)
+
+    def _link_edge(self, v0, v1):
+        st = self._store
+        a, b = self._own(v0, 0), self._own(v1, 0)
+        if a is None or b is None or not st.is_live(a) or not st.is_live(b):
+            return self._py("_link_edge", v0, v1)
+        self._dirty(1)
+        k, _ch = st.link_edge(a, b)
+        return EdgeView(self, k)
+
+    def add_edge(self, a, b):
+        self.__dict__.pop("_bulk", None)
+        k, _ch = self._store.add_edge(_xyz(a), _xyz(b))
+        self._dirty(1)
+        return EdgeView(self, k)
+
+    def add_face(self, loop_positions, hole_loops=None):
+        self._dirty(1)
+        loop = list(loop_positions)
+        raw = [list(h) for h in (hole_loops or [])]
+        if len(raw) > 1:
+            from core.topology import _maximal_holes
+            try:
+                raw = _maximal_holes(raw)
+            except Exception:
+                # Python welds the outer loop before filtering the holes.
+                for p in loop:
+                    self.vertex(p)
+                raise
+        rings = [[_xyz(p) for p in loop]] + [[_xyz(p) for p in h]
+                                             for h in raw]
+        k, _ch = self._store.add_face(rings)
+        self._dirty(sum(len(r) for r in rings))
+        return FaceView(self, k)
+
+    def remove_edge(self, e) -> None:
+        k = self._own(e, 1)
+        if k is None:
+            return self._py("remove_edge", e)
+        self._dirty(1)
+        self._store.remove_edge(k)
+
+    def remove_face(self, face) -> None:
+        k = self._own(face, 2)
+        if k is None:
+            return self._py("remove_face", face)
+        self._dirty(1)
+        self._store.remove_face(k)
+
+    def relink_edge(self, edge) -> None:
+        k = self._own(edge, 1)
+        if k is None:
+            return self._py("relink_edge", edge)
+        try:
+            done, _ch = self._store.relink_edge(k)
+        except _fallback():
+            return self._py("relink_edge", edge)
+        self.__dict__.pop("_bulk", None)
+        if done:
+            self.mark_modified()
+
+    def relink_face(self, face) -> None:
+        k = self._own(face, 2)
+        if k is None:
+            return self._py("relink_face", face)
+        st = self._store
+        try:
+            done, _ch = st.relink_face(k)
+        except _fallback():
+            return self._py("relink_face", face)
+        self.__dict__.pop("_bulk", None)
+        if done:
+            self._dirty(sum(len(r) for r in st.face_rings(k)))
+            self.mark_modified()
+
+    def add_hole(self, face, loop_positions):
+        k = self._own(face, 2)
+        loop = list(loop_positions)
+        if k is None or not self._store.is_live(k):
+            return self._py("add_hole", face, loop)
+        try:
+            keys, _ch = self._store.add_hole(k, [_xyz(p) for p in loop])
+        except _fallback():
+            return self._py("add_hole", face, loop)
+        self._dirty(len(loop))
+        self.__dict__.pop("_bulk", None)
+        return [VertexView(self, v) for v in keys]
+
+    def remove_hole(self, face, loop) -> None:
+        k = self._own(face, 2)
+        loop = list(loop)
+        vk = [self._own(v, 0) for v in loop]
+        if k is None or None in vk:
+            return self._py("remove_hole", face, loop)
+        self.__dict__.pop("_bulk", None)
+        self._store.remove_hole(k, vk)          # Python bumps nothing
+
+    def purge_debris(self):
+        """:meth:`Mesh.purge_debris` in the store. A store has no ghost
+        entries (design decision 4): the second count is the dropped
+        vertices' own cells."""
+        n, ghosts, _ch = self._store.purge_debris()
+        if n or ghosts:
+            self._dirty(1)
+        return n, ghosts
 
     def prune_orphan_vertices(self) -> int:
         return self.purge_debris()[0]
+
+    def drop_orphan_vertices(self, vertices) -> int:
+        vertices = list(vertices)
+        keys = [k for k in (self._own(v, 0) for v in vertices)
+                if k is not None]
+        try:
+            n, _ch = self._store.drop_orphan_vertices(keys)
+        except _fallback():
+            return self._py("drop_orphan_vertices", vertices)
+        if n:
+            self._dirty(1)
+        return n
+
+    def relink_vertices(self, vertices) -> None:
+        vertices = list(vertices)
+        keys = [self._own(v, 0) for v in vertices]
+        if None in keys:
+            return self._py("relink_vertices", vertices)
+        self._store.relink_vertices(keys)
+        self._dirty(1)
 
     def resplit_curves(self) -> None:
         """:meth:`Mesh.resplit_curves` with the scan for curve edges done
@@ -1255,10 +1401,7 @@ class StoreMesh(Mesh):
         _materialise(self)
 
 
-for _name in ("_probe_neighbours", "vertex", "_link_edge", "add_edge", "remove_edge", "relink_vertices",
-              "drop_orphan_vertices", "add_faces_bulk", "add_face",
-              "remove_face", "relink_edge", "relink_face", "add_hole",
-              "remove_hole", "_rekey", "split_edge", "weld_coincident",
+for _name in ("add_faces_bulk", "_rekey", "split_edge", "weld_coincident",
               "dedupe_faces", "_weld_into", "split_edge_at",
               "collapse_vertex", "dissolve_edge_recorded",
               "dissolve_coplanar_pair", "dissolve_coplanar_region",
@@ -1271,6 +1414,15 @@ StoreMesh.add_faces_bulk = Mesh.add_faces_bulk
 # through the edge views): tag_curve, resplit_curves, curve_edges,
 # surface_of, interior_vertex_on, collapsible_vertex.
 StoreMesh.tag_curve = Mesh.tag_curve
+
+
+def _fallback():
+    """``ingetrazo_core.StoreFallback``: an op the store refused before
+    changing anything (store/topo.rs); the Python kernel runs instead.
+    From the loaded module itself: a store exists, so it is loaded, even
+    when ``_native.native`` was fixed to None for the session."""
+    from core import _native
+    return _native.available().StoreFallback
 
 
 def _xyz(p):
@@ -1495,12 +1647,57 @@ def _materialise_objects(m) -> None:
     cells, vid = st.registry()
     registry = dict(zip(map(tuple, cells.tolist()),
                         [verts[i] for i in vid.tolist()]))
-    displaced = {cell: [verts[i] for i in q]
-                 for cell, q in st.displaced().items()}
+    _materialise_tombstones(st, objmap, own, table, names)
+    displaced = {cell: [objmap[k] for k in q]
+                 for cell, q in st.displaced_keys().items()}
     d.update(vertices=verts, edges=edges, faces=faces, _registry=registry,
              _displaced=displaced, _attr_own={})
     d.pop("_bulk", None)
     m.__class__ = MaterialisedMesh
+
+
+def _materialise_tombstones(st, objmap, own, table, names) -> None:
+    """Objects for the elements the store keeps removed (port step 2):
+    history holds a removed edge or face and relinks or edits it later,
+    as it holds the removed Python object. Listed nowhere; their fields
+    are the store's, pointing at the objects just built (or at other
+    removed ones)."""
+    dv, df, de = (st.dead_keys(k) for k in ("vertex", "face", "edge"))
+    if not (dv or df or de):
+        return
+    get = objmap.get
+    for k in dv:
+        v = get(k)
+        if v is None:
+            v = objmap[k] = _MVertex.__new__(_MVertex)
+            v.key = k
+        v.position = QVector3D(*st.vertex_position(k))
+        v.edges = set()
+    for k in df:
+        f = get(k)
+        if f is None:
+            f = objmap[k] = _MFace.__new__(_MFace)
+            f.key = k
+        rings = st.face_rings(k)
+        f.loop = [objmap[j] for j in rings[0]] if rings else []
+        f.hole_loops = [[objmap[j] for j in r] for r in rings[1:]]
+        ai, ff = st.face_info(k)
+        o = own.get(k)
+        f.attrs = o if o is not None else (
+            _copy_attrs(table[ai]) if ai >= 0 else {})
+        f.interior = bool(ff & 1)
+    for k in de:
+        e = get(k)
+        if e is None:
+            e = objmap[k] = _MEdge.__new__(_MEdge)
+            e.key = k
+        a, b, fl, c, la = st.edge(k)
+        e.v0, e.v1 = objmap[a], objmap[b]
+        e.faces = [objmap[j] for j in st.edge_faces(k)]
+        e.soft = bool(fl & 1)
+        e.hidden = bool(fl & 2)
+        e.curve = None if c < 0 else c
+        e.layer = la
 
 
 # ---- Construction -----------------------------------------------------------

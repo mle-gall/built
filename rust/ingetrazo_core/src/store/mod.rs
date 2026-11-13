@@ -25,6 +25,7 @@ pub mod edit;
 pub mod keys;
 pub mod py;
 pub mod read;
+pub mod topo;
 #[cfg(test)]
 mod tests;
 

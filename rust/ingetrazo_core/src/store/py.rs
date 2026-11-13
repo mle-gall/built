@@ -13,16 +13,95 @@
 use super::build::Block;
 use super::edit::Change;
 use super::keys::Kind;
+use super::topo::OpError;
 use super::{Snapshot, Store, Weld};
+use std::sync::{Arc, Mutex};
 use numpy::ndarray::Array2;
 use numpy::{IntoPyArray, PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2, PyUntypedArrayMethods};
-use pyo3::exceptions::{PyKeyError, PyValueError};
+use pyo3::exceptions::{PyAssertionError, PyException, PyKeyError, PyOverflowError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
+
+pyo3::create_exception!(
+    ingetrazo_core,
+    StoreFallback,
+    PyException,
+    "An op the store does not represent (see store/topo.rs): nothing changed; run the Python kernel."
+);
 
 #[pyclass(module = "ingetrazo_core", name = "MeshStore")]
 pub struct PyMeshStore {
     pub inner: Store,
+    /// Per kind, `(revision, live slots in list order, slot -> index)`:
+    /// `mesh.faces[i]` / `.index(f)` in a loop must not rebuild the list
+    /// order per call once tombstones or a relink made it non-trivial.
+    /// Every mutation bumps the revision, so a stale entry is never read.
+    cache: Mutex<[Option<OrderCache>; 3]>,
+}
+
+/// `(revision, live slots in list order, slot -> list index)`.
+type OrderCache = (u64, Arc<Vec<u32>>, Arc<Vec<u32>>);
+
+impl PyMeshStore {
+    fn wrap(inner: Store) -> Self {
+        Self { inner, cache: Mutex::new(Default::default()) }
+    }
+
+    fn order_of(&self, k: Kind) -> (Arc<Vec<u32>>, Arc<Vec<u32>>) {
+        let mut c = self.cache.lock().unwrap();
+        let rev = self.inner.revision;
+        if let Some((r, live, dense)) = &c[k as usize] {
+            if *r == rev {
+                return (live.clone(), dense.clone());
+            }
+        }
+        let st = &self.inner.state;
+        let live = st.order[k as usize].live(&st.slots[k as usize]);
+        let mut dense = vec![super::keys::NONE; st.slots[k as usize].len()];
+        for (i, &s) in live.iter().enumerate() {
+            dense[s as usize] = i as u32;
+        }
+        let (live, dense) = (Arc::new(live), Arc::new(dense));
+        c[k as usize] = Some((rev, live.clone(), dense.clone()));
+        (live, dense)
+    }
+
+    /// Run an op with a fresh change record; the revision is bumped even
+    /// when the op fails half way (a vertex made before a NaN), so the
+    /// caches above never see a changed store under an old revision.
+    fn op<T>(&mut self, f: impl FnOnce(&mut Store, &mut Change) -> Result<T, OpError>) -> PyResult<(T, PyChange)> {
+        let mut ch = Change::default();
+        let r = f(&mut self.inner, &mut ch);
+        let ch = self.inner.finish(ch);
+        match r {
+            Ok(v) => Ok((v, PyChange { inner: ch })),
+            Err(e) => Err(op_err(e)),
+        }
+    }
+}
+
+fn op_err(e: OpError) -> PyErr {
+    match e {
+        OpError::Nan => PyValueError::new_err("cannot convert float NaN to integer"),
+        OpError::Inf => PyOverflowError::new_err("cannot convert float infinity to integer"),
+        OpError::Degenerate => PyValueError::new_err("degenerate edge: endpoints weld to one vertex"),
+        OpError::Full => PyValueError::new_err("more elements than a store has slots"),
+        OpError::Fallback(why) => StoreFallback::new_err(why),
+    }
+}
+
+/// A key's slot, live or a tombstone of this state (removed elements
+/// stay readable for history: their loops, ends and faces).
+fn any_of(st: &Store, kind: Kind, key: u128) -> PyResult<u32> {
+    st.slot_any(kind, key).ok_or_else(|| PyKeyError::new_err(key))
+}
+
+fn live_of(st: &Store, kind: Kind, key: u128) -> PyResult<u32> {
+    st.slot(kind, key).ok_or_else(|| PyKeyError::new_err(key))
+}
+
+fn p3(p: (f64, f64, f64)) -> [f64; 3] {
+    [p.0, p.1, p.2]
 }
 
 #[pyclass(module = "ingetrazo_core", name = "StoreSnapshot", frozen)]
@@ -94,7 +173,7 @@ impl PyMeshStore {
     #[new]
     #[pyo3(signature = (namespace, scale = 10_000.0, tol2 = 1e-8))]
     fn new(namespace: u64, scale: f64, tol2: f64) -> Self {
-        Self { inner: Store::empty(namespace, Weld { scale, tol2 }) }
+        Self::wrap(Store::empty(namespace, Weld { scale, tol2 }))
     }
 
     /// The store a format-3 block builds — `Mesh.bulk_weld` +
@@ -154,7 +233,7 @@ impl PyMeshStore {
         };
         let w = Weld { scale, tol2 };
         let store = py.detach(|| Store::from_block(namespace, &block, w)).map_err(PyValueError::new_err)?;
-        Ok(Self { inner: store })
+        Ok(Self::wrap(store))
     }
 
     #[getter]
@@ -208,12 +287,13 @@ impl PyMeshStore {
     /// `mesh.faces` iteration).
     fn keys(&self, kind: &str) -> PyResult<Vec<u128>> {
         let k = kind_of(kind)?;
-        Ok(self.inner.live_slots(k).into_iter().map(|s| self.inner.key(k, s)).collect())
+        let (live, _) = self.order_of(k);
+        Ok(live.iter().map(|&s| self.inner.key(k, s)).collect())
     }
 
     /// `Vertex.position` as a float64 triple (holding float32 values).
     fn vertex_position(&self, key: u128) -> PyResult<(f64, f64, f64)> {
-        let v = slot_of(&self.inner, Kind::Vertex, key)?;
+        let v = any_of(&self.inner, Kind::Vertex, key)?;
         let p = self.inner.state.vpos.get(v as usize);
         Ok((p[0], p[1], p[2]))
     }
@@ -221,13 +301,13 @@ impl PyMeshStore {
     /// `Vertex.edges` as keys (disk-cycle order: most recently linked
     /// first; Python's is a set).
     fn vertex_edges(&self, key: u128) -> PyResult<Vec<u128>> {
-        let v = slot_of(&self.inner, Kind::Vertex, key)?;
+        let v = any_of(&self.inner, Kind::Vertex, key)?;
         Ok(self.inner.edges_at(v).map(|e| self.inner.key(Kind::Edge, e)).collect())
     }
 
     /// `(v0, v1, flags, curve (-1 none), layer name or None)` of an edge.
     fn edge(&self, key: u128) -> PyResult<(u128, u128, u8, i64, Option<String>)> {
-        let e = slot_of(&self.inner, Kind::Edge, key)?;
+        let e = any_of(&self.inner, Kind::Edge, key)?;
         let st = &self.inner.state;
         let [a, b] = *st.ends.get(e as usize);
         let l = *st.elayer.get(e as usize);
@@ -242,20 +322,20 @@ impl PyMeshStore {
 
     /// `(v0, v1)` keys of an edge.
     fn edge_ends(&self, key: u128) -> PyResult<(u128, u128)> {
-        let e = slot_of(&self.inner, Kind::Edge, key)?;
+        let e = any_of(&self.inner, Kind::Edge, key)?;
         let [a, b] = *self.inner.state.ends.get(e as usize);
         Ok((self.inner.key(Kind::Vertex, a), self.inner.key(Kind::Vertex, b)))
     }
 
     /// `Edge.faces` as keys, in order, with multiplicity.
     fn edge_faces(&self, key: u128) -> PyResult<Vec<u128>> {
-        let e = slot_of(&self.inner, Kind::Edge, key)?;
+        let e = any_of(&self.inner, Kind::Edge, key)?;
         Ok(self.inner.edge_faces(e).iter().map(|&f| self.inner.key(Kind::Face, f)).collect())
     }
 
     /// A face's rings as vertex keys (outer first, then holes).
     fn face_rings(&self, key: u128) -> PyResult<Vec<Vec<u128>>> {
-        let f = slot_of(&self.inner, Kind::Face, key)?;
+        let f = any_of(&self.inner, Kind::Face, key)?;
         Ok(self
             .inner
             .face_rings(f)
@@ -267,7 +347,7 @@ impl PyMeshStore {
     /// A face's rings as positions: what `normal()` / `area()` /
     /// `vertices` read, in one call.
     fn face_positions(&self, key: u128) -> PyResult<Vec<Vec<(f64, f64, f64)>>> {
-        let f = slot_of(&self.inner, Kind::Face, key)?;
+        let f = any_of(&self.inner, Kind::Face, key)?;
         let st = &self.inner.state;
         Ok(self
             .inner
@@ -286,15 +366,15 @@ impl PyMeshStore {
 
     /// `(attribute-table index or -1, face flags)`.
     fn face_info(&self, key: u128) -> PyResult<(i64, u8)> {
-        let f = slot_of(&self.inner, Kind::Face, key)?;
+        let f = any_of(&self.inner, Kind::Face, key)?;
         let st = &self.inner.state;
         Ok((*st.fattr.get(f as usize) as i64 - 1, *st.fflags.get(f as usize)))
     }
 
     /// `Mesh.find_edge(v0, v1)`: the edge key, or None.
     fn find_edge(&self, a: u128, b: u128) -> PyResult<Option<u128>> {
-        let va = slot_of(&self.inner, Kind::Vertex, a)?;
-        let vb = slot_of(&self.inner, Kind::Vertex, b)?;
+        let va = any_of(&self.inner, Kind::Vertex, a)?;
+        let vb = any_of(&self.inner, Kind::Vertex, b)?;
         Ok(self.inner.find_edge(va, vb).map(|e| self.inner.key(Kind::Edge, e)))
     }
 
@@ -307,25 +387,25 @@ impl PyMeshStore {
 
     /// `Edge.soft` / `hidden` as format-3 bits (soft 1, hidden 2).
     fn set_edge_flags(&mut self, key: u128, flags: u8) -> PyResult<u64> {
-        let e = slot_of(&self.inner, Kind::Edge, key)?;
+        let e = any_of(&self.inner, Kind::Edge, key)?;
         Ok(self.inner.set_edge_flags(e, flags))
     }
 
     /// `Edge.curve` (None: no curve).
     fn set_edge_curve(&mut self, key: u128, curve: Option<i64>) -> PyResult<u64> {
-        let e = slot_of(&self.inner, Kind::Edge, key)?;
+        let e = any_of(&self.inner, Kind::Edge, key)?;
         Ok(self.inner.set_edge_curve(e, curve.unwrap_or(-1)))
     }
 
     /// `Edge.layer` (a tag key, or None).
     fn set_edge_layer(&mut self, key: u128, layer: Option<String>) -> PyResult<u64> {
-        let e = slot_of(&self.inner, Kind::Edge, key)?;
+        let e = any_of(&self.inner, Kind::Edge, key)?;
         Ok(self.inner.set_edge_layer(e, layer.as_deref()))
     }
 
     /// A face's attribute-table index (-1: no attrs).
     fn set_face_attr(&mut self, key: u128, index: i64) -> PyResult<u64> {
-        let f = slot_of(&self.inner, Kind::Face, key)?;
+        let f = any_of(&self.inner, Kind::Face, key)?;
         if index < -1 || index >= u32::MAX as i64 {
             return Err(PyValueError::new_err("attribute index out of range"));
         }
@@ -334,7 +414,7 @@ impl PyMeshStore {
 
     /// A face's flags (interior = 1).
     fn set_face_flags(&mut self, key: u128, flags: u8) -> PyResult<u64> {
-        let f = slot_of(&self.inner, Kind::Face, key)?;
+        let f = any_of(&self.inner, Kind::Face, key)?;
         Ok(self.inner.set_face_flags(f, flags))
     }
 
@@ -359,16 +439,13 @@ impl PyMeshStore {
         let k = kind_of(kind)?;
         let st = &self.inner.state;
         let (order, slots) = (&st.order[k as usize], &st.slots[k as usize]);
-        // List order is the slot order with nothing dead (every fresh
-        // store): the index IS the slot. Otherwise one pass.
-        let slot = if order.explicit.is_none() && slots.live == slots.len() {
-            if index >= slots.len() {
-                return Err(PyValueError::new_err("index out of range"));
-            }
-            index as u32
-        } else {
-            order.live(slots).get(index).copied().ok_or_else(|| PyValueError::new_err("index out of range"))?
+        // Free when list order is the slots (a fresh store) or an explicit
+        // list without stale entries; else the cached list order.
+        let slot = match order.nth_fast(slots, index) {
+            Some(s) => s,
+            None => self.order_of(k).0.get(index).copied(),
         };
+        let slot = slot.ok_or_else(|| PyValueError::new_err("index out of range"))?;
         Ok(self.inner.key(k, slot))
     }
 
@@ -377,11 +454,10 @@ impl PyMeshStore {
         let (_, k, _, _) = super::keys::split_key(key).ok_or_else(|| PyKeyError::new_err(key))?;
         let slot = self.inner.slot(k, key).ok_or_else(|| PyKeyError::new_err(key))?;
         let st = &self.inner.state;
-        let (order, slots) = (&st.order[k as usize], &st.slots[k as usize]);
-        if order.explicit.is_none() && slots.live == slots.len() {
-            return Ok(slot as usize);
+        if let Some(i) = st.order[k as usize].index_fast(&st.slots[k as usize], slot) {
+            return Ok(i);
         }
-        Ok(order.dense_of_slot(slots)[slot as usize] as usize)
+        Ok(self.order_of(k).1[slot as usize] as usize)
     }
 
     fn is_live(&self, key: u128) -> bool {
@@ -431,7 +507,7 @@ impl PyMeshStore {
 
     /// `Mesh.registers(v)`.
     fn registers(&self, key: u128) -> bool {
-        match self.inner.slot(Kind::Vertex, key) {
+        match self.inner.slot_any(Kind::Vertex, key) {
             Some(v) => self.inner.registers(v),
             None => false,
         }
@@ -454,6 +530,18 @@ impl PyMeshStore {
         Ok(d)
     }
 
+    /// `Mesh._displaced` as `{cell: [vertex key, ...]}`: a dropped vertex
+    /// may still wait in a queue (Python's `drop_orphan_vertices` leaves
+    /// the queues alone too), which a list index cannot name.
+    fn displaced_keys<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        let d = PyDict::new(py);
+        for (c, q) in self.inner.state.displaced.iter() {
+            let ks: Vec<u128> = q.iter().map(|&v| self.inner.key(Kind::Vertex, v)).collect();
+            d.set_item((c.0, c.1, c.2), ks)?;
+        }
+        Ok(d)
+    }
+
     /// Faces touching the given vertices, each once (keys).
     fn faces_around(&self, keys: Vec<u128>) -> PyResult<Vec<u128>> {
         let vs: Vec<u32> = keys
@@ -461,6 +549,130 @@ impl PyMeshStore {
             .map(|&k| self.inner.slot(Kind::Vertex, k).ok_or_else(|| PyKeyError::new_err(k)))
             .collect::<PyResult<_>>()?;
         Ok(self.inner.faces_around(&vs).into_iter().map(|f| self.inner.key(Kind::Face, f)).collect())
+    }
+
+    // ---- port step 2: the incidence primitives (store/topo.rs) ----------
+
+    /// Whether `key` names an element of this store, listed or removed
+    /// (a tombstone history may relink).
+    fn knows(&self, key: u128) -> bool {
+        match super::keys::split_key(key) {
+            Some((_, k, _, _)) => self.inner.slot_any(k, key).is_some(),
+            None => false,
+        }
+    }
+
+    /// `Mesh._probe_neighbours(cell, position)`: the vertex key or None.
+    fn probe(&self, cell: (i64, i64, i64), position: (f64, f64, f64)) -> Option<u128> {
+        let p = self.inner.quantize(p3(position));
+        self.inner.probe(cell, &p).map(|v| self.inner.key(Kind::Vertex, v))
+    }
+
+    /// `Mesh.vertex(position)`: `(key, change)`.
+    fn vertex(&mut self, position: (f64, f64, f64)) -> PyResult<(u128, PyChange)> {
+        let (v, ch) = self.op(|s, ch| s.vertex(p3(position), ch))?;
+        Ok((self.inner.key(Kind::Vertex, v), ch))
+    }
+
+    /// `Mesh._link_edge(v0, v1)` on two live vertices: `(key, change)`.
+    fn link_edge(&mut self, a: u128, b: u128) -> PyResult<(u128, PyChange)> {
+        let va = live_of(&self.inner, Kind::Vertex, a)?;
+        let vb = live_of(&self.inner, Kind::Vertex, b)?;
+        let (e, ch) = self.op(|s, ch| s.link_edge(va, vb, ch))?;
+        Ok((self.inner.key(Kind::Edge, e), ch))
+    }
+
+    /// `Mesh.add_edge(a, b)`: `(key, change)`.
+    fn add_edge(&mut self, a: (f64, f64, f64), b: (f64, f64, f64)) -> PyResult<(u128, PyChange)> {
+        let (e, ch) = self.op(|s, ch| s.add_edge(p3(a), p3(b), ch))?;
+        Ok((self.inner.key(Kind::Edge, e), ch))
+    }
+
+    /// `Mesh.add_face` with the rings as positions (outer first, holes
+    /// already filtered): `(key, change)`.
+    fn add_face(&mut self, rings: Vec<Vec<(f64, f64, f64)>>) -> PyResult<(u128, PyChange)> {
+        let rings: Vec<Vec<[f64; 3]>> = rings.into_iter().map(|r| r.into_iter().map(p3).collect()).collect();
+        let (f, ch) = self.op(|s, ch| s.add_face(&rings, ch))?;
+        Ok((self.inner.key(Kind::Face, f), ch))
+    }
+
+    /// `Mesh.remove_edge(e)` (a removed edge: nothing).
+    fn remove_edge(&mut self, key: u128) -> PyResult<PyChange> {
+        let e = any_of(&self.inner, Kind::Edge, key)?;
+        Ok(self.op(|s, ch| { s.remove_edge(e, ch); Ok(()) })?.1)
+    }
+
+    /// `Mesh.remove_face(f)`.
+    fn remove_face(&mut self, key: u128) -> PyResult<PyChange> {
+        let f = any_of(&self.inner, Kind::Face, key)?;
+        Ok(self.op(|s, ch| { s.remove_face(f, ch); Ok(()) })?.1)
+    }
+
+    /// `Mesh.relink_edge(e)`: `(relinked, change)`; StoreFallback when the
+    /// result is not a store state (see store/topo.rs).
+    fn relink_edge(&mut self, key: u128) -> PyResult<(bool, PyChange)> {
+        let e = any_of(&self.inner, Kind::Edge, key)?;
+        self.op(|s, ch| s.relink_edge(e, ch))
+    }
+
+    /// `Mesh.relink_face(f)`: `(relinked, change)`.
+    fn relink_face(&mut self, key: u128) -> PyResult<(bool, PyChange)> {
+        let f = any_of(&self.inner, Kind::Face, key)?;
+        self.op(|s, ch| s.relink_face(f, ch))
+    }
+
+    /// `Mesh.add_hole(face, positions)`: `(loop vertex keys, change)`.
+    fn add_hole(&mut self, key: u128, ring: Vec<(f64, f64, f64)>) -> PyResult<(Vec<u128>, PyChange)> {
+        let f = any_of(&self.inner, Kind::Face, key)?;
+        let ring: Vec<[f64; 3]> = ring.into_iter().map(p3).collect();
+        let (lp, ch) = self.op(|s, ch| s.add_hole(f, &ring, ch))?;
+        Ok((lp.into_iter().map(|v| self.inner.key(Kind::Vertex, v)).collect(), ch))
+    }
+
+    /// `Mesh.remove_hole(face, loop)` with the loop as vertex keys.
+    fn remove_hole(&mut self, key: u128, ring: Vec<u128>) -> PyResult<PyChange> {
+        let f = any_of(&self.inner, Kind::Face, key)?;
+        let ring: Vec<u32> = ring.iter().map(|&k| any_of(&self.inner, Kind::Vertex, k)).collect::<PyResult<_>>()?;
+        Ok(self.op(|s, ch| { s.remove_hole(f, &ring, ch); Ok(()) })?.1)
+    }
+
+    /// `Mesh.purge_debris()`: `(vertices dropped, entries dropped, change)`.
+    fn purge_debris(&mut self) -> PyResult<(usize, usize, PyChange)> {
+        let ((a, b), ch) = self.op(|s, ch| Ok(s.purge_debris(ch)))?;
+        Ok((a, b, ch))
+    }
+
+    /// `Mesh.drop_orphan_vertices(vertices)`: `(count, change)`; keys of
+    /// other meshes are ignored (Python: not listed here).
+    fn drop_orphan_vertices(&mut self, keys: Vec<u128>) -> PyResult<(usize, PyChange)> {
+        let vs: Vec<u32> = keys.iter().filter_map(|&k| self.inner.slot_any(Kind::Vertex, k)).collect();
+        self.op(|s, ch| s.drop_orphan_vertices(&vs, ch))
+    }
+
+    /// `Mesh.relink_vertices(vertices)`; every key must be this store's.
+    fn relink_vertices(&mut self, keys: Vec<u128>) -> PyResult<PyChange> {
+        let vs: Vec<u32> = keys.iter().map(|&k| any_of(&self.inner, Kind::Vertex, k)).collect::<PyResult<_>>()?;
+        Ok(self.op(|s, ch| { s.relink_vertices(&vs, ch); Ok(()) })?.1)
+    }
+
+    /// Keys of the removed elements of `kind` this state keeps (slot
+    /// order): what a materialisation gives objects besides the listed.
+    fn dead_keys(&self, kind: &str) -> PyResult<Vec<u128>> {
+        let k = kind_of(kind)?;
+        let s = &self.inner.state.slots[k as usize];
+        Ok((0..s.len() as u32).filter(|&i| !s.alive(i)).map(|i| self.inner.key(k, i)).collect())
+    }
+
+    /// The store's invariants (tests): AssertionError naming the first
+    /// one broken.
+    fn check(&self) -> PyResult<()> {
+        self.inner.check().map_err(PyAssertionError::new_err)
+    }
+
+    /// `(slots, live)` per kind: tombstones are `slots - live`.
+    fn slot_counts(&self) -> [(usize, usize); 3] {
+        let s = &self.inner.state.slots;
+        [(s[0].len(), s[0].live), (s[1].len(), s[1].live), (s[2].len(), s[2].live)]
     }
 
     /// `capture_state`: O(chunks), whatever the mesh size.
@@ -504,7 +716,7 @@ impl PyMeshStore {
 
     /// `copy.deepcopy(mesh)`: shares every chunk, keys in `namespace`.
     fn copy(&self, namespace: u64) -> Self {
-        Self { inner: self.inner.copy_as(namespace) }
+        Self::wrap(self.inner.copy_as(namespace))
     }
 
     /// Allocated bytes per column: `{name: (kind, bytes)}`.
@@ -634,5 +846,6 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyMeshStore>()?;
     m.add_class::<PyStoreSnapshot>()?;
     m.add_class::<PyChange>()?;
+    m.add("StoreFallback", m.py().get_type::<StoreFallback>())?;
     Ok(())
 }

@@ -101,6 +101,25 @@ impl<T: Clone> CowVec<T> {
         self.len += 1;
     }
 
+    /// Drop the last element (copies the last chunk if a snapshot shares
+    /// it, frees it once empty).
+    pub fn pop(&mut self) -> Option<T> {
+        if self.len == 0 {
+            return None;
+        }
+        let last = self.chunks.last_mut().expect("a chunk holds the last element");
+        let v = Arc::make_mut(last).pop();
+        if last.is_empty() {
+            self.chunks.pop();
+        }
+        self.len -= 1;
+        v
+    }
+
+    pub fn last(&self) -> Option<&T> {
+        if self.len == 0 { None } else { Some(self.get(self.len - 1)) }
+    }
+
     /// The contiguous runs, in order: how native consumers (pack, snap
     /// index) read a column without assembling one buffer.
     pub fn chunks(&self) -> impl Iterator<Item = &[T]> {

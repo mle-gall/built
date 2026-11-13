@@ -127,9 +127,12 @@ def test_flag_and_attr_writes_stay_in_the_store(binary, monkeypatch,
     assert f2.attrs["texture"] == {"rot": 0.5}
     m.move_vertex(m.vertices[0], V(0.25, 0, 0))
     assert type(m) is S.StoreMesh
+    # An edge drawn stays in the store too (port step 2).
+    m.add_edge(V(50, 0, 0), V(51, 0, 0))
+    assert type(m) is S.StoreMesh
     # Materialised, every write is still there, under the same keys.
     keys = [x.key for x in m.faces]
-    m.add_edge(V(50, 0, 0), V(51, 0, 0))
+    m._materialise()
     assert type(m) is S.MaterialisedMesh
     assert [x.key for x in m.faces][:len(keys)] == keys
     ee = m.edges[0]
@@ -143,7 +146,8 @@ def test_materialise_on_write_resolves_views_held_before(
     face = m.faces[2]
     loop = face.loop
     edge = m.find_edge(loop[0], loop[1])
-    m.remove_face(face)                          # materialises
+    m._materialise()          # what an op not ported yet does first
+    m.remove_face(face)
     assert type(m) is S.MaterialisedMesh
     assert face not in m.faces and face.key not in {f.key for f in m.faces}
     assert all(f.key != face.key for f in edge.faces)
@@ -166,6 +170,7 @@ def test_snapshot_restore_round_trips_through_materialisation(
     before = fingerprint(m)
     s0 = m.capture_state()
     assert isinstance(s0, S.StoreState) and m.capture_state() == s0
+    m._materialise()
     m.add_face([V(40, 0, 0), V(41, 0, 0), V(41, 1, 0)])
     assert type(m) is S.MaterialisedMesh
     assert m.capture_state() != s0
@@ -174,7 +179,7 @@ def test_snapshot_restore_round_trips_through_materialisation(
     assert type(m) is S.StoreMesh and m.capture_state() == s0
     assert fingerprint(m) == before
     # The next materialisation hands back the very objects.
-    m.add_edge(V(60, 0, 0), V(61, 0, 0))
+    m._materialise()
     assert m.faces[0] is held
     # A Python snapshot of the materialised mesh equals the store snapshot
     # it came from, by content.
@@ -255,8 +260,8 @@ def test_copies_and_share_back(binary, monkeypatch, tmp_path):
     c = copy.deepcopy(m)
     assert type(c) is S.StoreMesh and fingerprint(c) == fingerprint(m)
     assert not {f.key for f in c.faces} & {f.key for f in m.faces}
-    m.add_edge(V(80, 0, 0), V(81, 0, 0))
-    d = copy.deepcopy(m)                         # a materialised mesh
+    m.add_edge(V(80, 0, 0), V(81, 0, 0))          # stays in the store
+    d = copy.deepcopy(m)
     assert fingerprint(d) == fingerprint(m)
     # Share-back: a plain Python mesh adopts a store snapshot, new keys.
     proto = M.Mesh()

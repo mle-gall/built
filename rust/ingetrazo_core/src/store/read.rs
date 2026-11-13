@@ -130,10 +130,13 @@ impl State {
         }
         for k in 0..3 {
             let (a, b) = (&self.slots[k], &o.slots[k]);
-            if a.live != b.live || a.len() != b.len() {
+            if a.live != b.live {
                 return false;
             }
-            if !cols_eq(&a.state, &b.state) {
+            // Live slots and their generations; tombstones (removed
+            // elements kept for relinking) are not part of what Python's
+            // snapshot compares, so slot counts may differ.
+            if !live_gens_eq(a, b) {
                 return false;
             }
             let (oa, ob) = (&self.order[k], &o.order[k]);
@@ -210,8 +213,24 @@ fn cols_eq_ptr<T: Clone>(a: &super::cow::CowVec<T>, b: &super::cow::CowVec<T>) -
     a.len() == b.len() && (0..a.n_chunks()).all(|c| a.same_chunk(b, c))
 }
 
-fn cols_eq<T: Clone + PartialEq>(a: &super::cow::CowVec<T>, b: &super::cow::CowVec<T>) -> bool {
-    a.len() == b.len() && cols_eq_live(a, b, |_| true)
+/// The same slots live, under the same generations (chunks both share
+/// skipped).
+fn live_gens_eq(a: &super::keys::Slots, b: &super::keys::Slots) -> bool {
+    let (sa, sb) = (&a.state, &b.state);
+    let n = sa.len().max(sb.len());
+    let at = |s: &super::cow::CowVec<u32>, i: usize| if i < s.len() { *s.get(i) } else { 0 };
+    for (c, range) in chunk_ranges(n) {
+        if sa.same_chunk(sb, c) && c < sa.n_chunks() {
+            continue;
+        }
+        for i in range {
+            let (x, y) = (at(sa, i), at(sb, i));
+            if (x & 1 == 1 || y & 1 == 1) && x != y {
+                return false;
+            }
+        }
+    }
+    true
 }
 
 fn cols_eq_live<T: Clone + PartialEq>(

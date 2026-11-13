@@ -236,6 +236,40 @@ impl Slots {
         true
     }
 
+    /// Retire a live element and keep its slot as a TOMBSTONE: dead, its
+    /// data left in the columns, never handed out again in this state.
+    /// Editing ops remove this way (not [`Slots::release`]) because a
+    /// removed element is often brought back by undo or redo with its own
+    /// key (`relink_edge` / `relink_face` / `relink_vertices`), and a
+    /// reused slot would make that impossible after LIFO undo: delete e,
+    /// add e2 (reusing e's slot), undo the add, undo the delete.
+    pub fn kill(&mut self, slot: u32) {
+        let st = self.state.get_mut(slot as usize);
+        debug_assert!(*st & 1 == 1);
+        *st &= !1;
+        self.live -= 1;
+    }
+
+    /// A tombstone back to life under its own generation (see `kill`).
+    pub fn wake(&mut self, slot: u32) -> bool {
+        if (slot as usize) >= self.len() {
+            return false;
+        }
+        let st = self.state.get_mut(slot as usize);
+        if *st & 1 == 1 {
+            return false;
+        }
+        *st |= 1;
+        self.live += 1;
+        true
+    }
+
+    /// Whether no live slot lies above `slot` (then a relisted element
+    /// at `slot` keeps an implicit list order ascending).
+    pub fn none_live_above(&self, slot: u32) -> bool {
+        ((slot as usize + 1)..self.len()).rev().all(|i| self.state.get(i) & 1 == 0)
+    }
+
     /// Live slots, ascending.
     pub fn live_slots(&self) -> impl Iterator<Item = u32> + '_ {
         self.state.iter().enumerate().filter(|(_, &st)| st & 1 == 1).map(|(i, _)| i as u32)
@@ -301,13 +335,49 @@ impl Order {
         x.at.set(slot as usize, i);
     }
 
-    /// `slot` leaves the list (call before or after releasing it).
+    /// `slot` leaves the list (call before or after releasing it). The
+    /// last entry is popped instead of left stale, with any stale entries
+    /// it uncovers: undo removes what the command appended last, so LIFO
+    /// edits keep the list free of stale entries (indexing stays O(1)).
     pub fn remove(&mut self, slot: u32) {
         if let Some(x) = self.explicit.as_mut() {
             if (slot as usize) < x.at.len() && *x.at.get(slot as usize) != NONE {
+                let i = *x.at.get(slot as usize) as usize;
                 x.at.set(slot as usize, NONE);
-                x.stale += 1;
+                if i + 1 == x.list.len() {
+                    x.list.pop();
+                    while let Some(&last) = x.list.last() {
+                        let here = (x.list.len() - 1) as u32;
+                        if (last as usize) < x.at.len() && *x.at.get(last as usize) == here {
+                            break;
+                        }
+                        x.list.pop();
+                        x.stale -= 1;
+                    }
+                } else {
+                    x.stale += 1;
+                }
             }
+        }
+    }
+
+    /// The `index`-th live slot in list order without building the list
+    /// when that is free: implicit order with no dead slot, or an explicit
+    /// list with no stale entry.
+    pub fn nth_fast(&self, slots: &Slots, index: usize) -> Option<Option<u32>> {
+        match &self.explicit {
+            None if slots.live == slots.len() => Some((index < slots.len()).then_some(index as u32)),
+            Some(x) if x.stale == 0 => Some((index < x.list.len()).then(|| *x.list.get(index))),
+            _ => None,
+        }
+    }
+
+    /// The list index of a live `slot` when that is free (see `nth_fast`).
+    pub fn index_fast(&self, slots: &Slots, slot: u32) -> Option<usize> {
+        match &self.explicit {
+            None if slots.live == slots.len() => Some(slot as usize),
+            Some(x) if x.stale == 0 => Some(*x.at.get(slot as usize) as usize),
+            _ => None,
         }
     }
 
