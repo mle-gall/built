@@ -38,18 +38,49 @@ fn slice<'a, T: numpy::Element>(a: &'a PyReadonlyArray1<'_, T>, name: &str) -> P
     a.as_slice().map_err(|_| PyValueError::new_err(format!("{name}: a contiguous 1-D array")))
 }
 
-fn change_dict<'py>(py: Python<'py>, c: &Change) -> PyResult<Bound<'py, PyDict>> {
-    let d = PyDict::new(py);
-    d.set_item("revision", c.revision)?;
-    d.set_item("moved", PyList::new(py, &c.moved)?)?;
-    for (name, lists) in [("created", &c.created), ("removed", &c.removed), ("modified", &c.modified)] {
-        let k = PyDict::new(py);
-        for kind in Kind::ALL {
-            k.set_item(kind.name(), PyList::new(py, &lists[kind as usize])?)?;
-        }
-        d.set_item(name, k)?;
+/// A change record (`edit::Change`) as Python sees it: built in one
+/// allocation; the key lists become Python lists only when read.
+#[pyclass(module = "ingetrazo_core", name = "StoreChange", frozen)]
+pub struct PyChange {
+    inner: Change,
+}
+
+#[pymethods]
+impl PyChange {
+    #[getter]
+    fn revision(&self) -> u64 {
+        self.inner.revision
     }
-    Ok(d)
+
+    /// Vertex keys whose position changed.
+    #[getter]
+    fn moved(&self) -> Vec<u128> {
+        self.inner.moved.clone()
+    }
+
+    /// `{kind: [key, ...]}` of new elements.
+    #[getter]
+    fn created<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        by_kind(py, &self.inner.created)
+    }
+
+    #[getter]
+    fn removed<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        by_kind(py, &self.inner.removed)
+    }
+
+    #[getter]
+    fn modified<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        by_kind(py, &self.inner.modified)
+    }
+}
+
+fn by_kind<'py>(py: Python<'py>, lists: &[Vec<u128>; 3]) -> PyResult<Bound<'py, PyDict>> {
+    let k = PyDict::new(py);
+    for kind in Kind::ALL {
+        k.set_item(kind.name(), PyList::new(py, &lists[kind as usize])?)?;
+    }
+    Ok(k)
 }
 
 fn rows3<'py, T: numpy::Element + Copy>(py: Python<'py>, rows: &[[T; 3]]) -> Bound<'py, PyArray2<T>> {
@@ -183,7 +214,7 @@ impl PyMeshStore {
     /// Vertex positions (V, 3) float64, list order.
     fn positions<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<f64>> {
         let st = &self.inner.state;
-        let rows: Vec<[f64; 3]> = st.order[0].iter().map(|v| *st.vpos.get(v as usize)).collect();
+        let rows: Vec<[f64; 3]> = st.order[0].live(&st.slots[0]).into_iter().map(|v| *st.vpos.get(v as usize)).collect();
         rows3(py, &rows)
     }
 
@@ -199,9 +230,11 @@ impl PyMeshStore {
     /// The key of the `index`-th element of `kind` in list order.
     fn key_at(&self, kind: &str, index: usize) -> PyResult<u128> {
         let k = kind_of(kind)?;
-        let slot = self.inner.state.order[k as usize]
-            .iter()
-            .nth(index)
+        let st = &self.inner.state;
+        let slot = st.order[k as usize]
+            .live(&st.slots[k as usize])
+            .get(index)
+            .copied()
             .ok_or_else(|| PyValueError::new_err("index out of range"))?;
         Ok(self.inner.key(k, slot))
     }
@@ -210,7 +243,8 @@ impl PyMeshStore {
     fn index_of(&self, key: u128) -> PyResult<usize> {
         let (_, k, _, _) = super::keys::split_key(key).ok_or_else(|| PyKeyError::new_err(key))?;
         let slot = self.inner.slot(k, key).ok_or_else(|| PyKeyError::new_err(key))?;
-        Ok(self.inner.state.order[k as usize].dense_of_slot()[slot as usize] as usize)
+        let st = &self.inner.state;
+        Ok(st.order[k as usize].dense_of_slot(&st.slots[k as usize])[slot as usize] as usize)
     }
 
     fn is_live(&self, key: u128) -> bool {
@@ -221,22 +255,20 @@ impl PyMeshStore {
     }
 
     /// `Mesh.move_vertex(v, delta)`; returns the change record.
-    fn move_vertex<'py>(&mut self, py: Python<'py>, key: u128, delta: (f64, f64, f64)) -> PyResult<Bound<'py, PyDict>> {
+    fn move_vertex(&mut self, key: u128, delta: (f64, f64, f64)) -> PyResult<PyChange> {
         let v = self.inner.slot(Kind::Vertex, key).ok_or_else(|| PyKeyError::new_err(key))?;
-        let c = self.inner.move_vertex(v, [delta.0, delta.1, delta.2]);
-        change_dict(py, &c)
+        Ok(PyChange { inner: self.inner.move_vertex(v, [delta.0, delta.1, delta.2]) })
     }
 
     /// `Mesh.place_vertex(v, position)`; returns the change record.
-    fn place_vertex<'py>(&mut self, py: Python<'py>, key: u128, position: (f64, f64, f64)) -> PyResult<Bound<'py, PyDict>> {
+    fn place_vertex(&mut self, key: u128, position: (f64, f64, f64)) -> PyResult<PyChange> {
         let v = self.inner.slot(Kind::Vertex, key).ok_or_else(|| PyKeyError::new_err(key))?;
-        let c = self.inner.place_vertex(v, [position.0, position.1, position.2]);
-        change_dict(py, &c)
+        Ok(PyChange { inner: self.inner.place_vertex(v, [position.0, position.1, position.2]) })
     }
 
     /// Batch move of many vertices by one delta (a Move drag frame),
     /// detached; one record listing them all.
-    fn move_vertices<'py>(&mut self, py: Python<'py>, keys: Vec<u128>, delta: (f64, f64, f64)) -> PyResult<Bound<'py, PyDict>> {
+    fn move_vertices(&mut self, py: Python<'_>, keys: Vec<u128>, delta: (f64, f64, f64)) -> PyResult<PyChange> {
         let slots: Vec<u32> = keys
             .iter()
             .map(|&k| self.inner.slot(Kind::Vertex, k).ok_or_else(|| PyKeyError::new_err(k)))
@@ -252,7 +284,7 @@ impl PyMeshStore {
             }
             all
         });
-        change_dict(py, &c)
+        Ok(PyChange { inner: c })
     }
 
     /// `Mesh.vertex_at(position)`: the key welding would pick, or None.
@@ -271,7 +303,7 @@ impl PyMeshStore {
     /// The weld registry as `(cells (N, 3) int64, vertex list index (N,))`,
     /// sorted by cell.
     fn registry<'py>(&self, py: Python<'py>) -> (Bound<'py, PyArray2<i64>>, Bound<'py, PyArray1<i64>>) {
-        let dv = self.inner.state.order[0].dense_of_slot();
+        let dv = self.inner.state.order[0].dense_of_slot(&self.inner.state.slots[0]);
         let mut rows: Vec<([i64; 3], i64)> = self
             .inner
             .state
@@ -287,7 +319,7 @@ impl PyMeshStore {
 
     /// `Mesh._displaced` as `{cell: [vertex list index, ...]}`.
     fn displaced<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
-        let dv = self.inner.state.order[0].dense_of_slot();
+        let dv = self.inner.state.order[0].dense_of_slot(&self.inner.state.slots[0]);
         let d = PyDict::new(py);
         for (c, q) in self.inner.state.displaced.iter() {
             let ids: Vec<i64> = q.iter().map(|&v| dv[v as usize] as i64).collect();
@@ -376,5 +408,6 @@ impl PyStoreSnapshot {
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyMeshStore>()?;
     m.add_class::<PyStoreSnapshot>()?;
+    m.add_class::<PyChange>()?;
     Ok(())
 }

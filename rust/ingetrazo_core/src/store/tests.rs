@@ -80,28 +80,31 @@ fn keys_round_trip() {
 fn restoring_never_rewinds_allocation() {
     let (mut slots, mut hwm) = Slots::fresh(2);
     let snap = slots.clone();
-    let (s, g) = slots.alloc(&mut hwm).unwrap();
-    assert_eq!((s, g), (2, 0));
-    slots.release(0, &hwm);
-    let (s0, g0) = slots.alloc(&mut hwm).unwrap();
-    assert_eq!((s0, g0), (0, 1)); // the freed slot, next generation
-    // Undo: back to the snapshot (slots 0, 1 live, gen 0); hwm survives.
+    let (s, g, top) = slots.alloc(&mut hwm).unwrap();
+    assert_eq!((s, g, top), (2, 0, true));
+    slots.release(0);
+    let (s0, g0, top0) = slots.alloc(&mut hwm).unwrap();
+    assert_eq!((s0, g0, top0), (0, 1, false)); // the freed slot, next generation
+    // Undo: back to the snapshot (slots 0, 1 live, gen 0); the floor of
+    // what the discarded state issued is folded in first.
+    hwm.fold(&slots, &snap);
     slots = snap;
-    let (s2, g2) = slots.alloc(&mut hwm).unwrap();
+    assert_eq!(hwm.over.get(&2), Some(&0));
+    let (s2, g2, _) = slots.alloc(&mut hwm).unwrap();
     assert_eq!((s2, g2), (2, 1), "slot 2 was issued gen 0 before the undo");
-    let mut seen = std::collections::HashSet::new();
-    seen.insert((2, 0));
-    seen.insert((0, 1));
-    assert!(seen.insert((s2, g2)));
+    slots.release(0);
+    let (s3, g3, _) = slots.alloc(&mut hwm).unwrap();
+    assert_eq!((s3, g3), (0, 2), "slot 0 was issued gen 1 before the undo");
+    assert!(hwm.over.is_empty(), "floors are dropped once passed");
 }
 
 #[test]
 fn an_exhausted_slot_retires() {
     let (mut slots, mut hwm) = Slots::fresh(1);
-    hwm.0[0] = keys::GEN_MAX;
-    slots.release(0, &hwm);
+    slots.state.set(0, keys::GEN_MAX << 1 | 1);
+    slots.release(0);
     assert!(slots.free.is_empty());
-    let (s, _) = slots.alloc(&mut hwm).unwrap();
+    let (s, _, _) = slots.alloc(&mut hwm).unwrap();
     assert_eq!(s, 1);
     let _ = Hwm::default();
 }
@@ -109,26 +112,43 @@ fn an_exhausted_slot_retires() {
 #[test]
 fn list_order_matches_a_python_list() {
     // Python: remove keeps the others' order, relink appends at the end.
-    let mut o = Order::identity(5);
+    let (mut slots, mut hwm) = Slots::fresh(5);
+    let mut o = Order::identity();
     let mut model: Vec<u32> = (0..5).collect();
+    slots.release(4);
+    o.remove(4);
+    model.retain(|&s| s != 4);
+    assert!(o.explicit.is_none(), "removal keeps the order implicit");
+    let (s, _, top) = slots.alloc(&mut hwm).unwrap(); // reuses slot 4 ...
+    assert_eq!(s, 4);
+    o.append(s, &slots, top); // ... but it lists last: still ascending
+    model.push(4);
+    assert_eq!(o.live(&slots), model);
+    slots.release(1);
     o.remove(1);
     model.retain(|&s| s != 1);
-    o.append(1); // relinked: last
+    let (s, _, top) = slots.alloc(&mut hwm).unwrap(); // slot 1, listed last
+    assert_eq!((s, top), (1, false));
+    o.append(s, &slots, top);
     model.push(1);
+    assert!(o.explicit.is_some());
+    slots.release(3);
     o.remove(3);
     model.retain(|&s| s != 3);
-    o.append(7); // a new slot
-    model.push(7);
-    o.append(3);
-    model.push(3);
-    assert_eq!(o.iter().collect::<Vec<_>>(), model);
-    let dense = o.dense_of_slot();
+    let (s, _, top) = slots.alloc(&mut hwm).unwrap();
+    o.append(s, &slots, top);
+    model.push(s);
+    let (s, _, top) = slots.alloc(&mut hwm).unwrap(); // a brand new slot
+    o.append(s, &slots, top);
+    model.push(s);
+    assert_eq!(o.live(&slots), model);
+    let dense = o.dense_of_slot(&slots);
     for (i, &s) in model.iter().enumerate() {
         assert_eq!(dense[s as usize], i as u32);
     }
-    o.compact();
-    assert_eq!(o.iter().collect::<Vec<_>>(), model);
-    assert_eq!(o.stale, 0);
+    o.compact(&slots);
+    assert_eq!(o.live(&slots), model);
+    assert_eq!(o.stale(), 0);
 }
 
 #[test]
@@ -231,7 +251,7 @@ fn a_foreign_snapshot_is_adopted_under_a_fresh_namespace() {
     proto.restore(&snap, Some(99)).unwrap();
     assert_eq!(proto.state.ns, 99);
     assert_eq!(proto.n(Kind::Vertex), 4);
-    assert_eq!(proto.hwm[0].0.len(), 4);
+    assert_eq!(proto.hwm[0].len, 4);
     let k = proto.key(Kind::Vertex, 3);
     assert_eq!(proto.slot(Kind::Vertex, k), Some(3));
     assert_eq!(local.slot(Kind::Vertex, k), None, "other namespace");

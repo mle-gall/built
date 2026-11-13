@@ -229,7 +229,7 @@ impl Store {
         store.state = State {
             ns,
             slots: [sv, se, sf],
-            order: [Order::identity(nv), Order::identity(ne), Order::identity(nf)],
+            order: [Order::identity(), Order::identity(), Order::identity()],
             vpos: CowVec::from_vec(vpos),
             vedge: CowVec::from_vec(vedge),
             ends: CowVec::from_vec(ed.ends),

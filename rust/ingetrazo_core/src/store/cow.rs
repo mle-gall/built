@@ -48,14 +48,10 @@ impl<T: Clone> CowVec<T> {
     /// check the refcount per element).
     pub fn from_vec(v: Vec<T>) -> Self {
         let len = v.len();
-        let chunks = v
-            .chunks(CHUNK)
-            .map(|c| {
-                let mut chunk = Vec::with_capacity(CHUNK);
-                chunk.extend_from_slice(c);
-                Arc::new(chunk)
-            })
-            .collect();
+        // Exact capacity: most meshes of a big model are a few dozen
+        // elements (16,733 of the ride's 18,482), so a chunk must not
+        // round them up to 4096. A chunk grows when pushed to.
+        let chunks = v.chunks(CHUNK).map(|c| Arc::new(c.to_vec())).collect();
         Self { chunks, len }
     }
 
@@ -90,18 +86,17 @@ impl<T: Clone> CowVec<T> {
 
     pub fn push(&mut self, v: T) {
         if self.len & MASK == 0 {
-            let mut chunk = Vec::with_capacity(CHUNK);
-            chunk.push(v);
+            // The first chunk grows by doubling (a small mesh stays
+            // small); later ones are a big mesh's: full size at once.
+            let chunk = if self.chunks.is_empty() { vec![v] } else {
+                let mut c = Vec::with_capacity(CHUNK);
+                c.push(v);
+                c
+            };
             self.chunks.push(Arc::new(chunk));
         } else {
             let last = self.chunks.last_mut().expect("a partial chunk exists");
-            let chunk = Arc::make_mut(last);
-            if chunk.capacity() < CHUNK {
-                // A chunk copied by make_mut has capacity == len; restore
-                // the full chunk once instead of doubling on every push.
-                chunk.reserve_exact(CHUNK - chunk.len());
-            }
-            chunk.push(v);
+            Arc::make_mut(last).push(v);
         }
         self.len += 1;
     }
@@ -129,7 +124,9 @@ impl<T: Clone> CowVec<T> {
     pub fn heap_bytes(&self) -> usize {
         self.chunks
             .iter()
-            .map(|c| c.capacity() * std::mem::size_of::<T>() + 2 * std::mem::size_of::<usize>())
+            // Arc allocation: two counts and the Vec header, then the data.
+            .map(|c| c.capacity() * std::mem::size_of::<T>() + 2 * std::mem::size_of::<usize>()
+                + std::mem::size_of::<Vec<T>>())
             .sum::<usize>()
             + self.chunks.capacity() * std::mem::size_of::<Arc<Vec<T>>>()
     }
@@ -221,9 +218,10 @@ impl Default for CellMap {
 }
 
 impl CellMap {
-    /// A map sized for `n` cells: a power-of-two shard count in [16, 4096].
+    /// A map sized for `n` cells: a power-of-two shard count in [1, 4096]
+    /// (one shard for a small mesh: its whole map is a shard's size).
     pub fn with_expected(n: usize) -> Self {
-        let want = (n / SHARD_TARGET).clamp(16, 4096).next_power_of_two();
+        let want = (n / SHARD_TARGET).next_power_of_two().clamp(1, 4096);
         let per = n / want + 1;
         let shards = (0..want)
             .map(|_| Arc::new(FxHashMap::with_capacity_and_hasher(per, FxBuild::default())))
@@ -257,8 +255,26 @@ impl CellMap {
         let old = Arc::make_mut(&mut self.shards[s]).insert(c, v);
         if old.is_none() {
             self.len += 1;
+            if self.len > 4 * SHARD_TARGET * self.shards.len() && self.shards.len() < 4096 {
+                self.reshard();
+            }
         }
         old
+    }
+
+    /// A mesh drawn up from nothing outgrew its shards: redistribute, so a
+    /// snapshot's first write keeps copying ~SHARD_TARGET entries.
+    fn reshard(&mut self) {
+        let mut next = CellMap::with_expected(self.len);
+        if next.shards.len() <= self.shards.len() {
+            next = CellMap::with_expected(self.len * 8);
+        }
+        for (c, &v) in self.iter() {
+            let s = next.shard(c);
+            Arc::make_mut(&mut next.shards[s]).insert(*c, v);
+        }
+        next.len = self.len;
+        *self = next;
     }
 
     pub fn remove(&mut self, c: &Cell) -> Option<u32> {

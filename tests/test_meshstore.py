@@ -330,9 +330,9 @@ def test_moves_rekey_like_the_mesh(seed):
         else:
             rec = store.place_vertex(keys[i], arg)
             m.place_vertex(v, V(*arg))
-        assert rec["moved"] == [keys[i]]
-        assert rec["revision"] == rev + 1
-        rev = rec["revision"]
+        assert rec.moved == [keys[i]]
+        assert rec.revision == rev + 1
+        rev = rec.revision
         compare_weld(store, m)
         # Welding a new point would pick the same vertex.
         probe = V(*arg) if op == "place" else v.position

@@ -199,8 +199,13 @@ impl Store {
         if snap.lineage != self.lineage {
             let ns = fresh_ns.ok_or("a snapshot of another store needs a fresh namespace")?;
             state.ns = ns;
+            // A fresh namespace has issued nothing: no floor to keep.
             for k in Kind::ALL {
-                self.hwm[k as usize].raise_to(&state.slots[k as usize]);
+                self.hwm[k as usize] = Hwm::new(state.slots[k as usize].len());
+            }
+        } else {
+            for k in Kind::ALL {
+                self.hwm[k as usize].fold(&self.state.slots[k as usize], &state.slots[k as usize]);
             }
         }
         if !state.displaced.is_empty() {
