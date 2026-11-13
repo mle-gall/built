@@ -27,6 +27,7 @@ from __future__ import annotations
 import os
 import random
 
+import numpy as np
 import pytest
 from PySide6.QtGui import QVector3D as V
 
@@ -127,13 +128,22 @@ class Run:
     #: Corner counts of the rings add_face draws.
     ring_sizes = (1, 2, 3, 3, 4, 4, 5)
 
+    @staticmethod
+    def block(rng, n_points, n_edges, n_faces):
+        return crowded_block(rng, n_points=n_points, n_edges=n_edges,
+                             n_faces=n_faces)
+
     def __init__(self, seed, n_points=90, n_edges=60, n_faces=25):
         self.rng = rng = random.Random(seed)
-        blk = crowded_block(rng, n_points=n_points, n_edges=n_edges,
-                            n_faces=n_faces)
+        blk = self.block(rng, n_points, n_edges, n_faces)
         self.pm = python_mesh(blk)
         self.sm = M.Mesh()
-        S.become_store(self.sm, store_of_block(blk), [])
+        # The weld constants the app gives a store (_weld_args), so the
+        # probe distance is Qt's here too (fused on arm64).
+        pos, edges, flags, curves, layers, names, rings, sizes, counts = blk
+        S.become_store(self.sm, mod.MeshStore.from_block(
+            next(M._KEY_NAMESPACES), pos, edges, flags, curves, layers,
+            names, rings, sizes, counts, None, **S._weld_args()), [])
         assert type(self.pm) is M.Mesh and type(self.sm) is S.StoreMesh
         self.keys = Keys()
         pair_keys(self.keys, self.pm, self.sm)
@@ -593,9 +603,43 @@ class StitchRun(Run):
     # drops), and ends the sequence.
     ring_sizes = (1, 2, 3, 3, 3, 4, 4, 4, 5, 2, 3, 4, 3, 4, 4)
 
-    def __init__(self, seed, **kw):
+    def __init__(self, seed, clean=False, **kw):
         self.stitched = dict.fromkeys(_STITCH_OPS, 0)
+        self.clean = clean
+        if clean:
+            self.ring_sizes = (3, 3, 4, 4, 4, 5)
         super().__init__(seed, **kw)
+
+    def block(self, rng, n_points, n_edges, n_faces):
+        """The crowded block; ``clean``: without its rings of 1 and 2
+        corners and edges onto their own point (the self-loops that make
+        a weld refuse and end the sequence), so sequences run longer."""
+        blk = crowded_block(rng, n_points=n_points, n_edges=n_edges,
+                            n_faces=n_faces)
+        if not self.clean:
+            return blk
+        pos, edges, flags, curves, layers, names, rings, sizes, counts = blk
+        keep = edges[:, 0] != edges[:, 1]
+        # Rebuild ring by ring, faces keeping only rings of 3+ corners.
+        r, sz, ct = [], [], []
+        i = j = 0
+        for n_r in counts.tolist():
+            mine = []
+            for _ in range(n_r):
+                s_ = int(sizes[j])
+                ring = rings[i:i + s_].tolist()
+                i += s_
+                j += 1
+                if s_ >= 3 and len(set(ring)) == s_:
+                    mine.append(ring)
+            if mine:
+                ct.append(len(mine))
+                for ring in mine:
+                    sz.append(len(ring))
+                    r.extend(ring)
+        return (pos, edges[keep], flags[keep], curves[keep], layers[keep],
+                names, np.asarray(r, np.int64), np.asarray(sz, np.int64),
+                np.asarray(ct, np.int64))
 
     def compare(self):
         _drop_ghosts(self.pm)
@@ -816,7 +860,7 @@ class StitchRun(Run):
 
 
 def stitch_run(seed, n_ops, **kw):
-    r = StitchRun(seed, **kw)
+    r = StitchRun(seed, clean=seed % 2 == 1, **kw)
     for _ in range(n_ops):
         r.step()
         if type(r.sm) is not S.StoreMesh:
