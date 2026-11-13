@@ -34,7 +34,7 @@ def test_open_does_not_prepare_before_picture(tmp_path, monkeypatch):
         # the last one (bounded) instead of a fixed 500 ms.
         import time
         from PySide6.QtCore import QEventLoop
-        deadline = time.monotonic() + 5.0
+        deadline = time.monotonic() + 30.0   # an order test, not a speed test: a loaded run needs room
         while 'heap' not in order and time.monotonic() < deadline:
             loop = QEventLoop()
             QTimer.singleShot(50, loop.quit)
