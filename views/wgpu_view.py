@@ -92,8 +92,8 @@ class WgpuView(QWidget):
     def set_scene(self, scene, *, progress=None, opening=False):
         """Make ``scene`` resident. ``progress(fraction, text)`` reports the
         pack; ``opening`` (a document coming in, its bar still up) leaves
-        the work the first picture does not need — the snap index and the
-        big containers' edit boxes — until after it."""
+        the big containers' edit boxes until after the first picture. The
+        native snap build overlaps upload on a worker."""
         self._observe_tool_source()
         if opening:
             # What the window runs after the first picture (see above).
@@ -211,23 +211,15 @@ class WgpuView(QWidget):
                 from views.viewport import Viewport
                 for group in big:
                     self._container_boxes[group] = Viewport._compute_obb(group)
-        if opening:
-            # The snap index is built on a worker that holds the GIL for
-            # seconds (5–10 s on the ride): started now, it slowed the
-            # upload and the first frame. Hover works without it meanwhile;
-            # the window starts it once the picture is up (after_open).
-            previous = getattr(self, '_inference_future', None)
-            if previous is not None:
-                previous.cancel()
-                self._inference_future = None
-            self.inference_index = None
-            self.after_open.append(self._refresh_inference)
-        else:
+        # The batched native build releases the GIL, so it can overlap upload
+        # and the first frame. Full repacks also need a fresh index on edits.
+        if not opening:
             self.build_seconds = time.perf_counter()-start
         lo, hi = self.packed.world_bounds
         if self.source_viewport is None:
             self.camera.target = QVector3D(*((lo+hi)/2))
             self.camera.distance = max(float(np.linalg.norm(hi-lo))*1.4, 1.)
+        self._prepare_inference()
         if progress is not None:
             # The bar's repaint may present a frame, and a frame uploads a
             # dirty pack itself: then it is up already (2.5 s twice on the

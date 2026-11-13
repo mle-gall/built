@@ -9,6 +9,7 @@
 
 use numpy::{PyArray1, PyArray2, PyReadonlyArray2, PyReadonlyArray3, PyReadonlyArray1};
 use pyo3::prelude::*;
+use numpy::IntoPyArray;
 
 mod boxes;
 mod facegeom;
@@ -21,6 +22,7 @@ mod instances;
 mod occlusion;
 mod parity;
 mod weld;
+mod snap_build;
 
 #[pymodule]
 fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -45,6 +47,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<GlReplay>()?;
     m.add_class::<InstanceProto>()?;
     m.add_class::<InstanceSet>()?;
+    m.add_function(wrap_pyfunction!(snap_build::build_snap_index, m)?)?;
     Ok(())
 }
 
@@ -688,6 +691,7 @@ impl GlReplay {
 #[pyclass(frozen)]
 struct InstanceProto {
     inner: std::sync::Arc<instances::Proto>,
+    curves: Vec<Vec<[f64; 6]>>,
 }
 
 #[pymethods]
@@ -711,7 +715,14 @@ impl InstanceProto {
         let es: Vec<[[f64; 3]; 2]> = (0..ev.shape()[0]).map(|i| [
             [ev[[i, 0]], ev[[i, 1]], ev[[i, 2]]], [ev[[i, 3]], ev[[i, 4]], ev[[i, 5]]]]).collect();
         let inner = py.detach(|| instances::Proto::new(a, b, c, es));
-        Ok(Self { inner: std::sync::Arc::new(inner) })
+        Ok(Self { inner: std::sync::Arc::new(inner), curves: Vec::new() })
+    }
+
+    fn curve_segments<'py>(&self, py: Python<'py>) -> Vec<Bound<'py, PyArray2<f64>>> {
+        self.curves.iter().map(|curve| {
+            let flat: Vec<f64> = curve.iter().flatten().copied().collect();
+            numpy::ndarray::Array2::from_shape_vec((curve.len(), 6), flat).unwrap().into_pyarray(py)
+        }).collect()
     }
 
     fn __len__(&self) -> usize {

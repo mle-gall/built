@@ -537,3 +537,21 @@ def test_a_rebake_the_size_of_the_scene_falls_back_to_a_full_pack():
     for m in meshes:
         m.bump_revision()
     assert updates.diff(scene) is None
+
+
+def test_native_incremental_matches_full_rebuild():
+    from views.wgpu_inference import prepare
+    scene, updates = fixture_scene()
+    index = prepare(updates.packed, scene)
+    base = index.base
+    for vertex in list(scene.groups[0].mesh.vertices):
+        scene.groups[0].mesh.move_vertex(vertex, QVector3D(0, 0, 2))
+    ids, rows = updates.diff(scene)
+    updates.apply(ids, rows)
+    index.update(ids, updates.packed, [code for _, _, code in updates.changed])
+    fresh = prepare(updates.packed, scene)
+    assert index.base is base
+    rows = np.arange(len(updates.packed.instances), dtype=np.int64)
+    for a, b in zip(index.ray_cands(rows, (.25, .25, 4), (0., 0., -1.), 10.),
+                    fresh.ray_cands(rows, (.25, .25, 4), (0., 0., -1.), 10.)):
+        np.testing.assert_allclose(a, b)
