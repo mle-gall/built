@@ -1147,13 +1147,25 @@ def load_into(scene, path: Path, progress=None, *, include_links=True) -> None:
 
     # Mass object construction ahead — see formats.skp.apply_payload: the
     # generational GC re-scanning the growing heap can dominate big loads.
+    # The linked sources are read with it still off: once the host's
+    # millions of objects exist, a generation-1/2 pass is a walk of all of
+    # them, and two such passes fell inside the ride's link resolution
+    # (0.41 s in _rename_tags, 0.48 s in _populate, of 4.1 s; 2026-11-13).
+    # Nothing is lost by waiting: the window collects once the document
+    # shows (MainWindow.settle_heap).
     _gc_was_enabled = gc.isenabled()
     gc.disable()
     try:
         _load_into_inner(scene, path, progress)
+        _load_links(scene, path, include_links)
     finally:
         if _gc_was_enabled:
             gc.enable()
+
+
+def _load_links(scene, path: Path, include_links: bool) -> None:
+    """The second half of :func:`load_into`: the project file and the
+    linked sources of the document just read."""
     # Linked files: the copies are filled in from their sources. A source
     # that cannot be read leaves its copies empty — the document still opens
     # (scene.link_errors says which, for the window to report).
@@ -1529,15 +1541,20 @@ def _load_into_inner(scene, path: Path, progress=None) -> None:
         name = raw.get("name") or None
         if name:
             names.append(name)
+        # The stored uid goes in at construction: a fresh one drawn only to
+        # be overwritten cost one random uid per group of the document. Older
+        # documents without one get a fresh uid, as before.
+        uid = str(raw["uid"]) if raw.get("uid") else None
         if raw.get("xform") is not None and "proto" in raw:
             from PySide6.QtGui import QMatrix4x4
-            group = Group(proto_meshes[int(raw["proto"])], name=name)
+            group = Group(proto_meshes[int(raw["proto"])], name=name,
+                          uid=uid)
             vals = [float(x) for x in raw["xform"]]
             # data() is column-major; the constructor takes row-major.
             rm = [vals[col * 4 + row] for row in range(4) for col in range(4)]
             group.xform = QMatrix4x4(*rm)
         else:
-            group = Group(name=name)
+            group = Group(name=name, uid=uid)
             _load_mesh(group.mesh, raw, geom)
         if isinstance(raw.get("axes"), list) and len(raw["axes"]) == 16:
             from PySide6.QtGui import QMatrix4x4
@@ -1554,8 +1571,6 @@ def _load_into_inner(scene, path: Path, progress=None) -> None:
             group.text3d = dict(raw["text3d"])
         if isinstance(raw.get("ext"), dict):
             group.ext = raw["ext"]
-        if raw.get("uid"):
-            group.uid = str(raw["uid"])   # older documents keep the fresh one
         if raw.get("hidden"):
             group.hidden = True
         if raw.get("locked"):

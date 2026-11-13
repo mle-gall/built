@@ -14,17 +14,50 @@ from __future__ import annotations
 
 import copy
 import itertools
+import os
 
 from core.mesh import Mesh
 
 _counter = itertools.count(1)
 
 
+# Fresh uids come from a pool filled by one ``os.urandom`` call: one
+# ``uuid4`` (one urandom syscall) per group was 0.26 s of opening the ride,
+# whose 104k groups each take one. Filled by ``_refill_uids``, emptied in a
+# forked child so two processes never hand out the same pooled bytes.
+_UID_POOL: list = []
+_UID_BATCH = 4096
+
+
+def _refill_uids() -> None:
+    """Refill the pool with ``_UID_BATCH`` uids of the very form
+    ``uuid4().hex[:16]`` had: 16 lowercase hex digits, 64 bits of which
+    the 13th digit is the version nibble «4» (a uid read by an older build
+    is indistinguishable from one it made)."""
+    raw = os.urandom(8 * _UID_BATCH).hex()
+    _UID_POOL.extend(raw[i:i + 12] + "4" + raw[i + 13:i + 16]
+                     for i in range(0, len(raw), 16))
+
+
+def _drop_uid_pool() -> None:
+    _UID_POOL.clear()
+
+
+if hasattr(os, "register_at_fork"):
+    os.register_at_fork(after_in_child=_drop_uid_pool)
+
+
 def new_uid() -> str:
     """A fresh group identity: random, so two documents merged (a ``.igz``
     imported as a component) never collide."""
-    import uuid
-    return uuid.uuid4().hex[:16]
+    # list.pop is atomic under the GIL: two threads never get the same one.
+    # A thread finding the pool empty refills it; a second refill racing it
+    # only adds more fresh uids.
+    while True:
+        try:
+            return _UID_POOL.pop()
+        except IndexError:
+            _refill_uids()
 
 
 def _highest_group_number(names) -> int:

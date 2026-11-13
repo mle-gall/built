@@ -244,7 +244,7 @@ def load_source(path, select=None, *, include_nested=True):
     return comp, tags, materials
 
 
-def _relabel_deferred(mesh, rename) -> bool:
+def _relabel_deferred(mesh, rename, shared=None) -> bool:
     """Relabel a mesh the document left deferred (``core.mesh.DeferredMesh``)
     in its tables — the face-attribute rows and the edge tag names —
     without building it: touching ``mesh.faces`` would build all of them,
@@ -253,37 +253,61 @@ def _relabel_deferred(mesh, rename) -> bool:
     meshes may share them), and what was derived from them is dropped: the
     lazy plan, and the drawing cache's key and bake (the key hashes the
     tables, so the bake is rebuilt, never shown stale). False for a mesh
-    that is already built."""
+    that is already built.
+
+    ``shared`` (a dict the caller keeps for one ``rename``) hands meshes
+    that had the same table the same renamed one: tables are only ever
+    replaced, so sharing them is safe, and the facilities model's 4353
+    deferred meshes have 2726 distinct tables. It also keeps the original
+    tables alive, so their ``id`` stays a valid key while it lives."""
     from core.mesh import DeferredMesh
     if type(mesh) is not DeferredMesh:
         return False
     import numpy as np
+    if shared is None:
+        shared = {}
     d = mesh.__dict__
     src = dict(d["_deferred_source"])
     meta = dict(src.get("meta") or {})
     untagged = rename(None)
     # Faces: each row of the attribute table, and a row for the faces that
     # had none (they were on the default tag).
-    table = [dict(row) for row in (meta.get("face_attrs") or [])]
-    for row in table:
-        row["layer"] = rename(row.get("layer"))
     nfaces = len(src.get("counts") if src.get("counts") is not None else ())
     fa = src.get("face_attr")
     fa = (np.full(nfaces, -1, dtype=np.int32) if fa is None
           else np.array(fa, copy=True))
-    if fa.size and (fa < 0).any():
-        table.append({"layer": untagged})
+    neg = bool(fa.size and (fa < 0).any())
+    old = meta.get("face_attrs") or []
+    key = ("f", id(old), neg)
+    hit = shared.get(key)
+    if hit is None:
+        table = [dict(row) for row in old]
+        for row in table:
+            row["layer"] = rename(row.get("layer"))
+        if neg:
+            table.append({"layer": untagged})
+        hit = shared[key] = (old, table)
+    table = hit[1]
+    if neg:
         fa[fa < 0] = len(table) - 1
     src["face_attr"] = fa
     meta["face_attrs"] = table
     # Edges: the name table, and a name for the untagged ones.
-    names = [rename(n) for n in (meta.get("edge_layers") or [])]
     nedges = len(src["edges"]) if src.get("edges") is not None else 0
     lay = src.get("layers")
     lay = (np.full(nedges, -1, dtype=np.int32) if lay is None
            else np.array(lay, copy=True))
-    if lay.size and (lay < 0).any():
-        names.append(untagged)
+    neg = bool(lay.size and (lay < 0).any())
+    old = meta.get("edge_layers") or []
+    key = ("e", id(old), neg)
+    hit = shared.get(key)
+    if hit is None:
+        names = [rename(n) for n in old]
+        if neg:
+            names.append(untagged)
+        hit = shared[key] = (old, names)
+    names = hit[1]
+    if neg:
         lay[lay < 0] = len(names) - 1
     src["layers"] = lay
     meta["edge_layers"] = names
@@ -390,13 +414,14 @@ def _rename_tags(comp, path) -> None:
             out = names[name] = tag_name(path, name)
         return out
     seen = set()
+    shared: dict = {}          # renamed tables, shared (_relabel_deferred)
     for g, _m in iter_placements(comp):
         if g is not comp:
             assign_layer(g, rename(layer_of(g)))
         if id(g.mesh) in seen:
             continue
         seen.add(id(g.mesh))
-        if _relabel_deferred(g.mesh, rename):
+        if _relabel_deferred(g.mesh, rename, shared):
             continue
         for f in g.mesh.faces:
             assign_layer(f, rename(layer_of(f)))
@@ -545,20 +570,68 @@ def validate_select(select):
         validate_filter(select['filter'])
 
 
+# uuid.NAMESPACE_URL's bytes, then the name's prefix: what uuid5 hashes.
+_UID5_PREFIX = (b"\x6b\xa7\xb8\x11\x9d\xad\x11\xd1\x80\xb4\x00\xc0\x4f\xd4\x30\xc8"
+                + b"ingetrazo:link:v1:")
+
+
 def stable_uid(placement_uid, source_uid):
-    """Versioned, platform-independent UUID5 mapping; paths never participate."""
-    import uuid
-    return uuid.uuid5(uuid.NAMESPACE_URL, 'ingetrazo:link:v1:' + placement_uid + ':' + source_uid).hex[:16]
+    """Versioned, platform-independent UUID5 mapping; paths never participate.
+
+    Exactly ``uuid.uuid5(NAMESPACE_URL, 'ingetrazo:link:v1:' + placement_uid
+    + ':' + source_uid).hex[:16]`` — these ids are saved and named by scenes,
+    so they may never change — computed with ``hashlib`` directly: building
+    a ``UUID`` object per cloned group was a good part of 0.6 s of opening
+    the ride. The first 8 bytes of the SHA-1 are kept, with the version
+    nibble (13th hex digit) set to 5 as ``uuid5`` does; the variant bits
+    fall outside these 16 digits."""
+    from hashlib import sha1
+    h = sha1(_UID5_PREFIX + (placement_uid + ':' + source_uid).encode()).hexdigest()
+    return h[:12] + '5' + h[13:16]
+
+
+def _clone_shell(group):
+    """A shallow copy of ``group``: what ``copy.copy`` gives, without its
+    generic reduce/reconstruct route (a few µs per call on 100k groups).
+    Slots the original never set stay unset."""
+    cls = type(group)
+    if cls is not _Group():
+        from copy import copy
+        return copy(group)
+    out = object.__new__(cls)
+    for name in _GROUP_SLOTS:
+        try:
+            value = getattr(group, name)
+        except AttributeError:
+            continue
+        setattr(out, name, value)
+    return out
+
+
+_GROUP_CLASS = None
+_GROUP_SLOTS = ()
+
+
+def _Group():
+    global _GROUP_CLASS, _GROUP_SLOTS
+    if _GROUP_CLASS is None:
+        from core.group import Group
+        _GROUP_CLASS, _GROUP_SLOTS = Group, Group.__slots__
+    return _GROUP_CLASS
 
 
 def _populate(placement, source):
-    from copy import copy, deepcopy
+    from copy import deepcopy
     from PySide6.QtGui import QMatrix4x4
     def clone(group, parent):
-        result = copy(group)
+        result = _clone_shell(group)
         result.uid = stable_uid(placement.uid, group.uid)
-        result.ext = deepcopy(group.ext)
-        result.ifc = deepcopy(group.ifc)
+        # Most cloned groups carry neither: skip deepcopy's machinery for
+        # None (anything else, even an empty dict, is still copied).
+        ext = group.ext
+        result.ext = None if ext is None else deepcopy(ext)
+        ifc = group.ifc
+        result.ifc = None if ifc is None else deepcopy(ifc)
         if result.ifc:
             for opening in result.ifc.get('openings', []):
                 if opening.get('group_uid'):
