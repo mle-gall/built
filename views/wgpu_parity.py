@@ -99,5 +99,13 @@ def preview_mesh(faces, edges=()):
         normal = face.normal().toTuple()
         rgba = [*np.asarray(np.clip(np.array(color[:3])*255, 0, 255), np.uint8), max(1, round(attrs.get('opacity', 1)*255))]
         triangles.extend((p.toTuple(), normal, rgba) for tri in face.triangulate() for p in tri)
-    lines = [(p.toTuple(), (0, 0, 1), (33, 43, 59, 255)) for edge in edges for p in edge]
+    # An edge is (a, b) in the dark edge colour or (a, b, rgba) in its own:
+    # the rubber band keeps the axis/lock colour GL gives it.
+    lines = []
+    for edge in edges:
+        rgba = (33, 43, 59, 255)
+        if len(edge) > 2:
+            c = tuple(edge[2]) + (1.0,) * (4 - len(edge[2]))
+            rgba = tuple(int(v) for v in np.clip(np.array(c[:4]) * 255, 0, 255).round())
+        lines.extend((p.toTuple(), (0, 0, 1), rgba) for p in edge[:2])
     return raw(np.array(triangles, VERTEX)), raw(np.array(lines, VERTEX))
