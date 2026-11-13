@@ -13,9 +13,12 @@
 //! elements known by `(slot, generation)` keys so nothing outside needs an
 //! object to name one.
 //!
-//! Not wired into the app: `core/mesh.py` is untouched. Step 3 ports the
+//! Wired into the app by `core/store_mesh.py` (port step 1): deferred and
+//! bulk-built meshes live here, snapshots are this store's; every op not
+//! ported yet turns the mesh into Python objects first. Step 3 ports the
 //! kernel onto this, op by op, with the Python suite as the oracle.
 
+pub mod access;
 pub mod build;
 pub mod cow;
 pub mod edit;

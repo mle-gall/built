@@ -195,20 +195,140 @@ impl PyMeshStore {
     /// face_attr (one remap pass for all of them).
     fn arrays<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let d = py.detach(|| self.inner.dense());
-        let out = PyDict::new(py);
-        out.set_item("pos", rows3(py, &d.pos))?;
-        let eflat: Vec<i64> = d.edges.iter().flat_map(|e| e.iter().copied()).collect();
-        out.set_item("edges", Array2::from_shape_vec((d.edges.len(), 2), eflat).unwrap().into_pyarray(py))?;
-        out.set_item("flags", d.flags.into_pyarray(py))?;
-        out.set_item("curve", d.curve.into_pyarray(py))?;
-        out.set_item("layer", d.layer.into_pyarray(py))?;
-        out.set_item("corners", d.corners.into_pyarray(py))?;
-        out.set_item("ring_sizes", d.ring_sizes.into_pyarray(py))?;
-        out.set_item("ring_counts", d.ring_counts.into_pyarray(py))?;
-        out.set_item("ef_start", d.ef_start.into_pyarray(py))?;
-        out.set_item("ef_face", d.ef_face.into_pyarray(py))?;
-        out.set_item("face_attr", d.face_attr.into_pyarray(py))?;
-        Ok(out)
+        dense_dict(py, d)
+    }
+
+    /// Which snapshots are this store's own (`restore` keeps their keys).
+    #[getter]
+    fn lineage(&self) -> u64 {
+        self.inner.lineage
+    }
+
+    /// Live keys of `kind` in list order, as Python ints (the facade's
+    /// `mesh.faces` iteration).
+    fn keys(&self, kind: &str) -> PyResult<Vec<u128>> {
+        let k = kind_of(kind)?;
+        Ok(self.inner.live_slots(k).into_iter().map(|s| self.inner.key(k, s)).collect())
+    }
+
+    /// `Vertex.position` as a float64 triple (holding float32 values).
+    fn vertex_position(&self, key: u128) -> PyResult<(f64, f64, f64)> {
+        let v = slot_of(&self.inner, Kind::Vertex, key)?;
+        let p = self.inner.state.vpos.get(v as usize);
+        Ok((p[0], p[1], p[2]))
+    }
+
+    /// `Vertex.edges` as keys (disk-cycle order: most recently linked
+    /// first; Python's is a set).
+    fn vertex_edges(&self, key: u128) -> PyResult<Vec<u128>> {
+        let v = slot_of(&self.inner, Kind::Vertex, key)?;
+        Ok(self.inner.edges_at(v).map(|e| self.inner.key(Kind::Edge, e)).collect())
+    }
+
+    /// `(v0, v1, flags, curve (-1 none), layer name or None)` of an edge.
+    fn edge(&self, key: u128) -> PyResult<(u128, u128, u8, i64, Option<String>)> {
+        let e = slot_of(&self.inner, Kind::Edge, key)?;
+        let st = &self.inner.state;
+        let [a, b] = *st.ends.get(e as usize);
+        let l = *st.elayer.get(e as usize);
+        Ok((
+            self.inner.key(Kind::Vertex, a),
+            self.inner.key(Kind::Vertex, b),
+            *st.eflags.get(e as usize),
+            *st.ecurve.get(e as usize),
+            if l == super::keys::NONE { None } else { Some(st.layers[l as usize].clone()) },
+        ))
+    }
+
+    /// `(v0, v1)` keys of an edge.
+    fn edge_ends(&self, key: u128) -> PyResult<(u128, u128)> {
+        let e = slot_of(&self.inner, Kind::Edge, key)?;
+        let [a, b] = *self.inner.state.ends.get(e as usize);
+        Ok((self.inner.key(Kind::Vertex, a), self.inner.key(Kind::Vertex, b)))
+    }
+
+    /// `Edge.faces` as keys, in order, with multiplicity.
+    fn edge_faces(&self, key: u128) -> PyResult<Vec<u128>> {
+        let e = slot_of(&self.inner, Kind::Edge, key)?;
+        Ok(self.inner.edge_faces(e).iter().map(|&f| self.inner.key(Kind::Face, f)).collect())
+    }
+
+    /// A face's rings as vertex keys (outer first, then holes).
+    fn face_rings(&self, key: u128) -> PyResult<Vec<Vec<u128>>> {
+        let f = slot_of(&self.inner, Kind::Face, key)?;
+        Ok(self
+            .inner
+            .face_rings(f)
+            .into_iter()
+            .map(|r| r.into_iter().map(|v| self.inner.key(Kind::Vertex, v)).collect())
+            .collect())
+    }
+
+    /// A face's rings as positions: what `normal()` / `area()` /
+    /// `vertices` read, in one call.
+    fn face_positions(&self, key: u128) -> PyResult<Vec<Vec<(f64, f64, f64)>>> {
+        let f = slot_of(&self.inner, Kind::Face, key)?;
+        let st = &self.inner.state;
+        Ok(self
+            .inner
+            .face_rings(f)
+            .into_iter()
+            .map(|r| {
+                r.into_iter()
+                    .map(|v| {
+                        let p = st.vpos.get(v as usize);
+                        (p[0], p[1], p[2])
+                    })
+                    .collect()
+            })
+            .collect())
+    }
+
+    /// `(attribute-table index or -1, face flags)`.
+    fn face_info(&self, key: u128) -> PyResult<(i64, u8)> {
+        let f = slot_of(&self.inner, Kind::Face, key)?;
+        let st = &self.inner.state;
+        Ok((*st.fattr.get(f as usize) as i64 - 1, *st.fflags.get(f as usize)))
+    }
+
+    /// `Mesh.find_edge(v0, v1)`: the edge key, or None.
+    fn find_edge(&self, a: u128, b: u128) -> PyResult<Option<u128>> {
+        let va = slot_of(&self.inner, Kind::Vertex, a)?;
+        let vb = slot_of(&self.inner, Kind::Vertex, b)?;
+        Ok(self.inner.find_edge(va, vb).map(|e| self.inner.key(Kind::Edge, e)))
+    }
+
+    /// `Edge.soft` / `hidden` as format-3 bits (soft 1, hidden 2).
+    fn set_edge_flags(&mut self, key: u128, flags: u8) -> PyResult<u64> {
+        let e = slot_of(&self.inner, Kind::Edge, key)?;
+        Ok(self.inner.set_edge_flags(e, flags))
+    }
+
+    /// `Edge.curve` (None: no curve).
+    fn set_edge_curve(&mut self, key: u128, curve: Option<i64>) -> PyResult<u64> {
+        let e = slot_of(&self.inner, Kind::Edge, key)?;
+        Ok(self.inner.set_edge_curve(e, curve.unwrap_or(-1)))
+    }
+
+    /// `Edge.layer` (a tag key, or None).
+    fn set_edge_layer(&mut self, key: u128, layer: Option<String>) -> PyResult<u64> {
+        let e = slot_of(&self.inner, Kind::Edge, key)?;
+        Ok(self.inner.set_edge_layer(e, layer.as_deref()))
+    }
+
+    /// A face's attribute-table index (-1: no attrs).
+    fn set_face_attr(&mut self, key: u128, index: i64) -> PyResult<u64> {
+        let f = slot_of(&self.inner, Kind::Face, key)?;
+        if index < -1 || index >= u32::MAX as i64 {
+            return Err(PyValueError::new_err("attribute index out of range"));
+        }
+        Ok(self.inner.set_face_attr(f, (index + 1) as u32))
+    }
+
+    /// A face's flags (interior = 1).
+    fn set_face_flags(&mut self, key: u128, flags: u8) -> PyResult<u64> {
+        let f = slot_of(&self.inner, Kind::Face, key)?;
+        Ok(self.inner.set_face_flags(f, flags))
     }
 
     /// Vertex positions (V, 3) float64, list order.
@@ -303,18 +423,7 @@ impl PyMeshStore {
     /// The weld registry as `(cells (N, 3) int64, vertex list index (N,))`,
     /// sorted by cell.
     fn registry<'py>(&self, py: Python<'py>) -> (Bound<'py, PyArray2<i64>>, Bound<'py, PyArray1<i64>>) {
-        let dv = self.inner.state.order[0].dense_of_slot(&self.inner.state.slots[0]);
-        let mut rows: Vec<([i64; 3], i64)> = self
-            .inner
-            .state
-            .registry
-            .iter()
-            .map(|(c, &v)| ([c.0, c.1, c.2], dv[v as usize] as i64))
-            .collect();
-        rows.sort_unstable();
-        let cells: Vec<[i64; 3]> = rows.iter().map(|r| r.0).collect();
-        let ids: Vec<i64> = rows.iter().map(|r| r.1).collect();
-        (rows3(py, &cells), ids.into_pyarray(py))
+        registry_arrays(py, &self.inner)
     }
 
     /// `Mesh._displaced` as `{cell: [vertex list index, ...]}`.
@@ -391,11 +500,110 @@ impl PyMeshStore {
     }
 }
 
+
+fn dense_dict<'py>(py: Python<'py>, d: super::read::Dense) -> PyResult<Bound<'py, PyDict>> {
+    let out = PyDict::new(py);
+    out.set_item("pos", rows3(py, &d.pos))?;
+    let eflat: Vec<i64> = d.edges.iter().flat_map(|e| e.iter().copied()).collect();
+    out.set_item("edges", Array2::from_shape_vec((d.edges.len(), 2), eflat).unwrap().into_pyarray(py))?;
+    out.set_item("flags", d.flags.into_pyarray(py))?;
+    out.set_item("curve", d.curve.into_pyarray(py))?;
+    out.set_item("layer", d.layer.into_pyarray(py))?;
+    out.set_item("corners", d.corners.into_pyarray(py))?;
+    out.set_item("ring_sizes", d.ring_sizes.into_pyarray(py))?;
+    out.set_item("ring_counts", d.ring_counts.into_pyarray(py))?;
+    out.set_item("ef_start", d.ef_start.into_pyarray(py))?;
+    out.set_item("ef_face", d.ef_face.into_pyarray(py))?;
+    out.set_item("face_attr", d.face_attr.into_pyarray(py))?;
+    out.set_item("face_flags", d.face_flags.into_pyarray(py))?;
+    Ok(out)
+}
+
+fn registry_arrays<'py>(py: Python<'py>, st: &Store) -> (Bound<'py, PyArray2<i64>>, Bound<'py, PyArray1<i64>>) {
+    let dv = st.state.order[0].dense_of_slot(&st.state.slots[0]);
+    let mut rows: Vec<([i64; 3], i64)> =
+        st.state.registry.iter().map(|(c, &v)| ([c.0, c.1, c.2], dv[v as usize] as i64)).collect();
+    rows.sort_unstable();
+    let cells: Vec<[i64; 3]> = rows.iter().map(|r| r.0).collect();
+    let ids: Vec<i64> = rows.iter().map(|r| r.1).collect();
+    (rows3(py, &cells), ids.into_pyarray(py))
+}
+
+fn slot_of(st: &Store, kind: Kind, key: u128) -> PyResult<u32> {
+    st.slot(kind, key).ok_or_else(|| PyKeyError::new_err(key))
+}
+
+/// A read-only store over a snapshot's state (shares every chunk).
+fn reader(snap: &Snapshot) -> Store {
+    let mut st = Store::empty(snap.state.ns, Weld::default());
+    st.state = snap.state.clone();
+    st.lineage = snap.lineage;
+    st
+}
+
 #[pymethods]
 impl PyStoreSnapshot {
     #[getter]
     fn namespace(&self) -> u64 {
         self.inner.state.ns
+    }
+
+    #[getter]
+    fn lineage(&self) -> u64 {
+        self.inner.lineage
+    }
+
+    /// `capture_state() == other` between two snapshots of one store:
+    /// chunk pointers first, content only where they differ.
+    fn same_as(&self, other: &PyStoreSnapshot) -> bool {
+        self.inner.lineage == other.inner.lineage && self.inner.state.same_as(&other.inner.state)
+    }
+
+    /// Live keys of `kind` in the snapshot, list order, as ints.
+    fn keys(&self, kind: &str) -> PyResult<Vec<u128>> {
+        let k = kind_of(kind)?;
+        let r = reader(&self.inner);
+        Ok(r.live_slots(k).into_iter().map(|s| r.key(k, s)).collect())
+    }
+
+    /// Whether the snapshot holds a live element under `key`.
+    fn has(&self, key: u128) -> bool {
+        let r = reader(&self.inner);
+        match super::keys::split_key(key) {
+            Some((_, k, _, _)) => r.slot(k, key).is_some(),
+            None => false,
+        }
+    }
+
+    /// The `Plan` arrays of the snapshot (see `MeshStore.arrays`).
+    fn arrays<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        let r = reader(&self.inner);
+        let d = py.detach(|| r.dense());
+        dense_dict(py, d)
+    }
+
+    fn layer_names(&self) -> Vec<String> {
+        self.inner.state.layers.as_ref().clone()
+    }
+
+    /// The snapshot's weld registry, as `MeshStore.registry`.
+    fn registry<'py>(&self, py: Python<'py>) -> (Bound<'py, PyArray2<i64>>, Bound<'py, PyArray1<i64>>) {
+        registry_arrays(py, &reader(&self.inner))
+    }
+
+    /// `(attribute-table index or -1, face flags)` in the snapshot.
+    fn face_info(&self, key: u128) -> PyResult<(i64, u8)> {
+        let r = reader(&self.inner);
+        let f = slot_of(&r, Kind::Face, key)?;
+        Ok((*r.state.fattr.get(f as usize) as i64 - 1, *r.state.fflags.get(f as usize)))
+    }
+
+    /// A vertex's position in the snapshot.
+    fn vertex_position(&self, key: u128) -> PyResult<(f64, f64, f64)> {
+        let r = reader(&self.inner);
+        let v = slot_of(&r, Kind::Vertex, key)?;
+        let p = r.state.vpos.get(v as usize);
+        Ok((p[0], p[1], p[2]))
     }
 
     fn counts(&self) -> (usize, usize, usize) {

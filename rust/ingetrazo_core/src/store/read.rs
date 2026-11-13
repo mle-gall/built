@@ -25,6 +25,7 @@ pub struct Dense {
     pub ef_start: Vec<i64>,
     pub ef_face: Vec<i64>,
     pub face_attr: Vec<i64>,
+    pub face_flags: Vec<u8>,
 }
 
 impl Store {
@@ -66,6 +67,7 @@ impl Store {
                 c += size;
             }
             d.face_attr.push(*st.fattr.get(f as usize) as i64 - 1);
+            d.face_flags.push(*st.fflags.get(f as usize));
         }
         d
     }
