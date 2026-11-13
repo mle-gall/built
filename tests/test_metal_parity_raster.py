@@ -51,7 +51,7 @@ def test_sun_matches_gl_and_can_be_disabled(monkeypatch):
 def test_native_api_available():
     from ingetrazo_render import Renderer
     for name in ('set_preview_mesh','set_face_marks','set_suppressed_faces',
-                 'set_profile_exclusions','set_hidden_geometry'):
+                 'set_profile_exclusions','set_hidden_geometry','set_lines'):
         assert hasattr(Renderer, name)
 
 
@@ -156,6 +156,42 @@ def test_preview_and_face_marks_are_depth_tested(native,aa):
     assert np.count_nonzero(marked[:,:,2]>original[:,:,2])>20
     native.set_face_marks(empty)
     np.testing.assert_array_equal(original,capture(native))
+
+
+@pytest.mark.parametrize('aa',[False,True])
+def test_scaffold_lines_are_depth_tested_and_dashed(native,aa):
+    """The edit box and guides (``lines.rs``): hidden behind a face, drawn
+    in front of it and on it (the edges' bias), dashed in screen pixels."""
+    from views.wgpu_lines import segments
+    upload(native,255); native.set_antialias(aa)
+    native.set_style(dict(sky=False,edges=False))
+    original=capture(native)
+    def line(z,dash=0.,y=0.):
+        data=segments([[[-.7,y,z],[.7,y,z]]],(0,255,0,255),3.,dash)
+        native.set_lines('test',data.view(np.uint8).ravel())
+        return capture(native)
+    green=lambda rgba: rgba[:,:,1].astype(int)>150
+    behind=line(-.2)                          # between the red and blue quads
+    np.testing.assert_array_equal(original,behind)
+    front=line(.2)
+    assert green(front)[30:34,12:52].any(axis=0).all(), 'solid line spans the face'
+    on_face=line(0.)
+    assert green(on_face)[30:34,12:52].any(axis=0).all(), 'a line on a face wins LEQUAL'
+    dashed=green(line(.2,dash=4.))[30:34,10:54].any(axis=0)
+    runs=np.flatnonzero(np.diff(dashed.astype(int)))
+    assert 8<len(runs), 'on/off runs along the line'
+    assert np.all(np.diff(runs)>=2) and np.all(np.diff(runs)<=6)
+    # Sheet captures never carry scaffolding.
+    from PySide6.QtGui import QMatrix4x4
+    view=QMatrix4x4(); view.translate(0,0,-3)
+    proj=QMatrix4x4(); proj.ortho(-1,1,-1,1,.1,10)
+    style=dict(sky=False,edges=False)
+    sheet=bytes(native.render_image(64,64,list(view.data()),list(proj.data()),style))
+    native.set_lines('test',np.zeros(0,np.uint8))
+    assert sheet==bytes(native.render_image(64,64,list(view.data()),list(proj.data()),style))
+    np.testing.assert_array_equal(original,capture(native))
+    with pytest.raises(ValueError): native.set_lines('test',np.zeros(39,np.uint8))
+    assert dict(native.line_counts())['test']==0
 
 
 def test_shadow_toggle_and_invalid_payload(native):

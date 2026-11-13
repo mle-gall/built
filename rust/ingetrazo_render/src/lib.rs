@@ -4,6 +4,7 @@ mod overlay;
 mod axes;
 mod sections;
 mod preview;
+mod lines;
 mod sun;
 mod textures;
 // R-look: isolated style and background passes.
@@ -92,6 +93,7 @@ struct Renderer {
     axes: axes::Axes,
     sections: sections::Sections,
     preview: preview::Preview,
+    lines: lines::Lines,
     face_marks: preview::Preview,
     sun: sun::Sun,
     ghost_geometry: preview::Preview,
@@ -512,6 +514,7 @@ impl Renderer {
             overlay: overlay::Overlay::new(&device, format),
             axes: axes::Axes::new(&device, format, &camera),
             sections: sections::Sections::new(&device, format, &camera),
+            lines: lines::Lines::new(&device, format, &camera),
             depth: texture(&device, w, h, wgpu::TextureFormat::Depth32Float),
             offscreen: texture(&device, w, h, format),
             ids: texture(&device, w, h, wgpu::TextureFormat::R32Uint),
@@ -1067,6 +1070,13 @@ impl Renderer {
     fn set_preview_mesh(&mut self, triangles: PyReadonlyArray1<'_, u8>, edges: PyReadonlyArray1<'_, u8>) -> PyResult<()> {
         self.preview.upload(&self.device, triangles.as_slice()?, edges.as_slice()?).map_err(PyValueError::new_err)
     }
+    /// Depth-tested world-space lines in a named slot (``lines.rs``):
+    /// 40-byte segments ``a, b (3 f32), RGBA8, width, dash, gap (f32
+    /// physical pixels)``. An empty array empties the slot.
+    fn set_lines(&mut self, slot: &str, segments: PyReadonlyArray1<'_, u8>) -> PyResult<()> {
+        self.lines.upload(&self.device, &self.queue, slot, segments.as_slice()?).map_err(PyValueError::new_err)
+    }
+    fn line_counts(&self) -> Vec<(String, u32)> { self.lines.counts() }
     /// Loose-face marks only; groups use group_selection_edges.
     fn set_face_marks(&mut self, triangles: PyReadonlyArray1<'_, u8>) -> PyResult<()> {
         self.face_marks.upload(&self.device, triangles.as_slice()?, &[]).map_err(PyValueError::new_err)
@@ -1208,6 +1218,8 @@ impl Renderer {
         if let (Some(rows), Some(s)) = (temporary_rows, &self.scene) {
             self.queue.write_buffer(&s.inst, 0, rows);
         }
+        // Scaffolding (edit box, guides) never belongs in a sheet capture.
+        let lines_enabled = std::mem::replace(&mut self.lines.enabled, false);
         let result = (|| {
             self.set_style(style)?;
             self.set_camera(view, projection)?;
@@ -1225,6 +1237,7 @@ impl Renderer {
         self.ao = old_ao;
         self.sun = old_sun;
         self.overlay = old_overlay;
+        self.lines.enabled = lines_enabled;
         self.offscreen = old_color;
         self.depth = old_depth;
         self.ids = old_ids;
@@ -1563,7 +1576,7 @@ impl Renderer {
             drop(pass);
             }
             if msaa && !self.pick_pending {
-                self.aa.draw(&mut e, &color, s, self.style, self.edges, self.look.data[6][0] > 0., self.multi, self.queries.as_ref(), Some(edge_only), self.sections.count > 0 || self.preview.active() || self.face_marks.active() || self.ghost_geometry.active() || self.ghost_objects.active() || (self.look.data[9][0] > 0. && self.material_transparency), &self.axes);
+                self.aa.draw(&mut e, &color, s, self.style, self.edges, self.look.data[6][0] > 0., self.multi, self.queries.as_ref(), Some(edge_only), self.sections.count > 0 || self.preview.active() || self.face_marks.active() || self.ghost_geometry.active() || self.ghost_objects.active() || self.lines.active() || (self.look.data[9][0] > 0. && self.material_transparency), &self.axes);
             }
             if !edge_only && self.sun.enabled && self.style != 1 && self.style != 4 {
                 if msaa { self.aa.resolve_depth(&self.device, &mut e, &depth, None); }
@@ -1606,6 +1619,8 @@ impl Renderer {
                 else { ghost.draw(&mut e,&color,&depth,None); }
             }
         }
+        if msaa { self.lines.draw(&mut e, &self.aa.color_view(), &self.aa.depth_view(), Some(&color)); }
+        else { self.lines.draw(&mut e, &color, &depth, None); }
         // Material OIT reads opaque depth and never writes it. AO has already
         // completed on opaque geometry; glass cannot generate contact darkness.
         if self.look.data[9][0] > 0. && self.material_transparency && self.style != 1 && self.style != 4 {

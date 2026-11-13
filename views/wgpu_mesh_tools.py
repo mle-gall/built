@@ -284,7 +284,8 @@ class MeshToolAccess:
         layout = draw_annotations(painter, self.scene, self.camera,
             (painter.device().width()/painter.device().devicePixelRatioF(),
              painter.device().height()/painter.device().devicePixelRatioF()), occluded=self._is_occluded,
-            hover=self._hover_entity)
+            hover=self._hover_entity,
+            guide_lines=not hasattr(getattr(self.view, 'renderer', None), 'set_lines'))
         draw_tool_feedback(painter, self, layout)
         snap = self.last_snap
         if snap is not None and getattr(snap, 'kind', None) and hasattr(snap, 'color'):

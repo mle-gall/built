@@ -494,7 +494,16 @@ class WgpuView(QWidget):
         # GL; only a renderer without them gets overlay lines.
         boxes = ([] if hasattr(self.renderer, 'set_preview_mesh')
                  else self._selection_box_primitives())
-        primitives = (self._edit_box_primitives() + boxes
+        # The edit box, guides and selected hidden edges go to the native
+        # line pass, depth-tested as GL draws them; only a renderer
+        # without it paints the box in the overlay (no depth there).
+        if hasattr(self.renderer, 'set_lines'):
+            from views.wgpu_lines import sync as sync_lines
+            sync_lines(self)
+            edit_box = []
+        else:
+            edit_box = self._edit_box_primitives()
+        primitives = (edit_box + boxes
                       + billboard_outline_primitives(self) + self.overlay_primitives)
         if annotations or primitives or section_widgets or getattr(self, "_had_overlay", False):
             from views.wgpu_overlay import rasterize, pixels

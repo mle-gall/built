@@ -20,9 +20,10 @@ Pass an occluded(world_point)->bool callback ONLY if valid for that capture
 camera (never a stale live pick buffer). Default is visible, explicitly.
 
 Document guide dashes reuse GL's world-space spacing/reach and colors; guide
-points use GL's [14,10] pen. The overlay has NO depth attachment: guide lines
-cannot match GL depth occlusion. Dimensions/leaders support the optional CPU
-occlusion callback. P2 can move guide segments to a depth-tested native pass.
+points use GL's [14,10] pen. The overlay has NO depth attachment, so the live
+view sends guide lines to the native depth-tested line pass instead
+(``views/wgpu_lines.py``, ``guide_lines=False``); exports still paint them
+here. Dimensions/leaders support the optional CPU occlusion callback.
 Live tools keep their own draw_overlay hook (Walk crosshair, Flip planes —
 the reference Flip tool draws planes, not arrows). Export excludes these and
 lock/snap/selection feedback. annotations_only excludes guides/section/geodata.
@@ -145,15 +146,19 @@ def draw_guide_lines(painter, layout):
 
 
 def draw_annotations(painter, scene, camera, logical_size, *, annotations_only=False,
-                     occluded=None, hover=None):
-    """Paint document annotations; return the isolated AnnotationLayout for snaps."""
+                     occluded=None, hover=None, guide_lines=True):
+    """Paint document annotations; return the isolated AnnotationLayout for snaps.
+
+    ``guide_lines=False`` leaves the guide lines to the native depth-tested
+    line pass (``views/wgpu_lines.py``); their points stay painted here."""
     layout = AnnotationLayout(scene, camera, logical_size, occluded=occluded, hover=hover)
     painter.save()
     try:
         painter.setRenderHint(QPainter.Antialiasing)
         painter.setRenderHint(QPainter.TextAntialiasing)
         if not annotations_only:
-            draw_guide_lines(painter, layout)
+            if guide_lines:
+                draw_guide_lines(painter, layout)
             layout._draw_guides(painter)
             layout._draw_section_planes(painter)
             layout._draw_geo_surfaces(painter)
