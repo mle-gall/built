@@ -332,6 +332,9 @@ def _retable_deferred(mesh, src, after_build) -> None:
     (an edit, a pick into it), ``after_build(mesh)`` brings its faces and
     edges to what the new tables say — the drawing already shows that."""
     d = mesh.__dict__
+    # What the loader's build reads (the original tables), for a
+    # store-backed first touch that replays build + hooks on its own.
+    d.setdefault("_deferred_hook_source", d["_deferred_source"])
     d["_deferred_source"] = src
     for key in ("_deferred_plan", "_drawing_staged", "_drawing_source_key"):
         d.pop(key, None)
@@ -341,6 +344,10 @@ def _retable_deferred(mesh, src, after_build) -> None:
         original(m)
         after_build(m)
     d["_deferred"] = build
+    # A store-backed first touch (core/store_mesh.py) does not run
+    # ``build``: it builds from the original source with these per-element
+    # hooks applied to its table rows and tag names.
+    d["_deferred_hooks"] = list(d.get("_deferred_hooks", ())) + [after_build]
 
 
 def _renamed_paint(attrs, renamed):

@@ -42,9 +42,9 @@ def _check_incidence(m):
         for a, b in _segments(f):
             e = m.find_edge(a, b)
             assert e is not None, "a face segment with no edge"
-            uses[id(e)] += 1
-        for e in {id(e): e for e in m.edges}.values():
-            assert sum(1 for g in e.faces if g is f) == uses[id(e)]
+            uses[e.key] += 1
+        for e in {e.key: e for e in m.edges}.values():
+            assert sum(1 for g in e.faces if g.key == f.key) == uses[e.key]
 
 
 def _shape(m):

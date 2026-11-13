@@ -52,6 +52,17 @@ _STITCH_TOL = 1e-4
 
 _KEY_SCALE = 10.0 ** _KEY_DECIMALS
 
+#: ``Mesh.__dict__`` entries of a store-backed or materialised mesh that
+#: belong to the store (``core.store_mesh.STORE_SIDE``): never deep-copied.
+_STORE_SIDE = frozenset(("_store", "_objmap", "_attr_table", "_attr_own",
+                         "_bulk", "_py_base"))
+
+
+def _store_on() -> bool:
+    """Whether new deferred / bulk-built meshes go to the Rust store."""
+    from core import store_mesh
+    return store_mesh.enabled()
+
 
 def _key(p: QVector3D) -> tuple[int, int, int]:
     # Integer grid cells (same partition as rounding to _KEY_DECIMALS):
@@ -353,10 +364,13 @@ class Mesh:
         from copy import deepcopy
         if isinstance(self, DeferredMesh):
             self._materialize()
+            if type(self) is not Mesh:
+                return self.__deepcopy__(memo)     # store-backed now
         copied = Mesh()
         memo[id(self)] = copied
         copied.__dict__.update(deepcopy(
-            {k: v for k, v in self.__dict__.items() if k != "_keys"}, memo))
+            {k: v for k, v in self.__dict__.items()
+             if k != "_keys" and k not in _STORE_SIDE}, memo))
         for element in (*copied.vertices, *copied.edges, *copied.faces):
             element.key = next(copied._keys)
         return copied
@@ -541,11 +555,17 @@ class Mesh:
         curve per segment on every copy, explode or solid operation."""
         self._chunk_dirty = True
         self._mut_serial += 1
-        global _CURVE_COUNTER
         by_id: dict[int, list[Edge]] = {}
         for e in self.edges:
             if e.curve is not None:
                 by_id.setdefault(e.curve, []).append(e)
+        self._resplit_curve_groups(by_id)
+
+    @staticmethod
+    def _resplit_curve_groups(by_id) -> None:
+        """:meth:`resplit_curves` past its scan: ``by_id`` maps each curve
+        id to its edges in mesh order."""
+        global _CURVE_COUNTER
         for cid, edges in by_id.items():
             eset = set(edges)
 
@@ -756,6 +776,13 @@ class Mesh:
         subtle case where a probe welds a point WITHOUT claiming its cell,
         so a later, farther point of the same cell creates its own vertex."""
         import numpy as np
+        d = self.__dict__
+        if (type(self) is Mesh and not d["vertices"] and not d["edges"]
+                and not d["faces"] and not d["_registry"] and _store_on()):
+            # An empty mesh built in bulk (an import, a group, a copy):
+            # into the Rust store (core/store_mesh.py), same vertex order.
+            from core import store_mesh
+            return store_mesh.bulk_weld(self, pos)
         # Round-trip through float32 first: the sequential path stores every
         # position in a QVector3D (C float), so cell keys and probe distances
         # are computed on float32 values — a float64 input must quantize the
@@ -1183,7 +1210,14 @@ class Mesh:
 
     def restore_state(self, snap: dict) -> None:
         """Restore a :meth:`capture_state` snapshot. Objects created since are
-        dropped; captured ones are re-listed with their fields reset."""
+        dropped; captured ones are re-listed with their fields reset.
+        A store-backed mesh's snapshot (``core.store_mesh.StoreState``, a
+        Scene.share_back of an edited instance) makes this mesh
+        store-backed."""
+        if not isinstance(snap, dict):
+            from core import store_mesh
+            store_mesh._restore_store_state(self, snap)
+            return
         self._chunk_dirty = True
         self._mut_serial += 1
         self.vertices[:] = snap["vertices"]
@@ -1914,6 +1948,14 @@ class DeferredMesh(Mesh):
         return True
 
     def _materialize(self) -> None:
+        """First touch: a store-backed mesh when the store is on
+        (``core.store_mesh.from_deferred``), else the Python objects the
+        loader's build makes."""
+        from core import store_mesh
+        if store_mesh.from_deferred(self):
+            return
+        self.__dict__.pop("_deferred_hooks", None)
+        self.__dict__.pop("_deferred_hook_source", None)
         build = self.__dict__.pop("_deferred")
         del self.__dict__["_deferred_nfaces"]
         del self.__dict__["_deferred_source"]
@@ -1930,6 +1972,27 @@ class DeferredMesh(Mesh):
         return self.__reduce_ex__(protocol)
 
 
+def _first_touch(name):
+    """A Mesh method called on a still-deferred mesh: build it (a store or
+    Python objects), then run the method of what it became."""
+    def method(self, *args, **kw):
+        self._materialize()
+        return getattr(self, name)(*args, **kw)
+    method.__name__ = name
+    return method
+
+
+# Every Mesh method that reads or writes the geometry first-touches it, so
+# a method never starts as a DeferredMesh and goes on as something else.
+for _name, _value in list(Mesh.__dict__.items()):
+    if (callable(_value) and not isinstance(_value, staticmethod)
+            and _name not in ("__init__", "__deepcopy__", "bump_revision",
+                              "mark_modified")
+            and not (_name.startswith("__") and _name.endswith("__"))):
+        setattr(DeferredMesh, _name, _first_touch(_name))
+del _name, _value
+
+
 def face_count(mesh) -> int:
     """``len(mesh.faces)``, without building a deferred mesh to learn it."""
     if type(mesh) is DeferredMesh:
@@ -1938,9 +2001,9 @@ def face_count(mesh) -> int:
 
 
 def face_attrs(mesh):
-    """Each face's own attrs, in face order — for a deferred mesh only the
-    first face of each distinct set (what a first-wins tally of materials
-    needs), read from the document without building the mesh."""
+    """Each face's own attrs, in face order — for a deferred or store-backed
+    mesh only the first face of each distinct set (what a first-wins tally
+    of materials needs), read without building Python objects."""
     if type(mesh) is DeferredMesh:
         import numpy as np
         from formats.igz import _face_attrs_from_json
@@ -1950,6 +2013,10 @@ def face_attrs(mesh):
         _u, first = np.unique(fa, return_index=True)
         for k in fa[np.sort(first)].tolist():
             yield (_face_attrs_from_json(table[k]) or {}) if k >= 0 else {}
+        return
+    from core import store_mesh
+    if type(mesh) is store_mesh.StoreMesh:
+        yield from store_mesh.face_attrs(mesh)
         return
     for f in mesh.faces:
         yield f.attrs

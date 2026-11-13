@@ -57,6 +57,37 @@ def wanted() -> bool:
         return False
 
 
+#: The General setting that keeps deferred and bulk-built meshes in the Rust
+#: ``MeshStore`` ("1") or builds Python objects as before ("0"); see
+#: ``core/store_mesh.py``. Needs the engine on.
+STORE_SETTING = "mesh_store"
+#: Its value when the user never chose.
+STORE_DEFAULT = "1"
+
+
+_store_setting = None     # the saved preference, read once
+
+
+def store_wanted() -> bool:
+    """Whether meshes are asked to live in the Rust store: the environment
+    first (``INGETRAZO_STORE=1`` / ``=0``, looked at on every call so tests
+    and benches can flip it), then the saved preference, read once per
+    session (a ``QSettings`` per first-touched mesh cost ~50 µs × the
+    ride's 18k meshes)."""
+    global _store_setting
+    env = os.environ.get("INGETRAZO_STORE")
+    if env is not None:
+        return env != "0"
+    if _store_setting is None:
+        try:
+            from core import general_settings
+            _store_setting = str(general_settings.value(
+                STORE_SETTING, STORE_DEFAULT)) == "1"
+        except Exception:  # noqa: BLE001 — no Qt settings yet: old path
+            return False
+    return _store_setting
+
+
 def __getattr__(name):
     if name == "native":
         mod = available() if wanted() else None

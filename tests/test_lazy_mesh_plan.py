@@ -29,23 +29,23 @@ def binary(monkeypatch):
 
 
 def _compare(plan, m):
-    vid = {id(v): i for i, v in enumerate(m.vertices)}
+    vid = {v.key: i for i, v in enumerate(m.vertices)}
     assert plan.pos.tolist() == [list(v.position.toTuple())
                                  for v in m.vertices]
-    assert plan.edges.tolist() == [[vid[id(e.v0)], vid[id(e.v1)]]
+    assert plan.edges.tolist() == [[vid[e.v0.key], vid[e.v1.key]]
                                    for e in m.edges]
     assert plan.soft.tolist() == [bool(e.soft) for e in m.edges]
     assert plan.hidden.tolist() == [bool(getattr(e, "hidden", False))
                                     for e in m.edges]
     assert plan.curve == [e.curve for e in m.edges]
     assert plan.layer == [e.layer for e in m.edges]
-    fid = {id(f): i for i, f in enumerate(m.faces)}
-    corners = [vid[id(v)] for f in m.faces
+    fid = {f.key: i for i, f in enumerate(m.faces)}
+    corners = [vid[v.key] for f in m.faces
                for ring in [f.loop] + f.hole_loops for v in ring]
     assert plan.corners.tolist() == corners
     assert plan.ring_counts.tolist() == [1 + len(f.hole_loops)
                                          for f in m.faces]
-    ef = [[fid[id(f)] for f in e.faces] for e in m.edges]
+    ef = [[fid[f.key] for f in e.faces] for e in m.edges]
     got = [plan.ef_face[plan.ef_start[i]:plan.ef_start[i + 1]].tolist()
            for i in range(len(plan.edges))]
     assert got == ef
@@ -88,8 +88,8 @@ def test_weld_is_bulk_weld(monkeypatch, engine):
         vpos, pid = lazy_mesh.weld(pts)
         assert vpos.tolist() == [list(v.position.toTuple())
                                  for v in m.vertices]
-        assert [id(vobjs[i]) for i in ids.tolist()] == \
-            [id(m.vertices[i]) for i in pid.tolist()]
+        assert [vobjs[i].key for i in ids.tolist()] == \
+            [m.vertices[i].key for i in pid.tolist()]
 
 
 def test_duplicate_and_shut_edges(binary, tmp_path):

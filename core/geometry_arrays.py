@@ -45,7 +45,9 @@ def faces_arrays(faces):
 
 def arrays_of(mesh):
     d = mesh.__dict__
-    serial = (d.get('_mut_serial'), id(d.get('_deferred_source')))
+    store = d.get('_store') if type(mesh).__name__ == 'StoreMesh' else None
+    serial = (d.get('_mut_serial'), id(d.get('_deferred_source')),
+              id(store), store.revision if store is not None else None)
     cached = d.get('_geometry_arrays')
     if cached is None or cached[0] != serial:
         source = d.get('_deferred_source')
@@ -61,6 +63,9 @@ def arrays_of(mesh):
             arrays = Arrays(pos, corners, np.asarray(source['sizes'], dtype=np.int64),
                             np.asarray(source['counts'], dtype=np.int64))
             arrays.edge_face_counts = edge_counts(arrays)
+        elif store is not None:
+            from core.store_mesh import faces_arrays as store_arrays
+            arrays = store_arrays(mesh)
         else:
             arrays = faces_arrays(mesh.faces)
             arrays.edge_face_counts = np.asarray([len(e.faces) for e in mesh.edges])
@@ -281,6 +286,10 @@ def face_attributes(mesh):
         src = mesh.__dict__['_deferred_source']
         table = [_face_attrs_from_json(a) or {} for a in src['meta'].get('face_attrs') or []]
         return [table[k] if k >= 0 else {} for k in src['face_attr']]
+    if type(mesh).__name__ == 'StoreMesh':
+        from core.store_mesh import attr_columns
+        table, fa = attr_columns(mesh)
+        return [table[k] if k >= 0 else {} for k in fa.tolist()]
     return [f.attrs for f in mesh.faces]
 
 

@@ -82,9 +82,13 @@ def bake_mesh(mesh):
     else:
         arrays = arrays_of(mesh)
         pos = arrays.pos
-
-        table = [f.attrs for f in mesh.faces]
-        attr = np.arange(len(table))
+        if type(mesh).__name__ == 'StoreMesh':
+            from core.store_mesh import attr_columns
+            table, attr = attr_columns(mesh)
+            attr = np.asarray(attr, np.int64)
+        else:
+            table = [f.attrs for f in mesh.faces]
+            attr = np.arange(len(table))
     # Gather once through the attribute table; masking every face for each
     # distinct colour is quadratic on large, per-face-painted prototypes.
     palette = np.full((len(table)+1, 4), 255, np.uint8)
@@ -128,7 +132,18 @@ def _source_arrays(mesh, paint=None, texture_ids=None, face_overrides=None, bill
         # Resolve lazy faces before reading topology; never mutate document attrs.
         list(mesh.faces)
     src = mesh.__dict__.get('_deferred_source')
-    if src is not None:
+    if src is None and type(mesh).__name__ == 'StoreMesh':
+        # A store-backed mesh (core/store_mesh.py): its welded arrays,
+        # vertex indices already shared by corners and edges.
+        from core.store_mesh import attr_columns
+        a = mesh.__dict__['_store'].arrays()
+        pos, corners = a['pos'], a['corners']
+        sizes, counts = a['ring_sizes'], a['ring_counts']
+        edges = a['edges']
+        flags = a['flags'] & 3
+        table, attr = attr_columns(mesh, face_overrides)
+        attr = np.asarray(attr, np.int64)
+    elif src is not None:
         pos, corners, sizes, counts = (src[k] for k in ('pos', 'rings', 'sizes', 'counts'))
         edges = src['edges']
         flags = src['flags']

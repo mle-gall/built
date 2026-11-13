@@ -33,6 +33,12 @@ def _open(monkeypatch, path, lazy):
     return scene
 
 
+def _built(m) -> bool:
+    """Built: Python objects, or (the mesh store on) a store-backed mesh —
+    anything but a still-deferred one."""
+    return isinstance(m, M.Mesh) and type(m) is not M.DeferredMesh
+
+
 def _meshes(scene):
     """Each mesh once (placements share their prototype's)."""
     seen = set()
@@ -100,7 +106,7 @@ def test_built_on_touch_is_the_eager_mesh(binary, monkeypatch, tmp_path,
     igz.save_scene(scene, path)
     eager = _open(monkeypatch, path, False)
     lazy = _open(monkeypatch, path, True)
-    assert all(type(m) is M.Mesh for m in _meshes(eager))
+    assert all(_built(m) for m in _meshes(eager))
     deferred = [m for m in _meshes(lazy) if type(m) is M.DeferredMesh]
     assert deferred, "the binary meshes should open deferred"
     # Counted without building.
@@ -127,7 +133,7 @@ def test_any_first_touch_builds_it(binary, monkeypatch, tmp_path):
             scene = _open(monkeypatch, path, lazy)
             for m in _meshes(scene):
                 touch(m)
-                assert type(m) is M.Mesh
+                assert _built(m)
             out.append(_canonical(scene))
         assert out[0] == out[1], touch
 
@@ -139,7 +145,7 @@ def test_a_deep_copy_is_its_own_mesh(binary, monkeypatch, tmp_path):
     m = lazy.groups[-1].mesh
     assert type(m) is M.DeferredMesh
     c = copy.deepcopy(m)
-    assert c is not m and type(c) is M.Mesh
+    assert c is not m and _built(c)
     assert [v.position.toTuple() for v in c.vertices] == \
         [v.position.toTuple() for v in m.vertices]
     c.add_edge(V(50, 0, 0), V(51, 0, 0))
@@ -153,14 +159,14 @@ def test_off_by_default_nothing_deferred(binary, monkeypatch, tmp_path):
     monkeypatch.setattr(_native, "wanted", lambda: False)
     scene = Scene()
     igz.load_into(scene, path)
-    assert all(type(m) is M.Mesh for m in _meshes(scene))
+    assert all(_built(m) for m in _meshes(scene))
 
 
 def test_defer_takes_only_an_empty_plain_mesh():
     m = M.Mesh()
     m.add_edge(V(0, 0, 0), V(1, 0, 0))
     assert not M.DeferredMesh.defer(m, lambda mesh: None, 0)
-    assert type(m) is M.Mesh
+    assert _built(m)
 
 
 def test_face_attrs_first_wear_without_building(binary, monkeypatch,

@@ -162,7 +162,9 @@ def _check(vp, tmp_path, seed, alpha=False):
             vp._group_chunks, vp._fp_memo = {}, {}
             want = vp._group_chunk(SimpleNamespace(mesh=m, xform=None,
                                                    material=paint))
-            assert type(m) is M.Mesh
+            # Built: Python objects, or a store-backed mesh read through
+            # its views (the mesh store on).
+            assert type(m) is not M.DeferredMesh
             assert faces == want["faces"]
             _compare(got, want)
             seen |= {k for k in _KINDS if got[k]}

@@ -63,14 +63,14 @@ def _fingerprint(mesh):
     def pk(p):
         return (p.x(), p.y(), p.z())
 
-    fidx = {id(f): i for i, f in enumerate(mesh.faces)}
+    fidx = {f.key: i for i, f in enumerate(mesh.faces)}
     return {
         "verts": [pk(v.position) for v in mesh.vertices],
         "faces": [([pk(v.position) for v in f.loop],
                    [[pk(v.position) for v in h] for h in f.hole_loops],
                    sorted(f.attrs.items(), key=str)) for f in mesh.faces],
         "edges": [(pk(e.v0.position), pk(e.v1.position), e.soft, e.curve,
-                   [fidx[id(x)] for x in e.faces]) for e in mesh.edges],
+                   [fidx[x.key] for x in e.faces]) for e in mesh.edges],
     }
 
 
