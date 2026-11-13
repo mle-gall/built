@@ -66,7 +66,7 @@ LOCAL_MASK = (1 << 40) - 1
 #: ``mesh.__dict__`` entries that belong to the store side and never travel
 #: with a deep copy of the Python state.
 STORE_SIDE = ("_store", "_objmap", "_attr_table", "_attr_own", "_bulk",
-              "_py_base", "_pos_cache")
+              "_py_base", "_pos_cache", "_face_cache")
 
 
 def enabled() -> bool:
@@ -383,11 +383,8 @@ def _position(m, key) -> QVector3D:
     builds each vector once instead of once per read."""
     d = m.__dict__
     st = d["_store"]
-    rev = st.revision
-    cache = d.get("_pos_cache")
-    if cache is None or cache[0] != rev or cache[2] is not st:
-        cache = d["_pos_cache"] = (rev, {}, st)
-    p = cache[1].get(key)
+    pc = _pos_dict(m, st)
+    p = pc.get(key)
     if p is None:
         try:
             p = QVector3D(*st.vertex_position(key))
@@ -396,8 +393,37 @@ def _position(m, key) -> QVector3D:
             if obj is None:
                 raise KeyError(f"element {key} is not in this mesh") from None
             return obj.position
-        cache[1][key] = p
+        pc[key] = p
     return p
+
+
+def _pos_dict(m, st) -> dict:
+    """The vertex key -> QVector3D cache of the store's current revision."""
+    d = m.__dict__
+    rev = st.revision
+    cache = d.get("_pos_cache")
+    if cache is None or cache[0] != rev or cache[2] is not st:
+        cache = d["_pos_cache"] = (rev, {}, st)
+    return cache[1]
+
+
+def _face_entry(m, key) -> list:
+    """``[ring positions as tuples, rings as QVector3D lists, normal]`` of a
+    face, kept until the store changes: a command scans every face several
+    times (``AddFaceCommand``: containment, subdivision, carving read
+    ``vertices`` and ``normal()`` ~30 times per face of the ride's largest
+    mesh), and each read was a store call plus fresh vectors. Raises
+    KeyError for a key the store does not have."""
+    d = m.__dict__
+    st = d["_store"]
+    rev = st.revision
+    cache = d.get("_face_cache")
+    if cache is None or cache[0] != rev or cache[2] is not st:
+        cache = d["_face_cache"] = (rev, {}, st)
+    hit = cache[1].get(key)
+    if hit is None:
+        hit = cache[1][key] = [st.face_positions(key), None, None]
+    return hit
 
 
 def _newell(ring) -> QVector3D:
@@ -462,27 +488,49 @@ class FaceView(_ViewMixin, Face):
         self._obj().hole_loops = [list(h) for h in _resolve(value, self._m)]
 
     def _positions(self):
-        st = _store_of(self._m)
         try:
-            return st.face_positions(self.key)
+            return _face_entry(self._m, self.key)[0]
         except KeyError:
             return None
 
+    def _vectors(self):
+        """The rings as the vertices' own position objects (cached per
+        store revision, see ``_face_entry``), or None."""
+        m = self._m
+        if m.__class__ is not StoreMesh:
+            return None
+        try:
+            hit = _face_entry(m, self.key)
+        except KeyError:
+            return None
+        if hit[1] is None:
+            st = m.__dict__["_store"]
+            pc = _pos_dict(m, st)
+            rings = []
+            for r in st.face_rings(self.key):
+                ring = []
+                for k in r:
+                    p = pc.get(k)
+                    if p is None:
+                        p = pc[k] = QVector3D(*st.vertex_position(k))
+                    ring.append(p)
+                rings.append(ring)
+            hit[1] = rings
+        return hit[1]
+
     @property
     def vertices(self):
-        st = _store_of(self._m)
-        rings = self._positions() if st is not None else None
+        rings = self._vectors()
         if rings is None:
             return [v.position for v in self.loop]
-        return [QVector3D(*p) for p in rings[0]]
+        return list(rings[0])
 
     @property
     def holes(self):
-        st = _store_of(self._m)
-        rings = self._positions() if st is not None else None
+        rings = self._vectors()
         if rings is None:
             return [[v.position for v in h] for h in self.hole_loops]
-        return [[QVector3D(*p) for p in r] for r in rings[1:]]
+        return [list(r) for r in rings[1:]]
 
     @property
     def interior(self):
@@ -539,16 +587,24 @@ class FaceView(_ViewMixin, Face):
         return _newell(rings[0])
 
     def normal(self) -> QVector3D:
-        rings = self._positions() if _store_of(self._m) is not None else None
-        if rings is None:
+        m = self._m
+        if m.__class__ is not StoreMesh:
             return Face.normal(self)
-        if len(rings[0]) < 3:
-            return QVector3D(0.0, 0.0, 1.0)
-        n = _newell(rings[0])
-        length = n.length()
-        if length < 1e-9:
-            return QVector3D(0.0, 0.0, 1.0)
-        return n / length
+        try:
+            hit = _face_entry(m, self.key)
+        except KeyError:
+            return Face.normal(self)
+        n = hit[2]
+        if n is None:
+            ring = hit[0][0]
+            if len(ring) < 3:
+                n = QVector3D(0.0, 0.0, 1.0)
+            else:
+                n = _newell(ring)
+                length = n.length()
+                n = QVector3D(0.0, 0.0, 1.0) if length < 1e-9 else n / length
+            hit[2] = n
+        return QVector3D(n)          # a caller may scale it in place
 
     def area(self) -> float:
         rings = self._positions() if _store_of(self._m) is not None else None
