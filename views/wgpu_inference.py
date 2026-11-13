@@ -51,62 +51,62 @@ def _source_visible(source, scene):
     return allowed[np.where(layers >= 0, layers, -1)]
 
 
-def _prototype(packed, code, scene, first_row):
+def _prototype_arrays(packed, code, scene, first_row, cache):
+    """Gather snapshots; expansion and curve grouping belong to the native worker."""
     face, edge = packed.commands[code], packed.edge_commands[code]
-    positions = packed.vertices['pos']
-    start = int(face['base'])
-    tris = positions[start:start + int(face['count'])].reshape(-1, 3, 3)
-    start += int(face['count'])
+    start, count = int(face['base']), int(face['count'])
+    triangles = np.ascontiguousarray(packed.vertices['pos'][start:start+count])
     groups = getattr(packed, 'groups', None)
     group = groups[first_row] if groups is not None and first_row >= 0 else None
     mesh = group.mesh if group is not None else getattr(scene, 'loose_mesh', None)
-    curves = []
-    if mesh is None:
-        edges = positions[start:start + int(edge['count'])].astype(np.float64).reshape(-1, 6)
+    key = (id(mesh), group is not None)
+    if mesh is not None and key in cache:
+        return (triangles, *cache[key])
+    reveal = bool(getattr(scene, 'show_hidden_geometry', False))
+    source = mesh.__dict__.get('_deferred_source') if mesh is not None else None
+    if source is not None:
+        pos = np.ascontiguousarray(source['pos'], dtype=float)
+        edges = np.ascontiguousarray(source['edges'], dtype=np.int64)
+        keep = _source_visible(source, scene)
+        flags = source['flags']
+        if flags is not None and not reveal:
+            keep &= (flags & (3 if group is not None else 2)) == 0
+        curves = source.get('curves')
+        curves = (np.full(len(edges), -1, np.int64) if curves is None else
+                  np.ascontiguousarray(curves, dtype=np.int64))
     else:
-        reveal = bool(getattr(scene, 'show_hidden_geometry', False))
-        source = mesh.__dict__.get('_deferred_source')
-        if source is not None:
-            keep = _source_visible(source, scene)
-            flags = source['flags']
-            if flags is not None and not reveal:
-                keep &= (flags & (3 if group is not None else 2)) == 0
-            edges = source['pos'][source['edges'][keep]].reshape(-1, 6)
-            ids = source.get('curves')
-            if ids is not None:
-                ids = ids[keep]
-                selected = np.flatnonzero(ids >= 0)
-                if len(selected):
-                    # Stable within a curve, and retain first-seen curve
-                    # order because equally close snap candidates can tie.
-                    _, first, inverse = np.unique(ids[selected], return_index=True,
-                                                  return_inverse=True)
-                    order = np.argsort(inverse, kind='stable')
-                    ends = np.cumsum(np.bincount(inverse))[:-1]
-                    segments = np.split(edges[selected[order]], ends)
-                    curves = [segments[i] for i in np.argsort(first)]
+        lines, named = [], []
+        if mesh is None:
+            pos = packed.vertices['pos'][start+count:start+count+int(edge['count'])]
         else:
             visible = getattr(scene, 'edge_snappable', lambda e: not e.hidden or reveal)
-            lines, named = [], {}
             for e in mesh.edges:
-                if visible(e) and (group is None or reveal or not e.soft):
-                    pair = (e.a.toTuple(), e.b.toTuple())
-                    lines.append(pair)
-                    if e.curve is not None:
-                        named.setdefault(e.curve, []).append(pair)
-            edges = np.asarray(lines, float).reshape(-1, 6)
-            curves = named.values()
-    tris = tris.astype(np.float64)
-    proto = _native.available().InstanceProto(
-        np.ascontiguousarray(tris[:, 0]),
-        np.ascontiguousarray(tris[:, 1] - tris[:, 0]),
-        np.ascontiguousarray(tris[:, 2] - tris[:, 0]), np.asarray(edges, float))
-    return proto, curves
+                if (group is None or reveal or not e.soft) and visible(e):
+                    lines.extend((e.a.toTuple(), e.b.toTuple()))
+                    named.append(-1 if e.curve is None else e.curve)
+            pos = lines
+        pos = np.ascontiguousarray(pos, dtype=float).reshape(-1, 3)
+        edges = np.arange(len(pos), dtype=np.int64).reshape(-1, 2)
+        keep = np.ones(len(edges), bool)
+        curves = np.asarray(named, np.int64) if mesh is not None else np.full(len(edges), -1, np.int64)
+    arrays = (pos, edges, keep, curves)
+    if mesh is not None:
+        cache[key] = arrays
+    return (triangles, *arrays)
+
+
+def _prototype(packed, code, scene, first_row):
+    protos, _ = _native.available().build_snap_index(
+        [_prototype_arrays(packed, code, scene, first_row, {})],
+        np.empty(0, np.int64), np.empty((0, 16)), np.empty((0, 3)), np.empty((0, 3)))
+    return protos[0], protos[0]
 
 
 def _curve_features(curves):
     """Fit only a queried prototype's named curves from its visibility snapshot."""
     from core.snap import fit_circle
+    if hasattr(curves, 'curve_segments'):
+        curves = curves.curve_segments()
     centers, tangents = [], []
     for segments in curves:
         ends = np.asarray(segments, float).reshape(-1, 3)
@@ -198,7 +198,7 @@ class ResidentInference:
         if len(self.replaced) < len(packed.instances):
             self.context_rows.clear()
             self.replaced = np.pad(self.replaced, (0, len(packed.instances)-len(self.replaced)))
-        for code in changed_codes:
+        for code in dict.fromkeys(changed_codes):
             while len(self.protos) <= code:
                 self.protos.append(None)
                 self.bounds.append(None)
@@ -269,11 +269,9 @@ def prepare(packed, scene=None):
     codes, rows = np.unique(packed.instances['info'][:, 0], return_index=True)
     first = np.full(len(packed.commands), -1, dtype=np.int64)
     first[codes] = rows
-    protos, curves = [], []
-    for code, row in enumerate(first):
-        proto, named = _prototype(packed, code, scene, row)
-        protos.append(proto)
-        curves.append(named)
+    cache = {}
+    arrays = [_prototype_arrays(packed, code, scene, row, cache)
+              for code, row in enumerate(first)]
     mats = packed.instances['world'].astype(np.float64).reshape(-1, 16)
     ids = packed.instances['info'][:, 0].astype(np.int64)
     bounds = packed.bounds[ids, :, :3].astype(np.float64)
@@ -282,9 +280,9 @@ def prepare(packed, scene=None):
     extent = (bounds[:, 1] - bounds[:, 0]) / 2
     wc = np.einsum('nij,nj->ni', matrix[:, :3, :3], center) + matrix[:, :3, 3]
     we = np.einsum('nij,nj->ni', abs(matrix[:, :3, :3]), extent)
-    base = native.InstanceSet(protos, ids, mats, np.ascontiguousarray(wc-we),
-                              np.ascontiguousarray(wc+we))
-    return ResidentInference(base, protos, curves, packed, scene)
+    protos, base = native.build_snap_index(arrays, ids, mats, np.ascontiguousarray(wc-we),
+                                           np.ascontiguousarray(wc+we))
+    return ResidentInference(base, protos, list(protos), packed, scene)
 
 
 def surface(index, row, origin, direction, limit=float('inf')):

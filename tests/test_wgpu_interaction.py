@@ -268,3 +268,58 @@ def test_orbit_pivot_is_under_cursor_without_snap_index(view):
     px = view._world_to_pixel(target)
     pivot = view._orbit_pivot_at(*px)
     assert (pivot - target).length() < 1e-3
+
+
+@pytest.mark.parametrize('point', [(6, 5, 0), (5, 3, 0), (5, 4, 0)])
+def test_batch_native_matches_python_prototypes(view, point, monkeypatch):
+    """Keep the former float64 expansion as an independent snap oracle."""
+    from core import _native
+    native = _native.available()
+    def reference(inputs, ids, mats, lo, hi):
+        protos = []
+        for tri, pos, edges, keep, curves in inputs:
+            tris = tri.astype(float).reshape(-1, 3, 3)
+            segments = pos[edges[keep]].reshape(-1, 6)
+            protos.append(native.InstanceProto(
+                np.ascontiguousarray(tris[:, 0]),
+                np.ascontiguousarray(tris[:, 1]-tris[:, 0]),
+                np.ascontiguousarray(tris[:, 2]-tris[:, 0]), segments))
+        return protos, native.InstanceSet(protos, ids, mats, lo, hi)
+    actual_index = prepare(view.packed, view.scene)
+    with monkeypatch.context() as m:
+        m.setattr(native, 'build_snap_index', reference)
+        expected_index = prepare(view.packed, view.scene)
+    pixel = view._world_to_pixel(QVector3D(*point))
+    actual = snap(actual_index, 0, view, *pixel)
+    expected = snap(expected_index, 0, view, *pixel)
+    assert actual.kind == expected.kind
+    assert (actual.point-expected.point).length() < 1e-6
+
+
+def test_native_curve_order_and_invalid_indices():
+    from core import _native
+    native = _native.available()
+    pos = np.arange(24, dtype=float).reshape(8, 3)
+    edges = np.arange(8, dtype=np.int64).reshape(4, 2)
+    keep = np.array([True, False, True, True])
+    ids = np.array([9, 3, 2, 9], np.int64)
+    def build(edges):
+        return native.build_snap_index([(np.empty((0, 3), np.float32), pos, edges, keep, ids)],
+            np.empty(0, np.int64), np.empty((0, 16)), np.empty((0, 3)), np.empty((0, 3)))
+    protos, _ = build(edges)
+    curves = protos[0].curve_segments()
+    np.testing.assert_array_equal(curves[0], pos[edges[[0, 3]]].reshape(-1, 6))
+    np.testing.assert_array_equal(curves[1], pos[edges[[2]]].reshape(-1, 6))
+    edges[0, 0] = 100
+    with pytest.raises(ValueError):
+        build(edges)
+
+
+def test_full_pack_starts_inference_without_after_open(monkeypatch):
+    view = WgpuView()
+    monkeypatch.setattr(view, '_upload', lambda: None)
+    view.set_scene(Scene(), opening=True)
+    assert view._inference_future is not None
+    assert view._inference_future.result(timeout=5) is not None
+    assert view._refresh_inference not in view.after_open
+    view.close()
