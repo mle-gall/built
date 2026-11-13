@@ -446,7 +446,8 @@ class WgpuView(QWidget):
         section_widgets = bool(getattr(self.scene, 'section_planes', ())) and getattr(self.scene, 'show_section_planes', True)
         if self.tools.mode == 'mesh' and not self.overlay_primitives:
             self.tools.mesh_feedback()
-        primitives = self._edit_box_primitives() + self.overlay_primitives
+        primitives = (self._edit_box_primitives() + self._selection_box_primitives()
+                      + self.overlay_primitives)
         if annotations or primitives or section_widgets or getattr(self, "_had_overlay", False):
             from views.wgpu_overlay import rasterize, pixels
             before = time.perf_counter()
@@ -715,6 +716,10 @@ class WgpuView(QWidget):
             self.update()
             return True
         return False
+
+    def _selection_box_primitives(self):
+        from views.wgpu_edit_context import selection_box_primitives
+        return selection_box_primitives(self)
 
     def _edit_box_primitives(self):
         from views.wgpu_edit_context import box_primitives

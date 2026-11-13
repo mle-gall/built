@@ -323,3 +323,36 @@ def test_full_pack_starts_inference_without_after_open(monkeypatch):
     assert view._inference_future.result(timeout=5) is not None
     assert view._refresh_inference not in view.after_open
     view.close()
+
+
+def _source_stub(view):
+    view.source_viewport = SimpleNamespace(plano_style=None, style_override=None,
+                                           _preview_groups=())
+
+
+def test_selected_group_is_boxed_in_the_overlay(view):
+    # GL boxes a selected group (its selection cue); Metal only tinted it.
+    _source_stub(view)
+    group = view.scene.groups[0]
+    assert view._selection_box_primitives() == []
+    view.scene.selection = {group}
+    lines = view._selection_box_primitives()
+    assert len(lines) == 8      # a flat square: its 4 vertical edges have no length
+    drawn = [p for line in lines for p in line.points]
+    corners = [view._world_to_pixel(QVector3D(x, y, 0)) for x in (4, 6) for y in (3, 5)]
+    for axis in (0, 1):
+        assert min(p[axis] for p in drawn) == pytest.approx(min(c[axis] for c in corners), abs=1)
+        assert max(p[axis] for p in drawn) == pytest.approx(max(c[axis] for c in corners), abs=1)
+
+
+def test_selection_box_skips_billboards_and_follows_a_move(view):
+    _source_stub(view)
+    group = view.scene.groups[0]
+    view.scene.selection = {group}
+    before = view._selection_box_primitives()[0].points
+    group.xform.translate(1, 0, 0)
+    view.scene.version += 1
+    after = view._selection_box_primitives()[0].points
+    assert after != before
+    group.billboard = 'mesh'
+    assert view._selection_box_primitives() == []
