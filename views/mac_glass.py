@@ -398,6 +398,7 @@ class GlassWindow(QObject):
                           argtypes=(ctypes.c_bool,))
                 self._lights_out = False
             return
+        self._lights_y = centre_y
         host_h = _bounds(self._frame).h
         x = float(LIGHTS_LEFT)
         for b, _home in self._lights:
@@ -517,7 +518,15 @@ class GlassWindow(QObject):
                      color.alphaF(),
                      argtypes=(ctypes.c_double,) * 4)
 
+    def lights_displaced(self) -> bool:
+        """AppKit took the window buttons back into its (hidden) title
+        bar: it does so whenever it lays that bar out again."""
+        return self._lights_out and any(
+            _send(b, "superview") != self._frame for b, _h in self._lights)
+
     def sync(self) -> None:
+        if getattr(self, "_lights_y", None) is not None and self.lights_displaced():
+            self.place_lights(self._lights_y)
         try:
             regions = [(r, rad, kind) for r, rad, kind in self._regions()
                        if r.isValid() and not r.isEmpty()]
@@ -824,8 +833,12 @@ class _Chrome(QObject):
                                                         QToolBar):
                 QTimer.singleShot(0, self, self.lock_all)
             elif kind in (QEvent.Show, QEvent.Resize, QEvent.WindowStateChange,
-                          QEvent.WindowActivate, QEvent.WindowDeactivate):
-                # AppKit lays its title bar out again on these.
+                          QEvent.WindowActivate, QEvent.WindowDeactivate,
+                          QEvent.WindowTitleChange, QEvent.ModifiedChange):
+                # AppKit lays its title bar out again on these -- a new
+                # title too: opening a document or a new tab put the
+                # buttons back in the hidden title bar, and nothing brought
+                # them out until the next resize or activation (2026-11-13).
                 QTimer.singleShot(0, self, self.fit_lights)
             return False
         if obj is self._lights:
