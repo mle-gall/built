@@ -1081,6 +1081,63 @@ class StoreMesh(Mesh):
         self._bump()
         self._store.place_vertex(v.key, _xyz(position))
 
+    def vertices_in_cells(self, cells, keyfn) -> list:
+        """Views of the vertices with ``keyfn(position) in cells``, in mesh
+        order (``history._vertices_at``), ``keyfn`` rounding to 4 decimals
+        (``topology._key``: floats; ``mesh._key``: cells x 10^4). Candidates
+        from the position array (a cell's points floor to it or the cell
+        below), then ``keyfn`` itself on those: Python's answer exactly."""
+        if not cells:
+            return []
+        pos = self._store.positions()
+        ix = np.floor(pos * 1e4).astype(np.int64)
+        near = set()
+        for c in cells:
+            ci = [round(float(x) * (1.0 if isinstance(x, int) else 1e4))
+                  for x in c]
+            for dx in (-1, 0):
+                for dy in (-1, 0):
+                    for dz in (-1, 0):
+                        near.add((ci[0] + dx, ci[1] + dy, ci[2] + dz))
+        idx = [i for i, r in enumerate(map(tuple, ix.tolist())) if r in near]
+        if not idx:
+            return []
+        keys = self._store.keys("vertex")
+        out = []
+        for i in idx:
+            p = QVector3D(*pos[i])
+            if keyfn(p) in cells:
+                out.append(VertexView(self, keys[i]))
+        return out
+
+    def cells_of(self, vertex_keys, keyfn) -> set:
+        st = self._store
+        out = set()
+        for k in vertex_keys:
+            try:
+                out.add(keyfn(QVector3D(*st.vertex_position(k))))
+            except (KeyError, OverflowError, TypeError):
+                pass
+        return out
+
+    def textured_faces(self) -> list:
+        """The faces whose attrs hold a texture (own dict or table row),
+        without giving the others a dict."""
+        table, fa = attr_columns(self)
+        rows = {i for i, a in enumerate(table) if a and a.get("texture")}
+        if not rows:
+            return []
+        keys = self._store.keys("face")
+        return [FaceView(self, keys[i]) for i, r in enumerate(fa.tolist())
+                if r in rows]
+
+    def nonplanar_faces(self, tolerance):
+        """The faces ``fold_nonplanar_faces`` folds, found by the store
+        (``is_planar`` ported exactly): a Move on a big store-backed mesh
+        no longer reads every face through a view."""
+        return [FaceView(self, k)
+                for k in self._store.nonplanar_faces(tolerance)]
+
     def purge_debris(self):
         """Nothing to drop is answered from the arrays; a store has no
         ghost entries (design decision 4), so only an unreferenced vertex

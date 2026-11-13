@@ -96,9 +96,68 @@ impl Store {
         self.revision
     }
 
+    /// The faces `core.topology.fold_nonplanar_faces` folds: more than 3
+    /// corners over all rings and not `is_planar` at `tolerance`, in list
+    /// order. `is_planar`'s double arithmetic, step for step (plane through
+    /// the first corner, the farthest one and the one spanning the widest
+    /// triangle), so the verdicts are Python's bit for bit.
+    pub fn nonplanar_faces(&self, tolerance: f64) -> Vec<u32> {
+        let st = &self.state;
+        let mut out = Vec::new();
+        let mut pts: Vec<[f64; 3]> = Vec::new();
+        for f in self.live_slots(Kind::Face) {
+            pts.clear();
+            for ring in self.face_rings(f) {
+                pts.extend(ring.iter().map(|&v| *st.vpos.get(v as usize)));
+            }
+            if pts.len() <= 3 {
+                continue;
+            }
+            if !is_planar(&pts, tolerance) {
+                out.push(f);
+            }
+        }
+        out
+    }
+
     /// Live slots of a kind, in list order.
     pub fn live_slots(&self, kind: Kind) -> Vec<u32> {
         let st = &self.state;
         st.order[kind as usize].live(&st.slots[kind as usize])
     }
+}
+
+/// `core.topology.is_planar` for more than three points.
+fn is_planar(pts: &[[f64; 3]], tolerance: f64) -> bool {
+    let a = pts[0];
+    let rel: Vec<[f64; 3]> = pts.iter().map(|p| [p[0] - a[0], p[1] - a[1], p[2] - a[2]]).collect();
+    // Python's max(): the first of the largest.
+    let mut u = rel[0];
+    let mut um = u[0] * u[0] + u[1] * u[1] + u[2] * u[2];
+    for r in &rel[1..] {
+        let m = r[0] * r[0] + r[1] * r[1] + r[2] * r[2];
+        if m > um {
+            um = m;
+            u = *r;
+        }
+    }
+    let (mut nx, mut ny, mut nz, mut best) = (0.0f64, 0.0f64, 0.0f64, 0.0f64);
+    for v in &rel {
+        let cx = u[1] * v[2] - u[2] * v[1];
+        let cy = u[2] * v[0] - u[0] * v[2];
+        let cz = u[0] * v[1] - u[1] * v[0];
+        let size = cx * cx + cy * cy + cz * cz;
+        if size > best {
+            best = size;
+            nx = cx;
+            ny = cy;
+            nz = cz;
+        }
+    }
+    let length = best.sqrt();
+    if length <= 1e-6 {
+        return false;
+    }
+    let (nx, ny, nz) = (nx / length, ny / length, nz / length);
+    rel.iter().all(|r| (nx * r[0] + ny * r[1] + nz * r[2]).abs() <= tolerance)
 }

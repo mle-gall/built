@@ -1601,7 +1601,13 @@ def fold_nonplanar_faces(mesh, tolerance: float = _PLANAR_TOLERANCE) -> list:
     into a coplanar neighbour across the original boundary. Returns the faces
     that were folded (the originals, already removed from the mesh)."""
     folded = []
-    for face in list(mesh.faces):
+    # A store-backed mesh names its warped faces itself (the same verdicts,
+    # without reading every face through a view); folding one face changes
+    # no other face's planarity, so the list can be taken up front.
+    store_scan = getattr(mesh, "nonplanar_faces", None)
+    faces = (store_scan(tolerance) if store_scan is not None
+             else list(mesh.faces))
+    for face in faces:
         pts = list(face.vertices)
         for hole in face.holes:
             pts += list(hole)

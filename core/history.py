@@ -2707,10 +2707,29 @@ def translate_points(scene, keys: set, delta: QVector3D) -> None:
     follows for free — the mechanic behind raising a ridge into a gable roof.
     Shared by :class:`MoveVerticesCommand` and the Push/Pull live preview.
     """
-    moving = [v for v in scene.mesh.vertices if _key(v.position) in keys]
+    moving = _vertices_at(scene.mesh, keys)
     for v in moving:
         scene.mesh.move_vertex(v, delta)
     scene.version += 1
+
+
+def _vertices_at(mesh, cells) -> list:
+    """The mesh's vertices whose position key (``topology._key``) is in
+    ``cells``, in mesh order. A store-backed mesh answers from its position array
+    instead of a view per vertex (core/store_mesh.py)."""
+    fast = getattr(mesh, "vertices_in_cells", None)
+    if fast is not None:
+        return fast(cells, _key)
+    return [v for v in mesh.vertices if _key(v.position) in cells]
+
+
+def _cells_of(mesh, vertex_keys) -> set:
+    """The position keys (``topology._key``) of the vertices with these
+    element keys."""
+    fast = getattr(mesh, "cells_of", None)
+    if fast is not None:
+        return fast(vertex_keys, _key)
+    return {_key(v.position) for v in mesh.vertices if v.key in vertex_keys}
 
 
 def defect_names() -> dict:
@@ -2737,11 +2756,10 @@ def _weld_landed(mesh, moving: set) -> bool:
     edge whose ends were now one vertex (#341, @pacaeiro). Only a move that
     actually lands pays for the weld: the check is one pass over the
     vertices, the weld runs when two of them share a point."""
-    moved_keys = {_key(v.position) for v in mesh.vertices if v.key in moving}
+    moved_keys = _cells_of(mesh, moving)
     if not moved_keys:
         return False
-    if not any(_key(v.position) in moved_keys for v in mesh.vertices
-               if v.key not in moving):
+    if not any(v.key not in moving for v in _vertices_at(mesh, moved_keys)):
         return False
     mesh.weld_coincident()
     return True
@@ -2753,7 +2771,8 @@ def _carried_faces(mesh, moving: set) -> list:
     (:func:`core.group._remap_uvws`); a face the move only stretches keeps
     the map it had."""
     out = []
-    for f in mesh.faces:
+    fast = getattr(mesh, "textured_faces", None)
+    for f in (fast() if fast is not None else mesh.faces):
         if not (f.attrs and f.attrs.get("texture")):
             continue
         loops = [f.loop] + list(getattr(f, "hole_loops", []) or [])
@@ -2803,17 +2822,14 @@ class MoveVerticesCommand(Command):
             return
         self._before = scene.mesh.capture_state()
         keys = {_key(p) for p in self.src}
-        moving = {v.key for v in scene.mesh.vertices
-                  if _key(v.position) in keys}
+        moving = {v.key for v in _vertices_at(scene.mesh, keys)}
         landing = {_key(p + self.delta) for p in self.src}
         before = None
-        if any(_key(v.position) in landing for v in scene.mesh.vertices
-               if v.key not in moving):
+        if any(v.key not in moving
+               for v in _vertices_at(scene.mesh, landing)):
             # Something stands where the move lands: note how healthy the
             # neighbourhood is now, to judge the join against it.
-            before = defects_near(
-                [v for v in scene.mesh.vertices
-                 if _key(v.position) in keys or _key(v.position) in landing])
+            before = defects_near(_vertices_at(scene.mesh, keys | landing))
         carried = (_carried_faces(scene.mesh, moving)
                    if self.carry_textures else [])
         translate_points(scene, keys, self.delta)
@@ -2826,8 +2842,7 @@ class MoveVerticesCommand(Command):
         self.welded = _weld_landed(scene.mesh, moving)
         fold_nonplanar_faces(scene.mesh)
         if self.welded and before is not None:
-            after = defects_near([v for v in scene.mesh.vertices
-                                  if _key(v.position) in landing])
+            after = defects_near(_vertices_at(scene.mesh, landing))
             worse = new_defects(before, after)
             if worse:
                 from core.i18n import tr

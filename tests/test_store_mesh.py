@@ -288,3 +288,56 @@ def test_link_hooks_relabel_like_the_built_mesh(binary, monkeypatch,
                                         "Layer0": "Z"}.get(n, n))
         out.append(fingerprint(m))
     assert out[0] == out[1]
+
+
+@pytest.mark.parametrize("seed", range(3))
+def test_the_stores_warped_faces_are_is_planars(monkeypatch, seed):
+    """``MeshStore.nonplanar_faces`` is ``topology.is_planar`` over every
+    face with more than three corners (holes included), bit for bit."""
+    from core.topology import _PLANAR_TOLERANCE, is_planar
+    rng = random.Random(seed)
+    flat, sizes, counts = [], [], []
+    for _ in range(300):
+        o = [rng.uniform(-50, 50) for _ in range(3)]
+        n = rng.choice([3, 4, 5, 6])
+        ring = [[o[0] + rng.uniform(0, 2), o[1] + rng.uniform(0, 2),
+                 o[2] + rng.choice([0, 0, 0, 5e-4, 1e-3, 1.5e-3, 0.3])
+                 * rng.random()] for _ in range(n)]
+        flat += ring
+        sizes.append(n)
+        rings = 1
+        if rng.random() < 0.2:
+            hole = [[o[0] + 0.5 + 0.1 * k, o[1] + 0.5, o[2]] for k in range(3)]
+            flat += hole
+            sizes.append(3)
+            rings = 2
+        counts.append(rings)
+    _store(monkeypatch, True)
+    m = M.Mesh()
+    m.add_faces_bulk(np.array(flat), sizes, counts)
+    assert type(m) is S.StoreMesh
+    want = [f.key for f in m.faces
+            if len(f.vertices) + sum(len(h) for h in f.holes) > 3
+            and not is_planar(list(f.vertices) + [p for h in f.holes
+                                                   for p in h],
+                              _PLANAR_TOLERANCE)]
+    got = [f.key for f in m.nonplanar_faces(_PLANAR_TOLERANCE)]
+    assert got == want and want
+
+
+def test_cell_queries_are_the_python_scans(binary, monkeypatch, tmp_path):
+    from core.history import _cells_of, _vertices_at
+    from core.topology import _key
+    _scene, m = _store_mesh(monkeypatch, tmp_path)
+    vs = list(m.vertices)
+    for cells in ({_key(vs[0].position)},
+                  {_key(v.position) for v in vs[::3]},
+                  {_key(v.position + V(0, 0, 4.9e-5)) for v in vs[::2]}):
+        assert [v.key for v in _vertices_at(m, cells)] == [
+            v.key for v in vs if _key(v.position) in cells]
+    keys = {v.key for v in vs[::5]}
+    assert _cells_of(m, keys) == {_key(v.position) for v in vs
+                                  if v.key in keys}
+    m.faces[1].attrs["texture"] = {"path": "x.png"}
+    assert [f.key for f in m.textured_faces()] == [m.faces[1].key]
+    assert type(m) is S.StoreMesh

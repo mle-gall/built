@@ -298,6 +298,13 @@ impl PyMeshStore {
         Ok(self.inner.find_edge(va, vb).map(|e| self.inner.key(Kind::Edge, e)))
     }
 
+    /// Keys of the faces `fold_nonplanar_faces` would fold, list order.
+    fn nonplanar_faces(&self, py: Python<'_>, tolerance: f64) -> Vec<u128> {
+        let st = &self.inner;
+        let slots = py.detach(|| st.nonplanar_faces(tolerance));
+        slots.into_iter().map(|f| st.key(Kind::Face, f)).collect()
+    }
+
     /// `Edge.soft` / `hidden` as format-3 bits (soft 1, hidden 2).
     fn set_edge_flags(&mut self, key: u128, flags: u8) -> PyResult<u64> {
         let e = slot_of(&self.inner, Kind::Edge, key)?;
@@ -351,11 +358,17 @@ impl PyMeshStore {
     fn key_at(&self, kind: &str, index: usize) -> PyResult<u128> {
         let k = kind_of(kind)?;
         let st = &self.inner.state;
-        let slot = st.order[k as usize]
-            .live(&st.slots[k as usize])
-            .get(index)
-            .copied()
-            .ok_or_else(|| PyValueError::new_err("index out of range"))?;
+        let (order, slots) = (&st.order[k as usize], &st.slots[k as usize]);
+        // List order is the slot order with nothing dead (every fresh
+        // store): the index IS the slot. Otherwise one pass.
+        let slot = if order.explicit.is_none() && slots.live == slots.len() {
+            if index >= slots.len() {
+                return Err(PyValueError::new_err("index out of range"));
+            }
+            index as u32
+        } else {
+            order.live(slots).get(index).copied().ok_or_else(|| PyValueError::new_err("index out of range"))?
+        };
         Ok(self.inner.key(k, slot))
     }
 
@@ -364,7 +377,11 @@ impl PyMeshStore {
         let (_, k, _, _) = super::keys::split_key(key).ok_or_else(|| PyKeyError::new_err(key))?;
         let slot = self.inner.slot(k, key).ok_or_else(|| PyKeyError::new_err(key))?;
         let st = &self.inner.state;
-        Ok(st.order[k as usize].dense_of_slot(&st.slots[k as usize])[slot as usize] as usize)
+        let (order, slots) = (&st.order[k as usize], &st.slots[k as usize]);
+        if order.explicit.is_none() && slots.live == slots.len() {
+            return Ok(slot as usize);
+        }
+        Ok(order.dense_of_slot(slots)[slot as usize] as usize)
     }
 
     fn is_live(&self, key: u128) -> bool {
