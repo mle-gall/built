@@ -495,3 +495,47 @@ def test_draw_erase_undo_redo_stays_in_the_store(monkeypatch, tmp_path, on):
             assert type(scene.mesh) is S.StoreMesh
         results.append(steps)
     assert results[0] == results[1]
+
+
+# ---- the engine fuzz on store-backed meshes --------------------------------
+
+def _engine_run(monkeypatch, scenario, seed, store):
+    """``tests.test_fuzz_engine.run_sequence`` with every new scene's mesh
+    store-backed (``store``) or plain; returns the scenes made and how many
+    of the loose mesh's ops left it in the store."""
+    import tests.test_fuzz_engine as FE
+    made = []
+
+    class _Scene(FE.Scene):
+        def __init__(self, *a, **k):
+            super().__init__(*a, **k)
+            if store:
+                S.become_store(self.mesh, mod.MeshStore(
+                    next(M._KEY_NAMESPACES), **S._weld_args()), [])
+            made.append(self)
+    monkeypatch.setattr(FE, "Scene", _Scene)
+    FE.run_sequence(scenario, seed)
+    return made
+
+
+@pytest.mark.parametrize("scenario", ["cube", "prism", "plan", "group"])
+@pytest.mark.parametrize("seed", range(6))
+def test_engine_fuzz_on_a_store_backed_mesh(monkeypatch, scenario, seed):
+    """The engine certifier (draw on faces, push/pull, undo/redo, with its
+    invariants after every commit) with the loose mesh starting in the
+    store: drawing stays there, a push materialises, undo restores store
+    snapshots. Same final model as the Python run of the same seed."""
+    import tests.test_fuzz_engine as FE
+    py = _engine_run(monkeypatch, scenario, seed, False)[0]
+    st = _engine_run(monkeypatch, scenario, seed, True)[0]
+    assert FE._scene_fingerprint(st) == FE._scene_fingerprint(py)
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("scenario", ["cube", "prism", "plan", "group"])
+@pytest.mark.parametrize("seed", range(6, 60))
+def test_engine_fuzz_on_a_store_backed_mesh_fuzz(monkeypatch, scenario, seed):
+    import tests.test_fuzz_engine as FE
+    py = _engine_run(monkeypatch, scenario, seed, False)[0]
+    st = _engine_run(monkeypatch, scenario, seed, True)[0]
+    assert FE._scene_fingerprint(st) == FE._scene_fingerprint(py)
