@@ -8,7 +8,6 @@ from PySide6.QtCore import Qt
 from core.history import MoveGroupCommand, CompoundCommand
 from tools.base import ToolContext
 from tools.tape import TapeMeasureTool
-from views.wgpu_overlay import Primitive
 
 TOOL_DISPATCH = {'SelectTool': 'select',
  'TapeMeasureTool': 'tape',
@@ -161,21 +160,10 @@ class NativeTools(MeshToolAccess):
             self.mesh_feedback()
             return
         if mode == 'tape':
+            # The band, the guide preview and the length label are painted
+            # each frame by draw_annotations, with GL's painters.
             self.tool.on_hover(ctx)
             self.measurements()
-            lines = self.tool.rubber_band_lines()
-            label = self.tool.value_label()
-        else:
-            return
-        for a, b in lines:
-            pa, pb = self.view._world_to_pixel(a), self.view._world_to_pixel(b)
-            if pa is not None and pb is not None:
-                self.view.overlay_primitives.append(Primitive('polyline', (pa, pb)))
-        if label is not None:
-            text, point = label
-            pixel = self.view._world_to_pixel(point)
-            if pixel is not None:
-                self.view.overlay_primitives.append(Primitive('text', (pixel,), text=text))
 
     def key(self, event):
         if self.mode == 'mesh':
@@ -234,6 +222,8 @@ class NativeTools(MeshToolAccess):
         if renderer is not None and hasattr(renderer, "set_preview_mesh"):
             empty = np.empty(0, np.uint8)
             renderer.set_preview_mesh(empty, empty)
+            # mesh_feedback skips an unchanged preview: this one is gone.
+            self.view._preview_key = None
         self.restore()
         if self.mode == 'mesh' and self.tool is not None:
             self.tool.on_cancel(self)

@@ -60,6 +60,18 @@ class AnnotationLayout:
     drape = Viewport.drape
     _text_block_x = staticmethod(Viewport._text_block_x)
     _format_dim_value = staticmethod(Viewport._format_dim_value)
+    # Live tool feedback (draw_tool_feedback): GL's own painters.
+    _segment_to_pixels = Viewport._segment_to_pixels
+    _clip_w = Viewport._clip_w
+    _CLIP_W = Viewport._CLIP_W
+    _SNAP_LABELS = Viewport._SNAP_LABELS
+    _rubber_band_style = Viewport._rubber_band_style
+    _draw_rubber_band_overlay = Viewport._draw_rubber_band_overlay
+    _draw_guide_preview = Viewport._draw_guide_preview
+    _draw_inference_marker = Viewport._draw_inference_marker
+    _draw_scale_box = Viewport._draw_scale_box
+    _draw_length_label = Viewport._draw_length_label
+    _draw_route_marker = Viewport._draw_route_marker
     _OCCLUSION_STEP_PX = Viewport._OCCLUSION_STEP_PX
     _OCCLUSION_MAX_SAMPLES = Viewport._OCCLUSION_MAX_SAMPLES
     _OCCLUSION_SPLIT = Viewport._OCCLUSION_SPLIT
@@ -152,6 +164,56 @@ def draw_annotations(painter, scene, camera, logical_size, *, annotations_only=F
     finally:
         painter.restore()
     return layout
+
+
+def rubber_band(tools):
+    """GL's rubber band for the active tool: ``(segments, rgba, width,
+    depth_tested)`` or None. A depth-tested band (Push/Pull's forming box,
+    Offset, Paste) goes to the native preview's edges so faces hide its
+    back side; the rest floats in the overlay, as in GL."""
+    style = Viewport._rubber_band_style(tools)
+    if style is None:
+        return None
+    tool = getattr(tools, "active_tool", None)
+    return (*style, bool(getattr(tool, "wireframe_depth_tested", False)))
+
+
+def draw_tool_feedback(painter, tools, layout):
+    """Paint the live tool cues GL's ``_draw_overlay`` paints, with GL's
+    painters: the floating rubber band in its axis/lock colour, the dashed
+    guide preview of Tape and Protractor, Scale's grip box, Push/Pull's
+    «level with» marker, the route marker, extension overlays and the
+    bold length label (warm while a value is typed).
+
+    The Metal view had its own stand-ins (one cyan pen for every line,
+    plain text, flat grips) that dropped the colours telling you which
+    axis a line follows. ``layout`` is the frame's AnnotationLayout (live
+    camera at the overlay's logical size); ``tools`` is NativeTools."""
+    tool = getattr(tools, "active_tool", None)
+    if tool is None:
+        return
+    layout.active_tool = tool
+    layout.last_snap = getattr(tools, "last_snap", None)
+    layout._value_buffer = getattr(tools, "value_buffer", "") or ""
+    layout._route_marker = getattr(tools, "_route_marker", None)
+    painter.save()
+    try:
+        band = rubber_band(tools) if callable(getattr(tool, "rubber_band_lines", None)) else None
+        layout._overlay_rubber = band[:3] if band is not None and not band[3] else None
+        layout._draw_rubber_band_overlay(painter)
+        if hasattr(tool, "guide_preview_lines"):
+            layout._draw_guide_preview(painter)
+        layout._draw_inference_marker(painter)
+        layout._draw_scale_box(painter)
+        layout._draw_route_marker(painter)
+        draw = getattr(Viewport, "_draw_extension_overlays", None)
+        if draw is not None and getattr(tools, "_ext_overlays", None):
+            draw(tools, painter)
+        if (callable(getattr(tool, "value_label", None))
+                or callable(getattr(tool, "rubber_band_lines", None))):
+            layout._draw_length_label(painter)
+    finally:
+        painter.restore()
 
 
 def composite_annotations(image, scene, camera, *, logical_size,

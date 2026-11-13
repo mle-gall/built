@@ -91,6 +91,35 @@ def face_marks(view, faces):
     return raw(np.concatenate(parts) if parts else np.empty(0, VERTEX))
 
 
+def hover_face_marks(view, face, placement=None):
+    """The dots GL puts on the face under the cursor of Push/Pull, Paint,
+    Offset, Follow Me... (``_paint_hover``): a selected face's dots, in
+    the colour picked against the side you see. The Metal view outlined
+    the face in cyan instead, which reads as a selected edge loop.
+
+    Built from the face's own triangulation through ``placement``'s
+    matrix (a face inside a component is stored in its part's
+    coordinates), not from the pack, so it works on any placement and
+    costs one face per hover change."""
+    from PySide6.QtGui import QVector3D
+    matrix = getattr(placement, 'xform', None)
+    points = [p for tri in face.triangulate() for p in tri]
+    if matrix is not None:
+        points = [matrix.map(p) for p in points]
+    if not points:
+        return raw(np.empty(0, VERTEX))
+    color = (.95, .45, .16)
+    choose = getattr(view.source_viewport, '_selection_dot_colors', None)
+    if choose:
+        front, back = choose(face)
+        normal, origin = face.normal(), face.vertices[0]
+        if matrix is not None:
+            normal, origin = matrix.mapVector(normal), matrix.map(origin)
+        color = front if QVector3D.dotProduct(normal, view.camera.eye()-origin) > 0 else back
+    rgba = [*np.asarray(np.clip(np.array(color[:3])*255, 0, 255), np.uint8), 255]
+    return raw(np.array([(p.toTuple(), (0, 0, 1), rgba) for p in points], VERTEX))
+
+
 def preview_mesh(faces, edges=()):
     triangles = []
     for face in faces:
@@ -99,5 +128,14 @@ def preview_mesh(faces, edges=()):
         normal = face.normal().toTuple()
         rgba = [*np.asarray(np.clip(np.array(color[:3])*255, 0, 255), np.uint8), max(1, round(attrs.get('opacity', 1)*255))]
         triangles.extend((p.toTuple(), normal, rgba) for tri in face.triangulate() for p in tri)
-    lines = [(p.toTuple(), (0, 0, 1), (33, 43, 59, 255)) for edge in edges for p in edge]
+    # An edge is (a, b) in the dark edge colour or (a, b, rgba) in its own:
+    # the rubber band keeps the axis/lock colour GL gives it.
+    lines = []
+    for edge in edges:
+        rgba = (33, 43, 59, 255)
+        if len(edge) > 2:
+            c = tuple(edge[2]) + (1.0,) * (4 - len(edge[2]))
+            rgba = tuple(int(v) for v in np.clip(np.array(c[:4]) * 255, 0, 255).round())
+        lines.extend((tuple(map(float, p.toTuple() if hasattr(p, 'toTuple') else p)), (0, 0, 1), rgba)
+                     for p in edge[:2])
     return raw(np.array(triangles, VERTEX)), raw(np.array(lines, VERTEX))

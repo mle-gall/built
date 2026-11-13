@@ -1,7 +1,6 @@
 """Document-tool facade for native mesh editing; no GL picking or drawing."""
 import numpy as np
-from PySide6.QtGui import QColor, QVector3D, QMatrix4x4
-from views.wgpu_overlay import Primitive
+from PySide6.QtGui import QVector3D, QMatrix4x4
 from core.group import iter_placements
 
 
@@ -55,8 +54,16 @@ class MeshToolAccess:
         return self._ray_hit_plane((x, y), plane)
 
     def _segment_to_pixels(self, a, b):
-        pa, pb = self._world_to_pixel(a), self._world_to_pixel(b)
-        return (pa, pb) if pa is not None and pb is not None else None
+        """GL's: cut where the segment passes behind the eye instead of
+        dropping it (a guide preview is kilometres long)."""
+        from views.viewport import Viewport
+        return Viewport._segment_to_pixels(self, a, b)
+
+    def _clip_w(self):
+        from views.viewport import Viewport
+        return Viewport._clip_w(self)
+
+    _CLIP_W = 1e-3      # Viewport._CLIP_W (no import cycle at class level)
 
     def _pixel_to_ray(self, x, y):
         return self.view._pixel_to_ray(x, y)
@@ -211,6 +218,9 @@ class MeshToolAccess:
 
     def set_hover(self, entity, placement=None):
         self._mesh_hover = self._hover_entity = entity
+        # The component placement a face was picked through: its dots are
+        # drawn through that matrix (GL's _hover_placement).
+        self._mesh_hover_placement = placement
 
     def set_suppressed_faces(self, faces):
         if type(getattr(self, 'tool', None)).__name__ == 'TexturePositionTool':
@@ -228,54 +238,44 @@ class MeshToolAccess:
         self.view.update()
 
     def mesh_feedback(self):
-        lines = list(self.tool.rubber_band_lines())
-        lines.extend(self.tool.guide_preview_lines())
+        """Push the tool's depth-tested preview to the renderer and report
+        its measurement. Everything that floats over the model (rubber
+        band, guide preview, grips, labels, snap) is painted each frame by
+        draw_annotations with GL's own painters, so this adds no overlay
+        primitives. The upload is skipped when the preview is unchanged:
+        the frame loop calls this whenever no primitive is pending."""
         faces = list(getattr(self.tool, 'preview_faces', lambda: [])())
         self.view.preview_faces = faces
         renderer = getattr(self.view, 'renderer', None)
         if renderer is not None and hasattr(renderer, 'set_preview_mesh'):
             from views.wgpu_parity import preview_mesh
-            edges = [(a, b) for face in faces
-                     for a, b in zip(face.vertices, face.vertices[1:] + face.vertices[:1])]
-            renderer.set_preview_mesh(*preview_mesh(faces, edges))
-
-        state = getattr(self.tool, 'scale_box_state', lambda: None)()
-        if state:
-            lines.extend(state['segments'])
-            for point, role in state['grips']:
-                pixel = self._world_to_pixel(point)
-                if pixel is not None:
-                    x, y = pixel
-                    color = '#55dd55' if role == 'idle' else '#ff5555'
-                    self.view.overlay_primitives.append(Primitive(
-                        'rectangle', ((x-4, y-4), (x+4, y+4)), color, fill=color))
-
-        entity = getattr(self, '_mesh_hover', None)
-        if entity is not None:
-            if hasattr(entity, 'vertices'):
-                points = entity.vertices
-                lines.extend(zip(points, points[1:] + points[:1]))
-            elif hasattr(entity, 'a'):
-                lines.append((entity.a, entity.b))
-        rgba = getattr(self.tool, 'wireframe_color', None)
-        color = QColor.fromRgbF(*rgba).name() if rgba else '#00dfff'
-        if type(self.tool).__name__ == 'EraserTool':
-            color = '#ff5555'
-        for a, b in lines:
-            pa, pb = self._world_to_pixel(a), self._world_to_pixel(b)
-            if pa is not None and pb is not None:
-                self.view.overlay_primitives.append(Primitive(
-                    'polyline', (pa, pb), color))
+            from views.wgpu_annotations import rubber_band
+            band = rubber_band(self) if callable(getattr(self.tool, 'rubber_band_lines', None)) else None
+            # GL draws a depth-tested band (Push/Pull's forming box) in
+            # the scene pass so the faces hide its back edges; the preview
+            # faces themselves carry no outline of their own.
+            edges = ([(a, b, band[1]) for a, b in band[0]]
+                     if band is not None and band[3] else [])
+            mesh = preview_mesh(faces, edges)
+            key = tuple(bytes(part) for part in mesh)
+            # The selected groups' boxes, depth-tested like GL's: the
+            # preview is this tool's while it is active. Cached vertices,
+            # compared by their key, not their bytes.
+            boxes = getattr(self.view, '_selection_box_vertices', None)
+            box_key, box = boxes() if boxes is not None else (None, None)
+            if (key, box_key) != getattr(self.view, '_preview_key', None):
+                if box is not None and len(box):
+                    from views.wgpu_parity import raw
+                    mesh = (mesh[0], np.concatenate((mesh[1], raw(box))))
+                renderer.set_preview_mesh(*mesh)
+                self.view._preview_key = (key, box_key)
         label = self.tool.value_label() if hasattr(self.tool, 'value_label') else None
         if label is not None:
-            text, point = label
-            pixel = self._world_to_pixel(point) if point is not None else (16, 24)
-            if pixel is not None:
-                self.view.overlay_primitives.append(Primitive('text', (pixel,), text=text))
-            self.measurementChanged.emit(text)
+            self.measurementChanged.emit(label[0])
 
     def draw_annotations(self, painter):
-        from views.wgpu_annotations import draw_annotations, draw_tool_overlays
+        from views.wgpu_annotations import (draw_annotations, draw_tool_feedback,
+                                            draw_tool_overlays)
         from views.wgpu_overlay import draw_snap_indicator
         self._hover_entity = getattr(self, '_mesh_hover', None)
         marks = getattr(self.view, '_draw_selection_marks', None)
@@ -285,11 +285,21 @@ class MeshToolAccess:
             (painter.device().width()/painter.device().devicePixelRatioF(),
              painter.device().height()/painter.device().devicePixelRatioF()), occluded=self._is_occluded,
             hover=self._hover_entity)
-        draw_tool_overlays(painter, self)
+        draw_tool_feedback(painter, self, layout)
         snap = self.last_snap
         if snap is not None and getattr(snap, 'kind', None) and hasattr(snap, 'color'):
+            # With its tooltip ("Endpoint", "On Edge in group"), as GL.
             draw_snap_indicator(painter, snap, layout._world_to_pixel,
-                                layout._clip_pixel_line, labels=False)
+                                layout._clip_pixel_line)
+        draw_tool_overlays(painter, self)
+
+    def world_to_pixel(self, world):
+        """Extension API (``ExtensionApp.add_overlay``) on the Metal view:
+        the hidden GL widget's own projection uses its own size."""
+        return self._world_to_pixel(world)
+
+    def world_to_pixels(self, pts):
+        return self._project_px(np.asarray(pts, dtype=float).reshape(-1, 3))
 
     def _draw_occluded_segment(self, painter, a, b):
         from views.viewport import Viewport
@@ -351,6 +361,8 @@ class MeshToolAccess:
 
     _group_obb = _unsupported_pick
     def begin_groups_preview(self, groups):
+        # Their selection boxes stay behind until the commit (GL skips them).
+        self._moving_groups = tuple(groups)
         selected = {g.uid for root in groups for g, _ in iter_placements(root)}
         self.ids = np.asarray([row for uid in selected
                                for row in self.view.uid_rows.get(uid, ())], np.int64)
@@ -374,6 +386,7 @@ class MeshToolAccess:
         self.write_rows(rows)
 
     def end_groups_preview(self):
+        self._moving_groups = ()
         self.restore()
         self.original = None
 

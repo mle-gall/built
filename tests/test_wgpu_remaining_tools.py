@@ -58,7 +58,8 @@ def test_scale_handles_numeric_commit_and_cancel():
     native.update()
     before = geometry(scene.mesh)
     native.mesh_feedback()
-    assert any(p.kind == 'rectangle' for p in native.view.overlay_primitives)
+    # The grip box is painted by GL's _draw_scale_box (test_metal_parity_cues).
+    assert native.tool.scale_box_state()['grips']
     grip = next(g for g in native.tool._grips if len(g.mask) == 2)
     native.tool._grab(native, grip, (0, 0))
     native.tool._apply_preview(native, (2., 2., 1.))

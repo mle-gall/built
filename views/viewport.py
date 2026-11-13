@@ -9660,14 +9660,17 @@ class Viewport(QOpenGLWidget):
                 self._program.setUniformValue1f(self._loc_opacity, 1.0)
         self._gl.glDisable(GL_POLYGON_OFFSET_FILL)
 
-    def _draw_rubber_band(self) -> None:
-        self._overlay_rubber = None
+    def _rubber_band_style(self):
+        """The active tool's rubber band as GL draws it: ``(segments,
+        rgba, pen width)`` or None. Shared with the Metal view, whose
+        overlay used one cyan pen for every band and so lost the axis and
+        lock colours that tell you which way the line is going."""
         tool = self.active_tool
         if tool is None:
-            return
+            return None
         segments = tool.rubber_band_lines()
         if not segments:
-            return
+            return None
 
         # A tool can force its preview-line colour (Push/Pull uses the normal
         # edge colour so its forming box reads like real geometry, not a loose
@@ -9701,6 +9704,15 @@ class Viewport(QOpenGLWidget):
             color = (0.20, 0.40, 0.78, 0.95)
         else:
             color = (0.95, 0.45, 0.16, 0.85)
+        return segments, color, 2.5 if inference else 2.0
+
+    def _draw_rubber_band(self) -> None:
+        self._overlay_rubber = None
+        style = self._rubber_band_style()
+        if style is None:
+            return
+        tool = self.active_tool
+        segments, color, width = style
 
         # Depth-tested previews (Push/Pull, Offset, Paste) read like real
         # geometry and need GL hidden-line removal — draw them via GL. The
@@ -9721,7 +9733,7 @@ class Viewport(QOpenGLWidget):
             self._gl.glDrawArrays(GL_LINES, 0, len(data) // 3)
             self._rubber_vao.release()
         else:
-            self._overlay_rubber = (segments, color, 2.5 if inference else 2.0)
+            self._overlay_rubber = (segments, color, width)
 
     def _draw_rubber_band_overlay(self, painter: QPainter) -> None:
         if self._overlay_rubber is None:
@@ -9828,15 +9840,7 @@ class Viewport(QOpenGLWidget):
         # Imported survey points (GPS / total station) — Track G.
         self._draw_geo_points(painter)
 
-        # Profile→plan marker: the route point at the station hovered in the
-        # profile panel (Track G).
-        if self._route_marker is not None:
-            q = self._world_to_pixel(self.drape(self._route_marker))
-            if q is not None:
-                painter.setBrush(QColor(243, 115, 41))
-                painter.setPen(QPen(QColor(255, 255, 255), 1.5))
-                painter.drawEllipse(QPointF(*q), 6, 6)
-                painter.setBrush(Qt.NoBrush)
+        self._draw_route_marker(painter)
 
         # Persistent dimension annotations
         self._draw_dimensions(painter)
@@ -9866,6 +9870,19 @@ class Viewport(QOpenGLWidget):
         self._draw_zoom_box(painter)
 
         painter.end()
+
+    def _draw_route_marker(self, painter: QPainter) -> None:
+        """Profile→plan marker: the route point at the station hovered in
+        the profile panel (Track G). A method so the Metal overlay paints
+        the same dot."""
+        if getattr(self, "_route_marker", None) is None:
+            return
+        q = self._world_to_pixel(self.drape(self._route_marker))
+        if q is not None:
+            painter.setBrush(QColor(243, 115, 41))
+            painter.setPen(QPen(QColor(255, 255, 255), 1.5))
+            painter.drawEllipse(QPointF(*q), 6, 6)
+            painter.setBrush(Qt.NoBrush)
 
     def _draw_linear_mode_label(self, painter: QPainter) -> None:
         # The mirror image of the bug above: these had the Spanish written
