@@ -258,9 +258,17 @@ class MeshToolAccess:
                      if band is not None and band[3] else [])
             mesh = preview_mesh(faces, edges)
             key = tuple(bytes(part) for part in mesh)
-            if key != getattr(self.view, '_preview_key', None):
+            # The selected groups' boxes, depth-tested like GL's: the
+            # preview is this tool's while it is active. Cached vertices,
+            # compared by their key, not their bytes.
+            boxes = getattr(self.view, '_selection_box_vertices', None)
+            box_key, box = boxes() if boxes is not None else (None, None)
+            if (key, box_key) != getattr(self.view, '_preview_key', None):
+                if box is not None and len(box):
+                    from views.wgpu_parity import raw
+                    mesh = (mesh[0], np.concatenate((mesh[1], raw(box))))
                 renderer.set_preview_mesh(*mesh)
-                self.view._preview_key = key
+                self.view._preview_key = (key, box_key)
         label = self.tool.value_label() if hasattr(self.tool, 'value_label') else None
         if label is not None:
             self.measurementChanged.emit(label[0])
@@ -353,6 +361,8 @@ class MeshToolAccess:
 
     _group_obb = _unsupported_pick
     def begin_groups_preview(self, groups):
+        # Their selection boxes stay behind until the commit (GL skips them).
+        self._moving_groups = tuple(groups)
         selected = {g.uid for root in groups for g, _ in iter_placements(root)}
         self.ids = np.asarray([row for uid in selected
                                for row in self.view.uid_rows.get(uid, ())], np.int64)
@@ -376,6 +386,7 @@ class MeshToolAccess:
         self.write_rows(rows)
 
     def end_groups_preview(self):
+        self._moving_groups = ()
         self.restore()
         self.original = None
 

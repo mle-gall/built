@@ -36,11 +36,21 @@ def box_primitives(view):
     return result
 
 
-def selection_box_primitives(view):
-    """The box around each selected group, in the group's own axes: GL's
-    selection cue (``_box_edges`` in the selected-edges pass) had no
-    Metal counterpart, so a selected group only tinted — on the ride a
-    support picked in a forest of others gave no sense of its extent.
+_NO_BOXES = (None, np.empty((0, 2, 3), np.float32))
+
+
+def selection_box_segments(view):
+    """``(key, segments)``: the box around each selected group, in the
+    group's own axes, as world segments ``(N, 2, 3)``. GL's selection cue
+    (``_box_edges`` in the selected-edges pass) had no Metal counterpart,
+    so a selected group only tinted; on the ride a support picked in a
+    forest of others gave no sense of its extent.
+
+    GL draws the box in the scene pass, depth-tested: the edges behind
+    the group are hidden. The Metal view sends these segments to the
+    native preview's edges (depth-tested) for the same look; ``key``
+    changes exactly when the segments do, so the upload is skipped
+    otherwise.
 
     Skipped like GL: face-me billboards (their mesh quad is not what is
     on screen) and groups a Move/Rotate drag is previewing. Boxes are
@@ -48,34 +58,67 @@ def selection_box_primitives(view):
     them, an edit (move, scale, geometry) measures again."""
     from core.group import Group, oriented_box_corners
     from views.viewport import Viewport, _box_edge_vertices
-    from views.wgpu_overlay import Primitive
     source = view.source_viewport
     if source is None or source.plano_style is not None or source.style_override is not None:
-        return []
+        return _NO_BOXES
     groups = [g for g in view.scene.selection if isinstance(g, Group)]
     if not groups:
-        return []
+        return _NO_BOXES
     moving = {id(g) for g in (getattr(source, '_preview_groups', None) or ())}
+    tools = view.__dict__.get('tools')
+    moving.update(id(g) for g in (getattr(tools, '_moving_groups', None) or ()))
     version = view.scene.version - view.scene.view_version
     cache = view.__dict__.setdefault('_selection_boxes', {})
     if cache.get(None) != version:
         cache.clear()
         cache[None] = version
-    scale = view.devicePixelRatioF()
-    result = []
-    for group in groups:
-        if getattr(group, 'billboard', False) or id(group) in moving:
-            continue
+    shown = [g for g in groups
+             if not getattr(g, 'billboard', False) and id(g) not in moving]
+    key = (version, frozenset(map(id, shown)))
+    if cache.get('key') == key:
+        return key, cache['segments']
+    parts = []
+    for group in shown:
         box = cache.get(group)
         if box is None:
             box = cache[group] = oriented_box_corners(*Viewport._compute_obb(group))
-        for a, b in np.asarray(_box_edge_vertices(box)).reshape(-1, 2, 3):
-            segment = Viewport._clip_segment_front(view, QVector3D(*a), QVector3D(*b))
-            if segment is None:
-                continue
-            points = tuple(view._world_to_pixel(p) for p in segment)
-            if all(p is not None for p in points):
-                result.append(Primitive('polyline', points, '#f2732a', 1.5 / scale))
+        parts.append(np.asarray(_box_edge_vertices(box), np.float32).reshape(-1, 2, 3))
+    segments = np.concatenate(parts) if parts else _NO_BOXES[1]
+    cache['key'], cache['segments'] = key, segments
+    return key, segments
+
+
+def selection_box_vertices(view):
+    """``(key, VERTEX array)``: the boxes as native preview line vertices
+    in GL's selection orange, cached with the segments: a mesh tool's
+    feedback asks for them on every frame."""
+    from views.wgpu_scene import VERTEX
+    key, segments = selection_box_segments(view)
+    cache = view.__dict__.setdefault('_selection_boxes', {})
+    if cache.get('vertex_key') != key or 'vertices' not in cache:
+        lines = np.zeros(len(segments) * 2, VERTEX)
+        lines['pos'] = np.asarray(segments).reshape(-1, 3)
+        lines['normal'] = (0, 0, 1)
+        lines['color'] = (242, 114, 40, 255)        # GL's (.95, .45, .16)
+        cache['vertex_key'], cache['vertices'] = key, lines
+    return key, cache['vertices']
+
+
+def selection_box_primitives(view):
+    """The same boxes as overlay lines, for a renderer without native
+    preview edges (no depth test there)."""
+    from views.viewport import Viewport
+    from views.wgpu_overlay import Primitive
+    _, segments = selection_box_segments(view)
+    scale = view.devicePixelRatioF()
+    result = []
+    for a, b in segments:
+        segment = Viewport._clip_segment_front(view, QVector3D(*a), QVector3D(*b))
+        if segment is None:
+            continue
+        points = tuple(view._world_to_pixel(p) for p in segment)
+        if all(p is not None for p in points):
+            result.append(Primitive('polyline', points, '#f2732a', 1.5 / scale))
     return result
 
 

@@ -448,7 +448,11 @@ class WgpuView(QWidget):
         if self.tools.mode == 'mesh' and not self.overlay_primitives:
             self.tools.mesh_feedback()
         from views.wgpu_edit_context import billboard_outline_primitives
-        primitives = (self._edit_box_primitives() + self._selection_box_primitives()
+        # Selection boxes ride the native preview edges, depth-tested as in
+        # GL; only a renderer without them gets overlay lines.
+        boxes = ([] if hasattr(self.renderer, 'set_preview_mesh')
+                 else self._selection_box_primitives())
+        primitives = (self._edit_box_primitives() + boxes
                       + billboard_outline_primitives(self) + self.overlay_primitives)
         if annotations or primitives or section_widgets or getattr(self, "_had_overlay", False):
             from views.wgpu_overlay import rasterize, pixels
@@ -723,6 +727,10 @@ class WgpuView(QWidget):
         from views.wgpu_edit_context import selection_box_primitives
         return selection_box_primitives(self)
 
+    def _selection_box_vertices(self):
+        from views.wgpu_edit_context import selection_box_vertices
+        return selection_box_vertices(self)
+
     def _edit_box_primitives(self):
         from views.wgpu_edit_context import box_primitives
         return box_primitives(self)
@@ -743,8 +751,14 @@ class WgpuView(QWidget):
         hover_face = (hovered if isinstance(hovered, Face) and self.tools.mode != 'select'
                       and hovered not in selected else None)
         placement = getattr(self.tools, '_mesh_hover_placement', None) if hover_face else None
+        # Outside the mesh tools (whose feedback owns the preview), the
+        # native preview edges carry the selected and hovered loose edges
+        # and the selected groups' boxes, all depth-tested as in GL.
+        edges_here = self.tools.mode != 'mesh' and hasattr(self.renderer, 'set_preview_mesh')
+        box_key, boxes = self._selection_box_vertices() if edges_here else (None, ())
         signature = (frozenset(map(element_identity, selected)), hover, element_identity(hovered), id(self.packed),
-                     id(placement), tuple(self.camera.eye().toTuple()) if faces or hover_face else ())
+                     id(placement), tuple(self.camera.eye().toTuple()) if faces or hover_face else (),
+                     self.tools.mode, box_key)
         if signature != self._selection_signature:
             indices = set()
             for root in selected:
@@ -761,7 +775,7 @@ class WgpuView(QWidget):
                     from views.wgpu_parity import hover_face_marks
                     marks = np.concatenate((marks, hover_face_marks(self, hover_face, placement)))
                 self.renderer.set_face_marks(marks)
-            if self.tools.mode == 'select' and hasattr(self.renderer, 'set_preview_mesh'):
+            if edges_here:
                 from views.wgpu_scene import VERTEX
                 from views.wgpu_parity import raw
                 edges = [(e, (.95, .45, .16)) for e in selected if isinstance(e, Edge)]
@@ -769,12 +783,13 @@ class WgpuView(QWidget):
                     edges.append((hovered, (.30, .55, .95)))
                 vertices = [(p.toTuple(), (0,0,1), (*np.asarray(np.array(c)*255, np.uint8),255))
                             for e,c in edges for p in (e.a,e.b)]
-                self.renderer.set_preview_mesh(np.empty(0,np.uint8), raw(np.array(vertices,VERTEX)))
+                lines = np.concatenate((np.array(vertices, VERTEX), boxes))
+                self.renderer.set_preview_mesh(np.empty(0,np.uint8), raw(lines))
             self._selection_signature = signature
 
     def _draw_selection_marks(self, painter):
         """Loose edge feedback; faces/groups are depth-tested native passes."""
-        if self.tools.mode == 'select' and hasattr(self.renderer, 'set_preview_mesh'):
+        if self.tools.mode != 'mesh' and hasattr(self.renderer, 'set_preview_mesh'):
             return
         from core.mesh import Edge
         from PySide6.QtCore import QPointF

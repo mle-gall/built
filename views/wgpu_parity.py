@@ -136,5 +136,6 @@ def preview_mesh(faces, edges=()):
         if len(edge) > 2:
             c = tuple(edge[2]) + (1.0,) * (4 - len(edge[2]))
             rgba = tuple(int(v) for v in np.clip(np.array(c[:4]) * 255, 0, 255).round())
-        lines.extend((p.toTuple(), (0, 0, 1), rgba) for p in edge[:2])
+        lines.extend((tuple(map(float, p.toTuple() if hasattr(p, 'toTuple') else p)), (0, 0, 1), rgba)
+                     for p in edge[:2])
     return raw(np.array(triangles, VERTEX)), raw(np.array(lines, VERTEX))

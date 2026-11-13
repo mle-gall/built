@@ -222,6 +222,8 @@ class NativeTools(MeshToolAccess):
         if renderer is not None and hasattr(renderer, "set_preview_mesh"):
             empty = np.empty(0, np.uint8)
             renderer.set_preview_mesh(empty, empty)
+            # mesh_feedback skips an unchanged preview: this one is gone.
+            self.view._preview_key = None
         self.restore()
         if self.mode == 'mesh' and self.tool is not None:
             self.tool.on_cancel(self)

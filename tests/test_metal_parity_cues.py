@@ -269,3 +269,41 @@ def test_selection_rectangle_waits_for_the_drag_threshold(view):
     QApplication.sendEvent(view, QMouseEvent(QMouseEvent.MouseMove, c, c,
         Qt.NoButton, Qt.LeftButton, Qt.NoModifier))
     assert [p.kind for p in view.overlay_primitives] == ['rectangle']
+
+
+def _preview_edges(view):
+    return np.frombuffer(bytes(view.calls['preview'][1]), VERTEX)
+
+
+def test_selection_box_is_a_depth_tested_preview_edge(view):
+    # GL draws the box in the scene pass (its back edges hidden by the
+    # group); an overlay line showed all twelve through the geometry.
+    group = view.scene.groups[0]
+    view.scene.selection = {group}
+    view.sync_selection()
+    edges = _preview_edges(view)
+    assert len(edges) >= 16 and len(edges) % 2 == 0
+    assert {tuple(c) for c in edges['color']} == {(242, 114, 40, 255)}
+    assert edges['pos'][:, 0].min() == pytest.approx(4) and edges['pos'][:, 0].max() == pytest.approx(6)
+    assert edges['pos'][:, 1].min() == pytest.approx(3) and edges['pos'][:, 1].max() == pytest.approx(5)
+    # A move commit measures again.
+    group.xform.translate(1, 0, 0)
+    view.scene.version += 1
+    view.sync_selection()
+    assert _preview_edges(view)['pos'][:, 0].max() == pytest.approx(7)
+
+
+def test_mesh_tool_preview_carries_the_box_except_while_moving_it(view):
+    group = view.scene.groups[0]
+    view.scene.selection = {group}
+    tool = line_tool()
+    view.tools.tool = tool
+    view.tools.mode = 'mesh'
+    view.tools.mesh_feedback()
+    assert len(_preview_edges(view)) >= 16
+    view.calls.pop('preview')
+    view.tools.mesh_feedback()                  # unchanged: no upload
+    assert 'preview' not in view.calls
+    view.tools._moving_groups = (group,)        # Move/Rotate drag preview
+    view.tools.mesh_feedback()
+    assert len(_preview_edges(view)) == 0
