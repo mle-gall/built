@@ -501,6 +501,10 @@ def is_closed(mesh) -> bool:
     anything. Open sheets and flat drawings return ``False``."""
     if not mesh.faces:
         return False
+    from core import push_scans
+    got = push_scans.is_closed(mesh)        # a store-backed mesh, natively
+    if got is not None:
+        return got
     return all(len(e.faces) >= 2 for e in mesh.edges)
 
 
@@ -547,6 +551,16 @@ def orient_outward(mesh, seed: int = 12345, only=None) -> list:
     re-run parity over all of them."""
     if not mesh.faces:
         return []
+    got = _native_decision(mesh, seed, only)
+    if got is not None:
+        scan, marks, flips = got
+        if marks:
+            for f, (_, v) in zip(scan.faces([i for i, _ in marks]), marks):
+                f.interior = v
+        out = scan.faces(flips) if flips else []
+        for f in out:
+            turn_face_over(f)
+        return out
     if _all_coplanar(mesh):
         # A flat drawing has no volume at all: no partitions, nothing to flip.
         for f in mesh.faces:
@@ -677,6 +691,14 @@ def orient_outward(mesh, seed: int = 12345, only=None) -> list:
                 if comp_of[f] in worse:
                     attrs, loop, holes = saved[f]
                     f.attrs = attrs
+                    reverse = getattr(f, "reverse_rings", None)
+                    if reverse is not None:
+                        # A store-backed face: turning it over reversed
+                        # each ring, so reversing them again IS the old
+                        # rings — one store op, where writing the saved
+                        # loop back materialised the whole mesh.
+                        reverse()
+                        continue
                     f.loop[:] = loop
                     for h, old in zip(f.hole_loops, holes):
                         h[:] = old
@@ -697,3 +719,55 @@ def _incoherent_edges(faces) -> int:
                 uses.setdefault(frozenset((a.key, b.key)), []).append(
                     (a.key, b.key))
     return sum(1 for u in uses.values() if len(u) == 2 and u[0] == u[1])
+
+
+# ---- The native pass ---------------------------------------------------------
+
+#: The helpers the native pass reproduces; a test that replaces one of them
+#: (or a constant) gets the Python pass, which calls the replacement.
+_REPRODUCED = None
+
+
+def _native_decision(mesh, seed, only):
+    """``orient_outward``'s decision from the Rust engine
+    (``ingetrazo_core.orient_decision``), or ``None`` to run the Python
+    pass: ``(scan, marks, flips)`` — the faces whose ``interior`` mark
+    changes (index, new value) and the faces to turn over, in list order.
+
+    The engine reproduces this module's decisions bit for bit (the float32
+    geometry through Qt's own formulas, Python's random stream, the parity
+    rays, the rounds and the rollback; see ``rust/ingetrazo_core/src/
+    orient.rs``), so it runs whenever the scans run (``core.scan_index``;
+    ``INGETRAZO_SCANS=0`` is the oracle) and this Qt's ``length()`` formula
+    is known. The ride's 267k-face mesh took ~40 s per pass in Python."""
+    import sys
+    from core import _native, scan_index
+    if not scan_index.enabled():
+        return None
+    mod = _native.native
+    hypot = _native.qt_hypot()
+    if hypot is None or not hasattr(mod, "orient_decision"):
+        return None
+    here = globals()
+    if (_REPRODUCED is None
+            or any(here[name] is not fn for name, fn in _REPRODUCED.items())
+            or _RAYS % 2 == 0 or not 1 <= _RAYS <= 31
+            or _EPS != 1e-7 or _T_MIN != 1e-6
+            or not isinstance(seed, int) or not 0 <= seed < 2 ** 64):
+        return None
+    # A Python mesh's scan reads its objects, and nothing here bumps its
+    # revision (``interior`` marks, a face turned over in place): a cached
+    # scan could hold rings or marks from before. Read afresh.
+    scan = scan_index.scan(mesh, fresh=not scan_index.store_backed(mesh))
+    if scan is None:
+        return None
+    marks, flips = mod.orient_decision(
+        scan.native, None if only is None else list(only), seed, _RAYS,
+        float(_JITTER), hypot, sys.version_info >= (3, 12))
+    return scan, marks, flips
+
+
+_REPRODUCED = {k: globals()[k] for k in (
+    "_face_side_state", "ray_parity_outside", "_interior_probe", "_on_face",
+    "_basis", "_face_components", "_face_triangles", "_all_coplanar",
+    "is_closed", "_incoherent_edges", "_python_crossings")}

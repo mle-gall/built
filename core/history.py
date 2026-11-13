@@ -3426,7 +3426,17 @@ class PruneOrphanEdgesCommand(Command):
         self.removed: list[Edge] = []
 
     def do(self, scene) -> None:
-        self.removed = orphaned_edges_at(scene.edges, scene.faces, self.vertices)
+        from core import push_scans
+        from core.topology import _key
+        # Only an edge with an end near the vertices can be swept, and only
+        # a face with a corner there can still hold it: those, in list
+        # order (natively), stand in for every edge and face.
+        keys = [_key(v) for v in self.vertices]
+        edges = push_scans.edges_near_points(scene.mesh, keys)
+        faces = push_scans.faces_near_points_rings(scene.mesh, keys)
+        self.removed = orphaned_edges_at(
+            scene.edges if edges is None else edges,
+            scene.faces if faces is None else faces, self.vertices)
         for edge in self.removed:
             scene.mesh.remove_edge(edge)
             scene.selection.discard(edge)

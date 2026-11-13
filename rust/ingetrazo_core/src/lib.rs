@@ -27,6 +27,8 @@ mod snap_build;
 mod pack;
 mod store;
 mod scans;
+mod orient;
+mod pushscan;
 
 #[pymodule]
 fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -36,6 +38,21 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<HlrOccluders>()?;
     m.add_function(wrap_pyfunction!(touching_boxes, m)?)?;
     m.add_class::<ParityTris>()?;
+    m.add_function(wrap_pyfunction!(orient::orient_decision, m)?)?;
+    m.add_function(wrap_pyfunction!(orient::scan_face_geometry, m)?)?;
+    m.add_function(wrap_pyfunction!(orient::scan_face_probes, m)?)?;
+    m.add_function(wrap_pyfunction!(orient::py_random_stream, m)?)?;
+    m.add_function(wrap_pyfunction!(pushscan::scan_is_closed, m)?)?;
+    m.add_function(wrap_pyfunction!(pushscan::scan_faces_holding_points, m)?)?;
+    m.add_function(wrap_pyfunction!(pushscan::scan_parallel_overlapping, m)?)?;
+    m.add_function(wrap_pyfunction!(pushscan::scan_lateral_exit, m)?)?;
+    m.add_function(wrap_pyfunction!(pushscan::scan_vertices_in_boxes, m)?)?;
+    m.add_function(wrap_pyfunction!(pushscan::scan_cracked_edges, m)?)?;
+    m.add_function(wrap_pyfunction!(pushscan::scan_faces_meeting_rings, m)?)?;
+    m.add_function(wrap_pyfunction!(pushscan::store_keys_since, m)?)?;
+    m.add_function(wrap_pyfunction!(pushscan::scan_tjunction_arrays, m)?)?;
+    m.add_function(wrap_pyfunction!(pushscan::scan_mesh_is_flat, m)?)?;
+    m.add_function(wrap_pyfunction!(orient::scan_face_indices, m)?)?;
     m.add_function(wrap_pyfunction!(occlusion_span, m)?)?;
     m.add_function(wrap_pyfunction!(face_geometry, m)?)?;
     m.add_function(wrap_pyfunction!(render_bake::bake_vertices, m)?)?;
@@ -211,15 +228,28 @@ impl ParityTris {
         skip: Option<i64>,
     ) -> PyResult<Vec<i64>> {
         let d = rows3(&dirs.as_array());
-        let m: Option<Vec<bool>> = mask.map(|m| m.as_array().to_vec());
-        if let Some(ref mm) = m {
+        // The mask is read in place: copying it cost O(triangles) per query,
+        // and orientation asks one query per face — O(F²) bytes moved (the
+        // ride's 267k-face mesh spent ~60 s of a push click copying masks).
+        let owned: Option<Vec<bool>>;
+        let m: Option<&[bool]> = match mask.as_ref() {
+            None => None,
+            Some(m) => match m.as_slice() {
+                Ok(s) => Some(s),
+                Err(_) => {
+                    owned = Some(m.as_array().to_vec());
+                    owned.as_deref()
+                }
+            },
+        };
+        if let Some(mm) = m {
             if mm.len() != self.inner.len() {
                 return Err(pyo3::exceptions::PyValueError::new_err("mask length"));
             }
         }
         let inner = &self.inner;
         let o = [origin.0, origin.1, origin.2];
-        Ok(py.detach(|| inner.crossings(o, &d, m.as_deref(), skip)))
+        Ok(py.detach(|| inner.crossings(o, &d, m, skip)))
     }
 }
 

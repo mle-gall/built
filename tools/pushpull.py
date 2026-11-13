@@ -86,6 +86,7 @@ from core.topology import (
 )
 from tools.base import Tool, ToolContext, ctrl_clause
 from core.units import fmt_len
+from core import push_scans
 
 
 def _project_loop_2d(loop, normal):
@@ -136,6 +137,139 @@ class _GroupScene:
     @version.setter
     def version(self, value):
         self._scene.version = value
+
+
+def _segment_faces(mesh, a, b, faces):
+    """The faces ``classify_push_edge(face, a, b, faces)`` /
+    ``_segment_on_face_boundary(a, b, g)`` can find carrying ``a``–``b``:
+    the native candidates near both points (list order, a superset), or
+    ``faces`` itself with the scans off (``core.push_scans``)."""
+    got = push_scans.faces_on_segment(mesh, a, b)
+    return faces if got is None else got
+
+
+def _refine_candidates(mesh, loops) -> list:
+    """The positions ``refine_loop_with_points(loop, points)`` can insert
+    into ``loops``' edges: every vertex inside the box it tests around an
+    edge (``2·tol + 1e-6·|coords|``, grown a hair), in list order — or every
+    vertex with the scans off. The same points per edge, in the same order,
+    so the same refined loops."""
+    from core.topology import _SPLIT_TOLERANCE as tol
+    boxes = []
+    for loop in loops:
+        n = len(loop)
+        for i in range(n):
+            a, b = loop[i], loop[(i + 1) % n]
+            big = max(abs(a.x()), abs(a.y()), abs(a.z()),
+                      abs(b.x()), abs(b.y()), abs(b.z()))
+            g = 2.0 * tol + 1e-6 * big + 1e-9 * (1.0 + big)
+            boxes.append((min(a.x(), b.x()) - g, min(a.y(), b.y()) - g,
+                          min(a.z(), b.z()) - g, max(a.x(), b.x()) + g,
+                          max(a.y(), b.y()) + g, max(a.z(), b.z()) + g))
+    got = push_scans.vertices_in_boxes(mesh, boxes) if boxes else []
+    if got is None:
+        return [v.position for v in mesh.vertices]
+    return [v.position for v in got]
+
+
+def _made_since(mesh, snap, kind: str):
+    """The elements of ``kind`` a store-backed ``mesh`` holds and its
+    snapshot ``snap`` (``capture_state()``) does not, in list order — what
+    ``[x for x in mesh.<kind>s if x not in snap]`` finds — or ``None`` (a
+    Python mesh or snapshot, or the scans off)."""
+    from core.store_mesh import StoreState
+    if not isinstance(snap, StoreState):
+        return None
+    return push_scans.made_since(mesh, snap.snap, kind)
+
+
+class _Fingerprint:
+    """``PushPullTool._mesh_fingerprint(mesh)`` taken now and compared
+    later, without sorting every vertex key unless it can matter: the
+    counts are compared first, as the tuple comparison does, and the keys
+    are made (from the positions read now) only when they are equal. On
+    the ride the eager form cost ~0.4 s twice per push."""
+
+    __slots__ = ("counts", "positions", "mesh")
+
+    def __init__(self, mesh) -> None:
+        from core import scan_index
+        self.counts = (len(mesh.faces), len(mesh.edges))
+        st = (mesh.__dict__["_store"] if scan_index.store_backed(mesh)
+              else None)
+        self.positions = (st.positions() if st is not None else
+                          [v.position.toTuple() for v in mesh.vertices])
+
+    def same_now(self, mesh) -> bool:
+        if (len(mesh.faces), len(mesh.edges)) != self.counts:
+            return False
+        rows = (self.positions.tolist() if hasattr(self.positions, "tolist")
+                else self.positions)
+        before = tuple(sorted(_key(QVector3D(*p)) for p in rows))
+        return PushPullTool._mesh_fingerprint(mesh)[2] == before
+
+
+class _FacesBefore:
+    """The faces before one plane rebuild, for the two questions the
+    fixpoint asks after it: which faces are new (``set(mesh.faces) -
+    before_faces``, in that set's iteration order, which ``fresh`` and so
+    the next round's planes inherit) and whether a new face's shape is the
+    shape of a face from before that is not fresh (``kept``).
+
+    The first needed a set of every face per plane (53 ms of views on the
+    ride's mesh) and the second the shape of every face but the fresh ones
+    (seconds). A store-backed mesh answers the first by key
+    (``push_scans.set_minus``: the same table, the same order); the second
+    is asked of the faces from before near the new face only — an equal
+    shape has its corners in the same 1e-4 cells, so its box is within a
+    cell of the new face's — through the same ``_face_shape`` of the same
+    elements (a store keeps a removed face's rings readable)."""
+
+    __slots__ = ("keys", "faces", "scan", "_python")
+
+    def __init__(self, mesh) -> None:
+        from core import scan_index
+        self.keys = push_scans.live_keys(mesh, "face")
+        self.faces = set(mesh.faces) if self.keys is None else None
+        # A store scan of the state before (cached per revision; it keeps
+        # that state's faces by key). A Python mesh's faces are scanned
+        # only if a rebuild changed something: they keep their loops, and
+        # a rebuild moves no vertex.
+        self.scan = scan_index.scan(mesh) if self.keys is not None else None
+        self._python = self.keys is None and scan_index.enabled()
+
+    def new_faces(self, mesh):
+        if self.keys is not None:
+            now = push_scans.live_keys(mesh, "face")
+            if now is not None:
+                got = push_scans.set_minus(mesh, "face", now, set(self.keys))
+                if got is not None:
+                    return got
+            self.faces = set(push_scans.views(mesh, "face", self.keys))
+        return set(mesh.faces) - self.faces
+
+    def kept(self, face, fresh) -> bool:
+        shape = _face_shape(face)
+        if self.scan is None and self._python:
+            from core import _native, scan_index
+            self._python = False
+            self.scan = scan_index.Scan.of_faces(_native.native,
+                                                 list(self.faces))
+        if self.scan is None:
+            if self.faces is None:
+                self.faces = set(push_scans.views(
+                    face._m, "face", self.keys))
+            return any(_face_shape(g) == shape for g in self.faces
+                       if g not in fresh)
+        pts = face.vertices
+        m = 2e-4 + 1e-6 * max((max(abs(p.x()), abs(p.y()), abs(p.z()))
+                               for p in pts), default=0.0)
+        lo = (min(p.x() for p in pts) - m, min(p.y() for p in pts) - m,
+              min(p.z() for p in pts) - m)
+        hi = (max(p.x() for p in pts) + m, max(p.y() for p in pts) + m,
+              max(p.z() for p in pts) + m)
+        near = self.scan.faces(self.scan.faces_meeting((lo, hi)))
+        return any(_face_shape(g) == shape for g in near if g not in fresh)
 
 
 def _component_is_closed(mesh, face) -> bool:
@@ -1043,7 +1177,9 @@ class PushPullTool(Tool):
         """The Vertex OBJECTS the cap loop stands on, resolved once."""
         keys = {_key(p) for p in self._cap_positions}
         mesh = self._group.mesh if self._group is not None else scene.mesh
-        return [v for v in mesh.vertices if _key(v.position) in keys]
+        near = push_scans.vertices_at_keys(mesh, self._cap_positions)
+        return [v for v in (mesh.vertices if near is None else near)
+                if _key(v.position) in keys]
 
     def _move_cap(self, viewport, delta: float, applied: float) -> None:
         """Slide the cap's own vertices by ``delta`` along the normal.
@@ -1215,7 +1351,9 @@ class PushPullTool(Tool):
         at its own distance."""
         snap = self._preview_snapshot
         n, anchor, d = self._normal, self._anchor, self.extrusion
-        movers = [v for v in mesh.vertices if v.key not in snap["vpos"]
+        made = _made_since(mesh, snap, "vertex")
+        movers = [v for v in (mesh.vertices if made is None else made)
+                  if v.key not in snap["vpos"]
                   and abs(QVector3D.dotProduct(v.position - anchor, n) - d)
                   < _STITCH_TOL]
         moving = set(movers)
@@ -1250,8 +1388,15 @@ class PushPullTool(Tool):
             self._stage_verts = movers
             self._stage_pos = [(QVector3D(v.position), r)
                                for v, r in zip(movers, rates)]
-        self._stage_new = ((ElementSet(mesh.faces) - ElementSet(snap["faces"]))
-                           | (set(mesh.edges) - set(snap["edges"])))
+        made_f = _made_since(mesh, snap, "face")
+        made_e = _made_since(mesh, snap, "edge")
+        if made_f is not None and made_e is not None:
+            # Read by membership only: the same elements, found by key.
+            self._stage_new = ElementSet(made_f) | set(made_e)
+        else:
+            self._stage_new = (
+                (ElementSet(mesh.faces) - ElementSet(snap["faces"]))
+                | (set(mesh.edges) - set(snap["edges"])))
         return True
 
     @staticmethod
@@ -1452,7 +1597,9 @@ class PushPullTool(Tool):
         anchor = (self._anchor if self._anchor is not None
                   else self.base_face.centroid())
         base_xy = _project_loop_2d(self.base_face.vertices, n)
-        for g in scene.faces:
+        # Only a parallel face overlapping the base laterally can block it.
+        near = push_scans.parallel_overlapping(scene.mesh, n, base_xy)
+        for g in (scene.faces if near is None else near):
             if g == self.base_face:
                 continue
             gn = g.normal().normalized()
@@ -1527,7 +1674,12 @@ class PushPullTool(Tool):
             mid = (p + loop3[(i + 1) % len(loop3)]) * 0.5
             samples.append(mid + (ip3 - mid) * 1e-3)
         lateral = None
-        for g in scene.faces:
+        # Natively: the same float32 ray test over every face's triangles.
+        got = push_scans.lateral_exit(scene.mesh, self.base_face, samples,
+                                      direction, n)
+        if got is not None:
+            lateral = got[1]
+        for g in (() if got is not None else scene.faces):
             if g == self.base_face or g.interior:
                 continue
             if abs(QVector3D.dotProduct(g.normal().normalized(), n)) > 0.999:
@@ -1559,7 +1711,8 @@ class PushPullTool(Tool):
         n = self._normal
         nn = n.normalized()
         base_xy = _project_loop_2d(self.base_face.vertices, nn)
-        for g in scene.faces:
+        near = push_scans.parallel_overlapping(scene.mesh, nn, base_xy)
+        for g in (scene.faces if near is None else near):
             if g == self.base_face:
                 continue
             if abs(QVector3D.dotProduct(g.normal().normalized(), nn)) <= 0.999:
@@ -1974,7 +2127,8 @@ class PushPullTool(Tool):
             n = len(loop)
             kinds.extend(
                 classify_push_edge(self.base_face, loop[i], loop[(i + 1) % n],
-                                   faces)
+                                   _segment_faces(scene.mesh, loop[i],
+                                                  loop[(i + 1) % n], faces))
                 for i in range(n)
             )
         normal = self.base_face.normal()
@@ -1995,11 +2149,15 @@ class PushPullTool(Tool):
             # Unless the position only slides along a straight edge of it that
             # runs with the push (a T-point on the host wall's top edge).
             walls = {nb.key for _, nb in kinds}
-            rim = {_key(p) for loop in [self.base_face.vertices]
-                   + self.base_face.holes for p in loop}
+            rim_pts = [p for loop in [self.base_face.vertices]
+                       + self.base_face.holes for p in loop]
+            rim = {_key(p) for p in rim_pts}
+            # Only a face with a corner on the rim can be dragged by it.
+            near = push_scans.faces_near_points_rings(
+                scene.mesh, [_key(p) for p in rim_pts])
             prism_cap = not any(
                 _corner_dragged(g, rim, normal)
-                for g in faces
+                for g in (faces if near is None else near)
                 if g != self.base_face and g.key not in walls)
         return attached, prism_cap
 
@@ -2138,7 +2296,10 @@ class PushPullTool(Tool):
         self._refused = False
         target = self._target_scene(scene)
         mesh = target.mesh
-        before_edges = set(mesh.edges)
+        # The edges there before, to soften only the push's own: by key on
+        # a store-backed mesh (a set of 534k views took 0.65 s on the ride).
+        before_mark = push_scans.mark(mesh)
+        before_edges = set(mesh.edges) if before_mark is None else None
         # Pushing a tagged face EXTENDS its BIM object: the walls and cap the
         # extrusion creates join the base's tag (thickening a tagged slab, or
         # raising a wall from a rect the active class stamped, yields a fully
@@ -2151,25 +2312,26 @@ class PushPullTool(Tool):
                 base_tag = dict(t)
             base_paint = _paint_of(self.base_face)
         before_verts = ({v.key for v in mesh.vertices}
-                        if base_tag is not None or base_paint else None)
+                        if (base_tag is not None or base_paint)
+                        and before_mark is None else None)
         curve_runs = (self._curve_runs(mesh, self.base_face)
                       if self.base_face is not None else [])
         guard = (mesh.capture_state()
                  if is_closed(mesh) and not _mesh_is_flat(mesh) else None)
-        fp_before = self._mesh_fingerprint(mesh) if guard is not None else None
+        fp_before = (_Fingerprint(mesh) if guard is not None else None)
         self._mutate_inner(scene, preview)
         if guard is not None and not (is_closed(mesh) or _mesh_is_flat(mesh)):
             mesh.restore_state(guard)
             self._refused = True
             return
         if (fp_before is not None and abs(self.extrusion) >= _MIN_EXTRUDE
-                and self._mesh_fingerprint(mesh) == fp_before):
+                and fp_before.same_now(mesh)):
             # The rebuild digested the push back to the starting state (the
             # known holed-face-between-levels class): geometrically a no-op.
             # Flag it so the commit tells the user instead of failing silently.
             self._refused = True
             return
-        self._soften_curve_facets(mesh, before_edges)
+        self._soften_curve_facets(mesh, before_edges, before_mark)
         self._tag_moved_curves(mesh, curve_runs)
         if base_tag is not None or base_paint:
             # Only faces carrying at least one vertex this push created — the
@@ -2183,8 +2345,12 @@ class PushPullTool(Tool):
             # a face is fresh exactly when it holds one, so the pass costs the
             # push rather than the mesh.
             fresh: set = set()
-            for v in mesh.vertices:
-                if v.key not in before_verts:
+            made = push_scans.made_since(mesh, before_mark, "vertex")
+            if made is None and before_verts is None:
+                # Left the store meanwhile: the keys it had, from the mark.
+                before_verts = set(before_mark.keys("vertex"))
+            for v in (mesh.vertices if made is None else made):
+                if made is not None or v.key not in before_verts:
                     fresh.update(v.faces())
             for f in fresh:
                 if base_tag is not None and not f.attrs.get("ifc"):
@@ -2258,13 +2424,27 @@ class PushPullTool(Tool):
     # (15° steps) softens, a hexagon/octagon (≥45°) keeps its visible edges.
     _CURVE_FACET_COS = 0.85
 
-    def _soften_curve_facets(self, mesh, before_edges) -> None:
+    def _soften_curve_facets(self, mesh, before_edges, before_mark=None) -> None:
         """Hide the *new* edges between two faces that meet at a shallow dihedral
         — the vertical facet seams of a swept curve — so a pushed circle reads as
         a smooth cylinder while its circle outline (and a polygon's flat sides,
         which meet at a real angle) stay visible. Topology-free: only the render
-        flag changes."""
-        for e in mesh.edges:
+        flag changes.
+
+        ``before_mark``: a store snapshot (``push_scans.mark``) in place of
+        ``before_edges`` on a store-backed mesh — the new edges are the keys
+        it lacks, in list order (a view is in a set of views by its key)."""
+        edges = mesh.edges
+        if before_mark is not None:
+            made = push_scans.made_since(mesh, before_mark, "edge")
+            if made is None:
+                # Materialised meanwhile: the views of before, as the set
+                # of views would have held them.
+                before_edges = set(push_scans.views(
+                    mesh, "edge", before_mark.keys("edge")))
+            else:
+                edges, before_edges = made, ()
+        for e in edges:
             if e in before_edges or e.soft or len(e.faces) != 2:
                 continue
             d = QVector3D.dotProduct(e.faces[0].normal().normalized(),
@@ -2352,7 +2532,9 @@ class PushPullTool(Tool):
         normal = face.normal()
         if QVector3D.dotProduct(normal, pre_normal) < 0:
             d = -d
-        allverts = [v.position for v in scene.mesh.vertices]
+        # Only a vertex inside a base edge's box can split it (the boxes
+        # refine_loop_with_points itself tests, grown): those, in list order.
+        allverts = _refine_candidates(scene.mesh, [face.vertices, *face.holes])
         # Split the base loop at any existing vertex sitting on one of its edges
         # (a T-junction where the host wall ends and an earlier overhang's floor
         # begins) so each sub-edge is carried by one face and classifies right.
@@ -2366,7 +2548,9 @@ class PushPullTool(Tool):
         count = len(base)
         faces = scene.faces
         kinds = [
-            classify_push_edge(face, base[i], base[(i + 1) % count], faces)
+            classify_push_edge(face, base[i], base[(i + 1) % count],
+                               _segment_faces(scene.mesh, base[i],
+                                              base[(i + 1) % count], faces))
             for i in range(count)
         ]
         # Ctrl ("push/pull a copy") forces the free-extrusion semantics: the
@@ -2380,7 +2564,8 @@ class PushPullTool(Tool):
         # parity queries.
         attached_any = all(kind != "free" for kind, _ in kinds)
         attached = attached_any and not self._keep_base
-        through = self._find_through_face(face, d, faces) if attached else None
+        through = (self._find_through_face(face, d, faces, mesh=scene.mesh)
+                   if attached else None)
         # "Solid" must be a property of the REGION being pushed, not just the
         # whole mesh: a flat drawing with a box standing elsewhere is 'not
         # flat', but pushing one of the drawing's sheet regions must take the
@@ -2398,8 +2583,10 @@ class PushPullTool(Tool):
         if sheet_fast:
             for h in base_holes:
                 m = len(h)
-                if any(classify_push_edge(face, h[i], h[(i + 1) % m],
-                                          faces)[0] != "coplanar"
+                if any(classify_push_edge(
+                        face, h[i], h[(i + 1) % m],
+                        _segment_faces(scene.mesh, h[i], h[(i + 1) % m],
+                                       faces))[0] != "coplanar"
                        for i in range(m)):
                     sheet_fast = False
                     break
@@ -2411,11 +2598,14 @@ class PushPullTool(Tool):
             # for the rebuild's parity (orient never flips faces here).
             orient_outward(scene.mesh, only=(face,))
 
-        before = set(scene.mesh.faces)
+        # The faces there before, by key on a store-backed mesh (see
+        # push_scans.set_minus: the same set, iteration order included).
+        before_fkeys = push_scans.live_keys(scene.mesh, "face")
+        before = set(scene.mesh.faces) if before_fkeys is None else None
         self._cap_cmd = None
         base_attrs = dict(face.attrs)
         if through is None and not attached_any and self._sweeps_a_free_sheet(
-                face, base, base_holes, faces):
+                face, base, base_holes, faces, mesh=scene.mesh):
             # A sheet swept free has no outside to orient against until it is
             # a block, and when it shares an edge with another sheet the block
             # is part of an open piece the orientation pass leaves alone: the
@@ -2446,7 +2636,17 @@ class PushPullTool(Tool):
         self._far_cmd = None
         if far is not None and far[1] and far[0].face in scene.mesh.faces:
             far[0].face.attrs = dict(far[1])
-        new_faces = set(scene.mesh.faces) - before
+        new_faces = None
+        if before_fkeys is not None:
+            now = push_scans.live_keys(scene.mesh, "face")
+            if now is not None:
+                new_faces = push_scans.set_minus(scene.mesh, "face", now,
+                                                 set(before_fkeys))
+            if new_faces is None:
+                before = set(push_scans.views(scene.mesh, "face",
+                                              before_fkeys))
+        if new_faces is None:
+            new_faces = set(scene.mesh.faces) - before
         if self._keep_base and attached_any and d < 0:
             # The Ctrl-stack grows *into* the solid: its cap is a deliberate
             # interior division (the inward counterpart of the kept base), not
@@ -2528,11 +2728,21 @@ class PushPullTool(Tool):
             sum(1 for t in w if t > far - 1e-6) > 2 for w in walls)
 
     @staticmethod
-    def _sweeps_a_free_sheet(face, base, base_holes, faces) -> bool:
+    def _sweeps_a_free_sheet(face, base, base_holes, faces, mesh=None) -> bool:
         """Whether ``face`` is a sheet whose whole rim — outline and holes —
         borders only other sheets on its plane or nothing at all: no face off
         its plane (a room's wall beside it) stands on any rim edge."""
         normal = face.normal()
+        segs = [(lp[i], lp[(i + 1) % len(lp)]) for lp in (base, *base_holes)
+                for i in range(len(lp))]
+        near = ([push_scans.faces_on_segment(mesh, a, b) for a, b in segs]
+                if mesh is not None else None)
+        if near is not None and all(c is not None for c in near):
+            # Only the faces near both ends of a rim edge can carry it.
+            return not any(
+                _segment_on_face_boundary(a, b, g)
+                for (a, b), cands in zip(segs, near) for g in cands
+                if g != face and not _faces_coplanar(normal, g.normal()))
         off_plane = [g for g in faces if g != face
                      and not _faces_coplanar(normal, g.normal())]
         for lp in (base, *base_holes):
@@ -2551,7 +2761,9 @@ class PushPullTool(Tool):
         op left none, so a collapse can never silently skip orientation."""
         from core.topology import KeyMemo
         key = KeyMemo()
-        hit = [f for f in mesh.faces
+        # Only a face with a corner near the seeds can hold one's key.
+        near = push_scans.faces_near_points(mesh, seedkeys)
+        hit = [f for f in (mesh.faces if near is None else near)
                if any(key(v) in seedkeys for v in f.vertices)]
         return hit or None
 
@@ -2618,7 +2830,7 @@ class PushPullTool(Tool):
             changed = False
             for key in sorted(planes):
                 origin, plane_n = planes[key]
-                before_faces = set(mesh.faces)
+                before = _FacesBefore(mesh)
                 if apply_rebuild(mesh, origin, plane_n, fresh, keep_mode,
                                  removing, op=op_rims, cache=cache):
                     changed = True
@@ -2628,9 +2840,8 @@ class PushPullTool(Tool):
                     # op's: counted as fresh, the next round read a free
                     # sheet (a triangle drawn on the ground beside the
                     # solid) as op debris and deleted it (#552).
-                    kept = {_face_shape(f) for f in before_faces - fresh}
-                    fresh |= {f for f in set(mesh.faces) - before_faces
-                              if _face_shape(f) not in kept}
+                    fresh |= {f for f in before.new_faces(mesh)
+                              if not before.kept(f, fresh)}
             if not changed:
                 break
             fresh = {f for f in fresh if f in mesh.faces}
@@ -2690,7 +2901,7 @@ class PushPullTool(Tool):
         return commands
 
     # ---- Through-hole -------------------------------------------------------
-    def _find_through_face(self, face, d: float, faces):
+    def _find_through_face(self, face, d: float, faces, mesh=None):
         """If pushing ``face`` by ``d`` along its normal reaches a face parallel
         to it on the far side of the solid (the opposite wall), return
         ``(far_face, back_loop)`` — the face to punch and the opening projected
@@ -2709,7 +2920,10 @@ class PushPullTool(Tool):
         mg = 0.01 + 1e-6 * max(map(abs, sx + sy + sz))
         w0 = (min(sx) - mg, min(sy) - mg, min(sz) - mg)
         w1 = (max(sx) + mg, max(sy) + mg, max(sz) + mg)
-        for g in faces:
+        # The faces the window test below keeps, natively, in list order.
+        near = (push_scans.faces_meeting(mesh, w0, w1)
+                if mesh is not None else None)
+        for g in (faces if near is None else near):
             if g == face:
                 continue
             gv = g.vertices

@@ -851,7 +851,9 @@ def crack_planes(mesh, near=None) -> list:
         return (near[0] <= p.x() <= near[3] and near[1] <= p.y() <= near[4]
                 and near[2] <= p.z() <= near[5])
 
-    for e in mesh.edges:
+    from core import push_scans
+    edges = push_scans.cracked_edges(mesh, near)   # natively: exactly these
+    for e in (mesh.edges if edges is None else edges):
         if len(e.faces) != 1:
             continue
         if near is not None and not (inside(e.a) or inside(e.b)):

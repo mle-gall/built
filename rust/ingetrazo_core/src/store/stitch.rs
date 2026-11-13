@@ -670,6 +670,11 @@ impl Store {
     /// those already passed are queued and taken first when they now
     /// match, which is the vertex the restarted scan would reach first.
     pub fn weld_coincident(&mut self, ch: &mut Change) -> Result<(bool, usize), OpError> {
+        if self.nothing_to_weld() {
+            // What the passes below find on this state: no two vertices
+            // in a cell, no holder with a partner across a cell border.
+            return Ok((false, 1));
+        }
         let mut bumps = 1;
         let mut changed = false;
         let mut occ = self.corner_counts();
@@ -757,6 +762,49 @@ impl Store {
             }
         }
         Ok((changed, bumps))
+    }
+
+    /// Whether `weld_coincident` would weld nothing here: no cell holds
+    /// two live vertices (its first pass), and no vertex has a partner
+    /// across a cell border (`cross_partner`, which only welds change: with
+    /// nothing welded, the second pass asks the state as it is). Read
+    /// only, in parallel; a push on a 267k-vertex mesh spent 80 ms per
+    /// stitch walking both passes to find nothing.
+    fn nothing_to_weld(&self) -> bool {
+        use rayon::prelude::*;
+        let live = self.live_slots(Kind::Vertex);
+        let mut cells: Vec<Cell> = live.par_iter().map(|&v| self.cell(self.state.vpos.get(v as usize))).collect();
+        cells.par_sort_unstable();
+        if cells.windows(2).any(|w| w[0] == w[1]) {
+            return false;
+        }
+        !live.par_iter().any(|&v| self.cross_partner(v).is_some())
+    }
+
+    /// Whether `dedupe_faces` would drop nothing: no two live faces with
+    /// the same outer-ring edge signature. Read only, in parallel.
+    fn nothing_to_dedupe(&self) -> bool {
+        use rayon::prelude::*;
+        let sigs: Vec<Vec<(u32, u32)>> = self
+            .live_slots(Kind::Face)
+            .par_iter()
+            .map(|&f| {
+                let lp = self.outer_ring(f);
+                let n = lp.len();
+                let mut sig: Vec<(u32, u32)> = (0..n)
+                    .map(|i| {
+                        let (a, b) = (lp[i], lp[(i + 1) % n]);
+                        (a.min(b), a.max(b))
+                    })
+                    .collect();
+                sig.sort_unstable();
+                sig.dedup();
+                sig
+            })
+            .collect();
+        let mut sigs = sigs;
+        sigs.par_sort_unstable();
+        !sigs.windows(2).any(|w| w[0] == w[1])
     }
 
     /// The cross-cell pass's test of one vertex: `(its cell, the
@@ -912,6 +960,9 @@ impl Store {
     /// else the first in list order. Returns the `(dropped, kept)` pairs
     /// in order (the facade carries attrs across) and the bumps.
     pub fn dedupe_faces(&mut self, ch: &mut Change) -> (Vec<(u32, u32)>, usize) {
+        if self.nothing_to_dedupe() {
+            return (Vec::new(), 1);
+        }
         let mut bumps = 1;
         let mut seen: HashMap<Vec<(u32, u32)>, u32> = HashMap::new();
         let mut pairs = Vec::new();

@@ -42,6 +42,12 @@ const EFLAGS: u8 = 2;
 const EDGES: u8 = 4;
 const FACES: u8 = 8;
 const ALL: u8 = VERTS | EFLAGS | EDGES | FACES;
+/// Parts only the push/pull passes read (`crate::orient`), read on first
+/// use from the store state or the Python objects alike: every ring of a
+/// face (holes too), each edge's faces, the faces' interior flags.
+pub(crate) const RINGS: u8 = 16;
+pub(crate) const EFACES: u8 = 32;
+pub(crate) const FFLAGS: u8 = 64;
 
 /// Outer-loop box of a face / box of an edge: `[lo; hi]`.
 type Box6 = [f64; 6];
@@ -86,6 +92,23 @@ pub struct MeshScan {
     lists: Option<[Py<PyList>; 3]>,
     have: u8,
     vindex: HashMap<usize, u32>,
+    /// All rings (`RINGS`): face `f`'s ring sizes are
+    /// `rlen[rface[f]..rface[f+1]]`, their corners consecutive in
+    /// `rcorners` from `rcorner[f]`.
+    pub(crate) rface: Vec<u32>,
+    pub(crate) rlen: Vec<u32>,
+    pub(crate) rcorner: Vec<u32>,
+    pub(crate) rcorners: Vec<u32>,
+    /// `edge.faces` as face indices, in order with multiplicity
+    /// (`EFACES`); a face the face list does not hold is `NONE`.
+    pub(crate) efstart: Vec<u32>,
+    pub(crate) efaces: Vec<u32>,
+    /// `face.interior` (`FFLAGS`).
+    pub(crate) finterior: Vec<bool>,
+    /// Store-backed: vertex slot -> index in `pos` (`NONE`: not read yet).
+    vdense: Vec<u32>,
+    /// The push/pull passes' per-revision geometry (`crate::orient`).
+    pub(crate) geom: Option<std::sync::Arc<crate::orient::Geom>>,
     // Derived on first use.
     fbox: Option<Vec<Box6>>,
     ebox: Option<Vec<Box6>>,
@@ -112,6 +135,15 @@ impl MeshScan {
             lists: None,
             have: ALL,
             vindex: HashMap::new(),
+            rface: vec![0],
+            rlen: Vec::new(),
+            rcorner: vec![0],
+            rcorners: Vec::new(),
+            efstart: vec![0],
+            efaces: Vec::new(),
+            finterior: Vec::new(),
+            vdense: Vec::new(),
+            geom: None,
             fbox: None,
             ebox: None,
             fplane: None,
@@ -119,8 +151,107 @@ impl MeshScan {
         }
     }
 
-    fn n_faces(&self) -> usize {
+    pub(crate) fn n_faces(&self) -> usize {
         self.fstart.len() - 1
+    }
+
+    pub(crate) fn n_edges(&self) -> usize {
+        self.ends.len()
+    }
+
+    /// Vertices in the mesh's own list (the rest of `positions` are
+    /// corners no list holds).
+    pub(crate) fn n_listed_vertices(&self) -> usize {
+        self.n_listed
+    }
+
+    pub(crate) fn edge_ends(&self, e: usize) -> [u32; 2] {
+        self.ends[e]
+    }
+
+    pub(crate) fn positions(&self) -> &[[f64; 3]] {
+        &self.pos
+    }
+
+    /// `len(edge.faces)`, multiplicity included.
+    pub(crate) fn edge_face_counts(&self) -> &[u32] {
+        &self.enf
+    }
+
+    /// Whether the scan reads a store state (keys) or Python objects.
+    pub(crate) fn store_backed(&self) -> bool {
+        self.state.is_some()
+    }
+
+    /// Face `f`'s rings (outer first) as vertex indices.
+    pub(crate) fn rings_of(&self, f: usize) -> Vec<&[u32]> {
+        let mut out = Vec::with_capacity((self.rface[f + 1] - self.rface[f]) as usize);
+        let mut c = self.rcorner[f] as usize;
+        for r in self.rface[f] as usize..self.rface[f + 1] as usize {
+            let n = self.rlen[r] as usize;
+            out.push(&self.rcorners[c..c + n]);
+            c += n;
+        }
+        out
+    }
+
+    /// Store-backed: the key namespace of the state.
+    pub(crate) fn namespace(&self) -> u64 {
+        self.state.as_ref().map(|s| s.ns).unwrap_or(0)
+    }
+
+    /// Store-backed: `(slot, generation)` of a face -> its index in the
+    /// face list (`NONE` when the scan's state does not list it).
+    pub(crate) fn face_slot_table(&self) -> impl Fn(u32, u32) -> u32 + '_ {
+        let st = self.state.as_ref().expect("store-backed scan");
+        let mut dense = vec![NONE; st.slots[2].len()];
+        for (i, &f) in self.live[2].iter().enumerate() {
+            dense[f as usize] = i as u32;
+        }
+        move |slot: u32, gen: u32| {
+            if (slot as usize) < dense.len() && dense[slot as usize] != NONE && st.slots[2].gen(slot) == gen {
+                dense[slot as usize]
+            } else {
+                NONE
+            }
+        }
+    }
+
+    /// Python-backed: face object address -> its index in the face list.
+    pub(crate) fn face_pointer_map(&self, py: Python<'_>) -> PyResult<HashMap<usize, u32>> {
+        let mut map = HashMap::new();
+        if let Some(l) = &self.lists {
+            let fs = l[2].bind(py);
+            map.reserve(fs.len());
+            for (i, f) in fs.iter().enumerate() {
+                map.entry(f.as_ptr() as usize).or_insert(i as u32);
+            }
+        }
+        Ok(map)
+    }
+
+    /// The faces of edge `e` (indices; `NONE` for one not in the list).
+    pub(crate) fn faces_of_edge(&self, e: usize) -> &[u32] {
+        &self.efaces[self.efstart[e] as usize..self.efstart[e + 1] as usize]
+    }
+
+    /// Read the push/pull parts `what` (`RINGS`, `EFACES`, `FFLAGS`, and
+    /// any of the base parts they rest on).
+    pub(crate) fn need_parts(&mut self, py: Python<'_>, what: u8) -> PyResult<()> {
+        // The push/pull parts index the base ones (positions, the face and
+        // edge lists, the edges' face counts): all of them first.
+        self.need(py, ALL)?;
+        let missing = what & !self.have & (RINGS | EFACES | FFLAGS);
+        if missing == 0 {
+            return Ok(());
+        }
+        if self.state.is_some() {
+            self.store_parts(missing);
+        } else {
+            self.object_parts(py, missing)?;
+        }
+        self.have |= missing;
+        Ok(())
     }
 
     fn face_corners(&self, f: usize) -> &[u32] {
@@ -381,6 +512,8 @@ impl MeshScan {
             }
             s.live = live;
             s.state = Some(state.clone());
+            s.vdense = vdense;
+            s.have = ALL;
             s
         })
     }
@@ -706,6 +839,136 @@ impl MeshScan {
         self.pos.push(py_xyz(&v.getattr(a_position)?, a_to_tuple)?);
         self.vindex.insert(k, i);
         Ok(i)
+    }
+
+    /// The push/pull parts of a store-backed scan, from its state.
+    fn store_parts(&mut self, what: u8) {
+        let st = self.state.as_ref().unwrap();
+        if what & RINGS != 0 {
+            let nf = self.live[2].len();
+            self.rface = Vec::with_capacity(nf + 1);
+            self.rcorner = Vec::with_capacity(nf + 1);
+            self.rface.push(0);
+            self.rcorner.push(0);
+            self.rlen.clear();
+            self.rcorners.clear();
+            for &f in &self.live[2] {
+                let r = *st.frings.get(f as usize);
+                let mut c = r.corner_start as usize;
+                for k in 0..r.n_rings as usize {
+                    let size = *st.ring_sizes.get(r.ring_start as usize + k) as usize;
+                    self.rlen.push(size as u32);
+                    for j in 0..size {
+                        let slot = *st.corners.get(c + j) as usize;
+                        let mut d = self.vdense[slot];
+                        if d == NONE {
+                            d = self.pos.len() as u32;
+                            self.pos.push(*st.vpos.get(slot));
+                            self.vdense[slot] = d;
+                        }
+                        self.rcorners.push(d);
+                    }
+                    c += size;
+                }
+                self.rface.push(self.rlen.len() as u32);
+                self.rcorner.push(self.rcorners.len() as u32);
+            }
+        }
+        if what & (EFACES | FFLAGS) != 0 {
+            let mut fdense = vec![NONE; st.slots[2].len()];
+            for (i, &f) in self.live[2].iter().enumerate() {
+                fdense[f as usize] = i as u32;
+            }
+            if what & EFACES != 0 {
+                self.efstart = Vec::with_capacity(self.live[1].len() + 1);
+                self.efstart.push(0);
+                self.efaces.clear();
+                for &e in &self.live[1] {
+                    let inc = st.efaces.get(e as usize);
+                    let fs: &[u32] = if inc.len <= 2 {
+                        &inc.a[..inc.len as usize]
+                    } else {
+                        st.ef_spill.get(inc.a[0] as usize)
+                    };
+                    for &f in fs {
+                        let d = fdense.get(f as usize).copied().unwrap_or(NONE);
+                        self.efaces.push(d);
+                    }
+                    self.efstart.push(self.efaces.len() as u32);
+                }
+            }
+            if what & FFLAGS != 0 {
+                self.finterior = self.live[2]
+                    .iter()
+                    .map(|&f| *st.fflags.get(f as usize) & crate::store::INTERIOR != 0)
+                    .collect();
+            }
+        }
+    }
+
+    /// The push/pull parts of a Python-backed scan, from its objects.
+    fn object_parts(&mut self, py: Python<'_>, what: u8) -> PyResult<()> {
+        let lists = match &self.lists {
+            Some(l) => [l[0].clone_ref(py), l[1].clone_ref(py), l[2].clone_ref(py)],
+            None => return Ok(()),
+        };
+        let a_position = PyString::intern(py, "position");
+        let a_to_tuple = PyString::intern(py, "toTuple");
+        let fs = lists[2].bind(py);
+        if what & RINGS != 0 {
+            let a_loop = PyString::intern(py, "loop");
+            let a_holes = PyString::intern(py, "hole_loops");
+            self.rface = Vec::with_capacity(fs.len() + 1);
+            self.rcorner = Vec::with_capacity(fs.len() + 1);
+            self.rface.push(0);
+            self.rcorner.push(0);
+            self.rlen.clear();
+            self.rcorners.clear();
+            for f in fs.iter() {
+                let ring = |lp: Bound<'_, PyAny>, s: &mut Self| -> PyResult<()> {
+                    let mut n = 0u32;
+                    for v in lp.try_iter()? {
+                        let d = s.vid(&v?, &a_position, &a_to_tuple)?;
+                        s.rcorners.push(d);
+                        n += 1;
+                    }
+                    s.rlen.push(n);
+                    Ok(())
+                };
+                ring(f.getattr(&a_loop)?, self)?;
+                for h in f.getattr(&a_holes)?.try_iter()? {
+                    ring(h?, self)?;
+                }
+                self.rface.push(self.rlen.len() as u32);
+                self.rcorner.push(self.rcorners.len() as u32);
+            }
+        }
+        if what & EFACES != 0 {
+            let a_faces = PyString::intern(py, "faces");
+            let mut fidx: HashMap<usize, u32> = HashMap::with_capacity(fs.len());
+            for (i, f) in fs.iter().enumerate() {
+                fidx.entry(f.as_ptr() as usize).or_insert(i as u32);
+            }
+            let es = lists[1].bind(py);
+            self.efstart = Vec::with_capacity(es.len() + 1);
+            self.efstart.push(0);
+            self.efaces.clear();
+            for e in es.iter() {
+                for f in e.getattr(&a_faces)?.try_iter()? {
+                    let f = f?;
+                    self.efaces.push(fidx.get(&(f.as_ptr() as usize)).copied().unwrap_or(NONE));
+                }
+                self.efstart.push(self.efaces.len() as u32);
+            }
+        }
+        if what & FFLAGS != 0 {
+            let a_interior = PyString::intern(py, "interior");
+            self.finterior = Vec::with_capacity(fs.len());
+            for f in fs.iter() {
+                self.finterior.push(f.getattr(&a_interior)?.is_truthy()?);
+            }
+        }
+        Ok(())
     }
 
     fn near_plane(&self, o: &[f64; 3], n: &[f64; 3], tol: f64) -> Vec<bool> {
