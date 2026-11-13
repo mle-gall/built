@@ -322,3 +322,50 @@ def test_distinct_back_allocates_only_face_material_rows():
     packed = pack_scene(Scene(groups=[Group(mesh)]))
     assert len(packed.materials) == 16 + 3*32
     assert packed.materials[:16].view('<u4').tolist() == [0, 1, 3, 0]
+
+
+def test_pack_weld_matches_numpy_first_rows():
+    native = _native.available()
+    if not hasattr(native, 'pack_weld'):
+        pytest.skip('pack_weld wheel required')
+    rng = np.random.default_rng(17)
+    points = rng.integers(-4, 5, (4000, 3)).astype(np.float32)
+    points = np.concatenate((points, [[0., -0., 0.], [-0., 0., 0.],
+                                     [np.nan, 0., 0.], [np.nan, 0., 0.],
+                                     [np.inf, 1., 0.], [np.inf, 1., 0.]])).astype(np.float32)
+    _, first, inverse = np.unique(points, axis=0, return_index=True, return_inverse=True)
+    np.testing.assert_array_equal(native.pack_weld(points), first[inverse])
+    _, first, inverse = np.unique(points[::2], axis=0, return_index=True, return_inverse=True)
+    np.testing.assert_array_equal(native.pack_weld(points[::2]), first[inverse])
+    with pytest.raises(ValueError):
+        native.pack_weld(np.zeros((2, 2), np.float32))
+
+
+def test_profile_endpoints_keep_edit_sequence_semantics():
+    from array import array
+    from views.wgpu_scene import _profile_endpoints
+    mesh = (np.array([[0, 0, 0], [1, 2, 3]], np.float32), None, None, None,
+            np.array([[0, 1]]), np.array([1], np.uint8))
+    result = _profile_endpoints(mesh)
+    assert isinstance(result, array)
+    assert bool(result)
+    assert result == _profile_endpoints(mesh)
+    assert list(result) == [0, 0, 0, 1, 2, 3]
+    assert memoryview(result).nbytes == 24
+
+
+def test_soft_pack_native_and_fallback_identical(monkeypatch):
+    mesh = triangle()
+    mesh.edges[0].soft = True
+    mesh.faces[0].attrs.update(color=(.4, .5, .6), opacity=.5)
+    scene = Scene(groups=[Group(mesh), Group(mesh)])
+    monkeypatch.setattr(_native, 'native', _native.available())
+    fast = pack_scene(scene)
+    monkeypatch.setattr(_native, 'native', None)
+    reference = pack_scene(scene)
+    for name, value in vars(fast).items():
+        if isinstance(value, np.ndarray):
+            np.testing.assert_array_equal(value, getattr(reference, name), err_msg=name)
+    assert fast.prototype_paints == reference.prototype_paints
+    assert fast.profile_exclusions == reference.profile_exclusions
+    assert fast.textures == reference.textures

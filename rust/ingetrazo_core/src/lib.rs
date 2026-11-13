@@ -24,11 +24,13 @@ mod occlusion;
 mod parity;
 mod weld;
 mod snap_build;
+mod pack;
 
 #[pymodule]
 fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     m.add("SOURCE_HASH", env!("INGETRAZO_SOURCE_HASH"))?;
+    m.add_function(wrap_pyfunction!(pack::pack_weld, m)?)?;
     m.add_class::<HlrOccluders>()?;
     m.add_function(wrap_pyfunction!(touching_boxes, m)?)?;
     m.add_class::<ParityTris>()?;

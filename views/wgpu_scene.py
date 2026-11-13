@@ -156,10 +156,15 @@ def _source_arrays(mesh, paint=None, texture_ids=None, face_overrides=None, bill
     # IGZ source streams can repeat a coordinate for each face/edge. Soft fan
     # adjacency requires common vertex IDs; weld only prototypes that need it.
     if np.any(flags & 1):
-        _, first, inverse = np.unique(np.asarray(pos, np.float32), axis=0,
-                                      return_index=True, return_inverse=True)
-        corners = first[inverse[corners]]
-        edges = first[inverse[edges]]
+        native = _native.native
+        if native is not None and hasattr(native, 'pack_weld'):
+            remap = native.pack_weld(np.asarray(pos, np.float32))
+        else:
+            _, first, inverse = np.unique(np.asarray(pos, np.float32), axis=0,
+                                          return_index=True, return_inverse=True)
+            remap = first[inverse]
+        corners = remap[corners]
+        edges = remap[edges]
     from core.materials import effective_attrs
     table = [effective_attrs(own, paint) or {} for own in [{}] + table]
     palette = np.full((len(table), 4), 210, np.uint8)
@@ -261,6 +266,15 @@ def _placement_records(scene, roots, vp, state):
             yield g, matrix, proxy, flags
 
 
+def _profile_endpoints(mesh):
+    """Keep sequence semantics for incremental edits without boxing every float."""
+    from array import array
+    points = mesh[0][mesh[4][(mesh[5] & 3) != 0]]
+    result = array('f')
+    result.frombytes(np.asarray(points, np.float32).tobytes())
+    return result
+
+
 def pack_scene(scene, view_tint=None, *, face_overrides=None, texture_images=True,
                baked_paints=None, progress=None):
     """``baked_paints`` (id(group) -> paint) bakes those groups with that
@@ -332,7 +346,7 @@ def pack_scene(scene, view_tint=None, *, face_overrides=None, texture_images=Tru
     attributes = (np.concatenate([m[8]+offset for m, offset in zip(meshes, palette_offsets)])
                   if meshes else empty[8])
     arrays = [np.concatenate([m[k] for m in meshes]) if meshes else empty[k] for k in range(8)]
-    profile_exclusions = tuple((code, np.asarray(m[0][m[4][(m[5] & 3) != 0]], np.float32).reshape(-1).tolist())
+    profile_exclusions = tuple((code, _profile_endpoints(m))
                                for code, m in enumerate(meshes) if np.any(m[5] & 3))
     prototype_count = len(meshes)
     maps = (np.concatenate([m[9] for m in meshes]) if texture_ids or billboard_codes
@@ -405,6 +419,10 @@ def _material_columns(pos, corners, sizes, counts, table, attributes, texture_id
     maps = np.broadcast_to(np.zeros(16, np.float32), (len(counts), 16))
     paints = np.zeros((len(counts), 3), np.uint32)
     palette = np.zeros((len(table), 3), np.uint32)
+    # The common unpainted prototype has no back or texture rows to resolve.
+    # Avoid per-face palette gathers and temporary masks for this case.
+    if not any(table):
+        return maps, paints
     textures = []
     for k, own in enumerate(table):
         back = own.get('back')
