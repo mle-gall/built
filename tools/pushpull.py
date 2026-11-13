@@ -209,6 +209,69 @@ class _Fingerprint:
         return PushPullTool._mesh_fingerprint(mesh)[2] == before
 
 
+class _FacesBefore:
+    """The faces before one plane rebuild, for the two questions the
+    fixpoint asks after it: which faces are new (``set(mesh.faces) -
+    before_faces``, in that set's iteration order, which ``fresh`` and so
+    the next round's planes inherit) and whether a new face's shape is the
+    shape of a face from before that is not fresh (``kept``).
+
+    The first needed a set of every face per plane (53 ms of views on the
+    ride's mesh) and the second the shape of every face but the fresh ones
+    (seconds). A store-backed mesh answers the first by key
+    (``push_scans.set_minus``: the same table, the same order); the second
+    is asked of the faces from before near the new face only — an equal
+    shape has its corners in the same 1e-4 cells, so its box is within a
+    cell of the new face's — through the same ``_face_shape`` of the same
+    elements (a store keeps a removed face's rings readable)."""
+
+    __slots__ = ("keys", "faces", "scan", "_python")
+
+    def __init__(self, mesh) -> None:
+        from core import scan_index
+        self.keys = push_scans.live_keys(mesh, "face")
+        self.faces = set(mesh.faces) if self.keys is None else None
+        # A store scan of the state before (cached per revision; it keeps
+        # that state's faces by key). A Python mesh's faces are scanned
+        # only if a rebuild changed something: they keep their loops, and
+        # a rebuild moves no vertex.
+        self.scan = scan_index.scan(mesh) if self.keys is not None else None
+        self._python = self.keys is None and scan_index.enabled()
+
+    def new_faces(self, mesh):
+        if self.keys is not None:
+            now = push_scans.live_keys(mesh, "face")
+            if now is not None:
+                got = push_scans.set_minus(mesh, "face", now, set(self.keys))
+                if got is not None:
+                    return got
+            self.faces = set(push_scans.views(mesh, "face", self.keys))
+        return set(mesh.faces) - self.faces
+
+    def kept(self, face, fresh) -> bool:
+        shape = _face_shape(face)
+        if self.scan is None and self._python:
+            from core import _native, scan_index
+            self._python = False
+            self.scan = scan_index.Scan.of_faces(_native.native,
+                                                 list(self.faces))
+        if self.scan is None:
+            if self.faces is None:
+                self.faces = set(push_scans.views(
+                    face._m, "face", self.keys))
+            return any(_face_shape(g) == shape for g in self.faces
+                       if g not in fresh)
+        pts = face.vertices
+        m = 2e-4 + 1e-6 * max((max(abs(p.x()), abs(p.y()), abs(p.z()))
+                               for p in pts), default=0.0)
+        lo = (min(p.x() for p in pts) - m, min(p.y() for p in pts) - m,
+              min(p.z() for p in pts) - m)
+        hi = (max(p.x() for p in pts) + m, max(p.y() for p in pts) + m,
+              max(p.z() for p in pts) + m)
+        near = self.scan.faces(self.scan.faces_meeting((lo, hi)))
+        return any(_face_shape(g) == shape for g in near if g not in fresh)
+
+
 def _component_is_closed(mesh, face) -> bool:
     """Whether ``face``'s edge-connected component is watertight — every edge
     reachable from it borders at least two faces. An open sheet (a flat
@@ -2767,7 +2830,7 @@ class PushPullTool(Tool):
             changed = False
             for key in sorted(planes):
                 origin, plane_n = planes[key]
-                before_faces = set(mesh.faces)
+                before = _FacesBefore(mesh)
                 if apply_rebuild(mesh, origin, plane_n, fresh, keep_mode,
                                  removing, op=op_rims, cache=cache):
                     changed = True
@@ -2777,9 +2840,8 @@ class PushPullTool(Tool):
                     # op's: counted as fresh, the next round read a free
                     # sheet (a triangle drawn on the ground beside the
                     # solid) as op debris and deleted it (#552).
-                    kept = {_face_shape(f) for f in before_faces - fresh}
-                    fresh |= {f for f in set(mesh.faces) - before_faces
-                              if _face_shape(f) not in kept}
+                    fresh |= {f for f in before.new_faces(mesh)
+                              if not before.kept(f, fresh)}
             if not changed:
                 break
             fresh = {f for f in fresh if f in mesh.faces}

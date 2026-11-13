@@ -138,6 +138,18 @@ class Scan:
     that keeps a scan across its own edits asks everything it will need
     from it before the first edit (``history._SegmentIndex`` does)."""
 
+    @classmethod
+    def of_faces(cls, mod, faces) -> "Scan":
+        """A scan of some Python faces alone (no vertex or edge list):
+        face queries over them, indices into ``faces``."""
+        self = cls.__new__(cls)
+        self._mesh = lambda: None
+        self.store_backed = False
+        self.native = mod.MeshScan.from_objects([], [], list(faces))
+        self._vec = {}
+        self._tkey = {}
+        return self
+
     def __init__(self, mesh) -> None:
         from core import _native
         from core import store_mesh

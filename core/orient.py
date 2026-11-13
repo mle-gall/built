@@ -748,8 +748,9 @@ def _native_decision(mesh, seed, only):
     hypot = _native.qt_hypot()
     if hypot is None or not hasattr(mod, "orient_decision"):
         return None
-    g = globals()
-    if (_REPRODUCED is None or any(g[k] is not v for k, v in _REPRODUCED.items())
+    here = globals()
+    if (_REPRODUCED is None
+            or any(here[name] is not fn for name, fn in _REPRODUCED.items())
             or _RAYS % 2 == 0 or not 1 <= _RAYS <= 31
             or _EPS != 1e-7 or _T_MIN != 1e-6
             or not isinstance(seed, int) or not 0 <= seed < 2 ** 64):
