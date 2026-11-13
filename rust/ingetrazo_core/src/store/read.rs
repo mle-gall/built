@@ -1,0 +1,253 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
+//! Reading a store back as dense arrays, in `mesh.vertices` /
+//! `mesh.edges` / `mesh.faces` order — the `lazy_mesh.Plan` layout, so
+//! code that reads a plan today reads a store with the same indices.
+//!
+//! Dense index = position among the live entries of the list order. A
+//! store fresh from a block is the identity (slot = index); after edits
+//! the remap is built here, once per call.
+
+use super::keys::{Kind, NONE};
+use super::{State, Store};
+
+/// The `Plan` arrays.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Dense {
+    pub pos: Vec<[f64; 3]>,
+    pub edges: Vec<[i64; 2]>,
+    pub flags: Vec<u8>,
+    pub curve: Vec<i64>,
+    pub layer: Vec<i64>,
+    pub corners: Vec<i64>,
+    pub ring_sizes: Vec<i64>,
+    pub ring_counts: Vec<i64>,
+    pub ef_start: Vec<i64>,
+    pub ef_face: Vec<i64>,
+    pub face_attr: Vec<i64>,
+}
+
+impl Store {
+    pub fn dense_maps(&self) -> [Vec<u32>; 3] {
+        let o = &self.state.order;
+        [o[0].dense_of_slot(), o[1].dense_of_slot(), o[2].dense_of_slot()]
+    }
+
+    pub fn dense(&self) -> Dense {
+        let st = &self.state;
+        let [dv, _de, df] = self.dense_maps();
+        let mut d = Dense::default();
+        for v in st.order[Kind::Vertex as usize].iter() {
+            d.pos.push(*st.vpos.get(v as usize));
+        }
+        d.ef_start.push(0);
+        for e in st.order[Kind::Edge as usize].iter() {
+            let [a, b] = *st.ends.get(e as usize);
+            d.edges.push([dv[a as usize] as i64, dv[b as usize] as i64]);
+            d.flags.push(*st.eflags.get(e as usize));
+            d.curve.push(*st.ecurve.get(e as usize));
+            let l = *st.elayer.get(e as usize);
+            d.layer.push(if l == NONE { -1 } else { l as i64 });
+            for &f in self.edge_faces(e) {
+                d.ef_face.push(df[f as usize] as i64);
+            }
+            d.ef_start.push(d.ef_face.len() as i64);
+        }
+        for f in st.order[Kind::Face as usize].iter() {
+            let r = *st.frings.get(f as usize);
+            d.ring_counts.push(r.n_rings as i64);
+            let mut c = r.corner_start as usize;
+            for k in 0..r.n_rings as usize {
+                let size = *st.ring_sizes.get(r.ring_start as usize + k) as usize;
+                d.ring_sizes.push(size as i64);
+                for j in 0..size {
+                    d.corners.push(dv[*st.corners.get(c + j) as usize] as i64);
+                }
+                c += size;
+            }
+            d.face_attr.push(*st.fattr.get(f as usize) as i64 - 1);
+        }
+        d
+    }
+
+    /// Live keys of a kind, in list order (local 40-bit parts).
+    pub fn local_keys(&self, kind: Kind) -> Vec<u64> {
+        let slots = &self.state.slots[kind as usize];
+        self.state.order[kind as usize]
+            .iter()
+            .map(|s| super::keys::local_key(kind, slots.gen(s), s))
+            .collect()
+    }
+
+    /// Allocated bytes per column (what this store holds, counting chunks
+    /// shared with snapshots once, here).
+    pub fn memory(&self) -> Vec<(&'static str, Kind, usize)> {
+        let st = &self.state;
+        let o = |k: Kind| st.order[k as usize].list.heap_bytes() + st.order[k as usize].at.heap_bytes();
+        let spill: usize = st.ef_spill.iter().map(|v| v.capacity() * 4).sum();
+        vec![
+            ("vpos", Kind::Vertex, st.vpos.heap_bytes()),
+            ("vedge", Kind::Vertex, st.vedge.heap_bytes()),
+            ("vslots", Kind::Vertex, st.slots[0].state.heap_bytes() + self.hwm[0].0.capacity() * 4),
+            ("vorder", Kind::Vertex, o(Kind::Vertex)),
+            ("registry", Kind::Vertex, st.registry.heap_bytes()),
+            ("ends", Kind::Edge, st.ends.heap_bytes()),
+            ("enext", Kind::Edge, st.enext.heap_bytes()),
+            ("eflags", Kind::Edge, st.eflags.heap_bytes()),
+            ("ecurve", Kind::Edge, st.ecurve.heap_bytes()),
+            ("elayer", Kind::Edge, st.elayer.heap_bytes()),
+            ("efaces", Kind::Edge, st.efaces.heap_bytes() + st.ef_spill.heap_bytes() + spill),
+            ("eslots", Kind::Edge, st.slots[1].state.heap_bytes() + self.hwm[1].0.capacity() * 4),
+            ("eorder", Kind::Edge, o(Kind::Edge)),
+            ("frings", Kind::Face, st.frings.heap_bytes()),
+            ("fattr", Kind::Face, st.fattr.heap_bytes()),
+            ("fflags", Kind::Face, st.fflags.heap_bytes()),
+            ("corners", Kind::Face, st.corners.heap_bytes()),
+            ("ring_sizes", Kind::Face, st.ring_sizes.heap_bytes()),
+            ("fslots", Kind::Face, st.slots[2].state.heap_bytes() + self.hwm[2].0.capacity() * 4),
+            ("forder", Kind::Face, o(Kind::Face)),
+        ]
+    }
+}
+
+impl State {
+    /// `capture_state() == other` for two states of one store: the same
+    /// elements (keys) in the same list order with the same fields, the
+    /// same registry. `displaced` is not compared: Python's snapshot does
+    /// not hold it. Chunks shared by both are skipped unread — a state
+    /// undone back to a snapshot compares in O(chunks).
+    pub fn same_as(&self, o: &State) -> bool {
+        if self.ns != o.ns {
+            return false;
+        }
+        for k in 0..3 {
+            let (a, b) = (&self.slots[k], &o.slots[k]);
+            if a.live != b.live || a.len() != b.len() {
+                return false;
+            }
+            if !cols_eq(&a.state, &b.state) {
+                return false;
+            }
+            let (oa, ob) = (&self.order[k], &o.order[k]);
+            let shared = cols_eq_ptr(&oa.list, &ob.list) && cols_eq_ptr(&oa.at, &ob.at);
+            if !shared && !oa.iter().eq(ob.iter()) {
+                return false;
+            }
+        }
+        let live = |k: usize, s: usize| self.slots[k].state.get(s) & 1 == 1;
+        let ok = cols_eq_live(&self.vpos, &o.vpos, |s| live(0, s))
+            && cols_eq_live(&self.ends, &o.ends, |s| live(1, s))
+            && cols_eq_live(&self.eflags, &o.eflags, |s| live(1, s))
+            && cols_eq_live(&self.ecurve, &o.ecurve, |s| live(1, s))
+            && cols_eq_live(&self.elayer, &o.elayer, |s| live(1, s))
+            && cols_eq_live(&self.fattr, &o.fattr, |s| live(2, s))
+            && cols_eq_live(&self.fflags, &o.fflags, |s| live(2, s))
+            && self.registry.same_as(&o.registry)
+            && self.layers == o.layers;
+        if !ok {
+            return false;
+        }
+        // Incidence and rings: by content (pool layout may differ), chunks
+        // both still share skipped.
+        let bits = super::cow::CHUNK_BITS;
+        let spill_shared = cols_eq_ptr(&self.ef_spill, &o.ef_spill);
+        for e in 0..self.slots[1].len() {
+            if !live(1, e) || (spill_shared && self.efaces.same_chunk(&o.efaces, e >> bits)) {
+                continue;
+            }
+            if edge_faces(self, e as u32) != edge_faces(o, e as u32) {
+                return false;
+            }
+        }
+        let pools_shared =
+            cols_eq_ptr(&self.corners, &o.corners) && cols_eq_ptr(&self.ring_sizes, &o.ring_sizes);
+        for f in 0..self.slots[2].len() {
+            if !live(2, f) || (pools_shared && self.frings.same_chunk(&o.frings, f >> bits)) {
+                continue;
+            }
+            if rings(self, f as u32) != rings(o, f as u32) {
+                return false;
+            }
+        }
+        // Vertex adjacency as sets (Python compares `Vertex.edges` sets).
+        let enext_shared = cols_eq_ptr(&self.enext, &o.enext) && cols_eq_ptr(&self.ends, &o.ends);
+        for v in 0..self.slots[0].len() {
+            let links_shared = enext_shared && self.vedge.same_chunk(&o.vedge, v >> bits);
+            if live(0, v) && !links_shared {
+                let mut a = disk(self, v as u32);
+                let mut b = disk(o, v as u32);
+                a.sort_unstable();
+                b.sort_unstable();
+                if a != b {
+                    return false;
+                }
+            }
+        }
+        true
+    }
+}
+
+fn cols_eq_ptr<T: Clone>(a: &super::cow::CowVec<T>, b: &super::cow::CowVec<T>) -> bool {
+    a.len() == b.len() && (0..a.n_chunks()).all(|c| a.same_chunk(b, c))
+}
+
+fn cols_eq<T: Clone + PartialEq>(a: &super::cow::CowVec<T>, b: &super::cow::CowVec<T>) -> bool {
+    a.len() == b.len() && cols_eq_live(a, b, |_| true)
+}
+
+fn cols_eq_live<T: Clone + PartialEq>(
+    a: &super::cow::CowVec<T>,
+    b: &super::cow::CowVec<T>,
+    live: impl Fn(usize) -> bool,
+) -> bool {
+    if a.len() != b.len() {
+        // Columns grow with slots; slots past the shorter one are dead
+        // in both (slot counts were compared already).
+        let n = a.len().min(b.len());
+        return (0..n).all(|i| !live(i) || a.get(i) == b.get(i));
+    }
+    for c in 0..a.n_chunks() {
+        if a.same_chunk(b, c) {
+            continue;
+        }
+        let lo = c << super::cow::CHUNK_BITS;
+        let hi = (lo + super::cow::CHUNK).min(a.len());
+        if !(lo..hi).all(|i| !live(i) || a.get(i) == b.get(i)) {
+            return false;
+        }
+    }
+    true
+}
+
+fn edge_faces(st: &State, e: u32) -> Vec<u32> {
+    let inc = st.efaces.get(e as usize);
+    if inc.len <= 2 {
+        inc.a[..inc.len as usize].to_vec()
+    } else {
+        st.ef_spill.get(inc.a[0] as usize).clone()
+    }
+}
+
+fn rings(st: &State, f: u32) -> Vec<Vec<u32>> {
+    let r = *st.frings.get(f as usize);
+    let mut c = r.corner_start as usize;
+    let mut out = Vec::with_capacity(r.n_rings as usize);
+    for k in 0..r.n_rings as usize {
+        let size = *st.ring_sizes.get(r.ring_start as usize + k) as usize;
+        out.push((0..size).map(|j| *st.corners.get(c + j)).collect());
+        c += size;
+    }
+    out
+}
+
+fn disk(st: &State, v: u32) -> Vec<u32> {
+    let mut out = Vec::new();
+    let mut e = *st.vedge.get(v as usize);
+    while e != NONE {
+        out.push(e);
+        let ends = st.ends.get(e as usize);
+        let nx = st.enext.get(e as usize);
+        e = if ends[0] == v { nx[0] } else { nx[1] };
+    }
+    out
+}

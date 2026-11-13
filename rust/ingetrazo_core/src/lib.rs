@@ -25,6 +25,7 @@ mod parity;
 mod weld;
 mod snap_build;
 mod pack;
+mod store;
 
 #[pymodule]
 fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -52,6 +53,10 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<InstanceSet>()?;
     m.add_function(wrap_pyfunction!(snap_build::build_snap_index, m)?)?;
     m.add_function(wrap_pyfunction!(igz::igz_read_geometry, m)?)?;
+    // Unit tests link without libpython; this line made the test binary
+    // keep the store's PyO3 glue (and its Python symbols) alive.
+    #[cfg(not(test))]
+    store::py::register(m)?;
     Ok(())
 }
 
