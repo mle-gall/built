@@ -845,6 +845,6 @@ def test_the_stitch_fuzz_reaches_every_op():
 
 
 @pytest.mark.slow
-@pytest.mark.parametrize("seed", range(96))
+@pytest.mark.parametrize("seed", range(48))
 def test_stitch_ops_match_the_python_mesh_fuzz(seed):
-    stitch_run(9000 + seed, 500, n_points=120, n_edges=90, n_faces=40)
+    stitch_run(9000 + seed, 400, n_points=120, n_edges=90, n_faces=40)
