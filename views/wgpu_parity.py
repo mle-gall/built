@@ -91,6 +91,35 @@ def face_marks(view, faces):
     return raw(np.concatenate(parts) if parts else np.empty(0, VERTEX))
 
 
+def hover_face_marks(view, face, placement=None):
+    """The dots GL puts on the face under the cursor of Push/Pull, Paint,
+    Offset, Follow Me... (``_paint_hover``): a selected face's dots, in
+    the colour picked against the side you see. The Metal view outlined
+    the face in cyan instead, which reads as a selected edge loop.
+
+    Built from the face's own triangulation through ``placement``'s
+    matrix (a face inside a component is stored in its part's
+    coordinates), not from the pack, so it works on any placement and
+    costs one face per hover change."""
+    from PySide6.QtGui import QVector3D
+    matrix = getattr(placement, 'xform', None)
+    points = [p for tri in face.triangulate() for p in tri]
+    if matrix is not None:
+        points = [matrix.map(p) for p in points]
+    if not points:
+        return raw(np.empty(0, VERTEX))
+    color = (.95, .45, .16)
+    choose = getattr(view.source_viewport, '_selection_dot_colors', None)
+    if choose:
+        front, back = choose(face)
+        normal, origin = face.normal(), face.vertices[0]
+        if matrix is not None:
+            normal, origin = matrix.mapVector(normal), matrix.map(origin)
+        color = front if QVector3D.dotProduct(normal, view.camera.eye()-origin) > 0 else back
+    rgba = [*np.asarray(np.clip(np.array(color[:3])*255, 0, 255), np.uint8), 255]
+    return raw(np.array([(p.toTuple(), (0, 0, 1), rgba) for p in points], VERTEX))
+
+
 def preview_mesh(faces, edges=()):
     triangles = []
     for face in faces:

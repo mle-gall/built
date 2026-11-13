@@ -1,4 +1,5 @@
 """Native Metal input and presentation sharing the document camera and selection."""
+import math
 import time
 import numpy as np
 from PySide6.QtCore import Qt, Signal, QTimer, QEvent
@@ -446,8 +447,9 @@ class WgpuView(QWidget):
         section_widgets = bool(getattr(self.scene, 'section_planes', ())) and getattr(self.scene, 'show_section_planes', True)
         if self.tools.mode == 'mesh' and not self.overlay_primitives:
             self.tools.mesh_feedback()
+        from views.wgpu_edit_context import billboard_outline_primitives
         primitives = (self._edit_box_primitives() + self._selection_box_primitives()
-                      + self.overlay_primitives)
+                      + billboard_outline_primitives(self) + self.overlay_primitives)
         if annotations or primitives or section_widgets or getattr(self, "_had_overlay", False):
             from views.wgpu_overlay import rasterize, pixels
             before = time.perf_counter()
@@ -735,16 +737,30 @@ class WgpuView(QWidget):
         hover = tuple(getattr(self, 'hover_rows', ()) or ())
         faces = [f for f in selected if isinstance(f, Face)]
         hovered = getattr(self.tools, '_mesh_hover', getattr(self.source_viewport, '_hover_entity', None))
+        # A tool's face under the cursor wears the selection dots (GL's
+        # _paint_hover); Select never hovers a face, and a selected face
+        # already shows them.
+        hover_face = (hovered if isinstance(hovered, Face) and self.tools.mode != 'select'
+                      and hovered not in selected else None)
+        placement = getattr(self.tools, '_mesh_hover_placement', None) if hover_face else None
         signature = (frozenset(map(element_identity, selected)), hover, element_identity(hovered), id(self.packed),
-                     tuple(self.camera.eye().toTuple()) if faces else ())
+                     id(placement), tuple(self.camera.eye().toTuple()) if faces or hover_face else ())
         if signature != self._selection_signature:
             indices = set()
             for root in selected:
                 if isinstance(root, Group):
                     indices.update(self._rows_for_group(root))
-            self.renderer.set_highlight(list(indices), list(hover))
+            # GL never tints a face-me figure (its mesh quad is not what is
+            # on screen): its cue is the outline of the quad as drawn.
+            groups = self.packed.groups
+            indices = [r for r in indices if not getattr(groups[r], 'billboard', False)]
+            self.renderer.set_highlight(indices, list(hover))
             if hasattr(self.renderer, 'set_face_marks'):
-                self.renderer.set_face_marks(face_marks(self, faces))
+                marks = face_marks(self, faces)
+                if hover_face is not None:
+                    from views.wgpu_parity import hover_face_marks
+                    marks = np.concatenate((marks, hover_face_marks(self, hover_face, placement)))
+                self.renderer.set_face_marks(marks)
             if self.tools.mode == 'select' and hasattr(self.renderer, 'set_preview_mesh'):
                 from views.wgpu_scene import VERTEX
                 from views.wgpu_parity import raw
@@ -908,9 +924,17 @@ class WgpuView(QWidget):
             self.tools.hover(event)
         elif event.buttons() & Qt.LeftButton and (self.tools.mode == 'select' or mode == 'zoom_window'):
             from views import wgpu_overlay
-            primitive = wgpu_overlay.selection_rectangle((self.press.x(), self.press.y()),
-                (self.last.x(), self.last.y()), zoom=mode == 'zoom_window')
-            self.overlay_primitives = [primitive]
+            from views.viewport import Viewport
+            zoom = mode == 'zoom_window'
+            # GL shows a selection box only past the drag threshold (a
+            # click that jitters a pixel is no box); Zoom Window at once.
+            moved = self.last - self.press
+            if zoom or math.hypot(moved.x(), moved.y()) >= Viewport.BOX_DRAG_THRESHOLD_PX:
+                primitive = wgpu_overlay.selection_rectangle((self.press.x(), self.press.y()),
+                    (self.last.x(), self.last.y()), zoom=zoom)
+                self.overlay_primitives = [primitive]
+            else:
+                self.overlay_primitives = []
         self.update()
 
     @property

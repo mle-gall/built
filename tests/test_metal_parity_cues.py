@@ -180,3 +180,92 @@ def test_snap_tooltip_is_painted():
     import inspect
     source = inspect.getsource(MeshToolAccess.draw_annotations)
     assert "labels=False" not in source
+
+
+# ---- view-level cues --------------------------------------------------------
+
+@pytest.fixture
+def view():
+    from views.wgpu_view import WgpuView
+    from views.wgpu_inference import prepare
+    scene = Scene()
+    mesh = Mesh()
+    mesh.add_face([V(0, 0, 0), V(2, 0, 0), V(2, 2, 0), V(0, 2, 0)])
+    group = Group(mesh, name='placed')
+    group.xform = QMatrix4x4()
+    group.xform.translate(4, 3, 0)
+    scene.groups.append(group)
+    v = WgpuView()
+    v.resize(800, 600)
+    v.scene = scene
+    v.packed = pack_scene(scene)
+    v.uid_rows = {uid: [i] for i, uid in enumerate(v.packed.uids)}
+    v.camera.target = V(5, 4, 0)
+    v.camera.pitch = math.pi/2-.001
+    v.camera.distance = 8
+    v.camera.aspect = 800/600
+    v.inference_index = prepare(v.packed)
+    v.calls = {}
+    record = lambda name: (lambda *a: v.calls.__setitem__(name, a))
+    v.renderer = SimpleNamespace(set_highlight=record('highlight'), set_rest=lambda *a: None,
+                                 set_face_marks=record('marks'),
+                                 set_preview_mesh=record('preview'),
+                                 pick=lambda *a: 0, pick_rect=lambda *a: [0])
+    v.source_viewport = SimpleNamespace(plano_style=None, style_override=None,
+                                        _preview_groups=(), _hover_entity=None)
+    yield v
+    v.renderer = None
+    v.close()
+
+
+def test_tool_hovered_face_wears_dots_through_its_placement(view):
+    # GL dots the face under Push/Pull, Paint, Offset...; Metal outlined it.
+    group = view.scene.groups[0]
+    face = group.mesh.faces[0]
+    view.tools.mode = 'mesh'
+    view.tools.set_hover(face, SimpleNamespace(xform=group.xform))
+    view.sync_selection()
+    marks = np.frombuffer(bytes(view.calls['marks'][0]), VERTEX)
+    assert len(marks) == 6
+    xs, ys = marks['pos'][:, 0], marks['pos'][:, 1]
+    assert (xs.min(), xs.max(), ys.min(), ys.max()) == (4, 6, 3, 5)
+    assert tuple(marks['color'][0][:3]) == (242, 114, 40)
+    # Select never hovers a face, and a selected face shows its own dots.
+    view.tools.mode = 'select'
+    view.sync_selection()
+    assert len(view.calls['marks'][0]) == 0
+
+
+def test_selected_billboard_is_outlined_not_tinted(view):
+    from views.wgpu_edit_context import billboard_outline_primitives
+    group = view.scene.groups[0]
+    group.billboard = True
+    quad = [V(4, 3, 0), V(6, 3, 0), V(6, 3, 2), V(4, 3, 2)]
+    view.source_viewport._billboard_quad = lambda g: (quad, None)
+    assert billboard_outline_primitives(view) == []
+    view.scene.selection = {group}
+    lines = billboard_outline_primitives(view)
+    assert len(lines) == 4 and all(line.color == '#f2732a' for line in lines)
+    assert lines[0].points == (view._world_to_pixel(quad[0]), view._world_to_pixel(quad[1]))
+    view._rows_for_group = lambda g: [0]
+    view.sync_selection()
+    assert view.calls['highlight'][0] == []
+    group.billboard = False
+    view._selection_signature = None
+    view.sync_selection()
+    assert view.calls['highlight'][0] == [0]
+
+
+def test_selection_rectangle_waits_for_the_drag_threshold(view):
+    view.tools.sync = lambda: 'select'
+    view.tools.mode = 'select'
+    view.source_viewport.nav_mode = None
+    a, b, c = QPointF(100, 100), QPointF(102, 101), QPointF(140, 130)
+    QApplication.sendEvent(view, QMouseEvent(QMouseEvent.MouseButtonPress, a, a,
+        Qt.LeftButton, Qt.LeftButton, Qt.NoModifier))
+    QApplication.sendEvent(view, QMouseEvent(QMouseEvent.MouseMove, b, b,
+        Qt.NoButton, Qt.LeftButton, Qt.NoModifier))
+    assert view.overlay_primitives == []
+    QApplication.sendEvent(view, QMouseEvent(QMouseEvent.MouseMove, c, c,
+        Qt.NoButton, Qt.LeftButton, Qt.NoModifier))
+    assert [p.kind for p in view.overlay_primitives] == ['rectangle']

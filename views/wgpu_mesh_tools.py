@@ -218,6 +218,9 @@ class MeshToolAccess:
 
     def set_hover(self, entity, placement=None):
         self._mesh_hover = self._hover_entity = entity
+        # The component placement a face was picked through: its dots are
+        # drawn through that matrix (GL's _hover_placement).
+        self._mesh_hover_placement = placement
 
     def set_suppressed_faces(self, faces):
         if type(getattr(self, 'tool', None)).__name__ == 'TexturePositionTool':

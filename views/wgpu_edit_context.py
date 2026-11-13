@@ -77,3 +77,41 @@ def selection_box_primitives(view):
             if all(p is not None for p in points):
                 result.append(Primitive('polyline', points, '#f2732a', 1.5 / scale))
     return result
+
+
+def billboard_outline_primitives(view):
+    """The orange outline GL draws around a selected face-me figure, on
+    the quad as it faces the camera this frame (``_draw_billboard_outlines``).
+    The Metal view tinted the figure's rows instead, which GL deliberately
+    does not do (a stray plane through the figure), and gave no outline.
+
+    The quad is GL's own ``_billboard_quad`` on the source viewport: its
+    extent is cached per figure content, so this is four projections per
+    selected figure per frame; nothing when no figure is selected."""
+    from core.group import Group
+    from views.viewport import Viewport
+    from views.wgpu_overlay import Primitive
+    source = view.source_viewport
+    quad_of = getattr(source, '_billboard_quad', None)
+    if quad_of is None or source.plano_style is not None or source.style_override is not None:
+        return []
+    visible = getattr(view.scene, 'entity_visible', lambda g: True)
+    result = []
+    for group in view.scene.selection:
+        if not (isinstance(group, Group) and getattr(group, 'billboard', False)
+                and visible(group)):
+            continue
+        quad = quad_of(group)
+        if quad is None:
+            continue
+        corners = quad[0]
+        for a, b in zip(corners, corners[1:] + corners[:1]):
+            segment = Viewport._clip_segment_front(view, a, b)
+            if segment is None:
+                continue
+            points = tuple(view._world_to_pixel(p) for p in segment)
+            if all(p is not None for p in points):
+                # A GL line is one physical pixel; as the selection box.
+                result.append(Primitive('polyline', points, '#f2732a',
+                                        1.5 / view.devicePixelRatioF()))
+    return result
