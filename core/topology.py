@@ -1493,15 +1493,23 @@ def sweep_tjunctions(mesh, seedkeys=None) -> None:
         seed_lo = skeys.min(axis=0) - _STITCH_TOL
         seed_hi = skeys.max(axis=0) + _STITCH_TOL
     while True:
-        verts = mesh.vertices
-        edges = list(mesh.edges)
-        if not verts or not edges:
-            break
-        vpos = np.array([[v.position.x(), v.position.y(), v.position.z()]
-                         for v in verts])
-        vslot = {v.key: i for i, v in enumerate(verts)}
-        ends = np.array([(vslot[e.v0.key], vslot[e.v1.key]) for e in edges],
-                        dtype=np.int64)
+        # A store-backed mesh hands its arrays over (and the elements on
+        # demand) instead of being read element by element.
+        fast = getattr(mesh, "stitch_arrays", None)
+        if fast is not None:
+            vpos, ends, verts, edges = fast()
+            if not len(verts) or not len(edges):
+                break
+        else:
+            verts = mesh.vertices
+            edges = list(mesh.edges)
+            if not verts or not edges:
+                break
+            vpos = np.array([[v.position.x(), v.position.y(),
+                              v.position.z()] for v in verts])
+            vslot = {v.key: i for i, v in enumerate(verts)}
+            ends = np.array([(vslot[e.v0.key], vslot[e.v1.key])
+                             for e in edges], dtype=np.int64)
         va, vb = vpos[ends[:, 0]], vpos[ends[:, 1]]
         elo, ehi = np.minimum(va, vb), np.maximum(va, vb)
         if seed_lo is None:

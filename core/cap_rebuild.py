@@ -45,7 +45,6 @@ from core.arrangement import (
     planar_arrangement,
     plane_basis,
 )
-from core.mesh import _key as _vkey
 from core.orient import (
     _face_components,
     _face_triangles,
@@ -813,11 +812,13 @@ def prune_plane_debris(mesh, origin: QVector3D, normal: QVector3D) -> None:
     referenced = {
         lv for f in mesh.faces for lp in (f.loop, *f.hole_loops) for lv in lp
     }
-    for v in list(mesh.vertices):
-        if not v.edges and v not in referenced:
-            mesh.vertices.remove(v)
-            if mesh._registry.get(_vkey(v.position)) is v:
-                del mesh._registry[_vkey(v.position)]
+    # The kernel's targeted drop (list order kept, the registry cleaned by
+    # identity): what this loop did by hand on the list and the registry,
+    # which a store-backed mesh can only do by becoming Python objects.
+    orphans = [v for v in mesh.vertices
+               if not v.edges and v not in referenced]
+    if orphans:
+        mesh.drop_orphan_vertices(orphans)
 
 
 def plane_key(point: QVector3D, normal: QVector3D):

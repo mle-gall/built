@@ -27,6 +27,7 @@ from __future__ import annotations
 import os
 import random
 
+import numpy as np
 import pytest
 from PySide6.QtGui import QVector3D as V
 
@@ -124,13 +125,25 @@ def pair_keys(keys, pm, sm):
 
 
 class Run:
+    #: Corner counts of the rings add_face draws.
+    ring_sizes = (1, 2, 3, 3, 4, 4, 5)
+
+    @staticmethod
+    def block(rng, n_points, n_edges, n_faces):
+        return crowded_block(rng, n_points=n_points, n_edges=n_edges,
+                             n_faces=n_faces)
+
     def __init__(self, seed, n_points=90, n_edges=60, n_faces=25):
         self.rng = rng = random.Random(seed)
-        blk = crowded_block(rng, n_points=n_points, n_edges=n_edges,
-                            n_faces=n_faces)
+        blk = self.block(rng, n_points, n_edges, n_faces)
         self.pm = python_mesh(blk)
         self.sm = M.Mesh()
-        S.become_store(self.sm, store_of_block(blk), [])
+        # The weld constants the app gives a store (_weld_args), so the
+        # probe distance is Qt's here too (fused on arm64).
+        pos, edges, flags, curves, layers, names, rings, sizes, counts = blk
+        S.become_store(self.sm, mod.MeshStore.from_block(
+            next(M._KEY_NAMESPACES), pos, edges, flags, curves, layers,
+            names, rings, sizes, counts, None, **S._weld_args()), [])
         assert type(self.pm) is M.Mesh and type(self.sm) is S.StoreMesh
         self.keys = Keys()
         pair_keys(self.keys, self.pm, self.sm)
@@ -235,7 +248,7 @@ class Run:
                 a, b = self.both("_link_edge", (x[0], y[0]), (x[1], y[1]))
                 self.keys.pair(a.key, b.key)
         elif r < 0.33:
-            n = rng.choice([1, 2, 3, 3, 4, 4, 5])
+            n = rng.choice(self.ring_sizes)
             ring = [self.point() for _ in range(n)]
             if n >= 3 and rng.random() < 0.2:
                 ring = ring[:2] + [ring[1]] + ring[2:]      # a slit corner
@@ -287,6 +300,13 @@ class Run:
         elif r < 0.79:
             if self.holes and rng.random() < 0.6:
                 x, (lp, ls) = rng.choice(self.holes)
+                # Python's add_hole hands back the list the face holds, so
+                # a stitch since may have edited it in place: both engines
+                # get the loop as it stands.
+                ls = [S.VertexView(self.sm, self.keys.p2s[v.key])
+                      if type(self.sm) is S.StoreMesh else v for v in lp]
+                if any(k is None for k in ls):
+                    return
             else:
                 x = self.pick("f")
                 if not x or not x[0].hole_loops:
@@ -514,7 +534,15 @@ def _engine_run(monkeypatch, scenario, seed, store):
                     next(M._KEY_NAMESPACES), **S._weld_args()), [])
             made.append(self)
     monkeypatch.setattr(FE, "Scene", _Scene)
+    mats = []
+    real = S._materialise
+
+    def counted(m):
+        mats.append(m)
+        return real(m)
+    monkeypatch.setattr(S, "_materialise", counted)
     FE.run_sequence(scenario, seed)
+    _engine_run.materialised = len(mats)
     return made
 
 
@@ -523,11 +551,13 @@ def _engine_run(monkeypatch, scenario, seed, store):
 def test_engine_fuzz_on_a_store_backed_mesh(monkeypatch, scenario, seed):
     """The engine certifier (draw on faces, push/pull, undo/redo, with its
     invariants after every commit) with the loose mesh starting in the
-    store: drawing stays there, a push materialises, undo restores store
+    store: drawing and pushing stay there (port step 3: the stitch, the
+    plane rebuild's drop, turning a face over), undo restores store
     snapshots. Same final model as the Python run of the same seed."""
     import tests.test_fuzz_engine as FE
     py = _engine_run(monkeypatch, scenario, seed, False)[0]
     st = _engine_run(monkeypatch, scenario, seed, True)[0]
+    assert _engine_run.materialised == 0
     assert FE._scene_fingerprint(st) == FE._scene_fingerprint(py)
 
 
@@ -539,3 +569,326 @@ def test_engine_fuzz_on_a_store_backed_mesh_fuzz(monkeypatch, scenario, seed):
     py = _engine_run(monkeypatch, scenario, seed, False)[0]
     st = _engine_run(monkeypatch, scenario, seed, True)[0]
     assert FE._scene_fingerprint(st) == FE._scene_fingerprint(py)
+
+
+# ---- port step 3: the splits and the stitch (docs/meshstore-design.md §16) --
+
+def _drop_ghosts(pm):
+    """Design decision 4 on the Python side: a registry entry naming a
+    vertex the mesh no longer lists goes (a cross-border weld gives the
+    survivor the welded vertex's cell; Python leaves that entry pointing at
+    the dead survivor when it dies later, the store drops it)."""
+    live = {v.key for v in pm.vertices}
+    for k in [k for k, v in pm._registry.items() if v.key not in live]:
+        del pm._registry[k]
+
+
+_STITCH_OPS = ("grid", "split_edge", "split_edge_at", "interior_vertex_on",
+               "collapsible_vertex", "collapse_vertex", "collapse_collinear",
+               "_weld_into", "weld_coincident", "dedupe_faces",
+               "dissolve_edge", "dissolve_edge_recorded",
+               "dissolve_coplanar_pair", "dissolve_coplanar_region",
+               "turn_face_over")
+
+
+class StitchRun(Run):
+    """``Run`` with the step-3 ops mixed into the step-2 ones. Inputs that
+    lead to a coplanar merge are drawn on purpose (grids of quads in axis
+    planes, some split into triangles, some wound the other way, some with
+    a hole), as are collinear valence-2 vertices (splits) and coincident
+    ones (moves onto another vertex or a hair across a cell border)."""
+
+    # One-corner rings (self-loops) are rarer: a weld of a vertex with a
+    # self-loop is refused (Python would leave a live edge on the vertex it
+    # drops), and ends the sequence.
+    ring_sizes = (1, 2, 3, 3, 3, 4, 4, 4, 5, 2, 3, 4, 3, 4, 4)
+
+    def __init__(self, seed, clean=False, **kw):
+        self.stitched = dict.fromkeys(_STITCH_OPS, 0)
+        self.clean = clean
+        if clean:
+            self.ring_sizes = (3, 3, 4, 4, 4, 5)
+        super().__init__(seed, **kw)
+
+    def block(self, rng, n_points, n_edges, n_faces):
+        """The crowded block; ``clean``: without its rings of 1 and 2
+        corners and edges onto their own point (the self-loops that make
+        a weld refuse and end the sequence), so sequences run longer."""
+        blk = crowded_block(rng, n_points=n_points, n_edges=n_edges,
+                            n_faces=n_faces)
+        if not self.clean:
+            return blk
+        pos, edges, flags, curves, layers, names, rings, sizes, counts = blk
+        keep = edges[:, 0] != edges[:, 1]
+        # Rebuild ring by ring, faces keeping only rings of 3+ corners.
+        r, sz, ct = [], [], []
+        i = j = 0
+        for n_r in counts.tolist():
+            mine = []
+            for _ in range(n_r):
+                s_ = int(sizes[j])
+                ring = rings[i:i + s_].tolist()
+                i += s_
+                j += 1
+                if s_ >= 3 and len(set(ring)) == s_:
+                    mine.append(ring)
+            if mine:
+                ct.append(len(mine))
+                for ring in mine:
+                    sz.append(len(ring))
+                    r.extend(ring)
+        return (pos, edges[keep], flags[keep], curves[keep], layers[keep],
+                names, np.asarray(r, np.int64), np.asarray(sz, np.int64),
+                np.asarray(ct, np.int64))
+
+    def compare(self):
+        _drop_ghosts(self.pm)
+        if type(self.sm) is not S.StoreMesh:      # fell back: Python now
+            _drop_ghosts(self.sm)
+        super().compare()
+
+    def same(self, a, b):
+        """Results of the two engines: elements through the key bijection."""
+        if isinstance(a, (M.Vertex, M.Edge, M.Face)):
+            return b is not None and self.keys.name(b.key) == a.key
+        if isinstance(a, (list, tuple)):
+            return len(a) == len(b) and all(map(self.same, a, b))
+        if isinstance(a, dict):
+            return set(a) == set(b) - {"_undo"} and all(
+                self.same(a[k], b[k]) for k in a)
+        return a == b
+
+    def run_op(self, name, pargs, sargs, fn=None):
+        before = {k: {x.key: x for x in getattr(self.pm, n)}
+                  for k, n in (("v", "vertices"), ("e", "edges"),
+                               ("f", "faces"))}
+        if fn is not None:
+            self._fn = fn
+            a, b = self.both("_call", (self.pm,) + pargs, (self.sm,) + sargs)
+        else:
+            a, b = self.both(name, pargs, sargs)
+        self.stitched[name] += 1
+        pair_keys(self.keys, self.pm, self.sm)
+        assert self.same(a, b), (name, a, b)
+        # Vertices that went are held, as history would hold them, for the
+        # `registers` check and relink_vertices. (Faces are not: relinking
+        # one whose corner was welded away since is a refusal of step 2,
+        # and would end most sequences.)
+        now = {x.key for x in self.pm.vertices}
+        for key, obj in before["v"].items():
+            if key not in now and type(self.sm) is S.StoreMesh:
+                pair = (obj, S.VertexView(self.sm, self.keys.p2s[key]))
+                if pair[0] not in [x[0] for x in self.gone["v"]]:
+                    self.gone["v"].append(pair)
+        return a, b
+
+    def both(self, name, pargs, sargs):
+        if name == "_call":
+            errs, out = [], []
+            for args in (pargs, sargs):
+                try:
+                    out.append(self._fn(*args))
+                    errs.append(None)
+                except Exception as exc:  # noqa: BLE001 - compared below
+                    out.append(None)
+                    errs.append(type(exc))
+            assert errs[0] == errs[1], (self._fn, errs)
+            self.ops += 1
+            if type(self.sm) is S.StoreMesh:
+                self.on_store += 1
+            return out
+        return super().both(name, pargs, sargs)
+
+    # -- inputs
+    def plane_point(self, axis, base, u, v):
+        c = list(base)
+        a, b = [i for i in range(3) if i != axis]
+        c[a] += u
+        c[b] += v
+        return V(*c)
+
+    def coplanar_faces(self, f):
+        """Faces reached from ``f`` across edges, coplanar with it (either
+        winding), in the order found: a region to dissolve."""
+        n0 = f.normal()
+        comp, stack = [f], [f]
+        while stack:
+            g = stack.pop()
+            for lp in (g.loop, *g.hole_loops):
+                for a, b in zip(lp, lp[1:] + lp[:1]):
+                    e = self.pm.find_edge(a, b)
+                    if e is None:
+                        continue
+                    for h in e.faces:
+                        if h not in comp and abs(V.dotProduct(
+                                n0, h.normal())) > 0.999:
+                            comp.append(h)
+                            stack.append(h)
+        return comp
+
+    def store_face(self, f):
+        return self.sm.faces[self.pm.faces.index(f)]
+
+    def step(self):
+        rng, pm, sm = self.rng, self.pm, self.sm
+        if rng.random() < 0.45:
+            return super().step()
+        r = rng.random()
+        if r < 0.12:
+            axis = rng.randrange(3)
+            base = rng.choice(self.base)
+            s = rng.choice([0.25, 0.5])
+            for i in range(rng.randint(1, 3)):
+                for j in range(rng.randint(1, 2)):
+                    P = lambda u, v: self.plane_point(  # noqa: E731
+                        axis, base, (i + u) * s, (j + v) * s)
+                    rings = [[P(0, 0), P(1, 0), P(1, 1), P(0, 1)]]
+                    if rng.random() < 0.25:
+                        rings = [[P(0, 0), P(1, 0), P(1, 1)],
+                                 [P(0, 0), P(1, 1), P(0, 1)]]
+                    for ring in rings:
+                        if rng.random() < 0.15:
+                            ring.reverse()
+                        holes = None
+                        if len(ring) == 4 and rng.random() < 0.15:
+                            holes = [[P(.3, .3), P(.3, .6), P(.6, .6),
+                                      P(.6, .3)]]
+                        a, b = self.run_op("grid", (), (), fn=lambda m, r=ring,
+                                           h=holes: m.add_face(r, h))
+                        self.compare()
+            return
+        if r < 0.20:
+            x = self.pick("e")
+            if not x:
+                return
+            a, b = x[0].v0.position, x[0].v1.position
+            p = rng.choice([(a + b) * 0.5, a + (b - a) * rng.random(),
+                            V(a), self.point()])
+            self.run_op("split_edge", (x[0], p), (x[1], p))
+        elif r < 0.26:
+            x = self.pick("e")
+            if not x:
+                return
+            mid = pm.interior_vertex_on(x[0])
+            if mid is None or rng.random() < 0.3:
+                y = self.pick("v")
+                if not y or y[0] in (x[0].v0, x[0].v1):
+                    return
+                mid = y[0]
+            smid = sm.vertices[pm.vertices.index(mid)]
+            self.run_op("split_edge_at", (x[0], mid), (x[1], smid))
+        elif r < 0.29:
+            x = self.pick("e")
+            if x:
+                self.run_op("interior_vertex_on", (x[0],), (x[1],))
+        elif r < 0.32:
+            x = self.pick("v")
+            if x:
+                self.run_op("collapsible_vertex", (x[0],), (x[1],))
+        elif r < 0.40:
+            cands = [i for i, v in enumerate(pm.vertices)
+                     if len(v.edges) == 2
+                     and len({e.other(v).position.toTuple()
+                              for e in v.edges}) == 2
+                     and all(e.v0 is not e.v1 for e in v.edges)]
+            good = [i for i in cands if pm.collapsible_vertex(pm.vertices[i])]
+            pool = good if good and rng.random() < 0.8 else cands
+            if not pool:
+                return
+            i = rng.choice(pool)
+            self.run_op("collapse_vertex", (pm.vertices[i],),
+                        (sm.vertices[i],))
+        elif r < 0.44:
+            self.run_op("collapse_collinear", (), ())
+        elif r < 0.49:
+            x, y = self.pick("v"), self.pick("v")
+            if not x or not y or x[0] is y[0] or any(
+                    e.v0 is e.v1 for e in y[0].edges):
+                return
+            self.run_op("_weld_into", (x[0], y[0]), (x[1], y[1]))
+        elif r < 0.58:
+            for _ in range(rng.choice([0, 1, 1, 2, 3])):
+                x, y = self.pick("v"), self.pick("v")
+                if x and y and x[0] is not y[0]:
+                    d = y[0].position - x[0].position
+                    d += V(rng.choice([0, 0, 0, 3e-5, -4e-5, 6e-5]), 0,
+                           rng.choice([0, 0, 2e-5]))
+                    self.both("move_vertex", (x[0], d), (x[1], d))
+                    self.compare()
+            self.run_op("weld_coincident", (), ())
+        elif r < 0.64:
+            if rng.random() < 0.6:
+                x = self.pick("f")
+                if x:
+                    holes = x[0].holes if rng.random() < 0.6 else None
+                    self.run_op("grid", (), (), fn=lambda m, f=x[0], h=holes:
+                                m.add_face(f.vertices, h))
+                    self.compare()
+            self.run_op("dedupe_faces", (), ())
+        elif r < 0.78:
+            two = [i for i, e in enumerate(pm.edges) if len(e.faces) >= 2]
+            if not two:
+                return
+            i = rng.choice(two)
+            pe, se = pm.edges[i], sm.edges[i]
+            name = rng.choice(["dissolve_edge", "dissolve_edge",
+                               "dissolve_edge_recorded",
+                               "dissolve_coplanar_pair"])
+            if name == "dissolve_coplanar_pair":
+                fa, fb = pe.faces[0], pe.faces[1]
+                self.run_op(name, (fa, fb), (self.store_face(fa),
+                                             self.store_face(fb)))
+            else:
+                self.run_op(name, (pe,), (se,))
+        elif r < 0.92:
+            x = self.pick("f")
+            if not x:
+                return
+            comp = self.coplanar_faces(x[0])
+            if rng.random() < 0.3:
+                rng.shuffle(comp)
+            if rng.random() < 0.15 and len(comp) > 2:
+                comp = comp[:2]
+            self.run_op("dissolve_coplanar_region", (comp,),
+                        ([self.store_face(f) for f in comp],))
+        else:
+            x = self.pick("f")
+            if x:
+                self.run_op("turn_face_over", (x[0],), (x[1],),
+                            fn=lambda m, f: M.turn_face_over(f))
+        self.compare()
+
+
+def stitch_run(seed, n_ops, **kw):
+    r = StitchRun(seed, clean=seed % 2 == 1, **kw)
+    for _ in range(n_ops):
+        r.step()
+        if type(r.sm) is not S.StoreMesh:
+            r.fallbacks.append(r.ops)
+            break
+    return r
+
+
+@pytest.mark.parametrize("seed", range(16))
+def test_stitch_ops_match_the_python_mesh(seed):
+    """Every op compared (state, keys, results); a sequence ends early only
+    on a documented refusal, after which the states are compared too."""
+    r = stitch_run(7000 + seed, 220)
+    assert r.ops > 60 or r.fallbacks
+    if not r.fallbacks:
+        assert r.on_store == r.ops
+
+
+def test_the_stitch_fuzz_reaches_every_op():
+    """The draws above are not vacuous: each step-3 op runs, merges happen
+    (faces go and come), and most ops stay on the store."""
+    runs = [stitch_run(7100 + s, 160) for s in range(8)]
+    seen = {k: sum(r.stitched[k] for r in runs) for k in _STITCH_OPS}
+    assert all(n >= 3 for n in seen.values()), seen
+    assert sum(r.on_store for r in runs) >= 400
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("seed", range(48))
+def test_stitch_ops_match_the_python_mesh_fuzz(seed):
+    stitch_run(9000 + seed, 400, n_points=120, n_edges=90, n_faces=40)

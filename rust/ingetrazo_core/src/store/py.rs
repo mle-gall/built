@@ -13,6 +13,7 @@
 use super::build::Block;
 use super::edit::Change;
 use super::keys::Kind;
+use super::stitch::{Merge, Plan};
 use super::topo::OpError;
 use super::{Snapshot, Store, Weld};
 use std::sync::{Arc, Mutex};
@@ -77,6 +78,94 @@ impl PyMeshStore {
             Ok(v) => Ok((v, PyChange { inner: ch })),
             Err(e) => Err(op_err(e)),
         }
+    }
+}
+
+impl PyMeshStore {
+    /// Carry out a dissolve plan: the hole filter first when the merged
+    /// face has several holes (Python's `add_face` runs `_maximal_holes`
+    /// then), then the removals and the new face. `(face, removed faces,
+    /// bumps)`.
+    #[allow(clippy::type_complexity)]
+    fn merge(
+        &mut self,
+        plan: Plan,
+        hole_filter: &Bound<'_, PyAny>,
+    ) -> PyResult<(Option<(u128, Vec<u128>, usize)>, PyChange)> {
+        match plan {
+            Plan::No => {
+                let ch = self.inner.finish(Change::default());
+                Ok((None, PyChange { inner: ch }))
+            }
+            Plan::Stacked(fs) => {
+                let ((), ch) = self.op_all(|s, ch| {
+                    for &f in &fs[1..] {
+                        s.remove_face(f, ch);
+                    }
+                    Ok(())
+                })?;
+                let s = &self.inner;
+                let removed = fs[1..].iter().map(|&f| s.key(Kind::Face, f)).collect();
+                Ok((Some((s.key(Kind::Face, fs[0]), removed, fs.len() - 1)), ch))
+            }
+            Plan::Merge(m) => {
+                let keep = self.hole_mask(&m, hole_filter)?;
+                let removed: Vec<u128> = m.faces.iter().map(|&f| self.inner.key(Kind::Face, f)).collect();
+                let ((f, n), ch) = self.op_all(|s, ch| s.apply_merge(&m, &keep, ch))?;
+                Ok((Some((self.inner.key(Kind::Face, f), removed, n)), ch))
+            }
+        }
+    }
+
+    fn hole_mask(&self, m: &Merge, hole_filter: &Bound<'_, PyAny>) -> PyResult<Vec<bool>> {
+        if m.holes.len() <= 1 {
+            return Ok(Vec::new());
+        }
+        let st = &self.inner.state;
+        let rings: Vec<Vec<(f64, f64, f64)>> = m
+            .holes
+            .iter()
+            .map(|h| {
+                h.iter()
+                    .map(|&v| {
+                        let p = st.vpos.get(v as usize);
+                        (p[0], p[1], p[2])
+                    })
+                    .collect()
+            })
+            .collect();
+        let keep: Vec<bool> = match hole_filter.call1((rings,)).and_then(|r| r.extract()) {
+            Ok(k) => k,
+            Err(_) => return Err(StoreFallback::new_err("add_face's hole filter raised")),
+        };
+        if keep.len() != m.holes.len() {
+            return Err(PyValueError::new_err("hole_filter: one bool per hole"));
+        }
+        Ok(keep)
+    }
+}
+
+impl PyMeshStore {
+    /// `op` for the ops that remove faces on the way (welds, dedupe,
+    /// dissolves): all or nothing. A refusal half way, or a removed face
+    /// left listed on an edge (`Store::dangling`), puts the state back as
+    /// it was (O(chunks)) and raises StoreFallback.
+    fn op_all<T>(&mut self, f: impl FnOnce(&mut Store, &mut Change) -> Result<T, OpError>) -> PyResult<(T, PyChange)> {
+        self.op(|s, ch| {
+            let saved = s.state.clone();
+            let mut r = f(s, ch);
+            if r.is_ok() {
+                let gone: Vec<u32> = ch.removed[2].iter().filter_map(|&k| s.slot_any(Kind::Face, k)).collect();
+                if s.dangling(&gone) {
+                    r = Err(OpError::Fallback("a removed face would stay listed on an edge"));
+                }
+            }
+            if r.is_err() {
+                s.state = saved;
+                *ch = Change::default();
+            }
+            r
+        })
     }
 }
 
@@ -171,9 +260,9 @@ fn rows3<'py, T: numpy::Element + Copy>(py: Python<'py>, rows: &[[T; 3]]) -> Bou
 impl PyMeshStore {
     /// An empty store in key namespace `namespace` (`next(_KEY_NAMESPACES)`).
     #[new]
-    #[pyo3(signature = (namespace, scale = 10_000.0, tol2 = 1e-8))]
-    fn new(namespace: u64, scale: f64, tol2: f64) -> Self {
-        Self::wrap(Store::empty(namespace, Weld { scale, tol2 }))
+    #[pyo3(signature = (namespace, scale = 10_000.0, tol2 = 1e-8, fused = false))]
+    fn new(namespace: u64, scale: f64, tol2: f64, fused: bool) -> Self {
+        Self::wrap(Store::empty(namespace, Weld { scale, tol2, fused }))
     }
 
     /// The store a format-3 block builds — `Mesh.bulk_weld` +
@@ -185,7 +274,7 @@ impl PyMeshStore {
     #[staticmethod]
     #[pyo3(signature = (namespace, pos, edges, flags, curves, layers, layer_names, rings, sizes,
                         counts, face_attr = None, sequential = false, scale = 10_000.0,
-                        tol2 = 1e-8))]
+                        tol2 = 1e-8, fused = false))]
     #[allow(clippy::too_many_arguments)]
     fn from_block(
         py: Python<'_>,
@@ -203,6 +292,7 @@ impl PyMeshStore {
         sequential: bool,
         scale: f64,
         tol2: f64,
+        fused: bool,
     ) -> PyResult<Self> {
         if pos.ndim() != 2 || (pos.shape()[0] > 0 && pos.shape()[1] != 3) {
             return Err(PyValueError::new_err("pos: (P, 3) float32"));
@@ -231,7 +321,7 @@ impl PyMeshStore {
             face_attr: face_attr.as_ref().map(|a| slice(a, "face_attr")).transpose()?,
             sequential,
         };
-        let w = Weld { scale, tol2 };
+        let w = Weld { scale, tol2, fused };
         let store = py.detach(|| Store::from_block(namespace, &block, w)).map_err(PyValueError::new_err)?;
         Ok(Self::wrap(store))
     }
@@ -602,9 +692,13 @@ impl PyMeshStore {
         Ok(self.op(|s, ch| { s.remove_edge(e, ch); Ok(()) })?.1)
     }
 
-    /// `Mesh.remove_face(f)`.
+    /// `Mesh.remove_face(f)`; StoreFallback when the face would stay
+    /// listed on an edge (see `Store::remove_face_blocked`).
     fn remove_face(&mut self, key: u128) -> PyResult<PyChange> {
         let f = any_of(&self.inner, Kind::Face, key)?;
+        if self.inner.remove_face_blocked(f) {
+            return Err(StoreFallback::new_err("remove_face would stay listed on an edge"));
+        }
         Ok(self.op(|s, ch| { s.remove_face(f, ch); Ok(()) })?.1)
     }
 
@@ -653,6 +747,165 @@ impl PyMeshStore {
     fn relink_vertices(&mut self, keys: Vec<u128>) -> PyResult<PyChange> {
         let vs: Vec<u32> = keys.iter().map(|&k| any_of(&self.inner, Kind::Vertex, k)).collect::<PyResult<_>>()?;
         Ok(self.op(|s, ch| { s.relink_vertices(&vs, ch); Ok(()) })?.1)
+    }
+
+    // ---- port step 3: splits and the stitch (store/stitch.rs) -----------
+
+    /// `Mesh.split_edge(edge, position)`: `((e0, e1, bumps), change)`.
+    fn split_edge(&mut self, key: u128, position: (f64, f64, f64)) -> PyResult<((u128, u128, usize), PyChange)> {
+        let e = any_of(&self.inner, Kind::Edge, key)?;
+        let ((a, b, n), ch) = self.op(|s, ch| s.split_edge(e, p3(position), ch))?;
+        Ok(((self.inner.key(Kind::Edge, a), self.inner.key(Kind::Edge, b), n), ch))
+    }
+
+    /// `Mesh.split_edge_at(edge, mid)`:
+    /// `((e0, e1, e0_new, e1_new, faces), change)`; three bumps.
+    #[allow(clippy::type_complexity)]
+    fn split_edge_at(&mut self, key: u128, mid: u128) -> PyResult<((u128, u128, bool, bool, Vec<u128>), PyChange)> {
+        let e = any_of(&self.inner, Kind::Edge, key)?;
+        let m = any_of(&self.inner, Kind::Vertex, mid)?;
+        let (r, ch) = self.op(|s, ch| s.split_edge_at(e, m, ch))?;
+        let s = &self.inner;
+        let faces = r.faces.iter().map(|&f| s.key(Kind::Face, f)).collect();
+        Ok(((s.key(Kind::Edge, r.e0), s.key(Kind::Edge, r.e1), r.e0_new, r.e1_new, faces), ch))
+    }
+
+    /// `Mesh.interior_vertex_on(edge)` with Qt's `hypot` formula.
+    fn interior_vertex_on(&self, key: u128, hypot: &str) -> PyResult<Option<u128>> {
+        let e = any_of(&self.inner, Kind::Edge, key)?;
+        let h = crate::hypot_of(hypot)?;
+        Ok(self.inner.interior_vertex_on(e, h).map(|v| self.inner.key(Kind::Vertex, v)))
+    }
+
+    /// `Mesh.collapsible_vertex(v)`.
+    fn collapsible_vertex(&self, key: u128, hypot: &str) -> PyResult<bool> {
+        let v = any_of(&self.inner, Kind::Vertex, key)?;
+        Ok(self.inner.collapsible(v, crate::hypot_of(hypot)?))
+    }
+
+    /// `Mesh.collapse_vertex(v)`:
+    /// `((e1, e2, n1, n2, edge, edge_new, faces), change)`; three bumps.
+    #[allow(clippy::type_complexity)]
+    fn collapse_vertex(&mut self, key: u128) -> PyResult<((u128, u128, u128, u128, u128, bool, Vec<u128>), PyChange)> {
+        let v = any_of(&self.inner, Kind::Vertex, key)?;
+        let (c, ch) = self.op(|s, ch| {
+            let mut occ = s.corner_counts();
+            s.collapse_vertex(v, &mut occ, ch)
+        })?;
+        let s = &self.inner;
+        let faces = c.faces.iter().map(|&f| s.key(Kind::Face, f)).collect();
+        Ok((
+            (
+                s.key(Kind::Edge, c.e1),
+                s.key(Kind::Edge, c.e2),
+                s.key(Kind::Vertex, c.n1),
+                s.key(Kind::Vertex, c.n2),
+                s.key(Kind::Edge, c.edge),
+                c.edge_new,
+                faces,
+            ),
+            ch,
+        ))
+    }
+
+    /// `run_stitch`'s phase 2: `((collapses, bumps, refused vertex or
+    /// None), change)`. Collapses before a refused vertex stay done.
+    fn collapse_collinear(&mut self, hypot: &str) -> PyResult<((usize, usize, Option<u128>), PyChange)> {
+        let h = crate::hypot_of(hypot)?;
+        let ((n, b, r), ch) = self.op(|s, ch| Ok(s.collapse_collinear(h, ch)))?;
+        Ok(((n, b, r.map(|v| self.inner.key(Kind::Vertex, v))), ch))
+    }
+
+    /// `Mesh._weld_into(keep, dup)`: `(bumps, change)`.
+    fn weld_into(&mut self, keep: u128, dup: u128) -> PyResult<(usize, PyChange)> {
+        let k = any_of(&self.inner, Kind::Vertex, keep)?;
+        let d = any_of(&self.inner, Kind::Vertex, dup)?;
+        self.op_all(|s, ch| {
+            let mut occ = s.corner_counts();
+            s.weld_into(k, d, &mut occ, ch)
+        })
+    }
+
+    /// `Mesh.weld_coincident()`: `((changed, bumps), change)`. All or
+    /// nothing: a weld the store refuses half way puts the state back
+    /// (StoreFallback, nothing changed).
+    fn weld_coincident(&mut self) -> PyResult<((bool, usize), PyChange)> {
+        self.op_all(|s, ch| s.weld_coincident(ch))
+    }
+
+    /// `Mesh.dedupe_faces()`: `(([(dropped, kept)], bumps), change)`.
+    #[allow(clippy::type_complexity)]
+    fn dedupe_faces(&mut self) -> PyResult<((Vec<(u128, u128)>, usize), PyChange)> {
+        let ((pairs, b), ch) = self.op_all(|s, ch| Ok(s.dedupe_faces(ch)))?;
+        let s = &self.inner;
+        Ok(((pairs.into_iter().map(|(d, k)| (s.key(Kind::Face, d), s.key(Kind::Face, k))).collect(), b), ch))
+    }
+
+    /// `Mesh.dissolve_edge` (`winding_tolerant`) or
+    /// `dissolve_edge_recorded`: `(None or (merged, faces, bumps), change)`.
+    /// `hole_filter(holes)` is `add_face`'s nested-hole filter, called with
+    /// the holes' positions when there are several; it returns a bool per
+    /// hole. An exception there is a StoreFallback (nothing changed).
+    #[allow(clippy::type_complexity)]
+    #[pyo3(signature = (key, hypot, winding_tolerant, hole_filter))]
+    fn dissolve_edge(
+        &mut self,
+        key: u128,
+        hypot: &str,
+        winding_tolerant: bool,
+        hole_filter: &Bound<'_, PyAny>,
+    ) -> PyResult<(Option<(u128, Vec<u128>, usize)>, PyChange)> {
+        let e = live_of(&self.inner, Kind::Edge, key)?;
+        let plan = self.inner.plan_dissolve_edge(e, winding_tolerant, crate::hypot_of(hypot)?);
+        self.merge(plan, hole_filter)
+    }
+
+    /// `Mesh.dissolve_coplanar_pair(a, b)`:
+    /// `(None or (merged, removed edges, bumps), change)`.
+    #[allow(clippy::type_complexity)]
+    fn dissolve_pair(
+        &mut self,
+        a: u128,
+        b: u128,
+        hypot: &str,
+        hole_filter: &Bound<'_, PyAny>,
+    ) -> PyResult<(Option<(u128, Vec<u128>, usize)>, PyChange)> {
+        let fa = live_of(&self.inner, Kind::Face, a)?;
+        let fb = live_of(&self.inner, Kind::Face, b)?;
+        let plan = self.inner.plan_dissolve_pair(fa, fb, crate::hypot_of(hypot)?).map_err(op_err)?;
+        let edges = match &plan {
+            Plan::Merge(m) => m.edges.iter().map(|&e| self.inner.key(Kind::Edge, e)).collect(),
+            _ => Vec::new(),
+        };
+        let (r, ch) = self.merge(plan, hole_filter)?;
+        Ok((r.map(|(f, _, n)| (f, edges, n)), ch))
+    }
+
+    /// `Mesh.dissolve_coplanar_region(faces)`, faces in the caller's
+    /// order: `(None or (stacked, face, bumps), change)` — `stacked`: the
+    /// faces were one cycle, the first kept (the facade sets its attrs).
+    #[allow(clippy::type_complexity)]
+    fn dissolve_region(
+        &mut self,
+        faces: Vec<u128>,
+        hypot: &str,
+        hole_filter: &Bound<'_, PyAny>,
+    ) -> PyResult<(Option<(bool, u128, usize)>, PyChange)> {
+        let fs: Vec<u32> = faces.iter().map(|&k| live_of(&self.inner, Kind::Face, k)).collect::<PyResult<_>>()?;
+        let plan = self.inner.plan_dissolve_region(&fs, crate::hypot_of(hypot)?);
+        let stacked = matches!(plan, Plan::Stacked(_));
+        let (r, ch) = self.merge(plan, hole_filter)?;
+        Ok((r.map(|(f, _, n)| (stacked, f, n)), ch))
+    }
+
+    /// `turn_face_over`'s ring reversal (outer and holes).
+    fn reverse_face(&mut self, key: u128) -> PyResult<PyChange> {
+        let f = any_of(&self.inner, Kind::Face, key)?;
+        Ok(self.op(|s, ch| {
+            s.reverse_face(f, ch);
+            Ok(())
+        })?
+        .1)
     }
 
     /// Keys of the removed elements of `kind` this state keeps (slot

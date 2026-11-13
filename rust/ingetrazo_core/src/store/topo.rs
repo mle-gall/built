@@ -79,6 +79,33 @@ impl Change {
             }
         }
     }
+
+    /// One fate per key and kind. A key removed and made again in one op
+    /// (a split's first half inherits the split edge's key, a weld's
+    /// redirected edge its old one) is `modified`: the element lives on
+    /// with other data. A key made in the op is `created`, not also
+    /// `modified` by the steps that followed.
+    pub fn normalise(&mut self) {
+        for k in 0..3 {
+            if self.removed[k].is_empty() && self.modified[k].is_empty() {
+                continue;
+            }
+            let made: HashSet<u128> = self.created[k].iter().copied().collect();
+            if made.is_empty() {
+                continue;
+            }
+            let back: Vec<u128> = self.removed[k].iter().copied().filter(|x| made.contains(x)).collect();
+            if !back.is_empty() {
+                let back_set: HashSet<u128> = back.iter().copied().collect();
+                self.removed[k].retain(|x| !back_set.contains(x));
+                self.created[k].retain(|x| !back_set.contains(x));
+                self.modified[k].retain(|x| !back_set.contains(x));
+                self.modified[k].extend(back);
+            }
+            let made: HashSet<u128> = self.created[k].iter().copied().collect();
+            self.modified[k].retain(|x| !made.contains(x));
+        }
+    }
 }
 
 impl Store {
@@ -103,7 +130,7 @@ impl Store {
     // ---- slots ------------------------------------------------------------
 
     /// A new element's slot, its columns at their defaults, listed last.
-    fn new_slot(&mut self, kind: Kind) -> Result<u32, OpError> {
+    pub(super) fn new_slot(&mut self, kind: Kind) -> Result<u32, OpError> {
         let k = kind as usize;
         let st = &mut self.state;
         let (slot, _gen, on_top) = st.slots[k].alloc(&mut self.hwm[k]).ok_or(OpError::Full)?;
@@ -131,7 +158,7 @@ impl Store {
     }
 
     /// Unlist and retire a live element, keeping it as a tombstone.
-    fn kill(&mut self, kind: Kind, slot: u32) {
+    pub(super) fn kill(&mut self, kind: Kind, slot: u32) {
         let k = kind as usize;
         self.state.slots[k].kill(slot);
         self.state.order[k].remove(slot);
@@ -139,7 +166,7 @@ impl Store {
     }
 
     /// A tombstone back, listed LAST (`list.append` of the very object).
-    fn wake(&mut self, kind: Kind, slot: u32) {
+    pub(super) fn wake(&mut self, kind: Kind, slot: u32) {
         let k = kind as usize;
         let st = &mut self.state;
         let ok = st.slots[k].wake(slot);
@@ -161,7 +188,7 @@ impl Store {
     // ---- disk cycles ------------------------------------------------------
 
     /// Put a (live) edge at the head of its ends' disk cycles.
-    fn disk_link(&mut self, e: u32) {
+    pub(super) fn disk_link(&mut self, e: u32) {
         let st = &mut self.state;
         let [a, b] = *st.ends.get(e as usize);
         let mut nx = [NONE, NONE];
@@ -174,7 +201,7 @@ impl Store {
         st.enext.set(e as usize, nx);
     }
 
-    fn disk_unlink(&mut self, e: u32) {
+    pub(super) fn disk_unlink(&mut self, e: u32) {
         let [a, b] = *self.state.ends.get(e as usize);
         self.unlink_at(a, e);
         if b != a {
@@ -203,7 +230,7 @@ impl Store {
 
     // ---- edge.faces -------------------------------------------------------
 
-    fn ef_write(&mut self, e: u32, fs: Vec<u32>) {
+    pub(super) fn ef_write(&mut self, e: u32, fs: Vec<u32>) {
         let st = &mut self.state;
         let inc = *st.efaces.get(e as usize);
         if fs.len() <= 2 {
@@ -226,7 +253,7 @@ impl Store {
     }
 
     /// `edge.faces.append(f)`.
-    fn ef_push(&mut self, e: u32, f: u32) {
+    pub(super) fn ef_push(&mut self, e: u32, f: u32) {
         let inc = *self.state.efaces.get(e as usize);
         if inc.len < 2 {
             let st = &mut self.state;
@@ -241,7 +268,7 @@ impl Store {
     }
 
     /// `if f in edge.faces: edge.faces.remove(f)` (the first occurrence).
-    fn ef_remove(&mut self, e: u32, f: u32) -> bool {
+    pub(super) fn ef_remove(&mut self, e: u32, f: u32) -> bool {
         let fs = self.edge_faces(e);
         match fs.iter().position(|&x| x == f) {
             None => false,
@@ -259,7 +286,7 @@ impl Store {
     /// Give a face new rings: appended at the pools' ends, the old range
     /// left as garbage (compacted, tombstones included, when it outgrows
     /// the live pool).
-    fn set_rings(&mut self, f: u32, rings: &[Vec<u32>], had: bool) {
+    pub(super) fn set_rings(&mut self, f: u32, rings: &[Vec<u32>], had: bool) {
         let st = &mut self.state;
         if had {
             let r = *st.frings.get(f as usize);
@@ -440,6 +467,53 @@ impl Store {
         }
     }
 
+    /// Whether removing the live face `f` would leave it listed on a live
+    /// edge: `remove_face` takes one occurrence off the edge of each of
+    /// its segments, so a face listed on an edge more often than its rings
+    /// walk it (a self-loop on a degenerate ring, after a split or a weld)
+    /// stays there in Python, a dangling listing the store does not keep.
+    pub fn remove_face_blocked(&self, f: u32) -> bool {
+        if !self.alive(Kind::Face, f) {
+            return false;
+        }
+        let rings = self.face_rings(f);
+        let mut takes: std::collections::HashMap<u32, usize> = std::collections::HashMap::new();
+        for ring in &rings {
+            let n = ring.len();
+            for i in 0..n {
+                if let Some(e) = self.find_edge(ring[i], ring[(i + 1) % n]) {
+                    *takes.entry(e).or_default() += 1;
+                }
+            }
+        }
+        let mut seen = HashSet::new();
+        for &v in rings.iter().flatten() {
+            if !seen.insert(v) {
+                continue;
+            }
+            for e in self.edges_at(v) {
+                let listed = self.edge_faces(e).iter().filter(|&&x| x == f).count();
+                if listed > takes.get(&e).copied().unwrap_or(0) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    /// After an op: whether one of the faces it removed is still listed on
+    /// a live edge at one of its corners (see `remove_face_blocked`).
+    pub fn dangling(&self, faces: &[u32]) -> bool {
+        faces.iter().any(|&f| {
+            !self.alive(Kind::Face, f)
+                && self
+                    .face_rings(f)
+                    .iter()
+                    .flatten()
+                    .any(|&v| self.edges_at(v).any(|e| self.edge_faces(e).contains(&f)))
+        })
+    }
+
     /// What `relink_edge` would refuse (see the module docs).
     pub fn relink_edge_blocked(&self, e: u32) -> Option<&'static str> {
         if self.alive(Kind::Edge, e) {
@@ -554,7 +628,7 @@ impl Store {
     }
 
     /// Mark the vertex slots that are corners of live faces.
-    fn face_corners(&self) -> Vec<bool> {
+    pub(super) fn face_corners(&self) -> Vec<bool> {
         let st = &self.state;
         let mut used = vec![false; st.slots[0].len()];
         for f in st.slots[2].live_slots() {
@@ -570,13 +644,34 @@ impl Store {
         used
     }
 
-    fn unfile(&mut self, v: u32) -> bool {
+    /// A dying vertex leaves the registry: its own cell when it holds it
+    /// (Python's identity check), and the cells a cross-border weld gave
+    /// it (`State::extra`), which Python would leave as ghost entries.
+    /// Returns how many entries went.
+    pub(super) fn unfile(&mut self, v: u32) -> usize {
         let c = self.cell(self.state.vpos.get(v as usize));
+        let mut n = 0;
         if self.state.registry.get(&c) == Some(v) {
             self.state.registry.remove(&c);
-            return true;
+            n += 1;
         }
-        false
+        n + self.unfile_extra(v)
+    }
+
+    /// Drop the entries `State::extra` lists for `v` that still name it.
+    pub(super) fn unfile_extra(&mut self, v: u32) -> usize {
+        if !self.state.extra.contains_key(&v) {
+            return 0;
+        }
+        let cells = Arc::make_mut(&mut self.state.extra).remove(&v).unwrap_or_default();
+        let mut n = 0;
+        for c in cells {
+            if self.state.registry.get(&c) == Some(v) {
+                self.state.registry.remove(&c);
+                n += 1;
+            }
+        }
+        n
     }
 
     /// `Mesh.purge_debris`: drop the listed vertices with no edges that
@@ -604,9 +699,7 @@ impl Store {
         }
         let mut ghosts = 0;
         for &v in &doomed {
-            if self.unfile(v) {
-                ghosts += 1;
-            }
+            ghosts += self.unfile(v);
             self.kill(Kind::Vertex, v);
             ch.removed[0].push(self.key(Kind::Vertex, v));
         }
@@ -665,6 +758,7 @@ impl Store {
         self.revision += 1;
         ch.revision = self.revision;
         ch.dedup();
+        ch.normalise();
         ch
     }
 

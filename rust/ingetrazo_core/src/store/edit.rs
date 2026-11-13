@@ -46,14 +46,19 @@ impl Store {
 
     /// `(a - b).lengthSquared() < tol2`, in float32 like Qt when in parity.
     #[inline]
-    fn within(&self, a: &[f64; 3], b: &[f64; 3]) -> bool {
+    pub(super) fn within(&self, a: &[f64; 3], b: &[f64; 3]) -> bool {
         if self.f32_parity {
             let d = [
                 a[0] as f32 - b[0] as f32,
                 a[1] as f32 - b[1] as f32,
                 a[2] as f32 - b[2] as f32,
             ];
-            ((d[0] * d[0] + d[1] * d[1] + d[2] * d[2]) as f64) < self.weld.tol2
+            let l2 = if self.weld.fused {
+                d[2].mul_add(d[2], d[0].mul_add(d[0], d[1] * d[1]))
+            } else {
+                d[0] * d[0] + d[1] * d[1] + d[2] * d[2]
+            };
+            (l2 as f64) < self.weld.tol2
         } else {
             let d = [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
             d[0] * d[0] + d[1] * d[1] + d[2] * d[2] < self.weld.tol2
@@ -91,7 +96,13 @@ impl Store {
     /// its cell, waiting in `displaced`, or found by the probe.
     pub fn registers(&self, v: u32) -> bool {
         if !self.state.slots[Kind::Vertex as usize].alive(v) {
-            return false;
+            // Python leaves a vertex welded or collapsed away in the queue
+            // it waited in, and `registers` answers from that queue.
+            if (v as usize) >= self.state.vpos.len() {
+                return false;
+            }
+            let k = self.cell(self.state.vpos.get(v as usize));
+            return self.state.displaced.get(&k).is_some_and(|w| w.contains(&v));
         }
         let p = *self.state.vpos.get(v as usize);
         let k = self.cell(&p);

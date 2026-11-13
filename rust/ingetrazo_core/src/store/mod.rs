@@ -25,6 +25,7 @@ pub mod edit;
 pub mod keys;
 pub mod py;
 pub mod read;
+pub mod stitch;
 pub mod topo;
 #[cfg(test)]
 mod tests;
@@ -66,11 +67,16 @@ pub struct FaceRings {
 pub struct Weld {
     pub scale: f64,
     pub tol2: f64,
+    /// Whether this Qt fuses `QVector3D::lengthSquared()` into
+    /// `fma(z, z, fma(x, x, y * y))` (Apple clang on arm64:
+    /// `core._native.qt_hypot() == "libc++-fma"`). The weld distance test
+    /// is that call, so a probe at exactly the tolerance follows it.
+    pub fused: bool,
 }
 
 impl Default for Weld {
     fn default() -> Self {
-        Self { scale: 10_000.0, tol2: 0.0001 * 0.0001 }
+        Self { scale: 10_000.0, tol2: 0.0001 * 0.0001, fused: false }
     }
 }
 
@@ -112,6 +118,12 @@ pub struct State {
     pub registry: CellMap,
     /// `Mesh._displaced`: vertices waiting for a cell another one holds.
     pub displaced: Arc<FxHashMap<Cell, Vec<u32>>>,
+    /// Cells a vertex holds besides its own: `_weld_into` hands the welded
+    /// vertex's cell to the survivor (`registry[_key(dup.position)] =
+    /// keep`), which across a cell border is another cell. Kept so the
+    /// survivor's death takes those entries too (no ghost entries, design
+    /// decision 4); entries are checked against the registry before use.
+    pub extra: Arc<FxHashMap<u32, Vec<Cell>>>,
     /// Edge tag keys (`Edge.layer` strings), interned per store.
     pub layers: Arc<Vec<String>>,
 }

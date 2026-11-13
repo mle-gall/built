@@ -97,6 +97,29 @@ def _fresh_skp_parse_tables():
     yield
 
 
+@pytest.fixture(autouse=True, scope="session")
+def _session_native():
+    """``core._native.native`` as the app has it: resolved once, at start,
+    from the environment and the saved preference."""
+    import core._native as native_mod
+    return native_mod.native
+
+
+@pytest.fixture(autouse=True)
+def _native_per_test(_session_native):
+    """``core._native.native`` is resolved on first read and then FIXED for
+    the session (a module global written by ``_native.__getattr__``). Tests
+    that patch ``_native.wanted`` and read ``native`` meanwhile
+    (``tests/test_deferred_mesh.py``, through the loader), or reload the
+    module and leave the preference off (``tests/test_rust_engine_switch``),
+    fixed it to what THEY had: when one of them ran first in a batch,
+    ``native`` was None for the rest of the session and the store tests
+    failed. Every test now ends with the session's value put back."""
+    yield
+    import core._native as native_mod
+    native_mod.__dict__["native"] = _session_native
+
+
 _exit_status = [0]
 
 

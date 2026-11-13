@@ -247,6 +247,7 @@ impl Store {
             pool_garbage: 0,
             registry,
             displaced: Arc::new(FxHashMap::default()),
+            extra: Arc::new(FxHashMap::default()),
             layers: Arc::new(b.layer_names.clone()),
         };
         Ok(store)
