@@ -241,6 +241,7 @@ class Probe:
         self.gap_timer = None
         self.set_scene_log: list = []
         self.timeline: list = []
+        self.temp_folders: list = []
         self.frames: list = []
         self.pack_calls: list = []
         self.done = False
@@ -385,6 +386,7 @@ class Probe:
 
         # Autosave never writes beside the user's files nor asks to recover.
         folder = Path(tempfile.mkdtemp(prefix="ingetrazo-probe-autosave-"))
+        self.temp_folders.append(folder)
         autosave.autosave_dir = lambda: folder
         autosave.pending = lambda *a, **k: None
 
@@ -607,6 +609,9 @@ class Probe:
         self.result["timeline"] = self.timeline
         write_result(self.result, self.out)
         print(f"[probe] wrote {self.out}", flush=True)
+        import shutil
+        for folder in self.temp_folders:
+            shutil.rmtree(folder, ignore_errors=True)
         os._exit(code)
 
     def watchdog(self, seconds):
@@ -699,6 +704,7 @@ def main(argv=None) -> int:
     for scope in (QSettings.UserScope, QSettings.SystemScope):
         QSettings.setPath(QSettings.IniFormat, scope, folder)
     probe = Probe(path, args.out.resolve(), options)
+    probe.temp_folders.append(Path(folder))
     probe.result["core_file"] = __import__("core").__file__
     probe.install()
     probe.watchdog(args.timeout)
