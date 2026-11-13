@@ -7,6 +7,9 @@
 use super::build::Block;
 use super::cow::{CellMap, CowVec, CHUNK};
 use super::keys::{self, Hwm, Kind, Order, Slots};
+use super::edit::Change;
+use super::stitch;
+use super::topo::OpError;
 use super::{Store, Weld, HIDDEN, SOFT};
 
 fn block<'a>(
@@ -404,4 +407,85 @@ fn cowvec_pop_drops_empty_chunks() {
     a.push(5);
     assert_eq!(*a.get(CHUNK), 5);
     assert_eq!(*snap.get(CHUNK + 1), CHUNK as u32 + 1);
+}
+
+// ---- port step 3 -----------------------------------------------------------
+
+fn square(st: &mut Store, x: f64, ch: &mut Change) -> u32 {
+    st.add_face(&[vec![[x, 0.0, 0.0], [x + 1.0, 0.0, 0.0], [x + 1.0, 1.0, 0.0], [x, 1.0, 0.0]]], ch).unwrap()
+}
+
+#[test]
+fn split_first_half_takes_the_edge_slot_and_key() {
+    let mut st = Store::empty(9, Weld::default());
+    let mut ch = Change::default();
+    let f = square(&mut st, 0.0, &mut ch);
+    let e = st.find_edge(0, 1).unwrap();
+    let key = st.key(Kind::Edge, e);
+    let mut ch = Change::default();
+    let (e0, e1, bumps) = st.split_edge(e, [0.5, 0.0, 0.0], &mut ch).unwrap();
+    assert_eq!((e0, bumps), (e, 3));
+    assert_eq!(st.key(Kind::Edge, e0), key);
+    assert_ne!(e1, e0);
+    assert_eq!(st.face_rings(f)[0].len(), 5);
+    assert_eq!(st.edge_faces(e0), &[f]);
+    assert_eq!(st.edge_faces(e1), &[f]);
+    // The record: the inherited key is modified, not removed and created.
+    let ch = st.finish(ch);
+    assert!(!ch.removed[1].contains(&key) && !ch.created[1].contains(&key));
+    assert!(ch.modified[1].contains(&key));
+    st.check().unwrap();
+}
+
+#[test]
+fn a_cross_weld_hands_the_cell_over_and_takes_it_back_on_death() {
+    let mut st = Store::empty(9, Weld::default());
+    let mut ch = Change::default();
+    // Two vertices a hair apart across a cell border, each with an edge.
+    let a = st.vertex([0.000_049, 0.0, 0.0], &mut ch).unwrap();
+    let b = st.vertex([5.0, 0.0, 0.0], &mut ch).unwrap();
+    st.place_vertex(b, [0.000_051, 0.0, 0.0]); // a move never welds
+    assert_ne!(st.cell(st.state.vpos.get(a as usize)), st.cell(st.state.vpos.get(b as usize)));
+    let c = st.vertex([1.0, 0.0, 0.0], &mut ch).unwrap();
+    st.link_edge(a, c, &mut ch).unwrap();
+    st.link_edge(b, c, &mut ch).unwrap();
+    let (changed, _) = st.weld_coincident(&mut ch).unwrap();
+    assert!(changed);
+    let (keep, gone) = if st.alive(Kind::Vertex, a) { (a, b) } else { (b, a) };
+    assert!(!st.alive(Kind::Vertex, gone));
+    let cell = st.cell(st.state.vpos.get(gone as usize));
+    assert_eq!(st.state.registry.get(&cell), Some(keep));
+    assert_eq!(st.state.extra.get(&keep).map(|v| v.len()), Some(1));
+    // The survivor's death takes both its cells: no ghost entry.
+    let e = st.find_edge(keep, c).unwrap();
+    st.remove_edge(e, &mut ch);
+    assert_eq!(st.drop_orphan_vertices(&[keep], &mut ch).unwrap(), 1);
+    assert_eq!(st.state.registry.get(&cell), None);
+    st.check().unwrap();
+}
+
+#[test]
+fn trace_and_splice_follow_the_python_rules() {
+    // Start at the first outline segment, in its direction.
+    let outline = [(3, 4), (1, 2), (2, 3), (4, 1)];
+    assert_eq!(stitch::trace_loops(&outline), Some(vec![vec![3, 4, 1, 2]]));
+    assert_eq!(stitch::trace_loops(&[(1, 1)]), None);
+    assert_eq!(stitch::trace_loops(&[(1, 2), (2, 3), (3, 1), (1, 4)]), None);
+    // A runs u→w, B w→u: the splice drops the shared edge.
+    assert_eq!(stitch::splice_loops(&[1, 2, 3, 4], &[2, 1, 5, 6], 1, 2), Some(vec![2, 3, 4, 1, 5, 6]));
+    assert_eq!(stitch::splice_loops(&[1, 2, 3, 4], &[1, 2, 5, 6], 1, 2), None);
+}
+
+#[test]
+fn a_refused_weld_changes_nothing() {
+    let mut st = Store::empty(9, Weld::default());
+    let mut ch = Change::default();
+    let a = st.vertex([0.0, 0.0, 0.0], &mut ch).unwrap();
+    let b = st.vertex([1.0, 0.0, 0.0], &mut ch).unwrap();
+    st.link_edge(b, b, &mut ch).unwrap(); // a self-loop on the vertex to go
+    let before = st.snapshot();
+    let mut occ = st.corner_counts();
+    let r = st.weld_into(a, b, &mut occ, &mut ch);
+    assert!(matches!(r, Err(OpError::Fallback(_))));
+    assert!(st.state.same_as(&before.state));
 }

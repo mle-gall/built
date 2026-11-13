@@ -85,8 +85,12 @@ def _module():
 
 
 def _weld_args():
+    """The weld constants of ``core/mesh.py`` for a new store, and whether
+    this Qt fuses ``QVector3D::lengthSquared()`` (the weld distance test):
+    Apple clang on arm64 does (``libc++-fma``)."""
     return dict(scale=_mesh._KEY_SCALE,
-                tol2=(10.0 ** -_mesh._KEY_DECIMALS) ** 2)
+                tol2=(10.0 ** -_mesh._KEY_DECIMALS) ** 2,
+                fused=_hypot() == "libc++-fma")
 
 
 def _copy_attrs(d) -> dict:
@@ -578,6 +582,20 @@ class FaceView(_ViewMixin, Face):
             self._obj().attrs = value
             return
         m.__dict__["_attr_own"][self.key] = value
+
+    def reverse_rings(self) -> None:
+        """``turn_face_over``'s ``loop.reverse()`` and holes' ``reverse()``
+        as one store op: a push/pull turning its base over no longer
+        materialises the mesh. Python bumps no counter for it, neither
+        does this (the store's own revision moves, for the view caches)."""
+        st = _store_of(self._m)
+        if st is None:
+            obj = self._obj()
+            obj.loop.reverse()
+            for h in obj.hole_loops:
+                h.reverse()
+            return
+        st.reverse_face(self.key)
 
     # Geometry from one fetch of the rings' positions.
     def _newell(self) -> QVector3D:
@@ -1312,8 +1330,11 @@ class StoreMesh(Mesh):
         k = self._own(face, 2)
         if k is None:
             return self._py("remove_face", face)
+        try:
+            self._store.remove_face(k)
+        except _fallback():
+            return self._py("remove_face", face)
         self._dirty(1)
-        self._store.remove_face(k)
 
     def relink_edge(self, edge) -> None:
         k = self._own(edge, 1)
@@ -1394,6 +1415,210 @@ class StoreMesh(Mesh):
             return self._py("relink_vertices", vertices)
         self._store.relink_vertices(keys)
         self._dirty(1)
+
+    # -- port step 3: splits and the stitch primitives (store/stitch.rs) --
+    # Each is its Mesh method step for step, its dirty bumps counted by the
+    # store; attrs (Python dicts) are carried here, as the Python methods
+    # carry them. The geometric tests go through QVector3D in Python, so
+    # the store needs this Qt's ``length()`` formula
+    # (``_native.qt_hypot()``); without one, they run on views here.
+
+    def _live(self, x, kind):
+        """``x``'s key when it names a LIVE element of this store."""
+        k = self._own(x, kind)
+        return k if k is not None and self._store.is_live(k) else None
+
+    def _undo_state(self):
+        """What ``revert_stitch`` restores for a record made here: the
+        store's snapshot, O(chunks). The per-face attrs dicts are taken as
+        they stand at the revert (the record undoes geometry, LIFO, as
+        history uses it)."""
+        d = self.__dict__
+        return StoreState(self._store.snapshot(), d["_attr_own"],
+                          d["_attr_table"], self)
+
+    def split_edge(self, edge, position):
+        k = self._live(edge, 1)
+        if k is None:
+            return self._py("split_edge", edge, position)
+        try:
+            (e0, e1, n), _ch = self._store.split_edge(k, _xyz(position))
+        except _fallback():
+            return self._py("split_edge", edge, position)
+        self._dirty(n)
+        return EdgeView(self, e0), EdgeView(self, e1)
+
+    def split_edge_at(self, edge, mid) -> dict:
+        k, m = self._live(edge, 1), self._live(mid, 0)
+        if k is None or m is None:
+            return self._py("split_edge_at", edge, mid)
+        undo = self._undo_state()
+        try:
+            (e0, e1, n0, n1, faces), _ch = self._store.split_edge_at(k, m)
+        except _fallback():
+            return self._py("split_edge_at", edge, mid)
+        self._dirty(3)
+        # "edge" is the split edge's key, which a new first half took.
+        return {"kind": "split", "edge": EdgeView(self, k),
+                "e0": EdgeView(self, e0), "e1": EdgeView(self, e1),
+                "e0_new": n0, "e1_new": n1, "mid": VertexView(self, m),
+                "faces": [FaceView(self, f) for f in faces], "_undo": undo}
+
+    def interior_vertex_on(self, edge):
+        k, h = self._own(edge, 1), _hypot()
+        if k is None or h is None:
+            return Mesh.interior_vertex_on(self, edge)
+        hit = self._store.interior_vertex_on(k, h)
+        return None if hit is None else VertexView(self, hit)
+
+    def collapsible_vertex(self, v) -> bool:
+        k, h = self._own(v, 0), _hypot()
+        if k is None or h is None:
+            return Mesh.collapsible_vertex(self, v)
+        return self._store.collapsible_vertex(k, h)
+
+    def collapse_vertex(self, v) -> dict:
+        k = self._live(v, 0)
+        if k is None:
+            return self._py("collapse_vertex", v)
+        undo = self._undo_state()
+        try:
+            (e1, e2, n1, n2, ne, new, faces), _ch = \
+                self._store.collapse_vertex(k)
+        except _fallback():
+            return self._py("collapse_vertex", v)
+        self._dirty(3)
+        return {"kind": "collapse", "v": VertexView(self, k),
+                "e1": EdgeView(self, e1), "e2": EdgeView(self, e2),
+                "n1": VertexView(self, n1), "n2": VertexView(self, n2),
+                "new_edge": EdgeView(self, ne), "new_edge_new": new,
+                "faces": [FaceView(self, f) for f in faces], "_undo": undo}
+
+    def collapse_collinear(self) -> int:
+        """``run_stitch``'s phase 2 in one native pass; a vertex the store
+        will not collapse hands the rest of the loop to Python (the
+        collapses before it are done, and the loop restarts from the first
+        collapsible vertex anyway)."""
+        h = _hypot()
+        if h is None:
+            return Mesh.collapse_collinear(self)
+        (n, bumps, refused), _ch = self._store.collapse_collinear(h)
+        self._dirty(bumps)
+        if refused is None:
+            return n
+        self._materialise()
+        return n + self.collapse_collinear()
+
+    def _weld_into(self, keep, dup) -> None:
+        a, b = self._live(keep, 0), self._live(dup, 0)
+        if a is None or b is None:
+            return self._py("_weld_into", keep, dup)
+        try:
+            n, _ch = self._store.weld_into(a, b)
+        except _fallback():
+            return self._py("_weld_into", keep, dup)
+        self._dirty(n)
+
+    def weld_coincident(self) -> bool:
+        try:
+            (changed, n), _ch = self._store.weld_coincident()
+        except _fallback():
+            return self._py("weld_coincident")
+        self._dirty(n)
+        return changed
+
+    def dedupe_faces(self) -> int:
+        (pairs, n), _ch = self._store.dedupe_faces()
+        self._dirty(n)
+        for d, k in pairs:
+            drop, keep = FaceView(self, d), FaceView(self, k)
+            if drop.attrs and not keep.attrs:
+                keep.attrs = dict(drop.attrs)
+        return len(pairs)
+
+    def _dissolve_edge(self, name, edge, tolerant):
+        k, h = self._live(edge, 1), _hypot()
+        if k is None or h is None:
+            return self._py(name, edge)
+        undo = None if tolerant else self._undo_state()
+        try:
+            r, _ch = self._store.dissolve_edge(k, h, tolerant, _hole_filter)
+        except _fallback():
+            return self._py(name, edge)
+        if r is None:
+            return None
+        merged, (fa, fb), n = r
+        self._dirty(n)
+        a, b = FaceView(self, fa), FaceView(self, fb)
+        new = FaceView(self, merged)
+        new.attrs = dict(_mesh._dominant_attrs((a, b)))
+        if tolerant:
+            return new
+        return {"kind": "merge", "edge": EdgeView(self, k), "face_a": a,
+                "face_b": b, "merged": new, "_undo": undo}
+
+    def dissolve_edge(self, edge):
+        return self._dissolve_edge("dissolve_edge", edge, True)
+
+    def dissolve_edge_recorded(self, edge):
+        return self._dissolve_edge("dissolve_edge_recorded", edge, False)
+
+    def dissolve_coplanar_pair(self, face_a, face_b):
+        ka, kb, h = self._live(face_a, 2), self._live(face_b, 2), _hypot()
+        if ka is None or kb is None or h is None:
+            return self._py("dissolve_coplanar_pair", face_a, face_b)
+        undo = self._undo_state()
+        try:
+            r, _ch = self._store.dissolve_pair(ka, kb, h, _hole_filter)
+        except _fallback():
+            return self._py("dissolve_coplanar_pair", face_a, face_b)
+        if r is None:
+            return None
+        merged, edges, n = r
+        self._dirty(n)
+        a, b = FaceView(self, ka), FaceView(self, kb)
+        new = FaceView(self, merged)
+        new.attrs = dict(_mesh._dominant_attrs((a, b)))
+        return {"kind": "merge_pair", "face_a": a, "face_b": b,
+                "edges": [EdgeView(self, e) for e in edges], "merged": new,
+                "_undo": undo}
+
+    def dissolve_coplanar_region(self, faces):
+        """:meth:`Mesh.dissolve_coplanar_region`, the faces taken in the
+        caller's order (it decides the reference normal, the dominant
+        attrs on ties and where the merged face's loop starts)."""
+        faces = list(faces)
+        if len(faces) < 2:
+            return None
+        keys, h = [self._live(f, 2) for f in faces], _hypot()
+        if None in keys or h is None:
+            return self._py("dissolve_coplanar_region", faces)
+        try:
+            r, _ch = self._store.dissolve_region(keys, h, _hole_filter)
+        except _fallback():
+            return self._py("dissolve_coplanar_region", faces)
+        if r is None:
+            return None
+        stacked, fk, n = r
+        self._dirty(n)
+        views = [FaceView(self, k) for k in keys]
+        if stacked:
+            first = views[0]
+            if not first.attrs:
+                first.attrs = dict(_mesh._dominant_attrs(views[1:]))
+            return first
+        new = FaceView(self, fk)
+        new.attrs = dict(_mesh._dominant_attrs(views))
+        return new
+
+    def revert_stitch(self, rec) -> None:
+        """A record made by the store goes back by its snapshot (LIFO, as
+        the Python per-op inverse assumes too); a Python record runs the
+        Python kernel."""
+        undo = rec.get("_undo")
+        if undo is None:
+            return self._py("revert_stitch", rec)
+        self.restore_state(undo)
 
     def resplit_curves(self) -> None:
         """:meth:`Mesh.resplit_curves` with the scan for curve edges done
@@ -1493,18 +1718,14 @@ class StoreMesh(Mesh):
         _materialise(self)
 
 
-for _name in ("add_faces_bulk", "_rekey", "split_edge", "weld_coincident",
-              "dedupe_faces", "_weld_into", "split_edge_at",
-              "collapse_vertex", "dissolve_edge_recorded",
-              "dissolve_coplanar_pair", "dissolve_coplanar_region",
-              "revert_stitch", "dissolve_edge"):
+for _name in ("add_faces_bulk", "_rekey"):
     setattr(StoreMesh, _name, _on_python(_name))
 # add_faces_bulk: bulk_weld + add_faces_welded on an empty mesh goes to the
 # store through Mesh.add_faces_bulk itself (become_store at bulk_weld).
 StoreMesh.add_faces_bulk = Mesh.add_faces_bulk
 # Read-mostly Python code that runs on views as is (curve ids are written
 # through the edge views): tag_curve, resplit_curves, curve_edges,
-# surface_of, interior_vertex_on, collapsible_vertex.
+# surface_of.
 StoreMesh.tag_curve = Mesh.tag_curve
 
 
@@ -1515,6 +1736,24 @@ def _fallback():
     when ``_native.native`` was fixed to None for the session."""
     from core import _native
     return _native.available().StoreFallback
+
+
+def _hypot():
+    """This Qt's ``QVector3D::length()`` formula for the store's geometric
+    tests, or None (then they run in Python)."""
+    from core import _native
+    return _native.qt_hypot()
+
+
+def _hole_filter(holes):
+    """``Mesh.add_face``'s nested-hole filter (``topology._maximal_holes``)
+    over the merged face's holes, given as positions: a bool per hole. The
+    store calls it when a dissolve's face has several holes, before it
+    changes anything."""
+    from core.topology import _maximal_holes
+    rings = [[QVector3D(*p) for p in h] for h in holes]
+    kept = {id(h) for h in _maximal_holes(rings)}
+    return [id(r) in kept for r in rings]
 
 
 def _xyz(p):
@@ -1566,6 +1805,13 @@ class MaterialisedMesh(Mesh):
             return
         Mesh.restore_state(self, snap)
 
+    def revert_stitch(self, rec) -> None:
+        undo = rec.get("_undo")
+        if undo is not None:
+            self.restore_state(undo)        # a record the store made
+            return
+        Mesh.revert_stitch(self, *_resolve((rec,), self))
+
 
 
 for _name in ("curve_edges", "remove_edge", "relink_vertices",
@@ -1575,8 +1821,8 @@ for _name in ("curve_edges", "remove_edge", "relink_vertices",
               "split_edge", "_weld_into", "interior_vertex_on",
               "split_edge_at", "collapsible_vertex", "collapse_vertex",
               "dissolve_edge_recorded", "dissolve_coplanar_pair",
-              "dissolve_coplanar_region", "revert_stitch", "dissolve_edge",
-              "_rekey", "_link_edge"):
+              "dissolve_coplanar_region", "dissolve_edge",
+              "_rekey", "_link_edge", "collapse_collinear"):
     setattr(MaterialisedMesh, _name, _resolving(_name))
 del _name
 
