@@ -356,3 +356,17 @@ def test_selection_box_skips_billboards_and_follows_a_move(view):
     assert after != before
     group.billboard = 'mesh'
     assert view._selection_box_primitives() == []
+
+
+def test_leaving_a_group_clears_the_rest_after_an_update_reset(view):
+    # An incremental update clears _rest_signature; leaving the group then
+    # skipped set_rest (no rows, no signature) and the model stayed hidden.
+    calls = []
+    view.renderer.set_rest = lambda rows, mode: calls.append((list(rows), mode))
+    view.source_viewport = SimpleNamespace(edit_rest_mode='hide')
+    view.scene.edit_group = view.scene.groups[0]
+    view.sync_edit_context()
+    view._rest_signature = None               # what an incremental update does
+    view.scene.edit_group = None
+    view.sync_edit_context()
+    assert calls[-1] == ([], 'hide')

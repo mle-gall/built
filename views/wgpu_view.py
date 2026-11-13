@@ -729,8 +729,12 @@ class WgpuView(QWidget):
         from views.wgpu_edit_context import rest_rows
         rows = rest_rows(self.packed.groups, self.scene.edit_group)
         before = time.perf_counter()
-        if rows or getattr(self, '_rest_signature', None) is not None:
-            self.renderer.set_rest(rows, mode)
+        # Always: a reset signature (an incremental update clears it) does
+        # not mean the renderer holds no rest bits. Skipping the call when
+        # there were no rows left the whole model hidden after leaving a
+        # group with "hide" (and faded with "fade"). The native call is one
+        # pass over the flags and writes nothing when they are unchanged.
+        self.renderer.set_rest(rows, mode)
         self.rest_write_ms = (time.perf_counter() - before) * 1000
         flags = self.packed.instances['info'][:, 2]
         flags &= np.uint32(~(64 | 128) & 0xffffffff)
