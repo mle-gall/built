@@ -288,24 +288,90 @@ def _relabel_deferred(mesh, rename) -> bool:
     src["layers"] = lay
     meta["edge_layers"] = names
     src["meta"] = meta
-    d["_deferred_source"] = src
-    for key in ("_deferred_plan", "_drawing_staged", "_drawing_source_key"):
-        d.pop(key, None)
-    # The build the loader left reads its own copy of the original tables;
-    # if the mesh is ever built (an edit, a pick into it), its faces and
-    # edges are relabelled right after — the drawing, from the tables
-    # above, already shows the new names.
-    original = d["_deferred"]
 
-    def build(m, original=original, rename=rename):
+    def relabel(m, rename=rename):
         from core.layers import assign_layer, layer_of
-        original(m)
         for f in m.faces:
             assign_layer(f, rename(layer_of(f)))
         for e in m.edges:
             assign_layer(e, rename(layer_of(e)))
-    d["_deferred"] = build
+    _retable_deferred(mesh, src, relabel)
     return True
+
+
+def _retable_deferred(mesh, src, after_build) -> None:
+    """Give a deferred mesh new source tables ``src`` (a copy: the old ones
+    may be shared) and drop what was derived from the old ones: the lazy
+    plan, and the drawing cache's key and bake (the key hashes the tables,
+    so the bake is rebuilt, never shown stale). The build the loader left
+    reads its own copy of the original tables; if the mesh is ever built
+    (an edit, a pick into it), ``after_build(mesh)`` brings its faces and
+    edges to what the new tables say — the drawing already shows that."""
+    d = mesh.__dict__
+    d["_deferred_source"] = src
+    for key in ("_deferred_plan", "_drawing_staged", "_drawing_source_key"):
+        d.pop(key, None)
+    original = d["_deferred"]
+
+    def build(m, original=original, after_build=after_build):
+        original(m)
+        after_build(m)
+    d["_deferred"] = build
+
+
+def _renamed_paint(attrs, renamed):
+    """``attrs`` (a face's, or a row of a face-attribute table) with its
+    front and back material names moved through ``renamed``; the same
+    object when neither is renamed, else a copy."""
+    mat = attrs.get("mat")
+    back = attrs.get("back")
+    front_hit = mat in renamed
+    back_hit = isinstance(back, dict) and back.get("mat") in renamed
+    if not (front_hit or back_hit):
+        return attrs
+    out = dict(attrs)
+    if front_hit:
+        out["mat"] = renamed[mat]
+    if back_hit:
+        out["back"] = {**back, "mat": renamed[back["mat"]]}
+    return out
+
+
+def restamp_materials(mesh, renamed) -> None:
+    """Move ``mesh``'s faces onto the materials' new names (``renamed``,
+    old → new, from :func:`core.insert.merge_materials`). A mesh the
+    document left deferred is relabelled in its face-attribute table,
+    without building it: on Maxence's ride, three colliding names in the
+    linked facilities built every one of its meshes on open (4.8 s of a
+    9.5 s load, 2026-11-13). A built mesh has its faces restamped in place
+    as before."""
+    from core.mesh import DeferredMesh
+    if type(mesh) is DeferredMesh:
+        d = mesh.__dict__
+        src = dict(d["_deferred_source"])
+        meta = dict(src.get("meta") or {})
+        table = meta.get("face_attrs") or []
+        new = [_renamed_paint(row, renamed) for row in table]
+        if all(a is b for a, b in zip(new, table)):
+            return                     # no face of this mesh is renamed
+        meta["face_attrs"] = new
+        src["meta"] = meta
+        _retable_deferred(mesh, src,
+                          lambda m: _restamp_faces(m.faces, renamed))
+        return
+    _restamp_faces(mesh.faces, renamed)
+
+
+def _restamp_faces(faces, renamed) -> None:
+    for f in faces:
+        a = f.attrs
+        if not a:
+            continue
+        if a.get("mat") in renamed:
+            a["mat"] = renamed[a["mat"]]
+        back = a.get("back")
+        if isinstance(back, dict) and back.get("mat") in renamed:
+            back["mat"] = renamed[back["mat"]]
 
 
 def _rename_tags(comp, path) -> None:
@@ -314,21 +380,28 @@ def _rename_tags(comp, path) -> None:
     from core.group import iter_placements
     from core.layers import assign_layer, layer_of
 
+    # One name per source tag, worked out once: tag_name parses the path
+    # each time, and the ride's links asked it ~200k times per open.
+    names: dict = {}
+
     def rename(name):
-        return tag_name(path, name)
+        out = names.get(name)
+        if out is None:
+            out = names[name] = tag_name(path, name)
+        return out
     seen = set()
     for g, _m in iter_placements(comp):
         if g is not comp:
-            assign_layer(g, tag_name(path, layer_of(g)))
+            assign_layer(g, rename(layer_of(g)))
         if id(g.mesh) in seen:
             continue
         seen.add(id(g.mesh))
         if _relabel_deferred(g.mesh, rename):
             continue
         for f in g.mesh.faces:
-            assign_layer(f, tag_name(path, layer_of(f)))
+            assign_layer(f, rename(layer_of(f)))
         for e in g.mesh.edges:
-            assign_layer(e, tag_name(path, layer_of(e)))
+            assign_layer(e, rename(layer_of(e)))
 
 
 def _apply_tags(scene, path, tags) -> None:

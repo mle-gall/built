@@ -1228,16 +1228,10 @@ def _without_nonfinite(payload: dict) -> dict:
     return dict(payload, edges=edges, faces=faces)
 
 
-def _normalize_text_curve_ids(payload: dict, geom: dict) -> None:
-    """Map stored text curve identities to the engine's integer identities.
-
-    JSON documents can carry named curves. Their segments must stay grouped,
-    but the engine's counter and binary geometry writer require integer ids.
-    Reserve the document's existing integers first, including binary meshes
-    loaded later, so a name cannot collide with an existing numeric curve.
-    """
-    import core.mesh as _mesh_mod
-
+def _mesh_blocks(payload: dict):
+    """Every mesh block of a document's scene the loader reads: the scene's
+    own, the prototypes, and each group's (placements use their prototype
+    instead), down to the depth :func:`_load_into_inner` builds."""
     def group_meshes(groups, depth=0):
         for raw in groups:
             if not isinstance(raw, dict):
@@ -1249,16 +1243,123 @@ def _normalize_text_curve_ids(payload: dict, geom: dict) -> None:
                 yield from group_meshes(raw.get("children", []) or [],
                                         depth + 1)
 
-    def meshes():
-        yield payload
-        yield from payload.get("protos", [])
-        yield from group_meshes(payload.get("groups", []) or [])
-        yield from group_meshes(payload.get("kept_components", []) or [])
+    yield payload
+    yield from payload.get("protos", [])
+    yield from group_meshes(payload.get("groups", []) or [])
+    yield from group_meshes(payload.get("kept_components", []) or [])
+
+
+class _GeomMembers(dict):
+    """A document's ``geom/`` members (name → bytes), and in ``checked``
+    the block (its JSON ``meta`` dict, by identity) each one was already
+    validated for by the Rust engine — :func:`_geometry_arrays` then
+    builds its arrays without scanning them again."""
+    __slots__ = ("checked",)
+
+    def __init__(self):
+        super().__init__()
+        self.checked = {}
+
+
+#: ZipInfo flag bits the native reader handles like ``zipfile``: the
+#: deflate options, a trailing data descriptor and UTF-8 names. Anything
+#: else (encryption, patches) is read by ``zipfile``, which says no.
+_NATIVE_ZIP_FLAGS = 0x2 | 0x4 | 0x8 | 0x800
+
+
+def _read_geometry_members(archive, path: Path, payload: dict) -> dict:
+    """Format 3's binary geometry blocks, read while the archive is open.
+
+    With the Rust engine the members are inflated in parallel off the GIL
+    and each block is checked against the layout its JSON declares in the
+    same call (``ingetrazo_core.igz_read_geometry``). On the ride model
+    that was 11,604 members inflated one after the other, then a dozen
+    NumPy reductions per block. Whatever the engine cannot vouch for —
+    an unusual member, a block it does not accept, an engine that fails —
+    is read and checked here exactly as before, so a damaged document
+    fails with the same message either way."""
+    names = [n for n in archive.namelist() if n.startswith(_GEOM_PREFIX)]
+    out = _GeomMembers()
+    native = None
+    if names:
+        from core import _native
+        mod = _native.native
+        native = getattr(mod, "igz_read_geometry", None) if mod else None
+    if native is not None:
+        try:
+            _read_geometry_native(native, archive, path, payload, names, out)
+        except Exception as exc:  # noqa: BLE001 — Python reads them below
+            import logging
+            logging.getLogger(__name__).warning(
+                "Native geometry reader failed, using Python: %s", exc)
+            out.clear()
+            out.checked.clear()
+    for n in names:
+        if n not in out:
+            out[n] = archive.read(n)
+    return out
+
+
+def _read_geometry_native(native, archive, path, payload, names, out):
+    metas: dict = {}                   # member → its one block's meta
+    shared: set = set()
+    for block in _mesh_blocks(payload):
+        meta = block.get("geom") if isinstance(block, dict) else None
+        member = meta.get("member") if isinstance(meta, dict) else None
+        if not isinstance(member, str):
+            continue
+        if member in metas and metas[member] is not meta:
+            shared.add(member)         # two blocks, one member: Python checks
+        metas[member] = meta
+    todo, entries, checks = [], [], []
+    for n in names:
+        info = archive.getinfo(n)
+        if info.flag_bits & ~_NATIVE_ZIP_FLAGS or \
+                info.compress_type not in (0, 8):
+            continue
+        try:
+            local = info.orig_filename.encode(
+                "utf-8" if info.flag_bits & 0x800 else "cp437")
+        except UnicodeEncodeError:
+            continue
+        check = None
+        meta = metas.get(n) if n not in shared else None
+        if meta is not None:
+            try:
+                check = (meta["arrays"], len(meta.get("face_attrs") or ()),
+                         len(meta.get("edge_layers") or ()))
+            except (KeyError, TypeError):
+                check = None
+        todo.append((n, meta if check is not None else None))
+        entries.append((info.header_offset, info.compress_type,
+                        info.compress_size, info.file_size, info.CRC, local,
+                        info.flag_bits))
+        checks.append(check)
+    if not todo:
+        return
+    for (n, meta), (blob, ok) in zip(todo, native(str(path), entries,
+                                                  checks)):
+        if blob is None:
+            continue                   # read by zipfile, which decides
+        out[n] = blob
+        if ok and meta is not None:
+            out.checked[n] = meta
+
+
+def _normalize_text_curve_ids(payload: dict, geom: dict) -> None:
+    """Map stored text curve identities to the engine's integer identities.
+
+    JSON documents can carry named curves. Their segments must stay grouped,
+    but the engine's counter and binary geometry writer require integer ids.
+    Reserve the document's existing integers first, including binary meshes
+    loaded later, so a name cannot collide with an existing numeric curve.
+    """
+    import core.mesh as _mesh_mod
 
     text_edges = []
     binary_meshes = []
     top = _mesh_mod._CURVE_COUNTER - 1
-    for block in meshes():
+    for block in _mesh_blocks(payload):
         if "geom" in block:
             binary_meshes.append(block["geom"])
             continue
@@ -1306,8 +1407,7 @@ def _load_into_inner(scene, path: Path, progress=None) -> None:
                     scene._home_thumbnail_png = archive.read(info)
             # Format 3's binary geometry blocks, read while the archive is
             # open (it closes below).
-            geom = {n: archive.read(n) for n in archive.namelist()
-                    if n.startswith(_GEOM_PREFIX)}
+            geom = _read_geometry_members(archive, path, data.get("scene", {}))
             tick(0.2, "Unpacking textures…")
             _unpack_textures(data.get("scene", {}), archive)
             # Rebuilt here, while the archive is still open — it closes below
@@ -1943,11 +2043,25 @@ def _load_mesh_json(mesh, payload) -> None:
                               ring_counts, attrs_list, edge_map=emap)
 
 
-def _geometry_arrays(meta, blob: bytes) -> dict:
+def _geometry_arrays(meta, blob: bytes, checked: bool = False) -> dict:
     """The arrays of a format-3 block, checked: known dtypes, inside the
     blob, and every index pointing at something that exists. A damaged or
-    crafted document fails with a ValueError instead of building garbage."""
+    crafted document fails with a ValueError instead of building garbage.
+    ``checked``: the Rust engine already made these very checks on this
+    blob for this ``meta`` (:func:`_read_geometry_members`), so only the
+    views are built — the same arrays, without a second scan."""
     import numpy as np
+
+    if checked:
+        out = {}
+        for name, (dtype, shape, offset) in meta["arrays"].items():
+            shape = tuple(int(n) for n in shape)
+            count = 1
+            for n in shape:
+                count *= n
+            out[name] = np.frombuffer(blob, dtype=dtype, count=count,
+                                      offset=int(offset)).reshape(shape)
+        return out
 
     def bad(why):
         return ValueError(f"damaged geometry block ({why})")
@@ -2014,6 +2128,9 @@ def _document_geometry_arrays(meta, geom: dict) -> dict:
     blob = geom.get(member)
     if blob is None:
         raise ValueError(f"the document lost its geometry block {member!r}")
+    checked = getattr(geom, "checked", None)
+    if checked and checked.get(member) is meta:
+        return _geometry_arrays(meta, blob, True)
     return _geometry_arrays(meta, blob)
 
 
