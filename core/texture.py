@@ -530,7 +530,7 @@ def continuous_maps(mesh, faces, seed, tex: dict) -> dict:
                 if e is None or not e.soft:
                     continue
                 for g in e.faces:
-                    if g is f or g.key not in ids or g.key in out:
+                    if g == f or g.key not in ids or g.key in out:
                         continue
                     n2 = g.normal()
                     d = e.b - e.a

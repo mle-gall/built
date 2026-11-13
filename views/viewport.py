@@ -7534,7 +7534,7 @@ class Viewport(QOpenGLWidget):
         if memo is None or memo[0] != _cache_ver(self):
             memo = self._newell_memo = (_cache_ver(self), {})
         hit = memo[1].get(element_identity(face))
-        if hit is None or hit[0] is not face:
+        if hit is None or hit[0] != face:
             hit = memo[1][element_identity(face)] = (face, face._newell())
         return hit[1]
 
@@ -7557,7 +7557,7 @@ class Viewport(QOpenGLWidget):
         if memo is None or memo[0] != _cache_ver(self):
             memo = self._tri_memo = (_cache_ver(self), {})
         hit = memo[1].get(element_identity(face))
-        if hit is None or hit[0] is not face:
+        if hit is None or hit[0] != face:
             hit = memo[1][element_identity(face)] = (
                 face, face.triangulate(self._normal_of(face)))
         return hit[1]
@@ -7588,7 +7588,7 @@ class Viewport(QOpenGLWidget):
             if not hasattr(f, "loop") or len(f.loop) < 3:
                 continue
             hit = memo[1].get(element_identity(f))
-            if hit is not None and hit[0] is f:
+            if hit is not None and hit[0] == f:
                 continue
             rings = [f.vertices] + [h for h in f.holes if len(h) >= 3]
             if sum(len(r) for r in rings) >= self.NATIVE_TRIS_MIN_CORNERS:
@@ -9550,7 +9550,7 @@ class Viewport(QOpenGLWidget):
         component placement a face inside a component was picked through
         (see :meth:`pick_face_placement`): it is what puts the marking on the
         part."""
-        if entity is self._hover_entity and placement is self._hover_placement:
+        if entity == self._hover_entity and placement is self._hover_placement:
             return
         self._hover_entity = entity
         self._hover_placement = placement
@@ -11967,7 +11967,7 @@ class Viewport(QOpenGLWidget):
             i = int(i)
             g_face = hits.ent(i)[0]
             g_place = hits.place(i)
-            if g_face is f_face and g_place is f_place:
+            if g_face == f_face and g_place is f_place:
                 continue
             p_g, n_g = face_plane_world(g_face, getattr(g_place, "xform", None))
             u = QVector3D.crossProduct(n_f, n_g)
@@ -17184,7 +17184,7 @@ class Viewport(QOpenGLWidget):
         if face is None:
             return None, None
         fp = getattr(self, "_face_any_place", None)
-        if fp is not None and fp[0] is face:
+        if fp is not None and fp[0] == face:
             return face, fp[1]
         return face, owner
 

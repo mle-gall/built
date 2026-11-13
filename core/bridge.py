@@ -414,9 +414,9 @@ def _walks(face, va, vb) -> int:
     for lp in (face.loop, *face.hole_loops):
         n = len(lp)
         for i in range(n):
-            if lp[i] is va and lp[(i + 1) % n] is vb:
+            if lp[i] == va and lp[(i + 1) % n] == vb:
                 return 1
-            if lp[i] is vb and lp[(i + 1) % n] is va:
+            if lp[i] == vb and lp[(i + 1) % n] == va:
                 return -1
     return 0
 

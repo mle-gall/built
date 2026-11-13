@@ -100,10 +100,10 @@ def _inward(face, v0, v1) -> QVector3D | None:
     d = None
     for i in range(n):
         a, b = loop[i], loop[(i + 1) % n]
-        if a is v0 and b is v1:
+        if a == v0 and b == v1:
             d = v1.position - v0.position
             break
-        if a is v1 and b is v0:
+        if a == v1 and b == v0:
             d = v0.position - v1.position
             break
     if d is None:
@@ -111,9 +111,9 @@ def _inward(face, v0, v1) -> QVector3D | None:
             m = len(hole)
             for i in range(m):
                 a, b = hole[i], hole[(i + 1) % m]
-                if a is v0 and b is v1:
+                if a == v0 and b == v1:
                     d = v1.position - v0.position
-                elif a is v1 and b is v0:
+                elif a == v1 and b == v0:
                     d = v0.position - v1.position
                 else:
                     continue
@@ -365,11 +365,11 @@ def plan_fillet(mesh, edges, radius: float, segments: int = 8,
         """Record the points replacing ``v`` in ``face``; False on a
         conflict, the string "outside" when a point falls off the face (the
         radius is too large for it)."""
-        if r is not None and len(pts) == 1 and (face is r.f1 or face is r.f2):
+        if r is not None and len(pts) == 1 and (face == r.f1 or face == r.f2):
             # The tangent point must be ON the face: a hair back toward the
             # edge and along it lands inside when the face reaches that far
             # (a cap's arc is not tested — a concave fillet grows the cap).
-            w = r.w1 if face is r.f1 else r.w2
+            w = r.w1 if face == r.f1 else r.w2
             mid = (r.edge.v0.position + r.edge.v1.position) * 0.5
             p = pts[0]
             q = p + ((mid - p) - w * r.t) * 1e-3
@@ -396,7 +396,7 @@ def plan_fillet(mesh, edges, radius: float, segments: int = 8,
         faces_here = set(v.faces())
         if len(group) == 1:
             r = group[0]
-            caps = [g for g in faces_here if g is not r.f1 and g is not r.f2]
+            caps = [g for g in faces_here if g != r.f1 and g != r.f2]
             if len(caps) > 1:
                 return tr("The corner at {p} has too many faces to round.",
                           p=_fmt(v.position))
@@ -441,9 +441,9 @@ def plan_fillet(mesh, edges, radius: float, segments: int = 8,
             ra.ends[vid] = sec
             ra.end_kind[vid] = "chain"
             # The neighbour stops on the same section, read from its side.
-            if rb.f1 is ra.f1 or rb.f2 is ra.f2:
+            if rb.f1 == ra.f1 or rb.f2 == ra.f2:
                 sec_b = list(sec)
-            elif rb.f1 is ra.f2 or rb.f2 is ra.f1:
+            elif rb.f1 == ra.f2 or rb.f2 == ra.f1:
                 sec_b = list(reversed(sec))
             else:
                 return tr("The edges at {p} share no face.", p=_fmt(v.position))
@@ -470,12 +470,12 @@ def plan_fillet(mesh, edges, radius: float, segments: int = 8,
             for r in group:
                 cut_pts = []
                 for f, w in ((r.f1, r.w1), (r.f2, r.w2)):
-                    other = [q for q in group if q is not r and (q.f1 is f or q.f2 is f)]
+                    other = [q for q in group if q is not r and (q.f1 == f or q.f2 == f)]
                     if len(other) != 1:
                         return tr("The corner at {p} is not a simple corner.",
                                   p=_fmt(v.position))
                     q = other[0]
-                    wq = q.w1 if q.f1 is f else q.w2
+                    wq = q.w1 if q.f1 == f else q.w2
                     normal = f.normal().normalized()
                     hit = _line_intersection_2d(v.position + w * r.t, r.d,
                                                 v.position + wq * q.t, q.d, normal)

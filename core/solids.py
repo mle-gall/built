@@ -363,7 +363,7 @@ def _carry_edge_flags(mesh, sources: _Sources, rel_tol: float = 1e-7) -> None:
         parent = {e: e for e in edges}
 
         def find(x):
-            while parent[x] is not x:
+            while parent[x] != x:
                 parent[x] = parent[parent[x]]
                 x = parent[x]
             return x

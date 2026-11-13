@@ -640,7 +640,7 @@ class EraseSelectionCommand(Command):
                 continue
             faces = list(edge.faces)
             merged = None
-            if len(faces) == 2 and faces[0] is faces[1]:
+            if len(faces) == 2 and faces[0] == faces[1]:
                 # Slit edge: ONE face walks it twice — a fence line joining an
                 # inner boundary to the outline turns the ring into a cut-open
                 # walk. Dissolving "the face with itself" deleted the face and
@@ -878,7 +878,7 @@ class AddFaceCommand(Command):
         # Direction B: the new face encloses existing smaller faces → it gains
         # each of them as a hole.
         for other in list(m.faces):
-            if other is self.face:
+            if other == self.face:
                 continue
             if loop_inside_face(self.face, other.vertices):
                 loop = m.add_hole(self.face, other.vertices)
@@ -888,7 +888,7 @@ class AddFaceCommand(Command):
         # rectangle) → carve a connected sub-region. Only when no hole applied.
         if not self._punches and not self._hole_swaps:
             for other in list(m.faces):
-                if other is self.face:
+                if other == self.face:
                     continue
                 remainder = subtract_loop_from_face(other, self.face.vertices)
                 pieces = ([remainder] if remainder is not None
@@ -3763,7 +3763,7 @@ class MakeGroupCommand(Command):
                 n = len(lp)
                 for i in range(n):
                     va, vb = lp[i], lp[(i + 1) % n]
-                    note(next((k for k in va.edges if k.other(va) is vb),
+                    note(next((k for k in va.edges if k.other(va) == vb),
                               None))
         for e in edges:
             note(e)
@@ -5173,9 +5173,9 @@ def _welded_loop(mesh, loop):
     out = []
     for p in loop:
         v = mesh.vertex(p)
-        if not out or v is not out[-1]:
+        if not out or v != out[-1]:
             out.append(v)
-    if len(out) > 1 and out[0] is out[-1]:
+    if len(out) > 1 and out[0] == out[-1]:
         out.pop()
     if len(out) < 3:
         return None
@@ -5229,7 +5229,7 @@ class RebuildPlanarFacesCommand(Command):
         scene.selection.clear()
         mesh.clear()
         for a, b in edges:
-            if mesh.vertex(a) is mesh.vertex(b):
+            if mesh.vertex(a) == mesh.vertex(b):
                 # Shorter than the weld: the arrangement keys points on a
                 # 0.1 mm grid, so two ends a hair apart across a cell line
                 # stay two -- the mesh welds them into one. Raising here

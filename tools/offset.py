@@ -602,7 +602,7 @@ def _run_from_edges(edges: list):
             break
         seen.add(nxt.key)
         v = nxt.other(v)
-        if closed and v is start:
+        if closed and v == start:
             break
         points.append(QVector3D(v.position))
     if len(seen) != len(edges):
@@ -617,8 +617,8 @@ def _run_from_edge(edge: Edge):
     def walk(v, e):
         out = []
         while len(v.edges) == 2:
-            e = next(x for x in v.edges if x is not e)
-            if e is edge:
+            e = next(x for x in v.edges if x != e)
+            if e == edge:
                 return out, True              # came round: a closed loop
             v = e.other(v)
             out.append(QVector3D(v.position))

@@ -351,7 +351,7 @@ class TexturePositionTool(Tool):
         pick = getattr(viewport, "pick_face", None)
         if pick is None or screen is None:
             return True
-        return pick(screen.x(), screen.y()) is self.face
+        return pick(screen.x(), screen.y()) == self.face
 
     # ---- Mouse ----------------------------------------------------------------
     def on_click(self, ctx: ToolContext) -> None:

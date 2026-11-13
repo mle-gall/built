@@ -119,7 +119,7 @@ def plan_vertex_bevel(mesh, vertices, size: float, segments: int = 8,
             for loop in [f.loop] + list(f.hole_loops):
                 m = len(loop)
                 for i, x in enumerate(loop):
-                    if x is not v:
+                    if x != v:
                         continue
                     ep = edge_between(loop[i - 1], v)
                     en = edge_between(v, loop[(i + 1) % m])

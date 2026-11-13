@@ -252,7 +252,7 @@ class Dimension:
         if anchor is None:
             return
         holds = self._holds_of(which)
-        if not any(h.vertex is anchor.vertex and h.mesh is anchor.mesh
+        if not any(h.vertex == anchor.vertex and h.mesh is anchor.mesh
                    for h in holds):
             holds.append(anchor)
             del holds[:-_MAX_HOLDS]

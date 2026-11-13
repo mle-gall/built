@@ -143,7 +143,7 @@ def _edge_partners(edge) -> list:
     for f, theta, s, w_f, _n in info:
         best, best_key = None, None
         for g, phi, _s, _w, n_g in info:
-            if g is f:
+            if g == f:
                 continue
             d = ((phi - theta) * s) % two_pi
             if d < _COINCIDENT or two_pi - d < _COINCIDENT:
@@ -174,7 +174,7 @@ def _inward(face, a, b, n):
         m = len(ring)
         for i in range(m):
             p, q = ring[i], ring[(i + 1) % m]
-            if (p is a and q is b) or (p is b and q is a):
+            if (p == a and q == b) or (p == b and q == a):
                 w = QVector3D.crossProduct(n, q.position - p.position)
                 if k > 0:
                     hn = _newell([v.position for v in ring])
@@ -224,7 +224,7 @@ def solid_parts(mesh: Mesh) -> list:
             # face wound the wrong way turns into the neighbour's material
             # and picks the neighbour, but the neighbour does not pick it.
             chosen = {f.key: g for f, g in pairs}
-            pairs = [(f, g) for f, g in pairs if chosen.get(g.key) is f]
+            pairs = [(f, g) for f, g in pairs if chosen.get(g.key) == f]
         for f, g in pairs:
             join(f.key, g.key)
     groups: dict = {}

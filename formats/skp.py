@@ -299,7 +299,7 @@ def _apply_payload_inner(scene, payload, progress=None) -> str:
                         _tick()     # one group can carry 1.7 M flags
                     va = mesh.vertex_at(QVector3D(a[0], a[1], a[2]))
                     vb = mesh.vertex_at(QVector3D(b[0], b[1], b[2]))
-                    if va is None or vb is None or va is vb:
+                    if va is None or vb is None or va == vb:
                         continue
                     e = mesh.find_edge(va, vb)
                     if e is not None:

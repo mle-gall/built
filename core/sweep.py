@@ -48,13 +48,13 @@ def order_path_edges(edges):
     pts = [QVector3D(start.position)]
     prev, cur = None, start
     for _ in range(len(edges)):
-        nxt = next((v for v in adj[cur] if v is not prev), None)
+        nxt = next((v for v in adj[cur] if v != prev), None)
         if nxt is None:
             return None
         pts.append(QVector3D(nxt.position))
         prev, cur = cur, nxt
     if closed:
-        if cur is not start:
+        if cur != start:
             return None                              # disjoint loops
         pts.pop()                                    # implicit wrap
     elif len(pts) != len(edges) + 1:
@@ -345,13 +345,13 @@ def manual_path_extend(chain, edge, skip=None, limit=400) -> bool:
     last = chain[-1]
     v0, v1 = edge.v0, edge.v1
     ids = {v.key: i for i, v in enumerate(chain)}
-    if last is v0 or last is v1:
-        other = v1 if last is v0 else v0
-        if len(chain) >= 2 and other is chain[-2]:
+    if last == v0 or last == v1:
+        other = v1 if last == v0 else v0
+        if len(chain) >= 2 and other == chain[-2]:
             chain.pop()                              # backing up
             return True
         if other.key in ids:
-            if other is chain[0] and len(chain) >= 3:
+            if other == chain[0] and len(chain) >= 3:
                 chain.append(other)                  # the loop closes
                 return True
             return False
@@ -365,8 +365,8 @@ def manual_path_extend(chain, edge, skip=None, limit=400) -> bool:
         return False
     chain.extend(route)
     reached = route[-1]
-    other = v1 if reached is v0 else v0
-    if other.key not in ids and other is not reached:
+    other = v1 if reached == v0 else v0
+    if other.key not in ids and other != reached:
         chain.append(other)
     return True
 
@@ -386,12 +386,12 @@ def _route(start, targets, skip, blocked_ids, limit):
         for e in v.edges:
             if skip is not None and skip(e):
                 continue
-            w = e.v1 if e.v0 is v else e.v0
-            if w.key in seen or (w.key in blocked_ids and w is not start):
+            w = e.v1 if e.v0 == v else e.v0
+            if w.key in seen or (w.key in blocked_ids and w != start):
                 continue
             seen.add(w.key)
             prev[w.key] = v
-            if w is targets[0] or w is targets[1]:
+            if w == targets[0] or w == targets[1]:
                 hit = w
                 break
             q.append(w)
@@ -399,7 +399,7 @@ def _route(start, targets, skip, blocked_ids, limit):
         return None
     route = []
     v = hit
-    while v is not None and v is not start:
+    while v is not None and v != start:
         route.append(v)
         v = prev[v.key]
     route.reverse()
@@ -507,7 +507,7 @@ def sweep_profile(mesh, face, path, closed) -> bool:
 def _edge_at(mesh, p, q):
     """The mesh edge from point ``p`` to point ``q``, or ``None``."""
     va, vb = mesh.vertex_at(p), mesh.vertex_at(q)
-    if va is None or vb is None or va is vb:
+    if va is None or vb is None or va == vb:
         return None
     return mesh.find_edge(va, vb)
 

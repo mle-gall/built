@@ -561,13 +561,13 @@ def divide_edges(mesh, edges, n: int) -> int:
                 at = step * k
                 point = a + (b - a) * ((at - walked) / ln)
                 e0, e1 = mesh.split_edge(rest, point)
-                if e0 is e1:
+                if e0 == e1:
                     break
                 # split_edge hands the halves back in v0→v1 order of the
                 # facet, which need not be the walking order: pick by the
                 # vertex we came from.
                 first = e0 if rest_from in (e0.v0, e0.v1) else e1
-                second = e1 if first is e0 else e0
+                second = e1 if first == e0 else e0
                 for half in (first, second):
                     stamp_edge_flags(half, flags)
                 pieces[piece_of(rest_start, at)].append(first)

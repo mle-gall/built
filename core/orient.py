@@ -416,7 +416,7 @@ def _face_side_state(face, tris_by_face: dict, rng: random.Random,
     if n.length() < 1e-9:
         return None
     if packed is None:
-        others = [t for f, t in tris_by_face.items() if f is not face]
+        others = [t for f, t in tris_by_face.items() if f != face]
     else:
         others = None
     # Probe from a point INSIDE the face's solid region. The loop centroid is

@@ -1453,7 +1453,7 @@ class PushPullTool(Tool):
                   else self.base_face.centroid())
         base_xy = _project_loop_2d(self.base_face.vertices, n)
         for g in scene.faces:
-            if g is self.base_face:
+            if g == self.base_face:
                 continue
             gn = g.normal().normalized()
             if abs(QVector3D.dotProduct(gn, n)) < 0.999:
@@ -1495,7 +1495,7 @@ class PushPullTool(Tool):
                 if ed is None:
                     continue
                 for g in ed.faces:
-                    if g is self.base_face or g.interior:
+                    if g == self.base_face or g.interior:
                         continue
                     gn = g.normal().normalized()
                     if abs(QVector3D.dotProduct(gn, n)) > 0.999:
@@ -1528,7 +1528,7 @@ class PushPullTool(Tool):
             samples.append(mid + (ip3 - mid) * 1e-3)
         lateral = None
         for g in scene.faces:
-            if g is self.base_face or g.interior:
+            if g == self.base_face or g.interior:
                 continue
             if abs(QVector3D.dotProduct(g.normal().normalized(), n)) > 0.999:
                 continue  # parallel: blocker/through logic owns it
@@ -1560,7 +1560,7 @@ class PushPullTool(Tool):
         nn = n.normalized()
         base_xy = _project_loop_2d(self.base_face.vertices, nn)
         for g in scene.faces:
-            if g is self.base_face:
+            if g == self.base_face:
                 continue
             if abs(QVector3D.dotProduct(g.normal().normalized(), nn)) <= 0.999:
                 continue  # not parallel
@@ -1765,7 +1765,7 @@ class PushPullTool(Tool):
         # created (its moving cap, a riser) would pin it to itself.
         pick = getattr(vp, "pick_face_placement", None) or vp.pick_face_any
         face, _grp = pick(sx, sy)
-        if (face is not None and face is not self.base_face
+        if (face is not None and face != self.base_face
                 and face not in self._stage_new
                 and not (_grp is None and self._borders_base(face, exclude))):
             origin, direction = vp._pixel_to_ray(sx, sy)
@@ -1942,7 +1942,7 @@ class PushPullTool(Tool):
                 if edge.v0.key not in on_loop or edge.v1.key not in on_loop:
                     continue                      # not a boundary edge
                 for other in edge.faces:
-                    if other is face:
+                    if other == face:
                         continue
                     d = QVector3D.dotProduct(other.normal().normalized(), n)
                     if abs(d) > 0.999:            # the same plane
@@ -2000,7 +2000,7 @@ class PushPullTool(Tool):
             prism_cap = not any(
                 _corner_dragged(g, rim, normal)
                 for g in faces
-                if g is not self.base_face and g.key not in walls)
+                if g != self.base_face and g.key not in walls)
         return attached, prism_cap
 
     def _commit(self, viewport) -> None:
@@ -2511,7 +2511,7 @@ class PushPullTool(Tool):
             return False
         walls = []
         for g in scene.mesh.faces:
-            if g is face or not any(_key(v) in rim for v in g.vertices):
+            if g == face or not any(_key(v) in rim for v in g.vertices):
                 continue
             walls.append([QVector3D.dotProduct(origin - v, normal)
                           for v in g.vertices if _key(v) not in rim])
@@ -2533,7 +2533,7 @@ class PushPullTool(Tool):
         borders only other sheets on its plane or nothing at all: no face off
         its plane (a room's wall beside it) stands on any rim edge."""
         normal = face.normal()
-        off_plane = [g for g in faces if g is not face
+        off_plane = [g for g in faces if g != face
                      and not _faces_coplanar(normal, g.normal())]
         for lp in (base, *base_holes):
             m = len(lp)
@@ -2710,7 +2710,7 @@ class PushPullTool(Tool):
         w0 = (min(sx) - mg, min(sy) - mg, min(sz) - mg)
         w1 = (max(sx) + mg, max(sy) + mg, max(sz) + mg)
         for g in faces:
-            if g is face:
+            if g == face:
                 continue
             gv = g.vertices
             if (max(p.x() for p in gv) < w0[0] or min(p.x() for p in gv) > w1[0]
@@ -2882,7 +2882,7 @@ class PushPullTool(Tool):
                 kind, g = classify_push_edge(face, hole[i], hole[(i + 1) % m],
                                              faces)
                 if kind != "coplanar" or g is None or g.holes \
-                        or (filled is not None and g is not filled):
+                        or (filled is not None and g != filled):
                     return []
                 filled = g
             if filled is None or len(filled.vertices) != m:

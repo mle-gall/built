@@ -32,14 +32,14 @@ def _directed_edges(face, flipped: bool):
 
 def _edge_between(a, b):
     for e in a.edges:
-        if (e.v0 is a and e.v1 is b) or (e.v0 is b and e.v1 is a):
+        if (e.v0 == a and e.v1 == b) or (e.v0 == b and e.v1 == a):
             return e
     return None
 
 
 def _walks(face, a, b) -> bool:
     """Does ``face`` (as it is wound now) walk the step ``a → b``?"""
-    return any(x is a and y is b for x, y in _directed_edges(face, False))
+    return any(x == a and y == b for x, y in _directed_edges(face, False))
 
 
 def faces_to_flip(seed) -> list:
@@ -54,7 +54,7 @@ def faces_to_flip(seed) -> list:
             edge = _edge_between(a, b)
             if edge is None or len(edge.faces) != 2:
                 continue
-            other = next((f for f in edge.faces if f is not face), None)
+            other = next((f for f in edge.faces if f != face), None)
             if other is None or other.key in flip:
                 continue
             # Agreement = the neighbour walks this edge the other way, b → a.

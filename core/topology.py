@@ -504,7 +504,7 @@ def find_containing_face(
     """
     best: Optional[Face] = None
     for face in faces:
-        if face is exclude:
+        if face == exclude:
             continue
         if loop_inside_face(face, loop, outside_holes=True):
             if best is None or len(face.vertices) < len(best.vertices):
@@ -672,14 +672,14 @@ def classify_push_edge(
     eset = frozenset((_key(a), _key(b)))
     faces = list(faces)
     for g in faces:
-        if g is face:
+        if g == face:
             continue
         if _faces_coplanar(fn, g.normal()) and (
             eset in _face_all_edges(g) or _segment_on_face_boundary(a, b, g)
         ):
             return ("coplanar", g)
     for s in faces:
-        if s is face or _faces_coplanar(fn, s.normal()):
+        if s == face or _faces_coplanar(fn, s.normal()):
             continue
         if _segment_on_face_boundary(a, b, s):
             return ("perp", s)
@@ -702,7 +702,7 @@ def face_is_bordered(face: Face, faces: Iterable[Face]) -> bool:
         return False
     others: set = set()
     for f in faces:
-        if f is face:
+        if f == face:
             continue
         others.update(_loop_edges(f.vertices))
         for hole in f.holes:
@@ -1635,8 +1635,8 @@ def fold_nonplanar_faces(mesh, tolerance: float = _PLANAR_TOLERANCE) -> list:
                     e = mesh.find_edge(lp[i], lp[(i + 1) % len(lp)])
                     if e is None or len(e.faces) != 2:
                         continue
-                    g = e.faces[0] if e.faces[1] is f else e.faces[1]
-                    if g is f or g not in pieces:
+                    g = e.faces[0] if e.faces[1] == f else e.faces[1]
+                    if g == f or g not in pieces:
                         continue
                     if QVector3D.dotProduct(f.normal().normalized(),
                                             g.normal().normalized()) > 0.999:
@@ -1724,7 +1724,7 @@ def prune_collinear_orphan_edges(mesh) -> list:
     for e in orphans:
         i = slot[e.key]
         cover = [edges[j] for j in meeting(i)
-                 if edges[j] is not e and edges[j].key not in gone
+                 if edges[j] != e and edges[j].key not in gone
                  and _collinear_overlapping(e, edges[j])]
         if not cover:
             continue
@@ -1929,7 +1929,7 @@ def heal_overlapping_faces(mesh, coverage: float = 0.5, partial=None,
         covered = 0.0
         for j in cand:
             g = snap[j]
-            if g is face or g.key in gone:
+            if g == face or g.key in gone:
                 continue
             if (loop_inside_face(face, g.vertices)
                     and not _g_inside_a_hole(face, g.vertices)):
@@ -1976,7 +1976,7 @@ def heal_overlapping_faces(mesh, coverage: float = 0.5, partial=None,
                                      & (LO3 <= HI3[i3] + _BOX_PAD).all(axis=1)
                                      & (HI3 >= LO3[i3] - _BOX_PAD).all(axis=1)):
                 g = snap3[j3]
-                if g is face or g.key in gone:
+                if g == face or g.key in gone:
                     continue
                 if _g_inside_a_hole(g, face.vertices):
                     continue  # already filling a hole — no overlap
@@ -2124,7 +2124,7 @@ def defects_near(vertices, area_eps: float = 1e-10) -> dict:
             for f in e.faces:
                 faces[f.key] = f
     for e in edges.values():
-        if (e.v0 is e.v1 or
+        if (e.v0 == e.v1 or
                 (e.v0.position - e.v1.position).lengthSquared() < 1e-18):
             counts["zero_edge"] += 1
         if len({f.key for f in e.faces}) < len(e.faces):

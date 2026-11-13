@@ -145,10 +145,10 @@ class Edge:
 
     def other(self, v: Vertex) -> Vertex:
         """The endpoint that is not ``v``."""
-        return self.v1 if v is self.v0 else self.v0
+        return self.v1 if v == self.v0 else self.v0
 
     def has(self, v: Vertex) -> bool:
-        return v is self.v0 or v is self.v1
+        return v == self.v0 or v == self.v1
 
     def length(self) -> float:
         return (self.v1.position - self.v0.position).length()
@@ -1110,7 +1110,7 @@ class Mesh:
                     if e is None or not e.soft:
                         continue
                     for g in e.faces:
-                        if g is not f and g not in seen:
+                        if g != f and g not in seen:
                             seen.add(g)
                             stack.append(g)
         return list(seen)
@@ -1579,7 +1579,7 @@ class Mesh:
         if length < _STITCH_TOL:
             return None
         for v in self.vertices:
-            if v is edge.v0 or v is edge.v1:
+            if v == edge.v0 or v == edge.v1:
                 continue
             t = QVector3D.dotProduct(v.position - a, ab) / (length * length)
             if t <= _STITCH_TOL / length or t >= 1.0 - _STITCH_TOL / length:

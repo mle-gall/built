@@ -462,7 +462,7 @@ def rebuild_plane(mesh, origin: QVector3D, normal: QVector3D,
             return (QVector3D.dotProduct(d, fu), QVector3D.dotProduct(d, fv))
 
         for g in scope_faces:
-            if g is f or g in fresh_set:
+            if g == f or g in fresh_set:
                 continue
             gn = g.normal().normalized() if cache is None else cache.normal(g)
             if abs(QVector3D.dotProduct(gn, fn)) < 0.999:
@@ -946,7 +946,7 @@ def seam_planes(mesh, new_faces) -> list:
                 if e is None:
                     continue
                 for g in e.faces:
-                    if g is f:
+                    if g == f:
                         continue
                     if abs(QVector3D.dotProduct(
                             nf, g.normal().normalized())) > 0.999:

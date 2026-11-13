@@ -407,7 +407,7 @@ class SmoothNormals:
             parent: dict = {}
 
             def find(f):
-                while parent.setdefault(f, f) is not f:
+                while parent.setdefault(f, f) != f:
                     parent[f] = parent[parent[f]]
                     f = parent[f]
                 return f
@@ -416,7 +416,7 @@ class SmoothNormals:
                 root = find(e.faces[0])
                 for g in e.faces[1:]:
                     other = find(g)
-                    if other is not root:
+                    if other != root:
                         parent[other] = root
             by_root: dict = {}
             for f in list(parent):

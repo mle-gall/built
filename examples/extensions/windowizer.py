@@ -961,7 +961,7 @@ def is_bounded(mesh, face) -> bool:
         e = mesh.find_edge(loop[i], loop[(i + 1) % len(loop)])
         if e is None:
             return False
-        others = [f for f in e.faces if f is not face]
+        others = [f for f in e.faces if f != face]
         if len(others) != 1:
             return False
         o = others[0]
@@ -1002,7 +1002,7 @@ def _find_back_face(mesh, face, normal):
     ray = _mul(normal, -1.0)
     best = None
     for f in mesh.faces:
-        if f is face:
+        if f == face:
             continue
         fn = _t(f.normal())
         if _dot(fn, normal) > -0.9999:

@@ -97,7 +97,7 @@ def read_curve(mesh, edge) -> CurveShape | None:
     if len(walk) != len(chain):
         return None                                  # not one simple chain
     verts = [walk[0][1]] + [w for _e, _v, w in walk]
-    closed = verts[-1] is verts[0]
+    closed = verts[-1] == verts[0]
     if closed:
         verts = verts[:-1]
     if len({v.key for v in verts}) != len(verts):
@@ -183,17 +183,17 @@ def _splice(loop, shape: CurveShape, new_pts):
         if L != len(verts) or {v.key for v in loop} != {v.key for v in verts}:
             return None
         i = loop.index(verts[0])
-        forward = loop[(i + 1) % L] is verts[1]
+        forward = loop[(i + 1) % L] == verts[1]
         return list(new_pts) if forward else [new_pts[0]] + new_pts[:0:-1]
     i = loop.index(verts[0])
     pos = [p.position for p in loop]
-    if loop[(i + 1) % L] is verts[1]:
+    if loop[(i + 1) % L] == verts[1]:
         run = [loop[(i + j) % L] for j in range(L)]
         rest = [pos[(i + j) % L] for j in range(len(verts), L)]
         if run[:len(verts)] != verts:
             return None
         return list(new_pts) + rest
-    if loop[(i - 1) % L] is verts[1]:
+    if loop[(i - 1) % L] == verts[1]:
         run = [loop[(i - j) % L] for j in range(L)]
         rest = [pos[(i - j) % L] for j in range(len(verts), L)]
         if run[:len(verts)] != verts:

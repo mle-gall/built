@@ -556,7 +556,7 @@ def _boundary_runs(loop) -> list:
     segs = []
     for i in range(n):
         v0, v1 = loop[i], loop[(i + 1) % n]
-        edge = next((e for e in getattr(v0, "edges", ()) if e.other(v0) is v1),
+        edge = next((e for e in getattr(v0, "edges", ()) if e.other(v0) == v1),
                     None)
         cid = getattr(edge, "curve", None) if edge is not None else None
         soft = bool(getattr(edge, "soft", False)) if edge is not None else False
@@ -978,7 +978,7 @@ def _extension_snap(
     _, proj, from_end, src, u = best_ext
     best_hit = None
     for other in scene.edges:
-        if other is src:
+        if other == src:
             continue
         hit = _line_segment_intersection(proj, u, other.a, other.b)
         if hit is None:
@@ -1292,7 +1292,7 @@ def _intersection_snap(
 def _lock_reference_snap(
     start_point, line_dir, world_to_pixel, hover_edge, hover_plane,
 ) -> Optional[SnapResult]:
-    """SketchUp's «constrained on line / plane» under a direction lock (arrow,
+    """the modeller's «constrained on line / plane» under a direction lock (arrow,
     Shift or reference lock): with the cursor ON an edge or a face, the point
     where the lock line meets that edge's INFINITE line
     (``intersection_edge``) or that face's PLANE (``intersection_face``) is
@@ -1401,7 +1401,7 @@ def _lock_line_snaps(
     # 'From point' along the lock line: line up with a corner (green) or
     # midpoint (cyan) projected onto the locked axis — or hover it.
     # The cursor ON an edge: its meeting with the lock line is the answer
-    # (SketchUp's «constrained on line»), so the edge's body must not offer
+    # (the modeller's «constrained on line»), so the edge's body must not offer
     # an arbitrary 'from point' instead; corners and midpoints still do.
     edge_hit = (_lock_reference_snap(start_point, line_dir, world_to_pixel,
                                      hover_edge, None)
@@ -2072,7 +2072,7 @@ def compute_snap(
 
     # 7c. Where the face under the cursor meets another face with no edge
     #     between them — a box sunk into the floor, a beam through a wall
-    #     (#819, SketchUp's «Intersection»). Asked only here, once nothing
+    #     (#819, the modeller's «Intersection»). Asked only here, once nothing
     #     with a name is nearer: the caller's search casts a few rays.
     if face_crossing is not None and face_under_cursor and axis_engaged is None:
         crossing = face_crossing()

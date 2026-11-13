@@ -321,7 +321,7 @@ def _border_loops(mesh, edges=None) -> list:
         start, cur = e.v0, e.v1
         loop = [start]
         ok = len(at[start.key]) == 2
-        while ok and cur is not start:
+        while ok and cur != start:
             ways = at[cur.key]
             nxt = [x for x in ways if x.key not in used]
             if len(ways) != 2 or not nxt:
@@ -329,7 +329,7 @@ def _border_loops(mesh, edges=None) -> list:
                 break
             loop.append(cur)
             used.add(nxt[0].key)
-            cur = nxt[0].v1 if nxt[0].v0 is cur else nxt[0].v0
+            cur = nxt[0].v1 if nxt[0].v0 == cur else nxt[0].v0
         if ok and len(loop) >= 3:
             loops.append(loop)
     return loops
@@ -361,10 +361,10 @@ def _agree_with_neighbour(mesh, face) -> None:
     a, b = face.loop[0], face.loop[1]
     edge = mesh.find_edge(a, b)
     other = next((f for f in (edge.faces if edge else ())
-                  if f is not face and _live(f)), None)
+                  if f != face and _live(f)), None)
     if other is None:
         return
-    if any(x is a and y is b for x, y in _steps(other)):
+    if any(x == a and y == b for x, y in _steps(other)):
         face.loop.reverse()
 
 
@@ -417,7 +417,7 @@ def repair_item(mesh, item) -> dict:
     elif kind == "internal":
         face = ents[0]
         key = _face_key(face)
-        if any(f is not face and _face_key(f) == key for f in mesh.faces):
+        if any(f != face and _face_key(f) == key for f in mesh.faces):
             mesh.remove_face(face)
             done["duplicates"] = 1
         else:

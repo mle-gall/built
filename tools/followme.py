@@ -105,8 +105,8 @@ class FollowMeTool(Tool):
         changed = False
         if ctx.modifiers & Qt.AltModifier:
             face = viewport.pick_face(x, y)
-            if (face is not None and face is not self._profile
-                    and face is not self._alt_face):
+            if (face is not None and face != self._profile
+                    and face != self._alt_face):
                 self._alt_face = face
                 changed = True
         else:
@@ -191,7 +191,7 @@ class FollowMeTool(Tool):
             return orient_closed_path(self._alt_face.vertices,
                                       self._profile), True
         pts = [v.position for v in self._chain]
-        closed = (len(self._chain) >= 4 and self._chain[-1] is self._chain[0]
+        closed = (len(self._chain) >= 4 and self._chain[-1] == self._chain[0]
                   and self._start_pt is None)
         if closed:
             pts = pts[:-1]

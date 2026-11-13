@@ -392,7 +392,7 @@ class ArcTool(SegmentCount, AxisMagnet, PlaneLock, Tool):
             if d < 1e-6:
                 continue
             for B in V.edges:
-                if B is edge:
+                if B == edge:
                     continue
                 W = B.other(V).position
                 span = (W - V.position).length()

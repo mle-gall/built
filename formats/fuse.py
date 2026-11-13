@@ -385,7 +385,7 @@ def soften_by_smoothing_group(mesh, crease_cos: float = 0.17) -> None:
         if e.soft or len(e.faces) != 2:
             continue
         f0, f1 = e.faces
-        if f0 is f1 or not f0.attrs or not f1.attrs:
+        if f0 == f1 or not f0.attrs or not f1.attrs:
             continue
         g = f0.attrs.get(SMOOTH_KEY)
         if not g or g != f1.attrs.get(SMOOTH_KEY):
@@ -415,7 +415,7 @@ def soften_smooth_edges(mesh, cos_threshold: float = 0.85) -> None:
         if len(e.faces) != 2:
             continue
         f0, f1 = e.faces
-        if f0 is f1:
+        if f0 == f1:
             continue
         if _smooth_sig(f0.attrs) != _smooth_sig(f1.attrs):
             continue                      # material boundary: keep the line

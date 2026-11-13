@@ -74,7 +74,7 @@ def _face_edges(face):
         for i in range(n):
             a, b = lp[i], lp[(i + 1) % n]
             for e in a.edges:
-                if e.other(a) is b and face in e.faces:
+                if e.other(a) == b and face in e.faces:
                     yield e
                     break
 
