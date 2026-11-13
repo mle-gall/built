@@ -688,7 +688,7 @@ pub struct FaceGeom {
     pub tris_unit: Option<Vec<[u32; 3]>>,
 }
 
-fn triangles(pos: &[V3], rings: &[&[u32]], normal: V3, h: Hypot) -> Vec<[u32; 3]> {
+pub(crate) fn triangles(pos: &[V3], rings: &[&[u32]], normal: V3, h: Hypot) -> Vec<[u32; 3]> {
     triangles_impl(pos, rings, normal, h, false)
 }
 

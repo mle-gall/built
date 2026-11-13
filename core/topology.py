@@ -1496,7 +1496,19 @@ def sweep_tjunctions(mesh, seedkeys=None) -> None:
         # A store-backed mesh hands its arrays over (and the elements on
         # demand) instead of being read element by element.
         fast = getattr(mesh, "stitch_arrays", None)
-        if fast is not None:
+        local = None
+        if seed_lo is not None:
+            # Natively, only what the scoped sweep can touch: the edges in
+            # the seed box and the vertices in their boxes (the same pairs
+            # survive every test below, so the same splits).
+            from core import push_scans
+            local = push_scans.tjunction_arrays(mesh, seed_lo, seed_hi,
+                                                _STITCH_TOL)
+        if local is not None:
+            vpos, ends, verts, edges = local
+            if not len(verts) or not len(edges):
+                break
+        elif fast is not None:
             vpos, ends, verts, edges = fast()
             if not len(verts) or not len(edges):
                 break
@@ -1878,7 +1890,17 @@ def _mesh_is_flat(mesh) -> bool:
         return True
     n0 = faces[0].normal()
     d0 = QVector3D.dotProduct(n0, faces[0].vertices[0])
-    for f in faces[1:]:
+    # Walked lazily: a store-backed list's slice made a view of every face
+    # (0.3 s on the ride) before the first non-coplanar one ended the walk.
+    # Past the first faces, a store-backed mesh asks the engine the same
+    # float32 questions of the rest (core.push_scans.mesh_is_flat_from).
+    from itertools import islice
+    for i, f in enumerate(islice(faces, 1, None), 1):
+        if i == 64:
+            from core import push_scans
+            got = push_scans.mesh_is_flat_from(mesh, i, _PLANAR_TOLERANCE)
+            if got is not None:
+                return got
         if not _faces_coplanar(n0, f.normal()):
             return False
         if abs(QVector3D.dotProduct(n0, f.vertices[0]) - d0) > _PLANAR_TOLERANCE:

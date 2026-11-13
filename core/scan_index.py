@@ -61,9 +61,19 @@ def _token(mesh):
             len(mesh.faces))
 
 
-def scan(mesh) -> "Scan | None":
+def store_backed(mesh) -> bool:
+    """Whether ``mesh`` lives in the Rust store (its scans read the store's
+    columns, and its revision moves with every change)."""
+    from core import store_mesh
+    return type(mesh) is store_mesh.StoreMesh
+
+
+def scan(mesh, fresh: bool = False) -> "Scan | None":
     """The mesh's :class:`Scan` at its current revision, or ``None`` when
-    scans are off (the caller then runs its own loop)."""
+    scans are off (the caller then runs its own loop). ``fresh``: build a
+    new one even when the cache holds one for this revision — a Python
+    mesh's revision does not move for every change (a face turned over in
+    place, an ``interior`` mark), and a scan reads its objects lazily."""
     if mesh is None or not enabled():
         return None
     from core import mesh as _mesh
@@ -72,7 +82,8 @@ def scan(mesh) -> "Scan | None":
     token = _token(mesh)
     k = id(mesh)
     hit = _CACHE.get(k)
-    if hit is not None and hit[0]() is mesh and hit[1] == token:
+    if (not fresh and hit is not None and hit[0]() is mesh
+            and hit[1] == token):
         _CACHE.move_to_end(k)
         return hit[2]
     s = Scan(mesh)
@@ -151,11 +162,22 @@ class Scan:
             return got
         from core import store_mesh
         m = self._mesh()
-        cls = store_mesh.FaceView if kind == "face" else store_mesh.EdgeView
+        cls = {"face": store_mesh.FaceView, "edge": store_mesh.EdgeView,
+               "vertex": store_mesh.VertexView}[kind]
         return [cls(m, k) for k in got]
 
     def faces(self, idx) -> list:
         return self._elements("face", idx)
+
+    def vertices(self, idx) -> list:
+        """Listed vertices at ``idx`` (indices below the listed count)."""
+        return self._elements("vertex", idx)
+
+    def face_indices(self, faces) -> list:
+        """Each face's index in the scan's face list (``None``: not
+        there)."""
+        from core import _native
+        return _native.native.scan_face_indices(self.native, list(faces))
 
     def edges(self, idx) -> list:
         return self._elements("edge", idx)
