@@ -5,12 +5,25 @@ of mutated prototypes uses one R1b bake; transform previews only write rows.
 A prototype is (mesh, baked paint, billboard): a changed mesh rebakes every
 variant it has, each with its own paint, hidden faces/edges included, so an
 edit in a nested, painted or hidden-geometry model never repacks the scene.
+
+Entering a component instance (or a transformed container) swaps the group's
+mesh for a world-space copy; leaving puts the shared definition back. Both
+are *swaps*: the group keeps its row, paint and flags, only its prototype
+and matrix change, so they are written from the open edit path instead of
+walking every placement of the model (2 s on the ride).
 """
 import numpy as np
 from core.group import Group, iter_placements
 from core.scene import Scene
 from views.wgpu_scene import (COMMAND, INSTANCE, _baked_paint, _placement_records,
                               _placement_state, pack_scene)
+
+
+def _resident_version(scene):
+    """The content version less the edit-context bumps: entering or leaving
+    a group swaps meshes without moving anything in the world (the view's
+    content token reads the same), so the journal stays usable across it."""
+    return scene.content_version - getattr(scene, '_placement_context_bumps', 0)
 
 
 class InstanceUpdates:
@@ -40,7 +53,17 @@ class InstanceUpdates:
         self.active = set(self.rows)
         self.changed = []
         self.removed = []
-        self.version = scene.content_version
+        self.version = _resident_version(scene)
+        # uid -> [root, ..., group]: groups of the open edit path that draw
+        # another mesh than the one resident (see the module docstring).
+        self.pending_swaps = {}
+        self.chains = {}
+        # (vertices, indices) with spare room past the resident arrays, so
+        # a rebake that outgrows its range appends without copying them.
+        self._store = None
+        self._reserving = None
+        self.last_local = False
+        self.added = 0
         self.pending = set()
         self.pending_meshes = set()
         self.pending_materials = set()
@@ -72,14 +95,15 @@ class InstanceUpdates:
         material_targets = WeakKeyDictionary()
 
         def before(command, phase, ran):
-            if self.scene.content_version != self.version:
+            if _resident_version(self.scene) != self.version:
                 self.journal_valid = False
 
         def after(command, phase, ran):
             from core.history import (MoveGroupCommand, CompoundCommand, SetRecordCommand,
                                       SetRegistryCommand, InsertGroupCommand, DeleteGroupCommand,
                                       SnapshotMutation, MoveVerticesCommand, AddEdgeCommand,
-                                      AddFaceCommand, EraseSelectionCommand, HideCommand, AssignLayerCommand)
+                                      AddFaceCommand, EraseSelectionCommand, HideCommand, AssignLayerCommand,
+                                      ReshareInstanceCommand)
             def visit(command):
                 from core.history import (SetFaceTextureCommand, SetFaceBackCommand,
                                           SetFaceColorCommand, SetFaceOpacityCommand)
@@ -113,9 +137,25 @@ class InstanceUpdates:
                                         AddEdgeCommand, AddFaceCommand, EraseSelectionCommand)):
                     mesh = command._target(self.scene) if isinstance(command, SnapshotMutation) else self.scene.mesh
                     old = self.meshes.get(id(mesh))
-                    if old is None or old[2] < 0:
+                    if old is None:
+                        # The open group's world copy, first edited.
+                        chain = self._stack_chain(mesh)
+                        if chain is None:
+                            return False
+                        self.pending_swaps[chain[-1].uid] = chain
+                        return True
+                    if old[2] < 0:
                         return False
                     self.pending_meshes.add(id(mesh))
+                    return True
+                if isinstance(command, ReshareInstanceCommand):
+                    # Leaving an edited instance: back on the definition,
+                    # which every copy shows (all its variants rebake).
+                    if not self.queue_swap(command.group):
+                        return False
+                    old = self.meshes.get(id(command.proto))
+                    if old is not None and old[2] >= 0:
+                        self.pending_meshes.add(id(command.proto))
                     return True
                 if isinstance(command, (InsertGroupCommand, DeleteGroupCommand)) and command._owner is self.scene.groups:
                     adding = isinstance(command, InsertGroupCommand) != (phase == 'undo')
@@ -133,8 +173,80 @@ class InstanceUpdates:
                     return True
                 return isinstance(command, (SetRecordCommand, SetRegistryCommand))
             self.journal_valid = self.journal_valid and ran and visit(command)
-            self.version = self.scene.content_version
+            self.version = _resident_version(self.scene)
         self.unsubscribe = history.add_listener(before=before, after=after)
+
+    def remember_edit_path(self):
+        """Record ``[root, ..., group]`` for every resident group on the open
+        edit path, so leaving it (the definition back on the instance) can
+        be a row swap even after the path is closed."""
+        chain = []
+        for level in getattr(self.scene, '_edit_stack', ()):
+            group = level['group']
+            if chain and group not in (getattr(chain[-1], 'children', None) or ()):
+                return
+            if not chain and group not in self.roots:
+                return
+            chain.append(group)
+            if group.uid in self.rows:
+                self.chains[group.uid] = list(chain)
+
+    def _stack_chain(self, mesh):
+        """The recorded path to the open group that now draws ``mesh``, or
+        None (not a context swap, or not resident)."""
+        self.remember_edit_path()
+        for level in getattr(self.scene, '_edit_stack', ()):
+            group = level['group']
+            if group.mesh is mesh:
+                chain = self.chains.get(group.uid)
+                return chain if chain is not None and chain[-1] is group else None
+        return None
+
+    def queue_swap(self, group) -> bool:
+        """Rewrite ``group``'s row from its current mesh and the edit path
+        it was opened on. False when that path is unknown (full diff)."""
+        chain = self.chains.get(getattr(group, 'uid', None))
+        if chain is None or chain[-1] is not group:
+            return False
+        self.pending_swaps[group.uid] = chain
+        return True
+
+    def _resolve_swaps(self):
+        """``(row, group, matrix, paint)`` per pending swap, or None when
+        one no longer stands (the path was restructured meanwhile)."""
+        out = []
+        for uid, chain in self.pending_swaps.items():
+            row = self.rows.get(uid)
+            if row is None or chain[0] not in self.roots or row >= len(self.packed.groups):
+                return None
+            matrix = None
+            for parent, group in zip([None] + chain[:-1], chain):
+                if parent is not None and group not in (getattr(parent, 'children', None) or ()):
+                    return None
+                xform = getattr(group, 'xform', None)
+                matrix = xform if matrix is None else (matrix if xform is None else matrix * xform)
+            code = int(self.packed.instances['info'][row, 0])
+            variant = next((v[code] for v in self.variants.values() if code in v), None)
+            if variant is None:
+                return None
+            out.append((row, chain[-1], matrix, variant[0]))
+        return out
+
+    def _new_prototype(self, mesh, key, paint, mode, old, fresh):
+        """Allocate a prototype code for a variant never drawn before."""
+        code = len(self.packed.bounds)
+        if old is None or old[2] < 0:
+            old = (mesh, -1, code)
+            self.meshes[id(mesh)] = old
+        self.packed.prototype_lookup[key] = code
+        self.variants.setdefault(id(mesh), {})[code] = (paint, mode)
+        fresh[code] = mesh
+        self.packed.bounds = np.concatenate((self.packed.bounds, np.zeros((1, 2, 4), np.float32)))
+        self.packed.commands = np.concatenate((self.packed.commands, np.zeros(1, COMMAND)))
+        self.packed.edge_commands = np.concatenate((self.packed.edge_commands, np.zeros(1, COMMAND)))
+        self.packed.hidden_commands = np.concatenate((self.packed.hidden_commands, np.zeros(1, COMMAND)))
+        self.packed.hidden_edge_commands = np.concatenate((self.packed.hidden_edge_commands, np.zeros(1, COMMAND)))
+        return code, old
 
     def rebake_limit(self) -> int:
         """Most prototypes one edit rebakes in place; past it, a full pack."""
@@ -144,7 +256,12 @@ class InstanceUpdates:
         """Return changed resident rows, retaining prototype and placement IDs."""
         if scene is not self.scene:
             return None
-        local = self.unsubscribe is not None and self.journal_valid and scene.content_version == self.version
+        local = self.unsubscribe is not None and self.journal_valid and _resident_version(scene) == self.version
+        swaps = self._resolve_swaps() if local else None
+        if swaps is None:
+            local = False
+        self.pending_swaps.clear()
+        self.last_local = local
         placements = [] if local else [(None, None, None, 0)]
         state = _placement_state(scene)
         loose = self.meshes.get(id(scene.loose_mesh))
@@ -186,18 +303,7 @@ class InstanceUpdates:
             if code is None:
                 # A new mesh, or a known mesh under a paint or billboard
                 # mode it was never drawn with: a prototype of its own.
-                code = len(self.packed.bounds)
-                if old is None or old[2] < 0:
-                    old = (mesh, -1, code)
-                    self.meshes[id(mesh)] = old
-                self.packed.prototype_lookup[key] = code
-                self.variants.setdefault(id(mesh), {})[code] = (paint, mode)
-                fresh[code] = mesh
-                self.packed.bounds = np.concatenate((self.packed.bounds, np.zeros((1, 2, 4), np.float32)))
-                self.packed.commands = np.concatenate((self.packed.commands, np.zeros(1, COMMAND)))
-                self.packed.edge_commands = np.concatenate((self.packed.edge_commands, np.zeros(1, COMMAND)))
-                self.packed.hidden_commands = np.concatenate((self.packed.hidden_commands, np.zeros(1, COMMAND)))
-                self.packed.hidden_edge_commands = np.concatenate((self.packed.hidden_edge_commands, np.zeros(1, COMMAND)))
+                code, old = self._new_prototype(mesh, key, paint, mode, old, fresh)
             if old[1] != mesh._mut_serial:
                 changed[id(mesh)] = old
             row = self.rows.get(uid)
@@ -218,6 +324,25 @@ class InstanceUpdates:
             if row >= len(self.packed.instances) or value.tobytes() != self.packed.instances[row].tobytes():
                 ids.append(row)
                 values.append(value)
+        for row, group, matrix, paint in swaps or ():
+            # Same group, same paint and flags: its prototype and matrix.
+            mesh = group.mesh
+            mode = getattr(group, 'billboard', False)
+            key = (id(mesh), repr(paint), mode)
+            old = self.meshes.get(id(mesh))
+            code = self.packed.prototype_lookup.get(key)
+            if code is None or code < 0:
+                code, old = self._new_prototype(mesh, key, paint, mode, old, fresh)
+            if old[1] != mesh._mut_serial:
+                changed[id(mesh)] = old
+            self.packed.groups[row] = group
+            value = self.packed.instances[row].copy()
+            value['world'] = (np.eye(4, dtype=np.float32) if matrix is None
+                              else np.asarray(matrix.data(), np.float32).reshape(4, 4))
+            value['info'][0] = code
+            if value.tobytes() != self.packed.instances[row].tobytes():
+                ids.append(row)
+                values.append(value)
         removed = []
         if local:
             for root in self.pending_removed:
@@ -228,7 +353,7 @@ class InstanceUpdates:
                         removed.append(row)
         self.pending.clear()
         self.pending_removed.clear()
-        self.version = scene.content_version
+        self.version = _resident_version(scene)
         self.journal_valid = True
         self.roots = set(scene.groups) if not local else self.roots
         # Every variant of a changed mesh, and each new variant, rebakes.
@@ -247,6 +372,7 @@ class InstanceUpdates:
         for mesh in {id(m): m for m in bake.values()}.values():
             self.mesh_revisions[id(mesh)] = mesh.revision
         self.removed = removed if local else [self.rows[uid] for uid in self.active - seen]
+        self.added = len(additions)
         self.active = seen
         if additions:
             self.packed.instances = np.concatenate((self.packed.instances, np.zeros(len(additions), INSTANCE)))
@@ -255,6 +381,95 @@ class InstanceUpdates:
                 self.packed.uids.append(uid)
                 self.packed.groups.append(group)
         return np.asarray(ids, np.int64), np.asarray(values, dtype=INSTANCE)
+
+    def reserve(self, executor):
+        """Copy the resident CPU arrays into ones with spare room on
+        ``executor``, ahead of the first edit that appends. The first
+        append otherwise copies the whole model on the UI thread (65-200 ms
+        on the ride's 32 M vertices). Called on entering a group: the
+        intent to edit, and nothing is held twice for a model only looked
+        at (the copy is adopted as soon as it is done)."""
+        if self._store is not None or self._reserving is not None:
+            return
+        src_v, src_i = self.packed.vertices, self.packed.indices
+
+        def copy():
+            n = len(src_v)
+            capacity = n + max(n // 32, 4096)
+            vbuf = np.empty(capacity, src_v.dtype)
+            ibuf = np.empty(capacity, src_i.dtype)
+            # As raw bytes: a plain copy that releases the GIL.
+            for target, source in ((vbuf, src_v), (ibuf, src_i)):
+                if source.flags.c_contiguous:
+                    target[:n].view(np.uint8)[:] = source.view(np.uint8).reshape(-1)
+                else:
+                    target[:n] = source
+            return src_v, src_i, vbuf, ibuf
+        self._reserving = executor.submit(copy)
+
+    def adopt_reserved(self, wait=False):
+        """Swap a finished reservation in: the old ``(vertices, indices)``
+        when it was adopted, None when none is pending or it no longer
+        matches, False while it is still copying (and not ``wait``)."""
+        future = self._reserving
+        if future is None:
+            return None
+        if not wait and not future.done():
+            return False
+        self._reserving = None
+        try:
+            src_v, src_i, vbuf, ibuf = future.result()
+        except Exception:
+            return None
+        # Every write to these arrays goes through _place, which adopts
+        # first: identical arrays mean identical contents.
+        if (self._store is not None or self.packed.vertices is not src_v
+                or self.packed.indices is not src_i):
+            return None
+        n = len(src_v)
+        self.packed.vertices, self.packed.indices = vbuf[:n], ibuf[:n]
+        self._store = (vbuf, ibuf)
+        return src_v, src_i
+
+    def _place(self, code, vertices, indices) -> int:
+        """Write a rebaked prototype into the resident CPU arrays; its base.
+
+        Concatenating onto them copied the whole model per edit (0.5 s on
+        the ride, 1.4 s the first time). A rebake that fits the range its
+        code owns goes back there (a moved face keeps its counts); a longer
+        one is appended into spare room, grown by a margin when full."""
+        self.adopt_reserved(wait=True)
+        total = len(vertices)
+        packed = self.packed
+        tables = (packed.commands, packed.edge_commands,
+                  packed.hidden_commands, packed.hidden_edge_commands)
+        if code < len(packed.commands):
+            owned = sum(int(t[code]['count']) for t in tables)
+            base = int(packed.commands[code]['base'])
+            if total <= owned:
+                sizes = sum(t['count'].astype(np.int64) for t in tables)
+                # Two codes never share a range in the bake; check anyway,
+                # a shared one must not be overwritten for both.
+                if np.count_nonzero((packed.commands['base'] == base) & (sizes > 0)) == 1:
+                    packed.vertices[base:base+total] = vertices
+                    packed.indices[base:base+total] = indices
+                    return base
+        used = len(packed.vertices)
+        store = self._store
+        if (store is None or packed.vertices.base is not store[0]
+                or used + total > len(store[0])):
+            capacity = used + total + max(total * 4, used // 32, 4096)
+            vbuf = np.empty(capacity, packed.vertices.dtype)
+            ibuf = np.empty(capacity, packed.indices.dtype)
+            vbuf[:used] = packed.vertices
+            ibuf[:used] = packed.indices
+            store = self._store = (vbuf, ibuf)
+        vbuf, ibuf = store
+        vbuf[used:used+total] = vertices
+        ibuf[used:used+total] = indices
+        packed.vertices = vbuf[:used+total]
+        packed.indices = ibuf[:used+total]
+        return used
 
     def apply(self, ids, rows, renderer=None):
         if self.changed:
@@ -272,6 +487,7 @@ class InstanceUpdates:
             if renderer is not None and hasattr(renderer, 'set_material_transparency') and has_transparency(baked):
                 renderer.set_material_transparency(True)
             exclusions = dict(self.packed.profile_exclusions)
+            before = dict(exclusions)
             paths = list(self.packed.texture_paths)
             for path in baked.texture_paths:
                 if path not in paths:
@@ -324,9 +540,7 @@ class InstanceUpdates:
                             records[:, 16:20] = vertices['color'][:int(face['count'])]
                             material = records.reshape(-1)
                     renderer.update_prototype_materials(code, material)
-                offset = len(self.packed.vertices)
-                self.packed.vertices = np.concatenate((self.packed.vertices, vertices))
-                self.packed.indices = np.concatenate((self.packed.indices, indices))
+                offset = self._place(code, vertices, indices)
                 self.packed.bounds[code] = bounds
                 first = offset
                 for target, source in ((self.packed.commands, face), (self.packed.edge_commands, edge),
@@ -337,14 +551,23 @@ class InstanceUpdates:
                     target[code]['first'] = first
                     first += int(source['count'])
                 self.meshes[id(mesh)] = (mesh, mesh._mut_serial, code)
-            # The renderer takes the whole list (0.5 s on the ride): send it
-            # only when an edited prototype's own exclusions moved.
-            before = dict(self.packed.profile_exclusions)
-            moved = any((before.get(code) or []) != (exclusions.get(code) or [])
-                        for _, _, code in self.changed)
             self.packed.profile_exclusions = tuple((c, p) for c, p in exclusions.items() if p)
-            if renderer is not None and hasattr(renderer, 'set_profile_exclusions') and moved:
-                renderer.set_profile_exclusions(self.packed.profile_exclusions)
+            if renderer is not None and hasattr(renderer, 'set_profile_exclusions'):
+                if getattr(renderer, 'incremental_profile_exclusions', False):
+                    # Only the rebaked prototypes: each came back on a fresh,
+                    # unexcluded range; the others keep theirs natively.
+                    pairs = [(code, exclusions[code]) for _, _, code in self.changed
+                             if exclusions.get(code)]
+                    if pairs:
+                        renderer.set_profile_exclusions(pairs)
+                else:
+                    # An older module rebuilds every prototype from the
+                    # whole list (0.5 s on the ride): send it only when an
+                    # edited prototype's own exclusions moved.
+                    moved = any((before.get(code) or []) != (exclusions.get(code) or [])
+                                for _, _, code in self.changed)
+                    if moved:
+                        renderer.set_profile_exclusions(self.packed.profile_exclusions)
         if len(ids):
             if renderer is not None:
                 renderer.update_instances(ids.tolist(), rows.view(np.uint8).reshape(-1))

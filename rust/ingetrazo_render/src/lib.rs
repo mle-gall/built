@@ -197,6 +197,24 @@ fn capacity_buffer(d: &wgpu::Device, bytes: &[u8], capacity: usize, usage: wgpu:
     buffer(d, &padded, usage)
 }
 
+/// A larger buffer holding ``old``'s first ``used`` bytes, copied on the GPU.
+/// Re-uploading the whole resident scene from a zero-padded CPU copy made
+/// the first edit after an open wait ~0.4 s on the ride (the open uploads
+/// exact-size buffers, so the first append always grows them).
+fn grown_buffer(d: &wgpu::Device, q: &wgpu::Queue, old: &wgpu::Buffer, used: usize,
+    capacity: usize, usage: wgpu::BufferUsages) -> wgpu::Buffer {
+    let size = ((capacity.max(used).max(4) + 3) & !3) as u64;
+    let grown = d.create_buffer(&wgpu::BufferDescriptor {
+        label: None, size, usage: usage | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    });
+    let mut encoder = d.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+    encoder.copy_buffer_to_buffer(old, 0, &grown, 0, (used as u64) & !3);
+    // Submitted now: writes queued after this land after the copy.
+    q.submit([encoder.finish()]);
+    grown
+}
+
 fn bind_prototypes(d: &wgpu::Device, layout: &wgpu::BindGroupLayout,
     buffers: &[&wgpu::Buffer], count: u32) -> wgpu::BindGroup {
     // arrayLength(proto) defines the edge-command offset in the shader.
@@ -627,9 +645,10 @@ impl Renderer {
         if expanded_v.len() as u64 > self.device.limits().max_storage_buffer_binding_size as u64 {
             return Err(PyValueError::new_err("edge records exceed storage binding limit"));
         }
-        let edge_records = buffer(&self.device, &expanded_v, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST);
-        let vertex = buffer(&self.device, v, wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST);
-        let index = buffer(&self.device, ix, wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST);
+        // COPY_SRC: an edit grows these on the GPU (grown_buffer).
+        let edge_records = buffer(&self.device, &expanded_v, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC);
+        let vertex = buffer(&self.device, v, wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC);
+        let index = buffer(&self.device, ix, wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC);
         let protos = capacity_buffer(&self.device, p, prototype_capacity * 32, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST);
         let mut padded = vec![0; capacity * 80];
         for row in padded.chunks_exact_mut(80) {
@@ -782,8 +801,10 @@ impl Renderer {
             (&mut s.index, &s.index_data, wgpu::BufferUsages::INDEX, index_base*4, indices.as_slice()),
             (&mut s.edge_records, &s.edge_data, wgpu::BufferUsages::STORAGE, edge_base*48, edge.as_slice())] {
             if data.len() as u64 > target.size() {
-                *target = capacity_buffer(&self.device, data, grown_capacity(target.size() as usize, data.len()), usage | wgpu::BufferUsages::COPY_DST);
-            } else if !addition.is_empty() { self.queue.write_buffer(target, offset as u64, addition); }
+                *target = grown_buffer(&self.device, &self.queue, target, offset,
+                    grown_capacity(target.size() as usize, data.len()), usage);
+            }
+            if !addition.is_empty() { self.queue.write_buffer(target, offset as u64, addition); }
         }
         let mut face_cmd: Command = bytemuck::pod_read_unaligned(&commands[..20]);
         face_cmd.base += vertex_base as i32;
@@ -1063,20 +1084,29 @@ impl Renderer {
     }
     /// Soft/hidden endpoint pairs in prototype coordinates.
     /// Geometry-only reconstruction cannot distinguish a hidden edge from a seam.
+    ///
+    /// Only the prototypes named are touched, and the result is kept in the
+    /// resident edge records and command template: an edit sends its own
+    /// rebaked prototypes (cloning and rewriting every edge cost 0.45 s per
+    /// edit on the ride), and ``replace_prototype`` no longer resets the
+    /// other prototypes' hard-edge counts. A prototype's exclusions change
+    /// only with its geometry, which ``replace_prototype`` gives a fresh
+    /// range; sending the same pairs again leaves the records as they are.
     fn set_profile_exclusions(&mut self, pairs: Vec<(usize, Vec<f32>)>) -> PyResult<()> {
-        let s = self.scene.as_ref().ok_or_else(|| PyValueError::new_err("set_scene first"))?;
-        let mut data = s.edge_data.clone();
-        let mut template = s.template_data.clone();
-        for (prototype, endpoints) in pairs {
-            if prototype >= s.p as usize || endpoints.len()%6 != 0 || endpoints.iter().any(|v| !v.is_finite()) {
+        let s = self.scene.as_mut().ok_or_else(|| PyValueError::new_err("set_scene first"))?;
+        for (prototype, endpoints) in &pairs {
+            if *prototype >= s.p as usize || endpoints.len()%6 != 0 || endpoints.iter().any(|v| !v.is_finite()) {
                 return Err(PyValueError::new_err("profile exclusions need a valid prototype and finite endpoint pairs"));
             }
+        }
+        let mut touched = Vec::new();
+        for (prototype, endpoints) in pairs {
             let keys: std::collections::HashSet<_> = endpoints.chunks_exact(6).map(|p| edges::key(bytemuck::cast_slice(&p[..3]), bytemuck::cast_slice(&p[3..]))).collect();
             let offset = (s.p as usize+prototype)*20;
             let command: [u32;5] = bytemuck::pod_read_unaligned(&s.template_data[offset..offset+20]);
             let range = (command[2]/6) as usize*48..((command[2]+command[0])/6) as usize*48;
             let mut hard = Vec::new(); let mut soft = Vec::new();
-            for record in data[range.clone()].chunks_exact(48) {
+            for record in s.edge_data[range.clone()].chunks_exact(48) {
                 let mut edge = record.to_vec();
                 let n = glam::Vec3::from_array(bytemuck::pod_read_unaligned::<[f32;3]>(&edge[24..36]));
                 let candidate = n.length_squared()>2. || keys.contains(&edges::key(&edge[..12],&edge[12..24]));
@@ -1086,16 +1116,24 @@ impl Renderer {
                 } else { hard.extend(edge); }
             }
             let count = (hard.len()/48*6) as u32;
-            hard.extend(soft); data[range].copy_from_slice(&hard);
-            template[offset+16..offset+20].copy_from_slice(&count.to_le_bytes());
+            hard.extend(soft); s.edge_data[range.clone()].copy_from_slice(&hard);
+            s.template_data[offset+16..offset+20].copy_from_slice(&count.to_le_bytes());
+            touched.push(range);
         }
-        let mut hard = template.clone();
+        let bytes: usize = touched.iter().map(|r| r.len()).sum();
+        if bytes*2 > s.edge_data.len() {
+            self.queue.write_buffer(&s.edge_records, 0, &s.edge_data);
+        } else {
+            for range in touched.into_iter().filter(|r| !r.is_empty()) {
+                self.queue.write_buffer(&s.edge_records, range.start as u64, &s.edge_data[range]);
+            }
+        }
+        let mut hard = s.template_data.clone();
         for row in hard.chunks_exact_mut(20).skip(s.p as usize) {
             let count = row[16..20].to_vec(); row[..4].copy_from_slice(&count);
         }
-        self.queue.write_buffer(&s.edge_records,0,&data);
-        self.queue.write_buffer(&s.template,0,&template);
-        self.queue.write_buffer(&s.hard_template,0,&hard);
+        self.queue.write_buffer(&s.template, 0, &s.template_data);
+        self.queue.write_buffer(&s.hard_template, 0, &hard);
         Ok(())
     }
     /// Per-prototype hidden COMMAND rows and original vertex/index streams.
@@ -1848,6 +1886,12 @@ impl Renderer {
         read.unmap();
         Ok(ids.into_iter().collect())
     }
+    /// ``set_profile_exclusions`` touches only the prototypes it is given
+    /// and keeps the result (older modules rebuilt every prototype from the
+    /// full list, so callers had to send all of it).
+    #[getter]
+    fn incremental_profile_exclusions(&self) -> bool { true }
+
     #[getter]
     fn gpu_memory(&self) -> u64 {
         self.scene.as_ref().map_or(0, |s| {
