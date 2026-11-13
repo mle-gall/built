@@ -1467,6 +1467,13 @@ class Mesh:
         # deterministic survivor.
         step = 10.0 ** -_KEY_DECIMALS
         tol2 = step * step
+        # A cell a cross weld handed to the survivor still names it after
+        # the survivor is welded away in turn (a ghost entry): the pass must
+        # not take it for a partner, or it "welds" the dead vertex again,
+        # changes nothing and restarts forever. The store drops such
+        # entries with the vertex (design decision 4); here they are only
+        # skipped, the registry is not swept.
+        listed = {v.key for v in self.vertices}
         merged = True
         while merged:
             merged = False
@@ -1481,12 +1488,13 @@ class Mesh:
                             if nk == k:
                                 continue
                             w = self._registry.get(nk)
-                            if (w is None or w is v or
-                                    (w.position - v.position)
+                            if (w is None or w is v or w.key not in listed
+                                    or (w.position - v.position)
                                     .lengthSquared() >= tol2):
                                 continue
                             kp, dp = (v, w) if k < nk else (w, v)
                             self._weld_into(kp, dp)
+                            listed.discard(dp.key)
                             changed = True
                             merged = True
                             break
@@ -1537,7 +1545,7 @@ class Mesh:
         edge keeps its old key. Zero-length edges and sliver faces retire.
         """
         affected = {f for e in dup.edges for f in e.faces}
-        for e in list(dup.edges):
+        for e in self._weld_order(dup):
             other = e.other(dup)
             incident = list(e.faces)
             self.remove_edge(e)
@@ -1567,6 +1575,26 @@ class Mesh:
             self.vertices.remove(dup)
         if self._registry.get(_key(dup.position)) is dup:
             self._registry[_key(dup.position)] = keep
+
+    def _weld_order(self, dup: Vertex) -> list:
+        """``dup``'s edges in the order :meth:`_weld_into` redirects them:
+        by the other end's position, ties (two ends on one point, not
+        welded yet) in list order. The order decides the redirected edges'
+        list order; it was ``dup.edges``' set order, i.e. object addresses,
+        which no two runs (and no store) share (design decision 5)."""
+        edges = list(dup.edges)
+        if len(edges) < 2:
+            return edges
+
+        def end(e):
+            return e.other(dup).position.toTuple()
+
+        edges.sort(key=end)
+        ends = [end(e) for e in edges]
+        if len(set(ends)) < len(ends):
+            at = {e.key: i for i, e in enumerate(self.edges)}
+            edges.sort(key=lambda e: (end(e), at.get(e.key, -1)))
+        return edges
 
     def interior_vertex_on(self, edge: Edge) -> Optional[Vertex]:
         """An existing vertex lying strictly on ``edge``'s interior (a
@@ -1644,10 +1672,17 @@ class Mesh:
         :meth:`collapsible_vertex`), merging its two edges into one. Returns a
         reversible record. Surviving faces/endpoints keep their keys. An
         existing joined edge keeps its key; a new joined edge gets a fresh
-        key, retiring both old edges and the removed vertex."""
+        key, retiring both old edges and the removed vertex. A new joined
+        edge runs from the end with the smaller position (as a tuple) to the
+        other."""
         e1, e2 = list(v.edges)
         n1, n2 = e1.other(v), e2.other(v)
-        faces = list(set(e1.faces))
+        # The joined edge runs from the end with the smaller position: the
+        # two edges came in set order (object addresses), so its direction
+        # differed from run to run (design decision 5). Faces in e1's order.
+        if n2.position.toTuple() < n1.position.toTuple():
+            e1, e2, n1, n2 = e2, e1, n2, n1
+        faces = list({f.key: f for f in e1.faces}.values())
         self.remove_edge(e1)
         self.remove_edge(e2)
         new_edge_existed = self.find_edge(n1, n2) is not None
@@ -1665,6 +1700,21 @@ class Mesh:
         return {"kind": "collapse", "v": v, "e1": e1, "e2": e2, "n1": n1,
                 "n2": n2, "new_edge": new_edge, "new_edge_new": not new_edge_existed,
                 "faces": faces}
+
+    def collapse_collinear(self) -> int:
+        """Phase 2 of ``core.history.run_stitch``: while a listed vertex is
+        :meth:`collapsible_vertex`, collapse the first one in list order.
+        Returns how many went. A method so a store-backed mesh does it in
+        one native pass (``StoreMesh.collapse_collinear``)."""
+        n = 0
+        while True:
+            for v in list(self.vertices):
+                if self.collapsible_vertex(v):
+                    self.collapse_vertex(v)
+                    n += 1
+                    break
+            else:
+                return n
 
     def dissolve_edge_recorded(self, edge: Edge) -> Optional[dict]:
         """:meth:`dissolve_edge`, but returning a reversible record (the removed
@@ -2054,6 +2104,10 @@ def turn_face_over(face) -> None:
         if front:
             attrs["back"] = front
         face.attrs = attrs
+    reverse = getattr(face, "reverse_rings", None)
+    if reverse is not None:
+        reverse()              # a store-backed face (core.store_mesh)
+        return
     face.loop.reverse()
     for h in face.hole_loops:
         h.reverse()
@@ -2109,32 +2163,37 @@ def _splice_loops(
 
 def _trace_loops(outline: list[tuple[Vertex, Vertex]]) -> Optional[list[list[Vertex]]]:
     """Trace a set of undirected boundary edges into closed vertex loops. Returns
-    ``None`` if any vertex has valence ≠ 2 (a pinched / non-simple outline)."""
-    adj: dict[Vertex, list[Vertex]] = {}
-    edges: set = set()
+    ``None`` if any vertex has valence ≠ 2 (a pinched / non-simple outline).
+
+    Each loop starts at the first outline segment no loop has walked yet,
+    in that segment's direction: the start was the first member of a set
+    of segments, i.e. object addresses, so the merged face's corner order
+    differed from run to run (design decision 5). Vertices are known by
+    key, so the store's views trace the same loops."""
+    adj: dict = {}
+    edges: dict = {}               # undirected segment -> (u, w), in order
     for u, w in outline:
-        if u is w:
+        if u.key == w.key:
             # An edge onto itself: the outline is pinched, not simple. Some
             # imported models carry one, and it must be a refusal here rather
             # than a set of one endpoint further down.
             return None
-        adj.setdefault(u, []).append(w)
-        adj.setdefault(w, []).append(u)
-        edges.add(frozenset((u, w)))
+        adj.setdefault(u.key, []).append(w)
+        adj.setdefault(w.key, []).append(u)
+        edges.setdefault(frozenset((u.key, w.key)), (u, w))
     for nbrs in adj.values():
         if len(nbrs) != 2:
             return None
     loops: list[list[Vertex]] = []
     while edges:
-        a, b = tuple(next(iter(edges)))
-        edges.discard(frozenset((a, b)))
+        a, b = edges.pop(next(iter(edges)))
         loop = [a, b]
         prev, cur = a, b
         while True:
-            nbrs = adj[cur]
-            nxt = nbrs[0] if nbrs[0] is not prev else nbrs[1]
-            edges.discard(frozenset((cur, nxt)))
-            if nxt is loop[0]:
+            nbrs = adj[cur.key]
+            nxt = nbrs[0] if nbrs[0].key != prev.key else nbrs[1]
+            edges.pop(frozenset((cur.key, nxt.key)), None)
+            if nxt.key == loop[0].key:
                 break
             loop.append(nxt)
             prev, cur = cur, nxt
