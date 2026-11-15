@@ -5393,8 +5393,9 @@ class ScenesPanel(QWidget):
         scene tab, Camera ▸ Scenes ▸ Show). With the document's transitions
         on (``scene.animation``) the camera glides there first, and the
         rest of the scene comes in when it arrives (views/scene_player.py).
-        The glide moves the main viewport; with another view the one worked
-        in, the scene comes in at once there."""
+        The glide moves the main viewport (drawn by GL or by the Metal
+        view); with another view the one worked in, the scene comes in at
+        once there."""
         if view is None:
             return
         w = self._window
@@ -5406,7 +5407,7 @@ class ScenesPanel(QWidget):
         pick = getattr(w, "_active_view", None)
         main = pick is None or pick() is w.viewport
         if (player is not None and seconds > 0.0 and main
-                and w.viewport.isVisible()
+                and player.shows(w.viewport)
                 and player.glide_to(view, seconds,
                                     lambda v: self.finish_view(v, False))):
             row = getattr(w, "_scene_tabs", None)
@@ -5414,7 +5415,7 @@ class ScenesPanel(QWidget):
                 row.mark_view(view)
             # The keyboard goes back to the model now, not on arrival (see
             # the end of ``_show``): a key pressed mid-glide stops it there.
-            w.viewport.setFocus(Qt.OtherFocusReason)
+            player.focus_widget(w.viewport).setFocus(Qt.OtherFocusReason)
             return
         self.finish_view(view)
 
