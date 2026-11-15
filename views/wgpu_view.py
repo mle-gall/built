@@ -436,7 +436,8 @@ class WgpuView(QWidget):
                 self.source_viewport.scene, style,
                 horizon=self.source_viewport._horizon_ndc_y(mvp),
                 scale=self.devicePixelRatioF(),
-                edit_rest_fade=getattr(self.source_viewport, 'edit_rest_fade', .75))
+                edit_rest_fade=getattr(self.source_viewport, 'edit_rest_fade', .75),
+                soft_shadows=getattr(self.source_viewport, '_soft_shadows', 0))
             if payload != getattr(self, '_frame_style', None):
                 self.renderer.set_style(payload)
                 self._frame_style = payload
@@ -568,7 +569,8 @@ class WgpuView(QWidget):
         view, projection = camera.view_matrix(), camera.projection_matrix()
         payload = style_payload(source.scene, source._effective_style(),
                                 horizon=source._horizon_ndc_y(projection * view),
-                                edit_rest_fade=getattr(source, 'edit_rest_fade', .75))
+                                edit_rest_fade=getattr(source, 'edit_rest_fade', .75),
+                                soft_shadows=getattr(source, '_soft_shadows', 0))
         payload['edge_width'] = float(getattr(source, '_export_edge_px', 1))
         payload['profile_width'] = float(getattr(source, '_export_profile_px', 1))
         from views.wgpu_sections import capture_rows, geometry

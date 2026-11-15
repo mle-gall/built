@@ -7,6 +7,8 @@ pub struct Sun {
     matrix: [f32; 16],
     darkness: f32,
     ground: bool,
+    /// Soft sun shadows (#1281): GL's penumbra spread per level, 0 = crisp.
+    soft: f32,
     map: wgpu::Texture,
     caster: wgpu::RenderPipeline,
     receivers: Vec<wgpu::RenderPipeline>,
@@ -149,6 +151,7 @@ impl Sun {
             matrix: glam::Mat4::IDENTITY.to_cols_array(),
             darkness: 0.55,
             ground: true,
+            soft: 0.,
             map: crate::texture(d, 2048, 2048, wgpu::TextureFormat::Depth32Float),
             caster,
             receivers,
@@ -198,6 +201,14 @@ impl Sun {
             .map(|v| v.extract::<bool>())
             .transpose()?
             .unwrap_or(true);
+        let soft = d
+            .get_item("shadow_soft")?
+            .map(|v| v.extract::<f32>())
+            .transpose()?
+            .unwrap_or(0.);
+        if !soft.is_finite() || soft < 0. {
+            return Err(PyValueError::new_err("invalid sun payload"));
+        }
         if !darkness.is_finite()
             || !(0. ..=1.).contains(&darkness)
             || direction
@@ -216,6 +227,7 @@ impl Sun {
         self.direction = direction;
         self.darkness = darkness;
         self.ground = ground;
+        self.soft = soft;
         Ok(())
     }
     pub fn prepare(
@@ -331,7 +343,8 @@ impl Sun {
         data.extend((conversion * glam::Mat4::from_cols_array(&self.matrix)).to_cols_array());
         data.extend(self.direction);
         data.push(self.darkness);
-        data.extend([if self.ground { 1. } else { 0. }, 0., 0., 0.]);
+        let [across, along] = footprint(&self.matrix);
+        data.extend([if self.ground { 1. } else { 0. }, self.soft, across, along]);
         q.write_buffer(&self.uniform, 0, bytemuck::cast_slice(&data));
         let map = self.map.create_view(&Default::default());
         let pipeline = &self.receivers[usize::from(msaa)];
@@ -376,8 +389,28 @@ impl Sun {
         p.draw(0..3, 0..1);
     }
 }
+/// GL's ``Viewport._shadow_footprint``: metres across one side of the map
+/// and along its depth range. The light's view is rigid, so each row of the
+/// orthographic projection keeps its scale, 2 / width and 2 / depth.
+pub fn footprint(matrix: &[f32; 16]) -> [f32; 2] {
+    let span = |row: usize| {
+        let n = glam::Vec3::new(matrix[row], matrix[4 + row], matrix[8 + row]).length();
+        if n > 1e-12 { 2. / n } else { 1. }
+    };
+    [span(0), span(2)]
+}
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn footprint_reads_the_ortho_scales() {
+        // Column-major ortho: 40 m across, 25 m deep.
+        let mut m = glam::Mat4::IDENTITY.to_cols_array();
+        m[0] = 2. / 40.;
+        m[5] = 2. / 40.;
+        m[10] = -2. / 25.;
+        let [a, b] = super::footprint(&m);
+        assert!((a - 40.).abs() < 1e-4 && (b - 25.).abs() < 1e-4);
+    }
     #[test]
     fn sun_validates_on_metal_both_samples() {
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
