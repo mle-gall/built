@@ -6,8 +6,12 @@ Unsupported controls remain explicit in the payload for subsequent passes.
 from core.style import Style, effective_back_color
 
 
-def style_payload(scene, override=None, *, horizon=2.0, scale=1.0, edit_rest_fade=0.0):
-    """Return a fresh native payload, respecting the viewport override."""
+def style_payload(scene, override=None, *, horizon=2.0, scale=1.0, edit_rest_fade=0.0,
+                  camera=None):
+    """Return a fresh native payload, respecting the viewport override.
+
+    ``camera`` is the view's camera: from below the ground the ground's
+    shadows are not drawn, as in GL (#1301)."""
     style = override or getattr(scene, 'display_style', None) or Style()
     result = style.to_dict()
     from views.viewport import edit_fade_color
@@ -35,12 +39,19 @@ def style_payload(scene, override=None, *, horizon=2.0, scale=1.0, edit_rest_fad
     result['group_selection_edges'] = True
     result['show_hidden_geometry'] = bool(getattr(scene, 'show_hidden_geometry', False))
     result['show_hidden_objects'] = bool(getattr(scene, 'show_hidden_objects', False))
-    result.update(sun_payload(scene, override=override))
+    result.update(sun_payload(scene, override=override, camera=camera))
     return result
 
 
-def sun_payload(scene, *, override=None):
-    """Same sun/date/north convention and GL light fit; no viewport required."""
+#: Height of the GL shadow catcher (Viewport._draw_shadow_ground).
+SHADOW_CATCHER_Z = -0.005
+
+
+def sun_payload(scene, *, override=None, camera=None):
+    """Same sun/date/north convention and GL light fit; no viewport required.
+
+    A ``camera`` that sees the ground from below turns the ground's
+    shadows off, like GL's catcher pass (#1301)."""
     import datetime
     import os
     from core import sun
@@ -75,5 +86,6 @@ def sun_payload(scene, *, override=None):
         or Viewport._terrain_showing(reference)
         or (getattr(scene, 'photo_mesh', None) is not None
             and getattr(scene.photo_mesh, 'visible', False)
-            and scene.entity_visible(scene.photo_mesh)))
+            and scene.entity_visible(scene.photo_mesh))
+        or (camera is not None and camera.sees_from_below(SHADOW_CATCHER_Z)))
     return result
