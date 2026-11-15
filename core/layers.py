@@ -255,7 +255,7 @@ def load_linetype_colors(scene, raw) -> None:
 
 
 def model_line_styles(scene) -> dict:
-    """``{layer name: (rgb or None, dash pattern)}`` of the layers whose
+    """``{layer key: (rgb or None, dash pattern)}`` of the layers whose
     edges the model draws with their line type (the style's «Line types in
     the model»): dashed (the pattern in paper mm, as
     :func:`linetype_pattern` gives it), in a colour of its own, or both.
@@ -266,7 +266,7 @@ def model_line_styles(scene) -> dict:
         rgb = linetype_color(ly.linetype, scene)
         pattern = tuple(linetype_pattern(ly.linetype, scene))
         if rgb is not None or pattern:
-            out[ly.name] = (rgb, pattern)
+            out[ly.key] = (rgb, pattern)
     return out
 
 
@@ -920,20 +920,20 @@ def legend_rows(scene) -> tuple[list, dict]:
 
 
 def cut_hatches(scene) -> dict:
-    """``{name: pattern}`` of the layers whose section cut has a hatch of
+    """``{layer key: pattern}`` of the layers whose section cut has a hatch of
     its own (see ``core.hatches``) — empty when none has."""
-    return {ly.name: ly.hatch for ly in getattr(scene, "layers", ())
+    return {ly.key: ly.hatch for ly in getattr(scene, "layers", ())
             if getattr(ly, "hatch", None)}
 
 
 def cut_hatch_grounds(scene) -> dict:
-    """``{name: rgb}`` — the solid colour under each hatched layer's
+    """``{layer key: rgb}`` — the solid colour under each hatched layer's
     pattern, for the layers that have one."""
     out = {}
     for ly in getattr(scene, "layers", ()):
         rgb = hatch_ground_rgb(ly) if getattr(ly, "hatch", None) else None
         if rgb is not None:
-            out[ly.name] = rgb
+            out[ly.key] = rgb
     return out
 
 
@@ -1013,7 +1013,7 @@ def hatch_grows(ly) -> bool:
 
 
 def cut_hatch_forms(scene, scale_n: float = 100.0) -> dict:
-    """``{name: {"angle", "scale", "families", "brick", "scale_n"}}`` — how
+    """``{layer key: {"angle", "scale", "families", "brick", "scale_n"}}`` — how
     each hatched layer's pattern is laid on a sheet drawn at 1:``scale_n``:
     turned, sized (on paper; or with the drawing — a material at its real
     size, any other pattern from its size at 1:100), the families of an
@@ -1029,7 +1029,7 @@ def cut_hatch_forms(scene, scale_n: float = 100.0) -> dict:
             real = real_scale(key, scale_n, layer_brick(scene, ly))
             size *= (real if real is not None
                      else 100.0 / max(1e-6, float(scale_n or 100.0)))
-        out[ly.name] = {"angle": float(getattr(ly, "hatch_angle", 0.0) or 0.0),
+        out[ly.key] = {"angle": float(getattr(ly, "hatch_angle", 0.0) or 0.0),
                         "scale": size,
                         "families": layer_hatch_families(scene, ly),
                         "brick": layer_brick(scene, ly),
@@ -1060,23 +1060,23 @@ def clean_offset(raw) -> tuple | None:
 
 
 def cut_hatch_inks(scene) -> dict:
-    """``{name: rgb}`` — the ink of each hatched layer's pattern, for the
+    """``{layer key: rgb}`` — the ink of each hatched layer's pattern, for the
     layers that set one (by layer or fixed)."""
     out = {}
     for ly in getattr(scene, "layers", ()):
         rgb = hatch_ink_rgb(ly) if getattr(ly, "hatch", None) else None
         if rgb is not None:
-            out[ly.name] = rgb
+            out[ly.key] = rgb
     return out
 
 
 def cut_fill_colours(scene) -> dict:
-    """``{name: rgb}`` a sheet fills each layer's section cut with when the
+    """``{layer key: rgb}`` a sheet fills each layer's section cut with when the
     frame asks for the layers' colours: every layer's own colour (picked or
     automatic), except the default layer, which keeps the frame's fill — its
     white would vanish on paper."""
-    return {ly.name: layer_color(ly) for ly in getattr(scene, "layers", ())
-            if ly.name != DEFAULT_LAYER}
+    return {ly.key: layer_color(ly) for ly in getattr(scene, "layers", ())
+            if ly.key != DEFAULT_LAYER}
 
 
 def unprinted(scene) -> list:

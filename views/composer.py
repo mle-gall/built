@@ -641,7 +641,7 @@ def grain_layers(scene) -> list:
     (``Layer.hatch_cross``): for them a view measures how far each cut piece
     runs through the plane."""
     from core.hatches import WOOD
-    return [ly.name for ly in getattr(scene, "layers", ())
+    return [ly.key for ly in getattr(scene, "layers", ())
             if getattr(ly, "hatch_cross", False)
             and getattr(ly, "hatch", None) in WOOD]
 
@@ -697,7 +697,12 @@ def dxf_cut_layers(scene, camera, scale_n: float = DXF_VIEW_SCALE, k=None,
     def back(pts):
         return tuple((x / k, -y / k) for x, y in pts)
     groups, solids = [], []
+    # DXF layers go out under the tag's folder path, not its key (as
+    # dxf_groups_by_layer): a key may be a uid, and two tags share a label.
+    from core.layers import export_labels
+    labels = export_labels(scene)
     for tag, (rings, ds) in by_tag.items():
+        name = labels.get(tag, tag)
         ly = scene.layer(tag) if hasattr(scene, "layer") else None
         colour = layer_color(ly) if ly is not None else None
         ink = (hatch_ink_rgb(ly) if ly is not None else None) or colour
@@ -707,9 +712,9 @@ def dxf_cut_layers(scene, camera, scale_n: float = DXF_VIEW_SCALE, k=None,
             # Strips in model units, the right way up again.
             quads = [back((q[2], q[3], q[0], q[1])) for q in fill_quads(rings)]
         if ground is not None:
-            solids.append((f"{tag}-FONDO", quads, ground))
+            solids.append((f"{name}-FONDO", quads, ground))
         if hatches[tag] == "solid":
-            solids.append((f"{tag}-TRAMA", quads, ink))
+            solids.append((f"{name}-TRAMA", quads, ink))
             continue
         lines = hatch_lines(hatches[tag], rings,
                             dict(forms.get(tag, {}), cut=cut), frame_scale,
@@ -717,7 +722,7 @@ def dxf_cut_layers(scene, camera, scale_n: float = DXF_VIEW_SCALE, k=None,
         if lines:
             segs = np.array([(x0 / k, -y0 / k, x1 / k, -y1 / k)
                              for x0, y0, x1, y1 in lines])
-            groups.append((f"{tag}-TRAMA", segs, "CONTINUOUS", ink))
+            groups.append((f"{name}-TRAMA", segs, "CONTINUOUS", ink))
     return groups, solids
 
 
@@ -13144,7 +13149,7 @@ class ComposerWindow(QMainWindow):
     def _visibility_sig(self) -> tuple:
         """Which layers and map / terrain objects are switched on, now."""
         scene = self._scene()
-        return (tuple((ly.name, bool(ly.visible))
+        return (tuple((ly.key, bool(ly.visible))
                       for ly in getattr(scene, "layers", []) or []),
                 tuple(bool(getattr(obj, "visible", True))
                       for _k, obj in georef_objects(scene)

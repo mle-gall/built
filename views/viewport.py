@@ -11150,7 +11150,7 @@ class Viewport(QOpenGLWidget):
             if tag in styles:
                 by_layer.setdefault(tag, []).append(seg)
         from core.layers import linetype_text
-        names = {ly.name: ly.linetype for ly in scene.layers}
+        names = {ly.key: ly.linetype for ly in scene.layers}
         out = []
         for tag, segs in by_layer.items():
             rgb, pattern = styles[tag]
@@ -11463,7 +11463,7 @@ class Viewport(QOpenGLWidget):
         cut = getattr(self, "_section_cut_cache", None)
         if pattern != "layers" or cut is None or cut[2] is None                 or len(cut[2]) != len(keep):
             return np.ones(count)
-        pens = {ly.name: float(ly.cut_weight) / self.CUT_PEN_MM
+        pens = {ly.key: float(ly.cut_weight) / self.CUT_PEN_MM
                 for ly in self.scene.layers
                 if getattr(ly, "cut_weight", None) is not None}
         if not pens:

@@ -5217,7 +5217,7 @@ class LayersPanel(QWidget):
         # «Use in the whole document» touches every layer: all of them,
         # and the document's brick, come back too.
         doc_before = (dict(getattr(scene, "bricks", None) or {}),
-                      {ly.name: ly.brick for ly in scene.layers})
+                      {ly.key: ly.brick for ly in scene.layers})
 
         def put_back() -> None:
             kept[0] = True             # once
@@ -5225,8 +5225,8 @@ class LayersPanel(QWidget):
             if (getattr(scene, "bricks", None) or {}) != doc_before[0]:
                 scene.bricks = dict(doc_before[0])
                 for ly in scene.layers:
-                    if ly.name in doc_before[1]:
-                        ly.brick = doc_before[1][ly.name]
+                    if ly.key in doc_before[1]:
+                        ly.brick = doc_before[1][ly.key]
                 changed = True
             for n, old in before.items():
                 ly = scene.layer(n)
