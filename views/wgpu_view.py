@@ -473,7 +473,9 @@ class WgpuView(QWidget):
                 self.source_viewport.scene, style,
                 horizon=self.source_viewport._horizon_ndc_y(mvp),
                 scale=self.devicePixelRatioF(),
-                edit_rest_fade=getattr(self.source_viewport, 'edit_rest_fade', .75))
+                edit_rest_fade=getattr(self.source_viewport, 'edit_rest_fade', .75),
+                soft_shadows=getattr(self.source_viewport, '_soft_shadows', 0),
+                camera=self.camera)
             if payload != getattr(self, '_frame_style', None):
                 self.renderer.set_style(payload)
                 self._frame_style = payload
@@ -624,7 +626,9 @@ class WgpuView(QWidget):
         view, projection = camera.view_matrix(), camera.projection_matrix()
         payload = style_payload(source.scene, source._effective_style(),
                                 horizon=source._horizon_ndc_y(projection * view),
-                                edit_rest_fade=getattr(source, 'edit_rest_fade', .75))
+                                edit_rest_fade=getattr(source, 'edit_rest_fade', .75),
+                                soft_shadows=getattr(source, '_soft_shadows', 0),
+                                camera=camera)
         payload['edge_width'] = float(getattr(source, '_export_edge_px', 1))
         payload['profile_width'] = float(getattr(source, '_export_profile_px', 1))
         from views.wgpu_sections import capture_rows, geometry
@@ -1162,6 +1166,13 @@ class WgpuView(QWidget):
             locked_group=self.tools.pick_locked_group(point.x(), point.y()))
 
     def mouseDoubleClickEvent(self, event):
+        # A double click of the wheel recentres the view on the point under
+        # the cursor (on sky: at the depth of the view's centre); the tool in
+        # use never hears of it and no orbit starts, as in GL (#979, #1154).
+        if event.button() == Qt.MiddleButton:
+            self.last = None
+            self._recentre_on(event.position().x(), event.position().y())
+            return
         mode = self.tools.sync()
         if mode in ('tape', 'move', 'mesh'):
             self.hover(event.position().x(), event.position().y(), event.modifiers())
@@ -1252,6 +1263,24 @@ class WgpuView(QWidget):
         if point is not None:
             return 'hit', point
         return 'miss', None
+
+    def _model_point_at(self, x, y):
+        """The model point under pixel ``(x, y)`` from the Metal pick, or
+        ``None`` on sky or ground (GL's ``Viewport._model_point_at``)."""
+        seen, point = self._depth_world_at(x, y)
+        return point if seen == 'hit' else None
+
+    def _depth_of(self, point):
+        from views.viewport import Viewport
+        return Viewport._depth_of(self, point)
+
+    def _point_at_centre_depth(self, x, y):
+        from views.viewport import Viewport
+        return Viewport._point_at_centre_depth(self, x, y)
+
+    def _recentre_on(self, x, y):
+        from views.viewport import Viewport
+        Viewport._recentre_on(self, x, y)
 
     def _world_under_cursor(self, x, y):
         from views.viewport import Viewport

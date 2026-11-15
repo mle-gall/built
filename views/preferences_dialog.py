@@ -982,6 +982,12 @@ class PreferencesDialog(QDialog):
             return every()
         return [self._window.viewport]
 
+    def _native_views(self) -> list:
+        """Every project's Metal view (``doc.stand_in``), if any."""
+        docs = getattr(self._window, "_documents", None) or ()
+        return [v for v in (getattr(d, "stand_in", None) for d in docs)
+                if v is not None]
+
     # ---- Restore defaults -------------------------------------------------
 
     def _ask_restore_defaults(self) -> None:
@@ -1250,6 +1256,14 @@ class PreferencesDialog(QDialog):
                 update = getattr(vp, "update", None)
                 if callable(update):
                     update()
+        # The Metal view over each project (its stand-in) reads the level
+        # from its viewport on its next frame: ask for that frame now, so a
+        # still view shows the new level without waiting for its repaint
+        # tick or a camera move.
+        for view in self._native_views():
+            update = getattr(view, "update", None)
+            if callable(update):
+                update()
 
         px = int(self._icon_px.currentData())
         from views.icons import toolbar_icon_px

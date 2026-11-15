@@ -1,0 +1,122 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""Metal: a double click of the wheel recentres like GL (#979, #1154).
+
+On the model, the point the Metal pick finds under the cursor goes to the
+centre: a slide, no turn, perspective keeps the point's depth. On sky the
+pixel goes to the centre at the depth of the view's centre. The tool in
+use never hears of it and no orbit starts. Device free: the pick is the
+offscreen stand-in the other test_wgpu_* files use.
+"""
+import math
+import os
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+from types import SimpleNamespace
+
+import pytest
+from PySide6.QtCore import QEvent, QPointF, Qt
+from PySide6.QtGui import QMouseEvent, QVector3D as V
+from PySide6.QtWidgets import QApplication
+
+from core.mesh import Mesh
+from core.scene import Scene
+from views.wgpu_inference import prepare
+from views.wgpu_scene import pack_scene
+from views.wgpu_view import WgpuView
+
+_app = QApplication.instance() or QApplication([])
+
+
+def _event(kind, x, y, button, buttons):
+    p = QPointF(x, y)
+    return QMouseEvent(kind, p, p, button, buttons, Qt.NoModifier)
+
+
+def _double_click(view, x, y, button=Qt.MiddleButton):
+    """What Qt delivers: press, release, double click, release."""
+    view.mousePressEvent(_event(QEvent.MouseButtonPress, x, y, button, button))
+    view.mouseReleaseEvent(_event(QEvent.MouseButtonRelease, x, y, button, Qt.NoButton))
+    view.mouseDoubleClickEvent(_event(QEvent.MouseButtonDblClick, x, y, button, button))
+    view.mouseReleaseEvent(_event(QEvent.MouseButtonRelease, x, y, button, Qt.NoButton))
+
+
+@pytest.fixture
+def view():
+    """A wall 20 m wide in the plane y = 0, seen from the front."""
+    scene = Scene()
+    scene.guides.clear()
+    scene.mesh.add_face([V(-10, 0, -10), V(10, 0, -10), V(10, 0, 10), V(-10, 0, 10)])
+    v = WgpuView()
+    v.resize(800, 600)
+    v.scene = scene
+    v.packed = pack_scene(scene)
+    v.uid_rows = {uid: [i] for i, uid in enumerate(v.packed.uids)}
+    v.inference_index = prepare(v.packed)
+    v.hit = True
+    v.renderer = SimpleNamespace(set_highlight=lambda *a: None, set_rest=lambda *a: None,
+                                 pick=lambda *a: 0 if v.hit else -1,
+                                 pick_rect=lambda *a: [0])
+    v._prepare_pick_frame = lambda: None
+    cam = v.camera
+    cam.set_view('front')
+    cam.target = V(0, 0, 0)
+    cam.distance = 10.0
+    cam.aspect = 800 / 600
+    yield v
+    v.renderer = None
+    v.close()
+
+
+def _projected(view, point):
+    n = (view.camera.projection_matrix() * view.camera.view_matrix()).map(point)
+    return (n.x() + 1) / 2 * view.width(), (1 - n.y()) / 2 * view.height()
+
+
+@pytest.mark.parametrize('perspective', [True, False], ids=['perspective', 'parallel'])
+def test_the_point_under_the_cursor_goes_to_the_centre(view, perspective):
+    view.camera.perspective = perspective
+    x, y = 460, 260
+    seen, point = view._depth_world_at(x, y)
+    assert seen == 'hit' and abs(point.y()) < 1e-4
+    yaw, pitch, distance = view.camera.yaw, view.camera.pitch, view.camera.distance
+    _double_click(view, x, y)
+    cam = view.camera
+    assert (cam.target - point).length() < 1e-4
+    px, py = _projected(view, point)
+    assert abs(px - 400) < 1 and abs(py - 300) < 1
+    assert (cam.yaw, cam.pitch) == (yaw, pitch)
+    assert cam.distance == pytest.approx(distance, rel=1e-3)
+
+
+def test_on_sky_it_slides_at_the_centre_depth(view):
+    view.hit = False
+    x, y = 460, 260
+    expected = view._point_at_centre_depth(x, y)
+    distance = view.camera.distance
+    _double_click(view, x, y)
+    assert (view.camera.target - expected).length() < 1e-4
+    assert view.camera.distance == distance
+
+
+def test_the_tool_never_hears_of_it(view, monkeypatch):
+    calls = []
+    monkeypatch.setattr(view.tools, 'sync', lambda: calls.append('sync') or 'select')
+    _double_click(view, 460, 260)
+    # mousePressEvent syncs the tools; the double click itself does not.
+    assert calls.count('sync') == 1
+
+
+def test_no_orbit_after_the_double_click(view):
+    _double_click(view, 460, 260)
+    yaw, pitch = view.camera.yaw, view.camera.pitch
+    view.mouseMoveEvent(_event(QEvent.MouseMove, 520, 300, Qt.NoButton, Qt.MiddleButton))
+    assert (view.camera.yaw, view.camera.pitch) == (yaw, pitch)
+
+
+def test_a_wheel_drag_still_orbits(view):
+    x, y = 460, 260
+    view.mousePressEvent(_event(QEvent.MouseButtonPress, x, y, Qt.MiddleButton, Qt.MiddleButton))
+    yaw = view.camera.yaw
+    view.mouseMoveEvent(_event(QEvent.MouseMove, x + 60, y, Qt.NoButton, Qt.MiddleButton))
+    assert not math.isclose(view.camera.yaw, yaw)

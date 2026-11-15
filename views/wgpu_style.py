@@ -6,8 +6,13 @@ Unsupported controls remain explicit in the payload for subsequent passes.
 from core.style import Style, effective_back_color
 
 
-def style_payload(scene, override=None, *, horizon=2.0, scale=1.0, edit_rest_fade=0.0):
-    """Return a fresh native payload, respecting the viewport override."""
+def style_payload(scene, override=None, *, horizon=2.0, scale=1.0, edit_rest_fade=0.0,
+                  soft_shadows=0, camera=None):
+    """Return a fresh native payload, respecting the viewport override.
+
+    ``camera`` is the view's camera: from below the ground the ground's
+    shadows are not drawn, as in GL (#1301). ``soft_shadows`` is the
+    Preferences level (#1281)."""
     style = override or getattr(scene, 'display_style', None) or Style()
     result = style.to_dict()
     from views.viewport import edit_fade_color
@@ -35,18 +40,29 @@ def style_payload(scene, override=None, *, horizon=2.0, scale=1.0, edit_rest_fad
     result['group_selection_edges'] = True
     result['show_hidden_geometry'] = bool(getattr(scene, 'show_hidden_geometry', False))
     result['show_hidden_objects'] = bool(getattr(scene, 'show_hidden_objects', False))
-    result.update(sun_payload(scene, override=override))
+    result.update(sun_payload(scene, override=override,
+                              soft_shadows=soft_shadows, camera=camera))
     return result
 
 
-def sun_payload(scene, *, override=None):
-    """Same sun/date/north convention and GL light fit; no viewport required."""
+#: Height of the GL shadow catcher (Viewport._draw_shadow_ground).
+SHADOW_CATCHER_Z = -0.005
+
+
+def sun_payload(scene, *, override=None, soft_shadows=0, camera=None):
+    """Same sun/date/north convention and GL light fit; no viewport required.
+
+    ``soft_shadows`` is the Preferences level (#1281, GL's
+    ``Viewport._soft_shadows``); the payload carries its penumbra spread,
+    0 for the crisp map. A ``camera`` that sees the ground from below turns
+    the ground's shadows off, like GL's catcher pass (#1301)."""
     import datetime
     import os
     from core import sun
-    from views.viewport import Viewport
+    from views.viewport import Viewport, SOFT_SHADOW_SPREAD
     result = dict(shadows=False, sun_direction=(0., 0., 1.),
-                  shadow_darkness=0.55, ground_shadows=True)
+                  shadow_darkness=0.55, ground_shadows=True,
+                  shadow_soft=0.0)
     sh = getattr(scene, 'shadows', None)
     if getattr(override, 'name', None) in ('tecnico', 'lineas') or os.environ.get('INGETRAZO_NO_SHADOWS') or not getattr(sh, 'enabled', False):
         return result
@@ -68,6 +84,7 @@ def sun_payload(scene, *, override=None):
         return result
     result.update(shadows=True, sun_direction=tuple(direction),
                   shadow_darkness=float(getattr(sh, 'darkness', 0.55)),
+                  shadow_soft=float(SOFT_SHADOW_SPREAD.get(soft_shadows, 0.0)),
                   shadow_matrix=list(Viewport._light_vp(direction, lo, hi).data()))
     from types import SimpleNamespace
     reference = SimpleNamespace(scene=scene)
@@ -75,5 +92,6 @@ def sun_payload(scene, *, override=None):
         or Viewport._terrain_showing(reference)
         or (getattr(scene, 'photo_mesh', None) is not None
             and getattr(scene.photo_mesh, 'visible', False)
-            and scene.entity_visible(scene.photo_mesh)))
+            and scene.entity_visible(scene.photo_mesh))
+        or (camera is not None and camera.sees_from_below(SHADOW_CATCHER_Z)))
     return result
