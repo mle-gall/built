@@ -5563,7 +5563,8 @@ class Viewport(QOpenGLWidget):
                     obj.destroy()
                     if k.endswith("_vao"):
                         obj.deleteLater()      # a QObject child of the viewport
-                except RuntimeError:           # already gone with the context
+                # Already gone with the context, or never made (None).
+                except (RuntimeError, AttributeError):
                     pass
 
     def _update_inst_matrices(self, entry, groups) -> int:
