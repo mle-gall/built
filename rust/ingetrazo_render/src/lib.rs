@@ -1473,6 +1473,7 @@ impl Renderer {
         if plan.xray { self.transparency.draw(&mut e, &color, None, s, self.multi, tq); }
 
         let ao_active = plan.ao;
+        let mut sun_drawn = false;
         for edge_only in [false, true] {
             if edge_only && (!msaa || self.pick_pending) {
                 self.axes.draw(&mut e, &color, &depth, None);
@@ -1581,7 +1582,9 @@ impl Renderer {
             if !edge_only && self.sun.enabled && self.style != 1 && self.style != 4 {
                 if msaa { self.aa.resolve_depth(&self.device, &mut e, &depth, None); }
                 let output = if msaa { self.aa.color_view() } else { target.create_view(&Default::default()) };
-                self.sun.draw(&self.device, &self.queue, &mut e, &output, &depth, msaa, &self.camera_data);
+                self.sun.draw(&self.device, &self.queue, &mut e, &output, &depth, msaa, &self.camera_data,
+                              self.queries.as_ref().filter(|_| self.detailed_timestamps));
+                sun_drawn = true;
             }
             if !edge_only && ao_active {
                 // Caps must contribute depth before AO reconstructs its normals.
@@ -1718,6 +1721,7 @@ impl Renderer {
             if msaa && !self.pick_pending { active.push("antialias"); if ao_active || self.edges || self.style == 4 { active.push("antialias_edges"); } }
             if self.style == 1 { active.extend(["xray_accumulation", "xray_composite"]); }
             if ao_active && msaa { active.push("ao_inputs"); }
+            if sun_drawn && self.detailed_timestamps { active.push("sun"); }
             if ao_active { active.extend(["ao_kernel", "ao_blur_x", "ao_blur_y", "ao_upsample_composite"]); }
             self.timings[k].active = active;
         }

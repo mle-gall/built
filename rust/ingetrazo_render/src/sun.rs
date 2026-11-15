@@ -328,6 +328,7 @@ impl Sun {
         depth: &wgpu::TextureView,
         msaa: bool,
         camera: &[f32],
+        queries: Option<&wgpu::QuerySet>,
     ) {
         if !self.enabled {
             return;
@@ -381,7 +382,7 @@ impl Sun {
                 },
             })],
             depth_stencil_attachment: None,
-            timestamp_writes: None,
+            timestamp_writes: crate::timing::writes(queries, "sun"),
             occlusion_query_set: None,
         });
         p.set_pipeline(pipeline);
