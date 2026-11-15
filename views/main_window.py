@@ -7507,7 +7507,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         doc.viewport.sceneVersionChanged.connect(lambda *_: refresh.start(0))
         display._refresh_timer = refresh
         def present():
-            if not display.isVisible():
+            if not display._presentable():
                 return
             # Outliner and editing commands can request a paint on the hidden
             # GL viewport. Its paint would normally announce the new version.
@@ -7518,6 +7518,9 @@ class MainWindow(WorksessionMixin, QMainWindow):
                 doc.viewport.notify_scene_changed()
             else:
                 display.update()  # camera presets also use the shared viewport
+                for peer in display.peers():
+                    if peer.isVisible():
+                        peer.update()
 
         repaint = QTimer(display)
         repaint.timeout.connect(present)
@@ -7994,6 +7997,10 @@ class MainWindow(WorksessionMixin, QMainWindow):
         grid = doc.view_grid
         if grid is not None or not make:
             return grid
+        from views.wgpu_view import WgpuView
+        if (getattr(doc, "_renderer_wgpu", False)
+                and isinstance(doc.stand_in, WgpuView)):
+            return self._make_metal_grid(doc)
         if doc.stand_in is not None:
             return None
         from views.multi_view import ViewGrid
@@ -8002,6 +8009,24 @@ class MainWindow(WorksessionMixin, QMainWindow):
         grid.setObjectName("view_grid")
         doc.view_grid = grid
         self._put_in_slot(doc, None, grid)
+        return grid
+
+    def _make_metal_grid(self, doc):
+        """Under Metal: the native view moves into the grid's window cell
+        (its NSView and the resident scene stay); the other cells get views
+        of that scene (views/wgpu_peer.py). It stays ``doc.stand_in``: the
+        window's Metal paths keep reaching the document's first view."""
+        from views.multi_view import ViewGrid
+        display = doc.stand_in
+        stack = self._doc_stack
+        index = stack.indexOf(display)
+        grid = ViewGrid(doc.viewport, display=display)
+        grid.setObjectName("view_grid")
+        doc.view_grid = grid
+        stack.insertWidget(index if index >= 0 else stack.count(), grid)
+        display.show()
+        if doc is self._doc:
+            stack.setCurrentWidget(grid)
         return grid
 
     @staticmethod
@@ -8518,6 +8543,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         # Its grid of views goes with it, extra viewports and all.
         grid, doc.view_grid = doc.view_grid, None
         if grid is not None:
+            grid.release_surfaces()
             for extra in grid.extras():
                 try:
                     extra.set_active_tool(None)

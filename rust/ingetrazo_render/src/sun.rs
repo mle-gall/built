@@ -1,5 +1,13 @@
 //! Cached, camera-independent sun depth map; optional opaque/ground receiver.
 use pyo3::{exceptions::PyValueError, prelude::*, types::PyDict};
+#[derive(Clone, Copy)]
+pub struct Settings {
+    enabled: bool,
+    direction: [f32; 3],
+    matrix: [f32; 16],
+    darkness: f32,
+    ground: bool,
+}
 pub struct Sun {
     pub enabled: bool,
     dirty: bool,
@@ -164,6 +172,22 @@ impl Sun {
                 ..Default::default()
             }),
         }
+    }
+    /// The style's part of the sun, kept per view of the same scene.
+    pub fn settings(&self) -> Settings {
+        Settings { enabled: self.enabled, direction: self.direction, matrix: self.matrix,
+                   darkness: self.darkness, ground: self.ground }
+    }
+    /// Another view's sun: the shared depth map is drawn again only if it
+    /// differs from the one it holds.
+    pub fn restore(&mut self, s: Settings) {
+        self.dirty |= self.matrix != s.matrix || self.direction != s.direction
+            || (s.enabled && !self.enabled);
+        self.enabled = s.enabled;
+        self.direction = s.direction;
+        self.matrix = s.matrix;
+        self.darkness = s.darkness;
+        self.ground = s.ground;
     }
     pub fn invalidate(&mut self) {
         self.dirty = true;

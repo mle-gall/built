@@ -115,6 +115,13 @@ class NativeTools(MeshToolAccess):
             source.flash_status('not yet available on the Metal renderer')
         return self.mode
 
+    def claim(self):
+        """The pointer came into this view (one of several, sharing the
+        window's tool): the tool's viewport is this one again, so what it
+        draws and picks is here."""
+        if self.tool is not None and hasattr(self.tool, '_viewport'):
+            self.tool._viewport = self
+
     def context(self, event):
         view = self.view
         point = (view.last_snap.point if getattr(view, 'last_snap', None) is not None

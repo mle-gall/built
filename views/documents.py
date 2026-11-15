@@ -74,6 +74,12 @@ class Document:
 
     def slot_widget(self):
         """The widget this project shows in the viewport stack."""
+        grid = getattr(self, "view_grid", None)
+        # Under Metal the stand-in (the native view) sits in a cell of the
+        # project's grid: the grid is what the stack shows.
+        if (grid is not None and self.stand_in is not None
+                and getattr(grid, "display", None) is self.stand_in):
+            return grid
         return self.stand_in if self.stand_in is not None else self.viewport
 
     def display_name(self) -> str:

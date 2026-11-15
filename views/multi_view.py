@@ -152,9 +152,14 @@ class _CellHeader(QToolButton):
 
 class ViewCell(QWidget):
     """A view of the four: the viewport filling it and its name as a small
-    label over the corner."""
+    label over the corner.
 
-    def __init__(self, grid, index: int, viewport=None) -> None:
+    Under Metal the cell shows a native view (``display``) of the
+    document's resident scene; ``viewport`` is then the view's model, a GL
+    viewport never shown, holding its camera, style and tool — what the
+    window reads and changes, as with OpenGL."""
+
+    def __init__(self, grid, index: int, viewport=None, display=None) -> None:
         super().__init__()
         self.grid = grid
         self.index = index
@@ -164,21 +169,38 @@ class ViewCell(QWidget):
         lay.setSpacing(0)
         # Not in the layout: it floats over the viewport's corner.
         self.header = _CellHeader(self)
+        if grid.native_overlays():
+            # Over a native Metal view only another native view shows.
+            self.header.setAttribute(Qt.WA_NativeWindow)
         self.header.setVisible(False)
         self.viewport = None
+        self.display = None
         if viewport is not None:
-            self.set_viewport(viewport)
+            self.set_viewport(viewport, display)
 
-    def set_viewport(self, vp) -> None:
+    def surface(self):
+        """The widget the view is drawn in: the Metal view, or the GL one."""
+        return self.display if self.display is not None else self.viewport
+
+    def set_viewport(self, vp, display=None) -> None:
         self.viewport = vp
-        vp.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.layout().addWidget(vp, 1)
+        self.display = display
+        shown = self.surface()
+        shown.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.layout().addWidget(shown, 1)
         # Taken out of the window's stack of projects it comes in hidden
         # (the stack hides what it lets go): shown with its cell.
-        vp.show()
-        vp.installEventFilter(self)
+        shown.show()
+        shown.installEventFilter(self)
         self._label()
         self.header.raise_()
+
+    def refresh(self) -> None:
+        """Draw again, in whichever renderer shows the view."""
+        if self.viewport is not None:
+            self.viewport.update()
+        if self.display is not None:
+            self.display.update()
 
     def _label(self) -> None:
         self.header.setText(tr(dict(VIEWS).get(self.view, self.view)))
@@ -199,11 +221,11 @@ class ViewCell(QWidget):
         self._place_header()
 
     def eventFilter(self, obj, ev) -> bool:  # noqa: N802 — Qt override
-        if obj is not self.viewport:
+        if obj is not self.surface() or self.viewport is None:
             return False
         kind = ev.type()
         if kind in (QEvent.Enter, QEvent.MouseMove, QEvent.MouseButtonPress):
-            self.grid.set_tool_view(obj)
+            self.grid.set_tool_view(self.viewport)
         # The view clicked or given the keyboard is the one worked in.
         if kind in (QEvent.MouseButtonPress, QEvent.FocusIn):
             self.grid.set_active_cell(self)
@@ -231,7 +253,7 @@ class ViewCell(QWidget):
         else:
             cam.perspective = key == "iso"
             cam.set_view(key)
-        vp.update()
+        self.refresh()
 
 
 class _FollowWindow(QObject):
@@ -248,6 +270,14 @@ class _FollowWindow(QObject):
     def eventFilter(self, obj, ev) -> bool:  # noqa: N802 — Qt override
         if ev.type() in self._EVENTS:
             main = self._grid.main
+            # A Metal view: its model takes the tool; the view then routes
+            # it, the tool's feedback going to this view's surface.
+            display = obj if getattr(obj, "tools", None) is not None and hasattr(
+                obj, "source_viewport") else None
+            if display is not None:
+                obj = display.source_viewport
+                if obj is None:
+                    return False
             changed = False
             if obj.active_tool is not main.active_tool:
                 obj.active_tool = main.active_tool
@@ -263,6 +293,10 @@ class _FollowWindow(QObject):
                 else:
                     obj.unsetCursor()
                     obj._apply_tool_cursor()
+            if display is not None and ev.type() in (
+                    QEvent.Enter, QEvent.MouseButtonPress):
+                display.tools.sync()
+                display.tools.claim()
         return False
 
 
@@ -439,9 +473,50 @@ class _DividerGuide(QWidget):
     def show_lines(self, lines) -> None:
         """``lines``: (QLine in the grid's coordinates, sticking)."""
         self.lines = lines
+        grid = self.parentWidget()
+        if getattr(grid, "metal", False) and grid.native_overlays():
+            self._show_strips(lines)
+            return
         self.setGeometry(self.parentWidget().rect())
         self.show()
         self.update()
+
+    def _show_strips(self, lines) -> None:
+        """Under Metal: a transparent widget over the native views would
+        stay under them, so each line is a thin native strip of its own."""
+        from views.theme import accent_color
+        strips = self.__dict__.setdefault("_strips", [])
+        grid = self.parentWidget()
+        while len(strips) < len(lines):
+            strip = QWidget(grid)
+            strip.setAttribute(Qt.WA_NativeWindow)
+            strip.setAttribute(Qt.WA_TransparentForMouseEvents)
+            strip.setAutoFillBackground(True)
+            strips.append(strip)
+        for strip in strips[len(lines):]:
+            strip.hide()
+        for strip, (line, snapped) in zip(strips, lines):
+            colour = QColor(accent_color())
+            if snapped:
+                colour = colour.lighter(140)
+            pal = strip.palette()
+            pal.setColor(strip.backgroundRole(), colour)
+            strip.setPalette(pal)
+            x0, x1 = sorted((line.x1(), line.x2()))
+            y0, y1 = sorted((line.y1(), line.y2()))
+            strip.setGeometry(x0 - 2, y0 - 2, x1 - x0 + 4, y1 - y0 + 4)
+            strip.show()
+            strip.raise_()
+
+    def hideEvent(self, ev) -> None:  # noqa: N802 — Qt override
+        for strip in self.__dict__.get("_strips", ()):
+            strip.hide()
+        super().hideEvent(ev)
+
+    def hide(self) -> None:
+        for strip in self.__dict__.get("_strips", ()):
+            strip.hide()
+        super().hide()
 
     def paintEvent(self, _ev) -> None:  # noqa: N802 — Qt override
         from views.theme import accent_color
@@ -587,6 +662,8 @@ class _CrossHandle(QWidget):
     def __init__(self, grid) -> None:
         super().__init__(grid)
         self._grid = grid
+        if grid.native_overlays():
+            self.setAttribute(Qt.WA_NativeWindow)
         self.setFixedSize(self.SIDE, self.SIDE)
         self.setCursor(Qt.SizeAllCursor)
         self.setToolTip(tr("Drag: move these views' lines together"))
@@ -708,9 +785,14 @@ class ViewGrid(QWidget):
     that only change order and visibility: no cell changes parent after
     the grid is made, so no viewport loses its OpenGL context again."""
 
-    def __init__(self, main_viewport, parent=None) -> None:
+    def __init__(self, main_viewport, parent=None, display=None) -> None:
         super().__init__(parent)
         self.main = main_viewport
+        #: Under Metal: the document's native view (its stand-in), drawing
+        #: in the window's cell; the extra cells get views of its resident
+        #: scene (views/wgpu_peer.py).
+        self.display = display
+        self.metal = display is not None
         self._main_min = main_viewport.minimumSize()
         self._layout = "single"
         self._maximized = None
@@ -722,7 +804,8 @@ class ViewGrid(QWidget):
         self.columns = _ViewSplitter(Qt.Horizontal, self)
         self.columns.setChildrenCollapsible(False)
         lay.addWidget(self.columns)
-        self.cells = [ViewCell(self, i, main_viewport if i == 1 else None)
+        self.cells = [ViewCell(self, i, main_viewport if i == 1 else None,
+                               display if i == 1 else None)
                       for i in range(4)]
         # Column A holds cells 0 and 2, column B cells 1 and 3.
         self.col_a = _ViewSplitter(Qt.Vertical, self)
@@ -746,6 +829,26 @@ class ViewGrid(QWidget):
     def is_enabled(self) -> bool:
         """More than the one view."""
         return self._layout != "single"
+
+    def native_overlays(self) -> bool:
+        """The labels, the square and the guide as native views of their
+        own, to show over the Metal views (on the Mac's own platform)."""
+        return self.metal and QApplication.platformName() == "cocoa"
+
+    def displays(self) -> list:
+        """Under Metal, the native views made so far, the window's first."""
+        return [c.display for c in self.cells if c.display is not None]
+
+    def visible_displays(self) -> list:
+        return [c.display for c in self.cells
+                if c.display is not None and not c.isHidden()]
+
+    def release_surfaces(self) -> None:
+        """The project closes: the extra Metal views hand their surfaces
+        back to the document's renderer."""
+        for display in self.displays():
+            if display is not self.display and hasattr(display, "release"):
+                display.release()
 
     def extras(self) -> list:
         """The three extra viewports made so far (none before the first
@@ -832,7 +935,7 @@ class ViewGrid(QWidget):
             want = on_all or cell.viewport is self._tool_view
             if cell.viewport.tool_preview != want:
                 cell.viewport.tool_preview = want
-                cell.viewport.update()
+                cell.refresh()
 
     def toggle_maximized_here(self) -> None:
         """Ctrl+Space: back to the others if a view fills the area; else the view
@@ -949,6 +1052,8 @@ class ViewGrid(QWidget):
             self.main.setMinimumSize(80, 60)
         else:
             self.main.setMinimumSize(self._main_min)
+        if self.display is not None:
+            self.display.setMinimumSize(80, 60)
         spec = next(l for l in LAYOUTS if l[0] == self._layout)
         columns, widths = spec[2], spec[3]
         # The views a layout suggests, in the cells the user left alone.
@@ -1004,6 +1109,17 @@ class ViewGrid(QWidget):
                 continue
             vp = Viewport(cell)
             vp.setMinimumSize(80, 60)
+            display = None
+            if self.metal:
+                # The view's model, never shown (as the window's own under
+                # Metal); the cell shows a view of the resident scene.
+                vp.hide()
+                vp.setEnabled(False)
+                from views.wgpu_peer import WgpuPeerView
+                display = WgpuPeerView(self.display, cell)
+                display.setMinimumSize(80, 60)
+                display.source_viewport = vp
+                display.camera = vp.camera
             # What extensions registered: one list per window, as in
             # MainWindow._make_viewport.
             for name in ("_ext_overlays", "_ext_snap_providers",
@@ -1017,9 +1133,9 @@ class ViewGrid(QWidget):
             cam = vp.camera
             cam.target = type(main.camera.target)(main.camera.target)
             cam.distance = max(main.camera.distance, 15.0)
-            cell.set_viewport(vp)
+            cell.set_viewport(vp, display)
             cell.show_view(cell.view)
-            vp.installEventFilter(self._follow)
+            cell.surface().installEventFilter(self._follow)
             # Whatever happens in an extra view reaches the window as if
             # it had happened in the main one.
             vp.sceneVersionChanged.connect(main.sceneVersionChanged.emit)
@@ -1099,17 +1215,23 @@ class ViewGrid(QWidget):
             cell.view = view
             cell._label()
             _apply_camera_state(cell.viewport.camera, cam)
-            cell.viewport.update()
+            cell.refresh()
 
     def fit_box(self, lo, hi) -> None:
         """Zoom Extents: every extra view shown frames the same box."""
         for vp in self.visible_extras():
             vp.camera.fit_box(lo, hi)
             vp.update()
+        self._repaint_displays()
+
+    def _repaint_displays(self) -> None:
+        for display in self.visible_displays():
+            display.update()
 
     def _repaint_extras(self, *_a) -> None:
         for vp in self.visible_extras():
             vp.update()
+        self._repaint_displays()
 
     def _repaint_others(self, source) -> None:
         if self.main is not source:
@@ -1117,3 +1239,4 @@ class ViewGrid(QWidget):
         for vp in self.visible_extras():
             if vp is not source:
                 vp.update()
+        self._repaint_displays()

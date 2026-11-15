@@ -62,6 +62,39 @@ class WgpuView(QWidget):
     def paintEngine(self):
         return None
 
+    # ---- more views of the same resident scene (views/wgpu_peer.py) -------
+    @property
+    def _shared(self):
+        """The view holding the resident scene: this one; a peer's first."""
+        return self
+
+    def peers(self):
+        return list(self.__dict__.get('_peers', ()))
+
+    def add_peer(self, peer):
+        """``peer`` draws this view's resident scene on a surface of its
+        own: this view's calls now name its surface too."""
+        peers = self.__dict__.setdefault('_peers', [])
+        if peer not in peers:
+            peers.append(peer)
+        self._wrap_renderer()
+
+    def remove_peer(self, peer):
+        peers = self.__dict__.get('_peers', [])
+        if peer in peers:
+            peers.remove(peer)
+
+    def _wrap_renderer(self):
+        from views.wgpu_peer import TargetRenderer
+        if (self.peers() and self.renderer is not None
+                and hasattr(self.renderer, 'bind_target')
+                and not isinstance(self.renderer, TargetRenderer)):
+            self.renderer = TargetRenderer(self.renderer, 0)
+
+    def _presentable(self):
+        """On screen here or in another view of the grid."""
+        return self.isVisible() or any(p.isVisible() for p in self.peers())
+
     def _observe_tool_source(self):
         source = self.source_viewport
         previous = getattr(self, '_tool_source', None)
@@ -281,7 +314,7 @@ class WgpuView(QWidget):
         def step():
             if getattr(self, '_closed', False) or self.scene is not scene:
                 return
-            boxes = self.__dict__.setdefault('_container_boxes', {})
+            boxes = self._shared.__dict__.setdefault('_container_boxes', {})
             while pending and pending[0] in boxes:
                 pending.pop(0)
             if not pending:
@@ -354,13 +387,14 @@ class WgpuView(QWidget):
                        bounds=self.packed.bounds.copy(), commands=self.packed.commands.copy(),
                        edge_commands=self.packed.edge_commands.copy())
 
-    def _upload(self):
-        if self.packed is None or not self.isVisible():
+    def _upload(self, force=False):
+        if self.packed is None or not (force or self._presentable()):
             return
         import ingetrazo_render
         start = time.perf_counter()
         if self.renderer is None:
             self.renderer = ingetrazo_render.Renderer(int(self.winId()), self.width(), self.height(), self.devicePixelRatioF())
+            self._wrap_renderer()
         self._resident_count = len(self.packed.instances) or 1
         if len(self.packed.instances):
             self.packed.upload(self.renderer)
@@ -387,6 +421,9 @@ class WgpuView(QWidget):
         self._scene_dirty = False
         self._pick_frame_dirty = True
         self.update()
+        for peer in self.peers():
+            peer._pick_frame_dirty = True
+            peer.update()
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -440,14 +477,17 @@ class WgpuView(QWidget):
             if payload != getattr(self, '_frame_style', None):
                 self.renderer.set_style(payload)
                 self._frame_style = payload
-            tint = getattr(self.source_viewport, 'view_tint', None) or {}
+            # The resident rows' colours are the document's: the first
+            # view's tint (Navigator, structure), not a peer's own.
+            tint_view = self._shared.source_viewport if self._shared is not self else self.source_viewport
+            tint = getattr(tint_view, 'view_tint', None) or {}
             # Structure colours can cover the whole ride. set_display already
             # versions each replacement, including a restored previous view.
-            if getattr(self.source_viewport, '_view_color', None) == 'structure':
-                signature = ('structure', self.source_viewport._navigator_revision)
+            if getattr(tint_view, '_view_color', None) == 'structure':
+                signature = ('structure', tint_view._navigator_revision)
             else:
                 signature = tuple(sorted(tint.items()))
-            if signature != getattr(self, '_tint_signature', None):
+            if self._shared is self and signature != getattr(self, '_tint_signature', None):
                 colors = []
                 for uid, group in zip(self.packed.uids, self.packed.groups):
                     rgb = tint.get(uid)
@@ -473,7 +513,9 @@ class WgpuView(QWidget):
             self._last_camera = camera_key
             self._settle_timer.start(80)
         self.renderer.set_camera(*camera_key)
-        if getattr(self, '_billboards', None) is not None:
+        # Face-me figures turn to the first view's camera: their rows are
+        # the document's, one set for every view.
+        if self._shared is self and getattr(self, '_billboards', None) is not None:
             self._billboards.update(self.camera, self.renderer, self.inference_index)
         from views.wgpu_axes import axes_state
         axes = axes_state(self.scene, self.camera, self.source_viewport)
@@ -487,7 +529,21 @@ class WgpuView(QWidget):
         from views.wgpu_sections import sync
         sync(self)
         section_widgets = bool(getattr(self.scene, 'section_planes', ())) and getattr(self.scene, 'show_section_planes', True)
-        if self.tools.mode == 'mesh' and not self.overlay_primitives:
+        # With several views a tool's preview shows in one of them
+        # (ViewGrid.set_tool_view): the others draw without it.
+        preview_here = getattr(self.source_viewport, 'tool_preview', True)
+        if not preview_here:
+            if not getattr(self, '_preview_given_away', False):
+                self._preview_given_away = True
+                self.overlay_primitives = []
+                self.last_snap = None
+                if hasattr(self.renderer, 'set_preview_mesh'):
+                    empty = np.empty(0, np.uint8)
+                    self.renderer.set_preview_mesh(empty, empty)
+                self._selection_signature = None
+        else:
+            self._preview_given_away = False
+        if preview_here and self.tools.mode == 'mesh' and not self.overlay_primitives:
             self.tools.mesh_feedback()
         from views.wgpu_edit_context import billboard_outline_primitives
         # Selection boxes ride the native preview edges, depth-tested as in
@@ -756,12 +812,13 @@ class WgpuView(QWidget):
 
     def _group_obb(self, group):
         from views.viewport import Viewport
-        boxes = self.__dict__.setdefault('_container_boxes', {})
+        shared = self._shared.__dict__
+        boxes = shared.setdefault('_container_boxes', {})
         if group not in boxes:
             boxes[group] = Viewport._compute_obb(group)
             # Which rows it measured: an edit elsewhere keeps the box.
             if getattr(self, 'uid_rows', None) is not None:
-                self.__dict__.setdefault('_container_box_rows', {})[group] = np.asarray(
+                shared.setdefault('_container_box_rows', {})[group] = np.asarray(
                     self._rows_for_group(group), np.int64)
         return boxes[group]
 
@@ -946,7 +1003,7 @@ class WgpuView(QWidget):
         return None
 
     def _rows_for_group(self, group):
-        cache = self.__dict__.setdefault('_selection_rows', {})
+        cache = self._shared.__dict__.setdefault('_selection_rows', {})
         if group not in cache:
             rows = []
             pending = [group]

@@ -70,8 +70,50 @@ struct Scene {
     n: u32,
     p: u32,
 }
+/// One more view of the resident scene: its own surface, size-dependent
+/// attachments, view-owned passes and uniforms. Everything that belongs to
+/// the document (geometry, instances, prototypes, materials, textures, the
+/// sun's depth map) stays single in the Renderer; ``bind_target`` swaps one
+/// of these into the live fields, so every existing pass keeps working.
+struct Target {
+    surface: wgpu::Surface<'static>,
+    config: wgpu::SurfaceConfiguration,
+    depth: wgpu::Texture,
+    offscreen: wgpu::Texture,
+    ids: wgpu::Texture,
+    aa: antialias::Antialias,
+    transparency: xray::Xray,
+    ao: ao::AmbientOcclusion,
+    overlay: overlay::Overlay,
+    axes: axes::Axes,
+    lines: lines::Lines,
+    preview: preview::Preview,
+    face_marks: preview::Preview,
+    sections: sections::Sections,
+    camera_data: Vec<f32>,
+    look_data: [[f32; 4]; 10],
+    sun: sun::Settings,
+    style: u32,
+    edges: bool,
+    textures_enabled: bool,
+    ids_dirty: bool,
+    stable_frames: u32,
+    pick_pending: bool,
+    capture_next: bool,
+    captured: Option<Vec<u8>>,
+    /// ``scene_epoch`` when it was last live: a later scene change leaves
+    /// its pick IDs stale.
+    seen_epoch: u64,
+}
 #[pyclass(unsendable)]
 struct Renderer {
+    instance: wgpu::Instance,
+    /// Views of the same scene; ``None`` at the live one's index.
+    targets: Vec<Option<Target>>,
+    active: usize,
+    alive: Vec<bool>,
+    /// Bumped by every change that invalidates pick IDs for all views.
+    scene_epoch: u64,
     textures: textures::Textures,
     textures_enabled: bool,
     material_transparency: bool,
@@ -494,6 +536,7 @@ impl Renderer {
         let mut transparency = xray::Xray::new(&device, format, w, h);
         transparency.bind_textures(&device, &textures);
         Ok(Self {
+            instance, targets: vec![None], active: 0, alive: vec![true], scene_epoch: 0,
             textures, texture_groups, textures_enabled: true, material_transparency: true,
             ao: ao::AmbientOcclusion::new(&device, format),
             antialias: true,
@@ -567,6 +610,121 @@ impl Renderer {
                 features.contains(wgpu::Features::MULTI_DRAW_INDIRECT)
             ),
         })
+    }
+
+    /// Another view of the resident scene on its own NSView: one more
+    /// surface and its attachments; the scene is not packed or sent again.
+    fn add_target(&mut self, ns_view_ptr: usize, width: u32, height: u32, scale: f64) -> PyResult<usize> {
+        let ptr = NonNull::new(ns_view_ptr as *mut std::ffi::c_void)
+            .ok_or_else(|| PyValueError::new_err("null NSView"))?;
+        let surface = unsafe {
+            self.instance.create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
+                raw_display_handle: RawDisplayHandle::AppKit(AppKitDisplayHandle::new()),
+                raw_window_handle: RawWindowHandle::AppKit(AppKitWindowHandle::new(ptr)),
+            })
+        }
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let w = ((width as f64 * scale) as u32).max(1);
+        let h = ((height as f64 * scale) as u32).max(1);
+        let mut config = self.config.clone();
+        config.width = w;
+        config.height = h;
+        surface.configure(&self.device, &config);
+        let format = config.format;
+        let d = &self.device;
+        let mut aa = antialias::Antialias::new(d, format, &self.look.buffer, w, h);
+        aa.bind_textures(d, &self.textures);
+        let mut transparency = xray::Xray::new(d, format, w, h);
+        transparency.bind_textures(d, &self.textures);
+        if let Some(s) = &self.scene {
+            aa.bind_scene(d, &self.camera, &s.inst, &s.survivors, &self.look.buffer, &s.edge_records, &s.viewpoints);
+            transparency.bind_scene(d, &self.camera, &s.inst, &s.survivors, &self.look.buffer);
+        }
+        let target = Target {
+            surface, config,
+            depth: texture(d, w, h, wgpu::TextureFormat::Depth32Float),
+            offscreen: texture(d, w, h, format),
+            ids: texture(d, w, h, wgpu::TextureFormat::R32Uint),
+            aa, transparency,
+            ao: ao::AmbientOcclusion::new(d, format),
+            overlay: overlay::Overlay::new(d, format),
+            axes: axes::Axes::new(d, format, &self.camera),
+            lines: lines::Lines::new(d, format, &self.camera),
+            preview: preview::Preview::new(d, format, &self.camera, &self.look.buffer, 0),
+            face_marks: preview::Preview::new(d, format, &self.camera, &self.look.buffer, 1),
+            sections: sections::Sections::new(d, format, &self.camera),
+            camera_data: Vec::new(),
+            look_data: self.look.data,
+            sun: self.sun.settings(),
+            style: self.style,
+            edges: self.edges,
+            textures_enabled: self.textures_enabled,
+            ids_dirty: true,
+            stable_frames: 0,
+            pick_pending: false,
+            capture_next: false,
+            captured: None,
+            seen_epoch: self.scene_epoch,
+        };
+        self.targets.push(Some(target));
+        self.alive.push(true);
+        Ok(self.targets.len() - 1)
+    }
+    /// Make view ``id`` the live one: later calls (camera, style, overlay,
+    /// lines, preview, resize, render, pick) are its own.
+    fn bind_target(&mut self, id: usize) -> PyResult<()> {
+        if id == self.active {
+            return Ok(());
+        }
+        let mut t = self.targets.get_mut(id).and_then(Option::take)
+            .ok_or_else(|| PyValueError::new_err("no such view target"))?;
+        let seen = t.seen_epoch;
+        self.swap_live(&mut t);
+        t.seen_epoch = self.scene_epoch;
+        self.targets[self.active] = Some(t);
+        self.active = id;
+        if seen != self.scene_epoch {
+            self.ids_dirty = true;
+        }
+        self.queue.write_buffer(&self.look.buffer, 0, bytemuck::cast_slice(&self.look.data));
+        if !self.camera_data.is_empty() {
+            self.queue.write_buffer(&self.camera, 0, bytemuck::cast_slice(&self.camera_data));
+        }
+        // The scene's buffers may have been replaced or grown since.
+        self.aa.bind_textures(&self.device, &self.textures);
+        self.transparency.bind_textures(&self.device, &self.textures);
+        if let Some(s) = &self.scene {
+            self.aa.bind_scene(&self.device, &self.camera, &s.inst, &s.survivors, &self.look.buffer, &s.edge_records, &s.viewpoints);
+            self.transparency.bind_scene(&self.device, &self.camera, &s.inst, &s.survivors, &self.look.buffer);
+        }
+        Ok(())
+    }
+    /// Let view ``id`` go (its widget is going away); the first view stays.
+    fn remove_target(&mut self, id: usize) -> PyResult<()> {
+        if id == 0 || !self.alive.get(id).copied().unwrap_or(false) {
+            return Err(PyValueError::new_err("no such removable view target"));
+        }
+        if self.active == id {
+            self.bind_target(0)?;
+        }
+        self.targets[id] = None;
+        self.alive[id] = false;
+        Ok(())
+    }
+    #[getter]
+    fn active_target(&self) -> usize { self.active }
+    #[getter]
+    fn target_count(&self) -> usize { self.alive.iter().filter(|a| **a).count() }
+    /// Bytes of every view's own attachments (surface not included): depth,
+    /// colour and ID targets, 4× multisampled colour and depth, X-ray
+    /// accumulation — what one more view costs, apart from the scene.
+    #[getter]
+    fn target_memory(&self) -> u64 {
+        let per_pixel = 4 + 4 + 4 + 16 + 16 + 8 + 2;
+        let live = self.config.width as u64 * self.config.height as u64;
+        self.targets.iter().flatten()
+            .map(|t| t.config.width as u64 * t.config.height as u64)
+            .sum::<u64>().saturating_add(live) * per_pixel
     }
     /// Packed little-endian arrays; reject malformed uploads before reaching wgpu.
     fn set_scene(
@@ -714,7 +872,7 @@ impl Renderer {
         self.gpu_memory =
             (v.len() + expanded_v.len() + ix.len() + p.len() + cmd.len() * 3 + instances.len() + n * 20 + 112 + 416)
                 as u64 + self.textures.bytes + self.textures.materials.size();
-        self.ids_dirty = true;
+        self.ids_dirty = true; self.scene_epoch += 1;
         self.material_transparency = true; // unclassified raw scenes use conservative OIT
         self.scene = Some(Scene {
             edge_data: expanded_v,
@@ -754,6 +912,11 @@ impl Renderer {
         self.preview.upload(&self.device,&[],&[]).map_err(PyValueError::new_err)?;
         self.face_marks.upload(&self.device,&[],&[]).map_err(PyValueError::new_err)?;
         self.ghost_geometry.upload(&self.device,&[],&[]).map_err(PyValueError::new_err)?;
+        for t in self.targets.iter_mut().flatten() {
+            t.preview.upload(&self.device,&[],&[]).map_err(PyValueError::new_err)?;
+            t.face_marks.upload(&self.device,&[],&[]).map_err(PyValueError::new_err)?;
+            t.ids_dirty = true;
+        }
         self.ghost_objects.upload(&self.device,&[],&[]).map_err(PyValueError::new_err)?;
         self.device.poll(wgpu::Maintain::Wait);
         Ok(())
@@ -840,7 +1003,7 @@ impl Renderer {
         s.xray_edge_draw = bind(&self.device, &self.xray_edge.get_bind_group_layout(0), &[&self.camera, &s.inst, &s.survivors, &s.edge_records, &s.viewpoints]);
         s.profile_draw = bind(&self.device, &self.profile_top.get_bind_group_layout(0), &[&self.camera, &s.inst, &s.survivors, &s.edge_records, &s.viewpoints]);
         self.aa.bind_scene(&self.device, &self.camera, &s.inst, &s.survivors, &self.look.buffer, &s.edge_records, &s.viewpoints);
-        self.ids_dirty = true;
+        self.ids_dirty = true; self.scene_epoch += 1;
         Ok(())
     }
 
@@ -858,7 +1021,7 @@ impl Renderer {
             s.rows[id*80..id*80+64].copy_from_slice(data);
             self.queue.write_buffer(&s.inst, (id*80) as u64, data);
         }
-        if !ids.is_empty() { self.ids_dirty = true; self.stable_frames = 0; }
+        if !ids.is_empty() { self.ids_dirty = true; self.scene_epoch += 1; self.stable_frames = 0; }
         Ok(())
     }
 
@@ -873,7 +1036,7 @@ impl Renderer {
     /// Update existing resident rows without replacing geometry or pick IDs.
     fn update_instances(&mut self, ids: Vec<usize>, rows: PyReadonlyArray1<'_, u8>) -> PyResult<()> {
         self.sun.invalidate();
-        self.ids_dirty = true;
+        self.ids_dirty = true; self.scene_epoch += 1;
         self.stable_frames = 0;
         let rows = rows.as_slice()?;
         let s = self.scene.as_mut().ok_or_else(|| PyValueError::new_err("set_scene first"))?;
@@ -957,7 +1120,7 @@ impl Renderer {
     /// Tombstones retain row identities so stale picks cannot select a neighbour.
     fn remove_instances(&mut self, ids: Vec<usize>) -> PyResult<()> {
         self.sun.invalidate();
-        self.ids_dirty = true;
+        self.ids_dirty = true; self.scene_epoch += 1;
         let s = self.scene.as_mut().ok_or_else(|| PyValueError::new_err("set_scene first"))?;
         if ids.iter().any(|&id| id >= s.n as usize) {
             return Err(PyValueError::new_err("instance id out of range"));
@@ -1025,13 +1188,13 @@ impl Renderer {
             // One queue write per context change, rather than N tiny writes.
             if changed {
                 self.queue.write_buffer(&s.inst, 0, &s.rows);
-                self.ids_dirty = true;
+                self.ids_dirty = true; self.scene_epoch += 1;
             }
         }
         Ok(())
     }
     fn set_overrides(&mut self, colors: Vec<u32>) -> PyResult<()> {
-        self.ids_dirty = true;
+        self.ids_dirty = true; self.scene_epoch += 1;
         if let Some(s) = &mut self.scene {
             if colors.len() != s.n as usize {
                 return Err(PyValueError::new_err("one override per instance required"));
@@ -1089,7 +1252,7 @@ impl Renderer {
         let data = suppressed_indices(&s.index_data, &s.template_data, s.p as usize, &ranges)
             .map_err(PyValueError::new_err)?;
         self.queue.write_buffer(&s.index, 0, &data);
-        self.ids_dirty = true;
+        self.ids_dirty = true; self.scene_epoch += 1;
         Ok(())
     }
     /// Soft/hidden endpoint pairs in prototype coordinates.
@@ -1310,7 +1473,7 @@ impl Renderer {
     }
     fn set_materials(&mut self, data: PyReadonlyArray1<'_, u8>) -> PyResult<()> {
         self.sun.invalidate();
-        self.ids_dirty = true;
+        self.ids_dirty = true; self.scene_epoch += 1;
         let data = data.as_slice()?;
         let scene = self.scene.as_mut().ok_or_else(|| PyValueError::new_err("no scene"))?;
         if data.len() % 16 != 0 || data.len() < scene.p as usize * 16
@@ -1335,7 +1498,7 @@ impl Renderer {
     }
     fn set_textures(&mut self, width: u32, height: u32, layers: u32, levels: Vec<Vec<u8>>) -> PyResult<()> {
         self.sun.invalidate();
-        self.ids_dirty = true;
+        self.ids_dirty = true; self.scene_epoch += 1;
         let limits = self.device.limits();
         if width == 0 || height == 0 || layers == 0 || width > limits.max_texture_dimension_2d
             || height > limits.max_texture_dimension_2d || layers > limits.max_texture_array_layers
@@ -1963,6 +2126,36 @@ impl Renderer {
     }
 }
 impl Renderer {
+    fn swap_live(&mut self, t: &mut Target) {
+        use std::mem::swap;
+        swap(&mut self.surface, &mut t.surface);
+        swap(&mut self.config, &mut t.config);
+        swap(&mut self.depth, &mut t.depth);
+        swap(&mut self.offscreen, &mut t.offscreen);
+        swap(&mut self.ids, &mut t.ids);
+        swap(&mut self.aa, &mut t.aa);
+        swap(&mut self.transparency, &mut t.transparency);
+        swap(&mut self.ao, &mut t.ao);
+        swap(&mut self.overlay, &mut t.overlay);
+        swap(&mut self.axes, &mut t.axes);
+        swap(&mut self.lines, &mut t.lines);
+        swap(&mut self.preview, &mut t.preview);
+        swap(&mut self.face_marks, &mut t.face_marks);
+        swap(&mut self.sections, &mut t.sections);
+        swap(&mut self.camera_data, &mut t.camera_data);
+        swap(&mut self.look.data, &mut t.look_data);
+        swap(&mut self.style, &mut t.style);
+        swap(&mut self.edges, &mut t.edges);
+        swap(&mut self.textures_enabled, &mut t.textures_enabled);
+        swap(&mut self.ids_dirty, &mut t.ids_dirty);
+        swap(&mut self.stable_frames, &mut t.stable_frames);
+        swap(&mut self.pick_pending, &mut t.pick_pending);
+        swap(&mut self.capture_next, &mut t.capture_next);
+        swap(&mut self.captured, &mut t.captured);
+        let sun = self.sun.settings();
+        self.sun.restore(t.sun);
+        t.sun = sun;
+    }
     fn readback(&self, n: u64) -> PyResult<Vec<u8>> {
         let slice = self.read.slice(..n);
         let (tx, rx) = std::sync::mpsc::channel();
