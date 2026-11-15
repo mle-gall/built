@@ -70,6 +70,12 @@ def test_a_file_saved_in_3d_opens_in_3d(tmp_path, monkeypatch):
     try:
         assert not win._terrain_on                 # a fresh window: flat
         assert win.open_path(path)
+        # The fork brings the base map and terrain in after the document's
+        # first picture (views/main_window.py, _after_picture); offscreen
+        # no picture comes, so run what waits for it.
+        doc = win._doc
+        while doc._after_picture:
+            doc._after_picture.pop(0)()
         assert win._terrain_on
         assert built and built[-1] is True         # asked to build it
         assert win.georef_tray.base_map._terrain3d.isChecked()

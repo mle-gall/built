@@ -20,6 +20,21 @@ from PySide6.QtGui import QVector3D as V  # noqa: E402
 from PySide6.QtWidgets import QApplication, QMessageBox  # noqa: E402
 
 from core import autosave  # noqa: E402
+
+
+def _autosave_now(win, timeout=10.0):
+    """One auto-save tick, waited out: the fork writes the recovery slots
+    in the background (core.background_autosave), so the slot is there
+    once the manager is idle, not when the tick returns."""
+    import time
+    from PySide6.QtWidgets import QApplication
+    win._on_autosave_tick()
+    manager = getattr(win, "_background_autosave", None)
+    end = time.monotonic() + timeout
+    while manager is not None and manager.busy:
+        assert time.monotonic() < end, "the auto-save never finished"
+        QApplication.processEvents()
+        time.sleep(0.005)
 from core.history import AddEdgeCommand  # noqa: E402
 from core.scene import Scene  # noqa: E402
 from formats import igz as igz_format  # noqa: E402
@@ -137,7 +152,7 @@ def test_the_auto_save_writes_the_project(win, tmp_path):
     path = tmp_path / "model.igz"
     _new_tab(win, 3, path)
     win.viewport = _pane(win)
-    win._on_autosave_tick()
+    _autosave_now(win)
     slot = autosave.pending(path)
     assert slot is not None
     assert _edges_in_file(slot) == 3
@@ -403,7 +418,7 @@ def test_save_as_retires_the_recovery_copy_of_the_old_name(win, tmp_path,
     from views import main_window as mw
     old, new = tmp_path / "old.igz", tmp_path / "new.igz"
     _new_tab(win, 3, old)
-    win._on_autosave_tick()
+    _autosave_now(win)
     assert autosave.pending(old) is not None
     monkeypatch.setattr(mw.file_dialogs, "getSaveFileName",
                         lambda *a, **k: (str(new), ""))
@@ -415,7 +430,7 @@ def test_save_as_retires_the_recovery_copy_of_the_old_name(win, tmp_path,
 def test_the_auto_save_of_a_tab_behind_goes_to_its_own_slot(win, tmp_path):
     a = _new_tab(win, 3, tmp_path / "a.igz")
     b = _new_tab(win, 2, tmp_path / "b.igz")
-    win._on_autosave_tick()
+    _autosave_now(win)
     assert _edges_in_file(autosave.pending(a.path)) == 3
     assert _edges_in_file(autosave.pending(b.path)) == 2
 

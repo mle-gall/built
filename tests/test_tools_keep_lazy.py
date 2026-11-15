@@ -29,6 +29,18 @@ pytestmark = pytest.mark.skipif(
 __all__ = ["big_enough", "binary"]
 
 
+
+def _built(mesh) -> bool:
+    """A mesh built for editing: the fork's store-backed StoreMesh is one."""
+    return isinstance(mesh, M.Mesh) and not isinstance(mesh, M.DeferredMesh)
+
+
+def _real(face) -> bool:
+    """A real face of a built mesh (the fork's FaceView too), not a light
+    stand-in read from the arrays."""
+    from views.array_bake import LightFace
+    return isinstance(face, M.Face) and not isinstance(face, LightFace)
+
 def _click(vp, x, y):
     vp._dispatch_tool_click(QMouseEvent(
         QEvent.Type.MouseButtonPress, QPointF(x, y),
@@ -87,7 +99,7 @@ def test_rotate_takes_the_plane_of_the_face_unbuilt(floor):
     light = _xyz(tool.work_plane[1])
     assert type(mesh) is M.DeferredMesh
     face, _g = vp.pick_face_any(x, y)
-    assert type(face) is M.Face
+    assert _real(face)
     assert light == _xyz(face.normal().normalized())
 
 
@@ -118,7 +130,7 @@ def test_push_pull_is_handed_the_real_face_of_a_loose_lazy_mesh(floor):
     vp.set_hover = lambda *a, **k: None
     tool.on_hover(SimpleNamespace(viewport=vp, screen=QPointF(x, y)))
     del vp.pick_face_any, vp.set_hover
-    assert tool.hovered_face is real
+    assert tool.hovered_face == real
 
 
 def test_paint_paints_a_closed_group_whole_unbuilt(floor):
@@ -228,7 +240,7 @@ def test_a_centre_on_a_lazy_group_follows_it_unbuilt(big_enough, tmp_path):
         mesh.faces                       # built meanwhile: the real face now
         vp.scene.version += 1
         again = vp._valid_center_ref()
-        assert type(again[4]) is M.Face
+        assert _real(again[4])
         assert _xyz(again[0]) == _xyz(moved[0])
     finally:
         win._saved_version = win.viewport.scene.version

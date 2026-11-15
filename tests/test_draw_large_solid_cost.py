@@ -37,6 +37,10 @@ def _circle_segments(cx, cy, z=3.0, r=0.4, n=32):
 
 
 def test_a_stroke_lays_the_edge_graph_out_once(monkeypatch):
+    # The Python planner's edge list is the one laid out once; with the
+    # scans on, the fork plans over the mesh scan (core.edits._ScanEdges),
+    # whose adjacency is built node by node and never as a CycleGraph.
+    monkeypatch.setenv("INGETRAZO_SCANS", "0")
     scene, _hist = _slab_with_cylinders(3)
     built = []
     real_init = CycleGraph.__init__
@@ -176,4 +180,6 @@ def test_a_circle_drawn_on_the_solid_lands_as_before():
     assert len(cap.hole_loops) == holes_before + 1
     assert is_closed(scene.mesh)
     assert not any(f.interior for f in scene.mesh.faces)
-    assert abs(signed_volume(scene.mesh) - volume) < 1e-6
+    # Float32 corners: equal to the last digits a float32 solid of ~300 m³
+    # can tell apart (the fork's planner may cut the cap in another order).
+    assert abs(signed_volume(scene.mesh) - volume) < 1e-7 * abs(volume)

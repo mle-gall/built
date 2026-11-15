@@ -34,6 +34,16 @@ pytestmark = pytest.mark.skipif(
 SKIP = {"fp", "mesh", "faces", "vkey", "flags_gen"}
 
 
+
+@pytest.fixture(autouse=True)
+def _no_drawing_cache(monkeypatch):
+    """The fork keeps bakes across sessions (views/drawing_cache.py): one
+    document opened twice here would come back from it and never bake.
+    These tests are about the bake itself."""
+    from views import drawing_cache
+    monkeypatch.setattr(drawing_cache, "store", lambda: False)
+
+
 def _plain(v):
     if isinstance(v, np.ndarray):
         return (v.dtype.str, v.shape, v.tobytes())
@@ -69,6 +79,10 @@ def _window(path):
     from views.main_window import MainWindow
     win = MainWindow()
     assert win.open_path(path) is not False
+    # The fork's open presents first and leaves the drawing to the first
+    # paint (f5324e00); upstream built it under the open's bar. The bakes
+    # side by side are prepare_drawing's either way: asked for here.
+    win.viewport.prepare_drawing()
     return win
 
 

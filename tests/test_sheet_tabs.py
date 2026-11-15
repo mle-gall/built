@@ -524,6 +524,12 @@ def test_the_main_window_keeps_its_two_tabs_and_its_long_hint(monkeypatch, width
         _composer_with(win, 30)
         win._composer.hide()
         win._update_status_hint = lambda: None
+        # The fork's renderer note on the right («OpenGL — Metal
+        # unavailable: …» where the probe cannot run, as offscreen) is not
+        # what this measures.
+        label = getattr(win, "_renderer_label", None)
+        if label is not None:
+            label.hide()
         win.show()
         win.resize(width, 900)
         _settle()

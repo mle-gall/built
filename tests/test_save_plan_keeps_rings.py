@@ -25,6 +25,18 @@ pytestmark = pytest.mark.skipif(
     reason="engine off or not built")
 
 
+
+def _built(mesh) -> bool:
+    """A mesh built for editing: the fork's store-backed StoreMesh is one."""
+    return isinstance(mesh, M.Mesh) and not isinstance(mesh, M.DeferredMesh)
+
+
+def _real(face) -> bool:
+    """A real face of a built mesh (the fork's FaceView too), not a light
+    stand-in read from the arrays."""
+    from views.array_bake import LightFace
+    return isinstance(face, M.Face) and not isinstance(face, LightFace)
+
 def _square(x, y, s, z=0.0):
     return [V(x, y, z), V(x + s, y, z), V(x + s, y + s, z), V(x, y + s, z)]
 
@@ -62,7 +74,7 @@ def test_the_bytes_are_those_of_the_built_mesh(binary, monkeypatch, tmp_path,
     path = _doc(tmp_path, monkeypatch, curve, layer)
     lazy = _open(monkeypatch, path, True)
     eager = _open(monkeypatch, path, False)
-    assert type(lazy.mesh) is M.DeferredMesh and type(eager.mesh) is M.Mesh
+    assert type(lazy.mesh) is M.DeferredMesh and _built(eager.mesh)
     a, b, c = (tmp_path / n for n in ("a.igz", "b.igz", "c.igz"))
     igz.save_scene(lazy, a)
     igz.save_scene(lazy, b)

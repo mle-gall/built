@@ -31,6 +31,18 @@ pytestmark = pytest.mark.skipif(
     reason="engine off or not built")
 
 
+
+def _built(mesh) -> bool:
+    """A mesh built for editing: the fork's store-backed StoreMesh is one."""
+    return isinstance(mesh, M.Mesh) and not isinstance(mesh, M.DeferredMesh)
+
+
+def _real(face) -> bool:
+    """A real face of a built mesh (the fork's FaceView too), not a light
+    stand-in read from the arrays."""
+    from views.array_bake import LightFace
+    return isinstance(face, M.Face) and not isinstance(face, LightFace)
+
 @pytest.fixture
 def binary(monkeypatch):
     monkeypatch.setattr(igz, "_LARGE_DOCUMENT", 0)
@@ -63,7 +75,7 @@ def _ring_sig(ring):
     n = len(ring)
     for i, v in enumerate(ring):
         w = ring[(i + 1) % n]
-        e = next((e for e in v.edges if e.other(v) is w), None)
+        e = next((e for e in v.edges if e.other(v) == w), None)
         out.append((_xyz(v.position), None if e is None else (
             e.soft, e.hidden, e.curve, e.layer)))
     return out
@@ -90,10 +102,10 @@ def test_a_light_face_reads_as_the_built_face(binary, tmp_path, seed):
         centers = [curve_centers_of_face(f) for f in light]
         tris = [[tuple(map(_xyz, t)) for t in f.triangulate()] for f in light]
         want = m.faces                   # built now
-        assert type(m) is M.Mesh
+        assert _built(m)
         for a, b, c, t in zip(light, want, centers, tris):
             assert _sig(a) == _sig(b)
-            assert a.real() is b
+            assert a.real() == b
             assert [(_xyz(x), r, k) for x, r, k in c] == [
                 (_xyz(x), r, k) for x, r, k in curve_centers_of_face(b)]
             assert t == [tuple(map(_xyz, q)) for q in b.triangulate()]
@@ -111,9 +123,9 @@ def test_deferred_faces_answer_light_only_while_reading(binary, tmp_path):
         assert isinstance(f, array_bake.LightFace)
         assert type(m) is M.DeferredMesh
     real = faces[0]                     # no longer reading: builds, as always
-    assert type(m) is M.Mesh and type(real) is M.Face
+    assert _built(m) and _real(real)
     with array_bake.reading_only():
-        assert faces[0] is real, "once built, the real face"
+        assert faces[0] == real, "once built, the real face"
 
 
 def _window(tmp_path):
@@ -160,7 +172,7 @@ def test_hovering_with_line_builds_no_mesh_and_a_click_gets_the_real_face(
         assert type(mesh) is M.DeferredMesh, "a Line hover built the group"
         assert vp.last_snap is not None
         face, group = vp.pick_face_any(x, y)
-        assert type(face) is M.Face, "the memo of a hover's light face leaked"
+        assert _real(face), "the memo of a hover's light face leaked"
         assert face in mesh.faces and group is vp.scene.groups[0]
     finally:
         win._saved_version = vp.scene.version
