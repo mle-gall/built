@@ -15,6 +15,11 @@ wheel in the viewport, Esc, a camera moved by anything else (a standard
 view, Zoom Extents, a tool), another project brought to the front. A
 glide stopped short still brings its scene's layers and style: that
 scene is the one marked; the camera stays where the user took it.
+
+Under Metal the GL viewport is hidden and the window's Metal view
+(``Document.stand_in``, a ``WgpuView`` whose ``source_viewport`` is the
+viewport) draws its camera: each frame repaints it too, and its clicks,
+wheel and Esc stop the player like the viewport's.
 """
 from __future__ import annotations
 
@@ -42,6 +47,8 @@ class ScenePlayer(QObject):
         self._timer.setInterval(FRAME_MS)
         self._timer.timeout.connect(self.tick)
         self._viewport = None
+        #: The Metal view drawing the viewport's camera, while it plays.
+        self._display = None
         self._t0 = 0.0
         #: The pose the player last gave the camera: any other there means
         #: something else moved it, and the player lets go.
@@ -55,6 +62,30 @@ class ScenePlayer(QObject):
         self._arrive = None
 
     # ---- State ------------------------------------------------------------
+    def display_of(self, viewport):
+        """The Metal view that draws ``viewport``'s camera, or None (GL)."""
+        doc = getattr(self._window, "_doc", None)
+        stand_in = getattr(doc, "stand_in", None) if doc is not None else None
+        if (stand_in is not None
+                and getattr(stand_in, "source_viewport", None) is viewport):
+            return stand_in
+        return None
+
+    def shows(self, viewport) -> bool:
+        """Whether ``viewport``'s camera is on screen: the GL viewport
+        itself, or the Metal view drawing it."""
+        if viewport.isVisible():
+            return True
+        display = self.display_of(viewport)
+        return display is not None and display.isVisible()
+
+    def focus_widget(self, viewport):
+        """Where the keyboard goes during a glide: the widget drawn in."""
+        display = self.display_of(viewport)
+        if display is not None and display.isVisible():
+            return display
+        return viewport
+
     def is_active(self) -> bool:
         return self._glide is not None or self._run is not None
 
@@ -100,9 +131,12 @@ class ScenePlayer(QObject):
 
     def _begin(self, viewport, pose) -> None:
         self._viewport = viewport
+        self._display = self.display_of(viewport)
         self._last = pose
         self._t0 = self._clock()
         viewport.installEventFilter(self)
+        if self._display is not None:
+            self._display.installEventFilter(self)
         self._timer.start()
         self.activeChanged.emit(True)
 
@@ -125,12 +159,14 @@ class ScenePlayer(QObject):
 
     def _end(self) -> None:
         self._timer.stop()
-        if self._viewport is not None:
+        for widget in (self._viewport, self._display):
+            if widget is None:
+                continue
             try:
-                self._viewport.removeEventFilter(self)
+                widget.removeEventFilter(self)
             except RuntimeError:             # the viewport went with its doc
                 pass
-        self._viewport = None
+        self._viewport = self._display = None
         self._glide = self._run = None
         self._views = []
         self._arrive = None
@@ -157,7 +193,7 @@ class ScenePlayer(QObject):
             pose = glide(a, b, seconds, t)
             pose.put_on(camera)
             self._last = pose
-            viewport.update()
+            self._repaint(viewport)
             if t >= seconds:
                 arrive = self._arrive
                 self._end()
@@ -167,7 +203,7 @@ class ScenePlayer(QObject):
         pose, reached = self._run.at(t)
         pose.put_on(camera)
         self._last = pose
-        viewport.update()
+        self._repaint(viewport)
         if reached >= 0 and reached != self._reached:
             self._reached = reached
             view = self._views[reached]
@@ -181,6 +217,15 @@ class ScenePlayer(QObject):
             # scene): what it holds now is the player's own doing.
             if self.is_active():
                 self._last = Pose.of_camera(camera)
+
+    def _repaint(self, viewport) -> None:
+        viewport.update()
+        display = self._display
+        if display is not None:
+            try:
+                display.update()
+            except RuntimeError:             # the Metal view went with its doc
+                self._display = None
 
     # ---- The user takes the view back ---------------------------------------
     def eventFilter(self, obj, ev) -> bool:  # noqa: N802 — Qt override
