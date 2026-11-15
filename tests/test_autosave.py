@@ -9,6 +9,7 @@ files there), one per absolute document path plus an untitled slot.
 """
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
@@ -18,6 +19,11 @@ import core.autosave as autosave
 from core.edits import build_add_edges
 from core.history import History
 from core.scene import Scene
+
+#: The genuine ``autosave_dir``, captured at import — the fixture below
+#: replaces it on the module for every test, and the APPDATA test needs
+#: the real one.
+_real_autosave_dir = autosave.autosave_dir
 
 
 @pytest.fixture(autouse=True)
@@ -104,3 +110,18 @@ def test_progress_event_during_open_does_not_autosave_partial_document():
     # A timer callback at that point must not inspect or serialize the scene.
     opening = SimpleNamespace(_opening_document=True)
     MainWindow._on_autosave_tick(opening)
+
+
+def test_autosave_dir_follows_process_appdata_on_windows(tmp_path,
+                                                          monkeypatch):
+    """#1180: QStandardPaths resolves the roaming folder through the OS
+    and never reads the process's APPDATA, so a test run that pointed
+    APPDATA at a sandbox (conftest does) still wrote its slots into the
+    developer's real profile. On win32 the dir must be built from the
+    variable, keeping the org/app suffix Qt appends."""
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setenv("APPDATA", str(tmp_path / "Roaming"))
+    d = _real_autosave_dir()
+    assert d == (tmp_path / "Roaming" / "IngeTrazo" / "IngeTrazo"
+                 / "autosave")
+    assert d.is_dir()

@@ -53,7 +53,8 @@ def test_resolution(view):
 
 @pytest.mark.parametrize('point,kind', [((6, 5, 0), 'endpoint'),
                                        ((5, 3, 0), 'midpoint'),
-                                       ((5, 4, 0), 'on_face')])
+                                       # Near the face's centre of area: «Face center» (#736).
+                                       ((5, 4, 0), 'face_center')])
 def test_snap_matches_exact_rules(view, point, kind):
     world = QVector3D(*point)
     px = view._world_to_pixel(world)
@@ -62,8 +63,11 @@ def test_snap_matches_exact_rules(view, point, kind):
     transform = view.scene.groups[0].xform
     edges = [SimpleNamespace(a=transform.map(e.a), b=transform.map(e.b),
                              in_group=True, context='group') for e in mesh.edges]
+    from views.wgpu_inference import face_centers_near
+    centers = face_centers_near(view, *px, True, view._world_to_pixel)
     expected = compute_snap(world, px, SimpleNamespace(edges=edges),
-                            view._world_to_pixel, 12., face_under_cursor=True)
+                            view._world_to_pixel, 12., face_under_cursor=True,
+                            face_centers=centers)
     assert result.kind == expected.kind == kind
     assert (result.point-expected.point).length() < 1e-4
 

@@ -112,7 +112,8 @@ def axes(origin, directions, length=32):
     return result
 
 
-def draw_snap_indicator(painter, snap, project, clip_line, *, labels=True):
+def draw_snap_indicator(painter, snap, project, clip_line, *, labels=True,
+                        scene=None):
     """Paint a full SnapResult using GL's glyphs, halos, guides and labels.
 
     P1 calls from the rasterize annotation callback, passing its world-to-logical
@@ -229,6 +230,13 @@ def draw_snap_indicator(painter, snap, project, clip_line, *, labels=True):
             label += " " + tr("in component")
         elif ctx_ == "group":
             label += " " + tr("in group")
+        elif ctx_ == "outside" and scene is not None:
+            # As GL's Viewport._snap_context_suffix (#1327): geometry
+            # outside the group or component open for editing.
+            is_comp = (scene.edit_definition() is not None
+                       if scene.edit_group is not None else None)
+            label += " " + tr("outside the component" if is_comp
+                              else "outside the group")
         font = QFont()
         font.setPointSize(9)
         painter.setFont(font)

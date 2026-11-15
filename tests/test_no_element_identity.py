@@ -55,6 +55,7 @@ _ALLOWED = {
         "_is_ear", "_cure_local_intersections", "_split_earcut",
         "_get_leftmost", "_middle_inside", "_intersects_polygon")},
     ("core/topology.py", "__call__"): "id()-keyed memo of a QVector3D",
+    ("views/tray.py", "delete_row"): "saved views (scenes), not mesh elements",
     ("core/ai.py", "_tidy_groups"): "groups",
     ("core/intersect.py", "intersect"): "polygons of two meshes",
     ("core/links.py", "restamp_materials"): "paint rows: was one copied",

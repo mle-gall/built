@@ -164,7 +164,16 @@ def face_net_area(f) -> float:
 def face_set_volume(faces):
     """Volume enclosed by ``faces``, or ``None`` when the set is not
     watertight by itself. Signed tetrahedron sum over the set's triangles;
-    closure = every edge of the set borders exactly two faces of the set."""
+    closure = every edge of the set borders exactly two faces of the set.
+
+    The tetrahedra are measured from the set's own first vertex and
+    accumulated in Python floats (double precision). Summing from the
+    world origin in ``QVector3D`` (single precision) instead makes the
+    terms cancel out for geometry far from the origin — a column that
+    reads exactly at the origin is already wrong by percent at 300 m
+    and meaningless at kilometres (#1221). For a closed set the sum is
+    the same from any reference point, so the set's own vertex costs
+    nothing and keeps every term the size of the set itself."""
     faces = list(faces)
     if not faces:
         return None

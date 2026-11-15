@@ -291,7 +291,8 @@ class MeshToolAccess:
         if snap is not None and getattr(snap, 'kind', None) and hasattr(snap, 'color'):
             # With its tooltip ("Endpoint", "On Edge in group"), as GL.
             draw_snap_indicator(painter, snap, layout._world_to_pixel,
-                                layout._clip_pixel_line)
+                                layout._clip_pixel_line,
+                                scene=getattr(self, 'scene', None))
         draw_tool_overlays(painter, self)
 
     def world_to_pixel(self, world):

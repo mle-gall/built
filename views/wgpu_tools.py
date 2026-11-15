@@ -50,7 +50,8 @@ TOOL_DISPATCH = {'SelectTool': 'select',
  'SubtractTool': 'mesh',
  'TrimTool': 'mesh',
  'IntersectTool': 'mesh',
- 'SplitTool': 'mesh'}
+ 'SplitTool': 'mesh',
+ 'NorthTool': 'mesh'}
 
 
 def move_command(groups, delta):

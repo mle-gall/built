@@ -1,5 +1,7 @@
 # IngeTrazo
 
+[Bahasa Indonesia](README.id.md) · [Español](#en-español)
+
 *Pronounced **EEN-heh-TRAH-soh** — from Spanish* inge(niería) *"engineering"
 +* trazo *"a drawn stroke": the engineer's stroke.*
 
@@ -83,7 +85,9 @@ welcome arch with all its rebar (also attached to every release as
 
 - **Viewport** — Z-up camera that orbits around the point under the cursor,
   grid, colored axes, perspective ↔ parallel and two-point perspective,
-  standard views, zoom-extents, hidden-line removal, real-sun shadows.
+  standard views, zoom-extents, hidden-line removal, real-sun shadows. Right-click
+  a face and choose **Align View** to look along its normal, including inside
+  an open group or component (two-point perspective switches to perspective).
   Trackpad and touch screen: pinch to zoom, a finger on the touch screen
   orbits (Shift pans, Cmd/Ctrl zooms), two-finger double tap to frame the
   model.

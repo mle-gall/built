@@ -66,6 +66,8 @@ def test_snap_matches_gl(kind, dpr):
     clip = lambda a, b: (a, b)
     reference = SimpleNamespace(_world_to_pixel=project, _clip_pixel_line=clip,
                                 _SNAP_LABELS=Viewport._SNAP_LABELS)
+    reference._snap_context_suffix = (
+        lambda c: Viewport._snap_context_suffix(reference, c))
     expected = painted(lambda p: Viewport._draw_snap_indicator(reference, p, snap), dpr=dpr)
     actual = painted(lambda p: draw_snap_indicator(p, snap, project, clip), dpr=dpr)
     equal(actual, expected)

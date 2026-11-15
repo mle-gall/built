@@ -173,6 +173,7 @@ def test_snap_tooltip_is_painted():
     clip = lambda a, b: (a, b)
     gl = SimpleNamespace(_world_to_pixel=project, _clip_pixel_line=clip,
                          _SNAP_LABELS=Viewport._SNAP_LABELS)
+    gl._snap_context_suffix = lambda c: Viewport._snap_context_suffix(gl, c)
     expected = painted(lambda p: Viewport._draw_snap_indicator(gl, p, snap), SIZE)
     bare = painted(lambda p: draw_snap_indicator(p, snap, project, clip, labels=False), SIZE)
     assert np.abs(pixels(expected).astype(int) - pixels(bare).astype(int)).max() > 1

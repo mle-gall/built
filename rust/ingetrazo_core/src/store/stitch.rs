@@ -391,7 +391,12 @@ impl Store {
         }
         let a: HashSet<u32> = self.edge_faces(e1).iter().copied().collect();
         let b: HashSet<u32> = self.edge_faces(e2).iter().copied().collect();
-        a == b
+        if a != b {
+            return false;
+        }
+        // A loop of three keeps its corners, however thin (Mesh.collapsible_vertex:
+        // a sliver hole of an STL import became a hole of two).
+        !a.iter().any(|&f| self.face_rings(f).iter().any(|r| r.len() <= 3 && r.contains(&v)))
     }
 
     /// How many times each vertex slot is a corner of a live face (all

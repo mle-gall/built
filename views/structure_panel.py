@@ -234,7 +234,7 @@ class StructureDock(QDockWidget):
         active = registry.get('structure', {}).get('active')
         self.tree.clear()
         self.items = {}
-        self.children, self.direct, self.unsorted = children, direct, unsorted
+        self.child_keys, self.direct, self.unsorted = children, direct, unsorted
         for key in order:
             node = nodes[key]
             name = node['name']
@@ -286,7 +286,7 @@ class StructureDock(QDockWidget):
         while stack:
             k = stack.pop()
             yield from self.direct[k]
-            stack.extend(reversed(self.children[k]))
+            stack.extend(reversed(self.child_keys[k]))
 
     def select_unsorted(self):
         if self._building is not None:

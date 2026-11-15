@@ -33,6 +33,8 @@ tangent is not a new competing compute_snap rule. Defaults retain the previous
 """
 from collections.abc import Sequence
 from types import SimpleNamespace
+import math
+
 import numpy as np
 from PySide6.QtGui import QVector3D
 from core import _native
@@ -610,5 +612,55 @@ def snap(index, row, view, x, y, **options):
     from views.viewport import Viewport
     mvp = view.camera.projection_matrix() * view.camera.view_matrix()
     project = lambda p: Viewport._world_to_pixel(view, p, mvp)
+    if 'face_centers' not in options:
+        options['face_centers'] = face_centers_near(view, x, y, on_face, project)
     return compute_snap(point, (x, y), SimpleNamespace(edges=edges),
                         project, threshold, **options)
+
+
+#: Faces in the mesh under the cursor above which the Metal view does not
+#: look for the face itself to offer its «Face center» (the native face
+#: pick walks the mesh in Python); the selected faces' centres still come.
+FACE_CENTER_PICK_MAX = 5000
+
+
+def face_centers_near(view, x, y, on_face, project):
+    """GL's ``Viewport._face_centers_near`` for the Metal view (#736):
+    ``[(point, context)]`` — the centre of area of the face under the
+    cursor (when it falls inside the face and near the cursor) and of the
+    selected faces near it."""
+    from core.mesh import Face, face_count
+    from core.snap import face_center_of_face
+    from views.viewport import Viewport
+    reach = Viewport.POINT_INFERENCE_PX
+    tools = getattr(view, 'tools', None)
+    tool = getattr(tools, 'tool', None)
+    moving = getattr(tool, 'moving_face_ids', None)
+    moving = moving() if callable(moving) else ()
+
+    def near(c):
+        pc = project(c) if c is not None else None
+        return pc is not None and math.hypot(pc[0] - x, pc[1] - y) <= reach
+
+    out = []
+    picked = (tools._picked_mesh(x, y)
+              if on_face and hasattr(tools, '_picked_mesh') else None)
+    if picked is not None and face_count(picked[0]) <= FACE_CENTER_PICK_MAX:
+        face, place = tools.pick_face_placement(x, y)
+        if face is not None and face.key not in moving:
+            group = picked[1]
+            context = None
+            if place is not None and group is not None:
+                context = 'component' if group.is_instance() else 'group'
+            c = face_center_of_face(face, getattr(place, 'xform', None))
+            if near(c):
+                out.append((c, context))
+    faces = [e for e in view.scene.selection if isinstance(e, Face)]
+    if faces and len(faces) <= Viewport.FACE_CENTER_SELECTION_MAX:
+        for f in faces:
+            if f.key in moving:
+                continue
+            c = face_center_of_face(f)
+            if near(c):
+                out.append((c, None))
+    return out

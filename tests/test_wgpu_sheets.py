@@ -77,6 +77,7 @@ def test_offscreen_size_and_live_camera_unchanged(monkeypatch):
     source = SimpleNamespace(scene=Scene(), camera=OrbitCamera(), plano_style=None,
                              style_override=None, _horizon_ndc_y=lambda m: 2.)
     source._effective_style = lambda: Viewport._effective_style(source)
+    source._view_style = lambda: None    # no view of its own: the scene's
     view = module.WgpuView()
     view.source_viewport = source
     view.renderer = Renderer()
@@ -112,13 +113,21 @@ def test_scene_recall_updates_metal_layers_camera_style_and_filter():
     scene._navigator_allowed = {'old'}
     calls = []
     viewport = SimpleNamespace(scene=scene, camera=camera, update=lambda: None,
-                               view_tint=None, active_view_key='old')
+                               view_tint=None, active_view_key='old',
+                               setFocus=lambda *a: None)
     display = SimpleNamespace(set_scene=lambda s: calls.append(s), update=lambda: None)
     window = SimpleNamespace(viewport=viewport,
                              _doc=SimpleNamespace(_renderer_wgpu=True, stand_in=display),
                              statusBar=lambda: SimpleNamespace(showMessage=lambda *a: None))
-    panel = SimpleNamespace(_window=window, _scene=lambda: scene, _touch=lambda: None)
-    ScenesPanel._on_activate(panel, SimpleNamespace(data=lambda role: view))
+    panel = SimpleNamespace(_window=window, _scene=lambda: scene, _touch=lambda: None,
+                            _begin_own=lambda: None, refresh=lambda: None,
+                            row_for=lambda v: v, shown=None)
+    # The panel's own path from a double-click to the recall (no glide:
+    # the stand-in window has no scene player).
+    for name in ("show_view", "finish_view", "activate_view", "_show"):
+        setattr(panel, name, getattr(ScenesPanel, name).__get__(panel))
+    ScenesPanel._on_activate(panel, SimpleNamespace(
+        data=lambda _column, _role: ("scene", view)))
     assert calls == [scene]
     assert camera.distance == 42.
     assert not layer.visible

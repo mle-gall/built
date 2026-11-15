@@ -81,6 +81,9 @@ class BackgroundAutosave(QObject):
             if version == doc.autosaved_version:
                 continue
             scene.camera_home = self.window._camera_dict(doc.viewport)
+            views = getattr(self.window, "_views_dict", None)
+            if views is not None:            # the layout of several views
+                scene.views_home = views(doc)
             slot = autosave.slot_for(doc.path, doc.untitled_no)
             self.job = dict(doc=doc, scene=scene, version=version,
                             path=doc.path, untitled=doc.untitled_no,
