@@ -125,7 +125,8 @@ def test_dialog_rows_and_highlight(win):
     _box(g.mesh)                                     # closed group
     scene.groups.append(g)
 
-    dlg = SolidInspectorDialog(win.viewport, parent=win)
+    dlg = SolidInspectorDialog(win.viewport)
+    dlg.show()
     names = [dlg._table.item(i, 0).text()
              for i in range(dlg._table.rowCount())]
     assert names[0] == "Loose geometry" and "Caja OK" in names
@@ -160,7 +161,8 @@ def test_dialog_group_edit_context(win):
     scene.groups.append(g)
     scene.begin_group_edit(g)
     try:
-        dlg = SolidInspectorDialog(win.viewport, parent=win)
+        dlg = SolidInspectorDialog(win.viewport)
+        dlg.show()
         names = [dlg._table.item(i, 0).text()
                  for i in range(dlg._table.rowCount())]
         assert names[0] == "Open group: Caseta"
@@ -427,7 +429,8 @@ def test_dialog_repairs_a_group_without_entering_it(win):
     g = Group(Mesh(), name="Caja rota")
     _box(g.mesh, skip_top=True)
     scene.groups.append(g)
-    dlg = SolidInspectorDialog(win.viewport, parent=win)
+    dlg = SolidInspectorDialog(win.viewport)
+    dlg.show()
     i = _row(dlg, "Caja rota")
     dlg._table.setCurrentCell(i, 0)
     done = dlg.repair()
@@ -450,7 +453,8 @@ def test_repair_all_is_one_step_and_skips_sound_rows(win):
         f.loop.reverse()
     _box(sound.mesh)
     scene.groups += [broken, sound]
-    dlg = SolidInspectorDialog(win.viewport, parent=win)
+    dlg = SolidInspectorDialog(win.viewport)
+    dlg.show()
     depth = len(win.viewport.history.undo_stack)
     done = dlg.repair_all()
     assert done["holes"] == 1 and done["reversed"] == 6
@@ -466,7 +470,8 @@ def test_status_says_reversed_on_a_closed_wrong_box(win):
     _box(g.mesh)
     _top(g.mesh).loop.reverse()
     win.viewport.scene.groups.append(g)
-    dlg = SolidInspectorDialog(win.viewport, parent=win)
+    dlg = SolidInspectorDialog(win.viewport)
+    dlg.show()
     i = _row(dlg, "Al revés")
     assert dlg._table.item(i, 2).text() == "✘ faces reversed"
     # Closed, but a reversed face makes the signed sum lie (8 m³ read as
@@ -489,7 +494,8 @@ def test_next_problem_selects_and_frames_each_in_turn(win):
     scene = vp.scene
     _box(scene.mesh, skip_top=True)
     scene.mesh.add_edge(QVector3D(10, 0, 0), QVector3D(11, 0, 0))
-    dlg = SolidInspectorDialog(vp, parent=win)
+    dlg = SolidInspectorDialog(vp)
+    dlg.show()
     dlg._table.setCurrentCell(0, 0)
     first = dlg.next_problem()
     assert first["kind"] == "open"
@@ -512,7 +518,8 @@ def test_next_problem_on_a_placed_group_flies_to_its_placement(win):
     m.translate(50.0, 0.0, 0.0)
     g.xform = m
     vp.scene.groups.append(g)
-    dlg = SolidInspectorDialog(vp, parent=win)
+    dlg = SolidInspectorDialog(vp)
+    dlg.show()
     dlg._table.setCurrentCell(_row(dlg, "Lejos"), 0)
     assert dlg.next_problem() is not None
     assert vp.scene.selection == {g}
@@ -533,7 +540,8 @@ def test_nested_pieces_are_listed_and_repaired(win):
     whole = Group(name="Mesa")
     whole.adopt([piece])
     vp.scene.groups.append(whole)
-    dlg = SolidInspectorDialog(vp, parent=win)
+    dlg = SolidInspectorDialog(vp)
+    dlg.show()
     names = [dlg._table.item(i, 0).text()
              for i in range(dlg._table.rowCount())]
     assert "Mesa" not in names
@@ -556,7 +564,8 @@ def test_instances_of_one_component_are_listed_once(win):
         g.xform = QMatrix4x4()
         g.xform.translate(x, 0.0, 0.0)
     win.viewport.scene.groups += [a, b]
-    dlg = SolidInspectorDialog(win.viewport, parent=win)
+    dlg = SolidInspectorDialog(win.viewport)
+    dlg.show()
     names = [dlg._table.item(i, 0).text()
              for i in range(dlg._table.rowCount())]
     assert "Silla" in names and "Silla#2" not in names
@@ -567,7 +576,8 @@ def test_next_problem_on_a_sound_row_returns_none(win):
     g = Group(Mesh(), name="Bien")
     _box(g.mesh)
     win.viewport.scene.groups.append(g)
-    dlg = SolidInspectorDialog(win.viewport, parent=win)
+    dlg = SolidInspectorDialog(win.viewport)
+    dlg.show()
     dlg._table.setCurrentCell(_row(dlg, "Bien"), 0)
     assert dlg.next_problem() is None
     dlg.close()
@@ -660,7 +670,8 @@ def test_walk_and_repair_one_by_one(win):
     scene = vp.scene
     _box(scene.mesh, skip_top=True)
     scene.mesh.add_edge(QVector3D(10, 0, 0), QVector3D(11, 0, 0))
-    dlg = SolidInspectorDialog(vp, parent=win)
+    dlg = SolidInspectorDialog(vp)
+    dlg.show()
     dlg._table.setCurrentCell(0, 0)
     assert dlg._fix_btn.isEnabled() is False   # nothing on screen yet
     assert dlg.next_problem()["kind"] == "open"
@@ -689,7 +700,8 @@ def test_previous_goes_back_and_wraps(win):
     scene = win.viewport.scene
     _box(scene.mesh, skip_top=True)
     scene.mesh.add_edge(QVector3D(10, 0, 0), QVector3D(11, 0, 0))
-    dlg = SolidInspectorDialog(win.viewport, parent=win)
+    dlg = SolidInspectorDialog(win.viewport)
+    dlg.show()
     dlg._table.setCurrentCell(0, 0)
     assert dlg.previous_problem()["kind"] == "stray"   # from the end
     assert dlg.previous_problem()["kind"] == "open"
@@ -701,7 +713,8 @@ def test_unrepairable_problem_is_shown_with_its_reason(win):
     scene = win.viewport.scene
     _box(scene.mesh)
     _box(scene.mesh, x0=2.0, z0=2.0)
-    dlg = SolidInspectorDialog(win.viewport, parent=win)
+    dlg = SolidInspectorDialog(win.viewport)
+    dlg.show()
     dlg._table.setCurrentCell(0, 0)
     assert dlg.next_problem()["kind"] == "over"
     assert dlg._fix_btn.isEnabled() is False
@@ -721,7 +734,8 @@ def test_problem_is_painted_in_its_colour_and_unpainted_on_close(win):
     g.xform = QMatrix4x4()
     g.xform.translate(20.0, 0.0, 0.0)
     vp.scene.groups.append(g)
-    dlg = SolidInspectorDialog(vp, parent=win)
+    dlg = SolidInspectorDialog(vp)
+    dlg.show()
     assert dlg._paint in vp._ext_overlays
     dlg._table.setCurrentCell(_row(dlg, "Rota"), 0)
     dlg.next_problem()
@@ -750,7 +764,8 @@ def test_click_on_a_row_flies_to_that_object(win):
     far.xform = QMatrix4x4()
     far.xform.translate(0.0, 80.0, 0.0)
     vp.scene.groups.append(far)
-    dlg = SolidInspectorDialog(vp, parent=win)
+    dlg = SolidInspectorDialog(vp)
+    dlg.show()
     i = _row(dlg, "Lejana")
     dlg._table.setCurrentCell(i, 0)
     dlg._table.cellClicked.emit(i, 0)
@@ -766,7 +781,8 @@ def test_refresh_does_not_move_the_camera(win):
     g.xform = QMatrix4x4()
     g.xform.translate(0.0, 80.0, 0.0)
     vp.scene.groups.append(g)
-    dlg = SolidInspectorDialog(vp, parent=win)
+    dlg = SolidInspectorDialog(vp)
+    dlg.show()
     dlg._table.setCurrentCell(_row(dlg, "Quieta"), 0)
     before = QVector3D(vp.camera.target)
     dlg.refresh()
@@ -799,7 +815,8 @@ def test_highlight_paints_every_problem_of_a_group_in_its_colour(win):
     g.xform = QMatrix4x4()
     g.xform.translate(40.0, 0.0, 0.0)
     vp.scene.groups.append(g)
-    dlg = SolidInspectorDialog(vp, parent=win)
+    dlg = SolidInspectorDialog(vp)
+    dlg.show()
     dlg._table.setCurrentCell(_row(dlg, "Mezcla"), 0)
     items = dlg.highlight()
     assert sorted(i["kind"] for i in items) == ["open", "stray"]
@@ -822,7 +839,8 @@ def test_highlight_selects_the_problems_of_the_geometry_being_edited(win):
     _box(scene.mesh)
     for f in scene.mesh.faces:
         f.loop.reverse()
-    dlg = SolidInspectorDialog(win.viewport, parent=win)
+    dlg = SolidInspectorDialog(win.viewport)
+    dlg.show()
     dlg._table.setCurrentCell(0, 0)
     items = dlg.highlight()
     assert len(items) == 6 and scene.selection == set(scene.mesh.faces)
@@ -856,6 +874,8 @@ def test_narrow_tab_keeps_object_and_status_and_says_the_rest_below(win):
     assert "4 open borders" in panel._detail.text()
     assert panel._detail.isVisible()
     panel.resize(700, 600)
+    from PySide6.QtTest import QTest
+    QTest.qWait(180)
     assert not any(table.isColumnHidden(c) for c in range(5))
     assert not panel._detail.isVisible()
     panel.close()
@@ -922,6 +942,7 @@ def test_one_click_on_a_broken_object_shows_its_first_problem_ready(win):
     g.xform.translate(0.0, 60.0, 0.0)
     vp.scene.groups.append(g)
     panel = SolidInspectorPanel(vp)
+    panel.show()
     i = _row(panel, "Rota")
     panel._table.setCurrentCell(i, 0)
     panel._table.cellClicked.emit(i, 0)
@@ -941,9 +962,196 @@ def test_one_click_on_a_sound_object_says_so(win):
     _box(g.mesh)
     win.viewport.scene.groups.append(g)
     panel = SolidInspectorPanel(win.viewport)
+    panel.show()
     i = _row(panel, "Sana")
     panel._table.setCurrentCell(i, 0)
     panel._table.cellClicked.emit(i, 0)
     assert panel._current is None and not panel._fix_btn.isEnabled()
     assert "No problems left" in panel._problem_label.text()
+    panel.close()
+
+
+def test_showing_the_tab_again_unchanged_does_not_inspect_again(win, monkeypatch):
+    """Unfolding the sidebar or leaving clean screen shows the tab again:
+    with the model as it was, nothing is inspected again (a large model
+    took seconds each time). A camera move is not a change."""
+    import plugins.solid_inspector as si
+    panel = SolidInspectorPanel(win.viewport)
+    _box(win.viewport.scene.mesh)
+    panel.show()
+    calls = []
+    real = si.inspect_mesh
+    monkeypatch.setattr(si, "inspect_mesh",
+                        lambda m: calls.append(m) or real(m))
+    panel.hide()
+    win.viewport.scene.view_version += 1        # an orbit: view-only bump
+    win.viewport.scene.version += 1
+    panel.show()
+    assert calls == []
+    assert panel._table.item(0, 2).text().startswith("✔")
+    panel.hide()
+    win.viewport.scene.version += 1             # an edit
+    panel.show()
+    assert calls
+    panel.close()
+
+
+def test_a_long_list_keeps_its_fitted_columns(win):
+    """The columns sized to their contents are fixed only while the table
+    fills, and fitted again after."""
+    from PySide6.QtWidgets import QHeaderView
+    panel = SolidInspectorPanel(win.viewport)
+    panel.show()
+    header = panel._table.horizontalHeader()
+    for c in (1, 2, 4):
+        assert header.sectionResizeMode(c) == QHeaderView.ResizeToContents
+    assert panel._table.updatesEnabled()
+    panel.close()
+
+
+@pytest.mark.parametrize("backend", ["python", "store"])
+@pytest.mark.parametrize("edit", ["topology", "attribute", "geometry_version"])
+def test_same_count_group_edit_invalidates_inspection(win, monkeypatch, backend, edit):
+    import plugins.solid_inspector as si
+    from core import mesh as meshes, store_mesh
+    mesh = Mesh()
+    if backend == "store":
+        from core._native import available
+        native = available()
+        assert native is not None and hasattr(native, "MeshStore")
+        store_mesh.become_store(mesh, native.MeshStore(
+            next(meshes._KEY_NAMESPACES), **store_mesh._weld_args()), [])
+    _box(mesh)
+    # Nested meshes matter too, even when the loose mesh never changes.
+    parent = Group(Mesh(), name="Parent")
+    parent.children = [Group(mesh, name="Solid")]
+    win.viewport.scene.groups.append(parent)
+    panel = SolidInspectorPanel(win.viewport)
+    panel.show()
+    before = panel._last_key
+    counts = (len(mesh.vertices), len(mesh.edges), len(mesh.faces))
+    calls = []
+    real = si.inspect_mesh
+    monkeypatch.setattr(si, "inspect_mesh", lambda m: calls.append(m) or real(m))
+    panel.hide()
+    face = mesh.faces[0]
+    if edit == "topology":
+        if backend == "store":
+            # Direct store writes leave the Python mesh revision untouched.
+            revision = mesh.revision
+            mesh._store.reverse_face(face.key)
+            assert mesh.revision == revision
+        else:
+            face.loop.reverse()
+            mesh.mark_modified()
+    elif edit == "attribute":
+        face.interior = True
+        if backend == "python":
+            mesh.bump_revision()
+    else:
+        win.viewport.scene.version += 1
+    assert counts == (len(mesh.vertices), len(mesh.edges), len(mesh.faces))
+    panel.show()
+    assert mesh in calls and panel._last_key != before
+    if edit == "topology":
+        assert panel._rows[1]["report"]["reversed"]
+    if edit == "attribute":
+        assert not panel._rows[1]["report"]["watertight"]
+    panel.close()
+
+
+def test_hidden_panel_defers_construction_and_explicit_refresh(win, monkeypatch):
+    import plugins.solid_inspector as si
+    calls = []
+    real = si.inspect_mesh
+    monkeypatch.setattr(si, "inspect_mesh", lambda m: calls.append(m) or real(m))
+    panel = SolidInspectorPanel(win.viewport)
+    panel.refresh()
+    assert calls == []
+    panel.show()
+    assert len(calls) == 1
+    panel.hide()
+    panel.refresh()
+    panel.refresh()
+    assert len(calls) == 1
+    panel.show()
+    assert len(calls) == 2
+    panel.close()
+
+
+def test_background_dock_tab_defers_inspection(win, monkeypatch):
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QDockWidget, QMainWindow, QLabel
+    from PySide6.QtTest import QTest
+    import plugins.solid_inspector as si
+    host = QMainWindow()
+    dock, other = QDockWidget("Inspector", host), QDockWidget("Other", host)
+    panel = SolidInspectorPanel(win.viewport)
+    panel._dock_visible = False
+    dock.setWidget(panel)
+    other.setWidget(QLabel("Other tab"))
+    dock.visibilityChanged.connect(panel._dock_visibility_changed)
+    host.addDockWidget(Qt.RightDockWidgetArea, dock)
+    host.addDockWidget(Qt.RightDockWidgetArea, other)
+    host.tabifyDockWidget(dock, other)
+    host.show()
+    other.raise_()
+    QTest.qWait(180)
+    assert panel._dock_visible is False
+    calls = []
+    real = si.inspect_mesh
+    monkeypatch.setattr(si, "inspect_mesh", lambda m: calls.append(m) or real(m))
+    _box(win.viewport.scene.mesh)
+    panel.refresh()
+    QTest.qWait(180)
+    assert calls == []
+    dock.raise_()
+    QTest.qWait(180)
+    assert len(calls) == 1
+    panel.close()
+    host.close()
+
+
+def test_splitter_resizes_defer_layout_and_refresh_until_settled(win, monkeypatch):
+    from PySide6.QtTest import QTest
+    import plugins.solid_inspector as si
+    panel = SolidInspectorPanel(win.viewport)
+    panel.show()
+    QTest.qWait(180)
+    calls, fits = [], []
+    real, fit = si.inspect_mesh, panel._fit_columns
+    monkeypatch.setattr(si, "inspect_mesh", lambda m: calls.append(m) or real(m))
+    monkeypatch.setattr(panel, "_fit_columns", lambda: fits.append(1) or fit())
+    for width in (620, 640, 660):
+        panel.resize(width, 650)
+        panel.refresh()
+        QTest.qWait(20)
+    assert calls == [] and fits == []
+    QTest.qWait(180)
+    assert len(calls) == 1 and len(fits) == 1
+    panel.close()
+
+
+def test_fitted_columns_are_suspended_during_row_insertion(win, monkeypatch):
+    from PySide6.QtWidgets import QHeaderView
+    panel = SolidInspectorPanel(win.viewport)
+    for i in range(20):
+        win.viewport.scene.groups.append(Group(Mesh(), name=str(i)))
+    table = panel._table
+    original = table.setItem
+    inserted = []
+
+    def insert(row, col, item):
+        assert not table.updatesEnabled()
+        assert all(table.horizontalHeader().sectionResizeMode(c)
+                   != QHeaderView.ResizeToContents for c in (1, 2, 4))
+        inserted.append((row, col))
+        original(row, col, item)
+
+    monkeypatch.setattr(table, "setItem", insert)
+    panel.show()
+    assert len(inserted) == 105
+    assert table.updatesEnabled()
+    assert all(table.horizontalHeader().sectionResizeMode(c)
+               == QHeaderView.ResizeToContents for c in (1, 2, 4))
     panel.close()
