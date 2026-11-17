@@ -17,7 +17,7 @@ from core.layers import Layer
 from core.materials import Material
 from core.kept_components import definitions_of
 from core.bim_registry import get
-from formats.rfa import apply_payload, read_rfa, RfaImport
+from formats.rfa import apply_payload, read_rfa, RfaImport, ZONE_TAG_KEY
 
 _app = QApplication.instance() or QApplication([])
 
@@ -40,7 +40,8 @@ def payload():
 
 def test_mapping():
     scene = Scene()
-    scene.layers.append(Layer('Clearance zones', key='stable-zone-id'))
+    # The zone tag is found by its key, whatever the user renamed it to.
+    scene.layers.append(Layer('Dégagements', key=ZONE_TAG_KEY))
     scene.materials['Steel'] = Material('Steel', (250/255, 243/255, 227/255))
     data = payload()
     original = deepcopy(data)
@@ -58,7 +59,8 @@ def test_mapping():
     assert len(solid.children) == 2
     assert [g.hidden for g in solid.children] == [False, True]
     assert len(solid.children[0].mesh.faces) == 2
-    assert zone.layer == zone.children[0].layer == 'stable-zone-id'
+    assert zone.layer == zone.children[0].layer == ZONE_TAG_KEY
+    assert [ly.key for ly in scene.layers].count(ZONE_TAG_KEY) == 1
     assert zone.children[0].material['opacity'] == .2
     assert len(scene.materials) == 2
     assert solid.children[0].material['color'] == pytest.approx((250/255, 243/255, 227/255))

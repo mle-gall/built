@@ -9,7 +9,7 @@ import math
 
 from PySide6.QtGui import QMatrix4x4, QVector3D
 
-from core.group import Group, new_uid
+from core.group import Group
 from core.history import SnapshotImport, SetRegistryCommand
 from core.i18n import tr
 from core.kept_components import place_copy
@@ -24,6 +24,40 @@ def read_rfa(path):
     except ImportError as exc:
         raise RuntimeError(tr('The Revit family reader is not built. Run scripts/build_native.sh.')) from exc
     return json.loads(reader.read_family(str(path)))
+
+
+#: The "Clearance zones" tag's key: every .rfa import puts zones on it.
+ZONE_TAG_KEY = 'rfa-clearance-zones'
+
+
+def _triangle_mesh(positions, indices):
+    """One Mesh from a part's triangles, welded and with the seams between
+    coplanar or gently curved triangles softened, as the glTF import does."""
+    import numpy as np
+    from core.mesh import Mesh
+    from formats.fuse import soften_smooth_edges
+    try:
+        pts = np.asarray(positions, dtype=np.float64).reshape(-1, 3)
+        idx = np.asarray(indices, dtype=np.int64).reshape(-1, 3)
+    except (ValueError, TypeError) as exc:
+        raise ValueError(tr('Invalid Revit triangle mesh.')) from exc
+    if not np.isfinite(pts).all():
+        raise ValueError(tr('Invalid Revit triangle mesh.'))
+    if len(idx) and (idx.min() < 0 or idx.max() >= len(pts)):
+        raise ValueError(tr('Invalid Revit triangle index.'))
+    tri = pts[idx]
+    # Drop degenerate triangles (Revit's tessellation leaves a few slivers).
+    area2 = np.linalg.norm(np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0]), axis=1)
+    tri = tri[area2 > 1e-12]
+    mesh = Mesh()
+    if not len(tri):
+        return mesh
+    vobjs, inverse = mesh.bulk_weld(tri.reshape(-1, 3))
+    n = len(tri)
+    mesh.add_faces_welded(vobjs, inverse, np.full(n, 3, dtype=np.int64),
+                          np.ones(n, dtype=np.int64), [None] * n)
+    soften_smooth_edges(mesh)
+    return mesh
 
 
 def _property(parameter):
@@ -77,7 +111,7 @@ def apply_payload(scene, payload):
     family, source = payload.get('family', {}), payload.get('source', {})
     materials = {}
     for key, raw in payload.get('materials', {}).items():
-        mat = Material(raw['name'], tuple(v / 255.0 for v in raw['rgb']),
+        mat = Material(raw['name'], tuple(v / 255.0 for v in (raw.get('rgb') or (180, 180, 180))),
                        opacity=(1.0 - float(raw['transparency'])) if raw.get('transparency') else None)
         materials[key] = scene.materials[register(scene.materials, mat)]
     zone_layer = None
@@ -85,9 +119,10 @@ def apply_payload(scene, payload):
     def clearance():
         nonlocal zone_layer
         if zone_layer is None:
-            zone_layer = next((ly for ly in scene.layers if ly.name == 'Clearance zones'), None)
+            # Found again by its key, so renaming the tag keeps it in use.
+            zone_layer = next((ly for ly in scene.layers if ly.key == ZONE_TAG_KEY), None)
             if zone_layer is None:
-                zone_layer = Layer('Clearance zones', key=new_uid())
+                zone_layer = Layer(tr('Clearance zones'), key=ZONE_TAG_KEY)
                 scene.layers.append(zone_layer)
         return zone_layer.key
 
@@ -129,15 +164,7 @@ def apply_payload(scene, payload):
                 if part.get('zone'):
                     g.layer = clearance()
                 g.ext = {'rfa': {'solid': part['solid'], 'style': deepcopy(payload.get('styles', {}).get(part.get('style')))}}
-                positions, indices = part['positions'], part['indices']
-                if len(positions) % 3 or len(indices) % 3 or not all(math.isfinite(v) for v in positions):
-                    raise ValueError(tr('Invalid Revit triangle mesh.'))
-                points = [QVector3D(*positions[i:i + 3]) for i in range(0, len(positions), 3)]
-                for i in range(0, len(indices), 3):
-                    tri = indices[i:i + 3]
-                    if any(not isinstance(j, int) or j < 0 or j >= len(points) for j in tri):
-                        raise ValueError(tr('Invalid Revit triangle index.'))
-                    g.mesh.add_face([points[j] for j in tri])
+                g.mesh = _triangle_mesh(part['positions'], part['indices'])
                 grouped.setdefault(part['solid'], []).append(g)
             for solid_id, parts in grouped.items():
                 solid = Group(name=parts[0].name)
