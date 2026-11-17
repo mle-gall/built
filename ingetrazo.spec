@@ -154,6 +154,11 @@ import importlib.util as _ilu
 hiddenimports += ['core._native']
 if _ilu.find_spec('ingetrazo_core') is not None:
     hiddenimports += ['ingetrazo_core']
+# Revit family import (File > Import > Revit family): formats.rfa loads the
+# native reader through importlib, which static analysis cannot follow.
+hiddenimports += ['formats.rfa']
+if _ilu.find_spec('ingetrazo_rfa') is not None:
+    hiddenimports += collect_submodules('ingetrazo_rfa')
 # macOS releases must carry the Metal extension; fail packaging if the build
 # step was skipped. Other platforms keep the optional OpenGL-only package.
 hiddenimports += ['core.renderer_settings']
