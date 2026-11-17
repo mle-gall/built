@@ -17,4 +17,15 @@ if [[ "$(uname -s)" == Darwin ]]; then
     ./$venv/bin/python -m pip install --quiet --force-reinstall --no-deps "$out"/ingetrazo_render-*.whl
     ./$venv/bin/python -c "import ingetrazo_render"
 fi
+# Revit family reader: needs the rvt-rs checkout beside this repository
+# (../rvt-rs, branch ingetrazo/rfa-family). Without it .rfa import reports
+# the reader missing.
+if [[ -d ../rvt-rs ]]; then
+    ./$venv/bin/maturin build --release --features extension-module \
+        -m rust/ingetrazo_rfa/Cargo.toml -o "$out"
+    ./$venv/bin/python -m pip install --quiet --force-reinstall --no-deps "$out"/ingetrazo_rfa-*.whl
+    ./$venv/bin/python -c "import ingetrazo_rfa"
+else
+    echo "skipping ingetrazo_rfa: no ../rvt-rs checkout" >&2
+fi
 INGETRAZO_RUST=1 ./$venv/bin/python -m pytest -q tests/test_rust_engine_switch.py
