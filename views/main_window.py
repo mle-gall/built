@@ -4122,6 +4122,9 @@ class MainWindow(WorksessionMixin, QMainWindow):
              tr("Bring another IngeTrazo document in as one component, "
                 "placed with a click."),
              self._on_import_igz),
+            (tr("Revit family (.rfa)…"),
+             tr("Bring in Revit family types, materials and parameters."),
+             self._on_import_rfa),
             (tr("SKP (.skp)…"),
              tr("Bring in a .skp model with its groups, materials and "
                 "textures."),
@@ -7837,7 +7840,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
     # ---- every project closed: the empty area (views/empty_area.py) --------
     #: What a file dropped on the empty area may be, besides an extension's
     #: own types (``open_path``).
-    OPENABLE = (".igz", ".dae", ".skp", ".dxf", ".dwg")
+    OPENABLE = (".igz", ".dae", ".skp", ".rfa", ".dxf", ".dwg")
 
     def _openable_suffixes(self) -> tuple:
         extra = tuple(s for s in getattr(self, "file_openers", {})
@@ -8944,6 +8947,8 @@ class MainWindow(WorksessionMixin, QMainWindow):
 
     def _open_path_here(self, path: Path, suffix: str) -> bool:
         """Read ``path`` into the project in front (see :meth:`open_path`)."""
+        if suffix == ".rfa":
+            return self._import_rfa_path(path)
         if suffix == ".dae":
             return self._import_dae_path(path)
         if suffix == ".skp":
@@ -9863,7 +9868,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
                 pass
         cb(1.0, "Done")
 
-    def _run_import(self, load, dlg, title: str, describe=str):
+    def _run_import(self, load, dlg, title: str, describe=str, command_type=SnapshotImport):
         """``load(scene)`` as one undo step. Returns the command, or ``None``
         when it failed: the failure has been shown (``describe`` makes its
         text) and the project is as it was.
@@ -9881,7 +9886,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
                 failure.append(exc)
                 raise               # history.execute rolls back and keeps it
 
-        cmd = SnapshotImport(guarded)
+        cmd = command_type(guarded)
         was_clean = not self._is_dirty()
         try:
             self.viewport.history.execute(cmd)
@@ -9895,6 +9900,35 @@ class MainWindow(WorksessionMixin, QMainWindow):
         self._update_title()
         QMessageBox.critical(self, title, describe(failure[0]))
         return None
+
+    def _on_import_rfa(self) -> None:
+        path, _ = file_dialogs.getOpenFileName(
+            self, tr("Import Revit family"), "",
+            tr("Revit family (*.rfa);;All files (*)"))
+        if path:
+            self._import_rfa_path(Path(path))
+
+    def _import_rfa_path(self, path: Path) -> bool:
+        from formats.rfa import RfaImport, apply_payload, read_rfa
+        dlg, cb = self._import_progress(tr("Importing {name}…", name=path.name))
+        report = []
+
+        def load(scene):
+            report.extend(apply_payload(scene, read_rfa(path)))
+
+        cmd = self._run_import(load, dlg, tr("Import Revit family failed"),
+                               command_type=RfaImport)
+        if cmd is None:
+            return False
+        self._prepare_import_display(cmd, cb)
+        dlg.close()
+        self.viewport.update()
+        self._import_name = path.name
+        self._update_title()
+        self._report_import(path.name)
+        if report:
+            QMessageBox.information(self, tr("Revit family import report"), "\n".join(report))
+        return True
 
     def _on_import_dae(self) -> None:
         path_str, _ = file_dialogs.getOpenFileName(

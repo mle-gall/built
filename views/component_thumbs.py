@@ -107,6 +107,17 @@ def _rgb(attrs, inherited):
 def thumbnail(definition, size: int = SIZE) -> QPixmap:
     """The icon for ``definition`` (a component instance or a kept
     template), from the cache when nothing it shows has changed."""
+    # Imported family previews survive save/load in the definition extension.
+    encoded = (getattr(definition, "ext", None) or {}).get("rfa", {}).get("preview_png_base64")
+    if encoded:
+        import base64
+        import binascii
+        try:
+            pm = QPixmap()
+            if pm.loadFromData(base64.b64decode(encoded, validate=True), "PNG"):
+                return pm.scaled(size, size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        except (ValueError, TypeError, binascii.Error):
+            pass  # Invalid preview: use the geometry thumbnail below.
     sig = _signature(definition)
     key = (sig[0][0], size)
     hit = _cache.get(key)
