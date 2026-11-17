@@ -707,3 +707,43 @@ def test_an_edit_keeps_the_container_boxes_it_did_not_touch():
     tracker.added = 1                       # a new row may sit in any container
     WgpuView._keep_container_boxes(view, tracker, np.array([0]), boxes, rows)
     assert view._container_boxes == {}
+
+
+def test_draw_snapshot_and_guides_do_not_scan_unrelated_placements(monkeypatch):
+    from core.history import History, SnapshotCompound, AddEdgeCommand, AddGuideCommand
+    from core.guide import Guide
+    scene, updates = fixture_scene()
+    history = History(scene)
+    updates.observe(history)
+    scene.begin_group_edit(scene.groups[0])
+    updates.remember_edit_path()
+    updates.apply(*updates.diff(scene))
+    original = __import__('views.wgpu_updates', fromlist=['_placement_records'])._placement_records
+
+    def bounded(scene, roots, *args):
+        roots = list(roots)
+        assert not roots, 'small edit traversed unrelated placements'
+        return original(scene, roots, *args)
+
+    monkeypatch.setattr('views.wgpu_updates._placement_records', bounded)
+    for command in (SnapshotCompound([AddEdgeCommand(QVector3D(8, 0, 0), QVector3D(9, 0, 0))]),
+                    AddGuideCommand(Guide(QVector3D(), QVector3D(1, 0, 0)))):
+        history.execute(command)
+        assert history.last_error is None
+        for action in (None, history.undo, history.redo):
+            if action:
+                action()
+            updates.apply(*updates.diff(scene))
+            assert updates.last_local
+            assert_matches_fresh_pack(updates, scene)
+
+
+def test_new_default_layer_does_not_change_resident_paint_key():
+    from core.layers import Layer
+    from views.wgpu_view import _paint_key
+    scene = Scene()
+    before = _paint_key(scene)
+    scene.layers.append(Layer('Guides'))
+    assert _paint_key(scene) == before
+    scene.layers[-1].opacity = .5
+    assert _paint_key(scene) != before

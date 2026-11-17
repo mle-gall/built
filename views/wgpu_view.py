@@ -22,7 +22,9 @@ def _paint_key(scene):
             bool(getattr(scene, 'show_hidden_objects', False)), tuple(
         (ly.key, tuple(layer_color(ly)) if by_layer else None,
          float(getattr(ly, 'opacity', 1.0)), bool(getattr(ly, 'locked', False)))
-        for ly in getattr(scene, 'layers', ())))
+        for ly in getattr(scene, 'layers', ())
+        if by_layer or float(getattr(ly, 'opacity', 1.0)) != 1.0
+        or bool(getattr(ly, 'locked', False))))
 
 
 class WgpuView(QWidget):
@@ -135,6 +137,8 @@ class WgpuView(QWidget):
         self.scene = scene
         allowed = getattr(scene, '_navigator_allowed', None)
         version, stack, _, similar, layers = scene._bounds_key()
+        # A new visible layer (e.g. the first guide) changes no resident row.
+        layers = tuple((key, visible) for key, visible in layers if not visible)
         token = (id(scene), (version - scene._placement_context_bumps,
                              stack if similar else (), similar, layers),
                  None if allowed is None else frozenset(allowed))
