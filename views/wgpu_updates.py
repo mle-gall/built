@@ -101,9 +101,10 @@ class InstanceUpdates:
         def after(command, phase, ran):
             from core.history import (MoveGroupCommand, CompoundCommand, SetRecordCommand,
                                       SetRegistryCommand, InsertGroupCommand, DeleteGroupCommand,
-                                      SnapshotMutation, MoveVerticesCommand, AddEdgeCommand,
+                                      SnapshotMutation, SnapshotCompound, MoveVerticesCommand, AddEdgeCommand,
                                       AddFaceCommand, EraseSelectionCommand, HideCommand, AssignLayerCommand,
-                                      ReshareInstanceCommand)
+                                      ReshareInstanceCommand, AddGuideCommand, ChangeGuideCommand,
+                                      DeleteGuidesCommand, MoveGuidesCommand, RotateGuidesCommand)
             def visit(command):
                 from core.history import (SetFaceTextureCommand, SetFaceBackCommand,
                                           SetFaceColorCommand, SetFaceOpacityCommand)
@@ -133,7 +134,7 @@ class InstanceUpdates:
                     return False
                 if isinstance(command, CompoundCommand):
                     return all(visit(c) for c in command.commands)
-                if isinstance(command, (SnapshotMutation, MoveVerticesCommand,
+                if isinstance(command, (SnapshotMutation, SnapshotCompound, MoveVerticesCommand,
                                         AddEdgeCommand, AddFaceCommand, EraseSelectionCommand)):
                     mesh = command._target(self.scene) if isinstance(command, SnapshotMutation) else self.scene.mesh
                     old = self.meshes.get(id(mesh))
@@ -171,7 +172,9 @@ class InstanceUpdates:
                 if isinstance(command, MoveGroupCommand) and command.group in self.roots:
                     self.pending.add(command.group)
                     return True
-                return isinstance(command, (SetRecordCommand, SetRegistryCommand))
+                return isinstance(command, (SetRecordCommand, SetRegistryCommand,
+                                            AddGuideCommand, ChangeGuideCommand, DeleteGuidesCommand,
+                                            MoveGuidesCommand, RotateGuidesCommand))
             self.journal_valid = self.journal_valid and ran and visit(command)
             self.version = _resident_version(self.scene)
         self.unsubscribe = history.add_listener(before=before, after=after)

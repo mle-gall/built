@@ -396,3 +396,25 @@ def test_the_automatic_layers_take_the_interface_language():
         assert layer_of(scene.text_labels[-1]) == "Textos"
     finally:
         set_language(before)
+
+
+def test_active_layer_small_edits_never_walk_existing_groups(monkeypatch):
+    from core.history import AddEdgeCommand, SnapshotCompound
+    scene = _scene_with('Work')
+    L.set_active(scene, 'Work')
+    history = History(scene)
+    from core.purge import iter_groups
+    def bounded(groups):
+        assert not groups, 'per-edit scan of existing groups'
+        return iter_groups(groups)
+    # A sentinel group makes the old all-document path fail regardless of speed.
+    from core.group import Group
+    scene.groups.append(Group(name='unrelated'))
+    monkeypatch.setattr('core.purge.iter_groups', bounded)
+    for command in (SnapshotCompound([AddEdgeCommand(V(0, 0, 0), V(1, 0, 0))]),
+                    AddGuideCommand(Guide(V(0, 0, 0)))):
+        history.execute(command)
+        assert history.last_error is None
+        assert history.undo()
+        assert history.redo()
+    assert layer_of(scene.guides[-1]) == 'Work'

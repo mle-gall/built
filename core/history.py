@@ -345,10 +345,12 @@ class History:
                   extra=type(cmd).__name__)
         self.last_rejected = None
         before = getattr(self.scene, "content_version", None)
-        objs_before = self._objects_before()
+        # Geometry-only commands cannot create groups, even on an active tag.
+        include_groups = not cmd.keeps_rows
+        objs_before = self._objects_before(include_groups=include_groups)
         try:
             cmd.do(self.scene)
-            self._tag_new_objects(objs_before)
+            self._tag_new_objects(objs_before, include_groups=include_groups)
         except CommandRejected as exc:
             self.scene.mesh.restore_state(snapshot)
             self.scene.version += 1
@@ -428,15 +430,16 @@ class History:
             return False
         cmd = self.redo_stack.pop()
         before = getattr(self.scene, "content_version", None)
-        objs_before = self._objects_before()
+        include_groups = not cmd.keeps_rows
+        objs_before = self._objects_before(include_groups=include_groups)
         self._in_command_mesh(cmd, lambda: cmd.do(self.scene))
         self._keep_paint_cv(cmd, before)
-        self._tag_new_objects(objs_before)
+        self._tag_new_objects(objs_before, include_groups=include_groups)
         self.undo_stack.append(cmd)
         self._rebind_dimensions()
         return True
 
-    def _objects_before(self):
+    def _objects_before(self, *, include_groups=True):
         """The objects in the document before a command runs. With no
         layer active only the guides, dimensions and texts (they go to
         their automatic layers), so the default case never walks the
@@ -445,9 +448,9 @@ class History:
                                  object_ids)
         if active_layer(self.scene) == DEFAULT_LAYER:
             return auto_ids(self.scene)
-        return object_ids(self.scene)
+        return object_ids(self.scene, include_groups=include_groups)
 
-    def _tag_new_objects(self, before) -> None:
+    def _tag_new_objects(self, before, *, include_groups=True) -> None:
         """The objects a command made go onto the active layer
         (core.layers) — groups, components, dimensions and texts; loose
         lines and faces stay on the default layer, so hiding a layer never
@@ -455,9 +458,11 @@ class History:
         gets it without knowing about layers."""
         if before is None:
             return
-        from core.layers import tag_new_objects
-        if tag_new_objects(self.scene, before):
-            _dirty_group_chunks(self.scene)
+        from core.layers import tag_new_objects, active_layer, DEFAULT_LAYER
+        if tag_new_objects(self.scene, before, include_groups=include_groups):
+            # Automatic tags only touch annotations, never group geometry.
+            if include_groups and active_layer(self.scene) != DEFAULT_LAYER:
+                _dirty_group_chunks(self.scene)
             self.scene.version += 1
 
     def _in_command_mesh(self, cmd, fn) -> None:
@@ -2037,6 +2042,7 @@ class MoveGuidesCommand(Command):
     its ``origin`` along, so the dashed segment it draws keeps its shape."""
 
     keeps_paint = True
+    keeps_rows = True
 
     def __init__(self, guides, delta) -> None:
         self._guides = list(guides)
@@ -2065,6 +2071,9 @@ class RotateGuidesCommand(Command):
     tool, #627): the point orbits, a line's direction turns, a guide
     point's ``origin`` orbits with it. Undo puts back the exact values from
     before, so a turn and its undo never drift."""
+
+    keeps_paint = True
+    keeps_rows = True
 
     def __init__(self, guides, centre: QVector3D, axis: QVector3D,
                  deg: float) -> None:
@@ -2208,6 +2217,9 @@ class DeleteTextLabelsCommand(Command):
 
 class AddGuideCommand(Command):
     """Add a construction guide (Tape Measure) to ``scene.guides``."""
+
+    keeps_paint = True
+    keeps_rows = True
 
     def __init__(self, guide) -> None:
         self.guide = guide
@@ -2660,6 +2672,9 @@ class ChangeGuideCommand(Command):
     """Re-aim an existing guide line (Protractor hot retype: after the guide
     is created, a typed angle updates it until the next click/command)."""
 
+    keeps_paint = True
+    keeps_rows = True
+
     def __init__(self, guide, direction) -> None:
         self.guide = guide
         self.new = QVector3D(direction).normalized()
@@ -2677,6 +2692,9 @@ class ChangeGuideCommand(Command):
 
 class DeleteGuidesCommand(Command):
     """Remove construction guides (the Eraser, or Edit ▸ Delete Guides)."""
+
+    keeps_paint = True
+    keeps_rows = True
 
     def __init__(self, guides) -> None:
         self._guides = list(guides)
@@ -4168,6 +4186,8 @@ class SnapshotCompound(Command):
     ``heal=False`` preserves supplied copy topology instead of applying
     drawing-specific global face cleanup.
     """
+
+    keeps_rows = True
 
     def __init__(self, inner: Iterable[Command], *, heal: bool = True) -> None:
         self.inner = list(inner)

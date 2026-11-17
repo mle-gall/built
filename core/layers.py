@@ -1728,14 +1728,16 @@ def _release_active(scene) -> bool:
     return False
 
 
-def object_ids(scene) -> set:
+def object_ids(scene, *, include_groups=True) -> set:
     """Identity of every object in the document — groups and components at
     any depth (by ``id`` and by ``uid``), dimensions, leader texts,
     guides. Compared before and after a command to find what it created
-    (:func:`tag_new_objects`)."""
+    (:func:`tag_new_objects`). Geometry-only commands pass
+    ``include_groups=False``: no group can be created by those edits."""
     from core.purge import iter_groups
     ids: set = set()
-    for g in iter_groups(getattr(scene, "groups", None) or ()):
+    groups = (getattr(scene, "groups", None) or ()) if include_groups else ()
+    for g in iter_groups(groups):
         ids.add(id(g))
         if getattr(g, "uid", None):
             ids.add(g.uid)
@@ -1800,7 +1802,7 @@ def _tag_automatic(scene, before: set) -> int:
     return n
 
 
-def tag_new_objects(scene, before: set) -> int:
+def tag_new_objects(scene, before: set, *, include_groups=True) -> int:
     """Put the objects a command created on the active layer.
 
     A group, a component, a dimension, a leader text or a guide made while
@@ -1817,7 +1819,8 @@ def tag_new_objects(scene, before: set) -> int:
         return _tag_automatic(scene, before)
     # A copy that REPLACES an object (Make Unique, Replace Component…)
     # keeps its uid: that one is not new, and keeps the layer it had.
-    fresh = [g for g in iter_groups(getattr(scene, "groups", None) or ())
+    groups = (getattr(scene, "groups", None) or ()) if include_groups else ()
+    fresh = [g for g in iter_groups(groups)
              if id(g) not in before
              and getattr(g, "uid", None) not in before]
     # Only the outermost new objects: a new group's own children keep
