@@ -45,7 +45,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QColor, QVector3D
 from PySide6.QtWidgets import (
     QFrame,
@@ -682,8 +682,13 @@ class SolidInspectorPanel(QWidget):
         self._painted_matrix = None
         self._filling = False          # refresh() is rebuilding the table
         self.setWindowTitle(tr("Solid Inspector"))
+        self._refresh_pending = True
+        self._dock_visible = None
+        self._resize_timer = QTimer(self)
+        self._resize_timer.setSingleShot(True)
+        self._resize_timer.setInterval(120)
+        self._resize_timer.timeout.connect(self._settled)
         self._build_ui()
-        self.refresh()
         overlays = getattr(viewport, "_ext_overlays", None)
         if overlays is not None:
             overlays.append(self._paint)
@@ -699,11 +704,56 @@ class SolidInspectorPanel(QWidget):
     def showEvent(self, event) -> None:  # noqa: N802 — Qt override
         # The tab brought forward: the model may have changed meanwhile.
         super().showEvent(event)
-        self.refresh()
+        self._fit_columns()
+        self._refresh_if_needed()
+
+    def _visible(self):
+        # Tabified docks can keep their child visible while another tab
+        # covers it. QDockWidget.visibilityChanged reports that distinction.
+        return self.isVisible() and self._dock_visible is not False
+
+    def _dock_visibility_changed(self, visible):
+        self._dock_visible = visible
+        if visible:
+            self._refresh_if_needed()
+        else:
+            self._resize_timer.stop()
+            self._let_go()
+
+    def _refresh_if_needed(self):
+        if (self._visible() and not self._resize_timer.isActive()
+                and (self._refresh_pending
+                     or self._inspected_key() != getattr(self, "_last_key", None))):
+            self.refresh()
+
+    def _inspected_key(self):
+        """Geometry/context plus every inspected mesh's mutation token.
+
+        History.rows_cv deliberately ignores some edits; it is not a solid
+        validity token. Store writes can also bypass Mesh.revision entirely.
+        Walk objects, never their elements, to detect same-count edits.
+        """
+        scene = self._viewport.scene
+
+        def mesh_key(mesh):
+            store = mesh.__dict__.get("_store")
+            return (id(mesh), mesh.revision,
+                    (id(store), store.lineage, store.revision)
+                    if store is not None else None,
+                    len(mesh.vertices), len(mesh.edges), len(mesh.faces))
+
+        rows = [(mesh_key(scene.mesh),)]
+        for row in _group_rows(scene):
+            matrix = row["matrix"]
+            rows.append((mesh_key(row["mesh"]), row["name"],
+                         tuple(matrix.data()) if matrix is not None else None))
+        return (id(scene), scene.geometry_version, id(scene.edit_group),
+                len(scene.groups), tuple(rows))
 
     def hideEvent(self, event) -> None:  # noqa: N802 — Qt override
         # Another tab in front: the colours of a panel nobody sees would
         # only puzzle.
+        self._resize_timer.stop()
         self._let_go()
         super().hideEvent(event)
 
@@ -716,7 +766,13 @@ class SolidInspectorPanel(QWidget):
 
     def resizeEvent(self, event) -> None:  # noqa: N802 — Qt override
         super().resizeEvent(event)
-        self._fit_columns()
+        if self._visible():
+            self._resize_timer.start()
+
+    def _settled(self):
+        if self._visible():
+            self._fit_columns()
+            self._refresh_if_needed()
 
     def _fit_columns(self) -> None:
         wide = self.width() >= self.WIDE
@@ -888,6 +944,9 @@ class SolidInspectorPanel(QWidget):
     def refresh(self) -> None:
         """Inspect everything again. The problem on screen is let go: what
         it pointed at may have changed."""
+        self._refresh_pending = True
+        if not self._visible() or self._resize_timer.isActive():
+            return
         scene = self._viewport.scene
         current = self._selected_row()
         current_name = current["name"] if current else None
@@ -913,35 +972,49 @@ class SolidInspectorPanel(QWidget):
 
         table = self._table
         self._filling = True
-        table.setRowCount(len(self._rows))
-        ok, bad = _OK, _BAD
-        solids = problems = 0
-        from core.units import fmt_volume
-        for i, row in enumerate(self._rows):
-            rep = row["report"]
-            table.setItem(i, 0, QTableWidgetItem(row["name"]))
-            table.setItem(i, 1, QTableWidgetItem(f"{rep['faces']:,}"))
-            if not rep["faces"] and not rep["edges"]:
-                status = QTableWidgetItem(tr("(empty)"))
-            elif is_sound(rep):
-                status = QTableWidgetItem("✔ " + tr("watertight"))
-                status.setForeground(ok)
-                solids += 1
-            else:
-                status = QTableWidgetItem(
-                    "✘ " + (tr("faces reversed") if rep["watertight"]
-                            else tr("not watertight")))
-                status.setForeground(bad)
-                problems += 1
-            table.setItem(i, 2, status)
-            table.setItem(i, 3, QTableWidgetItem(_problem_text(rep)))
-            vol = (fmt_volume(rep['volume'])
-                   if rep["volume"] is not None else "—")
-            table.setItem(i, 4, QTableWidgetItem(vol))
-        names = [r["name"] for r in self._rows]
-        if current_name in names:
-            table.setCurrentCell(names.index(current_name), 0)
-        self._filling = False
+        # A column sized to its contents re-measures every row on each
+        # setItem: thousands of rows took ~30 s. Fixed while filling, then
+        # one measuring pass at the end.
+        header = table.horizontalHeader()
+        fitted = [c for c in range(table.columnCount())
+                  if header.sectionResizeMode(c) == QHeaderView.ResizeToContents]
+        for c in fitted:
+            header.setSectionResizeMode(c, QHeaderView.Interactive)
+        table.setUpdatesEnabled(False)
+        try:
+            table.setRowCount(len(self._rows))
+            ok, bad = _OK, _BAD
+            solids = problems = 0
+            from core.units import fmt_volume
+            for i, row in enumerate(self._rows):
+                rep = row["report"]
+                table.setItem(i, 0, QTableWidgetItem(row["name"]))
+                table.setItem(i, 1, QTableWidgetItem(f"{rep['faces']:,}"))
+                if not rep["faces"] and not rep["edges"]:
+                    status = QTableWidgetItem(tr("(empty)"))
+                elif is_sound(rep):
+                    status = QTableWidgetItem("✔ " + tr("watertight"))
+                    status.setForeground(ok)
+                    solids += 1
+                else:
+                    status = QTableWidgetItem(
+                        "✘ " + (tr("faces reversed") if rep["watertight"]
+                                else tr("not watertight")))
+                    status.setForeground(bad)
+                    problems += 1
+                table.setItem(i, 2, status)
+                table.setItem(i, 3, QTableWidgetItem(_problem_text(rep)))
+                vol = (fmt_volume(rep['volume'])
+                       if rep["volume"] is not None else "—")
+                table.setItem(i, 4, QTableWidgetItem(vol))
+            names = [r["name"] for r in self._rows]
+            if current_name in names:
+                table.setCurrentCell(names.index(current_name), 0)
+        finally:
+            for c in fitted:
+                header.setSectionResizeMode(c, QHeaderView.ResizeToContents)
+            table.setUpdatesEnabled(True)
+            self._filling = False
 
         self._summary.setText(
             tr("{ok} watertight solids, {bad} with problems",
@@ -955,6 +1028,8 @@ class SolidInspectorPanel(QWidget):
         self._painted = []
         self._show_label()
         self._show_detail()
+        self._last_key = self._inspected_key()
+        self._refresh_pending = False
         self._viewport.update()
 
     # ---- Highlight ---------------------------------------------------------
@@ -1289,7 +1364,7 @@ class SolidInspectorTool(Tool):
             if show is not None:
                 show(dock, True)
             dock.raise_()
-            panel.refresh()
+            panel._refresh_if_needed()
             return
         if panel is None or not panel.isVisible():
             panel = SolidInspectorPanel(viewport, parent=window)
@@ -1335,6 +1410,8 @@ def setup(app) -> None:
     panel = SolidInspectorPanel(app.viewport)
     dock = app.add_panel(tr("Solid Inspector"), panel,
                          icon="panel_solid_inspector")
+    panel._dock_visible = dock.isVisible()
+    dock.visibilityChanged.connect(panel._dock_visibility_changed)
     app.window._solid_inspector = panel
     app.window._solid_inspector_dock = dock
     # Once the window has restored the saved layout (after every setup).
