@@ -1,0 +1,178 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+import base64
+from copy import deepcopy
+import json
+import os
+import sys
+from types import SimpleNamespace
+
+os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
+import pytest
+from PySide6.QtCore import QByteArray, QBuffer, QIODevice
+from PySide6.QtGui import QImage, QVector3D
+from PySide6.QtWidgets import QApplication
+
+from core.scene import Scene
+from core.layers import Layer
+from core.materials import Material
+from core.kept_components import definitions_of
+from core.bim_registry import get
+from formats.rfa import apply_payload, read_rfa, RfaImport
+
+_app = QApplication.instance() or QApplication([])
+
+
+def payload():
+    part = dict(solid=112, material='steel', style='clear', hidden=False, zone=False,
+                positions=[0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0], indices=[0, 1, 2, 0, 2, 3])
+    return {'schema': 'ingetrazo.rfa/1', 'source': {'file_name': 'cabinet.rfa'},
+            'family': {'name': 'Cabinet', 'category': 'Electrical Equipment', 'omniclass': '23.80.30.11.17'},
+            'materials': {'steel': {'name': 'Steel', 'rgb': [250, 243, 227], 'transparency': 0}},
+            'styles': {'clear': {'subcategory': 'Clearance'}},
+            'geometries': {'g': {'label': 'Cabinet', 'parts': [part, dict(part, hidden=True), dict(part, solid=113, zone=True)]}},
+            'types': [{'name': 'Standard', 'parameters': [{'name': 'Manufacturer', 'value': 'Schneider', 'kind': 'Text', 'units': None}],
+                       'components': [{'geometry': 'g', 'transform': [0, -1, 0, 2, 1, 0, 0, 3, 0, 0, 1, 4, 0, 0, 0, 1]}],
+                       'geometry_source': 'nested_type'},
+                      {'name': 'Empty', 'parameters': [{'name': k, 'value': v, 'kind': 'Length', 'units': 'mm'} for k, v in [('Width', '710'), ('Depth', '600'), ('Height', '2000')]],
+                       'components': [], 'geometry_source': 'none'}],
+            'warnings': ['Decoder warning']}
+
+
+def test_mapping():
+    scene = Scene()
+    scene.layers.append(Layer('Clearance zones', key='stable-zone-id'))
+    scene.materials['Steel'] = Material('Steel', (250/255, 243/255, 227/255))
+    data = payload()
+    original = deepcopy(data)
+    report = apply_payload(scene, data)
+    assert data == original
+    assert [g.name for g in scene.kept_components] == ['Standard', 'Empty']
+    assert len(definitions_of(scene)) == 2
+    assert len(scene.groups) == 1
+    definition = scene.kept_components[0]
+    assert scene.groups[0].mesh is definition.mesh
+    assert scene.groups[0].xform.isIdentity()
+    assert len(definition.children) == 2
+    solid, zone = definition.children
+    assert solid.name == 'Steel'
+    assert len(solid.children) == 2
+    assert [g.hidden for g in solid.children] == [False, True]
+    assert len(solid.children[0].mesh.faces) == 2
+    assert zone.layer == zone.children[0].layer == 'stable-zone-id'
+    assert zone.children[0].material['opacity'] == .2
+    assert len(scene.materials) == 2
+    assert solid.children[0].material['color'] == pytest.approx((250/255, 243/255, 227/255))
+    assert solid.xform.map(QVector3D(1, 0, 0)).toTuple() == pytest.approx((2, 4, 4))
+    assert max(v.position.x() for v in solid.children[0].mesh.vertices) == 1
+    assert definition.ifc['classifications'] == [{'system': 'omniclass', 'code': '23.80.30.11.17'}]
+    assert definition.ifc['psets']['Revit family']['Source file'] == 'cabinet.rfa'
+    assert definition.ifc['psets']['Revit family']['Category'] == 'Electrical Equipment'
+    assert definition.ext['rfa']['parameters'][0]['value'] == 'Schneider'
+    box = scene.kept_components[1].children[0].mesh
+    assert len(box.faces) == 6
+    assert tuple(max(getattr(v.position, axis)() for v in box.vertices) for axis in ('x', 'y', 'z')) == pytest.approx((.710, .600, 2))
+    assert scene.kept_components[1].ifc['psets']['Revit parameters']['Width'] == {'kind': 'length', 'value': .71}
+    assert report[0] == 'Decoder warning'
+    assert any('placeholder' in w for w in report)
+
+
+def test_created_tag_has_key_and_undo_redo():
+    scene = Scene()
+    before_layers = list(scene.layers)
+    before_registry = get(scene)
+    cmd = RfaImport(lambda s: apply_payload(s, payload()))
+    cmd.do(scene)
+    assert 'omniclass' in get(scene)['classification_systems']
+    tag = next(ly for ly in scene.layers if ly.name == 'Clearance zones')
+    assert tag.key != tag.name
+    cmd.undo(scene)
+    assert not scene.groups and not scene.kept_components and not scene.materials
+    assert scene.layers == before_layers
+    assert get(scene) == before_registry
+    cmd.do(scene)
+    assert len(scene.kept_components) == 2 and len(scene.groups) == 1
+    assert len(scene.materials) == 2
+
+
+def test_missing_module(monkeypatch):
+    monkeypatch.setitem(sys.modules, 'ingetrazo_rfa', None)
+    with pytest.raises(RuntimeError, match='scripts/build_native.sh'):
+        read_rfa('unused.rfa')
+
+
+def test_reader_contract(monkeypatch):
+    seen = []
+    def read(path):
+        seen.append(path)
+        return json.dumps(payload())
+    monkeypatch.setitem(sys.modules, 'ingetrazo_rfa', SimpleNamespace(read_family=read))
+    assert read_rfa('test.rfa') == payload()
+    assert seen == ['test.rfa']
+
+
+def test_thumbnail():
+    from views.component_thumbs import thumbnail
+    image = QImage(16, 16, QImage.Format_RGB32)
+    image.fill(0xffff0000)
+    data = QByteArray()
+    buffer = QBuffer(data)
+    buffer.open(QIODevice.WriteOnly)
+    image.save(buffer, 'PNG')
+    p = payload()
+    p['preview_png_base64'] = base64.b64encode(bytes(data)).decode()
+    scene = Scene()
+    apply_payload(scene, p)
+    pm = thumbnail(scene.kept_components[0])
+    assert pm.toImage().pixelColor(20, 20).red() == 255
+    assert pm.toImage().pixelColor(20, 20).green() == 0
+
+
+def test_bad_indices_rollback():
+    scene = Scene()
+    data = payload()
+    data['geometries']['g']['parts'][0]['indices'][0] = -1
+    cmd = RfaImport(lambda s: apply_payload(s, data))
+    with pytest.raises(ValueError, match='index'):
+        cmd.do(scene)
+    assert not scene.kept_components and not scene.groups and not scene.materials
+
+
+def test_persistence(tmp_path):
+    from formats.igz import save_scene, load_into
+    scene = Scene()
+    RfaImport(lambda s: apply_payload(s, payload())).do(scene)
+    path = tmp_path / 'family.igz'
+    save_scene(scene, path)
+    restored = Scene()
+    load_into(restored, path)
+    assert len(definitions_of(restored)) == 2
+    assert restored.kept_components[0].ext['rfa']['source']['file_name'] == 'cabinet.rfa'
+    assert restored.groups[0].ifc['classifications'][0]['system'] == 'omniclass'
+    assert restored.groups[0].children[0].children[1].hidden
+    assert restored.layer(restored.groups[0].children[1].layer).name == 'Clearance zones'
+
+
+def test_menu_dispatch_and_report(monkeypatch, tmp_path):
+    from views.main_window import MainWindow
+    from views.filedialogs import file_dialogs
+    from PySide6.QtWidgets import QMessageBox
+    from formats import rfa
+    win = MainWindow()
+    reports = []
+    path = tmp_path / 'test.rfa'
+    monkeypatch.setattr(rfa, 'read_rfa', lambda path: payload())
+    monkeypatch.setattr(QMessageBox, 'information', lambda parent, title, text: reports.append(text))
+    monkeypatch.setattr(file_dialogs, 'getOpenFileName', lambda *a, **k: (str(path), ''))
+    try:
+        assert '.rfa' in win._openable_suffixes()
+        win._on_import_rfa()
+        assert len(win.viewport.scene.kept_components) == 2
+        assert reports and 'Decoder warning' in reports[0] and 'placeholder' in reports[0]
+        win.viewport.history.undo()
+        assert not win.viewport.scene.kept_components
+        assert win._open_path_here(path, '.rfa')
+        assert len(win.viewport.scene.kept_components) == 2
+    finally:
+        for doc in win.documents():
+            doc.saved_content = doc.viewport.scene.content_version
+        win.close()
