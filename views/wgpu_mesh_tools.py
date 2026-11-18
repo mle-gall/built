@@ -3,6 +3,17 @@ import numpy as np
 from PySide6.QtGui import QVector3D, QMatrix4x4
 from core.group import iter_placements
 
+_VIEWPORT = None
+
+
+def _viewport_class():
+    """``views.viewport.Viewport``, imported once (no import cycle at load)."""
+    global _VIEWPORT
+    if _VIEWPORT is None:
+        from views.viewport import Viewport
+        _VIEWPORT = Viewport
+    return _VIEWPORT
+
 
 class MeshToolAccess:
     mesh_outline_preview = True
@@ -71,8 +82,10 @@ class MeshToolAccess:
     def _world_to_pixel(self, point, mvp=None):
         if mvp is None:
             return self.view._world_to_pixel(point)
-        from views.viewport import Viewport
-        return Viewport._world_to_pixel(self, point, mvp)
+        # Called once per vertex by the walks (box select's fallback): an
+        # import statement each time went through shiboken's import hook,
+        # a visible share of the box hang samples (2026-11-18).
+        return _viewport_class()._world_to_pixel(self, point, mvp)
 
     def _project_to_lock_line(self, *args):
         return self.view._project_to_lock_line(*args)

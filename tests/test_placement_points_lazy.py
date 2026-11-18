@@ -84,3 +84,22 @@ def test_the_selection_box_of_a_lazy_group_builds_nothing(lazy, tmp_path):
     for (_f, lo, hi), (_f2, lo2, hi2) in zip(boxes, again):
         assert lo == pytest.approx(lo2, abs=1e-9)
         assert hi == pytest.approx(hi2, abs=1e-9)
+
+
+def test_store_mesh_points_come_from_the_store_arrays():
+    """A store-backed mesh (any mesh touched since the open) gives the same
+    points as walking its vertices, without a cached vector per vertex:
+    selecting a linked file measures every mesh of it."""
+    from core.group import _local_points
+    from core.store_mesh import StoreMesh
+    m = M.Mesh()
+    quads = np.array([[[x, y, 0.3], [x + 1.1, y, 0.3], [x + 1.1, y + 0.7, 0.3],
+                       [x, y + 0.7, 0.3]] for x in range(4) for y in range(3)])
+    m.add_faces_bulk(quads.reshape(-1, 3), np.full(12, 4), np.ones(12, int))
+    if m.__class__ is not StoreMesh:
+        pytest.skip("mesh store off")
+    got = _local_points(m)
+    assert not m.__dict__.get("_pos_cache"), "no per-vertex vectors"
+    walked = np.array([[v.position.x(), v.position.y(), v.position.z()]
+                       for v in m.vertices])
+    assert np.array_equal(got, walked)

@@ -36,6 +36,10 @@ if _crash_log is not None:
     faulthandler.enable(file=_crash_log)
 elif sys.stderr is not None:
     faulthandler.enable()
+# Beside it, once main() starts the window (not when a test imports this
+# module): Rust panics, deliberate and unplanned exits, main-thread stalls
+# (core/black_box.py) — a force-quit hang left nothing (2026-11-18).
+from core import black_box
 
 # Native Wayland is the default. Known cosmetic tradeoff (2026-07-12): the
 # compositor interleaves stale GL viewport frames under fast zoom bursts (a
@@ -624,6 +628,13 @@ def main() -> int:
         return _run_mcp_server()
     if _wants_cli(sys.argv[1:]):
         return _run_cli(sys.argv[1:])
+    if _crash_log is not None:
+        black_box.attach(_crash_log)
+        try:
+            import ingetrazo_core as _ingetrazo_core
+            black_box.install_panic_log(_ingetrazo_core)
+        except ImportError:
+            pass
     # Hang autopsy (Linux): `kill -USR1 <pid>` dumps every thread's Python
     # stack to stderr, so a frozen main loop names its exact line without a
     # debugger or elevated ptrace. No-op where SIGUSR1 doesn't exist.
@@ -861,6 +872,11 @@ def main() -> int:
 
     QTimer.singleShot(0, _after_first_frame)
     _offer_appimage_integration(window)
+    if _crash_log is not None:
+        black_box.note_unplanned_exit()
+        # This frame is the idle one: the watch speaks only when the main
+        # thread is in Python elsewhere with the event loop held up.
+        black_box.StallWatch(_crash_log, idle_code=main.__code__).start(app)
     return app.exec()
 
 
@@ -915,6 +931,7 @@ def _exit_now(code) -> None:
         except Exception:
             pass
     status = code if isinstance(code, int) else 0
+    black_box.note(f"exit {status} (normal quit, os._exit)")
     if sys.platform == "win32":
         _terminate_windows_process(status)
     os._exit(status)
