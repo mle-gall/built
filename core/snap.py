@@ -498,32 +498,74 @@ def _on_edge_point(edge, t: float,
     return edge.a + ab * t
 
 
+def _edge_cursor_point(edge, cursor, world_to_pixel, threshold_px,
+                       project_onto_line=None):
+    """Screen distance, segment parameter and world point under the cursor.
+
+    If one endpoint is behind the camera, recover the visible point through
+    the cursor ray. Keep the original endpoints and midpoint: a clipping
+    boundary is neither an endpoint target nor the middle of the model edge.
+    """
+    pa, pb = world_to_pixel(edge.a), world_to_pixel(edge.b)
+    if pa is not None and pb is not None:
+        distance, t = _closest_on_segment_2d(cursor, pa, pb)
+        if distance > threshold_px:
+            return None
+        return distance, t, _on_edge_point(edge, t, project_onto_line)
+    if project_onto_line is None or (pa is None and pb is None):
+        return None
+    ab = edge.b - edge.a
+    length_sq = ab.lengthSquared()
+    if length_sq < 1e-18:
+        return None
+    projected = project_onto_line(edge.a, ab)
+    if projected is None:
+        return None
+    t = max(0.0, min(1.0, QVector3D.dotProduct(projected - edge.a, ab) / length_sq))
+    point = edge.a + ab * t
+    pixel = world_to_pixel(point)
+    if pixel is None:
+        return None
+    distance = math.hypot(pixel[0] - cursor[0], pixel[1] - cursor[1])
+    return (distance, t, point) if distance <= threshold_px else None
+
+
 def _line_segment_intersection(
     p: QVector3D, u: QVector3D, a: QVector3D, b: QVector3D, tol: float = 1e-3
 ) -> Optional[QVector3D]:
     """Where the infinite line through ``p`` (unit direction ``u``) crosses the
     segment ``a``–``b``, or ``None`` if they're parallel, skew (closest approach
     > ``tol``), or the crossing falls outside the segment."""
-    v = b - a
-    if v.length() < 1e-9:
+    # Normalized directions and double-precision products avoid cancellation
+    # on long edges, as in topology.segment_intersection. Keep the line
+    # infinite, the segment bounded, and the caller's absolute skew tolerance.
+    pc, ac = p.toTuple(), a.toTuple()
+    uc = u.toTuple()
+    v = tuple(bc - av for bc, av in zip(b.toTuple(), ac))
+    lu, lv = math.hypot(*uc), math.hypot(*v)
+    if lu < 1e-9 or lv < 1e-9:
         return None
-    w0 = p - a
-    bb = QVector3D.dotProduct(u, v)
-    cc = QVector3D.dotProduct(v, v)
-    dd = QVector3D.dotProduct(u, w0)
-    ee = QVector3D.dotProduct(v, w0)
-    denom = cc - bb * bb  # u·u == 1 (u is unit)
-    if abs(denom) < 1e-12:
+    uc = tuple(c / lu for c in uc)
+    v = tuple(c / lv for c in v)
+    w = tuple(pv - av for pv, av in zip(pc, ac))
+
+    def dot(x, y):
+        return sum(a * b for a, b in zip(x, y))
+
+    aa, bb, cc = dot(uc, uc), dot(uc, v), dot(v, v)
+    dd, ee = dot(uc, w), dot(v, w)
+    denom = aa * cc - bb * bb
+    if denom < 1e-12:
         return None
     sc = (bb * ee - cc * dd) / denom
-    tc = (ee - bb * dd) / denom
-    if tc < -1e-6 or tc > 1.0 + 1e-6:
+    tc = (aa * ee - bb * dd) / denom
+    if tc < -1e-6 * lv or tc > (1.0 + 1e-6) * lv:
         return None
-    on_line = p + u * sc
-    on_seg = a + v * tc
-    if (on_line - on_seg).length() > tol:
-        return None  # skew — they don't actually meet
-    return on_seg
+    on_line = tuple(pv + uv * sc for pv, uv in zip(pc, uc))
+    on_seg = tuple(av + vv * tc for av, vv in zip(ac, v))
+    if math.dist(on_line, on_seg) > tol:
+        return None
+    return QVector3D(*on_seg)
 
 
 def _point_on_segment_world(
@@ -1230,7 +1272,17 @@ def _from_point_snap(
                 continue
             d, t = _closest_on_segment_2d((cx, cy), pa, pb)
             if d <= threshold_px and (best_edge is None or d < best_edge[0]):
-                best_edge = (d, _on_edge_point(edge, t, project_onto_line))
+                point = _on_edge_point(edge, t, project_onto_line)
+                # Only an edge you can see. An edge the model hides cannot
+                # be the one the cursor is on: its screen trace crossing
+                # the cursor is a coincidence of projection. Dragging up
+                # with Z locked from a box's top corner, the FAR vertical
+                # edge projects onto the cursor's screen line and lent the
+                # lock its lower height (upstream #1085). In X-ray nothing
+                # hides anything (no ``is_occluded``), so it still counts.
+                if is_occluded is not None and is_occluded(point):
+                    continue
+                best_edge = (d, point)
         if best_edge is not None:
             refs.append((best_edge[1], "from_point", COLOR_ENDPOINT, True))
 
@@ -1262,7 +1314,16 @@ def _from_point_snap(
         if hovered_refs:
             rp = world_to_pixel(ref)
             if rp is not None:
-                d = min(d, math.hypot(rp[0] - cx, rp[1] - cy))
+                d_ref = math.hypot(rp[0] - cx, rp[1] - cy)
+                # Pointing AT a reference counts only when it can be seen:
+                # with Z locked from a box's top corner in an Iso view, the
+                # hidden back edge's midpoint sat right above the corner on
+                # screen, and the point went DOWN to its height while the
+                # cursor went up (upstream #1085). Its foot on the lock line
+                # still counts the usual way.
+                if d_ref < d and not (is_occluded is not None
+                                      and is_occluded(ref)):
+                    d = d_ref
         if d > threshold_px:
             continue
         if is_occluded is not None and is_occluded(foot):
@@ -1571,6 +1632,7 @@ def _lock_reference_snap(
                 on_line = start_point + line_dir * s
                 on_edge = a + v * t
                 if ((on_line - on_edge).length() <= 1e-3
+                        and (on_edge - start_point).length() > 1e-6
                         and world_to_pixel(on_edge) is not None):
                     # Beyond an end of the edge that stretch is the dotted
                     # extension; inside it, the crossing rule answered.
@@ -1585,22 +1647,111 @@ def _lock_reference_snap(
         if abs(den) > 1e-6:
             s = QVector3D.dotProduct(n, p0 - start_point) / den
             hit = start_point + line_dir * s
-            if world_to_pixel(hit) is not None:
+            # A plane through the start meets the lock line AT the start:
+            # nothing to offer, the line leaves the plane there. Offering
+            # it pinned a Z lock from a box's top corner to that corner
+            # while the cursor, over the top face, went up (upstream #1085,
+            # seen on the Metal view, whose hover edge is visible-only).
+            if abs(s) > 1e-6 and world_to_pixel(hit) is not None:
                 return SnapResult(hit, "intersection_face",
                                   COLOR_LOCK_INTERSECT, guide=(ref, hit),
                                   guide_color=COLOR_EXTENSION)
     return None
 
 
+def _point_snap_candidates(edges, named=()):
+    """Named points, world origin and endpoints, with their original context.
+
+    The order is the precedence on a tie: the pseudo-edges' named points (a
+    circle's centre, a component's origin, an arc's midpoint), then the
+    caller's extra ``named`` points (a guide circle's quadrants), then the
+    world origin, then the plain edges' endpoints. A construction guide's
+    ends are clipped to the view: not endpoints."""
+    plain = []
+    for edge in edges:
+        context = getattr(edge, "context", None)
+        if getattr(edge, "center", False):
+            yield edge.a, "center", COLOR_ENDPOINT, context
+        elif getattr(edge, "component_origin", False):
+            yield edge.a, "component_origin", COLOR_ORIGIN, context
+        elif getattr(edge, "arc_midpoint", False):
+            yield edge.a, "arc_midpoint", COLOR_MIDPOINT, context
+        elif not getattr(edge, "guide", False):
+            plain.append(edge)
+    for point in named:
+        yield point, "quadrant", COLOR_MIDPOINT, None
+    yield QVector3D(0.0, 0.0, 0.0), "origin", COLOR_ORIGIN, None
+    for edge in plain:
+        context = getattr(edge, "context", None)
+        yield edge.a, "endpoint", COLOR_ENDPOINT, context
+        yield edge.b, "endpoint", COLOR_ENDPOINT, context
+
+
+def _midpoint_snap_candidates(edges):
+    """Actual edge midpoints; clipped guides and pseudo-points have none."""
+    for edge in edges:
+        if not getattr(edge, "guide", False) and (edge.b - edge.a).length() >= 1e-9:
+            yield ((edge.a + edge.b) * 0.5, "midpoint", COLOR_MIDPOINT,
+                   getattr(edge, "context", None))
+
+
+def _resolve_point_candidates(candidates, is_occluded, are_occluded=None):
+    """Nearest visible point, preferring the drawing context in a near-tie.
+
+    Candidates are (distance, point, kind, color, context, occludable).
+    Anchor the tie window to the nearest VISIBLE candidate, not absolute
+    half-pixel buckets or a hidden point. Original order breaks remaining
+    ties so named points keep precedence. Cache visibility across both passes.
+    """
+    if not candidates:
+        return None
+    ordered = sorted(enumerate(candidates), key=lambda c: c[1][0])
+    hidden = {}
+
+    def key(candidate):
+        return candidate[1].toTuple()
+
+    def one(candidate):
+        if not candidate[5] or is_occluded is None:
+            return False
+        point_key = key(candidate)
+        if point_key not in hidden:
+            hidden[point_key] = is_occluded(candidate[1])
+        return hidden[point_key]
+
+    def many(batch):
+        unseen = {}
+        for candidate in batch:
+            if candidate[5] and key(candidate) not in hidden:
+                unseen.setdefault(key(candidate), candidate[1])
+        if unseen:
+            hidden.update(zip(unseen, are_occluded(list(unseen.values()))))
+        return [one(candidate) for candidate in batch]
+
+    nearest = _first_visible([c for _i, c in ordered],
+                             one if is_occluded is not None else None,
+                             many if are_occluded is not None else None)
+    if nearest is None:
+        return None
+    limit = ordered[nearest][1][0] + _TIE_PX
+    ties = [(i, c) for i, c in ordered[nearest:] if c[0] < limit]
+    ties.sort(key=lambda c: (c[1][4] is not None, c[0]))
+    for _i, candidate in ties:
+        if not one(candidate):
+            return candidate
+    return None
+
+
 def _lock_line_snaps(
     scene, start_point, line_dir, cx, cy, world_to_pixel, threshold_px,
     is_occluded, acquired_point, chain_first_point=None,
-    project_onto_line=None, hover_edge=None, hover_plane=None,
+    project_onto_line=None, hover_edge=None, hover_plane=None, are_occluded=None,
 ) -> Optional[SnapResult]:
     """What a directional lock still lets you fetch, in order: the chain's
-    own first point (closing), a vertex sitting ON the lock line, the
-    crossing of the lock line with another edge, and a corner, midpoint or
-    origin — hovered, or projected onto the line. Issue #27 gave these to
+    first point (closing), named points and endpoints ON the lock line,
+    an edge crossing, an on-line midpoint, then projected references.
+    Corners, midpoints and the origin may be hovered off the lock line too.
+    Issue #27 gave these to
     the arrow lock, #31 to the Shift lock, and #34 found the third lock —
     Shift held over a soft axis cue, when the press had nothing to capture
     — with none of them: «release Shift to reposition the camera and
@@ -1620,17 +1771,26 @@ def _lock_line_snaps(
         if fp_px is not None and math.hypot(
                 fp_px[0] - cx, fp_px[1] - cy) <= threshold_px:
             return SnapResult(QVector3D(chain_first_point), "close", COLOR_CLOSE)
-    # A vertex that sits on the lock line → endpoint snap, so you can land
-    # exactly on a corner without leaving the lock.
-    for edge in scene.edges:
-        for vertex in (edge.a, edge.b):
-            if not _vertex_on_line(vertex, start_point, line_dir):
+
+    def point_on_lock(points):
+        candidates = []
+        for point, kind, color, context in points:
+            if not _vertex_on_line(point, start_point, line_dir):
                 continue
-            vp = world_to_pixel(vertex)
-            if vp is None:
+            pixel = world_to_pixel(point)
+            if pixel is None:
                 continue
-            if math.hypot(vp[0] - cx, vp[1] - cy) <= threshold_px:
-                return SnapResult(vertex, "endpoint", COLOR_ENDPOINT)
+            distance = math.hypot(pixel[0] - cx, pixel[1] - cy)
+            if distance <= threshold_px:
+                candidates.append((distance, point, kind, color, context, True))
+        chosen = _resolve_point_candidates(candidates, is_occluded, are_occluded)
+        if chosen is not None:
+            return SnapResult(chosen[1], chosen[2], chosen[3], context=chosen[4])
+        return None
+
+    hit = point_on_lock(_point_snap_candidates(scene.edges))
+    if hit is not None:
+        return hit
     # Where the lock line crosses another edge → intersection (green
     # point), so a locked line landing on a crossing wall offers the exact
     # junction without breaking the lock.
@@ -1652,6 +1812,9 @@ def _lock_line_snaps(
     if best_hit is not None:
         return SnapResult(best_hit[1], "intersection", COLOR_ENDPOINT,
                           guide=(start_point, best_hit[1]))
+    hit = point_on_lock(_midpoint_snap_candidates(scene.edges))
+    if hit is not None:
+        return hit
     # 'From point' along the lock line: line up with a corner (green) or
     # midpoint (cyan) projected onto the locked axis — or hover it.
     # The cursor ON an edge: its meeting with the lock line is the answer
@@ -1678,7 +1841,7 @@ def _lock_line_snaps(
 
 
 #: Two point candidates closer than this on screen are a tie, and the tie
-#: goes to the drawing context (see ``_resolve`` in :func:`compute_snap`).
+#: goes to the drawing context (see ``_resolve_point_candidates``).
 _TIE_PX = 0.5
 
 
@@ -2016,7 +2179,7 @@ def compute_snap(
         hit = _lock_line_snaps(
             scene, acquired_point, axis_dir, cx, cy, world_to_pixel,
             threshold_px, is_occluded, acquired_point, chain_first_point,
-            project_onto_line, hover_lock_edge, hover_lock_plane,
+            project_onto_line, hover_lock_edge, hover_lock_plane, are_occluded,
         )
         guide = (QVector3D(acquired_point),
                  project_onto_line(acquired_point, _AXIS_VECTORS[axis_lock]))
@@ -2055,7 +2218,7 @@ def compute_snap(
         hit = _lock_line_snaps(
             scene, start_point, axis_dir, cx, cy, world_to_pixel,
             threshold_px, is_occluded, acquired_point, chain_first_point,
-            project_onto_line, hover_lock_edge, hover_lock_plane,
+            project_onto_line, hover_lock_edge, hover_lock_plane, are_occluded,
         )
         # A hard lock also keeps the 'level with' reference to an encouraged
         # point visible: its dashed axis line, so the cursor can go fetch
@@ -2088,7 +2251,7 @@ def compute_snap(
             hit = _lock_line_snaps(
                 scene, ref_pt, axis_dir, cx, cy, world_to_pixel,
                 threshold_px, is_occluded, ref_pt, chain_first_point,
-                project_onto_line, hover_lock_edge, hover_lock_plane,
+                project_onto_line, hover_lock_edge, hover_lock_plane, are_occluded,
             )
             color = shift_lock_color if shift_lock_color is not None else COLOR_REFERENCE
             guide = (QVector3D(ref_pt), project_onto_line(ref_pt, axis_dir))
@@ -2129,7 +2292,7 @@ def compute_snap(
         hit = _lock_line_snaps(
             scene, start_point, lock_dir, cx, cy, world_to_pixel,
             threshold_px, is_occluded, acquired_point, chain_first_point,
-            project_onto_line, hover_lock_edge, hover_lock_plane,
+            project_onto_line, hover_lock_edge, hover_lock_plane, are_occluded,
         )
         color = shift_lock_color if shift_lock_color is not None else COLOR_REFERENCE
         # A lock captured from a 'from point' keeps its dashed, axis-coloured
@@ -2168,7 +2331,7 @@ def compute_snap(
                 scene, start_point, direction, candidate_pixel[0],
                 candidate_pixel[1], world_to_pixel, threshold_px,
                 is_occluded, acquired_point, chain_first_point,
-                project_onto_line, hover_lock_edge, hover_lock_plane,
+                project_onto_line, hover_lock_edge, hover_lock_plane, are_occluded,
             )
             if hit is not None:
                 hit.lock_color = COLOR_REFERENCE
@@ -2185,6 +2348,8 @@ def compute_snap(
         inferred = _detect_axis_alignment(
             line_start, candidate_world, inference_angle_deg
         )
+        if axis_in_plane:
+            inferred = _axis_in_plane(inferred, work_plane_normal)
         if inferred is not None:
             axis_dir = QVector3D(_AXIS_VECTORS[inferred])
             locked = project_onto_line(line_start, axis_dir)
@@ -2194,7 +2359,7 @@ def compute_snap(
             hit = _lock_line_snaps(
                 scene, line_start, axis_dir, cx3, cy3, world_to_pixel,
                 threshold_px, is_occluded, acquired_point, chain_first_point,
-                project_onto_line, hover_lock_edge, hover_lock_plane,
+                project_onto_line, hover_lock_edge, hover_lock_plane, are_occluded,
             )
             if hit is not None:
                 hit.lock_color = AXIS_COLORS[inferred]
@@ -2230,52 +2395,20 @@ def compute_snap(
     def _resolve():
         """The nearest visible candidate, or ``None``; clears the list.
 
-        Near-ties go to the point of the context being drawn in — a loose
-        vertex beats a component's corner at the same spot. The two really
-        do coincide when the line was started ON that corner, and only the
-        loose vertex can be welded to; the component's copy (mapped through
-        its placement, a float or two away) ended a line that closed no
-        face, with the tip promising it had snapped (issue #36, @pacaeiro:
-        «Endpoint in component and the vertice endpoint share the same
-        coordinate, but no face created»). Same family as the 0.4.4 rule:
-        a derived point never beats the point it derives from. Within the
-        bucket the order stays as appended (named points before endpoints).
-        """
+        The same visibility and tie policy as a direction lock's points
+        (``_resolve_point_candidates``). Near-ties go to the point of the
+        context being drawn in — a loose vertex beats a component's corner
+        at the same spot. The two really do coincide when the line was
+        started ON that corner, and only the loose vertex can be welded to
+        (issue #36, @pacaeiro: «Endpoint in component and the vertice
+        endpoint share the same coordinate, but no face created»). Hidden
+        candidates are asked in doubling batches (``_first_visible``): a
+        dense model hides dozens behind the first wall."""
         nonlocal best
-        pending.sort(key=lambda c: (math.floor(c[0] / _TIE_PX),
-                                    0 if c[4] is None else 1))
-        chosen = None
-        # Once the nearest candidate turns out hidden, the next ones are
-        # asked in batches (``are_occluded``) that double in size — 8, 16,
-        # 32… — until one is visible. A dense model hides dozens behind
-        # the first wall and a ray each was most of the hover's cost; but
-        # the first visible candidate is usually the ~9th of ~100 (city-L,
-        # pileta-fuente), so one batch of ALL the rest did 10x the work
-        # the one-by-one walk did. Doubling bounds the waste to ~2x.
-        hidden: dict = {}
-        batch = 8
-        for k, (d, world, kind, color, context, occludable) in enumerate(pending):
-            # Only snap to geometry the user can actually see — a vertex
-            # hidden behind a face shouldn't light up.
-            if occludable and is_occluded is not None:
-                if k in hidden:
-                    if hidden[k]:
-                        continue
-                elif are_occluded is not None and hidden:
-                    nxt = [j for j in range(k, len(pending)) if pending[j][5]][:batch]
-                    batch *= 2
-                    hidden.update(zip(nxt, are_occluded(
-                        [pending[j][1] for j in nxt])))
-                    if hidden[k]:
-                        continue
-                elif is_occluded(world):
-                    hidden[k] = True       # from here on, ask in batches
-                    continue
-            chosen = (d, world, kind, color, context)
-            break
+        chosen = _resolve_point_candidates(pending, is_occluded, are_occluded)
         pending.clear()
-        best = chosen
-        return chosen
+        best = chosen[:5] if chosen is not None else None
+        return best
 
     # 4. Vertex snaps (close, endpoint) — the highest-priority discrete points.
     if (
@@ -2291,44 +2424,20 @@ def compute_snap(
         # The named points first (a tie goes to the first considered): an
         # arc's midpoint that happens to fall on one of its facet vertices
         # reads "Arc midpoint", the usual name, not "Endpoint".
-        plain = []
-        for edge in scene.edges:
-            if getattr(edge, "center", False):
-                # The centre of a circle or arc the cursor visited (the
-                # viewport hands it in as a degenerate pseudo-edge).
-                _consider(edge.a, "center", COLOR_ENDPOINT)
-            elif getattr(edge, "component_origin", False):
-                # A group's / component's own origin (the "Component
-                # Origin Point") — its insertion point, worth grabbing.
-                _consider(edge.a, "component_origin", COLOR_ORIGIN)
-            elif getattr(edge, "arc_midpoint", False):
-                # The middle of an arc's sweep, not of any one of its facets.
-                _consider(edge.a, "arc_midpoint", COLOR_MIDPOINT)
-            elif getattr(edge, "guide", False):
-                # A construction guide's ends are not endpoints (they are
-                # clipped to the view) — it offers 'on line' below.
-                continue
-            else:
-                plain.append(edge)
-        # A guide circle's four quadrants are named points too — the cardinal
-        # N/E/S/W of the circle, exact.
-        for circ in getattr(scene, "circles", ()):
-            for q in _circle_quadrants(circ.center, circ.radius, circ.normal):
-                _consider(q, "quadrant", COLOR_MIDPOINT)
-        # The world origin is a point inference like a corner (the
-        # "Origin"), so it must beat the LINEAR inferences of rule 5 — it
-        # sat in rule 6, behind 'from point' and the axis line, and a
-        # cursor aligned with an encouraged point or the red axis clicked
-        # millimetres beside it, leaving stubs along the axis (Marco,
-        # 2026-09-15: «me quiero poner en el origen y no se pone»).
-        _consider(QVector3D(0.0, 0.0, 0.0), "origin", COLOR_ORIGIN)
-        for edge in plain:
-            # The usual convention paints every point inference magenta when
-            # the geometry is inside a group or component; Marco found the
-            # magenta everywhere on a model made of components tiring —
-            # 2026-09-14 — so the colours stay, the tip says "in component".)
-            _consider(edge.a, "endpoint", COLOR_ENDPOINT, context=getattr(edge, "context", None))
-            _consider(edge.b, "endpoint", COLOR_ENDPOINT, context=getattr(edge, "context", None))
+        # Named points (centre, component origin, arc midpoint), then a
+        # guide circle's four quadrants (the cardinal N/E/S/W of the circle,
+        # exact), then the world origin, then plain endpoints: the same
+        # candidates, in the same order, a direction lock fetches
+        # (``_point_snap_candidates``). The world origin is a point inference
+        # like a corner, so it beats the LINEAR inferences of rule 5 (Marco,
+        # 2026-09-15: «me quiero poner en el origen y no se pone»). Points
+        # inside a component keep their colours; the tip says "in component".
+        quadrants = [q for circ in getattr(scene, "circles", ())
+                     for q in _circle_quadrants(circ.center, circ.radius,
+                                                circ.normal)]
+        for point, kind, color, context in _point_snap_candidates(
+                scene.edges, quadrants):
+            _consider(point, kind, color, context=context)
         for point, context in face_centers or ():
             # The centres of the face under the cursor and of the selected
             # faces, ``(point, context)``. Handed in on their own, not as
@@ -2360,16 +2469,11 @@ def compute_snap(
                 continue                      # a pseudo-edge: centre, origin…
             if _point_on_segment_world(exclude_at, edge.a, edge.b):
                 continue
-            pa = world_to_pixel(edge.a)
-            pb = world_to_pixel(edge.b)
-            if pa is None or pb is None:
+            hit = _edge_cursor_point(edge, (cx, cy), world_to_pixel, et,
+                                     project_onto_line)
+            if hit is None:
                 continue
-            if _closest_on_segment_2d((cx, cy), pa, pb)[0] > et:
-                continue
-            ab = edge.b - edge.a
-            tt = QVector3D.dotProduct(project_onto_line(edge.a, ab) - edge.a,
-                                      ab) / QVector3D.dotProduct(ab, ab)
-            on_pt = edge.a + ab * max(0.0, min(1.0, tt))
+            on_pt = hit[2]
             if is_occluded is None or not is_occluded(on_pt):
                 return True
         return False
@@ -2550,11 +2654,8 @@ def compute_snap(
 
     # 6. Midpoint + origin.
     best = None
-    for edge in scene.edges:
-        if getattr(edge, "guide", False) or (edge.a - edge.b).length() < 1e-9:
-            continue
-        _consider((edge.a + edge.b) * 0.5, "midpoint", COLOR_MIDPOINT,
-                  context=getattr(edge, "context", None))
+    for point, kind, color, context in _midpoint_snap_candidates(scene.edges):
+        _consider(point, kind, color, context=context)
     _consider(QVector3D(0.0, 0.0, 0.0), "origin", COLOR_ORIGIN)
     _resolve()
     if best is not None:
@@ -2579,27 +2680,19 @@ def compute_snap(
     #    floor line) should be forgiving.
     on_targets = []
     for edge in scene.edges:
-        pa = world_to_pixel(edge.a)
-        pb = world_to_pixel(edge.b)
-        if pa is None or pb is None:
+        # The point under the cursor through the camera ray (the screen
+        # parameter is not the world one under perspective), and the visible
+        # part of an edge whose other end is behind the camera.
+        hit = _edge_cursor_point(edge, (cx, cy), world_to_pixel, et,
+                                 project_onto_line)
+        if hit is None:
             continue
-        d, t = _closest_on_segment_2d((cx, cy), pa, pb)
-        if d > et or t <= 0.0 or t >= 1.0:
+        d, t, on_pt = hit
+        if t <= 0.0 or t >= 1.0:
             # Past either end the nearest point is the endpoint itself: an
             # «On edge» there named a point the endpoint snap had already
             # turned down (#587, between its 9 px and the edge's 14 px).
             continue
-        # The screen-space parameter ``t`` is NOT the world parameter under
-        # perspective, so 3D-lerping it displaces the point by metres on a long,
-        # foreshortened edge. Map back through the camera ray: the closest point
-        # on the edge's line to the cursor ray, clamped to the segment.
-        ab = edge.b - edge.a
-        if project_onto_line is not None and ab.length() > 1e-9:
-            proj = project_onto_line(edge.a, ab)
-            tt = QVector3D.dotProduct(proj - edge.a, ab) / QVector3D.dotProduct(ab, ab)
-            on_pt = edge.a + ab * max(0.0, min(1.0, tt))
-        else:
-            on_pt = edge.a + ab * t
         kind = "on_line" if getattr(edge, "guide", False) else "on_edge"
         on_targets.append((d, on_pt, kind, edge))
     # A guide circle's rim is the same big target, resolved exactly: the
@@ -2784,7 +2877,7 @@ def compute_snap(
     #     have let an alignment line outrank a midpoint or the origin, and
     #     that precedence is not ours to spend. Down here it competes only
     #     with the soft axis cue below — the weakest rule there is.
-    
+
     if line_inferences and axis_engaged is None:
 
         if acquired_points:
@@ -2828,9 +2921,26 @@ def compute_snap(
     #    vertex, a 'through point' or the origin fetched with the mouse still
     #    wins.
     if axis_engaged is not None:
+        locked = project_onto_line(start_point, _AXIS_VECTORS[axis_engaged])
+        # 'From point' ALONG the engaged axis is the one derived inference
+        # the magnet keeps: its foot is ON the axis line, so it cannot pull
+        # the point off it (what #42 and #140 silenced the others for).
+        # Without it a line drawn along green toward the red axis slid past
+        # the origin's line-up, and could not end exactly on the red axis
+        # unless the arrow lock was on (upstream #1418).
+        if line_inferences:
+            run = locked - start_point
+            if run.length() > 1e-6:
+                fp = _from_point_snap(
+                    scene, start_point, run, cx, cy, world_to_pixel,
+                    threshold_px, is_occluded, extra_point=acquired_point,
+                    line_dir=run.normalized(),
+                )
+                if fp is not None:
+                    fp.lock_color = AXIS_COLORS[axis_engaged]
+                    return fp
         return SnapResult(
-            project_onto_line(start_point, _AXIS_VECTORS[axis_engaged]),
-            "axis", AXIS_COLORS[axis_engaged], axis=axis_engaged,
+            locked, "axis", AXIS_COLORS[axis_engaged], axis=axis_engaged,
         )
     #    The cue kept below is the visual-only fallback: the cursor is near an
     #    axis and the marker says so, but nothing is projected and nothing is

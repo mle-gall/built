@@ -506,7 +506,23 @@ def reference_edge(index, view, x, y, radius_px=None):
     return None
 
 
+def _see_through(view):
+    """X-ray and wireframe show everything, so nothing hides a snap there:
+    GL's ``Viewport._is_occluded`` answers False in those styles, and the
+    snap rules that skip hidden references (a lock taking a hidden back
+    edge's height, upstream #1085) must still see through them here."""
+    style = getattr(getattr(view, 'source_viewport', None), '_effective_style', None)
+    if style is None:
+        return False
+    try:
+        return getattr(style(), 'face_mode', None) in ('xray', 'wireframe')
+    except Exception:
+        return False
+
+
 def _occluded(index, view, candidate, rows=None):
+    if _see_through(view):
+        return False
     pixel = view._world_to_pixel(candidate)
     if pixel is None:
         return True
@@ -532,6 +548,8 @@ def _occluded(index, view, candidate, rows=None):
 def _occluded_many(index, view, points, rows=None):
     if not points:
         return []
+    if _see_through(view):
+        return [False] * len(points)
     if rows is None:
         rows = eligible_rows(index, view.packed)
     if not getattr(view.camera, 'perspective', False) or index.replaced.any():
@@ -610,14 +628,22 @@ def snap(index, row, view, x, y, **options):
     for r in feature_rows:
         value = index.rows.get(r, index.packed.instances[r])
         matrix = value['world'].astype(float).T
+        group = view.packed.groups[r] if view.packed.groups is not None else None
+        # The placement's context, as nearby_edges gives its edges: a named
+        # point keeps it (the tip, and a near-tie going to the loose point;
+        # core.snap._point_snap_candidates), as GL's pseudo-edges do.
+        named = (None if group is context else
+                 'component' if group is not None and group.is_instance()
+                 else 'group')
         for center in index.features[int(value['info'][0])][0]:
             center = QVector3D(*(matrix[:3, :3] @ center + matrix[:3, 3]))
-            edges.append(SimpleNamespace(a=center, b=center, center=True))
-        group = view.packed.groups[r] if view.packed.groups is not None else None
+            edges.append(SimpleNamespace(a=center, b=center, center=True,
+                                         context=named))
         if group is not None and group.is_instance():
             value = index.rows.get(r, index.initial[r])
             anchor = QVector3D(*value['world'][3, :3])
-            edges.append(SimpleNamespace(a=anchor, b=anchor, component_origin=True))
+            edges.append(SimpleNamespace(a=anchor, b=anchor, component_origin=True,
+                                         context=named))
     edges = scene_edges(view) + edges
     threshold = options.pop('threshold_px', getattr(view, 'snap_threshold_px', 12.))
     options.setdefault('edge_threshold_px', getattr(view, 'edge_snap_threshold_px', None))
