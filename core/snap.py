@@ -615,6 +615,31 @@ def fit_circle(points, tol_rel: float = 0.01):
     return QVector3D(float(c[0]), float(c[1]), float(c[2])), r
 
 
+def arc_sweep_midpoint(points, fit=None) -> Optional[QVector3D]:
+    """The «Arc midpoint» of an open curve chain through ``points`` (its
+    distinct vertices, in any order): the point of the arc bisecting its
+    sweep — not any facet's midpoint — or ``None`` (not on a circle, or a
+    sweep whose vertices balance out around the centre). ``fit`` is the
+    chain's :func:`fit_circle` when the caller already has it.
+
+    The one rule both views offer: the GL viewport reads it per mesh
+    (``Viewport._mesh_arc_midpoints``), the Metal view per prototype of its
+    snap index (``views.wgpu_inference._curve_features``)."""
+    if fit is None:
+        if len(points) < 3:
+            return None
+        fit = fit_circle(list(points))
+        if fit is None:
+            return None
+    c, r = fit[0], fit[1]
+    m = QVector3D(0.0, 0.0, 0.0)
+    for pt in points:
+        m += (pt - c)
+    if m.length() < 1e-9:
+        return None
+    return c + m.normalized() * r
+
+
 def _boundary_runs(loop) -> list:
     """Split a boundary loop into runs of consecutive segments that belong
     to one circle or arc, as ``[[vertex, ...], ...]`` (each run's vertices
@@ -1530,6 +1555,18 @@ def _intersection_snap(
     return SnapResult(hit, "intersection", COLOR_ENDPOINT)
 
 
+class SurfacePatch(tuple):
+    """A face known by its plane and a membership test instead of its
+    loops: ``(point, normal, contains, context)``. What a view that picks
+    triangles, not faces (the Metal view), hands ``compute_snap`` as its
+    ``face_outline``; ``contains(world point)`` says whether the point lies
+    on the face under the cursor (inside it, not in a hole)."""
+    __slots__ = ()
+
+    def __new__(cls, point, normal, contains, context=None):
+        return tuple.__new__(cls, (point, normal, contains, context))
+
+
 def _edge_face_snap(
     cx, cy, scene, world_to_pixel, et, is_occluded, outline
 ) -> Optional[SnapResult]:
@@ -1539,33 +1576,45 @@ def _edge_face_snap(
     ``_intersection_snap`` only pairs edges with edges and
     ``face_crossing`` only faces with faces, so a line through a face
     offered nothing. ``outline`` is ``(outer, holes, context)``: the face's
-    loops in world space. The crossing counts only INSIDE the face (outer
+    loops in world space — or a :class:`SurfacePatch`, its plane and a
+    membership test. The crossing counts only INSIDE the face (outer
     loop, outside every hole), on the edge's own span, and under the cursor.
     An edge lying in the face's plane has no single crossing and is skipped."""
-    from core.topology import _point_inside_2d
-    from core.triangulate import plane_axes
-    outer, holes, context = outline
-    if len(outer) < 3:
-        return None
-    nx = ny = nz = 0.0
-    for i in range(len(outer)):
-        a, b = outer[i], outer[(i + 1) % len(outer)]
-        nx += (a.y() - b.y()) * (a.z() + b.z())
-        ny += (a.z() - b.z()) * (a.x() + b.x())
-        nz += (a.x() - b.x()) * (a.y() + b.y())
-    n = QVector3D(nx, ny, nz)
-    if n.length() < 1e-12:
-        return None
-    n = n.normalized()
-    origin = outer[0]
-    u, w = plane_axes(n)
+    if isinstance(outline, SurfacePatch):
+        origin, n, inside, context = outline
+        if n is None or n.length() < 1e-12:
+            return None
+        n = n.normalized()
+    else:
+        from core.topology import _point_inside_2d
+        from core.triangulate import plane_axes
+        outer, holes, context = outline
+        if len(outer) < 3:
+            return None
+        nx = ny = nz = 0.0
+        for i in range(len(outer)):
+            a, b = outer[i], outer[(i + 1) % len(outer)]
+            nx += (a.y() - b.y()) * (a.z() + b.z())
+            ny += (a.z() - b.z()) * (a.x() + b.x())
+            nz += (a.x() - b.x()) * (a.y() + b.y())
+        n = QVector3D(nx, ny, nz)
+        if n.length() < 1e-12:
+            return None
+        n = n.normalized()
+        origin = outer[0]
+        u, w = plane_axes(n)
 
-    def proj(p):
-        rel = p - origin
-        return (QVector3D.dotProduct(rel, u), QVector3D.dotProduct(rel, w))
+        def proj(p):
+            rel = p - origin
+            return (QVector3D.dotProduct(rel, u), QVector3D.dotProduct(rel, w))
 
-    outer2 = [proj(p) for p in outer]
-    holes2 = [[proj(p) for p in h] for h in holes if len(h) >= 3]
+        outer2 = [proj(p) for p in outer]
+        holes2 = [[proj(p) for p in h] for h in holes if len(h) >= 3]
+
+        def inside(p):
+            pt = proj(p)
+            return (_point_inside_2d(pt, outer2)
+                    and not any(_point_inside_2d(pt, h) for h in holes2))
 
     found = []
     for edge in scene.edges:
@@ -1590,18 +1639,68 @@ def _edge_face_snap(
         dh = math.hypot(hp[0] - cx, hp[1] - cy)
         if dh > et:
             continue
-        pt = proj(hit)
-        if not _point_inside_2d(pt, outer2):
-            continue
-        if any(_point_inside_2d(pt, h) for h in holes2):
-            continue
         found.append((dh, hit))
+    # Nearest first; the membership test (a ray for a SurfacePatch) and the
+    # occlusion are asked only of the candidates, in that order.
     found.sort(key=lambda f: f[0])
     for _dh, hit in found:
+        if not inside(hit):
+            continue
         if is_occluded is None or not is_occluded(hit):
             return SnapResult(hit, "intersection", COLOR_ENDPOINT,
                               context=context)
     return None
+
+
+def face_crossing_near_ray(px, py, origin, direction, f_plane, g_plane,
+                           world_to_pixel, reach_px, side_px=3.0):
+    """Where plane ``f_plane`` meets plane ``g_plane`` (each ``(point,
+    unit normal)``) nearest the cursor ray ``origin + t·direction``, if it
+    falls within ``reach_px`` of the cursor ``(px, py)`` on screen:
+    ``(world point, (pixel one side, pixel the other side))`` — the two
+    probes ``side_px`` either side of the crossing line, square to it on
+    screen, where one face must show and then the other — or ``None``
+    (near-coplanar planes, a crossing line running along the ray, out of
+    reach).
+
+    The geometry of the modeller's face/face «Intersection» (#819) that both
+    views share; each asks its own picks which face shows at the probes
+    (``Viewport._crossing_on_screen``, ``views.wgpu_inference.
+    face_crossing``)."""
+    p_f, n_f = f_plane
+    p_g, n_g = g_plane
+    u = QVector3D.crossProduct(n_f, n_g)
+    if u.length() < 0.02:                   # (near) coplanar: no crossing
+        return None
+    o, d = origin, direction
+    # The crossing line: the point of both planes nearest the origin…
+    d_f = QVector3D.dotProduct(n_f, p_f)
+    d_g = QVector3D.dotProduct(n_g, p_g)
+    uu = QVector3D.dotProduct(u, u)
+    l0 = (QVector3D.crossProduct(n_g, u) * d_f
+          + QVector3D.crossProduct(u, n_f) * d_g) / uu
+    # …then its point nearest the cursor ray.
+    un = u / math.sqrt(uu)
+    w0 = l0 - o
+    b = QVector3D.dotProduct(un, d)
+    den = 1.0 - b * b
+    if den < 1e-9:                          # the line runs along the ray
+        return None
+    s = (b * QVector3D.dotProduct(w0, d) - QVector3D.dotProduct(w0, un)) / den
+    x = l0 + un * s
+    pix = world_to_pixel(x)
+    if pix is None or math.hypot(pix[0] - px, pix[1] - py) > reach_px:
+        return None
+    # Either side of the crossing on screen: one face, then the other.
+    q = world_to_pixel(x + un * max(1e-3, (x - o).length() * 1e-2))
+    if q is None:
+        return None
+    sx, sy = q[0] - pix[0], q[1] - pix[1]
+    ln = math.hypot(sx, sy)
+    if ln < 1e-9:
+        return None
+    nx, ny = -sy / ln * side_px, sx / ln * side_px
+    return x, ((pix[0] + nx, pix[1] + ny), (pix[0] - nx, pix[1] - ny))
 
 
 def _lock_reference_snap(
