@@ -34,11 +34,14 @@ mod store;
 mod scans;
 mod orient;
 mod pushscan;
+mod panic_log;
 
 #[pymodule]
 fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     m.add("SOURCE_HASH", env!("INGETRAZO_SOURCE_HASH"))?;
+    m.add_function(wrap_pyfunction!(panic_log::install_panic_log, m)?)?;
+    m.add_function(wrap_pyfunction!(panic_log::_panic_for_test, m)?)?;
     m.add_function(wrap_pyfunction!(pack::pack_weld, m)?)?;
     m.add_class::<HlrOccluders>()?;
     m.add_function(wrap_pyfunction!(touching_boxes, m)?)?;

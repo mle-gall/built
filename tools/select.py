@@ -140,6 +140,270 @@ def _box_loose_fast(viewport, rect, crossing):
     return edges, faces
 
 
+def _box_loose_arrays(viewport, rect, crossing):
+    """The loose mesh's box test from the store's dense arrays, for a view
+    without the GL caches (the Metal view): one projection of every vertex,
+    vectorised edge and face tests, and element views made only for what
+    the box takes. Returns (edges, faces), or None when the loose mesh is
+    not store-backed (the per-entity walk then runs)."""
+    project = getattr(viewport, "_project_px", None)
+    scene = viewport.scene
+    mesh = getattr(scene, "mesh", None)
+    if project is None or mesh is None:
+        return None
+    from core.store_mesh import StoreMesh
+    if mesh.__class__ is not StoreMesh:
+        return None
+    import numpy as np
+    try:
+        a = mesh.__dict__["_store"].arrays()
+        pos = np.asarray(a["pos"], dtype=float).reshape(-1, 3)
+        if not len(pos):
+            return [], []
+        xs, ys, ok = project(pos)
+    except Exception:  # noqa: BLE001 — a stub viewport: the walk answers
+        return None
+    x0, y0, x1, y1 = rect
+    inside = ok & (xs >= x0) & (xs <= x1) & (ys >= y0) & (ys <= y1)
+    ends = np.asarray(a["edges"], dtype=np.int64).reshape(-1, 2)
+    ea, eb = ends[:, 0], ends[:, 1]
+    # The walk skips what has an end behind the eye, in both modes.
+    emask = _seg_rect_mask(xs[ea], ys[ea], xs[eb], ys[eb], ok[ea] & ok[eb],
+                           rect, crossing)
+    corners = np.asarray(a["corners"], dtype=np.int64)
+    sizes = np.asarray(a["ring_sizes"], dtype=np.int64)
+    counts = np.asarray(a["ring_counts"], dtype=np.int64)
+    fmask = np.zeros(len(counts), dtype=bool)
+    if len(corners) and len(counts):
+        # Corners per face, then each face's first corner.
+        ring_face = np.repeat(np.arange(len(counts)), counts)
+        per_face = np.bincount(ring_face, weights=sizes,
+                               minlength=len(counts)).astype(np.int64)
+        starts = np.concatenate(([0], np.cumsum(per_face)[:-1]))
+        live = per_face > 0
+        s = starts[live]
+        face_ok = np.zeros(len(counts), dtype=bool)
+        face_ok[live] = np.logical_and.reduceat(ok[corners], s)
+        if not crossing:
+            hit = np.zeros(len(counts), dtype=bool)
+            hit[live] = np.logical_and.reduceat(inside[corners], s)
+        else:
+            # Each ring's sides: corner i to the next corner of its ring.
+            nxt = np.arange(len(corners)) + 1
+            ring_end = np.cumsum(sizes)
+            nxt[ring_end - 1] = ring_end - sizes
+            ca, cb = corners, corners[nxt]
+            side = _seg_rect_mask(xs[ca], ys[ca], xs[cb], ys[cb],
+                                  ok[ca] & ok[cb], rect, True)
+            hit = np.zeros(len(counts), dtype=bool)
+            hit[live] = np.logical_or.reduceat(side, s)
+        fmask = hit & face_ok
+    sel = scene.entity_selectable
+    edges = []
+    seq = mesh.edges
+    for i in np.flatnonzero(emask):
+        e = seq[int(i)]
+        if sel(e):
+            edges.append(e)
+    faces = []
+    seq = mesh.faces
+    for i in np.flatnonzero(fmask):
+        f = seq[int(i)]
+        if sel(f):
+            faces.append(f)
+    return edges, faces
+
+
+# Points (or segment ends) one exact test of a packed instance projects at
+# once: bounded scratch whatever the prototype's or the scene's size.
+_PACKED_BATCH = 1 << 18
+
+#: The eight corners of a box from its (lo, hi): which coordinates take hi.
+_BOX_CORNERS = None
+
+
+def _box_corner_mask():
+    global _BOX_CORNERS
+    if _BOX_CORNERS is None:
+        import numpy as np
+        _BOX_CORNERS = np.array([[x, y, z] for x in (0, 1) for y in (0, 1)
+                                 for z in (0, 1)], dtype=bool)
+    return _BOX_CORNERS
+
+
+def _packed_view(viewport):
+    """The packed scene the Metal view draws, when ``viewport`` is its
+    tool facade (the GL viewport has its own chunk caches instead)."""
+    if getattr(viewport, "_group_chunk", None) is not None:
+        return None
+    view = getattr(viewport, "view", None)
+    packed = getattr(view, "packed", None)
+    if (packed is None or getattr(packed, "groups", None) is None
+            or getattr(viewport, "_project_px", None) is None):
+        return None
+    import numpy as np
+    if not isinstance(getattr(packed, "instances", None), np.ndarray):
+        return None
+    return packed
+
+
+def _packed_world(points, world):
+    """``points`` (K, 3) placed by each of ``world`` (R, 4, 4) — Qt's
+    column-major matrices as packed, so a row vector times the 3×3 plus
+    the last row — as (R, K, 3) float64."""
+    import numpy as np
+    w = world.astype(np.float64)
+    return (np.einsum("kj,rji->rki", points, w[:, :3, :3])
+            + w[:, None, 3, :3])
+
+
+def _packed_rows_exact(viewport, packed, code, world, rect, crossing):
+    """Exact box test of the instances of prototype ``code`` placed by
+    ``world`` (R, 4, 4): per instance, every triangle corner and edge end
+    inside (window), or one inside or a side or edge crossing the box
+    (crossing). Projects at most ``_PACKED_BATCH`` points at a time."""
+    import numpy as np
+    pos = packed.vertices["pos"]
+    c, e = packed.commands[code], packed.edge_commands[code]
+    first, count, base = int(c["first"]), int(c["count"]), int(c["base"])
+    tri = pos[base + packed.indices[first:first + count].astype(np.int64)]
+    first, count, base = int(e["first"]), int(e["count"]), int(e["base"])
+    edg = pos[base + packed.indices[first:first + count].astype(np.int64)]
+    points = np.concatenate((tri, edg)).astype(np.float64)
+    n_rows = len(world)
+    if not len(points):
+        return np.zeros(n_rows, dtype=bool)
+    x0, y0, x1, y1 = rect
+    result = np.ones(n_rows, dtype=bool) if not crossing \
+        else np.zeros(n_rows, dtype=bool)
+
+    def chunks(k):
+        """(row slice, point slice) pairs of at most _PACKED_BATCH points."""
+        rows_at = max(1, _PACKED_BATCH // max(1, k))
+        step = min(k, _PACKED_BATCH)
+        for r in range(0, n_rows, rows_at):
+            for p in range(0, k, step):
+                yield slice(r, min(n_rows, r + rows_at)), slice(p, p + step)
+
+    for rs, ps in chunks(len(points)):
+        todo = result[rs] if not crossing else ~result[rs]
+        if not todo.any():
+            continue
+        placed = _packed_world(points[ps], world[rs])
+        xs, ys, ok = viewport._project_px(placed.reshape(-1, 3))
+        shape = placed.shape[:2]
+        xs, ys, ok = xs.reshape(shape), ys.reshape(shape), ok.reshape(shape)
+        inside = ok & (xs >= x0) & (xs <= x1) & (ys >= y0) & (ys <= y1)
+        if crossing:
+            result[rs] |= inside.any(axis=1)
+        else:
+            result[rs] &= inside.all(axis=1)
+    if not crossing or result.all():
+        return result
+    # Crossing, no point inside: a triangle side or an edge through the box.
+    sides_a = np.concatenate((tri[0::3], tri[1::3], tri[2::3], edg[0::2]))
+    sides_b = np.concatenate((tri[1::3], tri[2::3], tri[0::3], edg[1::2]))
+    sides_a = sides_a.astype(np.float64)
+    sides_b = sides_b.astype(np.float64)
+    for rs, ps in chunks(2 * len(sides_a)):
+        sl = slice(ps.start // 2, ps.stop // 2)
+        todo = ~result[rs]
+        if not todo.any() or sl.start >= len(sides_a):
+            continue
+        wa = _packed_world(sides_a[sl], world[rs])
+        wb = _packed_world(sides_b[sl], world[rs])
+        ax, ay, oka = viewport._project_px(wa.reshape(-1, 3))
+        bx, by, okb = viewport._project_px(wb.reshape(-1, 3))
+        cross = _seg_rect_mask(ax, ay, bx, by, oka & okb, rect, True)
+        result[rs] |= cross.reshape(wa.shape[:2]).any(axis=1)
+    return result
+
+
+def _box_groups_packed(viewport, candidates, rect, crossing):
+    """Box test of every candidate object at once from the Metal view's
+    packed scene: per instance its prototype's box carried by its matrix
+    and projected (eight corners), and the exact per-point test only for
+    the instances whose box straddles the rectangle — one numpy pass over
+    the instances instead of a Python walk over every vertex of every
+    placement (the ride: 91k placements, 14M faces, minutes on the main
+    thread). A linked file is one candidate, like a component: its
+    placements decide for it as a whole.
+
+    Returns ``(hits, tested)`` — sets of ``id(candidate)`` — or None when
+    there is no packed scene. Candidates with no packed instance at all
+    are not in ``tested``: the caller tests them its usual way."""
+    packed = _packed_view(viewport)
+    if packed is None or not candidates:
+        return None
+    import numpy as np
+    owner_of: dict = {}
+    for i, group in enumerate(candidates):
+        stack = [group]
+        while stack:
+            node = stack.pop()
+            owner_of[id(node)] = i
+            stack.extend(getattr(node, "children", None) or ())
+    groups = packed.groups
+    owner = np.fromiter((owner_of.get(id(g), -1) if g is not None else -1
+                         for g in groups), dtype=np.int64, count=len(groups))
+    if len(owner) != len(packed.instances):
+        return None
+    rows = np.flatnonzero(owner >= 0)
+    tested = {id(candidates[i]) for i in np.unique(owner[rows])}
+    info = packed.instances["info"]
+    # What the view does not draw (hidden objects, tags off) takes no part.
+    rows = rows[(info[rows, 2] & 1) == 0]
+    hits: set = set()
+    if not len(rows):
+        return hits, tested
+    codes = info[rows, 0].astype(np.int64)
+    world = packed.instances["world"][rows]
+    lo = packed.bounds[codes, 0, :3].astype(np.float64)
+    hi = packed.bounds[codes, 1, :3].astype(np.float64)
+    mask = _box_corner_mask()
+    corners = np.where(mask[None], hi[:, None, :], lo[:, None, :])
+    w = world.astype(np.float64)
+    placed = (np.einsum("nkj,nji->nki", corners, w[:, :3, :3])
+              + w[:, None, 3, :3])
+    xs, ys, ok = viewport._project_px(placed.reshape(-1, 3))
+    xs, ys, ok = (xs.reshape(-1, 8), ys.reshape(-1, 8), ok.reshape(-1, 8))
+    x0, y0, x1, y1 = rect
+    front = ok.all(axis=1)
+    inside = front & ((xs >= x0) & (xs <= x1)
+                      & (ys >= y0) & (ys <= y1)).all(axis=1)
+    out = front & ((xs < x0).all(axis=1) | (xs > x1).all(axis=1)
+                   | (ys < y0).all(axis=1) | (ys > y1).all(axis=1))
+    unsure = ~inside & ~out
+    row_owner = owner[rows]
+    n = len(candidates)
+    if crossing:
+        hit = np.zeros(n, dtype=bool)
+        hit[row_owner[inside]] = True
+    else:
+        present = np.zeros(n, dtype=bool)
+        present[row_owner] = True
+        hit = present.copy()
+        hit[row_owner[out]] = False
+    # The straddling instances, prototype by prototype, skipping those
+    # whose object is already decided.
+    todo = np.flatnonzero(unsure)
+    if len(todo):
+        order = todo[np.argsort(codes[todo], kind="stable")]
+        bounds = np.flatnonzero(np.diff(codes[order])) + 1
+        for group_rows in np.split(order, bounds):
+            live = group_rows[hit[row_owner[group_rows]] == (not crossing)]
+            if not len(live):
+                continue
+            res = _packed_rows_exact(viewport, packed, int(codes[live[0]]),
+                                     world[live], rect, crossing)
+            if crossing:
+                hit[row_owner[live[res]]] = True
+            else:
+                hit[row_owner[live[~res]]] = False
+    hits = {id(candidates[i]) for i in np.flatnonzero(hit)}
+    return hits, tested
+
+
 # Bound temporary triangle/edge arrays and camera projections independently
 # of the import's size (#1175). Even-sized batches keep edge pairs together.
 _BOX_BATCH_POINTS = 8192
@@ -581,6 +845,8 @@ class SelectTool(Tool):
         w2p = _frame_projector(viewport)
         picked = []
         fast = _box_loose_fast(viewport, rect, crossing)
+        if fast is None:
+            fast = _box_loose_arrays(viewport, rect, crossing)
         if fast is not None:
             picked.extend(fast[0])
             picked.extend(fast[1])
@@ -626,8 +892,13 @@ class SelectTool(Tool):
         candidates = (getattr(viewport.scene, "groups", []) if ctx is None
                       else (getattr(ctx, "children", None) or []))
         if candidates:
+            candidates = [g for g in candidates
+                          if viewport.scene.entity_selectable(g)]
+            packed = _box_groups_packed(viewport, candidates, rect, crossing)
             for group in candidates:
-                if not viewport.scene.entity_selectable(group):
+                if packed is not None and id(group) in packed[1]:
+                    if id(group) in packed[0]:
+                        picked.append(group)
                     continue
                 verdict = _box_group_fast(viewport, group, rect, crossing)
                 if verdict is not None:

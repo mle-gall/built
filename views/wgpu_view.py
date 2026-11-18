@@ -403,6 +403,8 @@ class WgpuView(QWidget):
         import ingetrazo_render
         start = time.perf_counter()
         if self.renderer is None:
+            from core import black_box
+            black_box.install_panic_log(ingetrazo_render)
             self.renderer = ingetrazo_render.Renderer(int(self.winId()), self.width(), self.height(), self.devicePixelRatioF())
             self._wrap_renderer()
         self._resident_count = len(self.packed.instances) or 1
@@ -634,6 +636,8 @@ class WgpuView(QWidget):
             raise ValueError("Image dimensions must be positive")
         if self.renderer is None:
             import ingetrazo_render
+            from core import black_box
+            black_box.install_panic_log(ingetrazo_render)
             self.renderer = ingetrazo_render.Renderer(
                 int(self.winId()), max(1, self.width()), max(1, self.height()), 1.)
             if self.packed is None:

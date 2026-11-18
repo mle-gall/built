@@ -1018,6 +1018,14 @@ def _local_points(mesh):
             pos = lazy_mesh.weld(np.asarray(s["pos"], dtype=np.float64),
                                  s.get("sequential", False))[0]
         return np.array(pos, dtype=np.float64) if len(pos) else None
+    from core.store_mesh import StoreMesh
+    if mesh.__class__ is StoreMesh:
+        # The store's dense positions, in ``mesh.vertices`` order: walking
+        # the views made a cached QVector3D per vertex, and selecting a
+        # linked file measures every mesh of it (the selection box).
+        pos = mesh.__dict__["_store"].arrays()["pos"]
+        return (np.array(pos, dtype=np.float64).reshape(-1, 3)
+                if len(pos) else None)
     verts = mesh.vertices
     if not verts:
         return None

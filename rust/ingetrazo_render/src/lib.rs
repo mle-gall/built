@@ -1,5 +1,6 @@
 //! A resident Metal scene: compute compaction precedes native indirect draws.
 mod timing;
+mod panic_log;
 mod overlay;
 mod axes;
 mod sections;
@@ -2177,6 +2178,8 @@ impl Renderer {
 }
 #[pymodule]
 fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(panic_log::install_panic_log, m)?)?;
+    m.add_function(wrap_pyfunction!(panic_log::_panic_for_test, m)?)?;
     m.add_class::<Renderer>()
 }
 #[cfg(test)]
