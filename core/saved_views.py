@@ -26,7 +26,7 @@ class SavedView:
                  two_point: bool = False, hidden_layers=None, style=None, section=None,
                  georef=None, shadows=None, hidden_objects=None,
                  hidden_shown=None, navigator_view=None, folder=None,
-                 lens=None) -> None:
+                 lens=None, hidden_folders=None) -> None:
         self.navigator_view = navigator_view
         self.name = name
         #: The folder of the Scenes tab the scene is filed under, or
@@ -44,6 +44,11 @@ class SavedView:
         #: Layer NAMES hidden in this view. Every other layer shows — a layer
         #: created after the view was saved defaults to visible.
         self.hidden_layers = list(hidden_layers or [])
+        #: Tag folder KEYS switched off in this view (their own switch;
+        #: the tags inside keep theirs). ``None``: a view saved before
+        #: folders had a switch, which leaves the folders as they are.
+        self.hidden_folders = (None if hidden_folders is None
+                               else list(hidden_folders))
         #: Display-style snapshot (core.style.Style.to_dict()) or ``None`` —
         #: a scene remembers the style it was saved with.
         self.style = dict(style) if style else None
@@ -106,6 +111,8 @@ class SavedView:
                          if hasattr(camera, "lens_dict") else None),
                    hidden_layers=[ly.key for ly in scene.layers
                                   if not ly.visible],
+                   hidden_folders=[f for f, on in getattr(
+                       scene, "folder_visibility", {}).items() if not on],
                    style=style.to_dict() if style else None,
                    section={
                        "active": (scene.active_section().uid
@@ -177,6 +184,11 @@ class SavedView:
         hidden = set(self.hidden_layers)
         for ly in scene.layers:
             ly.visible = ly.key not in hidden
+        if self.hidden_folders is not None:
+            off = set(self.hidden_folders)
+            from core.layers import folders_of
+            scene.folder_visibility = {f: f not in off
+                                       for f in folders_of(scene)}
         if self.style:
             from core.style import Style
             style = Style.from_dict(self.style)
@@ -229,6 +241,8 @@ class SavedView:
             entry["lens"] = dict(self.lens)
         if self.hidden_layers:
             entry["hidden_layers"] = list(self.hidden_layers)
+        if self.hidden_folders is not None:
+            entry["hidden_folders"] = list(self.hidden_folders)
         if self.style:
             entry["style"] = dict(self.style)
         if self.section is not None:
@@ -259,6 +273,7 @@ class SavedView:
                    perspective=not raw.get("parallel", False),
                    two_point=bool(raw.get("two_point", False)),
                    hidden_layers=raw.get("hidden_layers"),
+                   hidden_folders=raw.get("hidden_folders"),
                    style=raw.get("style"),
                    section=raw.get("section"),
                    georef=raw.get("georef"),
@@ -299,6 +314,7 @@ def shown_state(scene) -> tuple:
     section = (scene.active_section()
                if hasattr(scene, "active_section") else None)
     return (tuple((ly.key, ly.visible) for ly in scene.layers),
+            tuple(sorted(getattr(scene, "folder_visibility", {}).items())),
             style.to_dict() if style is not None else None,
             getattr(section, "uid", None),
             getattr(scene, "show_section_planes", None),

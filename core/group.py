@@ -575,13 +575,16 @@ def visible_placements(scene, group):
     instance below it on that tag, whatever its children are tagged. A
     hidden group two levels down drew in a sheet while the viewport left it
     out, because :func:`world_mesh` folds in every child."""
+    from core.layers import effective_visible   # a hidden folder hides its tags
+
     def shown(layer):
         ly = scene.layer(layer) if layer else None
-        return ly is None or ly.visible
+        return ly is None or effective_visible(scene, ly)
 
     def blocking(layer):
         ly = scene.layer(layer) if layer else None
-        return ly is not None and (not ly.visible or ly.locked)
+        return ly is not None and (not effective_visible(scene, ly)
+                                   or ly.locked)
 
     def walk(node, world, hidden, forced, inherited):
         for child in node.children:

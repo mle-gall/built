@@ -596,8 +596,11 @@ def test_a_folder_eye_reaches_layers_in_folders_inside_it(win):
                                                             folder=outer)]
     panel.refresh()
     panel.click_cell(("folder", outer), 2)
-    assert not scene.layer("Exterior").visible
-    assert not scene.layer("Suelo").visible
+    # The folder hides what is inside it at any depth; the tags keep
+    # their own switches (.skp tag folders).
+    assert not L.effective_visible(scene, scene.layer("Exterior"))
+    assert not L.effective_visible(scene, scene.layer("Suelo"))
+    assert scene.layer("Exterior").visible and scene.layer("Suelo").visible
     panel.search.setText("exter")
     assert not panel.item_for("Exterior").isHidden()
     assert not panel.item_for(inner, "folder").isHidden()
@@ -710,9 +713,10 @@ def test_folder_row_shows_hides_and_counts(win):
     folder = panel.item_for("Arq", "folder")
     assert folder.childCount() == 2
     panel.click_cell(("folder", "Arq"), 2)
-    assert not scene.layer("A").visible and not scene.layer("B").visible
+    assert not L.effective_visible(scene, scene.layer("A"))
+    assert not L.effective_visible(scene, scene.layer("B"))
     panel.click_cell(("folder", "Arq"), 2)
-    assert scene.layer("A").visible
+    assert L.effective_visible(scene, scene.layer("A"))
     panel.update_counts()
     assert panel.item_for("A").text(5) == "1"
 
@@ -2061,12 +2065,13 @@ def test_sort_by_visible_keeps_folders_first_and_sorts_inside_them(win):
     scene = win.viewport.scene
     hidden = L.add_folder(scene, "Apagada")
     shown = L.add_folder(scene, "Zona")
+    scene.folder_visibility[hidden] = False    # the folder itself off
     scene.layers += [Layer("Muro", folder=hidden, visible=False),
                      Layer("Losa", folder=shown, visible=False),
                      Layer("Pilar", folder=shown),
                      Layer("Suelta", visible=False), Layer("Viga")]
     panel.set_sort_by("visible")
-    # Layer 0, the folders (the one with a layer shown first), the layers.
+    # Layer 0, the folders (the one switched on first), the layers.
     assert _top_rows(panel) == [DEFAULT_LAYER, shown, hidden, "Viga",
                                 "Suelta"]
     assert _child_rows(panel, shown) == ["Pilar", "Losa"]
@@ -2301,10 +2306,13 @@ def test_an_edit_of_the_model_does_not_rebuild_the_rows(win):
     assert panel.tree.topLevelItem(0) is first          # not rebuilt
     panel.update_counts()                               # the timer's call
     assert panel._counts.get("Muros") == 1
+    swatch = panel.item_for("Muros").icon(4).cacheKey()
     scene.layer("Muros").color = (1.0, 0.0, 0.0)
     win.viewport.notify_scene_changed()
     _app.processEvents()                        # the deferred turn
-    assert panel.tree.topLevelItem(0) is not first      # a layer changed
+    # A layer changed: its row is repainted in place, not rebuilt.
+    assert panel.tree.topLevelItem(0) is first
+    assert panel.item_for("Muros").icon(4).cacheKey() != swatch
 
 
 def test_behind_another_tab_the_panel_waits_until_shown(win):
