@@ -2717,6 +2717,10 @@ class MainWindow(WorksessionMixin, QMainWindow):
 
         btn = QToolButton(self)
         btn.setObjectName("sidebar_handle")
+        # It straddles the Metal view's edge. Siblings are no longer native
+        # (AA_DontCreateNativeWidgetSiblings), so it must be its own NSView
+        # or the view's layer covers its left half.
+        btn.setAttribute(Qt.WA_NativeWindow)
         btn.setFixedSize(14, 56)
         btn.setIconSize(QSize(12, 12))
         btn.setIcon(tool_icon("side_collapse"))
@@ -2864,6 +2868,8 @@ class MainWindow(WorksessionMixin, QMainWindow):
         # project in front changes.
         btn = QToolButton(self._doc_stack)
         btn.setObjectName("clean_screen_exit")
+        # Over the Metal view: a native view of its own, or it stays under it.
+        btn.setAttribute(Qt.WA_NativeWindow)
         btn.setText("✕  " + tr("Exit clean screen"))
         btn.setToolTip(tr("Back to the workspace (Ctrl+0)"))
         btn.setCursor(Qt.PointingHandCursor)
