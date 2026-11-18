@@ -322,17 +322,23 @@ class InferenceEngine:
             self._acquired_point = QVector3D(corner)
 
     def finish_snap(self, snap, px_x: float, px_y: float, tool,
-                    cues: bool = True):
-        """What follows the search: the sticky axis, the axis-source cue and
-        the extension hooks (``cues``: they pick through this viewport) and
-        the tool's allowed kinds."""
+                    picks=None):
+        """What follows the search: the sticky axis, the axis-source cue,
+        the extension hooks and the tool's allowed kinds.
+
+        ``picks`` is what the axis-source cue picks and projects through —
+        this viewport by default; the Metal view hands its own tool facade
+        (``views.wgpu_tools.NativeTools``), whose occlusion asks the snap
+        index rather than the GL pick index. The extension providers are
+        always handed this viewport: their signature is ``fn(viewport,
+        snap, px, py)`` with the document's viewport, whichever view drew
+        the frame (the two share the camera and the size)."""
         if snap is not None and snap.kind == "axis" and snap.axis:
             self._sticky_axis = snap.axis
         else:
             self._sticky_axis = None
-        if cues:
-            snap = self._axis_source_cue(snap, px_x, px_y)
-            snap = self._extension_snap(snap, px_x, px_y)
+        snap = self._axis_source_cue(snap, px_x, px_y, picks)
+        snap = self._extension_snap(snap, px_x, px_y)
         return self._limit_snap(snap, tool)
 
     def _limit_snap(self, snap, tool):
@@ -362,7 +368,7 @@ class InferenceEngine:
         "component_origin", "intersection", "intersection_edge",
         "intersection_face", "close", "on_edge", "face_center"))
 
-    def _axis_source_cue(self, snap, px_x: float, px_y: float):
+    def _axis_source_cue(self, snap, px_x: float, px_y: float, picks=None):
         """Before its first click, a tool that reads the model axes as a
         source (the Tape: ``axis_source``) shows the cursor is ON the red,
         green or blue axis — the classic small square on the axis line.
@@ -372,8 +378,9 @@ class InferenceEngine:
 
         The pick itself stays on the viewport (``pick_axis`` is a general
         pick, the Tape reads it too): the engine calls it, the same shape as
-        ``_snap_scene`` / ``pick_face_any``."""
-        vp = self.viewport
+        ``_snap_scene`` / ``pick_face_any``. ``picks`` stands in for the
+        viewport where another view did the search (see :meth:`finish_snap`)."""
+        vp = picks if picks is not None else self.viewport
         tool = vp.active_tool
         empty_space_only = bool(
             getattr(tool, "axis_source_empty_only", False))

@@ -814,7 +814,11 @@ class WgpuView(QWidget):
                 options.update(inference=inference, modifiers=modifiers)
             self.last_snap = snap(self.inference_index, self.hovered_row, self, x, y, **options)
             if hasattr(inference, 'finish_snap') and self.last_snap is not None:
-                self.last_snap = inference.finish_snap(self.last_snap, x, y, tool, cues=False)
+                # The axis-source cue picks through this view's tools (the
+                # snap index answers its occlusion); the extension
+                # providers get the document's viewport, as on GL.
+                self.last_snap = inference.finish_snap(self.last_snap, x, y, tool,
+                                                       picks=self.tools)
                 if self.last_snap.kind == 'endpoint':
                     # GL's mid-segment corner pick: the corner under the
                     # cursor is a soft, instant reference (through point,
