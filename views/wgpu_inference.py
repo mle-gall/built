@@ -506,7 +506,23 @@ def reference_edge(index, view, x, y, radius_px=None):
     return None
 
 
+def _see_through(view):
+    """X-ray and wireframe show everything, so nothing hides a snap there:
+    GL's ``Viewport._is_occluded`` answers False in those styles, and the
+    snap rules that skip hidden references (a lock taking a hidden back
+    edge's height, upstream #1085) must still see through them here."""
+    style = getattr(getattr(view, 'source_viewport', None), '_effective_style', None)
+    if style is None:
+        return False
+    try:
+        return getattr(style(), 'face_mode', None) in ('xray', 'wireframe')
+    except Exception:
+        return False
+
+
 def _occluded(index, view, candidate, rows=None):
+    if _see_through(view):
+        return False
     pixel = view._world_to_pixel(candidate)
     if pixel is None:
         return True
@@ -532,6 +548,8 @@ def _occluded(index, view, candidate, rows=None):
 def _occluded_many(index, view, points, rows=None):
     if not points:
         return []
+    if _see_through(view):
+        return [False] * len(points)
     if rows is None:
         rows = eligible_rows(index, view.packed)
     if not getattr(view.camera, 'perspective', False) or index.replaced.any():

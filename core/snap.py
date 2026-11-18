@@ -1230,7 +1230,17 @@ def _from_point_snap(
                 continue
             d, t = _closest_on_segment_2d((cx, cy), pa, pb)
             if d <= threshold_px and (best_edge is None or d < best_edge[0]):
-                best_edge = (d, _on_edge_point(edge, t, project_onto_line))
+                point = _on_edge_point(edge, t, project_onto_line)
+                # Only an edge you can see. An edge the model hides cannot
+                # be the one the cursor is on: its screen trace crossing
+                # the cursor is a coincidence of projection. Dragging up
+                # with Z locked from a box's top corner, the FAR vertical
+                # edge projects onto the cursor's screen line and lent the
+                # lock its lower height (upstream #1085). In X-ray nothing
+                # hides anything (no ``is_occluded``), so it still counts.
+                if is_occluded is not None and is_occluded(point):
+                    continue
+                best_edge = (d, point)
         if best_edge is not None:
             refs.append((best_edge[1], "from_point", COLOR_ENDPOINT, True))
 
@@ -1262,7 +1272,16 @@ def _from_point_snap(
         if hovered_refs:
             rp = world_to_pixel(ref)
             if rp is not None:
-                d = min(d, math.hypot(rp[0] - cx, rp[1] - cy))
+                d_ref = math.hypot(rp[0] - cx, rp[1] - cy)
+                # Pointing AT a reference counts only when it can be seen:
+                # with Z locked from a box's top corner in an Iso view, the
+                # hidden back edge's midpoint sat right above the corner on
+                # screen, and the point went DOWN to its height while the
+                # cursor went up (upstream #1085). Its foot on the lock line
+                # still counts the usual way.
+                if d_ref < d and not (is_occluded is not None
+                                      and is_occluded(ref)):
+                    d = d_ref
         if d > threshold_px:
             continue
         if is_occluded is not None and is_occluded(foot):
@@ -1571,6 +1590,7 @@ def _lock_reference_snap(
                 on_line = start_point + line_dir * s
                 on_edge = a + v * t
                 if ((on_line - on_edge).length() <= 1e-3
+                        and (on_edge - start_point).length() > 1e-6
                         and world_to_pixel(on_edge) is not None):
                     # Beyond an end of the edge that stretch is the dotted
                     # extension; inside it, the crossing rule answered.
@@ -1585,7 +1605,12 @@ def _lock_reference_snap(
         if abs(den) > 1e-6:
             s = QVector3D.dotProduct(n, p0 - start_point) / den
             hit = start_point + line_dir * s
-            if world_to_pixel(hit) is not None:
+            # A plane through the start meets the lock line AT the start:
+            # nothing to offer, the line leaves the plane there. Offering
+            # it pinned a Z lock from a box's top corner to that corner
+            # while the cursor, over the top face, went up (upstream #1085,
+            # seen on the Metal view, whose hover edge is visible-only).
+            if abs(s) > 1e-6 and world_to_pixel(hit) is not None:
                 return SnapResult(hit, "intersection_face",
                                   COLOR_LOCK_INTERSECT, guide=(ref, hit),
                                   guide_color=COLOR_EXTENSION)
