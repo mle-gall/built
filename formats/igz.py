@@ -791,6 +791,7 @@ def prepare_scene_steps(scene, mesh_steps=None):
                if folder_parent(scene, f)}
     if parents:
         payload["layer_folder_parents"] = parents
+    payload["layer_folder_visibility"] = dict(getattr(scene, "folder_visibility", {}))
     # Folder labels that differ from the folder's key (#tags-by-key). An
     # older reader ignores them and shows each folder by its key.
     labels = {f: n for f, n in (getattr(scene, "layer_folder_names", None)
@@ -1758,6 +1759,9 @@ def _load_into_inner(scene, path: Path, progress=None) -> None:
     if isinstance(raw_parents, dict):
         scene.folder_parents = {f: p for f, p in raw_parents.items()
                                 if isinstance(f, str) and isinstance(p, str)}
+    flags = payload.get("layer_folder_visibility", {})
+    scene.folder_visibility = {f: bool(v) for f, v in flags.items()
+                               if f in scene.layer_folders} if isinstance(flags, dict) else {}
     raw_labels = payload.get("layer_folder_names")
     scene.layer_folder_names = (
         {f: n for f, n in raw_labels.items()

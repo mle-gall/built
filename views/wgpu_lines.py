@@ -123,7 +123,8 @@ def selected_hidden(view):
     moving = {id(g) for g in (getattr(source, '_preview_groups', None) or ())}
     tools = view.__dict__.get('tools')
     moving.update(id(g) for g in (getattr(tools, '_moving_groups', None) or ()))
-    layers = tuple((layer.key, layer.visible) for layer in getattr(scene, 'layers', ()))
+    from core.layers import effective_visible
+    layers = tuple((layer.key, effective_visible(scene, layer)) for layer in getattr(scene, 'layers', ()))
     version = scene.version - scene.view_version
     key = (version, id(packed), frozenset(map(id, groups)), frozenset(moving), layers)
     cache = view.__dict__.get('_hidden_lines')

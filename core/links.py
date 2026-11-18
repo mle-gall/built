@@ -195,6 +195,7 @@ def load_source(path, select=None, *, include_nested=True):
         # scene's meshes, not its tags).
         tags = {"layers": [ly.to_dict() for ly in src.layers],
                 "folders": list(getattr(src, "layer_folders", ()) or ()),
+                "folder_visibility": dict(src.folder_visibility),
                 "folder_names": dict(getattr(src, "layer_folder_names", None)
                                      or {}),
                 "parents": dict(getattr(src, "folder_parents", {}) or {})}
@@ -491,6 +492,11 @@ def _apply_tags(scene, path, tags) -> None:
     src_labels = tags.get("folder_names") or {}
     labels = dict(getattr(scene, "layer_folder_names", None) or {})
     for f, name in src_folders.items():
+        incoming = tags.get("folder_visibility", {}).get(f, True)
+        previous = entry.setdefault("source_folder_visible", {})
+        if name not in previous or scene.folder_visibility.get(name, True) == previous[name]:
+            scene.folder_visibility[name] = incoming
+        previous[name] = incoming
         parent = tags.get("parents", {}).get(f)
         move_folder(scene, name, src_folders.get(parent, own))
         label = src_labels.get(f) or f
