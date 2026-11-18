@@ -773,21 +773,40 @@ class WgpuView(QWidget):
             self.update()
             return self.last_snap
         inference = getattr(source, 'inference', None)
-        options = dict(start_point=self.tools.start_point,
-                       chain_first_point=getattr(tool, 'chain_first_point', None),
-                       acquired_point=getattr(inference, '_acquired_point', None),
-                       acquired_points=getattr(inference, '_encouraged', None),
-                       axis_lock=getattr(inference, 'axis_lock', None),
-                       shift_held=bool(modifiers & Qt.ShiftModifier),
-                       reference_edge=getattr(inference, 'reference_edge', None),
-                       reference_mode=getattr(inference, 'reference_mode', None),
-                       magnetic_axis_deg=getattr(tool, 'magnetic_axis_deg', None),
-                       screen_axis_px=getattr(tool, 'screen_axis_px', None),
-                       linear_mode=getattr(source, 'linear_inference_mode', 'all'),
-                       project_onto_line=lambda start, direction:
-                           self._project_to_lock_line(start, direction, x, y))
+        project = (lambda start, direction:
+                   self._project_to_lock_line(start, direction, x, y))
+        if inference is not None and hasattr(inference, 'snap_options'):
+            # The same tool/state keywords as GL's InferenceEngine.snap: the
+            # short list this used to build left out the acquired edge and
+            # face, the Shift lock, the plane rules and the rectangle's
+            # diagonal (see InferenceEngine.snap_options).
+            options = inference.snap_options(tool, modifiers)
+            options['start_point'] = self.tools.start_point
+            options['project_onto_line'] = project
+        else:
+            options = dict(start_point=self.tools.start_point,
+                           chain_first_point=getattr(tool, 'chain_first_point', None),
+                           acquired_point=getattr(inference, '_acquired_point', None),
+                           acquired_points=getattr(inference, '_encouraged', None),
+                           axis_lock=getattr(inference, 'axis_lock', None),
+                           shift_held=bool(modifiers & Qt.ShiftModifier),
+                           reference_edge=getattr(inference, 'reference_edge', None),
+                           reference_mode=getattr(inference, 'reference_mode', None),
+                           magnetic_axis_deg=getattr(tool, 'magnetic_axis_deg', None),
+                           screen_axis_px=getattr(tool, 'screen_axis_px', None),
+                           linear_mode=getattr(source, 'linear_inference_mode', 'all'),
+                           project_onto_line=project)
         if self.inference_index is not None:
+            if hasattr(inference, 'note_drawing_refs'):
+                options.update(inference=inference, modifiers=modifiers)
             self.last_snap = snap(self.inference_index, self.hovered_row, self, x, y, **options)
+            if hasattr(inference, 'finish_snap') and self.last_snap is not None:
+                self.last_snap = inference.finish_snap(self.last_snap, x, y, tool, cues=False)
+                if self.last_snap.kind == 'endpoint':
+                    # GL's mid-segment corner pick: the corner under the
+                    # cursor is a soft, instant reference (through point,
+                    # from point) while a segment is drawn.
+                    inference.note_drawing_refs(tool, corner=self.last_snap.point)
         elif self.tools.sync() in ('tape', 'move', 'mesh'):
             from core.snap import compute_snap
             from types import SimpleNamespace

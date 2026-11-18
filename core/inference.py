@@ -220,19 +220,12 @@ class InferenceEngine:
         tool = vp.active_tool
         if tool is not None and not tool.uses_snap:
             return SnapResult(world_raw, "none")
-        chain_first = None
-        start_pt = None
-        if tool is not None:
-            chain_first = getattr(tool, "chain_first_point", None)
-            start_pt = getattr(tool, "start_point", None)
+        start_pt = getattr(tool, "start_point", None) if tool is not None else None
         # «Constrained on line / plane»: under a direction lock, the edge or
         # face the cursor is over (an edge wins) hands the lock line its
         # meeting point. Only paid for while a lock is actually holding.
         lock_edge = lock_plane = None
-        locked = (self.axis_lock or self._shift_lock
-                  or (self.reference_edge is not None and self.reference_mode)
-                  or bool(modifiers & Qt.ShiftModifier))
-        if start_pt is not None and locked:
+        if start_pt is not None and self.direction_locked(modifiers):
             lock_edge = self._hover_edge
             if lock_edge is None:
                 lock_plane = self._hover_lock_plane(px_x, px_y)
@@ -246,13 +239,6 @@ class InferenceEngine:
             threshold_px=vp.snap_threshold_px,
             project_onto_line=lambda s, d: vp._project_to_lock_line(
                 s, d, px_x, px_y),
-            chain_first_point=chain_first,
-            start_point=start_pt,
-            axis_lock=self.axis_lock,
-            shift_held=bool(modifiers & Qt.ShiftModifier),
-            reference_edge=self.reference_edge,
-            reference_mode=self.reference_mode,
-            inference_angle_deg=vp.inference_angle_deg,
             is_occluded=vp._is_occluded,
             hover_lock_edge=lock_edge,
             hover_lock_plane=lock_plane,
@@ -261,6 +247,42 @@ class InferenceEngine:
             face_context=(vp._face_context_under(px_x, px_y)
                           if hasattr(vp, "_face_context_under") else None),
             edge_threshold_px=vp.edge_snap_threshold_px,
+            work_plane_normal=vp._work_plane_normal(),
+            face_crossing=(lambda: vp._face_crossing_point(px_x, px_y))
+            if hasattr(vp, "_face_crossing_point") else None,
+            face_outline=(lambda: vp._face_outline_world(px_x, px_y))
+            if hasattr(vp, "_face_outline_world") else None,
+            face_centers=self._face_centers(px_x, px_y),
+            **self.snap_options(tool, modifiers),
+        )
+        return self.finish_snap(snap, px_x, px_y, tool)
+
+    def direction_locked(self, modifiers) -> bool:
+        """Whether a direction lock holds: an arrow, a captured Shift, Down
+        on a reference edge, or Shift held."""
+        return bool(self.axis_lock or self._shift_lock
+                    or (self.reference_edge is not None and self.reference_mode)
+                    or bool(modifiers & Qt.ShiftModifier))
+
+    def snap_options(self, tool, modifiers) -> dict:
+        """The :func:`compute_snap` keywords that come from the tool and from
+        this engine's state, not from a renderer's picks — the ones the GL
+        viewport and the Metal view must hand in alike. The Metal view used
+        to build its own short list and left half of them out: no
+        parallel/perpendicular to a hovered edge, no perpendicular to a
+        face, no Shift lock on a magenta inference, a rectangle's diagonal
+        read as a line, a circle's magnet off its plane."""
+        vp = self.viewport
+        return dict(
+            chain_first_point=(getattr(tool, "chain_first_point", None)
+                               if tool is not None else None),
+            start_point=(getattr(tool, "start_point", None)
+                         if tool is not None else None),
+            axis_lock=self.axis_lock,
+            shift_held=bool(modifiers & Qt.ShiftModifier),
+            reference_edge=self.reference_edge,
+            reference_mode=self.reference_mode,
+            inference_angle_deg=getattr(vp, "inference_angle_deg", 3.0),
             magnetic_axis_deg=getattr(tool, "magnetic_axis_deg", None),
             screen_axis_px=getattr(tool, "screen_axis_px", None),
             acquired_edge=self._acquired_edge,
@@ -270,27 +292,47 @@ class InferenceEngine:
             shift_lock_dir=self._shift_lock[0] if self._shift_lock else None,
             shift_lock_color=self._shift_lock[1] if self._shift_lock else None,
             shift_lock_ref=self._shift_lock_ref,
-            linear_mode=vp.linear_inference_mode,
+            linear_mode=getattr(vp, "linear_inference_mode", "all"),
             diagonal_span=bool(getattr(tool, "diagonal_span", False)),
-            work_plane_normal=vp._work_plane_normal(),
             radial_arm=bool(getattr(tool, "radial_arm", False)),
             axis_in_plane=not _magnet_may_leave_plane(tool),
             free_3d=(not _tool_is_planar(tool)
                      and not getattr(tool, "prefers_vertical_drag", False)),
             sticky_axis=self._sticky_axis if _STICKY_AXIS else None,
             dwell_axis_lock=_DWELL_ARROW,
-            face_crossing=(lambda: vp._face_crossing_point(px_x, px_y))
-            if hasattr(vp, "_face_crossing_point") else None,
-            face_outline=(lambda: vp._face_outline_world(px_x, px_y))
-            if hasattr(vp, "_face_outline_world") else None,
-            face_centers=self._face_centers(px_x, px_y),
         )
+
+    def note_drawing_refs(self, tool, edge=None, face_normal=None,
+                          corner=None) -> None:
+        """:meth:`acquire` for a view that does its own picks (the Metal
+        view): the edge, the face normal and the corner under the cursor
+        become the soft references while a segment is being drawn, and are
+        dropped when none is."""
+        drawing = (tool is not None and getattr(tool, "uses_snap", False)
+                   and getattr(tool, "start_point", None) is not None)
+        if not drawing:
+            self._acquired_edge = None
+            self._acquired_face_normal = None
+            return
+        if edge is not None:
+            self._acquired_edge = edge
+        if face_normal is not None:
+            self._acquired_face_normal = face_normal
+        if corner is not None:
+            self._acquired_point = QVector3D(corner)
+
+    def finish_snap(self, snap, px_x: float, px_y: float, tool,
+                    cues: bool = True):
+        """What follows the search: the sticky axis, the axis-source cue and
+        the extension hooks (``cues``: they pick through this viewport) and
+        the tool's allowed kinds."""
         if snap is not None and snap.kind == "axis" and snap.axis:
             self._sticky_axis = snap.axis
         else:
             self._sticky_axis = None
-        snap = self._axis_source_cue(snap, px_x, px_y)
-        snap = self._extension_snap(snap, px_x, px_y)
+        if cues:
+            snap = self._axis_source_cue(snap, px_x, px_y)
+            snap = self._extension_snap(snap, px_x, px_y)
         return self._limit_snap(snap, tool)
 
     def _limit_snap(self, snap, tool):

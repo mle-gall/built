@@ -289,6 +289,13 @@ def prepare(packed, scene=None):
 
 def surface(index, row, origin, direction, limit=float('inf')):
     """Use the GL picker's exact triangle test after the prototype BVH."""
+    hit = surface_hit(index, row, origin, direction, limit)
+    return hit[0] if hit is not None else None
+
+
+def surface_hit(index, row, origin, direction, limit=float('inf')):
+    """:func:`surface` and the unit normal of the triangle it hit, from the
+    same candidates: ``(point, normal)`` or ``None``."""
     from views.viewport import _moller_trumbore
     rows = np.asarray(row, np.int64).reshape(-1)
     rows = rows[(rows >= 0) & (rows < len(index.packed.instances))]
@@ -297,10 +304,13 @@ def surface(index, row, origin, direction, limit=float('inf')):
     if not len(v0):
         return None
     t, hit = _moller_trumbore(np.array(origin.toTuple()), np.array(direction.toTuple()), v0, e1, e2)
-    valid = t[hit]
-    if not len(valid):
+    if not hit.any():
         return None
-    return origin + direction * float(valid.min())
+    k = int(np.argmin(np.where(hit, t, np.inf)))
+    n = np.cross(e1[k], e2[k])
+    length = float(np.linalg.norm(n))
+    normal = QVector3D(*(n / length)) if length > 1e-30 else None
+    return origin + direction * float(t[k]), normal
 
 
 def packed_surface(packed, row, origin, direction):
@@ -546,7 +556,10 @@ def snap(index, row, view, x, y, **options):
     origin, direction = view._pixel_to_ray(x, y)
     if origin is None or direction is None:
         return None
-    point = surface(index, row, origin, direction) if row in rows else None
+    engine = options.pop('inference', None)
+    modifiers = options.pop('modifiers', None)
+    hit = surface_hit(index, row, origin, direction) if row in rows else None
+    point, face_normal = hit if hit is not None else (None, None)
     on_face = point is not None
     tool = getattr(getattr(view, 'tools', None), 'tool', None)
     if point is None:
@@ -571,6 +584,16 @@ def snap(index, row, view, x, y, **options):
              if len(loose_rows) else [])
     edges += nearby_edges(index, view.packed, view.camera, view.width(), view.height(),
                           x, y, rows=group_rows, edit_group=context)
+    if row in rows and len(group_rows) > 1 and not np.isin(row, loose_rows):
+        # The placement visible under the cursor, asked on its own: the query
+        # above keeps the nearest 48 edges of ALL groups by screen distance,
+        # whatever their depth, and dense geometry BEHIND a corner filled it
+        # and pushed out the corner's own edges — hovering beside a vertex
+        # found no point. One more query on one placement.
+        seen = {(e.row, e.edge_id) for e in edges}
+        edges += [e for e in nearby_edges(
+            index, view.packed, view.camera, view.width(), view.height(), x, y,
+            rows=[row], edit_group=context) if (e.row, e.edge_id) not in seen]
     tool = getattr(getattr(view, 'tools', None), 'tool', None)
     moving = getattr(tool, '_verts', ()) if getattr(tool, 'grab', None) is not None else ()
     if moving and not getattr(tool, '_copy', False):
@@ -614,8 +637,86 @@ def snap(index, row, view, x, y, **options):
     project = lambda p: Viewport._world_to_pixel(view, p, mvp)
     if 'face_centers' not in options:
         options['face_centers'] = face_centers_near(view, x, y, on_face, project)
+    plane = getattr(getattr(view, 'tools', None), '_last_work_plane', None)
+    if plane is not None:
+        options.setdefault('work_plane_normal', plane[1])
+    elif on_face and face_normal is not None:
+        options.setdefault('work_plane_normal', face_normal)
+    start = options.get('start_point')
+    if start is not None:
+        options.setdefault('start_edges', start_edges(index, view, start, rows))
+    if engine is not None:
+        _acquire(engine, view, edges, on_face, point, face_normal,
+                 options, x, y, modifiers)
     return compute_snap(point, (x, y), SimpleNamespace(edges=edges),
                         project, threshold, **options)
+
+
+def start_edges(index, view, start, rows):
+    """The edges through ``start``, for «perpendicular to the edge you
+    started on»: the snap only hands in the edges near the cursor, and the
+    start edge is far from it once the line is longer than that radius.
+    Asked once per start, camera and index state (a 2 px query at the
+    start's pixel), then reused for every move of that segment."""
+    mvp = view.camera.projection_matrix() * view.camera.view_matrix()
+    key = (start.toTuple(), tuple(mvp.data()), view.width(), view.height(),
+           index.epoch, id(view.scene.edit_group))
+    cached = getattr(index, 'start_edges_cache', None)
+    if cached is not None and cached[0] == key:
+        return cached[1]
+    from views.viewport import Viewport
+    pixel = Viewport._world_to_pixel(view, start, mvp)
+    found = []
+    if pixel is not None:
+        from core.snap import _point_on_segment_world
+        found = [e for e in nearby_edges(
+            index, view.packed, view.camera, view.width(), view.height(),
+            pixel[0], pixel[1], radius_px=2., cap=16, rows=rows,
+            edit_group=view.scene.edit_group)
+            if _point_on_segment_world(start, e.a, e.b)]
+    index.start_edges_cache = (key, found)
+    return found
+
+
+def _acquire(engine, view, edges, on_face, point, face_normal,
+             options, x, y, modifiers=None):
+    """GL's ``InferenceEngine.acquire`` from this view's own picks: the edge
+    and the face under the cursor become the soft references a segment
+    being drawn reads (parallel / perpendicular to the edge, perpendicular
+    to the face), and, under a direction lock, what the lock line meets.
+    The candidates are the ones the snap already holds: the nearest edge
+    within the edge reach whose point under the cursor is visible (at most
+    three asked, one ray each, only while a segment is drawn)."""
+    tool = getattr(getattr(view, 'tools', None), 'tool', None)
+    drawing = (tool is not None and getattr(tool, 'uses_snap', False)
+               and getattr(tool, 'start_point', None) is not None)
+    hover = None
+    if drawing:
+        reach = options.get('edge_threshold_px') or 14.
+        occluded = options.get('is_occluded')
+        near = sorted((e for e in edges if hasattr(e, 'distance')
+                       and e.distance <= reach
+                       and (e.b - e.a).lengthSquared() > 1e-18),
+                      key=lambda e: e.distance)
+        from views.viewport import Viewport
+        for e in near[:3]:
+            delta = e.b - e.a
+            foot = Viewport._project_to_lock_line(view, e.a, delta, x, y)
+            t = QVector3D.dotProduct(foot - e.a, delta) / delta.lengthSquared()
+            if occluded is None or not occluded(e.a + delta * max(0., min(1., t))):
+                hover = e
+                break
+    engine.note_drawing_refs(tool, edge=hover,
+                             face_normal=face_normal if on_face else None)
+    options['acquired_edge'] = engine._acquired_edge
+    options['acquired_face_normal'] = engine._acquired_face_normal
+    from PySide6.QtCore import Qt
+    if drawing and engine.direction_locked(
+            modifiers if modifiers is not None else Qt.NoModifier):
+        if hover is not None:
+            options.setdefault('hover_lock_edge', hover)
+        elif on_face and face_normal is not None:
+            options.setdefault('hover_lock_plane', (point, face_normal, point))
 
 
 #: Faces in the mesh under the cursor above which the Metal view does not
