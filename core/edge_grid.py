@@ -109,7 +109,16 @@ class EdgeGrid:
                 parts.append(self.ids[lo:hi])
         cand = np.concatenate(parts)
         if len(cand) * 16 < self.n:
-            return np.unique(cand)
+            # np.unique's answer by a sort: the same sorted, repeat-free
+            # indices, without the masked-array module np.unique imports
+            # on its first call (~14 ms of the first hover).
+            cand = np.sort(cand)
+            if len(cand) > 1:
+                keep = np.empty(len(cand), dtype=bool)
+                keep[0] = True
+                np.not_equal(cand[1:], cand[:-1], out=keep[1:])
+                cand = cand[keep]
+            return cand
         # Many candidates (a whole plant in view: thousands of edges a
         # cell): the same sorted, repeat-free indices through a mask, in
         # one linear pass instead of a sort (~180 ms a move on #158).

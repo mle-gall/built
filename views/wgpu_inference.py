@@ -370,25 +370,8 @@ def screen_boxes(index, packed, mvp, width, height):
         _, lo, hi, grid, moved = cache
         changed = np.fromiter(index.screen_dirty, np.int64)
     if len(changed):
-        values = packed.instances[changed]
-        matrices = values['world'].astype(float).transpose(0, 2, 1)
-        bounds = packed.bounds[values['info'][:, 0], :, :3].astype(float)
-        center = bounds.mean(axis=1)
-        extent = (bounds[:, 1]-bounds[:, 0])*.5
-        wc = np.einsum('nij,nj->ni', matrices[:, :3, :3], center)+matrices[:, :3, 3]
-        we = np.einsum('nij,nj->ni', abs(matrices[:, :3, :3]), extent)
-        signs = np.array([[a,b,c] for a in (-1,1) for b in (-1,1) for c in (-1,1)])
-        corners = wc[:, None, :]+we[:, None, :]*signs
-        matrix = np.asarray(mvp.data()).reshape(4, 4).T
-        clip = corners @ matrix[:, :3].T + matrix[:, 3]
-        front = clip[:, :, 3] > 1e-3
-        denom = np.where(front, clip[:, :, 3], 1.)
-        xy = clip[:, :, :2]/denom[:, :, None]
-        xy = (xy*np.array([1., -1.])+1.)*np.array([width/2, height/2])
-        low, high = xy.min(axis=1), xy.max(axis=1)
-        crossing = front.any(axis=1) & ~front.all(axis=1)
-        low[crossing], high[crossing] = -np.inf, np.inf
-        low[~front.any(axis=1)], high[~front.any(axis=1)] = np.inf, np.inf
+        wc, we = _world_boxes(index, packed)
+        low, high = _project_boxes(wc[changed], we[changed], mvp, width, height)
         lo[changed], hi[changed] = low, high
         index.screen_dirty.clear()
         if grid is None:
@@ -404,6 +387,68 @@ def screen_boxes(index, packed, mvp, width, height):
             moved.update(changed.tolist())
         index.screen_cache = (key, lo, hi, grid, moved)
     return lo, hi, grid, moved
+
+
+def _world_boxes(index, packed):
+    """Each row's world box as ``(centre, half extent)``, ``(n, 3)`` each:
+    camera-independent, so kept on the index and redone only for the rows
+    an update marked (``screen_dirty``) — a camera move used to rebuild all
+    of them, ~2 ms of the first hover over 30 000 placements."""
+    n = len(packed.instances)
+    cache = getattr(index, 'world_box_cache', None)
+    if cache is None or len(cache[0]) != n:
+        rows = np.arange(n)
+        wc, we = np.empty((n, 3)), np.empty((n, 3))
+    else:
+        wc, we = cache
+        rows = np.fromiter(index.screen_dirty, np.int64)
+    if len(rows):
+        values = packed.instances[rows]
+        matrices = values['world'].astype(float).transpose(0, 2, 1)
+        bounds = packed.bounds[values['info'][:, 0], :, :3].astype(float)
+        center = bounds.mean(axis=1)
+        extent = (bounds[:, 1]-bounds[:, 0])*.5
+        wc[rows] = np.einsum('nij,nj->ni', matrices[:, :3, :3], center)+matrices[:, :3, 3]
+        we[rows] = np.einsum('nij,nj->ni', abs(matrices[:, :3, :3]), extent)
+    index.world_box_cache = (wc, we)
+    return wc, we
+
+
+def _project_boxes(wc, we, mvp, width, height):
+    """Conservative screen boxes ``(low, high)`` of the world boxes: the
+    eight corners projected, ``±inf`` for a box crossing the eye plane,
+    ``+inf`` for one wholly behind it. The clip transform is linear, so
+    each corner is the clip centre plus signed clip extents — eight passes
+    over contiguous rows, not reductions over a short middle axis (half of
+    the first hover's 17 ms over 30 000 placements)."""
+    matrix = np.asarray(mvp.data()).reshape(4, 4).T
+    centre = wc @ matrix[:, :3].T + matrix[:, 3]
+    axes = [we[:, k, None] * matrix[:, k] for k in range(3)]
+    n = len(wc)
+    low = np.full((n, 2), np.inf)
+    high = np.full((n, 2), -np.inf)
+    any_front = np.zeros(n, bool)
+    all_front = np.ones(n, bool)
+    half_w, half_h = width / 2, height / 2
+    for sx in (-1., 1.):
+        for sy in (-1., 1.):
+            for sz in (-1., 1.):
+                clip = centre + sx * axes[0] + sy * axes[1] + sz * axes[2]
+                w = clip[:, 3]
+                front = w > 1e-3
+                denom = np.where(front, w, 1.)
+                px = (clip[:, 0] / denom + 1.) * half_w
+                py = (1. - clip[:, 1] / denom) * half_h
+                np.minimum(low[:, 0], px, out=low[:, 0])
+                np.minimum(low[:, 1], py, out=low[:, 1])
+                np.maximum(high[:, 0], px, out=high[:, 0])
+                np.maximum(high[:, 1], py, out=high[:, 1])
+                any_front |= front
+                all_front &= front
+    crossing = any_front & ~all_front
+    low[crossing], high[crossing] = -np.inf, np.inf
+    low[~any_front], high[~any_front] = np.inf, np.inf
+    return low, high
 
 
 def _screen_rows(index, packed, mvp, width, height, x, y, radius, rows):
