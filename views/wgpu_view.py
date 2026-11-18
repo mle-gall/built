@@ -2,9 +2,9 @@
 import math
 import time
 import numpy as np
-from PySide6.QtCore import Qt, Signal, QTimer, QEvent
+from PySide6.QtCore import Qt, Signal, QTimer, QEvent, QCoreApplication
 from PySide6.QtGui import QColor, QVector3D
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QApplication, QWidget
 from core.camera import OrbitCamera
 from views.wgpu_scene import pack_scene
 from tools.select import selection_mode
@@ -34,6 +34,12 @@ class WgpuView(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        # Keep the inspector's trees and forms in Qt's backing store. Making
+        # every sibling an NSView turns each splitter step into native layout.
+        if QApplication.platformName() == 'cocoa':
+            QCoreApplication.setAttribute(Qt.AA_DontCreateNativeWidgetSiblings)
+        self._resize_timer = QTimer(self, singleShot=True, interval=80)
+        self._resize_timer.timeout.connect(self._finish_resize)
         for attr in (Qt.WA_NativeWindow, Qt.WA_PaintOnScreen, Qt.WA_NoSystemBackground):
             self.setAttribute(attr)
         self.camera = OrbitCamera()
@@ -432,12 +438,23 @@ class WgpuView(QWidget):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
+        # Keep the last Metal frame during a splitter/window drag. Surface
+        # configuration waits for GPU work and reallocates all render targets;
+        # doing it per pixel can consume the entire input frame budget.
+        self._resize_timer.start()
+
+    def _finish_resize(self):
         if self.renderer is not None:
-            self.renderer.resize(self.width(), self.height(), self.devicePixelRatioF())
+            physical = (self.width(), self.height(), self.devicePixelRatioF())
+            if physical != getattr(self, '_physical_size', None):
+                self.renderer.resize(*physical)
+                self._physical_size = physical
+        self._pick_frame_dirty = True
         self.update()
 
     def draw_frame(self):
-        if self.renderer is None or getattr(self, '_drawing_frame', False):
+        if (self.renderer is None or self._resize_timer.isActive()
+                or getattr(self, '_drawing_frame', False)):
             return None
         self._drawing_frame = True
         try:
@@ -690,6 +707,10 @@ class WgpuView(QWidget):
     def _prepare_pick_frame(self):
         if getattr(self, '_drawing_frame', False):
             return  # overlay occlusion reads IDs during this very presentation
+        # A click immediately after release must use the new pixel mapping.
+        if self._resize_timer.isActive():
+            self._resize_timer.stop()
+            self._finish_resize()
         if self._scene_dirty and self.isVisible():
             self._upload()
         timer = getattr(self, '_refresh_timer', None)

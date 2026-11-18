@@ -18,6 +18,14 @@ def _panel():
     win = MainWindow()
     win.resize(1400, 900)
     win.show()
+    # Startup now clamps saved geometry to the display. These column tests
+    # deliberately need a 1400 px window even on the 800 px offscreen screen:
+    # apply their test size after the queued startup layout has settled.
+    for _ in range(4):
+        QApplication.processEvents()
+    win.resize(1400, 900)
+    from PySide6.QtCore import Qt
+    win.resizeDocks([win.project_browser], [win.FACTORY_TRAY_WIDTH], Qt.Horizontal)
     QApplication.processEvents()
     panel = win.project_browser.outliner
     panel.refresh()
