@@ -1876,6 +1876,7 @@ def compute_snap(
     face_outline: Optional[Callable[[], Optional[tuple]]] = None,
     face_centers: Optional[list] = None,
     face_context: Optional[str] = None,
+    start_edges=None,
 ) -> SnapResult:
     # Linear-inference toggle (Alt): "all" = every inference, "off" =
     # point snaps only, "parallel_perp" = keep only parallel/perpendicular. The
@@ -1966,6 +1967,43 @@ def compute_snap(
             if _still_along_axis(sticky_axis, line_start, candidate_world,
                                  _STICKY_AXIS_RELEASE_DEG):
                 axis_engaged = sticky_axis
+        if (axis_engaged is not None and line_start is not None
+                and project_onto_line is not None):
+            # The magnet must not take the point BEHIND the face the cursor
+            # is over. On a sloped face, the red or green line through a
+            # start on the face runs under it: the magnet engaged, silenced
+            # «On edge» / «On face», and the line ended in the air under the
+            # roof — a loop drawn on it made a floating face, a line across
+            # it cut nothing. An axis lying IN the face (the eave) or rising
+            # in front of it (a chimney) is visible and still engages.
+            # Asked whether or not a face was hit under the cursor: on a
+            # face's border edge the ray grazes past it, and the axis point
+            # hidden under the face is just as wrong there. Cost: one
+            # occlusion ray, only while an axis engages and its point is off
+            # the plane the cursor's own point lies on.
+            #
+            # And a line drawn ON the face (its start on the face's plane)
+            # keeps to the face while the cursor is over it: an axis that
+            # runs at a shallow angle to a sloped face (under 45°) is not the
+            # way off it — the cursor on the face and the axis point lie on
+            # the same pixel, and the face is what the badge names. The
+            # axis along the normal, or steeper than 45° (a post rising from
+            # a sloped roof), still engages. No ray for this one.
+            axis_dir = _AXIS_VECTORS[axis_engaged]
+            ax_pt = project_onto_line(line_start, axis_dir)
+            n = work_plane_normal
+            n = n.normalized() if n is not None and n.length() > 1e-9 else None
+            off_plane = (n is None or abs(
+                QVector3D.dotProduct(ax_pt - candidate_world, n)) > 1e-3)
+            if off_plane and n is not None and face_under_cursor:
+                rise = abs(QVector3D.dotProduct(axis_dir.normalized(), n))
+                start_on_face = abs(QVector3D.dotProduct(
+                    line_start - candidate_world, n)) <= 1e-3
+                if start_on_face and 0.0087 < rise < 0.7071:
+                    axis_engaged = None
+            if (axis_engaged is not None and off_plane
+                    and is_occluded is not None and is_occluded(ax_pt)):
+                axis_engaged = None
 
     # 0.5 Axis lock BEFORE the first click (issue #1095): with no start point
     #     yet, an arrow key constrains the first click to the encouraged
@@ -2352,7 +2390,12 @@ def compute_snap(
         if draw.length() > 1e-6:
             draw_u = draw.normalized()
             cos_tol = math.cos(math.radians(8.0))  # forgiving: it snaps to exact
-            for edge in scene.edges:
+            # ``scene.edges`` are the edges near the CURSOR; the edge the line
+            # started on is far from it once the line is longer than the
+            # search radius, and the lock went with it (the Metal view only
+            # hands in nearby edges). ``start_edges`` are the edges through
+            # the start, found once per start by the caller.
+            for edge in list(scene.edges) + list(start_edges or ()):
                 if not _point_on_segment_world(line_start, edge.a, edge.b):
                     continue
                 perp = _direction_from_edge(edge, "perpendicular",
@@ -2594,6 +2637,22 @@ def compute_snap(
                         and (is_occluded is None or not is_occluded(hit))):
                     return SnapResult(hit, "intersection", COLOR_ENDPOINT,
                                       guide=(start_point, hit))
+            elif (kind == "on_edge" and line_start is not None
+                    and work_plane_normal is not None
+                    and work_plane_normal.length() > 1e-9):
+                # …and when it does NOT cross it — the edge lies in the plane
+                # the line is drawn on (a sloped face's border) and the axis
+                # leaves that plane at a shallow angle — the axis line passes
+                # under or over the edge, and the edge the cursor is on is
+                # the target. Locked to the axis, a line across a sloped face
+                # ended in the air beside its border and cut nothing.
+                n = work_plane_normal.normalized()
+                rise = abs(QVector3D.dotProduct(
+                    _AXIS_VECTORS[axis_engaged].normalized(), n))
+                in_plane = all(abs(QVector3D.dotProduct(p - line_start, n))
+                               <= 1e-3 for p in (target.a, target.b))
+                if in_plane and 0.0087 < rise < 0.7071:
+                    axis_engaged = None
     if best_target is not None and axis_engaged is None:
         _d, on_pt, kind, target = best_target
         if kind == "on_edge" and line_inferences and acquired_point is not None:
@@ -2653,6 +2712,20 @@ def compute_snap(
             if abs(QVector3D.dotProduct(draw.normalized(), ev_u)) >= par_cos:
                 locked = project_onto_line(line_start, ev_u)
                 return SnapResult(locked, "reference", COLOR_REFERENCE)
+        # …and PERPENDICULAR to it, in the plane being drawn on: the other
+        # half of the hovered-edge reference (only parallel was offered).
+        # A perpendicular that runs along an axis is left to the axis cue,
+        # as the parallel above leaves axis-aligned edges.
+        perp = (_direction_from_edge(acquired_edge, "perpendicular",
+                                     work_plane_normal)
+                if ev.length() > 1e-9 and draw.length() > 1e-6 else None)
+        if (perp is not None
+                and _detect_axis_alignment(QVector3D(), perp,
+                                           inference_angle_deg) is None
+                and abs(QVector3D.dotProduct(draw.normalized(), perp))
+                >= math.cos(math.radians(inference_angle_deg))):
+            locked = project_onto_line(line_start, perp)
+            return SnapResult(locked, "reference", COLOR_REFERENCE)
 
     # 8c. Perpendicular to an encouraged face: heading along its normal locks
     #     the line square-out of the face (magenta).

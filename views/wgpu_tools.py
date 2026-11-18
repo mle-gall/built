@@ -144,9 +144,28 @@ class NativeTools(MeshToolAccess):
                     and self.tool.start_point is None
                     and ctx.modifiers & Qt.ControlModifier and not self.tool._copy):
                 self.tool._toggle_copy(self, say=False)
+            had_start = getattr(self.tool, 'start_point', None) is not None
+            plane = None
+            if (not had_start and hasattr(self.tool, 'work_plane')
+                    and self.tool.work_plane is None
+                    and callable(getattr(self.view, 'pick_row', None))):
+                # GL's _dispatch_tool_click: the first click on a face
+                # captures its plane for the rest of the operation, so a
+                # rectangle started on a sloped face and dragged past its
+                # border stays on that face's plane and splits it. Asked
+                # at the click only.
+                face, placement = self.pick_face_placement(
+                    event.position().x(), event.position().y())
+                if face is not None:
+                    from core.snap import face_plane_world
+                    plane = face_plane_world(face, getattr(placement, 'xform', None))
             self.tool.on_hover(ctx)
             self.tool.on_click(ctx)
             self.start_point = getattr(self.tool, 'start_point', None)
+            if (plane is not None and self.start_point is not None
+                    and hasattr(self.tool, 'work_plane')
+                    and self.tool.work_plane is None):
+                self.tool.work_plane = plane
             self.update()
             self.view.overlay_primitives = []
             self.mesh_feedback()
