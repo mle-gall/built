@@ -730,6 +730,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             from PySide6.QtCore import QTimer
             self._toolbars_packed = True
             QTimer.singleShot(0, self, self._pack_toolbars)
+            QTimer.singleShot(0, self, self._fit_docks_to_screen)
         if not getattr(self, "_ndof_connected", False):
             self._connect_ndof()
 
@@ -2484,6 +2485,13 @@ class MainWindow(WorksessionMixin, QMainWindow):
         (Marco, 29-09 — floating tabs were tried and dropped): no floating,
         and one a saved layout left floating goes back among the tabs."""
         from PySide6.QtWidgets import QDockWidget
+        if sys.platform == "darwin":
+            # A restored floating dock retains an NSView when docked again.
+            # Qt interprets an off-screen tab's position as safe-area insets
+            # (e.g. 1040 x 1596), then adds them to the window minimum.
+            # Only the top-level window owns the screen's safe area.
+            dock.setAttribute(Qt.WA_ContentsMarginsRespectsSafeArea, False)
+            dock.setContentsMargins(0, 0, 0, 0)
         dock.setFeatures(dock.features() & ~QDockWidget.DockWidgetFloatable)
         if dock.isFloating():
             dock.setFloating(False)
@@ -2709,6 +2717,10 @@ class MainWindow(WorksessionMixin, QMainWindow):
 
         btn = QToolButton(self)
         btn.setObjectName("sidebar_handle")
+        # It straddles the Metal view's edge. Siblings are no longer native
+        # (AA_DontCreateNativeWidgetSiblings), so it must be its own NSView
+        # or the view's layer covers its left half.
+        btn.setAttribute(Qt.WA_NativeWindow)
         btn.setFixedSize(14, 56)
         btn.setIconSize(QSize(12, 12))
         btn.setIcon(tool_icon("side_collapse"))
@@ -2856,6 +2868,8 @@ class MainWindow(WorksessionMixin, QMainWindow):
         # project in front changes.
         btn = QToolButton(self._doc_stack)
         btn.setObjectName("clean_screen_exit")
+        # Over the Metal view: a native view of its own, or it stays under it.
+        btn.setAttribute(Qt.WA_NativeWindow)
         btn.setText("✕  " + tr("Exit clean screen"))
         btn.setToolTip(tr("Back to the workspace (Ctrl+0)"))
         btn.setCursor(Qt.PointingHandCursor)
@@ -3836,13 +3850,11 @@ class MainWindow(WorksessionMixin, QMainWindow):
         return restored
 
     def _fit_docks_to_screen(self) -> None:
-        """Give the tallest side panels a scroll bar while the window
-        cannot be as short as the screen. A panel's minimum height is its
-        contents', and the tabbed panels of one side all count: with the
-        whole catalog installed one extension's panel asked for 652 px and
-        the window needed 902 px on a screen with 890 to give — GNOME
-        would not maximize it (Marco, 18-10). A window that fits is left
-        as it is."""
+        """Scroll oversized panels instead of imposing their size on the window.
+
+        Include inactive tabs: Qt uses the largest minimum in a tab group.
+        Wide extension forms remain accessible through horizontal scrolling.
+        """
         from PySide6.QtWidgets import QDockWidget, QFrame, QScrollArea
         screen = self.screen()
         if screen is None:
@@ -3854,17 +3866,35 @@ class MainWindow(WorksessionMixin, QMainWindow):
                  and not isinstance(d.widget(), QScrollArea)
                  and self.dockWidgetArea(d) in (Qt.LeftDockWidgetArea,
                                                 Qt.RightDockWidgetArea)]
-        docks.sort(key=lambda d: -d.widget().minimumSizeHint().height())
+        docks.sort(key=lambda d: -d.widget().minimumSizeHint().expandedTo(
+            d.widget().minimumSize()).height())
         for dock in docks:
-            if self.minimumSizeHint().height() <= limit:
-                return
             inner = dock.widget()
+            need = inner.minimumSizeHint().expandedTo(inner.minimumSize())
+            if self.minimumSizeHint().height() <= limit and need.width() <= 300:
+                continue
             scroll = QScrollArea(dock)
             scroll.setWidgetResizable(True)
             scroll.setFrameShape(QFrame.NoFrame)
             scroll.setWidget(inner)
             dock.setWidget(scroll)
             self.layout().activate()
+        # Layout requests from reparented panels must settle before clamping.
+        QTimer.singleShot(0, self, self._clamp_to_screen)
+
+    def _clamp_to_screen(self) -> None:
+        """Fit restored geometry to the current display, including its frame."""
+        if self.isFullScreen() or self.isMaximized() or self.screen() is None:
+            return
+        self.layout().activate()
+        avail = self.screen().availableGeometry()
+        frame = self.frameGeometry()
+        extra = frame.size() - self.size()
+        self.resize(min(self.width(), avail.width() - max(0, extra.width())),
+                    min(self.height(), avail.height() - max(0, extra.height())))
+        frame = self.frameGeometry()
+        self.move(max(avail.left(), min(frame.left(), avail.right() - frame.width() + 1)),
+                  max(avail.top(), min(frame.top(), avail.bottom() - frame.height() + 1)))
 
     def _on_manage_extensions(self) -> None:
         # An exception in a menu slot goes to stderr, and a windowed build

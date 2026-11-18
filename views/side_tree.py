@@ -195,6 +195,27 @@ class SideTree(QTreeWidget):
         #: pixels of wobble while clicking an eye selected a run of rows.
         self._cell_press = False
 
+    def resizeEvent(self, event) -> None:
+        # Cocoa backing-store flushes plus row delegates can exceed a frame
+        # during a dock drag, even with uniform row heights. Keep the existing
+        # rows until the pane settles; the dock splitter still moves.
+        if (QApplication.platformName() == "cocoa" and self.isVisible()
+                and event.oldSize().isValid()):
+            timer = getattr(self, "_resize_paint_timer", None)
+            if timer is None:
+                timer = self._resize_paint_timer = QTimer(self, singleShot=True,
+                                                        interval=80)
+                timer.timeout.connect(self._finish_resize_paint)
+            if not timer.isActive():
+                self._resize_updates_enabled = self.updatesEnabled()
+                self.setUpdatesEnabled(False)
+            timer.start()
+        super().resizeEvent(event)
+
+    def _finish_resize_paint(self) -> None:
+        if self._resize_updates_enabled:
+            self.setUpdatesEnabled(True)
+
     # ---- The strip of the columns button ---------------------------------
     def updateGeometries(self) -> None:          # noqa: N802 — Qt override
         """Qt lays the header over the whole viewport; a strip is then kept
