@@ -45,7 +45,16 @@ class MeshToolAccess:
     def work_point(self, x, y):
         from core import axes
         tool = self.tool
-        plane = tool.drag_plane(self) or getattr(tool, 'work_plane', None)
+        own = tool.drag_plane(self)
+        plane = own or getattr(tool, 'work_plane', None)
+        if own is None and plane is not None:
+            # GL's _current_work_plane (#545): a PLANAR shape re-plans onto
+            # the face the cursor is over, capture or not, and takes its
+            # capture with it — or the preview stayed on the face it started
+            # on while the point and the badge went to the other one.
+            face_plane = self._face_replan(tool, x, y, plane)
+            if face_plane is not None:
+                tool.work_plane = plane = face_plane
         if plane is None:
             lock = getattr(tool, 'locked_work_plane', None)
             anchor = self.start_point if self.start_point is not None else axes.origin()
@@ -63,6 +72,30 @@ class MeshToolAccess:
             plane = anchor, normal
         self._last_work_plane = plane
         return self._ray_hit_plane((x, y), plane)
+
+    def _face_replan(self, tool, x, y, captured):
+        """``Viewport._planar_face_plane`` with the face under the cursor
+        from this view's picks: the placement under the cursor (the ID
+        pass) and its triangle on the cursor ray, ``(point, unit normal)``.
+        Only a planar shape pays for the ray."""
+        from tools.base import PlaneLock
+        if not isinstance(tool, PlaneLock):
+            return None
+        index = getattr(self.view, 'inference_index', None)
+        if index is None:
+            return None
+        row = self.view.pick_row(x, y)
+        if row is None:
+            return None
+        origin, direction = self._pixel_to_ray(x, y)
+        if origin is None or direction is None:
+            return None
+        from views.wgpu_inference import surface_hit
+        hit = surface_hit(index, row, origin, direction)
+        if hit is None or hit[1] is None:
+            return None
+        return _viewport_class()._planar_face_plane(
+            self, tool, (x, y), captured, face_plane=hit)
 
     def _segment_to_pixels(self, a, b):
         """GL's: cut where the segment passes behind the eye instead of
