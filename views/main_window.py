@@ -703,6 +703,10 @@ class MainWindow(WorksessionMixin, QMainWindow):
         geo = st.value("ui/window_geometry")
         if geo:
             self.restoreGeometry(geo)
+            # Saved on another (bigger) display, it may not fit this one.
+            # Here and now, not after the show: a size set on purpose later
+            # (a script, a test, the user) is left alone.
+            self._clamp_to_screen()
 
         self._setup_autosave()
         # An untitled recovery slot on disk means the last session died with
@@ -3879,17 +3883,19 @@ class MainWindow(WorksessionMixin, QMainWindow):
             scroll.setWidget(inner)
             dock.setWidget(scroll)
             self.layout().activate()
-        # Layout requests from reparented panels must settle before clamping.
-        QTimer.singleShot(0, self, self._clamp_to_screen)
 
     def _clamp_to_screen(self) -> None:
-        """Fit restored geometry to the current display, including its frame."""
+        """Fit restored geometry to the current display, including its frame.
+        Called once, right after restoreGeometry (before the first show
+        the frame is not known yet: the title bar's height is allowed
+        for)."""
         if self.isFullScreen() or self.isMaximized() or self.screen() is None:
             return
-        self.layout().activate()
         avail = self.screen().availableGeometry()
         frame = self.frameGeometry()
         extra = frame.size() - self.size()
+        if not self.isVisible() and extra.height() <= 0:
+            extra.setHeight(28)          # the title bar the show will add
         self.resize(min(self.width(), avail.width() - max(0, extra.width())),
                     min(self.height(), avail.height() - max(0, extra.height())))
         frame = self.frameGeometry()

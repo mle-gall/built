@@ -11,6 +11,17 @@ from PySide6.QtWidgets import QApplication, QDockWidget, QScrollArea, QWidget
 from views.main_window import MainWindow
 
 
+def _wait_for(cond, timeout_ms=3000):
+    """Under a loaded suite an 80 ms timer can fire late: wait for it."""
+    import time
+    end = time.monotonic() + timeout_ms / 1000
+    while not cond():
+        if time.monotonic() > end:
+            return False
+        QTest.qWait(10)
+    return True
+
+
 @pytest.fixture
 def win(monkeypatch):
     window = MainWindow()
@@ -30,7 +41,7 @@ def test_restored_oversize_geometry_is_clamped(win):
     avail = win.screen().availableGeometry()
     win.resize(avail.width() + 200, avail.height() + 300)
     win.move(avail.right() - 50, avail.bottom() - 50)
-    win._fit_docks_to_screen()
+    win._clamp_to_screen()           # what restoreGeometry is followed by
     for _ in range(3):
         QApplication.processEvents()
     assert avail.contains(win.frameGeometry())
@@ -77,7 +88,7 @@ def test_metal_resize_burst_configures_only_final_size():
             view.resizeEvent(QResizeEvent(QSize(width, 200), QSize(width - 1, 200)))
         view.renderer.resize.assert_not_called()
         assert view.draw_frame() is None
-        QTest.qWait(110)
+        assert _wait_for(lambda: view.renderer.resize.called)
         view.renderer.resize.assert_called_once_with(359, 200, view.devicePixelRatioF())
         assert view._pick_frame_dirty
         view._finish_resize()
@@ -118,7 +129,7 @@ def test_mac_tree_repaints_once_resize_settles(monkeypatch, enabled):
         for width in range(300, 360):
             tree.resizeEvent(QResizeEvent(QSize(width, 200), QSize(width - 1, 200)))
         assert not tree.updatesEnabled()
-        QTest.qWait(110)
+        assert _wait_for(lambda: not tree._resize_paint_timer.isActive())
         assert tree.updatesEnabled() == enabled
         assert not tree._resize_paint_timer.isActive()
     finally:

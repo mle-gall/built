@@ -76,7 +76,9 @@ def test_the_progress_dialog_offers_cancel_and_cancel_stops_the_converter(
     def convert(self, dwg_path):
         dlg = window._progress_dlg
         seen["buttons"] = [b.text() for b in dlg.findChildren(QPushButton)]
-        dlg.cancel()                      # what the Cancel button does
+        # The Cancel button itself (dlg.cancel() does not emit canceled;
+        # the test passed before only because dlg.close() did).
+        dlg.findChildren(QPushButton)[0].click()
         raise dwg_bridge.DwgBridgeError("stopped", "cancelled")
 
     cancelled = []
