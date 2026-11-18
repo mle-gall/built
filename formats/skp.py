@@ -364,12 +364,10 @@ def _apply_payload_inner(scene, payload, progress=None) -> str:
         for raw in payload["layers"]:
             name = raw.get("name")
             if name and name not in known:
-                # A tag in a hidden .skp folder is hidden there, its own
-                # switch notwithstanding; IngeTrazo's folders only file.
+                # Preserve the tag's own switch independently of its folder.
                 scene.layers.append(Layer(
                     name,
-                    visible=raw.get("visible", True)
-                    and not folder_hidden.get(name, False),
+                    visible=raw.get("visible", True),
                     folder=folder_of.get(name)))
                 known.add(name)
 
@@ -563,6 +561,7 @@ def _import_tag_folders(scene, records) -> tuple[dict, dict]:
                 move_folder(scene, name, parent)
         else:
             here = add_folder(scene, name, parent)
+        scene.folder_visibility[here] = not bool(rec.get("hidden"))
         names[key] = here
         hidden[key] = bool(rec.get("hidden")) \
             or hidden.get(rec.get("parent"), False)

@@ -108,9 +108,10 @@ def test_load_creates_the_tags_in_their_folders(monkeypatch):
     from core.layers import Layer as L
     for raw in payload_layers:
         scene.layers.append(L(raw["name"],
-                              visible=raw["visible"]
-                              and not hidden.get(raw["name"], False),
+                              visible=raw["visible"],
                               folder=folder_of.get(raw["name"])))
     assert scene.layer("Dome - Roof").folder == "Dome"
-    assert not scene.layer("Old mesh").visible          # its folder is hidden
+    assert scene.layer("Old mesh").visible
+    from core.layers import effective_visible
+    assert not effective_visible(scene, scene.layer("Old mesh"))
     assert scene.layer("Loose").folder is None

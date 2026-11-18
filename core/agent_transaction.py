@@ -31,6 +31,7 @@ class AgentSnapshot(SnapshotImport):
         mesh_states = [(m, m.capture_state()) for m in meshes if m is not scene.mesh]
         fields = {k: deepcopy(getattr(scene, k), memo) for k in (
             "plugin_data", "layer_folders", "folder_parents", "layer_folder_uids",
+            "folder_visibility",
             "active_layer", "units", "dimension_style", "camera_home", "custom_scales")}
         return attrs, mesh_states, fields
 

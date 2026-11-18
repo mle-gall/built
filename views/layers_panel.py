@@ -161,6 +161,7 @@ def layers_signature(scene) -> tuple:
     return (tuple(repr(sorted(vars(ly).items())) for ly in scene.layers),
             folders, tuple(L.folder_parent(scene, f) for f in folders),
             tuple(L.folder_label(scene, f) for f in folders),
+            tuple(sorted(scene.folder_visibility.items())),
             L.active_layer(scene),
             bool(getattr(style, "color_by_layer", False)))
 
@@ -2952,6 +2953,7 @@ class LayersPanel(QWidget):
         current = self.tree.currentItem()
         current_key = self._key(current) if current is not None else None
         self._updating = True
+        scroll = (self.tree.horizontalScrollBar().value(), self.tree.verticalScrollBar().value())
         self.tree.clear()
         folders = {}
         for order, name in enumerate(L.folders_of(scene)):
@@ -3007,6 +3009,9 @@ class LayersPanel(QWidget):
         self.color_by_layer.blockSignals(False)
         self._updating = False
         self._drawn_signature = self._signature()
+        self._drawn_structure = self._structure()
+        self.tree.horizontalScrollBar().setValue(scroll[0])
+        self.tree.verticalScrollBar().setValue(scroll[1])
         self._count_timer.start(300)
         self._tell_order()
 
@@ -3159,12 +3164,16 @@ class LayersPanel(QWidget):
         self._update_expand_button()
 
     def _on_expanded(self, item) -> None:
+        if self._updating:
+            return
         self._collapsed.discard(self._key(item)[1])
         if not self._updating:
             self._mark_selection()
             self._update_expand_button()
 
     def _on_collapsed(self, item) -> None:
+        if self._updating:
+            return
         self._collapsed.add(self._key(item)[1])
         if not self._updating:
             self._mark_selection()
@@ -3212,12 +3221,48 @@ class LayersPanel(QWidget):
         self._marked_names = names
         self._updating = was
 
+    def _dim_eye(self, item, dim):
+        if dim:
+            icon = item.icon(COL_EYE)
+            item.setIcon(COL_EYE, QIcon(icon.pixmap(20, 20, QIcon.Disabled)))
+        item.setData(COL_EYE, Qt.UserRole + 2, dim)
+
+    def _structure(self):
+        scene = self._scene()
+        return (tuple((ly.key, ly.folder) for ly in scene.layers),
+                tuple((f, L.folder_parent(scene, f)) for f in L.folders_of(scene)))
+
+    def _update_rows(self):
+        scene = self._scene()
+        self._updating = True
+        self._alone = self.isolated_layers()
+        for item in self._all_items():
+            kind, key = self._key(item)
+            if kind == KIND_LAYER:
+                ly = scene.layer_by_key(key)
+                item.setText(COL_NAME, ly.name)
+                self._paint_layer_row(item, ly, key == L.active_layer(scene))
+            else:
+                item.setText(COL_NAME, L.folder_label(scene, key))
+                self._paint_folder_row(item)
+        self._updating = False
+        self._drawn_signature = self._signature()
+        col, order = self._sort
+        self.tree.sortItems(col, order)
+        self._tell_order()
+        self.color_by_layer.blockSignals(True)
+        self.color_by_layer.setChecked(bool(getattr(scene.display_style, "color_by_layer", False)))
+        self.color_by_layer.blockSignals(False)
+        self._mark_selection()
+        self._apply_filter()
+
     def _paint_layer_row(self, item, ly, active: bool) -> None:
         item.setIcon(COL_ACTIVE, _pencil_icon(active))
         item.setToolTip(COL_ACTIVE, tr("Active layer") if active
                         else tr("Make this the active layer"))
         item.setIcon(COL_EYE, node_icon("eye" if ly.visible else "eye_off"))
         item.setData(COL_EYE, Qt.UserRole + 1, int(ly.visible))
+        self._dim_eye(item, not L.folder_visible(self._scene(), ly.folder))
         item.setIcon(COL_LOCK, node_icon("lock" if ly.locked else "lock_open"))
         item.setData(COL_LOCK, Qt.UserRole + 1, int(ly.locked))
         item.setIcon(COL_COLOR, layer_swatch(ly))
@@ -3298,14 +3343,16 @@ class LayersPanel(QWidget):
         if layers is None:
             layers = [scene.layer(n) for n in L.layers_in_folder(scene, self._key(item)[1])]
             layers = [ly for ly in layers if ly is not None]
-        shown = any(ly.visible for ly in layers) or not layers
+        key = self._key(item)[1]
+        shown = L.folder_visible(scene, key, ancestors=False)
         locked = bool(layers) and all(ly.locked for ly in layers)
         item.setIcon(COL_EYE, node_icon("eye" if shown else "eye_off"))
         item.setIcon(COL_LOCK, node_icon("lock" if locked else "lock_open"))
         # Read by «Sort by visible / locked», as a layer row's are.
         item.setData(COL_EYE, Qt.UserRole + 1, int(shown))
         item.setData(COL_LOCK, Qt.UserRole + 1, int(locked))
-        item.setToolTip(COL_EYE, tr("Show or hide every layer in the folder"))
+        item.setToolTip(COL_EYE, tr("Show or hide the folder"))
+        self._dim_eye(item, not L.folder_visible(scene, L.folder_parent(scene, key)))
         printed = (not layers
                    or any(getattr(ly, "printable", True) for ly in layers))
         item.setIcon(COL_PRINT, printer_icon(printed))
@@ -3479,8 +3526,8 @@ class LayersPanel(QWidget):
                 ly = scene.layer(name)
                 if ly is None:
                     return False
-                return (ly.visible if key == "visible" else
-                        not ly.visible if key == "hidden" else
+                return (L.effective_visible(scene, ly) if key == "visible" else
+                        not L.effective_visible(scene, ly) if key == "hidden" else
                         not getattr(ly, "printable", True)
                         if key == "unprinted" else ly.locked)
             return test
@@ -3561,7 +3608,7 @@ class LayersPanel(QWidget):
         # name is about to be typed must not be rebuilt under the editor.
         self._window.viewport.notify_scene_changed()
         if rebuild:
-            self.refresh()
+            self._refresh_after_change()
 
     def _released(self, released: bool) -> None:
         if released:
@@ -3596,6 +3643,8 @@ class LayersPanel(QWidget):
         scene = self._scene()
         if column == COL_ACTIVE and kind == KIND_LAYER:
             self.set_active(name)
+        elif column == COL_EYE and kind == KIND_FOLDER:
+            self.set_folder_visible(name, not L.folder_visible(scene, name, ancestors=False))
         elif column in (COL_EYE, COL_LOCK):
             names = targets
             layers =[scene.layer(n) for n in names if scene.layer(n)]
@@ -4242,10 +4291,19 @@ class LayersPanel(QWidget):
     def set_visible(self, names, on: bool) -> None:
         self._remember()
         scene = self._scene()
-        released = L.set_visible(scene, names, on)
+        from core.history import SetLayerVisibilityCommand
+        previous = scene.active_layer
+        self._window.viewport.history.execute(SetLayerVisibilityCommand(names, on))
+        released = previous != scene.active_layer
         if not on:
             self._prune_selection(names)
         self._released(released)
+        self._touch()
+
+    def set_folder_visible(self, key, on):
+        from core.history import SetLayerVisibilityCommand
+        self._remember()
+        self._window.viewport.history.execute(SetLayerVisibilityCommand([], on, [key]))
         self._touch()
 
     def set_locked(self, names, on: bool) -> None:
@@ -4353,6 +4411,8 @@ class LayersPanel(QWidget):
         else:
             ly = scene.layer_by_key(old)
             label = ly.name if ly is not None else old
+        if not new or new == label:
+            return
         if new and new != label:
             if kind == KIND_FOLDER:
                 L.rename_folder(scene, old, new)
@@ -5316,7 +5376,10 @@ class LayersPanel(QWidget):
             if self._scene().content_version != self._counted_version:
                 self._count_timer.start(300)
             return
-        self.refresh()
+        if self._structure() == getattr(self, "_drawn_structure", None):
+            self._update_rows()
+        else:
+            self.refresh()
 
     def _signature(self) -> tuple:
         return (layers_signature(self._scene()), tuple(self._isolated))

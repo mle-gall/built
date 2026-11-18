@@ -537,8 +537,8 @@ class Layer:
 
     ``color`` is an RGB tuple (0–1) or ``None`` for the automatic one (see
     :func:`layer_color`); ``folder`` is the KEY of the folder the layer is
-    filed under in the Layers panel, or ``None``. A folder only organises the
-    list: entities carry the layer's key and nothing else."""
+    filed under in the Layers panel, or ``None``. Folder visibility gates
+    the tag without changing its own visibility flag."""
 
     def __init__(self, name: str, visible: bool = True,
                  locked: bool = False, color=None,
@@ -896,7 +896,7 @@ def legend_rows(scene) -> tuple[list, dict]:
     its swatch — colour and line type."""
     rows, swatches = [], {}
     for ly in getattr(scene, "layers", ()):
-        if not ly.visible or not getattr(ly, "printable", True):
+        if not effective_visible(scene, ly) or not getattr(ly, "printable", True):
             continue
         label = path_label(scene, ly.key)
         rows.append(label)
@@ -1100,7 +1100,7 @@ def active_layer(scene) -> str:
     if not name or name == DEFAULT_LAYER:
         return DEFAULT_LAYER
     ly = scene.layer(name)
-    if ly is None or not ly.visible or ly.locked:
+    if ly is None or not effective_visible(scene, ly) or ly.locked:
         return DEFAULT_LAYER
     return ly.key
 
@@ -1120,6 +1120,23 @@ def folders_of(scene) -> list[str]:
     uids = getattr(scene, "layer_folder_uids", {})
     scene.layer_folder_uids = {f: uids.get(f) or new_uid() for f in out}
     return out
+
+
+def folder_visible(scene, key, *, ancestors=True) -> bool:
+    """Folder flags are independent of tags; tolerate malformed cycles."""
+    flags = getattr(scene, "folder_visibility", {})
+    parents = getattr(scene, "folder_parents", {})
+    seen = set()
+    while key and key not in seen:
+        seen.add(key)
+        if not flags.get(key, True):
+            return False
+        key = parents.get(key) if ancestors else None
+    return True
+
+
+def effective_visible(scene, layer) -> bool:
+    return bool(layer.visible and folder_visible(scene, layer.folder))
 
 
 def folder_label(scene, key) -> str:
@@ -1319,6 +1336,7 @@ def remove_folder(scene, name: str) -> None:
     scene.folder_parents = parents
     scene.layer_folders = [f for f in folders_of(scene) if f != name]
     scene.layer_folder_uids.pop(name, None)
+    scene.folder_visibility.pop(name, None)
     labels = getattr(scene, "layer_folder_names", None)
     if isinstance(labels, dict):
         labels.pop(name, None)
@@ -1418,7 +1436,7 @@ def set_active(scene, name: str | None) -> None:
 def layer_state(scene) -> dict:
     """The layers' display state — visibility, lock, the active layer — to
     come back to (:func:`apply_layer_state`)."""
-    return {"layers": {ly.key: (ly.visible, ly.locked)
+    return {"folders": dict(scene.folder_visibility), "layers": {ly.key: (ly.visible, ly.locked)
                        for ly in scene.layers},
             "active": getattr(scene, "active_layer", None)}
 
@@ -1430,6 +1448,7 @@ def apply_layer_state(scene, state: dict) -> None:
         saved = state.get("layers", {}).get(ly.key)
         if saved is not None:
             ly.visible, ly.locked = saved
+    scene.folder_visibility = dict(state.get("folders", {}))
     active = state.get("active")
     scene.active_layer = active if active and scene.layer(active) else None
     _release_active(scene)
