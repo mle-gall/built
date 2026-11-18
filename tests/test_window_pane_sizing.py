@@ -87,7 +87,11 @@ def test_metal_resize_burst_configures_only_final_size():
             view.resize(width, 200)
             view.resizeEvent(QResizeEvent(QSize(width, 200), QSize(width - 1, 200)))
         view.renderer.resize.assert_not_called()
-        assert view.draw_frame() is None
+        # A repaint during the drag keeps the last frame: nothing drawn.
+        view.draw_frame = Mock(wraps=view.draw_frame)
+        view.paintEvent(None)
+        view.draw_frame.assert_not_called()
+        del view.draw_frame
         assert _wait_for(lambda: view.renderer.resize.called)
         view.renderer.resize.assert_called_once_with(359, 200, view.devicePixelRatioF())
         assert view._pick_frame_dirty
@@ -136,3 +140,22 @@ def test_mac_tree_repaints_once_resize_settles(monkeypatch, enabled):
         tree.hide()
         tree.deleteLater()
         panel.deleteLater()
+
+
+def test_an_explicit_draw_applies_the_pending_resize_first():
+    """A pick, the view grid or an export draws now, at the new size;
+    only the repaints of a live drag wait for the resize to settle."""
+    from views.wgpu_view import WgpuView
+    view = WgpuView()
+    view.renderer = Mock()
+    view._present_frame = Mock(return_value="frame")
+    try:
+        view.resize(420, 240)
+        view.resizeEvent(QResizeEvent(QSize(420, 240), QSize(400, 240)))
+        assert view._resize_timer.isActive()
+        assert view.draw_frame() == "frame"
+        assert not view._resize_timer.isActive()
+        view.renderer.resize.assert_called_once_with(420, 240, view.devicePixelRatioF())
+    finally:
+        view.renderer = None
+        view.deleteLater()

@@ -248,7 +248,7 @@ def test_a_line_started_at_one_crossing_detects_the_other():
         candidate_world=B, candidate_pixel=w2p(B),
         scene=SimpleNamespace(edges=[], circles=[c1, c2]), world_to_pixel=w2p,
         threshold_px=9.0, edge_threshold_px=14.0, start_point=A,
-        project_onto_line=lambda s, d: s + d * V.dotProduct(B - s, d),
+        project_onto_line=lambda s, d: s + d * QVector3D.dotProduct(B - s, d),
         magnetic_axis_deg=3.0)
     assert snap.kind == "intersection"
     assert (snap.point - B).length() < 1e-6

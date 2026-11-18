@@ -459,9 +459,14 @@ class WgpuView(QWidget):
         self.update()
 
     def draw_frame(self):
-        if (self.renderer is None or self._resize_timer.isActive()
-                or getattr(self, '_drawing_frame', False)):
+        if self.renderer is None or getattr(self, '_drawing_frame', False):
             return None
+        # Asked for explicitly (a pick, the view grid, an export): the
+        # pending surface size first. Only the repaints of a live drag
+        # wait for the resize to settle (paintEvent).
+        if self._resize_timer.isActive():
+            self._resize_timer.stop()
+            self._finish_resize()
         self._drawing_frame = True
         try:
             return self._present_frame()
@@ -702,6 +707,10 @@ class WgpuView(QWidget):
         # End R3c-2a offscreen entry point.
 
     def paintEvent(self, event):
+        # During a splitter/window drag keep the last Metal frame: the
+        # surface is configured once the resize settles (_finish_resize).
+        if self._resize_timer.isActive():
+            return
         self.draw_frame()
 
     def resolve(self, row):

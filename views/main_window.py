@@ -9782,7 +9782,19 @@ class MainWindow(WorksessionMixin, QMainWindow):
                 old.deleteLater()
             except RuntimeError:
                 pass
-        dlg = QProgressDialog(title, "", 0, 100, self)
+        class _Bar(QProgressDialog):
+            def close(self):
+                # reset() stops the timer that shows the bar after
+                # minimumDuration. Without it a bar closed before it ever
+                # showed could still pop up later, window-modal, where a
+                # close of a never-shown dialog does not take (a native
+                # child in the window, offscreen platform): the update
+                # dialog then waited behind it forever.
+                self.reset()
+                self.hide()
+                return super().close()
+
+        dlg = _Bar(title, "", 0, 100, self)
         self._progress_dlg = dlg
         dlg.setCancelButton(None)
         dlg.setWindowModality(Qt.WindowModal)
