@@ -38,7 +38,7 @@ import math
 import numpy as np
 from PySide6.QtGui import QVector3D
 from core import _native
-from core.snap import compute_snap
+from core.snap import SurfacePatch, compute_snap, face_crossing_near_ray
 
 
 def _source_visible(source, scene):
@@ -105,17 +105,26 @@ def _prototype(packed, code, scene, first_row):
 
 
 def _curve_features(curves):
-    """Fit only a queried prototype's named curves from its visibility snapshot."""
-    from core.snap import fit_circle
+    """Fit only a queried prototype's named curves from its visibility
+    snapshot: ``(centres, tangents, arc midpoints)`` in prototype space.
+    The arc midpoint is GL's «Arc midpoint» (``core.snap.
+    arc_sweep_midpoint``), for an open chain only: two ends, three or more
+    vertices — a circle has none."""
+    from core.snap import fit_circle, arc_sweep_midpoint
     if hasattr(curves, 'curve_segments'):
         curves = curves.curve_segments()
-    centers, tangents = [], []
+    centers, tangents, mids = [], [], []
     for segments in curves:
         ends = np.asarray(segments, float).reshape(-1, 3)
         points, counts = np.unique(ends, axis=0, return_counts=True)
-        fit = fit_circle([QVector3D(*p) for p in points]) if len(points) >= 3 else None
+        vertices = [QVector3D(*p) for p in points]
+        fit = fit_circle(vertices) if len(points) >= 3 else None
         if fit is None:
             continue
+        if int((counts == 1).sum()) == 2:
+            mid = arc_sweep_midpoint(vertices, fit)
+            if mid is not None:
+                mids.append(np.array(mid.toTuple()))
         center = np.array(fit[0].toTuple())
         centers.append(center)
         for point in points[counts == 1]:
@@ -127,7 +136,7 @@ def _curve_features(curves):
             length = np.linalg.norm(tangent)
             if length > 1e-9:
                 tangents.append((point, tangent/length))
-    return centers, tangents
+    return centers, tangents, mids
 
 
 def tangent_direction(index, packed, row, point):
@@ -361,25 +370,8 @@ def screen_boxes(index, packed, mvp, width, height):
         _, lo, hi, grid, moved = cache
         changed = np.fromiter(index.screen_dirty, np.int64)
     if len(changed):
-        values = packed.instances[changed]
-        matrices = values['world'].astype(float).transpose(0, 2, 1)
-        bounds = packed.bounds[values['info'][:, 0], :, :3].astype(float)
-        center = bounds.mean(axis=1)
-        extent = (bounds[:, 1]-bounds[:, 0])*.5
-        wc = np.einsum('nij,nj->ni', matrices[:, :3, :3], center)+matrices[:, :3, 3]
-        we = np.einsum('nij,nj->ni', abs(matrices[:, :3, :3]), extent)
-        signs = np.array([[a,b,c] for a in (-1,1) for b in (-1,1) for c in (-1,1)])
-        corners = wc[:, None, :]+we[:, None, :]*signs
-        matrix = np.asarray(mvp.data()).reshape(4, 4).T
-        clip = corners @ matrix[:, :3].T + matrix[:, 3]
-        front = clip[:, :, 3] > 1e-3
-        denom = np.where(front, clip[:, :, 3], 1.)
-        xy = clip[:, :, :2]/denom[:, :, None]
-        xy = (xy*np.array([1., -1.])+1.)*np.array([width/2, height/2])
-        low, high = xy.min(axis=1), xy.max(axis=1)
-        crossing = front.any(axis=1) & ~front.all(axis=1)
-        low[crossing], high[crossing] = -np.inf, np.inf
-        low[~front.any(axis=1)], high[~front.any(axis=1)] = np.inf, np.inf
+        wc, we = _world_boxes(index, packed)
+        low, high = _project_boxes(wc[changed], we[changed], mvp, width, height)
         lo[changed], hi[changed] = low, high
         index.screen_dirty.clear()
         if grid is None:
@@ -395,6 +387,68 @@ def screen_boxes(index, packed, mvp, width, height):
             moved.update(changed.tolist())
         index.screen_cache = (key, lo, hi, grid, moved)
     return lo, hi, grid, moved
+
+
+def _world_boxes(index, packed):
+    """Each row's world box as ``(centre, half extent)``, ``(n, 3)`` each:
+    camera-independent, so kept on the index and redone only for the rows
+    an update marked (``screen_dirty``) — a camera move used to rebuild all
+    of them, ~2 ms of the first hover over 30 000 placements."""
+    n = len(packed.instances)
+    cache = getattr(index, 'world_box_cache', None)
+    if cache is None or len(cache[0]) != n:
+        rows = np.arange(n)
+        wc, we = np.empty((n, 3)), np.empty((n, 3))
+    else:
+        wc, we = cache
+        rows = np.fromiter(index.screen_dirty, np.int64)
+    if len(rows):
+        values = packed.instances[rows]
+        matrices = values['world'].astype(float).transpose(0, 2, 1)
+        bounds = packed.bounds[values['info'][:, 0], :, :3].astype(float)
+        center = bounds.mean(axis=1)
+        extent = (bounds[:, 1]-bounds[:, 0])*.5
+        wc[rows] = np.einsum('nij,nj->ni', matrices[:, :3, :3], center)+matrices[:, :3, 3]
+        we[rows] = np.einsum('nij,nj->ni', abs(matrices[:, :3, :3]), extent)
+    index.world_box_cache = (wc, we)
+    return wc, we
+
+
+def _project_boxes(wc, we, mvp, width, height):
+    """Conservative screen boxes ``(low, high)`` of the world boxes: the
+    eight corners projected, ``±inf`` for a box crossing the eye plane,
+    ``+inf`` for one wholly behind it. The clip transform is linear, so
+    each corner is the clip centre plus signed clip extents — eight passes
+    over contiguous rows, not reductions over a short middle axis (half of
+    the first hover's 17 ms over 30 000 placements)."""
+    matrix = np.asarray(mvp.data()).reshape(4, 4).T
+    centre = wc @ matrix[:, :3].T + matrix[:, 3]
+    axes = [we[:, k, None] * matrix[:, k] for k in range(3)]
+    n = len(wc)
+    low = np.full((n, 2), np.inf)
+    high = np.full((n, 2), -np.inf)
+    any_front = np.zeros(n, bool)
+    all_front = np.ones(n, bool)
+    half_w, half_h = width / 2, height / 2
+    for sx in (-1., 1.):
+        for sy in (-1., 1.):
+            for sz in (-1., 1.):
+                clip = centre + sx * axes[0] + sy * axes[1] + sz * axes[2]
+                w = clip[:, 3]
+                front = w > 1e-3
+                denom = np.where(front, w, 1.)
+                px = (clip[:, 0] / denom + 1.) * half_w
+                py = (1. - clip[:, 1] / denom) * half_h
+                np.minimum(low[:, 0], px, out=low[:, 0])
+                np.minimum(low[:, 1], py, out=low[:, 1])
+                np.maximum(high[:, 0], px, out=high[:, 0])
+                np.maximum(high[:, 1], py, out=high[:, 1])
+                any_front |= front
+                all_front &= front
+    crossing = any_front & ~all_front
+    low[crossing], high[crossing] = -np.inf, np.inf
+    low[~any_front], high[~any_front] = np.inf, np.inf
+    return low, high
 
 
 def _screen_rows(index, packed, mvp, width, height, x, y, radius, rows):
@@ -635,15 +689,32 @@ def snap(index, row, view, x, y, **options):
         named = (None if group is context else
                  'component' if group is not None and group.is_instance()
                  else 'group')
-        for center in index.features[int(value['info'][0])][0]:
+        centers, _tangents, mids = index.features[int(value['info'][0])]
+        for center in centers:
             center = QVector3D(*(matrix[:3, :3] @ center + matrix[:3, 3]))
             edges.append(SimpleNamespace(a=center, b=center, center=True,
                                          context=named))
+        # GL's «Arc midpoint» (Viewport._arc_midpoints): the middle of each
+        # open arc's sweep, from the same per-prototype fit as the centres —
+        # only for the placements already met near the cursor.
+        # Their tips say what GL's do (_snap_context_of): «outside» for a
+        # placement around the open group / component.
+        word = snap_context(view, r, context) if mids or (
+            group is not None and group.is_instance()) else None
+        for mid in mids:
+            mid = QVector3D(*(matrix[:3, :3] @ mid + matrix[:3, 3]))
+            edges.append(SimpleNamespace(a=mid, b=mid, arc_midpoint=True,
+                                         context=word))
         if group is not None and group.is_instance():
-            value = index.rows.get(r, index.initial[r])
+            # Not ``rows.get(r, initial[r])``: the default is evaluated
+            # first, and a placement added since the index was built has
+            # no initial row (IndexError on the hover after an insert).
+            value = index.rows.get(r)
+            if value is None:
+                value = index.initial[r]
             anchor = QVector3D(*value['world'][3, :3])
             edges.append(SimpleNamespace(a=anchor, b=anchor, component_origin=True,
-                                         context=named))
+                                         context=word))
     edges = scene_edges(view) + edges
     threshold = options.pop('threshold_px', getattr(view, 'snap_threshold_px', 12.))
     options.setdefault('edge_threshold_px', getattr(view, 'edge_snap_threshold_px', None))
@@ -663,6 +734,20 @@ def snap(index, row, view, x, y, **options):
     project = lambda p: Viewport._world_to_pixel(view, p, mvp)
     if 'face_centers' not in options:
         options['face_centers'] = face_centers_near(view, x, y, on_face, project)
+    if on_face and face_normal is not None:
+        # The face rules GL's InferenceEngine.snap hands in from its own
+        # picks, here from the triangle under the cursor: the ScreenTip's
+        # «in group / outside» for the face, an edge piercing it (5d) and
+        # another face crossing it with no edge between them (7c). Both
+        # are callables, asked by compute_snap only when nothing nearer
+        # with a name answered, and both stay on the placements under the
+        # cursor.
+        options.setdefault('face_context', snap_context(view, row, context))
+        options.setdefault('face_outline', lambda p=point, n=face_normal: SurfacePatch(
+            p, n, lambda q: on_surface(index, view, row, q, project),
+            placement_context(view, row, context)))
+        options.setdefault('face_crossing', lambda p=point, n=face_normal: face_crossing(
+            index, view, x, y, row, p, n, rows, project, context))
     plane = getattr(getattr(view, 'tools', None), '_last_work_plane', None)
     if plane is not None:
         options.setdefault('work_plane_normal', plane[1])
@@ -676,6 +761,178 @@ def snap(index, row, view, x, y, **options):
                  options, x, y, modifiers)
     return compute_snap(point, (x, y), SimpleNamespace(edges=edges),
                         project, threshold, **options)
+
+
+def _row_group(view, row):
+    groups = getattr(view.packed, 'groups', None)
+    return groups[row] if groups is not None and row is not None else None
+
+
+def placement_context(view, row, context):
+    """What GL's ``_face_outline_world`` says a face belongs to:
+    ``"group"`` / ``"component"`` for a placement, ``None`` for the open
+    context's own loose geometry and for the root's around it."""
+    group = _row_group(view, row)
+    if group is None or group is context:
+        return None
+    return 'component' if group.is_instance() else 'group'
+
+
+def snap_context(view, row, context):
+    """GL's ``_snap_context_of`` for a resident row: ``None`` for the open
+    context's own geometry (and at the root), ``"outside"`` for what is
+    drawn around an open group / component, else ``"group"`` /
+    ``"component"``."""
+    group = _row_group(view, row)
+    if group is context:
+        return None
+    if context is not None:
+        inside = getattr(view, 'context_placement', None)
+        if group is None or (inside is not None and inside(group) is None):
+            return 'outside'
+    return placement_context(view, row, context)
+
+
+def on_surface(index, view, row, point, project=None):
+    """Whether ``point`` lies on the visible surface of placement ``row``:
+    the ray through its pixel meets that placement's triangles there. What
+    stands for GL's «inside the face's loops, outside its holes» (a hole
+    has no triangles) — one ray over one placement."""
+    project = project or view._world_to_pixel
+    pixel = project(point)
+    if pixel is None:
+        return False
+    origin, direction = view._pixel_to_ray(*pixel)
+    if origin is None or direction is None:
+        return False
+    hit = surface(index, row, origin, direction)
+    if hit is None:
+        return False
+    return (hit - point).length() <= 1e-6 + 1e-5 * (point - origin).length()
+
+
+def _front_at(index, view, x, y, rows, mvp):
+    """``(point, unit normal, row)`` of the front surface at pixel
+    ``(x, y)``, asked of the placements whose screen box holds the pixel."""
+    from views.viewport import _moller_trumbore
+    origin, direction = view._pixel_to_ray(x, y)
+    if origin is None or direction is None:
+        return None
+    near = _screen_rows(index, view.packed, mvp, view.width(), view.height(),
+                        x, y, 1., rows)
+    if not len(near):
+        return None
+    pl, _, v0, e1, e2 = index.ray_cands(near, origin.toTuple(), direction.toTuple(),
+                                        float('inf'))
+    if not len(v0):
+        return None
+    t, hit = _moller_trumbore(np.array(origin.toTuple()), np.array(direction.toTuple()),
+                              v0, e1, e2)
+    if not hit.any():
+        return None
+    k = int(np.argmin(np.where(hit, t, np.inf)))
+    n = np.cross(e1[k], e2[k])
+    length = float(np.linalg.norm(n))
+    if length < 1e-30:
+        return None
+    return origin + direction * float(t[k]), QVector3D(*(n / length)), int(pl[k])
+
+
+def _on_plane(hit, plane, depth):
+    p, n = plane
+    return (abs(QVector3D.dotProduct(hit[1], n)) > 0.999
+            and abs(QVector3D.dotProduct(hit[0] - p, n)) <= 1e-6 + 1e-5 * depth)
+
+
+#: Distinct planes behind the face under the cursor that a face crossing
+#: tries, as GL's search tries its first seven faces.
+CROSSING_CANDIDATES = 7
+
+
+def face_crossing(index, view, x, y, row, point, normal, rows, project, context):
+    """GL's ``Viewport._face_crossing_point`` from the snap index (#819):
+    where the face under the cursor meets another face crossing it with no
+    edge between them — ``(world point, context)`` or ``None``.
+
+    The candidates are the triangles the cursor ray meets a little behind
+    the face (a face that goes THROUGH the one in front is met there), one
+    ray over the placements under the cursor; the crossing line and its two
+    probes are :func:`core.snap.face_crossing_near_ray`, as GL's; a crossing
+    counts if one probe shows the face's plane and the other the crossing
+    face's — the two really meet there, in view. A view knows triangles,
+    not faces: a plane stands for the face (two coplanar faces meeting the
+    same third one meet it along the same line)."""
+    from views.viewport import Viewport, _active_cut, _moller_trumbore
+    if _active_cut(view.scene) is not None:
+        return None
+    origin, direction = view._pixel_to_ray(x, y)
+    if origin is None or direction is None:
+        return None
+    t_f = QVector3D.dotProduct(point - origin, direction)
+    ring = Viewport._CROSSING_RING_PX
+    o2, d2 = view._pixel_to_ray(x + ring, y)
+    if o2 is None or d2 is None:
+        return None
+    reach = ((o2 + d2 * t_f) - (origin + direction * t_f)).length() * 50.0
+    mvp = view.camera.projection_matrix() * view.camera.view_matrix()
+    near = _screen_rows(index, view.packed, mvp, view.width(), view.height(),
+                        x, y, 1., rows)
+    if not len(near):
+        return None
+    pl, _, v0, e1, e2 = index.ray_cands(near, origin.toTuple(), direction.toTuple(),
+                                        t_f + reach)
+    if not len(v0):
+        return None
+    t, hit = _moller_trumbore(np.array(origin.toTuple()), np.array(direction.toTuple()),
+                              v0, e1, e2)
+    slack = 1e-6 + 1e-5 * t_f
+    cand = np.flatnonzero(hit & (t >= t_f - slack) & (t <= t_f + reach))
+    if not len(cand):
+        return None
+    cand = cand[np.argsort(t[cand], kind='stable')]
+    f = (point, normal.normalized())
+    planes, seen = [], []
+    for k in cand.tolist():
+        n = np.cross(e1[k], e2[k])
+        length = float(np.linalg.norm(n))
+        if length < 1e-30:
+            continue
+        n = QVector3D(*(n / length))
+        p = QVector3D(*v0[k])
+        if abs(QVector3D.crossProduct(f[1], n).length()) < 0.02:
+            continue                        # the face itself, or parallel
+        if any(abs(QVector3D.dotProduct(n, m)) > 0.999
+               and abs(QVector3D.dotProduct(p - q, m)) <= slack for q, m in seen):
+            continue                        # another triangle of that plane
+        seen.append((p, n))
+        planes.append(((p, n), int(pl[k])))
+        if len(planes) >= CROSSING_CANDIDATES:
+            break
+    reach_px = max(getattr(view, 'edge_snap_threshold_px', None) or 14., ring)
+    for g, g_row in planes:
+        found = face_crossing_near_ray(x, y, origin, direction, f, g, project,
+                                       reach_px, Viewport._CROSSING_SIDE_PX)
+        if found is None:
+            continue
+        crossing, probes = found
+        depth = (crossing - origin).length()
+        sides = []
+        for q in probes:
+            h = _front_at(index, view, q[0], q[1], rows, mvp)
+            if h is None:
+                break
+            side = ('f' if _on_plane(h, f, depth) else
+                    'g' if _on_plane(h, g, depth) else None)
+            if side is None:
+                break
+            sides.append(side)
+        if sorted(sides) != ['f', 'g']:
+            continue
+        words = [w for w in (snap_context(view, r, context) for r in (row, g_row))
+                 if w is not None]
+        word = 'outside' if 'outside' in words else (words[0] if words else None)
+        return crossing, word
+    return None
 
 
 def start_edges(index, view, start, rows):

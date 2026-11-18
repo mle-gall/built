@@ -45,16 +45,22 @@ class MeshToolAccess:
     def work_point(self, x, y):
         from core import axes
         tool = self.tool
-        plane = tool.drag_plane(self) or getattr(tool, 'work_plane', None)
+        own = tool.drag_plane(self)
+        plane = own or getattr(tool, 'work_plane', None)
+        if own is None and plane is not None:
+            # GL's _current_work_plane (#545): a PLANAR shape re-plans onto
+            # the face the cursor is over, capture or not, and takes its
+            # capture with it — or the preview stayed on the face it started
+            # on while the point and the badge went to the other one.
+            face_plane = self._face_replan(tool, x, y, plane)
+            if face_plane is not None:
+                tool.work_plane = plane = face_plane
         if plane is None:
             lock = getattr(tool, 'locked_work_plane', None)
             anchor = self.start_point if self.start_point is not None else axes.origin()
             plane = lock(anchor) if lock else None
         if plane is None:
-            face, placement = self.pick_face_placement(x, y)
-            if face is not None:
-                from core.snap import face_plane_world
-                plane = face_plane_world(face, getattr(placement, 'xform', None))
+            plane = self._face_plane_under(x, y)
         if plane is None:
             anchor = self.start_point if self.start_point is not None else axes.origin()
             normal = axes.axis('z')
@@ -63,6 +69,47 @@ class MeshToolAccess:
             plane = anchor, normal
         self._last_work_plane = plane
         return self._ray_hit_plane((x, y), plane)
+
+    def _face_replan(self, tool, x, y, captured):
+        """``Viewport._planar_face_plane`` with the face under the cursor
+        from this view's picks (:meth:`_face_plane_under`). Only a planar
+        shape pays for the ray."""
+        from tools.base import PlaneLock
+        if not isinstance(tool, PlaneLock):
+            return None
+        face_plane = self._face_plane_under(x, y)
+        if face_plane is None:
+            return None
+        return _viewport_class()._planar_face_plane(
+            self, tool, (x, y), captured, face_plane=face_plane)
+
+    def _face_plane_under(self, x, y):
+        """World ``(point, unit normal)`` of the face under the cursor, or
+        ``None``: the placement under the cursor (the ID pass) and its
+        triangle on the cursor ray, from the snap index — one ray over one
+        placement, where the mesh walk (:meth:`pick_face_placement`) costs
+        the mesh's size. The walk still answers before the index is built
+        and while a tool moves faces (a moving face is no plane to land on,
+        and only the walk knows which triangles are its)."""
+        index = getattr(self.view, 'inference_index', None)
+        moving = getattr(self.tool, 'moving_face_ids', None)
+        if index is None or (callable(moving) and moving()):
+            face, placement = self.pick_face_placement(x, y)
+            if face is None:
+                return None
+            from core.snap import face_plane_world
+            return face_plane_world(face, getattr(placement, 'xform', None))
+        row = self.view.pick_row(x, y)
+        if row is None:
+            return None
+        origin, direction = self._pixel_to_ray(x, y)
+        if origin is None or direction is None:
+            return None
+        from views.wgpu_inference import surface_hit
+        hit = surface_hit(index, row, origin, direction)
+        if hit is None or hit[1] is None:
+            return None
+        return hit
 
     def _segment_to_pixels(self, a, b):
         """GL's: cut where the segment passes behind the eye instead of
@@ -109,8 +156,17 @@ class MeshToolAccess:
         return mesh, group, matrix
 
     def pick_face_placement(self, x, y):
-        from views.viewport import _ray_triangle
+        """The face of the placement under the cursor that the cursor ray
+        meets first, and that placement (``None`` for loose geometry).
+
+        One vectorised ray test over the mesh's triangles, kept per mesh
+        (:meth:`_face_triangles`); it used to triangulate every face of
+        the mesh in Python on every call — twice a hover (the work plane
+        and the face centre), ~4 ms over 600 faces and without bound on a
+        big loose mesh. The same Möller–Trumbore thresholds, the same
+        first-face-wins on a tie."""
         from types import SimpleNamespace
+        from views.viewport import _moller_trumbore
         picked = self._picked_mesh(x, y)
         if picked is None:
             return None, None
@@ -121,18 +177,57 @@ class MeshToolAccess:
             return None, None
         origin = inverse.map(origin)
         direction = inverse.mapVector(direction)
-        best, distance = None, float('inf')
+        faces, owner, v0, e1, e2 = self._face_triangles(mesh)
+        if not len(v0):
+            return None, (SimpleNamespace(xform=matrix) if group is not None else None)
+        t, hit = _moller_trumbore(np.array(origin.toTuple()),
+                                  np.array(direction.toTuple()), v0, e1, e2)
         excluded = getattr(self.tool, 'moving_face_ids', lambda: set())()
+        if excluded and hit.any():
+            moving = np.fromiter((f.key in excluded for f in faces), bool, len(faces))
+            hit &= ~moving[owner]
+        best = None
+        if hit.any():
+            best = faces[int(owner[int(np.argmin(np.where(hit, t, np.inf)))])]
+        return best, (SimpleNamespace(xform=matrix) if group is not None else None)
+
+    #: Meshes whose triangles :meth:`_face_triangles` keeps at once (the
+    #: cursor goes back and forth between a few).
+    FACE_TRIANGLE_MEMO = 8
+
+    def _face_triangles(self, mesh):
+        """``(faces, owner, v0, e1, e2)``: the shown faces of ``mesh`` and
+        their triangles in its own space, ``owner[i]`` the face of triangle
+        ``i`` — kept until the mesh mutates or the scene's version moves
+        (a hide, a vertex dragged)."""
+        key = (getattr(mesh, '_mut_serial', None),
+               getattr(self.scene, 'version', None))
+        memo = self.__dict__.setdefault('_face_tri_memo', {})
+        hit = memo.get(id(mesh))
+        if hit is not None and hit[0] is mesh and hit[1] == key:
+            return hit[2]
+        faces, owner, pts = [], [], []
         for face in mesh.faces:
-            if face.key in excluded:
-                continue
             if getattr(face, 'hidden', False):
                 continue
-            for triangle in face.triangulate():
-                t = _ray_triangle(origin, direction, *triangle)
-                if t is not None and t < distance:
-                    best, distance = face, t
-        return best, (SimpleNamespace(xform=matrix) if group is not None else None)
+            tris = face.triangulate()
+            if not tris:
+                continue
+            k = len(faces)
+            faces.append(face)
+            for a, b, c in tris:
+                owner.append(k)
+                pts.append((a.toTuple(), b.toTuple(), c.toTuple()))
+        arr = np.asarray(pts, dtype=np.float64).reshape(-1, 3, 3)
+        v0 = np.ascontiguousarray(arr[:, 0])
+        value = (faces, np.asarray(owner, np.int64), v0,
+                 np.ascontiguousarray(arr[:, 1] - v0),
+                 np.ascontiguousarray(arr[:, 2] - v0))
+        memo.pop(id(mesh), None)
+        while len(memo) >= self.FACE_TRIANGLE_MEMO:
+            memo.pop(next(iter(memo)))
+        memo[id(mesh)] = (mesh, key, value)
+        return value
 
     def pick_face_any(self, x, y):
         face, _ = self.pick_face_placement(x, y)

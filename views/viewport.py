@@ -13040,38 +13040,13 @@ class Viewport(QOpenGLWidget):
         """The crossing of plane ``f`` with plane ``g`` nearest the cursor
         ray, if it is within reach on screen: ``(world point, (pixel one
         side, pixel the other side))``, or ``None``."""
+        from core.snap import face_crossing_near_ray
         _f_face, _f_place, p_f, n_f = f
-        _g_face, _g_place, p_g, n_g, u = g
-        r = self._CROSSING_RING_PX
-        # The crossing line: the point of both planes nearest the origin…
-        d_f = QVector3D.dotProduct(n_f, p_f)
-        d_g = QVector3D.dotProduct(n_g, p_g)
-        uu = QVector3D.dotProduct(u, u)
-        l0 = (QVector3D.crossProduct(n_g, u) * d_f
-              + QVector3D.crossProduct(u, n_f) * d_g) / uu
-        # …then its point nearest the cursor ray.
-        un = u / math.sqrt(uu)
-        w0 = l0 - o
-        b = QVector3D.dotProduct(un, d)
-        den = 1.0 - b * b
-        if den < 1e-9:                          # the line runs along the ray
-            return None
-        s = (b * QVector3D.dotProduct(w0, d) - QVector3D.dotProduct(w0, un)) / den
-        x = l0 + un * s
-        pix = self._world_to_pixel(x)
-        if pix is None or math.hypot(pix[0] - px, pix[1] - py) > max(
-                self.edge_snap_threshold_px, r):
-            return None
-        # Either side of the crossing on screen: one face, then the other.
-        q = self._world_to_pixel(x + un * max(1e-3, (x - o).length() * 1e-2))
-        if q is None:
-            return None
-        sx, sy = q[0] - pix[0], q[1] - pix[1]
-        ln = math.hypot(sx, sy)
-        if ln < 1e-9:
-            return None
-        nx, ny = -sy / ln * self._CROSSING_SIDE_PX, sx / ln * self._CROSSING_SIDE_PX
-        return x, ((pix[0] + nx, pix[1] + ny), (pix[0] - nx, pix[1] - ny))
+        _g_face, _g_place, p_g, n_g, _u = g
+        return face_crossing_near_ray(
+            px, py, o, d, (p_f, n_f), (p_g, n_g), self._world_to_pixel,
+            max(self.edge_snap_threshold_px, self._CROSSING_RING_PX),
+            self._CROSSING_SIDE_PX)
 
     def _crossing_on_screen(self, f, g, found):
         """The crossing ``found`` by :meth:`_crossing_sides` if it shows
@@ -17195,7 +17170,7 @@ class Viewport(QOpenGLWidget):
     def _mesh_arc_midpoints(mesh) -> list:
         """The sweep midpoint of every open curve chain of ``mesh`` (in the
         mesh's own space)."""
-        from core.snap import fit_circle
+        from core.snap import arc_sweep_midpoint
         from core.lazy_mesh import plan_of
         plan = plan_of(mesh)
         by_curve: dict = {}
@@ -17230,16 +17205,9 @@ class Viewport(QOpenGLWidget):
             ends = [pos[k] for k, n in degree.items() if n == 1]
             if len(ends) != 2 or len(pos) < 3:
                 continue                     # a circle, or not a chain
-            fit = fit_circle(list(pos.values()))
-            if fit is None:
-                continue
-            c, r = fit[0], fit[1]
-            m = QVector3D(0.0, 0.0, 0.0)
-            for pt in pos.values():
-                m += (pt - c)
-            if m.length() < 1e-9:
-                continue
-            mids.append(c + m.normalized() * r)
+            mid = arc_sweep_midpoint(list(pos.values()))
+            if mid is not None:
+                mids.append(mid)
         return mids
 
     def _billboard_placements(self) -> list:

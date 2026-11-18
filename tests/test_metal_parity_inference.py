@@ -238,7 +238,7 @@ def test_interleaved_deferred_arcs_fit_once_in_source_order(monkeypatch):
     index = prepare(packed, scene)
     assert not calls
     code = int(packed.instances['info'][0, 0])
-    centers, tangents = index.features[code]
+    centers, tangents, _mids = index.features[code]
     np.testing.assert_allclose(centers, [[0, 0, 0], [4, 0, 0]], atol=1e-6)
     assert len(tangents) == 4
     assert tangent_direction(index, packed, 1, QVector3D(*pts[0])) is not None
