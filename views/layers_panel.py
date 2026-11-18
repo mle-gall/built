@@ -3222,9 +3222,23 @@ class LayersPanel(QWidget):
         self._updating = was
 
     def _dim_eye(self, item, dim):
+        """A tag (or folder) hidden by a folder above it: its own eye,
+        faded. QIcon.Disabled looks the same as Normal on the dark theme,
+        so the faded copy is painted here."""
         if dim:
+            from PySide6.QtCore import QSize
+            from PySide6.QtGui import QPainter, QPixmap
             icon = item.icon(COL_EYE)
-            item.setIcon(COL_EYE, QIcon(icon.pixmap(20, 20, QIcon.Disabled)))
+            ratio = self.devicePixelRatioF() or 1.0
+            src = icon.pixmap(QSize(20, 20), ratio)
+            faded = QPixmap(src.size())
+            faded.setDevicePixelRatio(src.devicePixelRatio())
+            faded.fill(Qt.transparent)
+            painter = QPainter(faded)
+            painter.setOpacity(0.3)
+            painter.drawPixmap(0, 0, src)
+            painter.end()
+            item.setIcon(COL_EYE, QIcon(faded))
         item.setData(COL_EYE, Qt.UserRole + 2, dim)
 
     def _structure(self):
