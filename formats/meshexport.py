@@ -315,6 +315,10 @@ def material_key(attrs, with_opacity: bool = True) -> tuple:
         key: tuple = ("tex", Path(tex["path"]).name)
     else:
         key = ("color", tuple(attrs.get("color") or _DEFAULT_COLOR)[:3])
+    if attrs.get("pbr") is not None:
+        import json
+        key += (("pbr", json.dumps(attrs["pbr"], sort_keys=True),
+                 tuple(attrs.get("color") or (1, 1, 1)), (tex or {}).get("path")),)
     if with_opacity and op is not None:
         key += (op,)
     if attrs.get("mat"):
@@ -497,11 +501,14 @@ def _add_face(face, materials, prims, attrs=None, smoother=None) -> None:
     op = None if op is None or float(op) >= 0.999 else round(float(op), 3)
     tex = attrs.get("texture")
     key = material_key(attrs)
-    if tex is not None and tex.get("path"):
-        src = Path(tex["path"])
-        materials.setdefault(key, {"color": (1.0, 1.0, 1.0),
-                                   "map": src.name, "src": src,
-                                   "opacity": op})
+    recipe = attrs.get("pbr")
+    if (tex and tex.get("path")) or any(k.endswith("_map") for k in recipe or ()):
+        tex = tex or {}
+        src = Path(tex["path"]) if tex.get("path") else None
+        color = attrs.get("color") if attrs.get("pbr") is not None else None
+        materials.setdefault(key, {"color": tuple(color or (1, 1, 1))[:3],
+                                   "map": src.name if src else None, "src": src,
+                                   "opacity": op, "pbr": attrs.get("pbr")})
         if attrs.get("mat") and "mat" not in materials[key]:
             materials[key]["mat"] = attrs["mat"]
         sw = tex.get("sw", 1.0) or 1.0
@@ -517,8 +524,9 @@ def _add_face(face, materials, prims, attrs=None, smoother=None) -> None:
     else:
         # RGB: the AI recipes paint (r, g, b, 1.0) and every writer reads
         # three channels (transparency is attrs["opacity"], above).
-        col = tuple(attrs.get("color") or _DEFAULT_COLOR)[:3]
-        materials.setdefault(key, {"color": col, "map": None,
+        default = (1., 1., 1.) if recipe is not None else _DEFAULT_COLOR
+        col = tuple(attrs.get("color") or default)[:3]
+        materials.setdefault(key, {"color": col, "map": None, "pbr": recipe,
                                    "opacity": op})
         if attrs.get("mat") and "mat" not in materials[key]:
             materials[key]["mat"] = attrs["mat"]

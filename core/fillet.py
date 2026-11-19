@@ -666,7 +666,7 @@ def plan_fillet(mesh, edges, radius: float, segments: int = 8,
 def _shared_attrs(f1, f2) -> dict:
     """The new faces take the material when both neighbours share it."""
     a, b = f1.attrs or {}, f2.attrs or {}
-    keys = ("color", "texture", "mat", "opacity")
+    keys = ("color", "texture", "mat", "opacity", "pbr")
     if all(a.get(k) == b.get(k) for k in keys):
         return {k: a[k] for k in keys if k in a}
     return {}

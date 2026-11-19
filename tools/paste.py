@@ -178,13 +178,26 @@ class PasteTool(Tool):
         from core.layers import template_name_map
         names = template_name_map(viewport.scene, self._clip.get("layers") or {})
 
+        from core.links import _renamed_paint, restamp_materials
+        from core.materials import register
+        from core.history import SetFaceMaterialTagCommand
+        commands: list = [_PruneOnUndo()]
+        renamed = {}
+        if self._clip.get("materials"):
+            registry = dict(viewport.scene.materials)
+            for old_name, mat in self._clip["materials"].items():
+                name = register(registry, mat)
+                if name != old_name:
+                    renamed[old_name] = name
+                if name not in viewport.scene.materials:
+                    commands.append(SetFaceMaterialTagCommand([], name, registry[name]))
+
         def remap_attrs(attrs):
             out = copy_attrs(attrs)
             if out.get("layer") in names:
                 out["layer"] = names[out["layer"]]
-            return out
+            return _renamed_paint(out, renamed)
 
-        commands: list = [_PruneOnUndo()]
         # The tags the copy carries that this document lacks (with their
         # folders) come first, undone with the paste; tags it already has
         # keep their own look and visibility.
@@ -237,7 +250,7 @@ class PasteTool(Tool):
         # (instances stay siblings of the same prototype).
         pasted_groups = [copy_group(g, off)
                          for g in self._clip.get("groups", ())]
-        if any(a != b for a, b in names.items()):
+        if renamed or any(a != b for a, b in names.items()):
             from core.group import iter_placements, transformed_mesh
             from PySide6.QtGui import QMatrix4x4
             for root in pasted_groups:
@@ -245,6 +258,10 @@ class PasteTool(Tool):
                     g.layer = names.get(g.layer, g.layer)
                     # A renamed target tag must not rename the source definition.
                     g.mesh = transformed_mesh(g.mesh, QMatrix4x4())
+                    if renamed:
+                        restamp_materials(g.mesh, renamed)
+                        if g.material:
+                            g.material = _renamed_paint(g.material, renamed)
                     for f in g.mesh.faces:
                         if f.attrs.get("layer") in names:
                             f.attrs["layer"] = names[f.attrs["layer"]]

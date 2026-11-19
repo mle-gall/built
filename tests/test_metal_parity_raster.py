@@ -304,3 +304,27 @@ def audit_handoff():
 
 if __name__ == '__main__':
     audit_handoff()
+
+
+def test_pbr_shading_changes_pixels_and_keeps_picks(native, tmp_path):
+    from PySide6.QtGui import QImage, QColor, QVector3D
+    from views.wgpu_scene import pack_scene
+    scene = Scene()
+    face = scene.loose_mesh.add_face([QVector3D(x, y, 0) for x, y in
+                                     ((-.8, -.8), (.8, -.8), (.8, .8), (-.8, .8))])
+    face.attrs['color'] = (.7, .3, .1)
+    native.set_style(dict(sky=False, edges=False, profiles=False))
+    pack_scene(scene).upload(native)
+    before = capture(native)
+    points = [(32, 32), (20, 40), (1, 1)]
+    picks = [native.pick(x, y) for x, y in points]
+    assert picks == [0, 0, -1]
+    path = tmp_path / 'normal.png'
+    normal = QImage(2, 2, QImage.Format_RGB32)
+    normal.fill(QColor(200, 110, 236))
+    assert normal.save(str(path))
+    face.attrs['pbr'] = {'metallic': .75, 'normal_map': {'path': str(path)}}
+    pack_scene(scene).upload(native)
+    after = capture(native)
+    assert not np.array_equal(before[32, 32], after[32, 32])
+    assert [native.pick(x, y) for x, y in points] == picks

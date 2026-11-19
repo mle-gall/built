@@ -164,7 +164,7 @@ class Edge:
 #: own rules (new geometry belongs to the active tag, and a BIM tag extends its
 #: object). Anything that hands paint from one face to another — a face carved
 #: out of another, an extrusion's walls — keys on these.
-PAINT_KEYS = ("color", "mat", "texture", "opacity")
+PAINT_KEYS = ("color", "mat", "texture", "opacity", "pbr")
 
 #: Everything an edge carries besides its two ends, in the order
 #: :meth:`Mesh.add_edges_welded` reads them.

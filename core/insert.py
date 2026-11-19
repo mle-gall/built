@@ -89,9 +89,11 @@ def merge_materials(src_materials: dict, dst_materials: dict, comp) -> dict:
         if final != old:
             renamed[old] = final
     if renamed:
-        from core.links import restamp_materials
+        from core.links import _renamed_paint, restamp_materials
         seen: set = set()
         for g, _m in iter_placements(comp):
+            if g.material:
+                g.material = _renamed_paint(g.material, renamed)
             if id(g.mesh) not in seen:
                 seen.add(id(g.mesh))
                 restamp_materials(g.mesh, renamed)

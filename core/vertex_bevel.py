@@ -159,7 +159,7 @@ def plan_vertex_bevel(mesh, vertices, size: float, segments: int = 8,
             return tr("A face would collapse — the radius is too large.")
         plan.removed_faces.append(f)
         plan.rebuilt.append((loop, holes, dict(f.attrs), bool(f.interior)))
-        keep = {k: f.attrs[k] for k in ("color", "texture", "mat", "opacity")
+        keep = {k: f.attrs[k] for k in ("color", "texture", "mat", "opacity", "pbr")
                 if k in (f.attrs or {})}
         attrs = keep if attrs is None else (attrs if attrs == keep else {})
     plan.face_attrs["strip"] = attrs or {}

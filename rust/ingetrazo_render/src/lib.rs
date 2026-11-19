@@ -92,7 +92,7 @@ struct Target {
     face_marks: preview::Preview,
     sections: sections::Sections,
     camera_data: Vec<f32>,
-    look_data: [[f32; 4]; 10],
+    look_data: [[f32; 4]; 11],
     sun: sun::Settings,
     style: u32,
     edges: bool,
@@ -1497,7 +1497,8 @@ impl Renderer {
         self.transparency.bind_textures(&self.device, &self.textures);
         Ok(())
     }
-    fn set_textures(&mut self, width: u32, height: u32, layers: u32, levels: Vec<Vec<u8>>) -> PyResult<()> {
+    #[pyo3(signature = (width, height, layers, levels, recipes=None))]
+    fn set_textures(&mut self, width: u32, height: u32, layers: u32, levels: Vec<Vec<u8>>, recipes: Option<&[u8]>) -> PyResult<()> {
         self.sun.invalidate();
         self.ids_dirty = true; self.scene_epoch += 1;
         let limits = self.device.limits();
@@ -1507,8 +1508,16 @@ impl Renderer {
             || levels.iter().enumerate().any(|(k,v)| v.len() as u64 != (width>>k).max(1) as u64 * (height>>k).max(1) as u64 * layers as u64 * 4) {
             return Err(PyValueError::new_err("invalid texture array dimensions or mip data"));
         }
+        if recipes.is_some_and(|r| !textures::valid_recipes(r, layers) ||
+            r.len() as u64 > limits.max_storage_buffer_binding_size as u64) {
+            return Err(PyValueError::new_err("invalid PBR recipe table"));
+        }
         self.gpu_memory = self.gpu_memory.saturating_sub(self.textures.bytes);
         let mut textures = textures::Textures::new(&self.device, &self.queue, width, height, layers, &levels);
+        if let Some(data) = recipes {
+            textures.recipes = buffer(&self.device, data, wgpu::BufferUsages::STORAGE);
+            textures.bytes += data.len() as u64;
+        }
         std::mem::swap(&mut textures.materials, &mut self.textures.materials);
         self.textures = textures;
         self.gpu_memory += self.textures.bytes;

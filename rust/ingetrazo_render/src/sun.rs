@@ -276,6 +276,7 @@ impl Sun {
             .to_cols_array()
             .to_vec();
         camera.extend([2048., 2048., 0., 0.]);
+        camera.extend([0., 0., 1., 0.]);
         let camera = crate::buffer(
             d,
             bytemuck::cast_slice(&camera),

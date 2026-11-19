@@ -50,6 +50,27 @@ def encode(clip: dict) -> bytes:
         if attrs:
             face.attrs = dict(attrs)
     scene.groups.extend(clip.get("groups", ()))
+    registry = clip.get("registry") or clip.get("materials")
+    if registry:
+        from core.mesh import face_attrs
+        from core.group import iter_placements
+        def include(attrs):
+            name = attrs.get("mat")
+            if name in registry:
+                scene.materials[name] = registry[name]
+            back = attrs.get("back")
+            if isinstance(back, dict):
+                include(back)
+        seen = set()
+        for root in scene.groups:
+            for group, _ in iter_placements(root):
+                include(group.material or {})
+                if id(group.mesh) not in seen:
+                    seen.add(id(group.mesh))
+                    for attrs in face_attrs(group.mesh):
+                        include(attrs)
+        for face in scene.mesh.faces:
+            include(face.attrs)
     # The copy's tags and folders ride in the document itself: the .igz
     # writer keeps a scene's tag list and folders.
     from core.layers import add_missing
@@ -111,7 +132,7 @@ def decode(data: bytes) -> dict | None:
     from core.layers import template_of
     return {"faces": faces, "edges": edges, "groups": list(scene.groups),
             "edge_layers": list(head.get("edge_layers") or ()),
-            "layers": template_of(scene),
+            "layers": template_of(scene), "materials": dict(scene.materials),
             "ref": QVector3D(*head["ref"])}
 
 

@@ -96,7 +96,7 @@ def rename_recent(entries: list, old: str, stamp: dict) -> list:
     for e in entries:
         if e.get("mat") == old:
             e = {k: v for k, v in e.items()
-                 if k not in ("mat", "color", "texture", "opacity")}
+                 if k not in ("mat", "color", "texture", "opacity", "pbr")}
             e.update({k: (list(v) if isinstance(v, tuple) else v)
                       for k, v in stamp.items()})
         out.append(e)
@@ -451,6 +451,8 @@ class PaintTool(Tool):
             if cmds is None:
                 cmds = _texture_commands(faces, PaintTool.current_texture,
                                          PaintTool.current_texture_plane)
+            if mat is not None and mat.pbr is not None:
+                cmds.append(SetFaceColorCommand(faces, mat.color or (1., 1., 1.)))
             vp.history.execute(CompoundCommand(cmds + [opacity, tag]))
         else:
             # Painting a solid colour clears any texture on those faces, in one
@@ -539,6 +541,10 @@ class PaintTool(Tool):
             paint["opacity"] = float(cls.current_opacity)
         if cls.current_material is not None:
             paint["mat"] = cls.current_material.name
+            if cls.current_material.pbr is not None:
+                paint["pbr"] = cls.current_material.pbr
+                if cls.current_texture:
+                    paint["color"] = list(cls.current_material.color or (1., 1., 1.))
         return paint
 
     @classmethod
@@ -562,4 +568,8 @@ class PaintTool(Tool):
             back["opacity"] = float(cls.current_opacity)
         if cls.current_material is not None:
             back["mat"] = cls.current_material.name
+            if cls.current_material.pbr is not None:
+                back["pbr"] = cls.current_material.pbr
+                if cls.current_texture:
+                    back["color"] = list(cls.current_material.color or (1., 1., 1.))
         return back

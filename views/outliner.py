@@ -3713,7 +3713,7 @@ class OutlinerPanel(QWidget):
                     cmds.insert(0, SetFaceMaterialTagCommand([], name, Material(
                         name, color=tuple(col) if col else None,
                         texture=material.get("texture"),
-                        opacity=material.get("opacity"))))
+                        opacity=material.get("opacity"), pbr=material.get("pbr"))))
         self._window.viewport.history.execute(CompoundCommand(cmds))
         self._window.viewport.update()
         self.refresh()

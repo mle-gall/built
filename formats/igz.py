@@ -130,6 +130,12 @@ def _texture_slots(node):
         for key, value in node.items():
             if key == "texture" and isinstance(value, dict):
                 yield node, key
+            elif key == "pbr" and isinstance(value, dict):
+                # Face and placement payloads can share the live recipe.
+                recipe = node[key] = dict(value)
+                for slot, image in recipe.items():
+                    if slot.endswith("_map") and isinstance(image, dict):
+                        yield recipe, slot
             elif key not in _TEXTURE_WALK_SKIP:
                 yield from _texture_slots(value)
     elif isinstance(node, list):
@@ -269,6 +275,8 @@ def _face_attrs_json(f) -> dict:
     texture = getattr(f, "attrs", {}).get("texture")
     if texture is not None:
         entry["texture"] = dict(texture)
+    if getattr(f, "attrs", {}).get("pbr") is not None:
+        entry["pbr"] = dict(f.attrs["pbr"])
     layer = getattr(f, "attrs", {}).get("layer")
     if layer is not None:
         entry["layer"] = layer
@@ -2109,6 +2117,8 @@ def _face_attrs_from_json(raw) -> dict | None:
     color = raw.get("color")
     if color is not None:
         attrs["color"] = list(color)
+    if raw.get("pbr") is not None:
+        attrs["pbr"] = dict(raw["pbr"])
     texture = raw.get("texture")
     if texture is not None:
         attrs["texture"] = dict(texture)

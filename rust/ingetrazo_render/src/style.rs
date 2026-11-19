@@ -4,7 +4,7 @@ use wgpu::util::DeviceExt;
 
 pub struct Style {
     pub buffer: wgpu::Buffer,
-    pub data: [[f32; 4]; 10],
+    pub data: [[f32; 4]; 11],
 }
 impl Style {
     pub fn new(d: &wgpu::Device) -> Self {
@@ -19,6 +19,7 @@ impl Style {
             [0.; 4],
             [0.7, 0.7, 0.7, 0.],
             [0., 0., 0., 0.], // opacity ABI, group edges, hidden geometry, hidden objects
+            [0.35, 0.25, 1., 0.], // PBR light direction
         ];
         let buffer = d.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("display style"),
@@ -34,6 +35,12 @@ impl Style {
     ) -> PyResult<(u32, Option<bool>)> {
         let mut next = self.data;
         let (name, edges) = if let Ok(d) = value.cast::<PyDict>() {
+            if let Some(active) = d.get_item("shadows")? {
+                let direction: [f32; 3] = if active.extract::<bool>()? {
+                    d.get_item("sun_direction")?.map(|v| v.extract()).transpose()?.unwrap_or([0., 0., 1.])
+                } else { [0.35, 0.25, 1.] };
+                next[10][..3].copy_from_slice(&direction);
+            }
             for (index, name) in [(0, "material_opacity"), (1, "group_selection_edges"),
                                    (2, "show_hidden_geometry"), (3, "show_hidden_objects")] {
                 if let Some(v) = d.get_item(name)? { next[9][index] = if v.extract::<bool>()? { 1. } else { 0. }; }
@@ -145,8 +152,8 @@ impl Style {
 mod section_tests {
     #[test]
     fn section_and_fade_uniform_offsets() {
-        let data = [[0f32; 4]; 10];
-        assert_eq!(std::mem::size_of_val(&data), 160);
+        let data = [[0f32; 4]; 11];
+        assert_eq!(std::mem::size_of_val(&data), 176);
         assert_eq!(data[7].as_ptr() as usize - data.as_ptr() as usize, 112);
         assert_eq!(data[8].as_ptr() as usize - data.as_ptr() as usize, 128);
         assert_eq!(data[9].as_ptr() as usize - data.as_ptr() as usize, 144);

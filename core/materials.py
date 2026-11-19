@@ -27,7 +27,9 @@ name is then just a label with nothing behind it.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from copy import deepcopy
+from dataclasses import dataclass, replace
+import json
 from typing import Optional
 
 
@@ -50,6 +52,9 @@ class Material:
     #: ``core.finish.FINISHES``, or ``None`` = guessed from the name.
     finish: Optional[str] = None
 
+    #: Maps share the base projection. Without a base image, use a 1 m planar tile.
+    pbr: Optional[dict] = None
+
     def face_attrs(self) -> dict:
         """The attrs this material stamps on a face (its own name included)."""
         out: dict = {"mat": self.name}
@@ -59,6 +64,8 @@ class Material:
             out["texture"] = dict(self.texture)
         if self.opacity is not None:
             out["opacity"] = float(self.opacity)
+        if self.pbr is not None:
+            out["pbr"] = deepcopy(self.pbr)
         return out
 
     # ---- Serialization (.igz) -------------------------------------------
@@ -72,6 +79,8 @@ class Material:
             entry["opacity"] = float(self.opacity)
         if self.finish is not None:
             entry["finish"] = self.finish
+        if self.pbr is not None:
+            entry["pbr"] = deepcopy(self.pbr)
         return entry
 
     @classmethod
@@ -82,6 +91,7 @@ class Material:
             color=tuple(color) if color is not None else None,
             texture=dict(raw["texture"]) if raw.get("texture") else None,
             opacity=raw.get("opacity"),
+            pbr=deepcopy(raw.get("pbr")),
             finish=raw.get("finish") or None,
         )
 
@@ -130,12 +140,12 @@ def register(materials: dict, mat: Material) -> str:
     while name in materials:
         other = materials[name]
         if (other.color == mat.color and other.texture == mat.texture
-                and other.opacity == mat.opacity):
+                and other.opacity == mat.opacity and other.pbr == mat.pbr):
             return name
         name = f"{base} ({n})"
         n += 1
     if name != mat.name:
-        mat = Material(name, mat.color, mat.texture, mat.opacity)
+        mat = replace(mat, name=name)
     materials[name] = mat
     return name
 
@@ -144,6 +154,7 @@ def has_own_material(attrs) -> bool:
     """Whether a face was painted itself (a colour or a texture of its own),
     as opposed to wearing the default material."""
     return bool(attrs) and (attrs.get("texture") is not None
+                            or attrs.get("pbr") is not None
                             or attrs.get("color") is not None)
 
 
@@ -192,7 +203,7 @@ def effective_attrs(attrs, material):
         if rgb is None:
             rgb = material.get("color")
         merged = dict(attrs or {})
-        for key in ("texture", "mat"):
+        for key in ("texture", "mat", "pbr"):
             merged.pop(key, None)
         merged["color"] = tuple(rgb) if rgb is not None else None
         merged["back"] = True
@@ -200,7 +211,7 @@ def effective_attrs(attrs, material):
     if not material or has_own_material(attrs):
         return attrs
     merged = dict(attrs or {})
-    for key in ("color", "texture", "opacity", "mat"):
+    for key in ("color", "texture", "opacity", "mat", "pbr"):
         if key in material and material[key] is not None:
             merged[key] = material[key]
     if not merged.get("back") and not material.get("front_only"):
@@ -227,7 +238,8 @@ def material_sig(material):
             (tex.get("path"), tex.get("sw"), tex.get("sh"), tex.get("rot"))
             if isinstance(tex, dict) else None,
             material.get("opacity"), material.get("mat"),
-            bool(material.get("front_only")))
+            bool(material.get("front_only"))) + (
+                (json.dumps(material["pbr"], sort_keys=True),) if "pbr" in material else ())
 
 
 def free_name(base: str, taken) -> str:

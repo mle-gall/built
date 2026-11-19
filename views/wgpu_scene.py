@@ -14,6 +14,7 @@ only for prototypes with textures or backs that differ from their fronts.
 """
 from dataclasses import dataclass
 from types import SimpleNamespace
+from typing import NamedTuple
 import numpy as np
 from core import _native
 from core.geometry_arrays import arrays_of
@@ -119,7 +120,7 @@ def _baked_paint(paint):
     # base/fx_self; dropping those used to lose inherited tag fade/opacity.
     if not paint or paint.get('front_only'):
         return None
-    if any(k in paint for k in ('texture', 'by_layer', 'layer_fx', 'opacity')):
+    if any(k in paint for k in ('texture', 'pbr', 'by_layer', 'layer_fx', 'opacity')):
         if (paint.get('base') or {}).get('front_only'):
             return dict(paint, base=None)
         return paint
@@ -194,7 +195,9 @@ def _source_arrays(mesh, paint=None, texture_ids=None, face_overrides=None, bill
         palette[ids, 3] = [_alpha(table[k]) for k in ids]
     # Texture-only and opacity-only faces also need a nonzero opacity byte.
     for k, own in enumerate(table):
-        if own.get('texture') or 'opacity' in own:
+        if 'pbr' in own and own.get('color') is None:
+            palette[k, :3] = 255
+        if own.get('texture') or 'opacity' in own or 'pbr' in own:
             palette[k, 3] = _alpha(own)
     maps, paints = _material_columns(pos, corners, sizes, counts, table, attr+1,
                                      texture_ids if texture_ids is not None else {})
@@ -444,6 +447,8 @@ def _material_columns(pos, corners, sizes, counts, table, attributes, texture_id
         if not isinstance(back, dict):
             back = {} if back_is_default(own) else own
         color = back.get('color')
+        if color is None and 'pbr' in back:
+            color = (1., 1., 1.)
         if color is None and (back.get('texture') or 'opacity' in back):
             color = (210/255,)*3
         if color is not None:
@@ -451,9 +456,12 @@ def _material_columns(pos, corners, sizes, counts, table, attributes, texture_id
         sides = []
         for side, attrs in enumerate((own, back)):
             tex = attrs.get('texture')
+            path = (tex or {}).get('path')
+            if attrs.get('pbr') is not None:
+                path = _pbr_entry(path, attrs['pbr'])
+                tex = tex or {'sw': 1., 'sh': 1.}
             sides.append(tex)
-            if tex and tex.get('path'):
-                path = tex['path']
+            if path:
                 if path not in texture_ids:
                     texture_ids[path] = len(texture_ids)+1
                 palette[k, side+1] = texture_ids[path]
@@ -475,11 +483,27 @@ def _material_columns(pos, corners, sizes, counts, table, attributes, texture_id
         resolved = np.zeros((len(unique),16), np.float32)
         for j, row in enumerate(unique):
             for side, tex in enumerate(textures[int(row[0])]):
-                if tex and tex.get('path'):
+                if tex:
                     gu, cu, gv, cv = face_uv_axes(tex, QVector3D(*row[1:]))
                     resolved[j,side*8:side*8+8] = [*gu.toTuple(),cu,*gv.toTuple(),cv]
         maps[textured] = resolved[inverse]
     return maps, paints
+
+
+class _PbrEntry(NamedTuple):
+    images: tuple  # base, normal, ORM, AO, roughness, metallic
+    flip_y: bool
+    factors: tuple  # metallic, roughness, normal scale, AO strength
+
+
+def _pbr_entry(base, recipe):
+    # Logical material IDs survive incremental prototype remapping. Image layers
+    # are assigned separately so a shared normal or ORM consumes one layer.
+    maps = tuple((recipe.get(key) or {}).get("path") for key in
+                 ("normal_map", "orm_map", "ao_map", "roughness_map", "metallic_map"))
+    factors = tuple(float(recipe.get(key, default)) for key, default in
+                    (("metallic", 0), ("roughness", 1), ("normal_scale", 1), ("ao_strength", 1)))
+    return _PbrEntry((base, *maps), bool((recipe.get("normal_map") or {}).get("flip_y")), factors)
 
 
 def _texture_array(paths, *, device_limit=8192, memory_budget=256*1024*1024):
@@ -493,7 +517,26 @@ def _texture_array(paths, *, device_limit=8192, memory_budget=256*1024*1024):
     """
     from PySide6.QtGui import QImage
     from PySide6.QtCore import Qt
+    descriptors = None
+    if any(isinstance(entry, _PbrEntry) for entry in paths):
+        layers = {}
+        descriptors = np.zeros((len(paths)+1, 12), '<u4')
+        for i, entry in enumerate(paths, 1):
+            images = entry.images if isinstance(entry, _PbrEntry) else (entry,)
+            for channel, path in enumerate(images):
+                if path:
+                    descriptors[i, channel] = layers.setdefault(path, len(layers)+1)
+            if isinstance(entry, _PbrEntry):
+                descriptors[i, 6:8] = (1, entry.flip_y)
+                descriptors[i, 8:].view('<f4')[:] = entry.factors
+        paths = layers
     images = [QImage(path).mirrored() for path in paths]
+    if descriptors is not None:
+        # A missing normal must leave the geometric normal intact. Zero is
+        # the neutral/unused layer for each of the six image roles.
+        available = np.array([0] + [0 if im.isNull() else i
+                                    for i, im in enumerate(images, 1)], np.uint32)
+        descriptors[:, :6] = available[descriptors[:, :6]]
     width = min(device_limit, max([1] + [im.width() for im in images]))
     height = min(device_limit, max([1] + [im.height() for im in images]))
     if device_limit < 1 or memory_budget < (len(images)+1)*4:
@@ -521,4 +564,5 @@ def _texture_array(paths, *, device_limit=8192, memory_budget=256*1024*1024):
         if w == h == 1:
             break
         w, h = max(1,w//2), max(1,h//2)
-    return width, height, len(images)+1, levels
+    return (width, height, len(images)+1, levels) + (
+        (descriptors.tobytes(),) if descriptors is not None else ())

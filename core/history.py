@@ -1659,12 +1659,16 @@ class SetFaceMaterialTagCommand(Command):
 
     def do(self, scene) -> None:
         if self._old is None:
-            self._old = [f.attrs.get("mat") for f in self._faces]
+            self._old = [(f.attrs.get("mat"), f.attrs.get("pbr")) for f in self._faces]
         if (self._material is not None and self._name
                 and self._name not in getattr(scene, "materials", {})):
             scene.materials[self._name] = self._material
             self._registered = True
         for f in self._faces:
+            if self._material is not None and self._material.pbr is not None:
+                f.attrs["pbr"] = self._material.pbr
+            else:
+                f.attrs.pop("pbr", None)
             if self._name is None:
                 f.attrs.pop("mat", None)
             else:
@@ -1672,7 +1676,11 @@ class SetFaceMaterialTagCommand(Command):
         scene.version += 1
 
     def undo(self, scene) -> None:
-        for f, old in zip(self._faces, self._old or []):
+        for f, (old, recipe) in zip(self._faces, self._old or []):
+            if recipe is None:
+                f.attrs.pop("pbr", None)
+            else:
+                f.attrs["pbr"] = recipe
             if old is None:
                 f.attrs.pop("mat", None)
             else:
@@ -1733,13 +1741,14 @@ class RestampMaterialCommand(Command):
         self._new = new_material
         self._old_material = None
         self._old_faces: Optional[list] = None   # (face, {key: old value})
+        self._old_backs = []
         self._old_groups: Optional[list] = None  # (container, old material)
         self._old_target = None   # a renamed-onto entry, put back by undo
         self._meshes: Optional[list] = None      # the ones restamped
 
-    _KEYS = ("mat", "color", "texture", "opacity")
+    _KEYS = ("mat", "color", "texture", "opacity", "pbr")
 
-    def _targets(self, scene):
+    def _targets(self, scene, *, capture_backs=False):
         # Nested placements included: walking scene.groups as a flat list
         # left every face INSIDE a component wearing the old recipe, so
         # "change the concrete everywhere" changed it almost nowhere in an
@@ -1757,6 +1766,10 @@ class RestampMaterialCommand(Command):
             if mesh is None:
                 continue
             for f in mesh.faces:
+                if capture_backs:
+                    back = f.attrs.get("back")
+                    if isinstance(back, dict) and back.get("mat") == self._name:
+                        self._old_backs.append((f, back))
                 if f.attrs.get("mat") == self._name:
                     yield f
 
@@ -1767,6 +1780,7 @@ class RestampMaterialCommand(Command):
         if self._meshes is None:
             from core.group import iter_placements
             worn = {element_identity(f) for f, _old in self._old_faces or []}
+            worn.update(element_identity(f) for f, _ in self._old_backs)
             found: dict = {}
             meshes = [scene.loose_mesh] + [pg.mesh for g in scene.groups
                                            for pg, _m in iter_placements(g)]
@@ -1798,19 +1812,31 @@ class RestampMaterialCommand(Command):
             self._old_material = scene.materials.get(self._name)
             self._old_faces = [
                 (f, {k: f.attrs.get(k) for k in self._KEYS})
-                for f in self._targets(scene)]
+                for f in self._targets(scene, capture_backs=True)]
             self._old_groups = [(g, g.material)
                                 for g in self._painted_groups(scene)]
             self._old_target = scene.materials.get(self._new.name)
         if self._new.name != self._name:
             scene.materials.pop(self._name, None)
         scene.materials[self._new.name] = self._new
-        for f, _old in self._old_faces:
-            for k in self._KEYS:
-                if k in stamp:
-                    f.attrs[k] = stamp[k]
+        keep_mapping = (self._old_material is not None
+                        and self._old_material.texture == self._new.texture)
+
+        def apply(attrs):
+            for key in self._KEYS:
+                if key == "texture" and keep_mapping:
+                    continue
+                if key in stamp:
+                    attrs[key] = stamp[key]
                 else:
-                    f.attrs.pop(k, None)
+                    attrs.pop(key, None)
+
+        for face, _ in self._old_faces:
+            apply(face.attrs)
+        for face, old in self._old_backs:
+            back = dict(old)
+            apply(back)
+            face.attrs["back"] = back
         for g, _old in self._old_groups or []:
             g.material = dict(stamp)
         self._count_meshes(scene)
@@ -1833,6 +1859,8 @@ class RestampMaterialCommand(Command):
                     f.attrs.pop(k, None)
                 else:
                     f.attrs[k] = old[k]
+        for face, old in self._old_backs:
+            face.attrs["back"] = old
         for g, old in self._old_groups or []:
             g.material = old
         self._count_meshes(scene)
@@ -1893,7 +1921,7 @@ class EditTexturedMaterialCommand(RestampMaterialCommand):
                                 for g in self._painted_groups(scene)]
             self._new = Material(self._name, color=old.color,
                                  texture=self.edited(old.texture),
-                                 opacity=old.opacity, finish=old.finish)
+                                 opacity=old.opacity, finish=old.finish, pbr=old.pbr)
         scene.materials[self._name] = self._new
         for f, before in self._old_faces:
             if before["texture"]:

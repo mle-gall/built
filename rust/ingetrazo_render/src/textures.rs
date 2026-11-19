@@ -4,6 +4,7 @@ pub struct Textures {
     pub sampler: wgpu::Sampler,
     pub bytes: u64,
     pub layers: u32,
+    pub recipes: wgpu::Buffer,
     pub materials: wgpu::Buffer,
 }
 impl Textures {
@@ -53,7 +54,9 @@ impl Textures {
             );
         }
         Self {
-            layers,            materials: crate::buffer(d, &[0;16], wgpu::BufferUsages::STORAGE),
+            recipes: crate::buffer(d, &[0; 48], wgpu::BufferUsages::STORAGE),
+            layers,
+            materials: crate::buffer(d, &[0;16], wgpu::BufferUsages::STORAGE),
             view: texture.create_view(&wgpu::TextureViewDescriptor {
                 dimension: Some(wgpu::TextureViewDimension::D2Array),
                 ..Default::default()
@@ -74,6 +77,7 @@ impl Textures {
             label: Some("material textures"),
             layout: &p.get_bind_group_layout(2),
             entries: &[
+                wgpu::BindGroupEntry { binding: 3, resource: self.recipes.as_entire_binding() },
                 wgpu::BindGroupEntry { binding: 2, resource: self.materials.as_entire_binding() },
                 wgpu::BindGroupEntry {
                     binding: 0,
@@ -85,5 +89,29 @@ impl Textures {
                 },
             ],
         })
+    }
+}
+
+/// Each recipe is three vec4s: six layer indices, two flags and four factors.
+pub fn valid_recipes(data: &[u8], layers: u32) -> bool {
+    !data.is_empty() && data.len() % 48 == 0 && data.chunks_exact(48).all(|row| {
+        row[..24].chunks_exact(4).all(|v| u32::from_le_bytes(v.try_into().unwrap()) < layers)
+            && row[32..].chunks_exact(4).all(|v| f32::from_le_bytes(v.try_into().unwrap()).is_finite())
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::valid_recipes;
+
+    #[test]
+    fn recipe_table_requires_complete_rows_and_resident_layers() {
+        let mut row = [0u8; 48];
+        row[16..20].copy_from_slice(&1u32.to_le_bytes());
+        assert!(valid_recipes(&row, 2));
+        assert!(!valid_recipes(&row, 1));
+        assert!(!valid_recipes(&row[..32], 2));
+        row[40..44].copy_from_slice(&f32::NAN.to_le_bytes());
+        assert!(!valid_recipes(&row, 2));
     }
 }

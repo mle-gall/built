@@ -19257,6 +19257,8 @@ class Viewport(QOpenGLWidget):
         names = used_layers([a for _l, _h, a in face_data], edge_layers,
                             group_data)
         self.clipboard = {"faces": face_data, "edges": edge_data,
+                          "registry": {n: m for n, m in getattr(self.scene, "materials", {}).items()
+                                       if m.pbr is not None},
                           "edge_layers": edge_layers,
                           "layers": template_for(self.scene, names),
                           "groups": group_data, "ref": ref}

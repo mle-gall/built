@@ -12,7 +12,7 @@ smooth-shaded models read smooth. Stdlib + NumPy only.
 Supported: TRIANGLES primitives, u8/u16/u32 indices, float/normalized-int
 attributes with byteStride, node hierarchies (matrix or TRS), embedded and
 external images, pbrMetallicRoughness + the KHR_materials_pbrSpecularGlossiness
-legacy (old Sketchfab uploads), KHR_texture_transform offset/scale,
+legacy (old Sketchfab uploads), shared KHR_texture_transform offset/scale/rotation,
 alphaMode BLEND → face opacity (MASK rides on the texture's own alpha).
 Not supported: Draco-compressed meshes (clear error), skinning/animation
 (imported at bind pose), sparse accessors.
@@ -200,11 +200,11 @@ def _extract_images(js, buffers, path: Path):
 
 
 def _material_recipe(js, mat_idx, image_paths):
-    """(texture path | None, uv transform (ox, oy, sx, sy), rgba) for a
+    """(texture path | None, uv transform (ox, oy, sx, sy, rotation), rgba) for a
     material index, honouring the specular-glossiness legacy."""
     mats = js.get("materials", [])
     if mat_idx is None or mat_idx >= len(mats):
-        return None, (0.0, 0.0, 1.0, 1.0), None, 0, None
+        return None, (0.0, 0.0, 1.0, 1.0, 0.0), None, 0, None
     mat = mats[mat_idx]
     sg = (mat.get("extensions", {})
           .get("KHR_materials_pbrSpecularGlossiness"))
@@ -216,19 +216,23 @@ def _material_recipe(js, mat_idx, image_paths):
         tex_info = pbr.get("baseColorTexture")
         rgba = pbr.get("baseColorFactor")
     tex_path = None
-    uvt = (0.0, 0.0, 1.0, 1.0)
+    uvt = (0.0, 0.0, 1.0, 1.0, 0.0)
     uv_set = 0
+    mapping = tex_info or mat.get("normalTexture") or mat.get("occlusionTexture") or (
+        mat.get("pbrMetallicRoughness", {}).get("metallicRoughnessTexture"))
     if tex_info is not None:
         tex = js.get("textures", [])[tex_info["index"]]
         src = tex.get("source")
         if src is not None and src < len(image_paths):
             tex_path = image_paths[src]
-        uv_set = tex_info.get("texCoord", 0)
-        tt = tex_info.get("extensions", {}).get("KHR_texture_transform")
+    if mapping:
+        uv_set = mapping.get("texCoord", 0)
+        tt = mapping.get("extensions", {}).get("KHR_texture_transform")
         if tt:
+            uv_set = tt.get("texCoord", uv_set)
             ox, oy = tt.get("offset", [0.0, 0.0])
             sx, sy = tt.get("scale", [1.0, 1.0])
-            uvt = (ox, oy, sx, sy)
+            uvt = (ox, oy, sx, sy, tt.get("rotation", 0.0))
     opacity = None
     if mat.get("alphaMode") == "BLEND":
         a = rgba[3] if rgba and len(rgba) > 3 else 1.0
@@ -239,7 +243,7 @@ def _material_recipe(js, mat_idx, image_paths):
     return tex_path, uvt, rgba, uv_set, opacity
 
 
-def read_triangles(path: Path):
+def read_triangles(path: Path, *, materials=None):
     """Parse the file into world-space Z-up triangle soup:
     (positions (N,3,3) float64 metres, per-triangle recipe index,
     recipes: [(tex_path|None, rgba|None, opacity|None)], uvs (N,3,2) or
@@ -256,6 +260,7 @@ def read_triangles(path: Path):
                     [0.0, 0.0, -1.0],
                     [0.0, 1.0, 0.0]])
     batches = []
+    recipes = {}
     meshes = js.get("meshes", [])
     for node_idx, world in _node_transforms(js):
         nd = js["nodes"][node_idx]
@@ -276,19 +281,43 @@ def read_triangles(path: Path):
             idx = idx.astype(np.int64)[:(len(idx) // 3) * 3].reshape(-1, 3)
             tex_path, uvt, rgba, uv_set, opacity = _material_recipe(
                 js, prim.get("material"), image_paths)
+            idx_mat = prim.get("material")
+            if (materials is not None and idx_mat is not None
+                    and 0 <= idx_mat < len(js.get("materials", ())) and idx_mat not in recipes):
+                from core.materials import Material, register
+                from formats.pbr_maps import import_recipe
+                mat = js["materials"][idx_mat]
+                if "KHR_materials_pbrSpecularGlossiness" in mat.get("extensions", {}):
+                    recipes[idx_mat] = None
+                else:
+                    pbr = import_recipe(mat, js.get("textures", []), image_paths)
+                    material = Material(mat.get("name") or f"Material {idx_mat+1}",
+                                        tuple((rgba or [1, 1, 1])[:3]),
+                                        {"path": tex_path} if tex_path else None,
+                                        opacity, pbr=pbr)
+                    recipes[idx_mat] = (register(materials, material), pbr)
+            recipe = recipes.get(idx_mat)
             world_pts = pos @ world[:3, :3].T + world[:3, 3]
             world_pts = world_pts @ zup.T
             tris = world_pts[idx]                      # (N, 3, 3)
             uvs = None
             uv_key = f"TEXCOORD_{uv_set}"
-            if tex_path is not None and uv_key in attr:
+            has_maps = recipe and any(key.endswith("_map") for key in recipe[1])
+            if (tex_path or has_maps) and uv_key in attr:
                 uv = _accessor(js, buffers, attr[uv_key])[:, :2]
-                ox, oy, sx, sy = uvt
-                uv = uv * (sx, sy) + (ox, oy)
+                ox, oy, sx, sy, rotation = uvt
+                uv = uv * (sx, sy)
+                if rotation:
+                    c, s = np.cos(rotation), np.sin(rotation)
+                    uv = uv @ np.array([[c, s], [-s, c]])
+                uv += (ox, oy)
                 uvs = uv[idx]                          # (N, 3, 2)
             elif tex_path is not None:
                 tex_path = None                        # texture without UVs
-            batches.append((tris, uvs, (tex_path, rgba, opacity)))
+            material = (tex_path, rgba, opacity)
+            if recipe:
+                material += (recipe,)
+            batches.append((tris, uvs, material))
     return batches, js
 
 
@@ -337,12 +366,17 @@ def build_mesh(batches, progress=None):
     attrs_list = []
     total = sum(len(t) for t, _u, _r in batches) or 1
     done = 0
-    for tris, uvs, (tex_path, rgba, opacity) in batches:
+    for tris, uvs, material in batches:
+        tex_path, rgba, opacity = material[:3]
+        extra = {}
+        if len(material) > 3:
+            name, pbr = material[3]
+            extra = {"mat": name, "pbr": pbr, "back": True,
+                     "color": list((rgba or [1, 1, 1])[:3])}
         flat_parts.append(tris.reshape(-1, 3))
-        base = None
-        if tex_path is None:
+        if uvs is None or not (tex_path or extra):
             color = ([float(c) for c in rgba[:3]] if rgba else None)
-            base = {}
+            base = dict(extra)
             if color is not None and color != [1.0, 1.0, 1.0]:
                 # A mesh format paints a triangle, not a side.
                 base["color"] = color
@@ -359,11 +393,14 @@ def build_mesh(batches, progress=None):
             sw = np.where(glu > 1e-9, 1.0 / np.maximum(glu, 1e-9), 1.0)
             sh = np.where(glv > 1e-9, 1.0 / np.maximum(glv, 1e-9), 1.0)
             for i in range(len(tris)):
-                a = {"texture": {"path": tex_path,
+                a = {"texture": {"path": tex_path or "",
                                  "uvw": [float(x) for x in uvw[i]],
                                  "sw": float(sw[i]), "sh": float(sh[i])},
                      "back": True} \
                     if okm[i] else None
+                if extra:
+                    a = a or {}
+                    a.update(extra)
                 if a is not None and opacity is not None:
                     a["opacity"] = opacity
                 attrs_list.append(a)
@@ -465,7 +502,8 @@ def _load_glb_inner(scene, path, progress=None):
             progress(frac, text)
 
     tick(0.05, "Reading file…")
-    batches, js = read_triangles(Path(path))
+    imported = dict(scene.materials)
+    batches, js = read_triangles(Path(path), materials=imported)
     # Our own files are in metres, as glTF says: guessing would shrink a
     # model wider than 40 m to inches (a 18 m² layout read back as 0.012).
     ours = (js.get("asset", {}) or {}).get("generator") == "IngeTrazo"
@@ -486,5 +524,6 @@ def _load_glb_inner(scene, path, progress=None):
     title = (js.get("asset", {}).get("extras", {}) or {}).get("title")
     name = (title or Path(path).stem)[:60]
     group = Group(mesh, name=name)
+    scene.materials.update(imported)
     scene.groups.append(group)
     return offset

@@ -37,11 +37,26 @@ def _yup(v):
     return (v.x(), v.z(), -v.y())
 
 
-def _mime(name: str) -> str:
-    ext = Path(name).suffix.lower()
-    if ext in (".jpg", ".jpeg"):
-        return "image/jpeg"
-    return "image/png"
+def _image_data(src):
+    """glTF core embeds PNG or JPEG. Transcode other document image formats."""
+    try:
+        data = Path(src).read_bytes()
+    except OSError:
+        return None
+    if data.startswith(b"\x89PNG"):
+        return data, "image/png"
+    if data.startswith(b"\xff\xd8\xff"):
+        return data, "image/jpeg"
+    if not is_image_bytes(data) and Path(src).suffix.lower() != ".tga":
+        return None
+    from PySide6.QtCore import QBuffer, QIODevice
+    from PySide6.QtGui import QImage
+    image = QImage(str(src))
+    buf = QBuffer()
+    buf.open(QIODevice.WriteOnly)
+    if image.isNull() or not image.save(buf, "PNG"):
+        return None
+    return bytes(buf.data()), "image/png"
 
 
 def _yup_matrix(m) -> list:
@@ -233,6 +248,25 @@ def save_glb(scene, path, face_me=None, only=None) -> None:
     mat_index: dict[tuple, int] = {}
     tex_for_image: dict[str, int] = {}
 
+    def image_index(src):
+        if str(src) in tex_for_image:
+            return tex_for_image[str(src)]
+        encoded = _image_data(src)
+        if encoded is None:
+            return None
+        data, mime = encoded
+        _align()
+        buffer_views.append({"buffer": 0, "byteOffset": len(buf), "byteLength": len(data)})
+        buf.extend(data)
+        images.append({"bufferView": len(buffer_views) - 1, "mimeType": mime,
+                       "name": Path(src).name})
+        if not samplers:
+            samplers.append({"wrapS": 10497, "wrapT": 10497})  # REPEAT
+        textures.append({"source": len(images) - 1, "sampler": 0})
+        index = len(textures) - 1
+        tex_for_image[str(src)] = index
+        return index
+
     names = export_names(materials_in)
     used_ext: set = set()
     for key in keys:
@@ -243,27 +277,7 @@ def save_glb(scene, path, face_me=None, only=None) -> None:
                                               "roughnessFactor": 1.0}}
         if info.get("map"):
             src = info["src"]
-            tex_idx = tex_for_image.get(str(src))
-            if tex_idx is None:
-                try:
-                    img_bytes = Path(src).read_bytes()
-                except OSError:
-                    img_bytes = None
-                if img_bytes is not None and not is_image_bytes(img_bytes):
-                    img_bytes = None
-                if img_bytes is not None:
-                    _align()
-                    view = {"buffer": 0, "byteOffset": len(buf),
-                            "byteLength": len(img_bytes)}
-                    buf.extend(img_bytes)
-                    buffer_views.append(view)
-                    images.append({"bufferView": len(buffer_views) - 1,
-                                   "mimeType": _mime(info["map"]),
-                                   "name": info["map"]})
-                    if not samplers:
-                        samplers.append({"wrapS": 10497, "wrapT": 10497})  # REPEAT
-                    textures.append({"source": len(images) - 1, "sampler": 0})
-                    tex_idx = tex_for_image[str(src)] = len(textures) - 1
+            tex_idx = image_index(src)
             if tex_idx is not None:
                 mat["pbrMetallicRoughness"]["baseColorTexture"] = {"index": tex_idx}
                 # A cut-out image (a face-me figure, leaves) stays cut out:
@@ -283,7 +297,23 @@ def save_glb(scene, path, face_me=None, only=None) -> None:
         # The finish (core.finish): plain glTF for every program, and the
         # name in extras for Render with Blender's full materials.
         finish = info.get("finish")
-        if finish:
+        recipe = info.get("pbr")
+        if recipe is not None:
+            from formats.pbr_maps import export_maps
+            mr = mat["pbrMetallicRoughness"]
+            mr.update(baseColorFactor=[*info["color"], 1.0],
+                      metallicFactor=recipe.get("metallic", 0.0),
+                      roughnessFactor=recipe.get("roughness", 1.0))
+            normal, packed, ao = export_maps(recipe)
+            for target, slot, map_path, factors in (
+                (mr, "metallicRoughnessTexture", packed, {}),
+                (mat, "normalTexture", normal, {"scale": recipe.get("normal_scale", 1.0)}),
+                (mat, "occlusionTexture", ao, {"strength": recipe.get("ao_strength", 1.0)}),
+            ):
+                index = image_index(map_path) if map_path else None
+                if index is not None:
+                    target[slot] = {"index": index, **factors}
+        elif finish:
             from core.finish import PBR
             rough, metal, trans, ior = PBR[finish]
             pbr = mat["pbrMetallicRoughness"]
@@ -315,7 +345,8 @@ def save_glb(scene, path, face_me=None, only=None) -> None:
             if key not in source:
                 continue
             tris = source[key]
-            textured = key[0] == "tex"
+            textured = key[0] == "tex" or any(
+                slot.endswith("_map") for slot in materials_in[key].get("pbr") or ())
             positions: list[tuple] = []
             normals: list[tuple] = []
             uvs: list[tuple] = []

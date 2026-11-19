@@ -2560,19 +2560,24 @@ class MaterialsPanel(QWidget):
                 yield
                 continue
             mat = attrs.get("mat")
-            tex = attrs.get("texture")
-            if tex and tex.get("path"):
-                textures.setdefault(tex["path"], tex)
+            path = (attrs.get("texture") or {}).get("path")
+            recipe_name = mat if attrs.get("pbr") is not None else None
+            if path:
+                key = (path, recipe_name)
+                textures.setdefault(key, attrs["texture"])
                 if attrs.get("opacity") is not None:
-                    opacities.setdefault(tex["path"], attrs.get("opacity"))
+                    opacities.setdefault(key, attrs["opacity"])
                 if mat:
-                    names.setdefault(("t", tex["path"]), mat)
+                    names.setdefault(("t", key), mat)
             else:
                 col = attrs.get("color")
+                if col is None and recipe_name:
+                    col = (1., 1., 1.)
                 if col is not None:
-                    colors[tuple(col)] = col
+                    key = (tuple(col), recipe_name)
+                    colors[key] = col
                     if mat:
-                        names.setdefault(("c", tuple(col)), mat)
+                        names.setdefault(("c", key), mat)
         self._worn_by_mesh = live
         self._in_model_cv = version
         if hist is not None:
@@ -2584,7 +2589,7 @@ class MaterialsPanel(QWidget):
         sig = (tuple((k, tuple(c), names.get(("c", k)))
                      for k, c in colors.items()),
                tuple((p, repr(sorted(t.items())), names.get(("t", p)),
-                      opacities.get(p), _file_stamp(p))
+                      opacities.get(p), _file_stamp(p[0]))
                      for p, t in textures.items()))
         if (sig == getattr(self, "_swatch_sig", None)
                 and self._in_model_grid.count() == self._swatch_count):
@@ -2597,10 +2602,10 @@ class MaterialsPanel(QWidget):
                 w.setParent(None)
                 w.deleteLater()
         i = 0
-        for col in colors.values():
+        for key, col in colors.items():
             # A named material shows its NAME (the registry identity the
             # .skp import now preserves); an anonymous paint stays "Color".
-            name = names.get(("c", tuple(col)))
+            name = names.get(("c", key))
             label = name or tr("Color")
             b = _swatch_button(_color_pixmap(tuple(col)), label)
             b.clicked.connect(lambda _=False, c=tuple(col), n=name:
@@ -2615,15 +2620,16 @@ class MaterialsPanel(QWidget):
                     self._swatch_menu(w, n, color=c))
             self._in_model_grid.addWidget(b, i // self.COLS, i % self.COLS)
             i += 1
-        for path, tex in textures.items():
+        for key, tex in textures.items():
+            path = key[0]
             pm = _texture_pixmap(path)
             if pm is None:
                 continue
-            t_name = names.get(("t", path))
+            t_name = names.get(("t", key))
             b = _swatch_button(pm, t_name or Path(path).stem)
             b.clicked.connect(
                 lambda _=False, t=dict(tex), n=t_name,
-                o=opacities.get(path): self._apply_texture(
+                o=opacities.get(key): self._apply_texture(
                     t["path"], t.get("sw", 1.0), name=n, opacity=o))
             if t_name:
                 b.setContextMenuPolicy(Qt.CustomContextMenu)
@@ -2673,6 +2679,8 @@ class MaterialsPanel(QWidget):
                            lambda: QTimer.singleShot(
                                0, lambda: self._edit_named_color(name, color)))
         if mat is not None:
+            menu.addAction(tr("Edit PBR maps…"),
+                           lambda: QTimer.singleShot(0, lambda: self._edit_pbr(mat)))
             sub = menu.addMenu(tr("Finish for the render"))
             pic = (mat.texture or {}).get("path")
             guessed = fin.guess(name, pic and Path(pic).name, mat.opacity)
@@ -2690,6 +2698,61 @@ class MaterialsPanel(QWidget):
                     lambda _c=False, k=key: self._set_finish(name, k))
         if not menu.isEmpty():
             menu.exec(QCursor.pos())
+
+    def _edit_pbr(self, material):
+        from dataclasses import replace
+        from PySide6.QtWidgets import QDialog, QDialogButtonBox, QFormLayout, QLineEdit
+        dialog = QDialog(self)
+        dialog.setWindowTitle(tr("PBR material") + " — " + material.name)
+        form = QFormLayout(dialog)
+        enabled = QCheckBox(tr("Use PBR shading"))
+        enabled.setChecked(True)
+        form.addRow(enabled)
+        recipe = dict(material.pbr or {})
+        fields = {}
+        for key, label, default in (("metallic", "Metallic", 0.), ("roughness", "Roughness", 1.),
+                                    ("normal_scale", "Normal scale", 1.), ("ao_strength", "AO strength", 1.)):
+            field = QDoubleSpinBox()
+            field.setRange(-1e6 if key == "normal_scale" else 0., 1e6 if key == "normal_scale" else 1.)
+            field.setDecimals(4)
+            field.setSingleStep(0.05)
+            field.setValue(recipe.get(key, default))
+            fields[key] = field
+            form.addRow(tr(label), field)
+        paths = {}
+        def browse(field):
+            path, _ = QFileDialog.getOpenFileName(dialog, tr("Choose map"))
+            if path:
+                field.setText(path)
+        for key, label in (("normal_map", "Normal map"), ("roughness_map", "Roughness map"),
+                           ("metallic_map", "Metallic map"), ("ao_map", "Occlusion map"),
+                           ("orm_map", "Packed ORM (overrides separate maps)")):
+            row = QHBoxLayout()
+            field = QLineEdit((recipe.get(key) or {}).get("path", ""))
+            field.setClearButtonEnabled(True)
+            button = QPushButton(tr("Browse…"))
+            button.clicked.connect(lambda _, f=field: browse(f))
+            row.addWidget(field)
+            row.addWidget(button)
+            form.addRow(tr(label), row)
+            paths[key] = field
+        flip = QCheckBox(tr("Flip normal map Y (DirectX)"))
+        flip.setChecked((recipe.get("normal_map") or {}).get("flip_y", False))
+        form.addRow(flip)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        form.addRow(buttons)
+        if dialog.exec():
+            recipe.update({key: field.value() for key, field in fields.items()})
+            for key, field in paths.items():
+                if field.text().strip():
+                    recipe[key] = {"path": field.text().strip()}
+                else:
+                    recipe.pop(key, None)
+            if flip.isChecked() and "normal_map" in recipe:
+                recipe["normal_map"]["flip_y"] = True
+            self._restamp(material.name, replace(material, pbr=recipe if enabled.isChecked() else None))
 
     def _set_finish(self, name: str, finish) -> None:
         from core.finish import LABELS
@@ -2719,7 +2782,8 @@ class MaterialsPanel(QWidget):
         new_mat = Material(
             self._recoloured_name(name, rgb), color=rgb,
             opacity=existing.opacity if existing else None,
-            finish=existing.finish if existing else None)
+            finish=existing.finish if existing else None,
+            pbr=existing.pbr if existing else None)
         self._restamp(name, new_mat)
 
     # ---- Rename / recolour in the model ----------------------------------
@@ -2782,7 +2846,7 @@ class MaterialsPanel(QWidget):
             return False
         return self._restamp(old_name, Material(
             new_name, color=old.color, texture=old.texture,
-            opacity=old.opacity, finish=old.finish))
+            opacity=old.opacity, finish=old.finish, pbr=old.pbr))
 
     def _ask_rename(self, name: str) -> None:
         """Right-click ▸ Rename… on a swatch of «In model»."""
@@ -3038,7 +3102,7 @@ class MaterialsPanel(QWidget):
             old = scene.materials[mat.name]
             new_mat = Material(self._recoloured_name(mat.name, rgb),
                                color=rgb, opacity=old.opacity,
-                               finish=old.finish)
+                               finish=old.finish, pbr=old.pbr)
             if self._restamp(mat.name, new_mat):
                 PaintTool.current_material = new_mat
                 PaintTool.current_color = rgb

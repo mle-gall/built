@@ -46,6 +46,27 @@ def load_job():
 
 def import_model(path):
     bpy.ops.import_scene.gltf(filepath=path)
+    # Blender wires base colour, normal and metal/roughness to Principled.
+    # Its importer leaves strength-adjusted AO on a glTF settings node.
+    for mat in bpy.data.materials:
+        tree = mat.node_tree
+        if tree is None:
+            continue
+        occlusion = next((n.inputs.get("Occlusion") for n in tree.nodes
+                          if n.type == "GROUP" and n.inputs.get("Occlusion")), None)
+        bsdf = next((n for n in tree.nodes if n.type == "BSDF_PRINCIPLED"), None)
+        if occlusion is None or not occlusion.is_linked or bsdf is None:
+            continue
+        base = bsdf.inputs["Base Color"]
+        mix = tree.nodes.new("ShaderNodeMixRGB")
+        mix.blend_type = "MULTIPLY"
+        mix.inputs[0].default_value = 1.0
+        if base.is_linked:
+            tree.links.new(base.links[0].from_socket, mix.inputs[1])
+        else:
+            mix.inputs[1].default_value = base.default_value
+        tree.links.new(occlusion.links[0].from_socket, mix.inputs[2])
+        tree.links.new(mix.outputs[0], base)
     objs = [o for o in bpy.context.scene.objects if o.type == "MESH"]
     say("imported", len(objs), "objects")
     return objs
