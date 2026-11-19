@@ -27,7 +27,8 @@ name is then just a label with nothing behind it.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from copy import deepcopy
+from dataclasses import dataclass, replace
 from typing import Optional
 
 
@@ -50,6 +51,9 @@ class Material:
     #: ``core.finish.FINISHES``, or ``None`` = guessed from the name.
     finish: Optional[str] = None
 
+    #: Maps share the base projection. Without a base image, use a 1 m planar tile.
+    pbr: Optional[dict] = None
+
     def face_attrs(self) -> dict:
         """The attrs this material stamps on a face (its own name included)."""
         out: dict = {"mat": self.name}
@@ -59,6 +63,8 @@ class Material:
             out["texture"] = dict(self.texture)
         if self.opacity is not None:
             out["opacity"] = float(self.opacity)
+        if self.pbr is not None:
+            out["pbr"] = deepcopy(self.pbr)
         return out
 
     # ---- Serialization (.igz) -------------------------------------------
@@ -72,6 +78,8 @@ class Material:
             entry["opacity"] = float(self.opacity)
         if self.finish is not None:
             entry["finish"] = self.finish
+        if self.pbr is not None:
+            entry["pbr"] = deepcopy(self.pbr)
         return entry
 
     @classmethod
@@ -82,6 +90,7 @@ class Material:
             color=tuple(color) if color is not None else None,
             texture=dict(raw["texture"]) if raw.get("texture") else None,
             opacity=raw.get("opacity"),
+            pbr=deepcopy(raw.get("pbr")),
             finish=raw.get("finish") or None,
         )
 
@@ -130,12 +139,13 @@ def register(materials: dict, mat: Material) -> str:
     while name in materials:
         other = materials[name]
         if (other.color == mat.color and other.texture == mat.texture
-                and other.opacity == mat.opacity):
+                and other.opacity == mat.opacity and other.pbr == mat.pbr
+                and other.finish == mat.finish):
             return name
         name = f"{base} ({n})"
         n += 1
     if name != mat.name:
-        mat = Material(name, mat.color, mat.texture, mat.opacity)
+        mat = replace(mat, name=name)
     materials[name] = mat
     return name
 
