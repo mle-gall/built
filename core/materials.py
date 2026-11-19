@@ -140,7 +140,8 @@ def register(materials: dict, mat: Material) -> str:
     while name in materials:
         other = materials[name]
         if (other.color == mat.color and other.texture == mat.texture
-                and other.opacity == mat.opacity and other.pbr == mat.pbr):
+                and other.opacity == mat.opacity and other.pbr == mat.pbr
+                and other.finish == mat.finish):
             return name
         name = f"{base} ({n})"
         n += 1

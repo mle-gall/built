@@ -1,0 +1,104 @@
+{
+  "Classic Plain": {
+    "ao_enabled": 0,
+    "ao_strength": 1,
+    "metallic_factor": 1,
+    "metalness_enabled": 0,
+    "normal_enabled": 0,
+    "normal_scale": 1,
+    "normal_style": 1,
+    "roughness_enabled": 0,
+    "roughness_factor": 1,
+    "textures": {},
+    "workflow": 0
+  },
+  "PBR All Maps": {
+    "ao_enabled": 1,
+    "ao_strength": 0.400000006,
+    "metallic_factor": 0.25,
+    "metalness_enabled": 1,
+    "normal_enabled": 1,
+    "normal_scale": 0.600000024,
+    "normal_style": 0,
+    "roughness_enabled": 1,
+    "roughness_factor": 0.75,
+    "textures": {
+      "ao": {
+        "file_name": "all_ao.png",
+        "h": 16,
+        "pixels_sha256": "b182e1b6799ea641d4aa2998b9e50b21e3c9d0518e257ffcf5d79aa08ac899b3",
+        "s_scale": 1,
+        "t_scale": 1,
+        "w": 16
+      },
+      "base": {
+        "file_name": "all_base.png",
+        "h": 16,
+        "pixels_sha256": "789a0a2cba97f193f858638bb8d980e85d62d39a2a681e5b4c29585cd19046a8",
+        "s_scale": 1,
+        "t_scale": 1,
+        "w": 16
+      },
+      "metallic": {
+        "file_name": "all_metal.png",
+        "h": 16,
+        "pixels_sha256": "5d2f1416e1188f11949200aa3a02916e31263ef9935c9015b78dcfdf95176aaa",
+        "s_scale": 1,
+        "t_scale": 1,
+        "w": 16
+      },
+      "normal": {
+        "file_name": "all_normal_gl.png",
+        "h": 16,
+        "pixels_sha256": "1a1b76b32463d79c0c876f97fab2695eb941d0a746ef04724e3ed47d640016d7",
+        "s_scale": 1,
+        "t_scale": 1,
+        "w": 16
+      },
+      "roughness": {
+        "file_name": "all_rough.png",
+        "h": 16,
+        "pixels_sha256": "150dd86abf329c89b67698c80acde112124a10dafd2564433bdc419f796911bd",
+        "s_scale": 1,
+        "t_scale": 1,
+        "w": 16
+      }
+    },
+    "workflow": 1
+  },
+  "PBR Factors Only": {
+    "ao_enabled": 0,
+    "ao_strength": 1,
+    "metallic_factor": 0.899999976,
+    "metalness_enabled": 1,
+    "normal_enabled": 0,
+    "normal_scale": 1,
+    "normal_style": 1,
+    "roughness_enabled": 1,
+    "roughness_factor": 0.200000003,
+    "textures": {},
+    "workflow": 1
+  },
+  "PBR Normal DirectX": {
+    "ao_enabled": 0,
+    "ao_strength": 1,
+    "metallic_factor": 1,
+    "metalness_enabled": 0,
+    "normal_enabled": 1,
+    "normal_scale": 1.5,
+    "normal_style": 1,
+    "roughness_enabled": 0,
+    "roughness_factor": 1,
+    "textures": {
+      "normal": {
+        "file_name": "dx_normal.png",
+        "h": 16,
+        "pixels_sha256": "9f51e356c978452ad14b02b59f16b4a0c252eeb3076ded17c879b0537d45473e",
+        "s_scale": 1,
+        "t_scale": 1,
+        "w": 16
+      }
+    },
+    "workflow": 1
+  }
+}

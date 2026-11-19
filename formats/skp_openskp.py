@@ -33,7 +33,9 @@ later refinement). Both joins are guarded, so PyPI 0.2.0 still imports (uncolour
 """
 from __future__ import annotations
 
+import copy
 from pathlib import Path
+from typing import Optional
 
 from PySide6.QtGui import QMatrix4x4, QVector3D
 
@@ -309,6 +311,103 @@ def _tile_size(width, height):
     return w * _INCH, h * _INCH
 
 
+def _write_map(tex_dir: Path, name: str, data: bytes, mid) -> Optional[Path]:
+    """Write one PBR map image into ``tex_dir`` under its basename (the
+    file's own name for it), prefixed with the material id when another
+    material's different image already took that name. ``None`` when the
+    cache is not writable."""
+    safe = (name or "").replace("\\", "/").rsplit("/", 1)[-1] \
+        or f"map_{mid}.png"
+    img = tex_dir / safe
+    try:
+        if img.exists() and img.read_bytes() != data:
+            img = tex_dir / f"{mid}_{safe}"
+        if not img.exists() or img.read_bytes() != data:
+            img.write_bytes(data)
+    except OSError:
+        return None
+    return img
+
+
+def _inverted_png(data: bytes) -> Optional[bytes]:
+    """``data`` (an image) with every pixel inverted, as PNG bytes — a
+    glossiness map read as roughness. ``None`` when it does not decode."""
+    from PySide6.QtCore import QBuffer, QIODevice
+    from PySide6.QtGui import QImage
+    img = QImage.fromData(data)
+    if img.isNull():
+        return None
+    img.invertPixels()
+    buf = QBuffer()
+    buf.open(QIODevice.WriteOnly)
+    if not img.save(buf, "PNG"):
+        return None
+    return bytes(buf.data())
+
+
+def _pbr_attrs(pbr, tex_dir_for, mid) -> Optional[dict]:
+    """The ``attrs["pbr"]`` dict (core.materials contract) for an OpenSKP PBR
+    recipe (``openskp_compat.read_pbr``), or ``None`` when it enables
+    nothing — a 2025+ file marks many materials PBR with every channel off,
+    and an empty recipe would read as the glTF defaults (fully metallic).
+
+    Only enabled channels appear: ``metallic``/``roughness`` (0..1) with an
+    optional ``*_map``, ``normal_scale`` + ``normal_map`` (``flip_y`` for a
+    DirectX-style map), ``ao_strength`` + ``ao_map``. A normal or AO
+    channel without its image is dropped (.skp will not enable either
+    without one). Map images land beside the base texture in
+    ``tex_dir_for()``; a roughness map flagged inverted (a glossiness map)
+    is written inverted. .skp stores every map single-channel, so
+    ``orm_map`` never comes out of a .skp."""
+    if pbr is None:
+        return None
+
+    def clamp01(v):
+        return min(max(float(v), 0.0), 1.0)
+
+    def put(key, tex, transform=None):
+        data = getattr(tex, "data", None) if tex is not None else None
+        if not data:
+            return None
+        name = getattr(tex, "filename", "") or ""
+        if transform is not None:
+            data = transform(data)
+            if data is None:
+                return None
+            stem = name.replace("\\", "/").rsplit("/", 1)[-1].rsplit(".", 1)[0]
+            name = f"{stem or key}_inverted.png"
+        img = _write_map(tex_dir_for(), name, data, mid)
+        return {"path": str(img)} if img is not None else None
+
+    out: dict = {}
+    if getattr(pbr, "metalness_enabled", False):
+        out["metallic"] = clamp01(pbr.metallic_factor)
+        m = put("metallic", pbr.metallic_texture)
+        if m:
+            out["metallic_map"] = m
+    if getattr(pbr, "roughness_enabled", False):
+        out["roughness"] = clamp01(pbr.roughness_factor)
+        m = put("roughness", pbr.roughness_texture,
+                _inverted_png if getattr(pbr, "roughness_texture_inverted",
+                                         False) else None)
+        if m:
+            out["roughness_map"] = m
+    if getattr(pbr, "normal_enabled", False):
+        m = put("normal", pbr.normal_texture)
+        if m:
+            from formats.openskp_compat import NORMAL_STYLE_DIRECTX
+            if getattr(pbr, "normal_style", 0) == NORMAL_STYLE_DIRECTX:
+                m["flip_y"] = True
+            out["normal_map"] = m
+            out["normal_scale"] = max(float(pbr.normal_scale), 0.0)
+    if getattr(pbr, "ao_enabled", False):
+        m = put("ao", pbr.ao_texture)
+        if m:
+            out["ao_map"] = m
+            out["ao_strength"] = clamp01(pbr.ao_strength)
+    return out or None
+
+
 def _material_attrs(model, skp_path):
     """Map ``material_id`` → IngeTrazo ``Face.attrs`` dict.
 
@@ -326,6 +425,25 @@ def _material_attrs(model, skp_path):
     (one dict per named material, `.igz`-shaped)."""
     attrs: dict = {}
     tex_dir = None
+
+    def tex_dir_for():
+        nonlocal tex_dir
+        if tex_dir is None:
+            tex_dir = _texture_dir(skp_path)
+        return tex_dir
+
+    # PBR maps and factors (2025+, openskp_compat.attach_pbr), once per
+    # material: several ids may alias one material.
+    pbr_done: dict = {}
+
+    def pbr_of(mid, mat, entry):
+        key = id(mat)
+        if key not in pbr_done:
+            pbr_done[key] = _pbr_attrs(getattr(mat, "pbr", None),
+                                       tex_dir_for, mid)
+        if pbr_done[key] is not None:
+            entry["pbr"] = copy.deepcopy(pbr_done[key])
+
     for mid, mat in (getattr(model, "materials_by_id", None) or {}).items():
         tex = getattr(mat, "texture", None)
         if tex is not None and getattr(tex, "data", None):
@@ -368,6 +486,7 @@ def _material_attrs(model, skp_path):
                 if op < 0.999:
                     entry["opacity"] = float(op)
                 attrs[mid] = entry
+                pbr_of(mid, mat, entry)
                 continue
         color = getattr(mat, "color", None)
         if color is not None and len(color) >= 3:
@@ -377,6 +496,7 @@ def _material_attrs(model, skp_path):
             if op < 0.999:
                 entry["opacity"] = float(op)
             attrs[mid] = entry
+            pbr_of(mid, mat, entry)
 
     # Registry: give every named entry its identity. register() dedups —
     # two .skp materials with the same name and the same recipe merge;
@@ -396,6 +516,7 @@ def _material_attrs(model, skp_path):
             color=tuple(color) if color is not None else None,
             texture=dict(entry["texture"]) if entry.get("texture") else None,
             opacity=entry.get("opacity"),
+            pbr=copy.deepcopy(entry["pbr"]) if entry.get("pbr") else None,
         ))
         entry["mat"] = final
     return attrs, [m.to_dict() for m in registry.values()]
@@ -1801,6 +1922,7 @@ def parse(path, progress=None):
     model = openskp.SkpFile.open(str(path)).parse()
     openskp_compat.resolve_face_layers(model)   # tag ids → names (#700)
     openskp_compat.resolve_vff_annotations(model)   # dims/texts (#1226)
+    openskp_compat.attach_pbr(model)    # 2025+ PBR maps and factors
     if progress is not None:
         progress(0.6, "Building geometry…")
     return _adapt(model, Path(path).stem, skp_path=path)

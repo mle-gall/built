@@ -81,6 +81,15 @@ their owning definition or the model root (marked ``vff_recovered``).
 A text whose connection type the reader cannot resolve (e.g. type 4)
 keeps its label position but no anchor.
 
+**PBR materials (2025+).** A 2025+ ``material.xml`` carries a
+``<mat:pbrMR>`` block (metallic/roughness factors and maps, normal map with
+its scale and OpenGL/DirectX style, ambient occlusion) whose images sit in
+the material's ZIP folder; OpenSKP 1.5 drops it, so imported PBR materials
+lost everything but their base colour/texture. :func:`read_pbr` reads it
+during the parse and :func:`pbr_for` hands it to the importer
+(docs/skp-pbr-format.md). Steps aside once ``openskp.model.Material`` has
+a ``pbr`` field of its own.
+
 All patches are detected by BEHAVIOUR, not by version: once the upstream
 reader carries ``_connection_paths`` the first is left alone, the second
 only touches a face layer that is still a number, the anchor and list
@@ -117,8 +126,9 @@ def apply() -> bool:
     groups = _note_legacy_groups(L)
     kinds = _note_definition_kinds()
     tails = _fix_layer_tail_2019(L)
+    pbr = _keep_pbr()
     return _fix_legacy_dimensions(L) or layers or texts or lists \
-        or groups or kinds or tails or ann or folders
+        or groups or kinds or tails or ann or folders or pbr
 
 
 def _keep_legacy_pids(L):
@@ -950,3 +960,167 @@ def _fix_layer_tail_2019(L) -> bool:
     L._read_layer = _read_layer
     L._READERS['CLayer'] = _read_layer
     return True
+
+
+# ---- PBR materials (.skp 2025+) ----------------------------------------
+# A 2025+ material.xml carries a <mat:pbrMR> block next to <mat:texture>; the
+# maps it names sit in the material's own ZIP folder, beside the base image.
+# OpenSKP 1.5 reads neither. Format: docs/skp-pbr-format.md. The reader runs
+# inside the parse, where the ZIP is open: openskp calls ``_extract_texture``
+# once per material (textured or not), so wrapping it sees every material.
+
+#: ``Material.workflow`` values (the XML's ``workflow`` attribute).
+WORKFLOW_CLASSIC, WORKFLOW_PBR = 0, 1
+#: ``normalMapStyle`` values (the C API's ``SUMaterialNormalMapStyle``).
+NORMAL_STYLE_OPENGL, NORMAL_STYLE_DIRECTX = 0, 1
+
+
+def _xml_float(el, default):
+    try:
+        v = float((el.text or "").strip()) if el is not None else default
+    except ValueError:
+        return default
+    return v if v == v and abs(v) != float("inf") else default
+
+
+def _xml_flag(el) -> bool:
+    return el is not None and (el.text or "").strip() == "1"
+
+
+def _pbr_map(zf, xml_name, el, x_scale, y_scale):
+    """The ``Texture`` an ``<mat:*_texture path= file_name=>`` element names,
+    or ``None`` when absent or its image is not in the container. ``path``
+    is relative to the material's folder (``./x.png``); ``file_name`` is
+    the name the image had when it was loaded."""
+    if el is None:
+        return None
+    from openskp import _core
+    from openskp.model import Texture
+    folder = xml_name.rsplit("/", 1)[0]
+    path = (el.get("path") or "").replace("\\", "/")
+    while path.startswith("./"):
+        path = path[2:]
+    file_name = el.get("file_name") or ""
+    names = set(zf.namelist())
+    for cand in (f"{folder}/{path}" if path else None, path or None,
+                 f"{folder}/{file_name}" if file_name else None):
+        if cand and cand in names:
+            _core._validate_zip_entry_size(zf, cand)
+            return Texture(filename=file_name or cand.rsplit("/", 1)[-1],
+                           width=x_scale, height=y_scale,
+                           data=zf.read(cand))
+    return None
+
+
+def read_pbr(zf, xml_name, mat_elem, ns):
+    """A material's PBR recipe from its ``<mat:pbrMR>`` block, as a
+    :class:`types.SimpleNamespace` shaped like the upstream-ready
+    ``openskp.model.PbrMaterial`` (docs/skp-pbr-format.md): the enable
+    flags, the factors (float32 in the file, rounded to 6 decimals) and
+    one ``Texture`` per map (``None`` when unset), tiled by the block's own
+    ``xScale``/``yScale`` (inches). ``None`` for a classic material — every
+    2025+ material has the block, enabled or not, so ``workflow`` decides."""
+    from types import SimpleNamespace
+    try:
+        workflow = int(mat_elem.get("workflow", WORKFLOW_CLASSIC) or 0)
+    except ValueError:
+        workflow = WORKFLOW_CLASSIC
+    block = mat_elem.find("mat:pbrMR", ns)
+    if workflow != WORKFLOW_PBR or block is None:
+        return None
+
+    def child(tag):
+        return block.find(f"mat:{tag}", ns)
+
+    def num(tag, default):
+        return round(_xml_float(child(tag), default), 6)
+
+    xs = _xml_float(SimpleNamespace(text=block.get("xScale")), 0.0)
+    ys = _xml_float(SimpleNamespace(text=block.get("yScale")), 0.0)
+
+    def tex(tag):
+        return _pbr_map(zf, xml_name, child(tag), xs, ys)
+
+    try:
+        style = int(round(_xml_float(child("normalMapStyle"),
+                                     NORMAL_STYLE_OPENGL)))
+    except (TypeError, ValueError):
+        style = NORMAL_STYLE_OPENGL
+    return SimpleNamespace(
+        workflow=workflow,
+        metalness_enabled=_xml_flag(child("enable_metalness")),
+        metallic_factor=num("metallicFactor", 1.0),
+        metallic_texture=tex("metallic_texture"),
+        roughness_enabled=_xml_flag(child("enable_roughness")),
+        roughness_factor=num("roughnessFactor", 1.0),
+        roughness_texture=tex("roughness_texture"),
+        roughness_texture_inverted=_xml_flag(child("roughness_texture_invert")),
+        normal_enabled=_xml_flag(child("enable_normal")),
+        normal_texture=tex("normal_texture"),
+        normal_scale=num("normalScale", 1.0),
+        normal_style=style,
+        ao_enabled=_xml_flag(child("enable_occlusion")),
+        ao_texture=tex("occlusion_texture"),
+        ao_strength=num("occlusionStrength", 1.0),
+    )
+
+
+def _keep_pbr() -> bool:
+    """Wrap ``openskp._core._extract_texture`` so each PBR material's recipe
+    is read while the ZIP is open and kept by material name for the
+    importer (:func:`pbr_for`). Steps aside once OpenSKP's own ``Material``
+    carries ``pbr`` (the importer then reads that)."""
+    try:
+        from openskp import _core
+        from openskp.model import Material
+    except Exception:  # noqa: BLE001
+        return False
+    if "pbr" in getattr(Material, "__dataclass_fields__", {}):
+        return False
+    extract = getattr(_core, "_extract_texture", None)
+    parse = getattr(_core, "full_parse", None)
+    if extract is None or parse is None \
+            or getattr(extract, "_keeps_pbr", False):
+        return False
+
+    def _extract_texture(zf, xml_name, mat_elem, ns):
+        tex = extract(zf, xml_name, mat_elem, ns)
+        try:
+            pbr = read_pbr(zf, xml_name, mat_elem, ns)
+        except Exception:  # noqa: BLE001 — never fail the open over PBR
+            pbr = None
+        if pbr is not None:
+            table = getattr(_parse_tables, "pbr", None)
+            if table is None:
+                table = _parse_tables.pbr = {}
+            table[mat_elem.get("name", "unknown")] = pbr
+        return tex
+
+    def full_parse(*args, **kwargs):
+        _parse_tables.pbr = {}              # this parse's, not the last one's
+        return parse(*args, **kwargs)
+
+    _extract_texture._keeps_pbr = True
+    full_parse._keeps_layers = getattr(parse, "_keeps_layers", False)
+    _core._extract_texture = _extract_texture
+    _core.full_parse = full_parse
+    return True
+
+
+def attach_pbr(model) -> int:
+    """Give each ``Material`` of ``model`` (parsed last) its ``pbr`` recipe
+    from :func:`_keep_pbr`'s table: ``None`` for a classic material. A
+    material that already has one (upstream reads PBR) is left alone.
+    Returns how many materials got a recipe."""
+    table = getattr(_parse_tables, "pbr", None) or {}
+    n = 0
+    for mat in getattr(model, "materials", None) or ():
+        if getattr(mat, "pbr", None) is not None:
+            continue
+        rec = table.get(getattr(mat, "name", None))
+        try:
+            mat.pbr = rec
+        except AttributeError:  # a slotted dataclass upstream: leave it be
+            continue
+        n += rec is not None
+    return n
