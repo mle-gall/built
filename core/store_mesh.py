@@ -1303,7 +1303,11 @@ class StoreMesh(Mesh):
         return VertexView(self, k)
 
     def _probe_neighbours(self, k, position):
-        hit = self._store.probe(tuple(k), _xyz(position))
+        p = _xyz(position)
+        origin = self._store.frame_origin
+        if any(origin):
+            k = tuple(round((v + o) * _mesh._KEY_SCALE) for v, o in zip(p, origin))
+        hit = self._store.probe(tuple(k), p)
         return None if hit is None else VertexView(self, hit)
 
     def _link_edge(self, v0, v1):
@@ -1713,7 +1717,7 @@ class StoreMesh(Mesh):
 
     # -- bulk construction straight into the store
     def bulk_weld(self, pos):
-        if self._store.revision == 0 and not any(self._store.counts()):
+        if self._store.revision == 0 and not any(self._store.counts()) and not any(self._store.frame_origin):
             return bulk_weld(self, pos)
         return Mesh.bulk_weld(self, pos)
 
@@ -2215,17 +2219,26 @@ def _table_index(table, index, a):
     return i
 
 
+def _input_positions(pos):
+    points = np.asarray(pos)
+    dtype = np.float32 if points.dtype == np.float32 else np.float64
+    return np.ascontiguousarray(points, dtype=dtype).reshape(-1, 3)
+
+
 def bulk_weld(m, pos):
     """``Mesh.bulk_weld`` on an empty mesh, into a new store. Returns the
     views of the welded vertices and each point's vertex index, as the
     Python method does."""
     from core import _native
     mod = _native.available()
-    points = np.ascontiguousarray(pos, dtype=np.float64).reshape(-1, 3)
+    points = _input_positions(pos)
     w = _weld_args()
     if not len(points):
         return [], np.empty(0, dtype=np.int64)
-    ids, origin = mod.store_weld_indices(points, w["scale"], w["tol2"])
+    if points.dtype == np.float32:
+        _, ids, origin = mod.weld_points(points, w["scale"], w["tol2"])
+    else:
+        ids, origin = mod.store_weld_indices(points, w["scale"], w["tol2"])
     ns = next(_mesh._KEY_NAMESPACES)
     empty_i = np.zeros(0, dtype=np.int64)
     store = mod.MeshStore.from_block(
@@ -2430,7 +2443,7 @@ def store_from_source(src, hooks=()):
                                                 layers, n_e)
     w = _weld_args()
     ns = next(_mesh._KEY_NAMESPACES)
-    pos = np.ascontiguousarray(src["pos"], dtype=np.float64).reshape(-1, 3)
+    pos = _input_positions(src["pos"])
     edges = np.ascontiguousarray(src["edges"], dtype=np.int64).reshape(-1, 2)
     flags = src.get("flags")
     curves = src.get("curves")

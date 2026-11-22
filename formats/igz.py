@@ -2687,7 +2687,7 @@ def _build_geometry(mesh, meta, pos, edges, flags, curves, layers, rings,
     half, run at once or, for a lazy mesh, on its first touch."""
     import numpy as np
 
-    vobjs, inverse = mesh.bulk_weld(pos.astype(np.float64))
+    vobjs, inverse = mesh.bulk_weld(pos if "_store" in mesh.__dict__ else pos.astype(np.float64))
     emap = None
     if len(edges):
         eflags = None

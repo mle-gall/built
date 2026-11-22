@@ -872,7 +872,8 @@ class Mesh:
         pos = np.ascontiguousarray(pos, dtype=np.float64)
         if not len(pos):
             return [], np.empty(0, dtype=np.int64)
-        keys = np.round(pos * _KEY_SCALE).astype(np.int64)
+        model = pos + store.frame_origin if store is not None and any(store.frame_origin) else pos
+        keys = np.round(model * _KEY_SCALE).astype(np.int64)
         # Byte records group equal int64 triples without the field-by-field
         # structured sort. Only equality matters: first occurrence restores
         # the cell order below, regardless of the byte sort's ordering.
