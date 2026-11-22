@@ -11,6 +11,7 @@ from core.store_mesh import StoreMesh
 pytest.importorskip("ingetrazo_core")
 
 from tests.test_.skp_inference_gaps import view  # noqa: F401
+from tests.test_wgpu_soft_shadows import native  # noqa: F401
 
 
 @pytest.mark.parametrize("origin", [(0., 0.), (650000., 6860000.)])
@@ -127,7 +128,7 @@ def test_raw_lambert_draw_pick_snap_push_and_weld(view, monkeypatch):
     assert commands.push_pull(history, face.key, .012345)["ok"]
     assert mesh._store.counts() == (8, 12, 6)
     positions = {v.key: v.position_tuple() for v in mesh.vertices}
-    assert max(v[2] for v in positions.values()) == pytest.approx(.012345, abs=1e-9)
+    assert max(v[2] for v in positions.values()) == .012345
     assert history.undo()
     assert mesh._store.counts() == (4, 4, 1)
     assert history.redo()
@@ -172,4 +173,103 @@ def test_metal_mouse_tools_at_raw_lambert(view):
     QTest.keyClick(view, Qt.Key_Return)
     assert not view.tools.tool.dragging
     assert mesh._store.counts() == (10, 14, 6)
-    assert max(v.position_tuple()[2] for v in mesh.vertices) == pytest.approx(.012345, abs=1e-9)
+    assert max(v.position_tuple()[2] for v in mesh.vertices) == .012345
+
+
+def test_scene_frame_stays_put_and_composes_child_offsets_in_double():
+    from PySide6.QtGui import QMatrix4x4
+    from core.group import Group
+    from core.mesh import Mesh
+    from views.wgpu_scene import pack_scene
+
+    leaf = Group(Mesh())
+    leaf.mesh.add_face([(0.,0.,0.), (.02,0.,0.), (.02,.02,0.), (0.,.02,0.)])
+    leaf.xform = QMatrix4x4()
+    leaf.xform.translate(.01, .02, 0.)
+    root = Group(Mesh())
+    root.children = [leaf]
+    root.xform = QMatrix4x4()
+    root.xform.translate(650000., 6860000., 0.)
+    scene = Scene(groups=[root])
+    packed = pack_scene(scene)
+    assert packed.origin == (650000., 6860000., 0.)
+    np.testing.assert_allclose(packed.world_bounds, [[.01,.02,0.],[.03,.04,0.]], atol=1e-8)
+    root.xform.translate(2., 4., 0.)
+    adjusted = pack_scene(scene, previous_origin=packed.origin)
+    assert adjusted.origin == packed.origin
+    root.xform.translate(1024., 0., 0.)
+    moved = pack_scene(scene, previous_origin=adjusted.origin)
+    assert moved.origin == (651026., 6860004., 0.)
+    np.testing.assert_allclose(moved.world_bounds, packed.world_bounds, atol=1e-8)
+
+
+def test_frame_preserves_numeric_input_and_feed_coordinates(view):
+    from core.coordinate_frame import mesh_frame
+    from PySide6.QtGui import QVector3D as V
+    from tests.test_.skp_inference_gaps import click, move, refresh, use
+    from tools.line import LineTool
+    from tools.rectangle import RectangleTool
+
+    scene, history = view.scene, view.source_viewport.history
+    mesh = scene.mesh
+    start = np.array([650000.012345678, 6860000.023456789, 0.])
+    mesh.add_edge(start - [.02,0.,0.], start)
+    refresh(view)
+    p = V(*(start - view.packed.origin))
+    view.camera.target = p
+    view.camera.distance = .15
+    observed = []
+    history.add_listener(after=lambda *args: observed.append(mesh._store.frame_origin))
+    use(view, LineTool())
+    move(view, p)
+    click(view, p)
+    delta = (.012345678912, .017891234567, .001234567891)
+    with mesh_frame(mesh, view.packed.origin):
+        assert view.tools.tool.on_value(view.tools, delta)
+    result = start + delta
+    np.testing.assert_array_equal(mesh.vertex_at(result).position_tuple(), result)
+    assert observed[-1] == [0., 0., 0.]
+    assert history.undo()
+    use(view, RectangleTool())
+    move(view, p)
+    click(view, p)
+    move(view, p + V(.02,.03,0.))
+    w, h = .022345678912, .038912345678
+    with mesh_frame(mesh, view.packed.origin):
+        assert view.tools.tool.on_value(view.tools, (w,h))
+    expected = start + [w,h,0.]
+    np.testing.assert_array_equal(mesh.vertex_at(expected).position_tuple(), expected)
+
+
+def test_raw_lambert_metal_raster_and_id_buffer(native):
+    from PySide6.QtGui import QMatrix4x4, QVector3D as V
+    from views.wgpu_scene import pack_scene
+
+    camera, projection = QMatrix4x4(), QMatrix4x4()
+    camera.lookAt(V(.02,.03,.1), V(.02,.03,0.), V(0.,1.,0.))
+    projection.ortho(-.02, .02, -.02, .02, .001, 1.)
+    images = []
+    for x, y in ((0.,0.), (650000.,6860000.)):
+        scene = Scene()
+        scene.mesh.add_face([(x+dx, y+dy, 0.) for dx, dy in
+                             [(.01,.02),(.03,.02),(.03,.04),(.01,.04)]])
+        pack_scene(scene).upload(native)
+        native.set_camera(list(camera.data()), list(projection.data()))
+        images.append(bytes(native.render_image(256, 256, list(camera.data()),
+                                                 list(projection.data()), dict(sky=False, edges=False))))
+        assert [native.pick(i,j) for i,j in [(80,80),(176,80),(176,176),(80,176),(40,40)]] == [0,0,0,0,-1]
+    assert images[0] == images[1]
+
+
+@pytest.mark.parametrize("dtype,counts", [("f4",(1,0,0)), ("f8",(2,1,0))])
+def test_bulk_weld_uses_source_precision_at_the_radius(dtype, counts):
+    from core.store_mesh import store_from_source
+    points = np.array([[0.,0.,0.], [3.0003e-8,1e-4,0.]], dtype='f4').astype(dtype)
+    empty = np.empty(0, dtype=np.int64)
+    source = dict(pos=points, edges=[[0,1]], counts=empty, sizes=empty, rings=empty)
+    store, _ = store_from_source(source)
+    assert store.counts() == counts
+    mesh = Scene().mesh
+    vertices, ids = mesh.bulk_weld(points)
+    mesh.add_edges_welded(vertices, ids[:1], ids[1:])
+    assert mesh._store.counts() == counts

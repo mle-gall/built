@@ -449,6 +449,7 @@ def pack_scene(scene, view_tint=None, *, face_overrides=None, texture_images=Tru
     instances = np.zeros(len(rows), INSTANCE)
     origins = tuple(c[0] for c in coordinates)
     origin = previous_origin
+    world_bounds = np.zeros((2, 3))
     if rows:
         from core.coordinate_frame import choose_origin
         codes = np.asarray([r[0] for r in rows])
@@ -458,8 +459,12 @@ def pack_scene(scene, view_tint=None, *, face_overrides=None, texture_images=Tru
         boxes = np.array([c[1] for c in coordinates])[codes]
         centers = np.einsum('ni,nij->nj', boxes.mean(axis=1), linear) + matrices[:, 3, :3]
         radii = np.einsum('ni,nij->nj', (boxes[:, 1] - boxes[:, 0]) * .5, abs(linear))
-        center = ((centers - radii).min(axis=0) + (centers + radii).max(axis=0)) * .5
-        origin = choose_origin(center, previous_origin)
+        visible = np.array([not r[2] & 1 for r in rows])
+        if visible.any():
+            world_bounds = np.stack(((centers-radii)[visible].min(axis=0),
+                                     (centers+radii)[visible].max(axis=0)))
+            origin = choose_origin(world_bounds.mean(axis=0), previous_origin)
+            world_bounds -= origin
         matrices[:, 3, :3] -= origin
         instances['world'] = matrices
         instances['info'][:, 0] = [r[0] for r in rows]
@@ -483,23 +488,11 @@ def pack_scene(scene, view_tint=None, *, face_overrides=None, texture_images=Tru
     hidden_commands['first'] = table[:, 0]+table[:, 1]+table[:, 2]
     hidden_edge_commands['first'] = hidden_commands['first']+table[:, 3]
     hidden_commands['start'] = hidden_edge_commands['start'] = commands['start']
-    world_bounds = np.zeros((2, 3))
-    if len(rows):
-        shown = instances[(instances['info'][:, 2] & 1) == 0]
-        if not len(shown):
-            return PackedScene(vertices, indices, bounds, commands, edge_commands, instances, uids, world_bounds, dict(handoff=handoff-begin, native=baked-handoff, finish=perf_counter()-baked, peak_build_rss_bytes=(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss if resource is not None else None)), groups, materials, textures, tuple(texture_ids), hidden_commands, hidden_edge_commands, profile_exclusions,
-                               (bool(getattr(scene, 'show_hidden_geometry', False)), bool(getattr(scene, 'show_hidden_objects', False))), lookup, prototype_paints, origin=origin, prototype_origins=tuple(origins))
-        b = bounds[shown['info'][:, 0], :, :3]
-        center, extent = (b[:, 0]+b[:, 1])/2, (b[:, 1]-b[:, 0])/2
-        mat = shown['world'].transpose(0, 2, 1)
-        wc = np.einsum('nij,nj->ni', mat[:, :3, :3], center)+mat[:, :3, 3]
-        we = np.einsum('nij,nj->ni', abs(mat[:, :3, :3]), extent)
-        world_bounds = np.array([(wc-we).min(axis=0), (wc+we).max(axis=0)])
     return PackedScene(vertices, indices, bounds, commands, edge_commands, instances, uids, world_bounds, dict(handoff=handoff-begin, native=baked-handoff, finish=perf_counter()-baked, peak_build_rss_bytes=(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss if resource is not None else None)), groups, materials, textures, tuple(texture_ids), hidden_commands, hidden_edge_commands, profile_exclusions,
                                (bool(getattr(scene, 'show_hidden_geometry', False)), bool(getattr(scene, 'show_hidden_objects', False))), lookup, prototype_paints, origin=origin, prototype_origins=tuple(origins))
 
 
-def _material_columns(pos, corners, sizes, counts, table, attributes, texture_ids, origin):
+def _material_columns(pos, corners, sizes, counts, table, attributes, texture_ids, origin=(0., 0., 0.)):
     """Use the GL mapping and side resolution, before triangulation splits corners."""
     from PySide6.QtGui import QVector3D
     from core.materials import back_is_default

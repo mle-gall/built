@@ -161,6 +161,7 @@ class WgpuView(QWidget):
         if opening:
             # What the window runs after the first picture (see above).
             self.after_open = []
+        same_document = scene is getattr(self, "scene", None)
         self.scene = scene
         allowed = getattr(scene, '_navigator_allowed', None)
         version, stack, _, similar, layers = scene._bounds_key()
@@ -266,7 +267,7 @@ class WgpuView(QWidget):
             return
         old_origin = getattr(self.packed, 'origin', (0., 0., 0.))
         self.packed = pack_scene(scene, getattr(self.source_viewport, 'view_tint', None),
-                                 progress=progress, previous_origin=old_origin)
+                                 progress=progress, previous_origin=old_origin if same_document else (0., 0., 0.))
         remote = {}
         if any(any(o) for o in self.packed.prototype_origins):
             for group, code in zip(self.packed.groups, self.packed.instances['info'][:, 0]):
@@ -435,9 +436,19 @@ class WgpuView(QWidget):
 
     def _inference_snapshot(self):
         from dataclasses import replace
-        return replace(self.packed, instances=self.packed.instances.copy(),
-                       bounds=self.packed.bounds.copy(), commands=self.packed.commands.copy(),
-                       edge_commands=self.packed.edge_commands.copy())
+        packed = replace(self.packed, instances=self.packed.instances.copy(),
+                         bounds=self.packed.bounds.copy(), commands=self.packed.commands.copy(),
+                         edge_commands=self.packed.edge_commands.copy())
+        if any(packed.origin) or any(any(o) for o in packed.prototype_origins):
+            _, first = np.unique(packed.instances['info'][:, 0], return_index=True)
+            packed._snap_sources = {}
+            for row in first:
+                group = packed.groups[row]
+                mesh = self.scene.loose_mesh if group is None else group.mesh
+                store = mesh.__dict__.get('_store')
+                if store is not None and id(mesh) not in packed._snap_sources:
+                    packed._snap_sources[id(mesh)] = (store.snapshot(), store.frame_origin)
+        return packed
 
     def _upload(self, force=False):
         if self.packed is None or not (force or self._presentable()):
