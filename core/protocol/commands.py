@@ -114,6 +114,22 @@ def orient_faces(history, face):
     return _answer(history, before)
 
 
+def solid_operation(history, operation, placements):
+    """Run a solid tool with placement uids in pick order."""
+    from core.solids import OPS, SolidOperationCommand
+    if operation not in OPS:
+        raise ValueError(operation)
+    if len(set(placements)) != len(placements):
+        raise ValueError("duplicate placement uid")
+    scene = history.scene
+    siblings = scene.edit_group.children if scene.edit_group else scene.groups
+    groups = {g.uid: g for g in siblings}
+    inputs = [groups[uid] for uid in placements]
+    before = history.revision
+    history.execute(SolidOperationCommand(operation, inputs))
+    return _answer(history, before)
+
+
 def undo(history):
     before = history.revision
     history.undo()
@@ -127,7 +143,7 @@ def redo(history):
 
 
 COMMANDS = {"move_vertices": move_vertices, "erase": erase, "orient_faces": orient_faces,
-            "push_pull": push_pull, "undo": undo, "redo": redo}
+            "solid_operation": solid_operation, "push_pull": push_pull, "undo": undo, "redo": redo}
 
 
 def run(history, name, **args):

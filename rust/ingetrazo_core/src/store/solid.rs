@@ -87,3 +87,59 @@ impl Store {
         Some(crate::facegeom::py_sum(terms, true).abs())
     }
 }
+
+pub struct Surface {
+    pub positions: Vec<[f64; 3]>,
+    pub triangles: Vec<[u32; 3]>,
+    pub owners: Vec<u32>,
+    pub faces: Vec<u128>,
+}
+
+impl Store {
+    /// Manifold3D needs equal positions welded even if their store keys differ.
+    /// Vertices follow first triangle use. Owners index the returned face list.
+    pub fn indexed_surface(&self, faces: &[u32], h: Hypot) -> Surface {
+        let mut surface = Surface {
+            positions: vec![],
+            triangles: vec![],
+            owners: vec![],
+            faces: vec![],
+        };
+        let mut ids = FxHashMap::default();
+        for &f in faces {
+            if self.state.fflags.get(f as usize) & INTERIOR != 0 {
+                continue;
+            }
+            let fi = surface.faces.len() as u32;
+            surface.faces.push(self.key(Kind::Face, f));
+            for tri in self.face_triangles(f, None, h) {
+                surface.triangles.push(tri.map(|p| {
+                    let bits = p.map(|x| if x == 0.0 { 0 } else { x.to_bits() });
+                    *ids.entry(bits).or_insert_with(|| {
+                        let i = surface.positions.len() as u32;
+                        surface.positions.push(p.map(f64::from));
+                        i
+                    })
+                }));
+                surface.owners.push(fi);
+            }
+        }
+        surface
+    }
+
+    pub fn edge_defects(&self) -> [Vec<u128>; 3] {
+        let mut issues = [vec![], vec![], vec![]];
+        for edge in self.live_slots(Kind::Edge) {
+            let uses = self
+                .edge_faces(edge)
+                .iter()
+                .filter(|&&f| self.state.fflags.get(f as usize) & INTERIOR == 0)
+                .count();
+            match uses {
+                2 => continue,
+                n => issues[n.min(2)].push(self.key(Kind::Edge, edge)),
+            }
+        }
+        issues
+    }
+}

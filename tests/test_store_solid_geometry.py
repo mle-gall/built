@@ -102,3 +102,33 @@ def test_split_pushed_cap(monkeypatch, hole):
         assert len(caps)==1 and len(caps[0].holes)==int(hole)
         results.append(_canon_faces([(f.vertices,f.holes,f.interior) for f in sc.mesh.faces]))
     assert results[0] == results[1]
+
+
+@pytest.mark.parametrize("op,expected", [
+    ("outer_shell",[1.5]), ("union",[1.5]), ("subtract",[.5]),
+    ("trim",[.5]), ("intersect",[.5]), ("split",[.5,.5,.5])])
+def test_store_solid_tool_feed(monkeypatch, op, expected):
+    from core.group import Group
+    from core.history import History
+    from core.protocol.commands import run
+    monkeypatch.setattr(StoreMesh, '_materialise', lambda self: pytest.fail('materialised'))
+    sc = empty(True)
+    inputs = []
+    for x in (0,.5):
+        m = empty(True).mesh
+        box(m,x)
+        inputs.append(Group(m))
+    sc.groups.extend(inputs)
+    history = History(sc)
+    result = run(history, "solid_operation", operation=op, placements=[g.uid for g in inputs])
+    assert result["ok"]
+    made = [g for g in sc.groups if g not in inputs]
+    assert all(isinstance(g.mesh, StoreMesh) for g in made)
+    assert [solid_report(g.mesh)[1] for g in made] == expected
+    delta = result["step"].placements
+    assert set(delta["created"]) == {g.uid for g in made}
+    assert set(delta["removed"]) == {g.uid for g in inputs if g not in sc.groups}
+    assert result["step"].complete
+    undo = run(history, "undo")["step"].placements
+    assert set(undo["removed"]) == set(delta["created"])
+    assert set(undo["created"]) == set(delta["removed"])

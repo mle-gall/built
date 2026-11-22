@@ -108,6 +108,7 @@ class _Sources:
     result triangle's ``face_id`` points back to."""
 
     def __init__(self) -> None:
+        self.store_result = False
         self.attrs: list[dict] = []
         #: Pairs of source face ids joined by a soft edge (curved surfaces).
         self.soft_pairs: set[tuple[int, int]] = set()
@@ -138,18 +139,25 @@ def _to_manifold(group, sources: _Sources, index_in_op: int = 0):
             verts.append(k)
         return i
 
-    for f in mesh.faces:
-        if getattr(f, "interior", False):
-            continue
+    from core.store_mesh import FaceView, StoreMesh
+    from core._native import qt_hypot
+    indexed = isinstance(mesh, StoreMesh) and qt_hypot()
+    if indexed:
+        v, t, f, keys = mesh._store.snapshot().indexed_surface(qt_hypot())
+        f = f + np.uint32(len(sources.attrs))
+        skin = (FaceView(mesh, k) for k in keys)
+    else:
+        skin = (face for face in mesh.faces if not face.interior)
+    for face in skin:
         fid = len(sources.attrs)
-        face_id[f.key] = fid
-        attrs = effective_attrs(dict(f.attrs or {}), paint)
-        sources.attrs.append({k: (dict(v) if isinstance(v, dict) else v)
-                              for k, v in attrs.items()})
-        n = f.normal()
-        for a, b, c in f.triangulate(n):
-            tris.append((vid(a), vid(b), vid(c)))
-            fids.append(fid)
+        face_id[face.key] = fid
+        attrs = effective_attrs(dict(face.attrs or {}), paint)
+        sources.attrs.append({k: (dict(value) if isinstance(value, dict) else value)
+                              for k, value in attrs.items()})
+        if not indexed:
+            for a, b, c in face.triangulate():
+                tris.append((vid(a), vid(b), vid(c)))
+                fids.append(fid)
     for e in mesh.edges:
         if getattr(e, "soft", False):
             fs = [face_id.get(f.key) for f in e.faces]
@@ -163,15 +171,16 @@ def _to_manifold(group, sources: _Sources, index_in_op: int = 0):
             sources.flagged.append((
                 (e.a.x(), e.a.y(), e.a.z()), (e.b.x(), e.b.y(), e.b.z()),
                 None if cid is None else (index_in_op, cid), layer, hidden))
-    if not tris:
+    if not indexed:
+        v = np.asarray(verts, dtype=np.float64)
+        t = np.asarray(tris, dtype=np.uint32)
+        f = np.asarray(fids, dtype=np.uint32)
+    if not len(t):
         raise SolidError("empty")
-    v = np.asarray(verts, dtype=np.float64)
-    t = np.asarray(tris, dtype=np.uint32)
     # Outward orientation: a negative signed volume means the faces point in.
     a, b, c = v[t[:, 0]], v[t[:, 1]], v[t[:, 2]]
     if np.einsum("ij,ij->i", a, np.cross(b, c)).sum() < 0:
         t = t[:, ::-1].copy()
-    f = np.asarray(fids, dtype=np.uint32)
     man = m3d.Manifold(m3d.Mesh64(vert_properties=v, tri_verts=t, face_id=f))
     if man.status() != m3d.Error.NoError:
         # A face's triangulation can leave a corner of a neighbouring face
@@ -303,6 +312,10 @@ def _group_from_loops(loops, sources: _Sources, name: str, layer):
         tagged.append((pts, a))
     fused = fuse_coplanar_loops(tagged)
     mesh = Mesh()
+    if sources.store_result:
+        from core import mesh as mesh_module, store_mesh
+        store_mesh.become_store(mesh, store_mesh._module().MeshStore(
+            next(mesh_module._KEY_NAMESPACES), **store_mesh._weld_args()), [])
     polys = []
     for outer, holes, attrs, originals in fused:
         polys.append((list(outer), [list(h) for h in (holes or [])],
@@ -448,7 +461,9 @@ def run(op: str, groups: list) -> tuple[list, list]:
         raise SolidError("two solids")
     for g in groups:
         _need_solid(g)
+    from core.store_mesh import StoreMesh
     sources = _Sources()
+    sources.store_result = any(isinstance(g.mesh, StoreMesh) for g in groups)
     mans = [_to_manifold(g, sources, i) for i, g in enumerate(groups)]
     first, second = groups[0], groups[1]
     from core.i18n import tr

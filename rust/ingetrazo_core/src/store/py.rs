@@ -1346,6 +1346,25 @@ fn reader(snap: &Snapshot) -> Store {
 
 #[pymethods]
 impl PyStoreSnapshot {
+    fn edge_defects(&self, py: Python<'_>) -> [Vec<u128>;3] {
+        let store = reader(&self.inner);
+        py.detach(|| store.edge_defects())
+    }
+
+    #[pyo3(signature = (hypot, keys=None))]
+    fn indexed_surface<'py>(&self, py: Python<'py>, hypot: &str, keys: Option<Vec<u128>>)
+        -> PyResult<(Bound<'py,PyArray2<f64>>, Bound<'py,PyArray2<u32>>, Bound<'py,PyArray1<u32>>, Vec<u128>)> {
+        let store = reader(&self.inner);
+        let h = crate::hypot_of(hypot)?;
+        let faces = match keys {
+            Some(keys) => keys.into_iter().map(|k| slot_of(&store,Kind::Face,k)).collect::<PyResult<_>>()?,
+            None => store.live_slots(Kind::Face),
+        };
+        let surface = py.detach(|| store.indexed_surface(&faces,h));
+        Ok((rows3(py,&surface.positions), rows3(py,&surface.triangles),
+            surface.owners.into_pyarray(py),surface.faces))
+    }
+
     fn seed_orientation(&self, py: Python<'_>, key: u128) -> PyResult<(Vec<u128>, usize)> {
         let store = reader(&self.inner);
         let face = slot_of(&store, Kind::Face, key)?;

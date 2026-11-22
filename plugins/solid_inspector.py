@@ -183,15 +183,21 @@ def inspect_mesh(mesh) -> dict:
     ``volume`` is in m³ (or ``None`` when the mesh is not closed, or
     closed with faces turned inward).
     """
-    stray, open_borders, over = [], [], []
-    for e in mesh.edges:
-        n = sum(1 for f in e.faces if _live(f))
-        if n == 0:
-            stray.append(e)
-        elif n == 1:
-            open_borders.append(e)
-        elif n > 2:
-            over.append(e)
+    from core.store_mesh import EdgeView, StoreMesh
+    if isinstance(mesh, StoreMesh):
+        stray, open_borders, over = (
+            [EdgeView(mesh, k) for k in keys]
+            for keys in mesh._store.snapshot().edge_defects())
+    else:
+        stray, open_borders, over = [], [], []
+        for e in mesh.edges:
+            n = sum(1 for f in e.faces if _live(f))
+            if n == 0:
+                stray.append(e)
+            elif n == 1:
+                open_borders.append(e)
+            elif n > 2:
+                over.append(e)
 
     watertight = (not stray and not open_borders and not over
                   and bool(mesh.faces))
