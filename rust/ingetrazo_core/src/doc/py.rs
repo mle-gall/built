@@ -515,8 +515,7 @@ impl PyPlacement {
     #[setter]
     fn set_material(slf: &Bound<'_, Self>, v: &Bound<'_, PyAny>) -> PyResult<()> {
         let (py, k) = (slf.py(), slf.get().key);
-        // The very dict this placement shows already (the viewport's
-        // proxies are handed their part's dict on every pack): no write.
+        // The very dict this placement shows already: no write.
         {
             let d = lock();
             if let Some(n) = d.node(k) {
@@ -526,23 +525,20 @@ impl PyPlacement {
             }
         }
         let val = if v.is_none() { None } else { Some(Value::from_py(v)?) };
-        write(py, slf.as_any(), k, Field::Material, FVal::Val(val))?;
-        // A dict assigned is the dict read back, as the attribute gave it.
-        if v.is_exact_instance_of::<PyDict>() {
-            let keep = v.clone().unbind();
-            let stale = {
-                let mut d = lock();
-                match d.node_mut(k) {
-                    Some(n) if n.views[VIEW_MATERIAL].is_none() => {
-                        n.views[VIEW_MATERIAL] = Some(keep);
-                        None
-                    }
-                    _ => Some(keep),
+        // The same paint again (the viewport hands every proxy its part's
+        // dict on each pack): nothing changes, the cached dict stays.
+        // The dict assigned is not kept: the document holds the value
+        // (keeping the loader's dicts pinned its JSON's memory, +20 MB on
+        // the 20k-placement probe).
+        {
+            let d = lock();
+            if let Some(n) = d.node(k) {
+                if n.get(Field::Material).ok().as_ref() == Some(&FVal::Val(val.clone())) {
+                    return Ok(());
                 }
-            };
-            drop(stale);
+            }
         }
-        Ok(())
+        write(py, slf.as_any(), k, Field::Material, FVal::Val(val))
     }
     #[getter]
     fn xform<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
