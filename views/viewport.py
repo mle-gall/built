@@ -13718,6 +13718,7 @@ class Viewport(QOpenGLWidget):
             ndc_x = clip.x() / clip.w()
             ndc_y = clip.y() / clip.w()
             return ((ndc_x * 0.5 + 0.5) * w, (1.0 - (ndc_y * 0.5 + 0.5)) * h)
+        world_to_pixel.snap_projection = (mvp.data(), (w, h))
         return world_to_pixel
 
     def _world_to_pixel(self, world: QVector3D,

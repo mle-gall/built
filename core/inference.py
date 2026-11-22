@@ -30,6 +30,7 @@ from __future__ import annotations
 import os
 from typing import Optional
 
+from core import _native
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QVector3D
 
@@ -88,6 +89,8 @@ class InferenceEngine:
     """
 
     def __init__(self, viewport) -> None:
+        memory = getattr(_native.native, 'InferenceMemory', None)
+        self._memory = memory() if memory is not None else None
         self.viewport = viewport
         # Arrow-key axis lock: None | "x" | "y" | "z".
         self.axis_lock: Optional[str] = None
@@ -136,6 +139,47 @@ class InferenceEngine:
         self._dwell_timer.setSingleShot(True)
         self._dwell_timer.setInterval(viewport.ENCOURAGE_MS)
         self._dwell_timer.timeout.connect(self._encourage_dwelt)
+
+    @property
+    def _encouraged(self):
+        if self._memory is not None:
+            return [QVector3D(*p) for p in self._memory.encouraged]
+        return self._python_encouraged
+
+    @_encouraged.setter
+    def _encouraged(self, points):
+        if self._memory is not None:
+            self._memory.encouraged = [p.toTuple() for p in points]
+        else:
+            self._python_encouraged = points
+
+    @property
+    def _acquired_point(self):
+        if self._memory is not None:
+            p = self._memory.acquired
+            return QVector3D(*p) if p is not None else None
+        return self._python_acquired
+
+    @_acquired_point.setter
+    def _acquired_point(self, point):
+        if self._memory is not None:
+            self._memory.acquired = point.toTuple() if point is not None else None
+        else:
+            self._python_acquired = point
+
+    @property
+    def _dwell_point(self):
+        if self._memory is not None:
+            p = self._memory.dwell
+            return QVector3D(*p) if p is not None else None
+        return self._python_dwell
+
+    @_dwell_point.setter
+    def _dwell_point(self, point):
+        if self._memory is not None:
+            self._memory.dwell = point.toTuple() if point is not None else None
+        else:
+            self._python_dwell = point
 
     # ---- Picking the cursor's neighbourhood ---------------------------------
     def acquire(self, px: float, py: float) -> None:
@@ -444,6 +488,10 @@ class InferenceEngine:
             self._dwell_point = None
             self._dwell_timer.stop()
             return
+        if self._memory is not None:
+            if self._memory.rest(point.toTuple()):
+                self._dwell_timer.start()
+            return
         if (self._dwell_point is not None
                 and (self._dwell_point - point).length() < 1e-6):
             return                                  # still resting on it
@@ -457,6 +505,10 @@ class InferenceEngine:
     def encourage_point(self, point: QVector3D) -> None:
         """Make ``point`` the newest encouraged point (two are kept, the
         older one drops), and the 'from point' reference."""
+        if self._memory is not None:
+            self._memory.encourage(point.toTuple())
+            self.viewport.update()
+            return
         pt = QVector3D(point)
         self._encouraged = [p for p in self._encouraged if (p - pt).length() > 1e-6]
         self._encouraged.append(pt)
