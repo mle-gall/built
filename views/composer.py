@@ -13053,6 +13053,7 @@ class ComposerWindow(QMainWindow):
             getattr(scene, "show_section_cuts", True))
         keep_style = getattr(scene, "display_style", None)
         keep_two_point = getattr(cam, 'two_point', False)
+        keep_folders = scene.folder_visibility
         keep_hidden = [(g, g.hidden) for g in scene.groups_by_uid().values()]
         keep_shown = (scene.show_hidden_objects, scene.show_hidden_geometry)
         from views.composer_scene import temporary_display
@@ -13079,6 +13080,7 @@ class ComposerWindow(QMainWindow):
             with temporary_display(vp, saved_view):
                 return fn()
         finally:
+            scene.folder_visibility = keep_folders
             cam.two_point = keep_two_point
             for group, hidden in keep_hidden:
                 group.hidden = hidden
@@ -13113,20 +13115,22 @@ class ComposerWindow(QMainWindow):
     #: an occasional snap to a hidden vertex beats a frozen composer.
     _EXACT_SNAP_EDGE_BUDGET = 20_000
 
-    def _scene_geometry(self):
+    def _scene_geometry(self, sig=None):
         """collect_geometry(scene), cached — camera-independent, so every
         frame (and every re-snap) shares one collection. Follows the same
         staleness rule as the frame renders: refreshed when the composer
         reopens or a frame is explicitly refreshed, not on sheet edits."""
         cached = getattr(self, "_geom_cache", None)
-        if cached is not None:
+        if sig is None:
+            sig = self._visibility_sig()
+        if cached is not None and self._geom_cache_sig == sig:
             return cached
         vp = self._window.viewport
-        fast = getattr(vp, "hlr_geometry", None)
-        if fast is not None:
-            self._geom_cache = fast()               # arrays, ~30 ms
-        else:                                       # stub viewports (tests)
-            self._geom_cache = self._collect_geometry_arrays()
+        # A recalled scene can precede the queued refresh of the live pick
+        # index. Collect under the current switches, including on first use.
+        now = getattr(vp, "hlr_geometry_now", None)
+        self._geom_cache = now() if now is not None else self._collect_geometry_arrays()
+        self._geom_cache_sig = sig
         return self._geom_cache
 
     def _collect_geometry_arrays(self):
@@ -13147,13 +13151,8 @@ class ComposerWindow(QMainWindow):
                        dtype=np.float64).reshape(-1, 2, 3))
 
     def _visibility_sig(self) -> tuple:
-        """Which layers and map / terrain objects are switched on, now."""
-        scene = self._scene()
-        return (tuple((ly.key, bool(ly.visible))
-                      for ly in getattr(scene, "layers", []) or []),
-                tuple(bool(getattr(obj, "visible", True))
-                      for _k, obj in georef_objects(scene)
-                      if obj is not None))
+        from core.saved_views import visibility_sig
+        return visibility_sig(self._scene())
 
     def _frame_geometry(self, live_sig: tuple):
         """The geometry a frame shows — called with its camera applied.
@@ -13168,7 +13167,7 @@ class ComposerWindow(QMainWindow):
         :meth:`_visibility_sig` taken OUTSIDE the frame."""
         sig = self._visibility_sig()
         if sig == live_sig:
-            return self._scene_geometry()
+            return self._scene_geometry(sig)
         by_sig = getattr(self, "_geom_by_sig", None)
         if by_sig is None:
             by_sig = self._geom_by_sig = {}
@@ -13866,9 +13865,15 @@ class ComposerWindow(QMainWindow):
         # The viewport's arrays with their layers (a stand-in without them
         # walks the model, as before).
         tagged = getattr(vp, "hlr_geometry", None)
-        return self._with_frame_camera(frame, lambda: dxf_cut_layers(
-            vp.scene, vp.camera, scale_n, k, frame_scale,
-            geometry=tagged(tags=True) if tagged is not None else None))
+        live_sig = self._visibility_sig()
+
+        def run():
+            geometry = (tagged(tags=True) if tagged is not None
+                        and self._visibility_sig() == live_sig else None)
+            return dxf_cut_layers(vp.scene, vp.camera, scale_n, k,
+                                  frame_scale, geometry=geometry)
+
+        return self._with_frame_camera(frame, run)
 
     def dxf_hatch_groups(self, frame: MarcoVista) -> list:
         """The line groups of :meth:`dxf_cut_layers` alone."""

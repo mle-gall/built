@@ -18237,7 +18237,12 @@ class Viewport(QOpenGLWidget):
         # maps, term by term, so the arrays are the ones a bake makes.
         batches: dict = {}
         inst_cache = getattr(self, "_inst_chunks", None) or {}
-        for g in self._placements():
+        # Nested proxies inherit their ancestors' switches. Build them for
+        # the sheet, independently of the visible viewport's cached proxies.
+        sheet = types.SimpleNamespace(scene=scene)
+        placements = (g for root in scene.groups
+                      for g in Viewport._expand_placements(sheet, root))
+        for g in placements:
             if (getattr(g, "billboard", False)
                     or not scene.entity_visible(g)):
                 continue
@@ -18250,6 +18255,9 @@ class Viewport(QOpenGLWidget):
                         base["uid"], tuple(xf.data()), base.get("rev")):
                     batches.setdefault(id(base), (base, []))[1].append(xf)
                     continue
+            if xf is None and getattr(g, "owner", None) is not None:
+                # A sheet-only proxy has no persistent identity for caching.
+                g = _proto_wrapper(self, g.mesh, _paint_of(self, g))
             ch = self._group_chunk(g)
             v0 = ch.get("v0")
             if v0 is not None and len(v0):
