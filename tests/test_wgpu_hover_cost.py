@@ -202,3 +202,11 @@ def test_nearby_edges_filters_visibility_after_grid_lookup(view, monkeypatch):
     assert near()
     view.packed.instances['info'][:, 2] |= 128
     assert not near()
+
+
+def test_annotation_at_front_surface_skips_gpu_reads_but_one_behind_does_not(view):
+    _box(view.scene.mesh, (0, 0, 0), (2, 2, 1))
+    _look(view, V(1, 1, 0), distance=7., pitch=80.)
+    refresh(view)
+    assert view.tools._clear_annotation_segment(V(.5, .5, 1), V(1.5, .5, 1))
+    assert not view.tools._clear_annotation_segment(V(.5, .5, 0), V(1.5, .5, 0))

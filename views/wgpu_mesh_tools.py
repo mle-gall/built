@@ -312,6 +312,40 @@ class MeshToolAccess:
         return ((clip[:, 0]/w*.5+.5)*self.view.width(),
                 (1.-(clip[:, 1]/w*.5+.5))*self.view.height(), ok)
 
+    def _clear_annotation_segment(self, a, b):
+        """Whether every viewing ray to this segment ends before resident geometry."""
+        from views.wgpu_inference import _screen_rows
+        view = self.view
+        index = view.inference_index
+        if index is None:
+            return True
+        pa, pb = self._world_to_pixel(a), self._world_to_pixel(b)
+        if pa is None or pb is None:
+            return False
+        x, y = (pa[0]+pb[0])*.5, (pa[1]+pb[1])*.5
+        radius = .5*np.hypot(pa[0]-pb[0], pa[1]-pb[1]) + 2.
+        if radius > 128 or not (0 <= x <= view.width() and 0 <= y <= view.height()):
+            return False
+        mvp = view.camera.projection_matrix() * view.camera.view_matrix()
+        rows = _screen_rows(index, view.packed, mvp, view.width(), view.height(),
+                            x, y, radius, None)
+        if not len(rows):
+            return True
+        # The near-plane origins and the segment endpoints span a convex
+        # quadrilateral. Reject a box only if a whole axis separates it
+        # from that quadrilateral (touching at the measured surface is OK).
+        oa, _ = self._pixel_to_ray(*pa)
+        ob, _ = self._pixel_to_ray(*pb)
+        if oa is None or ob is None:
+            return False
+        origins = np.array([oa.toTuple(), ob.toTuple()])
+        ends = np.array([a.toTuple(), b.toTuple()])
+        centers, extents = index.world_box_cache
+        low, high = centers[rows]-extents[rows], centers[rows]+extents[rows]
+        before = (origins.max(axis=0) < low) & (ends.max(axis=0) <= low)
+        after = (origins.min(axis=0) > high) & (ends.min(axis=0) >= high)
+        return bool((before | after).any(axis=1).all())
+
     def _is_occluded(self, point):
         from views.wgpu_inference import surface
         pixel = self._world_to_pixel(point)
@@ -392,7 +426,7 @@ class MeshToolAccess:
         layout = draw_annotations(painter, self.scene, self.camera,
             (painter.device().width()/painter.device().devicePixelRatioF(),
              painter.device().height()/painter.device().devicePixelRatioF()), occluded=self._is_occluded,
-            hover=self._hover_entity,
+            hover=self._hover_entity, clear_segment=self._clear_annotation_segment,
             guide_lines=not hasattr(getattr(self.view, 'renderer', None), 'set_lines'))
         draw_tool_feedback(painter, self, layout)
         snap = self.last_snap
