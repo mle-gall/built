@@ -131,7 +131,7 @@ from core.camera import OrbitCamera
 from core.i18n import tr
 from core.group import Group, copy_group, effective_material, world_mesh
 from core import layers as _layers
-from core.mesh import Edge, Face
+from core.mesh import Edge, Face, smooths
 from core.history import EraseSelectionCommand, History
 from core.scene import Scene
 from core.style import (DEFAULT_BACK_COLOR, DEFAULT_FACE_COLOR,
@@ -2284,12 +2284,12 @@ def _finite_point(p) -> bool:
 
 
 def _curved_faces(mesh) -> set:
-    """The faces of ``mesh`` on a curved surface: those a soft edge
-    joins to another face. Only these can have a smooth corner, so
+    """The faces of ``mesh`` on a curved surface: those a soft edge that
+    smooths (not ``flat``) joins to another face. Only these can have a smooth corner, so
     every other face keeps its one flat colour and costs nothing."""
     out: set = set()
     for e in mesh.edges:
-        if getattr(e, "soft", False) and len(e.faces) > 1:
+        if smooths(e) and len(e.faces) > 1:
             out.update(e.faces)
     return out
 
@@ -13745,16 +13745,24 @@ class Viewport(QOpenGLWidget):
             s += p.x() + p.y() * 1.000003 + p.z() * 1.000007
         a = Viewport._faces_paint_fp(mesh)
         soft = 0
+        flat = 0
         hid = 0
         for i, e in enumerate(mesh.edges):
             if getattr(e, "soft", False):
                 soft += 1
+                if getattr(e, "flat", False):
+                    # Index-sensitive like ``hid``: which seams shade flat.
+                    flat ^= ((i + 1) * 2654435761) & 0xFFFFFFFF
             if getattr(e, "hidden", False):
                 # Index-sensitive (not a count): Hide edge A + undo + hide
                 # edge B leaves the count equal while the baked edge VBO
                 # differs. Deterministic mix, no hash() — the disk digest
                 # reuses this term across runs.
                 hid ^= ((i + 1) * 2654435761) & 0xFFFFFFFF
+        if flat:
+            # Soft only («Smooth normals» off) bakes otherwise; meshes
+            # with none keep their digests.
+            soft = (soft, flat)
         fp = (len(mesh.vertices), len(mesh.edges), len(mesh.faces),
               round(s, 4), a, soft, hid)
         # Reverse Faces changes none of the above (#197): the mesh counts

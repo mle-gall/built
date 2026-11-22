@@ -8,7 +8,8 @@ are editable, saved in the host and no longer read from the source — and
 it looks exactly as it did: the same matrices, paint, tags and tag
 visibility, the parts under the same uids. The file's other placements
 stay live links. When none is left, the source leaves the host's link
-registry (nothing watches it), and its tags stay as the host's own. One
+registry (nothing watches it), and its tags move out of «Linked files» to
+the top of the tags tree as the host's own. One
 undo brings the live link back exactly; redo breaks it again."""
 from __future__ import annotations
 
@@ -23,7 +24,7 @@ from PySide6.QtWidgets import QApplication, QMessageBox  # noqa: E402
 from core import _native, links  # noqa: E402
 from core.group import Group, copy_group, iter_placements  # noqa: E402
 from core.history import History, MakeUniqueCommand, UnlinkCommand  # noqa: E402
-from core.layers import Layer, layer_of  # noqa: E402
+from core.layers import Layer, folder_label, layer_of  # noqa: E402
 from core.materials import Material  # noqa: E402
 from core.mesh import DeferredMesh, Mesh  # noqa: E402
 from core.purge import iter_groups  # noqa: E402
@@ -219,7 +220,8 @@ def test_unlinking_both_placements_in_one_step(tmp_path):
     history.execute(UnlinkCommand([link, other]))
     assert_own(link, [other])
     assert_own(other, [link])
-    assert (_look(link), _look(other)) == looks
+    # The last placements: the file's «Untagged» is the host's now.
+    assert (_look(link), _look(other)) == tuple(_released(x, src) for x in looks)
     assert links.sources(host) == []
     history.undo()
     assert_live(link, src)
@@ -286,9 +288,14 @@ def test_a_dimension_on_the_link_follows_its_own_copy(tmp_path):
     assert id(dim.anchor_a.mesh) not in mine
 
 
-def test_a_file_linked_inside_the_source_becomes_content_too(tmp_path):
+def _nested_host(tmp_path):
+    """``Mid.igz`` links ``Leaf.igz`` (a face on its tag «Steel»); the host
+    places Mid twice."""
     leaf = Scene()
+    leaf.layers.append(Layer("Steel"))
     leaf.mesh.add_face([V(0, 0, 7), V(1, 0, 7), V(1, 1, 7)])
+    for f in leaf.mesh.faces:
+        f.attrs["layer"] = "Steel"
     leaf_path = tmp_path / "Leaf.igz"
     igz.save_scene(leaf, leaf_path)
     mid = Scene()
@@ -301,21 +308,131 @@ def test_a_file_linked_inside_the_source_becomes_content_too(tmp_path):
     host.groups.append(link)
     other = copy_group(link, V(9, 0, 0))
     host.groups.append(other)
-    look = _look(link)
-    assert any(links.is_linked(p) for p in _parts(link))     # nested link
+    return host, link, other, mid_path, leaf_path
+
+
+def _shape(g):
+    """What ``g`` shows in the world, tags and uids aside."""
+    return sorted(row[2] for row in _look(g) if row[0] == "f")
+
+
+def _tags_and_registry(scene):
+    from copy import deepcopy
+    return _tag_state(scene), deepcopy(links.registry(scene)), \
+        dict(scene.layer_folder_names), sorted(scene.materials)
+
+
+def test_a_file_linked_inside_the_source_stays_a_live_link(tmp_path):
+    host, link, other, mid_path, leaf_path = _nested_host(tmp_path)
+    (inner,) = [p for p in _parts(link) if links.is_linked(p)]
+    mirror = host.layer_by_key("Mid / Leaf / Steel")      # Mid's copy of it
+    mirror.visible = False                                 # switched here
+    shape = _shape(link)
     history = History(host)
     history.execute(UnlinkCommand([link]))
-    assert_own(link, [other])
-    assert _look(link) == look
+    assert not links.is_linked(link)
+    # Mid's own geometry is the host's; Leaf, linked inside it, stays a link
+    # of the host's own: at the top of its chain, its parts read-only and
+    # under the uids a reload of Leaf gives them.
+    (nested,) = [p for p in _parts(link) if links.is_linked(p)]
+    assert links.link_of(nested)["path"] == str(leaf_path)
+    assert links.linked_ancestor(nested.owner) is None
+    assert nested.uid == inner.uid
+    leaf_parts = _parts(nested)
+    for p in _parts(link):
+        if p is nested or p in leaf_parts:
+            continue
+        assert links.linked_ancestor(p) is None and p.owner is None
+    for p, _m in iter_placements(nested):
+        if p is not nested:
+            assert links.linked_ancestor(p) is nested
+            assert p.uid == links.stable_uid(nested.uid, p.source_uid)
+    assert _shape(link) == shape                        # looks as it did
+    # Leaf's tags are the host's link of Leaf now: its own folder in
+    # «Linked files», the switch made on Mid's copy kept as an override.
+    steel = host.layer_by_key(links.tag_name(leaf_path, "Steel"))
+    assert steel is not None and steel.folder == "Leaf"
+    assert host.folder_parents["Leaf"] == links.LINKED_FOLDER
+    assert steel.visible is False
+    entry = links.registry(host)[links._norm(leaf_path)]
+    assert entry["overrides"] == {steel.key: False}
+    face_tags = {layer_of(f) for p, _m in iter_placements(nested)
+                 for f in p.mesh.faces}
+    assert face_tags == {steel.key}
+    # Still watched (and listed): both files are linked.
     assert sorted(links.sources(host)) == sorted(
-        [links._norm(mid_path), links._norm(leaf_path)])        # ``other``
-    history.execute(UnlinkCommand([other]))
-    assert links.sources(host) == [] and links.registry(host) == {}
+        [links._norm(mid_path), links._norm(leaf_path)])
+    rows = [r for r in links.query(host) if r["uid"] == nested.uid]
+    assert rows and rows[0]["status"] == "resolved"
+    # It follows its file.
+    n, n_other = _faces(nested), _faces(other)
+    _edit_source(leaf_path)
+    links.reload(host, leaf_path)
+    assert _faces(nested) == n + 2
+    assert _faces(other) == n_other + 2       # through Mid, as before
+
+
+
+def test_undo_and_redo_around_a_nested_link_are_exact(tmp_path):
+    host, link, other, mid_path, leaf_path = _nested_host(tmp_path)
+    before = list(link.children)
+    parts = _parts(link)
+    state = _tags_and_registry(host)
+    history = History(host)
+    history.execute(UnlinkCommand([link]))
+    after = _parts(link)
+    after_state = _tags_and_registry(host)
     history.undo()
+    assert link.children == before and _parts(link) == parts
+    assert links.is_linked(link)
+    assert all(links.linked_ancestor(p.owner) is link for p in link.children)
+    assert _tags_and_registry(host) == state
+    history.redo()
+    assert _parts(link) == after                 # the very same objects
+    (nested,) = [p for p in _parts(link) if links.is_linked(p)]
+    assert links.linked_ancestor(nested.owner) is None
+    assert _tags_and_registry(host) == after_state
     history.undo()
-    assert any(links.is_linked(p) for p in _parts(link))
-    assert all(links.linked_ancestor(p.owner) is link
-               for p in link.children)
+    assert _tags_and_registry(host) == state
+
+
+def test_a_nested_file_that_cannot_be_read_keeps_what_it_showed(tmp_path):
+    host, link, other, mid_path, leaf_path = _nested_host(tmp_path)
+    (inner,) = [p for p in _parts(link) if links.is_linked(p)]
+    shape, inner_meshes = _shape(link), _meshes(inner)
+    os.remove(leaf_path)
+    history = History(host)
+    history.execute(UnlinkCommand([link]))
+    (nested,) = [p for p in _parts(link) if links.is_linked(p)]
+    assert links.linked_ancestor(nested.owner) is None
+    assert all(links.linked_ancestor(p) is nested for p in _parts(nested))
+    assert _shape(link) == shape
+    assert set(_meshes(nested)) <= set(inner_meshes) | {id(nested.mesh)}
+    history.undo()
+    assert _parts(link)[0].owner is link
+
+
+def test_a_nested_link_in_the_window_is_watched_and_listed(win, tmp_path):
+    host_scene = win.viewport.scene
+    _h, _l, _o, mid_path, leaf_path = _nested_host(tmp_path)
+    link = links.make_link(host_scene, mid_path, host_path=tmp_path / "host.igz")
+    host_scene.groups.append(link)
+    host_scene.version += 1
+    watcher = win._link_watcher()
+    watcher.refresh()
+    watched = lambda: sorted(os.path.normcase(p) for p in watcher._fs.files())
+    both = sorted([links._norm(mid_path), links._norm(leaf_path)])
+    assert watched() == both
+    host_scene.select([link])
+    win._on_make_unique()
+    assert watched() == [links._norm(leaf_path)]
+    panel = win.project_browser.links_panel
+    panel.refresh()
+    assert [r["path"] for r in panel.rows] == [str(leaf_path)]
+    win._on_undo()
+    assert watched() == both
+    win._on_redo()
+    assert watched() == [links._norm(leaf_path)]
 
 
 # ---- 2. tags and the registry ------------------------------------------------
@@ -327,32 +444,202 @@ def _tag_state(scene):
             dict(scene.folder_visibility))
 
 
-def test_the_last_placement_leaves_the_registry_and_keeps_its_tags(tmp_path):
-    host, link, other, src = _host(tmp_path)
-    host.groups.remove(other)
+def _released(look, src):
+    """``look`` with the file's «Untagged» read as the host's Untagged:
+    what a last unlinked placement wears (they draw the same)."""
+    from core.layers import DEFAULT_LAYER
+    u = links.tag_name(src, None)
+    swap = {u: DEFAULT_LAYER, repr(u): repr(DEFAULT_LAYER)}
+    who = {u: ""}                       # a placement's own tag: none
+    return sorted(tuple(swap.get(x, x) if isinstance(x, str) else
+                        tuple(who.get(y, y) for y in x) if isinstance(x, tuple)
+                        and len(x) == 4 else x for x in row)
+                  for row in look)
+
+
+def _full_tag_state(scene):
+    from copy import deepcopy
+    return (_tag_state(scene), dict(scene.layer_folder_names),
+            dict(scene.layer_folder_uids), deepcopy(links.registry(scene)))
+
+
+def _foldered_source(path):
+    """A source whose tags sit in folders: «Structure» holding «Beams»
+    and a subfolder «Steel» holding «Columns»; «Wood» at its top."""
+    s = Scene()
+    s.layer_folders = ["Structure", "Steel"]
+    s.folder_parents = {"Steel": "Structure"}
+    s.layers.append(Layer("Wood", color=(0.5, 0.3, 0.1)))
+    s.layers.append(Layer("Beams", folder="Structure", color=(0.1, 0.2, 0.9)))
+    s.layers.append(Layer("Columns", folder="Steel", visible=False))
+    for i, tag in enumerate(("Wood", "Beams", "Columns", None)):
+        m = _square(x=2.0 * i)
+        for f in m.faces:
+            if tag:
+                f.attrs["layer"] = tag
+        g = Group(m, name=f"piece {i}")
+        g.xform = QMatrix4x4()
+        s.groups.append(g)
+    igz.save_scene(s, path)
+    return path
+
+
+def _one_link(tmp_path, source=_foldered_source, host=None):
+    src = source(tmp_path / "Site.igz")
+    host = host or Scene()
+    link = links.make_link(host, src, host_path=tmp_path / "host.igz")
+    host.groups.append(link)
     host.version += 1
-    wood = links.tag_name(src, "Wood")
-    host.layer_by_key(wood).visible = False            # switched in the host
-    assert links.note_visibility(host, wood, False)
-    tags = _tag_state(host)
+    return host, link, src
+
+
+def _faces_on(g, key):
+    return sum(1 for p, _m in iter_placements(g) for f in p.mesh.faces
+               if layer_of(f) == key)
+
+
+def test_the_last_placement_moves_its_tags_to_the_top(tmp_path):
+    host, link, src = _one_link(tmp_path)
+    key = lambda tag: links.tag_name(src, tag)
+    host.layer_by_key(key("Wood")).visible = False      # switched in the host
+    assert links.note_visibility(host, key("Wood"), False)
+    before = _full_tag_state(host)
     entry = dict(links.registry(host)[links._norm(src)])
+    shown = {ly.key: (ly.name, ly.visible, repr(ly.color)) for ly in host.layers}
     look = _look(link)
     history = History(host)
     history.execute(UnlinkCommand([link]))
     assert links.registry(host) == {}
-    assert links.sources(host) == []
-    assert links.source_of_tag(host, wood) is None     # the host's own now
-    assert _tag_state(host) == tags                    # kept, as they showed
-    assert _look(link) == look
-    # Switching it now is the host's own switch, not an override.
-    assert not links.note_visibility(host, wood, True)
+    assert links.source_of_tag(host, key("Wood")) is None     # the host's own
+    # The same tags, by key, label, colour and visibility; out at the top.
+    for tag in ("Wood", "Beams", "Columns"):
+        ly = host.layer_by_key(key(tag))
+        assert (ly.name, ly.visible, repr(ly.color)) == shown[ly.key]
+    assert host.layer_by_key(key("Wood")).folder is None
+    # The file's folders came along as top-level folders, nested as they were.
+    structure = host.layer_by_key(key("Beams")).folder
+    steel = host.layer_by_key(key("Columns")).folder
+    assert structure == key("Structure") and steel == key("Steel")
+    assert host.folder_parents.get(structure) is None
+    assert host.folder_parents[steel] == structure
+    assert (folder_label(host, structure), folder_label(host, steel)) == (
+        "Structure", "Steel")
+    # Neither «Linked files» nor the file's folder is left.
+    assert links.LINKED_FOLDER not in host.layer_folders
+    assert "Site" not in host.layer_folders
+    # The file's Untagged is the host's Untagged; the rest looks the same.
+    assert host.layer_by_key(key(None)) is None
+    assert _look(link) == _released(look, src)
+    assert not links.note_visibility(host, key("Wood"), True)
+    after = _full_tag_state(host)
+
     history.undo()
+    assert _full_tag_state(host) == before
     assert links.registry(host)[links._norm(src)] == entry
-    assert links.source_of_tag(host, wood) == links._norm(src)
-    assert _tag_state(host) == tags
+    assert links.source_of_tag(host, key("Wood")) == links._norm(src)
+    assert _look(link) == look
     history.redo()
-    assert links.registry(host) == {}
-    assert _tag_state(host) == tags
+    assert _full_tag_state(host) == after
+    assert _look(link) == _released(look, src)
+
+
+def test_tags_stay_in_their_folder_while_another_placement_links_the_file(tmp_path):
+    host, link, src = _one_link(tmp_path)
+    other = copy_group(link, V(20, 0, 0))
+    host.groups.append(other)
+    before = _full_tag_state(host)
+    history = History(host)
+    history.execute(UnlinkCommand([link]))
+    assert _tag_state(host) == before[0]
+    assert host.layer_by_key(links.tag_name(src, "Beams")).folder != None
+    history.execute(UnlinkCommand([other]))                   # the last one
+    assert host.layer_by_key(links.tag_name(src, "Wood")).folder is None
+    assert links.LINKED_FOLDER not in host.layer_folders
+    history.undo()
+    history.undo()
+    assert _full_tag_state(host) == before
+
+
+@pytest.mark.parametrize("deferred", [False, True])
+def test_a_tag_and_folder_named_as_the_hosts_merge_into_them(
+        tmp_path, monkeypatch, deferred):
+    from core.layers import folders_of
+    monkeypatch.setattr(_native, "wanted", lambda: deferred)
+    host = Scene()
+    host.layers.append(Layer("Wood", color=(0.9, 0.9, 0.0), visible=False))
+    host.layer_folders = ["Structure"]
+    host.layers.append(Layer("Beams", folder="Structure", color=(0.0, 1.0, 0.0)))
+    folders_of(host)
+    host, link, src = _one_link(tmp_path, host=host)
+    key = lambda tag: links.tag_name(src, tag)
+    before = _full_tag_state(host)
+    old_parts = _parts(link)
+    history = History(host)
+    history.execute(UnlinkCommand([link]))
+    if deferred:          # relabelled in their tables, not built for it
+        assert all(type(m) is DeferredMesh for m in _meshes(link).values()
+                   if m is not link.mesh)
+    n_wood, n_beams = 1, 1
+    # «Wood» is the host's «Wood», which keeps its colour and visibility.
+    assert host.layer_by_key(key("Wood")) is None
+    assert _faces_on(link, "Wood") == n_wood
+    wood = host.layer_by_key("Wood")
+    assert wood.color == (0.9, 0.9, 0.0) and wood.visible is False
+    # «Structure» is the host's folder: its «Beams» merged, «Steel» inside it.
+    assert key("Structure") not in folders_of(host)
+    assert host.layer_by_key(key("Beams")) is None
+    assert _faces_on(link, "Beams") == n_beams
+    assert host.folder_parents[key("Steel")] == "Structure"
+    assert host.layer_by_key(key("Columns")).folder == key("Steel")
+    history.undo()
+    assert _full_tag_state(host) == before
+    assert _parts(link) == old_parts
+    assert _faces_on(link, key("Wood")) == n_wood          # untouched copies
+    history.redo()
+    assert _faces_on(link, "Wood") == n_wood
+    assert host.layer_by_key(key("Wood")) is None
+
+
+def test_a_tag_worn_outside_the_link_is_not_merged_away(tmp_path):
+    host = Scene()
+    host.layers.append(Layer("Wood"))
+    host, link, src = _one_link(tmp_path, host=host)
+    mine = Group(_square(x=50), name="mine")
+    mine.xform = QMatrix4x4()
+    mine.layer = links.tag_name(src, "Wood")       # the host's own, on it
+    host.groups.append(mine)
+    History(host).execute(UnlinkCommand([link]))
+    ly = host.layer_by_key(links.tag_name(src, "Wood"))
+    assert ly is not None and ly.folder is None
+    assert _faces_on(link, ly.key)
+
+
+def test_a_hidden_file_folder_leaves_its_tags_hidden(tmp_path):
+    host, link, src = _one_link(tmp_path)
+    host.folder_visibility["Site"] = False
+    look = _look(link)
+    History(host).execute(UnlinkCommand([link]))
+    # What came out to the top is hidden: a tag itself, a folder as a folder.
+    assert host.layer_by_key(links.tag_name(src, "Wood")).visible is False
+    assert host.folder_visibility[links.tag_name(src, "Structure")] is False
+    assert host.layer_by_key(links.tag_name(src, "Beams")).visible is True
+    assert _look(link) == _released(look, src)
+
+
+def test_the_nested_files_copies_of_their_tags_go(tmp_path):
+    """Mid's own copies of Leaf's tags («Mid / Leaf / Steel», in Mid's
+    «Linked files») are worn by nothing once Leaf is the host's own link."""
+    from core.layers import folders_of
+    host, link, other, mid_path, leaf_path = _nested_host(tmp_path)
+    host.groups.remove(other)
+    host.version += 1
+    History(host).execute(UnlinkCommand([link]))
+    assert host.layer_by_key("Mid / Leaf / Steel") is None
+    assert not [f for f in folders_of(host) if f.startswith("Mid")]
+    # Leaf's own tags, as a link of the host's, stay where links' tags go.
+    steel = host.layer_by_key(links.tag_name(leaf_path, "Steel"))
+    assert steel.folder == "Leaf"
+    assert host.folder_parents["Leaf"] == links.LINKED_FOLDER
 
 
 # ---- 3. the window ---------------------------------------------------------

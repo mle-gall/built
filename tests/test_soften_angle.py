@@ -3,6 +3,7 @@
 the soft flag an import sets (formats.fuse.soften_smooth_edges), shaded
 smooth in the GL viewport and in the Metal view."""
 import numpy as np
+import pytest
 from PySide6.QtGui import QMatrix4x4, QVector3D as V
 
 from core.group import Group, copy_group
@@ -282,3 +283,204 @@ def test_the_dialog_softens_across_materials_by_default_as_.skp():
     assert dialog.materials.isChecked()
     assert dialog.coplanar.isChecked()
     dialog.deleteLater()
+
+
+# ---- «Smooth normals» (the modeller's Soften Edges): soft, and smooth or not ----
+
+def _flat(mesh):
+    return sum(bool(e.soft and e.flat) for e in mesh.edges)
+
+
+def test_smooth_normals_off_hides_the_lines_and_keeps_the_facets():
+    """Off, the edges go soft (no line) but every face keeps its flat
+    shade in the GL view; on (the default), they shade smooth."""
+    hard = Group(_cylinder(Mesh(), soft=False))
+    vp = _stub(_scene_with(hard))
+    facets = vp._group_chunk(hard)["vcol"]
+    lines = vp._group_chunk(hard)["edges"]
+    group = Group(_cylinder(Mesh(), soft=False))
+    scene = _scene_with(group)
+    vp = _stub(scene)
+    hist = History(scene)
+    hist.execute(SoftenByAngleCommand(selected_edges(scene), 40, smooth=False))
+    assert _soft(group.mesh) == SEAMS and _flat(group.mesh) == SEAMS
+    chunk = vp._group_chunk(group)
+    assert chunk["vcol"] == facets                    # flat-shaded
+    assert len(chunk["edges"]) < len(lines)           # the seams' lines gone
+    # The disk cache's key tells soft only from soft and smooth.
+    from views.viewport import Viewport
+    soft_only = Viewport._mesh_fingerprint(group.mesh)
+    # The same edges with «Smooth normals» on: soft and smooth now.
+    hist.execute(SoftenByAngleCommand(selected_edges(scene), 40))
+    assert Viewport._mesh_fingerprint(group.mesh) != soft_only
+    assert _soft(group.mesh) == SEAMS and _flat(group.mesh) == 0
+    assert vp._group_chunk(group)["vcol"] != facets
+    hist.undo()
+    assert _flat(group.mesh) == SEAMS
+    assert vp._group_chunk(group)["vcol"] == facets
+    hist.undo()
+    assert _soft(group.mesh) == 0
+
+
+def test_smooth_normals_on_by_default_matches_the_old_soft_flag():
+    """A soft edge from before the split (no ``flat``) shades as one the
+    command softens with «Smooth normals» on: soft implies smooth."""
+    old = Group(_cylinder(Mesh(), soft=True))
+    new = Group(_cylinder(Mesh(), soft=False))
+    scene = _scene_with(new)
+    History(scene).execute(SoftenByAngleCommand(selected_edges(scene), 40))
+    assert _stub(_scene_with(old))._group_chunk(old)["vcol"] == \
+        _stub(scene)._group_chunk(new)["vcol"]
+
+
+def test_hardening_clears_the_soft_only_mark():
+    group = Group(_cylinder(Mesh(), soft=False))
+    scene = _scene_with(group)
+    hist = History(scene)
+    targets = selected_edges(scene)
+    hist.execute(SoftenByAngleCommand(targets, 40, smooth=False))
+    hist.execute(SoftenByAngleCommand(targets, harden=True))
+    assert _soft(group.mesh) == 0
+    assert not any(e.flat for e in group.mesh.edges)
+
+
+def test_metal_shades_a_soft_only_edge_flat_without_its_line():
+    from views.wgpu_scene import pack_scene
+
+    def pack(smooth=None):
+        group = Group(_cylinder(Mesh(), soft=False))
+        group.xform = QMatrix4x4()
+        scene = _scene_with(group)
+        if smooth is not None:
+            History(scene).execute(SoftenByAngleCommand(
+                selected_edges(scene), 40, smooth=smooth))
+        return pack_scene(scene)
+    def shading(p):
+        v = p.vertices
+        return {(tuple(np.round(a, 4)), tuple(np.round(n, 4)))
+                for a, n in zip(v["pos"], v["normal"])}
+
+    def lines(p):
+        return sum(int(c[0]) for c in p.edge_commands)
+    hard, flat, smooth = pack(), pack(False), pack(True)
+    assert shading(flat) <= shading(hard)              # the facets' normals
+    assert not shading(smooth) <= shading(hard)        # the fans' normals
+    assert lines(flat) == lines(smooth) < lines(hard)
+
+
+def test_the_dialog_has_smooth_normals_ticked_as_.skp():
+    from PySide6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    from views.soften_dialog import SoftenDialog
+    dialog = SoftenDialog()
+    assert dialog.smooth.isChecked()
+    assert dialog.materials.isChecked() and dialog.coplanar.isChecked()
+    dialog.harden.setChecked(True)
+    assert not dialog.smooth.isEnabled()
+    dialog.deleteLater()
+
+
+def test_the_dialog_passes_smooth_normals_to_the_command(monkeypatch, tmp_path):
+    from PySide6.QtCore import QSettings
+    from PySide6.QtWidgets import QDialog
+    QSettings.setPath(QSettings.IniFormat, QSettings.UserScope, str(tmp_path / "qs"))
+    monkeypatch.setenv("INGETRAZO_AUTOSAVE_DIR", str(tmp_path / "autosave"))
+    from views.main_window import MainWindow
+    from views.soften_dialog import SoftenDialog
+    win = MainWindow()
+    try:
+        scene = win.viewport.scene
+        group = Group(_cylinder(Mesh(), soft=False))
+        scene.groups = [group]
+        scene.selection = {group}
+
+        def accept(dialog):
+            dialog.angle.setValue(40)
+            dialog.smooth.setChecked(False)
+            return QDialog.Accepted
+        monkeypatch.setattr(SoftenDialog, "exec", accept)
+        win._on_soften_edges()
+        assert _soft(group.mesh) == SEAMS and _flat(group.mesh) == SEAMS
+    finally:
+        win._saved_version = win.viewport.scene.version
+        win.close()
+
+
+def _half_soft_only_cylinder():
+    """A cylinder whose side seams are soft: half of them smooth, half
+    soft only (``flat``)."""
+    mesh = _cylinder(Mesh(), soft=True)
+    seams = [e for e in mesh.edges if e.soft]
+    for e in seams[::2]:
+        e.flat = True
+    return mesh
+
+
+@pytest.mark.parametrize("binary", [False, True])
+@pytest.mark.parametrize("engine", ["python", "native", "store"])
+def test_soft_only_edges_survive_save_and_reopen(tmp_path, monkeypatch,
+                                                 binary, engine):
+    from core import _native
+    from formats import igz
+    if binary:
+        monkeypatch.setattr(igz, "_LARGE_DOCUMENT", 0)
+        monkeypatch.setattr(igz, "_BULK_MIN", 1)
+    monkeypatch.setattr(_native, "wanted", lambda: engine != "python")
+    monkeypatch.setattr(_native, "store_wanted", lambda: engine == "store")
+    group = Group(_half_soft_only_cylinder(), name="c")
+    group.xform = QMatrix4x4()
+    scene = Scene(groups=[group])
+    reference = _stub(Scene(groups=[group]))._group_chunk(group)["vcol"]
+    path = tmp_path / "c.igz"
+    igz.save_scene(scene, path)
+    back = Scene()
+    igz.load_into(back, path)
+    (g,) = back.groups
+    # Drawn before anything builds it, then as built: the same shading.
+    assert _stub(back)._group_chunk(g)["vcol"] == reference
+    assert _soft(g.mesh) == SEAMS and _flat(g.mesh) == SEAMS // 2
+    # Saved again from what was read: still the same flags.
+    igz.save_scene(back, path)
+    again = Scene()
+    igz.load_into(again, path)
+    assert _flat(again.groups[0].mesh) == SEAMS // 2
+
+
+def test_a_file_from_before_the_split_reads_soft_as_smooth(tmp_path):
+    """An edge saved before ``flat`` existed — ``"soft": true`` and nothing
+    else — is soft and smooth, as it always was."""
+    from formats import igz
+    group = Group(_cylinder(Mesh(), soft=True), name="c")
+    group.xform = QMatrix4x4()
+    path = tmp_path / "old.igz"
+    igz.save_scene(Scene(groups=[group]), path)
+    assert b'"soft"' in path.read_bytes()
+    assert b'"flat"' not in path.read_bytes()
+    back = Scene()
+    igz.load_into(back, path)
+    assert _soft(back.groups[0].mesh) == SEAMS
+    assert _flat(back.groups[0].mesh) == 0
+
+
+def test_a_store_backed_edge_keeps_its_soft_only_mark(tmp_path, monkeypatch):
+    from core import _native
+    from formats import igz
+    monkeypatch.setattr(_native, "wanted", lambda: True)
+    monkeypatch.setattr(_native, "store_wanted", lambda: True)
+    monkeypatch.setattr(igz, "_LARGE_DOCUMENT", 0)
+    monkeypatch.setattr(igz, "_BULK_MIN", 1)
+    group = Group(_cylinder(Mesh(), soft=False), name="c")
+    group.xform = QMatrix4x4()
+    path = tmp_path / "s.igz"
+    igz.save_scene(Scene(groups=[group]), path)
+    back = Scene()
+    igz.load_into(back, path)
+    (g,) = back.groups
+    scene = _scene_with(g)
+    hist = History(scene)
+    hist.execute(SoftenByAngleCommand(selected_edges(scene), 40, smooth=False))
+    assert _soft(g.mesh) == SEAMS and _flat(g.mesh) == SEAMS
+    hist.undo()
+    assert _soft(g.mesh) == 0 and _flat(g.mesh) == 0
+    hist.redo()
+    assert _flat(g.mesh) == SEAMS

@@ -40,6 +40,7 @@ def document():
     b["edges"][5].update(curve=7, layer="Capa ñ \"x\"")
     b["edges"][6].update(curve=None, layer=None)
     b["edges"][7].update(layer="")           # kept by the bulk reader
+    b["edges"][8].update(soft=True, flat=True)   # soft only, not smooth
     b["faces"][1].update(color=[1.0, 0.5, 0.25], mat="m1")
     b["faces"][2].update(mat="m1", color=[1.0, 0.5, 0.25])  # the same, reordered
     b["faces"][3].update(back=True, layer="L", opacity=0.5)
@@ -228,7 +229,7 @@ def shape(scene):
              tuple(tuple((v.x(), v.y(), v.z()) for v in h) for h in f.holes),
              json.dumps(f.attrs, sort_keys=True, default=str))
             for f in mesh.faces],
-            [(e.soft, e.hidden, e.curve is not None, e.layer)
+            [(e.soft, e.hidden, e.curve is not None, e.layer, e.flat)
              for e in mesh.edges])
 
     def group(g):

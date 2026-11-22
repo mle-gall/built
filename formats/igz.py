@@ -351,6 +351,8 @@ def _edge_json(e) -> dict:
              "b": list(e.v1.position.toTuple())}
     if getattr(e, "soft", False):
         entry["soft"] = True
+        if getattr(e, "flat", False):
+            entry["flat"] = True          # soft only: no smooth shading
     if getattr(e, "hidden", False):
         entry["hidden"] = True
     if getattr(e, "curve", None) is not None:
@@ -398,6 +400,8 @@ def _plan_json(mesh, plan) -> dict:
         entry = {"a": list(pos[a]), "b": list(pos[b])}
         if plan.soft[i]:
             entry["soft"] = True
+            if plan.flat is not None and plan.flat[i]:
+                entry["flat"] = True
         if plan.hidden[i]:
             entry["hidden"] = True
         if plan.curve[i] is not None:
@@ -516,6 +520,8 @@ def _pack_geometry(mesh, sink: dict) -> dict:
     for i, e in enumerate(edges):
         if e.soft:
             flags[i] |= 1
+            if e.flat:
+                flags[i] |= 4
         if e.hidden:
             flags[i] |= 2
         if e.curve is not None:
@@ -645,6 +651,8 @@ def _pack_plan(mesh, plan, sink: dict) -> dict:
         "face_attr": face_attr.astype(np.int32),
     }
     flags = (plan.soft.astype(np.uint8) | (plan.hidden.astype(np.uint8) << 1))
+    if plan.flat is not None:
+        flags |= (plan.flat & plan.soft).astype(np.uint8) << 2
     arrays["edge_flags"] = flags
     # (list.count: a generator over millions of edges took seconds to say no.)
     if plan.curve.count(None) != len(plan.curve):
@@ -2267,6 +2275,8 @@ def _load_mesh_small(mesh, payload) -> None:
             continue  # degenerate edge in the document — skip
         if raw.get("soft"):
             edge.soft = True
+            if raw.get("flat"):
+                edge.flat = True
         if raw.get("hidden"):
             edge.hidden = True
         if raw.get("layer"):
@@ -2352,7 +2362,8 @@ def _json_arrays(payload) -> dict | None:
         flat.append(raw["a"])
         flat.append(raw["b"])
         flags.append((1 if raw.get("soft") else 0)
-                     | (2 if raw.get("hidden") else 0))
+                     | (2 if raw.get("hidden") else 0)
+                     | (4 if raw.get("soft") and raw.get("flat") else 0))
         cid = raw.get("curve")
         curves.append(-1 if cid is None else int(cid))
         lay = raw.get("layer")
@@ -2428,6 +2439,8 @@ def _payload_from_arrays(src) -> dict:
         raw = {"a": pos[a], "b": pos[b]}
         if flags[i] & 1:
             raw["soft"] = True
+            if flags[i] & 4:
+                raw["flat"] = True
         if flags[i] & 2:
             raw["hidden"] = True
         if curves is not None and curves[i] >= 0:
@@ -2500,7 +2513,8 @@ def _load_mesh_json(mesh, payload) -> None:
             if cid is not None and (max_curve is None or cid > max_curve):
                 max_curve = cid
             flags.append((bool(raw.get("soft")), cid, raw.get("layer"),
-                          bool(raw.get("hidden"))))
+                          bool(raw.get("hidden")),
+                          bool(raw.get("soft") and raw.get("flat"))))
         emap = mesh.add_edges_welded(
             vobjs, inverse[0:n_edge_pts:2], inverse[1:n_edge_pts:2], flags)
         # Keep new curves unique after loading stored ids.
@@ -2680,12 +2694,13 @@ def _build_geometry(mesh, meta, pos, edges, flags, curves, layers, rings,
             names = meta.get("edge_layers") or []
             soft = (flags & 1).astype(bool).tolist()
             hidden = (flags & 2).astype(bool).tolist()
+            flat = (flags & 4).astype(bool).tolist()
             cl = (curves.tolist() if curves is not None
                   else [-1] * len(edges))
             ll = (layers.tolist() if layers is not None
                   else [-1] * len(edges))
             eflags = [(s, c if c >= 0 else None, names[l] if l >= 0 else None,
-                       h) for s, c, l, h in zip(soft, cl, ll, hidden)]
+                       h, fl) for s, c, l, h, fl in zip(soft, cl, ll, hidden, flat)]
         emap = mesh.add_edges_welded(vobjs, inverse[edges[:, 0]],
                                      inverse[edges[:, 1]], eflags)
     if len(counts):

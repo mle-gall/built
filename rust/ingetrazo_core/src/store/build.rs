@@ -11,7 +11,7 @@
 //!   `sequential` reorders them as `Mesh.vertex` point by point would;
 //! - edges: input order of first occurrence of each unordered pair, in
 //!   the first occurrence's direction; pairs welded shut are skipped;
-//!   soft/hidden accumulate (any), curve/layer: the last one given wins;
+//!   soft/hidden/flat accumulate (any), curve/layer: the last one given wins;
 //! - then every ring segment, in global order, appends the boundary edges
 //!   still missing (first occurrence's direction, a ring corner welded
 //!   onto the next gives a self-loop edge, as Python does) and lists its
@@ -143,7 +143,7 @@ impl Store {
             }
             let ei = *emap.entry(pair(a, c)).or_insert_with(|| ed.push(a, c)) as usize;
             if let Some(f) = b.flags {
-                ed.flags[ei] |= f[i] & (super::SOFT | super::HIDDEN);
+                ed.flags[ei] |= f[i] & (super::SOFT | super::HIDDEN | super::FLAT);
             }
             if let Some(cv) = b.curves {
                 if cv[i] >= 0 {

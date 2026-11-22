@@ -823,7 +823,7 @@ def _without_link(ext):
     return rest or None
 
 
-def unlinked_copy(placement, pairs=None):
+def unlinked_copy(placement, pairs=None, nested=None):
     """``(mesh, children, ext)``: what the linked ``placement`` holds, as
     the host's own content (Make Unique of a link). Every mesh is its own
     (:func:`own_mesh`) — parts that shared one inside this placement
@@ -832,11 +832,19 @@ def unlinked_copy(placement, pairs=None):
     with its other placements. The parts keep their uids (what scenes,
     records and IFC openings name them by; saved from now on as the
     host's own), names, tags, paint and matrices; they lose their link
-    parentage (``owner``, ``source_uid``), and a linked file nested in
-    the source becomes content too. ``placement`` is left as it was.
+    parentage (``owner``, ``source_uid``). ``placement`` is left as it was.
+
+    A file linked inside the source stays a link: its placement comes
+    across with its link record — the host's own link of that file from
+    now on, at the top of its chain — and its parts as they showed,
+    read-only and on the link's meshes, until :func:`fill_link` reads it
+    as a fresh link of the host would.
 
     ``pairs``, a list, receives ``(old, new)`` for every part and every
-    mesh copied (what holds on them, a dimension's, move across)."""
+    mesh copied (what holds on them, a dimension's, move across).
+    ``nested``, a list, receives ``(old, new, part_pairs)`` for each file
+    linked inside that stays a link, ``part_pairs`` the ``(old, new)`` of
+    its parts as copied (else they go to ``pairs``)."""
     from PySide6.QtGui import QMatrix4x4
     from copy import deepcopy
     meshes: dict = {}
@@ -850,22 +858,47 @@ def unlinked_copy(placement, pairs=None):
             pairs.append(out)
         return out[1]
 
-    def clone(group):
-        out = _clone_shell(group)
-        pairs.append((group, out))
-        out.mesh = own(group.mesh)
-        out.owner = None
+    def shell(group, out):
         out.context = None
-        try:
-            del out.source_uid
-        except AttributeError:
-            pass
         out.xform = QMatrix4x4(group.xform) if group.xform is not None else None
         out.axes = QMatrix4x4(group.axes) if group.axes is not None else None
         for name in ("ifc", "material", "exploded", "text3d"):
             value = getattr(group, name, None)
             if value is not None:
                 setattr(out, name, deepcopy(value))
+
+    def linked_part(group, parent, part_pairs):
+        # Read-only like every part of a link: owned, its mesh shared.
+        out = _clone_shell(group)
+        part_pairs.append((group, out))
+        out.owner = parent
+        shell(group, out)
+        if group.ext is not None:
+            out.ext = deepcopy(group.ext)
+        out.children = [linked_part(c, out, part_pairs)
+                        for c in group.children or ()]
+        return out
+
+    def clone(group):
+        out = _clone_shell(group)
+        pairs.append((group, out))
+        out.owner = None
+        try:
+            del out.source_uid
+        except AttributeError:
+            pass
+        shell(group, out)
+        if is_linked(group):
+            out.ext = deepcopy(group.ext)
+            part_pairs: list = []
+            out.children = [linked_part(c, out, part_pairs)
+                            for c in group.children or ()]
+            if nested is not None:
+                nested.append((group, out, part_pairs))
+            else:
+                pairs.extend(part_pairs)
+            return out
+        out.mesh = own(group.mesh)
         out.ext = _without_link(group.ext)
         out.children = [clone(c) for c in group.children or ()]
         return out
@@ -873,6 +906,184 @@ def unlinked_copy(placement, pairs=None):
     mesh = own(placement.mesh)
     children = [clone(c) for c in placement.children or ()]
     return mesh, children, _without_link(placement.ext)
+
+
+def fill_link(scene, group, mirror=None, host_path=None):
+    """Fill the linked placement ``group`` from its source as a fresh link
+    of the host is filled (:func:`make_link`, :func:`reload`): its parts
+    under the uids a reload gives them, the source's tags brought in under
+    the file's own folder in «Linked files». Returns the error, or None
+    (``group`` is then left as it was).
+
+    ``mirror``: the file ``group`` was linked inside until now (Make
+    Unique of that file's link). When this file was not linked directly
+    before, a tag of it the host showed switched there — the outer file's
+    copy of it, «Mid / Leaf / Steel» — shows switched here too, as the
+    host's override."""
+    rec = link_of(group)
+    if rec is None:
+        return "not a link"
+    found = locate(rec, host_path)
+    if found is None:
+        return f"{rec['path']} was not found"
+    path = Path(found).resolve()
+    if _norm(path) != _norm(rec["path"]):
+        rec["path"] = str(path)          # the project moved: follow it
+    fresh = "tags" not in (registry(scene).get(_norm(path)) or {})
+    materials = dict(scene.materials)
+    try:
+        comp, tags = _read_definition(materials, path, rec.get("select"),
+                                      rec.get("include_nested", True))
+    except LinkError as exc:
+        return str(exc)
+    scene.materials.update(materials)
+    _populate(group, comp)
+    _sync_tags(scene, path, tags)
+    entry = _entry(scene, path)
+    entry["loaded_mtime_ns"] = path.stat().st_mtime_ns
+    if fresh and mirror:
+        for name in entry.get("tags", ()):
+            ly = scene.layer_by_key(name)
+            was = scene.layer_by_key(stem(mirror) + SEP + name)
+            if ly is not None and was is not None \
+                    and bool(was.visible) != bool(ly.visible):
+                ly.visible = bool(was.visible)
+                entry["overrides"][name] = bool(was.visible)
+    scene.version += 1
+    return None
+
+
+def release_tags(scene, path, used, outside) -> dict:
+    """The host no longer links ``path`` (Make Unique of its last
+    placement): the file's tags become the host's own, out of «Linked
+    files / <file>» to the top of the tags tree — the same keys, labels,
+    colours and visibility — and the file's folders come along as
+    top-level folders with what they hold. The file's folder goes, and
+    «Linked files» too when nothing is left in it. A file folder the host
+    showed hidden leaves its tags and folders hidden.
+
+    A tag landing beside one of the host's with the same label is that
+    one: what wore the file's tag wears the host's, and the host's keeps
+    its colour and visibility. Two folders of one label at one level
+    become the host's, their contents merged the same way, level by level
+    — as .skp merges a component's tags into the model's by name. The
+    file's «Untagged» is the host's Untagged. A tag that something outside
+    the unlinked copies wears (``outside``: key → count) is not merged
+    away: it moves as a tag of its own.
+
+    The file's copies of the tags of the files linked inside it (its own
+    «Linked files» folder), that nothing wears any more (``used``: key →
+    count) go: those files stay links, under their own tags.
+
+    Returns ``{file tag key: host tag key}``, what the copies are to be
+    relabelled with (:func:`relabel`; the host's Untagged as
+    :data:`DEFAULT_LAYER`)."""
+    from core.layers import (DEFAULT_LAYER, folder_label, folder_parent,
+                             folder_visible, folders_of, move_folder,
+                             remove_folder, subfolders)
+    entry = registry(scene).get(_norm(path))
+    if not isinstance(entry, dict):
+        return {}
+    own = stem(path)
+    if own not in folders_of(scene) or folder_parent(scene, own) != LINKED_FOLDER:
+        return {}
+    mine = set(entry.get("tags") or ())
+    hidden = not folder_visible(scene, own)
+    renames: dict = {}
+
+    def empty(f) -> bool:
+        return (not any(ly.folder == f for ly in scene.layers)
+                and not subfolders(scene, f))
+
+    # 1. The copies of the nested files' tags that nothing wears now.
+    nested = own + SEP + LINKED_FOLDER
+    if nested in folders_of(scene) and folder_parent(scene, nested) == own:
+        below = [nested, *subfolders(scene, nested, deep=True)]
+        scene.layers[:] = [ly for ly in scene.layers
+                           if not (ly.key in mine and ly.folder in below
+                                   and not used.get(ly.key))]
+        for f in reversed(below):                   # the deepest first
+            if empty(f):
+                remove_folder(scene, f)
+
+    # 2. The rest out to the top, merged by label.
+    moving = {own, *subfolders(scene, own, deep=True)}
+    untagged = tag_name(path, None)
+
+    def merge(src, target) -> None:
+        theirs: dict = {}
+        for ly in scene.layers:
+            if (ly.folder or None) == target and ly.key not in mine:
+                theirs.setdefault(ly.name, ly)
+        for ly in [ly for ly in scene.layers
+                   if ly.folder == src and ly.key in mine]:
+            if ly.key == untagged:
+                into = scene.layer_by_key(DEFAULT_LAYER) or DEFAULT_LAYER
+            else:
+                into = theirs.get(ly.name)
+            if into is not None and not outside.get(ly.key):
+                renames[ly.key] = getattr(into, "key", into)
+                scene.layers.remove(ly)
+                continue
+            ly.folder = target
+            if hidden:
+                ly.visible = False
+        level: dict = {}
+        for f in subfolders(scene, target):
+            if f not in moving and f != LINKED_FOLDER:
+                level.setdefault(folder_label(scene, f), f)
+        for f in subfolders(scene, src):
+            twin = level.get(folder_label(scene, f))
+            if twin is not None:
+                merge(f, twin)
+                remove_folder(scene, f)
+            else:
+                move_folder(scene, f, target)
+                if hidden:
+                    scene.folder_visibility[f] = False
+
+    merge(own, None)
+    if empty(own):
+        remove_folder(scene, own)
+    if LINKED_FOLDER in folders_of(scene) and empty(LINKED_FOLDER):
+        remove_folder(scene, LINKED_FOLDER)
+    return renames
+
+
+def relabel(groups, meshes, renames) -> None:
+    """Move what ``groups`` and ``meshes`` wear onto other tags
+    (``renames``: key → key, :data:`DEFAULT_LAYER` for Untagged). A mesh
+    left deferred is relabelled in its tables, unbuilt
+    (:func:`_relabel_deferred`), and only when they name a tag that moves."""
+    from core.layers import DEFAULT_LAYER, assign_layer, layer_of
+    from core.mesh import DeferredMesh
+    if not renames:
+        return
+
+    def rename(name):
+        out = renames.get(name, name)
+        return None if out == DEFAULT_LAYER else out
+
+    for g in groups:
+        if layer_of(g) in renames:
+            assign_layer(g, renames[layer_of(g)])
+    shared: dict = {}
+    seen = set()
+    for mesh in meshes:
+        if mesh is None or id(mesh) in seen:
+            continue
+        seen.add(id(mesh))
+        if type(mesh) is DeferredMesh:
+            meta = mesh.__dict__["_deferred_source"].get("meta") or {}
+            named = {(row or {}).get("layer")
+                     for row in meta.get("face_attrs") or ()}
+            named.update(meta.get("edge_layers") or ())
+            if named & set(renames):
+                _relabel_deferred(mesh, rename, shared)
+            continue
+        for item in (*mesh.faces, *mesh.edges):
+            if layer_of(item) in renames:
+                assign_layer(item, renames[layer_of(item)])
 
 
 def adopt_parts(placement) -> None:

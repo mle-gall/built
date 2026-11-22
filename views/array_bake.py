@@ -119,6 +119,7 @@ def light_face(mesh, f) -> LightFace:
             continue
         ed = Edge(va, vb)
         ed.soft = bool(plan.soft[e])
+        ed.flat = bool(plan.flat[e]) if plan.flat is not None else False
         ed.hidden = bool(plan.hidden[e])
         ed.curve = plan.curve[e]
         ed.layer = plan.layer[e]
@@ -283,6 +284,13 @@ def fingerprint(mesh, plan, table, face_attr):
                        repr(back) if back else None,
                        bool(at.get("hidden"))))
     soft = int(plan.soft.sum())
+    if plan.flat is not None and plan.flat.any():
+        # Soft only («Smooth normals» off) bakes otherwise; the same term
+        # as Viewport._mesh_fingerprint's, so the two keys agree.
+        flat = 0
+        for i in np.flatnonzero(plan.flat & plan.soft).tolist():
+            flat ^= ((i + 1) * 2654435761) & 0xFFFFFFFF
+        soft = (soft, flat)
     hid = 0
     for i in np.flatnonzero(plan.hidden).tolist():
         hid ^= ((i + 1) * 2654435761) & 0xFFFFFFFF
@@ -396,12 +404,13 @@ class LazyFingerprint:
 def _smooth_stream(vp, plan, normal, unit, tfa, tva, col_a, f_rgb,
                    bases, fk, plain):
     """Native soft fans, retaining array geometry and shared prototypes."""
-    if not len(tfa) or not np.any(plan.soft & (np.diff(plan.ef_start) > 1)):
+    smooth = plan.smooth
+    if not len(tfa) or not np.any(smooth & (np.diff(plan.ef_start) > 1)):
         return None
     normals, mask = _native.native.smooth_corner_normals(
         np.ascontiguousarray(plan.pos, dtype=np.float32), normal, unit,
         plan.corners, plan.ring_sizes, plan.ring_counts, plan.edges,
-        plan.soft, plan.ef_start, plan.ef_face, tva, tfa, _native.qt_hypot())
+        smooth, plan.ef_start, plan.ef_face, tva, tfa, _native.qt_hypot())
     normals = normals.reshape(-1, 3, 3)
     mask = mask.reshape(-1, 3) & plain[tfa, None]
     if np.any(mask):

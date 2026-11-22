@@ -745,6 +745,7 @@ def _transformed_mesh_walk(src: Mesh, m) -> Mesh:
             except Exception:  # noqa: BLE001
                 continue
         ne.soft = e.soft
+        ne.flat = e.flat
         ne.curve = e.curve
     new.resplit_curves()
     _remap_uvws(new, m)

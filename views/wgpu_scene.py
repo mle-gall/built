@@ -168,7 +168,7 @@ def _source_arrays(mesh, paint=None, texture_ids=None, face_overrides=None, bill
         pos, corners = a['pos'], a['corners']
         sizes, counts = a['ring_sizes'], a['ring_counts']
         edges = a['edges']
-        flags = a['flags'] & 3
+        flags = a['flags'] & 7
         table, attr = attr_columns(mesh, face_overrides)
         attr = np.asarray(attr, np.int64)
     elif src is not None:
@@ -193,7 +193,9 @@ def _source_arrays(mesh, paint=None, texture_ids=None, face_overrides=None, bill
         remap = np.fromiter((positions[tuple(p)] for p in arrays.pos.tolist()),
                             dtype=np.int64, count=len(arrays.pos))
         corners = remap[corners]
-        flags = np.asarray([int(e.soft) | (int(e.hidden) << 1) for e in mesh.edges], np.uint8)
+        flags = np.asarray([int(e.soft) | (int(e.hidden) << 1)
+                            | (int(e.soft and e.flat) << 2)
+                            for e in mesh.edges], np.uint8)
         table = [(face_overrides or {}).get(f.key, f.attrs) for f in mesh.faces]
         attr = np.arange(len(table))
     # IGZ source streams can repeat a coordinate for each face/edge. Soft fan

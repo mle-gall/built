@@ -105,7 +105,8 @@ fn prepare(
         .iter()
         .map(|e| [e[0] as i64, e[1] as i64])
         .collect();
-    let soft: Vec<_> = edge_flags.iter().map(|f| f & 1 != 0).collect();
+    // Soft edges shade smooth, unless flat (soft only: «Smooth normals» off).
+    let soft: Vec<_> = edge_flags.iter().map(|f| f & 1 != 0 && f & 4 == 0).collect();
     let corners: Vec<_> = c.iter().map(|&v| v as i64).collect();
     let fans = crate::smooth::corners(
         p,
@@ -488,6 +489,16 @@ mod tests {
         // Hidden edges alone do not request smoothing.
         let hidden = bake(2);
         assert_eq!(hard.triangles[0].1[0].2, hidden.triangles[0].1[0].2);
+        // Soft but flat («Smooth normals» off): no line, and no smoothing.
+        let flat = bake(1 | 4);
+        assert_eq!(flat.edges.len() + 1, hard.edges.len());
+        assert_eq!(soft.edges.len(), flat.edges.len());
+        for k in 0..2 {
+            let (hn, fl) = (hard.triangles[k].1, flat.triangles[k].1);
+            for j in 0..3 {
+                assert_eq!((hn[j].0, hn[j].1, hn[j].2), (fl[j].0, fl[j].1, fl[j].2));
+            }
+        }
     }
     #[test]
     fn multiple_mesh_offsets_bounds() {

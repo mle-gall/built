@@ -40,7 +40,7 @@ use super::cow::Cell;
 use super::edit::Change;
 use super::keys::{Kind, NONE};
 use super::topo::OpError;
-use super::{Store, SOFT};
+use super::{Store, FLAT, SOFT};
 use crate::facegeom::{self, Hypot, V3};
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashMap, HashSet};
@@ -496,7 +496,8 @@ impl Store {
     }
 
     /// `Mesh.split_edge_at(edge, mid)` at an existing vertex: new halves
-    /// carry the edge's soft / layer / curve (not hidden), e0 its key.
+    /// carry the edge's soft (and flat) / layer / curve (not hidden), e0
+    /// its key.
     pub fn split_edge_at(&mut self, e: u32, mid: u32, ch: &mut Change) -> Result<SplitAt, OpError> {
         if !self.alive(Kind::Edge, e) || !self.alive(Kind::Vertex, mid) {
             return Err(OpError::Fallback("split_edge_at with a gone element"));
@@ -506,7 +507,7 @@ impl Store {
             return Err(OpError::Fallback("split_edge_at at an end of the edge"));
         }
         let incident = self.edge_faces(e).to_vec();
-        let soft = *self.state.eflags.get(e as usize) & SOFT;
+        let soft = *self.state.eflags.get(e as usize) & (SOFT | FLAT);
         let curve = *self.state.ecurve.get(e as usize);
         let layer = *self.state.elayer.get(e as usize);
         self.remove_edge(e, ch);
