@@ -26,6 +26,11 @@ def _resident_version(scene):
     return scene.content_version - getattr(scene, '_placement_context_bumps', 0)
 
 
+def _has_vertices(mesh):
+    src = mesh.__dict__.get('_deferred_source')
+    return bool(len(src['pos']) if src is not None else len(mesh.vertices))
+
+
 class InstanceUpdates:
     def __init__(self, scene, packed):
         self.scene = scene
@@ -232,8 +237,29 @@ class InstanceUpdates:
             variant = next((v[code] for v in self.variants.values() if code in v), None)
             if variant is None:
                 return None
-            out.append((row, chain[-1], matrix, variant[0]))
+            world = np.eye(4, dtype=np.float32) if matrix is None else np.asarray(matrix.data(), np.float32).reshape(4, 4)
+            out.append((row, chain[-1], world, variant[0]))
         return out
+
+    def _link_swaps(self):
+        change = getattr(self.scene, '_link_mesh_changes', None)
+        if (not change or change[2] is None or not self.journal_valid
+                or self.pending or self.pending_meshes or self.pending_materials
+                or self.pending_removed or self.pending_swaps or self.scene._edit_stack
+                or change[:2] != (self.version + self.scene._placement_context_bumps,
+                                  self.scene.content_version)):
+            return None
+        swaps = []
+        for group, old_mesh in change[2]:
+            row = self.rows.get(group.uid)
+            if row is None or group.uid not in self.active or not _has_vertices(group.mesh):
+                return None
+            code = int(self.packed.instances['info'][row, 0])
+            variant = self.variants.get(old_mesh, {}).get(code)
+            if variant is None:
+                return None
+            swaps.append((row, group, self.packed.instances['world'][row], variant[0]))
+        return swaps
 
     def _new_prototype(self, mesh, key, paint, mode, old, fresh):
         """Allocate a prototype code for a variant never drawn before."""
@@ -260,9 +286,10 @@ class InstanceUpdates:
         if scene is not self.scene:
             return None
         local = self.unsubscribe is not None and self.journal_valid and _resident_version(scene) == self.version
-        swaps = self._resolve_swaps() if local else None
-        if swaps is None:
-            local = False
+        swaps = self._resolve_swaps() if local else self._link_swaps()
+        local = swaps is not None and all(_has_vertices(self.meshes[k][0]) for k in self.pending_meshes)
+        if not local:
+            swaps = None
         self.pending_swaps.clear()
         self.last_local = local
         placements = [] if local else [(None, None, None, 0)]
@@ -298,9 +325,12 @@ class InstanceUpdates:
             old = self.meshes.get(id(mesh))
             code = self.packed.prototype_lookup.get(key)
             uid = getattr(group, 'uid', 'loose')
-            if (old is not None and old[2] < 0 and old[1] == mesh._mut_serial
-                    and (code is None or code < 0)):
+            if old is not None and old[2] < 0 and old[1] == mesh._mut_serial:
                 continue    # empty when packed, under any paint: no row
+            if (old is None or old[1] != mesh._mut_serial) and not _has_vertices(mesh):
+                if old is None:
+                    self.meshes[id(mesh)] = (mesh, mesh._mut_serial, -1)
+                continue
             if code == -1:
                 code = None
             if code is None:
@@ -327,7 +357,7 @@ class InstanceUpdates:
             if row >= len(self.packed.instances) or value.tobytes() != self.packed.instances[row].tobytes():
                 ids.append(row)
                 values.append(value)
-        for row, group, matrix, paint in swaps or ():
+        for row, group, world, paint in swaps or ():
             # Same group, same paint and flags: its prototype and matrix.
             mesh = group.mesh
             mode = getattr(group, 'billboard', False)
@@ -340,8 +370,7 @@ class InstanceUpdates:
                 changed[id(mesh)] = old
             self.packed.groups[row] = group
             value = self.packed.instances[row].copy()
-            value['world'] = (np.eye(4, dtype=np.float32) if matrix is None
-                              else np.asarray(matrix.data(), np.float32).reshape(4, 4))
+            value['world'] = world
             value['info'][0] = code
             if value.tobytes() != self.packed.instances[row].tobytes():
                 ids.append(row)
@@ -520,40 +549,42 @@ class InstanceUpdates:
                 # Hidden faces and edges follow the visible ones in the bake;
                 # the renderer takes the visible range, the resident arrays
                 # keep all four for Show hidden geometry.
-                total = count + int(hidden_face['count'] + hidden_edge['count'])
+                # Billboards suppress the visible edge draw, but its endpoint
+                # vertices still precede the hidden ranges in the native bake.
+                total = int(hidden_edge['first']) + int(hidden_edge['count']) - start
                 vertices = baked.vertices[start:start+total]
                 indices = baked.indices[start:start+total]
                 if renderer is not None:
                     renderer.replace_prototype(code, vertices[:count].view(np.uint8).reshape(-1),
                                                indices[:count].view(np.uint8).reshape(-1),
                                                bounds.view(np.uint8).reshape(-1), int(face['count']))
+                material = np.empty(0, np.uint8)
+                flags = 0
+                if uid is not None:
+                    header = baked.materials.view(np.uint32).reshape(-1, 4)[prototype]
+                    first, length, flags = map(int, header[1:])
+                    if length:
+                        material = baked.materials[first*16:first*16+length*32].copy()
+                        words = material.view(np.uint32).reshape(-1, 8)
+                        words[:, 5:7] = texture_map[words[:, 5:7]]
+                self.packed.material_updates[code] = flags, material
                 if renderer is not None:
-                    material = np.empty(0, np.uint8)
-                    if uid is not None:
-                        header = baked.materials.view(np.uint32).reshape(-1, 4)[prototype]
-                        first, length = int(header[1]), int(header[2])
-                        if length:
-                            material = baked.materials[first*16:first*16+length*32].copy()
-                            words = material.view(np.uint32).reshape(-1, 8)
-                            words[:, 5:7] = texture_map[words[:, 5:7]]
-                        elif header[3] & 1:
-                            # Incremental material API takes corner records. Expand
-                            # only this edited prototype's compressed matching back.
-                            records = np.zeros((int(face['count']), 32), np.uint8)
-                            records[:, 16:20] = vertices['color'][:int(face['count'])]
-                            material = records.reshape(-1)
+                    if flags & 1:
+                        # The live API takes explicit corner records. A full
+                        # upload retains the compact matching-back header.
+                        records = np.zeros((int(face['count']), 32), np.uint8)
+                        records[:, 16:20] = vertices['color'][:int(face['count'])]
+                        material = records.reshape(-1)
                     renderer.update_prototype_materials(code, material)
                 offset = self._place(code, vertices, indices)
                 self.packed.bounds[code] = bounds
-                first = offset
                 for target, source in ((self.packed.commands, face), (self.packed.edge_commands, edge),
                                        (self.packed.hidden_commands, hidden_face),
                                        (self.packed.hidden_edge_commands, hidden_edge)):
                     target[code]['count'] = source['count']
                     target[code]['base'] = offset
-                    target[code]['first'] = first
-                    first += int(source['count'])
-                self.meshes[id(mesh)] = (mesh, mesh._mut_serial, code)
+                    target[code]['first'] = offset + int(source['first']) - start
+                self.meshes[id(mesh)] = (mesh, mesh._mut_serial, code if uid is not None else -1)
             self.packed.profile_exclusions = tuple((c, p) for c, p in exclusions.items() if p)
             if renderer is not None and hasattr(renderer, 'set_profile_exclusions'):
                 if getattr(renderer, 'incremental_profile_exclusions', False):
@@ -571,6 +602,8 @@ class InstanceUpdates:
                                 for _, _, code in self.changed)
                     if moved:
                         renderer.set_profile_exclusions(self.packed.profile_exclusions)
+        regrouped = len(ids) and np.any(
+            self.packed.instances['info'][ids, 0] != rows['info'][:, 0])
         if len(ids):
             if renderer is not None:
                 renderer.update_instances(ids.tolist(), rows.view(np.uint8).reshape(-1))
@@ -582,7 +615,7 @@ class InstanceUpdates:
         if not len(ids) and not self.changed and not self.removed:
             return
         old_count = len(self.world_boxes)
-        if len(self.packed.instances) != old_count or self.changed:
+        if len(self.packed.instances) != old_count or self.changed or regrouped:
             counts = np.bincount(self.packed.instances['info'][:, 0], minlength=len(self.packed.commands))
             self.packed.commands['start'] = self.packed.edge_commands['start'] = np.cumsum(counts)-counts
             self.packed.hidden_commands['start'] = self.packed.hidden_edge_commands['start'] = np.cumsum(counts)-counts

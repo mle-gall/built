@@ -74,7 +74,7 @@ def component_from_scene(src, name: str):
     return comp
 
 
-def merge_materials(src_materials: dict, dst_materials: dict, comp) -> dict:
+def merge_materials(src_materials: dict, dst_materials: dict, comp, *, reused=()) -> dict:
     """Register the file's materials in the document, restamping the
     component's faces where a name had to change. Returns the rename map.
 
@@ -94,7 +94,7 @@ def merge_materials(src_materials: dict, dst_materials: dict, comp) -> dict:
         for g, _m in iter_placements(comp):
             if g.material:
                 g.material = _renamed_paint(g.material, renamed)
-            if id(g.mesh) not in seen:
+            if g.mesh not in reused and id(g.mesh) not in seen:
                 seen.add(id(g.mesh))
                 restamp_materials(g.mesh, renamed)
     return renamed

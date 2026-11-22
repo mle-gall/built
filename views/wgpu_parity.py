@@ -12,9 +12,10 @@ def has_transparency(packed):
     if np.any((alpha > 0) & (alpha < 255)):
         return True
     # Back-side material RGBA records follow the prototype headers.
-    for header in packed.materials[:len(packed.commands)*16].view('<u4').reshape(-1, 4):
+    materials = packed.material_stream() if getattr(packed, "material_updates", None) else packed.materials
+    for header in materials[:len(packed.commands)*16].view('<u4').reshape(-1, 4):
         if header[2]:
-            a = packed.materials[int(header[1])*16:int(header[1])*16+int(header[2])*32].reshape(-1, 32)[:, 19]
+            a = materials[int(header[1])*16:int(header[1])*16+int(header[2])*32].reshape(-1, 32)[:, 19]
             if np.any((a > 0) & (a < 255)):
                 return True
     if packed.textures:

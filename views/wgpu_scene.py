@@ -12,7 +12,7 @@ it. Hidden commands use the same vertex/index buffers and COMMAND dtype.
 Materials use 16-byte prototype headers followed by 32-byte corner records
 only for prototypes with textures or backs that differ from their fronts.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from types import SimpleNamespace
 from typing import NamedTuple
 import numpy as np
@@ -57,11 +57,38 @@ class PackedScene:
     # rebakes each variant of a changed mesh with its own paint.
     prototype_paints: dict | None = None
 
+    # Sparse replacements since the last whole-table handoff. Rebuilding
+    # this stream on each edit copies every unrelated material record.
+    material_updates: dict = field(default_factory=dict)
+
+    def material_stream(self):
+        if not self.material_updates:
+            return self.materials
+        count = len(self.commands)
+        headers = np.zeros((count, 4), '<u4')
+        chunks = [headers.view(np.uint8).ravel()]
+        at = count
+        old = self.materials.view('<u4').reshape(-1, 4)
+        for code in range(count):
+            if code in self.material_updates:
+                flags, records = self.material_updates[code]
+            else:
+                _, first, length, flags = map(int, old[code])
+                records = self.materials[first*16:first*16 + length*32]
+            headers[code, 3] = flags
+            if len(records):
+                headers[code, :3] = self.commands['base'][code], at, len(records) // 32
+                chunks.append(records)
+                at += len(records) // 16
+        self.materials = np.concatenate(chunks)
+        self.material_updates = {}
+        return self.materials
+
     def upload(self, renderer):
         renderer.set_scene(tuple(a.view(np.uint8).reshape(-1) for a in
                                  (self.vertices, self.indices, self.bounds, np.concatenate((self.commands, self.edge_commands)))),
                            self.instances.view(np.uint8).reshape(-1))
-        renderer.set_materials(self.materials)
+        renderer.set_materials(self.material_stream())
         renderer.set_textures(*self.textures)
         if hasattr(renderer, "set_profile_exclusions"):
             renderer.set_profile_exclusions(self.profile_exclusions)

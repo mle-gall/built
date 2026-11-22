@@ -28,7 +28,9 @@ class AgentSnapshot(SnapshotImport):
             return vars(o) if hasattr(o, "__dict__") else {
                 k: getattr(o, k) for k in o.__slots__ if hasattr(o, k)}
         attrs = [(o, deepcopy(attributes(o), memo)) for o in objects]
-        mesh_states = [(m, m.capture_state()) for m in meshes if m is not scene.mesh]
+        from core.mesh import DeferredMesh
+        mesh_states = {m: None if type(m) is DeferredMesh else m.capture_state()
+                       for m in meshes if m is not scene.mesh}
         fields = {k: deepcopy(getattr(scene, k), memo) for k in (
             "plugin_data", "layer_folders", "folder_parents", "layer_folder_uids",
             "folder_visibility",
@@ -36,9 +38,10 @@ class AgentSnapshot(SnapshotImport):
         return attrs, mesh_states, fields
 
     @staticmethod
-    def restore(scene, state):
+    def restore(scene, state, changed_meshes=None):
         attrs, meshes, fields = state
-        memo = {id(o): o for o, _ in attrs + meshes}
+        memo = {id(o): o for o, _ in attrs}
+        memo.update((id(m), m) for m in meshes)
         memo[id(scene.mesh)] = scene.mesh
         for obj, values in attrs:
             restored = deepcopy(values, memo)
@@ -52,7 +55,15 @@ class AgentSnapshot(SnapshotImport):
             else:
                 for key, value in restored.items():
                     setattr(obj, key, value)
-        for mesh, values in meshes:
+        for mesh, values in meshes.items():
+            if values is None:
+                continue
+            if changed_meshes is None:
+                # Failed call: compare with the before state for rollback.
+                if mesh.capture_state() == values:
+                    continue
+            elif mesh not in changed_meshes:
+                continue
             mesh.restore_state(values)
         for name, value in fields.items():
             restored = deepcopy(value, memo)
@@ -72,19 +83,37 @@ class AgentSnapshot(SnapshotImport):
     def do(self, scene):
         if self.extra_after is not None:
             super().do(scene)
-            self.restore(scene, self.extra_after)
+            self.restore(scene, self.extra_after, self.changed_meshes)
             return
+        from core.mesh import on_mesh_materialized
         self.extra_before = self.capture(scene)
+        before = self.extra_before[1]
+
+        def first_touch(mesh):
+            if mesh in before and before[mesh] is None:
+                before[mesh] = mesh.capture_state()
+
+        token = on_mesh_materialized.set(first_touch)
         try:
             super().do(scene)
             self.extra_after = self.capture(scene)
+            after = self.extra_after[1]
+            self.changed_meshes = {m for m in before.keys() & after.keys()
+                                   if before[m] != after[m]}
+            # Membership is restored separately. A removed or newly attached
+            # mesh can also have been edited on the same transaction.
+            self.changed_meshes.update(before.keys() ^ after.keys())
+            for m in self.changed_meshes & before.keys() & after.keys():
+                m.bump_revision()  # raw face/edge attribute edits bypass geometry serials
         except BaseException:
             self.restore(scene, self.extra_before)
             raise
+        finally:
+            on_mesh_materialized.reset(token)
 
     def undo(self, scene):
         super().undo(scene)
-        self.restore(scene, self.extra_before)
+        self.restore(scene, self.extra_before, self.changed_meshes)
 
 
 #: The Group fields a structural snapshot keeps: what a script reassigns

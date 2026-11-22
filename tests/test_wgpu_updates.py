@@ -747,3 +747,118 @@ def test_new_default_layer_does_not_change_resident_paint_key():
     assert _paint_key(scene) == before
     scene.layers[-1].opacity = .5
     assert _paint_key(scene) != before
+
+
+def test_bridge_edits_preserve_nested_face_and_edge_draw_ranges():
+    from plugins.ai_bridge import _Bridge
+    from core.history import History
+    scene, leaf, inner, root, mesh = _nested_component_scene()
+    second = Mesh()
+    second.add_face([QVector3D(), QVector3D(2, 0, 0), QVector3D(0, 2, 0)])
+    other = Group(second)
+    scene.groups.append(other)
+    root.xform.rotate(31, 1, 0, 0)
+    updates = InstanceUpdates(scene, pack_scene(scene))
+    history = History(scene)
+    updates.observe(history)
+    bridge = SimpleNamespace(_scope={'leaf': leaf, 'other': other},
+                             _viewport=SimpleNamespace(scene=scene, history=history,
+                                                       notify_scene_changed=lambda: None))
+    for code in (
+        'leaf.mesh.move_vertex(leaf.mesh.vertices[0], QVector3D(.25, 0, 1))',
+        'leaf.mesh = other.mesh',
+        'leaf.mesh = Mesh()',
+        'leaf.mesh = Mesh(); leaf.mesh.add_face([QVector3D(), QVector3D(1,0,0), QVector3D(1,1,0)])',
+        'for i in range(20): leaf.mesh.add_face([QVector3D(i,2,0), QVector3D(i+1,2,0), QVector3D(i,3,0)])',
+    ):
+        reply = _Bridge._tool_run_python(bridge, code)
+        assert reply['changed'] and not reply['error']
+        delta = updates.diff(scene)
+        assert delta is not None
+        updates.apply(*delta)
+        assert_matches_fresh_pack(updates, scene)
+        # First instance is the offset into survivors for this prototype.
+        packed = updates.packed
+        counts = np.bincount(packed.instances['info'][:, 0], minlength=len(packed.bounds))
+        for commands in (packed.commands, packed.edge_commands):
+            np.testing.assert_array_equal(commands['start'], counts.cumsum() - counts)
+
+
+def test_rebaked_billboard_keeps_hidden_edges_at_their_own_offsets():
+    scene, updates = fixture_scene()
+    group = scene.groups[0]
+    group.billboard = 'mesh'
+    scene.show_hidden_geometry = True
+    mesh = group.mesh
+    mesh.edges[0].hidden = True
+    updates = InstanceUpdates(scene, pack_scene(scene))
+    mesh.move_vertex(mesh.vertices[0], QVector3D(.25, 0, 1))
+    updates.apply(*updates.diff(scene))
+    assert_matches_fresh_pack(updates, scene)
+
+
+def test_callable_agent_edits_leave_other_deferred_meshes_resident():
+    from core.ai import run_callable_transactional
+    from core.history import History
+    from core.mesh import DeferredMesh
+
+    def build(m):
+        m.add_face([QVector3D(), QVector3D(1, 0, 0), QVector3D(0, 1, 0)])
+
+    meshes = [Mesh(), Mesh()]
+    for m in meshes:
+        DeferredMesh.defer(m, build, 1)
+    scene = Scene(groups=[Group(m) for m in meshes])
+    history = History(scene)
+    viewport = SimpleNamespace(scene=scene, history=history, notify_scene_changed=lambda: None)
+    def edit():
+        m = meshes[0]
+        m.move_vertex(m.vertices[0], QVector3D(0, 0, 2))
+        return True
+    assert run_callable_transactional(viewport, edit)
+    assert type(meshes[1]) is DeferredMesh
+    vertex = meshes[0].vertices[0]
+    assert vertex.position.z() == 2
+    history.undo()
+    assert type(meshes[1]) is DeferredMesh
+    assert vertex is meshes[0].vertices[0] and vertex.position.z() == 0
+    history.redo()
+    assert type(meshes[1]) is DeferredMesh
+    assert vertex is meshes[0].vertices[0] and vertex.position.z() == 2
+
+
+def test_agent_adding_group_on_active_layer_rebakes_only_new_mesh():
+    from core.ai import run_transactional
+    from core.history import History
+    from core.layers import Layer
+    scene, updates = fixture_scene()
+    scene.layers.append(Layer("Active"))
+    scene.active_layer = "Active"
+    history = History(scene)
+    updates.observe(history)
+    viewport = SimpleNamespace(scene=scene, history=history, notify_scene_changed=lambda: None)
+    reply = run_transactional(viewport, 'g=Group(); g.mesh.add_edge(QVector3D(), QVector3D(1,0,0)); groups.append(g)', {})
+    assert reply['changed']
+    delta = updates.diff(scene)
+    assert [mesh for mesh, _, _ in updates.changed] == [scene.groups[-1].mesh]
+    updates.apply(*delta)
+    assert_matches_fresh_pack(updates, scene)
+
+
+def test_reupload_after_offscreen_bridge_edit_keeps_material_headers():
+    scene, updates = fixture_scene()
+    replacement = Mesh()
+    face = replacement.add_face([QVector3D(0,0,0), QVector3D(2,0,0), QVector3D(0,1,0)])
+    face.attrs['back'] = {'color': [.2, .4, .8]}
+    scene.groups[0].mesh = replacement
+    updates.apply(*updates.diff(scene))  # edit while the GPU view has no renderer
+    uploaded = Renderer()
+    updates.packed.upload(uploaded)
+    stream = next(args[0] for name, args in uploaded.calls if name == 'set_materials')
+    code = int(updates.packed.instances[0]['info'][0])
+    base, first, count, flags = map(int, stream.view('<u4').reshape(-1, 4)[code])
+    assert (base, count, flags) == (updates.packed.commands[code]['base'], 3, 0)
+    fresh = pack_scene(scene)
+    fresh_first = int(fresh.materials.view('<u4').reshape(-1, 4)[0, 1])
+    np.testing.assert_array_equal(stream[first*16:first*16+96],
+                                  fresh.materials[fresh_first*16:fresh_first*16+96])
