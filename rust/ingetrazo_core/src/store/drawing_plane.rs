@@ -54,7 +54,7 @@ fn covers(t: [V3; 3], p: V3, h: Hypot) -> bool {
         side == 0. || (sides[i].cross(p.sub(t[i]), h).dot(n, h) as f64) / (nl * side) >= -1e-7
     })
 }
-fn bounds(r: &[P]) -> (P, P) {
+pub(super) fn bounds(r: &[P]) -> (P, P) {
     let mut lo = [f64::INFINITY; 3];
     let mut hi = [f64::NEG_INFINITY; 3];
     for p in r {

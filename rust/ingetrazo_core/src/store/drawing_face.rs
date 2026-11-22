@@ -247,14 +247,7 @@ impl Store {
                 if region.rings[0].is_empty() {
                     continue;
                 }
-                let mut lo = [f64::INFINITY; 3];
-                let mut hi = [f64::NEG_INFINITY; 3];
-                for p in &region.rings[0] {
-                    for k in 0..3 {
-                        lo[k] = lo[k].min(p[k]);
-                        hi[k] = hi[k].max(p[k]);
-                    }
-                }
+                let (lo, hi) = super::drawing_plane::bounds(&region.rings[0]);
                 old_regions.push((lo, hi, region));
             }
         }
@@ -404,7 +397,13 @@ impl Outline {
         (pieces.len() + 1 == count).then_some(pieces)
     }
     pub fn shared_hole(&self, r: &[P]) -> Option<(usize, Ring, Ring)> {
+        let (lo, hi) = super::drawing_plane::bounds(r);
         for (i, hole) in self.rings.iter().skip(1).enumerate() {
+            let (lower, upper) = super::drawing_plane::bounds(hole);
+            if (0..3).any(|k| hi[k] < lower[k] - 0.01 || upper[k] < lo[k] - 0.01) {
+                continue;
+            }
+
             let h = refine(hole, r, 1e-4, self.h);
             let l = refine(r, hole, 1e-4, self.h);
             let segs: std::collections::HashSet<_> =
