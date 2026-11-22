@@ -85,6 +85,17 @@ impl Store {
     }
 }
 
+fn arrangement_axes(n: V3, h: Hypot) -> (V3, V3) {
+    let basis_ref = if n.0.abs() > 0.9 {
+        V3(0., 1., 0.)
+    } else {
+        V3(1., 0., 0.)
+    };
+    let bu = normalized(basis_ref.sub(n.mul(basis_ref.dot(n, h))), h);
+    let bv = normalized(n.cross(bu, h), h);
+    (bu, bv)
+}
+
 /// The largest triangulated ear provides an interior witness even for concave
 /// regions. Measure its signed clearance from the original boundary.
 pub fn keep_regions(
@@ -99,13 +110,7 @@ pub fn keep_regions(
     use crate::facegeom::{is_convex, plane_axes};
     let n = normalized(V3(normal[0], normal[1], normal[2]), h);
     let (u, v) = plane_axes(n, h);
-    let basis_ref = if n.0.abs() > 0.9 {
-        V3(0., 1., 0.)
-    } else {
-        V3(1., 0., 0.)
-    };
-    let bu = normalized(basis_ref.sub(n.mul(basis_ref.dot(n, h))), h);
-    let bv = normalized(n.cross(bu, h), h);
+    let (bu, bv) = arrangement_axes(n, h);
     let rings = store.face_rings(face);
     let boundary: Vec<_> = rings
         .first()
@@ -157,8 +162,7 @@ pub fn keep_regions(
             let Some(p) = witness else {
                 return false;
             };
-            let (x, y) = flat(p);
-            let mut inside = false;
+            let inside = contains(&outline, flat(p));
             let mut depth = f32::INFINITY;
             for (i, &a) in boundary.iter().enumerate() {
                 let j = (i + 1) % boundary.len();
@@ -170,10 +174,6 @@ pub fn keep_regions(
                     (p.sub(a).dot(delta, h) / l2).clamp(0., 1.)
                 };
                 depth = depth.min(length(p.sub(a.add(delta.mul(t))), h));
-                let ((xi, yi), (xj, yj)) = (outline[j], outline[i]);
-                if (yi > y) != (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi + 1e-30) + xi {
-                    inside = !inside;
-                }
             }
             let signed = if inside { depth } else { -depth };
             signed as f64
@@ -184,4 +184,93 @@ pub fn keep_regions(
                 }
         })
         .collect()
+}
+
+type XY = (f64, f64);
+
+fn edges(ring: &[XY]) -> impl Iterator<Item = (XY, XY)> + '_ {
+    ring.iter()
+        .copied()
+        .zip(ring.iter().copied().cycle().skip(1))
+}
+
+fn contains(ring: &[XY], (x, y): XY) -> bool {
+    edges(ring).fold(false, |inside, ((xj, yj), (xi, yi))| {
+        inside ^ ((yi > y) != (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi + 1e-30) + xi)
+    })
+}
+
+fn meet(p: XY, q: XY, r: XY, s: XY) -> bool {
+    let orient = |a: XY, b: XY, c: XY| {
+        let v = (b.0 - a.0) * (c.1 - a.1) - (b.1 - a.1) * (c.0 - a.0);
+        if v.abs() < 1e-6 {
+            0
+        } else if v > 0. {
+            1
+        } else {
+            -1
+        }
+    };
+    let between = |a: f64, b: f64, c: f64| a.min(c) - 1e-6 <= b && b <= a.max(c) + 1e-6;
+    let on = |a: XY, b: XY, c: XY| between(a.0, b.0, c.0) && between(a.1, b.1, c.1);
+    let (a, b, c, d) = (
+        orient(p, q, r),
+        orient(p, q, s),
+        orient(r, s, p),
+        orient(r, s, q),
+    );
+    (a != b && c != d)
+        || (a == 0 && on(p, r, q))
+        || (b == 0 && on(p, s, q))
+        || (c == 0 && on(r, p, s))
+        || (d == 0 && on(r, q, s))
+}
+
+pub fn place_holes(
+    store: &Store,
+    face: u32,
+    regions: &[Vec<[f32; 3]>],
+    normal: [f32; 3],
+    h: Hypot,
+) -> Option<Vec<i64>> {
+    let n = normalized(V3(normal[0], normal[1], normal[2]), h);
+    let (u, v) = arrangement_axes(n, h);
+    let p = regions.first()?.first()?;
+    let origin = V3(p[0], p[1], p[2]);
+    let flat = |p: V3| {
+        let r = p.sub(origin);
+        (r.dot(u, h) as f64, r.dot(v, h) as f64)
+    };
+    let flat_regions: Vec<Vec<_>> = regions
+        .iter()
+        .map(|ring| ring.iter().map(|p| flat(V3(p[0], p[1], p[2]))).collect())
+        .collect();
+    let mut targets = Vec::new();
+    for ring in store.face_rings(face).iter().skip(1) {
+        let hole: Vec<_> = ring
+            .iter()
+            .map(|&s| {
+                let p = store.state.vpos.get(s as usize);
+                flat(V3(p[0] as f32, p[1] as f32, p[2] as f32))
+            })
+            .collect();
+        if flat_regions
+            .iter()
+            .any(|r| edges(&hole).any(|(a, b)| edges(r).any(|(c, d)| meet(a, b, c, d))))
+        {
+            return None;
+        }
+        let mut target = -1;
+        for (i, r) in flat_regions.iter().enumerate() {
+            if contains(r, *hole.first()?) {
+                target = i as i64;
+                break;
+            }
+            if contains(&hole, *r.first()?) {
+                return None;
+            }
+        }
+        targets.push(target);
+    }
+    Some(targets)
 }

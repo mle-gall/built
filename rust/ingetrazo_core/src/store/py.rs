@@ -731,6 +731,12 @@ impl PyMeshStore {
         Ok(self.inner.offset_outline(face, normal, distance, crate::hypot_of(hypot)?))
     }
 
+    fn offset_hole_targets(&self, key: u128, regions: Vec<Vec<[f32; 3]>>, normal: [f32; 3],
+                           hypot: &str) -> PyResult<Option<Vec<i64>>> {
+        let face = live_of(&self.inner, Kind::Face, key)?;
+        Ok(super::offset::place_holes(&self.inner, face, &regions, normal, crate::hypot_of(hypot)?))
+    }
+
     fn keep_offset_regions(&self, key: u128, regions: Vec<Vec<[f32; 3]>>, normal: [f32; 3],
                            distance: f64, hypot: &str) -> PyResult<Vec<bool>> {
         let face = live_of(&self.inner, Kind::Face, key)?;

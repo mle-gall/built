@@ -297,10 +297,19 @@ def build_offset_face(mesh, face, distance):
     if distance > 0:
         outer = outline
         inners = [loop for loop, _holes in regions]
-        placed = _place_holes(own_holes, inners, normal)
-        if placed is None:
-            raise OffsetHoleCollision
-        inner_holes, strip_holes = placed
+        if store is not None and h:
+            targets = store.offset_hole_targets(face.key, [[p.toTuple() for p in r]
+                                                           for r in inners], normal.toTuple(), h)
+            if targets is None:
+                raise OffsetHoleCollision
+            inner_holes, strip_holes = [[] for _ in inners], []
+            for hole, target in zip(own_holes, targets):
+                (strip_holes if target < 0 else inner_holes[target]).append(hole)
+        else:
+            placed = _place_holes(own_holes, inners, normal)
+            if placed is None:
+                raise OffsetHoleCollision
+            inner_holes, strip_holes = placed
     else:
         outer = max((loop for loop, _holes in regions),
                     key=lambda lp: _loop_extent(lp))
@@ -347,6 +356,7 @@ def _curve_tags(mesh, loop, off: list[QVector3D]) -> list:
             j = (j + 1) % n
         tags.append(TagCurveCommand(pts, closed=False))
     return tags
+
 
 def _place_holes(holes: list, regions: list, normal: QVector3D):
     """Where each of a face's ``holes`` goes after an inward offset:
