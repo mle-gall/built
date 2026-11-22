@@ -1650,10 +1650,9 @@ impl PyMeshStore {
         self.inner.state.frame_origin
     }
 
-    #[pyo3(signature = (origin, original=None))]
-    fn in_frame(&self, origin: [f64; 3], original: Option<&PyMeshStore>) -> Self {
+    fn _in_frame(&self, origin: [f64; 3]) -> Self {
         let mut st = self.inner.clone();
-        st.state = st.state.in_frame(origin, original.map(|m| &m.inner.state));
+        st.state = st.state.in_frame(origin, None);
         Self::wrap(st)
     }
 
@@ -1682,7 +1681,8 @@ impl PyMeshStore {
 
     /// `capture_state() == snapshot`.
     fn same_as(&self, snapshot: &PyStoreSnapshot) -> bool {
-        snapshot.inner.lineage == self.inner.lineage && self.inner.state.same_as(&snapshot.inner.state)
+        snapshot.inner.lineage == self.inner.lineage && self.inner.state.same_as(
+            &snapshot.inner.state.in_frame(self.inner.state.frame_origin, Some(&self.inner.state)))
     }
 
     /// `(chunks shared, chunks)` between the live state and a snapshot,

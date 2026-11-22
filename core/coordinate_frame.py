@@ -9,7 +9,7 @@ REBASE_DISTANCE = 512.
 
 
 def choose_origin(center, previous=ZERO):
-    if np.max(np.abs(np.subtract(center, previous))) <= REBASE_DISTANCE:
+    if not np.isfinite(center).all() or np.max(np.abs(np.subtract(center, previous))) <= REBASE_DISTANCE:
         return tuple(previous)
     return tuple(map(float, np.rint(center)))
 
@@ -36,7 +36,7 @@ def mesh_frame(mesh, origin):
     elif cached and cached[:3] == (st, st.revision, tuple(origin)):
         local = cached[3]
     else:
-        local = st.in_frame(origin)
+        local = st._in_frame(origin)
     start = local.revision
     d['_frame_parent'] = st
     d['_store'] = local
