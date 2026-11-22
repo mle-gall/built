@@ -25,11 +25,14 @@ fn hidden() -> Out { var o: Out; o.position = vec4f(0.,0.,2.,1.); return o; }
 @vertex fn vs(@builtin(vertex_index) k: u32, s: Segment) -> Out {
  var a = camera.vp * vec4f(s.a,1.);
  var b = camera.vp * vec4f(s.b,1.);
- if a.z < 0. && b.z < 0. { return hidden(); }
+ // Reverse-Z: the near plane is z = w, so w - z is the signed distance
+ // in front of it.
+ let na = a.w-a.z; let nb = b.w-b.z;
+ if na < 0. && nb < 0. { return hidden(); }
  // Clip at the near plane before dividing by w (as edge_vs): a segment
  // crossing it must not expand across the screen.
- if a.z < 0. { a = mix(a,b,-a.z/(b.z-a.z)); }
- if b.z < 0. { b = mix(b,a,-b.z/(a.z-b.z)); }
+ if na < 0. { a = mix(a,b,-na/(nb-na)); }
+ if nb < 0. { b = mix(b,a,-nb/(na-nb)); }
  let half = camera.size.xy*0.5;
  let pa = a.xy/max(a.w,1e-6)*half;
  let pb = b.xy/max(b.w,1e-6)*half;

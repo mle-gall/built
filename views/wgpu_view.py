@@ -543,11 +543,15 @@ class WgpuView(QWidget):
         if physical != getattr(self, '_physical_size', None):
             self.renderer.resize(*physical)
             self._physical_size = physical
+        # Reverse-Z reaches to infinity unless a far clip was set by hand
+        # (Camera Settings ▸ Clipping): only then does the renderer keep
+        # the projection's far plane.
+        far_clip = getattr(self.camera, 'clip_far', None) is not None
         camera_key = (tuple(view.data()), tuple(projection.data()))
-        if camera_key != self._last_camera:
-            self._last_camera = camera_key
+        if (camera_key, far_clip) != self._last_camera:
+            self._last_camera = (camera_key, far_clip)
             self._settle_timer.start(80)
-        self.renderer.set_camera(*camera_key)
+        self.renderer.set_camera(*camera_key, **({'far_clip': True} if far_clip else {}))
         # Face-me figures turn to the first view's camera: their rows are
         # the document's, one set for every view.
         if self._shared is self and getattr(self, '_billboards', None) is not None:
@@ -696,7 +700,10 @@ class WgpuView(QWidget):
             self.renderer.set_section_geometry(data)
             pixels = bytes(self.renderer.render_image(
                 width_px, height_px, tuple(view.data()), tuple(projection.data()), payload,
-                rows.view(np.uint8).reshape(-1)))
+                rows.view(np.uint8).reshape(-1),
+                # A far clip set by hand; otherwise reverse-Z reaches to
+                # infinity (stand-in renderers need not know the flag).
+                **({'far_clip': True} if getattr(camera, 'clip_far', None) is not None else {})))
         finally:
             if billboard_ids:
                 self.renderer.set_instance_world(billboard_ids, resident_world.reshape(-1))

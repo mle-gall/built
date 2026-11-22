@@ -80,10 +80,10 @@ impl Antialias {
                         depth_compare: if edge && xray {
                             wgpu::CompareFunction::Always
                         } else {
-                            wgpu::CompareFunction::LessEqual
+                            crate::depth::compare(wgpu::CompareFunction::LessEqual)
                         },
                         stencil: Default::default(),
-                        bias: if edge {
+                        bias: crate::depth::bias(if edge {
                             wgpu::DepthBiasState {
                                 constant: -2,
                                 slope_scale: -1.,
@@ -94,7 +94,7 @@ impl Antialias {
                             // slope, not only the edge-quad's along-line slope.
                             // Otherwise curved rims fail samples on the far side.
                             wgpu::DepthBiasState { constant: 1, slope_scale: 1., clamp: 0. }
-                        },
+                        }),
                     }),
                     multisample: wgpu::MultisampleState {
                         count: 4,
@@ -173,7 +173,7 @@ impl Antialias {
             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                 view: &depth,
                 depth_ops: Some(wgpu::Operations {
-                    load: if edge_only == Some(true) { wgpu::LoadOp::Load } else { wgpu::LoadOp::Clear(1.) },
+                    load: if edge_only == Some(true) { wgpu::LoadOp::Load } else { wgpu::LoadOp::Clear(crate::depth::CLEAR) },
                     store: if sections || edge_only == Some(false) { wgpu::StoreOp::Store } else { wgpu::StoreOp::Discard },
                 }),
                 stencil_ops: None,

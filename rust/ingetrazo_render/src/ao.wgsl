@@ -1,4 +1,5 @@
 // Horizon AO, ported from resources/shaders/ao*.frag (GPL-3.0-or-later).
+// Reverse-Z (crate::depth): depth 0 is sky, larger is nearer.
 struct Params { proj: mat4x4<f32>, inv: mat4x4<f32>, settings: vec4<f32> }
 @group(0) @binding(0) var<uniform> u: Params;
 @group(0) @binding(1) var depth: texture_depth_2d;
@@ -22,7 +23,7 @@ fn aligned(uv: vec2<f32>) -> vec2<f32> {
 fn size_ao() -> vec2<f32> { return ceil(vec2<f32>(textureDimensions(depth))/u.settings.w); }
 @fragment fn horizon(@builtin(position) frag: vec4<f32>) -> @location(0) vec4<f32> {
     let uv = aligned(frag.xy/size_ao()); let d = dep(uv);
-    if d >= 1. { return vec4<f32>(1.); }
+    if d <= 0. { return vec4<f32>(1.); }
     let texel = 1./vec2<f32>(textureDimensions(depth)); let p = pos(uv,d);
     let r = at(uv+vec2<f32>(texel.x,0.))-p; let l = p-at(uv-vec2<f32>(texel.x,0.));
     let t = at(uv+vec2<f32>(0.,texel.y))-p; let b = p-at(uv-vec2<f32>(0.,texel.y));
@@ -30,7 +31,7 @@ fn size_ao() -> vec2<f32> { return ceil(vec2<f32>(textureDimensions(depth))/u.se
     let eye = select(vec3<f32>(0.,0.,1.),normalize(-p),u.proj[2][3]< -0.5);
     if dot(n,eye)<0. { n = -n; }
     let radius=u.settings.x;
-    let bias=max(radius*0.025,abs(pos(uv,min(d+4./16777216.,1.)).z-p.z));
+    let bias=max(radius*0.025,abs(pos(uv,max(d-4./16777216.,d*0.5)).z-p.z));
     let pb=p+n*bias*2.;
     let tile=array<f32,16>(0.,8.,2.,10.,12.,4.,14.,6.,3.,11.,1.,9.,15.,7.,13.,5.);
     let c=vec2<u32>(frag.xy)&vec2<u32>(3u); let jitter=(tile[c.y*4u+c.x]+0.5)/16.;
@@ -50,7 +51,7 @@ fn size_ao() -> vec2<f32> { return ceil(vec2<f32>(textureDimensions(depth))/u.se
             let off=dir*max(radius_uv*f*f,texel*1.5)*vec2<f32>(1.,-1.);
             for(var side=0;side<2;side++) {
                 let suv=uv+select(-off,off,side==1);
-                if any(suv<vec2<f32>(0.)) || any(suv>vec2<f32>(1.)) || dep(suv)>=1. { continue; }
+                if any(suv<vec2<f32>(0.)) || any(suv>vec2<f32>(1.)) || dep(suv)<=0. { continue; }
                 let delta=at(suv)-pb; let dist=length(delta); if dist<0.000001 { continue; }
                 let shc=dot(delta/dist,eye); let fall=1.-smoothstep(radius*0.5,radius*1.5,dist);
                 hc[side]=max(hc[side],mix(initial[side],shc,fall));
@@ -68,13 +69,13 @@ fn size_ao() -> vec2<f32> { return ceil(vec2<f32>(textureDimensions(depth))/u.se
 fn slope(z: f32, m: f32, p: f32) -> f32 { return select(z-m,p-z,abs(p-z)<abs(z-m)); }
 fn blur(frag: vec4<f32>, spread: f32) -> vec4<f32> {
     let texel=1./size_ao(); let uv=aligned(frag.xy*texel); let z=at(uv).z;
-    if dep(uv)>=1. { return vec4<f32>(1.); }
+    if dep(uv)<=0. { return vec4<f32>(1.); }
     let gx=slope(z,at(uv-vec2<f32>(texel.x,0.)).z,at(uv+vec2<f32>(texel.x,0.)).z);
     let gy=slope(z,at(uv-vec2<f32>(0.,texel.y)).z,at(uv+vec2<f32>(0.,texel.y)).z);
     let tol=max(u.settings.x*0.2,abs(z)*0.004); var sum=0.; var total=0.;
     for(var y=-2;y<2;y++) { for(var x=-2;x<2;x++) {
         let o=vec2<f32>(f32(x),f32(y))+0.5; let sample=uv+o*texel*spread;
-        if dep(sample)<1. && abs(at(sample).z-z-dot(vec2<f32>(gx,gy),o)*spread)<tol {
+        if dep(sample)>0. && abs(at(sample).z-z-dot(vec2<f32>(gx,gy),o)*spread)<tol {
             sum+=value(sample); total+=1.;
         }
     }}
@@ -83,12 +84,12 @@ fn blur(frag: vec4<f32>, spread: f32) -> vec4<f32> {
 @fragment fn blur1(@builtin(position) p: vec4<f32>) -> @location(0) vec4<f32> { return blur(p,1.); }
 @fragment fn blur2(@builtin(position) p: vec4<f32>) -> @location(0) vec4<f32> { return blur(p,2.); }
 @fragment fn apply(@builtin(position) frag: vec4<f32>) -> @location(0) vec4<f32> {
-    let uv=frag.xy/vec2<f32>(textureDimensions(depth)); if dep(uv)>=1. { return vec4<f32>(1.); }
+    let uv=frag.xy/vec2<f32>(textureDimensions(depth)); if dep(uv)<=0. { return vec4<f32>(1.); }
     let z=at(uv).z; let f=uv*size_ao()-0.5; let base=floor(f); let t=fract(f);
     let tol=max(u.settings.x*0.1,abs(z)*0.003); var sum=0.; var total=0.; var best=1e30; var nearest=1.;
     for(var j=0;j<2;j++) { for(var i=0;i<2;i++) {
         let sample=(base+vec2<f32>(f32(i),f32(j))+0.5)/size_ao();
-        let dz=select(abs(at(aligned(sample)).z-z),1e30,dep(aligned(sample))>=1.);
+        let dz=select(abs(at(aligned(sample)).z-z),1e30,dep(aligned(sample))<=0.);
         let a=value(sample); let bil=select(1.-t.x,t.x,i==1)*select(1.-t.y,t.y,j==1);
         let weight=bil*max(0.,1.-dz/tol)+0.00001*bil;
         if dz<tol { sum+=a*weight; total+=weight; } if dz<best { best=dz; nearest=a; }

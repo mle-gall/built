@@ -74,7 +74,7 @@ impl Sections {
 }
 fn depth_state() -> wgpu::DepthStencilState {
     wgpu::DepthStencilState { format: wgpu::TextureFormat::Depth32Float, depth_write_enabled: true,
-        depth_compare: wgpu::CompareFunction::LessEqual, stencil: Default::default(), bias: Default::default() }
+        depth_compare: crate::depth::compare(wgpu::CompareFunction::LessEqual), stencil: Default::default(), bias: Default::default() }
 }
 #[cfg(test)]
 mod tests {
@@ -82,7 +82,7 @@ mod tests {
     fn polygon_caps_write_depth_without_stencil_or_culling() {
         let state = super::depth_state();
         assert!(state.depth_write_enabled);
-        assert_eq!(state.depth_compare, wgpu::CompareFunction::LessEqual);
+        assert_eq!(state.depth_compare, wgpu::CompareFunction::GreaterEqual);
         assert_eq!(state.stencil, wgpu::StencilState::default());
     }
 }

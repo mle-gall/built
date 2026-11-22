@@ -119,7 +119,7 @@ impl Xray {
             primitive: Default::default(),
             depth_stencil: if material { Some(wgpu::DepthStencilState {
                 format: wgpu::TextureFormat::Depth32Float, depth_write_enabled: false,
-                depth_compare: wgpu::CompareFunction::LessEqual, stencil: Default::default(), bias: Default::default(),
+                depth_compare: crate::depth::compare(wgpu::CompareFunction::LessEqual), stencil: Default::default(), bias: Default::default(),
             }) } else { None },
             multisample: Default::default(),
             multiview: None,

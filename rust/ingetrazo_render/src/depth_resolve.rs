@@ -1,4 +1,5 @@
 //! AO consumes the nearest covered MSAA sample, without replaying geometry.
+//! Reverse-Z (``crate::depth``): the nearest sample is the largest depth.
 pub struct DepthResolve { pipeline: wgpu::RenderPipeline }
 impl DepthResolve {
     pub fn new(device: &wgpu::Device) -> Self {
@@ -11,8 +12,8 @@ impl DepthResolve {
 }
 @fragment fn fs(@builtin(position) p: vec4f) -> @builtin(frag_depth) f32 {
  let xy = vec2i(p.xy);
- return min(min(textureLoad(source,xy,0),textureLoad(source,xy,1)),
-            min(textureLoad(source,xy,2),textureLoad(source,xy,3)));
+ return max(max(textureLoad(source,xy,0),textureLoad(source,xy,1)),
+            max(textureLoad(source,xy,2),textureLoad(source,xy,3)));
 }"#.into()),
         });
         Self { pipeline: device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -30,7 +31,7 @@ impl DepthResolve {
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("MSAA depth resolve"), color_attachments: &[],
             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment { view: target,
-                depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(1.), store: wgpu::StoreOp::Store }), stencil_ops: None }),
+                depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(crate::depth::CLEAR), store: wgpu::StoreOp::Store }), stencil_ops: None }),
             timestamp_writes: crate::timing::writes(queries, "ao_inputs"), occlusion_query_set: None,
         });
         pass.set_pipeline(&self.pipeline); pass.set_bind_group(0, &group, &[]); pass.draw(0..3, 0..1);

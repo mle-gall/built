@@ -79,12 +79,15 @@ fn light(world_position: vec3f, pixel: vec2f) -> f32 {
 @fragment fn fs(@builtin(position) p: vec4f) -> @location(0) vec4f {
  let size = vec2f(textureDimensions(depth)); let uv = p.xy/size;
  let d = textureLoad(depth,vec2i(p.xy),0);
- var pos = world(uv,d); let near = world(uv,0.); let far = world(uv,1.);
+ // Reverse-Z (crate::depth): the near plane is depth 1, sky is 0 and a
+ // perspective view's far plane is at infinity, so the ground ray ends at
+ // a tiny depth instead (kilometres out, about where GL's far plane is).
+ var pos = world(uv,d); let near = world(uv,1.); let far = world(uv,1e-7);
  var normal = normalize(cross(dpdx(pos),dpdy(pos)));
  // WGPU's framebuffer Y runs downward; orient toward the camera explicitly.
  if dot(normal,near-pos)<0. { normal = -normal; }
  var ground = false;
- if d>=1. {
+ if d<=0. {
   let ray = far-near;
   let t = (-0.005-near.z)/ray.z;
   pos = near+ray*t; normal=vec3f(0.,0.,1.); ground = true;

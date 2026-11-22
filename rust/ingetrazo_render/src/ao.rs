@@ -298,7 +298,7 @@ mod tests {
         let (d, q) = pollster::block_on(adapter.request_device(&Default::default(), None)).unwrap();
         let mut ao = super::AmbientOcclusion::new(&d, wgpu::TextureFormat::Rgba8Unorm);
         ao.settings = [0.5, 1., 32., 1.];
-        ao.camera(glam::Mat4::orthographic_rh(-1., 1., -1., 1., 0.1, 4.));
+        ao.camera(crate::depth::projection(&glam::Mat4::orthographic_rh_gl(-1., 1., -1., 1., 0.1, 4.).to_cols_array(), false));
         let scene = crate::texture(&d, 64, 64, wgpu::TextureFormat::Rgba8Unorm);
         let depth = crate::texture(&d, 64, 64, wgpu::TextureFormat::Depth32Float);
         let cv = scene.create_view(&Default::default());
@@ -306,9 +306,9 @@ mod tests {
         let mut results = Vec::new();
         for corner in [false, true] {
             let fragment = if corner {
-                "return (2.0-abs(p.x/32.0-1.0)-0.1)/3.9;"
+                "return (2.0+abs(p.x/32.0-1.0))/3.9;"
             } else {
-                "return 1.9/3.9;"
+                "return 2.0/3.9;"
             };
             let code=format!("@vertex fn vs(@builtin(vertex_index) i:u32)->@builtin(position) vec4<f32>{{return vec4<f32>(f32((i<<1u)&2u)*2.-1.,f32(i&2u)*2.-1.,0.,1.);}} @fragment fn fs(@builtin(position) p:vec4<f32>)->@builtin(frag_depth) f32{{{fragment}}}");
             let shader = d.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -366,7 +366,7 @@ mod tests {
                     depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                         view: &dv,
                         depth_ops: Some(wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(1.),
+                            load: wgpu::LoadOp::Clear(crate::depth::CLEAR),
                             store: wgpu::StoreOp::Store,
                         }),
                         stencil_ops: None,
