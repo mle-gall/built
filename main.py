@@ -11,6 +11,7 @@ from __future__ import annotations
 import faulthandler
 import os
 import sys
+from formats import built
 from pathlib import Path
 
 # Frozen subprocess entry: no settings, logs, engine guard or application window.
@@ -205,7 +206,7 @@ def _open_document_in(window, doc: "Path") -> None:
         window.open_path(doc)
         return
     if hasattr(window, "documents") and (
-            ext in (".igz", ".skp", ".dae", ".dxf", ".dwg")
+            ext in (*built.DOCUMENT_SUFFIXES, ".skp", ".dae", ".dxf", ".dwg")
             or ext in getattr(window, "file_openers", {})):
         # Projects in tabs (#1066): the document comes in a tab of its own
         # (or its tab comes to the front), so nothing is discarded and
@@ -219,7 +220,7 @@ def _open_document_in(window, doc: "Path") -> None:
         else:
             window.open_path(doc)
         return
-    if ext == ".igz" or ext in getattr(window, "file_openers", {}):
+    if ext in built.DOCUMENT_SUFFIXES or ext in getattr(window, "file_openers", {}):
         # A document REPLACES the drawing this window holds. File ▸ Open
         # and Open Recent ask about unsaved changes before they call
         # open_path; a path arriving from outside — a double-click handed
@@ -534,7 +535,7 @@ def _parse_cli(argv: list[str]):
         description="IngeTrazo without a window: open a document and "
                     "export its sheets.")
     parser.add_argument("-i", "--input-file", required=True, type=Path,
-                        help="the document to open (.igz)")
+                        help=f"the document to open ({built.BUILT_SUFFIX} or .igz)")
     parser.add_argument("-o", "--output-file", type=Path,
                         help="the PDF to write (default: the input file "
                              "with .pdf, beside it)")

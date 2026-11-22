@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """A live view of references, with subset edits scoped to one placement."""
 import json
+from formats import built
 from pathlib import Path
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QGridLayout, QTreeWidget,
                                QTreeWidgetItem, QPushButton, QInputDialog,
@@ -138,7 +139,7 @@ class LinksPanel(QWidget):
 
     def relink(self):
         _, rec = self.selected()
-        path, _ = QFileDialog.getOpenFileName(self, 'Relink', '', 'IngeTrazo (*.igz)')
+        path, _ = QFileDialog.getOpenFileName(self, 'Relink', '', built.DOCUMENT_FILTER)
         if not path:
             return
         previous = dict(rec)

@@ -228,7 +228,7 @@ class PreferencesDialog(QDialog):
         form.addRow("", row)
 
         self._backup = QCheckBox(tr("Keep a backup of the previous save "
-                                    "(.igz.bak)"))
+                                    "(.bak)"))
         self._backup.setChecked(str(_gs.value("backup", "1", st)) != "0")
         form.addRow("", self._backup)
 

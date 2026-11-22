@@ -14,6 +14,8 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from pathlib import Path
+
 import pytest  # noqa: E402
 from PySide6.QtCore import QEventLoop, QTimer  # noqa: E402
 from PySide6.QtGui import QVector3D as V  # noqa: E402
@@ -96,7 +98,7 @@ def win(tmp_path, monkeypatch):
 
 # ---- A view of an extension in front ---------------------------------------
 def test_save_writes_the_tab_and_not_the_view_in_front(win, tmp_path):
-    path = tmp_path / "model.igz"
+    path = tmp_path / "model.built"
     doc = _new_tab(win, 3, path)
     win.viewport = _pane(win)
     assert win.viewport is not doc.viewport         # extensions still see it
@@ -108,7 +110,7 @@ def test_save_writes_the_tab_and_not_the_view_in_front(win, tmp_path):
 def test_save_as_writes_the_tab_and_not_the_view_in_front(win, tmp_path,
                                                           monkeypatch):
     from views import main_window as mw
-    path = tmp_path / "named.igz"
+    path = tmp_path / "named.built"
     doc = _new_tab(win, 3)
     win.viewport = _pane(win)
     monkeypatch.setattr(mw.file_dialogs, "getSaveFileName",
@@ -120,7 +122,7 @@ def test_save_as_writes_the_tab_and_not_the_view_in_front(win, tmp_path,
 
 
 def test_the_camera_saved_is_the_one_of_the_project(win, tmp_path):
-    path = tmp_path / "model.igz"
+    path = tmp_path / "model.built"
     doc = _new_tab(win, 2, path)
     doc.viewport.camera.distance = 33.0
     pane = _pane(win)
@@ -133,7 +135,7 @@ def test_the_camera_saved_is_the_one_of_the_project(win, tmp_path):
 
 
 def test_the_unsaved_state_is_the_one_of_the_project(win, tmp_path):
-    doc = _new_tab(win, 2, tmp_path / "model.igz")
+    doc = _new_tab(win, 2, tmp_path / "model.built")
     win._on_save()
     pane = _pane(win)
     win.viewport = pane
@@ -149,7 +151,7 @@ def test_the_unsaved_state_is_the_one_of_the_project(win, tmp_path):
 
 
 def test_the_auto_save_writes_the_project(win, tmp_path):
-    path = tmp_path / "model.igz"
+    path = tmp_path / "model.built"
     _new_tab(win, 3, path)
     win.viewport = _pane(win)
     _autosave_now(win)
@@ -159,10 +161,10 @@ def test_the_auto_save_writes_the_project(win, tmp_path):
 
 
 def test_closing_its_tab_saves_the_project(win, tmp_path, monkeypatch):
-    path = tmp_path / "a.igz"
+    path = tmp_path / "a.built"
     a = _new_tab(win, 3, path)
     win.viewport = _pane(win)
-    _new_tab(win, 2, tmp_path / "b.igz")
+    _new_tab(win, 2, tmp_path / "b.built")
     monkeypatch.setattr(QMessageBox, "exec", lambda box: QMessageBox.Save)
     assert win.close_document(a)
     assert _edges_in_file(path) == 3
@@ -171,7 +173,7 @@ def test_closing_its_tab_saves_the_project(win, tmp_path, monkeypatch):
 
 def test_quitting_saves_each_project_with_a_view_in_front_of_one(
         win, tmp_path, monkeypatch):
-    a_path, b_path = tmp_path / "a.igz", tmp_path / "b.igz"
+    a_path, b_path = tmp_path / "a.built", tmp_path / "b.built"
     _new_tab(win, 3, a_path)
     win.viewport = _pane(win)
     _new_tab(win, 2, b_path)
@@ -184,10 +186,10 @@ def test_quitting_saves_each_project_with_a_view_in_front_of_one(
 def test_the_own_viewport_ends_the_replacement_in_its_project(win, tmp_path):
     """An extension restoring tab A's viewport with tab B in front: B stays
     B, and A shows its own again. It used to make B save A's scene."""
-    a = _new_tab(win, 3, tmp_path / "a.igz")
+    a = _new_tab(win, 3, tmp_path / "a.built")
     own = win.viewport
     win.viewport = _pane(win)
-    b = _new_tab(win, 2, tmp_path / "b.igz")
+    b = _new_tab(win, 2, tmp_path / "b.built")
     win.viewport = own
     assert win.viewport is b.viewport and b.viewport is not own
     win._on_save()
@@ -199,7 +201,7 @@ def test_the_own_viewport_ends_the_replacement_in_its_project(win, tmp_path):
 
 
 def test_the_replacement_stays_with_its_tab(win, tmp_path):
-    a = _new_tab(win, 3, tmp_path / "a.igz")
+    a = _new_tab(win, 3, tmp_path / "a.built")
     pane = _pane(win)
     win.viewport = pane
     b = _new_tab(win, 2)
@@ -218,7 +220,7 @@ def test_a_file_opened_under_a_view_does_not_land_on_it(win, tmp_path):
     source = Scene()
     for i in range(4):
         source.mesh.add_edge(V(i, 0, 0), V(i, 1, 0))
-    path = tmp_path / "other.igz"
+    path = tmp_path / "other.built"
     igz_format.save_scene(source, path)
     blank = win.active_document()
     win.viewport = _pane(win)
@@ -239,7 +241,7 @@ def test_file_new_under_a_view_opens_a_tab(win):
 
 
 def test_closing_retires_the_own_viewport(win, tmp_path, monkeypatch):
-    a = _new_tab(win, 3, tmp_path / "a.igz")
+    a = _new_tab(win, 3, tmp_path / "a.built")
     own = a.viewport
     pane = _pane(win)
     win.viewport = pane
@@ -253,8 +255,8 @@ def test_a_workspace_is_not_asked_about_another_tab(win, tmp_path,
                                                     monkeypatch):
     """Closing a tab behind a workspace: the question, and its Save, would be
     about the workspace's document, and the tab closed with its work lost."""
-    a = _new_tab(win, 3, tmp_path / "a.igz")
-    _new_tab(win, 2, tmp_path / "b.igz")
+    a = _new_tab(win, 3, tmp_path / "a.built")
+    _new_tab(win, 2, tmp_path / "b.built")
     scene = Scene()
 
     class Workspace:
@@ -289,7 +291,7 @@ def test_a_workspace_is_not_asked_about_another_tab(win, tmp_path,
 
 def test_leaving_a_workspace_finds_the_project_clean(win, tmp_path):
     """A saved model stays saved after a workspace on a view in front."""
-    _new_tab(win, 3, tmp_path / "a.igz")
+    _new_tab(win, 3, tmp_path / "a.built")
     win._on_save()
     win.viewport = _pane(win)
     scene = Scene()
@@ -321,7 +323,7 @@ def test_saving_ends_the_group_open_in_the_project(win, tmp_path):
     what is written is the model, not the group's edit state."""
     from core.group import Group
     from core.mesh import Mesh
-    path = tmp_path / "a.igz"
+    path = tmp_path / "a.built"
     doc = _new_tab(win, 3, path)
     mesh = Mesh()
     mesh.add_edge(V(0, 0, 9), V(1, 0, 9))
@@ -339,8 +341,8 @@ def test_saving_ends_the_group_open_in_the_project(win, tmp_path):
 
 # ---- Plain tabs: nobody writes over anybody ---------------------------------
 def test_each_tab_saves_its_own_file(win, tmp_path):
-    a = _new_tab(win, 3, tmp_path / "a.igz")
-    b = _new_tab(win, 2, tmp_path / "b.igz")
+    a = _new_tab(win, 3, tmp_path / "a.built")
+    b = _new_tab(win, 2, tmp_path / "b.built")
     win._on_save()
     assert _edges_in_file(b.path) == 2
     assert not a.path.exists()
@@ -351,8 +353,8 @@ def test_each_tab_saves_its_own_file(win, tmp_path):
 
 
 def test_closing_a_tab_behind_saves_that_tab(win, tmp_path, monkeypatch):
-    a = _new_tab(win, 3, tmp_path / "a.igz")
-    b = _new_tab(win, 2, tmp_path / "b.igz")
+    a = _new_tab(win, 3, tmp_path / "a.built")
+    b = _new_tab(win, 2, tmp_path / "b.built")
     monkeypatch.setattr(QMessageBox, "exec", lambda box: QMessageBox.Save)
     assert win.close_document(a)
     assert _edges_in_file(a.path) == 3
@@ -362,8 +364,8 @@ def test_closing_a_tab_behind_saves_that_tab(win, tmp_path, monkeypatch):
 
 def test_quitting_with_one_changed_tab_behind_saves_that_tab(win, tmp_path,
                                                              monkeypatch):
-    a = _new_tab(win, 3, tmp_path / "a.igz")
-    b = _new_tab(win, 2, tmp_path / "b.igz")
+    a = _new_tab(win, 3, tmp_path / "a.built")
+    b = _new_tab(win, 2, tmp_path / "b.built")
     win._on_save()
     assert not win._doc_is_dirty(b)
     assert win._doc_is_dirty(a)
@@ -374,9 +376,9 @@ def test_quitting_with_one_changed_tab_behind_saves_that_tab(win, tmp_path,
 
 
 def test_quitting_saves_all_each_to_its_own_file(win, tmp_path, monkeypatch):
-    a = _new_tab(win, 3, tmp_path / "a.igz")
-    b = _new_tab(win, 2, tmp_path / "b.igz")
-    c = _new_tab(win, 5, tmp_path / "c.igz")
+    a = _new_tab(win, 3, tmp_path / "a.built")
+    b = _new_tab(win, 2, tmp_path / "b.built")
+    c = _new_tab(win, 5, tmp_path / "c.built")
     win.activate_document(b)
     monkeypatch.setattr(QMessageBox, "exec", lambda box: QMessageBox.SaveAll)
     assert win._confirm_quit()
@@ -386,7 +388,7 @@ def test_quitting_saves_all_each_to_its_own_file(win, tmp_path, monkeypatch):
 def test_cancelling_a_save_as_on_quit_stays_and_writes_nothing_wrong(
         win, tmp_path, monkeypatch):
     from views import main_window as mw
-    a = _new_tab(win, 3, tmp_path / "a.igz")
+    a = _new_tab(win, 3, tmp_path / "a.built")
     _new_tab(win, 2)                                # untitled: Save As
     monkeypatch.setattr(QMessageBox, "exec", lambda box: QMessageBox.SaveAll)
     monkeypatch.setattr(mw.file_dialogs, "getSaveFileName",
@@ -397,9 +399,9 @@ def test_cancelling_a_save_as_on_quit_stays_and_writes_nothing_wrong(
 
 def test_a_failed_save_on_quit_stays(win, tmp_path, monkeypatch):
     from views import main_window as mw
-    path = tmp_path / "a.igz"
+    path = tmp_path / "a.built"
     a = _new_tab(win, 3, path)
-    _new_tab(win, 2, tmp_path / "b.igz")
+    _new_tab(win, 2, tmp_path / "b.built")
 
     def fail(*_a, **_k):
         raise OSError("disk full")
@@ -416,7 +418,7 @@ def test_save_as_retires_the_recovery_copy_of_the_old_name(win, tmp_path,
     """Its work is safe under the new name: the slot of the old one would
     offer that stale copy back whenever the old file is opened again."""
     from views import main_window as mw
-    old, new = tmp_path / "old.igz", tmp_path / "new.igz"
+    old, new = tmp_path / "old.built", tmp_path / "new.built"
     _new_tab(win, 3, old)
     _autosave_now(win)
     assert autosave.pending(old) is not None
@@ -428,17 +430,17 @@ def test_save_as_retires_the_recovery_copy_of_the_old_name(win, tmp_path,
 
 
 def test_the_auto_save_of_a_tab_behind_goes_to_its_own_slot(win, tmp_path):
-    a = _new_tab(win, 3, tmp_path / "a.igz")
-    b = _new_tab(win, 2, tmp_path / "b.igz")
+    a = _new_tab(win, 3, tmp_path / "a.built")
+    b = _new_tab(win, 2, tmp_path / "b.built")
     _autosave_now(win)
     assert _edges_in_file(autosave.pending(a.path)) == 3
     assert _edges_in_file(autosave.pending(b.path)) == 2
 
 
 def test_the_camera_saved_is_the_one_of_each_tab(win, tmp_path):
-    a = _new_tab(win, 1, tmp_path / "a.igz")
+    a = _new_tab(win, 1, tmp_path / "a.built")
     a.viewport.camera.distance = 11.0
-    b = _new_tab(win, 1, tmp_path / "b.igz")
+    b = _new_tab(win, 1, tmp_path / "b.built")
     b.viewport.camera.distance = 22.0
     win._on_save()
     win.activate_document(a)
@@ -447,3 +449,31 @@ def test_the_camera_saved_is_the_one_of_each_tab(win, tmp_path):
         scene = Scene()
         igz_format.load_into(scene, doc.path)
         assert scene.camera_home["distance"] == want
+
+
+def test_saving_legacy_document_offers_built_and_export_keeps_active_path(win, tmp_path, monkeypatch):
+    import json
+    import zipfile
+    from views import main_window as mw
+    legacy = tmp_path / "legacy.igz"
+    native = legacy.with_suffix(".built")
+    igz_format.save_scene(Scene(), legacy)
+    original = legacy.read_bytes()
+    assert win.open_path(legacy)
+    _edges(win.viewport, 1)
+    def choose_built(parent, title, suggested, filters):
+        assert Path(suggested) == native
+        assert "*.built" in filters
+        return str(native), filters
+    monkeypatch.setattr(mw.file_dialogs, "getSaveFileName", choose_built)
+    win._on_save()
+    assert win._current_path == native
+    assert legacy.read_bytes() == original
+    _edges(win.viewport, 1)
+    target = tmp_path / "compat.igz"
+    monkeypatch.setattr(mw.file_dialogs, "getSaveFileName", lambda *args: (str(target), ""))
+    win._on_export_igz()
+    assert win._current_path == native and win._is_dirty()
+    with zipfile.ZipFile(target) as archive:
+        assert json.loads(archive.read("document.json"))["igz_format"] == 3
+    assert _edges_in_file(target) == _edges_in_file(native) + 1

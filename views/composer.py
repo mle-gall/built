@@ -7494,7 +7494,7 @@ class ComposerWindow(QMainWindow):
             tb.addAction(a)
             return a
         self.save_action = act("save", tr("Save"), tr(
-            "Save the document — the model and every sheet — to its .igz "
+            "Save the document — the model and every sheet — to its file "
             "(Ctrl+S). Auto-save (Preferences) keeps a recovery copy too."),
             self.save_document)
         tb.addSeparator()
