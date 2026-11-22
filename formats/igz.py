@@ -47,13 +47,14 @@ only up to format 2 refuse it with a message instead of opening it empty.
 """
 from __future__ import annotations
 
-from contextlib import contextmanager, nullcontext
+from contextlib import contextmanager
 import json
 from types import SimpleNamespace
 import math
 from pathlib import Path
 
 from core.version import __version__
+from formats import built
 from formats.igz_stream import Fragment, SaveStream
 
 from PySide6.QtGui import QVector3D
@@ -498,9 +499,11 @@ def _pack_geometry(mesh, sink: dict) -> dict:
     rank = np.empty_like(order)
     rank[order] = np.arange(len(order))
     index = rank[inverse.reshape(-1)].astype(np.int32)
-    pos = np.array([corners[i].position.toTuple()
+    precise = getattr(sink, "built", False) or getattr(sink, "compatibility", False)
+    coords = built.position if precise else lambda vertex: vertex.position.toTuple()
+    pos = np.array([coords(corners[i])
                     for i in first[order].tolist()],
-                   dtype=np.float32).reshape(-1, 3)
+                   dtype=np.float64 if precise else np.float32).reshape(-1, 3)
     if not np.isfinite(pos).all():
         raise NonFiniteDocumentError("geometry")
 
@@ -550,6 +553,7 @@ def _write_geometry(arrays, table, layer_table, sink: dict) -> dict:
     # One raw blob, each array at an 8-byte-aligned offset: no pickles, no
     # per-save timestamps (an .npz carries them), so two saves of the same
     # model stay byte-identical.
+    arrays["pos"] = built.point_array(arrays["pos"], sink)
     layout: dict = {}
     chunks: list = []
     offset = 0
@@ -613,7 +617,7 @@ def _pack_plan(mesh, plan, sink: dict) -> dict:
     rank = np.empty_like(order)
     rank[order] = np.arange(len(order))
     index = rank[inverse.reshape(-1)].astype(np.int32)
-    pos = plan.pos[corners[first[order]]].astype(np.float32).reshape(-1, 3)
+    pos = plan.pos[corners[first[order]]].reshape(-1, 3)
     if not np.isfinite(pos).all():
         raise NonFiniteDocumentError("geometry")
     # The attribute table, renumbered in the order faces first use it.
@@ -710,18 +714,25 @@ def save_scene(scene, path: Path, *, backup=True) -> dict:
             gc.enable()
 
 
-def _save_scene(scene, path, *, backup):
+def _save_scene(scene, path, *, backup, confirm_loss=None, compatibility=False):
     from core import project, links
-    if hasattr(scene, "plugin_data"):
+    if hasattr(scene, "plugin_data") and not compatibility:
         project.refresh_reference(scene, path)
         project.sync_files(scene, path)
         links.refresh_paths(scene, path)
-    large = _live_element_count(scene) > _LARGE_DOCUMENT
-    with SaveStream() if large else nullcontext() as stream:
-        return _prepare_and_write(scene, path, backup, stream)
+    native_document = built.is_built(path) and not compatibility
+    if native_document or compatibility or _live_element_count(scene) > _LARGE_DOCUMENT:
+        with SaveStream(built=native_document, compatibility=compatibility, destination=path) as stream:
+            return _prepare_and_write(scene, path, backup, stream, confirm_loss)
+    return _prepare_and_write(scene, path, backup, None)
 
 
-def _prepare_and_write(scene, path, backup, stream):
+def export_igz(scene, path, confirm_loss):
+    """Write a compatibility copy. The callback receives maximum displacement in mm."""
+    return _save_scene(scene, path, backup=True, compatibility=True, confirm_loss=confirm_loss)
+
+
+def _prepare_and_write(scene, path, backup, stream, confirm_loss=None):
     steps = prepare_scene_steps(scene, stream=stream, large=stream is not None)
     while True:
         try:
@@ -729,6 +740,9 @@ def _prepare_and_write(scene, path, backup, stream):
         except StopIteration as done:
             prepared = done.value
             break
+    if confirm_loss is not None and stream.displacement_mm > built.WARNING_MM:
+        if not confirm_loss(stream.displacement_mm):
+            return None
     backup_failed = backup and not _backup_previous(path)
     stats = write_prepared(prepared, path, stream=stream)
     if backup_failed:
@@ -745,7 +759,11 @@ def prepare_scene_steps(scene, mesh_steps=None, *, stream=None, large=None):
     if large is None:
         large = mesh_steps is not None or _live_element_count(scene) > _LARGE_DOCUMENT
     geom = stream if stream is not None else ({} if large else None)
+    placements = built.export_placements(scene) if getattr(stream, "compatibility", False) else None
+
     def block(m):
+        if placements is not None:
+            stream.current_placements = placements.get(id(m), ())
         if mesh_steps is not None:
             return (yield from mesh_steps(m))
         block = _mesh_json(m, geom)
@@ -780,8 +798,9 @@ def prepare_scene_steps(scene, mesh_steps=None, *, stream=None, large=None):
                     idx = proto_index[id(mesh)] = len(protos)
                     protos.append(None)          # reserve: recursion is depth
                     protos[idx] = yield from block(mesh)
-                entry = {"proto": idx,
-                         "xform": [float(x) for x in xf.data()]}
+                values = (built.placement_values(xf) if mesh_steps is not None or getattr(stream, "built", False)
+                          else list(xf.data()))
+                entry = {"proto": idx, "xform": values}
                 # Group or component (issue #90): a group of groups and a
                 # copied group carry a matrix too. Written for EVERY
                 # instance — a file without the key is an older one, which
@@ -819,6 +838,10 @@ def prepare_scene_steps(scene, mesh_steps=None, *, stream=None, large=None):
                 # Extensions' parameters for this container (JSON-safe by
                 # contract); older readers ignore the key.
                 entry["ext"] = json.loads(json.dumps(g.ext, default=str))
+                if getattr(stream, "compatibility", False) and _links.link_of(g):
+                    link = entry["ext"][_links.LINK_KEY]
+                    link.pop("rel", None)
+                    link.update(_links._link_record(link["path"], stream.destination))
             if getattr(g, "uid", None):
                 # The identity a scene's hidden-object list names.
                 entry["uid"] = g.uid
@@ -956,6 +979,13 @@ def prepare_scene_steps(scene, mesh_steps=None, *, stream=None, large=None):
                 keep[str(key)] = _json.loads(_json.dumps(value))
             except (TypeError, ValueError):
                 continue
+        if getattr(stream, "compatibility", False) and isinstance(keep.get("project"), dict):
+            from core import project
+            from core.links import _link_record
+            source = project.path_for(scene)
+            if source:
+                keep["project"].pop("rel", None)
+                keep["project"].update(_link_record(source, stream.destination))
         if keep:
             payload["plugin_data"] = keep
     scales = getattr(scene, "custom_scales", None)
@@ -1080,7 +1110,7 @@ def _spool_json(value, stream):
 def write_prepared(prepared, path: Path, background=False, *, stream=None) -> dict:
     """Encode and write a detached payload. Never reads the live scene."""
     if background:
-        with SaveStream() as scratch:
+        with SaveStream(built=built.is_built(path)) as scratch:
             return _write_prepared(prepared, path, background, scratch)
     return _write_prepared(prepared, path, background, stream)
 
@@ -1108,6 +1138,14 @@ def _write_prepared(prepared, path, background, stream):
         "app_version": __version__,
         "scene": payload,
     }
+    container = bool(blobs or geom)
+    if getattr(stream, "built", False):
+        del data["igz_format"]
+        data["built_format"] = 1
+        container = True
+    elif getattr(stream, "compatibility", False):
+        data["igz_format"] = GEOMETRY_FORMAT
+        container = True
     try:
         if stream is not None:
             doc = stream.document(data)
@@ -1120,7 +1158,7 @@ def _write_prepared(prepared, path, background, stream):
         # it as the bare word NaN — not JSON, and a broken shape for good.
         # Refuse, and leave the file on disk as it was.
         raise NonFiniteDocumentError(_non_finite_where(payload)) from None
-    if blobs or geom:
+    if container:
         _write_container(path, doc, blobs, fast=large, deflated=geom)
     else:
         _write_atomic(path, doc if isinstance(doc, Fragment) else doc.encode("utf-8"))
@@ -1644,7 +1682,7 @@ class _GeomMembers(dict):
     the block (its JSON ``meta`` dict, by identity) each one was already
     validated for by the Rust engine — :func:`_geometry_arrays` then
     builds its arrays without scanning them again."""
-    __slots__ = ("checked",)
+    __slots__ = ("checked", "built_format")
 
     def __init__(self):
         super().__init__()
@@ -1657,7 +1695,7 @@ class _GeomMembers(dict):
 _NATIVE_ZIP_FLAGS = 0x2 | 0x4 | 0x8 | 0x800
 
 
-def _read_geometry_members(archive, path: Path, payload: dict, skip=()) -> dict:
+def _read_geometry_members(archive, path: Path, payload: dict, skip=(), *, built_format=False) -> dict:
     """Format 3's binary geometry blocks, read while the archive is open.
 
     With the Rust engine the members are inflated in parallel off the GIL
@@ -1670,6 +1708,7 @@ def _read_geometry_members(archive, path: Path, payload: dict, skip=()) -> dict:
     fails with the same message either way."""
     names = [n for n in archive.namelist() if n.startswith(_GEOM_PREFIX) and n not in skip]
     out = _GeomMembers()
+    out.built_format = built_format
     native = None
     if names:
         from core import _native
@@ -1726,8 +1765,8 @@ def _read_geometry_native(native, archive, path, payload, names, out):
         checks.append(check)
     if not todo:
         return
-    for (n, meta), (blob, ok) in zip(todo, native(str(path), entries,
-                                                  checks)):
+    results = native(str(path), entries, checks, built_format=out.built_format)
+    for (n, meta), (blob, ok) in zip(todo, results):
         if blob is None:
             continue                   # read by zipfile, which decides
         out[n] = blob
@@ -1801,7 +1840,12 @@ def _load_into_inner(scene, path: Path, progress=None, link_meshes=None) -> None
 
     survey = None
     geom: dict = {}
+    is_built = "built_format" in data
     try:
+        if is_built or built.is_built(path):
+            if (type(data.get("built_format")) is not int or data["built_format"] != 1
+                    or archive is None or "igz_format" in data):
+                raise ValueError("Invalid or unsupported Built document format")
         if archive is not None:
             if 'thumbnail.png' in archive.namelist():
                 info = archive.getinfo('thumbnail.png')
@@ -1813,7 +1857,7 @@ def _load_into_inner(scene, path: Path, progress=None, link_meshes=None) -> None
             _unpack_textures(payload, archive)
             materials = read_materials()
             skip = link_meshes.unchanged_members(archive, payload) if link_meshes else ()
-            geom = _read_geometry_members(archive, path, payload, skip)
+            geom = _read_geometry_members(archive, path, payload, skip, built_format=is_built)
             # Rebuilt here, while the archive is still open — it closes below
             # and the survey's blobs live inside it.
             survey = _unpack_photo_mesh(payload, archive)
@@ -1979,10 +2023,11 @@ def _load_into_inner(scene, path: Path, progress=None, link_meshes=None) -> None
             from PySide6.QtGui import QMatrix4x4
             group = Group(proto_meshes[int(raw["proto"])], name=name,
                           uid=uid)
-            vals = [float(x) for x in raw["xform"]]
-            # data() is column-major; the constructor takes row-major.
-            rm = [vals[col * 4 + row] for row in range(4) for col in range(4)]
-            group.xform = QMatrix4x4(*rm)
+            if is_built:
+                group.xform = built.placement(raw["xform"])
+            else:
+                vals = [float(x) for x in raw["xform"]]
+                group.xform = QMatrix4x4(*(vals[col * 4 + row] for row in range(4) for col in range(4)))
         else:
             group = Group(name=name, uid=uid)
             group.mesh = read_mesh(group.mesh, raw, ("group", group.uid))
@@ -2526,7 +2571,7 @@ def _load_mesh_json(mesh, payload) -> None:
                               ring_counts, attrs_list, edge_map=emap)
 
 
-def _geometry_arrays(meta, blob: bytes, checked: bool = False) -> dict:
+def _geometry_arrays(meta, blob: bytes, checked: bool = False, *, built_format=False) -> dict:
     """The arrays of a format-3 block, checked: known dtypes, inside the
     blob, and every index pointing at something that exists. A damaged or
     crafted document fails with a ValueError instead of building garbage.
@@ -2560,7 +2605,8 @@ def _geometry_arrays(meta, blob: bytes, checked: bool = False) -> dict:
             offset = int(offset)
         except (TypeError, ValueError):
             raise bad(name) from None
-        if dtype not in _GEOM_DTYPES or offset < 0 or any(n < 0 for n in shape):
+        allowed = ("<f4", "<f8") if built_format and name == "pos" else _GEOM_DTYPES
+        if dtype not in allowed or offset < 0 or any(n < 0 for n in shape):
             raise bad(name)
         count = 1
         for n in shape:
@@ -2614,7 +2660,7 @@ def _document_geometry_arrays(meta, geom: dict) -> dict:
     checked = getattr(geom, "checked", None)
     if checked and checked.get(member) is meta:
         return _geometry_arrays(meta, blob, True)
-    return _geometry_arrays(meta, blob)
+    return _geometry_arrays(meta, blob, built_format=getattr(geom, "built_format", False))
 
 
 def _load_geometry(mesh, meta, geom: dict) -> None:
@@ -2665,6 +2711,18 @@ def _load_geometry(mesh, meta, geom: dict) -> None:
     if meta.get("sequential") is True:
         source["sequential"] = True
 
+    if pos.dtype == np.dtype("<f8"):
+        # A deferred drawing plan targets Qt float coordinates. Build precise
+        # blocks directly so its projected positions never become save input.
+        from core import store_mesh
+        if store_mesh.enabled():
+            store, table = store_mesh.store_from_source(source, precise=True)
+            store_mesh.become_store(mesh, store, table)
+        else:
+            _build_geometry(mesh, meta, pos, edges, flags, curves, layers,
+                            rings, sizes, counts, face_attr, precise=True)
+        return
+
     def build(mesh):
         if source.get("sequential"):
             # Small meshes used the per-entity JSON reader. Preserve that
@@ -2682,12 +2740,15 @@ def _load_geometry(mesh, meta, geom: dict) -> None:
 
 
 def _build_geometry(mesh, meta, pos, edges, flags, curves, layers, rings,
-                    sizes, counts, face_attr) -> None:
+                    sizes, counts, face_attr, *, precise=False) -> None:
     """The objects of a format-3 block: :func:`_load_geometry`'s second
     half, run at once or, for a lazy mesh, on its first touch."""
     import numpy as np
 
-    vobjs, inverse = mesh.bulk_weld(pos.astype(np.float64))
+    if precise:
+        vobjs, inverse = built.python_vertices(mesh, pos, meta.get("sequential") is True)
+    else:
+        vobjs, inverse = mesh.bulk_weld(pos.astype(np.float64))
     emap = None
     if len(edges):
         eflags = None

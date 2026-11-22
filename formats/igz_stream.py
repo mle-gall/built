@@ -28,7 +28,11 @@ class Fragment:
 class SaveStream(dict):
     """Keep geometry blocks and completed mesh JSON on disk, one mesh at a time."""
 
-    def __init__(self):
+    def __init__(self, *, built=False, compatibility=False, destination=None):
+        self.built = built
+        self.compatibility = compatibility
+        self.destination = destination
+        self.displacement_mm = 0.0
         super().__init__()  # ZIP geometry member names -> scratch ranges
         self.file = tempfile.TemporaryFile()
         self.blobs = {}

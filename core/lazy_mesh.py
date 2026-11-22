@@ -46,12 +46,12 @@ class Plan:
         return len(self.ring_counts)
 
 
-def weld(pos: np.ndarray, sequential: bool = False):
+def weld(pos: np.ndarray, sequential: bool = False, *, precise=False):
     """``(vpos, point_ids)``: what :meth:`Mesh.bulk_weld` returns on an EMPTY
     mesh, as positions instead of vertices (same order: the vertex list).
     ``sequential``: in the order :meth:`Mesh.vertex` called point by point
     makes them instead — the same vertices, each where its point comes."""
-    vpos, ids, origin = _weld(pos)
+    vpos, ids, origin = _weld(pos, precise=precise)
     if sequential and len(vpos):
         order = np.argsort(origin, kind="stable")
         rank = np.empty_like(order)
@@ -60,15 +60,16 @@ def weld(pos: np.ndarray, sequential: bool = False):
     return vpos, ids
 
 
-def _weld(pos: np.ndarray):
+def _weld(pos: np.ndarray, *, precise=False):
     """``(vpos, point_ids, origin)`` — the weld, and the input point each
     vertex was made at."""
-    pos = np.ascontiguousarray(pos, dtype=np.float32).astype(np.float64)
+    scalar = np.float64 if precise else np.float32
+    pos = np.ascontiguousarray(pos, dtype=scalar).astype(np.float64)
     if not len(pos):
         return (np.zeros((0, 3)), np.empty(0, dtype=np.int64),
                 np.empty(0, dtype=np.int64))
     import core._native as _native
-    if _native.native is not None and hasattr(_native.native,
+    if not precise and _native.native is not None and hasattr(_native.native,
                                               "weld_points"):
         vpos, ids, origin = _native.native.weld_points(
             pos.astype(np.float32), _mesh._KEY_SCALE,
@@ -131,24 +132,23 @@ def _weld(pos: np.ndarray):
         registry: dict = {}
         for c, vid in zip(ukeys[nc_cells].tolist(), range(len(nc_cells))):
             registry[(c[0], c[1], c[2])] = vid
-        f32 = np.float32
         tol2 = (10.0 ** -_mesh._KEY_DECIMALS) ** 2
         extra = []
-        allpos32 = [vpos[0].astype(np.float32)]
+        initial = vpos[0].astype(scalar, copy=False)
         base = len(nc_cells)
 
         def position(vid):
             if vid < base:
-                return allpos32[0][vid]
+                return initial[vid]
             return extra[vid - base]
         cp_keys = keys[cp].tolist()
-        p32 = pos[cp].astype(np.float32)
+        candidates = pos[cp].astype(scalar)
         for j, i in enumerate(cp.tolist()):
             k3 = cp_keys[j]
             k = (k3[0], k3[1], k3[2])
             vid = registry.get(k)
             if vid is None:
-                p = p32[j]
+                p = candidates[j]
                 for ddx in (-1, 0, 1):
                     for ddy in (-1, 0, 1):
                         for ddz in (-1, 0, 1):
@@ -158,8 +158,8 @@ def _weld(pos: np.ndarray):
                                               k[2] + ddz))
                             if n is None:
                                 continue
-                            d = position(n) - p        # float32, as Qt
-                            if float(f32(d[0] * d[0] + d[1] * d[1]
+                            d = position(n) - p
+                            if float(scalar(d[0] * d[0] + d[1] * d[1]
                                          + d[2] * d[2])) < tol2:
                                 vid = n
                                 break
@@ -174,7 +174,7 @@ def _weld(pos: np.ndarray):
                     registry[k] = vid
             point_ids[i] = vid
         if extra:
-            vpos.append(np.asarray(extra, dtype=np.float32)
+            vpos.append(np.asarray(extra, dtype=scalar)
                         .astype(np.float64))
     if made:
         origin.append(np.asarray(made, dtype=np.int64))

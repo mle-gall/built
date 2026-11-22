@@ -22,5 +22,15 @@ and metadata.
 
 The IngeTrazo compatibility export writes a format 3 ZIP using binary32
 points. Its precision warning reports the largest Euclidean displacement
-of a mesh point in millimetres when it exceeds 0.0254 mm. Opening existing
+of a placed mesh point in world coordinates, in millimetres when it exceeds 0.0254 mm. Opening existing
 IngeTrazo formats 1, 2 and 3 follows their existing rules.
+
+## Storage measurement
+
+Level-1 DEFLATE on a synthetic 300 × 300 point grid with horizontal and
+vertical edges and 89,401 unit quads produced 1,119,670 bytes with binary32
+points and 1,118,540 bytes with binary64 points. The same test on one unit
+quad produced 443 and 445 bytes respectively. Sizes include the ZIP and the
+minimal scene manifest. Repeated integer coordinates compress well at either
+width. The writer uses binary32 for exactly representable blocks to halve the
+uncompressed point payload and retain the existing fast deferred-load path.
