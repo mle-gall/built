@@ -174,9 +174,9 @@ def test_the_box_does_not_take_the_rest_of_the_model():
         rect = (0.0, 0.0, float(vp.width()), float(vp.height()))
         got = _box_loose_fast(vp, rect, False)
         assert got is not None
-        outer = {id(e) for m in vp._outer_loose_meshes() for e in m.edges}
+        outer = {e.key for m in vp._outer_loose_meshes() for e in m.edges}
         assert outer
-        assert not any(id(e) in outer for e in got[0])
+        assert not any(e.key in outer for e in got[0])
         assert got[0], "the open component's own edges are still boxed"
     finally:
         win._saved_version = vp.scene.version

@@ -66,9 +66,9 @@ def _scene(tmp_path, lazy: bool):
     faces = _box(m, 0, 0, 0, 2.0)
     faces[1].attrs["layer"] = "Losa"                 # the top, its own
     top = faces[1]
-    on_top = {id(v) for v in top.loop}
+    on_top = {v.key for v in top.loop}
     e = next(ed for ed in m.edges
-             if id(ed.v0) in on_top and id(ed.v1) in on_top)
+             if ed.v0.key in on_top and ed.v1.key in on_top)
     e.layer = "Barandas"                              # an edge of its own
     walls = Group(m, "muros")
     walls.layer = "Muros"
@@ -76,9 +76,9 @@ def _scene(tmp_path, lazy: bool):
     m2 = M.Mesh()
     a = m2.add_face([V(4, 0, 0), V(6, 0, 0), V(6, 2, 1), V(4, 2, 1)])
     b = m2.add_face([V(4, 2, 1), V(6, 2, 1), V(6, 4, 0), V(4, 4, 0)])
-    shared = {id(v) for v in a.loop} & {id(v) for v in b.loop}
+    shared = {v.key for v in a.loop} & {v.key for v in b.loop}
     ridge = next(ed for ed in m2.edges
-                 if id(ed.v0) in shared and id(ed.v1) in shared)
+                 if ed.v0.key in shared and ed.v1.key in shared)
     ridge.soft = True
     roof = Group(m2, "techo")
     roof.layer = "Techos"
