@@ -1218,6 +1218,45 @@ impl PyMeshStore {
         Ok((a, b, ch))
     }
 
+    /// Explode (`ExplodeGroupCommand`'s geometry, store/explode.rs): the
+    /// faces and edges of `source` (a snapshot of the group's store) copied
+    /// in, `mapped` (V, 3) its vertices in list order through the
+    /// placement, `face_attr` per source face the new face's attribute
+    /// value (table index + 1, 0 none). `((face, vertex, edge) key maps:
+    /// per source element in list order its key here or None, change)`.
+    #[allow(clippy::type_complexity)]
+    fn paste_from(&mut self, source: &PyStoreSnapshot, mapped: PyReadonlyArray2<'_, f64>,
+                  face_attr: Vec<u32>, hole_filter: &Bound<'_, PyAny>)
+                  -> PyResult<((Vec<u128>, Vec<Option<u128>>, Vec<Option<u128>>), PyChange)> {
+        let src = reader(&source.inner);
+        let flat = mapped.as_slice().map_err(|_| PyValueError::new_err("mapped: contiguous (V, 3)"))?;
+        let pts: Vec<[f64; 3]> = flat.chunks_exact(3).map(|c| [c[0], c[1], c[2]]).collect();
+        let vl = src.live_slots(Kind::Vertex);
+        let mut dense = vec![super::keys::NONE; src.state.slots[0].len()];
+        for (i, &v) in vl.iter().enumerate() {
+            dense[v as usize] = i as u32;
+        }
+        let fl = src.live_slots(Kind::Face);
+        let keep = super::pieces::hole_masks(&src, &fl, |v| pts.get(dense[v as usize] as usize).copied().unwrap_or([0.0; 3]), hole_filter)?;
+        let (made, ch) = self.op(|s, ch| s.paste_from(&src, &pts, &keep, &face_attr, ch))?;
+        let st = &self.inner;
+        let opt = |k: Kind, x: u32| (x != super::keys::NONE).then(|| st.key(k, x));
+        Ok(((made.faces.iter().map(|&f| st.key(Kind::Face, f)).collect(),
+             made.vertices.iter().map(|&v| opt(Kind::Vertex, v)).collect(),
+             made.edges.iter().map(|&e| opt(Kind::Edge, e)).collect()), ch))
+    }
+
+    /// The broad phase of `_merge_overlapping_planes` after an explode
+    /// (store/explode.rs): `(added faces with a normal, [(old face key,
+    /// indices into that list)])`.
+    fn plane_merge_candidates(&self, added: Vec<u128>, tol: f64, hypot: &str) -> PyResult<(Vec<u128>, Vec<(u128, Vec<u32>)>)> {
+        let st = &self.inner;
+        let fs: Vec<u32> = added.iter().filter_map(|&k| st.slot(Kind::Face, k)).collect();
+        let (new, pairs) = st.plane_merge_candidates(&fs, tol, crate::hypot_of(hypot)?);
+        Ok((new.iter().map(|&f| st.key(Kind::Face, f)).collect(),
+            pairs.into_iter().map(|(f, hits)| (st.key(Kind::Face, f), hits)).collect()))
+    }
+
     /// `Mesh.drop_orphan_vertices(vertices)`: `(count, change)`; keys of
     /// other meshes are ignored (Python: not listed here).
     fn drop_orphan_vertices(&mut self, keys: Vec<u128>) -> PyResult<(usize, PyChange)> {
@@ -1918,6 +1957,51 @@ impl PyStoreSnapshot {
     fn counts(&self) -> (usize, usize, usize) {
         let s = &self.inner.state.slots;
         (s[0].live, s[1].live, s[2].live)
+    }
+
+    /// `core.pieces.connected_parts`: `[(face keys, edge keys)]`, largest
+    /// first (store/pieces.rs).
+    fn connected_parts(&self, py: Python<'_>) -> Vec<(Vec<u128>, Vec<u128>)> {
+        let r = reader(&self.inner);
+        let parts = py.detach(|| r.connected_parts());
+        super::pieces::keyed(&r, parts)
+    }
+
+    /// `core.pieces.solid_parts`: the physical pieces, `[(face keys, edge
+    /// keys)]`, in Python's order (store/pieces.rs).
+    fn solid_parts(&self, py: Python<'_>, hypot: &str) -> PyResult<Vec<(Vec<u128>, Vec<u128>)>> {
+        let h = crate::hypot_of(hypot)?;
+        let r = reader(&self.inner);
+        let parts = py.detach(|| r.solid_parts(h));
+        Ok(super::pieces::keyed(&r, parts))
+    }
+
+    /// Each face's attribute-table row (−1 none), by key (−1 also for a
+    /// key the snapshot does not hold live).
+    fn face_rows<'py>(&self, py: Python<'py>, keys: Vec<u128>) -> Bound<'py, PyArray1<i64>> {
+        let st = &self.inner.state;
+        let r = reader(&self.inner);
+        let rows: Vec<i64> = keys
+            .iter()
+            .map(|&k| r.slot(Kind::Face, k).map_or(-1, |f| *st.fattr.get(f as usize) as i64 - 1))
+            .collect();
+        rows.into_pyarray(py)
+    }
+
+    /// `core.pieces.copy_part` (Split into Pieces): a new store in
+    /// `namespace` holding the faces and edges named (keys of this
+    /// snapshot, in order), `face_attr` their rows in the new table (-1 none).
+    #[pyo3(signature = (namespace, faces, edges, face_attr, hole_filter, scale = 10_000.0, tol2 = 1e-8, fused = false))]
+    #[allow(clippy::too_many_arguments)]
+    fn extract(&self, namespace: u64, faces: Vec<u128>, edges: Vec<u128>, face_attr: Vec<i64>,
+               hole_filter: &Bound<'_, PyAny>, scale: f64, tol2: f64, fused: bool) -> PyResult<PyMeshStore> {
+        let r = reader(&self.inner);
+        let fs: Vec<u32> = faces.iter().map(|&k| slot_of(&r, Kind::Face, k)).collect::<PyResult<_>>()?;
+        let es: Vec<u32> = edges.iter().map(|&k| slot_of(&r, Kind::Edge, k)).collect::<PyResult<_>>()?;
+        let keep = super::pieces::hole_masks(&r, &fs, |v| *r.state.vpos.get(v as usize), hole_filter)?;
+        let store = r.extract(namespace, &fs, &es, &keep, &face_attr, Weld { scale, tol2, fused })
+            .map_err(PyValueError::new_err)?;
+        Ok(PyMeshStore::wrap(store))
     }
 }
 
