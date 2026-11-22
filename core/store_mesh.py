@@ -2370,7 +2370,7 @@ def from_deferred(m) -> bool:
         src = d.get("_deferred_hook_source", src)
     store, table = store_from_source(src, hooks)
     for key in ("_deferred", "_deferred_nfaces", "_deferred_source",
-                "_deferred_hook_source",
+                "_deferred_hook_source", "_deferred_geom",
                 "_deferred_plan", "_drawing_staged", "_drawing_source_key",
                 "_drawing_texture_paths"):
         d.pop(key, None)
