@@ -344,6 +344,56 @@ def _tabs(view, win) -> None:
         view.renderer.ui_set_tabs(tabs)
 
 
+def _sheet_and_jobs(view, win) -> None:
+    """The app sheet and the work in progress (views/chrome_dialogs.py)."""
+    from views import chrome_dialogs
+    sheet = chrome_dialogs.current_sheet(win)
+    sig = None if sheet is None else (id(sheet), sheet.title, sheet.text, tuple(sheet.buttons))
+    if sig != view.__dict__.get("_ui_sheet_sig", False):
+        view._ui_sheet_sig = sig
+        if sheet is None:
+            view.renderer.ui_set_sheet("", "", "", [])
+        else:
+            view.renderer.ui_set_sheet(sheet.title, sheet.text, sheet.tone, list(sheet.buttons))
+    if sheet is not None:
+        sheet.shown = True
+    rows = [(j.id, j.label, j.phase, float(j.fraction), bool(j.cancellable))
+            for j in chrome_dialogs.jobs(win)]
+    if rows != view.__dict__.get("_ui_jobs_sig", False):
+        view._ui_jobs_sig = rows
+        view.renderer.ui_set_jobs(rows)
+    # Polled work (the background auto-save) says when it is done only by
+    # being gone: look again soon while any shows.
+    view._ui_poll_jobs = bool(rows)
+
+
+def chrome_only(view) -> bool:
+    """Exclusive work holds the window (an open, an import): the model is
+    half there, so a frame draws only the chrome over what is resident."""
+    if not getattr(view, "_ui_attached", False):
+        return False
+    win = _window(view)
+    if win is None:
+        return False
+    from views import chrome_dialogs
+    return chrome_dialogs.exclusive(win)
+
+
+def chrome_frame(view):
+    """A frame of chrome alone: the projects, the sheet and the jobs, over
+    the resident (blank) model. Nothing here reads the scene."""
+    renderer = view.renderer
+    if renderer is None:
+        return None
+    win = _window(view)
+    if win is not None:
+        _projects(view, win)
+        _sheet_and_jobs(view, win)
+    cpu, gpu = renderer.render()
+    after_frame(view)
+    return cpu, gpu, 0.0
+
+
 def before_frame(view) -> None:
     """Mirror the window's state into the chrome (cheap: a few dict reads)."""
     if not getattr(view, "_ui_attached", False):
@@ -351,6 +401,7 @@ def before_frame(view) -> None:
     win = _window(view)
     if win is None:
         return
+    _sheet_and_jobs(view, win)
     if not view._ui_tools_sent and win._tool_actions:
         _send_tools(view, win)
     eyedropper = getattr(win, "_act_eyedropper", None)
@@ -2155,6 +2206,7 @@ def _file_to(win, n: int) -> None:
 def after_frame(view) -> None:
     if not getattr(view, "_ui_attached", False):
         return
+    view._ui_frames = getattr(view, "_ui_frames", 0) + 1
     renderer = view.renderer
     actions = renderer.ui_take_actions()
     if actions:
@@ -2162,6 +2214,8 @@ def after_frame(view) -> None:
         # Never switch tools from inside a paint.
         QTimer.singleShot(0, view, lambda: _run(win, actions))
     delay = renderer.ui_repaint_after_ms()
+    if view.__dict__.get("_ui_poll_jobs"):
+        delay = 400 if delay is None else min(delay, 400)
     if delay is not None:
         view._ui_timer.start(max(0, int(delay)))
 
@@ -2169,10 +2223,22 @@ def after_frame(view) -> None:
 def _run(win, actions) -> None:
     if win is None:
         return
+    from views import chrome_dialogs
     for action in actions:
         kind, _, arg = action.partition(":")
         if kind == "review":
             continue
+        if kind == "sheet":
+            chrome_dialogs.answer(win, arg)
+            continue
+        if kind == "job":
+            verb, _, jid = arg.partition(":")
+            job = chrome_dialogs.find_job(win, jid)
+            if verb == "cancel" and job is not None:
+                job.cancel()
+            continue
+        if chrome_dialogs.modal(win):
+            continue    # a click queued before the sheet came up
         if kind == "tool":
             view = getattr(getattr(win, "_doc", None), "stand_in", None)
             run = getattr(view, "_ui_palette_runs", {}).get(arg)
@@ -2571,6 +2637,9 @@ def title_double_click(view, event) -> bool:
 def wheel(view, event) -> bool:
     if not getattr(view, "_ui_attached", False):
         return False
+    from views import chrome_dialogs
+    if chrome_dialogs.modal(_window(view)):
+        return True
     p = event.position()
     d = event.pixelDelta()
     if d.isNull():
@@ -2584,10 +2653,35 @@ def wheel(view, event) -> bool:
     return taken
 
 
+def _held(view, kind, event) -> bool:
+    """Exclusive work holds the window: only its chip (Cancel) and the
+    window's own drag take the pointer; the model and the rest of the
+    chrome see nothing until it ends."""
+    from views import chrome_dialogs
+    win = _window(view)
+    if win is None or not chrome_dialogs.exclusive(win) or chrome_dialogs.current_sheet(win) is not None:
+        return False
+    if event is None:
+        return False
+    p = event.position()
+    rect = view.renderer.ui_area_rect("jobs")
+    if rect is not None:
+        x, y, w, h = rect
+        if x <= p.x() <= x + w and y <= p.y() <= y + h:
+            return False        # the chip's own: Cancel
+    if kind == "press" and event.button() == Qt.LeftButton \
+            and view.renderer.ui_top_empty(float(p.x()), float(p.y())):
+        return False            # the window still moves
+    view.renderer.ui_pointer("leave", -1.0, -1.0, 0, 0)
+    return True
+
+
 def pointer(view, kind: str, event=None) -> bool:
     """Offer a pointer event to the chrome first. True: it was the chrome's."""
     if not getattr(view, "_ui_attached", False):
         return False
+    if _held(view, kind, event):
+        return True
     if event is None:
         taken = view.renderer.ui_pointer(kind, -1.0, -1.0, 0, 0)
     elif kind == "press" and event.button() == Qt.LeftButton \

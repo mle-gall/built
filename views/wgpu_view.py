@@ -574,6 +574,9 @@ class WgpuView(QWidget):
             self._finish_resize()
         self._drawing_frame = True
         try:
+            from views import wgpu_ui
+            if wgpu_ui.chrome_only(self):   # a document is coming in
+                return wgpu_ui.chrome_frame(self)
             return self._present_frame()
         finally:
             self._drawing_frame = False

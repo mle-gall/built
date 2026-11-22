@@ -2091,6 +2091,15 @@ impl Renderer {
     fn ui_set_prompt(&mut self, title: String, body: String, buttons: Vec<(String, String)>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_prompt(title, body, buttons); }
     }
+    /// The app sheet (an empty title takes it down): tone, and buttons as
+    /// (id, label, key hint, role: 0 plain, 1 default, 2 discard, 3 cancel).
+    fn ui_set_sheet(&mut self, title: String, body: String, tone: String, buttons: Vec<(String, String, String, u8)>) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_sheet(title, body, tone, buttons); }
+    }
+    /// Work in progress: (id, what, phase, fraction or -1, cancellable).
+    fn ui_set_jobs(&mut self, jobs: Vec<ui::Job>) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_jobs(jobs); }
+    }
     fn ui_set_colset(&mut self, colset: u8) {
         if let Some(ui) = self.ui.as_mut() { ui.set_colset(colset); }
     }
