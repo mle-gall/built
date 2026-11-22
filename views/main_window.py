@@ -733,6 +733,14 @@ class MainWindow(WorksessionMixin, QMainWindow):
 
     def showEvent(self, event) -> None:  # noqa: N802 — Qt override
         super().showEvent(event)
+        if self.focusWidget() is None:
+            # The keyboard starts on the model: left to Qt, the window's
+            # activation gave it to the first button of the Tab chain (the
+            # project tabs'), and the arrows, a typed value and Enter did
+            # nothing until a click in the view.
+            view = self._shown_viewport()
+            if view is not None:
+                view.setFocus(Qt.OtherFocusReason)
         if not getattr(self, "_toolbars_packed", True):
             from PySide6.QtCore import QTimer
             self._toolbars_packed = True
@@ -1165,6 +1173,9 @@ class MainWindow(WorksessionMixin, QMainWindow):
         self.tray.raise_()
         self._build_sidebar_handle()
         self._setup_side_docks()
+        # The keyboard never strands on a button or on nothing (see
+        # _keys_back_to_view).
+        QApplication.instance().focusChanged.connect(self._keys_back_to_view)
         # (The panels follow the viewport's changes: see _wire_viewport.)
         # The Layers toolbar: the layer drop-down and the quick layer
         # actions, working through the Layers tab's panel.
@@ -2905,6 +2916,42 @@ class MainWindow(WorksessionMixin, QMainWindow):
         self._clean_exit_btn = btn
         self.viewport.installEventFilter(self)
         return btn
+
+    def _keys_back_to_view(self, _old, new) -> None:
+        """Keep the view's keys reachable: focus that lands on a toolbar or
+        tray button, or on a tab, without a click (the Tab chain at start-up,
+        or a tray hidden while it held the focus, hands it to the next
+        button), and focus gone with the window still active, go back to the
+        model's view. There, letters still fired the tool shortcuts, but the
+        arrows (axis and Down locks), typed values, Enter and Delete reached
+        a button and nothing happened. A button clicked keeps its focus (it
+        is taken on the press; taking it back mid-click would cancel the
+        click), and so does anything in a dialog or a popup."""
+        from PySide6.QtWidgets import QAbstractButton, QDockWidget
+        if new is not None:
+            if not isinstance(new, (QAbstractButton, QTabBar)):
+                return
+            top = new.window()
+            if not (top is self or (isinstance(top, QDockWidget)
+                                    and top.parentWidget() is self)):
+                return
+        if QApplication.mouseButtons() != Qt.NoButton:
+            return
+        from PySide6.QtCore import QTimer
+        QTimer.singleShot(0, self, lambda w=new: self._focus_view_from(w))
+
+    def _focus_view_from(self, stranded) -> None:
+        if QApplication.focusWidget() is not stranded:
+            return                          # the focus moved on meanwhile
+        if (QApplication.activePopupWidget() is not None
+                or QApplication.activeModalWidget() is not None
+                or QApplication.mouseButtons() != Qt.NoButton):
+            return
+        if stranded is None and QApplication.activeWindow() is not self:
+            return                          # another window, another app
+        view = self._shown_viewport()
+        if view is not None and view.isVisible():
+            view.setFocus(Qt.OtherFocusReason)
 
     def _shown_viewport(self):
         """The widget the model is drawn in right now: the Metal stand-in
@@ -7537,6 +7584,9 @@ class MainWindow(WorksessionMixin, QMainWindow):
         display.frameReady.connect(lambda *_: self._document_first_frame(doc))
         display.source_viewport = doc.viewport
         display.camera = doc.viewport.camera
+        # Whoever gives the (hidden) GL viewport the keyboard gives it to
+        # the view the user sees (Viewport.setFocus).
+        doc.viewport.keys_stand_in = display
         doc.stand_in = display
         self._doc_stack.addWidget(display)
         display.installEventFilter(self)       # re-place the handles on resize

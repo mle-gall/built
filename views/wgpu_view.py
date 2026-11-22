@@ -1164,12 +1164,19 @@ class WgpuView(QWidget):
         return Viewport._can_warp_pointer()
 
     def focusOutEvent(self, event):
+        # As GL's: the walking keys' releases will land elsewhere, but the
+        # tool goes on. Cancelling it here reset a line whose first point
+        # was down as soon as a tray, a field or a dialog took the focus.
         self._look_drag = None
         hook = getattr(self.tools.tool, 'on_focus_out', None)
         if hook is not None:
             hook(self.tools)
-        self.tools.cancel()
         super().focusOutEvent(event)
+
+    def focusNextPrevChild(self, next):
+        # Tab is a tool key here (reserved for the tools, views.shortcuts):
+        # Qt's focus chain took it and left the keyboard on a tray button.
+        return False
 
     def mouseReleaseEvent(self, event):
         if getattr(self, '_look_drag', None) is not None:

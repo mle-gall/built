@@ -21237,6 +21237,33 @@ class Viewport(QOpenGLWidget):
             self._refresh_snap()
         super().keyReleaseEvent(ev)
 
+    #: The view shown in this one's place (the Metal view), which takes the
+    #: keyboard whenever this hidden one is given it.
+    keys_stand_in = None
+
+    def setFocus(self, *args) -> None:  # noqa: N802 — Qt's name
+        """Orbit / Pan, a scene picked in its list, the camera panel, a
+        project switch… all give the keyboard back with
+        ``viewport.setFocus()``. Under Metal this viewport is hidden and Qt
+        ignores it there, so the keys stayed in the list or on a button:
+        the view the user sees takes them instead."""
+        shown = self.keys_stand_in
+        if shown is not None and not self.isVisible():
+            try:
+                visible = shown.isVisible()
+            except RuntimeError:        # its C++ side is gone
+                self.keys_stand_in = visible = None
+            if visible:
+                shown.setFocus(*args)
+                return
+        super().setFocus(*args)
+
+    def focusNextPrevChild(self, next) -> bool:  # noqa: A002 — Qt's name
+        """Tab is a tool key (``views.shortcuts.reserved_reason``): Qt's
+        focus chain took it and left the keyboard on a tray button, where
+        the arrows, typed values and Enter did nothing."""
+        return False
+
     def focusOutEvent(self, ev) -> None:
         """Focus gone means the Alt release will land somewhere else, so the
         claim on it lapses (issue #26)."""
