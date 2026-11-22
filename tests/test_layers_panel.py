@@ -2505,3 +2505,18 @@ def test_recount_after_host_drawing_preserves_other_mesh_counts(monkeypatch):
     assert counted() == before
     history.redo()
     assert counted()[DEFAULT_LAYER] == before[DEFAULT_LAYER] + 1
+
+
+def test_first_construction_tag_keeps_existing_folder_rows(win):
+    scene = win.viewport.scene
+    folder = L.add_folder(scene, "Zone")
+    scene.layers.extend([Layer("Walls", folder=folder), Layer("Floors", folder=folder)])
+    panel = win.layers_dock.panel
+    panel.refresh()
+    old = {panel._key(item): item for item in panel._all_items()}
+    guide = Layer("Guides")
+    scene.layers.append(guide)
+    panel._refresh_after_change()
+    rows = {panel._key(item): item for item in panel._all_items()}
+    assert all(rows[k] is item for k, item in old.items())
+    assert any(k[1] == guide.key for k in rows)
