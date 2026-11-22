@@ -271,3 +271,55 @@ impl Store {
         out
     }
 }
+
+impl Store {
+    /// Each face's component label and the scoped edge keys. Face labels are
+    /// dense list indices, matching the Python union through edges in list order.
+    pub fn cap_scope(&self, seeds: &[u128]) -> (Vec<(u128, u32)>, Vec<u128>) {
+        use crate::orient::component_root;
+        let faces = self.live_slots(Kind::Face);
+        let edges = self.live_slots(Kind::Edge);
+        let dense = self.state.order[2].dense_of_slot(&self.state.slots[2]);
+        let mut parent: Vec<_> = (0..faces.len() as u32).collect();
+        for &e in &edges {
+            if let Some((&first, rest)) = self.edge_faces(e).split_first() {
+                for &f in rest {
+                    let a = component_root(&mut parent, dense[first as usize]);
+                    let b = component_root(&mut parent, dense[f as usize]);
+                    parent[a as usize] = b;
+                }
+            }
+        }
+        let labels: Vec<_> = (0..faces.len() as u32)
+            .map(|f| component_root(&mut parent, f))
+            .collect();
+        let wanted: std::collections::HashSet<_> = seeds
+            .iter()
+            .filter_map(|&k| self.slot(Kind::Face, k))
+            .map(|f| labels[dense[f as usize] as usize])
+            .collect();
+        let scoped = if wanted.is_empty() {
+            vec![]
+        } else {
+            edges
+                .into_iter()
+                .filter(|&e| {
+                    let fs = self.edge_faces(e);
+                    fs.is_empty()
+                        || fs
+                            .iter()
+                            .any(|&f| wanted.contains(&labels[dense[f as usize] as usize]))
+                })
+                .map(|e| self.key(Kind::Edge, e))
+                .collect()
+        };
+        (
+            faces
+                .iter()
+                .zip(labels)
+                .map(|(&f, label)| (self.key(Kind::Face, f), label))
+                .collect(),
+            scoped,
+        )
+    }
+}

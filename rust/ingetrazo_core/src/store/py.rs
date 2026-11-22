@@ -1344,6 +1344,11 @@ fn reader(snap: &Snapshot) -> Store {
 
 #[pymethods]
 impl PyStoreSnapshot {
+    fn cap_scope(&self, py: Python<'_>, seeds:Vec<u128>) -> (Vec<(u128,u32)>, Vec<u128>) {
+        let store=reader(&self.inner);
+        py.detach(||store.cap_scope(&seeds))
+    }
+
     #[pyo3(signature = (hypot, compensated, near=None))]
     fn crack_planes(&self, py: Python<'_>, hypot:&str, compensated:bool, near:Option<[f64;6]>)
         -> PyResult<Vec<([f32;3],[f32;3])>> {

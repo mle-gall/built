@@ -109,7 +109,17 @@ class RebuildCache:
         """Face key → edge-connected component label, recomputed when the mesh
         changes."""
         if self._comp is None or self._comp_token != self.token:
-            self._comp = {f.key: c for f, c in _face_components(mesh).items()}
+            from core.store_mesh import StoreMesh, FaceView, EdgeView
+            if isinstance(mesh, StoreMesh):
+                seeds = [f.key for f in self.seed_faces]
+                labels, edges = mesh._store.snapshot().cap_scope(seeds)
+                self._comp = dict(labels)
+                live = {self._comp[k] for k in seeds if k in self._comp}
+                self._scope = ([FaceView(mesh, k) for k, c in labels if c in live],
+                               [EdgeView(mesh, k) for k in edges]) if live else None
+                self._scope_token = self.token
+            else:
+                self._comp = {f.key: c for f, c in _face_components(mesh).items()}
             self._comp_token = self.token
         return self._comp
 
@@ -130,9 +140,11 @@ class RebuildCache:
         the cost, more than the scans themselves."""
         if not self.seed_faces:
             return None
-        if self._scope is not None and self._scope_token == self.token:
+        if self._scope_token == self.token:
             return self._scope
         comp = self.components(mesh)
+        if self._scope_token == self.token:
+            return self._scope
         live = {comp[f.key] for f in self.seed_faces if f.key in comp}
         if not live:
             self._scope, self._scope_token = None, self.token
