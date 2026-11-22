@@ -2010,7 +2010,16 @@ impl Renderer {
     fn ui_enable(&mut self, font: Option<String>) -> PyResult<()> {
         let mut ui = ui::Ui::new(&self.device, self.config.format);
         if let Some(path) = font {
-            if let Ok(bytes) = std::fs::read(&path) { ui.set_font(bytes); }
+            // A folder of Inter faces, or a single font file.
+            let dir = std::path::Path::new(&path);
+            if dir.is_dir() {
+                let read = |n: &str| std::fs::read(dir.join(n)).ok();
+                if let Some(regular) = read("Inter-Regular.ttf") {
+                    ui.set_fonts(regular, read("Inter-Medium.ttf"), read("Inter-SemiBold.ttf"));
+                }
+            } else if let Ok(bytes) = std::fs::read(&path) {
+                ui.set_fonts(bytes, None, None);
+            }
         }
         self.ui = Some(ui);
         self.ui_target = self.active;

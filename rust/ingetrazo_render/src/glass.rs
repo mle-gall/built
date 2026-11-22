@@ -15,9 +15,15 @@ static NEXT: AtomicU32 = AtomicU32::new(0);
 pub struct Look {
     pub tint: [f32; 4],
     pub saturation: f32,
+    /// Lit and quiet rim strength.
     pub rim: [f32; 2],
+    /// Rim width in physical pixels (stays fine at 2×).
     pub rim_width: f32,
+    /// The narrow highlight along the top edge.
     pub glow: f32,
+    /// Brightest the backdrop may show (linear), soft shoulder.
+    pub peak: f32,
+    pub inner_shadow: f32,
 }
 
 struct Level {
@@ -207,19 +213,20 @@ impl Glass {
         self.copy = Some(copy);
         let half = |s: [u32; 2]| [(s[0] / 2).max(1), (s[1] / 2).max(1)];
         let mut s = size;
-        self.levels = (0..4).map(|_| { s = half(s); blur_target(device, self.format, s) }).collect();
-        // Up: 1/8, 1/4, 1/2.
-        self.ups = (0..3).rev().map(|i| blur_target(device, self.format, self.levels[i].size)).collect();
+        self.levels = (0..5).map(|_| { s = half(s); blur_target(device, self.format, s) }).collect();
+        // Up: 1/16, 1/8, 1/4, 1/2.
+        self.ups = (0..4).rev().map(|i| blur_target(device, self.format, self.levels[i].size)).collect();
         self.passes.clear();
         self.steps.clear();
         // Down: copy → L0 → L1 → L2 → L3; up: L3 → U0(1/8) → U1(1/4) → U2(1/2).
         let mut plan: Vec<(&wgpu::TextureView, [u32; 2], usize, bool)> = vec![(&copy_view, size, 0, false)];
-        for i in 1..4 {
+        for i in 1..5 {
             plan.push((&self.levels[i - 1].view, self.levels[i - 1].size, i, false));
         }
-        plan.push((&self.levels[3].view, self.levels[3].size, 0, true));
-        plan.push((&self.ups[0].view, self.ups[0].size, 1, true));
-        plan.push((&self.ups[1].view, self.ups[1].size, 2, true));
+        plan.push((&self.levels[4].view, self.levels[4].size, 0, true));
+        for i in 1..4 {
+            plan.push((&self.ups[i - 1].view, self.ups[i - 1].size, i, true));
+        }
         let mut passes = Vec::new();
         let mut steps = Vec::new();
         for (src, src_size, target, up) in plan {
@@ -236,10 +243,10 @@ impl Glass {
                 wgpu::BindGroupEntry {
                     binding: 0,
                     resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                        buffer: &res.uniforms, offset: 0, size: wgpu::BufferSize::new(64),
+                        buffer: &res.uniforms, offset: 0, size: wgpu::BufferSize::new(80),
                     }),
                 },
-                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&self.ups[2].view) },
+                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&self.ups[3].view) },
                 wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(&self.sampler) },
             ],
         }));
@@ -298,11 +305,12 @@ impl egui_wgpu::CallbackTrait for Pane {
         let ppp = screen.pixels_per_point;
         let r = self.rect;
         let l = self.look;
-        let data: [f32; 16] = [
+        let data: [f32; 20] = [
             r.min.x * ppp, r.min.y * ppp, r.max.x * ppp, r.max.y * ppp,
             self.radius * ppp, screen.size_in_pixels[0] as f32, screen.size_in_pixels[1] as f32, l.saturation,
             l.tint[0], l.tint[1], l.tint[2], l.tint[3],
-            l.rim[0], l.rim[1], l.rim_width * ppp, l.glow,
+            l.rim[0], l.rim[1], l.rim_width, l.glow,
+            l.peak, ppp, l.inner_shadow, 0.0,
         ];
         queue.write_buffer(&res.uniforms, self.slot as u64 * SLOT, bytemuck::cast_slice(&data));
         Vec::new()

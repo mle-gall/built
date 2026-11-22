@@ -35,7 +35,10 @@ PALETTE_ACTIONS = {"eyedropper": "_act_eyedropper", "bridge": "_act_bridge",
 # Navigation acts on the camera, not the model: a top row of its own.
 NAV = [["orbit", "pan", "zoom", "zoom_window", "zoom_extents", "zoom_selection"],
        ["look_around", "walk", "position_camera"]]
-FONT = "/System/Library/Fonts/SFNS.ttf"
+# Inter 400/500/600 (SIL OFL, resources/fonts/inter); the system font if missing.
+FONT = str(__import__("pathlib").Path(__file__).resolve().parents[1] / "resources" / "fonts" / "inter")
+if not os.path.isdir(FONT):
+    FONT = "/System/Library/Fonts/SFNS.ttf"
 _ICON_PX = 48
 
 

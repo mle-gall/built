@@ -6,7 +6,8 @@ struct Pane {
     rect: vec4<f32>,    // x0, y0, x1, y1 in physical pixels
     params: vec4<f32>,  // corner radius px, screen w, screen h, saturation
     tint: vec4<f32>,    // linear rgb, amount
-    edge: vec4<f32>,    // rim light at top-left, at bottom-right, rim width px, top glow
+    edge: vec4<f32>,    // lit rim, quiet rim, rim width (physical px), top highlight
+    detail: vec4<f32>,  // backdrop peak, pixels per point, inner shadow, unused
 };
 @group(0) @binding(0) var<uniform> pane: Pane;
 @group(0) @binding(1) var blurred: texture_2d<f32>;
@@ -25,30 +26,37 @@ fn rounded(p: vec2<f32>, half: vec2<f32>, r: f32) -> f32 {
 
 @fragment
 fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
+    // Council 2026-11-22 (glass specialist): a soft shoulder instead of a
+    // hard brightness cap, a rim lit from the shape's normal, a narrow top
+    // highlight, a faint inner shadow on the far side, a crisp outline.
+    // Derivatives and the sample stay in uniform control flow: no discard.
     let centre = (pane.rect.xy + pane.rect.zw) * 0.5;
     let half = (pane.rect.zw - pane.rect.xy) * 0.5;
     let d = rounded(pos.xy - centre, half, pane.params.x);
     let a = clamp(0.5 - d, 0.0, 1.0);
-    if (d > 2.0) {
-        discard;
-    }
-    var c = textureSample(blurred, smp, pos.xy / pane.params.yz).rgb;
-    let l = dot(c, vec3<f32>(0.2126, 0.7152, 0.0722));
-    c = mix(vec3<f32>(l), c, pane.params.w);
-    // Keep text legible on pale models: cap the backdrop's brightness
-    // (linear 0.16 ≈ 44 % sRGB) before the tint, keeping its colour.
-    let lum = max(dot(c, vec3<f32>(0.2126, 0.7152, 0.0722)), 1e-4);
-    c = c * min(1.0, 0.16 / lum);
-    c = mix(c, pane.tint.rgb, pane.tint.a);
-    // Edge details: a rim lit from the top-left, fading to the bottom-right,
-    // a soft glow just inside the top edge, a dark line just outside.
-    let t = clamp(dot((pos.xy - pane.rect.xy) / max(pane.rect.zw - pane.rect.xy, vec2<f32>(1.0)),
-                      vec2<f32>(0.5, 0.5)), 0.0, 1.0);
-    let rim = (1.0 - smoothstep(0.0, pane.edge.z, -d)) * mix(pane.edge.x, pane.edge.y, t);
-    let glow = pane.edge.w * (1.0 - smoothstep(0.0, 18.0, pos.y - pane.rect.y));
-    c = mix(c, vec3<f32>(1.0), clamp(rim + glow, 0.0, 1.0));
-    let outer = clamp(1.0 - abs(d - 0.75), 0.0, 1.0) * 0.35;
-    let alpha = max(a, outer);
-    let col = c * a;  // the dark outline adds coverage, no colour
-    return vec4<f32>(col, alpha);
+
+    let scene = textureSample(blurred, smp, pos.xy / pane.params.yz).rgb;
+    let y = dot(scene, vec3<f32>(0.2126, 0.7152, 0.0722));
+    let muted = mix(vec3<f32>(y), scene, pane.params.w);
+    let shoulder = pane.detail.x * 1.5 / (y + 0.5);
+    var c = mix(muted * shoulder, pane.tint.rgb, pane.tint.a);
+
+    let ppp = pane.detail.y;
+    let inward = max(-d, 0.0);
+    let normal = normalize(vec2<f32>(dpdx(d) + 1e-6, dpdy(d)));
+    let facing = dot(normal, normalize(vec2<f32>(-0.45, -0.89)));
+    let in_shadow = smoothstep(-0.05, 0.8, -facing) * (1.0 - smoothstep(0.0, 2.5 * ppp, inward));
+    c *= 1.0 - pane.detail.z * in_shadow;
+
+    let lit = smoothstep(-0.40, 0.85, facing);
+    let rim = mix(pane.edge.y, pane.edge.x, lit) * (1.0 - smoothstep(0.15, pane.edge.z, inward));
+    let x = clamp((pos.x - pane.rect.x) / max(pane.rect.z - pane.rect.x, 1.0), 0.0, 1.0);
+    let top = pane.edge.w * (1.0 - smoothstep(0.0, 5.0 * ppp, pos.y - pane.rect.y)) * mix(1.0, 0.65, x);
+    c = mix(c, vec3<f32>(0.38643, 0.48515, 0.63076), clamp(rim + top, 0.0, 1.0));
+
+    // ±0.5/255 dither so the flat graphite does not band.
+    let n = fract(sin(dot(floor(pos.xy), vec2<f32>(12.9898, 78.233))) * 43758.5453) - 0.5;
+    c += vec3<f32>(n / 255.0);
+    let outside = clamp(1.5 - d, 0.0, 1.0) - a;
+    return vec4<f32>(c * a, a + 0.48 * outside);
 }

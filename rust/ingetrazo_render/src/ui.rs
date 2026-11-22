@@ -8,37 +8,82 @@ use std::time::Instant;
 
 use egui::{pos2, vec2, Color32, CornerRadius, Margin, Pos2, Rect, Sense, Shadow, Stroke};
 
-// ---- Design tokens (one place; every component below draws from these) ----
-// Text on glass: three levels. Fills are translucent white or accent over
-// the blurred model, so they read on any background.
-const INK: Color32 = Color32::from_rgb(0xEE, 0xF1, 0xF4);        // primary text, icons
-const DIM: Color32 = Color32::from_rgb(0x9C, 0xA4, 0xAD);        // secondary text
-const FAINT: Color32 = Color32::from_rgb(0x6E, 0x76, 0x7F);      // captions, disabled
+// ---- Design tokens (council 2026-11-22; one place, every component
+// below draws from these). Text on graphite glass, three levels plus off.
+const INK: Color32 = Color32::from_rgb(0xEE, 0xF1, 0xF4);        // primary text, active icons
+const INK_2: Color32 = Color32::from_rgb(0xC9, 0xCF, 0xD6);      // idle icons
+const DIM: Color32 = Color32::from_rgb(0xA2, 0xA9, 0xB1);        // counts, keys, secondary text
+const FAINT: Color32 = Color32::from_rgb(0x85, 0x8C, 0x94);      // captions, placeholders, shortcuts
+const OFF: Color32 = Color32::from_rgb(0x5C, 0x63, 0x6A);        // disabled
 const ACCENT: Color32 = Color32::from_rgb(0x6A, 0xA5, 0xFF);
-const ACTIVE: Color32 = Color32::from_rgba_premultiplied(32, 50, 77, 77);   // accent @ 30 %
-const HOVER: Color32 = Color32::from_rgba_premultiplied(20, 20, 20, 20);    // white @ 8 %
-const EDGE: Color32 = Color32::from_rgba_premultiplied(23, 23, 23, 23);     // hairline: white @ 9 %
-const FIELD: Color32 = Color32::from_rgba_premultiplied(0, 0, 0, 70);       // inset fields
+const ACTIVE: Color32 = Color32::from_rgba_premultiplied(25, 40, 61, 61);    // accent @ 24 %
+const ACCENT_LINE: Color32 = Color32::from_rgba_premultiplied(58, 91, 140, 140); // accent @ 55 %
+const HOVER: Color32 = Color32::from_rgba_premultiplied(18, 18, 18, 18);     // white @ 7 %
+const PRESS: Color32 = Color32::from_rgba_premultiplied(31, 31, 31, 31);     // white @ 12 %
+const EDGE: Color32 = Color32::from_rgba_premultiplied(20, 20, 20, 20);      // hairline, white @ 8 %
+const FIELD: Color32 = Color32::from_rgba_premultiplied(0, 0, 0, 71);        // inset field, black @ 28 %
 const WARN: Color32 = Color32::from_rgb(0xF5, 0xB8, 0x4A);
-const PANEL: Color32 = Color32::from_rgba_premultiplied(22, 24, 28, 236);   // opaque fallback (tooltips)
-// Radii and rhythm (4-pt grid).
-const R_PANEL: u8 = 14;
-const R_CONTROL: u8 = 8;
+const WARN_FILL: Color32 = Color32::from_rgba_premultiplied(34, 26, 10, 36);  // warn @ 14 %
+const PANEL: Color32 = Color32::from_rgba_premultiplied(29, 31, 36, 245);    // tooltips (opaque)
+// Radii: concentric — control 6 inside bars/menus (margin 4) = 10, inside panels (margin 6) = 12.
+const R_CONTROL: u8 = 6;
 const R_ROW: u8 = 6;
-/// Glass surfaces: how much of the blurred model shows, and the rim.
+// Type roles (Inter 400 / 500 / 600 when bundled, else the system font).
+fn body() -> egui::FontId { egui::FontId::proportional(12.0) }
+fn meta() -> egui::FontId { egui::FontId::proportional(11.0) }
+fn strong(size: f32) -> egui::FontId { egui::FontId::new(size, egui::FontFamily::Name("medium".into())) }
+fn title() -> egui::FontId { egui::FontId::new(13.0, egui::FontFamily::Name("semibold".into())) }
+
+/// The one state painter: every control's fill and line come from here.
+#[derive(Clone, Copy, PartialEq)]
+enum State { Idle, Hover, Press, On, Off }
+fn state_of(resp: &egui::Response, on: bool, enabled: bool) -> State {
+    if !enabled { State::Off }
+    else if on { State::On }
+    else if resp.is_pointer_button_down_on() { State::Press }
+    else if resp.hovered() { State::Hover }
+    else { State::Idle }
+}
+fn paint_state(ui: &egui::Ui, rect: Rect, st: State, radius: u8) {
+    let r = CornerRadius::same(radius);
+    match st {
+        State::Hover => { ui.painter().rect_filled(rect, r, HOVER); }
+        State::Press => { ui.painter().rect_filled(rect, r, PRESS); }
+        State::On => {
+            ui.painter().rect_filled(rect, r, ACTIVE);
+            ui.painter().rect_stroke(rect.shrink(0.25), r, Stroke::new(0.5_f32, ACCENT_LINE), egui::StrokeKind::Inside);
+        }
+        _ => {}
+    }
+}
+fn ink_of(st: State) -> Color32 {
+    match st { State::Off => OFF, State::On => Color32::WHITE, State::Idle => INK_2, _ => INK }
+}
+
+/// Glass surfaces (council 2026-11-22): Panel for data (tree, inspector),
+/// Raised for menus, Pill for compact chrome (palette, rows, bars).
 #[derive(Clone, Copy)]
 enum Surface { Panel, Raised, Pill }
 impl Surface {
     fn look(self) -> crate::glass::Look {
-        // Tints are linear rgb (the target is sRGB).
-        let (amount, rim, glow) = match self {
-            Surface::Panel => (0.55, [0.30, 0.05], 0.05),
-            Surface::Raised => (0.66, [0.34, 0.06], 0.07),
-            Surface::Pill => (0.58, [0.26, 0.04], 0.03),
+        // (tint mix, saturation, peak, lit rim, quiet rim, top, inner shadow)
+        let (mix, sat, peak, lit, quiet, top, inner) = match self {
+            Surface::Panel => (0.72, 0.30, 0.080, 0.20, 0.045, 0.022, 0.12),
+            Surface::Raised => (0.82, 0.16, 0.065, 0.23, 0.055, 0.030, 0.14),
+            Surface::Pill => (0.61, 0.45, 0.085, 0.20, 0.045, 0.022, 0.10),
         };
-        crate::glass::Look { tint: [0.006, 0.007, 0.009, amount], saturation: 1.3, rim, rim_width: 1.0, glow }
+        crate::glass::Look { tint: [0.01444, 0.01764, 0.02315, mix], saturation: sat, rim: [lit, quiet],
+                             rim_width: 1.25, glow: top, peak, inner_shadow: inner }
     }
-    fn radius(self) -> u8 { match self { Surface::Pill => 10, Surface::Raised => 12, Surface::Panel => R_PANEL } }
+    fn radius(self) -> u8 { match self { Surface::Panel => 12, Surface::Raised | Surface::Pill => 10 } }
+    fn shadow(self) -> Shadow {
+        let (y, blur, alpha) = match self {
+            Surface::Panel => (8, 24, 100),
+            Surface::Raised => (12, 32, 128),
+            Surface::Pill => (4, 14, 90),
+        };
+        Shadow { offset: [0, y], blur, spread: 0, color: Color32::from_black_alpha(alpha) }
+    }
 }
 
 struct Tool {
@@ -126,7 +171,7 @@ struct Glass {
     radius: u8,
     accent: Option<Color32>,
 }
-fn frame() -> Glass { glass(Surface::Panel) }
+fn frame() -> Glass { glass(Surface::Pill) }
 fn glass(surface: Surface) -> Glass {
     Glass { surface, margin: Margin::same(4), radius: surface.radius(), accent: None }
 }
@@ -144,8 +189,11 @@ impl Glass {
         }
         let inner = f.show(ui, add);
         let rect = inner.response.rect;
-        let shadow = Shadow { offset: [0, 10], blur: 30, spread: 0, color: Color32::from_black_alpha(60) };
-        ui.painter().set(shadow_at, shadow.as_shape(rect, CornerRadius::same(self.radius)));
+        let contact = Shadow { offset: [0, 1], blur: 2, spread: 0, color: Color32::from_black_alpha(115) };
+        ui.painter().set(shadow_at, egui::Shape::Vec(vec![
+            egui::Shape::Rect(self.surface.shadow().as_shape(rect, CornerRadius::same(self.radius))),
+            egui::Shape::Rect(contact.as_shape(rect, CornerRadius::same(self.radius))),
+        ]));
         ui.painter().set(glass_at, crate::glass::pane(rect, self.radius as f32, self.surface.look()));
         inner
     }
@@ -154,7 +202,7 @@ impl Glass {
 /// A section caption: small, spaced capitals, faint.
 fn caption(ui: &mut egui::Ui, text: &str) {
     let job = egui::text::LayoutJob::single_section(text.to_uppercase(), egui::TextFormat {
-        font_id: egui::FontId::proportional(10.0), color: FAINT, extra_letter_spacing: 0.8, ..Default::default() });
+        font_id: strong(10.0), color: FAINT, extra_letter_spacing: 0.6, ..Default::default() });
     ui.label(job);
 }
 
@@ -216,11 +264,32 @@ impl Ui {
         }
     }
 
-    pub fn set_font(&mut self, bytes: Vec<u8>) {
+    /// Regular, medium and semibold faces (Inter); medium/semibold fall
+    /// back to regular when missing.
+    pub fn set_fonts(&mut self, regular: Vec<u8>, medium: Option<Vec<u8>>, semibold: Option<Vec<u8>>) {
         let mut fonts = egui::FontDefinitions::default();
-        fonts.font_data.insert("ui".into(), Arc::new(egui::FontData::from_owned(bytes)));
-        for family in [egui::FontFamily::Proportional, egui::FontFamily::Monospace] {
-            fonts.families.entry(family).or_default().insert(0, "ui".into());
+        // Inter lacks the arrows, checks and pencil the chrome uses: the
+        // system faces stand behind it (egui's own fallbacks are not built in).
+        for (key, path) in [("sys", "/System/Library/Fonts/SFNS.ttf"),
+                            ("symbols", "/System/Library/Fonts/Apple Symbols.ttf")] {
+            if let Ok(bytes) = std::fs::read(path) {
+                fonts.font_data.insert(key.into(), Arc::new(egui::FontData::from_owned(bytes)));
+                for family in [egui::FontFamily::Proportional, egui::FontFamily::Monospace] {
+                    fonts.families.entry(family).or_default().push(key.into());
+                }
+            }
+        }
+        let base = fonts.families.get(&egui::FontFamily::Proportional).cloned().unwrap_or_default();
+        fonts.font_data.insert("ui".into(), Arc::new(egui::FontData::from_owned(regular)));
+        fonts.families.entry(egui::FontFamily::Proportional).or_default().insert(0, "ui".into());
+        for (name, bytes) in [("medium", medium), ("semibold", semibold)] {
+            let key = if let Some(b) = bytes {
+                fonts.font_data.insert(name.into(), Arc::new(egui::FontData::from_owned(b)));
+                name.to_owned()
+            } else { "ui".to_owned() };
+            let mut fam = vec![key];
+            fam.extend(base.iter().cloned());
+            fonts.families.insert(egui::FontFamily::Name(name.into()), fam);
         }
         self.ctx.set_fonts(fonts);
     }
@@ -357,7 +426,7 @@ impl Ui {
             .order(egui::Order::Foreground)
             .interactable(false)
             .show(ctx, |ui| {
-                let edge = if *typing { Color32::from_rgb(0x4C, 0x8D, 0xFF) } else { EDGE };
+                let edge = if *typing { ACCENT } else { EDGE };
                 glass(Surface::Pill).stroke(Stroke::new(1.0_f32, edge))
                     .inner_margin(Margin::symmetric(10, 5)).show(ui, |ui| {
                     ui.horizontal(|ui| {
@@ -458,7 +527,7 @@ impl Ui {
         // Two columns while they fit above the status line; wider, never
         // scrolled or folded, when the window is short (council 2026-11-22).
         let room = screen.height() - 12.0 - 60.0;
-        let tall = |cols: usize| self.groups.iter().map(|g| g.len().div_ceil(cols) as f32 * 30.0).sum::<f32>()
+        let tall = |cols: usize| self.groups.iter().map(|g| g.len().div_ceil(cols) as f32 * 32.0).sum::<f32>()
             + self.groups.len().saturating_sub(1) as f32 * 9.0 + 8.0;
         let cols = (2..=5).find(|c| tall(*c) <= room).unwrap_or(5);
         egui::Area::new(egui::Id::new("palette"))
@@ -469,8 +538,8 @@ impl Ui {
                     ui.spacing_mut().item_spacing = vec2(2.0, 2.0);
                     for (gi, group) in self.groups.iter().enumerate() {
                         if gi > 0 {
-                            let (r, _) = ui.allocate_exact_size(vec2(cols as f32 * 30.0 - 2.0, 7.0), Sense::hover());
-                            ui.painter().hline(r.x_range().shrink(4.0), r.center().y, Stroke::new(1.0_f32, EDGE));
+                            let (r, _) = ui.allocate_exact_size(vec2(cols as f32 * 32.0 - 2.0, 7.0), Sense::hover());
+                            ui.painter().hline(r.x_range().shrink(2.0), r.center().y, Stroke::new(1.0_f32, EDGE));
                         }
                         for pair in group.chunks(cols) {
                             ui.horizontal(|ui| {
@@ -503,10 +572,10 @@ impl Ui {
                     ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing = vec2(10.0, 0.0);
                         if !self.status.is_empty() {
-                            ui.label(egui::RichText::new(&self.status).size(12.0).color(INK));
+                            ui.label(egui::RichText::new(&self.status).font(strong(12.0)).color(INK));
                         }
                         if !self.hint.is_empty() {
-                            ui.label(egui::RichText::new(&self.hint).size(12.0).color(DIM));
+                            ui.label(egui::RichText::new(&self.hint).font(body()).color(DIM));
                         }
                     });
                 });
@@ -527,8 +596,11 @@ impl Ui {
                     ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing = vec2(2.0, 0.0);
                         ui.add_space(8.0);
-                        ui.label(egui::RichText::new(summary).size(12.0).color(DIM));
-                        ui.add_space(6.0);
+                        ui.label(egui::RichText::new(summary).font(meta()).color(FAINT));
+                        ui.add_space(8.0);
+                        let (r, _) = ui.allocate_exact_size(vec2(1.0, 28.0), Sense::hover());
+                        ui.painter().vline(r.center().x, r.y_range().shrink(6.0), Stroke::new(1.0_f32, EDGE));
+                        ui.add_space(4.0);
                         for (id, label, key, enabled, more) in actions {
                             if !*more && text_button(ui, label, key, *enabled) {
                                 clicked = Some(id.clone());
@@ -665,7 +737,7 @@ impl Ui {
                             if si > 0 {
                                 ui.add_space(4.0);
                             }
-                            ui.label(egui::RichText::new(title.to_uppercase()).size(10.0).color(DIM));
+                            caption(ui, title);
                             let icons_only = items.iter().all(|i| self.icons.contains_key(&i.3));
                             if icons_only {
                                 ui.horizontal_wrapped(|ui| {
@@ -752,13 +824,13 @@ impl Ui {
             .fixed_pos(pos2(screen.max.x - 12.0 - W, top))
             .order(egui::Order::Foreground)
             .show(ctx, |ui| {
-                frame().inner_margin(Margin::same(6)).show(ui, |ui| {
+                glass(Surface::Panel).inner_margin(Margin::same(8)).show(ui, |ui| {
                     ui.set_width(W - 12.0);
                     ui.set_height(height - 12.0);
                     ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
                     // Header: title, Unfiled chip.
                     ui.horizontal(|ui| {
-                        ui.label(egui::RichText::new("PROJECT").size(10.5).strong().color(DIM));
+                        caption(ui, "Project");
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if col.unfiled > 0 {
                                 let item = (String::new(), format!("{} unfiled", col.unfiled), "Select the unfiled items".to_owned(),
@@ -771,13 +843,14 @@ impl Ui {
                     if let Some(what) = &col.filing {
                         let banner = format!("File {what} to…  click a node, or type and press Enter");
                         let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 22.0), Sense::hover());
-                        ui.painter().rect_filled(r, CornerRadius::same(4), Color32::from_rgb(0x24, 0x40, 0x6E));
+                        ui.painter().rect_filled(r, CornerRadius::same(R_ROW), ACTIVE);
                         ui.painter().text(r.left_center() + vec2(8.0, 0.0), egui::Align2::LEFT_CENTER, banner,
                             egui::FontId::proportional(11.5), Color32::WHITE);
                         ui.add_space(4.0);
                     }
                     let edit = egui::TextEdit::singleline(&mut col.filter)
-                        .hint_text(if col.filing.is_some() { "Node name or kind" } else { "Filter nodes" })
+                        .hint_text(egui::RichText::new(if col.filing.is_some() { "Node name or kind" } else { "Filter nodes" }).color(FAINT))
+                        .margin(Margin::symmetric(8, 5))
                         .desired_width(f32::INFINITY)
                         .font(egui::FontId::proportional(12.0));
                     let resp = ui.add(edit);
@@ -816,7 +889,7 @@ impl Ui {
                             col.filter.clear();
                         }
                     }
-                    let tree_h = (ui.available_height() * 0.58).max(140.0);
+                    let tree_h = ((visible.len().max(1) as f32) * (ROW + 0.0) + 4.0).min(ui.available_height() * 0.6).max(66.0);
                     if col.nodes.is_empty() {
                         ui.add_space(6.0);
                         ui.label(egui::RichText::new("No project structure yet. Proposing one from the tags is in the Structure panel (Window menu) for now.")
@@ -827,49 +900,54 @@ impl Ui {
                             for &i in &visible[range] {
                                 let n = &col.nodes[i];
                                 let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ROW), Sense::click());
-                                let hot = resp.hovered();
                                 let lit = col.highlighted.as_deref() == Some(n.key.as_str());
+                                let filing = col.filing.is_some();
                                 if lit {
-                                    ui.painter().rect_filled(rect, CornerRadius::same(4), Color32::from_rgb(0x2A, 0x3C, 0x5C));
-                                } else if hot {
-                                    ui.painter().rect_filled(rect, CornerRadius::same(4),
-                                        if col.filing.is_some() { Color32::from_rgb(0x24, 0x40, 0x6E) } else { HOVER });
+                                    // Selected: accent wash and a 2 × 12 mark at the leading edge.
+                                    ui.painter().rect_filled(rect, CornerRadius::same(R_ROW), ACTIVE);
+                                    ui.painter().rect_filled(Rect::from_center_size(pos2(rect.min.x + 1.0, rect.center().y), vec2(2.0, 12.0)),
+                                        CornerRadius::same(1), ACCENT);
+                                } else if resp.hovered() {
+                                    ui.painter().rect_filled(rect, CornerRadius::same(R_ROW), if filing { ACTIVE } else { HOVER });
                                 }
                                 let x0 = rect.min.x + 4.0 + n.depth as f32 * 14.0;
                                 let tri = Rect::from_min_size(pos2(x0, rect.min.y), vec2(14.0, ROW));
                                 if n.has_children {
                                     let open = col.expanded.contains(&n.key) || !needle.is_empty();
-                                    ui.painter().text(tri.center(), egui::Align2::CENTER_CENTER, if open { "▾" } else { "▸" },
-                                        egui::FontId::proportional(11.0), DIM);
+                                    ui.painter().text(tri.center(), egui::Align2::CENTER_CENTER, if open { "▾" } else { "▸" }, meta(), FAINT);
                                 }
-                                let name = if n.active { format!("✎ {}", n.name) } else { n.name.clone() };
-                                let ink = if n.active { Color32::WHITE } else { INK };
-                                let galley = ui.painter().layout_no_wrap(name, egui::FontId::proportional(12.0), ink);
-                                let name_w = galley.size().x;
-                                ui.painter().galley(pos2(x0 + 16.0, rect.center().y - galley.size().y / 2.0), galley, ink);
-                                let mut right = rect.max.x - 6.0;
+                                // Right: problems (dot + number) and count, each in a fixed 40-pt column.
+                                let cy = rect.center().y;
+                                let warn_col = rect.max.x - 6.0;
                                 if n.problems > 0 {
-                                    let g = ui.painter().layout_no_wrap(format!("!{}", n.problems), egui::FontId::proportional(11.0),
-                                        Color32::from_rgb(0xF0, 0xB0, 0x40));
+                                    let g = ui.painter().layout_no_wrap(n.problems.to_string(), meta(), WARN);
                                     let w = g.size().x;
-                                    ui.painter().galley(pos2(right - w, rect.center().y - g.size().y / 2.0), g, Color32::WHITE);
-                                    right -= w + 8.0;
+                                    ui.painter().galley(pos2(warn_col - w, cy - g.size().y / 2.0), g, WARN);
+                                    ui.painter().circle_filled(pos2(warn_col - w - 6.0, cy), 2.5, WARN);
                                 }
-                                let g = ui.painter().layout_no_wrap(n.count.to_string(), egui::FontId::proportional(11.0), DIM);
-                                let w = g.size().x;
-                                ui.painter().galley(pos2(right - w, rect.center().y - g.size().y / 2.0), g, DIM);
-                                right -= w + 10.0;
-                                // The kind, when there is room after the name.
-                                let kx = x0 + 16.0 + name_w + 10.0;
-                                if !n.kind.is_empty() && kx + 40.0 < right {
-                                    let italic = n.kind == "Drawing only" || n.kind == "Reference";
-                                    let mut job = egui::text::LayoutJob::single_section(n.kind.clone(), egui::TextFormat {
-                                        font_id: egui::FontId::proportional(11.0), color: DIM, italics: italic, ..Default::default() });
-                                    job.wrap.max_width = right - kx;
+                                let count_col = warn_col - 44.0;
+                                let g = ui.painter().layout_no_wrap(n.count.to_string(), meta(), DIM);
+                                ui.painter().galley(pos2(count_col - g.size().x, cy - g.size().y / 2.0), g, DIM);
+                                let right = count_col - 44.0;
+                                // Name, then kind, both cut short before the numbers.
+                                let ink = if lit || n.active { Color32::WHITE } else { INK };
+                                let font = if n.active { strong(12.0) } else { body() };
+                                let name = if n.active { format!("✎ {}", n.name) } else { n.name.clone() };
+                                let one_line = |text: String, font: egui::FontId, color: Color32, width: f32| {
+                                    let mut job = egui::text::LayoutJob::single_section(text, egui::TextFormat {
+                                        font_id: font, color, ..Default::default() });
+                                    job.wrap.max_width = width.max(10.0);
                                     job.wrap.max_rows = 1;
                                     job.wrap.break_anywhere = true;
-                                    let g = ui.painter().layout_job(job);
-                                    ui.painter().galley(pos2(kx, rect.center().y - g.size().y / 2.0), g, DIM);
+                                    job
+                                };
+                                let g = ui.painter().layout_job(one_line(name, font, ink, right - x0 - 16.0));
+                                let name_w = g.size().x;
+                                ui.painter().galley(pos2(x0 + 16.0, cy - g.size().y / 2.0), g, ink);
+                                let kx = x0 + 16.0 + name_w + 8.0;
+                                if !n.kind.is_empty() && kx + 30.0 < right {
+                                    let g = ui.painter().layout_job(one_line(n.kind.clone(), meta(), FAINT, right - kx));
+                                    ui.painter().galley(pos2(kx, cy - g.size().y / 2.0), g, FAINT);
                                 }
                                 if resp.clicked() {
                                     let on_tri = n.has_children && resp.interact_pointer_pos().is_some_and(|p| tri.contains(p));
@@ -900,10 +978,10 @@ impl Ui {
                     egui::ScrollArea::vertical().id_salt("inspector").auto_shrink([false, false]).show(ui, |ui| {
                         ui.spacing_mut().item_spacing = vec2(0.0, 3.0);
                         if col.inspector_title.is_empty() {
-                            ui.label(egui::RichText::new("Nothing selected").size(12.0).color(DIM));
+                            ui.label(egui::RichText::new("Nothing selected").font(body()).color(FAINT));
                             return;
                         }
-                        ui.label(egui::RichText::new(&col.inspector_title).size(13.0).strong().color(Color32::WHITE));
+                        ui.label(egui::RichText::new(&col.inspector_title).font(title()).color(INK));
                         ui.add_space(4.0);
                         for (title, rows) in &col.inspector {
                             let folded = title.starts_with("Export");
@@ -924,11 +1002,11 @@ impl Ui {
                                 }
                             };
                             if folded {
-                                egui::CollapsingHeader::new(egui::RichText::new(title.to_uppercase()).size(10.5).color(DIM))
+                                egui::CollapsingHeader::new(egui::RichText::new(title.to_uppercase()).font(strong(10.0)).color(FAINT))
                                     .id_salt(title).default_open(false).show(ui, body);
                             } else {
-                                ui.add_space(4.0);
-                                ui.label(egui::RichText::new(title.to_uppercase()).size(10.5).color(DIM));
+                                ui.add_space(8.0);
+                                caption(ui, title);
                                 body(ui);
                             }
                         }
@@ -977,7 +1055,7 @@ impl Ui {
             .order(egui::Order::Tooltip)
             .interactable(false)
             .show(ctx, |ui| {
-                let edge = if *typing { Color32::from_rgb(0x4C, 0x8D, 0xFF) } else { EDGE };
+                let edge = if *typing { ACCENT } else { EDGE };
                 glass(Surface::Pill).stroke(Stroke::new(1.0_f32, edge))
                     .inner_margin(Margin::symmetric(7, 3)).show(ui, |ui| {
                     ui.horizontal(|ui| {
@@ -1085,20 +1163,25 @@ fn mods_from(mods: u8) -> egui::Modifiers {
 
 /// A cluster or icon-grid button: its icon if it has one, else its label.
 /// Checked items stay lit (latched toggles).
+/// A bar control (top row, options strip): icon 28 × 28 or text, 28 high.
+/// Checked items stay lit (latched toggles), the same way as a current tool.
 fn item_button(ui: &mut egui::Ui, item: &Item, icon: Option<&egui::TextureHandle>) -> bool {
     let (_, label, tip, _, checked, enabled) = item;
-    let ink = if !*enabled { Color32::from_rgb(0x5E, 0x64, 0x6B) } else if *checked == 1 { Color32::WHITE } else { INK };
     let width = match icon {
         Some(_) => 28.0,
-        None => ui.painter().layout_no_wrap(label.clone(), egui::FontId::proportional(12.0), ink).size().x + 18.0,
+        None => ui.painter().layout_no_wrap(label.clone(), body(), INK).size().x + 16.0,
     };
     let sense = if *enabled { Sense::click() } else { Sense::hover() };
-    let (rect, resp) = ui.allocate_exact_size(vec2(width, 26.0), sense);
-    let fill = if *checked == 1 { ACTIVE } else if *enabled && resp.hovered() { HOVER } else { Color32::TRANSPARENT };
-    ui.painter().rect_filled(rect, CornerRadius::same(R_CONTROL), fill);
+    let (rect, resp) = ui.allocate_exact_size(vec2(width, 28.0), sense);
+    let st = state_of(&resp, *checked == 1, *enabled);
+    paint_state(ui, rect, st, R_CONTROL);
+    let ink = ink_of(st);
     match icon {
-        Some(tex) => { egui::Image::new(tex).tint(ink).paint_at(ui, rect.shrink(3.0)); }
-        None => { ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, label, egui::FontId::proportional(12.0), ink); }
+        Some(tex) => { egui::Image::new(tex).tint(ink).paint_at(ui, rect.shrink(4.0)); }
+        None => {
+            let ink = if st == State::Idle { INK } else { ink };
+            ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, label, body(), ink);
+        }
     }
     let tip = if tip.is_empty() { label.clone() } else { tip.clone() };
     resp.on_hover_text(tip).clicked()
@@ -1108,74 +1191,67 @@ fn menu_row(ui: &mut egui::Ui, item: &Item) -> bool {
     menu_row_resp(ui, item).0.clicked()
 }
 
-/// A menu row: check mark column, label, shortcut (or ▸) on the right.
+/// A menu row, 24 high: optional check lane (only when the menu has checks:
+/// the caller marks that with item.3 == "check"), label, shortcut or › right.
 fn menu_row_resp(ui: &mut egui::Ui, item: &Item) -> (egui::Response, Rect) {
-    let (_, label, tip, _, checked, enabled) = item;
-    let ink = if *enabled { INK } else { Color32::from_rgb(0x5E, 0x64, 0x6B) };
+    let (_, label, tip, lane, checked, enabled) = item;
     let sense = if *enabled { Sense::click() } else { Sense::hover() };
     let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 24.0), sense);
-    if *enabled && resp.hovered() {
-        ui.painter().rect_filled(rect, CornerRadius::same(R_ROW), HOVER);
-    }
+    let st = state_of(&resp, false, *enabled);
+    paint_state(ui, rect, st, R_ROW);
+    let ink = if *enabled { INK } else { OFF };
+    let x = if lane == "check" || *checked >= 0 { 24.0 } else { 10.0 };
     if *checked == 1 {
-        ui.painter().text(pos2(rect.min.x + 10.0, rect.center().y), egui::Align2::CENTER_CENTER, "✓",
-            egui::FontId::proportional(12.0), Color32::WHITE);
+        ui.painter().text(pos2(rect.min.x + 12.0, rect.center().y), egui::Align2::CENTER_CENTER, "✓", body(), ACCENT);
     }
-    ui.painter().text(pos2(rect.min.x + 22.0, rect.center().y), egui::Align2::LEFT_CENTER, label,
-        egui::FontId::proportional(12.0), ink);
+    ui.painter().text(pos2(rect.min.x + x, rect.center().y), egui::Align2::LEFT_CENTER, label, body(), ink);
     if !tip.is_empty() {
-        ui.painter().text(pos2(rect.max.x - 8.0, rect.center().y), egui::Align2::RIGHT_CENTER, tip,
-            egui::FontId::proportional(11.0), DIM);
+        ui.painter().text(pos2(rect.max.x - 10.0, rect.center().y), egui::Align2::RIGHT_CENTER, tip, meta(), FAINT);
     }
     (resp, rect)
 }
 
+/// A warning chip: amber text on an amber wash, no outline.
 fn amber_button(ui: &mut egui::Ui, label: &str) -> bool {
-    let amber = Color32::from_rgb(0xF0, 0xB0, 0x40);
-    let g = ui.painter().layout_no_wrap(label.to_owned(), egui::FontId::proportional(11.5), amber);
-    let (rect, resp) = ui.allocate_exact_size(vec2(g.size().x + 14.0, 20.0), Sense::click());
-    ui.painter().rect_stroke(rect, CornerRadius::same(10), Stroke::new(1.0_f32, if resp.hovered() { amber } else { Color32::from_rgb(0x8A, 0x66, 0x22) }),
-        egui::StrokeKind::Inside);
-    ui.painter().galley(rect.center() - g.size() / 2.0, g, amber);
+    let g = ui.painter().layout_no_wrap(label.to_owned(), strong(11.0), WARN);
+    let (rect, resp) = ui.allocate_exact_size(vec2(g.size().x + 16.0, 20.0), Sense::click());
+    let fill = if resp.is_pointer_button_down_on() {
+        Color32::from_rgba_premultiplied(54, 40, 16, 56)
+    } else if resp.hovered() {
+        Color32::from_rgba_premultiplied(44, 33, 13, 46)
+    } else { WARN_FILL };
+    ui.painter().rect_filled(rect, CornerRadius::same(10), fill);
+    ui.painter().galley(rect.center() - g.size() / 2.0, g, WARN);
     resp.clicked()
 }
 
+/// A text command in a bar, 28 high, 8 pt padding.
 fn text_button(ui: &mut egui::Ui, label: &str, key: &str, enabled: bool) -> bool {
-    let font = egui::FontId::proportional(12.0);
-    let ink = if enabled { INK } else { Color32::from_rgb(0x5E, 0x64, 0x6B) };
-    let galley = ui.painter().layout_no_wrap(label.to_owned(), font, ink);
+    let galley = ui.painter().layout_no_wrap(label.to_owned(), body(), INK);
     let sense = if enabled { Sense::click() } else { Sense::hover() };
-    let (rect, resp) = ui.allocate_exact_size(vec2(galley.size().x + 16.0, 26.0), sense);
-    if enabled && resp.hovered() {
-        ui.painter().rect_filled(rect, CornerRadius::same(R_CONTROL), HOVER);
-    }
+    let (rect, resp) = ui.allocate_exact_size(vec2(galley.size().x + 16.0, 28.0), sense);
+    let st = state_of(&resp, false, enabled);
+    paint_state(ui, rect, st, R_CONTROL);
+    let ink = if enabled { INK } else { OFF };
     ui.painter().galley(pos2(rect.min.x + 8.0, rect.center().y - galley.size().y / 2.0), galley, ink);
     let resp = if key.is_empty() { resp } else { resp.on_hover_text(key) };
     resp.clicked()
 }
 
+/// A palette tool: 30 × 30 cell, glyph about 18 pt (the icon art carries
+/// its own margin), idle INK_2, hover INK, current white on accent.
 fn tool_button(ui: &mut egui::Ui, tool: &Tool, active: bool) -> bool {
-    let (rect, resp) = ui.allocate_exact_size(vec2(28.0, 28.0), Sense::click());
-    let fill = if active {
-        ACTIVE
-    } else if resp.hovered() {
-        HOVER
-    } else {
-        Color32::TRANSPARENT
-    };
-    ui.painter().rect_filled(rect, CornerRadius::same(R_CONTROL), fill);
-    if active {
-        ui.painter().rect_stroke(rect.shrink(0.5), CornerRadius::same(R_CONTROL),
-            Stroke::new(1.0_f32, Color32::from_rgba_premultiplied(64, 99, 153, 153)), egui::StrokeKind::Inside);
-    }
-    let tint = if active { Color32::WHITE } else { INK };
+    let (rect, resp) = ui.allocate_exact_size(vec2(30.0, 30.0), Sense::click());
+    let st = state_of(&resp, active, true);
+    paint_state(ui, rect, st, R_CONTROL);
+    let tint = ink_of(st);
     match &tool.icon {
         Some(tex) => {
-            egui::Image::new(tex).tint(tint).paint_at(ui, rect.shrink(1.0));
+            egui::Image::new(tex).tint(tint).paint_at(ui, rect.shrink(3.0));
         }
         None => {
             let letter: String = tool.label.chars().take(2).collect();
-            ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, letter, egui::FontId::proportional(11.0), tint);
+            ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, letter, meta(), tint);
         }
     }
     let tip = if tool.key.is_empty() { tool.label.clone() } else { format!("{}    {}", tool.label, tool.key) };
