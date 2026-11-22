@@ -8,6 +8,9 @@ use std::time::Instant;
 
 use egui::{pos2, vec2, Color32, CornerRadius, Margin, Pos2, Rect, Sense, Shadow, Stroke, Vec2};
 
+/// The start page (views/wgpu_start.py): a full-window state of the chrome.
+mod start;
+
 // ---- Design tokens (council 2026-11-22; one place, every component
 // below draws from these). Text on graphite glass, three levels plus off.
 const INK: Color32 = Color32::from_rgb(0xEE, 0xF1, 0xF4);        // primary text, active icons
@@ -226,6 +229,8 @@ pub struct Ui {
     sheet: Option<Sheet>,
     /// Work in progress, in the top bar: open, import, save, auto-save.
     jobs: Vec<Job>,
+    /// The start page: while shown it is the whole window (ui/start.rs).
+    home: start::Start,
 }
 
 /// A sheet: title, body, tone (question, info, warning, error) and its
@@ -423,6 +428,7 @@ impl Ui {
             units: "mm".into(),
             sheet: None,
             jobs: Vec::new(),
+            home: Default::default(),
         }
     }
 
@@ -1091,6 +1097,9 @@ impl Ui {
                                     if menu_row(ui, &(String::new(), "Close project".into(), "⌘W".into(), "check".into(), -1, true)) {
                                         clicked = Some(format!("proj:close:{i}"));
                                     }
+                                }
+                                if menu_row(ui, &(String::new(), "Start page".into(), String::new(), "check".into(), -1, true)) {
+                                    clicked = Some("start:show".into());
                                 }
                             }
                         }
@@ -2157,7 +2166,13 @@ impl Ui {
         };
         raw.viewports.entry(egui::ViewportId::ROOT).or_default().native_pixels_per_point = Some(scale);
         let ctx = self.ctx.clone();
+        let start = self.home.shown;
         let out = ctx.run(raw, |ctx| {
+            if start {
+                // The whole window: only the palette, the jobs and the sheet over it.
+                self.top_groups.clear();
+                self.start_page(ctx, screen);
+            } else {
             self.top_bar(ctx, screen);
             if !self.review {
                 self.palette(ctx, screen);
@@ -2169,14 +2184,15 @@ impl Ui {
             self.bar_menu(ctx);
             self.view_popup(ctx);
             self.form_popup(ctx);
+            }
             self.command_palette(ctx, screen);
-            if !self.review { self.selection_more(ctx); }
+            if !self.review && !start { self.selection_more(ctx); }
             self.jobs_chip(ctx, screen);
             self.sheet_popup(ctx, screen);
         });
-        let work = !self.review;
-        let shown = [("top", true), ("palette", work && !self.groups.is_empty()),
-                     ("view_menu", self.view_open), ("menu", self.menu.is_some()), ("form", self.form.is_some()),
+        let work = !self.review && !start;
+        let shown = [("top", !start), ("start", start), ("palette", work && !self.groups.is_empty()),
+                     ("view_menu", self.view_open && !start), ("menu", self.menu.is_some() && !start), ("form", self.form.is_some() && !start),
                      ("column", work && self.column.is_some()), ("bottom", work),
                      ("sel_more", work && self.sel_more && self.selection.is_some()),
                      ("paint_strip", work && !self.palette_items.is_empty()),

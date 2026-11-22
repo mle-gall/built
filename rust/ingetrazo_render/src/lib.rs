@@ -2115,6 +2115,28 @@ impl Renderer {
     fn ui_set_form(&mut self, title: String, fields: Vec<ui::FormField>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_form(title, fields); }
     }
+    /// The start page (views/wgpu_start.py): shown or not, and whether a
+    /// document waits behind it (Esc returns to it).
+    fn ui_show_start(&mut self, shown: bool, can_return: bool) {
+        if let Some(ui) = self.ui.as_mut() { ui.show_start(shown, can_return); }
+    }
+    fn ui_start_shown(&self) -> bool { self.ui.as_ref().is_some_and(|ui| ui.start_shown()) }
+    /// The page's rows: files ([path, name, meta, project, thumb], [pinned,
+    /// missing]); projects ([path, name, meta], [pinned, missing], files
+    /// (path, name, role)); templates (id, name, description); continue
+    /// [path, name, place, last in, problems, auto-save, thumb, open] or [];
+    /// the engine footer; side sections and bottom links as (id, label).
+    #[allow(clippy::too_many_arguments)]
+    fn ui_set_start(&mut self, files: Vec<(Vec<String>, Vec<i64>)>,
+                    projects: Vec<(Vec<String>, Vec<i64>, Vec<(String, String, String)>)>,
+                    templates: Vec<(String, String, String)>, cont: Vec<String>, footer: String,
+                    nav: Vec<(String, String)>, links: Vec<(String, String)>) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_start(files, projects, templates, cont, footer, nav, links); }
+    }
+    /// A key while the page is up: the key's name and its text. True: taken.
+    fn ui_start_key(&mut self, name: &str, text: &str) -> bool {
+        self.ui.as_mut().is_some_and(|ui| ui.start_key(name, text))
+    }
     fn ui_open_commands(&mut self) {
         if let Some(ui) = self.ui.as_mut() { ui.open_commands(); }
     }

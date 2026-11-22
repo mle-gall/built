@@ -29,7 +29,41 @@ def remember(path, pinned=None, settings=None, replace=None):
     rows = [row] + [r for r in rows if r['path'] not in (path, replace)]
     rows.sort(key=lambda r: not r.get('pinned', False))
     st.setValue('home/recent_' + kind, json.dumps(rows[:LIMIT]))
+    if kind == 'files' and pinned is None:
+        # Opened or saved, not a pin: the start page's «Continue».
+        st.setValue('home/last_file', path)
 
 
 def query(settings=None):
     return {kind: entries(kind, settings) for kind in ('files', 'projects')}
+
+
+def meta(path, settings=None):
+    """What the start page remembers of a document from when it was open
+    (``views.wgpu_start.note``): project, links, origin, unfiled, problems,
+    workspace. Empty when never noted."""
+    st = settings or QSettings()
+    try:
+        table = json.loads(st.value('home/meta', '{}'))
+    except (TypeError, ValueError):
+        table = {}
+    row = table.get(str(Path(path).resolve())) if isinstance(table, dict) else None
+    return row if isinstance(row, dict) else {}
+
+
+def note(path, data, settings=None):
+    """Merge ``data`` into what is remembered of ``path`` (bounded like the
+    recent lists, the newest kept)."""
+    st = settings or QSettings()
+    try:
+        table = json.loads(st.value('home/meta', '{}'))
+    except (TypeError, ValueError):
+        table = {}
+    if not isinstance(table, dict):
+        table = {}
+    key = str(Path(path).resolve())
+    row = dict(table.pop(key, None) or {})
+    row.update({k: v for k, v in data.items() if v is not None})
+    table[key] = row
+    keep = list(table.items())[-LIMIT * 2:]
+    st.setValue('home/meta', json.dumps(dict(keep)))
