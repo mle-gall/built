@@ -316,3 +316,69 @@ def test_unknown_keys_refuse_before_running():
     with pytest.raises(ValueError):
         C.run(h, "explode")
     assert h.revision == 0
+
+
+@needs_store
+def test_renderer_reads_the_feed_for_a_store_mesh():
+    """views/wgpu_updates: a mesh edit inside an open group is found from
+    the feed's step (not from the command class) and the element records
+    travel with the rebake."""
+    from core.group import Group
+    from core.history import SnapshotMutation
+    from views.wgpu_scene import pack_scene
+    from views.wgpu_updates import InstanceUpdates
+    mesh = M.Mesh()
+    S.become_store(mesh, mod.MeshStore(next(M._KEY_NAMESPACES), **S._weld_args()), [])
+    mesh.add_face([V(0, 0, 0), V(2, 0, 0), V(0, 3, 0)])
+    # A classic group: its own mesh is edited in place (a component
+    # instance would be edited through a world copy).
+    scene = Scene(groups=[Group(mesh), Group(M.Mesh())])
+    updates = InstanceUpdates(scene, pack_scene(scene))
+    scene.begin_group_edit(scene.groups[0])
+    updates.apply(*updates.diff(scene))
+    history = History(scene)
+    updates.observe(history)
+    edited = scene.mesh
+    assert edited is mesh and type(edited) is S.StoreMesh
+    v = edited.vertices[0]
+    history.execute(SnapshotMutation(lambda s: s.mesh.move_vertex(
+        s.mesh.vertices[0], V(0, 0, 1))))
+    updates.apply(*updates.diff(scene))
+    assert len(updates.changed) == 1 and updates.changed[0][0] is edited
+    (records,) = updates.changed_records.values()
+    assert records[-1].moved == [v.key]
+    history.undo()
+    updates.apply(*updates.diff(scene))
+    assert len(updates.changed) == 1
+    assert list(updates.changed_records.values())[0][-1].moved == [v.key]
+
+
+@pytest.mark.parametrize("store", [False, pytest.param(True, marks=needs_store)])
+def test_renderer_undo_after_leaving_the_group_rebakes_it(store):
+    """Edit inside a group, leave it, undo: the undo ran on the group's
+    mesh, which the feed names. Derived from the command class (the open
+    mesh, now the loose one) the resident pack kept the edit drawn."""
+    from core.group import Group
+    from core.history import SnapshotMutation
+    from tests.test_wgpu_updates import assert_matches_fresh_pack
+    from views.wgpu_scene import pack_scene
+    from views.wgpu_updates import InstanceUpdates
+    mesh = M.Mesh()
+    if store:
+        S.become_store(mesh, mod.MeshStore(next(M._KEY_NAMESPACES), **S._weld_args()), [])
+    mesh.add_face([V(0, 0, 0), V(2, 0, 0), V(0, 3, 0)])
+    scene = Scene(groups=[Group(mesh), Group(M.Mesh())])
+    updates = InstanceUpdates(scene, pack_scene(scene))
+    scene.begin_group_edit(scene.groups[0])
+    updates.apply(*updates.diff(scene))
+    history = History(scene)
+    updates.observe(history)
+    history.execute(SnapshotMutation(lambda s: s.mesh.move_vertex(
+        s.mesh.vertices[0], V(0, 0, 1))))
+    updates.apply(*updates.diff(scene))
+    scene.end_group_edit()
+    updates.apply(*updates.diff(scene))
+    history.undo()
+    updates.apply(*updates.diff(scene))
+    assert updates.last_local and [c[0] for c in updates.changed] == [mesh]
+    assert_matches_fresh_pack(updates, scene)
