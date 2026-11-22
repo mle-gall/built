@@ -61,9 +61,14 @@ impl State {
                 && a.efaces.same_chunk(&b.efaces, c)
         }, |s, live_b, live_a, same_key| {
             let (eb, ea) = (live_b.then(|| *b.ends.get(s as usize)), live_a.then(|| *a.ends.get(s as usize)));
-            if !same_key || eb != ea {
+            if !same_key {
                 touched.extend(eb.into_iter().flatten());
                 touched.extend(ea.into_iter().flatten());
+            } else if let (Some(old), Some(new)) = (eb, ea) {
+                // A split keeps the first half's edge key. Its shared end
+                // still has exactly the same incident edge.
+                touched.extend(old.into_iter().filter(|v| !new.contains(v)));
+                touched.extend(new.into_iter().filter(|v| !old.contains(v)));
             }
             if !same_key {
                 return false;
@@ -290,8 +295,7 @@ mod tests {
     #[test]
     fn the_chunked_diff_is_the_element_by_element_one() {
         // Draws, a removal, a relink, a move and a restore; the chunked
-        // diff and the full walk name the same keys (vertex edge sets as
-        // sets: the full walk also sees a reordered disk cycle).
+        // diff and the full walk name the same keys.
         let mut st = Store::empty(9, Weld::default());
         for i in 0..40 {
             quad(&mut st, 0.5 * i as f64); // overlapping: shared edges, welds
@@ -308,21 +312,8 @@ mod tests {
             for k in 0..3 {
                 assert_eq!(sorted(a.created[k].clone()), sorted(b.created[k].clone()));
                 assert_eq!(sorted(a.removed[k].clone()), sorted(b.removed[k].clone()));
-                if k > 0 {
-                    assert_eq!(sorted(a.modified[k].clone()), sorted(b.modified[k].clone()), "kind {k}");
-                }
+                assert_eq!(sorted(a.modified[k].clone()), sorted(b.modified[k].clone()), "kind {k}");
             }
-            // Vertices: the full walk's extra ones only had their cycle
-            // reordered (the relinked edge went to the end).
-            let edges = |s: &Store, key: u128| {
-                let v = s.slot(Kind::Vertex, key).unwrap();
-                sorted(s.edges_at(v).map(|e| s.key(Kind::Edge, e)).collect())
-            };
-            assert!(a.modified[0].iter().all(|k| b.modified[0].contains(k)));
-            for k in b.modified[0].iter().filter(|k| !a.modified[0].contains(k)) {
-                assert_eq!(edges(now, *k), edges(then, *k));
-            }
-            assert!(!a.modified[0].is_empty() || !b.modified[0].is_empty());
             assert_eq!(sorted(a.moved), sorted(b.moved));
         }
     }

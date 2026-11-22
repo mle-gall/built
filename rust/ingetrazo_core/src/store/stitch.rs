@@ -250,7 +250,7 @@ impl Store {
     }
 
     #[inline]
-    fn other_end(&self, e: u32, v: u32) -> u32 {
+    pub(super) fn other_end(&self, e: u32, v: u32) -> u32 {
         // Edge.other: `v1 if v == v0 else v0`.
         let [a, b] = *self.state.ends.get(e as usize);
         if v == a {

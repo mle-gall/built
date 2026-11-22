@@ -108,8 +108,28 @@ def find_smallest_cycle_through(
     ka, kb = _key(a), _key(b)
     if ka == kb:
         return None
+    cycles = _drawing_cycles(edges, a, b, max_len, False)
+    if cycles is not NotImplemented:
+        return cycles[0] if cycles else None
     return _smallest_cycle(_cycle_adjacency(edges, ka, kb), a, b, ka, kb,
                            max_len)
+
+
+def _store_edge_plan(edges):
+    from core.store_mesh import _Seq, StoreMesh
+    if isinstance(edges, _Seq) and edges._kind == "edge" and type(edges._m) is StoreMesh:
+        from core import scan_index
+        from core.edits import _ScanEdges
+        sc = scan_index.scan(edges._m)
+        if sc is not None:
+            return _ScanEdges(sc)
+    return None
+
+
+def _drawing_cycles(edges, a, b, limit, both):
+    edges = _store_edge_plan(edges) or edges
+    query = getattr(edges, "drawing_cycles", None)
+    return NotImplemented if query is None else query(a, b, limit, both)
 
 
 def _cycle_adjacency(edges, ka, kb, key=_key) -> dict:
@@ -139,15 +159,33 @@ class CycleGraph:
     edge list, so each node's neighbours stay in that list's order — the
     order the search's answer depends on."""
 
-    __slots__ = ("adj", "_key")
+    __slots__ = ("_adj", "_key", "_scan")
 
     def __init__(self, edges, key=_key) -> None:
-        self.adj: dict = {}
+        self._adj: dict = {}
         self._key = key
+        self._scan = _store_edge_plan(edges) if key is _key or isinstance(key, KeyMemo) else None
+        if self._scan is not None:
+            return
         for edge in edges:
             self.add(edge)
 
+    @property
+    def adj(self):
+        if self._scan is not None:
+            sc = self._scan
+            self._scan = None
+            n = sc._sc.native.counts()[1]
+            for edge in sc._sc.edges(i for i in range(n) if i not in sc._dead):
+                self.add(edge)
+            for edge in sc._extra:
+                self.add(edge)
+        return self._adj
+
     def add(self, edge) -> None:
+        if self._scan is not None:
+            self._scan.append(edge)
+            return
         ea, eb = self._key(edge.a), self._key(edge.b)
         if ea == eb:
             return
@@ -157,6 +195,12 @@ class CycleGraph:
     def remove(self, edge) -> bool:
         """Take ``edge`` out. False if it was not found as it was added —
         the graph is then not to be trusted and the caller drops it."""
+        if self._scan is not None:
+            for candidate in self._scan.pick((edge.a, edge.b)):
+                if candidate == edge:
+                    self._scan.remove(candidate)
+                    return True
+            return False
         ea, eb = self._key(edge.a), self._key(edge.b)
         if ea == eb:
             return True
@@ -373,6 +417,9 @@ def plan_edge_split(
     weld already shares that vertex). A straight segment meets another at
     most once, so each existing edge maps to a single cut point.
     """
+    plan = _store_edge_plan(edges)
+    if plan is not None:
+        return plan.split_plan(a, b, whole=True)
     new_cuts: list[QVector3D] = []
     edge_cuts: dict[Edge, QVector3D] = {}
     for e in edges:
@@ -442,6 +489,16 @@ def _strictly_inside_2d(p, poly: list[tuple[float, float]]) -> bool:
     return inside
 
 
+def _drawing_store(face):
+    from core.store_mesh import FaceView, StoreMesh
+    if isinstance(face, FaceView) and type(face._m) is StoreMesh:
+        from core.store_mesh import _hypot
+        if _hypot() is None:
+            return None
+        return face._m._store
+    return None
+
+
 def loop_inside_face(mother: Face, loop: list[QVector3D],
                      outside_holes: bool = False) -> bool:
     """Whether ``loop`` lies entirely, strictly inside coplanar face ``mother``.
@@ -455,6 +512,10 @@ def loop_inside_face(mother: Face, loop: list[QVector3D],
     a vertex inside one of her holes is not contained (it belongs to whatever
     face fills that hole — the nested-rectangle case).
     """
+    store = _drawing_store(mother)
+    if store is not None:
+        from core._native import qt_hypot
+        return store.loop_inside_face(mother.key, [p.toTuple() for p in loop], outside_holes, qt_hypot())
     if len(mother.vertices) < 3 or len(loop) < 3:
         return False
     normal = mother.normal()
@@ -564,14 +625,17 @@ def hole_merged_with_loop(face: Face, loop: list[QVector3D]):
     # An opening whose box stands clear of the loop's shares no stretch of
     # rim with it (the clearance is a hundred times the welding distance).
     loop_box = _points_box(loop)
-    for idx, hole in enumerate(face.holes):
-        if _boxes_apart(loop_box, _points_box(hole), _BOX_PAD):
-            continue
-        h3 = refine_loop_with_points(list(hole), loop)
-        l3 = refine_loop_with_points(list(loop), hole)
-        shared = set(_loop_edges(h3)) & set(_loop_edges(l3))
-        if not shared:
-            continue
+    store = _drawing_store(face)
+    if store is not None:
+        from core._native import qt_hypot
+        match = store.shared_hole(face.key, [p.toTuple() for p in loop], qt_hypot())
+        if match is None:
+            return None
+        idx, h, l = match
+        pairs = [(idx, [QVector3D(*p) for p in h], [QVector3D(*p) for p in l])]
+    else:
+        pairs = _shared_hole_pairs(face, loop, loop_box)
+    for idx, h3, l3 in pairs:
         rings = []
         for ring in (proj(h3), proj(l3)):
             if _signed_area(ring) < 0:
@@ -582,6 +646,18 @@ def hole_merged_with_loop(face: Face, loop: list[QVector3D]):
             return None
         return idx, [back[xy] for xy in merged[0][0]]
     return None
+
+
+def _shared_hole_pairs(face, loop, loop_box):
+    for idx, hole in enumerate(face.holes):
+        if _boxes_apart(loop_box, _points_box(hole), _BOX_PAD):
+            continue
+        h3 = refine_loop_with_points(list(hole), loop)
+        l3 = refine_loop_with_points(list(loop), hole)
+        shared = set(_loop_edges(h3)) & set(_loop_edges(l3))
+        if not shared:
+            continue
+        yield idx, h3, l3
 
 
 def _points_box(pts) -> tuple:
@@ -635,6 +711,20 @@ def find_containing_face(
     cheap, good-enough proxy for the immediate mother when faces are nested.
     ``exclude`` skips the face being added.
     """
+    from core.store_mesh import _Seq, FaceView, StoreMesh, _hypot
+    if isinstance(faces, _Seq) and type(faces._m) is StoreMesh:
+        mesh, candidates = faces._m, None
+    elif isinstance(faces, (list, tuple)) and faces and _drawing_store(faces[0]) is not None:
+        mesh = faces[0]._m
+        candidates = [f.key for f in faces if isinstance(f, FaceView) and f._m is mesh]
+        if len(candidates) != len(faces):
+            mesh = None
+    else:
+        mesh = None
+    if mesh is not None and (hypot := _hypot()) is not None:
+        k = mesh._store.containing_face([p.toTuple() for p in loop], candidates,
+                                        getattr(exclude, "key", None), hypot)
+        return None if k is None else FaceView(mesh, k)
     best: Optional[Face] = None
     # A face that holds the loop strictly inside it holds the loop's first
     # corner inside its box: the rest are passed over without working out
@@ -668,6 +758,12 @@ def orphaned_edges_at(
     where geometry was carved away, without disturbing standalone edges
     elsewhere (only those touching the operation's vertices are considered).
     """
+    from core.store_mesh import _Seq, StoreMesh, EdgeView
+    if (isinstance(edges, _Seq) and isinstance(faces, _Seq)
+            and edges._m is faces._m and type(edges._m) is StoreMesh):
+        mesh = edges._m
+        keys = mesh._store.orphaned_edges_at([p.toTuple() for p in vertices], None, None)
+        return [EdgeView(mesh, k) for k in keys]
     vkeys = {_key(v) for v in vertices}
     key = KeyMemo()
     face_edges: set = set()
@@ -740,7 +836,7 @@ def _segment_on_face_boundary(a: QVector3D, b: QVector3D, face: Face) -> bool:
 
 
 def refine_loop_with_points(
-    loop: list[QVector3D], points: Iterable[QVector3D], tol: float = _SPLIT_TOLERANCE
+    loop: list[QVector3D], points: Iterable[QVector3D], tol: float = _SPLIT_TOLERANCE, *, mesh=None
 ) -> list[QVector3D]:
     """Insert any ``points`` that lie on an edge's interior into ``loop``.
 
@@ -750,6 +846,11 @@ def refine_loop_with_points(
     the existing vertices sitting on it makes each sub-segment carried by one
     face, so push/pull classifies (and consumes) it correctly. Returns a new loop
     with the collinear points inserted in order; the originals are untouched."""
+    from core.store_mesh import StoreMesh, _hypot
+    if type(mesh) is StoreMesh and (hypot := _hypot()) is not None:
+        ring = mesh._store.refine_ring([p.toTuple() for p in loop],
+                                       [p.toTuple() for p in points], tol, hypot)
+        return [QVector3D(*p) for p in ring]
     import numpy as np
     out: list[QVector3D] = []
     n = len(loop)
@@ -815,6 +916,19 @@ def classify_push_edge(
     has 2000 edges, and listing them again for each of the 32 edges of a
     circle pushed on it was a third of the push.
     """
+    store = _drawing_store(face)
+    if store is not None:
+        from core.store_mesh import _Seq, FaceView, _hypot
+        if isinstance(faces, _Seq) and faces._m is face._m:
+            candidates = None
+        else:
+            faces = list(faces)
+            if not all(isinstance(f, FaceView) and f._m is face._m for f in faces):
+                store = None
+            candidates = [f.key for f in faces] if store is not None else []
+        if store is not None:
+            kind, k = store.classify_segment(face.key, a.toTuple(), b.toTuple(), candidates, _hypot())
+            return kind, None if k is None else FaceView(face._m, k)
     if memo is None:
         memo = {}
     split = memo.get("split")
@@ -910,6 +1024,11 @@ def split_face_by_chord(
     returned loops inherit the mother's winding, so neither comes out
     inverted.
     """
+    store = _drawing_store(face)
+    if store is not None:
+        from core._native import qt_hypot
+        pieces = store.split_face_loops(face.key, [a.toTuple(), b.toTuple()], True, qt_hypot())
+        return None if pieces is None else tuple([QVector3D(*p) for p in ring] for ring in pieces)
     if face.holes or len(face.vertices) < 3:
         return None
     la = _locate_on_loop(face.vertices, a)
@@ -1065,6 +1184,11 @@ def find_subdividing_chain(
     still subdivide. The caller is responsible for re-assigning each hole to the
     region that contains it.
     """
+    store = _drawing_store(face)
+    if store is not None:
+        from core._native import qt_hypot
+        chain = store.subdividing_chain(face.key, [p.toTuple() for p in loop], qt_hypot())
+        return None if chain is None else [QVector3D(*p) for p in chain]
     if len(face.vertices) < 3 or len(loop) < 3:
         return None
     proj, poly2 = _face_plane_proj(face)
@@ -1125,6 +1249,11 @@ def split_face_by_chain(
     """Split ``face`` along ``chain`` (``[P, ...interior..., Q]``, ends on the
     boundary) into its two sub-loops. On-edge ends are inserted into the
     boundary. Returns ``None`` if the ends can't be located."""
+    store = _drawing_store(face)
+    if store is not None:
+        from core._native import qt_hypot
+        pieces = store.split_face_loops(face.key, [p.toTuple() for p in chain], False, qt_hypot())
+        return None if pieces is None else tuple([QVector3D(*p) for p in ring] for ring in pieces)
     p, q = chain[0], chain[-1]
     middles = list(chain[1:-1])
     on_edge: dict[int, list[QVector3D]] = {}
@@ -1189,6 +1318,11 @@ def carve_loop_by_chords(
     split it one by one; the piece that IS the loop is dropped (it stays a
     face of its own). Returns the remaining outer loops, or ``None`` when
     this is not that case."""
+    store = _drawing_store(face)
+    if store is not None:
+        from core._native import qt_hypot
+        pieces = store.carve_face(face.key, [p.toTuple() for p in loop], qt_hypot())
+        return None if pieces is None else [[QVector3D(*p) for p in ring] for ring in pieces]
     if len(face.vertices) < 3 or len(loop) < 3:
         return None
     if any(_locate_on_loop(face.vertices, v) is None for v in loop):
@@ -1263,6 +1397,12 @@ def find_cycles_through(
         return []
     # ``graph`` is ``edges`` already laid out, by a caller that asks about
     # one segment after another over the same list.
+    if graph is not None and graph._scan is not None:
+        return graph._scan.drawing_cycles(a, b, 32, max_results >= 2)
+    if graph is None:
+        cycles = _drawing_cycles(edges, a, b, 32, max_results >= 2)
+        if cycles is not NotImplemented:
+            return cycles
     direct = graph is not None
     if direct:
         adj = graph.adj
@@ -1549,6 +1689,13 @@ def winding_footprint(mesh):
     past the heal cap."""
     if len(mesh.faces) > _HEAL_FACE_CAP or not _mesh_is_flat(mesh):
         return None
+    from core.store_mesh import StoreMesh, _hypot
+    if type(mesh) is StoreMesh and _hypot() is not None:
+        return mesh._store.snapshot()
+    return _python_winding_footprint(mesh)
+
+
+def _python_winding_footprint(mesh):
     out = []
     for f in mesh.faces:
         outer = [QVector3D(v) for v in f.vertices]
@@ -1618,6 +1765,28 @@ def orient_coplanar_faces(mesh, footprint=None) -> list:
     Faces) came back the other way at the next draw on the plane — a loose
     rectangle anywhere was enough.
     """
+    from core.store_mesh import StoreMesh, FaceView, _hypot
+    import sys
+    if type(mesh) is StoreMesh and (footprint is None or hasattr(footprint, "namespace")) and (hypot := _hypot()) is not None:
+        keys = mesh._store.winding_flips(hypot, sys.version_info >= (3, 12), footprint)
+        flipped = [FaceView(mesh, k) for k in keys]
+        for face in flipped:
+            outer = list(reversed(face.vertices))
+            holes = face.holes
+            attrs = dict(face.attrs)
+            mesh.remove_face(face)
+            mesh.add_face(outer, holes or None).attrs = attrs
+        return flipped
+    if hasattr(footprint, "namespace"):
+        # A legacy command materialised the mesh after taking the footprint.
+        from core.store_mesh import become_store
+        from core.mesh import Mesh
+        from core import _native
+        old = Mesh()
+        store = _native.native.MeshStore(footprint.namespace)
+        store.restore(footprint, footprint.namespace)
+        become_store(old, store, [])
+        footprint = _python_winding_footprint(old)
     groups: dict = {}
     for f in mesh.faces:
         n = f.normal()
@@ -2278,19 +2447,14 @@ def _mesh_is_flat(mesh) -> bool:
     faces = mesh.faces
     if len(faces) < 2:
         return True
+    from core import push_scans
+    got = push_scans.mesh_is_flat_from(mesh, 1, _PLANAR_TOLERANCE)
+    if got is not None:
+        return got
     n0 = faces[0].normal()
     d0 = QVector3D.dotProduct(n0, faces[0].vertices[0])
-    # Walked lazily: a store-backed list's slice made a view of every face
-    # (0.3 s on the ride) before the first non-coplanar one ended the walk.
-    # Past the first faces, a store-backed mesh asks the engine the same
-    # float32 questions of the rest (core.push_scans.mesh_is_flat_from).
     from itertools import islice
-    for i, f in enumerate(islice(faces, 1, None), 1):
-        if i == 64:
-            from core import push_scans
-            got = push_scans.mesh_is_flat_from(mesh, i, _PLANAR_TOLERANCE)
-            if got is not None:
-                return got
+    for f in islice(faces, 1, None):
         if not _faces_coplanar(n0, f.normal()):
             return False
         if abs(QVector3D.dotProduct(n0, f.vertices[0]) - d0) > _PLANAR_TOLERANCE:
@@ -2407,7 +2571,11 @@ def heal_overlapping_faces(mesh, coverage: float = 0.5, partial=None,
         orient_coplanar_faces(mesh, footprint)
 
     # 1. Dedupe nested holes by rebuilding the face with the outermost holes.
-    for face in list(mesh.faces):
+    from core.store_mesh import StoreMesh, FaceView, _hypot
+    store = mesh._store if type(mesh) is StoreMesh and _hypot() is not None else None
+    holed = (list(mesh.faces) if store is None else
+             (FaceView(mesh, k) for k in store.multiple_hole_faces()))
+    for face in holed:
         if len(face.holes) < 2:
             continue
         keep = _maximal_holes(face.holes)
@@ -2417,6 +2585,21 @@ def heal_overlapping_faces(mesh, coverage: float = 0.5, partial=None,
             mesh.add_face(
                 outer, [[QVector3D(v) for v in h] for h in keep] or None
             ).attrs = dict(face.attrs)
+
+    if store is not None:
+        import sys
+        removed_keys, punches = store.heal_plan(
+            coverage, bool(partial), _BOX_PAD, _hypot(), sys.version_info >= (3, 12))
+        removed = [FaceView(mesh, k) for k in removed_keys]
+        if removed_keys:
+            store.remove_drawing_faces(removed_keys)
+            mesh._dirty(len(removed_keys))
+        for key, smalls in punches:
+            _punch_overlaps(mesh, FaceView(mesh, key), [FaceView(mesh, k) for k in smalls])
+        if not flat:
+            from core.orient import orient_outward
+            orient_outward(mesh)
+        return removed
 
     # 2. Remove a redundant mother covered by faces that aren't in its holes.
     removed: list = []
@@ -2505,17 +2688,7 @@ def heal_overlapping_faces(mesh, coverage: float = 0.5, partial=None,
                     punch[g].append(face)
                     break
         for g, smalls in punch.items():
-            outer = [QVector3D(v) for v in g.vertices]
-            holes = [[QVector3D(v) for v in h] for h in g.holes]
-            holes += [[QVector3D(v) for v in s.vertices] for s in smalls]
-            mesh.remove_face(g)
-            try:
-                mesh.add_face(outer, holes).attrs = dict(g.attrs)
-            except Exception:
-                # Degenerate hole arrangement — fall back to the face as it was.
-                mesh.add_face(outer, [[QVector3D(v) for v in h]
-                                      for h in g.holes] or None
-                              ).attrs = dict(g.attrs)
+            _punch_overlaps(mesh, g, smalls)
 
     # 4. (3D) Volumetric winding: a freshly drawn sub-face lands with whatever
     #    winding the user traced; on a closed solid, orient per face (and
@@ -2526,6 +2699,20 @@ def heal_overlapping_faces(mesh, coverage: float = 0.5, partial=None,
     return removed
 
 
+
+
+def _punch_overlaps(mesh, g, smalls):
+    outer = [QVector3D(v) for v in g.vertices]
+    holes = [[QVector3D(v) for v in h] for h in g.holes]
+    holes += [[QVector3D(v) for v in s.vertices] for s in smalls]
+    mesh.remove_face(g)
+    try:
+        mesh.add_face(outer, holes).attrs = dict(g.attrs)
+    except Exception:
+        # Degenerate hole arrangement — fall back to the face as it was.
+        mesh.add_face(outer, [[QVector3D(v) for v in h]
+                              for h in g.holes] or None
+                      ).attrs = dict(g.attrs)
 
 
 #: The defects :func:`defects_near` counts, worst first — the order a

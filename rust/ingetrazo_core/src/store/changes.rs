@@ -56,12 +56,8 @@ impl Store {
                         if a.vpos.get(i) != b.vpos.get(i) {
                             change.moved.push(key);
                         }
-                        !self.same_references(
-                            before,
-                            Kind::Edge,
-                            self.edges_at(s),
-                            before.edges_at(s),
-                        )
+                        let keys = |st: &Store| st.edges_at(s).map(|e| st.key(Kind::Edge,e)).collect::<std::collections::HashSet<_>>();
+                        keys(self) != keys(before)
                     }
                     Kind::Edge => {
                         a.eflags.get(i) != b.eflags.get(i)

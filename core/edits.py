@@ -99,6 +99,7 @@ def plan_edge_commands(
     eye=None,
     *,
     close_cycles: bool = True,
+    soft=None, tag=None,
 ) -> list[Command]:
     """Build the ordered command list to add ``segments`` to ``scene``.
 
@@ -136,8 +137,10 @@ def plan_edge_commands(
         # far wider than the welding tolerance); the plan's own edits still
         # go to the full lists. Inside the Plaza's 25 797-face group every
         # stroke tested every edge and face — ~1 s each (09-10).
-        new_segments, edge_cuts = plan_edge_split(
-            near.edges(simulated, a, b), a, b)
+        if isinstance(simulated, _ScanEdges):
+            new_segments, edge_cuts = simulated.split_plan(a, b)
+        else:
+            new_segments, edge_cuts = plan_edge_split(near.edges(simulated, a, b), a, b)
 
         # Replace each crossed existing edge with its two sub-edges.
         for edge, point in edge_cuts.items():
@@ -199,7 +202,7 @@ def plan_edge_commands(
             # Always emit the add: AddEdgeCommand welds, so a duplicate is a
             # no-op, but face detection below must still run (drawing over an
             # existing edge can still close a new face).
-            commands.append(AddEdgeCommand(sa, sb))
+            commands.append(AddEdgeCommand(sa, sb, soft=soft, layer=tag))
             if already is None:
                 simulated.append(Edge(sa, sb))
             if detect_faces:
@@ -370,17 +373,17 @@ class _ScanList:
     def _base(self, item):
         """The scan index ``item`` stands at, or None (not a scan element)."""
         i = self._at.get(element_identity(item))
-        if i is not None and self._got[i] is item:
+        if i is not None and self._got[i] == item:
             return i
         return None
 
     def _box(self, item):
-        hit = self._boxes.get(id(item))
-        if hit is not None and hit[0] is item:
-            return hit[1]
+        hit = self._boxes.get(item)
+        if hit is not None:
+            return hit
         pts = item.vertices if hasattr(item, "vertices") else (item.a, item.b)
         box = _Nearby._points_box(pts)
-        self._boxes[id(item)] = (item, box)
+        self._boxes[item] = box
         return box
 
     @staticmethod
@@ -409,7 +412,7 @@ class _ScanList:
         i = self._base(item)
         if i is not None and i not in self._dead and i not in self._repl:
             return True
-        if any(r is item for j, r in self._repl.items() if j not in self._dead):
+        if any(r == item for j, r in self._repl.items() if j not in self._dead):
             return True
         return item in self._extra
 
@@ -419,7 +422,7 @@ class _ScanList:
             self._dead.add(i)
             return
         for j, r in self._repl.items():
-            if r is item and j not in self._dead:
+            if r == item and j not in self._dead:
                 self._dead.add(j)
                 return
         self._extra.remove(item)
@@ -434,7 +437,7 @@ class _ScanList:
         if i is not None and i not in self._dead and i not in self._repl:
             return ("base", i)
         for j, r in self._repl.items():
-            if r is item and j not in self._dead:
+            if r == item and j not in self._dead:
                 return ("base", j)
         return ("extra", self._extra.index(item))
 
@@ -454,6 +457,31 @@ class _ScanEdges(_ScanList):
 
     def _scan_hits(self, w) -> list:
         return self._sc.native.edges_meeting(w[:3], w[3:])
+
+    def split_plan(self, a, b, *, whole=False):
+        from core.store_mesh import _hypot
+        import sys
+        if not self._sc.store_backed or (hypot := _hypot()) is None:
+            return plan_edge_split(self._sc.edges(range(self._sc.native.counts()[1])) if whole else self.pick((a, b)), a, b)
+        window = _Nearby._window((a, b))
+        indices = (range(self._sc.native.counts()[1]) if whole else
+                   [i for i in self._scan_hits(window) if i not in self._dead])
+        extras = [e for e in self._extra if self._meets(self._box(e), window)]
+        hits, cuts = self._sc.native.split_plan(
+            a.toTuple(), b.toTuple(), list(indices), [(e.a.toTuple(), e.b.toTuple()) for e in extras],
+            hypot, sys.version_info >= (3, 12))
+        chain = [a, *(QVector3D(*p) for p in hits), b]
+        def edge(i):
+            return self._elements([indices[i]])[0] if i < len(indices) else extras[i - len(indices)]
+        return list(zip(chain, chain[1:])), {edge(i): QVector3D(*p) for i, p in cuts}
+
+    def drawing_cycles(self, a, b, limit, both):
+        if not self._sc.store_backed:
+            return NotImplemented
+        extra = [(e.a.toTuple(), e.b.toTuple()) for e in self._extra]
+        cycles = self._sc.native.drawing_cycles(
+            a.toTuple(), b.toTuple(), list(self._dead), extra, max(0, limit), both)
+        return [[QVector3D(*p) for p in cycle] for cycle in cycles]
 
     def cycle_adjacency(self, ka, kb):
         """``topology._cycle_adjacency`` of this list, built per node as the
@@ -789,17 +817,16 @@ def _append_flat_curve_rebuild(scene, commands, points, *, close_cycles=True) ->
             # Whole-flat drawing with curves: the full rebuild (every minimal
             # region gets a face — how a lone circle yields its disc).
             commands.append(RebuildPlanarFacesCommand())
-        elif scene.mesh.faces:
+        elif 0 < len(scene.mesh.faces) <= 400:
+            # Apply the populated-plane rebuild limit to flat imports too.
             # Whole-flat, straight edges only, faces present: the SCOPED
             # rebuild with coverage semantics. Two overlapping rectangles must
             # split into three regions (the classic behaviour) — the planner leaves
             # the first rectangle whole over the lens (rect.igz report) — but
             # regions nobody covered stay empty (no resurrecting faces the
             # user deleted).
-            origin, normal = _whole_drawing_plane(scene, points)
-            if scene.mesh.faces:
-                normal = scene.mesh.faces[0].normal()
-                origin = scene.mesh.faces[0].vertices[0]
+            normal = scene.mesh.faces[0].normal()
+            origin = scene.mesh.faces[0].vertices[0]
             commands.append(RebuildPlaneFacesCommand(origin, normal))
         return
     if not has_curves:
@@ -841,6 +868,10 @@ def _whole_drawing_plane(scene, points):
         verts = [v.position for v in scene.mesh.vertices] + list(points)
         return coplanar_plane(verts)
     import numpy as np
+    from core._native import qt_hypot
+    if sc.store_backed and qt_hypot() is not None:
+        plane = scene.mesh._store.drawing_plane([p.toTuple() for p in points], qt_hypot())
+        return None if plane is None else tuple(QVector3D(*p) for p in plane)
     P = sc.native.vertex_positions()
     extra = [QVector3D(p) for p in points]
     n_mesh = len(P)
@@ -914,6 +945,12 @@ def _append_face_plane_rebuild(scene, commands, points) -> None:
     tol = 1e-4
     from core import scan_index
     sc = scan_index.scan(scene.mesh)
+    from core._native import qt_hypot
+    if sc is not None and sc.store_backed and qt_hypot() is not None:
+        plane = scene.mesh._store.rebuild_plane([p.toTuple() for p in points], 400, qt_hypot())
+        if plane is not None:
+            commands.append(RebuildPlaneFacesCommand(*(QVector3D(*p) for p in plane)))
+        return
     faces = scene.mesh.faces
     if sc is not None:
         import numpy as np
@@ -1006,10 +1043,10 @@ def face_up_or_toward(loop, eye=None):
 
 
 def build_add_edge(scene, a: QVector3D, b: QVector3D, detect_faces: bool = True,
-                   eye=None) -> Command:
+                   eye=None, *, soft=None, tag=None) -> Command:
     """Single-segment convenience: one drawn edge → one atomic command."""
     commands = plan_edge_commands(scene, [(a, b)], detect_faces=detect_faces,
-                                  eye=eye)
+                                  eye=eye, soft=soft, tag=tag)
     _append_active_tag(scene, commands)
     _append_flat_curve_rebuild(scene, commands, [a, b])
     if detect_faces:
@@ -1018,7 +1055,7 @@ def build_add_edge(scene, a: QVector3D, b: QVector3D, detect_faces: bool = True,
     # contours (a tangent line landing on a curve vertex splits it),
     # so it must go through SnapshotCompound, which runs the contour re-split —
     # and whose undo restores the reunited curve.
-    if len(commands) == 1 and not _scene_has_curves(scene):
+    if len(commands) == 1 and soft is None and tag is None and not _scene_has_curves(scene):
         return commands[0]
     # Splits/welds/hole-punches don't compose into a clean per-op inverse — undo
     # via one snapshot so it reverses exactly (no orphan edges/vertices left).
@@ -1080,6 +1117,18 @@ def divide_edges(mesh, edges, n: int) -> int:
     n = int(n)
     if n < 2:
         return 0
+    from core import mesh as mesh_module
+    from core.store_mesh import StoreMesh, _hypot
+    import sys
+    if type(mesh) is StoreMesh and (hypot := _hypot()) is not None:
+        (cuts, next_id), change = mesh._store.divide_edges(
+            [e.key for e in edges], n, mesh_module._CURVE_COUNTER, hypot,
+            sys.version_info >= (3, 12))
+        mesh_module._CURVE_COUNTER = next_id
+        mesh._dirty(3 * cuts)
+        if change.modified["edge"]:
+            mesh._chunk_dirty = True
+        return cuts
     done: set = set()
     cuts = 0
     for edge in list(edges):
@@ -1219,6 +1268,15 @@ def join_edges(mesh, edges, verdicts: Optional[dict] = None) -> list:
     :func:`join_preview` shows."""
     from core.mesh import edge_flags, stamp_edge_flags
     live = [e for e in edges if e in mesh.edges]
+    from core.store_mesh import StoreMesh, EdgeView, VertexView, _hypot
+    import sys
+    if type(mesh) is StoreMesh and (hypot := _hypot()) is not None:
+        (keys, reasons, joins), _ = mesh._store.join_edges(
+            [e.key for e in live], hypot, sys.version_info >= (3, 12))
+        mesh._dirty(3 * joins)
+        if verdicts is not None:
+            verdicts.update((VertexView(mesh, k), why) for k, why in reasons)
+        return [EdgeView(mesh, k) for k in keys]
     picked = set(map(element_identity, live))
     seen: set = set()
     candidates = []

@@ -145,6 +145,43 @@ def solid_operation(history, operation, placements):
     return _answer(history, before)
 
 
+def add_edge(history, a, b, soft=None, tag=None):
+    from PySide6.QtGui import QVector3D
+    from core.edits import build_add_edge
+    before = history.revision
+    if tag is not None and history.scene.layer_by_key(tag) is None:
+        raise KeyError(f"no tag with key {tag!r}")
+    history.execute(build_add_edge(history.scene, QVector3D(*a), QVector3D(*b), soft=soft, tag=tag))
+    return _answer(history, before)
+
+
+def add_edges(history, segments):
+    from PySide6.QtGui import QVector3D
+    from core.edits import build_add_edges
+    before = history.revision
+    history.execute(build_add_edges(history.scene, [(QVector3D(*a), QVector3D(*b))
+                                                    for a, b in segments]))
+    return _answer(history, before)
+
+
+def _edge_edit(history, edges, edit, *args):
+    from core.history import SnapshotMutation
+    selected = _need(history.scene.mesh, "edge", edges)
+    before = history.revision
+    history.execute(SnapshotMutation(lambda sc: edit(sc.mesh, selected, *args)))
+    return _answer(history, before)
+
+
+def divide_edges(history, edges, n):
+    from core.edits import divide_edges as divide
+    return _edge_edit(history, edges, divide, int(n))
+
+
+def join_edges(history, edges):
+    from core.edits import join_edges as join
+    return _edge_edit(history, edges, join)
+
+
 def undo(history):
     before = history.revision
     history.undo()
@@ -157,8 +194,12 @@ def redo(history):
     return _answer(history, before)
 
 
-COMMANDS = {"move_vertices": move_vertices, "erase": erase, "orient_faces": orient_faces,
-            "rebuild_cap": rebuild_cap, "solid_operation": solid_operation, "push_pull": push_pull, "undo": undo, "redo": redo}
+COMMANDS = {"add_edge": add_edge, "add_edges": add_edges,
+            "divide_edges": divide_edges, "join_edges": join_edges,
+            "move_vertices": move_vertices, "erase": erase,
+            "push_pull": push_pull, "orient_faces": orient_faces,
+            "rebuild_cap": rebuild_cap, "solid_operation": solid_operation,
+            "undo": undo, "redo": redo}
 
 
 def run(history, name, **args):
