@@ -149,6 +149,17 @@ struct Tool {
 /// A window action shown in the chrome: (id, label, tooltip, icon key,
 /// checked: -1 not checkable / 0 / 1, enabled).
 pub type Item = (String, String, String, String, i8, bool);
+/// One field of a settings form: (id, kind, label, text, value, min, max,
+/// options). Kinds: caption, check, slider, choice, color, button, text.
+pub type FormField = (String, String, String, String, f32, f32, f32, Vec<String>);
+
+/// A settings popover (Edit style, Shadows…): Python mirrors a panel's
+/// controls into fields and applies what comes back as `form:<id>:<value>`.
+pub struct Form {
+    title: String,
+    fields: Vec<FormField>,
+    choice_open: Option<usize>,
+}
 
 pub struct Ui {
     ctx: egui::Context,
@@ -181,6 +192,7 @@ pub struct Ui {
     cluster: Vec<Vec<Item>>,
     view_menu: Vec<(String, Vec<Item>)>,
     view_open: bool,
+    form: Option<Form>,
     /// Options strip: (id, label, key, state: 0 off, 1 on, 2 read-only note).
     options: Vec<(String, String, String, u8)>,
     /// Right column: project tree above, inspector below.
@@ -372,6 +384,7 @@ impl Ui {
             cluster: Vec::new(),
             view_menu: Vec::new(),
             view_open: false,
+            form: None,
             options: Vec::new(),
             column: None,
             delivery: None,
@@ -520,6 +533,13 @@ impl Ui {
         self.cmd_at = self.cmd_at.min(self.cmd_results.len().saturating_sub(1));
     }
     pub fn set_palette(&mut self, items: Vec<(String, String, String, String, bool)>) { self.palette_items = items; }
+    /// Opens (or refreshes) the settings form; an empty title closes it.
+    pub fn set_form(&mut self, title: String, fields: Vec<FormField>) {
+        if title.is_empty() { self.form = None; return; }
+        let choice_open = self.form.as_ref().filter(|f| f.title == title).and_then(|f| f.choice_open);
+        if self.form.is_none() { self.view_open = false; }
+        self.form = Some(Form { title, fields, choice_open });
+    }
     pub fn set_units(&mut self, units: String) { self.units = units; }
     pub fn set_tabs(&mut self, tabs: Vec<Vec<Item>>) { self.tabs = tabs; }
     pub fn set_delivery(&mut self, active: String, unfiled: u32, problems: u32) {
@@ -536,7 +556,7 @@ impl Ui {
     pub fn claims_key(&self, name: &str) -> bool {
         let filing = self.column.as_ref().is_some_and(|c| c.filing.is_some() || c.row_menu.is_some() || !c.mode.is_empty()
             || c.kind_menu.is_some() || c.head_menu.is_some() || c.prompt.is_some());
-        self.cmd_open || (name == "Escape" && (self.view_open || self.sel_more || self.menu.is_some() || filing))
+        self.cmd_open || (name == "Escape" && (self.view_open || self.sel_more || self.menu.is_some() || self.form.is_some() || filing))
             || self.ctx.wants_keyboard_input()
     }
     pub fn key(&mut self, name: &str, pressed: bool, mods: u8) -> bool {
@@ -556,8 +576,11 @@ impl Ui {
                 _ => {}
             }
         }
-        if name == "Escape" && (self.view_open || self.sel_more || self.menu.is_some()) {
-            if pressed { self.view_open = false; self.sel_more = false; self.menu = None; }
+        if name == "Escape" && (self.view_open || self.sel_more || self.menu.is_some() || self.form.is_some()) {
+            if pressed {
+                if self.form.take().is_some() { self.actions.push("form:close".into()); }
+                self.view_open = false; self.sel_more = false; self.menu = None;
+            }
             return true;
         }
         if name == "Escape" {
@@ -821,6 +844,7 @@ impl Ui {
         if let Some((kind, r)) = open {
             if kind == "view" {
                 self.view_open = !self.view_open;
+                if self.view_open && self.form.take().is_some() { self.actions.push("form:close".into()); }
                 self.view_anchor = r;
                 self.menu = None;
             } else if self.menu.as_ref().is_some_and(|m| m.0 == kind) {
@@ -1116,6 +1140,118 @@ impl Ui {
             self.view_open = false;
         }
         if let Some(id) = clicked { self.actions.push(format!("act:{id}")); }
+    }
+
+    /// The settings form, hung under View ▾ like its menu (one floats at a time).
+    fn form_popup(&mut self, ctx: &egui::Context) {
+        let Some(form) = self.form.as_mut() else { return };
+        // Under View ▾ at the window's right edge, over the dock.
+        let screen = ctx.screen_rect();
+        let at = pos2(screen.max.x - GUT, TOP_H + GUT);
+        let mut close = false;
+        let mut out: Vec<String> = Vec::new();
+        let Form { title, fields, choice_open } = form;
+        egui::Area::new(egui::Id::new("form"))
+            .pivot(egui::Align2::RIGHT_TOP)
+            .fixed_pos(at)
+            .order(egui::Order::Foreground)
+            .show(ctx, |ui| {
+                glass(Surface::Raised).inner_margin(Margin::same(8)).show(ui, |ui| {
+                    ui.set_width(272.0);
+                    ui.spacing_mut().item_spacing = vec2(0.0, 2.0);
+                    let (hr, _) = ui.allocate_exact_size(vec2(ui.available_width(), 26.0), Sense::hover());
+                    ui.painter().text(hr.left_center() + vec2(6.0, 0.0), egui::Align2::LEFT_CENTER, title.as_str(),
+                        strong(13.0), INK);
+                    let xr = Rect::from_center_size(hr.right_center() - vec2(12.0, 0.0), vec2(22.0, 22.0));
+                    let xresp = ui.interact(xr, ui.id().with("form_close"), Sense::click());
+                    if xresp.hovered() { ui.painter().rect_filled(xr, CornerRadius::same(R_ROW as u8), HOVER); }
+                    ui.painter().text(xr.center(), egui::Align2::CENTER_CENTER, "×", body(), DIM);
+                    if xresp.clicked() { close = true; }
+                    let w = ui.available_width();
+                    for (i, f) in fields.iter_mut().enumerate() {
+                        let (id, kind, label, text) = (f.0.clone(), f.1.clone(), f.2.clone(), f.3.clone());
+                        match kind.as_str() {
+                            "caption" => { ui.add_space(4.0); caption_at(ui, &label, 6.0); }
+                            "text" => {
+                                egui::Frame::NONE.inner_margin(Margin { left: 6, right: 6, top: 2, bottom: 2 }).show(ui, |ui| {
+                                    ui.label(egui::RichText::new(&text).font(meta()).color(FAINT));
+                                });
+                            }
+                            "check" => {
+                                let item = (id.clone(), label.clone(), text.clone(), "check".to_owned(), if f.4 > 0.5 { 1 } else { 0 }, true);
+                                if menu_row(ui, &item) {
+                                    f.4 = if f.4 > 0.5 { 0.0 } else { 1.0 };
+                                    out.push(format!("form:{id}:{}", f.4 as i32));
+                                }
+                            }
+                            "slider" => {
+                                let (r, _) = ui.allocate_exact_size(vec2(w, 20.0), Sense::hover());
+                                ui.painter().text(r.left_center() + vec2(6.0, 0.0), egui::Align2::LEFT_CENTER, &label, body(), DIM);
+                                ui.painter().text(r.right_center() - vec2(6.0, 0.0), egui::Align2::RIGHT_CENTER, &text, body(), INK);
+                                let (sr, resp) = ui.allocate_exact_size(vec2(w, 18.0), Sense::click_and_drag());
+                                let track = Rect::from_center_size(sr.center(), vec2(sr.width() - 24.0, 4.0));
+                                let span = (f.6 - f.5).max(1e-6);
+                                if resp.dragged() || resp.clicked() {
+                                    if let Some(p) = resp.interact_pointer_pos() {
+                                        let t = ((p.x - track.min.x) / track.width()).clamp(0.0, 1.0);
+                                        let v = (f.5 + t * span).round();
+                                        if v != f.4 { f.4 = v; out.push(format!("form:{id}:{v}")); }
+                                    }
+                                }
+                                let t = ((f.4 - f.5) / span).clamp(0.0, 1.0);
+                                ui.painter().rect_filled(track, CornerRadius::same(2), FIELD);
+                                let filled = Rect::from_min_max(track.min, pos2(track.min.x + t * track.width(), track.max.y));
+                                ui.painter().rect_filled(filled, CornerRadius::same(2), ACCENT);
+                                let knob = pos2(track.min.x + t * track.width(), track.center().y);
+                                ui.painter().circle_filled(knob, if resp.hovered() || resp.dragged() { 7.0 } else { 6.0 }, INK);
+                            }
+                            "choice" => {
+                                let (r, resp) = ui.allocate_exact_size(vec2(w, 26.0), Sense::click());
+                                if resp.hovered() { ui.painter().rect_filled(r, CornerRadius::same(R_ROW as u8), HOVER); }
+                                ui.painter().text(r.left_center() + vec2(6.0, 0.0), egui::Align2::LEFT_CENTER, &label, body(), DIM);
+                                let open = *choice_open == Some(i);
+                                ui.painter().text(r.right_center() - vec2(6.0, 0.0), egui::Align2::RIGHT_CENTER,
+                                    format!("{text}  {}", if open { "▴" } else { "▾" }), body(), INK);
+                                if resp.clicked() { *choice_open = if open { None } else { Some(i) }; }
+                                if open {
+                                    for (j, opt) in f.7.iter().enumerate() {
+                                        let item = (j.to_string(), format!("   {opt}"), String::new(), "check".to_owned(),
+                                                    if j as f32 == f.4 { 1 } else { -1 }, true);
+                                        if menu_row(ui, &item) {
+                                            f.4 = j as f32;
+                                            f.3 = opt.clone();
+                                            out.push(format!("form:{id}:{j}"));
+                                            *choice_open = None;
+                                        }
+                                    }
+                                }
+                            }
+                            "color" => {
+                                let (r, resp) = ui.allocate_exact_size(vec2(w, 26.0), Sense::click());
+                                if resp.hovered() { ui.painter().rect_filled(r, CornerRadius::same(R_ROW as u8), HOVER); }
+                                ui.painter().text(r.left_center() + vec2(6.0, 0.0), egui::Align2::LEFT_CENTER, &label, body(), DIM);
+                                let sw = Rect::from_center_size(r.right_center() - vec2(22.0, 0.0), vec2(32.0, 16.0));
+                                if let Some(c) = parse_hex(&text) { ui.painter().rect_filled(sw, CornerRadius::same(4), c); }
+                                ui.painter().rect_stroke(sw, CornerRadius::same(4), Stroke::new(1.0_f32, EDGE), egui::StrokeKind::Inside);
+                                if resp.clicked() { out.push(format!("form:{id}:pick")); }
+                            }
+                            "button" => {
+                                ui.add_space(4.0);
+                                ui.horizontal(|ui| {
+                                    ui.add_space(6.0);
+                                    if chip_button(ui, &label) { out.push(format!("form:{id}:")); }
+                                });
+                            }
+                            _ => {}
+                        }
+                    }
+                });
+            });
+        if close {
+            self.form = None;
+            out.push("form:close".into());
+        }
+        self.actions.extend(out);
     }
 
     /// More ▾ of the selection actions (opened from the inspector), with
@@ -1856,12 +1992,13 @@ impl Ui {
             self.cursor_value(ctx, screen);
             self.bar_menu(ctx);
             self.view_popup(ctx);
+            self.form_popup(ctx);
             self.command_palette(ctx, screen);
             if !self.review { self.selection_more(ctx); }
         });
         let work = !self.review;
         let shown = [("top", true), ("palette", work && !self.groups.is_empty()),
-                     ("view_menu", self.view_open), ("menu", self.menu.is_some()),
+                     ("view_menu", self.view_open), ("menu", self.menu.is_some()), ("form", self.form.is_some()),
                      ("column", work && self.column.is_some()), ("bottom", work),
                      ("sel_more", work && self.sel_more && self.selection.is_some()),
                      ("paint_strip", work && !self.palette_items.is_empty()),

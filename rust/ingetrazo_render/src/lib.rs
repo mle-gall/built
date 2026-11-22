@@ -2103,6 +2103,9 @@ impl Renderer {
     fn ui_set_palette(&mut self, items: Vec<(String, String, String, String, bool)>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_palette(items); }
     }
+    fn ui_set_form(&mut self, title: String, fields: Vec<ui::FormField>) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_form(title, fields); }
+    }
     fn ui_open_commands(&mut self) {
         if let Some(ui) = self.ui.as_mut() { ui.open_commands(); }
     }

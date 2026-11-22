@@ -373,6 +373,7 @@ def before_frame(view) -> None:
     _selection(view, win, active)
     _palette(view, win, active)
     _cluster(view, win)
+    _form(view, win)
     _tree(view, win)
     _inspector(view, win)
     _tabs(view, win)
@@ -487,6 +488,8 @@ def _cluster(view, win) -> None:
         menu.append(("Style", rows))
     menu.append(("Sections", [i for i in (item(getattr(win, "_act_show_splanes", None)),
                                            item(getattr(win, "_act_section_fill", None))) if i]))
+    menu.append(("Settings", [("form-style", "Edit style…", "", "", -1, True),
+                              ("form-shadows", "Shadows and sun…", "", "", -1, True)]))
     menu = [(t, rows) for t, rows in menu if rows]
     view._ui_actions = actions
     sig = (tuple(map(tuple, cluster)), tuple((t, tuple(r)) for t, r in menu))
@@ -2195,6 +2198,19 @@ def _run(win, actions) -> None:
                 view.update()
             elif arg == "active" and data.get("active"):
                 _select(win, _tree_groups(view, data["active"]))
+        elif kind == "act" and arg.startswith("form-"):
+            view = getattr(getattr(win, "_doc", None), "stand_in", None)
+            if view is not None:
+                view._ui_form = arg[5:]
+                view._ui_form_sig = None
+                panel = _form_panel(win, view._ui_form)
+                if panel is not None:
+                    panel.refresh()
+                view.update()
+        elif kind == "form":
+            view = getattr(getattr(win, "_doc", None), "stand_in", None)
+            if view is not None:
+                _form_apply(win, view, arg)
         elif kind == "act":
             _trigger(win, int(arg))
         elif kind == "cmd":
@@ -2202,6 +2218,151 @@ def _run(win, actions) -> None:
             run = next((r for k, _, _, r, ok, _ in _commands(win, sel) if k == arg and ok), None)
             if run is not None:
                 run()
+
+
+# ---- Settings forms ---------------------------------------------------------
+# A form mirrors an existing panel's controls, so its logic (live apply,
+# daylight range, the style library) stays the panel's: (kind, widget
+# attribute, label, value text: QLabel attribute or callable, style attr).
+FORMS = {
+    "style": ("Style", "styles_panel", [
+        ("choice", "_combo", "Style"),
+        ("choice", "_mode", "Faces"),
+        ("caption", None, "Edges"),
+        ("check", "_edges", "Edges"),
+        ("color", "_edge_c", "Edge colour", None, "edge_color"),
+        ("check", "_profiles", "Profiles"),
+        ("check", "_back_edges", "Back edges, dashed"),
+        ("caption", None, "Faces and background"),
+        ("color", "_front_c", "Front colour", None, "front_color"),
+        ("color", "_back_c", "Back colour", None, "back_color"),
+        ("check", "_sky", "Sky"),
+        ("color", "_sky_c", "Sky colour", None, "sky_color"),
+        ("color", "_ground_c", "Ground", None, "ground_color"),
+        ("color", "_bg_c", "Background", None, "background"),
+        ("check", "_fill", "Section fill"),
+        ("color", "_fill_c", "Section fill colour", None, "section_fill_color"),
+        ("caption", None, "Ambient occlusion"),
+        ("check", "_ao", "Ambient occlusion"),
+        ("slider", "_ao_dist", lambda p: p._ao_dist_lbl.text().rstrip(": ") or "Distance", "_ao_dist_val"),
+        ("slider", "_ao_int", "Intensity", "_ao_int_val"),
+        ("button", "_on_save", "Save style…"),
+        ("button", "_on_delete", "Delete style", None, "_del_btn"),
+    ]),
+    "shadows": ("Shadows and sun", "shadows_panel", [
+        ("check", "_enable", "Show shadows"),
+        ("slider", "_doy", "Date", lambda p: p._date.date().toString("d MMMM")),
+        ("slider", "_time", "Time", "_time_lbl"),
+        ("text", None, lambda p: f"Sunrise {p._sunrise_lbl.text()} · sunset {p._sunset_lbl.text()}"
+                                  if p._sunrise_lbl.text() else ""),
+        ("slider", "_dark", "Darkness", lambda p: f"{p._dark.value()} %"),
+        ("choice", "_tz", "Time zone"),
+        ("caption", None, "Site"),
+        ("text", None, lambda p: p._site.text()),
+        ("button", "_on_north_tool", "Set north on screen"),
+        ("button", "_on_add_location", "Add location…"),
+    ]),
+}
+
+
+def _form_panel(win, name):
+    spec = FORMS.get(name)
+    return getattr(win, spec[1], None) if spec else None
+
+
+def _form(view, win) -> None:
+    """Send the open form's fields (only when they changed)."""
+    name = view.__dict__.get("_ui_form")
+    if not name:
+        return
+    panel = _form_panel(win, name)
+    if panel is None:
+        view._ui_form = None
+        view.renderer.ui_set_form("", [])
+        return
+    title, _attr, spec = FORMS[name]
+    fields = []
+
+    def text_of(t):
+        if callable(t):
+            return str(t(panel))
+        if isinstance(t, str) and hasattr(panel, t):
+            return getattr(panel, t).text()
+        return str(t or "")
+
+    for i, entry in enumerate(spec):
+        kind, attr, label = entry[:3]
+        extra = entry[3] if len(entry) > 3 else None
+        label = text_of(label) if callable(label) else label
+        fid = str(i)
+        if kind == "caption":
+            fields.append((fid, kind, label, "", 0.0, 0.0, 0.0, []))
+            continue
+        if kind == "text":
+            t = text_of(label)
+            if t:
+                fields.append((fid, kind, "", t, 0.0, 0.0, 0.0, []))
+            continue
+        if kind == "button":
+            gate = entry[4] if len(entry) > 4 else None
+            if gate and not getattr(panel, gate).isEnabled():
+                continue
+            fields.append((fid, kind, label, "", 0.0, 0.0, 0.0, []))
+            continue
+        w = getattr(panel, attr, None)
+        if w is None or w.isHidden() or not w.isEnabled():
+            continue
+        if kind == "check":
+            fields.append((fid, kind, label, "", float(w.isChecked()), 0.0, 1.0, []))
+        elif kind == "slider":
+            fields.append((fid, kind, label, text_of(extra) if extra else str(w.value()),
+                           float(w.value()), float(w.minimum()), float(w.maximum()), []))
+        elif kind == "choice":
+            opts = [w.itemText(j) for j in range(w.count())]
+            fields.append((fid, kind, label, w.currentText(), float(w.currentIndex()), 0.0, float(len(opts)), opts))
+        elif kind == "color":
+            try:
+                c = panel._shown_color(entry[4])
+            except Exception:
+                c = None
+            fields.append((fid, kind, label, _hex(c) if c else "", 0.0, 0.0, 0.0, []))
+    sig = (name, tuple(fields))
+    if sig != view.__dict__.get("_ui_form_sig"):
+        view._ui_form_sig = sig
+        view.renderer.ui_set_form(title, fields)
+
+
+def _form_apply(win, view, arg) -> None:
+    if arg == "close":
+        view._ui_form = None
+        view._ui_form_sig = None
+        return
+    name = view.__dict__.get("_ui_form")
+    panel = _form_panel(win, name)
+    if panel is None:
+        return
+    fid, _, value = arg.partition(":")
+    entry = FORMS[name][2][int(fid)]
+    kind, attr = entry[0], entry[1]
+    if kind == "button":
+        getattr(panel, attr)()
+    else:
+        w = getattr(panel, attr)
+        if kind == "check":
+            w.setChecked(value == "1")
+        elif kind == "slider":
+            w.setValue(int(float(value)))
+        elif kind == "choice":
+            i = int(value)
+            w.setCurrentIndex(i)
+            w.activated.emit(i)
+        elif kind == "color":
+            w.click()
+    if hasattr(panel, "refresh") and kind != "slider":
+        panel.refresh()
+    view._ui_form_sig = None
+    view._ui_cluster_sig = None
+    view.update()
 
 
 def _trigger(win, index: int) -> None:
