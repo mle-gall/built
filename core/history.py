@@ -5575,7 +5575,14 @@ class ExplodeGroupCommand(Command):
     components nested in it come out whole, as top-level objects in its
     place — Explode (@pacaeiro, issue #72: «the inside groups
     explode as well»). Snapshot undo restores the loose mesh, the group and
-    each lifted child's placement."""
+    each lifted child's placement.
+
+    Both meshes store-backed: the copy is one store op
+    (``MeshStore.paste_from``, ``core.store_parts.explode_geometry``), the
+    coplanar merge's broad phase is native, and redo puts back the state
+    the first run made, keys included. ``copies`` names, after a run,
+    where the group's elements went: ``[(group mesh, mesh, {kind:
+    [(source key, key)]})]`` (store runs only; the change feed reports it)."""
 
     def __init__(self, group: Group) -> None:
         self.group = group
@@ -5583,18 +5590,79 @@ class ExplodeGroupCommand(Command):
         self.index: Optional[int] = None
         self._lifted: list = []   # (child, xform, mesh, material, axes, offset)
         self._selection = None
+        self._before0 = None      # the store state the first run started from
+        self._after = None        # ... and the one it made
+        self.copies: list = []
 
     def do(self, scene) -> None:
-        from core.group import placed_face_paint
-        from core.materials import effective_attrs
         m = scene.mesh
         g = self.group
         self.snapshot = m.capture_state()
         self.index = scene.groups.index(g)
         self._selection = ElementSet(scene.selection)
         P = getattr(g, "xform", None)
-        inverse, invertible = P.inverted() if P is not None else (None, False)
         paint = getattr(g, "material", None)
+        if not self._replay(scene, m):
+            self._geometry(scene, m, g, P, paint)
+
+        # The nested objects come out one level up, whole: their placement
+        # composes with the parent's (a shared prototype is never touched),
+        # and an unpainted child takes the parent's paint, as its default
+        # faces were already drawn with it.
+        kids = list(getattr(g, "children", None) or [])
+        self._lifted = [(c, c.xform, c.mesh, c.material, c.axes,
+                         c.explode_offset) for c in kids]
+        for c in kids:
+            # Free of its component, a part keeps where an exploded view put
+            # it; there is no longer anything to reassemble it into.
+            c.explode_offset = None
+            if P is not None:
+                if c.xform is not None:
+                    c.xform = P * c.xform
+                else:
+                    from core.group import carry_axes, transformed_mesh
+                    c.mesh = transformed_mesh(c.mesh, P)
+                    carry_axes(c, P)          # its axes come out with it
+            if c.material is None and paint:
+                c.material = {k: (dict(v) if isinstance(v, dict) else v)
+                              for k, v in paint.items()}
+        scene.groups.remove(g)
+        scene.groups[self.index:self.index] = kids
+        scene.selection.discard(g)
+        if kids:
+            scene.selection = set(kids)   # select what came out
+        scene.version += 1
+
+    def _replay(self, scene, m) -> bool:
+        """Redo on the store: the mesh goes to the state the first run made
+        (O(chunks), the same keys) when it stands where that run started."""
+        from core.store_mesh import StoreState
+        if (self._after is None or not isinstance(self.snapshot, StoreState)
+                or not isinstance(self._before0, StoreState)
+                or self.snapshot != self._before0):
+            return False
+        m.restore_state(self._after)
+        _drop_dead_elements(scene, m)
+        return True
+
+    def _geometry(self, scene, m, g, P, paint) -> None:
+        from core.group import placed_face_paint
+        from core.materials import effective_attrs
+        from core.store_mesh import StoreState
+        from core import store_parts
+        inverse, invertible = P.inverted() if P is not None else (None, False)
+        native = store_parts.explode_geometry(m, g.mesh, P, inverse,
+                                              invertible, paint)
+        if native is not None:
+            added, _change, keys = native
+            m.resplit_curves()
+            if _merge_overlapping_planes(scene, None, added, others=True):
+                keys = keys.only_live(m._store)   # rebuilt planes: drop what went
+            self.copies = [(g.mesh, m, keys)]
+            if isinstance(self.snapshot, StoreState):
+                self._before0 = self.snapshot
+                self._after = m.capture_state()
+            return
 
         def W(p):
             # Instance prototypes hold LOCAL coords — explode in world.
@@ -5634,34 +5702,7 @@ class ExplodeGroupCommand(Command):
         # pasted one does (#73): two boxes that touch share ONE wall instead
         # of two coincident faces (issue #721).
         _merge_overlapping_planes(scene, before, added)
-
-        # The nested objects come out one level up, whole: their placement
-        # composes with the parent's (a shared prototype is never touched),
-        # and an unpainted child takes the parent's paint, as its default
-        # faces were already drawn with it.
-        kids = list(getattr(g, "children", None) or [])
-        self._lifted = [(c, c.xform, c.mesh, c.material, c.axes,
-                         c.explode_offset) for c in kids]
-        for c in kids:
-            # Free of its component, a part keeps where an exploded view put
-            # it; there is no longer anything to reassemble it into.
-            c.explode_offset = None
-            if P is not None:
-                if c.xform is not None:
-                    c.xform = P * c.xform
-                else:
-                    from core.group import carry_axes, transformed_mesh
-                    c.mesh = transformed_mesh(c.mesh, P)
-                    carry_axes(c, P)          # its axes come out with it
-            if c.material is None and paint:
-                c.material = {k: (dict(v) if isinstance(v, dict) else v)
-                              for k, v in paint.items()}
-        scene.groups.remove(g)
-        scene.groups[self.index:self.index] = kids
-        scene.selection.discard(g)
-        if kids:
-            scene.selection = set(kids)   # select what came out
-        scene.version += 1
+        self.copies = []
 
     def undo(self, scene) -> None:
         for c, xform, mesh, material, axes, offset in self._lifted:
@@ -5677,7 +5718,25 @@ class ExplodeGroupCommand(Command):
 
 
 
-def _merge_overlapping_planes(scene, before, added, *, on_rebuild=None) -> int:
+def _drop_dead_elements(scene, mesh) -> None:
+    """Keep in the selection only the faces and edges still in ``mesh``
+    (answered by the store for a store-backed mesh: no view per face)."""
+    from core.store_mesh import StoreMesh
+    st = mesh._store if type(mesh) is StoreMesh else None
+    if st is not None:
+        scene.selection = {s for s in ElementSet(scene.selection)
+                           if not isinstance(s, (Face, Edge))
+                           or st.is_live(s.key)}
+        return
+    live = set(map(element_identity, mesh.faces))
+    live_e = set(map(element_identity, mesh.edges))
+    scene.selection = {s for s in ElementSet(scene.selection)
+                       if not isinstance(s, (Face, Edge))
+                       or s.key in (live if isinstance(s, Face) else live_e)}
+
+
+def _merge_overlapping_planes(scene, before, added, *, on_rebuild=None,
+                              others=False) -> int:
     """Rebuild, plane by plane, where faces just ``added`` to the mesh
     overlap faces it already had (``before``): each region of the plane
     ends up covered by ONE face, as when a face is drawn or pasted there
@@ -5687,15 +5746,30 @@ def _merge_overlapping_planes(scene, before, added, *, on_rebuild=None) -> int:
     holds a snapshot of the mesh, so it takes none. Returns how many planes
     were rebuilt. ``on_rebuild`` lets a caller take its snapshot lazily,
     immediately before the first mutation, only if a rebuild is needed.
+
+    ``others=True``: ``before`` is every face of the mesh but ``added``
+    (pass None). A store-backed mesh then finds the face pairs whose boxes
+    overlap natively (``MeshStore.plane_merge_candidates``) and the plane
+    tests below run on those pairs only, in the same order.
     """
-    if not before or not added:
+    if not added:
         return 0
     mesh = scene.mesh
     tol = RebuildPlaneFacesCommand._TOL
-    live = set(map(element_identity, mesh.faces))
-    added = [f for f in added if f.key in live]
-    if not added:
-        return 0
+    found = None
+    if others:
+        from core.store_parts import merge_candidates
+        found = merge_candidates(mesh, added, tol)
+        if found is None:
+            ids = set(map(element_identity, added))
+            before = [f for f in mesh.faces if f.key not in ids]
+    if found is None:
+        if not before:
+            return 0
+        live = set(map(element_identity, mesh.faces))
+        added = [f for f in added if f.key in live]
+        if not added:
+            return 0
 
     def box(f):
         ps = f.vertices
@@ -5716,31 +5790,51 @@ def _merge_overlapping_planes(scene, before, added, *, on_rebuild=None) -> int:
                    or abs(ahi[i] - alo[i]) < tol and abs(bhi[i] - blo[i]) < tol
                    for i in range(3))
 
-    new = []
-    glo = [float("inf")] * 3
-    ghi = [float("-inf")] * 3
-    for f in added:
-        n = unit_normal(f)
-        if n is None:
-            continue
-        lo, hi = box(f)
-        new.append((f, n, lo, hi))
-        glo = [min(a, b) for a, b in zip(glo, lo)]
-        ghi = [max(a, b) for a, b in zip(ghi, hi)]
-    if not new:
-        return 0
-    added_ids = set(map(element_identity, added))
+    if found is not None:
+        new_faces, pairs = found
+        entries: dict = {}
+
+        def entry(j):
+            e = entries.get(j)
+            if e is None:
+                nf = new_faces[j]
+                e = entries[j] = (nf, unit_normal(nf), *box(nf))
+            return e
+
+        def candidates():
+            for f, hits in pairs:
+                yield f, (entry(j) for j in hits)
+    else:
+        new = []
+        glo = [float("inf")] * 3
+        ghi = [float("-inf")] * 3
+        for f in added:
+            n = unit_normal(f)
+            if n is None:
+                continue
+            lo, hi = box(f)
+            new.append((f, n, lo, hi))
+            glo = [min(a, b) for a, b in zip(glo, lo)]
+            ghi = [max(a, b) for a, b in zip(ghi, hi)]
+        if not new:
+            return 0
+        added_ids = set(map(element_identity, added))
+
+        def candidates():
+            for f in before:
+                if f.key not in live or f.key in added_ids:
+                    continue
+                lo, hi = box(f)
+                if not all(lo[i] <= ghi[i] + tol and glo[i] <= hi[i] + tol
+                           for i in range(3)):
+                    continue
+                yield f, (e for e in new if overlap(lo, hi, e[2], e[3]))
+
     planes: list = []          # [origin, normal, [old faces], [new faces]]
-    for f in before:
-        if f.key not in live or f.key in added_ids:
-            continue
-        lo, hi = box(f)
-        if not all(lo[i] <= ghi[i] + tol and glo[i] <= hi[i] + tol
-                   for i in range(3)):
-            continue
+    for f, near in candidates():
         n = None
-        for nf, nn, nlo, nhi in new:
-            if not overlap(lo, hi, nlo, nhi):
+        for nf, nn, nlo, nhi in near:
+            if nn is None:
                 continue
             if n is None:
                 n = unit_normal(f)
@@ -5752,18 +5846,18 @@ def _merge_overlapping_planes(scene, before, added, *, on_rebuild=None) -> int:
             if any(abs(QVector3D.dotProduct(p - o, nn)) > tol
                    for p in f.vertices):
                 continue
-            for entry in planes:
-                if (abs(QVector3D.dotProduct(entry[1], nn)) > 1.0 - 1e-6
-                        and abs(QVector3D.dotProduct(o - entry[0],
-                                                     entry[1])) < tol):
+            for entry_ in planes:
+                if (abs(QVector3D.dotProduct(entry_[1], nn)) > 1.0 - 1e-6
+                        and abs(QVector3D.dotProduct(o - entry_[0],
+                                                     entry_[1])) < tol):
                     break
             else:
-                entry = [QVector3D(o), QVector3D(nn), [], []]
-                planes.append(entry)
-            if f not in entry[2]:
-                entry[2].append(f)
-            if nf not in entry[3]:
-                entry[3].append(nf)
+                entry_ = [QVector3D(o), QVector3D(nn), [], []]
+                planes.append(entry_)
+            if f not in entry_[2]:
+                entry_[2].append(f)
+            if nf not in entry_[3]:
+                entry_[3].append(nf)
     if not planes:
         return 0
     if on_rebuild is not None:
@@ -5776,11 +5870,8 @@ def _merge_overlapping_planes(scene, before, added, *, on_rebuild=None) -> int:
                                        faces=old_faces + new_faces)
         cmd.take_snapshot = False
         cmd.do(scene)
-    live = set(map(element_identity, mesh.faces))
-    live_e = set(map(element_identity, mesh.edges))
-    scene.selection = {s for s in keep
-                       if not isinstance(s, (Face, Edge))
-                       or s.key in (live if isinstance(s, Face) else live_e)}
+    scene.selection = set(keep)
+    _drop_dead_elements(scene, mesh)
     return len(planes)
 
 
@@ -5837,6 +5928,12 @@ class SplitIntoPiecesCommand(Command):
         self.group = group
         self.pieces = list(pieces)
         self.before: Optional[tuple] = None
+        #: Where the group's faces went, for the change feed: ``[(source
+        #: mesh, piece mesh, {"face": [(key, key)]})]`` for the pieces the
+        #: store cut (``core.store_parts.copy_part``).
+        from core.store_parts import origin_of
+        self.copies = [(src, p.mesh, keys) for p in self.pieces
+                       for src, keys in [origin_of(p.mesh)] if src is not None]
 
     def do(self, scene) -> None:
         g = self.group

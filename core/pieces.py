@@ -31,7 +31,12 @@ def connected_parts(mesh: Mesh) -> list:
     pair, largest first (by face count, a loose wire after every solid).
 
     Two faces are one piece when they share a vertex; a loose edge joins
-    whatever its ends touch, so a wire hanging off a solid stays with it."""
+    whatever its ends touch, so a wire hanging off a solid stays with it.
+    A store-backed mesh is read by the store (``core.store_parts``)."""
+    from core import store_parts
+    found = store_parts.parts(mesh, solid=False)
+    if found is not None:
+        return found
     parent: dict = {}
 
     def find(x):
@@ -201,7 +206,13 @@ def _newell(points):
 def solid_parts(mesh: Mesh) -> list:
     """``mesh`` cut into its physical pieces (see the module docstring),
     each a ``(faces, edges)`` pair, largest first. A loose edge goes with
-    the piece its ends touch; one touching nothing is a wire of its own."""
+    the piece its ends touch; one touching nothing is a wire of its own.
+    A store-backed mesh is read by the store (``core.store_parts``), with
+    the same pieces in the same order."""
+    from core import store_parts
+    found = store_parts.parts(mesh, solid=True)
+    if found is not None:
+        return found
     parent: dict = {}
 
     def find(x):
@@ -264,7 +275,10 @@ def solid_parts(mesh: Mesh) -> list:
             k = owner.get(vid)
             if k is not None:
                 votes[k] = votes.get(k, 0) + 1
-        best = max(votes.items(), key=lambda kv: kv[1]) if votes else None
+        # The most votes; a tie goes to the first solid (``corners`` is a
+        # set, so its order must not decide).
+        best = (max(votes.items(), key=lambda kv: (kv[1], -kv[0]))
+                if votes else None)
         if best is not None and best[1] >= ATTACH_SHARE * len(corners):
             pieces[best[0]].extend(fs)
         else:
@@ -315,7 +329,13 @@ def copy_part(faces, edges) -> Mesh:
     """A new mesh holding a deep copy of ``faces`` and ``edges`` — attrs,
     holes and every edge flag included — in one vectorized weld, the recipe
     :func:`core.group.transformed_mesh` uses (a part of a leafy import is
-    thousands of faces, and a per-face walk froze the UI at that scale)."""
+    thousands of faces, and a per-face walk froze the UI at that scale).
+    Faces and edges of one store-backed mesh are copied by the store
+    (``core.store_parts.copy_part``)."""
+    from core import store_parts
+    made = store_parts.copy_part(faces, edges)
+    if made is not None:
+        return made
     import numpy as np
     from core.topology import _maximal_holes
 

@@ -182,6 +182,78 @@ def join_edges(history, edges):
     return _edge_edit(history, edges, join)
 
 
+def _placement(history, uid):
+    """The top-level placement (``scene.groups``) with ``uid``."""
+    for g in history.scene.groups:
+        if getattr(g, "uid", None) == uid:
+            return g
+    raise KeyError(f"no placement with uid {uid!r} in the open context")
+
+
+def explode_group(history, placement):
+    """Explode the placement (uid): its geometry merges into the open mesh
+    through its matrix (welding onto what is there, coplanar overlaps
+    rebuilt into one face), its nested placements come out whole
+    (``ExplodeGroupCommand``). The step's ``copies`` say where each of the
+    group's vertices, edges and faces went (store-backed meshes)."""
+    from core.history import ExplodeGroupCommand
+    g = _placement(history, placement)
+    before = history.revision
+    history.execute(ExplodeGroupCommand(g))
+    return _answer(history, before)
+
+
+def split_into_pieces(history, placement):
+    """Regroup the placement's (uid) contents by physical piece
+    (``core.pieces.split_into_pieces``, ``SplitIntoPiecesCommand``): one
+    child group per solid that does not touch another. Nothing happens
+    (``ok`` False, no step) when it already is its pieces."""
+    from core.history import SplitIntoPiecesCommand
+    from core.pieces import split_into_pieces as split
+    g = _placement(history, placement)
+    before = history.revision
+    pieces = split(g)
+    if not pieces:
+        return _answer(history, before, ok=False)
+    history.execute(SplitIntoPiecesCommand(g, pieces))
+    return _answer(history, before)
+
+
+def explode_view(history, placement, factor, mode="outward"):
+    """Pull the placement's (uid) parts apart to ``factor`` (0
+    reassembles) along ``mode``: ``outward``, ``x``, ``y`` or ``z``
+    (``ExplodeViewCommand``)."""
+    from core.explode import MODES
+    from core.history import ExplodeViewCommand
+    if mode not in MODES:
+        raise ValueError(f"mode must be one of {MODES}")
+    g = _placement(history, placement)
+    before = history.revision
+    history.execute(ExplodeViewCommand(g, float(factor), mode))
+    return _answer(history, before)
+
+
+def purge_unused(history, layers=True, materials=True):
+    """Remove the tags and/or materials nothing in the document uses
+    (``PurgeUnusedCommand``; tags a saved view hides stay)."""
+    from core.history import PurgeUnusedCommand
+    before = history.revision
+    cmd = PurgeUnusedCommand(layers=bool(layers), materials=bool(materials))
+    if cmd.counts(history.scene) == (0, 0):
+        return _answer(history, before, ok=False)
+    history.execute(cmd)
+    return _answer(history, before)
+
+
+def purge_debris(history):
+    """Drop the open mesh's vertices that no edge and no face uses
+    (``Mesh.purge_debris``, one snapshot step)."""
+    from core.history import SnapshotMutation
+    before = history.revision
+    history.execute(SnapshotMutation(lambda scene: scene.mesh.purge_debris()))
+    return _answer(history, before)
+
+
 def undo(history):
     before = history.revision
     history.undo()
@@ -199,7 +271,10 @@ COMMANDS = {"add_edge": add_edge, "add_edges": add_edges,
             "move_vertices": move_vertices, "erase": erase,
             "push_pull": push_pull, "orient_faces": orient_faces,
             "rebuild_cap": rebuild_cap, "solid_operation": solid_operation,
-            "undo": undo, "redo": redo}
+            "explode_group": explode_group,
+            "split_into_pieces": split_into_pieces,
+            "explode_view": explode_view, "purge_unused": purge_unused,
+            "purge_debris": purge_debris, "undo": undo, "redo": redo}
 
 
 def run(history, name, **args):

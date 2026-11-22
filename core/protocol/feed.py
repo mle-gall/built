@@ -95,7 +95,7 @@ class Step:
     """One History step as the feed reports it."""
 
     __slots__ = ("revision", "phase", "command", "meshes", "placements",
-                 "tags", "materials", "complete")
+                 "tags", "materials", "complete", "copies")
 
     def __init__(self, revision, phase, command):
         self.revision = revision
@@ -107,6 +107,11 @@ class Step:
         self.materials = _sets()        # scene.materials name
         #: False when placements may have changed beyond those named.
         self.complete = True
+        #: Elements the step copied from one mesh into another (Explode,
+        #: Split into Pieces): ``[{"source", "target", "keys"}]``, the mesh
+        #: keys and, per kind, ``(source key, key in target)`` pairs. Not
+        #: on undo (the copies are gone: ``removed`` names them).
+        self.copies: list = []
 
     def mesh_change(self, mesh) -> MeshChange | None:
         for c in self.meshes:
@@ -120,7 +125,12 @@ class Step:
                 "meshes": [c.to_json() for c in self.meshes],
                 "placements": {k: list(v) for k, v in self.placements.items()},
                 "tags": {k: list(v) for k, v in self.tags.items()},
-                "materials": {k: list(v) for k, v in self.materials.items()}}
+                "materials": {k: list(v) for k, v in self.materials.items()},
+                "copies": [{"source": c["source"], "target": c["target"],
+                            "keys": {k: [[to_json_key(a), to_json_key(b)]
+                                         for a, b in pairs]
+                                     for k, pairs in c["keys"].items()}}
+                           for c in self.copies]}
 
 
 # ---------------------------------------------------------------- capture
@@ -231,6 +241,22 @@ def _painted(cmd) -> list:
     return out
 
 
+def _copies(cmd) -> list:
+    """What a command says it copied between meshes (``cmd.copies``:
+    ``[(source mesh, target mesh, {kind: [(key, key)]})]``)."""
+    from core.history import CompoundCommand
+    out, stack = [], [cmd]
+    while stack:
+        c = stack.pop()
+        if isinstance(c, CompoundCommand):
+            stack.extend(c.commands)
+            continue
+        for src, dst, keys in getattr(c, "copies", None) or ():
+            out.append({"source": mesh_key(src), "target": mesh_key(dst),
+                        "keys": {k: list(keys[k]) for k in keys}})
+    return out
+
+
 def _doc_state(scene):
     roots = {id(g): g.uid for g in scene.groups}
     # By value: tags and materials are edited in place too.
@@ -273,6 +299,24 @@ def _known_placements(cmd, phase, step) -> bool:
     if isinstance(cmd, H.MoveGroupCommand) and uid:
         step.placements["modified"].append(uid)
         return True
+    undo = phase == "undo"
+    if isinstance(cmd, H.ExplodeGroupCommand) and uid:
+        # The group goes, what it held comes out (undo: the reverse).
+        step.placements["created" if undo else "removed"].append(uid)
+        step.placements["removed" if undo else "created"].extend(
+            c[0].uid for c in cmd._lifted)
+        return True
+    if isinstance(cmd, H.SplitIntoPiecesCommand) and uid:
+        step.placements["modified"].append(uid)
+        step.placements["removed" if undo else "created"].extend(
+            p.uid for p in cmd.pieces)
+        return True
+    if isinstance(cmd, H.ExplodeViewCommand):
+        step.placements["modified"].extend(
+            k.uid for k in getattr(cmd.container, "children", None) or ())
+        return True
+    if isinstance(cmd, H.PurgeUnusedCommand):
+        return True                 # tags and materials only
     if isinstance(cmd, (H.HideCommand, H.AssignLayerCommand)):
         from core.group import Group
         step.placements["modified"].extend(
@@ -405,6 +449,8 @@ class ChangeFeed:
                 step.meshes.append(change)
             mod = change.modified["face"]
             mod.extend(k for k in painted if k not in set(mod))
+        if phase != "undo":
+            step.copies = _copies(cmd)
         # Document level: roots by identity, tags and materials by value.
         roots1, tags1, mats1 = _doc_state(scene)
         step.placements["created"].extend(u for i, u in roots1.items() if i not in roots0)
