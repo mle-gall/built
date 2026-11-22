@@ -1332,6 +1332,12 @@ fn reader(snap: &Snapshot) -> Store {
 
 #[pymethods]
 impl PyStoreSnapshot {
+    fn seed_orientation(&self, py: Python<'_>, key: u128) -> PyResult<(Vec<u128>, usize)> {
+        let store = reader(&self.inner);
+        let face = slot_of(&store, Kind::Face, key)?;
+        Ok(py.detach(|| store.seed_orientation(face)))
+    }
+
     #[pyo3(signature = (key, hypot, normal=None))]
     fn face_triangles(&self, key: u128, hypot: &str, normal: Option<[f32;3]>) -> PyResult<Vec<[[f32;3];3]>> {
         let store = &reader(&self.inner);

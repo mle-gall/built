@@ -102,6 +102,18 @@ def push_pull(history, face, distance, keep_base=False):
     return _answer(history, before)
 
 
+def orient_faces(history, face):
+    """Orient the connected sheet to the seed face; all keys survive."""
+    from core.orient_faces import faces_to_flip
+    from core.history import FlipFacesCommand
+    seed, = _need(history.scene.mesh, "face", [face])
+    flip = faces_to_flip(seed)
+    before = history.revision
+    if flip:
+        history.execute(FlipFacesCommand(flip))
+    return _answer(history, before)
+
+
 def undo(history):
     before = history.revision
     history.undo()
@@ -114,7 +126,7 @@ def redo(history):
     return _answer(history, before)
 
 
-COMMANDS = {"move_vertices": move_vertices, "erase": erase,
+COMMANDS = {"move_vertices": move_vertices, "erase": erase, "orient_faces": orient_faces,
             "push_pull": push_pull, "undo": undo, "redo": redo}
 
 

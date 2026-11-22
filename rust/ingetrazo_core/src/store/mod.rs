@@ -37,6 +37,7 @@ pub mod sweep;
 pub mod topo;
 mod hole;
 mod solid;
+mod orient_seed;
 #[cfg(test)]
 mod tests;
 

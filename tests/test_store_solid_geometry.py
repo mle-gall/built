@@ -14,6 +14,8 @@ pytestmark = needs_store
 def empty(store):
     sc = _scene(store)
     sc.mesh.remove_face(sc.mesh.faces[0])
+    for edge in list(sc.mesh.edges):
+        sc.mesh.remove_edge(edge)
     sc.mesh.purge_debris()
     return sc
 
@@ -57,3 +59,18 @@ def test_triangle_order_and_snapshot(monkeypatch):
             sc.mesh.remove_face(face)
             assert snap.face_triangles(face.key, qt_hypot()) == result
     assert results[0] == results[1]
+
+def test_orient_feed(monkeypatch):
+    from core.history import History
+    from core.protocol.commands import run
+    from tests.test_core_protocol import _expected, _got, _read
+    monkeypatch.setattr(StoreMesh, '_materialise', lambda self: pytest.fail('materialised'))
+    sc = _scene(True)
+    sc.mesh.add_face([V(2,0,0), V(2,2,0), V(4,2,0), V(4,0,0)])
+    history = History(sc)
+    before = _read(sc.mesh)
+    response = run(history, "orient_faces", face=sc.mesh.faces[0].key)
+    assert response["ok"]
+    assert _got(response["step"].meshes[0]) == _expected(before, _read(sc.mesh))
+    assert run(history, "undo")["ok"]
+    assert _read(sc.mesh) == before

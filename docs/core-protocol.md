@@ -43,6 +43,7 @@ Built (`core.protocol.commands.run(history, name, **args)`):
 | Command | Arguments | Runs |
 |---|---|---|
 | `move_vertices` | `vertices: [vertex key]`, `delta: [x, y, z]` | `MoveVerticesCommand` (the Move tool's: coincident vertices move along, warped faces fold) |
+| `orient_faces` | `face: seed face key` | Flip inconsistent neighbours across two-face edges. All keys survive. |
 | `push_pull` | `face: face key`, `distance: number`, `keep_base: bool = false` | the Push/Pull tool locked on the face, the distance typed, committed (clamped as the tool clamps) |
 | `erase` | `edges: [edge key]`, `faces: [face key]` | `EraseSelectionCommand` (the Eraser: a split line between coplanar faces dissolves) |
 | `undo`, `redo` | — | `History.undo` / `redo` |
