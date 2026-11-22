@@ -50,6 +50,7 @@ def win(monkeypatch, tmp_path, request):
     w.activateWindow()
     settle()
     yield w
+    w._saved_version = w.viewport.scene.version
     w.close()
     settle()
 
@@ -240,3 +241,25 @@ def test_clean_screen_keeps_tool_shortcuts_and_measurements(win):
     win._act_clean_screen.setChecked(False)
     QTest.keyClick(display, Qt.Key_L)
     assert tool_name(win) == "LineTool"
+
+
+@pytest.mark.parametrize("shortcut,entry,count,x", [
+    (Qt.Key_L, "3", 1, 3.0),
+    (Qt.Key_R, "3;1", 4, 3.0),
+    (Qt.Key_C, "3", 24, 3.0),
+])
+def test_metal_retype_replaces_placed_shape(win, shortcut, entry, count, x):
+    display = win._doc.stand_in
+    QTest.keyClick(display, shortcut)
+    native = display.tools
+    native.sync()
+    for pt in (V(), V(2, 1 if shortcut == Qt.Key_R else 0, 0)):
+        ctx = ToolContext(native, pt, QPointF(), Qt.NoModifier, None)
+        native.tool.on_hover(ctx)
+        native.tool.on_click(ctx)
+    steps = len(native.history.undo_stack)
+    QTest.keyClicks(display, entry)
+    QTest.keyClick(display, Qt.Key_Return)
+    assert len(native.history.undo_stack) == steps
+    assert len(native.scene.mesh.edges) == count
+    assert max(v.position.x() for v in native.scene.mesh.vertices) == pytest.approx(x)

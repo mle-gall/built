@@ -894,3 +894,32 @@ def test_first_loose_edge_only_adds_its_own_row():
     updates.apply(*updates.diff(scene))
     assert updates.last_local
     assert_matches_fresh_pack(updates, scene)
+
+
+def test_retyped_line_updates_resident_face_split():
+    from core.history import History
+    from tools.line import LineTool
+
+    scene, _ = fixture_scene()
+    V = QVector3D
+    scene.mesh.add_face([V(), V(4, 0, 0), V(4, 4, 0), V(0, 4, 0)])
+    updates = InstanceUpdates(scene, pack_scene(scene))
+    history = History(scene)
+    updates.observe(history)
+    vp = SimpleNamespace(scene=scene, history=history, update=lambda: None)
+    line = LineTool()
+
+    def check(faces):
+        assert len(scene.mesh.faces) == faces
+        updates.apply(*updates.diff(scene))
+        assert updates.last_local
+        assert_matches_fresh_pack(updates, scene)
+
+    for point in (V(), V(4, 4, 0)):
+        line.on_click(ToolContext(vp, point, QPointF(), Qt.NoModifier, None))
+    check(2)
+    assert line.on_value(vp, 1.0)
+    assert len(history.undo_stack) == 1
+    check(1)
+    assert history.undo()
+    check(1)
