@@ -7490,8 +7490,10 @@ class MainWindow(WorksessionMixin, QMainWindow):
         # A presented frame from either renderer satisfies the Rust engine's
         # start guard (main.py arms it; the GL viewport's frameSwapped never
         # fires under the Metal view).
-        from core import _native
-        _native.start_ok()
+        if not getattr(self, "_engine_frame_seen", False):
+            from core import _native
+            _native.start_ok()
+            self._engine_frame_seen = True
         if getattr(doc, "_renderer_starting", False):
             doc._renderer_starting = False
             renderer_settings.first_frame()
