@@ -341,7 +341,7 @@ def test_materializing_releases_cached_face_geometry():
     del geometry
     assert retained() is not None
     assert len(mesh.faces) == 1
-    assert type(mesh) is M.Mesh
+    assert _built(mesh)
     assert "_deferred_geom" not in mesh.__dict__
     assert retained() is None
     assert [v.position.toTuple() for v in mesh.vertices] == \

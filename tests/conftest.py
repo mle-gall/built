@@ -186,3 +186,9 @@ def _no_stray_autosave():
     MainWindow._setup_autosave = armed_but_stopped
     yield
     MainWindow._setup_autosave = original
+
+
+@pytest.fixture
+def explicit_store_meshes(monkeypatch):
+    """Differential suites build their store operands explicitly."""
+    monkeypatch.setenv("INGETRAZO_STORE", "0")

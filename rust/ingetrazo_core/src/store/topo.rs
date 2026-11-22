@@ -414,9 +414,13 @@ impl Store {
             }
             vr.push(ring);
         }
+        self.add_welded_face(&vr, ch)
+    }
+
+    pub fn add_welded_face(&mut self, rings: &[Vec<u32>], ch: &mut Change) -> Result<u32, OpError> {
         let f = self.new_slot(Kind::Face)?;
-        self.set_rings(f, &vr, false);
-        for ring in &vr {
+        self.set_rings(f, rings, false);
+        for ring in rings {
             let n = ring.len();
             for i in 0..n {
                 let made = ch.created[1].len();

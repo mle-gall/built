@@ -1536,6 +1536,32 @@ impl PyMeshStore {
             .1)
     }
 
+    fn add_welded_face(&mut self, rings: Vec<Vec<u128>>) -> PyResult<(u128, PyChange)> {
+        let slots = rings.into_iter().map(|ring| ring.into_iter()
+            .map(|k| live_of(&self.inner, Kind::Vertex, k)).collect::<PyResult<Vec<_>>>())
+            .collect::<PyResult<Vec<_>>>()?;
+        let (face, change) = self.op(|s, ch| {
+            let f = s.add_welded_face(&slots, ch)?;
+            for &key in &ch.created[Kind::Edge as usize] {
+                let edge = s.slot(Kind::Edge, key).unwrap();
+                for &v in s.state.ends.get(edge as usize) {
+                    ch.modified[0].push(s.key(Kind::Vertex, v));
+                }
+            }
+            Ok(f)
+        })?;
+        Ok((self.inner.key(Kind::Face, face), change))
+    }
+
+    /// Clear live geometry in the current lineage; prior snapshots retain their keys.
+    fn clear(&mut self) -> PyResult<PyChange> {
+        let empty = super::State { ns: self.inner.state.ns, ..Default::default() };
+        let before = self.inner.state.clone();
+        let snap = Snapshot { state: empty, revision: self.inner.revision, lineage: self.inner.lineage };
+        self.inner.restore(&snap, None).map_err(PyValueError::new_err)?;
+        Ok(self.net_change(&before))
+    }
+
     /// `turn_face_over`'s ring reversal (outer and holes).
     fn reverse_face(&mut self, key: u128) -> PyResult<PyChange> {
         let f = any_of(&self.inner, Kind::Face, key)?;
