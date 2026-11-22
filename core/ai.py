@@ -30,7 +30,6 @@ import urllib.error
 import time
 import urllib.request
 
-from core.history import SnapshotImport
 from core.version import USER_AGENT as _UA, __version__
 
 #: Cloudflare fronts several providers (Groq above all) and rejects
@@ -448,7 +447,11 @@ def run_transactional(viewport, code: str, scope: dict) -> dict:
         finally:
             sys.stdout, sys.stderr = old_out, old_err
 
-    cmd = SnapshotImport(mutate)
+    # The nested group tree too: a script that adopted parts into a nested
+    # container or swapped a part's mesh used to report changed: False and
+    # leave no undo step (2026-11-14, the ride catwalk rebuild).
+    from core.agent_transaction import TreeSnapshot
+    cmd = TreeSnapshot(mutate)
     saved_redo = list(history.redo_stack)
     history.execute(cmd)
     error = history.last_error
@@ -463,8 +466,13 @@ def run_transactional(viewport, code: str, scope: dict) -> dict:
     else:
         changed = False
     viewport.notify_scene_changed()
-    return {"stdout": out_buf.getvalue(), "stderr": err_buf.getvalue(),
-            "error": error, "changed": changed}
+    result = {"stdout": out_buf.getvalue(), "stderr": err_buf.getvalue(),
+              "error": error, "changed": changed}
+    if cmd.in_place:
+        result["warning"] = (
+            f"{cmd.in_place} existing mesh(es) were edited in place; undo does "
+            "not restore those. Build a new Mesh and assign group.mesh instead.")
+    return result
 
 
 def run_callable_transactional(viewport, fn):
