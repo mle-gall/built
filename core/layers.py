@@ -1821,7 +1821,7 @@ def _tag_automatic(scene, before: set) -> int:
     return n
 
 
-def tag_new_objects(scene, before: set, *, include_groups=True) -> int:
+def tag_new_objects(scene, before: set, *, include_groups=True, tagged_groups=None) -> int:
     """Put the objects a command created on the active layer.
 
     A group, a component, a dimension, a leader text or a guide made while
@@ -1853,6 +1853,8 @@ def tag_new_objects(scene, before: set, *, include_groups=True) -> int:
     for obj in fresh:
         if layer_of(obj) == DEFAULT_LAYER:
             assign_layer(obj, name)
+            if tagged_groups is not None and hasattr(obj, "mesh"):
+                tagged_groups.append(obj)
             n += 1
     return n
 

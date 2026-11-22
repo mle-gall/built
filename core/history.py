@@ -458,11 +458,15 @@ class History:
         gets it without knowing about layers."""
         if before is None:
             return
-        from core.layers import tag_new_objects, active_layer, DEFAULT_LAYER
-        if tag_new_objects(self.scene, before, include_groups=include_groups):
-            # Automatic tags only touch annotations, never group geometry.
-            if include_groups and active_layer(self.scene) != DEFAULT_LAYER:
-                _dirty_group_chunks(self.scene)
+        from core.layers import tag_new_objects
+        from core.purge import iter_groups
+        tagged = []
+        if tag_new_objects(self.scene, before, include_groups=include_groups, tagged_groups=tagged):
+            # Only these new placements now inherit a different tag. Dirtying
+            # all meshes turns adding one part into a full Metal scene bake.
+            for group in iter_groups(tagged):
+                group.mesh._chunk_dirty = True
+                group.mesh._attrs_dirty = True
             self.scene.version += 1
 
     def _in_command_mesh(self, cmd, fn) -> None:

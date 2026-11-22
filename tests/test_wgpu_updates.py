@@ -825,3 +825,21 @@ def test_callable_agent_edits_leave_other_deferred_meshes_resident():
     history.redo()
     assert type(meshes[1]) is DeferredMesh
     assert vertex is meshes[0].vertices[0] and vertex.position.z() == 2
+
+
+def test_agent_adding_group_on_active_layer_rebakes_only_new_mesh():
+    from core.ai import run_transactional
+    from core.history import History
+    from core.layers import Layer
+    scene, updates = fixture_scene()
+    scene.layers.append(Layer("Active"))
+    scene.active_layer = "Active"
+    history = History(scene)
+    updates.observe(history)
+    viewport = SimpleNamespace(scene=scene, history=history, notify_scene_changed=lambda: None)
+    reply = run_transactional(viewport, 'g=Group(); g.mesh.add_edge(QVector3D(), QVector3D(1,0,0)); groups.append(g)', {})
+    assert reply['changed']
+    delta = updates.diff(scene)
+    assert [mesh for mesh, _, _ in updates.changed] == [scene.groups[-1].mesh]
+    updates.apply(*delta)
+    assert_matches_fresh_pack(updates, scene)
