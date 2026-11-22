@@ -46,6 +46,8 @@ Built (`core.protocol.commands.run(history, name, **args)`):
 | `add_edges` | `segments: [[a,b], ...]` | Batch drawing as one step |
 | `divide_edges` | `edges: [edge key], n: integer` | Divide each line or curve into n pieces |
 | `join_edges` | `edges: [edge key]` | Join straight segments |
+| `follow_me` | `face` key, `path` of local [x,y,z] points, optional `closed` boolean | Sweep the painted profile, consuming its key and creating outward walls and caps. |
+| `intersect_faces` | `mode` (context, model, selection, placements), optional `faces` keys or `placements` sibling uids | Partition faces in the open mesh or in each selected placement. Omit the keys to use the scene selection. The feed identifies changed meshes. |
 | `move_vertices` | `vertices: [vertex key]`, `delta: [x, y, z]` | `MoveVerticesCommand` (the Move tool's: coincident vertices move along, warped faces fold) |
 | `solid_operation` | `operation` (outer_shell, union, subtract, trim, intersect, split), `placements` (sibling uids in pick order) | Runs the Solid Tools command. The step names consumed and result placements. |
 | `rebuild_cap` | `face: seed face key` | Rebuild its plane, including debris pruning. Undo and redo restore the original and replacement keys. |

@@ -27,12 +27,13 @@ class _ResidentEdit:
         return self.after.changes_since(self.before) if self.after is not None else None
 
     def do(self, scene):
-        with resident_edit(scene.mesh):
+        mesh = self._target(scene) if isinstance(self, SnapshotMutation) else scene.mesh
+        with resident_edit(mesh):
             try:
                 super().do(scene)
             except Exception:
                 if self.before is not None:
-                    scene.mesh.restore_state(self.before)
+                    mesh.restore_state(self.before)
                 raise
 
     def apply(self, scene):

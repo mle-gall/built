@@ -111,6 +111,27 @@ def follow_me(history, face, path, closed=False):
     return _answer(history, before)
 
 
+def intersect_faces(history, mode, faces=None, placements=None):
+    from core.intersect import build_intersect_faces, WITH_CONTEXT, WITH_SELECTION, WITH_MODEL
+    if mode not in (WITH_CONTEXT, WITH_SELECTION, WITH_MODEL, "placements"):
+        raise ValueError(mode)
+    if placements is not None and (mode != "placements" or faces is not None):
+        raise ValueError("placement uids require placements mode")
+    groups = None
+    if placements is not None:
+        scene = history.scene
+        siblings = scene.edit_group.children if scene.edit_group else scene.groups
+        by_uid = {g.uid: g for g in siblings}
+        groups = [by_uid[uid] for uid in dict.fromkeys(placements)]
+    if faces is not None:
+        faces = [from_json_key(k) for k in faces]
+    before = history.revision
+    _, cmd = build_intersect_faces(history.scene, mode, faces, groups)
+    if cmd is not None:
+        history.execute(cmd)
+    return _answer(history, before)
+
+
 def rebuild_cap(history, face):
     """Rebuild the plane of a seed face with the direct cap planner."""
     from core.cap_rebuild import apply_rebuild
@@ -276,7 +297,7 @@ def redo(history):
     return _answer(history, before)
 
 
-COMMANDS = {"follow_me": follow_me,
+COMMANDS = {"follow_me": follow_me, "intersect_faces": intersect_faces,
             "add_edge": add_edge, "add_edges": add_edges,
             "divide_edges": divide_edges, "join_edges": join_edges,
             "move_vertices": move_vertices, "erase": erase,
