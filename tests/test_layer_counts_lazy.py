@@ -92,9 +92,12 @@ def test_panel_publishes_only_a_complete_current_count(monkeypatch):
     monkeypatch.setattr(time, "monotonic", lambda: next(ticks))
     scene = Scene()
     published = []
-    panel = SimpleNamespace(_scene=lambda: scene, _show_counts=published.append,
+    viewport = SimpleNamespace(history=object())
+    panel = SimpleNamespace(_window=SimpleNamespace(viewport=viewport),
+                            _scene=lambda: scene, _show_counts=published.append,
                             _count_timer=SimpleNamespace(start=lambda ms: None))
-    def steps(scene):
+    def steps(scene, *, history):
+        assert history is viewport.history
         version = scene.content_version
         yield None
         yield {"layer": version}
