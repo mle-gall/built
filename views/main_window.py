@@ -8010,6 +8010,34 @@ class MainWindow(WorksessionMixin, QMainWindow):
         return img.scaledToWidth(self.TAB_PREVIEW_PX,
                                  _Qt.SmoothTransformation)
 
+    #: Width of the picture a save keeps in the file (px): the start page's
+    #: tiles and Continue card are ~200 pt wide, so twice that on Retina.
+    SAVE_PICTURE_PX = 560
+
+    def _document_picture(self, doc):
+        """The picture a save keeps in the file (``thumbnail.png``): the
+        model as its view shows it, without the chrome. None when there is
+        nothing worth keeping (the file then keeps the picture it had).
+
+        Under the Metal view the GL viewport is hidden and never draws, so
+        its framebuffer is black, and a grab of the Metal widget is the
+        chrome at best. The Metal renderer draws one frame offscreen at
+        this small size instead (``render_image``: resident geometry, no
+        egui, the surface untouched): no repack and no full-size render,
+        so it stays cheap on a huge model."""
+        from views.wgpu_start import blank_picture
+        view = getattr(doc, "stand_in", None)
+        if view is not None and getattr(view, "renderer", None) is not None:
+            image = None
+            if getattr(view, "packed", None) is not None and view.width() > 0 and view.height() > 0:
+                try:
+                    image = view.render_image(self.SAVE_PICTURE_PX)
+                except Exception:  # noqa: BLE001 — a missing picture only
+                    image = None
+            return None if blank_picture(image) else image
+        image = self._tab_thumbnail(doc.viewport)
+        return None if blank_picture(image) else image
+
     #: Panel caches keyed by the scene's content version: two projects can
     #: be at the same number, so a switch forgets them all.
     _VERSION_CACHES = ("_in_model_cv", "_counted_version", "_drawn_signature",
@@ -9535,9 +9563,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             # Linked files: their paths relative to where this is saved.
             from core import links as _links
             _links.refresh_paths(vp.scene, path)
-            image = self._tab_thumbnail(vp)
-            if image is None and doc.stand_in is not None and doc.stand_in.isVisible():
-                image = doc.stand_in.grab().toImage().scaledToWidth(self.TAB_PREVIEW_PX)
+            image = self._document_picture(doc)
             if image is not None:
                 from PySide6.QtCore import QBuffer, QByteArray, QIODevice
                 data = QByteArray()

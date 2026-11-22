@@ -100,8 +100,12 @@ def on(monkeypatch):
 
 
 def thumb_png(w=40, h=24):
+    # Not one flat colour: the page takes that for a blank picture.
     image = QImage(w, h, QImage.Format_RGB32)
     image.fill(Qt.darkCyan)
+    for x in range(w // 2):
+        for y in range(h):
+            image.setPixel(x, y, 0xFFD0D8E0)
     data = QByteArray()
     buf = QBuffer(data)
     buf.open(QIODevice.WriteOnly)
@@ -360,3 +364,148 @@ def test_note_remembers_what_the_window_knows(win, tmp_path):
     assert m["workspace"] == "Model" and m["links"] == 0
     raw = json.loads(QSettings().value("home/meta"))
     assert str(a.resolve()) in raw
+
+
+# ---- Pictures: a black one is no picture ---------------------------------------
+def png_of(image):
+    data = QByteArray()
+    buf = QBuffer(data)
+    buf.open(QIODevice.WriteOnly)
+    image.save(buf, "PNG")
+    return bytes(data)
+
+
+def gradient(w=280, h=175):
+    from PySide6.QtGui import QColor, QPainter
+    image = QImage(w, h, QImage.Format_RGB32)
+    image.fill(QColor(200, 214, 230))                   # sky
+    p = QPainter(image)
+    p.fillRect(0, h // 2, w, h // 2, QColor(120, 128, 110))   # ground
+    p.fillRect(w // 3, h // 4, w // 3, h // 2, QColor(70, 70, 80))  # the model
+    p.end()
+    return image
+
+
+def test_blank_pictures_are_told_apart():
+    black = QImage(280, 175, QImage.Format_RGB32)
+    black.fill(Qt.black)
+    assert ws.blank_picture(black)
+    grey = QImage(280, 175, QImage.Format_RGB32)
+    grey.fill(Qt.darkGray)
+    assert ws.blank_picture(grey)
+    # A black frame with a far speck of model in it (the composite's tile).
+    speck = black.copy()
+    for x in range(138, 142):
+        for y in range(86, 89):
+            speck.setPixel(x, y, 0xFFFFFFFF)
+    assert ws.blank_picture(speck)
+    assert ws.blank_picture(QImage()) and ws.blank_picture(None)
+    assert not ws.blank_picture(gradient())
+
+
+def test_a_black_thumbnail_shows_the_placeholder(win, monkeypatch, tmp_path):
+    on(monkeypatch)
+    black = QImage(280, 175, QImage.Format_RGB32)
+    black.fill(Qt.black)
+    dark = tmp_path / "dark.built"
+    scene = Scene()
+    scene._home_thumbnail_png = png_of(black)
+    igz.save_scene(scene, dark)
+    lit = tmp_path / "lit.built"
+    scene = Scene()
+    scene._home_thumbnail_png = png_of(gradient())
+    igz.save_scene(scene, lit)
+    recent.remember(dark)
+    recent.remember(lit)
+    ws.show(win)
+    wait_loader(win)
+    files = frame(win).rows()[0]
+    by_name = {f[0][1]: f[0] for f in files}
+    assert by_name["dark.built"][4] == ""               # placeholder
+    assert by_name["lit.built"][4].startswith("thumb:")
+
+
+# ---- The picture a save keeps (Metal view) ------------------------------------
+class FakeMetalView:
+    """The Metal view at its boundary: ``render_image`` is the renderer's
+    offscreen frame (resident geometry, no egui chrome)."""
+
+    def __init__(self, image):
+        self.renderer = object()
+        self.packed = object()
+        self.image = image
+        self.asked = []
+
+    def width(self):
+        return 800
+
+    def height(self):
+        return 500
+
+    def isVisible(self):
+        return True
+
+    def render_image(self, width_px, height_px=None, overlays=False, sharp_shadows=False):
+        self.asked.append((width_px, height_px, overlays))
+        return self.image if self.image is None else self.image.scaled(width_px, round(width_px * 500 / 800))
+
+    def grab(self):  # the old path: the chrome over nothing
+        raise AssertionError("a save must not grab the Metal widget")
+
+
+def saved_picture(path):
+    import zipfile
+    with zipfile.ZipFile(path) as archive:
+        if "thumbnail.png" not in archive.namelist():
+            return None
+        image = QImage()
+        image.loadFromData(archive.read("thumbnail.png"), "PNG")
+        return image
+
+
+def save_with(win, monkeypatch, tmp_path, name, view, gl=None):
+    doc = win._doc
+    monkeypatch.setattr(doc, "stand_in", view)
+    # The hidden GL viewport under Metal: a black framebuffer.
+    black = QImage(280, 175, QImage.Format_RGB32)
+    black.fill(Qt.black)
+    monkeypatch.setattr(win, "_tab_thumbnail", lambda vp: gl if gl is not None else black)
+    path = tmp_path / name
+    try:
+        win._do_save(path)
+    finally:
+        monkeypatch.setattr(doc, "stand_in", None)
+    return path
+
+
+def test_save_under_metal_keeps_the_renderers_picture(win, monkeypatch, tmp_path):
+    view = FakeMetalView(gradient(800, 500))
+    path = save_with(win, monkeypatch, tmp_path, "metal.built", view)
+    # One offscreen frame at thumbnail size, never the window's size, no overlays.
+    assert view.asked == [(win.SAVE_PICTURE_PX, None, False)]
+    picture = saved_picture(path)
+    assert picture is not None and picture.width() == win.SAVE_PICTURE_PX
+    assert not ws.blank_picture(picture)
+
+
+def test_a_blank_metal_frame_is_not_saved(win, monkeypatch, tmp_path):
+    black = QImage(800, 500, QImage.Format_RGB32)
+    black.fill(Qt.black)
+    path = save_with(win, monkeypatch, tmp_path, "black.built", FakeMetalView(black))
+    assert saved_picture(path) is None
+    # Nothing to draw with yet (no renderer frame): nothing saved either,
+    # and the black GL framebuffer is not taken instead.
+    view = FakeMetalView(None)
+    path = save_with(win, monkeypatch, tmp_path, "none.built", view)
+    assert saved_picture(path) is None
+
+
+def test_the_gl_view_still_gives_its_frame(win, monkeypatch, tmp_path):
+    path = save_with(win, monkeypatch, tmp_path, "gl.built", None, gl=gradient())
+    picture = saved_picture(path)
+    assert picture is not None and not ws.blank_picture(picture)
+    # A black frame (nothing drawn yet): the document keeps the picture it had.
+    path = save_with(win, monkeypatch, tmp_path, "gl-black.built", None)
+    again = saved_picture(path)
+    assert again is not None and again == picture
+
