@@ -767,6 +767,7 @@ def test_bridge_edits_preserve_nested_face_and_edge_draw_ranges():
     for code in (
         'leaf.mesh.move_vertex(leaf.mesh.vertices[0], QVector3D(.25, 0, 1))',
         'leaf.mesh = other.mesh',
+        'leaf.mesh = Mesh()',
         'leaf.mesh = Mesh(); leaf.mesh.add_face([QVector3D(), QVector3D(1,0,0), QVector3D(1,1,0)])',
         'for i in range(20): leaf.mesh.add_face([QVector3D(i,2,0), QVector3D(i+1,2,0), QVector3D(i,3,0)])',
     ):

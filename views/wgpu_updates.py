@@ -26,6 +26,11 @@ def _resident_version(scene):
     return scene.content_version - getattr(scene, '_placement_context_bumps', 0)
 
 
+def _has_vertices(mesh):
+    src = mesh.__dict__.get('_deferred_source')
+    return bool(len(src['pos']) if src is not None else len(mesh.vertices))
+
+
 class InstanceUpdates:
     def __init__(self, scene, packed):
         self.scene = scene
@@ -247,7 +252,7 @@ class InstanceUpdates:
         swaps = []
         for group, old_mesh in change[2]:
             row = self.rows.get(group.uid)
-            if row is None or group.uid not in self.active:
+            if row is None or group.uid not in self.active or not _has_vertices(group.mesh):
                 return None
             code = int(self.packed.instances['info'][row, 0])
             variant = self.variants.get(old_mesh, {}).get(code)
@@ -282,7 +287,9 @@ class InstanceUpdates:
             return None
         local = self.unsubscribe is not None and self.journal_valid and _resident_version(scene) == self.version
         swaps = self._resolve_swaps() if local else self._link_swaps()
-        local = swaps is not None
+        local = swaps is not None and all(_has_vertices(self.meshes[k][0]) for k in self.pending_meshes)
+        if not local:
+            swaps = None
         self.pending_swaps.clear()
         self.last_local = local
         placements = [] if local else [(None, None, None, 0)]
@@ -318,9 +325,12 @@ class InstanceUpdates:
             old = self.meshes.get(id(mesh))
             code = self.packed.prototype_lookup.get(key)
             uid = getattr(group, 'uid', 'loose')
-            if (old is not None and old[2] < 0 and old[1] == mesh._mut_serial
-                    and (code is None or code < 0)):
+            if old is not None and old[2] < 0 and old[1] == mesh._mut_serial:
                 continue    # empty when packed, under any paint: no row
+            if (old is None or old[1] != mesh._mut_serial) and not _has_vertices(mesh):
+                if old is None:
+                    self.meshes[id(mesh)] = (mesh, mesh._mut_serial, -1)
+                continue
             if code == -1:
                 code = None
             if code is None:
@@ -572,7 +582,7 @@ class InstanceUpdates:
                     target[code]['count'] = source['count']
                     target[code]['base'] = offset
                     target[code]['first'] = offset + int(source['first']) - start
-                self.meshes[id(mesh)] = (mesh, mesh._mut_serial, code)
+                self.meshes[id(mesh)] = (mesh, mesh._mut_serial, code if uid is not None else -1)
             self.packed.profile_exclusions = tuple((c, p) for c, p in exclusions.items() if p)
             if renderer is not None and hasattr(renderer, 'set_profile_exclusions'):
                 if getattr(renderer, 'incremental_profile_exclusions', False):
