@@ -558,21 +558,23 @@ class InstanceUpdates:
                     renderer.replace_prototype(code, vertices[:count].view(np.uint8).reshape(-1),
                                                indices[:count].view(np.uint8).reshape(-1),
                                                bounds.view(np.uint8).reshape(-1), int(face['count']))
+                material = np.empty(0, np.uint8)
+                flags = 0
+                if uid is not None:
+                    header = baked.materials.view(np.uint32).reshape(-1, 4)[prototype]
+                    first, length, flags = map(int, header[1:])
+                    if length:
+                        material = baked.materials[first*16:first*16+length*32].copy()
+                        words = material.view(np.uint32).reshape(-1, 8)
+                        words[:, 5:7] = texture_map[words[:, 5:7]]
+                self.packed.material_updates[code] = flags, material
                 if renderer is not None:
-                    material = np.empty(0, np.uint8)
-                    if uid is not None:
-                        header = baked.materials.view(np.uint32).reshape(-1, 4)[prototype]
-                        first, length = int(header[1]), int(header[2])
-                        if length:
-                            material = baked.materials[first*16:first*16+length*32].copy()
-                            words = material.view(np.uint32).reshape(-1, 8)
-                            words[:, 5:7] = texture_map[words[:, 5:7]]
-                        elif header[3] & 1:
-                            # Incremental material API takes corner records. Expand
-                            # only this edited prototype's compressed matching back.
-                            records = np.zeros((int(face['count']), 32), np.uint8)
-                            records[:, 16:20] = vertices['color'][:int(face['count'])]
-                            material = records.reshape(-1)
+                    if flags & 1:
+                        # The live API takes explicit corner records. A full
+                        # upload retains the compact matching-back header.
+                        records = np.zeros((int(face['count']), 32), np.uint8)
+                        records[:, 16:20] = vertices['color'][:int(face['count'])]
+                        material = records.reshape(-1)
                     renderer.update_prototype_materials(code, material)
                 offset = self._place(code, vertices, indices)
                 self.packed.bounds[code] = bounds

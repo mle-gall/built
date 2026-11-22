@@ -843,3 +843,22 @@ def test_agent_adding_group_on_active_layer_rebakes_only_new_mesh():
     assert [mesh for mesh, _, _ in updates.changed] == [scene.groups[-1].mesh]
     updates.apply(*delta)
     assert_matches_fresh_pack(updates, scene)
+
+
+def test_reupload_after_offscreen_bridge_edit_keeps_material_headers():
+    scene, updates = fixture_scene()
+    replacement = Mesh()
+    face = replacement.add_face([QVector3D(0,0,0), QVector3D(2,0,0), QVector3D(0,1,0)])
+    face.attrs['back'] = {'color': [.2, .4, .8]}
+    scene.groups[0].mesh = replacement
+    updates.apply(*updates.diff(scene))  # edit while the GPU view has no renderer
+    uploaded = Renderer()
+    updates.packed.upload(uploaded)
+    stream = next(args[0] for name, args in uploaded.calls if name == 'set_materials')
+    code = int(updates.packed.instances[0]['info'][0])
+    base, first, count, flags = map(int, stream.view('<u4').reshape(-1, 4)[code])
+    assert (base, count, flags) == (updates.packed.commands[code]['base'], 3, 0)
+    fresh = pack_scene(scene)
+    fresh_first = int(fresh.materials.view('<u4').reshape(-1, 4)[0, 1])
+    np.testing.assert_array_equal(stream[first*16:first*16+96],
+                                  fresh.materials[fresh_first*16:fresh_first*16+96])
