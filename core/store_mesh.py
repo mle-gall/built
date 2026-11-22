@@ -47,12 +47,12 @@ STORE_SIDE = ("_store", "_objmap", "_attr_table", "_attr_own", "_bulk",
 
 
 def enabled() -> bool:
-    """Whether new deferred and bulk-built meshes go to the store."""
+    """Whether a new mesh gets a native geometry owner."""
     from core import _native
     if not _native.store_wanted():
         return False
     mod = _native.native
-    return mod is not None and hasattr(getattr(mod, "MeshStore", None), "add_welded_face")
+    return mod is not None and hasattr(getattr(mod, "MeshStore", None), "_extend_bulk")
 
 
 def _module():
@@ -1704,7 +1704,7 @@ class StoreMesh(Mesh):
 
     # -- bulk construction straight into the store
     def bulk_weld(self, pos):
-        if not any(self._store.counts()):
+        if self._store.revision == 0 and not any(self._store.counts()):
             return bulk_weld(self, pos)
         return Mesh.bulk_weld(self, pos)
 
@@ -1889,6 +1889,11 @@ class MaterialisedMesh(Mesh):
     """A store-backed mesh turned into Python objects: a plain mesh, plus
     the views handed out before resolved to the objects they name, and the
     original store lineage retained by any snapshots that need it."""
+
+    def clear(self):
+        Mesh.clear(self)
+        if enabled():
+            initialise_store(self)
 
     def __getstate__(self):
         # Pickle the compatibility object graph, without native handles.
@@ -2215,11 +2220,15 @@ def bulk_weld(m, pos):
     store = mod.MeshStore.from_block(
         ns, pos32, np.zeros((0, 2), dtype=np.int64), None, None, None, [],
         empty_i, empty_i, empty_i, None, **w)
-    become_store(m, store, [])
+    if type(m) is StoreMesh:
+        m._store._extend_bulk(store)
+        store = m._store
+    else:
+        become_store(m, store, [])
     vobjs = [VertexView(m, k) for k in store.keys("vertex")]
     m.__dict__["_bulk"] = dict(
         stage="points", vobjs=vobjs, pos=pos32,
-        origin=np.asarray(origin, dtype=np.int64), ns=ns,
+        origin=np.asarray(origin, dtype=np.int64),
         edges=np.zeros((0, 2), dtype=np.int64))
     return vobjs, np.asarray(ids, dtype=np.int64)
 
@@ -2241,7 +2250,7 @@ def _rebuild(m, b, edges_v, flags, curves, layers, names, rings=None,
     e = np.ascontiguousarray(pts, dtype=np.int64).reshape(-1, 2)
     empty_i = np.zeros(0, dtype=np.int64)
     store = mod.MeshStore.from_block(
-        b["ns"], b["pos"], e,
+        next(_mesh._KEY_NAMESPACES), b["pos"], e,
         np.ascontiguousarray(flags, dtype=np.uint8),
         np.ascontiguousarray(curves, dtype=np.int64),
         np.ascontiguousarray(layers, dtype=np.int64), names,
@@ -2250,8 +2259,8 @@ def _rebuild(m, b, edges_v, flags, curves, layers, names, rings=None,
         empty_i if sizes is None else sizes,
         empty_i if counts is None else counts,
         face_attr, **_weld_args())
-    m.__dict__["_store"] = store
-    return store
+    m._store._extend_bulk(store)
+    return m._store
 
 
 def _bulk_edges(m, b, ia, ib, flags):

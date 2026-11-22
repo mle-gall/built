@@ -61,7 +61,7 @@ _STORE_SIDE = frozenset(("_store", "_objmap", "_attr_table", "_attr_own",
 
 
 def _store_on() -> bool:
-    """Whether new deferred / bulk-built meshes go to the Rust store."""
+    """Whether new meshes go to the Rust store."""
     from core import store_mesh
     return store_mesh.enabled()
 
@@ -2079,7 +2079,7 @@ class DeferredMesh(Mesh):
         """Turn ``mesh`` into a deferred one that runs ``build(mesh)`` on
         first touch and makes exactly ``nfaces`` faces; ``source`` is what
         it is built from, for :mod:`core.lazy_mesh` (kept until built).
-        False (nothing done) unless it is a plain empty mesh."""
+        False (nothing done) unless it is an empty object or store mesh."""
         d = mesh.__dict__
         from core.store_mesh import StoreMesh
         if type(mesh) is StoreMesh:

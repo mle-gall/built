@@ -1553,6 +1553,27 @@ impl PyMeshStore {
         Ok((self.inner.key(Kind::Face, face), change))
     }
 
+    /// Internal to the staged block builder. Columns for the next stage
+    /// have the preceding stage's slot order as a prefix. Install them in
+    /// the live handle so snapshots and discarded branches share one HWM.
+    fn _extend_bulk(&mut self, block: &PyMeshStore) -> PyResult<()> {
+        for kind in Kind::ALL {
+            let i = kind as usize;
+            let slots = &self.inner.state.slots[i];
+            if slots.live != slots.len() || self.inner.hwm[i].len != slots.len()
+                || !self.inner.hwm[i].over.is_empty() || block.inner.n(kind) < slots.len()
+                || block.inner.revision != 0 {
+                return Err(PyValueError::new_err("bulk stages must append fresh slots"));
+            }
+        }
+        let ns = self.inner.state.ns;
+        self.inner.state = block.inner.state.clone();
+        self.inner.state.ns = ns;
+        self.inner.hwm = block.inner.hwm.clone();
+        self.inner.revision += 1;
+        Ok(())
+    }
+
     /// Clear live geometry in the current lineage; prior snapshots retain their keys.
     fn clear(&mut self) -> PyResult<PyChange> {
         let empty = super::State { ns: self.inner.state.ns, ..Default::default() };

@@ -141,3 +141,55 @@ def test_incremental_welded_import_and_snapshot_keys(resident, monkeypatch):
     assert mesh._store.keys("face") == keys
     clone, face = deepcopy((mesh, mesh.faces[0]))
     assert face == clone.faces[0] and face.key != keys[0]
+
+
+def test_bulk_stages_share_lineage_and_preserve_discarded_key_generations(resident):
+    mesh = Mesh()
+    owner = mesh._store
+    vertices, ids = mesh.bulk_weld([(0, 0, 0), (1, 0, 0), (0, 1, 0)])
+    points = mesh.capture_state()
+    edges = mesh.add_edges_welded(vertices, ids[:1], ids[1:2])
+    (edge,) = mesh.edges
+    mesh.add_faces_welded(vertices, ids, [3], [1], edge_map=edges)
+    assert mesh._store is owner
+    mesh.restore_state(points)
+    new_edge = mesh.add_edge(V(1, 0, 0), V(0, 1, 0))
+    assert new_edge.key != edge.key
+
+
+def test_group_and_loose_reverse_report_both_owners(resident):
+    from core.history import FlipFacesCommand
+
+    scene = Scene()
+    group = Group()
+    scene.groups.append(group)
+    faces = [_cube(owner)[0] for owner in (scene.mesh, group.mesh)]
+    history = History(scene)
+    history.execute(FlipFacesCommand(faces))
+    for step in (history.feed.last, run(history, "undo")["step"]):
+        assert {change.mesh: change.modified["face"] for change in step.meshes} == {
+            scene.mesh: [faces[0].key], group.mesh: [faces[1].key]}
+
+
+def test_compatibility_write_logs_and_releases_store(monkeypatch):
+    import io
+    from core import history as history_module
+    from core.store_mesh import MaterialisedMesh
+
+    monkeypatch.setattr(_native, "native", pytest.importorskip("ingetrazo_core"))
+    monkeypatch.setenv("INGETRAZO_STORE", "1")
+    monkeypatch.setenv("INGETRAZO_PERF", "1")
+    output = io.StringIO()
+    monkeypatch.setattr(history_module, "_PERF", True)
+    monkeypatch.setattr(history_module, "_perf_file", output)
+    mesh = Mesh()
+    edge = mesh.add_edge(V(), V(1, 0, 0))
+    snapshot = mesh.capture_state()
+    edge.layer = {"custom": 1}
+    assert type(mesh) is MaterialisedMesh and "_store" not in mesh.__dict__
+    assert edge.layer == {"custom": 1}
+    assert "_set_flag" in output.getvalue() and "mesh.materialise" in output.getvalue()
+    mesh.clear()
+    assert type(mesh) is StoreMesh and not mesh.edges
+    mesh.restore_state(snapshot)
+    assert type(mesh) is StoreMesh and edge.layer is None
