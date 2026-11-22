@@ -102,7 +102,7 @@ class ContextMenuEvent(MouseEvent):
     _type = QEvent.ContextMenu
 
     def __init__(self, x, y, modifiers=0):
-        super().__init__("press", x, y, int(Qt.RightButton), int(Qt.RightButton), modifiers)
+        super().__init__("press", x, y, Qt.RightButton.value, Qt.RightButton.value, modifiers)
         self._type = QEvent.ContextMenu
 
     def reason(self):

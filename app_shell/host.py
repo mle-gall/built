@@ -73,7 +73,8 @@ class Host:
         """Make the renderer on the window's NSView (first frame)."""
         view = self.view
         view.set_scene(self.viewport.scene)
-        view._upload(force=True)
+        if self.ns_view:
+            view._upload(force=True)
         self.window._activate_tool("select")
         return view.renderer
 
@@ -221,6 +222,7 @@ class Host:
 
     def pointer(self, kind, x, y, button=0, held=0, modifiers=0):
         from app_shell.events import ContextMenuEvent, MouseEvent
+        qt_host.INPUT.update(modifiers=int(modifiers), buttons=int(held), pos=(x, y))
         view = self.view
         if kind == "leave":
             return self._guard("leave", view.leaveEvent, None)
@@ -236,6 +238,7 @@ class Host:
     def wheel(self, x, y, pixel_dx, pixel_dy, angle_dx, angle_dy, phase="none",
               modifiers=0, held=0, inverted=True):
         from app_shell.events import WheelEvent
+        qt_host.INPUT["modifiers"] = int(modifiers)
         ev = WheelEvent(x, y, pixel_dx, pixel_dy, angle_dx, angle_dy, phase, modifiers, held, inverted)
         self._guard("wheel", self.view.wheelEvent, ev)
         self.request_frame()
@@ -251,6 +254,7 @@ class Host:
         value box and the tool may claim it), then the window's shortcuts
         (the tools' letters), else the view's key handler."""
         from app_shell.events import KeyEvent, ShortcutOverride
+        qt_host.INPUT["modifiers"] = int(modifiers)
         view = self.view
         if pressed:
             override = ShortcutOverride(key, modifiers, text, repeat)
@@ -338,11 +342,21 @@ class Host:
             "tool": type(tool).__name__ if tool is not None else None,
             "status": self.window.statusBar().currentMessage(),
             "errors": len(self.errors),
+            "widget_gaps": self.missing(),
         }
 
     def missing(self):
+        """Qt widget/window API the borrowed code asked for and the shell
+        lacks (probes of the code's own lazily set attributes left out)."""
+        from PySide6.QtOpenGLWidgets import QOpenGLWidget
+        from PySide6.QtWidgets import QMainWindow
         from app_shell.borrow import MISSING
-        return dict(MISSING.most_common())
+        out = {}
+        for name, n in MISSING.most_common():
+            bare = name.split(".", 1)[-1]
+            if hasattr(QOpenGLWidget, bare) or hasattr(QMainWindow, bare):
+                out[name] = n
+        return out
 
 
 def bootstrap(root: str, venv: str | None):

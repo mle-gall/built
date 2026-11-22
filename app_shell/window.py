@@ -204,6 +204,8 @@ class ShellWindow:
         self.tray = None
         for key, tool in self._tools.items():
             shortcut = getattr(tool, "shortcut", "") or ""
+            if key == "select":
+                shortcut = "Space"          # bound by MainWindow, not the tool
             self._tool_actions[key] = ShellAction(
                 getattr(tool, "name", key), shortcut, run=lambda k=key: self._activate_tool(k))
 

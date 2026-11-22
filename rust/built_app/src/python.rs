@@ -175,3 +175,33 @@ impl Host {
         Python::attach(|py| self.obj.bind(py).getattr(name).ok()?.extract().ok())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The embedded interpreter runs the shell's document headless: the
+    /// built-in renderer module, the repository's core/tools/formats, an
+    /// open, a tool switch by key (ShortcutOverride, then the shortcut).
+    #[test]
+    fn embedded_python_opens_a_document_headless() {
+        let layout = Layout::find(None, None);
+        start(&layout).expect("python starts");
+        let builtin = Python::attach(|py| -> PyResult<bool> {
+            let names = py.import("sys")?.getattr("builtin_module_names")?;
+            names.contains("ingetrazo_render")
+        });
+        assert!(builtin.unwrap(), "ingetrazo_render is registered as a built-in module");
+        let settings = std::env::temp_dir().join("built-shell-cargo-test");
+        let host = Host::new(0, 1280.0, 800.0, 2.0, Some(&settings.to_string_lossy())).expect("host");
+        let fixture = layout.root.join("tests/fixtures/shell/slab-and-cube.igz");
+        let opened = host.call("open", (fixture.to_string_lossy().to_string(),)).unwrap();
+        assert!(Python::attach(|py| opened.extract::<bool>(py).unwrap()));
+        host.call0("attach_surface"); // headless: no renderer, select tool on
+        host.call("key", (true, 'L' as u32, 0u32, "l", false));
+        let state = host.state_json();
+        assert!(state.contains("\"faces\": 6"), "{state}");
+        assert!(state.contains("\"tool\": \"LineTool\""), "{state}");
+        assert!(state.contains("\"errors\": 0"), "{state}");
+    }
+}
