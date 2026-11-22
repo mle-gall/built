@@ -147,7 +147,8 @@ class InstanceUpdates:
                         self.pending_swaps[chain[-1].uid] = chain
                         return True
                     if old[2] < 0:
-                        return False
+                        # diff already checks the loose mesh for its first row.
+                        return mesh is self.scene.loose_mesh
                     self.pending_meshes.add(id(mesh))
                     return True
                 if isinstance(command, ReshareInstanceCommand):

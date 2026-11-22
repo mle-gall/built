@@ -765,3 +765,14 @@ def test_adding_annotations_preserves_local_journal():
             ids, rows = updates.diff(scene)
             assert updates.last_local and not len(ids) and not updates.changed
             updates.apply(ids, rows)
+
+
+def test_first_loose_edge_only_adds_its_own_row():
+    from core.history import AddEdgeCommand, History
+    scene, updates = fixture_scene()
+    history = History(scene)
+    updates.observe(history)
+    history.execute(AddEdgeCommand(QVector3D(), QVector3D(1, 0, 0)))
+    updates.apply(*updates.diff(scene))
+    assert updates.last_local
+    assert_matches_fresh_pack(updates, scene)
