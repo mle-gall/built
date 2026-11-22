@@ -13,8 +13,8 @@ store on and off:
    attrs, because their rings come out the same; the step names only
    what was drawn.
 3. Split into Pieces empties the group into a store mesh when the store
-   is on (not a Python ``Mesh`` beside store pieces), the same one on
-   redo."""
+   is on (not a Python ``Mesh`` beside store pieces; ``Mesh()`` is
+   store-backed since the thin-handle merge), the same one on redo."""
 from __future__ import annotations
 
 import pytest
@@ -222,3 +222,25 @@ def test_a_plate_whose_ring_changes_is_still_rebuilt(store):
     assert len(keys) == 2 and b.key in keys and a.key not in keys
     split = next(f for f in sc.mesh.faces if f.key != b.key)
     assert len(split.loop) == 5 and split.attrs.get("color") == [10, 20, 30]
+
+
+# --------------------------------------------------- 3. split into pieces
+
+@pytest.mark.parametrize("store", STORE)
+def test_split_empties_the_group_into_a_store_mesh(store, guard):
+    m = _mesh(store)
+    m.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0)])
+    m.add_face([V(4, 0, 0), V(5, 0, 0), V(5, 1, 0), V(4, 1, 0)])
+    sc = Scene()
+    g = Group(m, name="Parts")
+    sc.groups.append(g)
+    h = History(sc)
+    h.execute(SplitIntoPiecesCommand(g, split_into_pieces(g)))
+    assert h.last_error is None and len(g.children) == 2
+    kind = S.StoreMesh if store else M.Mesh
+    emptied = g.mesh
+    assert type(emptied) is kind and not emptied.faces and not emptied.vertices
+    assert all(type(k.mesh) is kind for k in g.children)
+    assert h.undo() and g.mesh is m and len(m.faces) == 2
+    assert h.redo() and g.mesh is emptied           # the same mesh, same key
+    assert type(g.mesh) is kind and not g.mesh.faces

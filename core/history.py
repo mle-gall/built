@@ -5958,6 +5958,7 @@ class SplitIntoPiecesCommand(Command):
         self.group = group
         self.pieces = list(pieces)
         self.before: Optional[tuple] = None
+        self._emptied = None
         #: Where the group's faces went, for the change feed: ``[(source
         #: mesh, piece mesh, {"face": [(key, key)]})]`` for the pieces the
         #: store cut (``core.store_parts.copy_part``).
@@ -5968,8 +5969,12 @@ class SplitIntoPiecesCommand(Command):
     def do(self, scene) -> None:
         g = self.group
         self.before = (g.mesh, list(g.children), g.xform, g.exploded)
-        from core.mesh import Mesh
-        g.mesh = Mesh()
+        if self._emptied is None:
+            # The group keeps no geometry of its own: an empty mesh (in the
+            # store when the engine is on, like every Mesh()), made once so
+            # a redo shows the same mesh and mesh key.
+            self._emptied = Mesh()
+        g.mesh = self._emptied
         g.adopt(self.pieces)
         # The pieces are cut from the geometry as it stands, so they ARE
         # assembled in their new arrangement: nothing left to take back.
