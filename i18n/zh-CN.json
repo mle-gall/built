@@ -1,4 +1,5 @@
 {
+ "Edge Style": "Edge Style",
  "{index} of {count}: {what} — click again for the next": "第 {index}/{count} 个：{what} — 再次单击选择下一个",
  "Add a terrain profile along a traced path (two clicks or drag)": "沿着已绘制路径添加地形剖面（两次点击或拖动）",
  "Guide point": "参考点",

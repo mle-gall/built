@@ -1486,6 +1486,7 @@ class OutlinerPanel(QWidget):
         # icons and tooltips. Copy those Qt values once instead of
         # issuing dozens of setters for every hidden child row.
         templates = {}
+        template_owner = QTreeWidgetItem()
         from core.materials import material_sig
         around = inherited_states(scene.groups)
         yield
@@ -1509,7 +1510,11 @@ class OutlinerPanel(QWidget):
                 if len(templates) < 512:
                     # Store a detached leaf: cloning an attached row
                     # later would also copy its descendants.
-                    templates[template_key] = item.clone()
+                    # PySide leaves clone() ownership with C++. Give the
+                    # template a parent so its group role dies after the build.
+                    template = item.clone()
+                    template_owner.addChild(template)
+                    templates[template_key] = template
             if parent is not None:
                 holder = items[id(parent)]
             else:

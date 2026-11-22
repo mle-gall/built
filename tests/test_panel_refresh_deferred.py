@@ -126,10 +126,11 @@ def test_a_selection_leaves_the_in_model_lists_as_they_are(win, monkeypatch):
 
 def test_hidden_panels_let_the_previous_document_go(win):
     """Waiting to be shown, the «In model» list and the Browser kept their
-    rows — and each row holds its group, so after New or Open the whole
+    rows — and each row holds its group, so after closing the project the whole
     previous document stayed in memory (+130 MB on the Plaza,
     release_check 10-10)."""
     import gc
+    from PySide6.QtCore import QCoreApplication, QEvent
     from PySide6.QtGui import QVector3D as V
     from core.group import Group
     from core.mesh import Mesh
@@ -147,9 +148,10 @@ def test_hidden_panels_let_the_previous_document_go(win):
     assert browser._groups                      # the rows hold the group
     panel.hide()
     browser.hide()
-    del g, m
-    win._saved_version = vp.scene.version       # no «discard?» question
-    win._on_new()
+    del g, m, vp
+    assert win.close_document(ask=False)
+    # The retired viewport is owned by Qt until its deferred delete runs.
+    QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
     _app.processEvents()
     gc.collect()
     alive = [o for o in gc.get_objects() if isinstance(o, Group)

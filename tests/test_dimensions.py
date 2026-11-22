@@ -318,7 +318,7 @@ def test_geometry_inside_a_group_occludes_too():
 def test_world_under_cursor_uses_cached_pick():
     # Zoom-to-cursor's pick rides the cached NumPy triangles (fast wheel
     # bursts must not re-triangulate the model per event). Nearest hit wins;
-    # empty scene falls back to the ground plane.
+    # empty space falls back to the focal plane through the camera target.
     from PySide6.QtGui import QVector3D
     from views.viewport import Viewport
 
@@ -329,7 +329,7 @@ def test_world_under_cursor_uses_cached_pick():
                          QVector3D(2, 3, 2), QVector3D(-2, 3, 2)])   # wall y=3
 
     class _Cam:
-        target = QVector3D(0, 0, 0)
+        target = QVector3D(0, 5, 0)
         def eye(self):
             return QVector3D(0.0, -10.0, 0.0)
 
@@ -359,12 +359,12 @@ def test_world_under_cursor_uses_cached_pick():
 
     hit = under(0, 0)
     assert abs(hit.y() - 0.0) < 1e-6          # nearest wall, not the far one
+    cached = vp._pick_index_cache[1]
+    assert under(0, 0) == hit
+    assert vp._pick_index_cache[1] is cached
     scene.mesh.clear()
     scene.version += 1                        # cache refresh on scene change
-    vp._pixel_to_ray = lambda x, y: (QVector3D(0, 0, 10),
-                                     QVector3D(0, 0, -1))
-    ground = under(0, 0)
-    assert abs(ground.z()) < 1e-6             # falls back to the ground plane
+    assert under(0, 0) == vp.camera.target
 
 
 # ---- Custom dimension text (double-click the value) -------------------------
