@@ -1316,7 +1316,14 @@ class WgpuView(QWidget):
             if trackpad_nav.native_gesture(self, event):
                 return True
         if event.type() == QEvent.ShortcutOverride and hasattr(self, 'tools'):
-            self.tools.sync()
+            mode = self.tools.sync()
+            from views.viewport import Viewport
+            target = self.tools if mode == 'mesh' else self.source_viewport
+            if target is not None:
+                buffer = self.tools.value_buffer if mode == 'mesh' else target._value_buffer
+                if Viewport._measurement_claims_key(target, event, buffer):
+                    event.accept()
+                    return True
             claims = getattr(self.tools.tool, 'claims_key', None)
             if claims is not None and claims(event.key(), event.modifiers()):
                 event.accept()

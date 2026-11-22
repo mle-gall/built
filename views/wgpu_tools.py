@@ -140,7 +140,7 @@ class NativeTools(MeshToolAccess):
         self.mode = 'select'
         self.start_point = None
         self.original = None
-        self.value_buffer = ""
+        self._set_value_buffer("")
         self._mesh_hover = None
         self.view.overlay_primitives = []
         if hasattr(self.view, 'setCursor'):
@@ -149,6 +149,7 @@ class NativeTools(MeshToolAccess):
 
     def _resume(self, parked):
         self.__dict__.update(parked)
+        self._set_value_buffer(self.value_buffer)
         if hasattr(self.tool, '_viewport'):
             self.tool._viewport = self
         if hasattr(self.view, 'setCursor'):
@@ -260,7 +261,9 @@ class NativeTools(MeshToolAccess):
 
     def _set_value_buffer(self, value):
         self._value_buffer = self.value_buffer = value
-        self.measurementChanged.emit(value)
+        signal = getattr(self.view.source_viewport, "valueBufferChanged", None)
+        if signal is not None:
+            signal.emit(value)
 
     def _parse_value_buffer(self, *args, **kwargs):
         from views.viewport import Viewport
@@ -302,7 +305,8 @@ class NativeTools(MeshToolAccess):
         self.start_point = None
         if self.mode == "move" and self.tool is not None:
             self.tool.start_point = None
-        self.value_buffer = ""
+        if self.value_buffer:
+            self._set_value_buffer("")
         self.view.overlay_primitives = []
 
     def measurements(self):

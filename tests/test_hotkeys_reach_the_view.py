@@ -263,3 +263,44 @@ def test_metal_retype_replaces_placed_shape(win, shortcut, entry, count, x):
     assert len(native.history.undo_stack) == steps
     assert len(native.scene.mesh.edges) == count
     assert max(v.position.x() for v in native.scene.mesh.vertices) == pytest.approx(x)
+
+
+@pytest.mark.parametrize("win", ["0", "1"], indirect=True)
+def test_expression_beats_window_shortcuts_and_draws_its_result(win):
+    from PySide6.QtGui import QAction, QKeySequence
+    display = win._doc.stand_in or win.viewport
+    QTest.keyClick(display, Qt.Key_L)
+    target = display.tools if display is not win.viewport else display
+    if display is not win.viewport:
+        target.sync()
+    line = win.viewport.active_tool
+    line.on_click(ToolContext(target, V(), QPointF(), Qt.NoModifier, None))
+    line.on_hover(ToolContext(target, V(2, 0, 0), QPointF(), Qt.NoModifier, None))
+
+    fired = []
+    for operator in "=+-*/()":
+        action = QAction(operator, win)
+        action.setShortcut(QKeySequence(operator))
+        action.triggered.connect(lambda: fired.append(True))
+        win.addAction(action)
+    entry = "=(1.20m+35cm)*2/2-5cm"
+    QTest.keyClicks(display, entry)
+    assert not fired
+    assert win._vcb_value.text() == entry
+    QTest.keyClick(display, Qt.Key_Return)
+    assert line.start_point.x() == pytest.approx(1.5)
+    assert win.viewport.active_tool is line
+
+
+@pytest.mark.parametrize("win", ["0", "1"], indirect=True)
+def test_zoom_accepts_calculated_lens_and_field_of_view(win):
+    display = win._doc.stand_in or win.viewport
+    cam = win.viewport.camera
+    cam.set_projection("perspective")
+    win.viewport.set_nav_mode("zoom")
+    QTest.keyClicks(display, "=20mm+1.5cm")
+    QTest.keyClick(display, Qt.Key_Return)
+    assert cam.focal_mm == pytest.approx(35)
+    QTest.keyClicks(display, "=90/2")
+    QTest.keyClick(display, Qt.Key_Return)
+    assert cam.fov_deg == pytest.approx(45)
