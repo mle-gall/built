@@ -10,6 +10,13 @@
 //!
 //! Segments live in named slots, so the edit box, the guides and the hidden
 //! edges change independently: one slot's upload never resends another's.
+//!
+//! GL's order decides who wins where a line and a model edge cover the
+//! same pixels: it draws the box and the guides (`_draw_scaffold`) after
+//! the faces but before the scene edges, which paint over them, and the
+//! selected group's hidden edges after the scene edges. A slot is therefore
+//! drawn either under the edges (between the face and the edge passes) or
+//! above them (after the edges); depth against the faces is the same.
 use std::collections::BTreeMap;
 
 /// a (3 f32), b (3 f32), RGBA8 colour, width, dash, gap (f32 pixels).
@@ -18,6 +25,9 @@ pub const SEGMENT_BYTES: usize = 40;
 struct Slot {
     buffer: wgpu::Buffer,
     count: u32,
+    /// Drawn after the scene edges (GL's selected hidden edges) instead of
+    /// before them (GL's scaffold: box, guides).
+    above_edges: bool,
 }
 
 pub struct Lines {
@@ -123,6 +133,7 @@ impl Lines {
         q: &wgpu::Queue,
         slot: &str,
         data: &[u8],
+        above_edges: bool,
     ) -> Result<(), &'static str> {
         let count = validate(data)?;
         if count == 0 {
@@ -135,6 +146,7 @@ impl Lines {
             Some(s) if s.buffer.size() >= data.len() as u64 => {
                 q.write_buffer(&s.buffer, 0, data);
                 s.count = count;
+                s.above_edges = above_edges;
             }
             _ => {
                 let buffer = d.create_buffer(&wgpu::BufferDescriptor {
@@ -144,7 +156,7 @@ impl Lines {
                     mapped_at_creation: false,
                 });
                 q.write_buffer(&buffer, 0, data);
-                self.slots.insert(slot.to_string(), Slot { buffer, count });
+                self.slots.insert(slot.to_string(), Slot { buffer, count, above_edges });
             }
         }
         Ok(())
@@ -158,14 +170,21 @@ impl Lines {
         self.enabled && self.slots.values().any(|s| s.count > 0)
     }
 
+    /// Whether anything draws in one layer: the MSAA colour must outlive
+    /// the edge pass only for the slots drawn after it.
+    pub fn active_layer(&self, above_edges: bool) -> bool {
+        self.enabled && self.slots.values().any(|s| s.count > 0 && s.above_edges == above_edges)
+    }
+
     pub fn draw(
         &self,
         e: &mut wgpu::CommandEncoder,
         color: &wgpu::TextureView,
         depth: &wgpu::TextureView,
         resolve: Option<&wgpu::TextureView>,
+        above_edges: bool,
     ) {
-        if !self.active() {
+        if !self.active_layer(above_edges) {
             return;
         }
         let mut p = e.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -185,7 +204,7 @@ impl Lines {
         });
         p.set_pipeline(&self.pipelines[usize::from(resolve.is_some())]);
         p.set_bind_group(0, &self.group, &[]);
-        for s in self.slots.values().filter(|s| s.count > 0) {
+        for s in self.slots.values().filter(|s| s.count > 0 && s.above_edges == above_edges) {
             p.set_vertex_buffer(0, s.buffer.slice(..u64::from(s.count) * SEGMENT_BYTES as u64));
             p.draw(0..6, 0..s.count);
         }
@@ -243,21 +262,26 @@ mod tests {
         assert!(!lines.active());
         let one = segment([0.; 3], [1., 0., 0.], [1., 4., 4.]);
         let three = [one.clone(), one.clone(), one.clone()].concat();
-        lines.upload(&d, &q, "box", &three).unwrap();
-        lines.upload(&d, &q, "guides", &one).unwrap();
+        lines.upload(&d, &q, "box", &three, false).unwrap();
+        lines.upload(&d, &q, "guides", &one, false).unwrap();
         assert!(lines.active());
+        assert!(lines.active_layer(false) && !lines.active_layer(true));
         let size = lines.slots["box"].buffer.size();
-        lines.upload(&d, &q, "box", &one).unwrap();
+        lines.upload(&d, &q, "box", &one, false).unwrap();
         assert_eq!(lines.slots["box"].buffer.size(), size, "a smaller upload reuses the buffer");
         assert_eq!(lines.counts(), vec![("box".into(), 1), ("guides".into(), 1)]);
-        assert!(lines.upload(&d, &q, "box", &one[..39]).is_err());
+        assert!(lines.upload(&d, &q, "box", &one[..39], false).is_err());
         assert_eq!(lines.slots["box"].count, 1, "a rejected upload keeps the old segments");
-        lines.upload(&d, &q, "box", &[]).unwrap();
-        lines.upload(&d, &q, "guides", &[]).unwrap();
+        lines.upload(&d, &q, "hidden", &one, true).unwrap();
+        assert!(lines.active_layer(true));
+        lines.upload(&d, &q, "box", &[], false).unwrap();
+        lines.upload(&d, &q, "guides", &[], false).unwrap();
+        assert!(lines.active() && !lines.active_layer(false), "only the layer above the edges is left");
+        lines.upload(&d, &q, "hidden", &[], true).unwrap();
         assert!(!lines.active());
-        lines.upload(&d, &q, "box", &one).unwrap();
+        lines.upload(&d, &q, "box", &one, false).unwrap();
         lines.enabled = false;
-        assert!(!lines.active());
+        assert!(!lines.active() && !lines.active_layer(false));
         // Both pipelines record against matching targets without validation errors.
         lines.enabled = true;
         let target = |samples, format| d.create_texture(&wgpu::TextureDescriptor {
@@ -267,10 +291,10 @@ mod tests {
         let resolved = target(1, wgpu::TextureFormat::Bgra8UnormSrgb);
         let mut e = d.create_command_encoder(&Default::default());
         lines.draw(&mut e, &resolved.create_view(&Default::default()),
-                   &target(1, wgpu::TextureFormat::Depth32Float).create_view(&Default::default()), None);
+                   &target(1, wgpu::TextureFormat::Depth32Float).create_view(&Default::default()), None, false);
         lines.draw(&mut e, &target(4, wgpu::TextureFormat::Bgra8UnormSrgb).create_view(&Default::default()),
                    &target(4, wgpu::TextureFormat::Depth32Float).create_view(&Default::default()),
-                   Some(&resolved.create_view(&Default::default())));
+                   Some(&resolved.create_view(&Default::default())), false);
         q.submit([e.finish()]);
         d.poll(wgpu::Maintain::Wait);
     }

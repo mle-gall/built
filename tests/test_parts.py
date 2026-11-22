@@ -451,3 +451,34 @@ def test_the_tray_reads_a_shared_definition_once_per_refresh(monkeypatch):
     assert panel.tree.topLevelItemCount() == 30
     assert seen.count(False) == 1 and len(seen) == 30
     win._saved_version = scene.version
+
+
+def test_parts_read_lazy_shared_prototypes_without_building(monkeypatch, tmp_path):
+    import numpy as np
+    from core import parts
+    from core.group import iter_placements
+    from core.mesh import DeferredMesh
+    from core.scene import Scene
+    from formats import igz
+    from tests.test_deferred_mesh import _open
+    monkeypatch.setattr(igz, "_LARGE_DOCUMENT", 0)
+    monkeypatch.setattr(igz, "_BULK_MIN", 1)
+    stool = _stool()
+    # Both legs share a prototype but have different placements.
+    stool.children[2].mesh = stool.children[1].mesh
+    sc = Scene()
+    sc.groups.append(stool)
+    path = tmp_path / "parts.igz"
+    igz.save_scene(sc, path)
+    eager = _open(monkeypatch, path, False)
+    expected = part_rows(eager.groups[0])
+    lazy = _open(monkeypatch, path, True)
+    assert any(type(g.mesh) is DeferredMesh for g, _ in iter_placements(lazy.groups[0]))
+    monkeypatch.setattr(DeferredMesh, "_materialize", lambda self: pytest.fail(
+        "parts inspection built editable topology"))
+    assert lazy.groups[0].children[1].mesh is lazy.groups[0].children[2].mesh
+    actual = part_rows(lazy.groups[0])
+    for a, b in zip(actual, expected):
+        for key in ("name", "material", "faces", "hidden"):
+            assert a[key] == b[key]
+        np.testing.assert_allclose(a["size"], b["size"], rtol=1e-12, atol=1e-12)

@@ -155,7 +155,11 @@ def selected_hidden(view):
     return key, out
 
 
-SLOTS = (('edit_box', edit_box), ('guides', guides), ('selected_hidden', selected_hidden))
+# (slot, builder, above_edges). GL draws the box and the guides in
+# ``_draw_scaffold``, before the scene edges, which paint over them; the
+# selected hidden edges come after the scene edges.
+SLOTS = (('edit_box', edit_box, False), ('guides', guides, False),
+         ('selected_hidden', selected_hidden, True))
 
 
 def sync(view):
@@ -168,10 +172,11 @@ def sync(view):
         keys = {}
         view._line_keys = (renderer, keys)
     sent = []
-    for slot, build in SLOTS:
+    for slot, build, above_edges in SLOTS:
         key, data = build(view)
         if keys.get(slot) != key:
-            renderer.set_lines(slot, np.ascontiguousarray(data).view(np.uint8).reshape(-1))
+            renderer.set_lines(slot, np.ascontiguousarray(data).view(np.uint8).reshape(-1),
+                               above_edges)
             keys[slot] = key
             sent.append(slot)
     return sent

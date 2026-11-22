@@ -17,6 +17,7 @@ mod edges;
 mod faces;
 mod xray;
 mod ao;
+mod resident_readback;
 use numpy::PyReadonlyArray1;
 use pyo3::{exceptions::PyValueError, prelude::*};
 use raw_window_handle::{
@@ -42,6 +43,7 @@ struct TimingSlot {
 struct Scene {
     material_shifts: Vec<i64>,
     material_data: Vec<u8>,
+    material_layout_dirty: bool,
     face_ranges: Vec<(u32, u32, bool)>,
     inst: wgpu::Buffer,
     flags: Vec<u32>,
@@ -55,7 +57,7 @@ struct Scene {
     edge_records: wgpu::Buffer,
     viewpoints: wgpu::Buffer,
     counters: wgpu::Buffer,
-    vertex_data: Vec<u8>,
+    vertex_bytes: usize,
     index_data: Vec<u8>,
     vertex: wgpu::Buffer,
     index: wgpu::Buffer,
@@ -881,6 +883,7 @@ impl Renderer {
             viewpoints,
             counters,
             face_ranges: vec![(0, count as u32, true)],
+            material_layout_dirty: true,
             material_data: vec![0; count*16],
             material_shifts,
             inst,
@@ -890,7 +893,7 @@ impl Renderer {
             survivors,
             template_data: cmd.to_vec(),
             capacity,
-            vertex_data: v.to_vec(),
+            vertex_bytes: v.len(),
             index_data: ix.to_vec(),
             flags: instances
                 .chunks_exact(80)
@@ -939,12 +942,16 @@ impl Renderer {
         let (edge, expanded_ix, mut commands) = edges::expand(v, ix, bytemuck::cast_slice(&source), 1).map_err(PyValueError::new_err)?;
         let (face, indices, shifts) = faces::compact(v, &expanded_ix, &mut commands, 1);
         let edge_base = s.edge_data.len()/48;
-        let vertex_base = s.vertex_data.len()/28;
+        let vertex_base = s.vertex_bytes/28;
         let index_base = s.index_data.len()/4;
         if (s.edge_data.len()+edge.len()).next_power_of_two() > self.device.limits().max_storage_buffer_binding_size as usize {
             return Err(PyValueError::new_err("edge capacity exceeds storage binding limit"));
         }
         if id == s.p as usize {
+            if s.material_data.len() + 16 > self.device.limits().max_storage_buffer_binding_size as usize {
+                return Err(PyValueError::new_err("material headers exceed storage binding limit"));
+            }
+            s.material_layout_dirty = true;
             let old_p = s.p as usize;
             s.p += 1;
             s.prototype_data.extend_from_slice(bounds);
@@ -960,16 +967,16 @@ impl Renderer {
         s.face_ranges = face_ranges(&s.material_data, s.p);
         s.material_shifts[id] = vertex_base as i64 + shifts[0];
         s.prototype_data[id*32..(id+1)*32].copy_from_slice(bounds);
-        s.vertex_data.extend_from_slice(&face);
+        s.vertex_bytes += face.len();
         s.index_data.extend_from_slice(&indices);
         s.edge_data.extend_from_slice(&edge);
-        for (target, data, usage, offset, addition) in [
-            (&mut s.vertex, &s.vertex_data, wgpu::BufferUsages::VERTEX, vertex_base*28, face.as_slice()),
-            (&mut s.index, &s.index_data, wgpu::BufferUsages::INDEX, index_base*4, indices.as_slice()),
-            (&mut s.edge_records, &s.edge_data, wgpu::BufferUsages::STORAGE, edge_base*48, edge.as_slice())] {
-            if data.len() as u64 > target.size() {
+        for (target, length, usage, offset, addition) in [
+            (&mut s.vertex, s.vertex_bytes, wgpu::BufferUsages::VERTEX, vertex_base*28, face.as_slice()),
+            (&mut s.index, s.index_data.len(), wgpu::BufferUsages::INDEX, index_base*4, indices.as_slice()),
+            (&mut s.edge_records, s.edge_data.len(), wgpu::BufferUsages::STORAGE, edge_base*48, edge.as_slice())] {
+            if length as u64 > target.size() {
                 *target = grown_buffer(&self.device, &self.queue, target, offset,
-                    grown_capacity(target.size() as usize, data.len()), usage);
+                    grown_capacity(target.size() as usize, length), usage);
             }
             if !addition.is_empty() { self.queue.write_buffer(target, offset as u64, addition); }
         }
@@ -1236,9 +1243,11 @@ impl Renderer {
     }
     /// Depth-tested world-space lines in a named slot (``lines.rs``):
     /// 40-byte segments ``a, b (3 f32), RGBA8, width, dash, gap (f32
-    /// physical pixels)``. An empty array empties the slot.
-    fn set_lines(&mut self, slot: &str, segments: PyReadonlyArray1<'_, u8>) -> PyResult<()> {
-        self.lines.upload(&self.device, &self.queue, slot, segments.as_slice()?).map_err(PyValueError::new_err)
+    /// physical pixels)``. An empty array empties the slot. A slot is drawn
+    /// before the scene edges (GL's scaffold) unless ``above_edges``.
+    #[pyo3(signature = (slot, segments, above_edges=false))]
+    fn set_lines(&mut self, slot: &str, segments: PyReadonlyArray1<'_, u8>, above_edges: bool) -> PyResult<()> {
+        self.lines.upload(&self.device, &self.queue, slot, segments.as_slice()?, above_edges).map_err(PyValueError::new_err)
     }
     fn line_counts(&self) -> Vec<(String, u32)> { self.lines.counts() }
     /// Loose-face marks only; groups use group_selection_edges.
@@ -1318,8 +1327,12 @@ impl Renderer {
         hidden_commands: PyReadonlyArray1<'_, u8>, hidden_edge_commands: PyReadonlyArray1<'_, u8>, object_rows: Vec<usize>) -> PyResult<()> {
         let s = self.scene.as_ref().ok_or_else(|| PyValueError::new_err("set_scene first"))?;
         let (vertices,indices,faces,edges)=(vertices.as_slice()?,indices.as_slice()?,hidden_commands.as_slice()?,hidden_edge_commands.as_slice()?);
-        let (triangles,lines)=ghost_mesh(s,vertices,indices,faces,edges,&object_rows,false).map_err(PyValueError::new_err)?;
-        let (objects,object_edges)=ghost_mesh(s,vertices,indices,faces,edges,&object_rows,true).map_err(PyValueError::new_err)?;
+        // Only hidden-object ghosts need compact resident faces. Read them on
+        // demand instead of retaining a second full CPU vertex allocation.
+        let resident = resident_readback::read(&self.device, &self.queue, s, &object_rows)
+            .map_err(PyValueError::new_err)?;
+        let (triangles,lines)=ghost_mesh(s,&resident,vertices,indices,faces,edges,&object_rows,false).map_err(PyValueError::new_err)?;
+        let (objects,object_edges)=ghost_mesh(s,&resident,vertices,indices,faces,edges,&object_rows,true).map_err(PyValueError::new_err)?;
         self.ghost_geometry.upload(&self.device,&triangles,&lines).map_err(PyValueError::new_err)?;
         self.ghost_objects.upload(&self.device,&objects,&object_edges).map_err(PyValueError::new_err)?;
         Ok(())
@@ -1458,15 +1471,45 @@ impl Renderer {
         let data = data.as_slice()?;
         let s = self.scene.as_mut().ok_or_else(|| PyValueError::new_err("no scene"))?;
         if id >= s.p as usize || data.len()%32 != 0 { return Err(PyValueError::new_err("invalid material rows")); }
+        let limit = self.device.limits().max_storage_buffer_binding_size as usize;
+        if data.len() > limit.saturating_sub(s.material_data.len()) {
+            return Err(PyValueError::new_err("material records exceed storage binding limit"));
+        }
         let mut header = [0u32;4];
         if !data.is_empty() {
             let face: Command = bytemuck::pod_read_unaligned(&s.template_data[id*20..id*20+20]);
             header = [face.base as u32, (s.material_data.len()/16) as u32, (data.len()/32) as u32, 0];
         }
         s.material_data[id*16..(id+1)*16].copy_from_slice(bytemuck::bytes_of(&header));
+        let appended_at = s.material_data.len();
         s.material_data.extend_from_slice(data);
         s.face_ranges = face_ranges(&s.material_data, s.p);
-        self.textures.materials = buffer(&self.device, &s.material_data, wgpu::BufferUsages::STORAGE);
+        // Write only this prototype's header and its new records into the
+        // resident buffer. Allocating the whole table per call (one call per
+        // rebaked prototype) queued 432 full copies of the ride's material
+        // table on one 432-part bridge edit: ~30 GB before the GPU let any go.
+        let materials = &self.textures.materials;
+        if s.material_data.len() as u64 <= materials.size()
+            && materials.usage().contains(wgpu::BufferUsages::COPY_DST) {
+            if s.material_layout_dirty {
+                self.queue.write_buffer(materials, 0, &s.material_data);
+                s.material_layout_dirty = false;
+                return Ok(());
+            }
+            self.queue.write_buffer(materials, (id*16) as u64, bytemuck::bytes_of(&header));
+            if !data.is_empty() {
+                self.queue.write_buffer(materials, appended_at as u64, data);
+            }
+            return Ok(());
+        }
+        // Out of room (or the exact-size buffer of an open): grow to the next
+        // power of two once, so the following edits write in place.
+        s.material_layout_dirty = false;
+        let capacity = grown_capacity(materials.size() as usize, s.material_data.len()).min(limit);
+        self.gpu_memory = self.gpu_memory.saturating_sub(materials.size());
+        self.textures.materials = capacity_buffer(&self.device, &s.material_data, capacity,
+            wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST);
+        self.gpu_memory += self.textures.materials.size();
         self.texture_groups = [&self.draw, &self.xray].iter().map(|p| self.textures.bind(&self.device,p)).collect();
         self.aa.bind_textures(&self.device, &self.textures);
         self.transparency.bind_textures(&self.device, &self.textures);
@@ -1487,10 +1530,11 @@ impl Renderer {
             header[..4].copy_from_slice(&((i64::from(base) + shift) as u32).to_le_bytes());
         }
         scene.face_ranges = face_ranges(&resident, scene.p);
+        scene.material_layout_dirty = false;
         scene.material_data = resident.clone();
         let data = resident.as_slice();
         self.gpu_memory = self.gpu_memory.saturating_sub(self.textures.materials.size());
-        self.textures.materials = buffer(&self.device, data, wgpu::BufferUsages::STORAGE);
+        self.textures.materials = buffer(&self.device, data, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST);
         self.gpu_memory += self.textures.materials.size();
         self.texture_groups = [&self.draw, &self.xray].iter().map(|p| self.textures.bind(&self.device,p)).collect();
         self.aa.bind_textures(&self.device, &self.textures);
@@ -1651,6 +1695,12 @@ impl Renderer {
             if edge_only && (!msaa || self.pick_pending) {
                 self.axes.draw(&mut e, &color, &depth, None);
             }
+            // GL's scaffold (box, guides) sits between faces and edges: the
+            // scene edges paint over it. After sun and AO, which shade faces.
+            if edge_only {
+                if msaa { self.lines.draw(&mut e, &self.aa.color_view(), &self.aa.depth_view(), Some(&color), false); }
+                else { self.lines.draw(&mut e, &color, &depth, None, false); }
+            }
             if edge_only && !(self.edges || self.style == 4 || ao_active || self.axes.visible) { break; }
             if !msaa || self.pick_pending {
             let mut pass = e.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -1750,7 +1800,7 @@ impl Renderer {
             drop(pass);
             }
             if msaa && !self.pick_pending {
-                self.aa.draw(&mut e, &color, s, self.style, self.edges, self.look.data[6][0] > 0., self.multi, self.queries.as_ref(), Some(edge_only), self.sections.count > 0 || self.preview.active() || self.face_marks.active() || self.ghost_geometry.active() || self.ghost_objects.active() || self.lines.active() || (self.look.data[9][0] > 0. && self.material_transparency), &self.axes);
+                self.aa.draw(&mut e, &color, s, self.style, self.edges, self.look.data[6][0] > 0., self.multi, self.queries.as_ref(), Some(edge_only), self.sections.count > 0 || self.preview.active() || self.face_marks.active() || self.ghost_geometry.active() || self.ghost_objects.active() || self.lines.active_layer(true) || (self.look.data[9][0] > 0. && self.material_transparency), &self.axes);
             }
             if !edge_only && self.sun.enabled && self.style != 1 && self.style != 4 {
                 if msaa { self.aa.resolve_depth(&self.device, &mut e, &depth, None); }
@@ -1795,8 +1845,9 @@ impl Renderer {
                 else { ghost.draw(&mut e,&color,&depth,None); }
             }
         }
-        if msaa { self.lines.draw(&mut e, &self.aa.color_view(), &self.aa.depth_view(), Some(&color)); }
-        else { self.lines.draw(&mut e, &color, &depth, None); }
+        // GL's selected hidden edges come after the scene edges.
+        if msaa { self.lines.draw(&mut e, &self.aa.color_view(), &self.aa.depth_view(), Some(&color), true); }
+        else { self.lines.draw(&mut e, &color, &depth, None, true); }
         // Material OIT reads opaque depth and never writes it. AO has already
         // completed on opaque geometry; glass cannot generate contact darkness.
         if self.look.data[9][0] > 0. && self.material_transparency && self.style != 1 && self.style != 4 {
@@ -2495,7 +2546,7 @@ fn suppressed_indices(source: &[u8], commands: &[u8], prototypes: usize, ranges:
     use super::Command;
 }
 
-fn ghost_mesh(s:&Scene, vertices:&[u8], indices:&[u8], faces:&[u8], edges:&[u8], objects:&[usize], object_pass:bool) -> Result<(Vec<u8>,Vec<u8>), &'static str> {
+fn ghost_mesh(s:&Scene, resident:&resident_readback::Readback, vertices:&[u8], indices:&[u8], faces:&[u8], edges:&[u8], objects:&[usize], object_pass:bool) -> Result<(Vec<u8>,Vec<u8>), &'static str> {
     if vertices.len()%28!=0 || indices.len()%4!=0 || faces.len()!=s.p as usize*20 || edges.len()!=faces.len() || objects.iter().any(|&i|i>=s.n as usize) {return Err("invalid hidden geometry layout");}
     let objects:std::collections::HashSet<_>=objects.iter().copied().collect();
     let mut triangles=Vec::new();let mut lines=Vec::new();
@@ -2505,21 +2556,24 @@ fn ghost_mesh(s:&Scene, vertices:&[u8], indices:&[u8], faces:&[u8], edges:&[u8],
         let prototype=u32::from_le_bytes(row[64..68].try_into().unwrap()) as usize;
         let world=glam::Mat4::from_cols_array(&bytemuck::pod_read_unaligned::<[f32;16]>(&row[..64]));
         let normal=glam::Mat3::from_mat4(world).inverse().transpose();
-        let emit=|v:&[u8],ix:&[u8],commands:&[u8],out:&mut Vec<u8>,arity:u32| -> Result<(), &'static str> {
+        let emit=|v:Option<&[u8]>,ix:&[u8],commands:&[u8],out:&mut Vec<u8>,arity:u32| -> Result<(), &'static str> {
             let c:Command=bytemuck::pod_read_unaligned(&commands[prototype*20..prototype*20+20]);
             if c.count%arity!=0 || (u64::from(c.first)+u64::from(c.count))*4>ix.len() as u64 {return Err("invalid hidden command range");}
             for i in ix[c.first as usize*4..(c.first+c.count) as usize*4].chunks_exact(4) {
                 let index=i64::from(u32::from_le_bytes(i.try_into().unwrap()))+i64::from(c.base);
-                if index<0 || index as usize>=v.len()/28 {return Err("hidden vertex out of range");}
-                let source=&v[index as usize*28..index as usize*28+28];
+                let index = usize::try_from(index).map_err(|_| "negative hidden vertex")?;
+                let source = match v {
+                    Some(bytes) => bytes.get(index*28..index*28+28),
+                    None => resident.vertex(index),
+                }.ok_or("hidden vertex out of range")?;
                 let pos=world.transform_point3(glam::Vec3::from_array(bytemuck::pod_read_unaligned(&source[..12])));
                 let n=(normal*glam::Vec3::from_array(bytemuck::pod_read_unaligned(&source[12..24]))).normalize_or_zero();
                 out.extend_from_slice(bytemuck::cast_slice(&pos.to_array()));out.extend_from_slice(bytemuck::cast_slice(&n.to_array()));out.extend_from_slice(&source[24..28]);
             } Ok(())
         };
-        emit(vertices,indices,faces,&mut triangles,3)?;emit(vertices,indices,edges,&mut lines,2)?;
+        emit(Some(vertices),indices,faces,&mut triangles,3)?;emit(Some(vertices),indices,edges,&mut lines,2)?;
         if object_pass {
-            emit(&s.vertex_data,&s.index_data,&s.template_data,&mut triangles,3)?;
+            emit(None,&s.index_data,&s.template_data,&mut triangles,3)?;
             let c:[u32;5]=bytemuck::pod_read_unaligned(&s.template_data[(s.p as usize+prototype)*20..(s.p as usize+prototype+1)*20]);
             for edge in s.edge_data[(c[2]/6) as usize*48..((c[2]+c[0])/6) as usize*48].chunks_exact(48) {
                 for endpoint in [&edge[..12],&edge[12..24]] {

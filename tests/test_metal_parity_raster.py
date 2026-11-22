@@ -194,6 +194,34 @@ def test_scaffold_lines_are_depth_tested_and_dashed(native,aa):
     assert dict(native.line_counts())['test']==0
 
 
+@pytest.mark.parametrize('aa',[False,True])
+def test_scaffold_lines_under_scene_edges_selected_hidden_above(native,aa):
+    """GL's order where a line and a model edge share pixels: the box and
+    guides (``_draw_scaffold``) come before the scene edges, which cover
+    them; the selected group's hidden edges come after them."""
+    from views.wgpu_lines import segments
+    v,i,b,c,r=synthetic_pack(255)
+    # One hard edge: the red quad's bottom side (a lone face's border is soft).
+    i=np.concatenate([i,np.array([0,1],np.uint32)]); c['first'][1]=12; c['count'][1]=2
+    native.set_scene(tuple(x.view(np.uint8).ravel() for x in (v,i,b,c)),r.view(np.uint8).ravel())
+    native.set_antialias(aa)
+    native.set_style(dict(sky=False,edges=True,profiles=False,edge_color=[0.,0.,0.],edge_width=5.))
+    original=capture(native)
+    assert (original[55:60,32,:3]<20).all(), 'the hard edge is drawn'
+    # On that edge (y -.8: row 57), narrower than it.
+    data=segments([[[-.6,-.8,0.],[.6,-.8,0.]]],(0,255,0,255),1.).view(np.uint8).ravel()
+    green=lambda rgba: (rgba[:,:,1].astype(int)>100)&(rgba[:,:,0].astype(int)<100)
+    native.set_lines('test',data)
+    under=capture(native)
+    native.set_lines('test',data,True)
+    above=capture(native)
+    native.set_lines('test',np.zeros(0,np.uint8),True)
+    assert not green(under).any(), 'the scene edge paints over the scaffold'
+    np.testing.assert_array_equal(original,under)
+    assert green(above)[54:61].any(axis=0).sum()>30, 'selected hidden edges win over the scene edges'
+    np.testing.assert_array_equal(original,capture(native))
+
+
 def test_shadow_toggle_and_invalid_payload(native):
     upload(native,255)
     native.set_style(dict(shadows=False))
@@ -328,3 +356,35 @@ def test_pbr_shading_changes_pixels_and_keeps_picks(native, tmp_path):
     after = capture(native)
     assert not np.array_equal(before[32, 32], after[32, 32])
     assert [native.pick(x, y) for x, y in points] == picks
+    # Replacing this prototype's records grows the table, then reuses it.
+    # Both paths must keep the recipe/normal-map bindings and the pixels.
+    packed = pack_scene(scene)
+    offset, count = map(int, packed.materials[:16].view('<u4')[1:3])
+    records = packed.materials[offset * 16:offset * 16 + count * 32]
+    assert len(records) > 0
+    sizes = [native.gpu_memory]
+    for _ in range(8):
+        native.update_prototype_materials(0, records)
+        sizes.append(native.gpu_memory)
+        np.testing.assert_array_equal(capture(native), after)
+    assert sizes[-1] > sizes[0]
+    assert any(a == b for a, b in zip(sizes, sizes[1:]))
+
+def test_hidden_object_readback_survives_gpu_growth(native):
+    """GPU-owned faces must still supply identical ghosts after an append."""
+    v,i,b,c,r=synthetic_pack(255)
+    r['info'][:,2]=1
+    native.set_scene(tuple(x.view(np.uint8).ravel() for x in (v,i,b,c)),r.view(np.uint8).ravel())
+    empty=c[:1].copy(); empty['count']=0
+    def ghosts():
+        native.set_hidden_geometry(v.view(np.uint8).ravel(),i.view(np.uint8),
+                                   empty.view(np.uint8),empty.view(np.uint8),[0])
+    native.set_style(dict(show_hidden_objects=True,sky=False))
+    ghosts()
+    before=capture(native)
+    native.set_style(dict(show_hidden_objects=False,sky=False))
+    assert np.any(before != capture(native))
+    native.replace_prototype(0,v.view(np.uint8).ravel(),i.view(np.uint8),b.view(np.uint8).ravel(),12)
+    ghosts()
+    native.set_style(dict(show_hidden_objects=True,sky=False))
+    np.testing.assert_array_equal(before,capture(native))
