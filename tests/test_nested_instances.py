@@ -51,7 +51,7 @@ def _tree():
 
 def test_iter_placements_composes_the_chain():
     top, proto = _tree()
-    seen = [(g.name, (m(0, 3), m(1, 3), m(2, 3))) for g, m in
+    seen = [(g.name, m.column(3).toVector3D().toTuple()) for g, m in
             iter_placements(top)]
     assert seen == [("top", (0.0, 0.0, 1000.0)),
                     ("mid", (0.0, 100.0, 1000.0)),
@@ -108,7 +108,7 @@ def test_placements_expand_for_draw_and_map_back_to_the_owner():
     assert all(vp._owner_of(g) is top for g in out)   # ONE object to click
     # The proxies carry composed world matrices, so each draws its prototype
     # in the right place with no copy of the geometry.
-    assert [(m(0, 3), m(1, 3), m(2, 3)) for m in
+    assert [m.column(3).toVector3D().toTuple() for m in
             (g.xform for g in out[1:])] == [(0.0, 100.0, 1000.0),
                                             (0.0, 100.0, 1000.0),
                                             (10.0, 100.0, 1000.0)]
@@ -126,7 +126,7 @@ def test_placement_proxies_are_stable_across_frames():
     top.xform = _at(0, 0, 2000)                   # a Move drag
     again = vp._placements()
     assert [id(g) for g in again] == [id(g) for g in first]   # same objects
-    assert again[1].xform(2, 3) == 2000.0                     # new matrices
+    assert again[1].xform.column(3).z() == 2000.0                     # new matrices
 
 
 def test_flat_scenes_take_the_untouched_fast_path():
@@ -338,17 +338,17 @@ def test_explode_removes_one_level():
     assert scene.groups == [mid]
     assert len(scene.mesh.faces) == 1              # only the top's own quad
     assert {round(v.position.z()) for v in scene.mesh.vertices} == {1000}
-    assert (mid.xform(0, 3), mid.xform(1, 3), mid.xform(2, 3)) == (0, 100, 1000)
+    assert mid.xform.column(3).toVector3D().toTuple() == (0, 100, 1000)
     assert mid.mesh is proto and len(mid.children) == 2
     assert all(g.mesh is proto for g, _ in iter_placements(mid))
     assert scene.selection == {mid}                # what came out is selected
     h.undo()
     assert scene.groups == [top] and not scene.mesh.faces
     assert top.children == [mid]
-    assert (mid.xform(0, 3), mid.xform(1, 3), mid.xform(2, 3)) == (0, 100, 0)
+    assert mid.xform.column(3).toVector3D().toTuple() == (0, 100, 0)
     h.redo()
     assert scene.groups == [mid]
-    assert (mid.xform(0, 3), mid.xform(1, 3), mid.xform(2, 3)) == (0, 100, 1000)
+    assert mid.xform.column(3).toVector3D().toTuple() == (0, 100, 1000)
 
 
 def test_the_selection_box_follows_a_moved_group():

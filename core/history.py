@@ -5140,6 +5140,7 @@ class ExplodeGroupCommand(Command):
         self._selection = None
 
     def do(self, scene) -> None:
+        from core.group import placed_face_paint
         from core.materials import effective_attrs
         m = scene.mesh
         g = self.group
@@ -5147,6 +5148,7 @@ class ExplodeGroupCommand(Command):
         self.index = scene.groups.index(g)
         self._selection = ElementSet(scene.selection)
         P = getattr(g, "xform", None)
+        inverse, invertible = P.inverted() if P is not None else (None, False)
         paint = getattr(g, "material", None)
 
         def W(p):
@@ -5163,6 +5165,8 @@ class ExplodeGroupCommand(Command):
             # paint, or — a default face — the group's on BOTH sides
             # (issue #47: the back used to fall back to default).
             drawn = effective_attrs(dict(f.attrs or {}), paint)
+            if invertible:
+                drawn = placed_face_paint(drawn, f, inverse)
             for key, val in drawn.items():
                 nf.attrs[key] = dict(val) if isinstance(val, dict) else val
         for e in g.mesh.edges:
@@ -5450,8 +5454,7 @@ def placement_is_identity(xform, tol: float = 1e-6) -> bool:
         return True
     from PySide6.QtGui import QMatrix4x4
     ident = QMatrix4x4()
-    return all(abs(xform(r, c) - ident(r, c)) <= tol
-               for r in range(4) for c in range(4))
+    return all(abs(a - b) <= tol for a, b in zip(xform.data(), ident.data()))
 
 
 def placement_rotation_deg(xform) -> float:

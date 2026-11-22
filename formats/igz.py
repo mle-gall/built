@@ -261,6 +261,30 @@ def _unpack_textures(payload, archive) -> None:
             tex["path"] = out
 
 
+def _group_ifc_record(group):
+    """Keep serializable fields from script-supplied group records."""
+    import logging
+    record = getattr(group, "ifc", None)
+    if isinstance(record, str):
+        return {"class": record.strip()} if record.strip() else None
+    if record is None:
+        return None
+    if isinstance(record, dict):
+        clean = {}
+        for key, value in record.items():
+            try:
+                json.dumps({key: value}, allow_nan=False)
+            except (TypeError, ValueError, RecursionError):
+                logging.getLogger(__name__).warning(
+                    "Skipping invalid IFC field %r on group %r", key, group.name)
+            else:
+                clean[key] = value
+        return clean
+    logging.getLogger(__name__).warning(
+        "Skipping invalid IFC record on group %r", group.name)
+    return None
+
+
 def _face_json(f) -> dict:
     entry = {"vertices": [list(v.position.toTuple()) for v in f.loop]}
     # Holes are written only when present, so simple documents stay terse and
@@ -769,8 +793,8 @@ def prepare_scene_steps(scene, mesh_steps=None, *, stream=None, large=None):
                 entry["axes"] = [float(x) for x in axes.data()]
             if getattr(g, "layer", None) is not None:
                 entry["layer"] = g.layer
-            if getattr(g, "ifc", None):
-                entry["ifc"] = dict(g.ifc)
+            if ifc := _group_ifc_record(g):
+                entry["ifc"] = ifc
             if getattr(g, "billboard", False):
                 # True = legacy textured-quad face-me; "mesh" = imported
                 # silhouette whose real geometry turns toward the camera.

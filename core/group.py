@@ -406,7 +406,6 @@ def _remap_uvws(mesh, m, faces=None) -> None:
     minv, ok = m.inverted()
     if not ok:
         return
-    tx, ty, tz = m(0, 3), m(1, 3), m(2, 3)
     for f in (mesh.faces if faces is None else faces):
         t = f.attrs.get("texture") if f.attrs else None
         uvw = t.get("uvw") if t else None
@@ -414,15 +413,19 @@ def _remap_uvws(mesh, m, faces=None) -> None:
             uvw = _implicit_uvw(f, t, minv) if t else None
             if uvw is None:
                 continue
-        new = list(uvw)
-        for base in (0, 4):
-            gx, gy, gz, c = uvw[base:base + 4]
-            gpx = minv(0, 0) * gx + minv(1, 0) * gy + minv(2, 0) * gz
-            gpy = minv(0, 1) * gx + minv(1, 1) * gy + minv(2, 1) * gz
-            gpz = minv(0, 2) * gx + minv(1, 2) * gy + minv(2, 2) * gz
-            new[base:base + 4] = [gpx, gpy, gpz,
-                                  c - (gpx * tx + gpy * ty + gpz * tz)]
-        f.attrs["texture"] = {**t, "uvw": new}
+        f.attrs["texture"] = {**t, "uvw": _remapped_uvw(uvw, minv)}
+
+
+def _remapped_uvw(uvw, minv) -> list:
+    """The 8-number ``uvw`` map re-fitted for geometry mapped through the placement
+    with inverse ``minv``: g' = L⁻ᵀ·g, c' = c − g'·t for the U and the V
+    rows. The matrices are read through ``data()`` (:func:`np_affine`),
+    never as ``m(row, col)``: that call is gone from some PySide6 builds
+    (Qt 6.10 raises "object is not callable", #1405)."""
+    # Each UV row is a homogeneous covector: row' = row @ inverse.
+    d = minv.data()
+    return [sum(uvw[base + k] * d[4 * col + k] for k in range(4))
+            for base in (0, 4) for col in range(4)]
 
 
 def world_mesh(group, placements=None) -> Mesh:
@@ -739,6 +742,28 @@ def _transformed_mesh_walk(src: Mesh, m) -> Mesh:
     return new
 
 
+def placed_face_paint(attrs, face, inverse):
+    """Pin both sides' effective paint to the prototype before exploding."""
+    from core.texture import face_uv_axes
+
+    def placed(side):
+        tex = side.get("texture")
+        if not tex:
+            if not any(key.endswith("_map") for key in (side.get("pbr") or {})):
+                return side
+            tex = {}  # PBR-only maps share a one-metre planar tile.
+        uvw = tex.get("uvw")
+        if not uvw:
+            gu, cu, gv, cv = face_uv_axes(tex, face.normal())
+            uvw = [*gu.toTuple(), cu, *gv.toTuple(), cv]
+        return {**side, "texture": {**tex, "uvw": _remapped_uvw(uvw, inverse)}}
+
+    out = placed(attrs)
+    if isinstance(attrs.get("back"), dict):
+        out = {**out, "back": placed(attrs["back"])}
+    return out
+
+
 def transformed_attrs(attrs, m) -> dict:
     """A copy of face ``attrs`` with the texture's world→UV affine map
     (``uvw``) re-fitted for geometry mapped through ``m`` — the single-face
@@ -752,16 +777,7 @@ def transformed_attrs(attrs, m) -> dict:
     minv, ok = m.inverted()
     if not ok:
         return out
-    tx, ty, tz = m(0, 3), m(1, 3), m(2, 3)
-    new = list(uvw)
-    for base in (0, 4):
-        gx, gy, gz, c = uvw[base:base + 4]
-        gpx = minv(0, 0) * gx + minv(1, 0) * gy + minv(2, 0) * gz
-        gpy = minv(0, 1) * gx + minv(1, 1) * gy + minv(2, 1) * gz
-        gpz = minv(0, 2) * gx + minv(1, 2) * gy + minv(2, 2) * gz
-        new[base:base + 4] = [gpx, gpy, gpz,
-                              c - (gpx * tx + gpy * ty + gpz * tz)]
-    out["texture"] = {**t, "uvw": new}
+    out["texture"] = {**t, "uvw": _remapped_uvw(uvw, minv)}
     return out
 
 

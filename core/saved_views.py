@@ -327,6 +327,19 @@ def shown_state(scene) -> tuple:
             getattr(scene, "show_hidden_geometry", None))
 
 
+def visibility_sig(scene) -> tuple:
+    """Geometry visibility while a sheet temporarily recalls a scene."""
+    from core.layers import effective_visible
+    allowed = getattr(scene, "_navigator_allowed", None)
+    return (tuple((ly.key, effective_visible(scene, ly)) for ly in scene.layers),
+            tuple(bool(getattr(obj, "visible", True))
+                  for _, obj in georef_objects(scene) if obj is not None),
+            frozenset(uid for uid, group in scene.groups_by_uid().items()
+                      if group.hidden),
+            None if allowed is None else frozenset(allowed),
+            scene.show_hidden_objects, scene.show_hidden_geometry)
+
+
 def georef_state(scene) -> dict:
     """Visibility of the geographic layers right now — a missing object
     counts as hidden, so a scene made before any base map existed recalls
