@@ -125,6 +125,9 @@ class WgpuView(QWidget):
         self.overlay_primitives = []
         self.overlay_ms = 0.
         self.last = None
+        #: The last select double click, ``(timestamp, position)``: a
+        #: press in place right after it is a triple click.
+        self._last_double = None
         self.build_seconds = self.upload_seconds = 0.
         from views.wgpu_tools import NativeTools
         self.tools = NativeTools(self)
@@ -1328,6 +1331,23 @@ class WgpuView(QWidget):
         self._drag_nav = event.button() == Qt.MiddleButton or bool(
             getattr(self.source_viewport, 'nav_mode', None))
         mode = self.tools.sync()
+        if (not self._drag_nav and mode == 'select' and event.button() == Qt.LeftButton
+                and self._is_triple_click(event)):
+            # GL's: a press right after a double click, in place, is a
+            # triple click (Qt has none): everything connected. The
+            # release that follows is no click (``last`` is cleared).
+            self._last_double = None
+            self.last = None
+            from tools.select import SelectTool
+            from tools.base import ToolContext
+            (self.tools.tool or SelectTool()).on_triple_click(ToolContext(
+                self.tools, QVector3D(), event.position(), event.modifiers(), None))
+            if self.source_viewport is not None:
+                self.source_viewport.notify_scene_changed()
+            self.sync_selection()
+            self.update()
+            return
+        self._last_double = None
         if (not self._drag_nav and callable(getattr(self.tools.tool, 'on_look', None))
                 and event.button() in (Qt.LeftButton, Qt.RightButton)):
             from views.viewport import Viewport
@@ -1500,9 +1520,14 @@ class WgpuView(QWidget):
             return
         from tools.select import SelectTool
         from tools.base import ToolContext
+        self._last_double = (event.timestamp(), event.position())
         (self.tools.tool or SelectTool()).on_double_click(ToolContext(
             self.tools, QVector3D(), event.position(), event.modifiers(), None))
         self.update()
+
+    def _is_triple_click(self, event):
+        from views.viewport import Viewport
+        return Viewport._is_triple_click(self, event)
 
     def event(self, event):
         if event.type() == QEvent.NativeGesture:
