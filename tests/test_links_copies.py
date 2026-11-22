@@ -300,14 +300,18 @@ def test_make_unique_of_what_holds_a_link_and_of_the_link(win, tmp_path):
     (inner,) = other.children
     assert_live_link(inner, link)
     assert_reloads_with_the_source(scene, src, link, inner)
-    # Make Unique on the link itself: nothing of it is the copy's to keep.
+    # Make Unique on the link itself breaks that link and keeps the
+    # geometry (tests/test_links_unlink.py); the other copy stays linked.
     meshes = [p.mesh for p in _parts(inner)]
-    name, steps = inner.name, len(vp.history.undo_stack)
+    steps = len(vp.history.undo_stack)
     scene.select([inner])
     win._on_make_unique()
-    assert len(vp.history.undo_stack) == steps
-    assert inner.name == name and [p.mesh for p in _parts(inner)] == meshes
-    assert_read_only(win, inner)
+    assert len(vp.history.undo_stack) == steps + 1
+    assert not links.is_linked(inner)
+    assert not {id(p.mesh) for p in _parts(inner)} & {id(m) for m in meshes}
+    assert all(links.linked_ancestor(p) is None for p in _parts(inner))
+    assert links.is_linked(link)
+    assert_read_only(win, link)
 
 
 def test_explode_of_a_copied_holder_keeps_the_link(win, tmp_path):

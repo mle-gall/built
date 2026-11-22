@@ -4836,19 +4836,42 @@ class MainWindow(WorksessionMixin, QMainWindow):
 
     @_repeatable("Make Unique")
     def _on_make_unique(self) -> None:
+        """Make Unique. On a linked file's placement it breaks the link and
+        keeps the geometry (core.history.UnlinkCommand): the placement
+        becomes this model's own, editable, looking as it did, and the
+        file's other placements stay linked. On anything else — what holds
+        a link included, whose link stays linked — the usual Make Unique."""
         from core import links
-        from core.history import MakeUniqueCommand
+        from core.history import MakeUniqueCommand, UnlinkCommand
         comps = [g for g in self.viewport.scene.selection
                  if isinstance(g, Group) and g.is_component()]
+        linked = [g for g in comps if links.is_linked(g)]
         for g in comps:
-            if links.is_linked(g):
-                # A linked file stays its source's (edited in its own file).
-                self.viewport.flash_status(tr(
-                    "“{name}” is linked from another file.",
-                    name=Path(links.link_of(g)["path"]).name), 4000)
-                continue
-            self.viewport.history.execute(MakeUniqueCommand(g, rename=True))
+            if g not in linked:
+                self.viewport.history.execute(MakeUniqueCommand(g, rename=True))
+        if linked:
+            cmd = UnlinkCommand(linked)
+            if cmd.groups:
+                self.viewport.history.execute(cmd)
+                if self.viewport.history.undo_stack[-1:] == [cmd]:
+                    self._unlinked(cmd)
+                    self.viewport.flash_status(tr(
+                        "“{name}” is no longer linked: its geometry is now "
+                        "part of this model",
+                        name=", ".join(Path(p).name for p in cmd.paths)), 5000)
         self.viewport.update()
+
+    def _unlinked(self, cmd=None) -> None:
+        """A link was broken or brought back (Make Unique of a link, or
+        its undo / redo): watch the sources still linked, and show the
+        tags and the Links tab as they are now."""
+        self.viewport.notify_scene_changed()
+        self._link_watcher().refresh()
+        self._refresh_layer_views()
+        browser = getattr(self, "project_browser", None)
+        panel = getattr(browser, "links_panel", None)
+        if panel is not None:
+            panel.refresh()
 
     def _on_scale_dialog(self, group) -> None:
         tool = self._tools["scale_manager"]
@@ -7341,6 +7364,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             if inference is not None:
                 inference.clear_references()
             self.viewport.notify_scene_changed()
+            self._after_unlink_step(self.viewport.history.redo_stack)
 
     def _on_redo(self) -> None:
         # The same first refusal as undo: Push/Pull ends a drag whose staged
@@ -7358,6 +7382,19 @@ class MainWindow(WorksessionMixin, QMainWindow):
             if inference is not None:
                 inference.clear_references()
             self.viewport.notify_scene_changed()
+            self._after_unlink_step(self.viewport.history.undo_stack)
+
+    def _after_unlink_step(self, stack) -> None:
+        """Undo or redo just moved ``stack[-1]``: a broken link brought
+        back (or broken again) changes what is watched and the tags."""
+        from core.history import CompoundCommand, UnlinkCommand
+
+        def unlinks(cmd):
+            if isinstance(cmd, CompoundCommand):
+                return any(unlinks(c) for c in cmd.commands)
+            return isinstance(cmd, UnlinkCommand)
+        if stack and unlinks(stack[-1]):
+            self._unlinked()
 
     # ---- File handling ------------------------------------------------------
     # ---- The document's camera (issue #60) ---------------------------------

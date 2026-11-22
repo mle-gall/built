@@ -2939,19 +2939,37 @@ class OutlinerPanel(QWidget):
     def make_unique_rows(self, groups) -> bool:
         """Make Unique on the component rows — each a group of its own with
         a name of its own («Silla #2», #620) — as ONE undo step (from the
-        view, each copy was a step). Whether anything changed."""
-        from core.history import CompoundCommand, MakeUniqueCommand
+        view, each copy was a step). A linked file's row breaks its link
+        and keeps the geometry, as from the view (UnlinkCommand). Whether
+        anything changed."""
+        from core.history import (CompoundCommand, MakeUniqueCommand,
+                                  UnlinkCommand)
         from core import links
-        comps = [g for g in groups if g is not None and g.is_component()
-                 and not links.is_linked(g)]   # a link stays its file's
+        comps = [g for g in groups if g is not None and g.is_component()]
         if not comps:
             return False
         why = self.inside_component_refusal(comps)
         if why:
             self._window.viewport.flash_status(why, 5000)
             return False
-        self._window.viewport.history.execute(CompoundCommand(
-            [MakeUniqueCommand(g, rename=True) for g in comps]))
+        unlink = UnlinkCommand([g for g in comps if links.is_linked(g)])
+        steps = [MakeUniqueCommand(g, rename=True) for g in comps
+                 if not links.is_linked(g)]
+        if unlink.groups:
+            steps.append(unlink)
+        if not steps:
+            return False
+        history = self._window.viewport.history
+        history.execute(steps[0] if len(steps) == 1 else CompoundCommand(steps))
+        if unlink.groups and history.undo_stack and history.last_error is None:
+            done = getattr(self._window, "_unlinked", None)
+            if callable(done):
+                done(unlink)
+            from pathlib import Path
+            self._window.viewport.flash_status(tr(
+                "“{name}” is no longer linked: its geometry is now "
+                "part of this model",
+                name=", ".join(Path(p).name for p in unlink.paths)), 5000)
         self._window.viewport.update()
         self.refresh()
         return True
