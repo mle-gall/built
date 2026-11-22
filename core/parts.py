@@ -33,10 +33,13 @@ def part_points(part, cache=None):
         key = ("points", id(g.mesh))
         pos = cache.get(key) if cache is not None else None
         if pos is None:
-            verts = g.mesh.vertices
-            pos = (np.array([[v.position.x(), v.position.y(), v.position.z()]
-                             for v in verts], dtype=np.float64)
-                   if verts else np.empty((0, 3)))
+            from core.lazy_mesh import plan_of
+            plan = plan_of(g.mesh)
+            if plan is None:
+                pos = np.array([v.position.toTuple() for v in g.mesh.vertices],
+                               dtype=np.float64).reshape(-1, 3)
+            else:
+                pos = plan.pos
             if cache is not None:
                 cache[key] = pos
         if not len(pos):
@@ -113,13 +116,23 @@ def _mesh_paint_areas(mesh, cache=None):
         return hit
     own: dict = {}
     default = 0.0
-    for f in mesh.faces:
-        if has_own_material(f.attrs):
-            label = _material_label(f.attrs)
+    from core.lazy_mesh import plan_of, face_net_areas
+    plan = plan_of(mesh)
+    if plan is None:
+        faces = ((f.attrs, f.net_area()) for f in mesh.faces)
+    else:
+        from formats.igz import _face_attrs_from_json
+        source = mesh.__dict__["_deferred_source"]
+        table = [_face_attrs_from_json(row) for row in source["meta"].get("face_attrs", [])]
+        faces = ((table[key] if key >= 0 else {}, area)
+                 for key, area in zip(source["face_attr"], face_net_areas(plan)))
+    for attrs, area in faces:
+        if has_own_material(attrs):
+            label = _material_label(attrs)
             if label:
-                own[label] = own.get(label, 0.0) + f.net_area()
+                own[label] = own.get(label, 0.0) + area
         else:
-            default += f.net_area()
+            default += area
     hit = (own, default)
     if cache is not None:
         cache[key] = hit
@@ -156,12 +169,13 @@ def part_row(part, cache=None) -> dict:
     "hidden"}``. Pass the same ``cache`` (a dict) for every part of one
     pass, so a definition several parts share is read once."""
     from core.group import iter_placements
+    from core.mesh import face_count
     return {
         "part": part,
         "name": part.name,
         "material": part_material(part, cache),
         "size": part_size(part_points(part, cache)),
-        "faces": sum(len(g.mesh.faces) for g, _m in iter_placements(part)),
+        "faces": sum(face_count(g.mesh) for g, _m in iter_placements(part)),
         "hidden": bool(getattr(part, "hidden", False)),
     }
 
