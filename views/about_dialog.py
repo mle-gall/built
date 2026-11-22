@@ -533,8 +533,8 @@ class AboutDialog(QDialog):
              "</a>.</small>")
         para(f"<small>{tr('And thanks to everyone who tries Built and reports what they find.')}</small>")
         para(f"<small>{tr('Licensed under GPL-3.0-or-later.')} · "
-             "<a href='https://github.com/mle-gall/ingetrazo'>"
-             "github.com/mle-gall/ingetrazo</a></small>")
+             "<a href='https://github.com/mle-gall/built'>"
+             "github.com/mle-gall/built</a></small>")
         buttons = QDialogButtonBox(QDialogButtonBox.Ok, self)
         buttons.accepted.connect(self.accept)
         # What to paste in a bug report, one click away (#476).

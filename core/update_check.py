@@ -19,8 +19,8 @@ from dataclasses import dataclass
 
 from core.version import USER_AGENT, __version__
 
-LATEST_API = "https://api.github.com/repos/mle-gall/ingetrazo/releases/latest"
-RELEASES_PAGE = "https://github.com/mle-gall/ingetrazo/releases"
+LATEST_API = "https://api.github.com/repos/mle-gall/built/releases/latest"
+RELEASES_PAGE = "https://github.com/mle-gall/built/releases"
 
 KEY_AUTO = "updates/check_at_start"
 KEY_LAST = "updates/last_check"
