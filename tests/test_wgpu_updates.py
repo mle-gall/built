@@ -105,9 +105,12 @@ def test_shared_mutation_bakes_once(monkeypatch):
     original = pack_scene
     monkeypatch.setattr('views.wgpu_updates.pack_scene', lambda scene, **kw: (calls.append(scene), original(scene, **kw))[1])
     mesh = scene.groups[0].mesh
+    boxes = updates.world_boxes
     mesh.move_vertex(mesh.vertices[0], QVector3D(0, 0, 2))
     renderer = Renderer()
     updates.apply(*updates.diff(scene), renderer)
+    assert updates.world_boxes is boxes
+    assert updates.changed_code_rows[0].tolist() == [0, 1]
     assert len(calls) == 1
     assert len(calls[0].groups) == 1
     assert [name for name, _ in renderer.calls] == ['replace_prototype', 'update_prototype_materials']

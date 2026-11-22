@@ -39,10 +39,13 @@ class InstanceUpdates:
         for key, code in (packed.prototype_lookup or {}).items():
             if code >= 0:
                 self.variants.setdefault(key[0], {})[code] = (paints.get(code), key[2])
+        self.prototype_rows = {}
+        self.changed_code_rows = {}
         for row, group in enumerate(packed.groups):
+            code = int(packed.instances['info'][row, 0])
+            self.prototype_rows.setdefault(code, set()).add(row)
             mesh = group.mesh if group is not None else scene.loose_mesh
-            self.meshes[id(mesh)] = (mesh, mesh._mut_serial,
-                                    int(packed.instances['info'][row, 0]))
+            self.meshes[id(mesh)] = (mesh, mesh._mut_serial, code)
         # Empty containers have no GPU row, but still need a serial sentinel.
         all_meshes = [scene.loose_mesh]
         all_meshes.extend(g.mesh for root in scene.groups for g, _ in iter_placements(root))
@@ -574,6 +577,16 @@ class InstanceUpdates:
                                 for _, _, code in self.changed)
                     if moved:
                         renderer.set_profile_exclusions(self.packed.profile_exclusions)
+        old_count = len(self.world_boxes)
+        membership_changed = len(self.packed.instances) != old_count
+        for row, code in zip(ids, rows['info'][:, 0]):
+            if row < old_count:
+                old_code = self.packed.instances['info'][row, 0]
+                if old_code == code:
+                    continue
+                self.prototype_rows[old_code].remove(row)
+            self.prototype_rows.setdefault(code, set()).add(int(row))
+            membership_changed = True
         if len(ids):
             if renderer is not None:
                 renderer.update_instances(ids.tolist(), rows.view(np.uint8).reshape(-1))
@@ -584,26 +597,33 @@ class InstanceUpdates:
             self.packed.instances['info'][self.removed, 2] = 1
         if not len(ids) and not self.changed and not self.removed:
             return
-        old_count = len(self.world_boxes)
-        if len(self.packed.instances) != old_count or self.changed:
-            counts = np.bincount(self.packed.instances['info'][:, 0], minlength=len(self.packed.commands))
-            self.packed.commands['start'] = self.packed.edge_commands['start'] = np.cumsum(counts)-counts
-            self.packed.hidden_commands['start'] = self.packed.hidden_edge_commands['start'] = np.cumsum(counts)-counts
+        if membership_changed:
+            counts = np.zeros(len(self.packed.commands), dtype=np.int64)
+            for code, members in self.prototype_rows.items():
+                counts[code] = len(members)
+            starts = np.cumsum(counts) - counts
+            self.packed.commands['start'] = self.packed.edge_commands['start'] = starts
+            self.packed.hidden_commands['start'] = self.packed.hidden_edge_commands['start'] = starts
+        if len(self.packed.instances) != old_count:
             extra = np.empty((len(self.packed.instances)-old_count, 2, 3), np.float32)
             extra[:, 0] = np.inf
             extra[:, 1] = -np.inf
             self.world_boxes = np.concatenate((self.world_boxes, extra))
         touched = set(ids.tolist()) | set(self.removed)
-        if self.changed:
-            codes = [code for _, _, code in self.changed]
-            touched.update(np.flatnonzero(np.isin(self.packed.instances['info'][:, 0], codes)).tolist())
+        self.changed_code_rows = {}
+        for _, _, code in self.changed:
+            affected = self.prototype_rows.get(code, ())
+            self.changed_code_rows[code] = np.asarray(sorted(affected), np.int64)
+            touched.update(affected)
         touched = np.asarray(sorted(touched), np.int64)
         if len(touched):
             old = self.world_boxes[touched]
             bounds = self.packed.world_bounds
-            reduce = np.any(old[:, 0] == bounds[0]) or np.any(old[:, 1] == bounds[1])
-            self.world_boxes[touched] = self._boxes(touched)
-            subset = self.world_boxes if reduce else self.world_boxes[touched]
+            new = self._boxes(touched)
+            reduce = (np.any((old[:, 0] == bounds[0]) & (new[:, 0] > old[:, 0]))
+                      or np.any((old[:, 1] == bounds[1]) & (new[:, 1] < old[:, 1])))
+            self.world_boxes[touched] = new
+            subset = self.world_boxes if reduce else new
             low, high = subset[:, 0].min(axis=0), subset[:, 1].max(axis=0)
             if not reduce:
                 low, high = np.minimum(low, bounds[0]), np.maximum(high, bounds[1])

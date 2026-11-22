@@ -228,8 +228,7 @@ class WgpuView(QWidget):
                     self._tint_signature = None
                 self._resident_count = len(self.packed.instances)
                 if self.inference_index is not None:
-                    self.inference_index.update(ids, self.packed,
-                                                [code for _, _, code in tracker.changed])
+                    self.inference_index.update(ids, self.packed, code_rows=tracker.changed_code_rows)
                 else:
                     self.inference_index = None
                     previous = getattr(self, '_inference_future', None)
@@ -909,8 +908,7 @@ class WgpuView(QWidget):
             return
         touched = [np.asarray(ids, np.int64), np.asarray(tracker.removed, np.int64)]
         if tracker.changed:
-            codes = [code for _, _, code in tracker.changed]
-            touched.append(np.flatnonzero(np.isin(self.packed.instances['info'][:, 0], codes)))
+            touched.extend(tracker.changed_code_rows.values())
         touched = np.concatenate(touched)
         for group, box in boxes.items():
             rows = box_rows.get(group)

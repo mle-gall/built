@@ -202,17 +202,18 @@ class ResidentInference:
         self.local = {}
         self.replaced = np.zeros(len(packed.instances), bool)
 
-    def update(self, ids, packed, changed_codes=()):
+    def update(self, ids, packed, changed_codes=(), *, code_rows=None):
         self.epoch += 1
         self.packed = packed
         if len(self.replaced) < len(packed.instances):
             self.replaced = np.pad(self.replaced, (0, len(packed.instances)-len(self.replaced)))
-        for code in dict.fromkeys(changed_codes):
+        for code in code_rows if code_rows is not None else dict.fromkeys(changed_codes):
             while len(self.protos) <= code:
                 self.protos.append(None)
                 self.bounds.append(None)
 
-            affected = np.flatnonzero(packed.instances['info'][:, 0] == code)
+            affected = (code_rows[code] if code_rows is not None else
+                        np.flatnonzero(packed.instances['info'][:, 0] == code))
             self.protos[code], curves = _prototype(
                 packed, code, self.scene, affected[0] if len(affected) else -1)
             self.bounds[code] = packed.bounds[code].copy()
@@ -654,7 +655,7 @@ def snap(index, row, view, x, y, *, work_point=..., **options):
     # Classify just the nearby placements. Hidden or far-away links cannot
     # contribute edges inside either snap radius.
     groups = getattr(view.packed, 'groups', None)
-    is_loose = np.array([groups is None or groups[r] is context for r in rows], dtype=bool)
+    is_loose = np.array([groups is not None and groups[r] is context for r in rows], dtype=bool)
     loose_rows, group_rows = rows[is_loose], rows[~is_loose]
     edges = (nearby_edges(index, view.packed, view.camera, view.width(), view.height(),
                          x, y, rows=loose_rows, radius_px=64., cap=400, edit_group=context)
