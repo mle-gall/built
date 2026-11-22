@@ -225,6 +225,17 @@ class InstanceUpdates:
                 if isinstance(command, MoveGroupCommand) and command.group in self.roots:
                     self.pending.add(command.group)
                     return True
+                from core.history import UnlinkCommand
+                if isinstance(command, UnlinkCommand):
+                    # Make Unique of a link: the same rows (the parts keep
+                    # their uids) on meshes of their own — new prototypes
+                    # for those, baked once; undo goes back to the shared
+                    # ones, still resident. Only the roots holding them.
+                    tops = command.tops
+                    if not tops or not self.roots.issuperset(tops):
+                        return False
+                    self.pending.update(tops)
+                    return True
                 return isinstance(command, (SetRecordCommand, SetRegistryCommand,
                                             AddGuideCommand, ChangeGuideCommand, DeleteGuidesCommand,
                                             MoveGuidesCommand, RotateGuidesCommand,

@@ -459,6 +459,47 @@ def test_make_unique_from_the_browser_unlinks_too(win, tmp_path, monkeypatch):
     assert_own(link, [other])
 
 
+# ---- 4. the Metal view -------------------------------------------------------
+
+def test_metal_view_updates_in_place_and_draws_the_same(tmp_path, monkeypatch):
+    from tests.test_wgpu_updates import _prototype, assert_matches_fresh_pack
+    from views.wgpu_scene import pack_scene
+    from views.wgpu_updates import InstanceUpdates
+    host, link, other, src = _host(tmp_path)
+    before = pack_scene(host)
+    updates = InstanceUpdates(host, pack_scene(host))
+    history = History(host)
+    updates.observe(history)
+    history.execute(UnlinkCommand([link]))
+    ids, rows = updates.diff(host)                 # not None: no full pack
+    assert updates.last_local                      # only the link's root
+    assert updates.removed == [] and updates.added == 0
+    # Only the unlinked placement's rows move, onto its own meshes, each
+    # baked once; the other placement's rows are not written.
+    mine = {updates.rows[p.uid] for p, _m in iter_placements(link)
+            if p.uid in updates.rows}
+    assert set(ids.tolist()) <= mine
+    assert {id(m) for m, _s, _c in updates.changed} <= set(_meshes(link))
+    updates.apply(ids, rows)
+    assert_matches_fresh_pack(updates, host)
+    after = pack_scene(host)
+    # Pack equality: every row draws the same geometry, paint and flags.
+    assert sorted(before.uids) == sorted(after.uids)
+    for uid in before.uids:
+        b, a = before.uids.index(uid), after.uids.index(uid)
+        assert (before.instances[b]["world"] == after.instances[a]["world"]).all()
+        assert (before.instances[b]["info"][1:] == after.instances[a]["info"][1:]).all()
+        assert (_prototype(before, int(before.instances[b]["info"][0]))
+                == _prototype(after, int(after.instances[a]["info"][0])))
+    # Undo: back on the shared prototypes still resident, no bake.
+    history.undo()
+    ids, rows = updates.diff(host)
+    assert updates.last_local
+    assert updates.changed == []
+    updates.apply(ids, rows)
+    assert_matches_fresh_pack(updates, host)
+
+
 # ---- 5. save and reopen ------------------------------------------------------
 
 @pytest.mark.parametrize("packed", [False, True])
