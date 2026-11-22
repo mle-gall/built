@@ -439,15 +439,12 @@ impl Store {
             return Err("face_attr: one entry per face".into());
         }
         let st = &self.state;
-        let f32p = |v: u32| {
-            let p = st.vpos.get(v as usize);
-            [p[0] as f32, p[1] as f32, p[2] as f32]
-        };
-        let mut pos: Vec<[f32; 3]> = Vec::with_capacity(edges.len() * 2 + faces.len() * 4);
+        let position = |v: u32| *st.vpos.get(v as usize);
+        let mut pos: Vec<[f64; 3]> = Vec::with_capacity(edges.len() * 2 + faces.len() * 4);
         for &e in edges {
             let [a, b] = *st.ends.get(e as usize);
-            pos.push(f32p(a));
-            pos.push(f32p(b));
+            pos.push(position(a));
+            pos.push(position(b));
         }
         let (mut rings, mut sizes, mut counts) = (Vec::new(), Vec::new(), Vec::new());
         for &f in faces {
@@ -461,7 +458,7 @@ impl Store {
                 sizes.push(ring.len() as i64);
                 for &v in ring {
                     rings.push(pos.len() as i64);
-                    pos.push(f32p(v));
+                    pos.push(position(v));
                 }
                 n += 1;
             }

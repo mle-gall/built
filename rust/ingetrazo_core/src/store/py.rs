@@ -399,7 +399,7 @@ impl PyMeshStore {
     fn from_block(
         py: Python<'_>,
         namespace: u64,
-        pos: PyReadonlyArray2<'_, f32>,
+        pos: numpy::PyArrayLike2<'_, f64, numpy::AllowTypeChange>,
         edges: PyReadonlyArray2<'_, i64>,
         flags: Option<PyReadonlyArray1<'_, u8>>,
         curves: Option<PyReadonlyArray1<'_, i64>>,
@@ -415,17 +415,17 @@ impl PyMeshStore {
         fused: bool,
     ) -> PyResult<Self> {
         if pos.ndim() != 2 || (pos.shape()[0] > 0 && pos.shape()[1] != 3) {
-            return Err(PyValueError::new_err("pos: (P, 3) float32"));
+            return Err(PyValueError::new_err("pos: (P, 3) coordinates"));
         }
         if edges.ndim() != 2 || (edges.shape()[0] > 0 && edges.shape()[1] != 2) {
             return Err(PyValueError::new_err("edges: (E, 2) int64"));
         }
         let pflat = pos.as_slice().map_err(|_| PyValueError::new_err("pos: contiguous"))?;
         let eflat = edges.as_slice().map_err(|_| PyValueError::new_err("edges: contiguous"))?;
-        // SAFETY: [f32; 3] / [i64; 2] have the alignment of their element
+        // SAFETY: [f64; 3] / [i64; 2] have the alignment of their element
         // and the arrays are C-contiguous with exactly these row widths.
-        let pos3: &[[f32; 3]] =
-            unsafe { std::slice::from_raw_parts(pflat.as_ptr() as *const [f32; 3], pflat.len() / 3) };
+        let pos3: &[[f64; 3]] =
+            unsafe { std::slice::from_raw_parts(pflat.as_ptr() as *const [f64; 3], pflat.len() / 3) };
         let edges2: &[[i64; 2]] =
             unsafe { std::slice::from_raw_parts(eflat.as_ptr() as *const [i64; 2], eflat.len() / 2) };
         let block = Block {

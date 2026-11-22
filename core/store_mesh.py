@@ -2210,15 +2210,15 @@ def bulk_weld(m, pos):
     Python method does."""
     from core import _native
     mod = _native.available()
-    pos32 = np.ascontiguousarray(pos, dtype=np.float32).reshape(-1, 3)
+    points = np.ascontiguousarray(pos, dtype=np.float64).reshape(-1, 3)
     w = _weld_args()
-    if not len(pos32):
+    if not len(points):
         return [], np.empty(0, dtype=np.int64)
-    _vpos, ids, origin = mod.weld_points(pos32, w["scale"], w["tol2"])
+    ids, origin = mod.store_weld_indices(points, w["scale"], w["tol2"])
     ns = next(_mesh._KEY_NAMESPACES)
     empty_i = np.zeros(0, dtype=np.int64)
     store = mod.MeshStore.from_block(
-        ns, pos32, np.zeros((0, 2), dtype=np.int64), None, None, None, [],
+        ns, points, np.zeros((0, 2), dtype=np.int64), None, None, None, [],
         empty_i, empty_i, empty_i, None, **w)
     if type(m) is StoreMesh:
         m._store._extend_bulk(store)
@@ -2227,7 +2227,7 @@ def bulk_weld(m, pos):
         become_store(m, store, [])
     vobjs = [VertexView(m, k) for k in store.keys("vertex")]
     m.__dict__["_bulk"] = dict(
-        stage="points", vobjs=vobjs, pos=pos32,
+        stage="points", vobjs=vobjs, pos=points,
         origin=np.asarray(origin, dtype=np.int64),
         edges=np.zeros((0, 2), dtype=np.int64))
     return vobjs, np.asarray(ids, dtype=np.int64)
@@ -2419,7 +2419,7 @@ def store_from_source(src, hooks=()):
                                                 layers, n_e)
     w = _weld_args()
     ns = next(_mesh._KEY_NAMESPACES)
-    pos = np.ascontiguousarray(src["pos"], dtype=np.float32).reshape(-1, 3)
+    pos = np.ascontiguousarray(src["pos"], dtype=np.float64).reshape(-1, 3)
     edges = np.ascontiguousarray(src["edges"], dtype=np.int64).reshape(-1, 2)
     flags = src.get("flags")
     curves = src.get("curves")

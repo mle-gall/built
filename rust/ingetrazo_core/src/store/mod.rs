@@ -190,7 +190,7 @@ impl Store {
             revision: 0,
             lineage: LINEAGE.fetch_add(1, Ordering::Relaxed),
             weld,
-            f32_parity: true,
+            f32_parity: false,
         }
     }
 

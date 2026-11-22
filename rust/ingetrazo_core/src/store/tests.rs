@@ -13,7 +13,7 @@ use super::topo::OpError;
 use super::{Store, Weld, HIDDEN, SOFT};
 
 fn block<'a>(
-    pos: &'a [[f32; 3]],
+    pos: &'a [[f64; 3]],
     edges: &'a [[i64; 2]],
     flags: Option<&'a [u8]>,
     curves: Option<&'a [i64]>,
@@ -201,7 +201,7 @@ fn block_order_rules() {
 }
 
 fn chain(n: usize) -> Store {
-    let pos: Vec<[f32; 3]> = (0..n).map(|i| [i as f32, 0.0, 0.0]).collect();
+    let pos: Vec<[f64; 3]> = (0..n).map(|i| [i as f64, 0.0, 0.0]).collect();
     let edges: Vec<[i64; 2]> = (0..n as i64 - 1).map(|i| [i, i + 1]).collect();
     let b = block(&pos, &edges, None, None, &[], &[], &[]);
     Store::from_block(7, &b, Weld::default()).unwrap()
@@ -269,7 +269,7 @@ fn snapshots_are_cheap_on_a_big_store() {
     for i in 0..n {
         for j in 0..n {
             for k in 0..n {
-                pos.push([i as f32 * 0.1, j as f32 * 0.1, k as f32 * 0.1]);
+                pos.push([i as f64 * 0.1, j as f64 * 0.1, k as f64 * 0.1]);
             }
         }
     }
