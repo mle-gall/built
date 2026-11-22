@@ -123,6 +123,9 @@ def command(win, name, *args):
         "select_none": lambda: win._on_select_none(),
         "next_doc": lambda: step_document(win, 1),
         "prev_doc": lambda: step_document(win, -1),
+        # The workspaces (views/wgpu_sheets.py): the top bar's workspace ▾.
+        "sheets": lambda: win._to_sheets(),
+        "model": lambda: win._show_model(),
     }
     if kind == "import":
         return import_dialog(win, arg)
@@ -137,6 +140,11 @@ def command(win, name, *args):
         return do_save(win, Path(arg), copy=True)
     if kind == "export_igz_to":
         return export_igz(win, Path(arg))
+    if kind == "sheet_export_to":           # sheet_export_to:pdf:/path/file.pdf
+        from views import wgpu_sheets
+        what, _, path = arg.partition(":")
+        ws = wgpu_sheets.workspace_of(win.view)
+        return ws._export_to(what, path) if ws is not None else None
     if kind == "close_doc":
         docs = win._documents
         return close_document(win, docs[int(arg)] if arg else None)

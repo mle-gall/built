@@ -22,10 +22,12 @@ its model, its tools and its undo; only where it is seen changes:
 
 It works the same in the Qt app (``BUILT_UI`` on, Metal) and in the native
 ``built`` shell (app_shell/), where Qt is an offscreen library: no Qt
-widget is ever shown. In the shell a guard refuses any Qt window the
-composer would open, and the questions it asks (delete a sheet, where to
-export) are asked in the dock. With ``BUILT_UI=0`` (or the GL view) the
-composer stays the Qt window it always was.
+widget is ever shown (the shell's own guard, app_shell/qt_host.py, closes
+any window the composer would still open, and its file pickers are the
+native panels). Deleting a sheet is asked in the dock. What the dock does
+not cover yet opens in the classic sheet editor (the Qt window in the Qt
+app, the classic app from the shell). With ``BUILT_UI=0`` (or the GL view)
+the composer stays the Qt window it always was.
 
 The long-term plan ports sheets to Rust (docs/rust-port-plan.md, R3 / S3):
 this adapter is deliberately thin, and the composer's model and logic stay
@@ -55,6 +57,8 @@ RAIL = [["select", "pan", "zoom", "zoom_ventana", "estilo"],
         ["cota", "cota_cadena", "cota_base", "cota_ang", "cota_radio"]]
 #: Tools that open a Qt dialog before anything else (no Qt window in the shell).
 _DIALOG_TOOLS = {"imagen"}
+#: The desk behind the page: the composer's slate (views/composer.py), always.
+DESK = (70, 76, 84)
 
 #: Keys that stay the window's in the workspace (save, open, new, close,
 #: quit, preferences): everything else is the page's.
@@ -131,6 +135,9 @@ def composer_class():
         def isMinimized(self):  # noqa: N802
             return False
 
+        def _apply_desk_colour(self):
+            self._view.setBackgroundBrush(QColor(*DESK))
+
         def showMinimized(self):  # noqa: N802
             pass
 
@@ -159,6 +166,9 @@ def composer_class():
             if ws is not None:
                 ws.leave()
                 ws.detach()
+            classic = self.__dict__.get("_classic")
+            if classic is not None and _alive(classic):
+                classic.close()
             return super().close()
 
     _CLASS = SheetComposer
@@ -166,14 +176,10 @@ def composer_class():
 
 
 def composer_for(win):
-    """The composer of ``win``'s front document, made on first use."""
-    qt = _qt_window(win)
-    if qt is not None and hasattr(qt, "_ensure_composer"):
-        return qt._ensure_composer()
-    comp = win.__dict__.get("_sheet_composer")
-    if comp is None:
-        comp = win.__dict__["_sheet_composer"] = composer_class()(win)
-    return comp
+    """The composer of ``win``'s front document, made on first use
+    (MainWindow._ensure_composer; the shell borrows it)."""
+    win = getattr(win, "_host_window", win)
+    return win._ensure_composer()
 
 
 def workspace_of(view):
@@ -186,29 +192,33 @@ def shown(view) -> bool:
 
 
 def to_sheets(win, index=None) -> None:
-    """The workspace ▾ chose Sheets (or a sheet)."""
-    qt = _qt_window(win)
-    if qt is not None and hasattr(qt, "_to_sheets"):
-        if index is None:
-            qt._to_sheets()
-        else:
-            qt._show_sheet(index)
-        return
+    """The workspace ▾ chose Sheets (the native shell's _to_sheets; the Qt
+    app gets here through MainWindow._to_sheets → the composer's show)."""
+    win = getattr(win, "_host_window", win)
     comp = composer_for(win)
+    comps = list(getattr(win.viewport.scene, "compositions", None) or [])
+    if index is None and comps:
+        index = min(max(getattr(win, "_last_sheet", 0) or 0, 0), len(comps) - 1)
+    comp.show()
     if index is not None:
         comp.show_sheet(index)
-    comp.show()
 
 
 def to_model(win) -> None:
-    """The workspace ▾ chose Model."""
+    """The workspace ▾ chose Model (or ⌃Tab)."""
+    win = getattr(win, "_host_window", win)
     qt = _qt_window(win)
     if qt is not None and hasattr(qt, "_show_model"):
         qt._show_model()
         return
-    comp = win.__dict__.get("_sheet_composer")
-    if comp is not None:
+    comp = getattr(win, "_composer", None)
+    if comp is not None and getattr(comp, "EMBEDDED", False):
         comp.hide()
+
+
+def _int(v) -> int:
+    """A Qt enum or flag (or the shell's plain int) as an int."""
+    return int(getattr(v, "value", v))
 
 
 def _alive(obj) -> bool:
@@ -224,36 +234,6 @@ class _Act:
 
     def __init__(self, fn):
         self.trigger = fn
-
-
-class _ShellGuard(QObject):
-    """The shell has no Qt windows: a dialog, a menu or a picker the
-    composer opens is closed before it can wait for an answer nobody can
-    give, and the status line says so."""
-
-    def __init__(self, ws):
-        super().__init__()
-        self._ws = ws
-
-    def eventFilter(self, obj, event):  # noqa: N802
-        if event.type() == QEvent.Show:
-            from PySide6.QtWidgets import QWidget
-            if isinstance(obj, QWidget) and obj.isWindow():
-                QTimer.singleShot(0, lambda w=obj: self._refuse(w))
-        return False
-
-    def _refuse(self, w):
-        if not _alive(w):
-            return
-        name = w.windowTitle() or type(w).__name__
-        from PySide6.QtWidgets import QDialog, QMenu
-        if isinstance(w, QDialog):
-            w.reject()
-        elif isinstance(w, QMenu):
-            w.close()
-        else:
-            w.hide()
-        self._ws.flash(f"{name}: not in the Built shell yet")
 
 
 # ---- The workspace ---------------------------------------------------------------
@@ -277,6 +257,7 @@ class Workspace:
         cv.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         cv.setFrameShape(QFrame.NoFrame)
         composer.canvas.changed.connect(self._scene_changed)
+        self._connected = True
         self.image = None
         self.dirty = QRegion()
         self.full = True
@@ -289,12 +270,10 @@ class Workspace:
         self._on_page = False           # the last press landed on the page
         self._actions = []
         self._shell = is_shell(composer._window)
-        self._guard = None
-        if self._shell:
-            from PySide6.QtWidgets import QApplication
-            self._guard = _ShellGuard(self)
-            QApplication.instance().installEventFilter(self._guard)
         self._keys = self._shortcuts()
+        # The desk is the dark chrome's slate, whatever palette Qt has (the
+        # shell's offscreen one is light).
+        cv.setBackgroundBrush(QColor(*DESK))
 
     # ---- In and out ------------------------------------------------------------
     def _front_view(self):
@@ -314,6 +293,9 @@ class Workspace:
         self.shown = True
         self.view = view
         view.__dict__["_sheets_ws"] = self
+        if not self._connected:             # a closed composer shown again
+            self.composer.canvas.changed.connect(self._scene_changed)
+            self._connected = True
         tools = getattr(view, "tools", None)
         if tools is not None and hasattr(tools, "cancel"):
             try:
@@ -360,16 +342,12 @@ class Workspace:
 
     def detach(self) -> None:
         """The composer is closing: nothing of it may be reached again."""
-        try:
-            self.composer.canvas.changed.disconnect(self._scene_changed)
-        except (RuntimeError, TypeError):
-            pass
-        if self._guard is not None:
-            from PySide6.QtWidgets import QApplication
-            app = QApplication.instance()
-            if app is not None:
-                app.removeEventFilter(self._guard)
-            self._guard = None
+        if self._connected:
+            self._connected = False
+            try:
+                self.composer.canvas.changed.disconnect(self._scene_changed)
+            except (RuntimeError, TypeError):
+                pass
 
     @staticmethod
     def _reset_chrome(view) -> None:
@@ -442,7 +420,7 @@ class Workspace:
         if self.image is None or (self.image.width(), self.image.height()) != (W, H):
             self.image = QImage(W, H, QImage.Format_RGBA8888)
             self.image.setDevicePixelRatio(dpr)
-            self.image.fill(QColor(70, 76, 84))
+            self.image.fill(QColor(*DESK))
             self.full = True
         bounds = QRect(0, 0, w, h)
         if self.full:
@@ -672,9 +650,14 @@ class Workspace:
                 options = [self._clean(w.itemText(j)) for j in range(w.count())]
                 at = w.currentIndex()
                 current = self._clean(w.currentText())
-                if w.isEditable() and current and current not in options:
-                    options.append(current)
-                    at = len(options) - 1
+                if w.isEditable() and current:
+                    # An editable list (the scale) says what is typed, not
+                    # what is highlighted.
+                    if current in options:
+                        at = options.index(current)
+                    else:
+                        options.append(current)
+                        at = len(options) - 1
                 if not options:
                     continue
                 rows.append((label, f"{ED}pick{ED}{fid}{ED}{'|'.join(options)}{ED}{max(at, 0)}"))
@@ -694,7 +677,9 @@ class Workspace:
         if not spec and title.endswith("items"):
             rows.append(("", "Several items: their fields one at a time."))
         elif not spec:
-            rows.append(("", "More of its fields in the Qt sheet window for now."))
+            rows.append(("", "Its fields are in the classic sheet editor for now."))
+        if spec is not self.FRAME and spec is not self.TEXT:
+            rows.append(("Open in classic sheet editor", f"{ED}button{ED}classic"))
         return title, ((("", tuple(rows)),) if rows else ())
 
     def apply(self, fid: str, value: str) -> None:
@@ -780,6 +765,7 @@ class Workspace:
                 ("Sheet", [item("Update all views", comp.refresh_all_frames),
                            item("Auto-render views", lambda: comp.auto_check.toggle(),
                                 checked=int(bool(comp._auto_render))),
+                           item("Open in classic sheet editor…", self.open_classic),
                            item("Back to the model", lambda: to_model(comp._window))])]
         self._actions = acts
         if self.view is not None:
@@ -827,6 +813,8 @@ class Workspace:
         elif verb == "edit":
             fid, _, value = rest.partition(SEP)
             self.apply(fid, value)
+        elif verb == "button" and rest == "classic" or verb == "classic":
+            self.open_classic()
         elif verb == "button":
             self.apply(rest, "")
         elif verb == "export":
@@ -845,8 +833,37 @@ class Workspace:
         if what == "del" and bid == "del":
             if self.composer.delete_sheet(arg, confirm=False):
                 self._fit_pending = True
-        elif what == "export" and bid == "export" and text.strip():
-            self._export_to(arg, str(Path(text.strip()).expanduser()))
+
+
+    # ---- The escape hatch ----------------------------------------------------------------
+    def open_classic(self) -> None:
+        """What the dock does not cover yet (pens, colours, cajetín designs,
+        guides, rulers…): the classic sheet editor. In the Qt app that is
+        the composer's own window on this document, with the workspace
+        left for the model; in the native shell, the classic app."""
+        comp = self.composer
+        win = comp._window
+        real = getattr(win, "_host_window", win)
+        if self._shell:
+            from app_shell import files
+            files.open_in_classic(real, why="The classic sheet editor")
+            return
+        from views.composer import ComposerWindow, bring_to_front
+        from views.documents import DocumentHost
+        classic = comp.__dict__.get("_classic")
+        if classic is None or not _alive(classic):
+            classic = ComposerWindow(real)
+            host = DocumentHost(real, getattr(win, "_host_doc", None) or real._doc)
+            classic._window = host
+            panel = getattr(classic, "views_panel", None)
+            if panel is not None and hasattr(panel, "_window"):
+                panel._window = host
+            comp._classic = classic
+        comps = comp._scene().compositions
+        index = comps.index(comp.comp) if comp.comp in comps else 0
+        to_model(win)
+        bring_to_front(classic)
+        classic.show_sheet(index)
 
     # ---- Exports ------------------------------------------------------------------------------
     _EXPORTS = {"pdf": ("Export PDF…", ".pdf", "PDF (*.pdf)"),
@@ -875,14 +892,8 @@ class Workspace:
             self.flash("Select a model view on the sheet first")
             return
         title, ext, filters = self._EXPORTS[kind]
-        if self._shell:
-            # No native picker in the shell yet: where it goes is asked in the dock.
-            self._pending = ("export", kind)
-            self._prompt = (title.rstrip("…"), "The file to write:", self._default_path(kind),
-                            [("export", "Export"), ("cancel", "Cancel")])
-            self._touch()
-            return
         from views.filedialogs import file_dialogs
+        # The native save panel in both apps (the shell's is app_shell.files').
         parent = _qt_window(self.composer._window)
         path, _ = file_dialogs.getSaveFileName(parent, title, self._default_path(kind), filters)
         if path:
@@ -931,8 +942,8 @@ class Workspace:
             gpos = QPointF(event.globalPosition())
         except Exception:  # noqa: BLE001
             gpos = QPointF(pos)
-        return QMouseEvent(qtype, pos, gpos, Qt.MouseButton(event.button()),
-                           Qt.MouseButtons(event.buttons()), Qt.KeyboardModifiers(event.modifiers()))
+        return QMouseEvent(qtype, pos, gpos, Qt.MouseButton(_int(event.button())),
+                           Qt.MouseButton(_int(event.buttons())), Qt.KeyboardModifier(_int(event.modifiers())))
 
     def pointer(self, kind: str, event) -> None:
         from PySide6.QtWidgets import QApplication
@@ -974,8 +985,8 @@ class Workspace:
         phase = event.phase() if hasattr(event, "phase") else Qt.NoScrollPhase
         inverted = bool(event.inverted()) if hasattr(event, "inverted") else False
         buttons = event.buttons() if hasattr(event, "buttons") else Qt.NoButton
-        ev = QWheelEvent(pos, gpos, event.pixelDelta(), event.angleDelta(), Qt.MouseButtons(buttons),
-                         Qt.KeyboardModifiers(event.modifiers()), phase, inverted)
+        ev = QWheelEvent(pos, gpos, event.pixelDelta(), event.angleDelta(), Qt.MouseButton(_int(buttons)),
+                         Qt.KeyboardModifier(_int(event.modifiers())), phase, inverted)
         QApplication.sendEvent(self.cv.viewport(), ev)
         self._touch()
 
@@ -1004,7 +1015,7 @@ class Workspace:
             gpos = event.globalPos()
         except Exception:  # noqa: BLE001
             gpos = self.view.mapToGlobal(pos)
-        ev = QContextMenuEvent(QContextMenuEvent.Mouse, pos, gpos, Qt.KeyboardModifiers(event.modifiers()))
+        ev = QContextMenuEvent(QContextMenuEvent.Mouse, pos, gpos, Qt.KeyboardModifier(_int(event.modifiers())))
         QApplication.sendEvent(self.cv.viewport(), ev)
         self.full = True
         self._touch()
@@ -1040,7 +1051,7 @@ class Workspace:
     @staticmethod
     def _combo(event):
         try:
-            return QKeySequence(int(event.modifiers().value) | int(getattr(event.key(), "value", event.key())))
+            return QKeySequence(_int(event.modifiers()) | _int(event.key()))
         except Exception:  # noqa: BLE001
             return QKeySequence()
 
@@ -1055,9 +1066,8 @@ class Workspace:
 
     def key(self, event, pressed: bool) -> None:
         from PySide6.QtWidgets import QApplication
-        k = event.key()
-        k = Qt.Key(int(getattr(k, "value", k)))
-        mods = Qt.KeyboardModifiers(event.modifiers())
+        k = Qt.Key(_int(event.key()))
+        mods = Qt.KeyboardModifier(_int(event.modifiers()))
         text = event.text() or ""
         repeat = bool(event.isAutoRepeat()) if hasattr(event, "isAutoRepeat") else False
         if pressed and not self._editing() and not repeat:

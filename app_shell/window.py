@@ -714,10 +714,13 @@ class ShellWindow(QObject):
         self._status.showMessage(f"{name} — {hint}" if hint else name)
 
     def _show_model(self):
-        pass
+        from views import wgpu_sheets
+        wgpu_sheets.to_model(self)
 
     def _to_sheets(self):
-        self._host.not_here("Sheets")
+        # Sheets is a workspace of the window here too (views/wgpu_sheets.py).
+        from views import wgpu_sheets
+        wgpu_sheets.to_sheets(self)
 
     def show_viewport_context_menu(self, *args, **kwargs):
         # The viewport's right-click menu waits for its design review

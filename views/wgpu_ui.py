@@ -347,8 +347,15 @@ def _tabs(view, win) -> None:
     views = list(getattr(scene, "saved_views", None) or [])
     row = getattr(getattr(win, "_scene_tabs", None), "tabs", None)
     marked = row.marked_view() if row is not None and hasattr(row, "marked_view") else None
-    work = [("model", "Model", "The model", "", 1, True), ("sheet", sheet, "Sheets (⌃Tab)", "", 0, True)]
-    scenes = [(f"scene:{i}", v.name, "Scene", "", 1 if v is marked else 0, True) for i, v in enumerate(views)]
+    from views import wgpu_sheets
+    on_sheets = wgpu_sheets.shown(view)
+    if wgpu_sheets.embeds(win):
+        # Sheets is a workspace of this window (views/wgpu_sheets.py).
+        sheet = "Sheets"
+    work = [("model", "Model", "The model", "", 0 if on_sheets else 1, True),
+            ("sheet", sheet, "Sheets (⌃Tab)", "", 1 if on_sheets else 0, True)]
+    scenes = [] if on_sheets else [(f"scene:{i}", v.name, "Scene", "", 1 if v is marked else 0, True)
+                                   for i, v in enumerate(views)]
     tabs = [work, scenes]
     if tabs != getattr(view, "_ui_tabs", None):
         view._ui_tabs = tabs
@@ -2475,6 +2482,10 @@ def _run(win, actions) -> None:
             from views import wgpu_start
             wgpu_start.action(win, arg)
             continue
+        if kind == "sheets":
+            from views import wgpu_sheets
+            wgpu_sheets.action(win, arg)
+            continue
         if kind == "tool":
             view = getattr(getattr(win, "_doc", None), "stand_in", None)
             run = getattr(view, "_ui_palette_runs", {}).get(arg)
@@ -2827,7 +2838,10 @@ def claims_key(view, event) -> bool:
     if _opens_commands(event):
         return True
     name = _KEYS.get(event.key(), "")
-    return view.renderer.ui_claims_key(name)
+    if view.renderer.ui_claims_key(name):
+        return True
+    from views import wgpu_sheets
+    return wgpu_sheets.claims_key(view, event)
 
 
 def key(view, event, pressed: bool) -> bool:
@@ -2842,7 +2856,9 @@ def key(view, event, pressed: bool) -> bool:
             view.renderer.ui_open_commands()
             view.update()
         return True
-    step = _problem_key(view, event)
+    from views import wgpu_sheets
+    sheets = wgpu_sheets.shown(view)
+    step = 0 if sheets else _problem_key(view, event)
     if step:
         if pressed:
             _problem_step(view.window(), view, step)
@@ -2850,7 +2866,8 @@ def key(view, event, pressed: bool) -> bool:
         return True
     name = _KEYS.get(event.key(), "")
     if not view.renderer.ui_claims_key(name):
-        return False
+        # The Sheets workspace: the page's keys go to the composer.
+        return wgpu_sheets.key(view, event, pressed) if sheets else False
     view.renderer.ui_key(name, pressed, _mods(event))
     text = event.text()
     if pressed and text and text.isprintable():
@@ -2898,7 +2915,9 @@ def wheel(view, event) -> bool:
     taken = view.renderer.ui_wheel(float(p.x()), float(p.y()), dx, dy)
     if taken:
         view.update()
-    return taken
+        return True
+    from views import wgpu_sheets
+    return wgpu_sheets.wheel(view, event)
 
 
 def _held(view, kind, event) -> bool:
@@ -2925,9 +2944,11 @@ def _held(view, kind, event) -> bool:
 
 
 def pointer(view, kind: str, event=None) -> bool:
-    """Offer a pointer event to the chrome first. True: it was the chrome's."""
+    """Offer a pointer event to the chrome first. True: it was the chrome's
+    (or, in the Sheets workspace, the page's)."""
     if not getattr(view, "_ui_attached", False):
         return False
+    from views import wgpu_sheets
     if _held(view, kind, event):
         return True
     if event is None:
@@ -2952,8 +2973,14 @@ def pointer(view, kind: str, event=None) -> bool:
             view.setCursor(Qt.SizeHorCursor)
         elif taken and (not was or getattr(view, "_ui_cursor_shape", "")):
             view.setCursor(Qt.ArrowCursor)
-        elif was and not taken:
+        elif was and not taken and not wgpu_sheets.shown(view):
             view.tools._apply_tool_cursor()
         view._ui_was_over = taken
         view._ui_cursor_shape = shape
+    if wgpu_sheets.shown(view):
+        # The Sheets workspace: what the chrome leaves is the page's.
+        if taken:
+            wgpu_sheets.chrome_took(view)
+            return True
+        return wgpu_sheets.pointer(view, kind, event)
     return taken

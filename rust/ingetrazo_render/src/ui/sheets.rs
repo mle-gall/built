@@ -73,6 +73,148 @@ impl Sheets {
     }
 }
 
+impl Sheets {
+    /// A question over the dock (delete a sheet…): answered in place.
+    fn prompt_place(&mut self, ui: &mut egui::Ui, out: &mut Vec<String>) {
+        let s = self;
+        let mut clear_prompt = false;
+        if let Some((ptitle, pbody, field, buttons)) = s.prompt.as_mut() {
+            // The question, over everything else in the dock.
+            let mut answer: Option<String> = None;
+            egui::Frame::new().fill(FIELD).corner_radius(CornerRadius::same(R_CONTROL)).inner_margin(Margin::same(10)).show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.spacing_mut().item_spacing = vec2(0.0, 6.0);
+                ui.label(egui::RichText::new(ptitle.as_str()).font(strong(12.5)).color(INK));
+                if !pbody.is_empty() { ui.label(egui::RichText::new(pbody.as_str()).font(body()).color(DIM)); }
+                let mut enter = false;
+                if let Some(text) = field.as_mut() {
+                    let r = ui.add(egui::TextEdit::singleline(text).font(body()).margin(Margin::symmetric(6, 4))
+                        .desired_width(ui.available_width() - 4.0));
+                    if s.focus_prompt { r.request_focus(); s.focus_prompt = false; }
+                    enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                }
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing = vec2(6.0, 0.0);
+                    for (bi, (id, label)) in buttons.iter().enumerate() {
+                        if sheet_button(ui, label, "", if bi == 0 { 1 } else { 0 }) { answer = Some(id.clone()); }
+                    }
+                });
+                if enter { answer = buttons.first().map(|b| b.0.clone()); }
+            });
+            ui.add_space(8.0);
+            if let Some(id) = answer {
+                let text = field.clone().unwrap_or_default();
+                out.push(format!("answer{SEP}{id}{SEP}{text}"));
+                clear_prompt = true;
+            }
+        }
+        if clear_prompt { s.prompt = None; }
+    }
+
+    /// The sheets: header (name, +, ⋯) and the ordered list, at most
+    /// ``max_h`` high, scrolled past that.
+    fn list_place(&mut self, ui: &mut egui::Ui, out: &mut Vec<String>, max_h: f32) {
+        let s = self;
+        // Header: the place's name, New sheet, the current sheet's menu.
+        ui.horizontal(|ui| {
+            ui.set_min_height(28.0);
+            ui.add_space(8.0);
+            ui.label(egui::RichText::new("Sheets").font(title()).color(INK));
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let cur = s.list.iter().position(|r| r.2);
+                let dots = (String::new(), "⋯".to_owned(), "This sheet: rename, duplicate, move, delete, classic editor".to_owned(), String::new(), -1i8, cur.is_some());
+                let before = ui.cursor();
+                if item_button(ui, &dots, None) {
+                    if let Some(i) = cur { s.row_menu = Some((i, pos2(before.max.x - 180.0, before.min.y + 30.0))); }
+                }
+                let add = (String::new(), "+".to_owned(), "New sheet".to_owned(), String::new(), -1i8, true);
+                if item_button(ui, &add, None) { out.push("add".into()); }
+            });
+        });
+        ui.add_space(6.0);
+        let list_h = (s.list.len() as f32 * 26.0).min(max_h).max(26.0);
+        egui::ScrollArea::vertical().id_salt("sheets_list").max_height(list_h).auto_shrink([false, true]).show(ui, |ui| {
+            for (i, (name, cap, current)) in s.list.iter().enumerate() {
+                if s.renaming.as_ref().is_some_and(|(r, _)| *r == i) {
+                    let (_, buf) = s.renaming.as_mut().unwrap();
+                    let resp = ui.add(egui::TextEdit::singleline(buf).font(body()).margin(Margin::symmetric(8, 4))
+                        .desired_width(ui.available_width() - 4.0));
+                    if s.focus_rename { resp.request_focus(); s.focus_rename = false; }
+                    if resp.lost_focus() {
+                        let enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
+                        let text = buf.trim().to_owned();
+                        if enter && !text.is_empty() && &text != name { out.push(format!("rename{SEP}{i}{SEP}{text}")); }
+                        s.renaming = None;
+                    }
+                    continue;
+                }
+                let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 26.0), Sense::click());
+                paint_state(ui, r, state_of(&resp, *current, true), R_ROW);
+                let c = ui.painter().layout_no_wrap(cap.clone(), meta(), FAINT);
+                let cw = c.size().x.min(r.width() * 0.5);
+                ui.painter().galley(pos2(r.max.x - 8.0 - cw, r.center().y - c.size().y / 2.0), c, FAINT);
+                let mut job = egui::text::LayoutJob::single_section(name.clone(), egui::TextFormat {
+                    font_id: if *current { strong(12.0) } else { body() },
+                    color: if *current { Color32::WHITE } else { INK }, ..Default::default() });
+                job.wrap.max_width = (r.width() - cw - 26.0).max(20.0);
+                job.wrap.max_rows = 1;
+                job.wrap.break_anywhere = true;
+                let g = ui.painter().layout_job(job);
+                ui.painter().galley(pos2(r.min.x + 8.0, r.center().y - g.size().y / 2.0), g, INK);
+                if resp.double_clicked() {
+                    s.renaming = Some((i, name.clone()));
+                    s.focus_rename = true;
+                } else if resp.clicked() && !*current {
+                    out.push(format!("open{SEP}{i}"));
+                }
+                if resp.secondary_clicked() {
+                    let at = resp.interact_pointer_pos().unwrap_or(r.left_bottom());
+                    s.row_menu = Some((i, at));
+                }
+            }
+        });
+    }
+
+    /// The export commands.
+    fn exports_place(&mut self, ui: &mut egui::Ui, out: &mut Vec<String>) {
+        let s = self;
+        if !s.exports.is_empty() {
+            ui.add_space(8.0);
+            caption(ui, "Export");
+            ui.add_space(4.0);
+            ui.horizontal_wrapped(|ui| {
+                ui.spacing_mut().item_spacing = vec2(4.0, 4.0);
+                ui.add_space(6.0);
+                for (id, label, enabled) in &s.exports {
+                    let item = (id.clone(), label.clone(), String::new(), String::new(), -1i8, *enabled);
+                    if item_button(ui, &item, None) { out.push(format!("export{SEP}{id}")); }
+                }
+            });
+        }
+    }
+
+    /// What is selected on the page (or the sheet itself): its fields.
+    fn item_place(&mut self, ui: &mut egui::Ui, out: &mut Vec<String>) {
+        let s = self;
+        // What is selected on the page (or the sheet itself).
+        if !s.title.is_empty() {
+            ui.horizontal(|ui| {
+                ui.set_min_height(26.0);
+                ui.add_space(8.0);
+                ui.label(egui::RichText::new(&s.title).font(title()).color(INK));
+            });
+        }
+        egui::ScrollArea::vertical().id_salt("sheets_inspector").auto_shrink([false, false]).show(ui, |ui| {
+            ui.spacing_mut().item_spacing = vec2(0.0, 2.0);
+            for (si, (caption_text, rows)) in s.inspector.iter().enumerate() {
+                if si > 0 { ui.add_space(6.0); }
+                if !caption_text.is_empty() { caption(ui, caption_text); ui.add_space(2.0); }
+                sheet_rows(ui, rows, &mut s.edits, &mut s.pick, out);
+            }
+        });
+    }
+}
+
 const ED: char = '\u{1d}';
 const SEP: char = '\u{1f}';
 
@@ -217,6 +359,9 @@ impl Ui {
     }
 
     // ---- The dock: the sheets, then what is selected on the page ----------------
+    /// The dock. Today one column: the sheet list over the selected item;
+    /// each part is a place of its own (`Sheets::*_place`), so a later dock
+    /// with Sheets | Views | Item tabs shows one place per tab.
     fn sheets_dock(&mut self, ctx: &egui::Context, screen: Rect) {
         let (top, bottom) = self.band(ctx, screen);
         #[allow(non_snake_case)]
@@ -233,129 +378,15 @@ impl Ui {
                     ui.set_max_width(W - 20.0);
                     ui.set_height(height - 20.0);
                     ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
-                    let mut clear_prompt = false;
-                    if let Some((ptitle, pbody, field, buttons)) = s.prompt.as_mut() {
-                        // The question, over everything else in the dock.
-                        let mut answer: Option<String> = None;
-                        egui::Frame::new().fill(FIELD).corner_radius(CornerRadius::same(R_CONTROL)).inner_margin(Margin::same(10)).show(ui, |ui| {
-                            ui.set_width(ui.available_width());
-                            ui.spacing_mut().item_spacing = vec2(0.0, 6.0);
-                            ui.label(egui::RichText::new(ptitle.as_str()).font(strong(12.5)).color(INK));
-                            if !pbody.is_empty() { ui.label(egui::RichText::new(pbody.as_str()).font(body()).color(DIM)); }
-                            let mut enter = false;
-                            if let Some(text) = field.as_mut() {
-                                let r = ui.add(egui::TextEdit::singleline(text).font(body()).margin(Margin::symmetric(6, 4))
-                                    .desired_width(ui.available_width() - 4.0));
-                                if s.focus_prompt { r.request_focus(); s.focus_prompt = false; }
-                                enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-                            }
-                            ui.horizontal(|ui| {
-                                ui.spacing_mut().item_spacing = vec2(6.0, 0.0);
-                                for (bi, (id, label)) in buttons.iter().enumerate() {
-                                    if sheet_button(ui, label, "", if bi == 0 { 1 } else { 0 }) { answer = Some(id.clone()); }
-                                }
-                            });
-                            if enter { answer = buttons.first().map(|b| b.0.clone()); }
-                        });
-                        ui.add_space(8.0);
-                        if let Some(id) = answer {
-                            let text = field.clone().unwrap_or_default();
-                            out.push(format!("answer{SEP}{id}{SEP}{text}"));
-                            clear_prompt = true;
-                        }
-                    }
-                    if clear_prompt { s.prompt = None; }
-                    // Header: the place's name, New sheet, the current sheet's menu.
-                    ui.horizontal(|ui| {
-                        ui.set_min_height(28.0);
-                        ui.add_space(8.0);
-                        ui.label(egui::RichText::new("Sheets").font(title()).color(INK));
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            let cur = s.list.iter().position(|r| r.2);
-                            let dots = (String::new(), "⋯".to_owned(), "This sheet: rename, duplicate, move, delete".to_owned(), String::new(), -1i8, cur.is_some());
-                            let before = ui.cursor();
-                            if item_button(ui, &dots, None) {
-                                if let Some(i) = cur { s.row_menu = Some((i, pos2(before.max.x - 180.0, before.min.y + 30.0))); }
-                            }
-                            let add = (String::new(), "+".to_owned(), "New sheet".to_owned(), String::new(), -1i8, true);
-                            if item_button(ui, &add, None) { out.push("add".into()); }
-                        });
-                    });
-                    ui.add_space(6.0);
+                    s.prompt_place(ui, &mut out);
                     // The list: a third of the dock at most, scrolled past that.
-                    let list_h = (s.list.len() as f32 * 26.0).min(ui.available_height() * 0.34).max(26.0);
-                    egui::ScrollArea::vertical().id_salt("sheets_list").max_height(list_h).auto_shrink([false, true]).show(ui, |ui| {
-                        for (i, (name, cap, current)) in s.list.iter().enumerate() {
-                            if s.renaming.as_ref().is_some_and(|(r, _)| *r == i) {
-                                let (_, buf) = s.renaming.as_mut().unwrap();
-                                let resp = ui.add(egui::TextEdit::singleline(buf).font(body()).margin(Margin::symmetric(8, 4))
-                                    .desired_width(ui.available_width() - 4.0));
-                                if s.focus_rename { resp.request_focus(); s.focus_rename = false; }
-                                if resp.lost_focus() {
-                                    let enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
-                                    let text = buf.trim().to_owned();
-                                    if enter && !text.is_empty() && &text != name { out.push(format!("rename{SEP}{i}{SEP}{text}")); }
-                                    s.renaming = None;
-                                }
-                                continue;
-                            }
-                            let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 26.0), Sense::click());
-                            paint_state(ui, r, state_of(&resp, *current, true), R_ROW);
-                            let c = ui.painter().layout_no_wrap(cap.clone(), meta(), FAINT);
-                            let cw = c.size().x.min(r.width() * 0.5);
-                            ui.painter().galley(pos2(r.max.x - 8.0 - cw, r.center().y - c.size().y / 2.0), c, FAINT);
-                            let mut job = egui::text::LayoutJob::single_section(name.clone(), egui::TextFormat {
-                                font_id: if *current { strong(12.0) } else { body() },
-                                color: if *current { Color32::WHITE } else { INK }, ..Default::default() });
-                            job.wrap.max_width = (r.width() - cw - 26.0).max(20.0);
-                            job.wrap.max_rows = 1;
-                            job.wrap.break_anywhere = true;
-                            let g = ui.painter().layout_job(job);
-                            ui.painter().galley(pos2(r.min.x + 8.0, r.center().y - g.size().y / 2.0), g, INK);
-                            if resp.double_clicked() {
-                                s.renaming = Some((i, name.clone()));
-                                s.focus_rename = true;
-                            } else if resp.clicked() && !*current {
-                                out.push(format!("open{SEP}{i}"));
-                            }
-                            if resp.secondary_clicked() {
-                                let at = resp.interact_pointer_pos().unwrap_or(r.left_bottom());
-                                s.row_menu = Some((i, at));
-                            }
-                        }
-                    });
-                    if !s.exports.is_empty() {
-                        ui.add_space(8.0);
-                        caption(ui, "Export");
-                        ui.add_space(4.0);
-                        ui.horizontal_wrapped(|ui| {
-                            ui.spacing_mut().item_spacing = vec2(4.0, 4.0);
-                            ui.add_space(6.0);
-                            for (id, label, enabled) in &s.exports {
-                                let item = (id.clone(), label.clone(), String::new(), String::new(), -1i8, *enabled);
-                                if item_button(ui, &item, None) { out.push(format!("export{SEP}{id}")); }
-                            }
-                        });
-                    }
-                    // What is selected on the page (or the sheet itself).
+                    let list_h = ui.available_height() * 0.34;
+                    s.list_place(ui, &mut out, list_h);
+                    s.exports_place(ui, &mut out);
                     ui.add_space(8.0);
                     let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 9.0), Sense::hover());
                     ui.painter().hline(r.x_range(), r.center().y, Stroke::new(1.0_f32, EDGE));
-                    if !s.title.is_empty() {
-                        ui.horizontal(|ui| {
-                            ui.set_min_height(26.0);
-                            ui.add_space(8.0);
-                            ui.label(egui::RichText::new(&s.title).font(title()).color(INK));
-                        });
-                    }
-                    egui::ScrollArea::vertical().id_salt("sheets_inspector").auto_shrink([false, false]).show(ui, |ui| {
-                        ui.spacing_mut().item_spacing = vec2(0.0, 2.0);
-                        for (si, (caption_text, rows)) in s.inspector.iter().enumerate() {
-                            if si > 0 { ui.add_space(6.0); }
-                            if !caption_text.is_empty() { caption(ui, caption_text); ui.add_space(2.0); }
-                            sheet_rows(ui, rows, &mut s.edits, &mut s.pick, &mut out);
-                        }
-                    });
+                    s.item_place(ui, &mut out);
                 });
             });
         for a in out { self.actions.push(format!("sheets:{a}")); }
@@ -381,6 +412,9 @@ impl Ui {
                     let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 7.0), Sense::hover());
                     ui.painter().hline(r.x_range().shrink(6.0), r.center().y, Stroke::new(1.0_f32, EDGE));
                     if menu_row(ui, &row("del", "Delete…", n > 1)) { clicked = Some(format!("del{SEP}{i}")); }
+                    let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 7.0), Sense::hover());
+                    ui.painter().hline(r.x_range().shrink(6.0), r.center().y, Stroke::new(1.0_f32, EDGE));
+                    if menu_row(ui, &row("classic", "Open in classic sheet editor…", true)) { clicked = Some("classic".into()); }
                 });
             });
         if rename {
