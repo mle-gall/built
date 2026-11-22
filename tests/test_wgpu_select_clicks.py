@@ -3,7 +3,11 @@
 The classic rhythm on a face: one click takes the face, a double click the
 face and its edges, a triple click everything connected to it at the same
 level. The view had no triple click: its third press was an ordinary click
-and left a single face selected."""
+and left a single face selected.
+
+A face the ID pass shows covered by the faded rest of the model (a plate
+against a profile) is still the open group's to click, as in GL. While the
+snap index was being rebuilt on its worker, such a face took no click."""
 import math
 
 import pytest
@@ -149,3 +153,35 @@ def test_a_late_third_press_is_a_new_click(view):
     _clicks(view, pos, 1)
     assert _counts(view.scene) == (1, 0)
 
+
+def _covered(view):
+    cover = next(g for g in view.scene.groups if g.name == 'cover')
+    view.renderer.row = _row_of(view, cover)
+
+
+def test_a_face_under_the_faded_rest_takes_the_click(view):
+    _covered(view)
+    _clicks(view, _first_face_pixel(view), 1)
+    assert _counts(view.scene) == (1, 0)
+
+
+def test_a_covered_face_takes_the_click_while_the_index_builds(view):
+    # The snap index is rebuilt on a worker after a repack (a second and
+    # more on a big model); meanwhile the click must still reach the open
+    # group's face rather than nothing.
+    _covered(view)
+    view.inference_index = None
+    _clicks(view, _first_face_pixel(view), 1)
+    assert _counts(view.scene) == (1, 0)
+    view.scene.clear_selection()
+    _clicks(view, _first_face_pixel(view), 3)
+    assert _counts(view.scene) == (2, 7)
+
+
+def test_a_click_past_the_open_group_still_takes_nothing_while_the_index_builds(view):
+    _covered(view)
+    view.inference_index = None
+    x, y = view._world_to_pixel(QVector3D(14, 4, .5))
+    view.scene.select([view.scene.mesh.faces[0]])
+    _clicks(view, QPointF(x, y), 1)
+    assert not [e for e in view.scene.selection if isinstance(e, (Face, Edge))]
