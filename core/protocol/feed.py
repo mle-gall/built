@@ -285,10 +285,17 @@ def _copies(cmd) -> list:
 
 
 def _doc_state(scene):
+    from core import doc_model
+    if doc_model.ENABLED:
+        # Placements, tags and material fields come from the step's
+        # transaction (_build); the registry (a dict) by identity.
+        mats = {k: id(m) for k, m in (getattr(scene, "materials", {}) or {}).items()}
+        return None, None, mats
     roots = {id(g): g.uid for g in scene.groups}
     # By value: tags and materials are edited in place too.
     # (A tag's fields are plain values: a shallow copy sees their change.)
-    tags = {ly.key: tuple(vars(ly).items())
+    from core.layers import layer_values
+    tags = {ly.key: tuple(layer_values(ly).items())
             for ly in getattr(scene, "layers", ()) or ()}
     mats = {k: repr(m) for k, m in (getattr(scene, "materials", {}) or {}).items()}
     return roots, tags, mats
@@ -488,16 +495,36 @@ class ChangeFeed:
             step.copies = _copies(cmd)
         # Document level: roots by identity, tags and materials by value.
         roots1, tags1, mats1 = _doc_state(scene)
-        step.placements["created"].extend(u for i, u in roots1.items() if i not in roots0)
-        step.placements["removed"].extend(u for i, u in roots0.items() if i not in roots1)
+        if roots0 is None:
+            # Rust document: what the step's transaction wrote.
+            rec = getattr(h, "last_txn", None)
+            changes = None
+            root = getattr(scene, "_root", None)
+            if rec is not None and rec[0] is not None and root is not None:
+                changes = rec[0].changes(inverse=rec[1], root=root._doc_key)
+            if changes is not None:
+                p, t = changes["placements"], changes["tags"]
+                step.placements["created"].extend(p["created"])
+                step.placements["removed"].extend(p["removed"])
+                step.placements["modified"].extend(p["modified"])
+                step.tags["created"].extend(t["created"])
+                step.tags["removed"].extend(t["removed"])
+                step.tags["modified"].extend(t["modified"])
+                step.materials["modified"].extend(
+                    k for k in changes["materials"]["modified"]
+                    if k in mats0 and k in mats1)
+        else:
+            step.placements["created"].extend(u for i, u in roots1.items() if i not in roots0)
+            step.placements["removed"].extend(u for i, u in roots0.items() if i not in roots1)
         step.complete = _known_placements(cmd, phase, step, scene) and step.complete
         _dedupe(step.placements)
-        for k in tags1.keys() - tags0.keys():
-            step.tags["created"].append(k)
-        for k in tags0.keys() - tags1.keys():
-            step.tags["removed"].append(k)
-        step.tags["modified"].extend(k for k in tags1.keys() & tags0.keys()
-                                     if tags1[k] != tags0[k])
+        if tags0 is not None:
+            for k in tags1.keys() - tags0.keys():
+                step.tags["created"].append(k)
+            for k in tags0.keys() - tags1.keys():
+                step.tags["removed"].append(k)
+            step.tags["modified"].extend(k for k in tags1.keys() & tags0.keys()
+                                         if tags1[k] != tags0[k])
         for k in mats1.keys() - mats0.keys():
             step.materials["created"].append(k)
         for k in mats0.keys() - mats1.keys():
@@ -506,5 +533,5 @@ class ChangeFeed:
                                           if mats1[k] != mats0[k])
         for d in (step.tags, step.materials):
             for k in d:
-                d[k].sort()
+                d[k] = sorted(set(d[k]))
         return step

@@ -110,18 +110,34 @@ def document_name_scope(names):
         _counter = itertools.count(max(first_unused, session_next))
 
 
-class Group:
-    __slots__ = ("mesh", "name", "layer", "ifc", "billboard", "xform",
-                 "children", "owner", "context", "text3d", "hidden", "uid",
-                 "material", "axes", "component", "exploded",
-                 "explode_offset", "ext", "locked", "source_uid")
+from core import doc_model as _dm
+
+#: Every attribute a group has, in one tuple (``links._clone_shell`` copies
+#: them). With the Rust document (core/doc_model.py) the ``DOC_FIELDS`` live
+#: in the document and the rest stay Python slots.
+GROUP_FIELDS = ("mesh", "name", "layer", "ifc", "billboard", "xform",
+                "children", "owner", "context", "text3d", "hidden", "uid",
+                "material", "axes", "component", "exploded",
+                "explode_offset", "ext", "locked", "source_uid")
+DOC_FIELDS = ("name", "layer", "xform", "children", "hidden", "uid",
+              "material", "axes", "component", "locked")
+_PY_FIELDS = tuple(f for f in GROUP_FIELDS if f not in DOC_FIELDS)
+
+
+class _GroupMethods:
+    __slots__ = ()
 
     def __init__(self, mesh: Mesh | None = None, name: str | None = None,
                  uid: str | None = None) -> None:
+        # Rust document: its fields start at these defaults already (no
+        # tag, shown, unlocked, unpainted, no matrix, no children, a
+        # component), so only the name and the uid are written.
+        py = not _dm.ENABLED
         self.mesh = mesh if mesh is not None else Mesh()
         self.name = name or f"Group {next(_counter)}"
         # Layer / tag name (None = default layer).
-        self.layer = None
+        if py:
+            self.layer = None
         # BIM tag ({"class": "IfcWall", "name": ...}) or None — see core/bim.py.
         self.ifc = None
         # Face-me billboard: the group's textured quad rotates
@@ -141,13 +157,15 @@ class Group:
         # or the scene that remembers it visible (Rafael, 2026-09-16: «una
         # escena en donde esto esté oculto»). A hidden TAG hides by layer;
         # this hides the one object.
-        self.hidden = False
+        if py:
+            self.hidden = False
         # Lock: the object stays drawn but cannot be picked, selected or
         # opened — so no tool can move or edit it — until it is unlocked
         # from the Browser. Saved in the .igz (the Project
         # Structure plugin of #87 kept it outside the document: «the
         # padlock function is not saved in the .igz file»).
-        self.locked = False
+        if py:
+            self.locked = False
         # Stable identity that survives save/load — what a scene names when
         # it remembers which objects it hides. Fresh per object; a copy gets
         # its own (see ``copy_group``).
@@ -160,7 +178,8 @@ class Group:
         #: default material shows it; a face painted itself keeps its own —
         #: issue #47, @pacaeiro). Same keys as a face's attrs: ``color`` or
         #: ``texture``, ``opacity``, ``mat``. ``None`` = unpainted.
-        self.material: dict | None = None
+        if py:
+            self.material = None
         #: Exploded view (core/explode.py). On a container: ``{"factor",
         #: "mode"}`` while its parts are pulled apart, ``None`` assembled.
         #: On a part: the ``(x, y, z)`` translation, in the container's
@@ -174,7 +193,8 @@ class Group:
         # Instances render/pick through transformed chunk arrays; transform
         # tools compose into ``xform`` (O(1)); geometry edits first
         # ``materialize`` the instance ("make unique").
-        self.xform = None
+        if py:
+            self.xform = None
         # Nested placements the group OWNS: each a Group with an ``xform``
         # over a SHARED prototype mesh, in this group's coordinates. They
         # render, pick and export as part of their parent — one object to
@@ -188,7 +208,8 @@ class Group:
         # why the .skp we wrote was 80 MB against the original's 14, and
         # why a web .skp viewer laboured over our copy of a model it draws
         # fluently itself.
-        self.children: list = []
+        if py:
+            self.children = []
         # Set only on the throwaway placement proxies the viewport builds for
         # nested children: the top-level object a click must select. A real
         # group in ``scene.groups`` always has ``owner is None``.
@@ -205,7 +226,8 @@ class Group:
         #: this every Move/Rotate/Scale baked the turn into the vertices and
         #: the group forgot which way it faced. ``None`` = the world axes.
         #: A component instance does not use it: its ``xform`` IS its axes.
-        self.axes = None
+        if py:
+            self.axes = None
         #: Whether this instance is a COMPONENT — a definition its copies
         #: share, as Make Component or a .skp import makes it — or a
         #: GROUP that only carries a matrix: a group of groups (``adopt``
@@ -213,7 +235,8 @@ class Group:
         #: be edited. Only meaningful with an ``xform``; read it through
         #: :meth:`is_component` (issue #90, @fafecm: «the parent group
         #: always becomes a component»).
-        self.component = True
+        if py:
+            self.component = True
         # ``source_uid``: set only on the parts of a linked file
         # (core/links.py), never in ``__init__``: the uid the part has in
         # its source document, from which its uid in this one is derived —
@@ -294,6 +317,25 @@ class Group:
         kind = " instance" if self.xform is not None else ""
         return (f"Group({self.name!r}{kind}: {len(self.mesh.faces)} faces, "
                 f"{len(self.mesh.edges)} edges)")
+
+
+if _dm.ENABLED:
+    class Group(_GroupMethods, _dm.NATIVE.Placement):
+        """A placement: a group, a component instance or a nested part.
+        Its document fields (``DOC_FIELDS``) live in the Rust document
+        (core/doc_model.py); see ``_GroupMethods`` for the rest."""
+        __slots__ = _PY_FIELDS
+
+        # copy, deepcopy and pickle: a new handle, then every field.
+        def __reduce__(self):
+            return (_dm.new_handle, (type(self),),
+                    _dm.handle_state(self, GROUP_FIELDS))
+
+        __setstate__ = _dm.set_handle_state
+else:
+    class Group(_GroupMethods):
+        """A placement: a group, a component instance or a nested part."""
+        __slots__ = GROUP_FIELDS
 
 
 # ---- Local axes (issue #44) ---------------------------------------------------
