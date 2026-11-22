@@ -1626,12 +1626,10 @@ class StoreMesh(Mesh):
                 _Indexed(self, st.keys("edge"), EdgeView))
 
     def revert_stitch(self, rec) -> None:
-        """A record made by the store goes back by its snapshot (LIFO, as
-        the Python per-op inverse assumes too); a Python record runs the
-        Python kernel."""
+        """Undo a stitch recorded by this store by restoring its snapshot."""
         undo = rec.get("_undo")
-        if undo is None:
-            return self._py("revert_stitch", rec)
+        if not isinstance(undo, StoreState) or undo.mesh is not self:
+            raise ValueError("stitch record has no snapshot of this mesh")
         self.restore_state(undo)
 
     def resplit_curves(self) -> None:
