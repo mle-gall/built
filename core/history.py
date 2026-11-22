@@ -4067,6 +4067,15 @@ def _coplanar_component(mesh, f0, seedkeys: set,
     return comp
 
 
+class _SnapshotChanges:
+    @property
+    def change(self):
+        """Net store edit, including post-processing, computed when a reader requests it."""
+        if hasattr(self.after, "changes_since"):
+            return self.after.changes_since(self.before)
+        return None
+
+
 class SnapshotMutation(_SnapshotChanges, Command):
     """Wrap an arbitrary mesh mutation with snapshot undo. The push/pull live
     preview applies the *same* mutation each drag frame (then reverts via its own
@@ -4242,15 +4251,6 @@ class SnapshotImport(Command):
                 if x not in items:
                     items.insert(min(i, len(items)), x)
         scene.version += 1
-
-
-class _SnapshotChanges:
-    @property
-    def change(self):
-        """Net store edit, including post-processing, computed when a reader requests it."""
-        if hasattr(self.after, "changes_since"):
-            return self.after.changes_since(self.before)
-        return None
 
 
 class SnapshotCompound(_SnapshotChanges, Command):
