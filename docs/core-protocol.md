@@ -61,6 +61,16 @@ Built (`core.protocol.commands.run(history, name, **args)`):
 | `purge_unused` | `layers: bool = true`, `materials: bool = true` | `PurgeUnusedCommand`: tags and materials nothing uses go (a tag a saved view hides stays). `ok` false and no step when nothing would go |
 | `purge_debris` | — | `Mesh.purge_debris` on the open mesh as one snapshot step: vertices no edge and no face uses |
 | `undo`, `redo` | — | `History.undo` / `redo` |
+| `hide` / `unhide` | `placements: [uid]` (nested included) | `HideCommand` |
+| `lock` | `placements: [uid]`, `locked: bool = true` | `LockCommand` |
+| `rename_placement` | `placement: uid`, `name: string` | `RenameGroupCommand` |
+| `set_tag` | `placements: [uid]`, `tag: tag key` | `AssignLayerCommand` |
+| `resegment_curve` | `edge: edge key`, `segments: integer` | `ResegmentCurveCommand` (`core/curve_segments.py`): the regular circle, polygon or arc rebuilt in place with that many pieces; a curve that is not flat is `rejected` |
+| `repair_solid` | `placement: uid` | the Solid Inspector's `RepairSolidsCommand` on the placement's mesh (shared by its copies); the answer adds `repaired` counts |
+
+The placement commands above (`hide` to `repair_solid`, added for the egui
+UI) take placements at any depth of the open context, as the project tree
+names them; the older ones take top-level placements.
 
 All act on the open mesh (`scene.mesh`, the loose model or the group being
 edited); a `placement` is a top-level placement of the open context
@@ -76,8 +86,6 @@ lists are the contract to build to):
 | `paint_faces` | `faces: [face key]`, `material: name \| null`, `side: "front" \| "back"` | `SetFaceColorCommand` family |
 | `soften_edges` | `edges: [edge key]`, `soft: bool` | `SoftenByAngleCommand` |
 | `move_placements` | `placements: [uid]`, `delta: [x, y, z]` | `MoveGroupCommand` |
-| `set_tag` | `placements: [uid]`, `tag: tag key` | `AssignLayerCommand` |
-| `hide` / `unhide` | `placements: [uid]` | `HideCommand` |
 | `delete_placements` | `placements: [uid]` | `DeleteGroupCommand` |
 | `open_placement` / `close_placement` | `placement: uid` | `begin_group_edit` / `end_group_edit` (not History steps today) |
 

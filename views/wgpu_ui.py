@@ -1419,8 +1419,7 @@ def _tree_action(win, view, action) -> None:
     from core import bim_registry, structure
     from core import layers as L
     from core.group import Group
-    from core.history import (CompoundCommand, HideCommand, LockCommand, MakeUniqueCommand,
-                              RenameGroupCommand, SetLayerVisibilityCommand, SetRegistryCommand)
+    from core.history import CompoundCommand, MakeUniqueCommand, SetLayerVisibilityCommand, SetRegistryCommand
     from views.structure_recipe import execute, update_node
     if SEP not in action:
         # The inspector's chips and the delivery counts: "verb:arg".
@@ -1453,13 +1452,11 @@ def _tree_action(win, view, action) -> None:
             _measure(view, win)
             view._ui_tree_sig = None
         elif verb == "insp" and key == "solidrepair" and len(groups) == 1:
-            from plugins.solid_inspector import RepairSolidsCommand
-            cmd = RepairSolidsCommand([groups[0].mesh])
-            vp.history.execute(cmd)
-            if vp.history.last_error:
-                vp.flash_status(vp.history.last_error)
-            else:
-                d = cmd.done
+            out = _core(vp, "repair_solid", placement=groups[0].uid)
+            if out and out.get("error"):
+                vp.flash_status(out["error"])
+            elif out:
+                d = out["repaired"]
                 vp.flash_status(f"Repaired: {d['stray']} stray edges, {d['duplicates']} duplicated faces, "
                                 f"{d['holes']} holes closed, {d['partitions']} partitions, {d['reversed']} faces turned")
             view._ui_insp_sig = None
@@ -1627,7 +1624,8 @@ def _tree_action(win, view, action) -> None:
             else:
                 gs = members()
                 if gs:
-                    vp.history.execute(HideCommand(gs, hidden=not bool(getattr(gs[0], "hidden", False))))
+                    verb_ = "unhide" if getattr(gs[0], "hidden", False) else "hide"
+                    _core(vp, verb_, placements=[g.uid for g in gs])
             vp.notify_scene_changed() if hasattr(vp, "notify_scene_changed") else vp.update()
         elif verb == "lock" or verb == "lockitem":
             if node:
@@ -1639,12 +1637,12 @@ def _tree_action(win, view, action) -> None:
             else:
                 gs = members()
                 if gs:
-                    vp.history.execute(LockCommand(gs, locked=not bool(getattr(gs[0], "locked", False))))
+                    _core(vp, "lock", placements=[g.uid for g in gs], locked=not getattr(gs[0], "locked", False))
             vp.update()
         elif verb in ("hidemembers", "hideitem"):
             gs = members()
             if gs:
-                vp.history.execute(HideCommand(gs, hidden=True))
+                _core(vp, "hide", placements=[g.uid for g in gs])
                 vp.update()
         elif verb == "unique":
             gs = members()
@@ -1659,7 +1657,7 @@ def _tree_action(win, view, action) -> None:
             if node:
                 update_node(vp, node, name=extra)
             elif item() is not None:
-                vp.history.execute(RenameGroupCommand(item(), extra))
+                _core(vp, "rename_placement", placement=item().uid, name=extra)
                 vp.update()
         elif verb in ("file", "filehere"):
             key = node if verb == "filehere" else ident if kind == "n" else rk
@@ -1735,7 +1733,7 @@ def _tree_action(win, view, action) -> None:
                     recipe.pop(field, None)
                 update_node(vp, arg, recipe=recipe)
             elif what == "segments":
-                from core.curve_segments import MAX_SEGMENTS, ResegmentCurveCommand
+                from core.curve_segments import MAX_SEGMENTS
                 sel = list(scene.selection)
                 shape = _curve_of(scene, sel)
                 n = int(extra.strip())
@@ -1744,14 +1742,14 @@ def _tree_action(win, view, action) -> None:
                 if not shape.minimum <= n <= MAX_SEGMENTS:
                     raise ValueError(f"Between {shape.minimum} and {MAX_SEGMENTS}")
                 if n != shape.segments:
-                    vp.history.execute(ResegmentCurveCommand(sel[0], n))
-                    if getattr(vp.history, "last_rejected", None):
+                    out = _core(vp, "resegment_curve", edge=sel[0].key, segments=n)
+                    if out and out.get("rejected"):
                         raise ValueError("This curve cannot be rebuilt")
                     vp.update()
             elif what == "groupname":
                 g = _group_by_uid(win, arg)
                 if g is not None:
-                    vp.history.execute(RenameGroupCommand(g, extra))
+                    _core(vp, "rename_placement", placement=g.uid, name=extra)
                     vp.update()
             view._ui_insp_sig = None
             rebuild()
@@ -1761,6 +1759,18 @@ def _tree_action(win, view, action) -> None:
             _select(win, data.get("unfiled", []))
     except (KeyError, ValueError) as exc:
         vp.flash_status(str(exc))
+
+
+def _core(vp, command, /, **args):
+    """Run a core protocol command (docs/core-protocol.md §1): the UI edits
+    the model through these, by key. A key outside the open context is
+    told, not raised."""
+    from core.protocol import commands
+    try:
+        return commands.run(vp.history, command, **args)
+    except KeyError as exc:
+        vp.flash_status(str(exc).strip("'\""))
+        return None
 
 
 def _delete_node(vp, key) -> None:
@@ -1937,8 +1947,10 @@ def _inspector(view, win) -> None:
     others = len(sel) - len(groups)
     if others:
         from collections import Counter as C2
-        loose = C2(type(e).__name__ for e in sel if not isinstance(e, Group))
-        rows += [({"Face": "Faces", "Edge": "Edges"}.get(t, t), str(n)) for t, n in loose.most_common()]
+        from core.mesh import Edge, Face
+        loose = C2("Faces" if isinstance(e, Face) else "Edges" if isinstance(e, Edge) else type(e).__name__
+                   for e in sel if not isinstance(e, Group))
+        rows += [(t, str(n)) for t, n in loose.most_common()]
     sections = [("By node" if groups else "Geometry", rows)]
     if any(type(e).__name__ == "Dimension" for e in sel):
         sections.append(("Actions", [("form:dimstyle", "Dimension style…")]))
