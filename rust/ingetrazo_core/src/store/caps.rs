@@ -82,7 +82,7 @@ impl Store {
     ) -> Vec<(bool, u8, u8)> {
         use super::offset::contains;
         use crate::facegeom::normalized;
-        use crate::orient::{face_centroid, face_normal, plane_basis};
+        use crate::orient::plane_basis;
         use std::collections::HashSet;
         let fresh: HashSet<_> = fresh.iter().copied().collect();
         let mut seen = HashSet::new();
@@ -99,15 +99,9 @@ impl Store {
                 continue;
             }
             let rings = self.face_rings(f);
-            let point = |s: u32| {
-                let [x, y, z] = *self.state.vpos.get(s as usize);
-                V3(x as f32, y as f32, z as f32)
-            };
             let Some(outer) = rings.first() else { continue };
-            let pos: Vec<_> = outer.iter().map(|&s| point(s)).collect();
-            let indices: Vec<_> = (0..pos.len() as u32).collect();
-            let alignment = normalized(face_normal(&pos, &indices, h), h).dot(n, h) as f64;
-            let center = face_centroid(&pos, &indices, compensated);
+            let (center, face_normal, _) = self.cap_frame(outer, h, compensated);
+            let alignment = normalized(face_normal, h).dot(n, h) as f64;
             if alignment.abs() <= 0.999 || (center.sub(o).dot(n, h).abs() as f64) >= tol {
                 continue;
             }
@@ -116,7 +110,7 @@ impl Store {
                 .map(|r| {
                     r.iter()
                         .map(|&s| {
-                            let d = point(s).sub(o);
+                            let d = self.cap_point(s).sub(o);
                             (d.dot(u, h) as f64, d.dot(v, h) as f64)
                         })
                         .collect()
@@ -138,5 +132,142 @@ impl Store {
             }
         }
         coverage
+    }
+}
+
+use crate::facegeom::{length, normalized};
+use crate::orient::{face_centroid, face_normal_length};
+pub type Seam = ([f32; 3], [f32; 3], Option<[f32; 3]>);
+
+fn vector([x, y, z]: [f32; 3]) -> V3 {
+    V3(x, y, z)
+}
+fn xyz(V3(x, y, z): V3) -> [f32; 3] {
+    [x, y, z]
+}
+
+impl Store {
+    fn cap_point(&self, slot: u32) -> V3 {
+        vector(self.state.vpos.get(slot as usize).map(|p| p as f32))
+    }
+
+    fn cap_frame(&self, ring: &[u32], h: Hypot, compensated: bool) -> (V3, V3, f32) {
+        let pos: Vec<_> = ring.iter().map(|&s| self.cap_point(s)).collect();
+        let order: Vec<_> = (0..pos.len() as u32).collect();
+        let (normal, len) = face_normal_length(&pos, &order, h);
+        (face_centroid(&pos, &order, compensated), normal, len)
+    }
+
+    pub fn crack_planes(
+        &self,
+        near: Option<[f64; 6]>,
+        h: Hypot,
+        compensated: bool,
+    ) -> Vec<([f32; 3], [f32; 3])> {
+        let mut seen = std::collections::HashSet::new();
+        let mut planes = vec![];
+        for e in self.live_slots(Kind::Edge) {
+            let [f] = self.edge_faces(e) else { continue };
+            if seen.contains(f) {
+                continue;
+            }
+            if let Some(bounds) = near {
+                if !self.state.ends.get(e as usize).iter().any(|&v| {
+                    let p = xyz(self.cap_point(v)).map(f64::from);
+                    (0..3).all(|i| bounds[i] <= p[i] && p[i] <= bounds[i + 3])
+                }) {
+                    continue;
+                }
+            }
+            seen.insert(*f);
+            let rings = self.face_rings(*f);
+            let Some(outer) = rings.first() else { continue };
+            let (center, n, _) = self.cap_frame(outer, h, compensated);
+            planes.push((xyz(center), xyz(n)));
+        }
+        planes
+    }
+
+    pub fn edges_along(&self, segments: &[[[f32; 3]; 2]], tolerance: f64, h: Hypot) -> Vec<u128> {
+        let on = |p: V3, a: V3, b: V3| {
+            let ab = b.sub(a);
+            let l2 = ab.dot(ab, h) as f64;
+            if l2 < 1e-18 {
+                return (length(p.sub(a), h) as f64) < tolerance;
+            }
+            let t = p.sub(a).dot(ab, h) as f64 / l2;
+            (-1e-9..=1. + 1e-9).contains(&t)
+                && (length(a.add(ab.mul(t as f32)).sub(p), h) as f64) < tolerance
+        };
+        self.live_slots(Kind::Edge)
+            .into_iter()
+            .filter(|&e| {
+                let ends = self.state.ends.get(e as usize).map(|v| self.cap_point(v));
+                segments
+                    .iter()
+                    .any(|&[a, b]| ends.iter().all(|&p| on(p, vector(a), vector(b))))
+            })
+            .map(|e| self.key(Kind::Edge, e))
+            .collect()
+    }
+
+    pub fn seam_planes(
+        &self,
+        faces: &[u32],
+        half: f64,
+        hair_cos2: f64,
+        h: Hypot,
+        compensated: bool,
+    ) -> Vec<Seam> {
+        let mut out = vec![];
+        for &f in faces {
+            let rings = self.face_rings(f);
+            let Some(outer) = rings.first() else { continue };
+            let (center, n, size) = self.cap_frame(outer, h, compensated);
+            let nf = normalized(n, h);
+            let off = |rings: &[Vec<u32>], normal: V3| {
+                rings
+                    .iter()
+                    .flatten()
+                    .any(|&v| self.cap_point(v).sub(center).dot(normal, h).abs() as f64 > half)
+            };
+            let mut coplanar = false;
+            let mut correction = None;
+            let mut visited = std::collections::HashSet::from([f]);
+            'boundary: for ring in &rings {
+                for (&a, &b) in ring.iter().zip(ring.iter().cycle().skip(1)) {
+                    let Some(e) = self.find_edge(a, b) else {
+                        continue;
+                    };
+                    for &g in self.edge_faces(e) {
+                        if !visited.insert(g) {
+                            continue;
+                        }
+                        let gr = self.face_rings(g);
+                        let Some(outer) = gr.first() else { continue };
+                        let (_, gn, gsize) = self.cap_frame(outer, h, compensated);
+                        let unit = normalized(gn, h);
+                        let align = nf.dot(unit, h) as f64;
+                        if align.abs() <= 0.999 {
+                            continue;
+                        }
+                        coplanar = true;
+                        if gsize > size
+                            && align * align >= hair_cos2
+                            && off(&gr, nf)
+                            && !off(&gr, unit)
+                            && !off(&rings, unit)
+                        {
+                            correction = Some(xyz(gn));
+                            break 'boundary;
+                        }
+                    }
+                }
+            }
+            if coplanar {
+                out.push((xyz(center), xyz(nf), correction));
+            }
+        }
+        out
     }
 }

@@ -99,9 +99,13 @@ pub struct Geom {
 /// a `QVector3D`, divided by its own length (not `normalized()`), or
 /// `(0, 0, 1)` under three corners or below a length of 1e-9.
 pub fn face_normal(pos: &[V3], outer: &[u32], h: Hypot) -> V3 {
+    face_normal_length(pos, outer, h).0
+}
+
+pub(crate) fn face_normal_length(pos: &[V3], outer: &[u32], h: Hypot) -> (V3, f32) {
     let m = outer.len();
     if m < 3 {
-        return V3(0.0, 0.0, 1.0);
+        return (V3(0.0, 0.0, 1.0), 0.0);
     }
     let (mut nx, mut ny, mut nz) = (0.0f64, 0.0f64, 0.0f64);
     for k in 0..m {
@@ -116,9 +120,9 @@ pub fn face_normal(pos: &[V3], outer: &[u32], h: Hypot) -> V3 {
     let raw = V3(nx as f32, ny as f32, nz as f32);
     let len = facegeom::length(raw, h);
     if (len as f64) < 1e-9 {
-        V3(0.0, 0.0, 1.0)
+        (V3(0.0, 0.0, 1.0), len)
     } else {
-        div(raw, len)
+        (div(raw, len), len)
     }
 }
 

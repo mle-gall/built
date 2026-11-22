@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import math
 import random
+import sys
 from collections import defaultdict
 from typing import Optional
 
@@ -560,7 +561,6 @@ def rebuild_plane(mesh, origin: QVector3D, normal: QVector3D,
         samples.append((outer_xy, holes_xy, _region_test_point(outer_xy, holes_xy)))
 
     if native:
-        import sys
         coverage = mesh._store.snapshot().cap_coverage(
             origin.toTuple(), normal.toTuple(), [p for _, _, p in samples],
             [f.key for f in fresh_set], _ON_PLANE, qt_hypot(), sys.version_info >= (3, 12),
@@ -906,6 +906,14 @@ def crack_planes(mesh, near=None) -> list:
     face of the Plaza (09-10) — and planes far from the push recomputed."""
     seen: dict = {}
 
+    from core.store_mesh import StoreMesh
+    from core._native import qt_hypot
+    if isinstance(mesh, StoreMesh) and qt_hypot():
+        for p, n in mesh._store.snapshot().crack_planes(qt_hypot(), sys.version_info >= (3, 12), near):
+            key, origin, normal = plane_key(QVector3D(*p), QVector3D(*n))
+            seen.setdefault(key, (origin, normal))
+        return list(seen.values())
+
     def inside(p) -> bool:
         return (near[0] <= p.x() <= near[3] and near[1] <= p.y() <= near[4]
                 and near[2] <= p.z() <= near[5])
@@ -934,6 +942,13 @@ def edges_along(mesh, segments) -> list:
     material and capped a hole."""
     if not segments:
         return []
+
+    from core.store_mesh import EdgeView, StoreMesh
+    from core._native import qt_hypot
+    if isinstance(mesh, StoreMesh) and qt_hypot():
+        lines = [(a.toTuple(), b.toTuple()) for a, b in segments]
+        keys = mesh._store.snapshot().edges_along(lines, _ON_PLANE, qt_hypot())
+        return [EdgeView(mesh, k) for k in keys]
 
     def on(p, a, b) -> bool:
         ab = b - a
@@ -997,6 +1012,19 @@ def seam_planes(mesh, new_faces) -> list:
     out of the arrangement, and the whole floor went as «not traced» --
     the push refused, more often the bigger the model (#1076)."""
     seen: dict = {}
+    from core.store_mesh import StoreMesh
+    from core._native import qt_hypot
+    if isinstance(mesh, StoreMesh) and qt_hypot():
+        rows = mesh._store.snapshot().seam_planes(
+            [f.key for f in new_faces], _ON_PLANE, _HAIR_COS2, qt_hypot(), sys.version_info >= (3, 12))
+        for point, normal, correction in rows:
+            key, origin, cn = plane_key(QVector3D(*point), QVector3D(*normal))
+            if correction is not None and not seen.get(key, (False,))[0]:
+                _, _, cn = plane_key(origin, QVector3D(*correction))
+                seen[key] = (True, origin, cn)
+            else:
+                seen.setdefault(key, (False, origin, cn))
+        return [(o, n) for _, o, n in seen.values()]
     for f in new_faces:
         if f not in mesh.faces:
             continue
@@ -1024,4 +1052,3 @@ def seam_planes(mesh, new_faces) -> list:
                         elif key not in seen:
                             seen[key] = (False, origin, cn)
     return [(o, n) for _a, o, n in seen.values()]
-

@@ -1344,6 +1344,29 @@ fn reader(snap: &Snapshot) -> Store {
 
 #[pymethods]
 impl PyStoreSnapshot {
+    #[pyo3(signature = (hypot, compensated, near=None))]
+    fn crack_planes(&self, py: Python<'_>, hypot:&str, compensated:bool, near:Option<[f64;6]>)
+        -> PyResult<Vec<([f32;3],[f32;3])>> {
+        let store=reader(&self.inner);
+        let h=crate::hypot_of(hypot)?;
+        Ok(py.detach(||store.crack_planes(near,h,compensated)))
+    }
+
+    fn seam_planes(&self, py: Python<'_>, keys:Vec<u128>, tolerance:f64, hair_cos2:f64,
+                   hypot:&str, compensated:bool) -> PyResult<Vec<super::caps::Seam>> {
+        let store=reader(&self.inner);
+        let faces=keys.into_iter().filter_map(|k|store.slot(Kind::Face,k)).collect::<Vec<_>>();
+        let h=crate::hypot_of(hypot)?;
+        Ok(py.detach(||store.seam_planes(&faces,tolerance/2.,hair_cos2,h,compensated)))
+    }
+
+    fn edges_along(&self, py: Python<'_>, segments:Vec<[[f32;3];2]>, tolerance:f64,
+                   hypot:&str) -> PyResult<Vec<u128>> {
+        let store=reader(&self.inner);
+        let h=crate::hypot_of(hypot)?;
+        Ok(py.detach(||store.edges_along(&segments,tolerance,h)))
+    }
+
     fn triangles_by_face(&self, py: Python<'_>, keys: Vec<u128>, hypot: &str)
         -> PyResult<Vec<Option<Vec<[[f32;3];3]>>>> {
         let store = reader(&self.inner);

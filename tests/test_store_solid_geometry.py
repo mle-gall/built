@@ -174,3 +174,45 @@ def test_transformed_solid_operands(monkeypatch):
     assert isinstance(world_mesh(instance), StoreMesh)
     assert solid_volume(instance) == 24
     assert solid_report(sc.mesh) == (True, 1)
+
+
+def test_seam_and_crack_discovery(monkeypatch):
+    from core.cap_rebuild import crack_planes, edges_along, seam_planes
+    monkeypatch.setattr(StoreMesh, '_materialise', lambda self: pytest.fail('materialised'))
+    def planes(rows):
+        return [(p.toTuple(), n.toTuple()) for p, n in rows]
+    results = []
+    for store in (False, True):
+        sc = empty(store)
+        m = sc.mesh
+        f = m.add_face([V(0,0,0), V(1,0,0), V(1,1,0), V(0,1,0)])
+        m.add_face([V(1,0,0), V(3,0,0), V(3,1,0), V(1,1,0)])
+        m.add_edge(V(7,0,0), V(9,0,0))
+        segments = [(V(0,0,0), V(3,0,0))]
+        edges = edges_along(m, segments)
+        assert len(edges) == 2
+        seams = planes(seam_planes(m, [f]))
+        cracks = planes(crack_planes(m, (0,0,0,1,1,0)))
+        assert len(seams) == len(cracks) == 1
+        results.append((seams, cracks, [(e.a.toTuple(),e.b.toTuple()) for e in edges]))
+    assert results[0] == results[1]
+
+
+def test_repeated_prism_pushes(monkeypatch):
+    from core.cap_rebuild import _canon_faces
+    from core.history import History
+    from tests.test_cap_rebuild import _push, _walls
+    monkeypatch.setattr(StoreMesh, '_materialise', lambda self: pytest.fail('materialised'))
+    signatures = []
+    for store in (False, True):
+        sc = empty(store)
+        h = History(sc)
+        seed = sc.mesh.add_face([V(-.2,-2.8,0),V(2.7,-7.2,0),V(4.1,-2.7,0)])
+        _push(sc, h, seed, 3)
+        steps = []
+        for i, distance in enumerate([1.5,1.,2.]):
+            _push(sc, h, _walls(sc)[i], distance)
+            assert not h.last_error and not h.last_rejected
+            steps.append(_canon_faces([(f.vertices, f.holes, f.interior) for f in sc.mesh.faces]))
+        signatures.append(steps)
+    assert signatures[0] == signatures[1]
