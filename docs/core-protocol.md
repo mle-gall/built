@@ -51,6 +51,7 @@ Built (`core.protocol.commands.run(history, name, **args)`):
 | `move_vertices` | `vertices: [vertex key]`, `delta: [x, y, z]` | `MoveVerticesCommand` (the Move tool's: coincident vertices move along, warped faces fold) |
 | `solid_operation` | `operation` (outer_shell, union, subtract, trim, intersect, split), `placements` (sibling uids in pick order) | Runs the Solid Tools command. The step names consumed and result placements. |
 | `rebuild_cap` | `face: seed face key` | Rebuild its plane, including debris pruning. Undo and redo restore the original and replacement keys. |
+| `reverse_faces` | `faces: [face key]` | Reverse outer and hole rings in input order. Keys and paint survive. |
 | `orient_faces` | `face: seed face key` | Flip inconsistent neighbours across two-face edges. All keys survive. |
 | `push_pull` | `face: face key`, `distance: number`, `keep_base: bool = false` | the Push/Pull tool locked on the face, the distance typed, committed (clamped as the tool clamps) |
 | `erase` | `edges: [edge key]`, `faces: [face key]` | `EraseSelectionCommand` (the Eraser: a split line between coplanar faces dissolves) |

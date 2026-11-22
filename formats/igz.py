@@ -2318,7 +2318,8 @@ def _load_mesh(mesh, payload, geom=None) -> None:
     else:
         payload = _without_nonfinite(payload)
     from core import _native
-    if src is not None or (_native.wanted() and type(mesh) is _mesh_mod.Mesh):
+    from core.store_mesh import StoreMesh
+    if src is not None or (_native.wanted() and type(mesh) in (_mesh_mod.Mesh, StoreMesh)):
         # A lazy mesh (experimental engine): its arrays now, its objects —
         # built by the very walk below — on first touch.
         if src is None:

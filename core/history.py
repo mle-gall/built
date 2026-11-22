@@ -1318,6 +1318,21 @@ def _dirty_group_chunks(scene) -> None:
             pg.mesh._attrs_dirty = True
 
 
+def _reverse_faces(faces):
+    from core.store_mesh import FaceView, StoreMesh
+    batches = {}
+    object_keys = set()
+    for face in faces:
+        if isinstance(face, FaceView) and isinstance(face._m, StoreMesh):
+            batches.setdefault(face._m, []).append(face.key)
+        else:
+            face.reverse_rings()
+            object_keys.add(face.key)
+    for mesh, keys in batches.items():
+        mesh._store.reverse_faces(keys)
+    return batches, object_keys
+
+
 class FlipFacesCommand(Command):
     """Reverse the winding of a set of faces — "Reverse Faces".
 
@@ -1330,28 +1345,28 @@ class FlipFacesCommand(Command):
     keeps_rows = True
 
     def __init__(self, faces) -> None:
-        self._faces = [f for f in faces if hasattr(f, "loop")]
+        self._faces = [f for f in faces if isinstance(f, Face) or hasattr(f, "loop")]
+
+    def meshes(self):
+        from core.store_mesh import FaceView
+        return {f._m for f in self._faces if isinstance(f, FaceView)}
 
     def _flip(self, scene) -> None:
-        for f in self._faces:
-            f.reverse_rings()
+        batches, ids = _reverse_faces(self._faces)
         # A reversed loop changes no count, coordinate or paint — all a
         # cached group chunk is checked against — so the group went on
         # drawing the old winding until some edit changed a count (#197).
         # Each mesh holding a flipped face says so; the others keep theirs.
         from core.group import iter_placements
-        ids = {f.key for f in self._faces}
-        meshes = [getattr(scene, "mesh", None),
-                  getattr(scene, "loose_mesh", None)]
-        meshes += [pg.mesh for g in getattr(scene, "groups", [])
-                   for pg, _m in iter_placements(g)]
-        seen: set = set()
-        for m in meshes:
-            if m is None or id(m) in seen:
-                continue
-            seen.add(id(m))
-            if any(f.key in ids for f in m.faces):
-                m._winding_rev = getattr(m, "_winding_rev", 0) + 1
+        owners = set(batches)
+        if ids:
+            meshes = [getattr(scene, "mesh", None), getattr(scene, "loose_mesh", None)]
+            meshes.extend(pg.mesh for g in getattr(scene, "groups", [])
+                          for pg, _m in iter_placements(g))
+            owners.update(m for m in set(meshes) if m is not None
+                          and any(f.key in ids for f in m.faces))
+        for mesh in owners:
+            mesh._winding_rev = getattr(mesh, "_winding_rev", 0) + 1
         _dirty_group_chunks(scene)
         scene.version += 1
 
@@ -3515,6 +3530,9 @@ class FlipGroupsCommand(Command):
         self.centre = QVector3D(centre)
         self.axis = QVector3D(axis)
 
+    def meshes(self):
+        return [g.mesh for g in self._groups if getattr(g, "xform", None) is None]
+
     def _flip(self, scene) -> None:
         m = mirror_matrix(self.centre, self.axis)
         for g in self._groups:
@@ -3525,8 +3543,11 @@ class FlipGroupsCommand(Command):
                 g.mesh.move_vertex(v, m.map(v.position) - v.position)
             from core.group import carry_axes
             carry_axes(g, m)                  # an involution, like the rest
-            for f in g.mesh.faces:
-                f.reverse_rings()
+            from core.store_mesh import StoreMesh
+            if isinstance(g.mesh, StoreMesh):
+                g.mesh._store.reverse_faces(g.mesh._store.keys("face"))
+            else:
+                _reverse_faces(g.mesh.faces)
         _dirty_group_chunks(scene)
         scene.version += 1
 
@@ -3559,9 +3580,7 @@ class FlipVerticesCommand(Command):
         self._before = scene.mesh.capture_state()
         m = mirror_matrix(self.centre, self.axis)
         rotate_points(scene, {_key(p) for p in self.src}, m)
-        for f in self._faces:
-            if hasattr(f, "loop"):
-                f.reverse_rings()
+        _reverse_faces(f for f in self._faces if isinstance(f, Face) or hasattr(f, "loop"))
         fold_nonplanar_faces(scene.mesh)
         self._after = scene.mesh.capture_state()
 

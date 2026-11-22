@@ -53,7 +53,9 @@ def V(x, y, z=0.0):
 
 
 def _mesh(store: bool):
-    m = M.Mesh()
+    from unittest.mock import patch
+    with patch.dict(os.environ, INGETRAZO_STORE="0"):
+        m = M.Mesh()
     if store:
         S.become_store(m, mod.MeshStore(next(M._KEY_NAMESPACES),
                                         **S._weld_args()), [])

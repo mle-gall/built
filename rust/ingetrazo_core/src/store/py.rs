@@ -1536,6 +1536,62 @@ impl PyMeshStore {
             .1)
     }
 
+    fn add_welded_face(&mut self, rings: Vec<Vec<u128>>) -> PyResult<(u128, PyChange)> {
+        let slots = rings.into_iter().map(|ring| ring.into_iter()
+            .map(|k| live_of(&self.inner, Kind::Vertex, k)).collect::<PyResult<Vec<_>>>())
+            .collect::<PyResult<Vec<_>>>()?;
+        let (face, change) = self.op(|s, ch| {
+            let f = s.add_welded_face(&slots, ch)?;
+            for &key in &ch.created[Kind::Edge as usize] {
+                let edge = s.slot(Kind::Edge, key).unwrap();
+                for &v in s.state.ends.get(edge as usize) {
+                    ch.modified[0].push(s.key(Kind::Vertex, v));
+                }
+            }
+            Ok(f)
+        })?;
+        Ok((self.inner.key(Kind::Face, face), change))
+    }
+
+    /// Internal to the staged block builder. Columns for the next stage
+    /// have the preceding stage's slot order as a prefix. Install them in
+    /// the live handle so snapshots and discarded branches share one HWM.
+    fn _extend_bulk(&mut self, block: &PyMeshStore) -> PyResult<()> {
+        for kind in Kind::ALL {
+            let i = kind as usize;
+            let slots = &self.inner.state.slots[i];
+            if slots.live != slots.len() || self.inner.hwm[i].len != slots.len()
+                || !self.inner.hwm[i].over.is_empty() || block.inner.n(kind) < slots.len()
+                || block.inner.revision != 0 {
+                return Err(PyValueError::new_err("bulk stages must append fresh slots"));
+            }
+        }
+        let ns = self.inner.state.ns;
+        self.inner.state = block.inner.state.clone();
+        self.inner.state.ns = ns;
+        self.inner.hwm = block.inner.hwm.clone();
+        self.inner.revision += 1;
+        Ok(())
+    }
+
+    /// Clear live geometry in the current lineage; prior snapshots retain their keys.
+    fn clear(&mut self) -> PyResult<PyChange> {
+        let empty = super::State { ns: self.inner.state.ns, ..Default::default() };
+        let before = self.inner.state.clone();
+        let snap = Snapshot { state: empty, revision: self.inner.revision, lineage: self.inner.lineage };
+        self.inner.restore(&snap, None).map_err(PyValueError::new_err)?;
+        Ok(self.net_change(&before))
+    }
+
+    fn reverse_faces(&mut self, keys: Vec<u128>) -> PyResult<PyChange> {
+        let slots = keys.into_iter().map(|k| live_of(&self.inner, Kind::Face, k))
+            .collect::<PyResult<Vec<_>>>()?;
+        Ok(self.op(|s, ch| {
+            s.reverse_faces(slots, ch);
+            Ok(())
+        })?.1)
+    }
+
     /// `turn_face_over`'s ring reversal (outer and holes).
     fn reverse_face(&mut self, key: u128) -> PyResult<PyChange> {
         let f = any_of(&self.inner, Kind::Face, key)?;

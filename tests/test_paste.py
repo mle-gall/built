@@ -84,7 +84,7 @@ def test_paste_keeps_face_attrs_and_reanchors_texture():
     f.attrs["color"] = (0.0, 1.0, 0.0, 1.0)   # re-paint AFTER copy: snapshot
     _paste_at(vp, 5, 0)
 
-    pasted = next(k for k in scene.mesh.faces if k is not f)
+    pasted = next(k for k in scene.mesh.faces if k.key != f.key)
     assert pasted.attrs.get("color") == (1.0, 0.0, 0.0, 1.0)
     tex = pasted.attrs.get("texture")
     assert tex is not None and tex["path"] == "/tmp/tex.png"
@@ -532,8 +532,10 @@ def test_a_mixed_paste_leaves_everything_it_pasted_selected():
     assert _copy(vp)
     _paste_at(vp, 10, 10)
     assert face not in scene.selection and g not in scene.selection
-    kinds = sorted(type(x).__name__ for x in scene.selection)
-    assert kinds == ["Edge"] * 4 + ["Face", "Group"]
+    from core.mesh import Edge, Face
+    from core.group import Group
+    assert [sum(isinstance(x, cls) for x in scene.selection)
+            for cls in (Edge, Face, Group)] == [4, 1, 1]
     groups, points = _move_targets(vp)
     assert len(groups) == 1 and groups[0] is not g
     assert len(points) == 4

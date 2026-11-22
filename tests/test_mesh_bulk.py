@@ -103,7 +103,7 @@ def test_bulk_weld_reuses_preexisting_vertices():
     mesh = Mesh()
     v0 = mesh.vertex(QVector3D(0.0, 0.0, 0.0))
     vobjs, ids = mesh.bulk_weld(np.array([(0.0, 0.0, 0.0), (5.0, 0.0, 0.0)]))
-    assert vobjs[ids[0]] is v0
+    assert vobjs[ids[0]].key == v0.key
     assert len(mesh.vertices) == 2
 
 

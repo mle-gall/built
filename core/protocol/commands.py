@@ -148,6 +148,15 @@ def rebuild_cap(history, face):
     return _answer(history, before)
 
 
+def reverse_faces(history, faces):
+    from core.history import FlipFacesCommand
+    selected = _need(history.scene.mesh, "face", faces)
+    before = history.revision
+    if selected:
+        history.execute(FlipFacesCommand(selected))
+    return _answer(history, before)
+
+
 def orient_faces(history, face):
     """Orient the connected sheet to the seed face; all keys survive."""
     from core.orient_faces import faces_to_flip
@@ -301,7 +310,7 @@ COMMANDS = {"follow_me": follow_me, "intersect_faces": intersect_faces,
             "add_edge": add_edge, "add_edges": add_edges,
             "divide_edges": divide_edges, "join_edges": join_edges,
             "move_vertices": move_vertices, "erase": erase,
-            "push_pull": push_pull, "orient_faces": orient_faces,
+            "reverse_faces": reverse_faces, "push_pull": push_pull, "orient_faces": orient_faces,
             "rebuild_cap": rebuild_cap, "solid_operation": solid_operation,
             "explode_group": explode_group,
             "split_into_pieces": split_into_pieces,

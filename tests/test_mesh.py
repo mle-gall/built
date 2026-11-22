@@ -26,7 +26,7 @@ def test_coincident_positions_weld_to_one_vertex():
     m = Mesh()
     a = m.vertex(V(1, 1, 1))
     b = m.vertex(V(1, 1, 1))
-    assert a is b
+    assert a.key == b.key
     assert len(m.vertices) == 1
 
 
@@ -34,7 +34,7 @@ def test_weld_within_tolerance():
     m = Mesh()
     a = m.vertex(V(1, 0, 0))
     b = m.vertex(V(1.00001, 0, 0))  # < 0.1 mm
-    assert a is b
+    assert a.key == b.key
 
 
 def test_two_edges_sharing_a_corner_share_the_vertex():
@@ -42,7 +42,7 @@ def test_two_edges_sharing_a_corner_share_the_vertex():
     e1 = m.add_edge(V(0, 0), V(1, 0))
     e2 = m.add_edge(V(1, 0), V(1, 1))
     # The shared corner is a single Vertex object, referenced by both edges.
-    assert e1.v1 is e2.v0
+    assert e1.v1.key == e2.v0.key
     assert len(m.vertices) == 3
     assert e1.v1.edges == {e1, e2}
 
@@ -51,7 +51,7 @@ def test_add_edge_dedups():
     m = Mesh()
     e1 = m.add_edge(V(0, 0), V(2, 0))
     e2 = m.add_edge(V(2, 0), V(0, 0))  # reversed — same edge
-    assert e1 is e2
+    assert e1.key == e2.key
     assert len(m.edges) == 1
 
 
@@ -132,9 +132,9 @@ def test_move_vertex_rekeys_registry():
     v = m.vertex(V(0, 0, 0))
     m.move_vertex(v, V(5, 0, 0))
     assert m.vertex_at(V(0, 0, 0)) is None
-    assert m.vertex_at(V(5, 0, 0)) is v
+    assert m.vertex_at(V(5, 0, 0)).key == v.key
     # A later weld at the new spot reuses it.
-    assert m.vertex(V(5, 0, 0)) is v
+    assert m.vertex(V(5, 0, 0)).key == v.key
 
 
 # ---- face geometry (parity with legacy Face) --------------------------------
@@ -213,7 +213,7 @@ def test_split_edge_propagates_to_both_faces():
 
     assert mid in left.loop and mid in right.loop      # both faces gained it
     assert len(left.loop) == 5 and len(right.loop) == 5
-    assert shared not in m.edges                        # old edge gone
+    assert m.find_edge(m.vertex_at(V(1, 0)), m.vertex_at(V(1, 1))) is None
     # both sub-edges border both faces
     assert set(e0.faces) == {left, right}
     assert set(e1.faces) == {left, right}

@@ -833,7 +833,7 @@ def apply_rebuild(mesh, origin: QVector3D, normal: QVector3D,
         try:
             keys, _change = mesh._store.replace_plane_faces([f.key for f in old], caps)
         except _fallback():
-            mesh._materialise()
+            pass  # Replay through remove_face/add_face below.
         else:
             replacements = [FaceView(mesh, k) for k in keys]
             mesh._dirty()

@@ -10,35 +10,13 @@ objects, and every command snapshots the whole mesh it edits
 ride's largest mesh, 0.27 s to restore). A store holds ~220 B per face and
 snapshots by sharing ``Arc`` chunks, in microseconds.
 
-What is store-backed (``StoreMesh``):
-
-- a deferred mesh (``DeferredMesh``, a lazy ``.igz`` mesh) on its first
-  touch: built from its source arrays by ``MeshStore.from_block``, which is
-  ``lazy_mesh.plan`` index for index, i.e. the mesh the Python build makes;
-- a mesh built by the bulk constructors on an EMPTY mesh (``bulk_weld`` then
-  ``add_edges_welded`` then ``add_faces_welded``, or ``add_faces_bulk``):
-  imports, groups, copies of big meshes;
-- deep copies and snapshots of those.
-
-Reading goes through view objects (:class:`VertexView`, :class:`EdgeView`,
-:class:`FaceView`): ``(mesh, key)`` pairs that subclass the Python element
-classes (``isinstance`` checks keep working) and compare and hash BY KEY.
-Two views of one element are equal, never identical (no interning). The
-writes that change no topology stay in the store: edge ``soft`` /
-``flat`` / ``hidden`` / ``curve`` / ``layer``, face ``interior``, face ``attrs`` (a
-per-face dict once a face's attrs are touched, the shared table entry until
-then), ``move_vertex`` / ``place_vertex``.
-
-**Materialise on write.** Every other mutation (``add_face``, ``remove_edge``,
-``split_edge``, the stitch, a direct ``loop.reverse()``...) first turns the
-mesh into Python objects carrying the store's keys
-(:meth:`StoreMesh._materialise`) and then runs the Python kernel unchanged:
-the mesh becomes a :class:`MaterialisedMesh`, a plain mesh that also
-resolves views handed in from before. Its objects are kept per key
-(``_objmap``) and reused by the next materialisation, so a command that
-holds an element across an undo that went back to the store still holds the
-very object the mesh lists again. Later port steps move those ops into the
-store and delete this path.
+With the store enabled, Mesh() owns an empty store immediately. Imports
+can fill it in bulk and a deferred document block builds on first touch.
+Views identify elements by (mesh, key); each access can return a new view.
+Ordinary modelling commands edit the store. Compatibility writes that need
+an arbitrary Python object graph switch to MaterialisedMesh, which resolves
+previously issued views. See docs/meshstore-design.md §26 for the remaining
+transitions and their diagnostics.
 
 **Snapshots.** ``capture_state`` of a store-backed mesh is a
 :class:`StoreState` (a store snapshot plus the per-face attrs dicts):
@@ -47,9 +25,8 @@ one of the same lineage; restoring a Python snapshot turns a store-backed
 mesh into Python objects. One owner at any time: never a store and Python
 objects kept in sync.
 
-Switch: ``INGETRAZO_STORE=0/1``, else the General setting ``mesh_store``
-(:func:`core._native.store_wanted`); the Rust engine must be on and its
-module must have ``MeshStore``. Off, nothing here is reached."""
+The Rust engine owns new meshes when its current extension is available.
+Tests and measurements can select the object oracle with INGETRAZO_STORE=0."""
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -70,12 +47,12 @@ STORE_SIDE = ("_store", "_objmap", "_attr_table", "_attr_own", "_bulk",
 
 
 def enabled() -> bool:
-    """Whether new deferred and bulk-built meshes go to the store."""
+    """Whether a new mesh gets a native geometry owner."""
     from core import _native
     if not _native.store_wanted():
         return False
     mod = _native.native
-    return mod is not None and hasattr(getattr(mod, "StoreSnapshot", None), "cap_scope")
+    return mod is not None and hasattr(getattr(mod, "MeshStore", None), "_extend_bulk")
 
 
 def _module():
@@ -114,7 +91,7 @@ def _plain_reduce(base):
         # set before the copied edges have their keys, which a key hash
         # could not survive.
         rv = object.__reduce_ex__(self, 2)
-        return (rv[0], (base,) + tuple(rv[1][1:])) + tuple(rv[2:])
+        return (object.__new__, (base,)) + tuple(rv[2:])
     return __reduce_ex__
 
 
@@ -184,6 +161,14 @@ class _ViewMixin:
 
     def __hash__(self):
         return hash(self.key)
+
+    def __deepcopy__(self, memo):
+        from copy import deepcopy
+        if _store_of(self._m) is None or not self._m._store.knows(self.key):
+            return deepcopy(self._obj(), memo)
+        owner = deepcopy(self._m, memo)
+        key = (owner._store.namespace << 40) | (self.key & LOCAL_MASK)
+        return type(self)(owner, key)
 
     def __reduce__(self):
         # deepcopy / pickle of a view: the element it names.
@@ -942,10 +927,11 @@ class StoreState(Mapping):
     ``["edges"]`` as elements of the mesh); every other entry is built on
     demand from the snapshot's arrays."""
 
-    __slots__ = ("snap", "own", "table", "mesh", "_cache")
+    __slots__ = ("snap", "own", "table", "mesh", "_cache", "owner")
 
     def __init__(self, snap, own, table, mesh):
         self.snap = snap
+        self.owner = mesh._store
         self.own = own
         self.table = table
         self.mesh = mesh
@@ -1161,9 +1147,7 @@ def _on_python(name):
 
 
 class StoreMesh(Mesh):
-    """A mesh whose geometry is a ``MeshStore`` (see the module docstring).
-    Never constructed directly: a :class:`Mesh` becomes one
-    (:func:`become_store`)."""
+    """A Mesh whose geometry is owned by one native MeshStore."""
 
     vertices = _seq_property("vertex", "vertices", VertexView, 0)
     edges = _seq_property("edge", "edges", EdgeView, 1)
@@ -1698,14 +1682,10 @@ class StoreMesh(Mesh):
         Mesh._resplit_curve_groups(by_id)
 
     def clear(self) -> None:
-        d = self.__dict__
-        d.update(vertices=[], edges=[], faces=[], _registry={},
-                 _displaced={}, _attr_own={})
-        d.pop("_bulk", None)
-        d.pop("_py_base", None)
-        self.__class__ = MaterialisedMesh
-        self._chunk_dirty = True
-        self._mut_serial += 1
+        self._store.clear()
+        self._attr_own.clear()
+        self._attr_table = []
+        self._dirty()
 
     def capture_state(self):
         d = self.__dict__
@@ -1718,19 +1698,45 @@ class StoreMesh(Mesh):
             _restore_store_state(self, snap)
             return
         # A Python snapshot: the mesh becomes those objects again.
+        _log_object_fallback("restore object snapshot")
         _to_python_lists(self)
         Mesh.restore_state(self, snap)
 
     # -- bulk construction straight into the store
     def bulk_weld(self, pos):
-        self._materialise()
-        return self.bulk_weld(pos)
+        if self._store.revision == 0 and not any(self._store.counts()):
+            return bulk_weld(self, pos)
+        return Mesh.bulk_weld(self, pos)
 
     def add_edges_welded(self, vobjs, ia, ib, flags=None):
         b = self.__dict__.get("_bulk")
         if b is None or vobjs is not b["vobjs"] or b["stage"] != "points":
-            self._materialise()
-            return self.add_edges_welded(vobjs, ia, ib, flags)
+            pairs = [(int(a), int(ib[i])) for i, a in enumerate(ia)]
+            # Python appends a parallel edge if one already existed before
+            # this batch. The store represents one edge per unordered pair.
+            if any(self._live(v, 0) is None for v in vobjs) or any(
+                    self.find_edge(vobjs[a], vobjs[b]) is not None
+                    for a, b in pairs if vobjs[a].key != vobjs[b].key):
+                return self._py("add_edges_welded", vobjs, ia, ib, flags)
+            if flags is not None and any(
+                    (row[1] is not None and not isinstance(row[1], int))
+                    or (row[2] is not None and not isinstance(row[2], str))
+                    for row in flags):
+                return self._py("add_edges_welded", vobjs, ia, ib, flags)
+            self._bump()
+            emap = {}
+            for index, (a, b) in enumerate(pairs):
+                if vobjs[a].key == vobjs[b].key:
+                    continue
+                packed = min(a, b) * len(vobjs) + max(a, b)
+                if packed not in emap:
+                    key, _ = self._store.link_edge(vobjs[a].key, vobjs[b].key)
+                    emap[packed] = EdgeView(self, key)
+                if flags is not None:
+                    for name, value in zip(_mesh.EDGE_FLAG_NAMES, flags[index]):
+                        if value is not None and (name in ("layer", "curve") or value):
+                            setattr(emap[packed], name, value if name in ("layer", "curve") else True)
+            return emap
         return _bulk_edges(self, b, ia, ib, flags)
 
     def add_faces_welded(self, vobjs, inverse, ring_sizes, face_ring_counts,
@@ -1739,9 +1745,40 @@ class StoreMesh(Mesh):
         if (b is None or vobjs is not b["vobjs"]
                 or b["stage"] not in ("points", "edges")
                 or not (edge_map is None or isinstance(edge_map, _EdgeMap))):
-            self._materialise()
-            return self.add_faces_welded(vobjs, inverse, ring_sizes,
-                                         face_ring_counts, attrs, edge_map)
+            if (any(n < 1 for n in face_ring_counts) or any(n < 1 for n in ring_sizes)
+                    or any(self._live(v, 0) is None for v in vobjs)) or (
+                    edge_map is not None and not isinstance(edge_map, (dict, _EdgeMap))):
+                return self._py("add_faces_welded", vobjs, inverse, ring_sizes,
+                                face_ring_counts, attrs, edge_map)
+            ring_ends = np.cumsum(ring_sizes)
+            rings = [inverse[end - size:end] for end, size in zip(ring_ends, ring_sizes)]
+            face_ends = np.cumsum(face_ring_counts)
+            polygons = [rings[end - count:end] for end, count in zip(face_ends, face_ring_counts)]
+            # A caller-supplied map may deliberately request a parallel
+            # edge or a different edge's incidence. Only objects model that.
+            pairs = {}
+            if isinstance(edge_map, dict):
+                for rings in polygons:
+                    for ring in rings:
+                        for index, a in enumerate(ring):
+                            b = ring[(index + 1) % len(ring)]
+                            pairs[min(a, b) * len(vobjs) + max(a, b)] = (a, b)
+                if any(edge_map.get(k) != self.find_edge(vobjs[a], vobjs[b])
+                       for k, (a, b) in pairs.items()):
+                    return self._py("add_faces_welded", vobjs, inverse, ring_sizes,
+                                    face_ring_counts, attrs, edge_map)
+            self._bump()
+            faces = []
+            for i, rings in enumerate(polygons):
+                keys = [[vobjs[j].key for j in ring] for ring in rings]
+                key, _ = self._store.add_welded_face(keys)
+                face = FaceView(self, key)
+                if attrs is not None and attrs[i]:
+                    face.attrs.update(attrs[i])
+                faces.append(face)
+            for k, (a, b) in pairs.items():
+                edge_map[k] = self.find_edge(vobjs[a], vobjs[b])
+            return faces
         return _bulk_faces(self, b, inverse, ring_sizes, face_ring_counts,
                            attrs)
 
@@ -1777,14 +1814,11 @@ class StoreMesh(Mesh):
             return
         if self.__dict__.get("_resident_edit"):
             raise _fallback()("face edit requires unsupported mesh topology")
+        _log_object_fallback("materialise")
         _materialise(self)
 
 
-for _name in ("add_faces_bulk", "_rekey"):
-    setattr(StoreMesh, _name, _on_python(_name))
-# add_faces_bulk: bulk_weld + add_faces_welded on an empty mesh goes to the
-# store through Mesh.add_faces_bulk itself (become_store at bulk_weld).
-StoreMesh.add_faces_bulk = Mesh.add_faces_bulk
+StoreMesh._rekey = _on_python("_rekey")
 # Read-mostly Python code that runs on views as is (curve ids are written
 # through the edge views): tag_curve, resplit_curves, curve_edges,
 # surface_of.
@@ -1854,7 +1888,16 @@ def _resolving(name):
 class MaterialisedMesh(Mesh):
     """A store-backed mesh turned into Python objects: a plain mesh, plus
     the views handed out before resolved to the objects they name, and the
-    store kept so a store snapshot can be restored (back to store-backed)."""
+    original store lineage retained by any snapshots that need it."""
+
+    def clear(self):
+        Mesh.clear(self)
+        if enabled():
+            initialise_store(self)
+
+    def __getstate__(self):
+        # Pickle the compatibility object graph, without native handles.
+        return {k: v for k, v in self.__dict__.items() if k not in STORE_SIDE}
 
     def find_edge(self, v0, v1):
         if v0.__class__ is VertexView:
@@ -1906,6 +1949,16 @@ del _name
 
 # ---- Building, materialising, restoring -------------------------------------
 
+def _log_object_fallback(reason):
+    import os
+    if os.environ.get("INGETRAZO_PERF"):
+        import traceback
+        from core.history import _plog
+        stack = traceback.extract_stack(limit=8)[:-2]
+        callers = " <- ".join(f"{f.name}@{f.filename}:{f.lineno}" for f in reversed(stack))
+        _plog("mesh.materialise", 0, f"{reason}: {callers}", floor=0)
+
+
 def _to_python_lists(m) -> None:
     """Make ``m`` Python-backed with empty lists (a Python snapshot is about
     to define it completely)."""
@@ -1914,6 +1967,8 @@ def _to_python_lists(m) -> None:
              _attr_own={})
     d.pop("_bulk", None)
     d.pop("_py_base", None)
+    for key in ("_store", "_pos_cache", "_face_cache", "_attr_table"):
+        d.pop(key, None)
     m.__class__ = MaterialisedMesh
 
 
@@ -1923,10 +1978,12 @@ def _restore_store_state(m, snap: StoreState) -> None:
     store's snapshot (``Scene.share_back``) is adopted under a fresh
     namespace: new keys (design decision 3)."""
     d = m.__dict__
-    st = d.get("_store")
+    st = snap.owner if snap.mesh is m else d.get("_store")
+    d["_store"] = st
     foreign = st is None or st.lineage != snap.snap.lineage
     if st is None:
-        st = d["_store"] = _module().MeshStore(
+        from core import _native
+        st = d["_store"] = _native.available().MeshStore(
             next(_mesh._KEY_NAMESPACES), **_weld_args())
     if foreign:
         ns = next(_mesh._KEY_NAMESPACES)
@@ -1949,11 +2006,16 @@ def _restore_store_state(m, snap: StoreState) -> None:
 
 def empty_store_mesh():
     """Fresh empty store for a result built from store-backed operands."""
-    from core import _native
     mesh = Mesh()
+    if type(mesh) is not StoreMesh:
+        initialise_store(mesh)
+    return mesh
+
+
+def initialise_store(mesh):
+    from core import _native
     store = _native.available().MeshStore(next(_mesh._KEY_NAMESPACES), **_weld_args())
     become_store(mesh, store, [])
-    return mesh
 
 
 def become_store(m, store, table, own=None) -> None:
@@ -2078,6 +2140,8 @@ def _materialise_objects(m) -> None:
     d.update(vertices=verts, edges=edges, faces=faces, _registry=registry,
              _displaced=displaced, _attr_own={})
     d.pop("_bulk", None)
+    for key in ("_store", "_pos_cache", "_face_cache", "_attr_table"):
+        d.pop(key, None)
     m.__class__ = MaterialisedMesh
 
 
@@ -2144,7 +2208,8 @@ def bulk_weld(m, pos):
     """``Mesh.bulk_weld`` on an empty mesh, into a new store. Returns the
     views of the welded vertices and each point's vertex index, as the
     Python method does."""
-    mod = _module()
+    from core import _native
+    mod = _native.available()
     pos32 = np.ascontiguousarray(pos, dtype=np.float32).reshape(-1, 3)
     w = _weld_args()
     if not len(pos32):
@@ -2155,11 +2220,15 @@ def bulk_weld(m, pos):
     store = mod.MeshStore.from_block(
         ns, pos32, np.zeros((0, 2), dtype=np.int64), None, None, None, [],
         empty_i, empty_i, empty_i, None, **w)
-    become_store(m, store, [])
+    if type(m) is StoreMesh:
+        m._store._extend_bulk(store)
+        store = m._store
+    else:
+        become_store(m, store, [])
     vobjs = [VertexView(m, k) for k in store.keys("vertex")]
     m.__dict__["_bulk"] = dict(
         stage="points", vobjs=vobjs, pos=pos32,
-        origin=np.asarray(origin, dtype=np.int64), ns=ns,
+        origin=np.asarray(origin, dtype=np.int64),
         edges=np.zeros((0, 2), dtype=np.int64))
     return vobjs, np.asarray(ids, dtype=np.int64)
 
@@ -2174,13 +2243,14 @@ def _edge_columns(st):
 
 def _rebuild(m, b, edges_v, flags, curves, layers, names, rings=None,
              sizes=None, counts=None, face_attr=None):
-    mod = _module()
+    from core import _native
+    mod = _native.available()
     origin = b["origin"]
     pts = origin[edges_v] if len(edges_v) else np.zeros((0, 2), np.int64)
     e = np.ascontiguousarray(pts, dtype=np.int64).reshape(-1, 2)
     empty_i = np.zeros(0, dtype=np.int64)
     store = mod.MeshStore.from_block(
-        b["ns"], b["pos"], e,
+        next(_mesh._KEY_NAMESPACES), b["pos"], e,
         np.ascontiguousarray(flags, dtype=np.uint8),
         np.ascontiguousarray(curves, dtype=np.int64),
         np.ascontiguousarray(layers, dtype=np.int64), names,
@@ -2189,8 +2259,8 @@ def _rebuild(m, b, edges_v, flags, curves, layers, names, rings=None,
         empty_i if sizes is None else sizes,
         empty_i if counts is None else counts,
         face_attr, **_weld_args())
-    m.__dict__["_store"] = store
-    return store
+    m._store._extend_bulk(store)
+    return m._store
 
 
 def _bulk_edges(m, b, ia, ib, flags):

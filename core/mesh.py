@@ -61,7 +61,7 @@ _STORE_SIDE = frozenset(("_store", "_objmap", "_attr_table", "_attr_own",
 
 
 def _store_on() -> bool:
-    """Whether new deferred / bulk-built meshes go to the Rust store."""
+    """Whether new meshes go to the Rust store."""
     from core import store_mesh
     return store_mesh.enabled()
 
@@ -409,6 +409,15 @@ class Mesh:
 
     def __init__(self) -> None:
         self._keys = count(next(_KEY_NAMESPACES) << 40)
+        if type(self) is Mesh and _store_on():
+            from core.store_mesh import initialise_store
+            self._mut_serial = 0
+            self._chunk_dirty = True
+            initialise_store(self)
+            return
+        self._init_object_geometry()
+
+    def _init_object_geometry(self):
         self._registry: dict[tuple, Vertex] = {}
         # Moved vertices waiting for a key another vertex still holds (see
         # _rekey).
@@ -433,7 +442,8 @@ class Mesh:
             self._materialize()
             if type(self) is not Mesh:
                 return self.__deepcopy__(memo)     # store-backed now
-        copied = Mesh()
+        copied = object.__new__(Mesh)
+        copied._keys = count(next(_KEY_NAMESPACES) << 40)
         memo[id(self)] = copied
         copied.__dict__.update(deepcopy(
             {k: v for k, v in self.__dict__.items()
@@ -872,12 +882,12 @@ class Mesh:
         ukeys = keys[first]                    # unique cells, creation order
         nu = len(first)
         candidate = _weld_candidates(ukeys)
-        if self._registry:
-            # Pre-existing vertices can also satisfy a probe: any batch cell
-            # whose 3×3×3 neighbourhood touches a registered cell is a
-            # candidate too. (Membership via the registry dict itself — the
-            # batch is usually far larger than the probes saved.)
-            registry = self._registry
+        from core.store_mesh import StoreMesh
+        store = self._store if isinstance(self, StoreMesh) else None
+        registry = (set(map(tuple, store.registry()[0].tolist())) if store is not None
+                    else self._registry)
+        if registry:
+            # Existing cells participate in the neighbourhood test too.
             key_rows = ukeys.tolist()
             flat = ~candidate
             for u in np.flatnonzero(flat).tolist():
@@ -894,7 +904,6 @@ class Mesh:
                     if found:
                         break
                 candidate[u] = found
-        registry = self._registry
         vertices = self.vertices
         vobjs: list = []
         vindex: dict = {}
@@ -917,9 +926,13 @@ class Mesh:
             nc_pos = pos[first[nc_cells]].tolist()
             ids = np.empty(len(nc_cells), dtype=np.int64)
             for j, (k3, p3) in enumerate(zip(nc_keys, nc_pos)):
-                v = Vertex(QVector3D(p3[0], p3[1], p3[2]), key=next(self._keys))
-                registry[(k3[0], k3[1], k3[2])] = v
-                vertices.append(v)
+                position = QVector3D(*p3)
+                if store is None:
+                    v = Vertex(position, key=next(self._keys))
+                    registry[tuple(k3)] = v
+                    vertices.append(v)
+                else:
+                    v = self.vertex(position)
                 ids[j] = _vid(v)
             cell_vid[nc_cells] = ids
             ncp = ~cand_pt
@@ -931,11 +944,13 @@ class Mesh:
             cp_keys = keys[cp].tolist()
             cp_pos = pos[cp].tolist()
             probe = self._probe_neighbours
-            get = registry.get
             for j, i in enumerate(cp_list):
+                if store is not None:
+                    point_ids[i] = _vid(self.vertex(QVector3D(*cp_pos[j])))
+                    continue
                 k3 = cp_keys[j]
                 k = (k3[0], k3[1], k3[2])
-                v = get(k)
+                v = registry.get(k)
                 if v is None:
                     p3 = cp_pos[j]
                     p = QVector3D(p3[0], p3[1], p3[2])
@@ -2064,9 +2079,15 @@ class DeferredMesh(Mesh):
         """Turn ``mesh`` into a deferred one that runs ``build(mesh)`` on
         first touch and makes exactly ``nfaces`` faces; ``source`` is what
         it is built from, for :mod:`core.lazy_mesh` (kept until built).
-        False (nothing done) unless it is a plain empty mesh."""
+        False (nothing done) unless it is an empty object or store mesh."""
         d = mesh.__dict__
-        if (type(mesh) is not Mesh or d["vertices"] or d["edges"]
+        from core.store_mesh import StoreMesh
+        if type(mesh) is StoreMesh:
+            if any(mesh._store.counts()):
+                return False
+            for name in _STORE_SIDE:
+                d.pop(name, None)
+        elif (type(mesh) is not Mesh or d["vertices"] or d["edges"]
                 or d["faces"] or d["_registry"]):
             return False
         d["_deferred"] = build
@@ -2098,6 +2119,11 @@ class DeferredMesh(Mesh):
         self.__dict__.pop("_drawing_source_key", None)
         self.__dict__.pop("_drawing_texture_paths", None)
         self.__class__ = Mesh
+        if _store_on():
+            from core.store_mesh import initialise_store
+            initialise_store(self)
+        elif "vertices" not in self.__dict__:
+            self._init_object_geometry()
         build(self)
 
     def __reduce_ex__(self, protocol):

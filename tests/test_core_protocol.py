@@ -33,6 +33,8 @@ needs_store = pytest.mark.skipif(
     reason="native module without StoreSnapshot.changes_since")
 
 
+pytestmark = pytest.mark.usefixtures("explicit_store_meshes")
+
 def _scene(store):
     sc = Scene()
     if store:

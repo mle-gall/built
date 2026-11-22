@@ -25,7 +25,7 @@ from core.protocol.keys import mesh_key
 from core.purge import layer_counts, used_layers, used_materials
 from core.scene import Scene
 from tests.test_core_protocol import _expected, _got, _inverse, _read
-from tests.test_store_mesh import fingerprint, pytestmark  # noqa: F401
+from tests.test_store_mesh import fingerprint, pytestmark as store_required
 from core._native import available, qt_hypot
 
 mod = available()
@@ -36,6 +36,9 @@ needs_ops = pytest.mark.skipif(
 
 _QUADS = ((0, 2, 3, 1), (4, 5, 7, 6), (0, 1, 5, 4),
           (2, 6, 7, 3), (0, 4, 6, 2), (1, 3, 7, 5))
+
+
+pytestmark = [store_required, pytest.mark.usefixtures("explicit_store_meshes")]
 
 
 def _mesh(store):

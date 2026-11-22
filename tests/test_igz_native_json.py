@@ -331,8 +331,9 @@ def test_a_block_that_is_not_empty_when_read_builds_at_once(any_size):
     block = tree["scene"]["protos"][1]
     m = Mesh()
     m.vertex(__import__("PySide6.QtGui", fromlist=["QVector3D"]).QVector3D(9, 9, 9))
+    backing = type(m)
     igz._load_mesh(m, block)
-    assert type(m) is Mesh
+    assert type(m) is backing
     assert len(m.faces) == 1
 
 
