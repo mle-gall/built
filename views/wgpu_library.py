@@ -879,21 +879,26 @@ def install(win) -> None:
         if a.menu() is not None and a.text().replace("&", "") in ("Window", "Ventana"):
             menu = a.menu()
             break
+    from PySide6.QtCore import QObject
+    # The native shell's window is not a QObject: the actions then have no
+    # parent and are kept alive on the window instead.
+    owner = win if isinstance(win, QObject) else None
     acts = {}
     for p in PROVIDERS:
         if not p.ready:
             continue
-        act = QAction(p.label, win)
+        act = QAction(p.label, owner)
         act.triggered.connect(lambda _=False, t=p.id: open_library(win, t))
         acts[p.id] = act
     if menu is not None:
         sub = menu.addMenu("Library")
         for act in acts.values():
             sub.addAction(act)
-    comp = QAction("Components", win)
+    comp = QAction("Components", owner)
     comp.setToolTip("Components: the Library's components, to place")
     comp.triggered.connect(lambda: open_library(win, "components"))
     win._act_library_components = comp
+    win._lib_actions = acts
     win._ui_commands = None
     _register_icon()
 
