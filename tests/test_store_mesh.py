@@ -63,7 +63,10 @@ def _open(path, monkeypatch, store):
     scene = Scene()
     igz.load_into(scene, path)
     for m in _meshes(scene):
+        if "_deferred" in m.__dict__:
+            m.__dict__["_deferred_geom"] = object()
         len(m.faces)                              # first touch
+        assert "_deferred_geom" not in m.__dict__
     return scene
 
 
