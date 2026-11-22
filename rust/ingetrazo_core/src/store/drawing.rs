@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Plane selection and the position-keyed graph used by the drawing planner.
 use super::{keys::Kind, Store};
-use crate::facegeom::{length, normalized, Hypot, V3};
+use crate::store::geometry::{length, normalized, Hypot, V3};
 use std::collections::{HashMap, HashSet, VecDeque};
 
 type Point = [f64; 3];
@@ -9,10 +9,10 @@ type Node = [u64; 3];
 type Links = HashMap<Node, Vec<(usize, Point)>>;
 
 pub(super) fn vector(p: Point) -> V3 {
-    V3(p[0] as f32, p[1] as f32, p[2] as f32)
+    V3(p[0], p[1], p[2])
 }
 pub(super) fn point(v: V3) -> Point {
-    [v.0 as f64, v.1 as f64, v.2 as f64]
+    [v.0, v.1, v.2]
 }
 
 impl Store {
@@ -28,19 +28,19 @@ impl Store {
         let o = points().next().unwrap_or(V3(0., 0., 0.));
         let offsets = || points().map(|p| p.sub(o));
         let horizontal = Some([point(o), [0., 0., 1.]]);
-        let Some(dir) = offsets().find(|&d| length(d, h) as f64 > 1e-6) else {
+        let Some(dir) = offsets().find(|&d| length(d, h) > 1e-6) else {
             return horizontal;
         };
         let dir = normalized(dir, h);
         let Some(cross) = offsets()
             .map(|d| dir.cross(d, h))
-            .find(|&d| length(d, h) as f64 > 1e-6)
+            .find(|&d| length(d, h) > 1e-6)
         else {
             return horizontal;
         };
         let n = normalized(cross, h);
         offsets()
-            .all(|d| (d.dot(n, h) as f64).abs() <= 1e-4)
+            .all(|d| d.dot(n, h).abs() <= 1e-4)
             .then(|| [point(o), point(n)])
     }
 
@@ -59,13 +59,13 @@ impl Store {
             n.dot(n, h) >= 0.5
                 && points
                     .iter()
-                    .all(|&p| (vector(p).sub(o).dot(n, h) as f64).abs() < 1e-4)
+                    .all(|&p| vector(p).sub(o).dot(n, h).abs() < 1e-4)
         })?;
         let count = faces
             .iter()
             .filter_map(|&f| plane(f))
             .filter(|&(p, m)| {
-                (p.sub(o).dot(n, h) as f64).abs() < 1e-4 && (m.dot(n, h) as f64).abs() > 0.999
+                p.sub(o).dot(n, h).abs() < 1e-4 && m.dot(n, h).abs() > 0.999
             })
             .take(cap.saturating_add(1))
             .count();
@@ -82,7 +82,7 @@ impl Store {
     }
 }
 
-// f32 coordinates times 10,000 are exact in f64. Key by rounded integer
+// f64 coordinates times 10,000 are exact in f64. Key by rounded integer
 // bits so large coordinates cannot saturate an integer cell index.
 pub(super) fn key(p: Point) -> Node {
     p.map(|x| {
@@ -174,18 +174,17 @@ impl DrawingGraph {
     }
 }
 
-/// Closest points in units of distance along each line. Qt rounds only the
-/// initial differences, lengths and returned position to float32.
+/// Closest points in units of distance along each line.
 fn intersection(
     [a, b]: [Point; 2],
     [c, d]: [Point; 2],
     h: Hypot,
     compensated: bool,
 ) -> Option<Point> {
-    use crate::facegeom::py_sum;
+    use crate::store::geometry::py_sum;
     let delta = |a, b| vector(b).sub(vector(a));
     let (ab, cd) = (delta(a, b), delta(c, d));
-    let (l, m) = (length(ab, h) as f64, length(cd, h) as f64);
+    let (l, m) = (length(ab, h), length(cd, h));
     if l < 1e-4 || m < 1e-4 {
         return None;
     }
@@ -220,7 +219,7 @@ pub(crate) fn split_plan(
 ) -> (Vec<Point>, Vec<(usize, Point)>) {
     let mut hits = Vec::new();
     let mut cuts = Vec::new();
-    let close = |p, q| (length(vector(p).sub(vector(q)), h) as f64) <= 1e-4;
+    let close = |p, q| length(vector(p).sub(vector(q)), h) <= 1e-4;
     for (i, [x, y]) in edges.enumerate() {
         let Some(hit) = intersection([a, b], [x, y], h, compensated) else {
             continue;

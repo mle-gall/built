@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Edge and vertex rounding share the replacement transaction and preview data.
 use super::{edit::Change, keys::Kind, topo::OpError, Store, SOFT};
-use crate::facegeom::{length, Hypot, V3};
+use crate::store::geometry::{length, Hypot, V3};
 use std::collections::{BTreeMap, BTreeSet};
 use std::ops::{Add, Div, Mul, Sub};
 
@@ -20,28 +20,28 @@ impl Sub for V3 {
 impl Mul<f64> for V3 {
     type Output = Self;
     fn mul(self, s: f64) -> Self {
-        let k = s as f32;
+        let k = s;
         Self(self.0 * k, self.1 * k, self.2 * k)
     }
 }
 impl Div<f64> for V3 {
     type Output = Self;
     fn div(self, s: f64) -> Self {
-        let k = s as f32;
+        let k = s;
         Self(self.0 / k, self.1 / k, self.2 / k)
     }
 }
 pub(super) const ZERO: V3 = V3(0., 0., 0.);
 pub(super) fn pos(s: &Store, v: u32) -> V3 {
     let p = s.state.vpos.get(v as usize);
-    V3(p[0] as f32, p[1] as f32, p[2] as f32)
+    V3(p[0], p[1], p[2])
 }
 pub(super) fn xyz(p: V3) -> [f64; 3] {
-    [p.0 as f64, p.1 as f64, p.2 as f64]
+    [p.0, p.1, p.2]
 }
 pub(super) fn unit(a: V3, h: Hypot) -> Option<V3> {
     let n = length(a, h);
-    (n >= 1e-12).then(|| a / n as f64)
+    (n >= 1e-12).then(|| a / n)
 }
 pub(super) fn ends(s: &Store, e: u32) -> [u32; 2] {
     *s.state.ends.get(e as usize)
@@ -62,14 +62,14 @@ pub(super) fn newell(p: &[V3]) -> V3 {
     for (&a, &b) in p.iter().zip(p.iter().cycle().skip(1)) {
         let ([x, y, z], [u, v, w]) = (xyz(a), xyz(b));
         n = n + V3(
-            ((y - v) * (z + w)) as f32,
-            ((z - w) * (x + u)) as f32,
-            ((x - u) * (y + v)) as f32,
+            (y - v) * (z + w),
+            (z - w) * (x + u),
+            (x - u) * (y + v),
         );
     }
     n
 }
-pub(super) fn facing(mut ring: Vec<V3>, target: V3, sign: f32, h: Hypot) -> Vec<V3> {
+pub(super) fn facing(mut ring: Vec<V3>, target: V3, sign: f64, h: Hypot) -> Vec<V3> {
     if newell(&ring).dot(target - mean(&ring), h) * sign < 0. {
         ring.reverse()
     }
@@ -135,7 +135,9 @@ impl RoundPlan {
     pub fn filter_nested_holes(&mut self, h: Hypot) {
         for (_, rings) in &mut self.rebuilt {
             if rings.len() > 2 {
-                *rings = maximal_rings(rings, h).into_iter().cloned().collect();
+                let mask = maximal_holes(&rings[1..], h);
+                let mut keep = std::iter::once(true).chain(mask);
+                rings.retain(|_| keep.next().unwrap());
             }
         }
     }
@@ -219,12 +221,12 @@ impl RoundPlan {
 }
 fn on_segment(q: V3, a: V3, b: V3, h: Hypot) -> bool {
     let d = b - a;
-    let l = length(d, h) as f64;
+    let l = length(d, h);
     if l < 1e-4 {
         return xyz(q).map(|v| (v * 1e4).round_ties_even())
             == xyz(a).map(|v| (v * 1e4).round_ties_even());
     }
-    let t = (q - a).dot(d, h) as f64 / (l * l);
+    let t = (q - a).dot(d, h) / (l * l);
     (-1e-4..=1.0001).contains(&t) && length(q - (a + d * t), h) < 1e-4
 }
 
@@ -246,7 +248,7 @@ pub(super) fn grid_cap(
     plan: &mut RoundPlan,
     arcs: [Vec<V3>; 3],
     target: V3,
-    sign: f32,
+    sign: f64,
     soft_rim: bool,
     h: Hypot,
     interior: impl Fn(usize, usize, usize) -> V3,
@@ -426,7 +428,7 @@ struct Round {
     t: f64,
     radius: f64,
     centre: V3,
-    sign: f32,
+    sign: f64,
     offsets: Vec<V3>,
     // Two ends, in first-visited order (the order in which arcs get curve IDs).
     sections: Vec<(u32, Vec<V3>)>,
@@ -443,34 +445,30 @@ fn inward(s: &Store, f: u32, [a, b]: [u32; 2], h: Hypot) -> Option<V3> {
 }
 // Mesh.add_face drops holes nested inside a larger hole. Area is measured
 // in XY, while containment uses the inner hole's plane, as in topology.py.
-fn maximal_rings(rings: &[Vec<V3>], h: Hypot) -> Vec<&Vec<V3>> {
-    if rings.len() < 3 {
-        return rings.iter().collect();
-    }
-    let holes = &rings[1..];
+pub(super) fn maximal_holes(holes: &[Vec<V3>], h: Hypot) -> Vec<bool> {
     let areas: Vec<f64> = holes
         .iter()
         .map(|r| {
             sides(r)
                 .fold(0., |sum, (a, b)| {
-                    sum + a.0 as f64 * b.1 as f64 - b.0 as f64 * a.1 as f64
+                    sum + a.0 * b.1 - b.0 * a.1
                 })
                 .abs()
                 / 2.
         })
         .collect();
-    let mut keep = vec![&rings[0]];
+    let mut keep = Vec::with_capacity(holes.len());
     for (i, inner) in holes.iter().enumerate() {
         let normal = (inner[1] - inner[0]).cross(inner[2] - inner[0], h);
         if length(normal, h) < 1e-9 {
-            keep.push(inner);
+            keep.push(true);
             continue;
         }
-        let (u, v) = crate::facegeom::plane_axes(crate::facegeom::normalized(normal, h), h);
-        let project = |p: V3| (p.dot(u, h) as f64, p.dot(v, h) as f64);
+        let (u, v) = crate::store::geometry::plane_axes(crate::store::geometry::normalized(normal, h), h);
+        let project = |p: V3| (p.dot(u, h), p.dot(v, h));
         let average = |axis: usize| {
-            (crate::facegeom::py_sum(inner.iter().map(|&p| xyz(p)[axis]), true)
-                / inner.len() as f64) as f32
+            crate::store::geometry::py_sum(inner.iter().map(|&p| xyz(p)[axis]), true)
+                / inner.len() as f64
         };
         let centre = V3(average(0), average(1), average(2));
         let mut interior = None;
@@ -486,10 +484,10 @@ fn maximal_rings(rings: &[Vec<V3>], h: Hypot) -> Vec<&Vec<V3>> {
             interior
                 .get_or_insert_with(|| {
                     let points: Vec<_> = inner.iter().map(|&p| project(p - inner[0])).collect();
-                    let tris = if crate::facegeom::is_convex(&points) {
+                    let tris = if crate::store::geometry::is_convex(&points) {
                         (1..inner.len() - 1).map(|i| [0, i, i + 1]).collect()
                     } else {
-                        crate::facegeom::earcut(&points, &[])
+                        crate::store::geometry::earcut(&points, &[])
                     };
                     let mut best = None;
                     let mut area = 0.;
@@ -506,9 +504,7 @@ fn maximal_rings(rings: &[Vec<V3>], h: Hypot) -> Vec<&Vec<V3>> {
                 })
                 .is_some_and(contains)
         });
-        if !nested {
-            keep.push(inner)
-        }
+        keep.push(!nested);
     }
     keep
 }
@@ -527,8 +523,8 @@ fn solid(s: &Store, f: u32, p: V3, h: Hypot) -> bool {
         return false;
     };
     let o = pos(s, anchor);
-    let (u, v) = crate::facegeom::plane_axes(s.face_normal(f, h), h);
-    let project = |p: V3| (((p - o).dot(u, h) as f64), ((p - o).dot(v, h) as f64));
+    let (u, v) = crate::store::geometry::plane_axes(s.face_normal(f, h), h);
+    let project = |p: V3| ((p - o).dot(u, h), (p - o).dot(v, h));
     let inside = |r: &Vec<u32>| {
         let polygon: Vec<_> = r.iter().map(|&v| project(pos(s, v))).collect();
         inside_2d(&polygon, project(p))
@@ -568,7 +564,7 @@ impl Round {
         let read =
             |f| inward(s, f, vs, h).ok_or(("Could not read the faces around the edge.", None));
         let (a, b) = (read(*f)?, read(*g)?);
-        let angle = (a.dot(b, h) as f64).clamp(-1., 1.).acos();
+        let angle = a.dot(b, h).clamp(-1., 1.).acos();
         let flat = ("The faces meet too flat or too sharp to round.", None);
         if !(2f64.to_radians()..=178f64.to_radians()).contains(&angle) {
             return Err(flat);
@@ -615,8 +611,8 @@ impl Round {
         } else {
             let u = unit(ta - centre, h).ok_or(flat)?;
             let rb = tb - centre;
-            let v = unit(rb - u * (rb.dot(u, h) as f64), h).ok_or(flat)?;
-            let phi = (u.dot(unit(rb, h).ok_or(flat)?, h) as f64)
+            let v = unit(rb - u * rb.dot(u, h), h).ok_or(flat)?;
+            let phi = u.dot(unit(rb, h).ok_or(flat)?, h)
                 .clamp(-1., 1.)
                 .acos();
             (0..=n)
@@ -640,7 +636,7 @@ impl Round {
         })
     }
     fn cut(&self, p: V3, q: V3, m: V3, h: Hypot) -> Option<Vec<V3>> {
-        let den = self.d.dot(m, h) as f64;
+        let den = self.d.dot(m, h);
         if den.abs() < 0.05 {
             return None;
         }
@@ -649,7 +645,7 @@ impl Round {
                 .iter()
                 .map(|&off| {
                     let base = p + off;
-                    base + self.d * ((q - base).dot(m, h) as f64 / den)
+                    base + self.d * ((q - base).dot(m, h) / den)
                 })
                 .collect(),
         )
@@ -766,18 +762,18 @@ pub fn plan(
                         let normal = s.face_normal(f, h);
                         let a = p + r.w[side] * r.t;
                         let b = p + q.w[usize::from(q.faces[1] == f)] * q.t;
-                        let den = r.d.cross(q.d, h).dot(normal, h) as f64;
+                        let den = r.d.cross(q.d, h).dot(normal, h);
                         if den.abs() < 1e-12 {
                             return Err(simple);
                         }
-                        let hit = a + r.d * ((b - a).cross(q.d, h).dot(normal, h) as f64 / den);
-                        along[side] = (hit - p).dot(r.d, h) as f64;
+                        let hit = a + r.d * ((b - a).cross(q.d, h).dot(normal, h) / den);
+                        along[side] = (hit - p).dot(r.d, h);
                     }
                     if (along[0] - along[1]).abs() > 1e-3 * r.t.max(1.) {
                         return Err(err("The corner at {p} is too skewed to round."));
                     }
                     if along[0].abs()
-                        > (length(pos(s, other(s, r.edge, v)) - p, h) as f64) * 0.5 + 1e-9
+                        > length(pos(s, other(s, r.edge, v)) - p, h) * 0.5 + 1e-9
                     {
                         return Err(err("The radius is too large for the edge at {p}."));
                     }
@@ -824,7 +820,7 @@ pub fn plan(
                 let prev = pos(s, ring[(i + ring.len() - 1) % ring.len()]);
                 let next = pos(s, ring[(i + 1) % ring.len()]);
                 let (a, b) = (seq[0], seq[seq.len() - 1]);
-                let cost = |a, b| length(prev - a, h) as f64 + length(next - b, h) as f64;
+                let cost = |a, b| length(prev - a, h) + length(next - b, h);
                 if cost(b, a) < cost(a, b) {
                     seq.reverse()
                 }
@@ -834,7 +830,7 @@ pub fn plan(
         let ring = &plan.rebuilt.last().unwrap().1[0];
         let normal = s.face_normal(f, h);
         let o = pos(s, s.face_rings(f)[0][0]);
-        let span = ring.iter().map(|&p| length(p - o, h)).fold(1., f32::max);
+        let span = ring.iter().map(|&p| length(p - o, h)).fold(1., f64::max);
         for &p in ring {
             if (p - o).dot(normal, h).abs() > 1e-4 * span {
                 return Err(at("Rounding would bend the face at {p}.", p));
@@ -922,7 +918,7 @@ fn smooth(plan: &mut RoundPlan, h: Hypot) {
     }
     for ns in normals.values() {
         if let [(n, a, b), (m, _, _)] = ns.as_slice() {
-            if n.dot(*m, h) > 30f32.to_radians().cos() {
+            if n.dot(*m, h) > 30f64.to_radians().cos() {
                 plan.soft.push((*a, *b))
             }
         }
@@ -946,7 +942,7 @@ fn cut_faces(
         if d.dot(out, h) > 0. {
             d = d * (-1.)
         }
-        let depth = (length(a.centre, h) as f64 + length(b.centre, h) as f64) / 2. / 2f64.sqrt();
+        let depth = (length(a.centre, h) + length(b.centre, h)) / 2. / 2f64.sqrt();
         bottoms.push(corners[i] + d * depth);
     }
     let centre = bottoms.iter().any(|&p| length(p - bottoms[0], h) >= 1e-5);
@@ -1174,11 +1170,11 @@ fn split_sides(faces: &[Vec<V3>], secs: &[Vec<V3>], h: Hypot) -> (Vec<Vec<V3>>, 
     }
     let inner = |a: V3, b: V3| {
         let d = b - a;
-        let den = d.dot(d, h) as f64;
+        let den = d.dot(d, h);
         let mut hits = Vec::new();
         if den >= 1e-18 {
             for &p in pts.values() {
-                let t = (p - a).dot(d, h) as f64 / den;
+                let t = (p - a).dot(d, h) / den;
                 if t > 1e-6 && t < 1. - 1e-6 && length(a + d * t - p, h) < 1e-7 {
                     hits.push((t, p))
                 }
@@ -1287,7 +1283,7 @@ fn product(
     }
     None
 }
-fn staircase(c: [V3; 3], o: V3, k: usize, sign: f32, h: Hypot) -> Vec<Vec<V3>> {
+fn staircase(c: [V3; 3], o: V3, k: usize, sign: f64, h: Hypot) -> Vec<Vec<V3>> {
     let mut faces = Vec::new();
     let at = |q: [f64; 3]| {
         o + (c[0] - o) * (q[0] / k as f64)

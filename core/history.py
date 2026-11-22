@@ -256,14 +256,17 @@ class History:
         return unsubscribe
 
     def _notify(self, listeners, index, cmd, phase, ran):
-        for entry in listeners:
-            fn = entry[index]
-            if fn is not None:
-                try:
-                    fn(cmd, phase, ran)
-                except Exception:
-                    logging.getLogger("ingetrazo.history").exception(
-                        "Command listener failed (%s)", phase)
+        from core.coordinate_frame import model_frame
+        # Feed subscribers may read any placement synchronously during a click.
+        with model_frame():
+            for entry in listeners:
+                fn = entry[index]
+                if fn is not None:
+                    try:
+                        fn(cmd, phase, ran)
+                    except Exception:
+                        logging.getLogger("ingetrazo.history").exception(
+                            "Command listener failed (%s)", phase)
 
     def changes_since(self, revision=0):
         """Bounded command journal; not a geometric diff or a persisted log."""
@@ -277,6 +280,15 @@ class History:
         if getattr(self.scene, 'worksession_read_only', False):
             self.last_rejected = 'Choose this file in Worksession before editing it.'
             return False
+        target = getattr(cmd, "_history_mesh", None) or self.scene.mesh
+        st = target.__dict__.get("_store")
+        if st is not None and phase == "execute" and any(st.frame_origin):
+            cmd._tool_origin = tuple(st.frame_origin)
+        frame = getattr(cmd, "_tool_origin", None)
+        if frame is not None and st is not None and tuple(st.frame_origin) != frame:
+            from core.coordinate_frame import mesh_frame
+            with mesh_frame(target, frame):
+                return self._run(cmd, phase, operation)
         listeners = tuple(self._listeners)
         self._notify(listeners, 0, cmd, phase, False)
         ran = False
@@ -3424,8 +3436,12 @@ class MoveVerticesCommand(Command):
 
     def __init__(self, positions: Iterable[QVector3D], delta: QVector3D,
                  carry_textures: bool = False) -> None:
-        self.src = [QVector3D(p) for p in positions]
-        self.delta = QVector3D(delta)
+        if isinstance(delta, QVector3D):
+            self.src = [QVector3D(p) for p in positions]
+            self.delta = QVector3D(delta)
+        else:
+            self.src = [tuple(p) for p in positions]
+            self.delta = tuple(delta)
         #: The Move tool's moves: a textured face moved whole takes its
         #: image along instead of being re-projected where it lands (#1034).
         self.carry_textures = carry_textures
@@ -3442,7 +3458,10 @@ class MoveVerticesCommand(Command):
         self._before = scene.mesh.capture_state()
         keys = {_key(p) for p in self.src}
         moving = {v.key for v in _vertices_at(scene.mesh, keys)}
-        landing = {_key(p + self.delta) for p in self.src}
+        if isinstance(self.delta, tuple):
+            landing = {_key(tuple(x + d for x, d in zip(p, self.delta))) for p in self.src}
+        else:
+            landing = {_key(p + self.delta) for p in self.src}
         before = None
         if any(v.key not in moving
                for v in _vertices_at(scene.mesh, landing)):

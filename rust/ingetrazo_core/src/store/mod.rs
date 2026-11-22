@@ -30,6 +30,8 @@ mod drawing_face;
 mod drawing_plane;
 mod drawing_edges;
 pub mod edit;
+mod geometry;
+mod frame;
 pub mod explode;
 pub mod keys;
 pub mod intersect;
@@ -109,6 +111,7 @@ impl Default for Weld {
 /// slots, never keys: generations only matter at the API boundary.
 #[derive(Clone, Debug, Default)]
 pub struct State {
+    pub frame_origin: [f64; 3],
     /// Key namespace: `key = ns << 40 | local`.
     pub ns: u64,
     pub slots: [Slots; 3],
@@ -176,8 +179,7 @@ pub struct Store {
     /// keys; a foreign one takes a fresh namespace).
     pub lineage: u64,
     pub weld: Weld,
-    /// Positions stay float32 values and moves add in float32, exactly as
-    /// `QVector3D` does, until the kernel port is done (see the design).
+    /// Diagnostic mode for legacy float32 vertex edits and weld lookup.
     pub f32_parity: bool,
 }
 
@@ -191,7 +193,7 @@ impl Store {
             revision: 0,
             lineage: LINEAGE.fetch_add(1, Ordering::Relaxed),
             weld,
-            f32_parity: true,
+            f32_parity: false,
         }
     }
 
@@ -203,9 +205,9 @@ impl Store {
     pub fn cell(&self, p: &[f64; 3]) -> Cell {
         let s = self.weld.scale;
         (
-            (p[0] * s).round_ties_even() as i64,
-            (p[1] * s).round_ties_even() as i64,
-            (p[2] * s).round_ties_even() as i64,
+            ((p[0] + self.state.frame_origin[0]) * s).round_ties_even() as i64,
+            ((p[1] + self.state.frame_origin[1]) * s).round_ties_even() as i64,
+            ((p[2] + self.state.frame_origin[2]) * s).round_ties_even() as i64,
         )
     }
 
@@ -236,7 +238,7 @@ impl Store {
     /// .capture_state())`) is adopted under `fresh_ns`: two live stores
     /// must never allocate in one namespace.
     pub fn restore(&mut self, snap: &Snapshot, fresh_ns: Option<u64>) -> Result<(), String> {
-        let mut state = snap.state.clone();
+        let mut state = snap.state.in_frame(self.state.frame_origin, Some(&self.state));
         if snap.lineage != self.lineage {
             let ns = fresh_ns.ok_or("a snapshot of another store needs a fresh namespace")?;
             state.ns = ns;

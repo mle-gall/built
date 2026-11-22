@@ -981,6 +981,9 @@ def edges_along(mesh, segments) -> list:
 # An imported panel leaning 5e-4 next to an exact new face is two planes:
 # correcting it changed which pushes a broken bench model refused.
 _HAIR_COS2 = math.cos(1e-4) ** 2
+# The Qt unit-vector dot rounds up to 1 above the midpoint to the preceding
+# float32. Preserve that effective aperture for double-precision cap normals.
+_STORE_HAIR_COS2 = (1.0 - 2.0 ** -25) ** 2
 
 
 def _off_plane(face, origin, normal) -> float:
@@ -1028,7 +1031,7 @@ def seam_planes(mesh, new_faces) -> list:
     from core._native import qt_hypot
     if isinstance(mesh, StoreMesh) and qt_hypot():
         rows = mesh._store.snapshot().seam_planes(
-            [f.key for f in new_faces], _ON_PLANE, _HAIR_COS2, qt_hypot(), sys.version_info >= (3, 12))
+            [f.key for f in new_faces], _ON_PLANE, _STORE_HAIR_COS2, qt_hypot(), sys.version_info >= (3, 12))
         for point, normal, correction in rows:
             key, origin, cn = plane_key(QVector3D(*point), QVector3D(*normal))
             if correction is not None and not seen.get(key, (False,))[0]:

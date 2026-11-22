@@ -43,7 +43,8 @@ LOCAL_MASK = (1 << 40) - 1
 #: ``mesh.__dict__`` entries that belong to the store side and never travel
 #: with a deep copy of the Python state.
 STORE_SIDE = ("_store", "_objmap", "_attr_table", "_attr_own", "_bulk",
-              "_py_base", "_pos_cache", "_face_cache")
+              "_py_base", "_pos_cache", "_face_cache", "_frame_parent",
+              "_tool_frame_cache", "_planned_points")
 
 
 def enabled() -> bool:
@@ -367,9 +368,8 @@ class EdgeView(_ViewMixin, Edge):
         if st is None:
             return self._obj().length()
         a, b = st.edge_ends(self.key)
-        p = QVector3D(*st.vertex_position(a))
-        q = QVector3D(*st.vertex_position(b))
-        return (q - p).length()
+        from math import dist
+        return dist(st.vertex_position(a), st.vertex_position(b))
 
 
 def _position(m, key) -> QVector3D:
@@ -1178,8 +1178,13 @@ class StoreMesh(Mesh):
         self._mut_serial += 1
         self.__dict__.pop("_bulk", None)
 
+    def _input_point(self, position):
+        xyz = _xyz(position)
+        planned = self.__dict__.get('_planned_points')
+        return planned.get(xyz, xyz) if planned else xyz
+
     def vertex_at(self, position):
-        k = self._store.vertex_at(_xyz(position))
+        k = self._store.vertex_at(self._input_point(position))
         return None if k is None else VertexView(self, k)
 
     def _lookup(self, position):
@@ -1238,8 +1243,7 @@ class StoreMesh(Mesh):
         keys = self._store.keys("vertex")
         out = []
         for i in idx:
-            p = QVector3D(*pos[i])
-            if keyfn(p) in cells:
+            if keyfn(pos[i].tolist()) in cells:
                 out.append(VertexView(self, keys[i]))
         return out
 
@@ -1248,7 +1252,7 @@ class StoreMesh(Mesh):
         out = set()
         for k in vertex_keys:
             try:
-                out.add(keyfn(QVector3D(*st.vertex_position(k))))
+                out.add(keyfn(st.vertex_position(k)))
             except (KeyError, OverflowError, TypeError):
                 pass
         return out
@@ -1301,11 +1305,15 @@ class StoreMesh(Mesh):
 
     def vertex(self, position):
         self.__dict__.pop("_bulk", None)
-        k, _ch = self._store.vertex(_xyz(position))
+        k, _ch = self._store.vertex(self._input_point(position))
         return VertexView(self, k)
 
     def _probe_neighbours(self, k, position):
-        hit = self._store.probe(tuple(k), _xyz(position))
+        p = _xyz(position)
+        origin = self._store.frame_origin
+        if any(origin):
+            k = tuple(round((v + o) * _mesh._KEY_SCALE) for v, o in zip(p, origin))
+        hit = self._store.probe(tuple(k), p)
         return None if hit is None else VertexView(self, hit)
 
     def _link_edge(self, v0, v1):
@@ -1319,7 +1327,7 @@ class StoreMesh(Mesh):
 
     def add_edge(self, a, b):
         self.__dict__.pop("_bulk", None)
-        k, _ch = self._store.add_edge(_xyz(a), _xyz(b))
+        k, _ch = self._store.add_edge(self._input_point(a), self._input_point(b))
         self._dirty(1)
         return EdgeView(self, k)
 
@@ -1328,15 +1336,15 @@ class StoreMesh(Mesh):
         loop = list(loop_positions)
         raw = [list(h) for h in (hole_loops or [])]
         if len(raw) > 1:
-            from core.topology import _maximal_holes
             try:
-                raw = _maximal_holes(raw)
+                mask = _hole_filter(raw)
+                raw = [ring for ring, keep in zip(raw, mask) if keep]
             except Exception:
                 # Python welds the outer loop before filtering the holes.
                 for p in loop:
                     self.vertex(p)
                 raise
-        rings = [[_xyz(p) for p in loop]] + [[_xyz(p) for p in h]
+        rings = [[self._input_point(p) for p in loop]] + [[self._input_point(p) for p in h]
                                              for h in raw]
         k, _ch = self._store.add_face(rings)
         self._dirty(sum(len(r) for r in rings))
@@ -1391,7 +1399,7 @@ class StoreMesh(Mesh):
         if k is None or not self._store.is_live(k):
             return self._py("add_hole", face, loop)
         try:
-            keys, _ch = self._store.add_hole(k, [_xyz(p) for p in loop])
+            keys, _ch = self._store.add_hole(k, [self._input_point(p) for p in loop])
         except _fallback():
             return self._py("add_hole", face, loop)
         self._dirty(len(loop))
@@ -1492,7 +1500,7 @@ class StoreMesh(Mesh):
         if k is None:
             return self._py("split_edge", edge, position)
         try:
-            (e0, e1, n), _ch = self._store.split_edge(k, _xyz(position))
+            (e0, e1, n), _ch = self._store.split_edge(k, self._input_point(position))
         except _fallback():
             return self._py("split_edge", edge, position)
         self._dirty(n)
@@ -1715,7 +1723,7 @@ class StoreMesh(Mesh):
 
     # -- bulk construction straight into the store
     def bulk_weld(self, pos):
-        if self._store.revision == 0 and not any(self._store.counts()):
+        if self._store.revision == 0 and not any(self._store.counts()) and not any(self._store.frame_origin):
             return bulk_weld(self, pos)
         return Mesh.bulk_weld(self, pos)
 
@@ -1872,10 +1880,9 @@ def _hole_filter(holes):
     over the merged face's holes, given as positions: a bool per hole. The
     store calls it when a dissolve's face has several holes, before it
     changes anything."""
-    from core.topology import _maximal_holes
-    rings = [[QVector3D(*p) for p in h] for h in holes]
-    kept = {id(h) for h in _maximal_holes(rings)}
-    return [id(r) in kept for r in rings]
+    rings = [[_xyz(p) for p in ring] for ring in holes]
+    from core import _native
+    return _native.available().MeshStore.maximal_holes(rings, _hypot() or "libstdc++")
 
 
 def _xyz(p):
@@ -1990,6 +1997,9 @@ def _restore_store_state(m, snap: StoreState) -> None:
     namespace: new keys (design decision 3)."""
     d = m.__dict__
     st = snap.owner if snap.mesh is m else d.get("_store")
+    current = d.get("_store")
+    if snap.mesh is m and current is not None and current.lineage == st.lineage:
+        st = current
     d["_store"] = st
     foreign = st is None or st.lineage != snap.snap.lineage
     if st is None:
@@ -2221,21 +2231,30 @@ def _table_index(table, index, a):
     return i
 
 
+def _input_positions(pos):
+    points = np.asarray(pos)
+    dtype = np.float32 if points.dtype == np.float32 else np.float64
+    return np.ascontiguousarray(points, dtype=dtype).reshape(-1, 3)
+
+
 def bulk_weld(m, pos):
     """``Mesh.bulk_weld`` on an empty mesh, into a new store. Returns the
     views of the welded vertices and each point's vertex index, as the
     Python method does."""
     from core import _native
     mod = _native.available()
-    pos32 = np.ascontiguousarray(pos, dtype=np.float32).reshape(-1, 3)
+    points = _input_positions(pos)
     w = _weld_args()
-    if not len(pos32):
+    if not len(points):
         return [], np.empty(0, dtype=np.int64)
-    _vpos, ids, origin = mod.weld_points(pos32, w["scale"], w["tol2"])
+    if points.dtype == np.float32:
+        _, ids, origin = mod.weld_points(points, w["scale"], w["tol2"])
+    else:
+        ids, origin = mod.store_weld_indices(points, w["scale"], w["tol2"])
     ns = next(_mesh._KEY_NAMESPACES)
     empty_i = np.zeros(0, dtype=np.int64)
     store = mod.MeshStore.from_block(
-        ns, pos32, np.zeros((0, 2), dtype=np.int64), None, None, None, [],
+        ns, points, np.zeros((0, 2), dtype=np.int64), None, None, None, [],
         empty_i, empty_i, empty_i, None, **w)
     if type(m) is StoreMesh:
         m._store._extend_bulk(store)
@@ -2244,7 +2263,7 @@ def bulk_weld(m, pos):
         become_store(m, store, [])
     vobjs = [VertexView(m, k) for k in store.keys("vertex")]
     m.__dict__["_bulk"] = dict(
-        stage="points", vobjs=vobjs, pos=pos32,
+        stage="points", vobjs=vobjs, pos=points,
         origin=np.asarray(origin, dtype=np.int64),
         edges=np.zeros((0, 2), dtype=np.int64))
     return vobjs, np.asarray(ids, dtype=np.int64)
@@ -2436,7 +2455,8 @@ def store_from_source(src, hooks=(), *, precise=False):
                                                 layers, n_e)
     w = _weld_args()
     ns = next(_mesh._KEY_NAMESPACES)
-    pos = np.ascontiguousarray(src["pos"], dtype=np.float64 if precise else np.float32).reshape(-1, 3)
+    pos = (np.ascontiguousarray(src["pos"], dtype=np.float64).reshape(-1, 3)
+           if precise else _input_positions(src["pos"]))
     edges = np.ascontiguousarray(src["edges"], dtype=np.int64).reshape(-1, 2)
     flags = src.get("flags")
     curves = src.get("curves")
@@ -2592,6 +2612,6 @@ def faces_arrays(m):
     out = Arrays(np.asarray(pos, dtype=float).reshape(-1, 3),
                  np.asarray(corners, dtype=np.int64),
                  np.asarray(a["ring_sizes"], dtype=np.int64),
-                 np.asarray(a["ring_counts"], dtype=np.int64))
+                 np.asarray(a["ring_counts"], dtype=np.int64), model_f64=True)
     out.edge_face_counts = np.diff(a["ef_start"])
     return out

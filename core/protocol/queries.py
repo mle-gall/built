@@ -70,7 +70,7 @@ def edges(scene, keys, mesh=None) -> dict:
             continue
         out.append({"key": to_json_key(k),
                     "ends": [to_json_key(e.v0.key), to_json_key(e.v1.key)],
-                    "positions": [_xyz(e.v0.position), _xyz(e.v1.position)],
+                    "positions": [list(e.v0.position_tuple()), list(e.v1.position_tuple())],
                     "soft": bool(e.soft), "hidden": bool(getattr(e, "hidden", False)),
                     "faces": [to_json_key(f.key) for f in e.faces]})
     return {"mesh": mesh_key(m), "edges": out,
@@ -82,7 +82,7 @@ def vertices(scene, keys, mesh=None) -> dict:
     keys = [from_json_key(k) for k in keys]
     found = elements(m, "vertex", keys)
     return {"mesh": mesh_key(m),
-            "vertices": [{"key": to_json_key(k), "position": _xyz(found[k].position)}
+            "vertices": [{"key": to_json_key(k), "position": list(found[k].position_tuple())}
                          for k in keys if k in found],
             "missing": [to_json_key(k) for k in keys if k not in found]}
 

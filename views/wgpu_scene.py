@@ -61,6 +61,9 @@ class PackedScene:
     # this stream on each edit copies every unrelated material record.
     material_updates: dict = field(default_factory=dict)
 
+    origin: tuple = (0., 0., 0.)
+    prototype_origins: tuple = ()
+
     def material_stream(self):
         if not self.material_updates:
             return self.materials
@@ -154,7 +157,7 @@ def _baked_paint(paint):
     return None
 
 
-def _source_arrays(mesh, paint=None, texture_ids=None, face_overrides=None, billboard=False):
+def _source_arrays(mesh, paint=None, texture_ids=None, face_overrides=None, billboard=False, origins=None, previous_origin=(0., 0., 0.)):
     """Use source topology directly; the resident renderer needs no welded Plan."""
     if face_overrides:
         # Resolve lazy faces before reading topology; never mutate document attrs.
@@ -198,6 +201,16 @@ def _source_arrays(mesh, paint=None, texture_ids=None, face_overrides=None, bill
                             for e in mesh.edges], np.uint8)
         table = [(face_overrides or {}).get(f.key, f.attrs) for f in mesh.faces]
         attr = np.arange(len(table))
+    origin = (0., 0., 0.)
+    if origins is not None:
+        from core.coordinate_frame import ZERO, choose_origin
+        frame = mesh._store.frame_origin if type(mesh).__name__ == 'StoreMesh' else ZERO
+        box = (np.array([pos.min(axis=0), pos.max(axis=0)], dtype=float)
+               if len(pos) else np.zeros((2, 3)))
+        origin = choose_origin(box.mean(axis=0) + frame, previous_origin)
+        origins.append((origin, box + np.subtract(frame, origin)))
+        if tuple(frame) != origin:
+            pos = np.asarray(pos, float) + np.subtract(frame, origin)
     # IGZ source streams can repeat a coordinate for each face/edge. Soft fan
     # adjacency requires common vertex IDs; weld only prototypes that need it.
     if np.any(flags & 1):
@@ -229,7 +242,7 @@ def _source_arrays(mesh, paint=None, texture_ids=None, face_overrides=None, bill
         if own.get('texture') or 'opacity' in own or 'pbr' in own:
             palette[k, 3] = _alpha(own)
     maps, paints = _material_columns(pos, corners, sizes, counts, table, attr+1,
-                                     texture_ids if texture_ids is not None else {})
+                                     texture_ids if texture_ids is not None else {}, origin)
     if billboard is True:
         from views.wgpu_billboards import fitted_maps
         maps = fitted_maps(pos, corners, sizes, counts, maps.copy())
@@ -278,7 +291,7 @@ def _placement_state(scene):
     return state
 
 
-def _placement_records(scene, roots, vp, state):
+def _placement_records(scene, roots, vp, state, *, double=False):
     from views.viewport import Viewport
     # Visibility is inherited down the tree, as the GL proxies do it: a
     # placement inside a hidden group, or inside a group whose tag is off,
@@ -294,12 +307,24 @@ def _placement_records(scene, roots, vp, state):
     object_hidden_of = {}
     filtered_of = {}
 
+    def model_matrices(group, base=None):
+        transform = getattr(group, 'xform', None)
+        matrix = base
+        if transform is not None:
+            matrix = np.asarray(transform.data(), dtype=float).reshape(4, 4)
+            if base is not None:
+                matrix = matrix @ base  # Qt's packed layout is column-major.
+        yield group, matrix
+        for child in getattr(group, 'children', None) or ():
+            yield from model_matrices(child, matrix)
+
     for root in roots:
         map_parents(root)
         # GL proxies carry the top-level paint owner and inherited layer.
         # Keep source groups for editing; use proxies only to resolve paint.
         proxies = Viewport._expand_placements(vp, root)
-        for (g, matrix), proxy in zip(iter_placements(root), proxies):
+        placements = model_matrices(root) if double else iter_placements(root)
+        for (g, matrix), proxy in zip(placements, proxies):
             parent = parent_of.get(id(g))
             inherited = hidden_of.get(id(parent), False) if parent is not None else False
             hidden_of[id(g)] = inherited or not state(proxy)[0]
@@ -323,7 +348,7 @@ def _profile_endpoints(mesh):
 
 
 def pack_scene(scene, view_tint=None, *, face_overrides=None, texture_images=True,
-               baked_paints=None, progress=None):
+               baked_paints=None, progress=None, previous_origin=(0., 0., 0.), previous_pack=None):
     """``baked_paints`` (id(group) -> paint) bakes those groups with that
     paint instead of the one they resolve to: the incremental bake of a
     changed prototype variant (views.wgpu_updates). ``progress(fraction,
@@ -343,8 +368,14 @@ def pack_scene(scene, view_tint=None, *, face_overrides=None, texture_images=Tru
     billboard_codes = set()
     groups = []
     prototype_paints = {}
+    coordinates = []
+    old_anchors = {}
+    if previous_pack is not None:
+        for (mesh_id, _, _), code in (previous_pack.prototype_lookup or {}).items():
+            if 0 <= code < len(previous_pack.prototype_origins):
+                old_anchors[mesh_id] = previous_pack.prototype_origins[code]
     from itertools import chain
-    placements = chain([(None, None, None, 0)], _placement_records(scene, scene.groups, vp, state))
+    placements = chain([(None, None, None, 0)], _placement_records(scene, scene.groups, vp, state, double=True))
     total = 0
     if progress is not None:
         total = max(1, sum(1 for root in scene.groups for _ in iter_placements(root)))
@@ -365,18 +396,21 @@ def pack_scene(scene, view_tint=None, *, face_overrides=None, texture_images=Tru
         billboard = getattr(group, "billboard", False)
         key = (id(mesh), repr(baked_paint), billboard)
         if key not in lookup:
-            arrays = _source_arrays(mesh, baked_paint, texture_ids, face_overrides, billboard)
+            arrays = _source_arrays(mesh, baked_paint, texture_ids, face_overrides, billboard,
+                                    coordinates, old_anchors.get(id(mesh), (0., 0., 0.)))
             lookup[key] = len(meshes) if len(arrays[0]) else -1
             if len(arrays[0]):
                 prototype_paints[len(meshes)] = baked_paint
                 meshes.append(arrays)
+            else:
+                coordinates.pop()
         code = lookup[key]
         if code < 0:
             continue
         if billboard:
             billboard_codes.add(code)
         _, paint = state(paint_group)
-        world = np.eye(4, dtype=np.float32) if matrix is None else np.array(matrix.data(), np.float32).reshape(4, 4)
+        world = np.eye(4) if matrix is None else matrix
         rows.append((code, world, flags | (8 if billboard else 0)))
         uids.append(getattr(group, 'uid', 'loose'))
         groups.append(group)
@@ -419,8 +453,26 @@ def pack_scene(scene, view_tint=None, *, face_overrides=None, texture_images=Tru
     hidden_commands = np.zeros(prototype_count, COMMAND)
     hidden_edge_commands = np.zeros(prototype_count, COMMAND)
     instances = np.zeros(len(rows), INSTANCE)
+    origins = tuple(c[0] for c in coordinates)
+    origin = previous_origin
+    world_bounds = np.zeros((2, 3))
     if rows:
-        instances['world'] = [r[1] for r in rows]
+        from core.coordinate_frame import choose_origin
+        codes = np.asarray([r[0] for r in rows])
+        matrices = np.asarray([r[1] for r in rows])
+        linear = matrices[:, :3, :3]
+        matrices[:, 3, :3] += np.einsum('ni,nij->nj', np.asarray(origins)[codes], linear)
+        boxes = np.array([c[1] for c in coordinates])[codes]
+        centers = np.einsum('ni,nij->nj', boxes.mean(axis=1), linear) + matrices[:, 3, :3]
+        radii = np.einsum('ni,nij->nj', (boxes[:, 1] - boxes[:, 0]) * .5, abs(linear))
+        visible = np.array([not r[2] & 1 for r in rows])
+        if visible.any():
+            world_bounds = np.stack(((centers-radii)[visible].min(axis=0),
+                                     (centers+radii)[visible].max(axis=0)))
+            origin = choose_origin(world_bounds.mean(axis=0), previous_origin)
+            world_bounds -= origin
+        matrices[:, 3, :3] -= origin
+        instances['world'] = matrices
         instances['info'][:, 0] = [r[0] for r in rows]
         instances['info'][:, 1] = paints
         instances['info'][:, 2] = [r[2] for r in rows]
@@ -442,23 +494,11 @@ def pack_scene(scene, view_tint=None, *, face_overrides=None, texture_images=Tru
     hidden_commands['first'] = table[:, 0]+table[:, 1]+table[:, 2]
     hidden_edge_commands['first'] = hidden_commands['first']+table[:, 3]
     hidden_commands['start'] = hidden_edge_commands['start'] = commands['start']
-    world_bounds = np.zeros((2, 3))
-    if len(rows):
-        shown = instances[(instances['info'][:, 2] & 1) == 0]
-        if not len(shown):
-            return PackedScene(vertices, indices, bounds, commands, edge_commands, instances, uids, world_bounds, dict(handoff=handoff-begin, native=baked-handoff, finish=perf_counter()-baked, peak_build_rss_bytes=(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss if resource is not None else None)), groups, materials, textures, tuple(texture_ids), hidden_commands, hidden_edge_commands, profile_exclusions,
-                               (bool(getattr(scene, 'show_hidden_geometry', False)), bool(getattr(scene, 'show_hidden_objects', False))), lookup, prototype_paints)
-        b = bounds[shown['info'][:, 0], :, :3]
-        center, extent = (b[:, 0]+b[:, 1])/2, (b[:, 1]-b[:, 0])/2
-        mat = shown['world'].transpose(0, 2, 1)
-        wc = np.einsum('nij,nj->ni', mat[:, :3, :3], center)+mat[:, :3, 3]
-        we = np.einsum('nij,nj->ni', abs(mat[:, :3, :3]), extent)
-        world_bounds = np.array([(wc-we).min(axis=0), (wc+we).max(axis=0)])
     return PackedScene(vertices, indices, bounds, commands, edge_commands, instances, uids, world_bounds, dict(handoff=handoff-begin, native=baked-handoff, finish=perf_counter()-baked, peak_build_rss_bytes=(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss if resource is not None else None)), groups, materials, textures, tuple(texture_ids), hidden_commands, hidden_edge_commands, profile_exclusions,
-                               (bool(getattr(scene, 'show_hidden_geometry', False)), bool(getattr(scene, 'show_hidden_objects', False))), lookup, prototype_paints)
+                               (bool(getattr(scene, 'show_hidden_geometry', False)), bool(getattr(scene, 'show_hidden_objects', False))), lookup, prototype_paints, origin=origin, prototype_origins=tuple(origins))
 
 
-def _material_columns(pos, corners, sizes, counts, table, attributes, texture_ids):
+def _material_columns(pos, corners, sizes, counts, table, attributes, texture_ids, origin=(0., 0., 0.)):
     """Use the GL mapping and side resolution, before triangulation splits corners."""
     from PySide6.QtGui import QVector3D
     from core.materials import back_is_default
@@ -520,6 +560,11 @@ def _material_columns(pos, corners, sizes, counts, table, attributes, texture_id
             for side, tex in enumerate(textures[int(row[0])]):
                 if tex:
                     gu, cu, gv, cv = face_uv_axes(tex, QVector3D(*row[1:]))
+                    if any(origin):
+                        # Tiled UV phase at prototype zero; retaining integer
+                        # tile repetitions here would lose the small local UVs.
+                        cu = (cu + np.dot(gu.toTuple(), origin)) % 1.
+                        cv = (cv + np.dot(gv.toTuple(), origin)) % 1.
                     resolved[j,side*8:side*8+8] = [*gu.toTuple(),cu,*gv.toTuple(),cv]
         maps[textured] = resolved[inverse]
     return maps, paints

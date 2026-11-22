@@ -10,7 +10,7 @@ unknown key raises ``KeyError`` before anything runs. The answer is
 (a :class:`core.protocol.feed.Step`) or None when nothing happened."""
 from __future__ import annotations
 
-from core.protocol.keys import elements, from_json_key
+from core.protocol.keys import elements, from_json_key, store_of
 
 
 def _need(mesh, kind, keys):
@@ -37,8 +37,12 @@ def move_vertices(history, vertices, delta):
     from core.history import MoveVerticesCommand
     vs = _need(history.scene.mesh, "vertex", vertices)
     before = history.revision
-    history.execute(MoveVerticesCommand([QVector3D(v.position) for v in vs],
-                                        QVector3D(*map(float, delta))))
+    if store_of(history.scene.mesh) is not None:
+        x, y, z = map(float, delta)
+        cmd = MoveVerticesCommand([v.position_tuple() for v in vs], (x, y, z))
+    else:
+        cmd = MoveVerticesCommand([v.position for v in vs], QVector3D(*map(float, delta)))
+    history.execute(cmd)
     return _answer(history, before)
 
 
@@ -80,7 +84,14 @@ def push_pull(history, face, distance, keep_base=False):
     clamped where the tool clamps (a push stopped at an opposite face)."""
     from tools.pushpull import PushPullTool
     (f,) = _need(history.scene.mesh, "face", [face])
-    tool = PushPullTool()
+    from core.coordinate_frame import ZERO, choose_origin, mesh_frame
+    st = store_of(history.scene.mesh)
+    origin = choose_origin(st.face_positions(f.key)[0][0]) if st is not None else ZERO
+    with mesh_frame(history.scene.mesh, origin):
+        return _push_face(history, f, distance, keep_base, PushPullTool())
+
+
+def _push_face(history, f, distance, keep_base, tool):
     tool.base_face = f
     tool.dragging = True
     tool._group = None
@@ -104,7 +115,8 @@ def push_pull(history, face, distance, keep_base=False):
 def follow_me(history, face, path, closed=False):
     from PySide6.QtGui import QVector3D
     from core.sweep import build_sweep_face
-    points = [QVector3D(*p) for p in path]
+    points = (list(path) if store_of(history.scene.mesh) is not None else
+              [QVector3D(*p) for p in path])
     cmd = build_sweep_face(history.scene.mesh, from_json_key(face), points, closed)
     before = history.revision
     history.execute(cmd)
@@ -186,21 +198,32 @@ def solid_operation(history, operation, placements):
 
 
 def add_edge(history, a, b, soft=None, tag=None):
-    from PySide6.QtGui import QVector3D
-    from core.edits import build_add_edge
-    before = history.revision
     if tag is not None and history.scene.layer_by_key(tag) is None:
         raise KeyError(f"no tag with key {tag!r}")
-    history.execute(build_add_edge(history.scene, QVector3D(*a), QVector3D(*b), soft=soft, tag=tag))
-    return _answer(history, before)
+    return _draw_segments(history, [(a, b)], single=True, soft=soft, tag=tag)
 
 
 def add_edges(history, segments):
-    from PySide6.QtGui import QVector3D
-    from core.edits import build_add_edges
+    return _draw_segments(history, list(segments))
+
+
+def _draw_segments(history, segments, single=False, **options):
+    from core.coordinate_frame import ZERO, choose_origin, mesh_frame, point_in_frame
+    from core.edits import build_add_edge, build_add_edges
+    from core.coordinate_frame import planned_points
+    mesh = history.scene.mesh
+    st = store_of(mesh)
+    origin = choose_origin(segments[0][0]) if st is not None and segments else ZERO
+    local = [(point_in_frame(a, origin), point_in_frame(b, origin)) for a, b in segments]
     before = history.revision
-    history.execute(build_add_edges(history.scene, [(QVector3D(*a), QVector3D(*b))
-                                                    for a, b in segments]))
+    with mesh_frame(mesh, origin):
+        cmd = (build_add_edge(history.scene, *local[0], **options) if single else
+               build_add_edges(history.scene, local))
+        exact = {p.toTuple(): tuple(v-o for v, o in zip(raw, origin))
+                 for pair, args in zip(local, segments) for p, raw in zip(pair, args)
+                 } if st is not None else {}
+        with planned_points(mesh, exact):
+            history.execute(cmd)
     return _answer(history, before)
 
 

@@ -36,6 +36,8 @@ _LINE_GAP = 1e-5
 
 
 def _key(p: QVector3D) -> tuple[float, float, float]:
+    if not isinstance(p, QVector3D):
+        return tuple(round(x, _KEY_DECIMALS) for x in p)
     return (round(p.x(), _KEY_DECIMALS),
             round(p.y(), _KEY_DECIMALS),
             round(p.z(), _KEY_DECIMALS))

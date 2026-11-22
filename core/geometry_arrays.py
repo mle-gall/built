@@ -15,6 +15,7 @@ class Arrays:
     ring_sizes: np.ndarray
     ring_counts: np.ndarray
     edge_face_counts: np.ndarray | None = None
+    model_f64: bool = False
     _perimeter: float = field(default=0., init=False, repr=False)
     _balanced: bool = field(default=True, init=False, repr=False)
     _signed_volume: float = field(default=0., init=False, repr=False)
@@ -34,8 +35,7 @@ def faces_arrays(faces):
                 key = vertex.key
                 if key not in lookup:
                     lookup[key] = len(vertices)
-                    p = vertex.position
-                    vertices.append((p.x(), p.y(), p.z()))
+                    vertices.append(vertex.position_tuple())
                 corners.append(lookup[key])
     return Arrays(np.asarray(vertices, dtype=float).reshape(-1, 3),
                   np.asarray(corners, dtype=np.int64),
@@ -124,6 +124,11 @@ def uniform_scale(local, rot, trans):
     return scale2
 
 
+def transformed_positions(pos, rot, trans, model_f64):
+    world = pos @ rot.T + trans
+    return world if model_f64 else world.astype(np.float32).astype(float)
+
+
 def placed_arrays(local, matrix):
     """Reuse prototype Newell measurements for rigid/uniform placements.
 
@@ -134,9 +139,9 @@ def placed_arrays(local, matrix):
         return local
     from core.group import np_affine
     rot, trans = np_affine(matrix)
-    a = Arrays((local.pos @ rot.T + trans).astype(np.float32).astype(float),
+    a = Arrays(transformed_positions(local.pos, rot, trans, local.model_f64),
                local.corners, local.ring_sizes, local.ring_counts,
-               local.edge_face_counts)
+               local.edge_face_counts, local.model_f64)
     scale2 = uniform_scale(local, rot, trans)
     if scale2 is not None:
         data = measurements(local)
@@ -167,10 +172,19 @@ def merged(arrays):
     if not parts:
         return faces_arrays([])
     offsets = np.cumsum([0] + [len(a.pos) for a in parts[:-1]])
-    pos, inverse = weld(np.concatenate([a.pos for a in parts]))
+    points = np.concatenate([a.pos for a in parts])
+    model_f64 = any(a.model_f64 for a in parts)
+    if model_f64:
+        from core import _native
+        from core.mesh import _KEY_SCALE, _KEY_DECIMALS
+        inverse, first = _native.available().store_weld_indices(
+            points, _KEY_SCALE, (10.0 ** -_KEY_DECIMALS) ** 2)
+        pos = points[first]
+    else:
+        pos, inverse = weld(points)
     corners = np.concatenate([a.corners + offset for a, offset in zip(parts, offsets)])
     return Arrays(pos, inverse[corners], np.concatenate([a.ring_sizes for a in parts]),
-                  np.concatenate([a.ring_counts for a in parts]))
+                  np.concatenate([a.ring_counts for a in parts]), model_f64=model_f64)
 
 
 def assembled(arrays):
@@ -188,7 +202,7 @@ def assembled(arrays):
                   np.concatenate([a.corners + off for a, off in zip(parts, offsets)]),
                   np.concatenate([a.ring_sizes for a in parts]),
                   np.concatenate([a.ring_counts for a in parts]),
-                  np.concatenate([a.edge_face_counts for a in parts]))
+                  np.concatenate([a.edge_face_counts for a in parts]), any(a.model_f64 for a in parts))
 
 
 def ring_data(a):
@@ -314,6 +328,6 @@ def selected_arrays(mesh, indices, matrix=None):
     if matrix is not None:
         from core.group import np_affine
         rot, trans = np_affine(matrix)
-        pos = (pos @ rot.T + trans).astype(np.float32).astype(float)
+        pos = transformed_positions(pos, rot, trans, a.model_f64)
     return merged([Arrays(pos, np.arange(len(pos)), a.ring_sizes[rings],
-                          a.ring_counts[mask])])
+                          a.ring_counts[mask], model_f64=a.model_f64)])

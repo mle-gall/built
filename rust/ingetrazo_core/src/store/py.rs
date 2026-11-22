@@ -240,14 +240,14 @@ struct PyRoundPlan {
     inner: super::fillet::RoundPlan,
     lineage: u64,
     revision: u64,
-    hypot: crate::facegeom::Hypot,
+    hypot: crate::store::geometry::Hypot,
     faces: Vec<u128>,
     edges: Vec<u128>,
     flags: Vec<(u128, [f64; 3], [f64; 3])>,
     materials: Vec<u128>,
 }
 type Points = Vec<[f64; 3]>;
-fn points(ps: &[crate::facegeom::V3]) -> Points {
+fn points(ps: &[crate::store::geometry::V3]) -> Points {
     ps.iter().copied().map(super::fillet::xyz).collect()
 }
 
@@ -301,7 +301,7 @@ impl PyRoundPlan {
 fn round_preview(
     s: &Store,
     result: super::fillet::Result<super::fillet::RoundPlan>,
-    hypot: crate::facegeom::Hypot,
+    hypot: crate::store::geometry::Hypot,
 ) -> PyResult<PyRoundPlan> {
     let mut inner = result
         .map_err(|(message, p)| PyValueError::new_err((message, p.map(super::fillet::xyz))))?;
@@ -473,8 +473,7 @@ impl PyMeshStore {
         self.inner.revision
     }
 
-    /// Float32 semantics (QVector3D parity). Turning it off is the
-    /// post-port switch to true float64; tests only for now.
+    /// Round subsequent vertex edits and their weld probes like QVector3D.
     #[getter]
     fn get_f32_parity(&self) -> bool {
         self.inner.f32_parity
@@ -512,7 +511,7 @@ impl PyMeshStore {
         Ok(live.iter().map(|&s| self.inner.key(k, s)).collect())
     }
 
-    /// `Vertex.position` as a float64 triple (holding float32 values).
+    /// `Vertex.position` as a float64 triple.
     fn vertex_position(&self, key: u128) -> PyResult<(f64, f64, f64)> {
         let v = any_of(&self.inner, Kind::Vertex, key)?;
         let p = self.inner.state.vpos.get(v as usize);
@@ -570,8 +569,8 @@ impl PyMeshStore {
         &self,
         key: u128,
         hypot: &str,
-        normal: Option<[f32; 3]>,
-    ) -> PyResult<Vec<[[f32; 3]; 3]>> {
+        normal: Option<[f64; 3]>,
+    ) -> PyResult<Vec<[[f64; 3]; 3]>> {
         let store = &self.inner;
         let face = slot_of(store, Kind::Face, key)?;
         Ok(store.face_triangles(face, normal, crate::hypot_of(hypot)?))
@@ -1111,19 +1110,19 @@ impl PyMeshStore {
         })?.1)
     }
 
-    fn offset_outline(&self, key: u128, normal: [f32; 3], distance: f64, hypot: &str)
+    fn offset_outline(&self, key: u128, normal: [f64; 3], distance: f64, hypot: &str)
         -> PyResult<Vec<super::intersect::Segment>> {
         let face = live_of(&self.inner, Kind::Face, key)?;
         Ok(self.inner.offset_outline(face, normal, distance, crate::hypot_of(hypot)?))
     }
 
-    fn offset_hole_targets(&self, key: u128, regions: Vec<Vec<[f32; 3]>>, normal: [f32; 3],
+    fn offset_hole_targets(&self, key: u128, regions: Vec<Vec<[f64; 3]>>, normal: [f64; 3],
                            hypot: &str) -> PyResult<Option<Vec<i64>>> {
         let face = live_of(&self.inner, Kind::Face, key)?;
         Ok(super::offset::place_holes(&self.inner, face, &regions, normal, crate::hypot_of(hypot)?))
     }
 
-    fn keep_offset_regions(&self, key: u128, regions: Vec<Vec<[f32; 3]>>, normal: [f32; 3],
+    fn keep_offset_regions(&self, key: u128, regions: Vec<Vec<[f64; 3]>>, normal: [f64; 3],
                            distance: f64, hypot: &str) -> PyResult<Vec<bool>> {
         let face = live_of(&self.inner, Kind::Face, key)?;
         Ok(super::offset::keep_regions(&self.inner, face, regions, normal, distance, crate::hypot_of(hypot)?))
@@ -1165,6 +1164,18 @@ impl PyMeshStore {
 
     /// `Mesh.add_face` with the rings as positions (outer first, holes
     /// already filtered): `(key, change)`.
+    #[staticmethod]
+    fn maximal_holes(holes: Vec<Vec<[f64; 3]>>, hypot: &str) -> PyResult<Vec<bool>> {
+        if holes.len() < 2 {
+            return Ok(vec![true; holes.len()]);
+        }
+        if holes.iter().any(|r| r.len() < 3) {
+            return Err(pyo3::exceptions::PyIndexError::new_err("hole has fewer than three corners"));
+        }
+        let rings = holes.into_iter().map(|r| r.into_iter().map(super::drawing::vector).collect()).collect::<Vec<_>>();
+        Ok(super::fillet::maximal_holes(&rings, crate::hypot_of(hypot)?))
+    }
+
     fn add_face(&mut self, rings: Vec<Vec<(f64, f64, f64)>>) -> PyResult<(u128, PyChange)> {
         let rings: Vec<Vec<[f64; 3]>> = rings.into_iter().map(|r| r.into_iter().map(p3).collect()).collect();
         let (f, ch) = self.op(|s, ch| s.add_face(&rings, ch))?;
@@ -1536,8 +1547,8 @@ impl PyMeshStore {
 
     fn prune_plane_debris(
         &mut self,
-        origin: [f32; 3],
-        normal: [f32; 3],
+        origin: [f64; 3],
+        normal: [f64; 3],
         tolerance: f64,
         hypot: &str,
     ) -> PyResult<PyChange> {
@@ -1634,6 +1645,28 @@ impl PyMeshStore {
     }
 
     /// `capture_state`: O(chunks), whatever the mesh size.
+    #[getter]
+    fn frame_origin(&self) -> [f64; 3] {
+        self.inner.state.frame_origin
+    }
+
+    fn _in_frame(&self, origin: [f64; 3]) -> Self {
+        let mut st = self.inner.clone();
+        st.state = st.state.in_frame(origin, None);
+        Self::wrap(st)
+    }
+
+    fn _publish_frame(&mut self, source: &PyMeshStore) -> PyResult<()> {
+        if self.inner.lineage != source.inner.lineage {
+            return Err(PyValueError::new_err("coordinate frames must share a lineage"));
+        }
+        let state = source.inner.state.in_frame(self.inner.state.frame_origin, Some(&self.inner.state));
+        self.inner = source.inner.clone();
+        self.inner.state = state;
+        *self.cache.lock().unwrap() = Default::default();
+        Ok(())
+    }
+
     fn snapshot(&self) -> PyStoreSnapshot {
         PyStoreSnapshot { inner: self.inner.snapshot() }
     }
@@ -1648,7 +1681,8 @@ impl PyMeshStore {
 
     /// `capture_state() == snapshot`.
     fn same_as(&self, snapshot: &PyStoreSnapshot) -> bool {
-        snapshot.inner.lineage == self.inner.lineage && self.inner.state.same_as(&snapshot.inner.state)
+        snapshot.inner.lineage == self.inner.lineage && self.inner.state.same_as(
+            &snapshot.inner.state.in_frame(self.inner.state.frame_origin, Some(&self.inner.state)))
     }
 
     /// `(chunks shared, chunks)` between the live state and a snapshot,
@@ -1743,7 +1777,7 @@ impl PyStoreSnapshot {
         hypot: &str,
         compensated: bool,
         near: Option<[f64; 6]>,
-    ) -> PyResult<Vec<([f32; 3], [f32; 3])>> {
+    ) -> PyResult<Vec<([f64; 3], [f64; 3])>> {
         let store = reader(&self.inner);
         let h = crate::hypot_of(hypot)?;
         Ok(py.detach(|| store.crack_planes(near, h, compensated)))
@@ -1770,7 +1804,7 @@ impl PyStoreSnapshot {
     fn edges_along(
         &self,
         py: Python<'_>,
-        segments: Vec<[[f32; 3]; 2]>,
+        segments: Vec<[[f64; 3]; 2]>,
         tolerance: f64,
         hypot: &str,
     ) -> PyResult<Vec<u128>> {
@@ -1784,7 +1818,7 @@ impl PyStoreSnapshot {
         py: Python<'_>,
         keys: Vec<u128>,
         hypot: &str,
-    ) -> PyResult<Vec<Option<Vec<[[f32; 3]; 3]>>>> {
+    ) -> PyResult<Vec<Option<Vec<[[f64; 3]; 3]>>>> {
         let store = reader(&self.inner);
         let h = crate::hypot_of(hypot)?;
         Ok(py.detach(|| {
@@ -1812,8 +1846,8 @@ impl PyStoreSnapshot {
     fn cap_coverage(
         &self,
         py: Python<'_>,
-        origin: [f32; 3],
-        normal: [f32; 3],
+        origin: [f64; 3],
+        normal: [f64; 3],
         probes: Vec<(f64, f64)>,
         fresh: Vec<u128>,
         tolerance: f64,
@@ -1842,13 +1876,13 @@ impl PyStoreSnapshot {
     fn cap_segments(
         &self,
         py: Python<'_>,
-        origin: [f32; 3],
-        normal: [f32; 3],
+        origin: [f64; 3],
+        normal: [f64; 3],
         tolerance: f64,
         hypot: &str,
         keys: Option<Vec<u128>>,
     ) -> PyResult<Vec<(u128, [[f64; 3]; 2])>> {
-        use crate::facegeom::V3;
+        use crate::store::geometry::V3;
         let store = reader(&self.inner);
         let h = crate::hypot_of(hypot)?;
         let edges = match keys {
@@ -1924,8 +1958,8 @@ impl PyStoreSnapshot {
         &self,
         key: u128,
         hypot: &str,
-        normal: Option<[f32; 3]>,
-    ) -> PyResult<Vec<[[f32; 3]; 3]>> {
+        normal: Option<[f64; 3]>,
+    ) -> PyResult<Vec<[[f64; 3]; 3]>> {
         let store = &reader(&self.inner);
         let face = slot_of(store, Kind::Face, key)?;
         Ok(store.face_triangles(face, normal, crate::hypot_of(hypot)?))
@@ -1958,7 +1992,8 @@ impl PyStoreSnapshot {
     /// `capture_state() == other` between two snapshots of one store:
     /// chunk pointers first, content only where they differ.
     fn same_as(&self, other: &PyStoreSnapshot) -> bool {
-        self.inner.lineage == other.inner.lineage && self.inner.state.same_as(&other.inner.state)
+        self.inner.lineage == other.inner.lineage && self.inner.state.same_as(
+            &other.inner.state.in_frame(self.inner.state.frame_origin, Some(&self.inner.state)))
     }
 
     /// Net change between two immutable snapshots of one store. Across a
@@ -1970,7 +2005,8 @@ impl PyStoreSnapshot {
         if self.inner.lineage != before.inner.lineage {
             return Err(PyValueError::new_err("snapshots of different stores"));
         }
-        let (new, old) = (reader(&self.inner), reader(&before.inner));
+        let (new, mut old) = (reader(&self.inner), reader(&before.inner));
+        old.state = old.state.in_frame(new.state.frame_origin, Some(&new.state));
         let mut ch = py.detach(|| new.changes_since(&old));
         ch.modified[2].extend(attrs.into_iter().filter(|&k|
             new.slot(Kind::Face, k).is_some() && old.slot(Kind::Face, k).is_some()));

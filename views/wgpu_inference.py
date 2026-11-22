@@ -66,6 +66,17 @@ def _prototype_arrays(packed, code, scene, first_row, cache):
         return (triangles, *cache[key])
     reveal = bool(getattr(scene, 'show_hidden_geometry', False))
     source = mesh.__dict__.get('_deferred_source') if mesh is not None else None
+    store = mesh.__dict__.get('_store') if mesh is not None else None
+    frame = (0., 0., 0.)
+    if source is None and store is not None:
+        # Pin one native snapshot for the whole read. The worker can overlap
+        # a tool gesture or undo turning the mesh into another coordinate frame.
+        saved = getattr(packed, '_snap_sources', {}).get(id(mesh))
+        snapshot, frame = saved if saved is not None else (store.snapshot(), store.frame_origin)
+        arrays = snapshot.arrays()
+        source = dict(pos=arrays['pos'], edges=arrays['edges'], flags=arrays['flags'],
+                      curves=arrays['curve'], layers=arrays['layer'],
+                      meta={'edge_layers': snapshot.layer_names()})
     if source is not None:
         pos = np.ascontiguousarray(source['pos'], dtype=float)
         edges = np.ascontiguousarray(source['edges'], dtype=np.int64)
@@ -84,13 +95,17 @@ def _prototype_arrays(packed, code, scene, first_row, cache):
             visible = getattr(scene, 'edge_snappable', lambda e: not e.hidden or reveal)
             for e in mesh.edges:
                 if (group is None or reveal or not e.soft) and visible(e):
-                    lines.extend((e.a.toTuple(), e.b.toTuple()))
+                    lines.extend((e.v0.position_tuple(), e.v1.position_tuple()))
                     named.append(-1 if e.curve is None else e.curve)
             pos = lines
         pos = np.ascontiguousarray(pos, dtype=float).reshape(-1, 3)
         edges = np.arange(len(pos), dtype=np.int64).reshape(-1, 2)
         keep = np.ones(len(edges), bool)
         curves = np.asarray(named, np.int64) if mesh is not None else np.full(len(edges), -1, np.int64)
+    if mesh is not None and code < len(packed.prototype_origins):
+        origin = packed.prototype_origins[code]
+        if tuple(frame) != origin:
+            pos = pos + np.subtract(frame, origin)
     arrays = (pos, edges, keep, curves)
     if mesh is not None:
         cache[key] = arrays

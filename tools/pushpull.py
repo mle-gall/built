@@ -1246,7 +1246,8 @@ class PushPullTool(Tool):
         objects is what makes it safe.
         """
         mesh = self._target_mesh(viewport.scene)
-        step = self._normal * delta
+        step = (tuple(n * delta for n in self._normal.toTuple()) if "_store" in mesh.__dict__
+                else self._normal * delta)
         for v in self._prism_verts:
             mesh.move_vertex(v, step)
         # Booked as the TARGET, not as a running sum: adding deltas frame by
@@ -1336,7 +1337,9 @@ class PushPullTool(Tool):
         mesh = self._target_mesh(viewport.scene)
         off = d - self._stage_d
         for v, (p, rate) in zip(self._stage_verts, self._stage_pos):
-            mesh.place_vertex(v, p + rate * off)
+            position = (tuple(a + b * off for a, b in zip(p, rate.toTuple()))
+                        if isinstance(p, tuple) else p + rate * off)
+            mesh.place_vertex(v, position)
         self._stage_applied = d
         self._stage_serial = (id(mesh), mesh._mut_serial)
         viewport.scene.version += 1
@@ -1452,7 +1455,7 @@ class PushPullTool(Tool):
             self._stage_hi = min((lv for lv in levels if lv > d),
                                  default=math.inf)
             self._stage_verts = movers
-            self._stage_pos = [(QVector3D(v.position), r)
+            self._stage_pos = [(v.position_tuple() if "_store" in mesh.__dict__ else QVector3D(v.position), r)
                                for v, r in zip(movers, rates)]
         made_f = _made_since(mesh, snap, "face")
         made_e = _made_since(mesh, snap, "edge")
@@ -2701,7 +2704,8 @@ class PushPullTool(Tool):
                 and not self._cap_passes_a_wall_vertex(scene, face, d)):
             normal = self._normal if self._normal is not None else face.normal()
             translate_points(scene, {_key(p) for p in self._cap_positions},
-                             normal * d)
+                             tuple(n*d for n in normal.toTuple()) if "_store" in scene.mesh.__dict__
+                             else normal * d)
             seed = list(self._cap_positions) + [p + normal * d
                                                 for p in self._cap_positions]
             seedkeys = {_key(p) for p in seed}
@@ -2855,8 +2859,20 @@ class PushPullTool(Tool):
             commands = self._extrude_commands(
                 face, base, top, base_holes, top_holes, count, attached
             )
-        for cmd in commands:
-            cmd.do(scene)
+        from core.coordinate_frame import planned_points
+        exact = {}
+        if "_store" in scene.mesh.__dict__ and through is None:
+            delta = tuple(n * d for n in normal.toTuple())
+            for ring, raised in zip([base, *base_holes], [top, *top_holes]):
+                for point, cap in zip(ring, raised):
+                    vertex = scene.mesh.vertex_at(point)
+                    if vertex is not None:
+                        source = vertex.position_tuple()
+                        exact[point.toTuple()] = source
+                        exact[cap.toTuple()] = tuple(v + t for v, t in zip(source, delta))
+        with planned_points(scene.mesh, exact):
+            for cmd in commands:
+                cmd.do(scene)
         if (base_attrs and self._cap_cmd is not None
                 and self._cap_cmd.face in scene.mesh.faces):
             # The moved cap continues the (consumed) base: same attrs.

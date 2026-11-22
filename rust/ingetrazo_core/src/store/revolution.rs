@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Circular closed sweeps whose path axis lies in the profile plane.
 use super::sweep::Station;
-use crate::facegeom::{py_sum, Hypot, V3};
-use crate::orient::{face_centroid, face_normal};
+use crate::store::geometry::{py_sum, Hypot, V3};
+use crate::store::geometry::{face_centroid, face_normal};
 
 type Point = [f64; 3];
 fn dot(a: Point, b: Point) -> f64 {
@@ -78,10 +78,10 @@ pub(super) fn stations(
     }
     let points: Vec<_> = outer
         .iter()
-        .map(|p| V3(p[0] as f32, p[1] as f32, p[2] as f32))
+        .map(|p| V3(p[0], p[1], p[2]))
         .collect();
     let indices: Vec<_> = (0..points.len() as u32).collect();
-    let xyz = |p: V3| [p.0 as f64, p.1 as f64, p.2 as f64];
+    let xyz = |p: V3| [p.0, p.1, p.2];
     let normal = unit(xyz(face_normal(&points, &indices, h)))?;
     if dot(normal, axis).abs() > 1e-3 || dot(relative(outer[0]), normal).abs() > tol {
         return None;
@@ -131,11 +131,10 @@ pub(super) fn stations(
                         ring.iter()
                             .map(|&[height, x, y]| {
                                 std::array::from_fn(|k| {
-                                    (center[k]
+                                    center[k]
                                         + axis[k] * height
                                         + (radial[k] * ca + side[k] * sa) * x
-                                        + (side[k] * ca - radial[k] * sa) * y)
-                                        as f32 as f64
+                                        + (side[k] * ca - radial[k] * sa) * y
                                 })
                             })
                             .collect()

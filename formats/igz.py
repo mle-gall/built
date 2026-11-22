@@ -2748,7 +2748,8 @@ def _build_geometry(mesh, meta, pos, edges, flags, curves, layers, rings,
     if precise:
         vobjs, inverse = built.python_vertices(mesh, pos, meta.get("sequential") is True)
     else:
-        vobjs, inverse = mesh.bulk_weld(pos.astype(np.float64))
+        vobjs, inverse = mesh.bulk_weld(
+            pos if "_store" in mesh.__dict__ else pos.astype(np.float64))
     emap = None
     if len(edges):
         eflags = None

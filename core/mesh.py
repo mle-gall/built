@@ -57,7 +57,8 @@ _KEY_SCALE = 10.0 ** _KEY_DECIMALS
 #: belong to the store (``core.store_mesh.STORE_SIDE``): never deep-copied.
 _STORE_SIDE = frozenset(("_store", "_objmap", "_attr_table", "_attr_own",
                          "_bulk", "_py_base", "_pos_cache",
-                         "_face_cache"))
+                         "_face_cache", "_frame_parent", "_tool_frame_cache",
+                         "_planned_points"))
 
 
 def _store_on() -> bool:
@@ -132,6 +133,9 @@ class Vertex:
     """
 
     __slots__ = ("position", "edges", "key")
+
+    def position_tuple(self):
+        return self.position.toTuple()
 
     def __init__(self, position: QVector3D, *, key: int | None = None) -> None:
         self.key = next(_STANDALONE_KEYS) if key is None else key
@@ -872,14 +876,16 @@ class Mesh:
             # into the Rust store (core/store_mesh.py), same vertex order.
             from core import store_mesh
             return store_mesh.bulk_weld(self, pos)
-        # Round-trip through float32 first: the sequential path stores every
-        # position in a QVector3D (C float), so cell keys and probe distances
-        # are computed on float32 values — a float64 input must quantize the
-        # same way or boundary cells (and thus welds) diverge.
-        pos = np.ascontiguousarray(pos, dtype=np.float32).astype(np.float64)
+        from core.store_mesh import StoreMesh
+        store = self._store if isinstance(self, StoreMesh) else None
+        if store is None:
+            # Object vertices store their coordinates in QVector3D.
+            pos = np.ascontiguousarray(pos, dtype=np.float32)
+        pos = np.ascontiguousarray(pos, dtype=np.float64)
         if not len(pos):
             return [], np.empty(0, dtype=np.int64)
-        keys = np.round(pos * _KEY_SCALE).astype(np.int64)
+        model = pos + store.frame_origin if store is not None and any(store.frame_origin) else pos
+        keys = np.round(model * _KEY_SCALE).astype(np.int64)
         # Byte records group equal int64 triples without the field-by-field
         # structured sort. Only equality matters: first occurrence restores
         # the cell order below, regardless of the byte sort's ordering.
@@ -894,8 +900,6 @@ class Mesh:
         ukeys = keys[first]                    # unique cells, creation order
         nu = len(first)
         candidate = _weld_candidates(ukeys)
-        from core.store_mesh import StoreMesh
-        store = self._store if isinstance(self, StoreMesh) else None
         registry = (set(map(tuple, store.registry()[0].tolist())) if store is not None
                     else self._registry)
         if registry:
@@ -938,13 +942,12 @@ class Mesh:
             nc_pos = pos[first[nc_cells]].tolist()
             ids = np.empty(len(nc_cells), dtype=np.int64)
             for j, (k3, p3) in enumerate(zip(nc_keys, nc_pos)):
-                position = QVector3D(*p3)
                 if store is None:
-                    v = Vertex(position, key=next(self._keys))
+                    v = Vertex(QVector3D(*p3), key=next(self._keys))
                     registry[tuple(k3)] = v
                     vertices.append(v)
                 else:
-                    v = self.vertex(position)
+                    v = self.vertex(p3)
                 ids[j] = _vid(v)
             cell_vid[nc_cells] = ids
             ncp = ~cand_pt
@@ -958,7 +961,7 @@ class Mesh:
             probe = self._probe_neighbours
             for j, i in enumerate(cp_list):
                 if store is not None:
-                    point_ids[i] = _vid(self.vertex(QVector3D(*cp_pos[j])))
+                    point_ids[i] = _vid(self.vertex(cp_pos[j]))
                     continue
                 k3 = cp_keys[j]
                 k = (k3[0], k3[1], k3[2])

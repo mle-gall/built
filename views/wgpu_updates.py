@@ -361,6 +361,8 @@ class InstanceUpdates:
 
     def diff(self, scene):
         """Return changed resident rows, retaining prototype and placement IDs."""
+        if any(self.packed.origin) or any(any(o) for o in self.packed.prototype_origins):
+            return None
         if scene is not self.scene:
             return None
         local = self.unsubscribe is not None and self.journal_valid and _resident_version(scene) == self.version
@@ -471,6 +473,18 @@ class InstanceUpdates:
         for key, (mesh, _, _) in changed.items():
             for code in self.variants.get(key, ()):
                 bake[code] = mesh
+        # Incremental placement writes use unshifted matrices. A new remote
+        # placement or remote prototype needs bounds and a new full pack.
+        from core.coordinate_frame import REBASE_DISTANCE
+        if any(np.max(abs(row['world'][3, :3])) > REBASE_DISTANCE for row in values):
+            return None
+        for mesh in {id(m): m for m in bake.values()}.values():
+            store = mesh.__dict__.get('_store')
+            if store is not None:
+                pos = store.positions()
+                if len(pos) and np.max(abs((pos.min(axis=0) + pos.max(axis=0)) * .5
+                                           + store.frame_origin)) > REBASE_DISTANCE:
+                    return None
         records, self.mesh_changes = self.mesh_changes, {}
         self.changed_records = {key: records[key] for key in {id(m) for m in bake.values()}
                                 if key in records}

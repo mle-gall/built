@@ -147,8 +147,19 @@ class MeshToolAccess:
         if resolved is None:
             return None
         group, _ = resolved
-        matrix = QMatrix4x4(self.view.packed.instances['world'][row].T.flatten().tolist())
+        packed = self.view.packed
+        world = packed.instances['world'][row]
         mesh = group.mesh if group is not None else self.scene.loose_mesh
+        code = int(packed.instances['info'][row, 0])
+        origins = getattr(packed, 'prototype_origins', ())
+        if code < len(origins) and (any(origins[code]) or any(packed.origin)):
+            # The tool's active mesh is in scene space; the GPU row expects
+            # vertices relative to the prototype anchor.
+            st = mesh.__dict__.get('_store')
+            frame = st.frame_origin if st is not None else (0., 0., 0.)
+            world = world.astype(float)
+            world[3, :3] += np.subtract(frame, origins[code]) @ world[:3, :3]
+        matrix = QMatrix4x4(world.T.flatten().tolist())
         if group is self.scene.edit_group and group is not None:
             # The editing mesh is in world coordinates even if the retained
             # GPU row still draws its local-space definition.
@@ -165,6 +176,13 @@ class MeshToolAccess:
         and the face centre), ~4 ms over 600 faces and without bound on a
         big loose mesh. The same Möller–Trumbore thresholds, the same
         first-face-wins on a tie."""
+        packed = getattr(self.view, 'packed', None)
+        if any(getattr(packed, 'origin', ())) or getattr(self.view, '_remote_meshes', ()):
+            with self.view._geometry_frame():
+                return self._face_placement_at(x, y)
+        return self._face_placement_at(x, y)
+
+    def _face_placement_at(self, x, y):
         from types import SimpleNamespace
         from views.viewport import _moller_trumbore
         picked = self._picked_mesh(x, y)
@@ -200,8 +218,9 @@ class MeshToolAccess:
         their triangles in its own space, ``owner[i]`` the face of triangle
         ``i`` — kept until the mesh mutates or the scene's version moves
         (a hide, a vertex dragged)."""
-        key = (getattr(mesh, '_mut_serial', None),
-               getattr(self.scene, 'version', None))
+        store = mesh.__dict__.get('_store')
+        key = (getattr(mesh, '_mut_serial', None), getattr(self.scene, 'version', None),
+               tuple(store.frame_origin) if store is not None else None)
         memo = self.__dict__.setdefault('_face_tri_memo', {})
         hit = memo.get(id(mesh))
         if hit is not None and hit[0] is mesh and hit[1] == key:

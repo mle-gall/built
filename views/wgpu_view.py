@@ -1,4 +1,5 @@
 """Native Metal input and presentation sharing the document camera and selection."""
+from contextlib import ExitStack, contextmanager
 import math
 import time
 import numpy as np
@@ -27,9 +28,33 @@ def _paint_key(scene):
         or bool(getattr(ly, 'locked', False))))
 
 
+def _tool_frame(method):
+    from functools import wraps
+    @wraps(method)
+    def handle(view, *args, **kwargs):
+        origin = getattr(getattr(view, "packed", None), "origin", ())
+        prototypes = getattr(view, '_remote_meshes', ())
+        if not any(origin) and not prototypes:
+            return method(view, *args, **kwargs)
+        with view._geometry_frame():
+            return method(view, *args, **kwargs)
+    return handle
+
+
 class WgpuView(QWidget):
     frameReady = Signal(float, object, float)
     _ZOOM_OUT_STEP = 0.05
+
+    @contextmanager
+    def _geometry_frame(self):
+        from core.coordinate_frame import mesh_frame
+        with ExitStack() as frames:
+            active = self.scene.mesh
+            frames.enter_context(mesh_frame(active, self.packed.origin))
+            for mesh, origin in getattr(self, '_remote_meshes', ()):
+                if mesh is not active:
+                    frames.enter_context(mesh_frame(mesh, origin))
+            yield
 
     def _model_diag(self):
         return float(np.linalg.norm(self.packed.world_bounds[1]-self.packed.world_bounds[0]))
@@ -127,6 +152,7 @@ class WgpuView(QWidget):
             self.tools.sync()
             self.update()
 
+    @_tool_frame
     def hideEvent(self, event):
         self.tools.cancel()
         super().hideEvent(event)
@@ -140,6 +166,7 @@ class WgpuView(QWidget):
         if opening:
             # What the window runs after the first picture (see above).
             self.after_open = []
+        same_document = scene is getattr(self, "scene", None)
         self.scene = scene
         allowed = getattr(scene, '_navigator_allowed', None)
         version, stack, _, similar, layers = scene._bounds_key()
@@ -243,8 +270,22 @@ class WgpuView(QWidget):
             self.build_seconds = time.perf_counter() - start
             self.update()
             return
+        old_origin = getattr(self.packed, 'origin', (0., 0., 0.))
         self.packed = pack_scene(scene, getattr(self.source_viewport, 'view_tint', None),
-                                 progress=progress)
+                                 progress=progress, previous_origin=old_origin if same_document else (0., 0., 0.),
+                                 previous_pack=self.packed if same_document else None)
+        remote = {}
+        if any(any(o) for o in self.packed.prototype_origins):
+            for group, code in zip(self.packed.groups, self.packed.instances['info'][:, 0]):
+                anchor = self.packed.prototype_origins[code]
+                if group is not None and any(anchor):
+                    remote[id(group.mesh)] = (group.mesh, anchor)
+        self._remote_meshes = tuple(remote.values())
+        if any(self.packed.origin):
+            self._sync_scene_camera()
+        elif any(old_origin) and self.source_viewport is not None:
+            self.camera = self.source_viewport.camera
+            self._source_pose = None
         from views.wgpu_billboards import Billboards
         self._billboards = Billboards(self.packed)
         self._scene_dirty = True
@@ -279,7 +320,7 @@ class WgpuView(QWidget):
         if not opening:
             self.build_seconds = time.perf_counter()-start
         lo, hi = self.packed.world_bounds
-        if self.source_viewport is None:
+        if self.source_viewport is None and not any(self.packed.origin):
             self.camera.target = QVector3D(*((lo+hi)/2))
             self.camera.distance = max(float(np.linalg.norm(hi-lo))*1.4, 1.)
         self._prepare_inference()
@@ -352,6 +393,7 @@ class WgpuView(QWidget):
         self._resident_edit_copies = ()
         self._parent_map = None
         self.packed = pack_scene(Scene())
+        self._remote_meshes = ()
         from views.wgpu_billboards import Billboards
         self._billboards = Billboards(self.packed)
         self._content_token = None
@@ -398,9 +440,20 @@ class WgpuView(QWidget):
 
     def _inference_snapshot(self):
         from dataclasses import replace
-        return replace(self.packed, instances=self.packed.instances.copy(),
-                       bounds=self.packed.bounds.copy(), commands=self.packed.commands.copy(),
-                       edge_commands=self.packed.edge_commands.copy())
+        packed = replace(self.packed, instances=self.packed.instances.copy(),
+                         bounds=self.packed.bounds.copy(), commands=self.packed.commands.copy(),
+                         edge_commands=self.packed.edge_commands.copy())
+        if any(packed.origin) or any(any(o) for o in packed.prototype_origins):
+            _, first = np.unique(packed.instances['info'][:, 0], return_index=True)
+            packed.groups = list(packed.groups)
+            packed._snap_sources = {}
+            for row in first:
+                group = packed.groups[row]
+                mesh = self.scene.loose_mesh if group is None else group.mesh
+                store = mesh.__dict__.get('_store')
+                if store is not None and id(mesh) not in packed._snap_sources:
+                    packed._snap_sources[id(mesh)] = (store.snapshot(), store.frame_origin)
+        return packed
 
     def _upload(self, force=False):
         if self.packed is None or not (force or self._presentable()):
@@ -478,6 +531,48 @@ class WgpuView(QWidget):
         finally:
             self._drawing_frame = False
 
+    def _sync_scene_camera(self):
+        """Mirror document camera controls while retaining a precise local target."""
+        from copy import copy
+        origin = self.packed.origin
+        source = getattr(self.source_viewport, 'camera', None)
+        last = getattr(self, '_source_pose', None)
+        if last is None or last[0] != origin or last[1] is not source:
+            self.camera = copy(source or self.camera)
+            target = np.asarray(self.camera.target.toTuple()) - origin
+            lo, hi = self.packed.world_bounds
+            center = (lo + hi) * .5
+            # First geometry in a remote document, with the default camera
+            # still looking at model zero. Frame its actual relative extent.
+            if np.linalg.norm(target-center) > max(self.camera.distance, np.linalg.norm(hi-lo)) * 4:
+                self.camera.fit_to(QVector3D(*lo), QVector3D(*hi))
+            elif source is not None and source.target == QVector3D(*(center + origin)):
+                self.camera.target = QVector3D(*center)
+            else:
+                self.camera.target = QVector3D(*target)
+            previous = {}
+        else:
+            previous = last[2]
+        if source is None:
+            self._source_pose = (origin, None, {})
+            return
+        state = {}
+        for name, value in vars(source).items():
+            if name.startswith('_') or name in ('aspect', 'depth_reach'):
+                continue
+            signature = value.toTuple() if isinstance(value, QVector3D) else value
+            if name in previous and signature != previous[name]:
+                if name == 'target':
+                    self.camera.target = QVector3D(*np.subtract(signature, origin))
+                else:
+                    setattr(self.camera, name, value)
+            else:
+                local = getattr(self.camera, name)
+                value = QVector3D(*np.add(local.toTuple(), origin)) if name == 'target' else local
+                setattr(source, name, value)
+            state[name] = value.toTuple() if isinstance(value, QVector3D) else value
+        self._source_pose = (origin, source, state)
+
     def _present_frame(self):
         start = time.perf_counter()
         # A scene packed since the last frame goes up BEFORE anything is
@@ -492,7 +587,10 @@ class WgpuView(QWidget):
                 return None
         self.tools.sync()
         if self.source_viewport is not None:
-            self.camera = self.source_viewport.camera
+            if any(self.packed.origin):
+                self._sync_scene_camera()
+            else:
+                self.camera = self.source_viewport.camera
             self._mirror_cursor()
         # R-look 3c: compute each camera matrix once, after updating aspect.
         self.camera.aspect = self.width()/max(1, self.height())
@@ -684,7 +782,9 @@ class WgpuView(QWidget):
             self._scene_dirty = False
         elif self._scene_dirty:
             self._upload()
-        camera = copy(source.camera)
+        if any(self.packed.origin):
+            self._sync_scene_camera()
+        camera = copy(self.camera if any(self.packed.origin) else source.camera)
         camera.aspect = width_px / height_px
         view, projection = camera.view_matrix(), camera.projection_matrix()
         payload = style_payload(source.scene, source._effective_style(),
@@ -789,6 +889,7 @@ class WgpuView(QWidget):
         from views.viewport import Viewport
         return Viewport._world_to_pixel(self, point)
 
+    @_tool_frame
     def hover(self, x, y, modifiers=Qt.NoModifier):
         from views.wgpu_inference import snap
         from views.wgpu_overlay import snap_glyph, Primitive
@@ -1136,6 +1237,7 @@ class WgpuView(QWidget):
         self.update()
         self.selection_ms = (time.perf_counter()-start)*1000
 
+    @_tool_frame
     def mousePressEvent(self, event):
         self.setFocus()
         self.last = self.press = event.position()
@@ -1153,6 +1255,7 @@ class WgpuView(QWidget):
         if self._drag_nav:
             self._pivot = self._orbit_pivot_at(self.press.x(), self.press.y())
 
+    @_tool_frame
     def mouseMoveEvent(self, event):
         if getattr(self, '_look_drag', None) is not None:
             from views.viewport import Viewport
@@ -1207,6 +1310,7 @@ class WgpuView(QWidget):
         from views.viewport import Viewport
         return Viewport._can_warp_pointer()
 
+    @_tool_frame
     def focusOutEvent(self, event):
         # As GL's: the walking keys' releases will land elsewhere, but the
         # tool goes on. Cancelling it here reset a line whose first point
@@ -1222,6 +1326,7 @@ class WgpuView(QWidget):
         # Qt's focus chain took it and left the keyboard on a tray button.
         return False
 
+    @_tool_frame
     def mouseReleaseEvent(self, event):
         if getattr(self, '_look_drag', None) is not None:
             self._look_drag = None
@@ -1282,6 +1387,7 @@ class WgpuView(QWidget):
             event.globalPos(), locked_image=under if under is not picked else None,
             locked_group=self.tools.pick_locked_group(point.x(), point.y()))
 
+    @_tool_frame
     def mouseDoubleClickEvent(self, event):
         # A double click of the wheel recentres the view on the point under
         # the cursor (on sky: at the depth of the view's centre); the tool in
@@ -1330,6 +1436,7 @@ class WgpuView(QWidget):
                 return True
         return super().event(event)
 
+    @_tool_frame
     def keyPressEvent(self, event):
         mode = self.tools.sync()
         if event.key() == Qt.Key_Escape:
@@ -1378,6 +1485,7 @@ class WgpuView(QWidget):
             self.tools.hover(QMouseEvent(QEvent.MouseMove, pos, pos,
                                          Qt.NoButton, Qt.NoButton, held))
 
+    @_tool_frame
     def keyReleaseEvent(self, event):
         mode = self.tools.sync()
         release = getattr(self.tools.tool, 'on_key_release', None)

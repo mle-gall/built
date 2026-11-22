@@ -14,12 +14,7 @@
 //! same weld lookups, the key rules of `docs/element-keys-implementation.md`
 //! (a split's new first half and a weld's redirected edge take the old
 //! edge's key, i.e. its SLOT: a key is a slot and a generation), and the
-//! same float arithmetic. Python computes the geometric tests on
-//! `QVector3D`, i.e. in float32 with Qt's own `length()` (`std::hypot`,
-//! which differs between C++ libraries) and, on arm64, fused dot products;
-//! they go through `crate::facegeom`, which reproduces exactly that, with
-//! the `Hypot` formula `core._native.qt_hypot()` identified at start-up.
-//! Python's own float operations are `f64` here.
+//! same model-unit tolerances. Geometric predicates use doubles.
 //!
 //! Where Python iterates a `set` (`collapse_vertex`'s two edges,
 //! `_weld_into`'s edges of the welded vertex, `_trace_loops`' next edge),
@@ -41,7 +36,7 @@ use super::edit::Change;
 use super::keys::{Kind, NONE};
 use super::topo::OpError;
 use super::{Store, FLAT, SOFT};
-use crate::facegeom::{self, Hypot, V3};
+use crate::store::geometry::{self as facegeom, Hypot, V3};
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::sync::Arc;
@@ -51,7 +46,7 @@ pub const STITCH_TOL: f64 = 1e-4;
 
 #[inline]
 fn v3(p: &[f64; 3]) -> V3 {
-    V3(p[0] as f32, p[1] as f32, p[2] as f32)
+    V3(p[0], p[1], p[2])
 }
 
 #[inline]
@@ -60,7 +55,7 @@ fn add(a: V3, b: V3) -> V3 {
 }
 
 #[inline]
-fn scale(a: V3, s: f32) -> V3 {
+fn scale(a: V3, s: f64) -> V3 {
     V3(a.0 * s, a.1 * s, a.2 * s)
 }
 
@@ -245,7 +240,7 @@ impl Store {
     // ---- reads --------------------------------------------------------------
 
     #[inline]
-    fn p32(&self, v: u32) -> V3 {
+    pub(super) fn position_vec(&self, v: u32) -> V3 {
         v3(self.state.vpos.get(v as usize))
     }
 
@@ -271,8 +266,7 @@ impl Store {
         (0..n).map(|j| *st.corners.get(r.corner_start as usize + j)).collect()
     }
 
-    /// `Face(ring).normal()`: Newell in doubles, the vector and its
-    /// division in float32, (0, 0, 1) for fewer than three corners or a
+    /// Unit Newell vector, (0, 0, 1) for fewer than three corners or a
     /// length under 1e-9.
     pub fn ring_normal(&self, ring: &[u32], h: Hypot) -> V3 {
         let m = ring.len();
@@ -287,7 +281,7 @@ impl Store {
             ny += (c[2] - n[2]) * (c[0] + n[0]);
             nz += (c[0] - n[0]) * (c[1] + n[1]);
         }
-        let n = V3(nx as f32, ny as f32, nz as f32);
+        let n = V3(nx, ny, nz);
         let len = facegeom::length(n, h);
         if (len as f64) < 1e-9 {
             return V3(0.0, 0.0, 1.0);
@@ -301,19 +295,22 @@ impl Store {
 
     /// `core.mesh._loop_area`: the Newell terms summed in a QVector3D.
     fn loop_area(&self, ring: &[u32], h: Hypot) -> f64 {
-        let mut n = V3(0.0, 0.0, 0.0);
-        let m = ring.len();
-        for i in 0..m {
-            let c = self.state.vpos.get(ring[i] as usize);
-            let x = self.state.vpos.get(ring[(i + 1) % m] as usize);
-            let t = V3(
-                ((c[1] - x[1]) * (c[2] + x[2])) as f32,
-                ((c[2] - x[2]) * (c[0] + x[0])) as f32,
-                ((c[0] - x[0]) * (c[1] + x[1])) as f32,
-            );
-            n = add(n, t);
+        let mut sum = [0.; 3];
+        for (&a, &b) in ring.iter().zip(ring.iter().cycle().skip(1)) {
+            let p = self.state.vpos.get(a as usize);
+            let q = self.state.vpos.get(b as usize);
+            let term = self.quantize([
+                (p[1] - q[1]) * (p[2] + q[2]),
+                (p[2] - q[2]) * (p[0] + q[0]),
+                (p[0] - q[0]) * (p[1] + q[1]),
+            ]);
+            sum = self.quantize(std::array::from_fn(|k| sum[k] + term[k]));
         }
-        0.5 * facegeom::length(n, h) as f64
+        if self.f32_parity {
+            0.5 * crate::facegeom::hypot3(sum.map(|x| x as f32), h) as f64
+        } else {
+            0.5 * facegeom::length(v3(&sum), h)
+        }
     }
 
     /// `core.mesh._orient_union_loops`.
@@ -343,8 +340,8 @@ impl Store {
     /// the edge (within `_STITCH_TOL`), QVector3D arithmetic throughout.
     pub fn interior_vertex_on(&self, e: u32, h: Hypot) -> Option<u32> {
         let [v0, v1] = *self.state.ends.get(e as usize);
-        let a = self.p32(v0);
-        let b = self.p32(v1);
+        let a = self.position_vec(v0);
+        let b = self.position_vec(v1);
         let ab = b.sub(a);
         let length = facegeom::length(ab, h) as f64;
         if length < STITCH_TOL {
@@ -356,12 +353,12 @@ impl Store {
             if v == v0 || v == v1 {
                 continue;
             }
-            let p = self.p32(v);
+            let p = self.position_vec(v);
             let t = p.sub(a).dot(ab, h) as f64 / (length * length);
             if t <= lo || t >= hi {
                 continue;
             }
-            let foot = add(a, scale(ab, t as f32));
+            let foot = add(a, scale(ab, t));
             if (facegeom::length(p.sub(foot), h) as f64) < STITCH_TOL {
                 return Some(v);
             }
@@ -379,9 +376,9 @@ impl Store {
         let (Some(e1), Some(e2), None) = (it.next(), it.next(), it.next()) else {
             return false;
         };
-        let pv = self.p32(v);
-        let d1 = pv.sub(self.p32(self.other_end(e1, v)));
-        let d2 = self.p32(self.other_end(e2, v)).sub(pv);
+        let pv = self.position_vec(v);
+        let d1 = pv.sub(self.position_vec(self.other_end(e1, v)));
+        let d2 = self.position_vec(self.other_end(e2, v)).sub(pv);
         if (facegeom::length(d1, h) as f64) < STITCH_TOL || (facegeom::length(d2, h) as f64) < STITCH_TOL {
             return false;
         }

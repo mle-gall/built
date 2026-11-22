@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Geometry reads in face order, independent of dense vertex indices.
 use super::{cow::FxHashMap, keys::Kind, Store, INTERIOR};
-use crate::facegeom::{triangles, Hypot, V3};
+use crate::store::geometry::{triangles, Hypot, V3};
 
 impl Store {
-    pub fn face_triangles(&self, f: u32, normal: Option<[f32; 3]>, h: Hypot) -> Vec<[[f32; 3]; 3]> {
+    pub fn face_triangles(&self, f: u32, normal: Option<[f64; 3]>, h: Hypot) -> Vec<[[f64; 3]; 3]> {
         let rings = self.face_rings(f);
         if rings.first().is_none_or(|r| r.len() < 3) {
             return Vec::new();
@@ -17,7 +17,7 @@ impl Store {
                     .map(|&v| {
                         let [x, y, z] = *self.state.vpos.get(v as usize);
                         let i = pos.len() as u32;
-                        pos.push(V3(x as f32, y as f32, z as f32));
+                        pos.push(V3(x, y, z));
                         i
                     })
                     .collect()
@@ -26,7 +26,7 @@ impl Store {
         let refs: Vec<_> = local.iter().map(Vec::as_slice).collect();
         let n = normal
             .map(|[x, y, z]| V3(x, y, z))
-            .unwrap_or_else(|| crate::orient::face_normal(&pos, refs[0], h));
+            .unwrap_or_else(|| crate::store::geometry::face_normal(&pos, refs[0], h));
         triangles(&pos, &refs, n, h)
             .iter()
             .map(|t| {
@@ -67,11 +67,11 @@ impl Store {
         }
         let rings = self.face_rings(*faces.first()?);
         let anchor = self.state.vpos.get(*rings.first()?.first()? as usize);
-        let rel = |p: [f32; 3]| {
+        let rel = |p: [f64; 3]| {
             [
-                p[0] as f64 - anchor[0],
-                p[1] as f64 - anchor[1],
-                p[2] as f64 - anchor[2],
+                p[0] - anchor[0],
+                p[1] - anchor[1],
+                p[2] - anchor[2],
             ]
         };
         let terms = faces

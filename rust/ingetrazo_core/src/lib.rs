@@ -72,6 +72,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(qt_dot_pairs, m)?)?;
     m.add_function(wrap_pyfunction!(smooth_corner_normals, m)?)?;
     m.add_function(wrap_pyfunction!(weld_points, m)?)?;
+    m.add_function(wrap_pyfunction!(store_weld_indices, m)?)?;
     m.add_function(wrap_pyfunction!(json_mesh_blocks, m)?)?;
     m.add_function(wrap_pyfunction!(boxes_near_px, m)?)?;
     m.add_function(wrap_pyfunction!(points_near_px, m)?)?;
@@ -707,6 +708,20 @@ fn weld_points<'py>(
         (flat, ids, origin)
     });
     Ok((flat3(py, flat)?, PyArray1::from_vec(py, ids), PyArray1::from_vec(py, origin)))
+}
+
+/// Stable input and representative indices for a double-precision bulk weld.
+#[pyfunction]
+fn store_weld_indices<'py>(
+    py: Python<'py>, pos: PyReadonlyArray2<'_, f64>, scale: f64, tol2: f64,
+) -> PyResult<(Bound<'py, PyArray1<i64>>, Bound<'py, PyArray1<i64>>)> {
+    use numpy::PyUntypedArrayMethods;
+    if pos.shape()[1] != 3 {
+        return Err(pyo3::exceptions::PyValueError::new_err("expected (P, 3) positions"));
+    }
+    let points = pos.as_slice()?.as_chunks::<3>().0;
+    let (_, ids, origin) = py.detach(|| weld::weld(points, scale, tol2));
+    Ok((PyArray1::from_vec(py, ids), PyArray1::from_vec(py, origin)))
 }
 
 /// `formats.igz._parse_native`'s kernel: ``(the document without its mesh

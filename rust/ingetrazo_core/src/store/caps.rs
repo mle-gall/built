@@ -6,7 +6,7 @@ use super::{
     topo::OpError,
     Store, INTERIOR,
 };
-use crate::facegeom::{Hypot, V3};
+use crate::store::geometry::{Hypot, V3};
 
 pub type Cap = (Vec<Vec<[f64; 3]>>, bool);
 impl Store {
@@ -33,14 +33,14 @@ impl Store {
     pub fn edge_on_cap_plane(&self, edge: u32, o: V3, n: V3, tol: f64, h: Hypot) -> bool {
         self.state.ends.get(edge as usize).iter().all(|&v| {
             let [x, y, z] = *self.state.vpos.get(v as usize);
-            (V3(x as f32, y as f32, z as f32).sub(o).dot(n, h).abs() as f64) < tol
+            V3(x, y, z).sub(o).dot(n, h).abs() < tol
         })
     }
 
     pub fn prune_plane_debris(
         &mut self,
-        origin: [f32; 3],
-        normal: [f32; 3],
+        origin: [f64; 3],
+        normal: [f64; 3],
         tol: f64,
         h: Hypot,
         ch: &mut Change,
@@ -73,16 +73,16 @@ impl Store {
         &self,
         scope: &[u32],
         fresh: &[u32],
-        origin: [f32; 3],
-        normal: [f32; 3],
+        origin: [f64; 3],
+        normal: [f64; 3],
         probes: &[(f64, f64)],
         tol: f64,
         h: Hypot,
         compensated: bool,
     ) -> Vec<(bool, u8, u8)> {
         use super::offset::contains;
-        use crate::facegeom::normalized;
-        use crate::orient::plane_basis;
+        use crate::store::geometry::normalized;
+        use crate::store::geometry::plane_basis;
         use std::collections::HashSet;
         let fresh: HashSet<_> = fresh.iter().copied().collect();
         let mut seen = HashSet::new();
@@ -101,8 +101,8 @@ impl Store {
             let rings = self.face_rings(f);
             let Some(outer) = rings.first() else { continue };
             let (center, face_normal, _) = self.cap_frame(outer, h, compensated);
-            let alignment = normalized(face_normal, h).dot(n, h) as f64;
-            if alignment.abs() <= 0.999 || (center.sub(o).dot(n, h).abs() as f64) >= tol {
+            let alignment = normalized(face_normal, h).dot(n, h);
+            if alignment.abs() <= 0.999 || center.sub(o).dot(n, h).abs() >= tol {
                 continue;
             }
             let xy: Vec<Vec<_>> = rings
@@ -111,7 +111,7 @@ impl Store {
                     r.iter()
                         .map(|&s| {
                             let d = self.cap_point(s).sub(o);
-                            (d.dot(u, h) as f64, d.dot(v, h) as f64)
+                            (d.dot(u, h), d.dot(v, h))
                         })
                         .collect()
                 })
@@ -135,23 +135,23 @@ impl Store {
     }
 }
 
-use crate::facegeom::{length, normalized};
-use crate::orient::{face_centroid, face_normal_length};
-pub type Seam = ([f32; 3], [f32; 3], Option<[f32; 3]>);
+use crate::store::geometry::{length, normalized};
+use crate::store::geometry::{face_centroid, face_normal_length};
+pub type Seam = ([f64; 3], [f64; 3], Option<[f64; 3]>);
 
-fn vector([x, y, z]: [f32; 3]) -> V3 {
+fn vector([x, y, z]: [f64; 3]) -> V3 {
     V3(x, y, z)
 }
-fn xyz(V3(x, y, z): V3) -> [f32; 3] {
+fn xyz(V3(x, y, z): V3) -> [f64; 3] {
     [x, y, z]
 }
 
 impl Store {
     fn cap_point(&self, slot: u32) -> V3 {
-        vector(self.state.vpos.get(slot as usize).map(|p| p as f32))
+        vector(self.state.vpos.get(slot as usize).map(|p| p))
     }
 
-    fn cap_frame(&self, ring: &[u32], h: Hypot, compensated: bool) -> (V3, V3, f32) {
+    fn cap_frame(&self, ring: &[u32], h: Hypot, compensated: bool) -> (V3, V3, f64) {
         let pos: Vec<_> = ring.iter().map(|&s| self.cap_point(s)).collect();
         let order: Vec<_> = (0..pos.len() as u32).collect();
         let (normal, len) = face_normal_length(&pos, &order, h);
@@ -163,7 +163,7 @@ impl Store {
         near: Option<[f64; 6]>,
         h: Hypot,
         compensated: bool,
-    ) -> Vec<([f32; 3], [f32; 3])> {
+    ) -> Vec<([f64; 3], [f64; 3])> {
         let mut seen = std::collections::HashSet::new();
         let mut planes = vec![];
         for e in self.live_slots(Kind::Edge) {
@@ -188,16 +188,16 @@ impl Store {
         planes
     }
 
-    pub fn edges_along(&self, segments: &[[[f32; 3]; 2]], tolerance: f64, h: Hypot) -> Vec<u128> {
+    pub fn edges_along(&self, segments: &[[[f64; 3]; 2]], tolerance: f64, h: Hypot) -> Vec<u128> {
         let on = |p: V3, a: V3, b: V3| {
             let ab = b.sub(a);
-            let l2 = ab.dot(ab, h) as f64;
+            let l2 = ab.dot(ab, h);
             if l2 < 1e-18 {
-                return (length(p.sub(a), h) as f64) < tolerance;
+                return length(p.sub(a), h) < tolerance;
             }
-            let t = p.sub(a).dot(ab, h) as f64 / l2;
+            let t = p.sub(a).dot(ab, h) / l2;
             (-1e-9..=1. + 1e-9).contains(&t)
-                && (length(a.add(ab.mul(t as f32)).sub(p), h) as f64) < tolerance
+                && length(a.add(ab.mul(t)).sub(p), h) < tolerance
         };
         self.live_slots(Kind::Edge)
             .into_iter()
@@ -229,7 +229,7 @@ impl Store {
                 rings
                     .iter()
                     .flatten()
-                    .any(|&v| self.cap_point(v).sub(center).dot(normal, h).abs() as f64 > half)
+                    .any(|&v| self.cap_point(v).sub(center).dot(normal, h).abs() > half)
             };
             let mut coplanar = false;
             let mut correction = None;
@@ -247,7 +247,7 @@ impl Store {
                         let Some(outer) = gr.first() else { continue };
                         let (_, gn, gsize) = self.cap_frame(outer, h, compensated);
                         let unit = normalized(gn, h);
-                        let align = nf.dot(unit, h) as f64;
+                        let align = nf.dot(unit, h);
                         if align.abs() <= 0.999 {
                             continue;
                         }
