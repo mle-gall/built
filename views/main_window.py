@@ -1815,6 +1815,13 @@ class MainWindow(WorksessionMixin, QMainWindow):
         unhide_all_action.triggered.connect(self._on_unhide_all)
         unhide_menu.addAction(unhide_all_action)
 
+        soften_action = QAction(tr("Soften / Smooth Edges…"), self)
+        soften_action.setStatusTip(tr(
+            "Smooth the selected edges, faces or groups where their faces "
+            "meet at a shallow angle."))
+        soften_action.triggered.connect(self._on_soften_edges)
+        edit_menu.addAction(soften_action)
+
         reverse_action = QAction(tr("Reverse Faces"), self)
         reverse_action.setStatusTip(tr(
             "Swap the front and back sides of the selected faces."))
@@ -5899,6 +5906,8 @@ class MainWindow(WorksessionMixin, QMainWindow):
         if self._makes_faces(sel):
             menu.addAction(tr("Make Faces"), self._on_make_faces)
         if has_mesh or has_group:
+            menu.addAction(tr("Soften / Smooth Edges…"),
+                           self._on_soften_edges)
             # Flip Along ▸ Red / Green / Blue: a mirror in place about the
             # selection's centre in one click, the way modelling tutorials
             # do it (issue #178, Esteban Penzo). The same mirror as the
@@ -6533,6 +6542,39 @@ class MainWindow(WorksessionMixin, QMainWindow):
         """Right-click ▸ Flip Along ▸ Red / Green / Blue (issue #178)."""
         from tools.flip import FlipTool
         FlipTool().flip(self.viewport, axis)
+
+    def _on_soften_edges(self) -> None:
+        """Edit ▸ Soften / Smooth Edges…: the angle dialog, then one undo
+        step over the selection (see core.soften)."""
+        from PySide6.QtWidgets import QDialog
+        from core.soften import SoftenByAngleCommand, selected_edges
+        from views.soften_dialog import SoftenDialog, remember_angle
+        scene = self.viewport.scene
+        if not scene.selection:
+            self.viewport.flash_status(
+                tr("Select faces, edges or groups to soften"), 4000)
+            return
+        dialog = SoftenDialog(self)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        remember_angle(dialog.angle.value())
+        command = SoftenByAngleCommand(
+            selected_edges(scene), dialog.angle.value(),
+            coplanar=dialog.coplanar.isChecked(),
+            harden=dialog.harden.isChecked(),
+            materials=dialog.materials.isChecked())
+        command.changes = command.prepare()
+        if not command.changes:
+            self.viewport.flash_status(tr("No edges need changing"), 4000)
+            return
+        self.viewport.history.execute(command)
+        self.viewport.flash_status(
+            tr("Smoothed {n} edge(s)", n=sum(1 for c in command.changes
+                                             if c[3]))
+            if not dialog.harden.isChecked() else
+            tr("Unsoftened {n} edge(s)", n=len(command.changes)), 3000)
+        self.viewport.update()
+        self.viewport.notify_scene_changed()
 
     @_repeatable("Reverse Faces")
     def _on_reverse_faces(self) -> None:

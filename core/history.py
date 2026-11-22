@@ -4515,6 +4515,112 @@ class ReshareInstanceCommand(Command):
         scene.version += 1
 
 
+class ReshareAssemblyCommand(Command):
+    """Leaving an assembly edited in place: a component holding other
+    components, placed more than once. Its own geometry goes back into the
+    definition its copies share, and its matrix comes back up out of its
+    parts.
+
+    The commands run inside are folded in, one step either way, and stay
+    what they are: they were recorded with the matrix down in the parts,
+    where the tools work. Undo puts it back down, undoes them there, and
+    returns the parts to the frame they entered with, bit for bit. Redo
+    replays them the same way. A snapshot of the definition alone cannot
+    do it: deleting, moving or exploding a part changes the parts, not the
+    definition."""
+
+    def __init__(self, group, proto, xform, edited, state0, parts,
+                 inner=()) -> None:
+        from PySide6.QtGui import QMatrix4x4
+        self.group = group
+        self.proto = proto
+        self.xform = QMatrix4x4(xform)
+        self.edited = edited
+        self.state0 = state0
+        self.parts = parts            # on entry, matrix up: Scene.parts_record
+        self.inner = list(inner)
+        self._framed = None           # on leaving, matrix down
+        self._edited = None           # the world copy on leaving
+        self._left = None             # on leaving, matrix up
+        self._entered = None          # on entry, matrix down (set by undo)
+        self._before = None           # the definition before / after
+        self._after = None
+        self.shared = False
+
+    @staticmethod
+    def _in_mesh(scene, cmd, fn) -> None:
+        """As History does: each command against the mesh it ran on."""
+        target = getattr(cmd, "_history_mesh", None)
+        if target is None or target is scene.mesh:
+            fn()
+            return
+        target._mut_serial += 1
+        current = scene.mesh
+        scene.mesh = target
+        try:
+            fn()
+        finally:
+            scene.mesh = current
+
+    def _frame(self, record, state) -> None:
+        """The matrix down in the parts and the world copy in place: how
+        the session stood."""
+        from PySide6.QtGui import QMatrix4x4
+        from core.scene import Scene
+        self.edited.restore_state(state)
+        self.group.mesh = self.edited
+        self.group.xform = QMatrix4x4()
+        Scene.put_parts(self.group, record)
+
+    def _unframe(self, record) -> None:
+        from PySide6.QtGui import QMatrix4x4
+        from core.scene import Scene
+        self.group.mesh = self.proto
+        self.group.xform = QMatrix4x4(self.xform)
+        Scene.put_parts(self.group, record)
+
+    def do(self, scene) -> None:
+        from core.scene import Scene
+        refresh = getattr(scene, "_refresh_dimension_holds", None)
+        if refresh is not None:
+            refresh()
+        if self._framed is None:                 # leaving, the first time
+            self._framed = Scene.parts_record(self.group)
+            self._edited = self.edited.capture_state()
+            self._before = self.proto.capture_state()
+            self.shared = self._edited != self.state0
+            if self.shared:
+                scene.share_back(self.group, self.proto, self.xform,
+                                 self.edited, parts=self.parts)
+            else:
+                scene.restore_sharing(self.group, self.proto, self.xform,
+                                      parts=self.parts)
+            self._after = self.proto.capture_state()
+            self._left = Scene.parts_record(self.group)
+        else:
+            self._frame(self._entered, self.state0)
+            for cmd in self.inner:
+                self._in_mesh(scene, cmd, lambda cmd=cmd: cmd.do(scene))
+            self.proto.restore_state(self._after)
+            self.proto.note_rewound()
+            self._unframe(self._left)
+        scene.version += 1
+
+    def undo(self, scene) -> None:
+        from core.scene import Scene
+        refresh = getattr(scene, "_refresh_dimension_holds", None)
+        if refresh is not None:
+            refresh()
+        self._frame(self._framed, self._edited)
+        self.proto.restore_state(self._before)
+        self.proto.note_rewound()
+        for cmd in reversed(self.inner):
+            self._in_mesh(scene, cmd, lambda cmd=cmd: cmd.undo(scene))
+        self._entered = Scene.parts_record(self.group)
+        self._unframe(self.parts)
+        scene.version += 1
+
+
 class MakeUniqueCommand(Command):
     """Make Unique: bake a component instance into its OWN mesh
     so edits stop touching the siblings' shared definition.
