@@ -39,7 +39,10 @@ type CellMap<V> = HashMap<Cell, V, BuildHasherDefault<CellHasher>>;
 /// ``(vertex positions as float32, point → vertex, the point each vertex
 /// was made at)``, vertices in the order bulk_weld's vertex list holds
 /// them.
-pub fn weld(pos: &[[f32; 3]], scale: f64, tol2: f64) -> (Vec<[f32; 3]>, Vec<i64>, Vec<i64>) {
+pub fn weld<T>(pos: &[[T; 3]], scale: f64, tol2: f64) -> (Vec<[T; 3]>, Vec<i64>, Vec<i64>)
+where
+    T: Copy + Into<f64> + std::ops::Sub<Output=T> + std::ops::Add<Output=T> + std::ops::Mul<Output=T>,
+{
     let n = pos.len();
     let mut cell_of: Vec<Cell> = Vec::with_capacity(n);
     let mut index: CellMap<usize> = CellMap::with_capacity_and_hasher(n, Default::default());
@@ -48,9 +51,9 @@ pub fn weld(pos: &[[f32; 3]], scale: f64, tol2: f64) -> (Vec<[f32; 3]>, Vec<i64>
     let mut point_cell: Vec<usize> = Vec::with_capacity(n);
     for (i, p) in pos.iter().enumerate() {
         let c = (
-            (p[0] as f64 * scale).round_ties_even() as i64,
-            (p[1] as f64 * scale).round_ties_even() as i64,
-            (p[2] as f64 * scale).round_ties_even() as i64,
+            (p[0].into() * scale).round_ties_even() as i64,
+            (p[1].into() * scale).round_ties_even() as i64,
+            (p[2].into() * scale).round_ties_even() as i64,
         );
         cell_of.push(c);
         let k = *index.entry(c).or_insert_with(|| {
@@ -78,7 +81,7 @@ pub fn weld(pos: &[[f32; 3]], scale: f64, tol2: f64) -> (Vec<[f32; 3]>, Vec<i64>
         }
     }
     // Lone cells first, in creation order: one vertex each.
-    let mut vpos: Vec<[f32; 3]> = Vec::new();
+    let mut vpos: Vec<[T; 3]> = Vec::new();
     let mut origin: Vec<i64> = Vec::new();
     let mut cell_vid = vec![-1i64; nu];
     let mut registry: CellMap<usize> = CellMap::default();
@@ -119,7 +122,7 @@ pub fn weld(pos: &[[f32; 3]], scale: f64, tol2: f64) -> (Vec<[f32; 3]>, Vec<i64>
                                 let q = vpos[nb];
                                 let d = [q[0] - p[0], q[1] - p[1], q[2] - p[2]];
                                 let l2 = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
-                                if (l2 as f64) < tol2 {
+                                if (l2.into()) < tol2 {
                                     hit = Some(nb);
                                     break 'near;
                                 }

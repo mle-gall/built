@@ -33,6 +33,7 @@ type Entry = (u64, u32, u64, u64, u32, Vec<u8>, u32);
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Dtype {
     F4,
+    F8,
     I4,
     I8,
     U1,
@@ -52,7 +53,7 @@ impl Dtype {
     fn size(self) -> usize {
         match self {
             Dtype::F4 | Dtype::I4 => 4,
-            Dtype::I8 => 8,
+            Dtype::I8 | Dtype::F8 => 8,
             Dtype::U1 => 1,
         }
     }
@@ -87,7 +88,7 @@ struct Check {
 /// `[dtype, shape, offset]` from the JSON as Python ints and a str, or
 /// `None` for anything else (Python's `int(...)` would coerce more: it is
 /// left to decide those).
-fn parse_spec(name: String, spec: &Bound<'_, PyAny>) -> Option<Spec> {
+fn parse_spec(name: String, spec: &Bound<'_, PyAny>, built: bool) -> Option<Spec> {
     let items: Vec<Bound<'_, PyAny>> = if let Ok(l) = spec.cast::<PyList>() {
         l.iter().collect()
     } else if let Ok(t) = spec.cast::<PyTuple>() {
@@ -98,7 +99,16 @@ fn parse_spec(name: String, spec: &Bound<'_, PyAny>) -> Option<Spec> {
     if items.len() != 3 {
         return None;
     }
-    let dtype = Dtype::parse(&items[0].extract::<String>().ok()?)?;
+    let code = items[0].extract::<String>().ok()?;
+    let dtype = if built && name == "pos" {
+        match code.as_str() {
+            "<f4" => Dtype::F4,
+            "<f8" => Dtype::F8,
+            _ => return None,
+        }
+    } else {
+        Dtype::parse(&code)?
+    };
     let shape_list = items[1].cast::<PyList>().ok()?;
     let mut shape = Vec::with_capacity(shape_list.len());
     for n in shape_list.iter() {
@@ -110,12 +120,12 @@ fn parse_spec(name: String, spec: &Bound<'_, PyAny>) -> Option<Spec> {
     Some(Spec { name, dtype, shape, offset })
 }
 
-fn parse_check(layout: &Bound<'_, PyAny>, n_attrs: i64, n_layers: i64) -> Option<Check> {
+fn parse_check(layout: &Bound<'_, PyAny>, n_attrs: i64, n_layers: i64, built: bool) -> Option<Check> {
     let layout = layout.cast::<PyDict>().ok()?;
     let mut specs = Vec::with_capacity(layout.len());
     for (k, v) in layout.iter() {
         let name: String = k.extract().ok()?;
-        specs.push(parse_spec(name, &v)?);
+        specs.push(parse_spec(name, &v, built)?);
     }
     Some(Check { specs, n_attrs, n_layers })
 }
@@ -300,19 +310,20 @@ fn inflate_into(raw: &[u8], method: u32, crc: u32, out: &mut [u8]) -> bool {
 /// Returns, per member, ``(bytes or None, checked)``: ``None`` where Python
 /// must read the member itself, and ``checked`` true only when
 /// `_geometry_arrays` would accept the block as it stands.
-#[pyfunction]
+#[pyfunction(signature = (path, entries, checks, built_format=false))]
 pub fn igz_read_geometry<'py>(
     py: Python<'py>,
     path: std::path::PathBuf,
     entries: Vec<Entry>,
     checks: Vec<Option<(Bound<'py, PyAny>, i64, i64)>>,
+    built_format: bool,
 ) -> PyResult<Vec<(Option<Bound<'py, PyBytes>>, bool)>> {
     if checks.len() != entries.len() {
         return Err(PyValueError::new_err("entries and checks differ in length"));
     }
     let parsed: Vec<Option<Check>> = checks
         .iter()
-        .map(|c| c.as_ref().and_then(|(l, a, n)| parse_check(l, *a, *n)))
+        .map(|c| c.as_ref().and_then(|(l, a, n)| parse_check(l, *a, *n, built_format)))
         .collect();
 
     // The output buffers are Python bytes objects, allocated here and

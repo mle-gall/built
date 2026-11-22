@@ -193,6 +193,11 @@ class VertexView(_ViewMixin, Vertex):
             return self._obj().position
         return _position(m, self.key)
 
+    def position_tuple(self):
+        """Model coordinates for geometry consumers, including sub-float32 edits."""
+        st = _store_of(self._m)
+        return tuple(st.vertex_position(self.key)) if st is not None else self.position.toTuple()
+
     @position.setter
     def position(self, value):
         self._obj().position = value
@@ -2394,7 +2399,7 @@ class _EdgeMap(Mapping):
         return len(self._dict())
 
 
-def store_from_source(src, hooks=()):
+def store_from_source(src, hooks=(), *, precise=False):
     """The store a deferred mesh's ``_deferred_source`` builds, with its
     attribute table. ``hooks`` are the after-build functions links attached
     (``core.links._retable_deferred``): per-element relabels of attrs and
@@ -2419,7 +2424,7 @@ def store_from_source(src, hooks=()):
                                                 layers, n_e)
     w = _weld_args()
     ns = next(_mesh._KEY_NAMESPACES)
-    pos = np.ascontiguousarray(src["pos"], dtype=np.float32).reshape(-1, 3)
+    pos = np.ascontiguousarray(src["pos"], dtype=np.float64 if precise else np.float32).reshape(-1, 3)
     edges = np.ascontiguousarray(src["edges"], dtype=np.int64).reshape(-1, 2)
     flags = src.get("flags")
     curves = src.get("curves")
