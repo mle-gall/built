@@ -96,7 +96,12 @@ class LinkWatcher(QObject):
         browser = getattr(self._window, "project_browser", None)
         if browser is not None and hasattr(browser, "links_panel"):
             browser.links_panel.refresh()
+        # The Layers rows follow through their usual check: updated in
+        # place when the reload kept the same tags and folders, rebuilt only
+        # when it added or dropped some. A forced rebuild here tore the
+        # whole tree down on every save of a source (hundreds of linked
+        # folders in a composite).
         panel = getattr(self._window, "layers_dock", None)
-        refresh = getattr(getattr(panel, "panel", None), "refresh", None)
-        if callable(refresh):
-            refresh()
+        changed = getattr(getattr(panel, "panel", None), "on_scene_changed", None)
+        if callable(changed):
+            changed()

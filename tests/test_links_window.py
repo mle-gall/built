@@ -148,3 +148,31 @@ def test_link_document_action_shows_nested_choice(win, tmp_path, monkeypatch, ch
     monkeypatch.setattr(QFileDialog, "exec", choose)
     win._act_link_document.trigger()
     assert placements == ([] if choice is None else [(str(path), choice)])
+
+
+def test_a_reloaded_link_keeps_the_layers_rows(win, tmp_path):
+    """A linked file saved elsewhere reloads without tearing the Layers
+    tree down: same row objects, folders left folded as they were. In
+    the composite (hundreds of linked folders) the rebuild was a blink
+    of the whole tree on every save of a source."""
+    from core import layers as L
+    src = _source(tmp_path / "Site.igz", faces=1)
+    win.link_igz_path(src, at=(0, 0, 0))
+    scene = win.viewport.scene
+    panel = win.layers_dock.panel
+    panel.refresh()
+    folder = next(f for f in L.folders_of(scene) if f.startswith("Site"))
+    panel.item_for(folder, "folder").setExpanded(False)
+    _settle()
+    rows = {id(it) for it in panel._all_items()}
+    rebuilt = []
+    original = type(panel).refresh
+    panel.refresh = lambda *a, **k: (rebuilt.append(1), original(panel, *a, **k))
+    _source(src, faces=3)                     # same tags, more geometry
+    win._link_watcher()._changed(str(src.resolve()))
+    _settle(win._link_watcher().SETTLE_MS * 4)
+    (g,) = links.linked_groups(scene)
+    assert _faces(g) == 3
+    assert not rebuilt
+    assert {id(it) for it in panel._all_items()} == rows
+    assert not panel.item_for(folder, "folder").isExpanded()
