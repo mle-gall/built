@@ -1204,6 +1204,20 @@ impl PyMeshStore {
         Ok((r.map(|(f, _, n)| (stacked, f, n)), ch))
     }
 
+    fn replace_plane_faces(&mut self, old: Vec<u128>, caps: Vec<super::caps::Cap>) -> PyResult<(Vec<u128>, PyChange)> {
+        let faces: PyResult<Vec<_>> = old.iter().map(|&k| slot_of(&self.inner, Kind::Face, k)).collect();
+        let faces = faces?;
+        if faces.iter().copied().collect::<std::collections::HashSet<_>>().len() != faces.len() {
+            return Err(PyValueError::new_err("duplicate face key"));
+        }
+        self.op_all(|s,ch| s.replace_caps(&faces,&caps,ch))
+    }
+
+    fn prune_plane_debris(&mut self, origin: [f32;3], normal: [f32;3], tolerance: f64, hypot: &str) -> PyResult<PyChange> {
+        let h = crate::hypot_of(hypot)?;
+        Ok(self.op(|s,ch| s.prune_plane_debris(origin,normal,tolerance,h,ch))?.1)
+    }
+
     /// `turn_face_over`'s ring reversal (outer and holes).
     fn reverse_face(&mut self, key: u128) -> PyResult<PyChange> {
         let f = any_of(&self.inner, Kind::Face, key)?;

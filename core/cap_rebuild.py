@@ -778,11 +778,30 @@ def apply_rebuild(mesh, origin: QVector3D, normal: QVector3D,
          [[to2d(p) for p in h] for h in f.holes], dict(f.attrs))
         for f in old if f.attrs
     ]
-    for f in old:
-        mesh.remove_face(f)
-    for outer, holes, interior in rebuilt:
-        nf = mesh.add_face(outer, holes or None)
-        nf.interior = interior
+    from core.store_mesh import FaceView, StoreMesh, _fallback
+    replacements = None
+    if isinstance(mesh, StoreMesh):
+        from core.topology import _maximal_holes
+        caps = []
+        for outer, holes, interior in rebuilt:
+            rings = [outer, *(_maximal_holes(holes) if len(holes) > 1 else holes)]
+            caps.append(([[p.toTuple() for p in ring] for ring in rings], interior))
+        try:
+            keys, _change = mesh._store.replace_plane_faces([f.key for f in old], caps)
+        except _fallback():
+            mesh._materialise()
+        else:
+            replacements = [FaceView(mesh, k) for k in keys]
+            mesh._dirty()
+    if replacements is None:
+        for f in old:
+            mesh.remove_face(f)
+    for index, (outer, holes, interior) in enumerate(rebuilt):
+        if replacements is None:
+            nf = mesh.add_face(outer, holes or None)
+            nf.interior = interior
+        else:
+            nf = replacements[index]
         if donors:
             ip = _region_test_point([to2d(p) for p in outer],
                                     [[to2d(p) for p in h] for h in (holes or [])])
@@ -801,6 +820,14 @@ def prune_plane_debris(mesh, origin: QVector3D, normal: QVector3D) -> None:
     seams a union dissolved. Perimeter edges still border a wall, so they keep
     a face and survive. Vertices those edges leave behind with no incidence at
     all go too (they would otherwise haunt snapping)."""
+    from core._native import qt_hypot
+    from core.store_mesh import StoreMesh
+    if isinstance(mesh, StoreMesh) and qt_hypot():
+        change = mesh._store.prune_plane_debris(origin.toTuple(), normal.toTuple(),
+                                                _ON_PLANE, qt_hypot())
+        if any(change.removed.values()):
+            mesh._dirty()
+        return
     for e in list(mesh.edges):
         if (not e.faces
                 and _on_plane(e.a, origin, normal)

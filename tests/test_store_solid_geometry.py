@@ -74,3 +74,31 @@ def test_orient_feed(monkeypatch):
     assert _got(response["step"].meshes[0]) == _expected(before, _read(sc.mesh))
     assert run(history, "undo")["ok"]
     assert _read(sc.mesh) == before
+
+
+@pytest.mark.parametrize("hole", [False, True])
+def test_split_pushed_cap(monkeypatch, hole):
+    from core.cap_rebuild import apply_rebuild, _canon_faces
+    from core.history import History
+    from core.protocol.commands import run
+    monkeypatch.setattr(StoreMesh, '_materialise', lambda self: pytest.fail('materialised'))
+    results = []
+    for store in (False, True):
+        sc = empty(store)
+        def quad(a, b, z=0):
+            return [V(a,0,z), V(b,0,z), V(b,4,z), V(a,4,z)]
+        opening = [V(1,1,0), V(1,2,0), V(2,2,0), V(2,1,0)]
+        base = sc.mesh.add_face(quad(0,6), [opening] if hole else [])
+        h = History(sc)
+        assert run(h, "push_pull", face=base.key, distance=1)["ok"]
+        cap = next(f for f in sc.mesh.faces if all(p.z() == 1 for p in f.vertices))
+        sc.mesh.remove_face(cap)
+        sc.mesh.add_face(quad(0,3,1), [[p+V(0,0,1) for p in opening]] if hole else [])
+        sc.mesh.add_face(quad(3,6,1))
+        sc.mesh.add_edge(V(8,0,1), V(9,0,1))
+        assert apply_rebuild(sc.mesh,V(0,0,1),V(0,0,1))
+        assert sc.mesh.vertex_at(V(8,0,1)) is None
+        caps = [f for f in sc.mesh.faces if all(p.z()==1 for p in f.vertices)]
+        assert len(caps)==1 and len(caps[0].holes)==int(hole)
+        results.append(_canon_faces([(f.vertices,f.holes,f.interior) for f in sc.mesh.faces]))
+    assert results[0] == results[1]
