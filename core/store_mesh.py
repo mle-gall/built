@@ -950,6 +950,17 @@ class StoreState(Mapping):
             return d
         return self.table[arrays_idx] if arrays_idx >= 0 else {}
 
+    def changes_since(self, before):
+        """Net key changes including face attributes held outside the native columns."""
+        attrs = []
+        for k in sorted(self.own.keys() | before.own.keys()):
+            if not (self.snap.has(k) and before.snap.has(k)):
+                continue
+            if self._face_attrs(k, self.snap.face_info(k)[0]) != before._face_attrs(
+                    k, before.snap.face_info(k)[0]):
+                attrs.append(k)
+        return self.snap.changes_since(before.snap, attrs)
+
     def __eq__(self, other):
         if other is self:
             return True

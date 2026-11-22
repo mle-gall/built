@@ -5152,8 +5152,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         """Intersect Faces: edges wherever the selection's faces
         cross the others (core/intersect.py), added to the context being
         edited — they split its faces there — in one undo step."""
-        from core.edits import build_add_edges
-        from core.intersect import segments_for
+        from core.intersect import build_intersection_edit, segments_for
         scene = self.viewport.scene
         if not scene.selection:
             self.viewport.flash_status(tr("Select faces or groups first"))
@@ -5168,7 +5167,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             self.viewport.flash_status(tr("No faces cross the selection"))
             return
         history = self.viewport.history
-        history.execute(build_add_edges(scene, segs, detect_faces=True))
+        history.execute(build_intersection_edit(scene, segs))
         if history.last_error:
             QMessageBox.warning(self, tr("Intersect Faces failed"),
                                 history.last_error)

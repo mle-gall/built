@@ -1067,6 +1067,7 @@ fn reader(snap: &Snapshot) -> Store {
     let mut st = Store::empty(snap.state.ns, Weld::default());
     st.state = snap.state.clone();
     st.lineage = snap.lineage;
+    st.revision = snap.revision;
     st
 }
 
@@ -1086,6 +1087,19 @@ impl PyStoreSnapshot {
     /// chunk pointers first, content only where they differ.
     fn same_as(&self, other: &PyStoreSnapshot) -> bool {
         self.inner.lineage == other.inner.lineage && self.inner.state.same_as(&other.inner.state)
+    }
+
+    /// Net change between two immutable snapshots of one key namespace.
+    fn changes_since(&self, py: Python<'_>, before: &PyStoreSnapshot, attrs: Vec<u128>) -> PyResult<PyChange> {
+        if self.inner.lineage != before.inner.lineage || self.inner.state.ns != before.inner.state.ns {
+            return Err(PyValueError::new_err("snapshots have different key namespaces"));
+        }
+        let (new, old) = (reader(&self.inner), reader(&before.inner));
+        let mut ch = py.detach(|| new.changes_since(&old));
+        ch.modified[2].extend(attrs.into_iter().filter(|&k|
+            new.slot(Kind::Face, k).is_some() && old.slot(Kind::Face, k).is_some()));
+        ch.dedup();
+        Ok(PyChange { inner: ch })
     }
 
     /// Live keys of `kind` in the snapshot, list order, as ints.

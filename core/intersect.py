@@ -300,3 +300,13 @@ def segments_for(scene, mode: str) -> list:
         return _dedupe(intersect(mine, others)
                        + intersect(mine, mine, same=True))
     return intersect(mine, others)
+
+
+def build_intersection_edit(scene, segments):
+    """Install crossing segments through the drawing planner under one snapshot."""
+    from core.edits import build_add_edges
+    from core.history import SnapshotCompound, SnapshotMutation
+    command = build_add_edges(scene, segments, detect_faces=True)
+    if hasattr(scene.mesh, "_store") and not isinstance(command, SnapshotCompound):
+        return SnapshotMutation(command.do)
+    return command
