@@ -19696,15 +19696,34 @@ class Viewport(QOpenGLWidget):
         """«“Site.igz” is linked: open it to edit it?» — and open it in a
         tab of its own (or bring that tab forward) on yes."""
         from pathlib import Path
-        from PySide6.QtWidgets import QMessageBox
         from core import links
+        from views import chrome_dialogs
         path = Path(links.link_of(group)["path"])
         if not path.is_file():
-            QMessageBox.warning(
+            chrome_dialogs.warning(
                 self, tr("Linked document"),
                 tr("“{name}” is a linked document, and its file was not "
                    "found:\n{path}", name=path.name, path=str(path)))
             return
+        # The Built UI asks on its sheet; Qt when the chrome is not on screen.
+        answer = chrome_dialogs.ask(
+            self, tr("“{name}” is linked from another file.", name=path.name),
+            tr("It is edited in its own document; every change saved there "
+               "shows here. Open it now?"),
+            [("cancel", tr("Cancel")), ("open", tr("Open {name}", name=path.name))],
+            default="open", cancel="cancel")
+        if answer is not None and answer != "open":
+            return
+        if answer is None and not self._ask_open_link_qt(path):
+            return
+        window = getattr(self, "window", None)
+        window = window() if callable(window) else None
+        opener_fn = getattr(window, "open_path", None)
+        if callable(opener_fn):
+            opener_fn(path)
+
+    def _ask_open_link_qt(self, path) -> bool:
+        from PySide6.QtWidgets import QMessageBox
         box = QMessageBox(self)
         box.setIcon(QMessageBox.Question)
         box.setWindowTitle(tr("Linked document"))
@@ -19718,13 +19737,7 @@ class Viewport(QOpenGLWidget):
         box.addButton(QMessageBox.Cancel)
         box.setDefaultButton(opener)
         box.exec()
-        if box.clickedButton() is not opener:
-            return
-        window = getattr(self, "window", None)
-        window = window() if callable(window) else None
-        opener_fn = getattr(window, "open_path", None)
-        if callable(opener_fn):
-            opener_fn(path)
+        return box.clickedButton() is opener
 
     def begin_group_edit(self, group) -> None:
         """Enter a group for editing (double-click-into-group). A

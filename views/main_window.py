@@ -7,6 +7,7 @@ Save, Save As) onto :mod:`formats.igz`.
 """
 from __future__ import annotations
 
+from views import chrome_dialogs as _dialogs
 from views import prompts as _prompts
 
 import sys
@@ -1117,7 +1118,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
 
     def _recover_untitled(self, n: int, slot) -> None:
         from core import autosave
-        answer = QMessageBox.question(
+        answer = _dialogs.question(
             self, tr("Recovered drawing"),
             tr("The last session ended without saving an untitled drawing "
                "(auto-saved copy found). Recover it?"),
@@ -1135,7 +1136,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         try:
             igz_format.load_into(self.viewport.scene, slot)
         except Exception as exc:  # noqa: BLE001
-            QMessageBox.critical(self, tr("Open failed"), str(exc))
+            _dialogs.critical(self, tr("Open failed"), str(exc))
             return
         self.viewport.history.clear()
         self.viewport.reset_texture_cache()
@@ -3730,7 +3731,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         if lang == current_language():
             return
         set_language(lang)
-        QMessageBox.information(
+        _dialogs.information(
             self,
             tr("Language changed"),
             tr("Restart Built to apply the new language."),
@@ -4001,7 +4002,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             logging.getLogger("ingetrazo.plugins").exception(
                 "the extension manager could not open")
             note_failure("the extension manager could not open")
-            QMessageBox.warning(
+            _dialogs.warning(
                 self, tr("Extension manager"),
                 tr("Could not load extensions: {error}",
                    error=f"{type(exc).__name__}: {exc}"))
@@ -4128,7 +4129,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         if getattr(self, "_gl_unsupported_shown", False):
             return
         self._gl_unsupported_shown = True
-        QMessageBox.critical(self, tr("OpenGL 3.3 not available"), tr(
+        _dialogs.critical(self, tr("OpenGL 3.3 not available"), tr(
             "Built needs OpenGL 3.3, but this computer only offers "
             "OpenGL {version} ({renderer}). The viewport stays empty.\n\n"
             "Update the graphics driver from the NVIDIA, AMD or Intel "
@@ -5005,6 +5006,14 @@ class MainWindow(WorksessionMixin, QMainWindow):
         """True = keep them in the file, False = let them go, None =
         cancel the replacement."""
         names = ", ".join(sorted({g.name or tr("Component") for g in orphans}))
+        answer = _dialogs.ask(
+            self, tr("No copy of {names} will be left in the model.", names=names),
+            tr("Keep it in the file, to place it or swap back to it later?"),
+            [("drop", tr("Let It Go")), ("cancel", tr("Cancel")),
+             ("keep", tr("Keep in File"))],
+            default="keep", cancel="cancel")
+        if answer is not None:
+            return {"keep": True, "drop": False}.get(answer)
         box = QMessageBox(self)
         box.setIcon(QMessageBox.Question)
         box.setWindowTitle(tr("Replace Component"))
@@ -5079,7 +5088,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         try:
             n = self.import_kept_components(path)
         except Exception as exc:  # noqa: BLE001 - any unreadable file
-            QMessageBox.warning(self, tr("Components from File"),
+            _dialogs.warning(self, tr("Components from File"),
                                 tr("Could not read {p}: {e}", p=path, e=exc))
             return
         if n:
@@ -5167,7 +5176,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         history = self.viewport.history
         history.execute(command)
         if history.last_error:
-            QMessageBox.warning(self, tr("Intersect Faces failed"),
+            _dialogs.warning(self, tr("Intersect Faces failed"),
                                 history.last_error)
             return
         self.viewport.flash_status(
@@ -5248,7 +5257,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         self.viewport.history.execute(SimplifyMeshCommand(angle))
         error = self.viewport.history.last_error
         if error:
-            QMessageBox.warning(self, tr("Simplify Mesh failed"), error)
+            _dialogs.warning(self, tr("Simplify Mesh failed"), error)
             return
         command = self.viewport.history.undo_stack[-1]
         removed = getattr(command, "faces_removed", 0)
@@ -8978,7 +8987,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         from PySide6.QtCore import QProcess
         cmd = self._new_window_command()
         if not QProcess.startDetached(cmd[0], cmd[1:]):
-            QMessageBox.warning(self, tr("New Window"),
+            _dialogs.warning(self, tr("New Window"),
                                 tr("Could not start another Built window."))
 
     def _on_new(self) -> None:
@@ -9025,7 +9034,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         from core import autosave
         folder = autosave.discarded_dir()
         if not any(p.suffix in built.DOCUMENT_SUFFIXES for p in folder.iterdir()):
-            QMessageBox.information(
+            _dialogs.information(
                 self, tr("Recover a discarded auto-save…"),
                 tr("No discarded auto-saved copies yet."))
             return
@@ -9084,7 +9093,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
 
     def _open_recent(self, path: Path) -> None:
         if not path.exists():
-            QMessageBox.warning(self, tr("Open Recent"),
+            _dialogs.warning(self, tr("Open Recent"),
                                 tr("{name} is no longer there.", name=path.name))
             return
         self.viewport.end_group_edit()
@@ -9120,7 +9129,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             try:
                 return self.open_project(path)
             except (OSError, ValueError) as exc:
-                QMessageBox.warning(self, 'Open project', str(exc))
+                _dialogs.warning(self, 'Open project', str(exc))
                 return False
         if getattr(self, "_closed", False):
             # The window's close was already accepted while this open was
@@ -9187,7 +9196,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         recovered = False
         slot = autosave.pending(path)
         if slot is not None:
-            answer = QMessageBox.question(
+            answer = _dialogs.question(
                 self, tr("Recovered drawing"),
                 tr("A session with '{name}' ended without saving (auto-saved "
                    "copy found). Recover it instead of the file on disk?",
@@ -9201,17 +9210,25 @@ class MainWindow(WorksessionMixin, QMainWindow):
         # never show it (the dialog waits 400 ms before appearing).
         dlg, cb = self._import_progress(
             tr("Opening {name}…", name=path.name), monotonic=True)
-        # The bar is window-modal: while it shows, Qt drops a close of the
-        # main window before closeEvent ever hears it (a blocked window
-        # takes no close), so the X there did nothing (Windows round
-        # 0.6.2). Closing the bar itself is the user's close, then.
-        dlg.canceled.connect(self._on_open_bar_closed)
+        chrome = isinstance(dlg, _dialogs.ChromeBar)
+        self._open_cancelled = False
+        if chrome:
+            # The top bar's Cancel (or Esc) stops the load and keeps the
+            # window: the tab it was opening into goes.
+            dlg.canceled.connect(self._on_open_cancelled)
+            dlg.set_cancellable(True)
+        else:
+            # The bar is window-modal: while it shows, Qt drops a close of
+            # the main window before closeEvent ever hears it (a blocked
+            # window takes no close), so the X there did nothing (Windows
+            # round 0.6.2). Closing the bar itself is the user's close, then.
+            dlg.canceled.connect(self._on_open_bar_closed)
 
         def guarded_cb(frac, text):
             # A close that landed while the file was still coming in
             # (#1269) unwinds the load at its next milestone, instead of
             # letting it finish behind the closing window.
-            if self._open_aborted:
+            if self._open_aborted or self._open_cancelled:
                 raise _OpenAborted()
             cb(frac, text)
 
@@ -9237,16 +9254,21 @@ class MainWindow(WorksessionMixin, QMainWindow):
                                      progress=lambda f, t: guarded_cb(0.6 * f, t))
             except _OpenAborted:
                 dlg.close()
-                self._finish_aborted_open()
+                if self._open_cancelled and not self._open_aborted:
+                    self._finish_cancelled_open()
+                else:
+                    self._finish_aborted_open()
                 return False
             except Exception as exc:  # noqa: BLE001 - surface any IO/parse error to the user
                 dlg.close()
-                QMessageBox.critical(self, tr("Open failed"), str(exc))
+                _dialogs.critical(self, tr("Open failed"), str(exc))
                 return False
             # Keep the existing steady-state allocation threshold before the
             # resident pack allocates. Only the full heap walk is deferred.
             import gc
             gc.set_threshold(self.GC_THRESHOLD0, 10, 10)
+            if chrome:
+                dlg.set_cancellable(False)  # it is in: packing cannot stop
             self.viewport.history.clear()
             self.viewport.reset_texture_cache()
             self._forget_coordinate()
@@ -9294,14 +9316,16 @@ class MainWindow(WorksessionMixin, QMainWindow):
                 # left out rather than refuse the whole document (#185). Keep it
                 # unsaved, so Ctrl+S writes the cleaned file, and say so.
                 self._saved_version = -1
-                box = QMessageBox(
-                    QMessageBox.Warning, tr("Document repaired"),
-                    tr("{n} damaged pieces (a coordinate that is not a number) "
-                       "were left out so the rest of “{name}” could open. Save "
-                       "it to keep the repaired document.",
-                       n=repaired, name=path.name), QMessageBox.Ok, self)
-                box.setAttribute(Qt.WA_DeleteOnClose)
-                box.open()                       # not modal to the event loop
+                text = tr("{n} damaged pieces (a coordinate that is not a number) "
+                          "were left out so the rest of “{name}” could open. Save "
+                          "it to keep the repaired document.",
+                          n=repaired, name=path.name)
+                if not _dialogs.notify(self, tr("Document repaired"), text,
+                                       tone="warning"):
+                    box = QMessageBox(QMessageBox.Warning, tr("Document repaired"),
+                                      text, QMessageBox.Ok, self)
+                    box.setAttribute(Qt.WA_DeleteOnClose)
+                    box.open()                   # not modal to the event loop
             # The project's other views show what came in, not what was there.
             grid = self._doc.view_grid
             if grid is not None:
@@ -9360,6 +9384,26 @@ class MainWindow(WorksessionMixin, QMainWindow):
         the bar closing on its own means nothing."""
         if getattr(self, "_open_in_progress", False):
             self._open_aborted = True
+
+    def _on_open_cancelled(self) -> None:
+        """Cancel in the top bar while an .igz is coming in: the load
+        unwinds at its next milestone and the window stays."""
+        if getattr(self, "_open_in_progress", False):
+            self._open_cancelled = True
+
+    def _finish_cancelled_open(self) -> None:
+        """The load unwound after Cancel: what came in so far goes, so the
+        project is the empty one it was (open_path then retires the tab
+        it made for this file)."""
+        self._open_cancelled = False
+        scene = self.viewport.scene
+        scene.clear()
+        scene.version += 1
+        self.viewport.history.clear()
+        self.viewport.reset_texture_cache()
+        self._saved_version = scene.version
+        self.viewport.notify_scene_changed()
+        self.statusBar().showMessage(tr("Opening cancelled."), 4000)
 
     def _finish_aborted_open(self) -> None:
         """The user closed the window while a file was loading (#1269)
@@ -9442,7 +9486,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         path = Path(chosen).with_suffix(".igz")
 
         def confirm(mm):
-            return QMessageBox.question(
+            return _dialogs.question(
                 self, tr("Export precision"),
                 tr("Float32 rounding moves points by up to {mm} mm. Save the copy?",
                    mm=f"{mm:.6g}")) == QMessageBox.Yes
@@ -9454,10 +9498,10 @@ class MainWindow(WorksessionMixin, QMainWindow):
             scene.views_home = self._views_dict(doc)
             stats = igz_format.export_igz(scene, path, confirm)
             if stats and stats["missing"]:
-                QMessageBox.warning(self, tr("Saved with missing textures"),
+                _dialogs.warning(self, tr("Saved with missing textures"),
                                     tr("Some texture images could not be packed."))
         except Exception as exc:
-            QMessageBox.critical(self, tr("Save failed"), str(exc))
+            _dialogs.critical(self, tr("Save failed"), str(exc))
 
     def _end_group_edits(self) -> None:
         """The view in front and the project's own, when they differ."""
@@ -9498,9 +9542,11 @@ class MainWindow(WorksessionMixin, QMainWindow):
                 buffer.open(QIODevice.WriteOnly)
                 image.save(buffer, 'PNG')
                 vp.scene._home_thumbnail_png = bytes(data)
-            stats = igz_format.save_scene(vp.scene, path) or {}
+            # The Built UI: «Saving …» in the top bar for the time it takes.
+            with _dialogs.busy(self, tr("Saving {name}…", name=path.name)):
+                stats = igz_format.save_scene(vp.scene, path) or {}
         except Exception as exc:  # noqa: BLE001
-            QMessageBox.critical(self, tr("Save failed"), str(exc))
+            _dialogs.critical(self, tr("Save failed"), str(exc))
             return
         # A clean save ends the recovery window for this document — and for
         # the slot of what it was called until now (untitled, or the old
@@ -9513,7 +9559,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         embedded = int(stats.get("embedded", 0))
         missing = int(stats.get("missing", 0))
         if missing:
-            QMessageBox.warning(
+            _dialogs.warning(
                 self, tr("Saved with missing textures"),
                 tr("{n} texture image(s) could not be read, so they were not "
                    "packed into the document — those faces will lose their "
@@ -9595,7 +9641,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         self.viewport.end_group_edit()
         group = self._make_billboard_person(image, height, name)
         if group is None:
-            QMessageBox.warning(self, tr("Insert component"),
+            _dialogs.warning(self, tr("Insert component"),
                                 tr("Component file missing: {p}", p=image))
             return
         self._start_place(group)
@@ -9614,11 +9660,11 @@ class MainWindow(WorksessionMixin, QMainWindow):
             return
         img = QImage(path_str)
         if img.isNull() or img.height() == 0:
-            QMessageBox.warning(self, tr("Face-me image"),
+            _dialogs.warning(self, tr("Face-me image"),
                                 tr("Could not read the image."))
             return
         if not img.hasAlphaChannel():
-            QMessageBox.information(
+            _dialogs.information(
                 self, tr("Face-me image"),
                 tr("The image has no transparency — it will show as a "
                    "solid rectangle. A PNG with transparent background "
@@ -9659,7 +9705,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             from formats import igz as _igz
             _igz.load_into(temp, igz_path)
             if not temp.groups:
-                QMessageBox.warning(
+                _dialogs.warning(
                     self, tr("Insert component"),
                     tr("Component file missing: {p}", p=str(igz_path)))
                 return None
@@ -9686,7 +9732,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             from formats.fuse import soften_smooth_edges
             soften_smooth_edges(mesh, cos_threshold=0.55)
         else:
-            QMessageBox.warning(
+            _dialogs.warning(
                 self, tr("Insert component"),
                 tr("Component file missing: {p}", p=str(glb_path)))
             return None
@@ -9760,7 +9806,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
 
         obj = library.model_file(entry)
         if obj is None:
-            QMessageBox.warning(
+            _dialogs.warning(
                 self, tr("Component library"),
                 tr("Could not download “{name}”. Check your connection.",
                    name=entry.get("nombre", "")))
@@ -9770,7 +9816,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             _obj.load_obj(temp, obj,
                            matrix=library.model_matrix(entry, obj))
         except Exception as exc:  # noqa: BLE001
-            QMessageBox.critical(self, tr("Component library"), str(exc))
+            _dialogs.critical(self, tr("Component library"), str(exc))
             return None
         parts = _obj_parts(temp)
         if parts is not None:
@@ -9782,7 +9828,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         if not mesh.faces and temp.groups:
             mesh = temp.groups[0].mesh       # a big OBJ lands as a group
         if not mesh.faces:
-            QMessageBox.warning(
+            _dialogs.warning(
                 self, tr("Component library"),
                 tr("“{name}” has no geometry.", name=entry.get("nombre", "")))
             return None
@@ -9878,7 +9924,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         self.viewport.end_group_edit()
         group = make_text_group(params)
         if group is None:
-            QMessageBox.warning(self, tr("3D Text"),
+            _dialogs.warning(self, tr("3D Text"),
                                 tr("Could not build geometry for that text."))
             return
         self._start_place(group, align_to_face=True)
@@ -9921,7 +9967,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         if params is None or params == {k: group.text3d.get(k) for k in TEXT_KEYS}:
             return
         if make_text_group(params) is None:
-            QMessageBox.warning(self, tr("3D Text"),
+            _dialogs.warning(self, tr("3D Text"),
                                 tr("Could not build geometry for that text."))
             return
         if self.viewport.scene.edit_group is group:
@@ -9956,7 +10002,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         open_url(self.DOCUMENTATION_URL)
 
     def _on_get_models(self) -> None:
-        QMessageBox.information(
+        _dialogs.information(
             self, tr("Get more models and textures"),
             tr("Free sources that open directly in Built:") + "<br><br>"
             "<b>Poly Haven</b> — <a href='https://polyhaven.com'>"
@@ -9982,6 +10028,23 @@ class MainWindow(WorksessionMixin, QMainWindow):
                 old.deleteLater()
             except RuntimeError:
                 pass
+        if _dialogs.live(self) is not None:
+            # The Built UI: the work shows in the top bar (file, phase,
+            # share, Cancel where the loader can stop), never a dialog.
+            bar = _dialogs.ChromeBar(self, title)
+            self._progress_dlg = bar
+            last_chrome = 0
+
+            def chrome_cb(frac, text):
+                nonlocal last_chrome
+                value = max(0, min(100, int(frac * 100)))
+                last_chrome = max(last_chrome, value) if monotonic else value
+                bar.setValue(last_chrome)
+                bar.setLabelText(tr(text))
+                QApplication.processEvents()
+
+            return bar, chrome_cb
+
         class _Bar(QProgressDialog):
             def close(self):
                 # reset() stops the timer that shows the bar after
@@ -10162,7 +10225,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         if was_clean:
             self._saved_version = self.viewport.scene.version
         self._update_title()
-        QMessageBox.critical(self, title, describe(failure[0]))
+        _dialogs.critical(self, title, describe(failure[0]))
         return None
 
     def _on_import_rfa(self) -> None:
@@ -10191,7 +10254,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         self._update_title()
         self._report_import(path.name)
         if report:
-            QMessageBox.information(self, tr("Revit family import report"), "\n".join(report))
+            _dialogs.information(self, tr("Revit family import report"), "\n".join(report))
         return True
 
     def _on_import_dae(self) -> None:
@@ -10270,7 +10333,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
                 payload = None             # unreadable: said below
             elif exc is not None:
                 dlg.close()
-                QMessageBox.critical(self, tr("Import SKP failed"), str(exc))
+                _dialogs.critical(self, tr("Import SKP failed"), str(exc))
                 return False
             if payload is not None:
                 cmd = self._run_import(
@@ -10301,7 +10364,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
 
         # No converter behind this: IngeTrazo reads .skp with its own
         # reader only.
-        QMessageBox.warning(
+        _dialogs.warning(
             self, tr("Import SKP"),
             tr("Built could not read {name} with its built-in .skp "
                "reader.\n\nOpen it in the program it came from and export "
@@ -10326,12 +10389,12 @@ class MainWindow(WorksessionMixin, QMainWindow):
                                   texture_cache_stats)
         count, size = texture_cache_stats()
         if not count:
-            QMessageBox.information(
+            _dialogs.information(
                 self, tr("Texture cache"),
                 tr("The texture cache is already empty.\n\n{path}",
                    path=str(texture_cache_root())))
             return
-        answer = QMessageBox.question(
+        answer = _dialogs.question(
             self, tr("Clear texture cache"),
             tr("Delete {count} image(s) ({mb:.1f} MB) from:\n{path}\n\n"
                "Saved .igz documents carry their own copy and rebuild it when "
@@ -10395,7 +10458,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         self._link_watcher().refresh()
         errors = getattr(self.viewport.scene, "link_errors", None) or {}
         if errors:
-            QMessageBox.warning(
+            _dialogs.warning(
                 self, tr("Linked files"),
                 tr("Some linked documents could not be loaded; their copies "
                    "stay in place, empty, until the files are found:")
@@ -10430,7 +10493,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         try:
             self.link_igz_path(path, include_nested=include_nested)
         except links.LinkError as exc:
-            QMessageBox.warning(self, tr("Link IngeTrazo document"),
+            _dialogs.warning(self, tr("Link IngeTrazo document"),
                                 str(exc))
 
     def _choose_link_contents(self, path, select=None):
@@ -10524,7 +10587,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         try:
             links.set_include_nested(self.viewport.scene, group, enabled)
         except (links.LinkError, OSError) as exc:
-            QMessageBox.warning(self, tr("Linked files"), str(exc))
+            _dialogs.warning(self, tr("Linked files"), str(exc))
             return False
         self._relink_done("")
         return True
@@ -10540,18 +10603,20 @@ class MainWindow(WorksessionMixin, QMainWindow):
     def _reload_link(self, path) -> None:
         from core import links
         try:
-            links.reload(self.viewport.scene, path, self._current_path)
+            with _dialogs.busy(self, tr("Reloading {name}…", name=Path(path).name)):
+                links.reload(self.viewport.scene, path, self._current_path)
         except links.LinkError as exc:
-            QMessageBox.warning(self, tr("Linked files"), str(exc))
+            _dialogs.warning(self, tr("Linked files"), str(exc))
             return
         self._relink_done(tr("Reloaded {names}", names=Path(path).name))
 
     def _reload_all_links(self) -> None:
         from core import links
-        errors = links.resolve(self.viewport.scene, self._current_path)
+        with _dialogs.busy(self, tr("Reloading linked documents…")):
+            errors = links.resolve(self.viewport.scene, self._current_path)
         self._relink_done(tr("Linked documents reloaded"))
         if errors:
-            QMessageBox.warning(self, tr("Linked files"),
+            _dialogs.warning(self, tr("Linked files"),
                                 "\n".join(errors.values()))
 
     def _pack_link(self, path, on: bool) -> None:
@@ -10570,7 +10635,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             links.clear_overrides(self.viewport.scene, path,
                                   self._current_path)
         except links.LinkError as exc:
-            QMessageBox.warning(self, tr("Linked files"), str(exc))
+            _dialogs.warning(self, tr("Linked files"), str(exc))
             return
         self._relink_done("")
 
@@ -10588,18 +10653,18 @@ class MainWindow(WorksessionMixin, QMainWindow):
         path = Path(path_str)
         if (self._current_path is not None
                 and path.resolve() == self._current_path.resolve()):
-            QMessageBox.warning(
+            _dialogs.warning(
                 self, tr("Import IngeTrazo document"),
                 tr("That is the document you are editing."))
             return
         try:
             comp = self.import_igz_path(path)
         except Exception as exc:  # noqa: BLE001
-            QMessageBox.critical(
+            _dialogs.critical(
                 self, tr("Import IngeTrazo document failed"), str(exc))
             return
         if comp is None:
-            QMessageBox.warning(
+            _dialogs.warning(
                 self, tr("Import IngeTrazo document"),
                 tr("“{name}” has no geometry.", name=path.name))
 
@@ -10741,7 +10806,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             path, scale, simplify_mode, cb, report=moved)
         if exc is not None:
             dlg.close()
-            QMessageBox.critical(self, tr("Import STL failed"), str(exc))
+            _dialogs.critical(self, tr("Import STL failed"), str(exc))
             return
         cmd = self._run_import(
             lambda scene: stl_format.add_stl_mesh(scene, path, target),
@@ -10773,7 +10838,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         from core.image_plane import image_aspect
         aspect, pw, ph = image_aspect(path)
         if pw <= 0 or ph <= 0:
-            QMessageBox.critical(
+            _dialogs.critical(
                 self, tr("Import image failed"),
                 tr("{name} is not an image this build can read.",
                    name=path.name))
@@ -10782,7 +10847,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         try:
             cached = cache_image(path.read_bytes(), path.name, "imported")
         except OSError as exc:
-            QMessageBox.critical(self, tr("Import image failed"), str(exc))
+            _dialogs.critical(self, tr("Import image failed"), str(exc))
             return
 
         from tools.image import ImageTool
@@ -10867,10 +10932,10 @@ class MainWindow(WorksessionMixin, QMainWindow):
         try:
             info = read_info(path)
         except (GeoTiffError, OSError) as exc:
-            QMessageBox.critical(self, tr("Import orthomosaic"), str(exc))
+            _dialogs.critical(self, tr("Import orthomosaic"), str(exc))
             return
         if not info.georeferenced:
-            QMessageBox.warning(
+            _dialogs.warning(
                 self, tr("Import orthomosaic"),
                 tr("{name} carries no georeference (no map transform or an "
                    "unknown coordinate system). Import it with "
@@ -10879,7 +10944,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             return
         reason = unsupported_reason(info)
         if reason:
-            QMessageBox.critical(
+            _dialogs.critical(
                 self, tr("Import orthomosaic"),
                 tr("{name}: {reason} is not supported by this reader.",
                    name=path.name, reason=reason))
@@ -10910,7 +10975,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
                                      or True))
         except (GeoTiffError, OSError, MemoryError) as exc:
             dlg.close()
-            QMessageBox.critical(self, tr("Import orthomosaic"), str(exc))
+            _dialogs.critical(self, tr("Import orthomosaic"), str(exc))
             return
         cb(0.92, "Storing the picture…")
         image = rgba_to_qimage(rgba)
@@ -10933,7 +10998,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             cached = cache_image(bytes(data), f"{path.stem}.{ext}", "imported")
         except OSError as exc:
             dlg.close()
-            QMessageBox.critical(self, tr("Import orthomosaic"), str(exc))
+            _dialogs.critical(self, tr("Import orthomosaic"), str(exc))
             return
         dlg.close()
 
@@ -11020,7 +11085,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         try:
             f = integrate(img)
         except OSError as exc:
-            QMessageBox.warning(self, tr("Add to the applications menu"),
+            _dialogs.warning(self, tr("Add to the applications menu"),
                                 str(exc))
             return
         self.statusBar().showMessage(
@@ -11084,7 +11149,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
                                         discard_temp_dxf, have_dwg_support)
 
         if not have_dwg_support():
-            QMessageBox.critical(
+            _dialogs.critical(
                 self, tr("Import DWG failed"),
                 tr("The LibreDWG converter (dwg2dxf) is not available in "
                    "this installation.") + "\n\n" +
@@ -11109,7 +11174,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             if exc.kind == "cancelled":
                 self.statusBar().showMessage(tr("DWG import cancelled."), 5000)
             else:
-                QMessageBox.critical(self, tr("Import DWG failed"),
+                _dialogs.critical(self, tr("Import DWG failed"),
                                      self._dwg_failure_text(exc))
             return False
         finally:
@@ -11159,7 +11224,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         try:
             doc = open_document(path)
         except Exception as exc:  # noqa: BLE001 — unreadable file
-            QMessageBox.critical(self, tr("Import DXF failed"), str(exc))
+            _dialogs.critical(self, tr("Import DXF failed"), str(exc))
             return False
         suggested, _code = suggest_unit_scale(doc)
         options = self._dxf_options(shown, suggested)
@@ -11286,7 +11351,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             # The survey knows where it is — anchor the scene on it rather than
             # making the user type coordinates they'd have to look up.
             if anchor is None:
-                QMessageBox.warning(
+                _dialogs.warning(
                     self, tr("Import photogrammetric mesh"),
                     tr("This model is not georeferenced and the scene has no "
                        "datum yet. Set a location in the Terrain tray first, or "
@@ -11306,7 +11371,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         mesh, images, exc = self._load_photomesh_threaded(path, datum, 0.0, cb)
         if exc is not None:
             dlg.close()
-            QMessageBox.critical(self, tr("Import failed"), str(exc))
+            _dialogs.critical(self, tr("Import failed"), str(exc))
             return
         if mesh is None or mesh.triangle_count == 0:
             dlg.close()
@@ -11471,7 +11536,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         try:
             feats = load_features(Path(path_str))
         except Exception as exc:  # noqa: BLE001
-            QMessageBox.critical(self, tr("Import failed"), str(exc))
+            _dialogs.critical(self, tr("Import failed"), str(exc))
             return
         feats = [f for f in feats if len(f.points) >= 2]
         if not feats:
@@ -11519,7 +11584,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         self.viewport.end_group_edit()
         from core.bim import collect_objects
         if not collect_objects(self.viewport.scene):
-            QMessageBox.information(
+            _dialogs.information(
                 self, tr("Export IFC"),
                 tr("Nothing to export: tag geometry in the BIM panel first "
                    "(only tagged objects go to IFC)."))
@@ -11543,7 +11608,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
                 self.viewport.scene, path_str, profile=profile,
                 project_directory=Path(self._current_path).parent if self._current_path else None)
         except Exception as exc:  # noqa: BLE001
-            QMessageBox.critical(self, tr("Export IFC failed"), str(exc))
+            _dialogs.critical(self, tr("Export IFC failed"), str(exc))
             return
         self.statusBar().showMessage(
             tr("{n} IFC elements exported to {path}",
@@ -11624,6 +11689,13 @@ class MainWindow(WorksessionMixin, QMainWindow):
         sel = set(self.viewport.scene.selection)
         if not sel:
             return None
+        answer = _dialogs.ask(
+            self, tr("Export"), tr("Export the whole model, or only what is selected?"),
+            [("cancel", tr("Cancel")), ("whole", tr("Whole model")),
+             ("part", tr("Only the selection"))],
+            default="part", cancel="cancel")
+        if answer is not None:
+            return {"part": sel, "whole": None}.get(answer, False)
         box = QMessageBox(
             QMessageBox.Question, tr("Export"),
             tr("Export the whole model, or only what is selected?"),
@@ -11746,7 +11818,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
                 return
             except Exception as exc:  # noqa: BLE001
                 QApplication.restoreOverrideCursor()
-                QMessageBox.critical(self, tr("Export SVG failed"), str(exc))
+                _dialogs.critical(self, tr("Export SVG failed"), str(exc))
                 return
             QApplication.restoreOverrideCursor()
         finally:
@@ -11857,7 +11929,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             n = save(path, groups, solids, texts)
         except Exception as exc:  # noqa: BLE001
             QApplication.restoreOverrideCursor()
-            QMessageBox.critical(self, failed, str(exc))
+            _dialogs.critical(self, failed, str(exc))
             return
         QApplication.restoreOverrideCursor()
         self.statusBar().showMessage(
@@ -11891,7 +11963,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             width, sharp_shadows=True, transparent=transparent,
             crop_to_frame=True)
         if image is None or image.isNull() or not image.save(str(path)):
-            QMessageBox.critical(self, tr("Export Image failed"),
+            _dialogs.critical(self, tr("Export Image failed"),
                                  tr("Could not render or save the image."))
             return
         self.statusBar().showMessage(
@@ -11911,7 +11983,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         try:
             writer(self.viewport.scene, path)
         except Exception as exc:  # noqa: BLE001
-            QMessageBox.critical(
+            _dialogs.critical(
                 self, tr("Export {label} failed", label=label), str(exc))
             return
         self.statusBar().showMessage(
@@ -11921,6 +11993,18 @@ class MainWindow(WorksessionMixin, QMainWindow):
         """Return True if it's safe to discard the current drawing."""
         if not self._is_dirty():
             return True
+        # The Built UI asks on its own sheet (Enter saves, Esc stays, ⌘D
+        # lets the changes go); Qt asks when the chrome is not on screen.
+        answer = _dialogs.ask(
+            self, prompt, tr("Unsaved changes will be lost."),
+            [("discard", tr("Don't Save")), ("cancel", tr("Cancel")),
+             ("save", tr("Save"))],
+            default="save", cancel="cancel", discard="discard")
+        if answer is not None:
+            if answer == "save":
+                self._on_save()
+                return not self._is_dirty()
+            return answer == "discard"
         # Built by hand rather than with QMessageBox.question: on macOS
         # that is a NATIVE alert, which draws «Don't Save» as a red
         # destructive button — and under the dark scheme main.py forces,
@@ -12000,6 +12084,11 @@ class MainWindow(WorksessionMixin, QMainWindow):
 
     # ---- Window lifecycle ---------------------------------------------------
     def closeEvent(self, event) -> None:
+        if _dialogs.current_sheet(self) is not None:
+            # A question is on the chrome's sheet: answer it first, as a
+            # modal dialog would have kept the window from closing.
+            event.ignore()
+            return
         if getattr(self, "_open_in_progress", False):
             # A file is still loading into this window (#1269). What is
             # on screen is the loader's half-finished work, not the
@@ -12072,6 +12161,15 @@ class MainWindow(WorksessionMixin, QMainWindow):
                 self.activate_document(dirty[0])
             return self._confirm_discard(tr("Quit Built?"))
         names = "\n".join("• " + d.display_name() for d in dirty)
+        answer = _dialogs.ask(
+            self, tr("Unsaved changes"),
+            tr("{n} projects have unsaved changes:\n\n{names}\n\n"
+               "Save them before quitting?", n=len(dirty), names=names),
+            [("discard", tr("Don't Save")), ("cancel", tr("Cancel")),
+             ("save", tr("Save All"))],
+            default="save", cancel="cancel", discard="discard")
+        if answer is not None:
+            return self._save_all_or_stay(dirty, answer)
         box = QMessageBox(
             QMessageBox.Question, tr("Unsaved changes"),
             tr("{n} projects have unsaved changes:\n\n{names}\n\n"
@@ -12085,9 +12183,14 @@ class MainWindow(WorksessionMixin, QMainWindow):
             box.button(button).setText(tr(text))
         box.setDefaultButton(QMessageBox.SaveAll)
         answer = box.exec()
-        if answer == QMessageBox.Discard:
+        return self._save_all_or_stay(
+            dirty, {QMessageBox.Discard: "discard",
+                    QMessageBox.SaveAll: "save"}.get(answer, "cancel"))
+
+    def _save_all_or_stay(self, dirty, answer: str) -> bool:
+        if answer == "discard":
             return True
-        if answer != QMessageBox.SaveAll:
+        if answer != "save":
             return False
         for doc in dirty:
             self.activate_document(doc)
