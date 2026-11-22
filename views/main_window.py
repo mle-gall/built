@@ -488,6 +488,20 @@ def project_path_missing(scene):
 from views.worksession import WorksessionMixin
 
 
+
+def _after_unlink_step(window, stack) -> None:
+    """Undo or redo just moved ``stack[-1]``: a broken link brought back
+    (or broken again) changes what is watched and the tags. A function, not
+    a method: undo and redo run for stand-in windows too (tests, tools)."""
+    from core.history import CompoundCommand, UnlinkCommand
+
+    def unlinks(cmd):
+        if isinstance(cmd, CompoundCommand):
+            return any(unlinks(c) for c in cmd.commands)
+        return isinstance(cmd, UnlinkCommand)
+    if stack and unlinks(stack[-1]):
+        window._unlinked()
+
 class MainWindow(WorksessionMixin, QMainWindow):
     """Top-level IngeTrazo window."""
 
@@ -7364,7 +7378,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             if inference is not None:
                 inference.clear_references()
             self.viewport.notify_scene_changed()
-            self._after_unlink_step(self.viewport.history.redo_stack)
+            _after_unlink_step(self, self.viewport.history.redo_stack)
 
     def _on_redo(self) -> None:
         # The same first refusal as undo: Push/Pull ends a drag whose staged
@@ -7382,19 +7396,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             if inference is not None:
                 inference.clear_references()
             self.viewport.notify_scene_changed()
-            self._after_unlink_step(self.viewport.history.undo_stack)
-
-    def _after_unlink_step(self, stack) -> None:
-        """Undo or redo just moved ``stack[-1]``: a broken link brought
-        back (or broken again) changes what is watched and the tags."""
-        from core.history import CompoundCommand, UnlinkCommand
-
-        def unlinks(cmd):
-            if isinstance(cmd, CompoundCommand):
-                return any(unlinks(c) for c in cmd.commands)
-            return isinstance(cmd, UnlinkCommand)
-        if stack and unlinks(stack[-1]):
-            self._unlinked()
+            _after_unlink_step(self, self.viewport.history.undo_stack)
 
     # ---- File handling ------------------------------------------------------
     # ---- The document's camera (issue #60) ---------------------------------
