@@ -132,6 +132,8 @@ pub struct Ui {
     options: Vec<(String, String, String, u8)>,
     /// Right column: project tree above, inspector below.
     column: Option<Column>,
+    /// Ready-to-deliver: active node path, unfiled count, items to fix.
+    delivery: Option<(String, u32, u32)>,
     glass: crate::glass::Glass,
 }
 
@@ -261,6 +263,7 @@ impl Ui {
             view_open: false,
             options: Vec::new(),
             column: None,
+            delivery: None,
         }
     }
 
@@ -359,6 +362,9 @@ impl Ui {
             col.focus_filter = true;
             col.filter.clear();
         }
+    }
+    pub fn set_delivery(&mut self, active: String, unfiled: u32, problems: u32) {
+        self.delivery = Some((active, unfiled, problems));
     }
     pub fn set_options(&mut self, options: Vec<(String, String, String, u8)>) { self.options = options; }
     pub fn set_cluster(&mut self, cluster: Vec<Vec<Item>>, view_menu: Vec<(String, Vec<Item>)>) {
@@ -580,6 +586,46 @@ impl Ui {
                     });
                 });
             });
+    }
+
+    /// Bottom right: the node new geometry goes into, and what stands
+    /// between the model and delivery (council 2026-11-22, as-built lens).
+    fn delivery_pill(&mut self, ctx: &egui::Context, screen: Rect) {
+        let Some((active, unfiled, problems)) = self.delivery.clone() else { return };
+        if active.is_empty() && unfiled == 0 && problems == 0 {
+            return;
+        }
+        let measure = self.cursor.is_some().then(|| ctx.memory(|m| m.area_rect(egui::Id::new("measure")))).flatten();
+        let right = measure.map_or(self.free_right(ctx, screen) - 12.0, |r| r.min.x - 8.0);
+        let mut clicked = None;
+        egui::Area::new(egui::Id::new("delivery"))
+            .pivot(egui::Align2::RIGHT_BOTTOM)
+            .fixed_pos(pos2(right, screen.max.y - 12.0))
+            .order(egui::Order::Foreground)
+            .show(ctx, |ui| {
+                glass(Surface::Pill).inner_margin(Margin::same(4)).show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing = vec2(4.0, 0.0);
+                        if !active.is_empty() {
+                            if text_button(ui, &format!("✎ {active}"), "New geometry goes here", true) {
+                                clicked = Some("active");
+                            }
+                        }
+                        if unfiled > 0 && amber_button(ui, &format!("{unfiled} unfiled")) {
+                            clicked = Some("unfiled");
+                        }
+                        if problems > 0 && amber_button(ui, &format!("{problems} to fix")) {
+                            clicked = Some("problems");
+                        }
+                        if unfiled == 0 && problems == 0 {
+                            ui.label(egui::RichText::new("Ready to deliver").font(meta()).color(DIM));
+                        }
+                    });
+                });
+            });
+        if let Some(what) = clicked {
+            self.actions.push(format!("deliver:{what}"));
+        }
     }
 
     fn selection_bar(&mut self, ctx: &egui::Context, screen: Rect) {
@@ -984,6 +1030,19 @@ impl Ui {
                         ui.label(egui::RichText::new(&col.inspector_title).font(title()).color(INK));
                         ui.add_space(4.0);
                         for (title, rows) in &col.inspector {
+                            if title == "Actions" {
+                                // What to do next, as commands: (id, label).
+                                ui.add_space(6.0);
+                                ui.horizontal_wrapped(|ui| {
+                                    ui.spacing_mut().item_spacing = vec2(4.0, 4.0);
+                                    for (id, label) in rows {
+                                        if chip_button(ui, label) {
+                                            actions.push(format!("insp:{id}"));
+                                        }
+                                    }
+                                });
+                                continue;
+                            }
                             let folded = title.starts_with("Export");
                             let body = |ui: &mut egui::Ui| {
                                 for (label, value) in rows {
@@ -1099,6 +1158,7 @@ impl Ui {
             self.options_strip(ctx);
             self.right_column(ctx, screen);
             self.measure_box(ctx, screen);
+            self.delivery_pill(ctx, screen);
             if self.cursor.as_ref().is_some_and(|c| c.2) {
                 self.cursor_value(ctx, screen);
             }
@@ -1106,6 +1166,7 @@ impl Ui {
         let shown = [("palette", !self.groups.is_empty()), ("selection", self.selection.is_some()),
                      ("cluster", !self.cluster.is_empty()), ("view_menu", self.view_open),
                      ("options", !self.options.is_empty()), ("column", self.column.is_some()),
+                     ("delivery", self.delivery.is_some()),
                      ("sel_more", self.sel_more && self.selection.is_some()),
                      ("sel_sub", self.sel_more && self.sel_sub.is_some()),
                      ("row_menu", self.column.as_ref().is_some_and(|c| c.row_menu.is_some()))];
@@ -1209,6 +1270,18 @@ fn menu_row_resp(ui: &mut egui::Ui, item: &Item) -> (egui::Response, Rect) {
         ui.painter().text(pos2(rect.max.x - 10.0, rect.center().y), egui::Align2::RIGHT_CENTER, tip, meta(), FAINT);
     }
     (resp, rect)
+}
+
+/// A small command chip (inspector next steps): neutral wash, 22 high.
+fn chip_button(ui: &mut egui::Ui, label: &str) -> bool {
+    let g = ui.painter().layout_no_wrap(label.to_owned(), meta(), INK);
+    let (rect, resp) = ui.allocate_exact_size(vec2(g.size().x + 16.0, 22.0), Sense::click());
+    let st = state_of(&resp, false, true);
+    ui.painter().rect_filled(rect, CornerRadius::same(R_CONTROL), HOVER);
+    paint_state(ui, rect, st, R_CONTROL);
+    ui.painter().rect_stroke(rect, CornerRadius::same(R_CONTROL), Stroke::new(1.0_f32, EDGE), egui::StrokeKind::Inside);
+    ui.painter().galley(rect.center() - g.size() / 2.0, g, INK);
+    resp.clicked()
 }
 
 /// A warning chip: amber text on an amber wash, no outline.

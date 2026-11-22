@@ -2072,6 +2072,9 @@ impl Renderer {
     fn ui_wheel(&mut self, x: f32, y: f32, dx: f32, dy: f32) -> bool {
         self.ui.as_mut().is_some_and(|ui| ui.wheel(x, y, dx, dy))
     }
+    fn ui_set_delivery(&mut self, active: String, unfiled: u32, problems: u32) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_delivery(active, unfiled, problems); }
+    }
     fn ui_take_actions(&mut self) -> Vec<String> {
         self.ui.as_mut().map(|ui| ui.take_actions()).unwrap_or_default()
     }

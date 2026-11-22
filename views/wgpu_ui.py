@@ -56,6 +56,58 @@ def _icon_rgba(key: str) -> tuple[int, int, bytes]:
     return w, h, bytes(data)
 
 
+def _drawn_icon(key: str) -> tuple[int, int, bytes]:
+    """Icons the app has no art for yet (view-state toggles), drawn in the
+    same 48-px grid and stroke as views/icons.py, white for tinting."""
+    from PySide6.QtCore import QPointF, QRectF
+    from PySide6.QtGui import QColor, QPainter, QPen
+    image = QImage(_ICON_PX, _ICON_PX, QImage.Format_RGBA8888)
+    image.fill(Qt.transparent)
+    p = QPainter(image)
+    p.setRenderHint(QPainter.Antialiasing, True)
+    solid = QPen(QColor(255, 255, 255), 3.0, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+    dashed = QPen(QColor(255, 255, 255, 200), 2.2, Qt.DashLine, Qt.RoundCap, Qt.RoundJoin)
+    dashed.setDashPattern([1.6, 1.8])
+    front, back = QRectF(10, 18, 20, 20), QRectF(18, 10, 20, 20)
+    corners = [(front.topLeft(), back.topLeft()), (front.topRight(), back.topRight()),
+               (front.bottomLeft(), back.bottomLeft()), (front.bottomRight(), back.bottomRight())]
+    if key == "xray":
+        # A cube you see through: faces washed, every edge drawn.
+        p.setPen(Qt.NoPen)
+        p.setBrush(QColor(255, 255, 255, 70))
+        p.drawRect(back)
+        p.drawRect(front)
+        p.setBrush(Qt.NoBrush)
+        p.setPen(solid)
+        p.drawRect(front)
+        p.drawRect(back)
+        for a, b in corners:
+            p.drawLine(a, b)
+    elif key == "back_edges":
+        # The near edges solid, the ones behind dashed.
+        p.setPen(dashed)
+        p.drawLine(back.topLeft(), back.bottomLeft())
+        p.drawLine(back.bottomLeft(), back.bottomRight())
+        p.drawLine(front.bottomLeft(), back.bottomLeft())
+        p.setPen(solid)
+        p.drawRect(front)
+        p.drawLine(back.topLeft(), back.topRight())
+        p.drawLine(back.topRight(), back.bottomRight())
+        p.drawLine(front.topLeft(), back.topLeft())
+        p.drawLine(front.topRight(), back.topRight())
+        p.drawLine(front.bottomRight(), back.bottomRight())
+    elif key == "hidden_geometry":
+        # A face whose soft diagonal and smoothed edges show dashed.
+        p.setPen(solid)
+        p.drawRect(QRectF(11, 11, 26, 26))
+        p.setPen(dashed)
+        p.drawLine(QPointF(11, 37), QPointF(37, 11))
+        p.drawLine(QPointF(11, 24), QPointF(24, 11))
+        p.drawLine(QPointF(24, 37), QPointF(37, 24))
+    p.end()
+    return _ICON_PX, _ICON_PX, bytes(image.constBits())[: _ICON_PX * _ICON_PX * 4]
+
+
 def _window(view):
     win = view.window()
     return win if hasattr(win, "_tool_actions") else None
@@ -125,6 +177,8 @@ def _send_tools(view, win) -> None:
                 "view_right", "view_left", "view_back", "view_bottom"]:
         w, h, rgba = _icon_rgba(key)
         icons.append((key, w, h, rgba))
+    for key in ("xray", "back_edges", "hidden_geometry"):
+        icons.append((key, *_drawn_icon(key)))
     view.renderer.ui_set_icons(icons)
     view._ui_tools_sent = True
 
@@ -232,9 +286,9 @@ def _cluster(view, win) -> None:
     style = win.active_style() if hasattr(win, "active_style") else None
     xray = style is not None and getattr(style, "face_mode", None) == "xray"
     # No Save, Undo or Redo buttons: ⌘S, ⌘Z, ⇧⌘Z (Maxence 2026-11-22).
-    toggles = [tipped(item(getattr(win, "_act_xray_toggle", None), label="X-ray", checked=xray), "X-ray"),
-               tipped(item(getattr(win, "_act_style_back_edges", None), label="Back edges"), "Back edges"),
-               tipped(item(getattr(win, "_act_hidden_geometry", None), label="Hidden"), "Hidden geometry"),
+    toggles = [tipped(item(getattr(win, "_act_xray_toggle", None), label="X-ray", icon="xray", checked=xray), "X-ray"),
+               tipped(item(getattr(win, "_act_style_back_edges", None), label="Back edges", icon="back_edges"), "Back edges"),
+               tipped(item(getattr(win, "_act_hidden_geometry", None), label="Hidden geometry", icon="hidden_geometry"), "Hidden geometry"),
                tipped(item(getattr(win, "_act_shadows", None), icon="shadows"), "Shadows"),
                tipped(item(getattr(win, "_act_show_scuts", None), label="Cut", icon="section_cuts"), "Section cuts")]
     nav = []
@@ -429,7 +483,7 @@ def _tree(view, win) -> None:
     nodes = structure._nodes(registry)
     recipes = {k: structure.resolve(registry, k) for k in nodes}
     children = structure.tree(registry)
-    direct, counts, problems, unfiled = defaultdict(list), Counter(), Counter(), []
+    direct, counts, problems, unfiled, to_fix = defaultdict(list), Counter(), Counter(), [], []
     for g, source, root, key in structure._memberships(scene, registry):
         review = structure._is_unsorted(g, source, root, key, recipes)
         if review:
@@ -438,7 +492,10 @@ def _tree(view, win) -> None:
             direct[key].append(g)
             counts[key] += 1
             expects = recipes[key].get("class") is not None
-            problems[key] += int(expects and not structure._has_status(g.ifc or {})) + int(review)
+            bad = int(expects and not structure._has_status(g.ifc or {})) + int(review)
+            problems[key] += bad
+            if bad:
+                to_fix.append(g)
     order, depth, stack = [], {}, [(k, 0) for k in reversed(children[None])]
     while stack:
         key, d = stack.pop()
@@ -468,8 +525,11 @@ def _tree(view, win) -> None:
         parent = node["parent"]
         rows.append((key, index.get(parent, -1) if parent else -1, depth[key], name, kind,
                      int(counts[key]), int(problems[key]), key == active))
-    view._ui_tree = dict(direct=direct, children=children, unfiled=unfiled, recipes=recipes)
+    view._ui_tree = dict(direct=direct, children=children, unfiled=unfiled, recipes=recipes, to_fix=to_fix,
+                         active=active)
     view.renderer.ui_set_tree(rows, len(unfiled))
+    path = " › ".join(structure.path(registry, active)) if active in nodes else ""
+    view.renderer.ui_set_delivery(path, len(unfiled), len(to_fix))
 
 
 def _tree_groups(view, key):
@@ -512,6 +572,16 @@ def _tree_action(win, view, action) -> None:
             registry = bim_registry.get(vp.scene)
             registry.setdefault("structure", {})["active"] = key
             execute(vp, SetRegistryCommand(registry))
+        elif verb == "insp":
+            from core.group import Group
+            sel = list(vp.scene.selection)
+            groups = [e for e in sel if isinstance(e, Group)]
+            if key == "file" and groups:
+                _file_to(win, len(groups))
+            elif key == "isolate":
+                _isolate(win, [getattr(e, "uid", None) for e in sel if getattr(e, "uid", None)])
+            elif key == "edit" and len(groups) == 1:
+                vp.begin_group_edit(groups[0])
         elif verb == "unfiled":
             _select(win, (getattr(view, "_ui_tree", None) or {}).get("unfiled", []))
     except (KeyError, ValueError) as exc:
@@ -542,13 +612,22 @@ def _inspector(view, win) -> None:
         filed = " › ".join(structure.path(registry, key)) if key in nodes else "Not filed"
         recipe = (getattr(view, "_ui_tree", None) or {}).get("recipes", {}).get(key, {})
         title = g.name or getattr(getattr(g, "definition", None), "name", "") or "Group"
-        rows = [("Filed in", filed), ("Kind", kind_of(rec.get("class") or recipe.get("class")) if (rec or recipe) else "—")]
+        filed_ok = key in nodes
+        kind = kind_of(rec.get("class") or recipe.get("class")) if (rec or recipe) else "Comes from its node"
+        rows = [("Filed in", filed), ("Kind", kind)]
         status = structure._has_status(rec)
-        needs = [("Status", "set" if status else "missing")] if rec else [("Record", "none yet")]
+        if not filed_ok:
+            needs = [("Filing", "File it to give it a kind and a record")]
+        elif not rec:
+            needs = [("Record", "Made when its node has a kind")]
+        else:
+            needs = [("Status", "Set" if status else "Missing")]
+        acts = [("file", "Refile…" if filed_ok else "File to…"), ("isolate", "Isolate"), ("edit", "Edit group")]
         export = [("IFC class", str(rec.get("class") or recipe.get("class") or "generic object")),
                   ("Predefined type", str(rec.get("predefined_type") or recipe.get("predefined_type") or "—")),
                   ("Tag", str(recipe.get("tag") or "—"))]
-        view.renderer.ui_set_inspector(title, [("Where", rows), ("What it needs", needs), ("Export details", export)])
+        view.renderer.ui_set_inspector(title, [("Where", rows), ("What it needs", needs), ("Actions", acts),
+                                               ("Export details", export)])
         return
     kinds = Counter()
     unfiled = 0
@@ -564,7 +643,8 @@ def _inspector(view, win) -> None:
     others = len(sel) - len(groups)
     if others:
         rows.append(("Loose geometry", str(others)))
-    view.renderer.ui_set_inspector(f"{len(sel)} selected", [("By node", rows)])
+    acts = [("file", "File to…"), ("isolate", "Isolate")] if groups else [("isolate", "Isolate")]
+    view.renderer.ui_set_inspector(f"{len(sel)} selected", [("By node", rows), ("Actions", acts)])
 
 
 def _dock(win, names) -> None:
@@ -619,6 +699,15 @@ def _run(win, actions) -> None:
         elif kind == "tree":
             view = getattr(getattr(win, "_doc", None), "stand_in", None)
             _tree_action(win, view, arg)
+        elif kind == "deliver":
+            view = getattr(getattr(win, "_doc", None), "stand_in", None)
+            data = getattr(view, "_ui_tree", None) or {}
+            if arg == "unfiled":
+                _select(win, data.get("unfiled", []))
+            elif arg == "problems":
+                _select(win, data.get("to_fix", []))
+            elif arg == "active" and data.get("active"):
+                _select(win, _tree_groups(view, data["active"]))
         elif kind == "act":
             _trigger(win, int(arg))
         elif kind == "cmd":
