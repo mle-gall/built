@@ -520,7 +520,9 @@ class InstanceUpdates:
                 # Hidden faces and edges follow the visible ones in the bake;
                 # the renderer takes the visible range, the resident arrays
                 # keep all four for Show hidden geometry.
-                total = count + int(hidden_face['count'] + hidden_edge['count'])
+                # Billboards suppress the visible edge draw, but its endpoint
+                # vertices still precede the hidden ranges in the native bake.
+                total = int(hidden_edge['first']) + int(hidden_edge['count']) - start
                 vertices = baked.vertices[start:start+total]
                 indices = baked.indices[start:start+total]
                 if renderer is not None:
@@ -545,14 +547,12 @@ class InstanceUpdates:
                     renderer.update_prototype_materials(code, material)
                 offset = self._place(code, vertices, indices)
                 self.packed.bounds[code] = bounds
-                first = offset
                 for target, source in ((self.packed.commands, face), (self.packed.edge_commands, edge),
                                        (self.packed.hidden_commands, hidden_face),
                                        (self.packed.hidden_edge_commands, hidden_edge)):
                     target[code]['count'] = source['count']
                     target[code]['base'] = offset
-                    target[code]['first'] = first
-                    first += int(source['count'])
+                    target[code]['first'] = offset + int(source['first']) - start
                 self.meshes[id(mesh)] = (mesh, mesh._mut_serial, code)
             self.packed.profile_exclusions = tuple((c, p) for c, p in exclusions.items() if p)
             if renderer is not None and hasattr(renderer, 'set_profile_exclusions'):
@@ -571,6 +571,8 @@ class InstanceUpdates:
                                 for _, _, code in self.changed)
                     if moved:
                         renderer.set_profile_exclusions(self.packed.profile_exclusions)
+        regrouped = len(ids) and np.any(
+            self.packed.instances['info'][ids, 0] != rows['info'][:, 0])
         if len(ids):
             if renderer is not None:
                 renderer.update_instances(ids.tolist(), rows.view(np.uint8).reshape(-1))
@@ -582,7 +584,7 @@ class InstanceUpdates:
         if not len(ids) and not self.changed and not self.removed:
             return
         old_count = len(self.world_boxes)
-        if len(self.packed.instances) != old_count or self.changed:
+        if len(self.packed.instances) != old_count or self.changed or regrouped:
             counts = np.bincount(self.packed.instances['info'][:, 0], minlength=len(self.packed.commands))
             self.packed.commands['start'] = self.packed.edge_commands['start'] = np.cumsum(counts)-counts
             self.packed.hidden_commands['start'] = self.packed.hidden_edge_commands['start'] = np.cumsum(counts)-counts

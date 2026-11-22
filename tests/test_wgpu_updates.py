@@ -747,3 +747,50 @@ def test_new_default_layer_does_not_change_resident_paint_key():
     assert _paint_key(scene) == before
     scene.layers[-1].opacity = .5
     assert _paint_key(scene) != before
+
+
+def test_bridge_edits_preserve_nested_face_and_edge_draw_ranges():
+    from plugins.ai_bridge import _Bridge
+    from core.history import History
+    scene, leaf, inner, root, mesh = _nested_component_scene()
+    second = Mesh()
+    second.add_face([QVector3D(), QVector3D(2, 0, 0), QVector3D(0, 2, 0)])
+    other = Group(second)
+    scene.groups.append(other)
+    root.xform.rotate(31, 1, 0, 0)
+    updates = InstanceUpdates(scene, pack_scene(scene))
+    history = History(scene)
+    updates.observe(history)
+    bridge = SimpleNamespace(_scope={'leaf': leaf, 'other': other},
+                             _viewport=SimpleNamespace(scene=scene, history=history,
+                                                       notify_scene_changed=lambda: None))
+    for code in (
+        'leaf.mesh.move_vertex(leaf.mesh.vertices[0], QVector3D(.25, 0, 1))',
+        'leaf.mesh = other.mesh',
+        'leaf.mesh = Mesh(); leaf.mesh.add_face([QVector3D(), QVector3D(1,0,0), QVector3D(1,1,0)])',
+        'for i in range(20): leaf.mesh.add_face([QVector3D(i,2,0), QVector3D(i+1,2,0), QVector3D(i,3,0)])',
+    ):
+        reply = _Bridge._tool_run_python(bridge, code)
+        assert reply['changed'] and not reply['error']
+        delta = updates.diff(scene)
+        assert delta is not None
+        updates.apply(*delta)
+        assert_matches_fresh_pack(updates, scene)
+        # First instance is the offset into survivors for this prototype.
+        packed = updates.packed
+        counts = np.bincount(packed.instances['info'][:, 0], minlength=len(packed.bounds))
+        for commands in (packed.commands, packed.edge_commands):
+            np.testing.assert_array_equal(commands['start'], counts.cumsum() - counts)
+
+
+def test_rebaked_billboard_keeps_hidden_edges_at_their_own_offsets():
+    scene, updates = fixture_scene()
+    group = scene.groups[0]
+    group.billboard = 'mesh'
+    scene.show_hidden_geometry = True
+    mesh = group.mesh
+    mesh.edges[0].hidden = True
+    updates = InstanceUpdates(scene, pack_scene(scene))
+    mesh.move_vertex(mesh.vertices[0], QVector3D(.25, 0, 1))
+    updates.apply(*updates.diff(scene))
+    assert_matches_fresh_pack(updates, scene)
