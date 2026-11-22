@@ -71,7 +71,7 @@ class TestMacFileOpenEvent:
         # argv path is opened by main() once the window is up, so the event
         # for the same file is swallowed — once. A later event (Open With
         # on the same file) opens it again as usual.
-        doc = tmp_path / "model.igz"
+        doc = tmp_path / "model.built"
         doc.write_text("{}")
         window = _StubWindow()
         app_stub = SimpleNamespace(open_window=window, pending_open_path=None,
@@ -83,7 +83,7 @@ class TestMacFileOpenEvent:
         assert window.opened == [doc]
 
     def test_argv_paths_are_collected_from_the_command_line(self, tmp_path):
-        doc = tmp_path / "model.igz"
+        doc = tmp_path / "model.built"
         doc.write_text("{}")
         from PySide6.QtWidgets import QApplication
         if QApplication.instance() is not None:

@@ -174,8 +174,8 @@ def test_bridge_source_save_updates_one_binary_mesh_in_resident_scene(tmp_path, 
     inflated = []
     read = igz._read_geometry_members
 
-    def track(archive, path, payload, skip=()):
-        got = read(archive, path, payload, skip)
+    def track(archive, path, payload, skip=(), **kwargs):
+        got = read(archive, path, payload, skip, **kwargs)
         inflated.extend(got)
         return got
 

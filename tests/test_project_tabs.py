@@ -479,9 +479,9 @@ def test_every_untitled_slot_is_offered_back(win, monkeypatch, tmp_path):
 
 def test_the_classic_slot_names_stay(tmp_path):
     from core import autosave
-    assert autosave.slot_for(None).name == "untitled.igz"
-    assert autosave.slot_for(None, untitled=1).name == "untitled.igz"
-    assert autosave.slot_for(None, untitled=3).name == "untitled-3.igz"
+    assert autosave.slot_for(None).name == "untitled.built"
+    assert autosave.slot_for(None, untitled=1).name == "untitled.built"
+    assert autosave.slot_for(None, untitled=3).name == "untitled-3.built"
 
 
 # ---- extensions ----------------------------------------------------------

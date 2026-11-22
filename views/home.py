@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """A small launch surface keeps recents and relocation out of the model view."""
+from formats import built
 from pathlib import Path
 import zipfile
 from PySide6.QtCore import Qt
@@ -45,7 +46,7 @@ class Home(QDialog):
                 path = Path(row['path'])
                 item = QListWidgetItem(('★ ' if row.get('pinned') else '') + str(path))
                 item.setData(Qt.UserRole, row)
-                if path.suffix.lower() == '.igz':
+                if path.suffix.lower() in built.DOCUMENT_SUFFIXES:
                     try:
                         with zipfile.ZipFile(path) as archive:
                             info = archive.getinfo('thumbnail.png')
@@ -104,6 +105,6 @@ class Home(QDialog):
         self.accept()
 
     def open_dialog(self):
-        name, _ = file_dialogs.getOpenFileName(self, 'Open', '', 'IngeTrazo (*.igz *.igzproj)')
+        name, _ = file_dialogs.getOpenFileName(self, 'Open', '', f"Documents (*{built.BUILT_SUFFIX} *.igz *.igzproj)")
         if name:
             self.open_recent(name)

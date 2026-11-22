@@ -3,6 +3,7 @@
 Only the UI thread reads the model. Geometry and metadata cross into the
 worker as owned numeric arrays / Python values, never live meshes or widgets. Survey images use owned QImage values.
 """
+from formats import built
 from array import array
 from dataclasses import dataclass
 from types import SimpleNamespace
@@ -54,7 +55,7 @@ def geometry_steps(mesh):
         return {"geom": Geometry(deferred=source)}
     if not mesh.edges and not mesh.faces:
         return {"edges": [], "faces": []}
-    pos, edges, rings = array('f'), array('i'), array('i')
+    pos, edges, rings = array('d'), array('i'), array('i')
     sizes, counts, face_attr = array('i'), array('i'), array('i')
     flags, curves, layers = array('B'), array('q'), array('i')
     vertices, attr_index, layer_index = {}, {}, {}
@@ -64,7 +65,7 @@ def geometry_steps(mesh):
         key = v.key
         if key not in vertices:
             vertices[key] = len(vertices)
-            pos.extend(v.position.toTuple())
+            pos.extend(built.position(v))
         return vertices[key]
 
     for i, e in enumerate(mesh.edges):

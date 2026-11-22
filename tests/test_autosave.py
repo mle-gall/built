@@ -51,8 +51,8 @@ def test_slots_are_per_absolute_path():
     b = autosave.slot_for(Path("/otro/casa.igz"))
     assert a != b                       # same stem, different folder
     assert a == autosave.slot_for(Path("/proyectos/casa.igz"))
-    assert a.name.startswith("casa-") and a.suffix == ".igz"
-    assert autosave.slot_for(None).name == "untitled.igz"
+    assert a.name.startswith("casa-") and a.suffix == ".built"
+    assert autosave.slot_for(None).name == "untitled.built"
 
 
 def test_write_pending_clear_round_trip():
@@ -64,7 +64,7 @@ def test_write_pending_clear_round_trip():
     assert autosave.pending(doc) == slot
     assert autosave.pending(None) is None   # the untitled slot is separate
 
-    # The slot is a loadable .igz with the drawing in it.
+    # The slot is a loadable document with the drawing in it.
     from formats import igz
     restored = Scene()
     igz.load_into(restored, slot)
@@ -87,7 +87,7 @@ def test_clear_retires_the_slot_instead_of_deleting_it(slot_dir, monkeypatch):
     data = slot.read_bytes()
     autosave.clear(doc)
     assert autosave.pending(doc) is None                 # clean goodbye
-    kept = list(autosave.discarded_dir().glob("*.igz"))
+    kept = list(autosave.discarded_dir().glob("*.built"))
     assert len(kept) == 1 and kept[0].read_bytes() == data
     assert kept[0].name.startswith("banca-")
     # pruning: only the newest KEEP_DISCARDED survive
@@ -96,9 +96,9 @@ def test_clear_retires_the_slot_instead_of_deleting_it(slot_dir, monkeypatch):
     for i in range(5):
         autosave.write(scene, doc)
         autosave.clear(doc)
-        for j, f in enumerate(sorted(autosave.discarded_dir().glob("*.igz"))):
+        for j, f in enumerate(sorted(autosave.discarded_dir().glob("*.built"))):
             os.utime(f, (time.time() - 100 + j, time.time() - 100 + j))
-    assert len(list(autosave.discarded_dir().glob("*.igz"))) <= 3
+    assert len(list(autosave.discarded_dir().glob("*.built"))) <= 3
     # clearing a document without a slot is a no-op
     autosave.clear(Path("/tmp/proyecto/otro.igz"))
 
@@ -125,3 +125,15 @@ def test_autosave_dir_follows_process_appdata_on_windows(tmp_path,
     assert d == (tmp_path / "Roaming" / "IngeTrazo" / "IngeTrazo"
                  / "autosave")
     assert d.is_dir()
+
+
+def test_legacy_slots_remain_recoverable(slot_dir):
+    legacy = slot_dir / "untitled-2.igz"
+    legacy.write_text('{"igz_format": 1, "scene": {}}')
+    assert autosave.pending(None, 2) == legacy
+    assert autosave.pending_untitled() == [(2, legacy)]
+    new = autosave.write(Scene(), None, 2)
+    assert autosave.pending_untitled() == [(2, new)]
+    autosave.clear(None, 2)
+    assert autosave.pending(None, 2) is None
+    assert {p.suffix for p in autosave.discarded_dir().iterdir()} == {".igz", ".built"}

@@ -620,3 +620,16 @@ pub fn mesh_blocks(d: &[u8]) -> R<(Vec<u8>, Vec<Block>)> {
     out.extend_from_slice(&d[at_..]);
     Ok((out, blocks))
 }
+
+#[cfg(test)]
+mod built_tests {
+    use super::*;
+
+    #[test]
+    fn built_binary_manifest_is_preserved() {
+        let manifest = br#"{"built_format":1,"scene":{"geom":{"member":"geom/0.bin","arrays":{"pos":["<f8",[2,3],0]}},"groups":[{"proto":0,"xform":[1,0,0,0,0,1,0,0,0,0,1,0,650000.01,6860000.02,0,1]}]}}"#;
+        let (text, blocks) = mesh_blocks(manifest).unwrap();
+        assert_eq!(text, manifest);
+        assert!(blocks.is_empty());
+    }
+}

@@ -7,6 +7,7 @@ opens, as File ▸ Open would.
 """
 from __future__ import annotations
 
+from formats import built
 from pathlib import Path
 
 from PySide6.QtCore import QPointF, Signal
@@ -23,7 +24,7 @@ class EmptyArea(QWidget):
     #: Distance (px) between the hatching's lines.
     STEP = 7
 
-    def __init__(self, suffixes=(".igz",), parent=None) -> None:
+    def __init__(self, suffixes=built.DOCUMENT_SUFFIXES, parent=None) -> None:
         super().__init__(parent)
         self.setObjectName("empty_area")
         self.setAcceptDrops(True)

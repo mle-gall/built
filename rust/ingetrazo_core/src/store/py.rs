@@ -10,7 +10,7 @@
 //! readers run detached from the GIL; single-element ops do not (a
 //! release/reacquire costs more than the op).
 
-use super::build::Block;
+use super::build::{Block, Points as BlockPoints};
 use super::edit::Change;
 use super::keys::Kind;
 use super::stitch::{Merge, Plan};
@@ -29,6 +29,20 @@ pyo3::create_exception!(
     PyException,
     "An op the store does not represent (see store/topo.rs): nothing changed; run the Python kernel."
 );
+
+#[derive(FromPyObject)]
+enum PointArray<'py> {
+    Single(PyReadonlyArray2<'py, f32>),
+    Double(PyReadonlyArray2<'py, f64>),
+}
+
+fn triples<'a, T: numpy::Element>(points: &'a PyReadonlyArray2<'_, T>) -> PyResult<&'a [[T; 3]]> {
+    if points.shape()[1] != 3 && points.shape()[0] != 0 {
+        return Err(PyValueError::new_err("pos: (P, 3) coordinates"));
+    }
+    let flat = points.as_slice().map_err(|_| PyValueError::new_err("pos: contiguous"))?;
+    Ok(flat.as_chunks::<3>().0)
+}
 
 #[pyclass(module = "ingetrazo_core", name = "MeshStore")]
 pub struct PyMeshStore {
@@ -399,7 +413,7 @@ impl PyMeshStore {
     fn from_block(
         py: Python<'_>,
         namespace: u64,
-        pos: PyReadonlyArray2<'_, f32>,
+        pos: PointArray<'_>,
         edges: PyReadonlyArray2<'_, i64>,
         flags: Option<PyReadonlyArray1<'_, u8>>,
         curves: Option<PyReadonlyArray1<'_, i64>>,
@@ -414,18 +428,15 @@ impl PyMeshStore {
         tol2: f64,
         fused: bool,
     ) -> PyResult<Self> {
-        if pos.ndim() != 2 || (pos.shape()[0] > 0 && pos.shape()[1] != 3) {
-            return Err(PyValueError::new_err("pos: (P, 3) float32"));
-        }
+        let pos3 = match &pos {
+            PointArray::Single(p) => BlockPoints::Single(triples(p)?),
+            PointArray::Double(p) => BlockPoints::Double(triples(p)?),
+        };
         if edges.ndim() != 2 || (edges.shape()[0] > 0 && edges.shape()[1] != 2) {
             return Err(PyValueError::new_err("edges: (E, 2) int64"));
         }
-        let pflat = pos.as_slice().map_err(|_| PyValueError::new_err("pos: contiguous"))?;
         let eflat = edges.as_slice().map_err(|_| PyValueError::new_err("edges: contiguous"))?;
-        // SAFETY: [f32; 3] / [i64; 2] have the alignment of their element
-        // and the arrays are C-contiguous with exactly these row widths.
-        let pos3: &[[f32; 3]] =
-            unsafe { std::slice::from_raw_parts(pflat.as_ptr() as *const [f32; 3], pflat.len() / 3) };
+        // SAFETY: the edge array is contiguous with two i64 values per row.
         let edges2: &[[i64; 2]] =
             unsafe { std::slice::from_raw_parts(eflat.as_ptr() as *const [i64; 2], eflat.len() / 2) };
         let block = Block {

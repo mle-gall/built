@@ -54,6 +54,7 @@ from core.history import (
     SnapshotMutation,
 )
 from core.mesh import Edge, Face
+from formats import built
 from formats import igz as igz_format
 from formats import dae as dae_format
 from formats import obj as obj_format
@@ -94,7 +95,7 @@ from views.icons import tool_icon
 from views.viewport import Viewport
 
 
-IGZ_FILE_FILTER = "IngeTrazo document (*.igz);;All files (*)"
+IGZ_FILE_FILTER = built.DOCUMENT_FILTER + ";;All files (*)"
 
 # What each command does, for the status bar, the button tooltips and F3
 # (Blender's descriptions): a sentence, in English — ``tr`` translates it
@@ -121,7 +122,7 @@ _STYLE_TIPS = {
     "Wireframe": "Only the edges: the faces are not drawn.",
     "X-ray": "See-through faces, so the edges behind them show.",
 }
-_SAVE_TIP = ("Save the document — the model and every sheet — to its .igz "
+_SAVE_TIP = ("Save the document — the model and every sheet — to its "
              "file.")
 _RESET_TOOLBARS_TIP = ("Every toolbar back in its factory place and order, "
                        "the hidden ones shown again. The panels stay as "
@@ -4182,7 +4183,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
 
         open_action = QAction(tr("Open…"), self)
         open_action.setStatusTip(tr(
-            "Open an IngeTrazo document (.igz) in a tab of its own."))
+            "Open a document in a tab of its own."))
         open_action.setShortcut(QKeySequence.Open)
         open_action.triggered.connect(self._on_open)
         actions.append(open_action)
@@ -4214,6 +4215,10 @@ class MainWindow(WorksessionMixin, QMainWindow):
         save_as_action.triggered.connect(self._on_save_as)
         actions.append(save_as_action)
 
+        copy_action = QAction(tr("Save a Copy as IngeTrazo (.igz)…"), self)
+        copy_action.triggered.connect(self._on_export_igz)
+        actions.append(copy_action)
+
         actions.append(self._separator())
 
         # Linking is not an import — the file stays a document of its own —
@@ -4240,7 +4245,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         # goes out — the flat list had import/export items scattered.
         import_menu = QMenu(tr("Import"), self)
         for label, tip, handler in (
-            (tr("IngeTrazo document as component (.igz)…"),
+            (tr("Document as component…"),
              tr("Bring another IngeTrazo document in as one component, "
                 "placed with a click."),
              self._on_import_igz),
@@ -5068,7 +5073,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
                  if getattr(self, "_current_path", None) else "")
         path, _ = file_dialogs.getOpenFileName(
             self, tr("Components from File"), start,
-            tr("IngeTrazo document (*.igz)"))
+            built.DOCUMENT_FILTER)
         if not path:
             return
         try:
@@ -8033,7 +8038,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
     # ---- every project closed: the empty area (views/empty_area.py) --------
     #: What a file dropped on the empty area may be, besides an extension's
     #: own types (``open_path``).
-    OPENABLE = (".igz", ".dae", ".skp", ".rfa", ".dxf", ".dwg")
+    OPENABLE = (*built.DOCUMENT_SUFFIXES, ".dae", ".skp", ".rfa", ".dxf", ".dwg")
 
     def _openable_suffixes(self) -> tuple:
         extra = tuple(s for s in getattr(self, "file_openers", {})
@@ -8994,14 +8999,14 @@ class MainWindow(WorksessionMixin, QMainWindow):
         copy came from."""
         from core import autosave
         folder = autosave.discarded_dir()
-        if not any(folder.glob("*.igz")):
+        if not any(p.suffix in built.DOCUMENT_SUFFIXES for p in folder.iterdir()):
             QMessageBox.information(
                 self, tr("Recover a discarded auto-save…"),
                 tr("No discarded auto-saved copies yet."))
             return
         chosen, _ = file_dialogs.getOpenFileName(
             self, tr("Recover a discarded auto-save…"), str(folder),
-            tr("IngeTrazo auto-saves (*.igz)"))
+            built.DOCUMENT_FILTER)
         if not chosen:
             return
         if not self.open_path(Path(chosen)):
@@ -9025,7 +9030,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
     def _remember_recent(self, path) -> None:
         """Put ``path`` at the top of File ▸ Open Recent (native documents
         only: an import is not a document you reopen)."""
-        if path is None or Path(path).suffix.lower() != ".igz":
+        if path is None or Path(path).suffix.lower() not in built.DOCUMENT_SUFFIXES:
             return
         from core import recent as home_recent
         home_recent.remember(path)
@@ -9069,7 +9074,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             self,
             tr("Open IngeTrazo document"),
             "",
-            "IngeTrazo projects (*.igzproj);;" + tr(IGZ_FILE_FILTER),
+            built.DOCUMENT_FILTER + ";;IngeTrazo projects (*.igzproj);;All files (*)",
         )
         if not path_str:
             return
@@ -9374,7 +9379,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             self._update_title()
             return
         self._end_group_edits()
-        if self._current_path is None:
+        if self._current_path is None or not built.is_built(self._current_path):
             self._on_save_as()
             return
         self._do_save(self._current_path)
@@ -9386,20 +9391,48 @@ class MainWindow(WorksessionMixin, QMainWindow):
             return
         self._end_group_edits()
         default_name = (
-            self._current_path.name if self._current_path is not None else "untitled.igz"
+            str((self._current_path or Path("untitled")).with_suffix(built.BUILT_SUFFIX))
         )
         path_str, _ = file_dialogs.getSaveFileName(
             self,
             tr("Save IngeTrazo document"),
             default_name,
-            tr(IGZ_FILE_FILTER),
+            built.BUILT_FILTER,
         )
         if not path_str:
             return
         path = Path(path_str)
-        if path.suffix.lower() != ".igz":
-            path = path.with_suffix(".igz")
+        if not built.is_built(path):
+            path = path.with_suffix(built.BUILT_SUFFIX)
         self._do_save(path)
+
+    def _on_export_igz(self):
+        self._end_group_edits()
+        doc = self._doc
+        default = (doc.path or Path("untitled")).with_suffix(".igz")
+        chosen, _ = file_dialogs.getSaveFileName(
+            self, tr("Save a Copy as IngeTrazo"), str(default), "IngeTrazo (*.igz)")
+        if not chosen:
+            return
+        path = Path(chosen).with_suffix(".igz")
+
+        def confirm(mm):
+            return QMessageBox.question(
+                self, tr("Export precision"),
+                tr("Float32 rounding moves points by up to {mm} mm. Save the copy?",
+                   mm=f"{mm:.6g}")) == QMessageBox.Yes
+
+        try:
+            import copy
+            scene = copy.copy(doc.viewport.scene)
+            scene.camera_home = self._camera_dict(doc.viewport)
+            scene.views_home = self._views_dict(doc)
+            stats = igz_format.export_igz(scene, path, confirm)
+            if stats and stats["missing"]:
+                QMessageBox.warning(self, tr("Saved with missing textures"),
+                                    tr("Some texture images could not be packed."))
+        except Exception as exc:
+            QMessageBox.critical(self, tr("Save failed"), str(exc))
 
     def _end_group_edits(self) -> None:
         """The view in front and the project's own, when they differ."""
@@ -9466,8 +9499,9 @@ class MainWindow(WorksessionMixin, QMainWindow):
             self.statusBar().showMessage(
                 tr("Saved — {n} texture(s) packed into the document.",
                    n=embedded), 4000)
+        was_active = self._session_path and doc.same_file(self._active_file)
         doc.path = path
-        if self._session_unsaved_doc is doc:
+        if self._session_unsaved_doc is doc or was_active:
             self._active_file = str(path.resolve())
             self._session_unsaved_doc = None
         self._remember_recent(path)

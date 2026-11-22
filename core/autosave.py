@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """Auto-save recovery slots — the usual General ▸ Auto-save, our way.
 
-One ``.igz`` slot per document in the user data dir (NOT beside the
+One recovery slot per document in the user data dir (NOT beside the
 document: the project folder may live in a syncing drive — pCloud has
 truncated mid-write files there before — and recovery files are session
 state, not project files). The slot's name is the document's stem plus a
@@ -20,6 +20,7 @@ from __future__ import annotations
 import hashlib
 import os
 import sys
+from formats import built
 from pathlib import Path
 
 
@@ -55,15 +56,14 @@ def slot_for(path: Path | None, untitled: int = 1) -> Path:
     """The recovery slot for a document (``None`` = an unsaved document).
 
     With several projects open in tabs (#1066) each untitled one has its
-    own slot: ``untitled`` 1 is the classic ``untitled.igz``, the others
-    ``untitled-<n>.igz``."""
+    own slot, named untitled for the first document and untitled-N after that."""
     if path is None:
         n = max(1, int(untitled or 1))
-        return autosave_dir() / ("untitled.igz" if n == 1
-                                 else f"untitled-{n}.igz")
+        stem = "untitled" if n == 1 else f"untitled-{n}"
+        return autosave_dir() / (stem + built.BUILT_SUFFIX)
     p = Path(path).absolute()
     digest = hashlib.sha1(str(p).encode("utf-8")).hexdigest()[:8]
-    return autosave_dir() / f"{p.stem}-{digest}.igz"
+    return autosave_dir() / f"{p.stem}-{digest}{built.BUILT_SUFFIX}"
 
 
 def write(scene, path: Path | None, untitled: int = 1) -> Path:
@@ -77,19 +77,24 @@ def write(scene, path: Path | None, untitled: int = 1) -> Path:
 def pending(path: Path | None, untitled: int = 1) -> Path | None:
     """The slot file, if an interrupted session left one."""
     slot = slot_for(path, untitled)
-    return slot if slot.is_file() else None
+    legacy = slot.with_suffix(".igz")
+    if slot.is_file():
+        return slot
+    return legacy if legacy.is_file() else None
 
 
 def pending_untitled() -> list:
     """Every untitled slot an interrupted session left, as ``(n, slot)``
     pairs in slot order."""
     import re
-    found = []
-    for slot in autosave_dir().glob("untitled*.igz"):
-        m = re.fullmatch(r"untitled(?:-(\d+))?\.igz", slot.name)
-        if m:
-            found.append((int(m.group(1) or 1), slot))
-    return sorted(found)
+    found = {}
+    for slot in autosave_dir().glob("untitled*"):
+        m = re.fullmatch(r"untitled(?:-(\d+))?", slot.stem)
+        if m and slot.suffix in built.DOCUMENT_SUFFIXES and slot.is_file():
+            n = int(m.group(1) or 1)
+            if n not in found or built.is_built(slot):
+                found[n] = slot
+    return sorted(found.items())
 
 
 #: How many retired slots to keep in ``autosave_dir()/descartados``.
@@ -120,19 +125,23 @@ def clear(path: Path | None, untitled: int = 1) -> None:
     no slot in the live folder means a clean goodbye — while the retired
     copy waits in the folder Archivo ▸ Recover a discarded auto-save… opens.
     Only the newest :data:`KEEP_DISCARDED` are kept."""
-    import datetime
     slot = slot_for(path, untitled)
     _slot_epochs[slot] = slot_epoch(slot) + 1
-    if not slot.is_file():
-        return
+    for candidate in (slot, slot.with_suffix(".igz")):
+        if candidate.is_file():
+            _retire(candidate)
+
+
+def _retire(slot):
+    import datetime
     stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    target = discarded_dir() / f"{slot.stem}-{stamp}.igz"
+    target = discarded_dir() / f"{slot.stem}-{stamp}{slot.suffix}"
     try:
         slot.replace(target)
     except OSError:
         slot.unlink(missing_ok=True)
         return
-    kept = sorted(discarded_dir().glob("*.igz"),
+    kept = sorted((p for p in discarded_dir().iterdir() if p.suffix in built.DOCUMENT_SUFFIXES),
                   key=lambda p: p.stat().st_mtime, reverse=True)
     for old in kept[KEEP_DISCARDED:]:
         try:

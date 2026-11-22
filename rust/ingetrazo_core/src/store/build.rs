@@ -23,9 +23,35 @@ use super::{FaceRings, Inc, State, Store, Weld};
 use crate::weld;
 use std::sync::Arc;
 
+/// Probe neighbouring cells in the source precision. At the tolerance
+/// boundary a binary32 squared distance can select a different vertex.
+pub enum Points<'a> {
+    Single(&'a [[f32; 3]]),
+    Double(&'a [[f64; 3]]),
+}
+
+impl Points<'_> {
+    fn len(&self) -> usize {
+        match self {
+            Self::Single(p) => p.len(),
+            Self::Double(p) => p.len(),
+        }
+    }
+
+    fn weld(&self, w: Weld) -> (Vec<[f64; 3]>, Vec<i64>, Vec<i64>) {
+        match self {
+            Self::Single(p) => {
+                let (points, ids, origins) = weld::weld(p, w.scale, w.tol2);
+                (points.into_iter().map(|p| p.map(f64::from)).collect(), ids, origins)
+            }
+            Self::Double(p) => weld::weld(p, w.scale, w.tol2),
+        }
+    }
+}
+
 /// Borrowed arrays of one block, as `formats/igz.py` holds them.
 pub struct Block<'a> {
-    pub pos: &'a [[f32; 3]],
+    pub pos: Points<'a>,
     pub edges: &'a [[i64; 2]],
     pub flags: Option<&'a [u8]>,
     pub curves: Option<&'a [i64]>,
@@ -115,23 +141,22 @@ impl Edges {
 impl Store {
     pub fn from_block(ns: u64, b: &Block, weld_c: Weld) -> Result<Store, String> {
         check(b)?;
-        let (vpos32, mut ids, origin) = weld::weld(b.pos, weld_c.scale, weld_c.tol2);
-        let mut vpos32 = vpos32;
-        if b.sequential && !vpos32.is_empty() {
+        let (mut vpos, mut ids, origin) = b.pos.weld(weld_c);
+        if b.sequential && !vpos.is_empty() {
             // `lazy_mesh.weld(sequential=True)`: vertices in the order of
             // the point each was made at.
-            let mut order: Vec<usize> = (0..vpos32.len()).collect();
+            let mut order: Vec<usize> = (0..vpos.len()).collect();
             order.sort_by_key(|&i| origin[i]); // stable
             let mut rank = vec![0i64; order.len()];
             for (r, &i) in order.iter().enumerate() {
                 rank[i] = r as i64;
             }
-            vpos32 = order.iter().map(|&i| vpos32[i]).collect();
+            vpos = order.iter().map(|&i| vpos[i]).collect();
             for id in ids.iter_mut() {
                 *id = rank[*id as usize];
             }
         }
-        let nv = vpos32.len();
+        let nv = vpos.len();
         let mut emap: FxHashMap<u64, u32> =
             FxHashMap::with_capacity_and_hasher(b.edges.len() + b.rings.len() / 2, FxBuild::default());
         let mut ed = Edges::default();
@@ -212,8 +237,6 @@ impl Store {
                 }
             })
             .collect();
-        let vpos: Vec<[f64; 3]> =
-            vpos32.iter().map(|p| [p[0] as f64, p[1] as f64, p[2] as f64]).collect();
         let mut store = Store::empty(ns, weld_c);
         // One vertex per cell, at the cell of its own position: bulk_weld
         // registers exactly that (a probe-welded point never claims a cell).

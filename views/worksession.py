@@ -4,6 +4,7 @@
 The ordinary document tabs stay usable outside a worksession. Project state is
 merged on save/close, so it never replaces another host's shared registry.
 """
+from formats import built
 from pathlib import Path
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QListWidget, QListWidgetItem, QMessageBox
@@ -89,7 +90,7 @@ class WorksessionMixin:
         allowed = {(self._session_path.parent / e['path']).resolve()
                    for e in value['files'] if e['role'] in ('host', 'linked')}
         allowed.update(d.path.resolve() for d in self.documents() if d.path)
-        if path not in allowed or path.suffix.lower() != '.igz':
+        if path not in allowed or path.suffix.lower() not in built.DOCUMENT_SUFFIXES:
             raise ValueError('Active file must be a project document')
         if not self.open_path(path):
             raise ValueError('Could not open active file')
