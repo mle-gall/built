@@ -91,6 +91,8 @@ class FakeRenderer:
 
 @pytest.fixture
 def win(monkeypatch, tmp_path):
+    from core import autosave
+    monkeypatch.setattr(autosave, "autosave_dir", lambda: tmp_path)
     from PySide6.QtCore import QSettings
     QSettings.setPath(QSettings.IniFormat, QSettings.UserScope, str(tmp_path))
     import ingetrazo_render  # noqa: F401 — the real module, its class swapped
@@ -301,7 +303,13 @@ def test_closing_the_project_hands_the_targets_back(win):
     doc = win._doc
     win._new_document()
     _settle()
+    display = doc.stand_in
+    doc.viewport.scene.version += 1
+    doc.viewport.notify_scene_changed()
+    assert display._refresh_timer.isActive()
     win._retire_document(doc)
+    assert not display._refresh_timer.isActive()
+    assert not display._repaint_timer.isActive()
     _settle()
     removed = sorted(c[2][0] for c in renderer.named("remove_target"))
     assert removed == [1, 2, 3]

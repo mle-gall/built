@@ -50,7 +50,7 @@ def test_open_does_not_prepare_before_picture(tmp_path, monkeypatch):
 def test_previous_metal_frame_cannot_release_loaded_document(monkeypatch):
     from types import SimpleNamespace
     from core import renderer_settings
-    doc = SimpleNamespace(_renderer_wgpu=True, _resident_scene_ready=False,
+    doc = SimpleNamespace(viewport=object(), _renderer_wgpu=True, _resident_scene_ready=False,
                           _awaiting_picture=True, _renderer_starting=True)
     calls = []
     monkeypatch.setattr(renderer_settings, 'first_frame', lambda: calls.append('guard'))
@@ -78,7 +78,7 @@ def test_a_metal_first_frame_clears_the_rust_engine_guard(monkeypatch):
     monkeypatch.setattr(_native, "start_ok", lambda: calls.append(1))
     window = MainWindow.__new__(MainWindow)
     window._opening_document = False
-    doc = SimpleNamespace(_renderer_wgpu=True, _resident_scene_ready=True)
+    doc = SimpleNamespace(viewport=object(), _renderer_wgpu=True, _resident_scene_ready=True)
     try:
         MainWindow._document_first_frame(window, doc)
     except AttributeError:
