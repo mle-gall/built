@@ -53,7 +53,11 @@ class Home(QDialog):
                             if info.file_size <= 1024 * 1024:
                                 pix = QPixmap()
                                 pix.loadFromData(archive.read(info), 'PNG')
-                                item.setIcon(QIcon(pix))
+                                # A black picture (saved from the hidden GL
+                                # view under Metal) is no picture.
+                                from views.wgpu_start import blank_picture
+                                if not blank_picture(pix.toImage()):
+                                    item.setIcon(QIcon(pix))
                     except (OSError, KeyError, zipfile.BadZipFile):
                         pass
                 listing.addItem(item)

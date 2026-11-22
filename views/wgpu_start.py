@@ -342,7 +342,7 @@ class Page:
             return key
 
         files = []
-        for r in recent.entries("files"):
+        for r in visible_files():
             path = r["path"]
             c = _cached(path) or {}
             m = recent.meta(path)
@@ -403,6 +403,30 @@ def last_file() -> str:
     rows = recent.entries("files")
     plain = [r for r in rows if not r.get("pinned")]
     return (plain or rows)[0]["path"] if rows else ""
+
+
+def visible_files() -> list:
+    """The recent files the page shows: all of them but a missing one whose
+    name a file higher up the list has, and that one exists — the same
+    document, moved (``…/old/ride.igz`` gone, ``…/Project/ride.igz`` opened
+    since). Whether a file exists is what the worker found; until it has
+    looked, every row shows."""
+    rows, here = [], set()
+    for r in recent.entries("files"):
+        c = _cached(r["path"]) or {}
+        name = Path(r["path"]).name.casefold()
+        if c.get("exists") is False and name in here:
+            continue
+        if c.get("exists"):
+            here.add(name)
+        rows.append(r)
+    return rows
+
+
+def missing_files() -> list:
+    """The recent files the worker found gone (hidden duplicates included)."""
+    return [r["path"] for r in recent.entries("files")
+            if (_cached(r["path"]) or {}).get("exists") is False]
 
 
 def _folder(path) -> str:
@@ -600,6 +624,10 @@ def _thumbnail(p: Path, st):
     image = QImage()
     if not image.loadFromData(data, "PNG"):
         return None
+    if blank_picture(image):
+        # A save that grabbed the hidden GL view (Metal on) kept a black
+        # frame: the placeholder says more than a black tile.
+        return None
     if image.width() > THUMB_PX:
         image = image.scaledToWidth(THUMB_PX, Qt.SmoothTransformation)
     image = image.convertToFormat(QImage.Format_RGBA8888)
@@ -609,6 +637,32 @@ def _thumbnail(p: Path, st):
         rgba = b"".join(bytes(image.constScanLine(y))[: w * 4] for y in range(h))
     key = "thumb:" + hashlib.sha1(f"{p}|{st.st_mtime_ns}|{st.st_size}".encode()).hexdigest()[:16]
     return key, w, h, rgba
+
+
+#: A picture is blank when this share of it is one colour (a black frame
+#: with a few stray pixels of chrome or a far speck of model counts).
+BLANK_SHARE = 0.985
+
+
+def blank_picture(image) -> bool:
+    """True when ``image`` (a QImage) shows nothing: empty, or all (or
+    nearly all) one colour. Read on a 64 × 64 sample, so it costs the same
+    for any size; safe off the GUI thread."""
+    if image is None or image.isNull() or image.width() < 1 or image.height() < 1:
+        return True
+    small = image.scaled(64, 64, Qt.IgnoreAspectRatio, Qt.FastTransformation)
+    small = small.convertToFormat(QImage.Format_RGBA8888)
+    w, h = small.width(), small.height()
+    raw = bytes(small.constBits())
+    stride = small.bytesPerLine()
+    counts: dict = {}
+    for y in range(h):
+        row = raw[y * stride: y * stride + w * 4]
+        for x in range(0, w * 4, 4):
+            # Quantised: a JPEG-ish wobble or dither is still one colour.
+            key = (row[x] >> 3, row[x + 1] >> 3, row[x + 2] >> 3)
+            counts[key] = counts.get(key, 0) + 1
+    return max(counts.values()) >= BLANK_SHARE * w * h
 
 
 def forget_cache() -> None:
@@ -697,6 +751,17 @@ def action(win, arg: str) -> None:
     elif verb == "pin" and rest:
         row = next((r for k in ("files", "projects") for r in recent.entries(k) if r["path"] == rest), None)
         recent.remember(rest, pinned=not (row or {}).get("pinned", False))
+        p.dirty = True
+        p.repaint()
+    elif verb == "forget" and rest:
+        # Off the list only; the file stays where it is.
+        recent.forget(rest)
+        p.dirty = True
+        p.repaint()
+    elif verb == "clearmissing":
+        gone = missing_files()
+        if gone:
+            recent.forget(gone)
         p.dirty = True
         p.repaint()
     elif verb == "template" and rest:

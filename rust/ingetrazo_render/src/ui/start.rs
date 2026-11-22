@@ -82,6 +82,8 @@ pub struct Start {
     pub focus: Vec<(String, Rect)>,
     pub scroll_to: bool,
     pub expanded: std::collections::HashSet<String>,
+    /// A tile's right-click menu: (path, pinned, where).
+    pub menu: Option<(String, bool, Pos2)>,
 }
 
 const SEP: char = '\u{1f}';
@@ -139,6 +141,9 @@ impl Start {
     pub fn key(&mut self, name: &str, text: &str) -> (bool, Option<String>) {
         match name {
             "Escape" => {
+                if self.menu.take().is_some() {
+                    return (true, None);
+                }
                 if !self.filter.is_empty() {
                     self.filter.clear();
                     self.selected = None;
@@ -284,6 +289,45 @@ fn pin_star(ui: &egui::Ui, at: Pos2, pinned: bool, card: &egui::Response) -> (bo
     (hit, over)
 }
 
+/// The × at a tile's other corner, on hover: remove it from the recent
+/// list (the file itself is left alone). True: it was clicked.
+fn forget_x(ui: &egui::Ui, at: Pos2, card: &egui::Response) -> bool {
+    let r = Rect::from_center_size(at, vec2(22.0, 22.0));
+    if !card.hovered() { return false; }
+    let over = card.hover_pos().is_some_and(|p| r.contains(p));
+    ui.painter().circle_filled(r.center(), 11.0, if over { Color32::from_rgba_premultiplied(0, 0, 0, 170) }
+                                                 else { Color32::from_rgba_premultiplied(0, 0, 0, 120) });
+    let (c, k) = (r.center(), 3.5);
+    let pen = Stroke::new(1.3_f32, if over { INK } else { DIM });
+    ui.painter().line_segment([c + vec2(-k, -k), c + vec2(k, k)], pen);
+    ui.painter().line_segment([c + vec2(-k, k), c + vec2(k, -k)], pen);
+    card.clicked() && card.interact_pointer_pos().is_some_and(|p| r.contains(p))
+}
+
+/// A caption with a quiet action at the right end of its row ("Clear
+/// missing"). True: the action was clicked.
+fn caption_with_action(ui: &mut egui::Ui, text: &str, count: usize, action: &str) -> bool {
+    let (row, _) = ui.allocate_exact_size(vec2(ui.available_width(), 16.0), Sense::hover());
+    let mut clicked = false;
+    ui.scope_builder(egui::UiBuilder::new().max_rect(row), |ui| {
+        ui.horizontal(|ui| {
+            caption_plain(ui, text);
+            ui.add_space(4.0);
+            ui.label(egui::RichText::new(count.to_string()).font(meta()).color(OFF));
+        });
+    });
+    if !action.is_empty() {
+        let g = ui.painter().layout_no_wrap(action.to_owned(), meta(), FAINT);
+        let r = Rect::from_min_size(pos2(row.max.x - g.size().x - 8.0, row.center().y - 9.0), vec2(g.size().x + 8.0, 18.0));
+        let resp = ui.interact(r, egui::Id::new(("start_caption_action", text)), Sense::click());
+        let ink = if resp.hovered() { INK } else { FAINT };
+        ui.painter().text(pos2(r.max.x - 4.0, r.center().y), egui::Align2::RIGHT_CENTER, action, meta(), ink);
+        clicked = resp.clicked();
+    }
+    ui.add_space(6.0);
+    clicked
+}
+
 fn primary_button(ui: &mut egui::Ui, label: &str, key: &str) -> bool { sheet_button(ui, label, key, 1) }
 fn plain_button(ui: &mut egui::Ui, label: &str, key: &str) -> bool { sheet_button(ui, label, key, 0) }
 
@@ -304,6 +348,7 @@ impl Ui {
             self.home.filter.clear();
             self.home.selected = None;
             self.home.section.clear();
+            self.home.menu = None;
             // One float at a time: the page closes the menus.
             self.view_open = false;
             self.sel_more = false;
@@ -558,7 +603,11 @@ impl Ui {
                             let files: Vec<Tile> = st.visible_files().into_iter().cloned().collect();
                             if !files.is_empty() {
                                 any = true;
-                                section_caption(ui, "Files", Some(files.len()));
+                                let missing = files.iter().filter(|t| t.missing).count();
+                                let clear = if missing > 0 { format!("Clear missing ({missing})") } else { String::new() };
+                                if caption_with_action(ui, "Files", files.len(), &clear) {
+                                    out.push("clearmissing".into());
+                                }
                                 let cols = (((width + TILE_GAP) / (TILE_W + TILE_GAP)).floor() as usize).max(1);
                                 for row in files.chunks(cols) {
                                     let (band, _) = ui.allocate_exact_size(vec2(width, THUMB_H + 64.0), Sense::hover());
@@ -571,6 +620,7 @@ impl Ui {
                                         let thumb = Rect::from_min_size(r.min + vec2(4.0, 4.0), vec2(TILE_W - 8.0, THUMB_H - 8.0));
                                         paint_thumb(ui, thumb, icons.get(&t.thumb), t.missing, 7);
                                         let (pin, _) = pin_star(ui, pos2(thumb.max.x - 15.0, thumb.min.y + 15.0), t.pinned, &resp);
+                                        let forget = forget_x(ui, pos2(thumb.min.x + 15.0, thumb.min.y + 15.0), &resp);
                                         let ink = if t.missing { OFF } else { INK };
                                         let g = fit_text(ui, &t.name, strong(12.0), ink, TILE_W - 20.0, 1);
                                         let gh = g.size().y;
@@ -578,8 +628,13 @@ impl Ui {
                                         let m = fit_text(ui, &t.meta, meta(), FAINT, TILE_W - 20.0, 2);
                                         ui.painter().galley(pos2(r.min.x + 10.0, thumb.max.y + 10.0 + gh), m, FAINT);
                                         let resp = resp.on_hover_text(&t.path);
-                                        if pin || resp.secondary_clicked() {
+                                        if resp.secondary_clicked() {
+                                            let at = resp.interact_pointer_pos().unwrap_or(r.center());
+                                            st.menu = Some((t.path.clone(), t.pinned, at));
+                                        } else if pin {
                                             out.push(format!("pin{SEP}{}", t.path));
+                                        } else if forget {
+                                            out.push(format!("forget{SEP}{}", t.path));
                                         } else if resp.clicked() {
                                             out.push(format!("open{SEP}{}", t.path));
                                         }
@@ -615,7 +670,10 @@ impl Ui {
                                         let m = fit_text(ui, line.trim_start_matches(" · "), meta(), FAINT, w - 28.0, 2);
                                         ui.painter().galley(pos2(r.min.x + 14.0, r.min.y + 34.0), m, FAINT);
                                         let resp = resp.on_hover_text(&p.path);
-                                        if pin || resp.secondary_clicked() {
+                                        if resp.secondary_clicked() {
+                                            let at = resp.interact_pointer_pos().unwrap_or(r.center());
+                                            st.menu = Some((p.path.clone(), p.pinned, at));
+                                        } else if pin {
                                             out.push(format!("pin{SEP}{}", p.path));
                                         } else if resp.clicked() {
                                             out.push(format!("open{SEP}{}", p.path));
@@ -675,6 +733,33 @@ impl Ui {
                 let hint = if st.can_return { "↑↓←→ choose · ↩ open · esc back" } else { "↑↓←→ choose · ↩ open · type to filter" };
                 ui.painter().text(pos2(all.max.x - PAD, all.max.y - 15.0), egui::Align2::RIGHT_CENTER, hint, meta(), OFF);
             });
+        // A tile's right-click menu, over the page.
+        if let Some((path, pinned, at)) = st.menu.clone() {
+            let mut close = false;
+            let area = egui::Area::new(egui::Id::new("start_menu"))
+                .fixed_pos(at)
+                .order(egui::Order::Foreground)
+                .show(ctx, |ui| {
+                    glass(Surface::Raised).inner_margin(Margin::same(6)).show(ui, |ui| {
+                        ui.set_width(176.0);
+                        ui.spacing_mut().item_spacing = vec2(0.0, 1.0);
+                        let label = if pinned { "Unpin" } else { "Pin to top" };
+                        if menu_row(ui, &("pin".into(), label.into(), String::new(), String::new(), -1i8, true)) {
+                            out.push(format!("pin{SEP}{path}"));
+                            close = true;
+                        }
+                        if menu_row(ui, &("forget".into(), "Remove from recents".into(), String::new(), String::new(), -1i8, true)) {
+                            out.push(format!("forget{SEP}{path}"));
+                            close = true;
+                        }
+                    });
+                });
+            // A press anywhere else closes it (the press that chose a row
+            // has already been read above).
+            let outside = ctx.input(|i| i.pointer.any_pressed()
+                && i.pointer.interact_pos().is_some_and(|p| !area.response.rect.contains(p)));
+            if close || outside { st.menu = None; }
+        }
         // The focus follows the layout: keep it on a tile that is still there.
         if st.selected.as_ref().is_some_and(|s| !focus.iter().any(|f| &f.0 == s)) {
             st.selected = None;
@@ -737,5 +822,18 @@ mod tests {
         s.can_return = true;
         assert_eq!(s.key("Escape", ""), (true, Some("close".into())));
         assert_eq!(s.key("", ""), (false, None));
+    }
+
+    #[test]
+    fn escape_closes_a_tile_menu_before_anything_else() {
+        let mut s = page();
+        s.can_return = true;
+        s.filter = "a".into();
+        s.menu = Some(("/x/a.built".into(), false, pos2(10.0, 10.0)));
+        assert_eq!(s.key("Escape", ""), (true, None));
+        assert!(s.menu.is_none());
+        assert_eq!(s.filter, "a");
+        assert_eq!(s.key("Escape", ""), (true, None));
+        assert_eq!(s.key("Escape", ""), (true, Some("close".into())));
     }
 }
