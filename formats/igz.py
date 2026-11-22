@@ -267,33 +267,36 @@ def _face_json(f) -> dict:
 def _face_attrs_json(f) -> dict:
     """Everything a face stores besides its loops — the part a format-3
     geometry block keeps as JSON, in a table shared by equal faces."""
+    attrs = getattr(f, "attrs", None)
+    if not attrs:
+        return {}
     entry: dict = {}
     # Material colour (the Paint tool), written only when set.
-    color = getattr(f, "attrs", {}).get("color")
+    color = attrs.get("color")
     if color is not None:
         entry["color"] = list(color)
-    texture = getattr(f, "attrs", {}).get("texture")
+    texture = attrs.get("texture")
     if texture is not None:
         entry["texture"] = dict(texture)
-    if getattr(f, "attrs", {}).get("pbr") is not None:
-        entry["pbr"] = dict(f.attrs["pbr"])
-    layer = getattr(f, "attrs", {}).get("layer")
+    if attrs.get("pbr") is not None:
+        entry["pbr"] = dict(attrs["pbr"])
+    layer = attrs.get("layer")
     if layer is not None:
         entry["layer"] = layer
-    ifc = getattr(f, "attrs", {}).get("ifc")
+    ifc = attrs.get("ifc")
     if ifc is not None:
         entry["ifc"] = dict(ifc)
-    opacity = getattr(f, "attrs", {}).get("opacity")
+    opacity = attrs.get("opacity")
     if opacity is not None:
         entry["opacity"] = float(opacity)
-    if getattr(f, "attrs", {}).get("hidden"):
+    if attrs.get("hidden"):
         entry["hidden"] = True          # Hide on a face
     # Material identity (core.materials): the registry name this face was
     # painted with. Written only when present; older readers ignore it.
-    mat = getattr(f, "attrs", {}).get("mat")
+    mat = attrs.get("mat")
     if mat:
         entry["mat"] = mat
-    back = getattr(f, "attrs", {}).get("back")
+    back = attrs.get("back")
     if isinstance(back, dict):
         # Deep-copy the nested texture: _pack_textures rewrites the entries it
         # finds, and it must never reach into the live scene's attrs.
@@ -305,6 +308,9 @@ def _face_attrs_json(f) -> dict:
         # both sides becomes). Absent = the style's default back.
         entry["back"] = True
     return entry
+
+
+_attrs_key = json.JSONEncoder(sort_keys=True, separators=(",", ":")).encode
 
 
 def _edge_json(e) -> dict:
@@ -435,9 +441,9 @@ def _pack_geometry(mesh, sink: dict) -> dict:
         for h in holes:
             ring_sizes.append(len(h))
             corners.extend(h)
-        attrs = _face_attrs_json(f) if f.attrs else None
+        attrs = _face_attrs_json(f)
         if attrs:
-            key = json.dumps(attrs, sort_keys=True, separators=(",", ":"))
+            key = _attrs_key(attrs)
             k = table_index.get(key)
             if k is None:
                 k = table_index[key] = len(table)
@@ -584,7 +590,7 @@ def _pack_plan(mesh, plan, sink: dict) -> dict:
             js = _face_attrs_json(SimpleNamespace(attrs=attrs)) \
                 if attrs else None
             if js:
-                key = json.dumps(js, sort_keys=True, separators=(",", ":"))
+                key = _attrs_key(js)
                 t = table_index.get(key)
                 if t is None:
                     t = table_index[key] = len(table)

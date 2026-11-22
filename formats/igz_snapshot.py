@@ -48,7 +48,7 @@ def copy_steps(value):
 
 def geometry_steps(mesh):
     from core.mesh import DeferredMesh
-    from formats.igz import _face_attrs_json
+    from formats.igz import _attrs_key, _face_attrs_json
     if type(mesh) is DeferredMesh:
         source = yield from copy_steps(mesh.__dict__["_deferred_source"])
         return {"geom": Geometry(deferred=source)}
@@ -96,11 +96,10 @@ def geometry_steps(mesh):
                 rings.append(vertex(v))
                 if j and j % 256 == 0:
                     yield
-        attr = _face_attrs_json(f) if f.attrs else None
+        attr = _face_attrs_json(f)
         if attr:
             # Only this small record is encoded on the UI thread.
-            import json
-            key = json.dumps(attr, sort_keys=True, separators=(',', ':'))
+            key = _attrs_key(attr)
             if key not in attr_index:
                 attr_index[key] = len(attrs)
                 attrs.append((yield from copy_steps(attr)))
