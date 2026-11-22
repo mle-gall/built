@@ -984,6 +984,14 @@ def _problem_rules(scene, registry, nodes, recipes, unfiled):
                 ids.setdefault(hit.get("specification") or hit.get("file") or "IDS", []).append(g)
     for spec, gs in sorted(ids.items()):
         rules.append(("Blocks export", "ids:" + spec, f"IDS: {spec}", gs))
+    from core import links
+    stale, states = [], {}
+    for g in links.linked_groups(scene):
+        rec = links.link_of(g)
+        st = states.setdefault(rec["path"], _link_state(scene, rec))
+        if st in ("missing", "modified"):
+            stale.append(g)
+    rules.append(("Needs attention", "links", "Linked file changed or missing", stale))
     leaky, checked = _not_watertight(candidates)
     rules.append(("Needs attention", "solid", "Not watertight", leaky))
     if checked < len(candidates):
@@ -1449,15 +1457,8 @@ def _tree_action(win, view, action) -> None:
                                 f"{d['holes']} holes closed, {d['partitions']} partitions, {d['reversed']} faces turned")
             view._ui_insp_sig = None
             vp.update()
-        elif verb == "insp" and key in ("linkreload", "linkopen") and groups:
-            from core import links
-            from pathlib import Path
-            link = links.link_of(groups[0])
-            if link and key == "linkreload":
-                links.reload(vp.scene, link["path"])
-                vp.notify_scene_changed() if hasattr(vp, "notify_scene_changed") else vp.update()
-            elif link:
-                win.open_path(Path(link["path"]))
+        elif verb == "insp" and key.startswith("link") and groups:
+            _link_action(win, view, groups[0], key)
         elif verb == "unfiled":
             _select(win, (getattr(view, "_ui_tree", None) or {}).get("unfiled", []))
         return
@@ -1861,16 +1862,19 @@ def _inspector(view, win) -> None:
     if len(sel) == 1 and groups:
         g = groups[0]
         rec = g.ifc or {}
-        key = structure.node_of(g)
+        key = data.get("node_of", {}).get(id(g)) or structure.node_of(g)
         filed_ok = key in nodes
-        filed = " › ".join(structure.path(registry, key)) if filed_ok else "Not filed"
+        filed = (" › ".join(structure.path(registry, key)) if filed_ok
+                 else "Its source's nodes" if links.link_of(g) else "Not filed")
         recipe = data.get("recipes", {}).get(key, {})
         kind = kind_of(rec.get("class") or recipe.get("class")) if (rec or recipe) else "Comes from its node"
         rows = [("Name", _edit(f"groupname:{g.uid}", g.name or "")), ("Filed in", filed), ("Kind", kind)]
         if g.is_component():
             same = sum(1 for o, _s, _r in structure._placements(scene) if o.mesh is g.mesh)
             rows.append(("Copies", str(same)))
-        if not filed_ok:
+        if links.link_of(g):
+            needs = [("Record", "Kept in the source file")]
+        elif not filed_ok:
             needs = [("Filing", "Needed first")]
         elif not rec:
             needs = [("Record", "Comes with a kind")]
@@ -1892,9 +1896,18 @@ def _inspector(view, win) -> None:
             sections += solid
         link = links.link_of(g)
         if link:
+            state = _link_state(scene, link)
+            sel_ = link.get("select")
+            subset = "Full document" if sel_ is None else (f"{len(sel_['uids'])} items" if "uids" in sel_ else "Filtered")
+            nested = link.get("include_nested", True)
             sections.append(("Linked file", [("Source", str(link.get("path", "")).rsplit("/", 1)[-1]),
-                                             ("Subset", str(link.get("subset") or "all"))]))
-            sections.append(("Actions", [("linkreload", "Reload"), ("linkopen", "Open source")]))
+                                             ("Status", LINK_STATES.get(state, state)), ("Subset", subset),
+                                             ("Nested links", "included" if nested else "source only")]))
+            acts = [("linkreload", "Reload" if state != "modified" else "Reload changes"), ("linkrelink", "Relink…"),
+                    ("linkopen", "Open source"),
+                    ("linkpack", "Unpack" if state == "packed" else "Pack into this file"),
+                    ("linknested", "Source only" if nested else "Include nested links")]
+            sections.append(("Actions", acts))
         if _group_qty(view, g):
             sections.append(("Quantities", _qty_rows(_group_qty(view, g))))
         export = [("IFC class", str(rec.get("class") or recipe.get("class") or "generic object")),
@@ -1932,6 +1945,63 @@ def _inspector(view, win) -> None:
         sections.append(("Status", [("Missing on", f"{missing} items")]))
         sections.append(("Actions", [("status:" + v, "All " + v.lower()) for v in STATUS_CHOICES]))
     view.renderer.ui_set_inspector(f"{len(sel)} selected", sections)
+
+
+LINK_STATES = {"resolved": "Up to date", "modified": "Changed on disk", "missing": "Missing", "packed": "Packed in this file"}
+
+
+def _link_state(scene, link) -> str:
+    """links.query's status for one placement, without walking its parts."""
+    from pathlib import Path
+    from core import links
+    path = Path(link["path"])
+    if links.is_packed(scene, path):
+        return "packed"
+    if not path.is_file():
+        return "missing"
+    return "modified" if path.stat().st_mtime_ns != links._entry(scene, path).get("loaded_mtime_ns") else "resolved"
+
+
+def _link_action(win, view, g, key) -> None:
+    """The Linked files panel's verbs on the selected placement."""
+    from pathlib import Path
+    from core import links
+    vp = win.viewport
+    scene = vp.scene
+    rec = links.link_of(g)
+    if not rec:
+        return
+    try:
+        if key == "linkreload":
+            links.reload(scene, rec["path"])
+        elif key == "linkopen":
+            win.open_path(Path(rec["path"]))
+            return
+        elif key == "linkpack":
+            packed = not links.is_packed(scene, rec["path"])
+            if not packed:
+                links.reload(scene, rec["path"])
+            links.set_packed(scene, rec["path"], packed)
+        elif key == "linknested":
+            win._set_link_nested(g, not rec.get("include_nested", True))
+        elif key == "linkrelink":
+            from views.filedialogs import file_dialogs
+            path, _ = file_dialogs.getOpenFileName(win, "Relink", str(Path(rec["path"]).parent), "IngeTrazo (*.igz)")
+            if not path:
+                return
+            previous = dict(rec)
+            rec.update(links._link_record(path, win._current_path))
+            try:
+                links.reload(scene, path)
+            except Exception:
+                rec.clear()
+                rec.update(previous)
+                raise
+        win._relink_done("Linked files updated")
+    except (ValueError, OSError, links.LinkError) as exc:
+        vp.flash_status(str(exc))
+    view._ui_insp_sig = None
+    view._ui_tree_sig = None
 
 
 def _solid_section(g):

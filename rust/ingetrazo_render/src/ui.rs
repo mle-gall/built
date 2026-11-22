@@ -1557,8 +1557,7 @@ impl Ui {
                         // The selection's actions: the selection bar's job, in its one home.
                         if let Some((_, acts)) = &selection {
                             ui.add_space(6.0);
-                            ui.horizontal_wrapped(|ui| {
-                                ui.add_space(8.0);
+                            egui::Frame::NONE.inner_margin(Margin { left: 8, ..Default::default() }).show(ui, |ui| ui.horizontal_wrapped(|ui| {
                                 ui.spacing_mut().item_spacing = vec2(6.0, 6.0);
                                 for (id, label, _key, enabled, more) in acts {
                                     if !*more && *enabled && chip_button(ui, label) { cmds.push(format!("cmd:{id}")); }
@@ -1570,7 +1569,7 @@ impl Ui {
                                         more_at = Some(Rect::from_min_size(before, vec2(70.0, 24.0)));
                                     }
                                 }
-                            });
+                            }));
                         }
                         ui.add_space(4.0);
                         let sections = col.inspector.clone();
@@ -1578,9 +1577,8 @@ impl Ui {
                             if title == "Actions" {
                                 // What to do next, as commands: (id, label).
                                 ui.add_space(6.0);
-                                ui.horizontal_wrapped(|ui| {
-                                    ui.add_space(8.0);
-                                    ui.spacing_mut().item_spacing = vec2(6.0, 6.0);
+                                egui::Frame::NONE.inner_margin(Margin { left: 8, ..Default::default() }).show(ui, |ui| ui.horizontal_wrapped(|ui| {
+                                                                        ui.spacing_mut().item_spacing = vec2(6.0, 6.0);
                                     for (id, label) in rows {
                                         let at = ui.cursor().min;
                                         if chip_button(ui, label) {
@@ -1591,7 +1589,7 @@ impl Ui {
                                             }
                                         }
                                     }
-                                });
+                                }));
                                 continue;
                             }
                             if title.starts_with("Export") {
