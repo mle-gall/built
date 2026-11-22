@@ -116,8 +116,8 @@ class Pose:
 
     def put_on(self, camera) -> None:
         """Set ``camera`` to this pose."""
-        from PySide6.QtGui import QVector3D
-        camera.target = QVector3D(*self.target)
+        from core.camera_point import CameraPoint
+        camera.target = CameraPoint(self.target)
         camera.distance = self.distance
         camera.yaw = self.yaw
         camera.pitch = self.pitch

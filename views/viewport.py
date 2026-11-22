@@ -7343,12 +7343,13 @@ class Viewport(QOpenGLWidget):
     _SKY_RGB = (0.925, 0.935, 0.945)
     _GROUND_RGB = (0.815, 0.820, 0.815)
 
-    def _horizon_ndc_y(self, mvp) -> float:
+    def _horizon_ndc_y(self, mvp, camera=None) -> float:
         """Screen-space NDC y of the horizon (the ground plane at infinity),
         from the camera orientation. Returns a value that may exceed ±1 when the
         horizon is off-screen (looking straight down = all ground)."""
-        eye = self.camera.eye()
-        fwd = self.camera.target - eye
+        camera = camera or self.camera
+        eye = camera.eye()
+        fwd = camera.target - eye
         # Horizontal component of the view direction → its vanishing point.
         dh = QVector3D(fwd.x(), fwd.y(), 0.0)
         if dh.length() < 1e-5:

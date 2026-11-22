@@ -958,7 +958,13 @@ def prepare_scene_steps(scene, mesh_steps=None, *, stream=None, large=None):
         payload["dimension_style"] = dict(style)
     cam = getattr(scene, "camera_home", None)
     if isinstance(cam, dict) and _non_finite_where(cam) == "scene":
-        payload["camera"] = dict(cam)      # what the author was looking at
+        camera = dict(cam)
+        if not getattr(stream, "built", False):
+            for field in ("target", "up"):
+                point = camera.get(field)
+                if isinstance(point, (list, tuple)) and len(point) == 3:
+                    camera[field] = list(QVector3D(*point).toTuple())
+        payload["camera"] = camera
     # A camera holding a NaN is left out instead of refusing the save: it is
     # only the view, and the file opens framed on the model (#485). The
     # geometry keeps its own guard below.

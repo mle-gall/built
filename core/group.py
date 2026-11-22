@@ -1087,8 +1087,23 @@ def _local_points(mesh):
     verts = mesh.vertices
     if not verts:
         return None
-    return np.array([[v.position.x(), v.position.y(), v.position.z()]
-                     for v in verts], dtype=np.float64)
+    return np.array([v.position_tuple() for v in verts], dtype=np.float64)
+
+
+def model_placements(group, base=None, visible=None):
+    """Placements composed in f64, in Qt's column-major storage order."""
+    import numpy as np
+    from formats.built import placement_values
+    matrix = base
+    transform = getattr(group, "xform", None)
+    if transform is not None:
+        matrix = np.asarray(placement_values(transform), dtype=float).reshape(4, 4)
+        if base is not None:
+            matrix = matrix @ base
+    yield group, matrix
+    for child in getattr(group, "children", ()):
+        if visible is None or visible(child):
+            yield from model_placements(child, matrix, visible)
 
 
 def placement_points(group, cache=None):
@@ -1108,7 +1123,7 @@ def placement_points(group, cache=None):
     out: list = []
     if cache is None:
         cache = {}
-    for g, m in iter_placements(group):
+    for g, m in model_placements(group):
         arr = cache.get(id(g.mesh))
         if arr is None:
             arr = _local_points(g.mesh)
@@ -1116,11 +1131,7 @@ def placement_points(group, cache=None):
                 continue
             cache[id(g.mesh)] = arr
         if m is not None:
-            d = m.data()                      # column-major
-            rot = np.array([[d[0], d[4], d[8]],
-                            [d[1], d[5], d[9]],
-                            [d[2], d[6], d[10]]])
-            arr = arr @ rot.T + np.array([d[12], d[13], d[14]])
+            arr = arr @ m[:3, :3] + m[3, :3]
         out.append(arr)
     return np.concatenate(out) if out else np.empty((0, 3))
 

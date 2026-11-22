@@ -63,6 +63,17 @@ class PackedScene:
 
     origin: tuple = (0., 0., 0.)
     prototype_origins: tuple = ()
+    model_translations: np.ndarray | None = None
+    bake_focus: tuple | None = None
+
+    def rebase(self, origin):
+        """Project the original placement translations into this view frame."""
+        if self.origin == origin:
+            return False
+        self.instances["world"][:, 3, :3] = self.model_translations - origin
+        self.world_bounds = self.world_bounds + np.subtract(self.origin, origin)
+        self.origin = origin
+        return True
 
     def material_stream(self):
         if not self.material_updates:
@@ -157,7 +168,7 @@ def _baked_paint(paint):
     return None
 
 
-def _source_arrays(mesh, paint=None, texture_ids=None, face_overrides=None, billboard=False, origins=None, previous_origin=(0., 0., 0.)):
+def _source_arrays(mesh, paint=None, texture_ids=None, face_overrides=None, billboard=False, origins=None, previous_origin=(0., 0., 0.), focus=None, matrix=None):
     """Use source topology directly; the resident renderer needs no welded Plan."""
     if face_overrides:
         # Resolve lazy faces before reading topology; never mutate document attrs.
@@ -207,8 +218,17 @@ def _source_arrays(mesh, paint=None, texture_ids=None, face_overrides=None, bill
         frame = mesh._store.frame_origin if type(mesh).__name__ == 'StoreMesh' else ZERO
         box = (np.array([pos.min(axis=0), pos.max(axis=0)], dtype=float)
                if len(pos) else np.zeros((2, 3)))
-        origin = choose_origin(box.mean(axis=0) + frame, previous_origin)
-        origins.append((origin, box + np.subtract(frame, origin)))
+        from core.coordinate_frame import REBASE_DISTANCE
+        wide = np.max(box[1] - box[0]) > 2 * REBASE_DISTANCE
+        center = box.mean(axis=0) + frame
+        if wide and focus is not None:
+            local = np.asarray(focus)
+            if matrix is not None:
+                # Singular placements still draw their projected subspace.
+                local = (local - matrix[3, :3]) @ np.linalg.pinv(matrix[:3, :3])
+            center = np.clip(local, box[0] + frame, box[1] + frame)
+        origin = choose_origin(center, previous_origin)
+        origins.append((origin, box + np.subtract(frame, origin), wide))
         if tuple(frame) != origin:
             pos = np.asarray(pos, float) + np.subtract(frame, origin)
     # IGZ source streams can repeat a coordinate for each face/edge. Soft fan
@@ -307,23 +327,14 @@ def _placement_records(scene, roots, vp, state, *, double=False):
     object_hidden_of = {}
     filtered_of = {}
 
-    def model_matrices(group, base=None):
-        transform = getattr(group, 'xform', None)
-        matrix = base
-        if transform is not None:
-            matrix = np.asarray(transform.data(), dtype=float).reshape(4, 4)
-            if base is not None:
-                matrix = matrix @ base  # Qt's packed layout is column-major.
-        yield group, matrix
-        for child in getattr(group, 'children', None) or ():
-            yield from model_matrices(child, matrix)
+    from core.group import model_placements
 
     for root in roots:
         map_parents(root)
         # GL proxies carry the top-level paint owner and inherited layer.
         # Keep source groups for editing; use proxies only to resolve paint.
         proxies = Viewport._expand_placements(vp, root)
-        placements = model_matrices(root) if double else iter_placements(root)
+        placements = model_placements(root) if double else iter_placements(root)
         for (g, matrix), proxy in zip(placements, proxies):
             parent = parent_of.get(id(g))
             inherited = hidden_of.get(id(parent), False) if parent is not None else False
@@ -348,7 +359,7 @@ def _profile_endpoints(mesh):
 
 
 def pack_scene(scene, view_tint=None, *, face_overrides=None, texture_images=True,
-               baked_paints=None, progress=None, previous_origin=(0., 0., 0.), previous_pack=None):
+               baked_paints=None, progress=None, previous_origin=(0., 0., 0.), previous_pack=None, focus=None):
     """``baked_paints`` (id(group) -> paint) bakes those groups with that
     paint instead of the one they resolve to: the incremental bake of a
     changed prototype variant (views.wgpu_updates). ``progress(fraction,
@@ -369,6 +380,7 @@ def pack_scene(scene, view_tint=None, *, face_overrides=None, texture_images=Tru
     groups = []
     prototype_paints = {}
     coordinates = []
+    wide_variants = set()
     old_anchors = {}
     if previous_pack is not None:
         for (mesh_id, _, _), code in (previous_pack.prototype_lookup or {}).items():
@@ -395,9 +407,15 @@ def pack_scene(scene, view_tint=None, *, face_overrides=None, texture_images=Tru
             baked_paint = _baked_paint(paint_attrs)
         billboard = getattr(group, "billboard", False)
         key = (id(mesh), repr(baked_paint), billboard)
+        variant = key
+        if variant in wide_variants:
+            key = (id(mesh), (key[1], group.uid if group else None), billboard)
         if key not in lookup:
             arrays = _source_arrays(mesh, baked_paint, texture_ids, face_overrides, billboard,
-                                    coordinates, old_anchors.get(id(mesh), (0., 0., 0.)))
+                                    coordinates, old_anchors.get(id(mesh), (0., 0., 0.)), focus, matrix)
+            if coordinates[-1][2] and focus is not None:
+                wide_variants.add(variant)
+                key = (id(mesh), (variant[1], group.uid if group else None), billboard)
             lookup[key] = len(meshes) if len(arrays[0]) else -1
             if len(arrays[0]):
                 prototype_paints[len(meshes)] = baked_paint
@@ -455,6 +473,7 @@ def pack_scene(scene, view_tint=None, *, face_overrides=None, texture_images=Tru
     instances = np.zeros(len(rows), INSTANCE)
     origins = tuple(c[0] for c in coordinates)
     origin = previous_origin
+    model_translations = None
     world_bounds = np.zeros((2, 3))
     if rows:
         from core.coordinate_frame import choose_origin
@@ -471,6 +490,9 @@ def pack_scene(scene, view_tint=None, *, face_overrides=None, texture_images=Tru
                                      (centers+radii)[visible].max(axis=0)))
             origin = choose_origin(world_bounds.mean(axis=0), previous_origin)
             world_bounds -= origin
+        from core.coordinate_frame import REBASE_DISTANCE
+        if wide_variants or any(origin) or np.any(np.abs(matrices[:, 3, :3]) > REBASE_DISTANCE) or any(map(any, origins)):
+            model_translations = matrices[:, 3, :3].copy()
         matrices[:, 3, :3] -= origin
         instances['world'] = matrices
         instances['info'][:, 0] = [r[0] for r in rows]
@@ -495,7 +517,8 @@ def pack_scene(scene, view_tint=None, *, face_overrides=None, texture_images=Tru
     hidden_edge_commands['first'] = hidden_commands['first']+table[:, 3]
     hidden_commands['start'] = hidden_edge_commands['start'] = commands['start']
     return PackedScene(vertices, indices, bounds, commands, edge_commands, instances, uids, world_bounds, dict(handoff=handoff-begin, native=baked-handoff, finish=perf_counter()-baked, peak_build_rss_bytes=(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss if resource is not None else None)), groups, materials, textures, tuple(texture_ids), hidden_commands, hidden_edge_commands, profile_exclusions,
-                               (bool(getattr(scene, 'show_hidden_geometry', False)), bool(getattr(scene, 'show_hidden_objects', False))), lookup, prototype_paints, origin=origin, prototype_origins=tuple(origins))
+                               (bool(getattr(scene, 'show_hidden_geometry', False)), bool(getattr(scene, 'show_hidden_objects', False))), lookup, prototype_paints, origin=origin, prototype_origins=tuple(origins), model_translations=model_translations,
+                               bake_focus=tuple(focus) if wide_variants else None)
 
 
 def _material_columns(pos, corners, sizes, counts, table, attributes, texture_ids, origin=(0., 0., 0.)):

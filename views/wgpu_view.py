@@ -32,12 +32,19 @@ def _tool_frame(method):
     from functools import wraps
     @wraps(method)
     def handle(view, *args, **kwargs):
+        remote = getattr(getattr(view, 'packed', None), 'model_translations', None) is not None
+        if remote:
+            view._sync_scene_camera()
         origin = getattr(getattr(view, "packed", None), "origin", ())
         prototypes = getattr(view, '_remote_meshes', ())
-        if not any(origin) and not prototypes:
-            return method(view, *args, **kwargs)
-        with view._geometry_frame():
-            return method(view, *args, **kwargs)
+        if any(origin) or prototypes:
+            with view._geometry_frame():
+                result = method(view, *args, **kwargs)
+        else:
+            result = method(view, *args, **kwargs)
+        if remote and getattr(view.packed, 'model_translations', None) is not None:
+            view._sync_scene_camera()
+        return result
     return handle
 
 
@@ -55,6 +62,11 @@ class WgpuView(QWidget):
                 if mesh is not active:
                     frames.enter_context(mesh_frame(mesh, origin))
             yield
+
+    def _horizon(self, mvp, camera):
+        if any(self.packed.origin):
+            return self.source_viewport._horizon_ndc_y(mvp, camera)
+        return self.source_viewport._horizon_ndc_y(mvp)
 
     def _model_diag(self):
         return float(np.linalg.norm(self.packed.world_bounds[1]-self.packed.world_bounds[0]))
@@ -157,7 +169,7 @@ class WgpuView(QWidget):
         self.tools.cancel()
         super().hideEvent(event)
 
-    def set_scene(self, scene, *, progress=None, opening=False):
+    def set_scene(self, scene, *, progress=None, opening=False, focus=None):
         """Make ``scene`` resident. ``progress(fraction, text)`` reports the
         pack; ``opening`` (a document coming in, its bar still up) leaves
         the big containers' edit boxes until after the first picture. The
@@ -167,6 +179,8 @@ class WgpuView(QWidget):
             # What the window runs after the first picture (see above).
             self.after_open = []
         same_document = scene is getattr(self, "scene", None)
+        if not same_document:
+            self._source_pose = None
         self.scene = scene
         allowed = getattr(scene, '_navigator_allowed', None)
         version, stack, _, similar, layers = scene._bounds_key()
@@ -178,7 +192,7 @@ class WgpuView(QWidget):
         paint_key = _paint_key(scene)
         resident_copies = getattr(self, '_resident_edit_copies', ())
         sharing_restored = any(group.mesh is not mesh for group, mesh in resident_copies)
-        if (not sharing_restored and token == getattr(self, "_content_token", None)
+        if (focus is None and not sharing_restored and token == getattr(self, "_content_token", None)
                 and paint_key == getattr(self, "_paint_key", None)):
             tracker = getattr(self, '_instance_updates', None)
             if tracker is not None:
@@ -218,7 +232,7 @@ class WgpuView(QWidget):
             tracker.remember_edit_path()
             tracker.observe(getattr(self.source_viewport, 'history', None))
         delta = (tracker.diff(scene) if tracker is not None and len(self.packed.instances)
-                 and not repaint else None)
+                 and not repaint and focus is None else None)
         if delta is not None:
             ids, rows = delta
             tracker.apply(ids, rows, self.renderer)
@@ -271,8 +285,11 @@ class WgpuView(QWidget):
             self.update()
             return
         old_origin = getattr(self.packed, 'origin', (0., 0., 0.))
+        if focus is None:
+            camera = getattr(self.source_viewport, 'camera', None)
+            focus = camera.target.toTuple() if camera else np.add(self.camera.target.toTuple(), old_origin)
         self.packed = pack_scene(scene, getattr(self.source_viewport, 'view_tint', None),
-                                 progress=progress, previous_origin=old_origin if same_document else (0., 0., 0.),
+                                 progress=progress, focus=focus, previous_origin=old_origin if same_document else (0., 0., 0.),
                                  previous_pack=self.packed if same_document else None)
         remote = {}
         if any(any(o) for o in self.packed.prototype_origins):
@@ -281,9 +298,9 @@ class WgpuView(QWidget):
                 if group is not None and any(anchor):
                     remote[id(group.mesh)] = (group.mesh, anchor)
         self._remote_meshes = tuple(remote.values())
-        if any(self.packed.origin):
-            self._sync_scene_camera()
-        elif any(old_origin) and self.source_viewport is not None:
+        if self.packed.model_translations is not None:
+            self._sync_scene_camera(install=False)
+        elif (any(old_origin) or getattr(self, "_source_pose", None)) and self.source_viewport is not None:
             self.camera = self.source_viewport.camera
             self._source_pose = None
         from views.wgpu_billboards import Billboards
@@ -531,47 +548,78 @@ class WgpuView(QWidget):
         finally:
             self._drawing_frame = False
 
-    def _sync_scene_camera(self):
-        """Mirror document camera controls while retaining a precise local target."""
+    def _sync_scene_camera(self, *, install=True):
+        """Mirror the document pose and subtract its target frame before upload."""
         from copy import copy
-        origin = self.packed.origin
+        from core.coordinate_frame import choose_origin
+        from core.camera_point import CameraPoint
+        packed = self.packed
         source = getattr(self.source_viewport, 'camera', None)
-        last = getattr(self, '_source_pose', None)
-        if last is None or last[0] != origin or last[1] is not source:
-            self.camera = copy(source or self.camera)
-            target = np.asarray(self.camera.target.toTuple()) - origin
-            lo, hi = self.packed.world_bounds
-            center = (lo + hi) * .5
-            # First geometry in a remote document, with the default camera
-            # still looking at model zero. Frame its actual relative extent.
-            if np.linalg.norm(target-center) > max(self.camera.distance, np.linalg.norm(hi-lo)) * 4:
-                self.camera.fit_to(QVector3D(*lo), QVector3D(*hi))
-            elif source is not None and source.target == QVector3D(*(center + origin)):
-                self.camera.target = QVector3D(*center)
-            else:
-                self.camera.target = QVector3D(*target)
-            previous = {}
-        else:
-            previous = last[2]
+        previous = getattr(self, '_source_pose', None)
         if source is None:
-            self._source_pose = (origin, None, {})
-            return
+            if previous is None:
+                source = copy(self.camera)
+                self._standalone_camera = source
+            else:
+                source = self._standalone_camera
+        keep_local_target = False
+        if previous is None or previous[1] is not source:
+            lo, hi = packed.world_bounds
+            target = np.subtract(source.target.toTuple(), packed.origin)
+            outside = np.linalg.norm(target - (lo + hi)*.5) > 4 * max(source.distance, np.linalg.norm(hi-lo))
+            if outside and not getattr(getattr(self, "scene", None), "camera_home", None):
+                source.fit_to(CameraPoint(lo + packed.origin), CameraPoint(hi + packed.origin))
+            self.camera = copy(source)
+        else:
+            old_origin, _, state = previous
+            for name, old_value in state.items():
+                value = getattr(source, name)
+                signature = value.toTuple() if isinstance(value, QVector3D) else value
+                if signature == old_value:
+                    if name == 'target':
+                        keep_local_target = True
+                    local = getattr(self.camera, name)
+                    setattr(source, name, local + CameraPoint(old_origin) if name == 'target' else local)
+        origin = choose_origin(source.target.toTuple(), packed.origin)
+        if origin != packed.origin and not any(choose_origin(source.target.toTuple())):
+            origin = (0., 0., 0.)
+        billboards = getattr(self, '_billboards', None)
+        if origin != packed.origin and install and billboards is not None:
+            billboards.restore()
+        changed = packed.rebase(origin)
         state = {}
         for name, value in vars(source).items():
             if name.startswith('_') or name in ('aspect', 'depth_reach'):
                 continue
-            signature = value.toTuple() if isinstance(value, QVector3D) else value
-            if name in previous and signature != previous[name]:
-                if name == 'target':
-                    self.camera.target = QVector3D(*np.subtract(signature, origin))
-                else:
-                    setattr(self.camera, name, value)
-            else:
-                local = getattr(self.camera, name)
-                value = QVector3D(*np.add(local.toTuple(), origin)) if name == 'target' else local
-                setattr(source, name, value)
             state[name] = value.toTuple() if isinstance(value, QVector3D) else value
+            if name == 'target' and keep_local_target and previous[0] == origin:
+                continue
+            setattr(self.camera, name, value - CameraPoint(origin) if name == 'target' else value)
+        if previous is None or previous[2] != state or previous[0] != origin:
+            self._pick_frame_dirty = True
+        if previous is not None and previous[0] != origin and getattr(self, '_drag_nav', False):
+            if getattr(self, '_pivot', None) is not None:
+                self._pivot += CameraPoint(np.subtract(previous[0], origin))
+        reach = source.depth_reach
+        self.camera.depth_reach = (reach[0] - CameraPoint(origin), reach[1]) if reach else None
         self._source_pose = (origin, source, state)
+        if install and packed.bake_focus is not None and choose_origin(
+                source.target.toTuple(), packed.bake_focus) != packed.bake_focus:
+            # A single prototype spans distant sites. Bake its visible
+            # neighbourhood before the first narrowing to vertex float32.
+            self._shared.set_scene(self.scene, focus=source.target.toTuple())
+            return
+        if changed and install:
+            from views.wgpu_billboards import Billboards
+            # Their base holds translations in the previous frame.
+            self._billboards = Billboards(packed)
+            ids = list(range(len(packed.instances)))
+            if self.renderer is not None and not self._scene_dirty:
+                self.renderer.set_instance_world(ids, packed.instances['world'].flatten())
+            self._pick_frame_dirty = True
+            if self.inference_index is not None:
+                from views.wgpu_inference import rebase
+                self.inference_index = rebase(self.inference_index, packed)
 
     def _present_frame(self):
         start = time.perf_counter()
@@ -581,15 +629,15 @@ class WgpuView(QWidget):
         # scene («one override per instance required») on every frame, so
         # the previous document stayed on screen and the first-frame hook
         # never fired (a new document never finished laying out its trays).
+        if getattr(self.packed, "model_translations", None) is not None:
+            self._sync_scene_camera()
         if self._scene_dirty:
             self._upload()
             if self.renderer is None:
                 return None
         self.tools.sync()
         if self.source_viewport is not None:
-            if any(self.packed.origin):
-                self._sync_scene_camera()
-            else:
+            if self.packed.model_translations is None:
                 self.camera = self.source_viewport.camera
             self._mirror_cursor()
         # R-look 3c: compute each camera matrix once, after updating aspect.
@@ -603,7 +651,7 @@ class WgpuView(QWidget):
             mvp = projection * view
             payload = style_payload(
                 self.source_viewport.scene, style,
-                horizon=self.source_viewport._horizon_ndc_y(mvp),
+                horizon=self._horizon(mvp, self.camera),
                 scale=self.devicePixelRatioF(),
                 edit_rest_fade=getattr(self.source_viewport, 'edit_rest_fade', .75),
                 soft_shadows=getattr(self.source_viewport, '_soft_shadows', 0),
@@ -633,6 +681,9 @@ class WgpuView(QWidget):
         future = getattr(self, '_inference_future', None)
         if future is not None and future.done():
             self.inference_index = future.result()
+            if self.inference_index.packed.origin != self.packed.origin:
+                from views.wgpu_inference import rebase
+                self.inference_index = rebase(self.inference_index, self.packed)
             if getattr(self, "_billboards", None) is not None:
                 self._billboards.key = None
             self._inference_future = None
@@ -656,7 +707,7 @@ class WgpuView(QWidget):
         if self._shared is self and getattr(self, '_billboards', None) is not None:
             self._billboards.update(self.camera, self.renderer, self.inference_index)
         from views.wgpu_axes import axes_state
-        axes = axes_state(self.scene, self.camera, self.source_viewport)
+        axes = axes_state(self.scene, self.camera, self.source_viewport, self.packed.origin)
         if axes != getattr(self, '_axes_state', None):
             self.renderer.set_axes(*axes)
             self._axes_state = axes
@@ -770,25 +821,26 @@ class WgpuView(QWidget):
         width_px, height_px = int(width_px), int(height_px)
         if width_px <= 0 or height_px <= 0:
             raise ValueError("Image dimensions must be positive")
+        if self.packed is None:
+            self.packed = pack_scene(source.scene, getattr(source, 'view_tint', None),
+                                     focus=source.camera.target.toTuple())
+        if self.packed.model_translations is not None:
+            self._sync_scene_camera()
         if self.renderer is None:
             import ingetrazo_render
             from core import black_box
             black_box.install_panic_log(ingetrazo_render)
             self.renderer = ingetrazo_render.Renderer(
                 int(self.winId()), max(1, self.width()), max(1, self.height()), 1.)
-            if self.packed is None:
-                self.packed = pack_scene(source.scene, getattr(source, 'view_tint', None))
             self.packed.upload(self.renderer)
             self._scene_dirty = False
         elif self._scene_dirty:
             self._upload()
-        if any(self.packed.origin):
-            self._sync_scene_camera()
-        camera = copy(self.camera if any(self.packed.origin) else source.camera)
+        camera = copy(self.camera if self.packed.model_translations is not None else source.camera)
         camera.aspect = width_px / height_px
         view, projection = camera.view_matrix(), camera.projection_matrix()
         payload = style_payload(source.scene, source._effective_style(),
-                                horizon=source._horizon_ndc_y(projection * view),
+                                horizon=self._horizon(projection * view, camera),
                                 edit_rest_fade=getattr(source, 'edit_rest_fade', .75),
                                 soft_shadows=getattr(source, '_soft_shadows', 0),
                                 camera=camera)
@@ -814,13 +866,13 @@ class WgpuView(QWidget):
         # matrices through the resident API, restoring them even on failure.
         billboard_ids = [] if billboards is None else billboards.ids.tolist()
         resident_world = self.packed.instances['world'][billboard_ids].copy()
-        old_axes = getattr(self, '_axes_state', None) or axes_state(source.scene, self.camera, source)
+        old_axes = getattr(self, '_axes_state', None) or axes_state(source.scene, self.camera, source, self.packed.origin)
         previous = getattr(self, '_section_uploaded', np.empty(0, np.uint8))
         data = geometry(self, source.scene, source._effective_style(), camera, height_px, rows)
         try:
             if billboard_ids:
                 self.renderer.set_instance_world(billboard_ids, rows['world'][billboard_ids].reshape(-1))
-            self.renderer.set_axes(*axes_state(source.scene, camera, source))
+            self.renderer.set_axes(*axes_state(source.scene, camera, source, self.packed.origin))
             self.renderer.set_section_geometry(data)
             pixels = bytes(self.renderer.render_image(
                 width_px, height_px, tuple(view.data()), tuple(projection.data()), payload,
@@ -860,6 +912,8 @@ class WgpuView(QWidget):
     def _prepare_pick_frame(self):
         if getattr(self, '_drawing_frame', False):
             return  # overlay occlusion reads IDs during this very presentation
+        if getattr(self.packed, 'model_translations', None) is not None:
+            self._sync_scene_camera()
         # A click immediately after release must use the new pixel mapping.
         if self._resize_timer.isActive():
             self._resize_timer.stop()
@@ -1564,6 +1618,7 @@ class WgpuView(QWidget):
         self._invert_wheel = getattr(self.source_viewport, '_invert_wheel', False)
         return Viewport._zoom_at(self, steps, pos)
 
+    @_tool_frame
     def wheelEvent(self, event):
         from views.viewport import Viewport
         self._invert_wheel = getattr(self.source_viewport, '_invert_wheel', False)

@@ -289,14 +289,7 @@ class ResidentInference:
         return self._query('edges_near', rows, *args)
 
 
-def prepare(packed, scene=None):
-    native = _native.available()
-    codes, rows = np.unique(packed.instances['info'][:, 0], return_index=True)
-    first = np.full(len(packed.commands), -1, dtype=np.int64)
-    first[codes] = rows
-    cache = {}
-    arrays = [_prototype_arrays(packed, code, scene, row, cache)
-              for code, row in enumerate(first)]
+def _placement_arrays(packed):
     mats = packed.instances['world'].astype(np.float64).reshape(-1, 16)
     ids = packed.instances['info'][:, 0].astype(np.int64)
     bounds = packed.bounds[ids, :, :3].astype(np.float64)
@@ -305,6 +298,28 @@ def prepare(packed, scene=None):
     extent = (bounds[:, 1] - bounds[:, 0]) / 2
     wc = np.einsum('nij,nj->ni', matrix[:, :3, :3], center) + matrix[:, :3, 3]
     we = np.einsum('nij,nj->ni', abs(matrix[:, :3, :3]), extent)
+    return ids, mats, wc, we
+
+
+def rebase(index, packed):
+    """Keep prototype BVHs and replace their placement rows in the new frame."""
+    ids, mats, wc, we = _placement_arrays(packed)
+    base = _native.available().InstanceSet(index.protos, ids, mats,
+                                         np.ascontiguousarray(wc-we), np.ascontiguousarray(wc+we))
+    result = ResidentInference(base, index.protos, list(index.protos), packed, index.scene)
+    result.world_box_cache = wc, we
+    return result
+
+
+def prepare(packed, scene=None):
+    native = _native.available()
+    codes, rows = np.unique(packed.instances['info'][:, 0], return_index=True)
+    first = np.full(len(packed.commands), -1, dtype=np.int64)
+    first[codes] = rows
+    cache = {}
+    arrays = [_prototype_arrays(packed, code, scene, row, cache)
+              for code, row in enumerate(first)]
+    ids, mats, wc, we = _placement_arrays(packed)
     protos, base = native.build_snap_index(arrays, ids, mats, np.ascontiguousarray(wc-we),
                                            np.ascontiguousarray(wc+we))
     index = ResidentInference(base, protos, list(protos), packed, scene)

@@ -66,8 +66,8 @@ def _camera_state(cam) -> dict:
 
 
 def _apply_camera_state(cam, state: dict) -> None:
-    from PySide6.QtGui import QVector3D
-    cam.target = QVector3D(*state["target"])
+    from core.camera_point import CameraPoint
+    cam.target = CameraPoint(state["target"])
     for k in _CAMERA_FIELDS:
         if k in state:
             setattr(cam, k, state[k])

@@ -5,13 +5,15 @@
 Z-up convention (Blender, FreeCAD): X red (east), Y green (north),
 Z blue (up). The camera orbits around a ``target`` point in spherical
 coordinates (``yaw``, ``pitch``, ``distance``). Both perspective and parallel
-("orthographic") projections are supported.
+("orthographic") projections are supported. Target, up and the eye derived
+from the orbit parameters use binary64 model coordinates.
 """
 from __future__ import annotations
 
 import math
 
 from PySide6.QtGui import QMatrix4x4, QVector3D
+from core.camera_point import CameraPoint
 
 
 #: How close the camera may get to what it is looking at. A component is
@@ -140,6 +142,11 @@ def frame_rect(width: float, height: float,
 
 class OrbitCamera:
     """Camera that orbits around a target point."""
+
+    def __setattr__(self, name, value):
+        if name in ("target", "up") and not isinstance(value, CameraPoint):
+            value = CameraPoint(value)
+        super().__setattr__(name, value)
 
     def __init__(self) -> None:
         self.target = QVector3D(0.0, 0.0, 0.0)
@@ -293,7 +300,7 @@ class OrbitCamera:
         length = d.length()
         if not math.isfinite(length) or length < 1e-6:
             return False
-        before = (QVector3D(self.target), self.distance, self.yaw, self.pitch)
+        before = (CameraPoint(self.target), self.distance, self.yaw, self.pitch)
         self.distance = min(length, MAX_DISTANCE)
         self.look_from(eye, d)
         if not self.is_finite():
@@ -307,7 +314,7 @@ class OrbitCamera:
         sp = math.sin(self.pitch)
         cy = math.cos(self.yaw)
         sy = math.sin(self.yaw)
-        return self.target + QVector3D(
+        return self.target + CameraPoint(
             self.distance * cp * cy,
             self.distance * cp * sy,
             self.distance * sp,
@@ -366,7 +373,7 @@ class OrbitCamera:
         else:
             yaw = self.yaw
         self.yaw, self.pitch = yaw, pitch
-        self.target = eye + d * self.distance
+        self.target = CameraPoint(eye) + d * self.distance
 
     def turn(self, d_yaw_deg: float, d_pitch_deg: float) -> None:
         """Turn the head: the eye stays put, the look direction swings by
@@ -641,7 +648,7 @@ class OrbitCamera:
             self.orbit(dx_pixels, dy_pixels, viewport_h)  # about the target
             return
         old_yaw, old_pitch = self.yaw, self.pitch
-        old_target = QVector3D(self.target)
+        old_target = CameraPoint(self.target)
         self.orbit(dx_pixels, dy_pixels, viewport_h)     # the angles, clamped
         d_yaw = self.yaw - old_yaw
         d_pitch = self.pitch - old_pitch
@@ -660,7 +667,7 @@ class OrbitCamera:
         else:
             rot = QQuaternion.fromAxisAndAngle(
                 axis.normalized(), math.degrees(d_pitch)) * rot_yaw
-        self.target = pivot + rot.rotatedVector(self.target - pivot)
+        self.target = CameraPoint(pivot) + rot.rotatedVector(self.target - pivot)
         if not self.is_finite():
             # A pivot so far away that the turn overflowed: keep the pose the
             # gesture had, never a NaN one (#485).
@@ -735,8 +742,8 @@ class OrbitCamera:
         if steps < 0 and self.distance > 0.0:
             # the frame grows only as much as the distance could
             factor = min(factor, new_distance / self.distance)
-        before = (QVector3D(self.target), self.distance)
-        self.target = focus + (self.target - focus) * factor
+        before = (CameraPoint(self.target), self.distance)
+        self.target = CameraPoint(focus) + (self.target - focus) * factor
         self.distance = new_distance
         if steps < 0 and min_step > 0.0 and new_distance < MAX_DISTANCE:
             moved = (self.eye() - eye_before).length()
@@ -755,9 +762,8 @@ class OrbitCamera:
 
     def is_finite(self) -> bool:
         """Every number of the pose is a real number (no NaN, no inf)."""
-        t = self.target
         return all(math.isfinite(v) for v in (
-            t.x(), t.y(), t.z(), self.distance, self.yaw, self.pitch))
+            *self.target.toTuple(), *self.up.toTuple(), self.distance, self.yaw, self.pitch))
 
     def sees_from_below(self, z: float) -> bool:
         """The view looks at the horizontal plane at height ``z`` from
@@ -804,7 +810,7 @@ class OrbitCamera:
     # ---- Navigation presets ------------------------------------------------
     def fit_to(self, min_pt: QVector3D, max_pt: QVector3D, margin: float = 1.3) -> None:
         """Center the camera on the AABB and back up enough to frame it."""
-        center = QVector3D(
+        center = CameraPoint(
             (min_pt.x() + max_pt.x()) * 0.5,
             (min_pt.y() + max_pt.y()) * 0.5,
             (min_pt.z() + max_pt.z()) * 0.5,
@@ -832,6 +838,20 @@ class OrbitCamera:
         fills the window in this orientation and for this window shape;
         in perspective the camera also backs off by how far the box comes
         toward it, so the near side is not cut by the frame."""
+        # Project a nearby box in Qt's local frame. A world-space float
+        # matrix cannot distinguish its corners at survey coordinates.
+        from core.coordinate_frame import choose_origin
+        center = (CameraPoint(min_pt) + max_pt) * .5
+        origin = choose_origin(center.toTuple())
+        if any(origin):
+            from copy import copy
+            anchor = CameraPoint(origin)
+            local = copy(self)
+            local.target = (0., 0., 0.)
+            local.fit_box(min_pt - anchor, max_pt - anchor, margin)
+            self.target = anchor + local.target
+            self.distance = local.distance
+            return
         f = self.forward()
         r = QVector3D.crossProduct(f, self.up_vector())
         if r.lengthSquared() < 1e-18:

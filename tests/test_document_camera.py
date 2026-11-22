@@ -8,6 +8,8 @@ from __future__ import annotations
 import math
 import os
 
+import pytest
+
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtGui import QVector3D  # noqa: E402
@@ -122,3 +124,32 @@ def test_a_broken_camera_never_blocks_the_save(tmp_path):
     finally:
         win._saved_version = win.viewport.scene.version
         win.close()
+
+
+@pytest.mark.parametrize("extension", [".built", ".igz"])
+def test_document_camera_precision(tmp_path, extension):
+    from types import SimpleNamespace
+    import numpy as np
+    from core.camera import OrbitCamera
+    from views.main_window import MainWindow
+    cam = OrbitCamera()
+    cam.target = (650000.012345678, 6860000.023456789, .01)
+    cam.up = (.00123456789, .00234567891, .999999)
+    cam.distance = .07
+    scene = Scene()
+    win = SimpleNamespace(viewport=SimpleNamespace(camera=cam, scene=scene, update=lambda: None),
+                          _CAMERA_FIELDS=MainWindow._CAMERA_FIELDS)
+    scene.camera_home = MainWindow._camera_dict(win)
+    path = tmp_path / ("eye" + extension)
+    igz.save_scene(scene, path)
+    restored = Scene()
+    igz.load_into(restored, path)
+    win.viewport.camera = OrbitCamera()
+    MainWindow._apply_camera_dict(win, restored.camera_home)
+    for attr in ("target", "up"):
+        expected = np.array(getattr(cam, attr).toTuple())
+        if extension == ".igz":
+            expected = expected.astype(np.float32)
+        np.testing.assert_array_equal(getattr(win.viewport.camera, attr).toTuple(), expected)
+    if extension == ".built":
+        np.testing.assert_array_equal(win.viewport.camera.eye().toTuple(), cam.eye().toTuple())
