@@ -21,7 +21,7 @@ from PySide6.QtGui import QMatrix4x4, QVector3D
 
 from core.camera import OrbitCamera
 from core.group import Group
-from core.mesh import Mesh
+from core.mesh import Edge, Face, Mesh, Vertex
 from core.scene import Scene
 import tools.select as select
 from tools.select import SelectTool
@@ -171,7 +171,9 @@ def _box_select(vp, rect, crossing, packed=True):
         SelectTool().on_box_select(vp, rect, crossing, mode="replace")
     finally:
         select._box_groups_packed, select._box_loose_arrays = keep
-    return {id(e) for e in vp.scene.selection}
+    # Elements by key (a store element is a view per read), objects by id.
+    return {e.key if isinstance(e, (Vertex, Edge, Face)) else id(e)
+            for e in vp.scene.selection}
 
 
 def _scene(**kw):

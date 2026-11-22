@@ -86,7 +86,7 @@ def test_click_hover_modifiers(view):
     assert view.tools._mesh_hover is None  # GL suppresses face hover
     edge = view.scene.edges[0]
     mouse_move(view, pixel(view, (edge.a + edge.b) * .5))
-    assert view.tools._mesh_hover is edge
+    assert view.tools._mesh_hover == edge
 
 
 def test_box_occluded_and_loose(view):
@@ -274,7 +274,7 @@ def test_loose_edge_without_resident_pixel(view):
     view.pick_row = lambda *args: None
     p = pixel(view, QVector3D(1, 0, 0)) + QPoint(0, 3)
     mouse_move(view, p)
-    assert view.tools._mesh_hover is edge
+    assert view.tools._mesh_hover == edge
     QTest.mouseClick(view, Qt.LeftButton, Qt.NoModifier, p)
     assert view.scene.selection == {edge}
 
@@ -395,7 +395,7 @@ def test_transformed_component_retains_resident_row_and_picks_world_copy(view):
     view.set_scene(view.scene)
     assert view.packed is resident
     p = pixel(view, QVector3D(1.25, .25, 0))
-    assert view.tools.pick_face(p.x(), p.y()) is group.mesh.faces[0]
+    assert view.tools.pick_face(p.x(), p.y()) == group.mesh.faces[0]
     view.scene.end_one_group_edit()
     view.set_scene(view.scene)
     assert view.packed is resident

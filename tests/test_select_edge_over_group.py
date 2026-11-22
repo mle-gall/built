@@ -57,7 +57,7 @@ def test_a_line_on_a_group_face_is_picked_before_the_group():
         px = vp._world_to_pixel(V(0.5, 0.5, 1.0))          # on the line
         assert px is not None
         assert vp.pick_group(px[0], px[1]) is box            # the group IS there
-        assert tool._pick(vp, px[0], px[1]) is on_top        # …but the line wins
+        assert tool._pick(vp, px[0], px[1]) == on_top        # …but the line wins
         px2 = vp._world_to_pixel(V(0.5, 0.15, 1.0))         # face, away from it
         assert tool._pick(vp, px2[0], px2[1]) is box
     finally:

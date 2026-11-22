@@ -243,7 +243,7 @@ def test_a_loose_face_keeps_the_click_at_the_same_size():
     _look(vp, P, 33.3, -83.3, 17, 6)
     for px in _inner_pixels(vp, P):
         assert vp.pick_group(*px) is None
-        assert vp.pick_face(*px) is face
+        assert vp.pick_face(*px) == face
     assert wall in vp.scene.groups
 
 

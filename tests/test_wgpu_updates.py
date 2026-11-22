@@ -824,10 +824,10 @@ def test_callable_agent_edits_leave_other_deferred_meshes_resident():
     assert vertex.position.z() == 2
     history.undo()
     assert type(meshes[1]) is DeferredMesh
-    assert vertex is meshes[0].vertices[0] and vertex.position.z() == 0
+    assert vertex == meshes[0].vertices[0] and vertex.position.z() == 0
     history.redo()
     assert type(meshes[1]) is DeferredMesh
-    assert vertex is meshes[0].vertices[0] and vertex.position.z() == 2
+    assert vertex == meshes[0].vertices[0] and vertex.position.z() == 2
 
 
 def test_agent_adding_group_on_active_layer_rebakes_only_new_mesh():

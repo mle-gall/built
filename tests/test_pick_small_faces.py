@@ -44,7 +44,7 @@ def test_a_millimetre_square_is_picked():
                                     V(side, side, 0), V(0, side, 0)])
         vp.scene.version += 1
         x, y = vp._world_to_pixel(V(side / 2, side / 2, 0))
-        assert vp.pick_face(x, y) is f, side
+        assert vp.pick_face(x, y) == f, side
         assert vp.pick_face_any(x, y) == (f, None), side
 
 
@@ -107,7 +107,7 @@ def test_push_pull_pulls_a_millimetre_square():
         cx, cy = vp._world_to_pixel(V(s / 2, s / 2, 0))
         vp._last_mouse_pos = QPointF(cx, cy)
         vp._process_hover(QPointF(cx, cy), Qt.NoModifier)
-        assert tool.hovered_face is face
+        assert tool.hovered_face == face
         vp.mousePressEvent(ev(QMouseEvent.MouseButtonPress, cx, cy,
                               Qt.LeftButton, Qt.LeftButton))
         assert tool.dragging

@@ -61,7 +61,7 @@ def test_subdivide_face_that_already_has_a_hole():
     # The wall became the remainder (notched for the door) and kept the window.
     remainder = next(
         f for f in scene.faces
-        if f is not door_face and _key_set(f.vertices) != _key_set(window)
+        if f != door_face and _key_set(f.vertices) != _key_set(window)
     )
     assert len(remainder.vertices) == 8               # L/notched outline
     assert len(remainder.holes) == 1                  # window preserved

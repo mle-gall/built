@@ -1149,6 +1149,12 @@ def _on_python(name):
 class StoreMesh(Mesh):
     """A Mesh whose geometry is owned by one native MeshStore."""
 
+    def __init__(self) -> None:
+        # ``StoreMesh()`` (as ``type(scene.mesh)()``) is a new empty mesh
+        # like ``Mesh()``: store-backed when the engine is on, else objects.
+        self.__class__ = Mesh
+        Mesh.__init__(self)
+
     vertices = _seq_property("vertex", "vertices", VertexView, 0)
     edges = _seq_property("edge", "edges", EdgeView, 1)
     faces = _seq_property("face", "faces", FaceView, 2)
@@ -1991,8 +1997,14 @@ def _restore_store_state(m, snap: StoreState) -> None:
         own = {(ns << 40) | (k & LOCAL_MASK): dict(v)
                for k, v in snap.own.items()}
     else:
+        held = d.get("_attr_own") or {}
         st.restore(snap.snap)
         own = {k: dict(v) for k, v in snap.own.items()}
+        # The restore kept the newer elements as tombstones (restore_tail
+        # .rs); their own attrs come along for a relink.
+        for k, v in held.items():
+            if k not in own and not snap.snap.has(k) and st.knows(k):
+                own[k] = v
     d["_attr_table"] = snap.table
     d["_attr_own"] = own
     d.setdefault("_objmap", {})

@@ -307,7 +307,7 @@ def test_select_content_takes_the_context_and_skips_locked():
     g = Group(Mesh(), name="g")
     g.layer = "A"
     scene.groups.append(g)
-    assert set(map(id, on_layers(scene, ["A"]))) == {id(f1), id(g)}
+    assert set(on_layers(scene, ["A"])) == {f1, g}
     assert on_layers(scene, ["B"]) == []
 
 

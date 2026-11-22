@@ -103,6 +103,15 @@ def test_a_sweep_that_raises_keeps_the_previous_step_and_redo(
         mesh.add_edge(V(5, 5, 5), V(5, 5, 5))       # …and the engine raises
 
     monkeypatch.setattr(followme, "sweep_profile", broken)
+    # A store-backed mesh sweeps through the keyed command instead: break
+    # that one the same way.
+    import core.sweep
+    from core.history import SnapshotMutation
+    monkeypatch.setattr(
+        core.sweep, "build_sweep_face",
+        lambda mesh, key, pts, closed, failed: SnapshotMutation(
+            lambda scene: broken(scene.mesh, next(
+                f for f in scene.mesh.faces if f.key == key), pts, closed)))
     _sweep_along(vp, profile, path)
     assert vp.history.last_error                    # History rolled it back
     assert _FAILED in vp.messages

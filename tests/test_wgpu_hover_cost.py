@@ -98,7 +98,7 @@ def test_the_vectorised_face_pick_is_the_walk(view):
     for p in points:
         x, y = view._world_to_pixel(p)
         face, place = tools.pick_face_placement(x, y)
-        assert face is walk(x, y), p
+        assert face == walk(x, y), p
         assert (place is not None) == (p.x() > 2.5)
     # A face a tool is moving is not picked; the one behind it is.
     x, y = view._world_to_pixel(V(0.5, 0.5, 2.0))
@@ -108,7 +108,7 @@ def test_the_vectorised_face_pick_is_the_walk(view):
     try:
         behind, _ = tools.pick_face_placement(x, y)
         assert behind is not None and behind is not top
-        assert behind is walk(x, y)
+        assert behind == walk(x, y)
     finally:
         tools.tool = real
 

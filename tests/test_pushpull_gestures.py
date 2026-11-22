@@ -86,7 +86,7 @@ def _engage(vp, face):
     cx, cy = vp._world_to_pixel(QVector3D(4, 2.5, 0))
     vp._last_mouse_pos = QPointF(cx, cy)
     vp._process_hover(QPointF(cx, cy), Qt.NoModifier)
-    assert tool.hovered_face is face
+    assert tool.hovered_face == face
     vp.mousePressEvent(_press(cx, cy))
     assert tool.dragging is True
     return tool, cx, cy

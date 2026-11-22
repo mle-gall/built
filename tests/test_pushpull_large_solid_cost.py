@@ -64,9 +64,11 @@ def test_an_orientation_pass_triangulates_each_face_once(monkeypatch):
     # cut again at all) is forgotten, so this pass starts from nothing.
     orient._TRI_MEMO.pop(scene.mesh, None)
     calls = []
-    real = Face.triangulate
+    # The faces' own class: a store-backed face answers from the store.
+    cls = type(scene.mesh.faces[0])
+    real = cls.triangulate
     monkeypatch.setattr(
-        Face, "triangulate",
+        cls, "triangulate",
         lambda self, *a, **k: calls.append(self) or real(self, *a, **k))
     assert orient.orient_outward(scene.mesh) == []      # already outward
     per_face = {}

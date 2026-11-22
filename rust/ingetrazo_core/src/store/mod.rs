@@ -37,6 +37,7 @@ pub mod offset;
 pub mod pieces;
 pub mod py;
 pub mod read;
+mod restore_tail;
 mod revolution;
 pub mod stitch;
 pub mod sweep;
@@ -247,6 +248,9 @@ impl Store {
             for k in Kind::ALL {
                 self.hwm[k as usize].fold(&self.state.slots[k as usize], &state.slots[k as usize]);
             }
+            // Elements made after the snapshot stay tombstones a redo can
+            // relink (restore_tail.rs).
+            self.carry_tombstones(&mut state);
         }
         if !state.displaced.is_empty() {
             state.displaced = Arc::new(FxHashMap::default());

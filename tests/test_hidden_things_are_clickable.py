@@ -75,13 +75,13 @@ def test_a_hidden_face_shown_as_a_ghost_takes_the_click():
     f = sc.mesh.add_face([V(0, 0, 0), V(2, 0, 0), V(2, 2, 0), V(0, 2, 0)])
     sc.version += 1
     px = vp._world_to_pixel(V(1, 1, 0))
-    assert vp.pick_face(*px) is f
+    assert vp.pick_face(*px) == f
     f.attrs = dict(getattr(f, "attrs", None) or {}, hidden=True)
     sc.version += 1
     assert vp.pick_face(*px) is None
     sc.show_hidden_geometry = True
     sc.version += 1
-    assert vp.pick_face(*px) is f
+    assert vp.pick_face(*px) == f
 
 
 def test_a_hidden_edge_is_clickable_only_while_shown():
@@ -90,13 +90,13 @@ def test_a_hidden_edge_is_clickable_only_while_shown():
     e = sc.mesh.add_edge(V(0, 0, 0), V(4, 0, 0))
     sc.version += 1
     px = vp._world_to_pixel(V(2, 0, 0))
-    assert vp.pick_edge(*px) is e
+    assert vp.pick_edge(*px) == e
     e.hidden = True
     sc.version += 1
     assert vp.pick_edge(*px) is None                  # as window selection
     sc.show_hidden_geometry = True
     sc.version += 1
-    assert vp.pick_edge(*px) is e
+    assert vp.pick_edge(*px) == e
 
 
 # ---- @pacaeiro, issue #71: «Very difficult to select cylinder faces»
@@ -119,21 +119,21 @@ def test_a_click_never_lands_on_a_seam_it_cannot_see():
     vp = _vp()
     seam, _below = _box_with_soft_diagonal(vp)
     px = vp._world_to_pixel(V(1, 1, 1))
-    assert vp.pick_edge(*px) is seam                  # references still see it
+    assert vp.pick_edge(*px) == seam                  # references still see it
     assert vp.pick_visible_edge(*px) is None          # a click does not
     vp.scene.show_hidden_geometry = True
     vp.scene.version += 1
-    assert vp.pick_visible_edge(*px) is seam          # shown: clickable
+    assert vp.pick_visible_edge(*px) == seam          # shown: clickable
 
 
 def test_a_click_never_lands_on_an_edge_behind_the_model():
     vp = _vp()
     _seam, below = _box_with_soft_diagonal(vp)
     px = vp._world_to_pixel(V(1.6, 1, 0))             # seen through the lid
-    assert vp.pick_edge(*px) is below                 # nearest in 2D
+    assert vp.pick_edge(*px) == below                 # nearest in 2D
     assert vp.pick_visible_edge(*px) is None          # but under the lid
     px = vp._world_to_pixel(V(-0.5, 1, 0))            # beside the box
-    assert vp.pick_visible_edge(*px) is below
+    assert vp.pick_visible_edge(*px) == below
 
 
 def test_select_takes_the_face_of_a_smooth_side():

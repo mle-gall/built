@@ -1270,7 +1270,7 @@ def test_tiny_push_flashes_hint_once():
     tool.on_click(_ctx(vp))                 # the tiny "commit"
     assert vp.last_status == _TINY_PUSH_HINT
     assert tool.dragging is True            # the drag stays alive
-    assert tool.base_face is top
+    assert tool.base_face == top
     assert abs(tool.extrusion - _MIN_EXTRUDE * 0.5) < 1e-12
 
 
@@ -1661,7 +1661,7 @@ def test_release_without_motion_keeps_dragging():
     tool.on_release(vp)
 
     assert tool.dragging is True                  # nothing happened
-    assert tool.base_face is top
+    assert tool.base_face == top
     assert len(vp.history.undo_stack) == 0
 
     tool.on_hover(_px(vp, 150.0, 100.0))          # drag further, then...
@@ -1913,7 +1913,7 @@ def test_inference_guide_lines_with_face_inference():
 
 # ---- Preselection: Push/Pull arms on the preselected face -----------------------
 #
-# The SketchUp preselection workflow: Push/Pull activated while EXACTLY one
+# The .skp preselection workflow: Push/Pull activated while EXACTLY one
 # Face is selected (and it lives in the loose mesh) arms on it — the face is
 # hover-shaded, idle hovers do NOT steal the arm (no picking under the
 # cursor), and the FIRST CLICK ANYWHERE starts the drag on the armed face,
@@ -1986,7 +1986,7 @@ def test_first_click_anywhere_starts_the_arm_drag():
     # The arm is spent: the next idle hover picks normally again.
     vp2 = _StubViewport(scene, pick=_front(scene))
     tool.on_hover(_ctx(vp2))
-    assert tool.hovered_face is _front(scene)
+    assert tool.hovered_face == _front(scene)
 
 
 def test_commit_from_armed_start_is_a_normal_push():
@@ -2103,7 +2103,7 @@ def test_activate_with_no_selection_unchanged():
     assert tool.hovered_face is top
     tool.on_click(_ctx(vp))
     assert tool.dragging is True
-    assert tool.base_face is top
+    assert tool.base_face == top
 
 
 def test_hovering_the_origin_pushes_level_with_it():  # #407

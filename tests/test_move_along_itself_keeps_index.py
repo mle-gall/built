@@ -72,5 +72,5 @@ def test_a_square_turned_a_quarter_keeps_every_corner():
     h = History(sc)
     h.execute(RotateVerticesCommand(pts, V(0.5, 0.5, 0), V(0, 0, 1), 90.0))
     assert h.last_error is None
-    assert len({id(sc.mesh.vertex_at(p)) for p in pts}) == 4
+    assert len({sc.mesh.vertex_at(p).key for p in pts}) == 4
     assert all(sc.mesh.vertex_at(p) is not None for p in pts)

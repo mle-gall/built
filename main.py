@@ -23,6 +23,10 @@ if __name__ == '__main__' and '--probe-metal' in sys.argv:
 from core import malloc_arenas
 malloc_arenas.limit()
 
+# Cyclic garbage (Qt objects among it) is freed on the main thread only.
+from core import worker_gc
+worker_gc.install()
+
 # Black box: a native crash (GL driver, Qt) kills the process without a
 # Python traceback — faulthandler leaves the Python stacks of every thread
 # in this file so the next "it just closed" has an autopsy. It lives in the

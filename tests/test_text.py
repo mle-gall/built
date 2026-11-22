@@ -25,7 +25,7 @@ def _closed(mesh) -> bool:
         for lp in (f.loop, *f.hole_loops):
             n = len(lp)
             for i in range(n):
-                k = frozenset((id(lp[i]), id(lp[(i + 1) % n])))
+                k = frozenset((lp[i].key, lp[(i + 1) % n].key))
                 counts[k] = counts.get(k, 0) + 1
     return bool(counts) and all(c == 2 for c in counts.values())
 

@@ -32,8 +32,8 @@ def _incoherent(faces) -> int:
             n = len(lp)
             for i in range(n):
                 a, b = lp[i], lp[(i + 1) % n]
-                uses.setdefault(frozenset((id(a), id(b))), []).append(
-                    (id(a), id(b)))
+                uses.setdefault(frozenset((a.key, b.key)), []).append(
+                    (a.key, b.key))
     return sum(1 for u in uses.values() if len(u) == 2 and u[0] == u[1])
 
 

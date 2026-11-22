@@ -39,7 +39,7 @@ def _raise_first_child(scene, container):
     scene.begin_group_edit(container)
     child = container.children[0]
     scene.begin_group_edit(child)
-    for v in {id(v): v for f in child.mesh.faces for v in f.loop}.values():
+    for v in {v.key: v for f in child.mesh.faces for v in f.loop}.values():
         v.position = v.position + V(0, 0, 0.5)
     scene.end_group_edit()
     scene.end_group_edit()
@@ -88,7 +88,7 @@ def test_a_group_exploded_out_of_a_copy_is_its_own_when_opened():
         assert freed in scene.groups
         vp.begin_group_edit(freed)
         assert freed.mesh is not comp.children[0].mesh   # made unique
-        for v in {id(v): v for f in freed.mesh.faces for v in f.loop}.values():
+        for v in {v.key: v for f in freed.mesh.faces for v in f.loop}.values():
             v.position = v.position + V(0, 0, 0.5)
         vp.scene.version += 1
         while vp.scene.edit_group is not None:
@@ -132,7 +132,7 @@ def test_through_the_viewport_the_edit_reaches_the_other_copy_and_undoes():
         child = dup.children[0]
         vp.begin_group_edit(child)
         assert child.mesh is not comp.children[0].mesh   # the world copy …
-        for v in {id(v): v for f in child.mesh.faces for v in f.loop}.values():
+        for v in {v.key: v for f in child.mesh.faces for v in f.loop}.values():
             v.position = v.position + V(0, 0, 0.5)
         scene.version += 1
         while scene.edit_group is not None:

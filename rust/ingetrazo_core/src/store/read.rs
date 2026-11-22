@@ -158,7 +158,7 @@ impl State {
             && cols_eq_live(&self.fattr, &o.fattr, |s| live(2, s))
             && cols_eq_live(&self.fflags, &o.fflags, |s| live(2, s))
             && self.registry.same_as(&o.registry)
-            && self.layers == o.layers;
+            && layers_agree(&self.layers, &o.layers);
         if !ok {
             return false;
         }
@@ -288,4 +288,12 @@ fn disk(st: &State, v: u32) -> Vec<u32> {
         e = if ends[0] == v { nx[0] } else { nx[1] };
     }
     out
+}
+
+/// Interned tag keys of two states of one lineage: one list a prefix of
+/// the other (interning only appends; a restore may append a tombstone's
+/// tag, restore_tail.rs). Live edges compared their indices already.
+fn layers_agree(a: &[String], b: &[String]) -> bool {
+    let n = a.len().min(b.len());
+    a[..n] == b[..n]
 }

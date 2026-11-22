@@ -211,7 +211,7 @@ def _flat_ring_with_fence():
 
 def _slit_edges(mesh):
     return [e for e in mesh.edges
-            if len(e.faces) == 2 and e.faces[0] is e.faces[1]]
+            if len(e.faces) == 2 and e.faces[0] == e.faces[1]]
 
 
 def test_deleting_a_slit_edge_keeps_the_face():

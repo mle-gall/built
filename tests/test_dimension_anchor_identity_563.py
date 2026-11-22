@@ -170,14 +170,14 @@ def test_the_mesh_registers_a_vertex_by_identity():
     other = m.vertex_at(V(5, 0))
     assert m.registers(a) and m.registers(other)
     m.place_vertex(a, V(5, 0))                 # a waits behind ``other``
-    assert m.vertex_at(V(5, 0)) is other
+    assert m.vertex_at(V(5, 0)) == other
     assert m.registers(a) and m.registers(other)
     m.place_vertex(a, V(2, 0))
-    assert m.registers(a) and m.vertex_at(V(2, 0)) is a
+    assert m.registers(a) and m.vertex_at(V(2, 0)) == a
     m.place_vertex(a, V(5, 0))
     m.weld_coincident()
     survivor = m.vertex_at(V(5, 0))
-    dead = a if survivor is other else other
+    dead = a if survivor == other else other
     assert not m.registers(dead) or not dead.edges
     assert m.registers(survivor)
 

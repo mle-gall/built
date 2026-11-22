@@ -328,9 +328,13 @@ def test_a_turned_squashed_box_takes_the_flat_cut():
     assert is_closed(turned) and signed_volume(turned) > 0
 
 
-def test_caps_that_do_not_meet_get_a_centre_face():
+def test_caps_that_do_not_meet_get_a_centre_face(explicit_store_meshes):
     """When the bottom points part (the sections' heights differ), a
-    centre face joins them and every new side is shared by two faces."""
+    centre face joins them and every new side is shared by two faces.
+
+    The Python planner's own corner patch is spied on and fed, so the box
+    is an object mesh: a store mesh plans its corners natively
+    (test_store_fillet compares the two)."""
     from core import fillet as F
     from core.fillet import _corner_cut, _key
     # Catch a box corner's inputs from a plan, then deepen one section.
