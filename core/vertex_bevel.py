@@ -81,6 +81,16 @@ def plan_vertex_bevel(mesh, vertices, size: float, segments: int = 8,
     if not 0.0 < profile < 1.0:
         return tr("The profile must be between 0 and 1.")
     segments = max(int(segments), 1)
+    store = getattr(mesh, "_store", None)
+    if store is not None and hasattr(store, "plan_vertex_bevel"):
+        from core.store_mesh import _hypot
+        from core.fillet import _store_round_plan
+        hypot = _hypot()
+        if hypot:
+            return _store_round_plan(
+                mesh, FilletPlan(size, segments, profile, "offset", "round"),
+                store.plan_vertex_bevel, [v.key for v in verts], size,
+                segments, profile, hypot, vertices=True)
     r = _exponent(profile)
     chosen = {v.key for v in verts}
     plan = FilletPlan(size, segments, profile, "offset", "round")

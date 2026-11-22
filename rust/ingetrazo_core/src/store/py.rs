@@ -206,6 +206,113 @@ fn slice<'a, T: numpy::Element>(a: &'a PyReadonlyArray1<'_, T>, name: &str) -> P
     a.as_slice().map_err(|_| PyValueError::new_err(format!("{name}: a contiguous 1-D array")))
 }
 
+/// Read-only preview. Slots are usable only against the originating store
+/// revision. The facade resolves material dictionaries from source face keys.
+#[pyclass(module = "ingetrazo_core", name = "StoreFilletPlan", frozen)]
+struct PyRoundPlan {
+    inner: super::fillet::RoundPlan,
+    lineage: u64,
+    revision: u64,
+    hypot: crate::facegeom::Hypot,
+    faces: Vec<u128>,
+    edges: Vec<u128>,
+    flags: Vec<(u128, [f64; 3], [f64; 3])>,
+    materials: Vec<u128>,
+}
+type Points = Vec<[f64; 3]>;
+fn points(ps: &[crate::facegeom::V3]) -> Points {
+    ps.iter().copied().map(super::fillet::xyz).collect()
+}
+
+#[pymethods]
+impl PyRoundPlan {
+    #[getter]
+    fn strips(&self) -> Vec<Points> {
+        self.inner.strips.iter().map(|r| points(r)).collect()
+    }
+    #[getter]
+    fn patches(&self) -> Vec<Points> {
+        self.inner.patches.iter().map(|r| points(r)).collect()
+    }
+    #[getter]
+    fn curves(&self) -> Vec<Points> {
+        self.inner.curves.iter().map(|r| points(r)).collect()
+    }
+    #[getter]
+    fn rebuilt(&self) -> Vec<Vec<Points>> {
+        self.inner
+            .rebuilt
+            .iter()
+            .map(|(_, rs)| rs.iter().map(|r| points(r)).collect())
+            .collect()
+    }
+    #[getter]
+    fn soft(&self) -> Vec<[[f64; 3]; 2]> {
+        self.inner
+            .soft
+            .iter()
+            .map(|&(a, b)| [a, b].map(super::fillet::xyz))
+            .collect()
+    }
+    #[getter]
+    fn faces(&self) -> Vec<u128> {
+        self.faces.clone()
+    }
+    #[getter]
+    fn edges(&self) -> Vec<u128> {
+        self.edges.clone()
+    }
+    #[getter]
+    fn flags(&self) -> Vec<(u128, [f64; 3], [f64; 3])> {
+        self.flags.clone()
+    }
+    #[getter]
+    fn materials(&self) -> Vec<u128> {
+        self.materials.clone()
+    }
+}
+fn round_preview(
+    s: &Store,
+    result: super::fillet::Result<super::fillet::RoundPlan>,
+    hypot: crate::facegeom::Hypot,
+) -> PyResult<PyRoundPlan> {
+    let mut inner = result
+        .map_err(|(message, p)| PyValueError::new_err((message, p.map(super::fillet::xyz))))?;
+    inner.filter_nested_holes(hypot);
+    let faces = inner
+        .rebuilt
+        .iter()
+        .map(|(f, _)| s.key(Kind::Face, *f))
+        .collect();
+    let materials = inner
+        .materials
+        .iter()
+        .map(|&f| s.key(Kind::Face, f))
+        .collect();
+    let edges = inner.edges.iter().map(|&e| s.key(Kind::Edge, e)).collect();
+    let flags = inner
+        .flags
+        .iter()
+        .map(|&(e, a, b)| {
+            (
+                s.key(Kind::Edge, e),
+                super::fillet::xyz(a),
+                super::fillet::xyz(b),
+            )
+        })
+        .collect();
+    Ok(PyRoundPlan {
+        inner,
+        faces,
+        materials,
+        edges,
+        flags,
+        lineage: s.lineage,
+        revision: s.revision,
+        hypot,
+    })
+}
+
 /// A change record (`edit::Change`) as Python sees it: built in one
 /// allocation; the key lists become Python lists only when read.
 #[pyclass(module = "ingetrazo_core", name = "StoreChange", frozen)]
@@ -856,6 +963,91 @@ impl PyMeshStore {
         Ok(self.op(|s, ch| { s.relink_vertices(&vs, ch); Ok(()) })?.1)
     }
 
+    fn plan_vertex_bevel(
+        &self,
+        keys: Vec<u128>,
+        size: f64,
+        segments: usize,
+        profile: f64,
+        hypot: &str,
+    ) -> PyResult<PyRoundPlan> {
+        let s = &self.inner;
+        let vs = keys
+            .iter()
+            .map(|&k| live_of(s, Kind::Vertex, k))
+            .collect::<PyResult<_>>()?;
+        let h = crate::hypot_of(hypot)?;
+        round_preview(
+            s,
+            super::bevel::plan(s, vs, size, segments.max(1), profile, h),
+            h,
+        )
+    }
+
+    fn plan_fillet(
+        &self,
+        keys: Vec<u128>,
+        size: f64,
+        segments: usize,
+        profile: f64,
+        measure: &str,
+        corners: &str,
+        shape: &str,
+        controls: Vec<(f64, f64, bool)>,
+        hypot: &str,
+    ) -> PyResult<PyRoundPlan> {
+        let s = &self.inner;
+        let es = keys
+            .iter()
+            .map(|&k| live_of(s, Kind::Edge, k))
+            .collect::<PyResult<_>>()?;
+        let h = crate::hypot_of(hypot)?;
+        let n = segments.max(1);
+        let result = super::fillet::sample_profile(shape, &controls, n).and_then(|outline| {
+            let mirror = matches!(shape, "custom" | "cornice" | "crown");
+            super::fillet::plan(
+                s,
+                es,
+                size,
+                n,
+                profile,
+                measure,
+                corners == "cut",
+                &outline,
+                mirror,
+                shape == "steps",
+                h,
+            )
+        });
+        round_preview(s, result, h)
+    }
+
+    #[pyo3(signature = (plan, curve_ids, material_index=None))]
+    fn apply_fillet(
+        &mut self,
+        plan: &PyRoundPlan,
+        curve_ids: Vec<i64>,
+        material_index: Option<u32>,
+    ) -> PyResult<PyChange> {
+        let material = match material_index {
+            Some(i) => i
+                .checked_add(1)
+                .ok_or_else(|| PyValueError::new_err("material index overflow"))?,
+            None => 0,
+        };
+        if plan.lineage != self.inner.lineage || plan.revision != self.inner.revision {
+            return Err(PyValueError::new_err("stale or foreign fillet plan"));
+        }
+        if curve_ids.len() != plan.inner.curves.len() || curve_ids.iter().any(|&id| id < 0) {
+            return Err(PyValueError::new_err(
+                "one non-negative curve ID per arc required",
+            ));
+        }
+        Ok(self
+            .op_all(|s, ch| plan.inner.apply(s, &curve_ids, material, plan.hypot, ch))?
+            .1)
+    }
+
     // ---- port step 3: splits and the stitch (store/stitch.rs) -----------
 
     /// `Mesh.split_edge(edge, position)`: `((e0, e1, bumps), change)`.
@@ -1219,6 +1411,7 @@ impl PyStoreSnapshot {
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyMeshStore>()?;
     m.add_class::<PyStoreSnapshot>()?;
+    m.add_class::<PyRoundPlan>()?;
     m.add_class::<PyChange>()?;
     m.add("StoreFallback", m.py().get_type::<StoreFallback>())?;
     Ok(())

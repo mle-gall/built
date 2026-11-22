@@ -452,7 +452,8 @@ class FilletTool(Tool):
         key = (tuple(e.key for e in edges), round(FilletTool.radius, 6),
                FilletTool.segments, FilletTool.profile, FilletTool.measure,
                FilletTool.corners, FilletTool.affect, FilletTool.shape,
-               getattr(mesh, "_mut_serial", 0))
+               getattr(mesh, "_mut_serial", 0),
+               getattr(getattr(mesh, "_store", None), "revision", None))
         if key == self._plan_key:
             return
         self._plan_key = key

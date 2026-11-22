@@ -19,6 +19,8 @@
 //! kernel onto this, op by op, with the Python suite as the oracle.
 
 pub mod access;
+pub mod bevel;
+pub mod fillet;
 pub mod build;
 mod changes;
 pub mod cow;
