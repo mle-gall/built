@@ -254,7 +254,12 @@ class FollowMeTool(Tool):
         viewport.set_hover(None)
         self.hovered_face = None
         history = viewport.history
-        history.execute(SnapshotMutation(mutate))
+        if hasattr(viewport.scene.mesh, "_store"):
+            from core.sweep import build_sweep_face
+            command = build_sweep_face(viewport.scene.mesh, face.key, path, closed, failed)
+        else:
+            command = SnapshotMutation(mutate)
+        history.execute(command)
         if history.last_rejected or history.last_error:
             # Declined or failed: History put the model back and recorded
             # nothing. Never undo here — that would take the user's own

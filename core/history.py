@@ -4067,16 +4067,7 @@ def _coplanar_component(mesh, f0, seedkeys: set,
     return comp
 
 
-class _SnapshotChanges:
-    @property
-    def change(self):
-        """Net store edit, including post-processing, computed when a reader requests it."""
-        if hasattr(self.after, "changes_since"):
-            return self.after.changes_since(self.before)
-        return None
-
-
-class SnapshotMutation(_SnapshotChanges, Command):
+class SnapshotMutation(Command):
     """Wrap an arbitrary mesh mutation with snapshot undo. The push/pull live
     preview applies the *same* mutation each drag frame (then reverts via its own
     snapshot), so the forming solid renders exactly as it will commit — clean,
@@ -4253,7 +4244,7 @@ class SnapshotImport(Command):
         scene.version += 1
 
 
-class SnapshotCompound(_SnapshotChanges, Command):
+class SnapshotCompound(Command):
     """Run a list of sub-commands under one identity-preserving snapshot, undone
     by restoring it.
 

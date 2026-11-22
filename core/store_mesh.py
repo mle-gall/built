@@ -1744,6 +1744,8 @@ class StoreMesh(Mesh):
         docstring); a no-op once done."""
         if self.__class__ is not StoreMesh:
             return
+        if self.__dict__.get("_resident_edit"):
+            raise _fallback()("face edit requires unsupported mesh topology")
         _materialise(self)
 
 

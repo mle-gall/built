@@ -5152,28 +5152,23 @@ class MainWindow(WorksessionMixin, QMainWindow):
         """Intersect Faces: edges wherever the selection's faces
         cross the others (core/intersect.py), added to the context being
         edited — they split its faces there — in one undo step."""
-        from core.intersect import build_intersection_edit, segments_for
+        from core.intersect import build_intersect_faces
         scene = self.viewport.scene
         if not scene.selection:
             self.viewport.flash_status(tr("Select faces or groups first"))
             return
-        # A crossing shorter than the weld tolerance is a point: its two
-        # ends weld into one vertex, and that degenerate edge refused the
-        # whole step -- a sphere through a cube left nothing while the
-        # status said «178 intersection edges added» (tutorial hunt 2, A12).
-        segs = [(a, b) for a, b in segments_for(scene, mode)
-                if (b - a).length() >= _WELD_LENGTH]
-        if not segs:
+        count, command = build_intersect_faces(scene, mode)
+        if command is None:
             self.viewport.flash_status(tr("No faces cross the selection"))
             return
         history = self.viewport.history
-        history.execute(build_intersection_edit(scene, segs))
+        history.execute(command)
         if history.last_error:
             QMessageBox.warning(self, tr("Intersect Faces failed"),
                                 history.last_error)
             return
         self.viewport.flash_status(
-            tr("{n} intersection edges added", n=len(segs)), 3000)
+            tr("{n} intersection edges added", n=count), 3000)
 
     @_repeatable("Split into Pieces")
     def _on_split_into_pieces(self) -> None:

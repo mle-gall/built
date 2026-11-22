@@ -429,6 +429,21 @@ def orient_closed_path(pts, face):
     return pts
 
 
+def build_sweep_face(mesh, key, path, closed, rejection_message="degenerate sweep path"):
+    """Plan a store sweep by profile key. The resulting command exposes its net change."""
+    from core.history import CommandRejected
+    from core.store_face_edit import StoreFaceMutation
+    from core.store_mesh import FaceView
+    if not mesh._store.is_live(key):
+        raise KeyError(key)
+
+    def mutate(scene):
+        if not sweep_profile(scene.mesh, FaceView(scene.mesh, key), path, closed):
+            raise CommandRejected(rejection_message)
+
+    return StoreFaceMutation(mutate)
+
+
 def sweep_profile(mesh, face, path, closed) -> bool:
     """Sweep ``face`` (with holes) along ``path``; mutates ``mesh`` in place.
 

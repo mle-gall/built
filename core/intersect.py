@@ -269,7 +269,7 @@ def _placement_rings(group):
                    for ring in [face.vertices, *face.holes]]
 
 
-def segments_for(scene, mode: str) -> list:
+def segments_for(scene, mode: str, selection=None) -> list:
     """The crossing segments Intersect Faces would add, for ``mode``:
 
     * **model** — the selection against everything it touches (the whole
@@ -279,7 +279,8 @@ def segments_for(scene, mode: str) -> list:
       edited (inside a group: its own geometry)."""
     from core.group import Group
     from core.mesh import Face
-    sel = [e for e in scene.selection if isinstance(e, (Face, Group))]
+    entities = scene.selection if selection is None else selection
+    sel = [e for e in entities if isinstance(e, (Face, Group))]
     if not sel:
         return []
     mesh = scene.mesh
@@ -324,8 +325,27 @@ def segments_for(scene, mode: str) -> list:
 def build_intersection_edit(scene, segments):
     """Install crossing segments through the drawing planner under one snapshot."""
     from core.edits import build_add_edges
-    from core.history import SnapshotCompound, SnapshotMutation
-    command = build_add_edges(scene, segments, detect_faces=True)
-    if hasattr(scene.mesh, "_store") and not isinstance(command, SnapshotCompound):
-        return SnapshotMutation(command.do)
-    return command
+    from core.history import SnapshotCompound
+    from core.store_face_edit import resident_edit, StoreFaceMutation, StoreFaceCompound
+    if not hasattr(scene.mesh, "_store"):
+        return build_add_edges(scene, segments, detect_faces=True)
+    with resident_edit(scene.mesh):
+        command = build_add_edges(scene, segments, detect_faces=True)
+    if isinstance(command, SnapshotCompound):
+        return StoreFaceCompound(command.inner, heal=command._heal)
+    return StoreFaceMutation(command.do)
+
+def build_intersect_faces(scene, mode, face_keys=None):
+    """Plan an intersection by face keys, or from the current selection including groups.
+
+    Return (segment count, snapshot command). A sub-weld segment collapses
+    to one vertex and cannot be installed as an edge.
+    """
+    if face_keys is None:
+        pairs = segments_for(scene, mode)
+    else:
+        from core.store_mesh import FaceView
+        faces = [FaceView(scene.mesh, k) for k in face_keys]
+        pairs = segments_for(scene, mode, faces)
+    segments = [(p, q) for p, q in pairs if (q - p).length() >= 1e-4]
+    return len(segments), build_intersection_edit(scene, segments) if segments else None
