@@ -415,6 +415,8 @@ def _options(view):
     elif name == "RectangleTool" and hasattr(tool, "_set_from_center"):
         out.append(("centre", "From centre", _ctrl(), int(bool(tool._from_center)),
                     lambda: tool._set_from_center(host, not tool._from_center)))
+    elif name == "DimensionTool":
+        out.append(("dimstyle", "Dimension style…", "", 0, lambda: _open_form(view, "dimstyle")))
     vp = view.source_viewport
     lock = getattr(vp, "axis_lock", None) if vp is not None else None
     if lock:
@@ -1445,6 +1447,8 @@ def _tree_action(win, view, action) -> None:
                 parts.on_scene_changed()
                 parts._on_copy()
                 vp.flash_status("Cut list copied")
+        elif verb == "insp" and key.startswith("form:"):
+            _open_form(view, key[5:])
         elif verb == "insp" and key == "measure":
             _measure(view, win)
             view._ui_tree_sig = None
@@ -1936,6 +1940,8 @@ def _inspector(view, win) -> None:
         loose = C2(type(e).__name__ for e in sel if not isinstance(e, Group))
         rows += [({"Face": "Faces", "Edge": "Edges"}.get(t, t), str(n)) for t, n in loose.most_common()]
     sections = [("By node" if groups else "Geometry", rows)]
+    if any(type(e).__name__ == "Dimension" for e in sel):
+        sections.append(("Actions", [("form:dimstyle", "Dimension style…")]))
     shape = None if groups else _curve_of(scene, sel)
     if shape is not None:
         # «Sides» for a closed shape, as the Circle and Polygon tools count
@@ -2201,12 +2207,7 @@ def _run(win, actions) -> None:
         elif kind == "act" and arg.startswith("form-"):
             view = getattr(getattr(win, "_doc", None), "stand_in", None)
             if view is not None:
-                view._ui_form = arg[5:]
-                view._ui_form_sig = None
-                panel = _form_panel(win, view._ui_form)
-                if panel is not None:
-                    panel.refresh()
-                view.update()
+                _open_form(view, arg[5:])
         elif kind == "form":
             view = getattr(getattr(win, "_doc", None), "stand_in", None)
             if view is not None:
@@ -2249,6 +2250,16 @@ FORMS = {
         ("button", "_on_save", "Save style…"),
         ("button", "_on_delete", "Delete style", None, "_del_btn"),
     ]),
+    "dimstyle": ("Dimension style", "dimstyle_panel", [
+        ("choice", "_units", "Unit"),
+        ("slider", "_decimals", "Decimals", lambda p: str(p._decimals.value())),
+        ("check", "_show_unit", "Show the unit"),
+        ("slider", "_font", "Text size", lambda p: f"{p._font.value()} pt"),
+        ("color", "_color_btn", "Colour", None, lambda p: [c / 255 for c in p._style().get("color", [45, 55, 75])]),
+        ("choice", "_ends", "Ends"),
+        ("slider", "_base_step", "Baseline step", lambda p: f"{p._base_step.value():g} mm", None, 2),
+        ("text", None, "Applies to every dimension in the document."),
+    ]),
     "shadows": ("Shadows and sun", "shadows_panel", [
         ("check", "_enable", "Show shadows"),
         ("slider", "_doy", "Date", lambda p: p._date.date().toString("d MMMM")),
@@ -2263,6 +2274,16 @@ FORMS = {
         ("button", "_on_add_location", "Add location…"),
     ]),
 }
+
+
+def _open_form(view, name) -> None:
+    win = _window(view)
+    view._ui_form = name
+    view._ui_form_sig = None
+    panel = _form_panel(win, name) if win is not None else None
+    if panel is not None and hasattr(panel, "refresh"):
+        panel.refresh()
+    view.update()
 
 
 def _form_panel(win, name):
@@ -2286,7 +2307,7 @@ def _form(view, win) -> None:
     def text_of(t):
         if callable(t):
             return str(t(panel))
-        if isinstance(t, str) and hasattr(panel, t):
+        if isinstance(t, str) and t.startswith("_") and hasattr(panel, t):
             return getattr(panel, t).text()
         return str(t or "")
 
@@ -2315,14 +2336,15 @@ def _form(view, win) -> None:
         if kind == "check":
             fields.append((fid, kind, label, "", float(w.isChecked()), 0.0, 1.0, []))
         elif kind == "slider":
+            k = entry[5] if len(entry) > 5 else 1
             fields.append((fid, kind, label, text_of(extra) if extra else str(w.value()),
-                           float(w.value()), float(w.minimum()), float(w.maximum()), []))
+                           float(w.value()) * k, float(w.minimum()) * k, float(w.maximum()) * k, []))
         elif kind == "choice":
             opts = [w.itemText(j) for j in range(w.count())]
             fields.append((fid, kind, label, w.currentText(), float(w.currentIndex()), 0.0, float(len(opts)), opts))
         elif kind == "color":
             try:
-                c = panel._shown_color(entry[4])
+                c = entry[4](panel) if callable(entry[4]) else panel._shown_color(entry[4])
             except Exception:
                 c = None
             fields.append((fid, kind, label, _hex(c) if c else "", 0.0, 0.0, 0.0, []))
@@ -2351,7 +2373,9 @@ def _form_apply(win, view, arg) -> None:
         if kind == "check":
             w.setChecked(value == "1")
         elif kind == "slider":
-            w.setValue(int(float(value)))
+            k = entry[5] if len(entry) > 5 else 1
+            v = float(value) / k
+            w.setValue(v if k != 1 else int(v))
         elif kind == "choice":
             i = int(value)
             w.setCurrentIndex(i)
