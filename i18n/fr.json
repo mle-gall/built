@@ -3839,5 +3839,6 @@
  "Select faces, edges or groups to soften": "Sélectionnez des faces, arêtes ou groupes à adoucir",
  "No edges need changing": "Aucune arête à modifier",
  "Smoothed {n} edge(s)": "{n} arête(s) lissée(s)",
- "Unsoftened {n} edge(s)": "{n} arête(s) rendue(s) vive(s)"
+ "Unsoftened {n} edge(s)": "{n} arête(s) rendue(s) vive(s)",
+ "“{name}” is no longer linked: its geometry is now part of this model": "« {name} » n'est plus lié : sa géométrie fait maintenant partie de ce modèle"
 }

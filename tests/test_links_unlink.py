@@ -355,6 +355,110 @@ def test_the_last_placement_leaves_the_registry_and_keeps_its_tags(tmp_path):
     assert _tag_state(host) == tags
 
 
+# ---- 3. the window ---------------------------------------------------------
+
+@pytest.fixture
+def win(monkeypatch, tmp_path):
+    from PySide6.QtCore import QSettings
+    QSettings.setPath(QSettings.IniFormat, QSettings.UserScope, str(tmp_path / "qs"))
+    monkeypatch.setenv("INGETRAZO_AUTOSAVE_DIR", str(tmp_path / "autosave"))
+    from views.main_window import MainWindow
+    w = MainWindow()
+    monkeypatch.setattr(QMessageBox, "exec", lambda box: 0)
+    yield w
+    for d in w.documents():
+        d.saved_content = d.viewport.scene.content_version
+    w._saved_version = w.viewport.scene.version
+    w.close()
+
+
+def _place(win, tmp_path):
+    src = _source(tmp_path / "Site.igz")
+    scene = win.viewport.scene
+    link = links.make_link(scene, src, host_path=tmp_path / "host.igz")
+    scene.groups.append(link)
+    other = copy_group(link, V(20, 0, 0))
+    scene.groups.append(other)
+    scene.version += 1
+    win._link_watcher().refresh()
+    return scene, link, other, src
+
+
+def test_make_unique_on_a_link_unlinks_it(win, tmp_path, monkeypatch):
+    scene, link, other, src = _place(win, tmp_path)
+    vp = win.viewport
+    shown = []
+    monkeypatch.setattr(vp, "flash_status", lambda text, *a: shown.append(text))
+    look = _look(link)
+    scene.select([link])
+    win._on_make_unique()
+    assert isinstance(vp.history.undo_stack[-1], UnlinkCommand)
+    assert shown and "Site.igz" in shown[-1] and "no longer linked" in shown[-1]
+    assert_own(link, [other])
+    assert _look(link) == look
+    assert_live(other, src)
+    # Going into it now edits it (no offer to open the source).
+    vp.begin_group_edit(link)
+    assert scene.edit_group is link
+    vp.end_group_edit()
+    win._on_undo()
+    assert_live(link, src)
+    win._on_redo()
+    assert_own(link, [other])
+
+
+def test_the_last_placement_is_no_longer_watched(win, tmp_path):
+    scene, link, other, src = _place(win, tmp_path)
+    scene.groups.remove(other)
+    scene.version += 1
+    watcher = win._link_watcher()
+    watcher.refresh()
+    assert [os.path.normcase(p) for p in watcher._fs.files()] == [links._norm(src)]
+    scene.select([link])
+    win._on_make_unique()
+    assert watcher._fs.files() == []
+    win._on_undo()
+    assert [os.path.normcase(p) for p in watcher._fs.files()] == [links._norm(src)]
+    win._on_redo()
+    assert watcher._fs.files() == []
+
+
+def test_make_unique_of_what_holds_a_link_keeps_the_link(win, tmp_path):
+    scene, link, other, src = _place(win, tmp_path)
+    holder = Group(Mesh(), name="holder")
+    holder.adopt([link])
+    scene.groups = [holder, other]
+    scene.version += 1
+    scene.select([holder])
+    win._on_make_unique()
+    assert isinstance(win.viewport.history.undo_stack[-1], MakeUniqueCommand)
+    (inner,) = holder.children
+    assert_live(inner, src)
+
+
+def test_make_unique_from_the_browser_unlinks_too(win, tmp_path, monkeypatch):
+    scene, link, other, src = _place(win, tmp_path)
+    plain = Group(_square(x=40), name="Silla")
+    plain.xform = QMatrix4x4()
+    scene.groups.append(plain)
+    scene.version += 1
+    vp = win.viewport
+    shown = []
+    monkeypatch.setattr(vp, "flash_status", lambda text, *a: shown.append(text))
+    panel = win.project_browser.outliner
+    look, proto = _look(link), plain.mesh
+    steps = len(vp.history.undo_stack)
+    assert panel.make_unique_rows([link, plain])
+    assert len(vp.history.undo_stack) == steps + 1          # one step
+    assert_own(link, [other])
+    assert _look(link) == look and plain.mesh is not proto
+    assert shown and "no longer linked" in shown[-1]
+    win._on_undo()
+    assert_live(link, src) and plain.mesh is proto
+    win._on_redo()
+    assert_own(link, [other])
+
+
 # ---- 5. save and reopen ------------------------------------------------------
 
 @pytest.mark.parametrize("packed", [False, True])
