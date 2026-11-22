@@ -848,16 +848,27 @@ impl PyMeshStore {
             })?
             .1)
     }
-    fn painted_candidates(&self, own: Vec<u128>) -> Vec<u128> {
-        self.inner.painted_candidates(&own.into_iter().collect())
+    fn drawing_paint_owners(
+        &self,
+        before: &PyStoreSnapshot,
+        own: std::collections::HashMap<u128, bool>,
+        painted_rows: Vec<u32>,
+        hypot: &str,
+    ) -> PyResult<Vec<(u128, u128, i64)>> {
+        let old = reader(&before.inner);
+        Ok(self
+            .inner
+            .paint_owners(&old, &own, &painted_rows.into_iter().collect(), crate::hypot_of(hypot)?))
     }
+    #[pyo3(signature = (o,n,hypot,all=false))]
     fn drawing_plane_edges(
         &self,
         o: [f64; 3],
         n: [f64; 3],
         hypot: &str,
+        all: bool,
     ) -> PyResult<(Vec<[[f64; 3]; 2]>, Vec<u128>)> {
-        Ok(self.inner.drawing_plane_edges(o, n, crate::hypot_of(hypot)?))
+        Ok(self.inner.drawing_plane_edges(o, n, crate::hypot_of(hypot)?, all))
     }
     fn drawing_coverage(
         &self,
@@ -887,8 +898,17 @@ impl PyMeshStore {
             .map(|f| self.inner.key(Kind::Face, f))
             .collect()
     }
-    fn heal_candidates(&self, partial: bool, pad: f64, hypot: &str) -> PyResult<Vec<u128>> {
-        Ok(self.inner.heal_candidates(partial, pad, crate::hypot_of(hypot)?))
+    fn heal_plan(
+        &self,
+        coverage: f64,
+        partial: bool,
+        pad: f64,
+        hypot: &str,
+        compensated: bool,
+    ) -> PyResult<(Vec<u128>, Vec<(u128, Vec<u128>)>)> {
+        Ok(self
+            .inner
+            .heal_plan(coverage, partial, pad, crate::hypot_of(hypot)?, compensated))
     }
 
     fn containing_face(

@@ -17,7 +17,7 @@ fn signature(r: &[P]) -> Signature {
     s.dedup();
     s
 }
-fn tris(r: &[Ring], n: V3, h: Hypot) -> Vec<[V3; 3]> {
+pub(super) fn tris(r: &[Ring], n: V3, h: Hypot) -> Vec<[V3; 3]> {
     if r.first().is_none_or(|x| x.len() < 3) {
         return vec![];
     }
@@ -77,16 +77,56 @@ impl Store {
         self.state.displaced = Default::default();
         self.state.extra = Default::default();
     }
-    pub fn painted_candidates(&self, own: &HashSet<u128>) -> Vec<u128> {
-        self.live_slots(Kind::Face)
-            .into_iter()
-            .filter_map(|f| {
-                let k = self.key(Kind::Face, f);
-                (*self.state.fattr.get(f as usize) != 0 || own.contains(&k)).then_some(k)
+    fn position_rings(&self, f: u32) -> Vec<Ring> {
+        self.face_rings(f)
+            .iter()
+            .map(|r| {
+                r.iter()
+                    .map(|&v| *self.state.vpos.get(v as usize))
+                    .collect()
             })
             .collect()
     }
-    pub fn drawing_plane_edges(&self, o: P, n: P, h: Hypot) -> (Vec<[P; 2]>, Vec<u128>) {
+    /// A rebuilt curved drawing inherits paint from the first old painted
+    /// face covering the centroid of its first triangle (mesh order).
+    pub fn paint_owners(
+        &self,
+        old: &Store,
+        own: &HashMap<u128, bool>,
+        rows: &HashSet<u32>,
+        h: Hypot,
+    ) -> Vec<(u128, u128, i64)> {
+        let mut painted = vec![];
+        for f in old.live_slots(Kind::Face) {
+            let k = old.key(Kind::Face, f);
+            let row = *old.state.fattr.get(f as usize);
+            if own.get(&k).copied().unwrap_or_else(|| rows.contains(&row)) {
+                painted.push((
+                    k,
+                    row,
+                    tris(&old.position_rings(f), old.face_normal(f, h), h),
+                ));
+            }
+        }
+        if painted.is_empty() {
+            return vec![];
+        }
+        let mut result = vec![];
+        for f in self.live_slots(Kind::Face) {
+            let triangles = tris(&self.position_rings(f), self.face_normal(f, h), h);
+            if let Some(&[a, b, c]) = triangles.first() {
+                let probe = a.add(b).add(c).div(3.);
+                if let Some((old_key, row, _)) = painted
+                    .iter()
+                    .find(|(_, _, ts)| ts.iter().any(|&t| covers(t, probe, h)))
+                {
+                    result.push((self.key(Kind::Face, f), *old_key, *row as i64 - 1));
+                }
+            }
+        }
+        result
+    }
+    pub fn drawing_plane_edges(&self, o: P, n: P, h: Hypot, all: bool) -> (Vec<[P; 2]>, Vec<u128>) {
         let mut segs = vec![];
         let mut flagged = vec![];
         for e in self.live_slots(Kind::Edge) {
@@ -95,9 +135,10 @@ impl Store {
                 .ends
                 .get(e as usize)
                 .map(|v| *self.state.vpos.get(v as usize));
-            if !ends
-                .iter()
-                .all(|&p| (vector(p).sub(vector(o)).dot(vector(n), h) as f64).abs() < 1e-4)
+            if !all
+                && !ends
+                    .iter()
+                    .all(|&p| (vector(p).sub(vector(o)).dot(vector(n), h) as f64).abs() < 1e-4)
             {
                 continue;
             }
@@ -124,15 +165,7 @@ impl Store {
         let mut old = vec![];
         let mut keys = vec![];
         for f in self.live_slots(Kind::Face) {
-            let rings: Vec<Ring> = self
-                .face_rings(f)
-                .iter()
-                .map(|r| {
-                    r.iter()
-                        .map(|&v| *self.state.vpos.get(v as usize))
-                        .collect()
-                })
-                .collect();
+            let rings = self.position_rings(f);
             if !rings
                 .iter()
                 .flatten()
@@ -185,56 +218,5 @@ impl Store {
             }
         }
         (keys, keep)
-    }
-    /// Candidate faces for heal passes 2/3, including all possible partners.
-    /// The exact polygon tests still run in their original order.
-    pub fn heal_candidates(&self, partial: bool, pad: f64, h: Hypot) -> Vec<u128> {
-        let faces = self.live_slots(Kind::Face);
-        let data: Vec<_> = faces
-            .iter()
-            .map(|&f| {
-                let r = self.outer_ring(f);
-                let p: Vec<_> = r
-                    .iter()
-                    .map(|&v| *self.state.vpos.get(v as usize))
-                    .collect();
-                let mut raw = [0.; 3];
-                for (a, b) in p.iter().zip(p.iter().cycle().skip(1)) {
-                    for k in 0..3 {
-                        let (i, j) = ((k + 1) % 3, (k + 2) % 3);
-                        raw[k] += (a[i] - b[i]) * (a[j] + b[j])
-                    }
-                }
-                (
-                    length(vector(raw), h),
-                    bounds(&p),
-                    point(self.ring_normal(&r, h)),
-                )
-            })
-            .collect();
-        let mut use_face = vec![false; faces.len()];
-        for (i, (area, (lo, hi), n)) in data.iter().enumerate() {
-            for (j, (other, (low, high), m)) in data.iter().enumerate() {
-                if other >= area || (n[0] * m[0] + n[1] * m[1] + n[2] * m[2]).abs() < 0.999 - 1e-12
-                {
-                    continue;
-                }
-                if (0..3).all(|k| {
-                    if partial {
-                        low[k] <= hi[k] + pad && high[k] >= lo[k] - pad
-                    } else {
-                        low[k] >= lo[k] - pad && high[k] <= hi[k] + pad
-                    }
-                }) {
-                    use_face[i] = true;
-                    use_face[j] = true;
-                }
-            }
-        }
-        faces
-            .into_iter()
-            .zip(use_face)
-            .filter_map(|(f, t)| t.then(|| self.key(Kind::Face, f)))
-            .collect()
     }
 }

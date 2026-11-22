@@ -224,6 +224,9 @@ impl Outline {
         if (self.normal.dot(n, self.h) as f64).abs() < 0.999 || !self.plane(p) {
             return false;
         }
+        self.solid_at(p)
+    }
+    fn solid_at(&self, p: P) -> bool {
         let q = self.proj(p);
         inside(q, &self.polygon(&self.rings[0]), false)
             && !self
@@ -517,5 +520,145 @@ impl Store {
             })
             .map(|e| self.key(Kind::Edge, e))
             .collect()
+    }
+}
+
+impl Outline {
+    fn hole_contains(&self, other: &Outline, compensated: bool) -> bool {
+        use crate::facegeom::py_sum;
+        let inner = &other.rings[0];
+        if inner.len() < 3 || self.rings.len() < 2 {
+            return false;
+        }
+        let centroid = point(vector(std::array::from_fn(|k| {
+            py_sum(inner.iter().map(|p| p[k]), compensated) / inner.len() as f64
+        })));
+        let mut probe = None;
+        for hole in self.rings.iter().skip(1).filter(|r| r.len() >= 3) {
+            // The reference projects relative to the hole's own first corner.
+            let rel = |p: P| {
+                let d = vector(p).sub(vector(hole[0]));
+                [
+                    d.dot(self.axes.0, self.h) as f64,
+                    d.dot(self.axes.1, self.h) as f64,
+                ]
+            };
+            let poly: Vec<_> = hole.iter().copied().map(rel).collect();
+            if inside(rel(centroid), &poly, false) {
+                return true;
+            }
+            let inside_probe = probe.get_or_insert_with(|| {
+                let outline = Outline {
+                    rings: vec![inner.clone()],
+                    normal: self.normal,
+                    axes: self.axes,
+                    h: self.h,
+                };
+                outline.interior()
+            });
+            if inside_probe.is_some_and(|p| inside(rel(p), &poly, false)) {
+                return true;
+            }
+        }
+        false
+    }
+}
+
+impl Store {
+    pub fn heal_plan(
+        &self,
+        coverage: f64,
+        partial: bool,
+        pad: f64,
+        h: Hypot,
+        compensated: bool,
+    ) -> (Vec<u128>, Vec<(u128, Vec<u128>)>) {
+        use super::{
+            drawing_plane::{bounds, tris},
+            keys::Kind,
+        };
+        use std::collections::HashMap;
+        let faces = self.live_slots(Kind::Face);
+        let outlines: Vec<_> = faces.iter().map(|&f| self.outline(f, h)).collect();
+        let boxes: Vec<_> = outlines.iter().map(|o| bounds(&o.rings[0])).collect();
+        let areas: Vec<_> = outlines
+            .iter()
+            .map(|o| {
+                let mut raw = [0.; 3];
+                for (&a, &b) in segments(&o.rings[0]) {
+                    for k in 0..3 {
+                        let (i, j) = ((k + 1) % 3, (k + 2) % 3);
+                        raw[k] += (a[i] - b[i]) * (a[j] + b[j])
+                    }
+                }
+                0.5 * length(vector(raw), h) as f64
+            })
+            .collect();
+        let parallel = |i: usize, j: usize| {
+            let (a, b) = (point(outlines[i].normal), point(outlines[j].normal));
+            (a[0] * b[0] + a[1] * b[1] + a[2] * b[2]).abs() > 0.999
+        };
+        let mut gone = vec![false; faces.len()];
+        let mut removed = vec![];
+        for (i, o) in outlines.iter().enumerate() {
+            if areas[i] < 1e-4 {
+                continue;
+            }
+            let mut covered = 0.;
+            for (j, other) in outlines.iter().enumerate() {
+                if gone[j] || areas[j] >= areas[i] || !parallel(i, j) {
+                    continue;
+                }
+                if (0..3).all(|k| {
+                    boxes[j].0[k] >= boxes[i].0[k] - pad && boxes[j].1[k] <= boxes[i].1[k] + pad
+                }) && o.contains(&other.rings[0], false)
+                    && !o.hole_contains(other, compensated)
+                {
+                    covered += areas[j]
+                }
+            }
+            if covered > coverage * areas[i] {
+                gone[i] = true;
+                removed.push(self.key(Kind::Face, faces[i]))
+            }
+        }
+        let mut punch = Vec::<(u128, Vec<u128>)>::new();
+        let mut index = HashMap::new();
+        if partial {
+            for (i, o) in outlines.iter().enumerate() {
+                if gone[i] {
+                    continue;
+                }
+                let mut probes = None;
+                for (j, big) in outlines.iter().enumerate() {
+                    if gone[j] || areas[j] <= areas[i] || !parallel(i, j) {
+                        continue;
+                    }
+                    if !(0..3).all(|k| {
+                        boxes[j].0[k] <= boxes[i].1[k] + pad && boxes[j].1[k] >= boxes[i].0[k] - pad
+                    }) {
+                        continue;
+                    }
+                    if big.hole_contains(o, compensated) {
+                        continue;
+                    }
+                    let probes = probes.get_or_insert_with(|| {
+                        tris(&o.rings, o.normal, h)
+                            .into_iter()
+                            .map(|[a, b, c]| point(a.add(b).add(c).div(3.)))
+                            .collect::<Vec<_>>()
+                    });
+                    if probes.iter().filter(|&&p| big.solid_at(p)).count() * 2 > probes.len() {
+                        let row = *index.entry(j).or_insert_with(|| {
+                            punch.push((self.key(Kind::Face, faces[j]), vec![]));
+                            punch.len() - 1
+                        });
+                        punch[row].1.push(self.key(Kind::Face, faces[i]));
+                        break;
+                    }
+                }
+            }
+        }
+        (removed, punch)
     }
 }

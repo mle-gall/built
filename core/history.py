@@ -6260,17 +6260,21 @@ class RebuildPlanarFacesCommand(Command):
         if mesh.faces:  # prefer a real face's normal for a stable orientation
             normal = mesh.faces[0].normal()
             origin = mesh.faces[0].vertices[0]
-        segments = [(e.v0.position, e.v1.position) for e in mesh.edges]
-        # Remember flagged edges and face attrs so the rebuild preserves them:
-        # output edges are sub-segments of input ones (re-stamp by lie-on), and
-        # output faces inherit attrs from the old face containing their interior.
-        flagged = [(QVector3D(e.a), QVector3D(e.b), edge_flags(e))
-                   for e in mesh.edges if not edge_is_plain(e)]
-        painted = mesh.faces
-        if type(mesh) is StoreMesh:
-            painted = (FaceView(mesh, k) for k in mesh._store.painted_candidates(list(mesh._attr_own)))
-        old_attrs = [([tuple(t) for t in f.triangulate()], dict(f.attrs))
-                     for f in painted if f.attrs]
+        native = type(mesh) is StoreMesh and hypot is not None
+        if native:
+            from core.store_mesh import EdgeView
+            segments, flagged_keys = mesh._store.drawing_plane_edges(
+                origin.toTuple(), normal.toTuple(), hypot, all=True)
+            segments = [(QVector3D(*a), QVector3D(*b)) for a, b in segments]
+            flagged_edges = [EdgeView(mesh, k) for k in flagged_keys]
+            flagged = [(e.a, e.b, edge_flags(e)) for e in flagged_edges]
+            old_attrs = []
+        else:
+            segments = [(e.v0.position, e.v1.position) for e in mesh.edges]
+            flagged = [(QVector3D(e.a), QVector3D(e.b), edge_flags(e))
+                       for e in mesh.edges if not edge_is_plain(e)]
+            old_attrs = [([tuple(t) for t in f.triangulate()], dict(f.attrs))
+                         for f in mesh.faces if f.attrs]
         edges, faces = planar_rebuild(segments, origin, normal)
 
         near_flagged = _segment_grid([(fa, fb) for fa, fb, _ in flagged])
@@ -6312,6 +6316,12 @@ class RebuildPlanarFacesCommand(Command):
                        for t0, t1, t2 in old_tris):
                     f.attrs.update(attrs)
                     break
+        if native and (self.snapshot.own or self.snapshot.table):
+            own = {k: bool(attrs) for k, attrs in self.snapshot.own.items()}
+            rows = [i + 1 for i, attrs in enumerate(self.snapshot.table) if attrs]
+            owners = mesh._store.drawing_paint_owners(self.snapshot.snap, own, rows, hypot)
+            for face, owner, row in owners:
+                FaceView(mesh, face).attrs.update(self.snapshot._face_attrs(owner, row))
         # Every region comes out facing ``normal`` (the first face's); each
         # takes back the way the face it lies in was facing — a lone arc
         # drawn on the plane turned every reversed face back otherwise.

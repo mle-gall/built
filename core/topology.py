@@ -2573,11 +2573,6 @@ def heal_overlapping_faces(mesh, coverage: float = 0.5, partial=None,
     # 1. Dedupe nested holes by rebuilding the face with the outermost holes.
     from core.store_mesh import StoreMesh, FaceView, _hypot
     store = mesh._store if type(mesh) is StoreMesh and _hypot() is not None else None
-    def candidates(partial):
-        if store is None:
-            return list(mesh.faces)
-        return [FaceView(mesh, k) for k in store.heal_candidates(partial, _BOX_PAD, _hypot())]
-
     holed = (list(mesh.faces) if store is None else
              (FaceView(mesh, k) for k in store.multiple_hole_faces()))
     for face in holed:
@@ -2591,6 +2586,21 @@ def heal_overlapping_faces(mesh, coverage: float = 0.5, partial=None,
                 outer, [[QVector3D(v) for v in h] for h in keep] or None
             ).attrs = dict(face.attrs)
 
+    if store is not None:
+        import sys
+        removed_keys, punches = store.heal_plan(
+            coverage, bool(partial), _BOX_PAD, _hypot(), sys.version_info >= (3, 12))
+        removed = [FaceView(mesh, k) for k in removed_keys]
+        if removed_keys:
+            store.remove_drawing_faces(removed_keys)
+            mesh._dirty(len(removed_keys))
+        for key, smalls in punches:
+            _punch_overlaps(mesh, FaceView(mesh, key), [FaceView(mesh, k) for k in smalls])
+        if not flat:
+            from core.orient import orient_outward
+            orient_outward(mesh)
+        return removed
+
     # 2. Remove a redundant mother covered by faces that aren't in its holes.
     removed: list = []
     # Normals and areas ONCE per face, not once per pair: this sweep is
@@ -2600,7 +2610,7 @@ def heal_overlapping_faces(mesh, coverage: float = 0.5, partial=None,
     # REMOVED here, and a removed face stays alive in ``removed``, so no
     # cached id can be reused under us.
     import numpy as np
-    snap = candidates(False)
+    snap = list(mesh.faces)
     N = np.array([[(n := f.normal()).x(), n.y(), n.z()] for f in snap],
                  dtype=np.float64) if snap else np.empty((0, 3))
     A = np.array([f.area() for f in snap], dtype=np.float64)
@@ -2642,7 +2652,7 @@ def heal_overlapping_faces(mesh, coverage: float = 0.5, partial=None,
         # Rebuilt for THIS pass: pass 2 removed faces and the earlier passes
         # may have rebuilt some, so the pass-2 caches no longer cover the
         # mesh. Same reason as there — the sweep is O(F^2).
-        snap3 = candidates(True)
+        snap3 = list(mesh.faces)
         N3 = np.array([[(n := f.normal()).x(), n.y(), n.z()] for f in snap3],
                       dtype=np.float64) if snap3 else np.empty((0, 3))
         A3 = np.array([f.area() for f in snap3], dtype=np.float64)
@@ -2678,17 +2688,7 @@ def heal_overlapping_faces(mesh, coverage: float = 0.5, partial=None,
                     punch[g].append(face)
                     break
         for g, smalls in punch.items():
-            outer = [QVector3D(v) for v in g.vertices]
-            holes = [[QVector3D(v) for v in h] for h in g.holes]
-            holes += [[QVector3D(v) for v in s.vertices] for s in smalls]
-            mesh.remove_face(g)
-            try:
-                mesh.add_face(outer, holes).attrs = dict(g.attrs)
-            except Exception:
-                # Degenerate hole arrangement — fall back to the face as it was.
-                mesh.add_face(outer, [[QVector3D(v) for v in h]
-                                      for h in g.holes] or None
-                              ).attrs = dict(g.attrs)
+            _punch_overlaps(mesh, g, smalls)
 
     # 4. (3D) Volumetric winding: a freshly drawn sub-face lands with whatever
     #    winding the user traced; on a closed solid, orient per face (and
@@ -2699,6 +2699,20 @@ def heal_overlapping_faces(mesh, coverage: float = 0.5, partial=None,
     return removed
 
 
+
+
+def _punch_overlaps(mesh, g, smalls):
+    outer = [QVector3D(v) for v in g.vertices]
+    holes = [[QVector3D(v) for v in h] for h in g.holes]
+    holes += [[QVector3D(v) for v in s.vertices] for s in smalls]
+    mesh.remove_face(g)
+    try:
+        mesh.add_face(outer, holes).attrs = dict(g.attrs)
+    except Exception:
+        # Degenerate hole arrangement — fall back to the face as it was.
+        mesh.add_face(outer, [[QVector3D(v) for v in h]
+                              for h in g.holes] or None
+                      ).attrs = dict(g.attrs)
 
 
 #: The defects :func:`defects_near` counts, worst first — the order a

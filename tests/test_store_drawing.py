@@ -100,6 +100,7 @@ def test_store_rectangle_never_enumerates_face_views(monkeypatch, curved):
     sc.mesh.add_faces_bulk(np.asarray(_grid_points(n, n + 1)), np.full(n*n, 4), np.ones(n*n, int))
     if curved:
         sc.mesh.edges[0].curve = 123
+        sc.mesh.faces[0].attrs["color"] = "red"
     hist = History(sc)
     rect = [V(n+1,0,0), V(n+2,0,0), V(n+2,1,0), V(n+1,1,0)]
     iterate = S._Seq.__iter__
@@ -114,6 +115,9 @@ def test_store_rectangle_never_enumerates_face_views(monkeypatch, curved):
     assert not hist.last_error, hist.last_error
     assert type(sc.mesh) is S.StoreMesh
     assert len(sc.mesh.faces) == n*n + 1
+    if curved:
+        corner = sc.mesh.vertex_at(V(0,0,0))
+        assert any(f.attrs.get("color") == "red" for f in sc.mesh.faces_at(corner))
 
 
 @needs_store
