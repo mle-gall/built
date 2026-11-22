@@ -184,7 +184,7 @@ impl Geom {
 }
 
 /// `core.arrangement.plane_basis(normal)`.
-fn plane_basis(normal: V3, h: Hypot) -> (V3, V3) {
+pub(crate) fn plane_basis(normal: V3, h: Hypot) -> (V3, V3) {
     let n = facegeom::normalized(normal, h);
     let mut r = V3(1.0, 0.0, 0.0);
     if (r.dot(n, h) as f64).abs() > 0.9 {

@@ -1346,6 +1346,24 @@ fn reader(snap: &Snapshot) -> Store {
 
 #[pymethods]
 impl PyStoreSnapshot {
+    #[staticmethod]
+    fn trace_cap_outlines(py: Python<'_>, regions: Vec<super::cap_outline::Region>,
+                          creases: Vec<[[f64;2];2]>, tolerance: f64) -> Option<Vec<Vec<[f64;2]>>> {
+        py.detach(|| super::cap_outline::trace(regions,&creases,tolerance))
+    }
+
+    #[pyo3(signature = (origin, normal, probes, fresh, tolerance, hypot, compensated, scope=None))]
+    fn cap_coverage(&self, py: Python<'_>, origin: [f32;3], normal: [f32;3],
+                    probes: Vec<(f64,f64)>, fresh: Vec<u128>, tolerance: f64, hypot: &str,
+                    compensated: bool, scope: Option<Vec<u128>>) -> PyResult<Vec<(bool,u8,u8)>> {
+        let store = reader(&self.inner);
+        let h = crate::hypot_of(hypot)?;
+        let slots = |keys: Vec<u128>| keys.into_iter().map(|k|slot_of(&store,Kind::Face,k)).collect::<PyResult<Vec<_>>>();
+        let scope = match scope {Some(keys)=>slots(keys)?,None=>store.live_slots(Kind::Face)};
+        let fresh = slots(fresh)?;
+        Ok(py.detach(||store.cap_coverage(&scope,&fresh,origin,normal,&probes,tolerance,h,compensated)))
+    }
+
     #[pyo3(signature = (origin, normal, tolerance, hypot, keys=None))]
     fn cap_segments(&self, py: Python<'_>, origin: [f32;3], normal: [f32;3], tolerance: f64,
                     hypot: &str, keys: Option<Vec<u128>>) -> PyResult<Vec<(u128, [[f64;3];2])>> {

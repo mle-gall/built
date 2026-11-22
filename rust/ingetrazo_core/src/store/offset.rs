@@ -194,7 +194,7 @@ fn edges(ring: &[XY]) -> impl Iterator<Item = (XY, XY)> + '_ {
         .zip(ring.iter().copied().cycle().skip(1))
 }
 
-fn contains(ring: &[XY], (x, y): XY) -> bool {
+pub(super) fn contains(ring: &[XY], (x, y): XY) -> bool {
     edges(ring).fold(false, |inside, ((xj, yj), (xi, yi))| {
         inside ^ ((yi > y) != (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi + 1e-30) + xi)
     })

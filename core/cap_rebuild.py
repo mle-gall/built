@@ -365,6 +365,10 @@ def _union_outline(solid_regions_xy, keep_segs=None) -> list:
             if ok and len(loop) >= 3:
                 loops.append([coords[k] for k in loop])
 
+    return _nest_outlines(loops)
+
+
+def _nest_outlines(loops):
     # Classify: CCW loops are outer faces, CW loops are holes; nest each hole in
     # the smallest outer that contains it.
     outers = [lp for lp in loops if _signed_area(lp) > _area_floor(lp)]
@@ -549,22 +553,33 @@ def rebuild_plane(mesh, origin: QVector3D, normal: QVector3D,
     # side — the sweep envelops old boundary faces that still miscount); a
     # Ctrl push never declares (it removes nothing and its quads are
     # divisions).
-    fresh_polys = ([] if keep_mode else
-                   _proj_polys(f for f in fresh_set if not f.interior))
-    fresh_cover_polys = _proj_polys(f for f in fresh_set if not f.interior)
-    old_polys = _proj_polys(f for f in scope_faces
-                            if f not in fresh_set or f.interior)
-    # An OUTWARD push whose side lands back to back on a boundary face — the
-    # riser a step's pulled-up square rises against: the old face and the
-    # fresh side cover the same spot with OPPOSITE windings, and material
-    # now reads on both sides because the push put it there. That strip is
-    # inside the solid; it goes, as it should. Kept as a «partition» it
-    # left the side standing inside the solid, three faces on its edges,
-    # and the guard refused the pull (issue #94, @xyont: «cannot pull up…
-    # push down working properly»). Only that exact pairing: any other old
-    # face covering a both-sides region keeps its partition role.
-    old_boundary_polys = _proj_polys(f for f in scope_faces
-                                     if f not in fresh_set and not f.interior)
+    samples = []
+    for outer, holes in regions_3d:
+        outer_xy = [to2d(p) for p in outer]
+        holes_xy = [[to2d(p) for p in h] for h in holes]
+        samples.append((outer_xy, holes_xy, _region_test_point(outer_xy, holes_xy)))
+
+    if native:
+        import sys
+        coverage = mesh._store.snapshot().cap_coverage(
+            origin.toTuple(), normal.toTuple(), [p for _, _, p in samples],
+            [f.key for f in fresh_set], _ON_PLANE, qt_hypot(), sys.version_info >= (3, 12),
+            None if scope is None else [f.key for f in scope_faces])
+    else:
+        fresh_polys = _proj_polys(f for f in fresh_set if not f.interior)
+        old_polys = _proj_polys(f for f in scope_faces if f not in fresh_set or f.interior)
+        skin_polys = _proj_polys(f for f in scope_faces if f not in fresh_set and not f.interior)
+
+        def winding_mask(polys, probe):
+            mask = 0
+            for poly, positive in polys:
+                if _poly_covers(poly, probe):
+                    mask |= 1 if positive else 2
+            return mask
+
+        coverage = [(any(_poly_covers(poly, p) for poly, _ in old_polys),
+                     winding_mask(skin_polys, p), winding_mask(fresh_polys, p))
+                    for _, _, p in samples]
 
     # Group boundary regions by which side holds the material — each group is
     # unioned separately because its faces wind the other way (outward points
@@ -584,10 +599,7 @@ def rebuild_plane(mesh, origin: QVector3D, normal: QVector3D,
     solid_by_side: dict = {True: [], False: []}  # material on +side / on -side
     partitions: list = []
     sheets: list = []
-    for outer, holes in regions_3d:
-        outer_xy = [to2d(p) for p in outer]
-        holes_xy = [[to2d(p) for p in h] for h in holes]
-        ip_xy = _region_test_point(outer_xy, holes_xy)
+    for (outer_xy, holes_xy, ip_xy), (old, skin, fresh_mask) in zip(samples, coverage):
         ip = to3d(ip_xy)
         mat_plus = ray_parity_outside(
             ip + normal * _SAMPLE_OFF, normal, None, rng,
@@ -598,18 +610,15 @@ def rebuild_plane(mesh, origin: QVector3D, normal: QVector3D,
         if mat_plus != mat_minus:
             solid_by_side[mat_plus].append((outer_xy, holes_xy))
             continue
-        decl = {p for poly, p in fresh_polys if _poly_covers(poly, ip_xy)}
+        decl = 0 if keep_mode else fresh_mask
         if mat_plus:  # material on both sides
-            if removing and len(decl) == 1:
+            if removing and decl in (1, 2):
                 # One fresh winding covers the spot: the carve declares which
                 # side emptied (parity can be blind to a void still walled in
                 # by an untrimmed neighbouring plane).
-                solid_by_side[not decl.pop()].append((outer_xy, holes_xy))
+                solid_by_side[decl == 2].append((outer_xy, holes_xy))
             elif (not removing and not keep_mode
-                    and any(_poly_covers(poly, ip_xy) and any(
-                        _poly_covers(fpoly, ip_xy) and fplus != plus
-                        for fpoly, fplus in fresh_polys)
-                        for poly, plus in old_boundary_polys)):
+                    and ((skin & 1 and decl & 2) or (skin & 2 and decl & 1))):
                 # The strip is inside the solid now, and so is its outline:
                 # the old crease along its rim (a riser's top edge) is the
                 # op's seam from here on, free to dissolve when the next
@@ -621,23 +630,18 @@ def rebuild_plane(mesh, origin: QVector3D, normal: QVector3D,
                     op.extend(rim)
                 if cache is not None:
                     cache.dropped.extend(rim)
-            elif (not removing or not decl) and (
-                any(_poly_covers(poly, ip_xy) for poly, _ in old_polys)
-                or (keep_mode and any(_poly_covers(poly, ip_xy)
-                                      for poly, _ in fresh_cover_polys))
-            ):
+            elif (not removing or not decl) and (old or (keep_mode and fresh_mask)):
                 # Existing structure — or, in keep mode, the stack's own fresh
                 # quad cutting through solid interior: a Ctrl-stack grown into
                 # the body lays brand-new divisions where no face existed.
                 partitions.append((outer_xy, holes_xy))
         else:         # material on neither side
-            if not removing and len(decl) == 1:
+            if not removing and decl in (1, 2):
                 # An outward sweep envelops old boundary faces that still
                 # count in parity ("void below" misread): its own quad
                 # declares the new material side.
-                solid_by_side[not decl.pop()].append((outer_xy, holes_xy))
-            elif not decl and any(
-                    _poly_covers(poly, ip_xy) for poly, _ in old_polys):
+                solid_by_side[decl == 2].append((outer_xy, holes_xy))
+            elif not decl and old:
                 sheets.append((outer_xy, holes_xy))
             # otherwise: op debris (a flush-landed cap or collapsed fin)
 
@@ -686,11 +690,18 @@ def rebuild_plane(mesh, origin: QVector3D, normal: QVector3D,
                                              or _parts_paint(e)):
             keep_segs.append((to2d(e.a), to2d(e.b)))
 
+    def outlines(regions):
+        if native:
+            loops = mesh._store.snapshot().trace_cap_outlines(regions, keep_segs, _TOL)
+            if loops is not None:
+                return _nest_outlines(loops)
+        return _union_outline(regions, keep_segs)
+
     result = []
     for mat_plus, regions in solid_by_side.items():
         if not regions:
             continue
-        for outer, holes in _union_outline(regions, keep_segs):
+        for outer, holes in outlines(regions):
             # CCW in (u, v) gives a +normal face; flip when the material is on
             # the +side so the face points outward (toward the empty side).
             if mat_plus:
@@ -703,7 +714,7 @@ def rebuild_plane(mesh, origin: QVector3D, normal: QVector3D,
     if partitions:
         # Interior partitions have no outward side; keep the arrangement's
         # winding (orientation leaves them as-is anyway).
-        for outer, holes in _union_outline(partitions, keep_segs):
+        for outer, holes in outlines(partitions):
             result.append(
                 ([to3d(p) for p in outer],
                  [[to3d(p) for p in h] for h in holes], True)
@@ -711,7 +722,7 @@ def rebuild_plane(mesh, origin: QVector3D, normal: QVector3D,
     if sheets:
         # Free sheets (flat drawing attached to the solid) — not boundary, not
         # partition; they survive the rebuild as plain faces.
-        for outer, holes in _union_outline(sheets, keep_segs):
+        for outer, holes in outlines(sheets):
             result.append(
                 ([to3d(p) for p in outer],
                  [[to3d(p) for p in h] for h in holes], False)

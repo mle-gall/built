@@ -38,6 +38,7 @@ pub mod topo;
 mod hole;
 mod solid;
 mod caps;
+mod cap_outline;
 mod orient_seed;
 #[cfg(test)]
 mod tests;
