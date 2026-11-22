@@ -4489,21 +4489,40 @@ class ReshareInstanceCommand(Command):
     whole edit undoes as one step, back to the definition as it was, with
     the instance shared again. Redo replays it from the edited copy."""
 
-    def __init__(self, group, proto, xform, edited, inner=()) -> None:
+    def __init__(self, group, proto, xform, edited, inner=(),
+                 parts=None) -> None:
         self.group = group
         self.proto = proto
         self.xform = xform
         self.edited = edited
         self.inner = list(inner)
+        # An assembly's parts on entry (Scene.parts_record): its matrix
+        # comes back up out of them on leaving.
+        self.parts = parts
         self._before = None
+        self._after = None
+
+    def _nested(self):
+        """The parts edited inside this session: their definitions go with
+        it. Their matrices are the assembly's to bring back."""
+        return [c for c in self.inner if isinstance(c, ReshareInstanceCommand)]
 
     def do(self, scene) -> None:
         if self._before is None:
             self._before = self.proto.capture_state()
-        scene.share_back(self.group, self.proto, self.xform, self.edited)
+        else:
+            for c in self._nested():
+                c.proto.restore_state(c._after)
+                c.proto.note_rewound()
+        scene.share_back(self.group, self.proto, self.xform, self.edited,
+                         parts=self.parts)
+        self._after = self.proto.capture_state()
         scene.version += 1
 
     def undo(self, scene) -> None:
+        for c in reversed(self._nested()):
+            c.proto.restore_state(c._before)
+            c.proto.note_rewound()
         self.proto.restore_state(self._before)
         self.proto.note_rewound()
         self.group.mesh = self.proto

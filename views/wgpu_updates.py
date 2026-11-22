@@ -154,6 +154,10 @@ class InstanceUpdates:
                     # which every copy shows (all its variants rebake).
                     if not self.queue_swap(command.group):
                         return False
+                    # A part edited inside an assembly shares back with it.
+                    if not all(visit(c) for c in command.inner
+                               if isinstance(c, ReshareInstanceCommand)):
+                        return False
                     old = self.meshes.get(id(command.proto))
                     if old is not None and old[2] >= 0:
                         self.pending_meshes.add(id(command.proto))

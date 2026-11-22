@@ -529,12 +529,29 @@ class Scene:
         is_comp = getattr(group, "is_component", None)
         definition = (group.mesh if callable(is_comp) and is_comp()
                       else None)
+        parts = None
         if getattr(group, "children", None):
             # A container: its children stay children. What CANNOT stay is a
             # transform on it, because the tools work in world coordinates —
             # so the matrix is pushed down into the children and into its own
             # mesh, which leaves every world position exactly where it was.
+            instance = (callable(is_comp) and is_comp()
+                        and self._mesh_placed_elsewhere(group))
+            proto, xform = group.mesh, group.xform
+            if instance:
+                parts = self.parts_record(group)
             self._bake_container_xform(group)
+            if instance:
+                # An assembly is a component too: its own geometry is the
+                # definition its copies share. The session edits a world
+                # copy, and leaving shares it back and returns the matrix
+                # up out of the parts, as for a component with no parts.
+                from PySide6.QtGui import QMatrix4x4
+                if group.mesh is proto:
+                    from core.group import transformed_mesh
+                    group.mesh = transformed_mesh(proto, QMatrix4x4())
+                self._edit_share = (group, proto, QMatrix4x4(xform),
+                                    group.mesh.capture_state())
             if frame is not None:
                 # Its matrix went down into the children and its mesh is in
                 # world coordinates now: the axes stay, as world axes.
@@ -555,7 +572,7 @@ class Scene:
             self._loose_mesh = anterior
         self._edit_stack.append(
             {"group": group, "mesh": anterior, "share": self._edit_share,
-             "frame": frame, "definition": definition,
+             "frame": frame, "definition": definition, "parts": parts,
              "world_copy": group.mesh if entry_mesh is not group.mesh else None})
         self._placement_context_bumps += 1
         self.mesh = group.mesh
@@ -629,11 +646,12 @@ class Scene:
             # Headless callers (tests, the AI bridge): share back directly.
             # The viewport takes the share first and wraps it in a command.
             group, proto, xform, state0 = share
+            parts = nivel.get("parts")
             if group.mesh.capture_state() == state0:
-                self.restore_sharing(group, proto, xform)
+                self.restore_sharing(group, proto, xform, parts=parts)
             else:
                 unchanged = False
-                self.share_back(group, proto, xform, group.mesh)
+                self.share_back(group, proto, xform, group.mesh, parts=parts)
         if unchanged:
             self._placement_context_bumps += 1
         self.mesh = nivel["mesh"]
@@ -662,17 +680,91 @@ class Scene:
         self._edit_share = None
         return share
 
+    def _mesh_placed_elsewhere(self, group) -> bool:
+        """Whether another placement, at any depth, draws ``group``'s mesh:
+        an assembly placed once has no copies to share an edit with."""
+        from core.purge import iter_groups
+        mesh = group.mesh
+        return any(g is not group and g.mesh is mesh
+                   for g in iter_groups(self.groups))
+
     @staticmethod
-    def restore_sharing(group, proto, xform) -> None:
-        """The instance left untouched: back on the shared definition."""
+    def parts_record(group) -> tuple:
+        """An assembly's axes and its parts' matrices and offsets, copied,
+        to put back bit for bit: a round trip through the inverse matrix
+        drifts in the last digits."""
+        from PySide6.QtGui import QMatrix4x4
+        axes = getattr(group, "axes", None)
+        return (None if axes is None else QMatrix4x4(axes),
+                [(c, None if c.xform is None else QMatrix4x4(c.xform),
+                  c.explode_offset) for c in group.children])
+
+    @staticmethod
+    def _unbake_container_xform(group, xform, parts=None) -> None:
+        """Undo :meth:`_bake_container_xform` on leaving an assembly: its
+        matrix comes back up out of the parts, which return to the frame
+        the copies share, and its entry axes are its axes again. Nothing
+        moves in the world. A redo arrives with the matrix already back,
+        and leaves it alone.
+
+        ``parts`` is :meth:`parts_record` on entry: a part the session left
+        where it was gets its entry matrix back bit for bit, instead of a
+        round trip through the inverse that drifts in the last digits."""
+        from PySide6.QtGui import QMatrix4x4, QVector3D
+        if (not getattr(group, "children", None) or xform is None
+                or group.xform == xform):
+            return
+        inverse, ok = xform.inverted()
+        if not ok:
+            return
+        axes, entry = parts if parts is not None else (None, ())
+        entry = {id(c): (m, o) for c, m, o in entry}
+        for child in group.children:
+            was = entry.get(id(child))
+            now = child.xform if child.xform is not None else QMatrix4x4()
+            if was is not None:
+                m0 = was[0] if was[0] is not None else QMatrix4x4()
+                if xform * m0 == now:
+                    child.xform = None if was[0] is None else QMatrix4x4(m0)
+                else:
+                    child.xform = inverse * now
+                o0, o = was[1], child.explode_offset
+                if o0 and o:
+                    v = xform.mapVector(QVector3D(*o0))
+                    turned = (v.x(), v.y(), v.z())
+                    child.explode_offset = (o0 if turned == tuple(o) else
+                                            Scene._turned(inverse, o))
+                elif o:
+                    child.explode_offset = Scene._turned(inverse, o)
+                else:
+                    child.explode_offset = o
+            else:
+                child.xform = inverse * now
+                if child.explode_offset:
+                    child.explode_offset = Scene._turned(
+                        inverse, child.explode_offset)
+        group.axes = None if axes is None else QMatrix4x4(axes)
+
+    @staticmethod
+    def _turned(m, offset) -> tuple:
+        from PySide6.QtGui import QVector3D
+        v = m.mapVector(QVector3D(*offset))
+        return (v.x(), v.y(), v.z())
+
+    @staticmethod
+    def restore_sharing(group, proto, xform, parts=None) -> None:
+        """The instance left untouched: back on the shared definition (an
+        assembly's matrix back up out of its ``parts``)."""
+        Scene._unbake_container_xform(group, xform, parts)
         group.mesh = proto
         group.xform = xform
 
     @staticmethod
-    def share_back(group, proto, xform, edited) -> None:
+    def share_back(group, proto, xform, edited, parts=None) -> None:
         """Write the edited world-space mesh into the shared prototype (local
         coordinates) and put the instance back on it: every sibling shows
-        the edit."""
+        the edit. An assembly's matrix also comes back up out of its parts
+        (``parts``: :meth:`parts_record` on entry)."""
         from core.group import transformed_mesh
         inverse, ok = xform.inverted()
         local = transformed_mesh(edited, inverse if ok else xform)
@@ -680,6 +772,7 @@ class Scene:
         # A face reversed in the session was counted on the world copy, and
         # a reversed loop is all the definition's chunk could not see.
         proto.note_rewound()
+        Scene._unbake_container_xform(group, xform, parts)
         group.mesh = proto
         group.xform = xform
 
