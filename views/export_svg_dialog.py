@@ -98,7 +98,7 @@ def _face_texts() -> dict:
             "The faces in their materials' colours; a textured one in the "
             "mean colour of its image.")),
         "default": (tr("Default colour only"), tr(
-            "Every face in IngeTrazo's default colour and every line in "
+            "Every face in Built's default colour and every line in "
             "black, whatever their material or layer colour — a clean model "
             "to colour in the illustration program.")),
         "view": (tr("Picture of the view"), tr(

@@ -61,7 +61,7 @@ def test_closing_the_last_project_leaves_the_empty_area(win):
     assert not any(d.isVisible() for d in panels)
     assert not win._sidebar_handle.isVisible()
     assert not win._sheet_tabs.isVisible()
-    assert win.windowTitle() == "IngeTrazo"
+    assert win.windowTitle() == "Built"
 
 
 def test_plus_brings_a_project_and_everything_back(win):

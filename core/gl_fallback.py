@@ -53,7 +53,7 @@ def _probe_message_handler(kind, _context, message) -> None:
     134)» and no reason at all (issue #6, v0.3.19)."""
     from PySide6.QtCore import QtMsgType
     if kind == QtMsgType.QtFatalMsg:
-        print(f"IngeTrazo: Qt fatal while probing OpenGL: {message}",
+        print(f"Built: Qt fatal while probing OpenGL: {message}",
               file=sys.stderr, flush=True)
 
 
@@ -123,7 +123,7 @@ def _restart_under_xcb(platform_name: str) -> str:
     argv = sys.argv[1:] if getattr(sys, "frozen", False) else sys.argv
     # Said before the exec, because after it this process no longer exists:
     # a restart nobody announced looks like a crash in the log.
-    print("IngeTrazo: this driver cannot create an OpenGL context under "
+    print("Built: this driver cannot create an OpenGL context under "
           "Wayland; restarting under X11.", file=sys.stderr, flush=True)
     try:
         os.execv(sys.executable, [sys.executable] + argv)
@@ -156,14 +156,14 @@ def ensure_gl_context(app) -> str:
     lean = leaner(wanted)
     if lean is not None and _can_create(lean):
         QSurfaceFormat.setDefaultFormat(lean)
-        print("IngeTrazo: this driver refused the full OpenGL format; "
+        print("Built: this driver refused the full OpenGL format; "
               "continuing without stencil buffer and multisampling.",
               file=sys.stderr)
         return "reduced"
 
     outcome = _restart_under_xcb(app.platformName())
     if outcome == "no-x11":
-        print("IngeTrazo: this driver cannot create an OpenGL 3.3 context "
+        print("Built: this driver cannot create an OpenGL 3.3 context "
               "under Wayland, and no X11 display is available to fall back "
               "on. Under Flatpak, grant it X11:\n"
               "  flatpak override --user --socket=x11 com.ingetrazo.IngeTrazo",

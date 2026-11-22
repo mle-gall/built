@@ -195,13 +195,13 @@ def install_steps(kind: str | None = None,
         steps = [("Install Blender from Flathub (skip it if you already have "
                   "Blender):", f"flatpak install flathub {BLENDER_FLATPAK_ID}")]
         if not host_allowed:
-            steps.append(("Let IngeTrazo start it (the Flatpak cannot see "
+            steps.append(("Let Built start it (the Flatpak cannot see "
                           "other programs on its own), once:",
                           FLATPAK_PERMISSION))
         return steps
     if kind == "snap":
         return [("The Snap package cannot start other programs. To render "
-                 "with Blender, use IngeTrazo's AppImage or Flatpak.", None)]
+                 "with Blender, use Built's AppImage or Flatpak.", None)]
     return [("Install Blender, for example with Snap (current version):",
              "sudo snap install blender --classic"),
             ("or with Flatpak:", f"flatpak install flathub {BLENDER_FLATPAK_ID}")]

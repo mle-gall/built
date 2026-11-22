@@ -797,7 +797,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             dev.button.connect(self._on_ndof_button)
         except Exception as exc:  # noqa: BLE001 — never block the window
             import sys as _sys
-            print(f"IngeTrazo: 3D mouse unavailable ({exc!r})",
+            print(f"Built: 3D mouse unavailable ({exc!r})",
                   file=_sys.stderr)
 
     def _on_ndof_motion(self, sample, dt: float) -> None:
@@ -1705,7 +1705,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         copy_action = QAction(tr("Copy"), self)
         copy_action.setStatusTip(tr(
             "Keep a copy of the selection to paste here or in another "
-            "IngeTrazo window."))
+            "Built window."))
         copy_action.setShortcut(QKeySequence.Copy)
         copy_action.triggered.connect(lambda: self.viewport.copy_selection())
         edit_menu.addAction(copy_action)
@@ -2350,7 +2350,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         get_models_action = QAction(tr("Get more models and textures…"), self)
         get_models_action.setStatusTip(tr(
             "Free websites with models and textures that open in "
-            "IngeTrazo."))
+            "Built."))
         get_models_action.triggered.connect(self._on_get_models)
         help_menu.addAction(get_models_action)
         # Only as an AppImage: put a launcher in the menu, or take it away.
@@ -2373,12 +2373,12 @@ class MainWindow(WorksessionMixin, QMainWindow):
         if not store_managed():
             updates_action = QAction(tr("Check for Updates…"), self)
             updates_action.setStatusTip(tr(
-                "See whether a newer version of IngeTrazo is out."))
+                "See whether a newer version of Built is out."))
             updates_action.triggered.connect(self._on_check_updates)
             help_menu.addAction(updates_action)
-        about_action = QAction(tr("About IngeTrazo"), self)
+        about_action = QAction(tr("About Built"), self)
         about_action.setStatusTip(tr(
-            "The version, the authors and the licence of IngeTrazo."))
+            "The version, the authors and the licence of Built."))
         about_action.triggered.connect(self._on_about)
         help_menu.addAction(about_action)
         # A letter typed in an open menu searches that menu (Blender 4).
@@ -3733,7 +3733,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         QMessageBox.information(
             self,
             tr("Language changed"),
-            tr("Restart IngeTrazo to apply the new language."),
+            tr("Restart Built to apply the new language."),
         )
 
     def _build_extensions_menu(self, menubar) -> None:
@@ -4110,15 +4110,15 @@ class MainWindow(WorksessionMixin, QMainWindow):
             return
         if info.get("software"):
             self.statusBar().showMessage(tr(
-                "IngeTrazo is drawing with the software renderer ({renderer}): "
+                "Built is drawing with the software renderer ({renderer}): "
                 "the viewport will be slow. Update the graphics driver, or "
-                "assign IngeTrazo to the high-performance GPU in Windows "
+                "assign Built to the high-performance GPU in Windows "
                 "graphics settings.", renderer=info.get("renderer", "")), 30000)
         elif QCoreApplication.instance().property("gpu_pref") == "set":
             # First run on Windows: the preference was just written, and
             # Windows applies it to the next process, not this one.
             self.statusBar().showMessage(tr(
-                "IngeTrazo asked Windows for the high-performance GPU; it "
+                "Built asked Windows for the high-performance GPU; it "
                 "applies the next time you open the program."), 20000)
 
     def _warn_gl_unsupported(self, info: dict) -> None:
@@ -4129,10 +4129,10 @@ class MainWindow(WorksessionMixin, QMainWindow):
             return
         self._gl_unsupported_shown = True
         QMessageBox.critical(self, tr("OpenGL 3.3 not available"), tr(
-            "IngeTrazo needs OpenGL 3.3, but this computer only offers "
+            "Built needs OpenGL 3.3, but this computer only offers "
             "OpenGL {version} ({renderer}). The viewport stays empty.\n\n"
             "Update the graphics driver from the NVIDIA, AMD or Intel "
-            "website. On a laptop with two graphics chips, assign IngeTrazo "
+            "website. On a laptop with two graphics chips, assign Built "
             "to the high-performance GPU (Windows: Settings ▸ System ▸ "
             "Display ▸ Graphics) and start it again.",
             version=info.get("version", ""), renderer=info.get("renderer", "")))
@@ -4175,7 +4175,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         # document, and Copy/Paste now crosses between them (issue #76).
         window_action = QAction(tr("New Window"), self)
         window_action.setStatusTip(tr(
-            "Open another IngeTrazo window with its own document; copy "
+            "Open another Built window with its own document; copy "
             "and paste work between them."))
         window_action.setShortcut(QKeySequence("Ctrl+Shift+N"))
         window_action.triggered.connect(self._on_new_window)
@@ -4394,7 +4394,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
 
         quit_action = QAction(tr("Quit"), self)
         quit_action.setStatusTip(tr(
-            "Close IngeTrazo, offering to save what has not been saved."))
+            "Close Built, offering to save what has not been saved."))
         quit_action.setShortcut(QKeySequence.Quit)
         quit_action.triggered.connect(self.close)
         actions.append(quit_action)
@@ -5871,7 +5871,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             "restart", name, "failed adding" if failed else "was slow adding")
         self.statusBar().showMessage(tr(
             "The extension «{name}» failed in the right-click menu and is "
-            "left out of it until IngeTrazo restarts. Update it or turn it "
+            "left out of it until Built restarts. Update it or turn it "
             "off in the Extension manager.", name=name), 15000)
 
     def _extension_name(self, key: str) -> str:
@@ -8979,7 +8979,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         cmd = self._new_window_command()
         if not QProcess.startDetached(cmd[0], cmd[1:]):
             QMessageBox.warning(self, tr("New Window"),
-                                tr("Could not start another IngeTrazo window."))
+                                tr("Could not start another Built window."))
 
     def _on_new(self) -> None:
         """File ▸ New: a new project in a tab of its own (#1066). An
@@ -9097,7 +9097,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         self.viewport.end_group_edit()
         path_str, _ = file_dialogs.getOpenFileName(
             self,
-            tr("Open IngeTrazo document"),
+            tr("Open Built document"),
             "",
             built.DOCUMENT_FILTER + ";;IngeTrazo projects (*.igzproj);;All files (*)",
         )
@@ -9420,7 +9420,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         )
         path_str, _ = file_dialogs.getSaveFileName(
             self,
-            tr("Save IngeTrazo document"),
+            tr("Save Built document"),
             default_name,
             built.BUILT_FILTER,
         )
@@ -9813,7 +9813,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         dlg = QDialog(self)
         dlg.setWindowTitle(tr("3D Text"))
         form = QFormLayout(dlg)
-        text_edit = QLineEdit(params.get("text") or tr("IngeTrazo"))
+        text_edit = QLineEdit(params.get("text") or tr("Built"))
         text_edit.selectAll()
         form.addRow(tr("Text:"), text_edit)
         font_box = QFontComboBox()
@@ -9958,7 +9958,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
     def _on_get_models(self) -> None:
         QMessageBox.information(
             self, tr("Get more models and textures"),
-            tr("Free sources that open directly in IngeTrazo:") + "<br><br>"
+            tr("Free sources that open directly in Built:") + "<br><br>"
             "<b>Poly Haven</b> — <a href='https://polyhaven.com'>"
             "polyhaven.com</a> " + tr("(CC0: models OBJ and PBR textures)")
             + "<br><b>ambientCG</b> — <a href='https://ambientcg.com'>"
@@ -10303,7 +10303,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         # reader only.
         QMessageBox.warning(
             self, tr("Import SKP"),
-            tr("IngeTrazo could not read {name} with its built-in .skp "
+            tr("Built could not read {name} with its built-in .skp "
                "reader.\n\nOpen it in the program it came from and export "
                "it as COLLADA (.dae) or OBJ, then import that file here.",
                name=skp.name))
@@ -11978,11 +11978,11 @@ class MainWindow(WorksessionMixin, QMainWindow):
 
     def _update_title(self) -> None:
         if self.__dict__.get("_empty_on"):
-            self.setWindowTitle("IngeTrazo")
+            self.setWindowTitle("Built")
             return
         marker = " *" if self._is_dirty() else ""
         if self._workspace is not None:
-            self.setWindowTitle(f"IngeTrazo — {self._workspace.title()}{marker}")
+            self.setWindowTitle(f"Built — {self._workspace.title()}{marker}")
             return
         if self._current_path is not None:
             name = self._current_path.name
@@ -11990,7 +11990,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             name = self._import_name
         else:
             name = tr("Untitled")
-        self.setWindowTitle(f"IngeTrazo — {name}{marker}")
+        self.setWindowTitle(f"Built — {name}{marker}")
         self._update_tab()
         # The composer has a taskbar button of its own: it names the model.
         composer = getattr(self, "_composer", None)
@@ -12070,7 +12070,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         if len(dirty) == 1:
             if dirty[0] is not self._doc:
                 self.activate_document(dirty[0])
-            return self._confirm_discard(tr("Quit IngeTrazo?"))
+            return self._confirm_discard(tr("Quit Built?"))
         names = "\n".join("• " + d.display_name() for d in dirty)
         box = QMessageBox(
             QMessageBox.Question, tr("Unsaved changes"),

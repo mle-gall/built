@@ -165,7 +165,7 @@ def _stats_to_text(stats: dict) -> str:
     """Plain-text summary (the Copy to Clipboard payload)."""
     s, style = stats, stats["style"]
     lines = [
-        "=== IngeTrazo — " + tr("Model Info") + " ===",
+        "=== Built — " + tr("Model Info") + " ===",
         "",
         "--- " + tr("Geometry") + " ---",
         f"{tr('Vertices')}:  {s['total_verts']:,}",

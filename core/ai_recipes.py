@@ -101,7 +101,7 @@ billboard): no la borres ni la muevas salvo que te lo pidan, y no la tomes \
 por el modelo."""
 
 #: Model conventions. First line of everything the model reads.
-UNITS = ("IngeTrazo es un modelador 3D libre de empujar/tirar: Z arriba, "
+UNITS = ("Built es un modelador 3D libre de empujar/tirar: Z arriba, "
          "unidades en METROS, ángulos en RADIANES.")
 
 

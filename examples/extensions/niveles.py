@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 José Castro Basso (FADU–UDELAR) — idea and first version.
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""Niveles — building levels as an IngeTrazo EXTENSION.
+"""Niveles — building levels as a Built EXTENSION.
 
 Levels (PB, PA, Azotea…) with their height; in an elevation or a section
 seen in parallel projection, a dashed guide across the drawing at each

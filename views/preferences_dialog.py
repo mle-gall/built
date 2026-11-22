@@ -61,7 +61,7 @@ _REST_MODES = (("normal", "Show normally"), ("fade", "Fade"),
                ("hide", "Hide (fastest)"))
 _UNITS_FOR_NEW_KEY = "units/use_for_new_documents"
 _DEFAULTS_NOTE = (
-    "Puts the settings of this window back to how IngeTrazo comes. "
+    "Puts the settings of this window back to how Built comes. "
     "Nothing is saved until you press OK. The language, the AI Assistant, "
     "the keyboard shortcuts and the units of the open document stay as "
     "they are.")
@@ -107,7 +107,7 @@ class PreferencesDialog(QDialog):
     def __init__(self, window) -> None:
         super().__init__(window)
         self._window = window
-        self.setWindowTitle(tr("Preferences") + " — IngeTrazo")
+        self.setWindowTitle(tr("Preferences") + " — Built")
         self.setMinimumWidth(440)
         st = QSettings()
 
@@ -169,7 +169,7 @@ class PreferencesDialog(QDialog):
             self._glass.setToolTip(tr(
                 "Toolbars, panels and menus on macOS's translucent glass, "
                 "with the toolbars in the title bar. Off: the opaque look "
-                "IngeTrazo has on every system. Applies after a restart."))
+                "Built has on every system. Applies after a restart."))
             form.addRow("", self._glass)
 
         self._rest = QComboBox()
@@ -256,7 +256,7 @@ class PreferencesDialog(QDialog):
         from core.update_check import auto_enabled, store_managed
         self._check_updates = QCheckBox(tr("Check for new versions at startup"))
         self._check_updates.setToolTip(tr(
-            "Once a day, IngeTrazo asks GitHub for the latest version number. "
+            "Once a day, Built asks GitHub for the latest version number. "
             "Nothing about you or your files is sent."))
         self._check_updates.setChecked(auto_enabled(st))
         # Into the form, or nowhere: setVisible(True) while it had no
@@ -420,7 +420,7 @@ class PreferencesDialog(QDialog):
         self._rust.setChecked(str(_gs.value(_native.SETTING, _native.DEFAULT, st)) == "1")
         if _native.available() is None:
             self._rust.setEnabled(False)
-            self._rust.setToolTip(tr("This build of IngeTrazo does not carry "
+            self._rust.setToolTip(tr("This build of Built does not carry "
                                      "the Rust engine."))
         else:
             self._rust.setToolTip(tr(
@@ -792,7 +792,7 @@ class PreferencesDialog(QDialog):
 
     def _show_ndof_read(self, sample, _dt) -> None:
         self._ndof_read.setText(tr(
-            "IngeTrazo: right {r:+.2f}  up {u:+.2f}  forward {f:+.2f}  "
+            "Built: right {r:+.2f}  up {u:+.2f}  forward {f:+.2f}  "
             "tilt {t:+.2f}  twist {s:+.2f}", r=sample.right, u=sample.up,
             f=sample.forward, t=sample.tilt, s=sample.spin))
 
@@ -980,7 +980,7 @@ class PreferencesDialog(QDialog):
         img = QImage(path)
         if img.isNull() or img.height() == 0:
             QMessageBox.warning(self, tr("Scale figure"),
-                                tr("That file is not a picture IngeTrazo can read."))
+                                tr("That file is not a picture Built can read."))
             return False
         if not img.hasAlphaChannel():
             QMessageBox.information(
@@ -1152,7 +1152,7 @@ class PreferencesDialog(QDialog):
                 set_language(lang)
                 QMessageBox.information(
                     self, tr("Language changed"),
-                    tr("Restart IngeTrazo to apply the new language."))
+                    tr("Restart Built to apply the new language."))
 
         # Theme: applies at once (a no-op re-apply is cheap).
         from views.theme import apply_theme, save_theme, saved_theme
@@ -1168,7 +1168,7 @@ class PreferencesDialog(QDialog):
             mac_glass.set_enabled(self._glass.isChecked())
             QMessageBox.information(
                 self, tr("Window chrome changed"),
-                tr("Restart IngeTrazo to apply the new window chrome."))
+                tr("Restart Built to apply the new window chrome."))
 
         from views.theme import apply_accent, save_accent, saved_accent
         accent = self._accent.currentData()
@@ -1221,7 +1221,7 @@ class PreferencesDialog(QDialog):
             _native.chosen_by_user(st)
             QMessageBox.information(
                 self, tr("Rust engine"),
-                tr("Restart IngeTrazo to switch the engine."))
+                tr("Restart Built to switch the engine."))
         setup = getattr(self._window, "_setup_autosave", None)
         if callable(setup):
             setup()                     # re-arm the timer with the new pace

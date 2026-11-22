@@ -457,12 +457,12 @@ if sys.platform == 'darwin':
     mac_icon = ROOT / 'resources' / 'icons' / 'ingetrazo.icns'
     app = BUNDLE(
         coll,
-        name='IngeTrazo.app',
+        name='Built.app',
         icon=str(mac_icon) if mac_icon.exists() else None,
         bundle_identifier='com.ingetrazo.IngeTrazo',
         info_plist={
-            'CFBundleName': 'IngeTrazo',
-            'CFBundleDisplayName': 'IngeTrazo',
+            'CFBundleName': 'Built',
+            'CFBundleDisplayName': 'Built',
             'CFBundleShortVersionString': _version,
             'CFBundleVersion': _version,
             'NSHighResolutionCapable': True,
@@ -470,7 +470,7 @@ if sys.platform == 'darwin':
             # which makes macOS treat the bundle as agent-only: no Dock icon,
             # no window, no menu bar — a GUI app must say so explicitly.
             'LSBackgroundOnly': False,
-            'NSHumanReadableCopyright': 'GPL-3.0-or-later — Marco Sumari Tellez and IngeTrazo contributors',
+            'NSHumanReadableCopyright': 'GPL-3.0-or-later — Built contributors; based on IngeTrazo by Marco Sumari Tellez and IngeTrazo contributors',
             # .igz / .skp double-click-to-open, same association the other
             # platforms register (packaging/ingetrazo.desktop, the .iss).
             'UTExportedTypeDeclarations': [{

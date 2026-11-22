@@ -435,7 +435,7 @@ def system_info(version: str, gl_line: str = "") -> str:
 
     from core.i18n import current_language
 
-    lines = [f"IngeTrazo {version} ({_build()})",
+    lines = [f"Built {version} ({_build()})",
              f"OS: {_os_name()} ({platform.machine()})",
              f"Python: {platform.python_version()}",
              f"Qt: {qVersion()}, PySide6: {PySide6.__version__}"]
@@ -484,7 +484,7 @@ def _os_name() -> str:
 class AboutDialog(QDialog):
     def __init__(self, parent, version: str, gl_line: str = "") -> None:
         super().__init__(parent)
-        self.setWindowTitle(tr("About IngeTrazo"))
+        self.setWindowTitle(tr("About Built"))
         self.setMinimumWidth(480)
         outer = QHBoxLayout(self)
         outer.setContentsMargins(18, 18, 18, 14)
@@ -517,9 +517,11 @@ class AboutDialog(QDialog):
         # Which engine computes the heavy parts (Rust when the experimental
         # native engine is on and loads) — the first thing a report needs.
         gl += f"<br><small>{tr('Engine')}: {engine()}</small>"
-        para("<b style='font-size:15px'>IngeTrazo</b> "
+        upstream = "<a href='https://github.com/ingelibre/ingetrazo'>IngeTrazo</a>"
+        para("<b style='font-size:15px'>Built</b> "
              f"{tr('Version')} {version}{gl}<br>"
              f"{tr('Free 3D modeler for architecture, engineering and 3D design.')}<br>"
+             f"{tr('Fork of {upstream}.', upstream=upstream)} "
              f"{tr('Created by')} <b>Marco Sumari Tellez</b> — "
              f"{tr('Civil Engineer — Arequipa, Peru')}")
         head = para(f"<b>{tr('With contributions from')}</b>")
@@ -529,10 +531,10 @@ class AboutDialog(QDialog):
         para("<small><a href='https://github.com/ingelibre/ingetrazo-extensions'>"
              f"{tr('Thanks as well to all the authors of the extensions catalogue')}"
              "</a>.</small>")
-        para(f"<small>{tr('And thanks to everyone who tries IngeTrazo and reports what they find.')}</small>")
+        para(f"<small>{tr('And thanks to everyone who tries Built and reports what they find.')}</small>")
         para(f"<small>{tr('Licensed under GPL-3.0-or-later.')} · "
-             "<a href='https://github.com/ingelibre/ingetrazo'>"
-             "github.com/ingelibre/ingetrazo</a></small>")
+             "<a href='https://github.com/mle-gall/ingetrazo'>"
+             "github.com/mle-gall/ingetrazo</a></small>")
         buttons = QDialogButtonBox(QDialogButtonBox.Ok, self)
         buttons.accepted.connect(self.accept)
         # What to paste in a bug report, one click away (#476).

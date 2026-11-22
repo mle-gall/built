@@ -237,7 +237,7 @@ class _Bridge(QObject, InspectionTools, RecordTools, FacetTools, StructureTools,
             # A call delivered by an event loop nested in the previous one
             # (something it ran is still waiting): never run inside it.
             job["reply"] = {"id": req.get("id"), "ok": False, "error":
-                            "IngeTrazo is still running the previous call"}
+                            "Built is still running the previous call"}
             job["done"].set()
             return
         self._busy = True
@@ -491,7 +491,7 @@ def connect_instructions(port: int, platform: str | None = None, **kw) -> str:
         + json.dumps(config, indent=2) + "\n\n"
         + tr("Other clients take the same block in their own file:") + "\n"
         + others + "\n\n"
-        + tr("Keep IngeTrazo open with the bridge on; the tools answer only while it runs.")
+        + tr("Keep Built open with the bridge on; the tools answer only while it runs.")
     )
 
 

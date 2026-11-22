@@ -46,7 +46,7 @@ try:
     from core.ai_recipes import reference as _reference
     REFERENCE = _reference("llamada")
 except ImportError:                             # pragma: no cover - packaging
-    REFERENCE = ("IngeTrazo: Z arriba, unidades en METROS. En el scope: "
+    REFERENCE = ("Built: Z arriba, unidades en METROS. En el scope: "
                  "scene, mesh, selection, groups, layers, viewport, "
                  "QVector3D, Mesh, Group, Edge, Face, bim. Recetario: "
                  "revolve / extrude / prism / wall / house.")
@@ -58,7 +58,7 @@ finally:
 #: the stance, with the recipes themselves on ``run_python`` where every
 #: client is sure to put them in front of the model.
 INSTRUCTIONS = (
-    "Estas herramientas operan el documento ABIERTO de IngeTrazo, en vivo: "
+    "Estas herramientas operan el documento ABIERTO de Built, en vivo: "
     "lo que escribas aparece en la pantalla del usuario y entra en su "
     "historial de deshacer.\n" + REFERENCE + "\nEmpieza por query_model "
     "para ver qué hay, construye con run_python y MIRA el resultado con "
@@ -109,8 +109,8 @@ def _call(name: str, args: dict) -> dict:
         reply = _bridge(name, args)
     except OSError as exc:
         return _tool_result(
-            "Cannot reach IngeTrazo's AI bridge on %s:%d (%s). "
-            "In IngeTrazo: the AI tab of the side tray > Start bridge (or Extensions > AI Bridge (MCP))."
+            "Cannot reach Built's AI bridge on %s:%d (%s). "
+            "In Built: the AI tab of the side tray > Start bridge (or Extensions > AI Bridge (MCP))."
             % (HOST, PORT, exc), is_error=True)
     if not reply.get("ok"):
         return _tool_result(str(reply.get("error")), is_error=True)

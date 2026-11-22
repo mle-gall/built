@@ -41,7 +41,7 @@ class UpdateDialog(QDialog):
         self.resize(560, 460)
         col = QVBoxLayout(self)
 
-        title = QLabel(tr("IngeTrazo {version} is available",
+        title = QLabel(tr("Built {version} is available",
                           version=release.version))
         font = title.font()
         font.setPointSizeF(font.pointSizeF() * 1.3)

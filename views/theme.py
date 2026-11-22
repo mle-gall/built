@@ -78,7 +78,7 @@ def glass_tint(dark: bool) -> QColor:
 # change until they choose one.
 ORANGE, SYSTEM_ACCENT = "orange", "system"
 ACCENTS = (
-    (ORANGE, "IngeTrazo orange", (243, 115, 41)),
+    (ORANGE, "Built orange", (243, 115, 41)),
     ("blue", "Blue", (53, 132, 228)),
     ("green", "Green", (46, 160, 67)),
     ("red", "Red", (224, 27, 36)),

@@ -5,13 +5,13 @@ try:
     from core.ai_recipes import reference
     REFERENCE = reference("llamada")
 except ImportError:  # minimal packaged client without the recipe book
-    REFERENCE = "IngeTrazo: Z-up, metres. Inspect with query_model."
+    REFERENCE = "Built: Z-up, metres. Inspect with query_model."
 
 BUILTIN_TOOLS = [
     {
         "name": "run_python",
         "description": (
-            "Execute Python against the LIVE IngeTrazo document (Z-up, "
+            "Execute Python against the LIVE Built document (Z-up, "
             "metres). Returns stdout/stderr. The reference below is "
             "everything you need — read it instead of exploring the API. "
             "Use query_model/query_groups/query_status for inspection. "
@@ -73,12 +73,12 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "undo",
-        "description": "Undo the last step in IngeTrazo.",
+        "description": "Undo the last step in Built.",
         "inputSchema": {"type": "object", "properties": {}},
     },
     {
         "name": "redo",
-        "description": "Redo the last undone step in IngeTrazo.",
+        "description": "Redo the last undone step in Built.",
         "inputSchema": {"type": "object", "properties": {}},
     },
 ]

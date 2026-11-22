@@ -388,7 +388,7 @@ def uninstall_extension(ident: str) -> None:
     target, managed = _managed_target(ident)
     if not target.exists() or not managed or not target.is_dir():
         raise ExtensionManagerError(
-            f"{ident!r} is not an installed extension managed by IngeTrazo.")
+            f"{ident!r} is not an installed extension managed by Built.")
     shutil.rmtree(target)
 
 
@@ -663,7 +663,7 @@ def install_extension(extension: Extension,
     managed copy under an id the catalog dropped count as such a copy."""
     if not compatible_with_current(extension):
         raise ExtensionManagerError(
-            f"{extension.id!r} requires IngeTrazo "
+            f"{extension.id!r} requires Built "
             f"{extension.minimum_version} or later.")
     target, managed = _managed_target(extension.id)
     if not managed:
@@ -674,7 +674,7 @@ def install_extension(extension: Extension,
     if source is not None:
         if not source.exists():
             raise ExtensionManagerError(
-                f"{extension.id!r} is not shipped with this IngeTrazo.")
+                f"{extension.id!r} is not shipped with this Built.")
         archive_data = source.read_bytes() if source.is_file() else None
     else:
         archive_data = _get(extension.download, MAX_DOWNLOAD_BYTES)

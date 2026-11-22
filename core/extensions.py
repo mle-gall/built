@@ -147,7 +147,7 @@ def _candidates(p_dir: Path):
                 inner = _misplaced_module(entry)
                 if inner is not None:
                     yield entry.name, entry, (
-                        "This folder is not an extension: IngeTrazo needs "
+                        "This folder is not an extension: Built needs "
                         "__init__.py directly inside it. Move "
                         f"{inner} straight into the extensions folder.")
                 continue

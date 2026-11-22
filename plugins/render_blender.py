@@ -726,7 +726,7 @@ class RenderPanel(QWidget):
             self._help.setVisible(False)
             return
         self._go.setEnabled(False)
-        self._where.setText(tr("Blender is not installed, or IngeTrazo "
+        self._where.setText(tr("Blender is not installed, or Built "
                                "cannot reach it."))
         self._fill_help(kind)
 

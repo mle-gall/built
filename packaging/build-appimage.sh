@@ -55,7 +55,7 @@ mkdir -p "$TARDIR" "$OUT"
 cp -a "$WORK/pyi/ingetrazo/." "$TARDIR/"
 cp packaging/ingetrazo.desktop resources/icons/ingetrazo_256.png "$TARDIR/"
 cat > "$TARDIR/README.txt" <<'TXT'
-IngeTrazo — portable Linux build
+Built — portable Linux build
 ================================
 
 Run it:            ./ingetrazo          (or: ./ingetrazo model.igz)

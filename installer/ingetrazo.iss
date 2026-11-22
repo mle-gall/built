@@ -11,9 +11,9 @@
 ; The AppId is a FIXED GUID — never change it between versions, or Windows
 ; treats every release as a different app and upgrades stop being clean.
 
-#define MyAppName "IngeTrazo"
+#define MyAppName "Built"
 #define MyAppPublisher "Ing. Marco Sumari Tellez"
-#define MyAppURL "https://ingetrazo.com"
+#define MyAppURL "https://github.com/mle-gall/ingetrazo"
 #define MyAppExeName "ingetrazo.exe"
 
 ; MyAppVersion is injected from the build command with /DMyAppVersion=X.Y.Z
@@ -29,8 +29,8 @@ AppVersion={#MyAppVersion}
 AppVerName={#MyAppName} {#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
-AppSupportURL=https://github.com/tuxiasumari/ingetrazo/issues
-AppUpdatesURL=https://github.com/tuxiasumari/ingetrazo/releases
+AppSupportURL=https://github.com/mle-gall/ingetrazo/issues
+AppUpdatesURL=https://github.com/mle-gall/ingetrazo/releases
 VersionInfoVersion={#MyAppVersion}
 VersionInfoCompany={#MyAppPublisher}
 VersionInfoDescription=Modelador 3D libre para ingenieria y arquitectura
@@ -76,26 +76,26 @@ Name: "brazilianportuguese"; MessagesFile: "compiler:Languages\BrazilianPortugue
 Name: "polish"; MessagesFile: "compiler:Languages\Polish.isl"
 
 [CustomMessages]
-english.SkpDefault=Open .skp files with IngeTrazo (double-click)
+english.SkpDefault=Open .skp files with Built (double-click)
 english.FileAssociations=File associations:
 english.IgzDocument=IngeTrazo document
-english.DaeModel=COLLADA model (IngeTrazo)
-english.SkpModel=SKP model (IngeTrazo)
-spanish.SkpDefault=Abrir archivos .skp con IngeTrazo (doble clic)
+english.DaeModel=COLLADA model (Built)
+english.SkpModel=SKP model (Built)
+spanish.SkpDefault=Abrir archivos .skp con Built (doble clic)
 spanish.FileAssociations=Asociaciones de archivos:
 spanish.IgzDocument=Documento de IngeTrazo
-spanish.DaeModel=Modelo COLLADA (IngeTrazo)
-spanish.SkpModel=Modelo SKP (IngeTrazo)
-brazilianportuguese.SkpDefault=Abrir arquivos .skp com o IngeTrazo (clique duplo)
+spanish.DaeModel=Modelo COLLADA (Built)
+spanish.SkpModel=Modelo SKP (Built)
+brazilianportuguese.SkpDefault=Abrir arquivos .skp com o Built (clique duplo)
 brazilianportuguese.FileAssociations=Associações de arquivos:
 brazilianportuguese.IgzDocument=Documento do IngeTrazo
-brazilianportuguese.DaeModel=Modelo COLLADA (IngeTrazo)
-brazilianportuguese.SkpModel=Modelo SKP (IngeTrazo)
-polish.SkpDefault=Otwieraj pliki .skp w IngeTrazo (dwukrotne kliknięcie)
+brazilianportuguese.DaeModel=Modelo COLLADA (Built)
+brazilianportuguese.SkpModel=Modelo SKP (Built)
+polish.SkpDefault=Otwieraj pliki .skp w Built (dwukrotne kliknięcie)
 polish.FileAssociations=Skojarzenia plików:
 polish.IgzDocument=Dokument IngeTrazo
-polish.DaeModel=Model COLLADA (IngeTrazo)
-polish.SkpModel=Model SKP (IngeTrazo)
+polish.DaeModel=Model COLLADA (Built)
+polish.SkpModel=Model SKP (Built)
 
 [Tasks]
 Name: "skpdefault"; Description: "{cm:SkpDefault}"; \

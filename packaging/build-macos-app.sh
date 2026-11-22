@@ -28,11 +28,11 @@ ARCH=$(uname -m)   # arm64 or x86_64 — whichever Mac builds it
 
 cd "$ROOT"
 VERSION=$("$PYTHON" -c 'from core.version import __version__; print(__version__)')
-BUILD_APP="$WORK/pyi/IngeTrazo.app"
-APP="$OUT/IngeTrazo.app"
-DMG="$OUT/IngeTrazo-$VERSION-macos-$ARCH.dmg"
+BUILD_APP="$WORK/pyi/Built.app"
+APP="$OUT/Built.app"
+DMG="$OUT/Built-$VERSION-macos-$ARCH.dmg"
 
-echo "==> IngeTrazo $VERSION -> $DMG"
+echo "==> Built $VERSION -> $DMG"
 
 echo "==> icon (.icns from the committed PNGs, via iconutil)"
 # The Windows .ico is built by scripts/gen_app_icon.py + ImageMagick/Inkscape;
@@ -82,7 +82,7 @@ rm -rf "$STAGE"; mkdir -p "$STAGE"
 cp -R "$APP" "$STAGE/"
 ln -s /Applications "$STAGE/Applications"
 rm -f "$DMG"
-hdiutil create -volname "IngeTrazo $VERSION" -srcfolder "$STAGE" \
+hdiutil create -volname "Built $VERSION" -srcfolder "$STAGE" \
     -ov -format UDZO "$DMG" >/dev/null
 rm -rf "$STAGE"
 

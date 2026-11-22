@@ -67,7 +67,7 @@ def multimedia_available() -> bool:
 
 
 def no_video_message() -> str:
-    return tr("This build of IngeTrazo has no video support (Qt Multimedia).")
+    return tr("This build of Built has no video support (Qt Multimedia).")
 
 
 class MkvWriter:

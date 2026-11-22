@@ -192,12 +192,12 @@ def test_switching_drops_the_tool_and_leaves_the_group(win):
 def test_the_title_and_the_tab_mark_follow_the_front(win, tmp_path):
     path = _igz(tmp_path, "casa.igz")
     win.open_path(path)
-    assert win.windowTitle() == "IngeTrazo — casa.igz"
+    assert win.windowTitle() == "Built — casa.igz"
     _edit(win)
     assert win.windowTitle().endswith(" *")
     assert win._project_tabs.tabs.tabText(0) == "casa.igz •"
     win._on_new()
-    assert win.windowTitle() == "IngeTrazo — Untitled"
+    assert win.windowTitle() == "Built — Untitled"
     # The background tab still says it has unsaved changes.
     assert win._project_tabs.tabs.tabText(0) == "casa.igz •"
 

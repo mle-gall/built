@@ -104,7 +104,7 @@ def system_prompt(lang: str | None = None) -> str:
 #: modelling reference itself is shared with the MCP door (core.ai_recipes),
 #: so a new helper is taught once and both doors learn it.
 SYSTEM_PROMPT = "\n".join((
-    "Eres el asistente de modelado de IngeTrazo. " + ai_recipes.UNITS
+    "Eres el asistente de modelado de Built. " + ai_recipes.UNITS
     + " Conversas breve y claro.",
     """
 Para ACTUAR sobre el modelo incluye EXACTAMENTE UN bloque ```python por \
@@ -686,7 +686,7 @@ class AsistentePanel(QWidget):
         env_vars = ai.ENV_KEYS.get(provider)
         if env_vars:
             hint += tr(" Or define {var} in the environment and restart "
-                       "IngeTrazo.", var=env_vars[0])
+                       "Built.", var=env_vars[0])
         return hint
 
     @staticmethod

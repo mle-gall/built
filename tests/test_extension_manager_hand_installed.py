@@ -196,7 +196,7 @@ def test_an_extension_shipped_with_the_app_installs_from_the_manager(
         grid = dialog._pages["browse"]["grid"]
         row = grid.itemAt(1).widget()
         labels = _texts(row, QLabel)
-        assert "Included with IngeTrazo" in labels
+        assert "Included with Built" in labels
         assert "INCLUDED" in labels
         assert not any("Community extension" in text for text in labels)
         assert "Install" in _texts(row, QPushButton)

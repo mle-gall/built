@@ -15,7 +15,7 @@ class Home(QDialog):
     def __init__(self, window):
         super().__init__(window)
         self.window_host = window
-        self.setWindowTitle('Home — IngeTrazo')
+        self.setWindowTitle('Home — Built')
         self.resize(650, 460)
         layout = QVBoxLayout(self)
         buttons = QHBoxLayout()
@@ -72,8 +72,9 @@ class Home(QDialog):
         original = str(path)
         path = Path(path)
         if not path.is_file():
+            format_name = "Built" if built.is_built(path) else "IngeTrazo"
             located, _ = file_dialogs.getOpenFileName(
-                self, 'Locate ' + path.name, '', 'IngeTrazo (*' + path.suffix + ')')
+                self, 'Locate ' + path.name, '', f'{format_name} (*{path.suffix})')
             if not located:
                 return False
             path = Path(located)

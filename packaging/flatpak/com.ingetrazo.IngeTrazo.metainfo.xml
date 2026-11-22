@@ -3,7 +3,7 @@
   <id>com.ingetrazo.IngeTrazo</id>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-3.0-or-later</project_license>
-  <name>IngeTrazo</name>
+  <name>Built</name>
   <summary>Draw as if by hand: free 3D modeler for architecture and engineering</summary>
   <summary xml:lang="es">Traza como a mano: modelador 3D libre para arquitectura e ingeniería</summary>
   <developer id="com.ingetrazo">
@@ -70,9 +70,9 @@
       <caption xml:lang="es">Etiquetas BIM sobre lo trazado, exportadas a IFC4 para el metrado</caption>
     </screenshot>
   </screenshots>
-  <url type="homepage">https://ingetrazo.com</url>
-  <url type="bugtracker">https://github.com/ingelibre/ingetrazo/issues</url>
-  <url type="vcs-browser">https://github.com/ingelibre/ingetrazo</url>
+  <url type="homepage">https://github.com/mle-gall/ingetrazo</url>
+  <url type="bugtracker">https://github.com/mle-gall/ingetrazo/issues</url>
+  <url type="vcs-browser">https://github.com/mle-gall/ingetrazo</url>
   <content_rating type="oars-1.1"/>
   <releases>
     <release version="0.6.2" date="2026-11-14">

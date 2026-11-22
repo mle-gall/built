@@ -99,7 +99,7 @@ class PythonConsoleDialog(QDialog):
         #: palette when the theme changes with the console open.
         self._lines: list[tuple[str, str]] = []
 
-        self.setWindowTitle(tr("Python Console") + " — IngeTrazo")
+        self.setWindowTitle(tr("Python Console") + " — Built")
         self.setMinimumSize(640, 480)
         self.resize(720, 540)
 
@@ -216,7 +216,7 @@ class PythonConsoleDialog(QDialog):
         self._output.ensureCursorVisible()
 
     def _print_welcome(self) -> None:
-        self._append_text("IngeTrazo — " + tr("Python Console"), "title")
+        self._append_text("Built — " + tr("Python Console"), "title")
         self._append_text(
             tr("Live objects: scene, mesh, viewport, window, selection, "
                "groups, layers. Changes are undoable (Ctrl+Z)."), "muted")
