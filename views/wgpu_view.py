@@ -275,13 +275,11 @@ class WgpuView(QWidget):
                 if group is not None and any(anchor):
                     remote[id(group.mesh)] = (group.mesh, anchor)
         self._remote_meshes = tuple(remote.values())
-        if old_origin != self.packed.origin:
-            from copy import copy
-            # Keep camera movement, depth fitting and screen rays in the same
-            # frame as the instance matrices. Qt never holds the model offset.
-            self.camera = copy(self.camera)
-            self.camera.target = QVector3D(*self.packed.world_bounds.mean(axis=0))
-
+        if any(self.packed.origin):
+            self._sync_scene_camera()
+        elif any(old_origin) and self.source_viewport is not None:
+            self.camera = self.source_viewport.camera
+            self._source_pose = None
         from views.wgpu_billboards import Billboards
         self._billboards = Billboards(self.packed)
         self._scene_dirty = True
@@ -316,7 +314,7 @@ class WgpuView(QWidget):
         if not opening:
             self.build_seconds = time.perf_counter()-start
         lo, hi = self.packed.world_bounds
-        if self.source_viewport is None:
+        if self.source_viewport is None and not any(self.packed.origin):
             self.camera.target = QVector3D(*((lo+hi)/2))
             self.camera.distance = max(float(np.linalg.norm(hi-lo))*1.4, 1.)
         self._prepare_inference()
@@ -526,6 +524,48 @@ class WgpuView(QWidget):
         finally:
             self._drawing_frame = False
 
+    def _sync_scene_camera(self):
+        """Mirror document camera controls while retaining a precise local target."""
+        from copy import copy
+        origin = self.packed.origin
+        source = getattr(self.source_viewport, 'camera', None)
+        last = getattr(self, '_source_pose', None)
+        if last is None or last[0] != origin or last[1] is not source:
+            self.camera = copy(source or self.camera)
+            target = np.asarray(self.camera.target.toTuple()) - origin
+            lo, hi = self.packed.world_bounds
+            center = (lo + hi) * .5
+            # First geometry in a remote document, with the default camera
+            # still looking at model zero. Frame its actual relative extent.
+            if np.linalg.norm(target-center) > max(self.camera.distance, np.linalg.norm(hi-lo)) * 4:
+                self.camera.fit_to(QVector3D(*lo), QVector3D(*hi))
+            elif source is not None and source.target == QVector3D(*(center + origin)):
+                self.camera.target = QVector3D(*center)
+            else:
+                self.camera.target = QVector3D(*target)
+            previous = {}
+        else:
+            previous = last[2]
+        if source is None:
+            self._source_pose = (origin, None, {})
+            return
+        state = {}
+        for name, value in vars(source).items():
+            if name.startswith('_') or name in ('aspect', 'depth_reach'):
+                continue
+            signature = value.toTuple() if isinstance(value, QVector3D) else value
+            if name in previous and signature != previous[name]:
+                if name == 'target':
+                    self.camera.target = QVector3D(*np.subtract(signature, origin))
+                else:
+                    setattr(self.camera, name, value)
+            else:
+                local = getattr(self.camera, name)
+                value = QVector3D(*np.add(local.toTuple(), origin)) if name == 'target' else local
+                setattr(source, name, value)
+            state[name] = value.toTuple() if isinstance(value, QVector3D) else value
+        self._source_pose = (origin, source, state)
+
     def _present_frame(self):
         start = time.perf_counter()
         # A scene packed since the last frame goes up BEFORE anything is
@@ -540,7 +580,9 @@ class WgpuView(QWidget):
                 return None
         self.tools.sync()
         if self.source_viewport is not None:
-            if not any(self.packed.origin):
+            if any(self.packed.origin):
+                self._sync_scene_camera()
+            else:
                 self.camera = self.source_viewport.camera
             self._mirror_cursor()
         # R-look 3c: compute each camera matrix once, after updating aspect.
@@ -733,6 +775,8 @@ class WgpuView(QWidget):
             self._scene_dirty = False
         elif self._scene_dirty:
             self._upload()
+        if any(self.packed.origin):
+            self._sync_scene_camera()
         camera = copy(self.camera if any(self.packed.origin) else source.camera)
         camera.aspect = width_px / height_px
         view, projection = camera.view_matrix(), camera.projection_matrix()

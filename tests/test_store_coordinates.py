@@ -273,3 +273,23 @@ def test_bulk_weld_uses_source_precision_at_the_radius(dtype, counts):
     vertices, ids = mesh.bulk_weld(points)
     mesh.add_edges_welded(vertices, ids[:1], ids[1:])
     assert mesh._store.counts() == counts
+
+
+def test_metal_camera_tracks_document_controls_without_quantising_local_pan(view):
+    from PySide6.QtGui import QVector3D as V
+    from tests.test_.skp_inference_gaps import refresh
+    mesh = view.scene.mesh
+    mesh.add_face([(650000.+dx, 6860000.+dy, 0.) for dx, dy in
+                   [(.01,.02),(.03,.02),(.03,.04),(.01,.04)]])
+    refresh(view)
+    np.testing.assert_allclose(view.camera.target.toTuple(), [.02,.03,0.], atol=1e-8)
+    assert view.camera.distance < .2
+    source = view.source_viewport.camera
+    view.camera.target += V(.001234, .002345, .003456)
+    precise = view.camera.target.toTuple()
+    view._sync_scene_camera()
+    source.yaw += .3
+    source.fov_deg = 50.
+    view._sync_scene_camera()
+    assert view.camera.target.toTuple() == precise
+    assert view.camera.yaw == source.yaw and view.camera.fov_deg == 50.

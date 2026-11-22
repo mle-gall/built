@@ -66,7 +66,7 @@ SHARED = (
     "_inference_worker", "_inference_queued", "_instance_updates",
     "_content_token", "_paint_key", "_billboards", "_container_boxes",
     "_container_box_rows", "_resident_count", "_resident_edit_copies",
-    "_scene_dirty", "_parent_map", "_rest_signature", "_selection_rows",
+    "_scene_dirty", "_remote_meshes", "_parent_map", "_rest_signature", "_selection_rows",
     "suppressed_faces", "build_seconds", "upload_seconds", "after_open",
 )
 
