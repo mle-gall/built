@@ -104,7 +104,8 @@ class InstanceUpdates:
                                       SnapshotMutation, SnapshotCompound, MoveVerticesCommand, AddEdgeCommand,
                                       AddFaceCommand, EraseSelectionCommand, HideCommand, AssignLayerCommand,
                                       ReshareInstanceCommand, AddGuideCommand, ChangeGuideCommand,
-                                      DeleteGuidesCommand, MoveGuidesCommand, RotateGuidesCommand)
+                                      DeleteGuidesCommand, MoveGuidesCommand, RotateGuidesCommand,
+                                      AddDimensionCommand, AddTextLabelCommand)
             def visit(command):
                 from core.history import (SetFaceTextureCommand, SetFaceBackCommand,
                                           SetFaceColorCommand, SetFaceOpacityCommand)
@@ -174,7 +175,8 @@ class InstanceUpdates:
                     return True
                 return isinstance(command, (SetRecordCommand, SetRegistryCommand,
                                             AddGuideCommand, ChangeGuideCommand, DeleteGuidesCommand,
-                                            MoveGuidesCommand, RotateGuidesCommand))
+                                            MoveGuidesCommand, RotateGuidesCommand,
+                                            AddDimensionCommand, AddTextLabelCommand))
             self.journal_valid = self.journal_valid and ran and visit(command)
             self.version = _resident_version(self.scene)
         self.unsubscribe = history.add_listener(before=before, after=after)

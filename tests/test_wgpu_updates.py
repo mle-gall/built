@@ -747,3 +747,21 @@ def test_new_default_layer_does_not_change_resident_paint_key():
     assert _paint_key(scene) == before
     scene.layers[-1].opacity = .5
     assert _paint_key(scene) != before
+
+
+def test_adding_annotations_preserves_local_journal():
+    from core.dimension import Dimension
+    from core.history import AddDimensionCommand, AddTextLabelCommand, History
+    from core.textlabel import TextLabel
+    scene, updates = fixture_scene()
+    history = History(scene)
+    updates.observe(history)
+    for command in (AddDimensionCommand(Dimension(QVector3D(), QVector3D(2, 0, 0),
+                                                  QVector3D(0, 1, 0))),
+                    AddTextLabelCommand(TextLabel(QVector3D(), QVector3D(1, 1, 0), "axis"))):
+        history.execute(command)
+        for step in (lambda: None, history.undo, history.redo):
+            step()
+            ids, rows = updates.diff(scene)
+            assert updates.last_local and not len(ids) and not updates.changed
+            updates.apply(ids, rows)
