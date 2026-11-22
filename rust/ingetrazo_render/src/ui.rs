@@ -762,12 +762,18 @@ impl Ui {
                             let folded = title.starts_with("Export");
                             let body = |ui: &mut egui::Ui| {
                                 for (label, value) in rows {
-                                    ui.horizontal(|ui| {
-                                        let (lr, _) = ui.allocate_exact_size(vec2(104.0, 18.0), Sense::hover());
-                                        ui.painter().text(lr.left_center(), egui::Align2::LEFT_CENTER, label,
-                                            egui::FontId::proportional(11.5), DIM);
-                                        ui.label(egui::RichText::new(value).size(12.0).color(INK));
-                                    });
+                                    // Value right-aligned; the label takes what is left, cut short.
+                                    let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 18.0), Sense::hover());
+                                    let v = ui.painter().layout_no_wrap(value.clone(), egui::FontId::proportional(12.0), INK);
+                                    let vw = v.size().x.min(r.width() * 0.6);
+                                    ui.painter().galley(pos2(r.max.x - 4.0 - vw, r.center().y - v.size().y / 2.0), v, INK);
+                                    let mut job = egui::text::LayoutJob::single_section(label.clone(), egui::TextFormat {
+                                        font_id: egui::FontId::proportional(11.5), color: DIM, ..Default::default() });
+                                    job.wrap.max_width = (r.width() - vw - 14.0).max(20.0);
+                                    job.wrap.max_rows = 1;
+                                    job.wrap.break_anywhere = true;
+                                    let l = ui.painter().layout_job(job);
+                                    ui.painter().galley(pos2(r.min.x, r.center().y - l.size().y / 2.0), l, DIM);
                                 }
                             };
                             if folded {

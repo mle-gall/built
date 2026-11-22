@@ -394,7 +394,8 @@ def _tree(view, win) -> None:
         node = nodes[key]
         name = node["name"]
         if "source" in node:
-            name = f"{name} ↗ {links.stem(node['source'])}"
+            stem = links.stem(node["source"])
+            name = f"{name} ↗" if name == stem else f"{name} ↗ {stem}"
         cls = recipes[key].get("class")
         if "source" in node:
             kind = "Reference"
