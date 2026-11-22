@@ -1790,6 +1790,8 @@ def _adapt_inner(model, name: str, skp_path=None):
     # holds nothing but one placement — and a wholly empty entry simply
     # places nothing.
     protos = _merge_equal_protos(protos)
+    # Recursive helpers keep this private index alive until cyclic collection.
+    by_id.clear()
 
     # The namespace the placements' persistent ids are turned into uids
     # under. The file's name: a re-import of the file after it was edited
