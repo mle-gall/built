@@ -1949,8 +1949,9 @@ def _restore_store_state(m, snap: StoreState) -> None:
 
 def empty_store_mesh():
     """Fresh empty store for a result built from store-backed operands."""
+    from core import _native
     mesh = Mesh()
-    store = _module().MeshStore(next(_mesh._KEY_NAMESPACES), **_weld_args())
+    store = _native.available().MeshStore(next(_mesh._KEY_NAMESPACES), **_weld_args())
     become_store(mesh, store, [])
     return mesh
 

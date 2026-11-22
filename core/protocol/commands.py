@@ -1,11 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""Commands of the core protocol by key (docs/core-protocol.md §1): the
-first three, each one History step on the open mesh, each answered with
-the step the change feed published for it.
+"""Commands of the core protocol by key (docs/core-protocol.md §1): each
+command runs through History and returns the step published by its change feed.
 
-``run(history, name, **args)``: ``move_vertices``, ``push_pull``,
-``erase``, ``undo``, ``redo``. Arguments are keys and plain numbers; an
+``run(history, name, **args)`` dispatches the names in ``COMMANDS``.
+Arguments are keys, placement uids and plain values. An
 unknown key raises ``KeyError`` before anything runs. The answer is
 ``{"ok", "step", "error", "rejected"}`` with ``step`` the feed's record
 (a :class:`core.protocol.feed.Step`) or None when nothing happened."""
