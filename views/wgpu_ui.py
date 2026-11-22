@@ -808,11 +808,29 @@ def _tree(view, win) -> None:
         if colset == 2:
             if key is not None:
                 r = recipes.get(key, {})
-                return [str(r.get("class") or "—"), str(r.get("predefined_type") or "")]
+                return [str(r.get("class") or "—"), str(r.get("predefined_type") or ""), _qty_text(node_qty(key))]
             if g is not None:
                 rec = g.ifc or {}
-                return [str(rec.get("class") or "inherits"), str(rec.get("predefined_type") or "")]
+                return [str(rec.get("class") or "inherits"), str(rec.get("predefined_type") or ""),
+                        _qty_text(_group_qty(view, g))]
         return []
+
+    if colset == 2:
+        _measure(view, win, auto=True)
+    qty_memo = {}
+
+    def node_qty(key):
+        # The node's measured quantities, its sub-nodes' included, per unit.
+        if key not in qty_memo:
+            total, stack = defaultdict(float), [key]
+            while stack:
+                k = stack.pop()
+                for g in direct.get(k, ()):
+                    for unit, v in _group_qty(view, g).items():
+                        total[unit] += v
+                stack.extend(children.get(k, ()))
+            qty_memo[key] = dict(total)
+        return qty_memo[key]
 
     def add(key, name, kind, badge, icon, d, count, probs, act, row, eye, lock, expandable, expanded, sel, extra=()):
         rows.append(([key, name, kind, badge, icon, *extra],
@@ -1242,6 +1260,95 @@ def _paint_with(win, key) -> None:
                 return
 
 
+UNIT_TEXT = {"m2": "m²", "m3": "m³", "m": "m", "und": "u", "kg": "kg"}
+
+
+def _measure(view, win, auto=False) -> None:
+    """Quantity takeoff (the BIM panel's metrado), per item. The first
+    measure walks every tagged object (7.5 s on the 99k-object Ride file),
+    so it runs when asked; after it the memo keeps it current for the
+    cost of what changed (0.2 s there)."""
+    import time
+    from core import bim
+    scene = win.viewport.scene
+    q = view.__dict__.get("_ui_qty")
+    if q is None or q["scene"] != id(scene):
+        if auto:
+            return
+        q = view._ui_qty = {"scene": id(scene), "memo": {}, "sig": None, "by_group": {}}
+    if q["sig"] == scene.content_version:
+        return
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QApplication
+    t0 = time.perf_counter()
+    QApplication.setOverrideCursor(Qt.WaitCursor)
+    try:
+        objs = bim.collect_objects(scene, q["memo"])
+        by_group = {}
+        for obj in objs:
+            owner = obj.get("group") or obj.get("owner")
+            if owner is None:
+                continue
+            if "_q" not in obj:
+                try:
+                    obj["_q"] = bim.object_quantities(obj)[2]
+                except Exception:
+                    obj["_q"] = (None, "")
+            value, unit = obj["_q"]
+            if unit == "und":
+                value = 1.0
+            if value is None or not unit:
+                continue
+            per = by_group.setdefault(id(owner), {})
+            per[unit] = per.get(unit, 0.0) + value
+        q["by_group"] = by_group
+        q["sig"] = scene.content_version
+        q["count"] = len(objs)
+    finally:
+        QApplication.restoreOverrideCursor()
+    if not auto:
+        win.viewport.flash_status(f"Measured {len(objs)} items in {time.perf_counter() - t0:.1f} s")
+    view._ui_tree_sig = None
+    view._ui_insp_sig = None
+
+
+def _group_qty(view, g) -> dict:
+    q = view.__dict__.get("_ui_qty")
+    return q["by_group"].get(id(g), {}) if q else {}
+
+
+def _qty_text(per_unit) -> str:
+    """The main measure of a row: its largest unit's total, «+» if mixed."""
+    if not per_unit:
+        return ""
+    order = ["m3", "m2", "m", "kg", "und"]
+    unit = min(per_unit, key=lambda u: order.index(u) if u in order else 9)
+    v = per_unit[unit]
+    text = (f"{v:.0f}" if unit == "und" or v >= 100 else f"{v:.2f}") + " " + UNIT_TEXT.get(unit, unit)
+    return text + (" +" if len(per_unit) > 1 else "")
+
+
+def _qty_rows(per_unit) -> list:
+    return [(UNIT_TEXT.get(u, u), f"{v:.0f}" if u == "und" else f"{v:.3f}") for u, v in sorted(per_unit.items())]
+
+
+def _export_csv(win) -> None:
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QApplication
+    from core.bim import quantities_csv
+    from views.filedialogs import file_dialogs
+    path, _ = file_dialogs.getSaveFileName(win, "Export quantities CSV", "metrado.csv", "CSV (*.csv);;All files (*)")
+    if not path:
+        return
+    QApplication.setOverrideCursor(Qt.WaitCursor)
+    try:
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(quantities_csv(win.viewport.scene))
+    finally:
+        QApplication.restoreOverrideCursor()
+    win.viewport.flash_status(f"Quantities exported to {path}")
+
+
 def _problem_step(win, view, step) -> None:
     """⌘] / ⌘[: select and frame the next or previous problem."""
     order = getattr(view, "_ui_problem_order", [])
@@ -1327,6 +1434,9 @@ def _tree_action(win, view, action) -> None:
                 parts.on_scene_changed()
                 parts._on_copy()
                 vp.flash_status("Cut list copied")
+        elif verb == "insp" and key == "measure":
+            _measure(view, win)
+            view._ui_tree_sig = None
         elif verb == "insp" and key == "solidrepair" and len(groups) == 1:
             from plugins.solid_inspector import RepairSolidsCommand
             cmd = RepairSolidsCommand([groups[0].mesh])
@@ -1460,6 +1570,11 @@ def _tree_action(win, view, action) -> None:
                 view._ui_layer_rev = getattr(view, "_ui_layer_rev", 0) + 1
                 rebuild()
                 vp.update()
+        elif verb == "measure":
+            _measure(view, win)
+            rebuild()
+        elif verb == "exportcsv":
+            _export_csv(win)
         elif verb == "expandall":
             exp.update(f"n:{k}" for k in data.get("nodes", {}))
             rebuild()
@@ -1728,6 +1843,14 @@ def _inspector(view, win) -> None:
             export.append((c.get("system", "Classification"), f"{c.get('code', '')} {c.get('name', '')}".strip()))
         if recipe.get("systems"):
             export.append(("Systems", ", ".join(recipe["systems"])))
+        if view.__dict__.get("_ui_qty"):
+            total = {}
+            for g in members:
+                for u, v in _group_qty(view, g).items():
+                    total[u] = total.get(u, 0.0) + v
+            sections.append(("Quantities", _qty_rows(total) or [("Measured", "nothing to measure")]))
+        else:
+            sections.append(("Actions", [("measure", "Measure quantities")]))
         sections.append(("Export details", export))
         view.renderer.ui_set_inspector(node["name"], sections)
         return
@@ -1772,6 +1895,8 @@ def _inspector(view, win) -> None:
             sections.append(("Linked file", [("Source", str(link.get("path", "")).rsplit("/", 1)[-1]),
                                              ("Subset", str(link.get("subset") or "all"))]))
             sections.append(("Actions", [("linkreload", "Reload"), ("linkopen", "Open source")]))
+        if _group_qty(view, g):
+            sections.append(("Quantities", _qty_rows(_group_qty(view, g))))
         export = [("IFC class", str(rec.get("class") or recipe.get("class") or "generic object")),
                   ("Predefined type", str(rec.get("predefined_type") or recipe.get("predefined_type") or "—")),
                   ("Tag", str(getattr(g, "layer", None) or "—"))]

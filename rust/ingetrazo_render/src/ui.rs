@@ -1339,6 +1339,7 @@ impl Ui {
                                 // Right columns: problems, count, then eye and lock —
                                 // or the Drawing / Export cells.
                                 let mut cell_hits: Vec<(Rect, &'static str)> = Vec::new();
+                                let mut cells_left = f32::MAX;
                                 let warn_col = rect.max.x - 6.0;
                                 if col.colset != 0 {
                                     let cells = &n.cells;
@@ -1365,9 +1366,22 @@ impl Ui {
                                             cell_hits = vec![(pr, "print"), (wr, "weight"), (lr, "linetype"), (sr.expand(3.0), "color")];
                                         }
                                     } else if col.colset == 2 {
-                                        let er = Rect::from_min_max(pos2(warn_col - 150.0, rect.min.y), pos2(warn_col, rect.max.y));
+                                        // Quantity at the edge, the export class (and type) before it.
+                                        let qty = cell(2);
+                                        let qw = 74.0;
+                                        if !qty.is_empty() {
+                                            ui.painter().text(pos2(warn_col, cy), egui::Align2::RIGHT_CENTER, qty, meta(), if n.row == 0 { INK_2 } else { DIM });
+                                        }
                                         let text = if cell(1).is_empty() { cell(0) } else { format!("{} · {}", cell(0), cell(1)) };
-                                        ui.painter().text(er.right_center(), egui::Align2::RIGHT_CENTER, text, meta(), ink_c);
+                                        let text = text.strip_prefix("Ifc").map(|t| t.to_string()).unwrap_or(text);
+                                        let mut job = egui::text::LayoutJob::single_section(text, egui::TextFormat {
+                                            font_id: meta(), color: FAINT, ..Default::default() });
+                                        job.wrap.max_width = 120.0;
+                                        job.wrap.max_rows = 1;
+                                        job.wrap.break_anywhere = true;
+                                        let g = ui.painter().layout_job(job);
+                                        cells_left = warn_col - qw - g.size().x;
+                                        ui.painter().galley(pos2(cells_left, cy - g.size().y / 2.0), g, FAINT);
                                     }
                                 }
                                 let warn_col = if col.colset != 0 { rect.max.x + 1000.0 } else { warn_col };
@@ -1389,7 +1403,7 @@ impl Ui {
                                 if n.lock >= 0 && show_ctl { paint_lock(ui, lock_r, n.lock == 1); }
                                 // A row with no eye or lock (problems, library) keeps its width for the name.
                                 let bare = n.eye < 0 && n.lock < 0 && n.problems == 0;
-                                let right = if col.colset == 1 { rect.max.x - 170.0 } else if col.colset == 2 { rect.max.x - 160.0 }
+                                let right = if col.colset == 1 { rect.max.x - 170.0 } else if col.colset == 2 { cells_left.min(rect.max.x - 120.0) - 8.0 }
                                     else if bare && (n.count > 0 || n.row == 0) { count_col - 34.0 }
                                     else if bare { rect.max.x - 8.0 } else { eye_r.min.x - 6.0 };
                                 // Item icon (a material row shows its swatch).
@@ -1442,6 +1456,11 @@ impl Ui {
                                     3 | 4 => (FAINT, meta()),
                                     _ => (if lit { Color32::WHITE } else { INK_2 }, body()),
                                 };
+                                // The selection count sits at the right end; the name stops before it.
+                                let sel_g = (n.selected > 0 && n.row == 0)
+                                    .then(|| ui.painter().layout_no_wrap(format!("{} sel.", n.selected), meta(), ACCENT));
+                                let sel_right = right;
+                                let right = match &sel_g { Some(g) => right - g.size().x - 8.0, None => right };
                                 let name = if n.active && n.row != 5 { format!("✎ {}", n.name) } else { n.name.clone() };
                                 let g = ui.painter().layout_job(one_line(name, font, ink, right - tx));
                                 let name_w = g.size().x;
@@ -1458,10 +1477,8 @@ impl Ui {
                                     let g = ui.painter().layout_job(one_line(n.kind.clone(), meta(), FAINT, right - kx));
                                     ui.painter().galley(pos2(kx, cy - g.size().y / 2.0), g, FAINT);
                                 }
-                                if n.selected > 0 && n.row == 0 {
-                                    let t = format!("{} sel.", n.selected);
-                                    let g = ui.painter().layout_no_wrap(t, meta(), ACCENT);
-                                    ui.painter().galley(pos2(right - g.size().x, cy - g.size().y / 2.0), g, ACCENT);
+                                if let Some(g) = sel_g {
+                                    ui.painter().galley(pos2(sel_right - g.size().x, cy - g.size().y / 2.0), g, ACCENT);
                                 }
                                 if resp.clicked() {
                                     let p = resp.interact_pointer_pos().unwrap_or(rect.center());
@@ -1707,7 +1724,8 @@ impl Ui {
                         ui.set_width(220.0);
                         ui.spacing_mut().item_spacing = vec2(0.0, 1.0);
                         for (id, label) in [("new", "New node"), ("propose", "Propose structure from tags…"),
-                                            ("expandall", "Expand all"), ("collapseall", "Collapse all"), ("showall", "Show all")] {
+                                            ("expandall", "Expand all"), ("collapseall", "Collapse all"), ("showall", "Show all"),
+                                            ("measure", "Measure quantities"), ("exportcsv", "Export quantities CSV…")] {
                             if menu_row(ui, &(id.to_owned(), label.to_owned(), String::new(), String::new(), -1i8, true)) {
                                 actions.push(format!("{id}\u{1f}"));
                                 close = true;
