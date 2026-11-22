@@ -163,9 +163,9 @@ def _coherent_shells(faces, comp_of: dict) -> set:
             # right of a hole wound the same way round: such a hole is read
             # backwards, and then the two loops speak the same language.
             turn = -1 if k and _winds_like(loop, f) else 1
-            prev = id(loop[-1]) if n else 0
+            prev = loop[-1].key if n else 0
             for i in range(n):
-                cur = id(loop[i])
+                cur = loop[i].key
                 if prev < cur:
                     key, way = (c, prev, cur), turn
                 else:
