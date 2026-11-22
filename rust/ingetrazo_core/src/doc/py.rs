@@ -348,6 +348,26 @@ fn set_list(py: Python<'_>, me: &Bound<'_, PyAny>, k: Key, list: ListId, items: 
             drop(prev);
         }
     }
+    // An old list of this very attribute assigned back (`old =
+    // g.children; g.children = new; ...; g.children = old`): it is the
+    // list again, as the Python list object was.
+    if r.is_ok() {
+        if let Ok(h) = items.cast::<HandleList>() {
+            let hl = h.get();
+            if hl.owner == k && hl.list == list as u8 && !hl.cached.load(Ordering::Relaxed) {
+                let mut d = lock();
+                if let Some(n) = d.node_mut(k) {
+                    if n.list_views[l].0.is_null() {
+                        n.list_views[l] = super::HPtr(items.as_ptr());
+                        hl.cached.store(true, Ordering::Relaxed);
+                        drop(d);
+                        let prev = hl.detached.lock().unwrap_or_else(|e| e.into_inner()).take();
+                        drop(prev);
+                    }
+                }
+            }
+        }
+    }
     drain_pending();
     r.map_err(err)
 }

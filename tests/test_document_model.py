@@ -94,6 +94,25 @@ def test_a_list_refuses_what_it_cannot_hold():
         g.children.pop()
 
 
+def test_a_replaced_list_keeps_what_it_held():
+    a, b, c = Group(name="a"), Group(name="b"), Group(name="c")
+    g = Group()
+    g.children = [a, b]
+    old = g.children
+    g.children = [c]                    # `old` is the old list object now
+    assert list(old) == [a, b] and list(g.children) == [c]
+    old.append(c)                       # an ordinary list from now on
+    assert list(g.children) == [c]
+    old.remove(c)
+    g.children = old                    # assigned back: it is the list again
+    assert g.children is old and list(old) == [a, b]
+    old.append(c)
+    assert list(g.children) == [a, b, c]
+    same = g.children
+    g.children += [Group()]             # in place: the same list
+    assert g.children is same and len(same) == 4
+
+
 def test_scene_lists_and_constructor():
     a, b = Group(name="a"), Group(name="b")
     scene = Scene(groups=[a, b])
