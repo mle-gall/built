@@ -432,12 +432,18 @@ impl Renderer {
                 cache: None,
             })
         };
+        // Faces back off by their own slope, as GL's polygon-offset fill and
+        // the antialiased pass do: with reverse-Z the edges' constant bias is
+        // a few float steps at the face's own depth, far less than the old
+        // fixed-point-like step near 1, and alone it lost edge pixels to a
+        // face sloping away under the line's half-pixel width.
+        let face_bias = wgpu::DepthBiasState { constant: 1, slope_scale: 1., clamp: 0. };
         let draw = pipeline(
             wgpu::PrimitiveTopology::TriangleList,
             "fs",
             wgpu::CompareFunction::Less,
             true,
-            Default::default(),
+            face_bias,
             1,
         );
         // Keep the same explicit layouts so resident draw groups can be reused.
@@ -457,7 +463,7 @@ impl Renderer {
                     ids.then_some(wgpu::ColorTargetState { format: wgpu::TextureFormat::R32Uint, blend: None, write_mask: wgpu::ColorWrites::ALL })] }),
             primitive: Default::default(),
             depth_stencil: Some(wgpu::DepthStencilState { format: wgpu::TextureFormat::Depth32Float,
-                depth_write_enabled: true, depth_compare: depth::compare(wgpu::CompareFunction::Less), stencil: Default::default(), bias: Default::default() }),
+                depth_write_enabled: true, depth_compare: depth::compare(wgpu::CompareFunction::Less), stencil: Default::default(), bias: depth::bias(face_bias) }),
             multisample: Default::default(), multiview: None, cache: None,
         });
         let draw_plain = face_variant(true, true);
