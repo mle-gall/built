@@ -622,7 +622,7 @@ def _occluded_many(index, view, points, rows=None):
     return result
 
 
-def snap(index, row, view, x, y, **options):
+def snap(index, row, view, x, y, *, work_point=..., **options):
     """GL SnapResult; row may be None (guides/edges do not need a face ID)."""
     if index is None:
         return None
@@ -641,7 +641,9 @@ def snap(index, row, view, x, y, **options):
     tool = getattr(getattr(view, 'tools', None), 'tool', None)
     if point is None:
         work = getattr(getattr(view, 'tools', None), 'work_point', lambda x, y: None)
-        point = work(x, y) if tool is not None else None
+        point = work_point
+        if point is ...:
+            point = work(x, y) if tool is not None else None
         if point is None:
             normal = getattr(view.camera, 'forward', lambda: direction)()
             denominator = QVector3D.dotProduct(direction, normal)

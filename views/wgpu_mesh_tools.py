@@ -42,7 +42,7 @@ class MeshToolAccess:
         # their local vertices must not be projected as world coordinates.
         return [self.scene.mesh]
 
-    def work_point(self, x, y):
+    def work_point(self, x, y, *, picked_row=...):
         from core import axes
         tool = self.tool
         own = tool.drag_plane(self)
@@ -52,7 +52,7 @@ class MeshToolAccess:
             # the face the cursor is over, capture or not, and takes its
             # capture with it — or the preview stayed on the face it started
             # on while the point and the badge went to the other one.
-            face_plane = self._face_replan(tool, x, y, plane)
+            face_plane = self._face_replan(tool, x, y, plane, picked_row)
             if face_plane is not None:
                 tool.work_plane = plane = face_plane
         if plane is None:
@@ -60,7 +60,7 @@ class MeshToolAccess:
             anchor = self.start_point if self.start_point is not None else axes.origin()
             plane = lock(anchor) if lock else None
         if plane is None:
-            plane = self._face_plane_under(x, y)
+            plane = self._face_plane_under(x, y, picked_row)
         if plane is None:
             anchor = self.start_point if self.start_point is not None else axes.origin()
             normal = axes.axis('z')
@@ -70,20 +70,20 @@ class MeshToolAccess:
         self._last_work_plane = plane
         return self._ray_hit_plane((x, y), plane)
 
-    def _face_replan(self, tool, x, y, captured):
+    def _face_replan(self, tool, x, y, captured, picked_row):
         """``Viewport._planar_face_plane`` with the face under the cursor
         from this view's picks (:meth:`_face_plane_under`). Only a planar
         shape pays for the ray."""
         from tools.base import PlaneLock
         if not isinstance(tool, PlaneLock):
             return None
-        face_plane = self._face_plane_under(x, y)
+        face_plane = self._face_plane_under(x, y, picked_row)
         if face_plane is None:
             return None
         return _viewport_class()._planar_face_plane(
             self, tool, (x, y), captured, face_plane=face_plane)
 
-    def _face_plane_under(self, x, y):
+    def _face_plane_under(self, x, y, picked_row=...):
         """World ``(point, unit normal)`` of the face under the cursor, or
         ``None``: the placement under the cursor (the ID pass) and its
         triangle on the cursor ray, from the snap index — one ray over one
@@ -99,7 +99,7 @@ class MeshToolAccess:
                 return None
             from core.snap import face_plane_world
             return face_plane_world(face, getattr(placement, 'xform', None))
-        row = self.view.pick_row(x, y)
+        row = self.view.pick_row(x, y) if picked_row is ... else picked_row
         if row is None:
             return None
         origin, direction = self._pixel_to_ray(x, y)

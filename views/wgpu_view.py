@@ -781,12 +781,14 @@ class WgpuView(QWidget):
             self.hover_ms = (time.perf_counter()-start)*1000
             self.update()
             return None
-        if self.tools.sync() == 'mesh':
-            self.tools.work_point(x, y)
+        work_point = None
+        mesh_mode = self.tools.sync() == 'mesh'
+        if mesh_mode:
+            work_point = self.tools.work_point(x, y, picked_row=self.hovered_row)
         tool = getattr(source, 'active_tool', None)
         if tool is not None and not tool.uses_snap and self.tools.mode == 'mesh':
             from types import SimpleNamespace
-            point = self.tools.work_point(x, y)
+            point = work_point
             if point is not None:
                 self.last_snap = SimpleNamespace(point=point, kind=None, context=None)
             self.update()
@@ -818,6 +820,8 @@ class WgpuView(QWidget):
         if self.inference_index is not None:
             if hasattr(inference, 'note_drawing_refs'):
                 options.update(inference=inference, modifiers=modifiers)
+            if mesh_mode:
+                options['work_point'] = work_point
             self.last_snap = snap(self.inference_index, self.hovered_row, self, x, y, **options)
             if hasattr(inference, 'finish_snap') and self.last_snap is not None:
                 # The axis-source cue picks through this view's tools (the
@@ -840,7 +844,7 @@ class WgpuView(QWidget):
             if abs(denominator) > 1e-9:
                 point = origin + direction * (QVector3D.dotProduct(plane-origin, normal)/denominator)
                 if self.tools.mode == 'mesh':
-                    point = self.tools.work_point(x, y) or point
+                    point = work_point or point
                 self.last_snap = compute_snap(point, (x, y), SimpleNamespace(edges=[]),
                                               self._world_to_pixel, 12., **options)
         if inference is not None and self.last_snap is not None:

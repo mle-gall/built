@@ -210,3 +210,11 @@ def test_annotation_at_front_surface_skips_gpu_reads_but_one_behind_does_not(vie
     refresh(view)
     assert view.tools._clear_annotation_segment(V(.5, .5, 1), V(1.5, .5, 1))
     assert not view.tools._clear_annotation_segment(V(.5, .5, 0), V(1.5, .5, 0))
+
+
+def test_empty_canvas_work_plane_reuses_the_hover_pick(view, monkeypatch):
+    from tools.line import LineTool
+    view.tools.tool = LineTool()
+    refresh(view)
+    monkeypatch.setattr(view, "pick_row", lambda *_: pytest.fail("picked the same pixel again"))
+    assert view.tools.work_point(100, 100, picked_row=None) is not None
