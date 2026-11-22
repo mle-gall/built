@@ -19,12 +19,18 @@ class WorksessionMixin:
     _session_unsaved_doc = None
 
     def show_home(self):
+        # The Built chrome draws the start page; Qt's dialog where it cannot.
+        from views import wgpu_start
+        if wgpu_start.show(self):
+            return
         from views.home import Home
         self._home = Home(self)
         self._home.show()
         self._home.raise_()
 
     def _dismiss_home(self):
+        from views import wgpu_start
+        wgpu_start.hide(self)
         home = getattr(self, '_home', None)
         if home is not None:
             home.hide()

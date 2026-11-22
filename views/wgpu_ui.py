@@ -398,6 +398,8 @@ def chrome_frame(view):
     if win is not None:
         _projects(view, win)
         _sheet_and_jobs(view, win)
+        from views import wgpu_start
+        wgpu_start.before_frame(view, win)
     cpu, gpu = renderer.render()
     after_frame(view)
     return cpu, gpu, 0.0
@@ -411,6 +413,8 @@ def before_frame(view) -> None:
     if win is None:
         return
     _sheet_and_jobs(view, win)
+    from views import wgpu_start
+    wgpu_start.before_frame(view, win)
     if not view._ui_tools_sent and win._tool_actions:
         _send_tools(view, win)
     eyedropper = getattr(win, "_act_eyedropper", None)
@@ -2201,6 +2205,10 @@ def _run(win, actions) -> None:
             continue
         if chrome_dialogs.modal(win):
             continue    # a click queued before the sheet came up
+        if kind == "start":
+            from views import wgpu_start
+            wgpu_start.action(win, arg)
+            continue
         if kind == "tool":
             view = getattr(getattr(win, "_doc", None), "stand_in", None)
             run = getattr(view, "_ui_palette_runs", {}).get(arg)
@@ -2545,6 +2553,9 @@ def claims_key(view, event) -> bool:
     Escape while its popup is open)? Then no window shortcut fires."""
     if not getattr(view, "_ui_attached", False):
         return False
+    from views import wgpu_start
+    if wgpu_start.claims_key(view, event):
+        return True
     if _problem_key(view, event):
         return True
     if _opens_commands(event):
@@ -2557,6 +2568,9 @@ def key(view, event, pressed: bool) -> bool:
     """Offer a key to the chrome first. True: it was the chrome's."""
     if not getattr(view, "_ui_attached", False):
         return False
+    from views import wgpu_start
+    if wgpu_start.key(view, event, pressed):
+        return True
     if _opens_commands(event):
         if pressed:
             view.renderer.ui_open_commands()

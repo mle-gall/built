@@ -818,6 +818,13 @@ def main() -> int:
         # the next launch.
         app.aboutToQuit.connect(lambda: QLocalServer.removeServer(_SOCKET))
 
+    # No file: the window opens on the start page, drawn by the Built
+    # chrome from its first frame (views/wgpu_start.py). Where the chrome
+    # cannot draw it, the Qt Home dialog comes after the first frame
+    # instead (show_home below).
+    from views import wgpu_start
+    if wgpu_start.wants_at_start(bool(arg)):
+        wgpu_start.show(window)
     window.show()
     from PySide6.QtCore import QTimer
 

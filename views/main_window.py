@@ -9068,6 +9068,9 @@ class MainWindow(WorksessionMixin, QMainWindow):
             return
         from core import recent as home_recent
         home_recent.remember(path)
+        # What the start page shows of it: project, links, problems…
+        from views import wgpu_start
+        wgpu_start.note(self, path)
         key = str(Path(path).resolve())
         recent = [x for x in self._recent_paths() if x != key]
         recent.insert(0, key)
