@@ -789,17 +789,16 @@ def _append_flat_curve_rebuild(scene, commands, points, *, close_cycles=True) ->
             # Whole-flat drawing with curves: the full rebuild (every minimal
             # region gets a face — how a lone circle yields its disc).
             commands.append(RebuildPlanarFacesCommand())
-        elif scene.mesh.faces:
+        elif 0 < len(scene.mesh.faces) <= 400:
+            # Apply the populated-plane rebuild limit to flat imports too.
             # Whole-flat, straight edges only, faces present: the SCOPED
             # rebuild with coverage semantics. Two overlapping rectangles must
             # split into three regions (the classic behaviour) — the planner leaves
             # the first rectangle whole over the lens (rect.igz report) — but
             # regions nobody covered stay empty (no resurrecting faces the
             # user deleted).
-            origin, normal = _whole_drawing_plane(scene, points)
-            if scene.mesh.faces:
-                normal = scene.mesh.faces[0].normal()
-                origin = scene.mesh.faces[0].vertices[0]
+            normal = scene.mesh.faces[0].normal()
+            origin = scene.mesh.faces[0].vertices[0]
             commands.append(RebuildPlaneFacesCommand(origin, normal))
         return
     if not has_curves:
