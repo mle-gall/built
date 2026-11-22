@@ -1,0 +1,22 @@
+[package]
+name = "built_app"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+publish = false
+description = "Built: the Rust app shell (winit + wgpu renderer + embedded Python)"
+
+[[bin]]
+name = "built"
+path = "src/main.rs"
+
+[dependencies]
+# The renderer and its egui chrome, linked in and registered as the
+# built-in `ingetrazo_render` Python module (src/python.rs).
+ingetrazo_render = { path = "../ingetrazo_render" }
+pyo3 = { version = "0.29", features = ["auto-initialize"] }
+winit = "0.30"
+raw-window-handle = "0.6"
+rfd = "0.18"
+muda = "0.21"
+png = "0.18"

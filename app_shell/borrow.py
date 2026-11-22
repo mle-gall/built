@@ -1,0 +1,237 @@
+"""Run a Qt widget class's Python methods on an object that is no widget.
+
+``views.viewport.Viewport`` (a QOpenGLWidget) is the document controller the
+tools talk to, and ``views.wgpu_view.WgpuView`` (a QWidget) drives the
+renderer. Neither can exist without a QApplication and widgets. Their
+methods are plain Python, though: :func:`borrow` copies them onto a QObject
+subclass that supplies the handful of widget calls they make
+(:class:`WidgetShim`). Zero-argument ``super()`` inside a copied method
+names the class it was written in, so each copy gets a fresh ``__class__``
+cell pointing at the new class (closures of decorators included).
+
+What the copies ask of the widget and the shim does not have is recorded
+in :data:`MISSING`: the inventory of widget API the shell still lacks.
+"""
+from __future__ import annotations
+
+import types
+from collections import Counter
+
+from PySide6.QtCore import QObject, QPoint, QPointF, QRect, QSize, Qt, Signal
+
+#: Widget attributes the copied code looked up and the shim did not have.
+MISSING: Counter = Counter()
+
+
+def _rebind(fn, cls, depth=0):
+    """``fn`` with every ``__class__`` cell (its own and its closures')
+    pointing at ``cls``."""
+    if not isinstance(fn, types.FunctionType) or depth > 3:
+        return fn
+    code = fn.__code__
+    if not code.co_freevars:
+        return fn
+    cells = []
+    changed = False
+    for name, cell in zip(code.co_freevars, fn.__closure__):
+        if name == "__class__":
+            cells.append(types.CellType(cls))
+            changed = True
+            continue
+        try:
+            value = cell.cell_contents
+        except ValueError:
+            cells.append(cell)
+            continue
+        new = _rebind(value, cls, depth + 1)
+        if new is not value:
+            cells.append(types.CellType(new))
+            changed = True
+        else:
+            cells.append(cell)
+    if not changed:
+        return fn
+    out = types.FunctionType(code, fn.__globals__, fn.__name__, fn.__defaults__, tuple(cells))
+    out.__kwdefaults__ = fn.__kwdefaults__
+    out.__dict__.update(fn.__dict__)
+    out.__qualname__ = fn.__qualname__
+    out.__doc__ = fn.__doc__
+    return out
+
+
+def borrow(source: type, target: type, skip=()) -> None:
+    """Copy ``source``'s own methods, properties and constants onto
+    ``target``, leaving what ``target`` defines itself."""
+    for name, value in vars(source).items():
+        if name in skip or name in vars(target) or (name.startswith("__") and name.endswith("__")):
+            continue
+        if isinstance(value, Signal):
+            continue                    # declared on the target's class body
+        if isinstance(value, types.FunctionType):
+            value = _rebind(value, target)
+        elif isinstance(value, property):
+            value = property(_rebind(value.fget, target), _rebind(value.fset, target),
+                             _rebind(value.fdel, target), value.__doc__)
+        elif isinstance(value, (staticmethod, classmethod)):
+            value = type(value)(_rebind(value.__func__, target))
+        setattr(target, name, value)
+
+
+def signals_of(source: type) -> dict:
+    """``source``'s Qt signals, re-declared for a class body."""
+    out = {}
+    for klass in reversed(source.__mro__):
+        for name, value in vars(klass).items():
+            if isinstance(value, Signal) and not name.startswith("_"):
+                out[name] = value
+    return out
+
+
+class WidgetShim(QObject):
+    """The QWidget surface the borrowed methods use, over a host that
+    knows the window's size and scale and when a frame is wanted."""
+
+    _shim_visible = False
+
+    def __init__(self, parent=None, host=None):
+        super().__init__()
+        self._host = host
+        self._cursor = Qt.ArrowCursor
+        self._focus = False
+        self._enabled = True
+
+    def __getattr__(self, name):
+        if not name.startswith("__"):
+            MISSING[name] += 1
+        raise AttributeError(name)
+
+    # ---- geometry -----------------------------------------------------
+    def width(self):
+        return self._host.width if self._host else 1280
+
+    def height(self):
+        return self._host.height if self._host else 800
+
+    def size(self):
+        return QSize(self.width(), self.height())
+
+    def rect(self):
+        return QRect(0, 0, self.width(), self.height())
+
+    def devicePixelRatioF(self):
+        return float(self._host.scale) if self._host else 2.0
+
+    def devicePixelRatio(self):
+        return self.devicePixelRatioF()
+
+    def mapToGlobal(self, p):
+        return QPointF(p) if isinstance(p, QPointF) else QPoint(p)
+
+    def mapFromGlobal(self, p):
+        return QPointF(p) if isinstance(p, QPointF) else QPoint(p)
+
+    def mapTo(self, _other, p):
+        return p
+
+    def mapFrom(self, _other, p):
+        return p
+
+    def window(self):
+        return self._host.window if self._host else None
+
+    def windowHandle(self):
+        return None
+
+    def parentWidget(self):
+        return None
+
+    def isVisible(self):
+        return self._shim_visible
+
+    def isHidden(self):
+        return not self._shim_visible
+
+    def isEnabled(self):
+        return self._enabled
+
+    def setEnabled(self, on):
+        self._enabled = bool(on)
+
+    def updatesEnabled(self):
+        return True
+
+    def underMouse(self):
+        return True
+
+    # ---- painting -----------------------------------------------------
+    def update(self, *args):
+        if self._host is not None:
+            self._host.request_frame()
+
+    repaint = update
+
+    def makeCurrent(self):
+        pass
+
+    def doneCurrent(self):
+        pass
+
+    def context(self):
+        return None
+
+    def defaultFramebufferObject(self):
+        return 0
+
+    # ---- cursor and focus ---------------------------------------------
+    def cursor(self):
+        return self._cursor
+
+    def setCursor(self, cursor):
+        self._cursor = cursor
+        if self._host is not None:
+            self._host.cursor_changed(cursor)
+
+    def unsetCursor(self):
+        self.setCursor(Qt.ArrowCursor)
+
+    def setFocus(self, *args):
+        self._focus = True
+
+    def clearFocus(self):
+        self._focus = False
+
+    def hasFocus(self):
+        return True
+
+    # ---- setters the widgets' __init__ and tools call: no-ops ------------
+    def _noop(self, *args, **kwargs):
+        return None
+
+    def setAttribute(self, attr, on=True):
+        self.__dict__.setdefault("_shim_attrs", {})[attr] = bool(on)
+
+    def testAttribute(self, attr):
+        if attr == Qt.WA_SetCursor:
+            return self._cursor is not Qt.ArrowCursor
+        return self.__dict__.get("_shim_attrs", {}).get(attr, False)
+
+    setFormat = setMinimumSize = setFocusPolicy = setMouseTracking = _noop
+    setLayoutDirection = setUpdatesEnabled = setToolTip = _noop
+    setAcceptDrops = setContextMenuPolicy = setSizePolicy = grabKeyboard = _noop
+    releaseKeyboard = grabMouse = releaseMouse = raise_ = activateWindow = _noop
+    setStatusTip = setWhatsThis = show = hide = _noop
+
+    def event(self, e):
+        # Qt's own events (queued calls of QTimer.singleShot(0, self, fn),
+        # child events) still need QObject's handler; the shell's value
+        # events (app_shell.events) end here, unclaimed.
+        from PySide6.QtCore import QEvent
+        if isinstance(e, QEvent):
+            return QObject.event(self, e)
+        return False
+
+    # ---- default event handlers (what super() reaches) -------------------
+    keyPressEvent = keyReleaseEvent = mousePressEvent = mouseMoveEvent = _noop
+    mouseReleaseEvent = mouseDoubleClickEvent = wheelEvent = focusOutEvent = _noop
+    focusInEvent = leaveEvent = enterEvent = showEvent = hideEvent = _noop
+    resizeEvent = closeEvent = paintEvent = contextMenuEvent = _noop

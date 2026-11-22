@@ -1,0 +1,48 @@
+# The R1.1 acceptance run on tests/fixtures/shell/slab-and-cube.igz at
+# 1280x800: built tests/fixtures/shell/slab-and-cube.igz --script rust/built_app/scripts/demo.txt
+wait 300
+capture 00-open
+# Select the cube's top, then leave the selection.
+move 575 252
+click 575 252
+capture 01-select
+key escape
+# Line: the L shortcut, two clicks on the slab, Esc.
+key l
+move 576 544
+click 576 544
+move 736 480
+wait 100
+capture 02-line-rubber
+click 736 480
+key escape
+capture 03-line
+# Push/Pull the cube's top up, then undo it from the menu.
+key p
+move 575 252
+click 575 252
+move 575 190
+wait 100
+capture 04-pushpull-drag
+click 575 190
+capture 05-pushpull
+state
+menu undo
+capture 06-undo
+# Navigation: Space back to Select, orbit (middle drag), wheel zoom,
+# pan (Shift+middle), trackpad slide and pinch.
+key space
+drag 700 500 640 470 middle 10
+capture 07-orbit
+notch 600 400 2
+capture 08-zoom
+drag 700 500 640 520 middle 8 shift
+capture 09-pan
+wheel 600 400 0 start
+wheel 600 400 -30 move
+wheel 600 400 -30 move
+wheel 600 400 0 end
+capture 10-trackpad-slide
+pinch 600 400 0.5
+capture 11-pinch
+state
