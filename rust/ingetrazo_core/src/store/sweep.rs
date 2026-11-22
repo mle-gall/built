@@ -20,6 +20,7 @@ impl Store {
         path: &[[f64; 3]],
         closed: bool,
         h: Hypot,
+        compensated: bool,
     ) -> Option<Vec<Station>> {
         if path.len() < 2 {
             return None;
@@ -42,6 +43,11 @@ impl Store {
                     .collect()
             })
             .collect();
+        if closed {
+            if let Some(stations) = super::revolution::stations(path, &rings, h, compensated) {
+                return Some(stations);
+            }
+        }
         let mut stations = Vec::new();
         for (i, &anchor) in path.iter().enumerate() {
             let dir = dirs[i.saturating_sub(1)];

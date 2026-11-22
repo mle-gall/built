@@ -438,18 +438,13 @@ def sweep_profile(mesh, face, path, closed) -> bool:
     store = _store_of(mesh)
     h = _hypot() if store is not None else None
     if h:
-        revolution = _revolution_rings(face, path) if closed else None
-        if revolution is None:
-            stations_xyz = store.sweep_stations(face.key, [p.toTuple() for p in path],
-                                                closed, h)
-            if stations_xyz is None:
-                return False
-            rings = [[[QVector3D(*p) for p in lp] for lp in station]
-                     for station in stations_xyz]
-        else:
-            rings = revolution[0]
-            stations_xyz = [[[p.toTuple() for p in lp] for lp in station]
-                            for station in rings]
+        import sys
+        stations_xyz = store.sweep_stations(face.key, [p.toTuple() for p in path],
+                                            closed, h, sys.version_info >= (3, 12))
+        if stations_xyz is None:
+            return False
+        rings = [[[QVector3D(*p) for p in lp] for lp in station]
+                 for station in stations_xyz]
         spans = len(path) if closed else len(path) - 1
     else:
         got = sweep_rings(face, path, closed)

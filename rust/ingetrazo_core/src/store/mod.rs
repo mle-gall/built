@@ -28,6 +28,7 @@ pub mod intersect;
 pub mod offset;
 pub mod py;
 pub mod read;
+mod revolution;
 pub mod stitch;
 pub mod sweep;
 pub mod topo;

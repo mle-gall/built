@@ -679,10 +679,11 @@ impl PyMeshStore {
         Ok((self.inner.key(Kind::Edge, e), ch))
     }
 
-    fn sweep_stations(&self, key: u128, path: Vec<[f64; 3]>, closed: bool, hypot: &str)
+    #[pyo3(signature = (key, path, closed, hypot, compensated=true))]
+    fn sweep_stations(&self, key: u128, path: Vec<[f64; 3]>, closed: bool, hypot: &str, compensated: bool)
         -> PyResult<Option<Vec<super::sweep::Station>>> {
         let face = live_of(&self.inner, Kind::Face, key)?;
-        Ok(self.inner.sweep_stations(face, &path, closed, crate::hypot_of(hypot)?))
+        Ok(self.inner.sweep_stations(face, &path, closed, crate::hypot_of(hypot)?, compensated))
     }
 
     fn sweep_face(&mut self, key: u128, stations: Vec<super::sweep::Station>,
