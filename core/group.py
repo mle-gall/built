@@ -742,6 +742,28 @@ def _transformed_mesh_walk(src: Mesh, m) -> Mesh:
     return new
 
 
+def placed_face_paint(attrs, face, inverse):
+    """Pin both sides' effective paint to the prototype before exploding."""
+    from core.texture import face_uv_axes
+
+    def placed(side):
+        tex = side.get("texture")
+        if not tex:
+            if not any(key.endswith("_map") for key in (side.get("pbr") or {})):
+                return side
+            tex = {}  # PBR-only maps share a one-metre planar tile.
+        uvw = tex.get("uvw")
+        if not uvw:
+            gu, cu, gv, cv = face_uv_axes(tex, face.normal())
+            uvw = [*gu.toTuple(), cu, *gv.toTuple(), cv]
+        return {**side, "texture": {**tex, "uvw": _remapped_uvw(uvw, inverse)}}
+
+    out = placed(attrs)
+    if isinstance(attrs.get("back"), dict):
+        out = {**out, "back": placed(attrs["back"])}
+    return out
+
+
 def transformed_attrs(attrs, m) -> dict:
     """A copy of face ``attrs`` with the texture's world→UV affine map
     (``uvw``) re-fitted for geometry mapped through ``m`` — the single-face
