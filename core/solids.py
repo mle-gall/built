@@ -311,11 +311,8 @@ def _group_from_loops(loops, sources: _Sources, name: str, layer):
         a["_solid_src"] = f            # travels through the fuse, then goes
         tagged.append((pts, a))
     fused = fuse_coplanar_loops(tagged)
-    mesh = Mesh()
-    if sources.store_result:
-        from core import mesh as mesh_module, store_mesh
-        store_mesh.become_store(mesh, store_mesh._module().MeshStore(
-            next(mesh_module._KEY_NAMESPACES), **store_mesh._weld_args()), [])
+    from core.store_mesh import empty_store_mesh
+    mesh = empty_store_mesh() if sources.store_result else Mesh()
     polys = []
     for outer, holes, attrs, originals in fused:
         polys.append((list(outer), [list(h) for h in (holes or [])],

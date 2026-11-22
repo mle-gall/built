@@ -158,3 +158,19 @@ def test_partition_between_boxes(monkeypatch):
         partitions[0].interior = True
         assert solid_report(sc.mesh) == (True, 2)
         assert inspect_mesh(sc.mesh)["volume"] == 2
+
+
+def test_transformed_solid_operands(monkeypatch):
+    from PySide6.QtGui import QMatrix4x4
+    from core.group import Group, world_mesh
+    from core.solids import solid_volume
+    monkeypatch.setattr(StoreMesh, '_materialise', lambda self: pytest.fail('materialised'))
+    sc = empty(True)
+    box(sc.mesh, 0)
+    instance = Group(sc.mesh)
+    instance.xform = QMatrix4x4()
+    instance.xform.translate(3000, -200, 5)
+    instance.xform.scale(-2, 3, 4)
+    assert isinstance(world_mesh(instance), StoreMesh)
+    assert solid_volume(instance) == 24
+    assert solid_report(sc.mesh) == (True, 1)

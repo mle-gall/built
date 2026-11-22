@@ -1948,6 +1948,14 @@ def _restore_store_state(m, snap: StoreState) -> None:
     m._mut_serial += 1
 
 
+def empty_store_mesh():
+    """Fresh empty store for a result built from store-backed operands."""
+    mesh = Mesh()
+    store = _module().MeshStore(next(_mesh._KEY_NAMESPACES), **_weld_args())
+    become_store(mesh, store, [])
+    return mesh
+
+
 def become_store(m, store, table, own=None) -> None:
     """Make the plain, empty ``m`` store-backed by ``store``."""
     d = m.__dict__
