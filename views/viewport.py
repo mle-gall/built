@@ -3149,6 +3149,7 @@ class Viewport(QOpenGLWidget):
         self._gl.glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE)
         self._gl.glStencilMask(AO_FOLIAGE_BIT)
 
+        self._fit_scene_depth()
         mvp = self.camera.projection_matrix() * self.camera.view_matrix()
         old_detail = getattr(self, "_nav_fast_feedback", False)
         self._nav_fast_feedback = self._navigation_detail(mvp, mode)
@@ -3850,7 +3851,7 @@ class Viewport(QOpenGLWidget):
         self._draw_hidden_ghosts(mvp)
 
         self._draw_hidden_geometry_edges(mvp, w, h)
-        self._draw_scaffold(mvp, w, h)
+        self._draw_scaffold_depth(mvp, w, h)
 
         self._set_section_clip(True)
         show_edges = ((style.edges or mode == "wireframe")
@@ -3969,6 +3970,106 @@ class Viewport(QOpenGLWidget):
             self._hover_edges_vao.release()
         self._set_section_clip(False)
         self._draw_section_cut_edges()   # ON the plane — drawn unclipped
+
+    def _draw_scaffold_depth(self, mvp, w, h):
+        """``_draw_scaffold`` under a fitted depth range: the axes run far
+        past the model's box, so their depth is clamped rather than their
+        lines cut at the fitted near and far planes (no geometry is)."""
+        fitted = self.camera._fitted_depth_range() is not None
+        if fitted:
+            self._gl.glEnable(0x864F)  # GL_DEPTH_CLAMP, core since GL 3.2
+        try:
+            self._draw_scaffold(mvp, w, h)
+        finally:
+            if fitted:
+                self._gl.glDisable(0x864F)
+
+    def _depth_fit_refused(self) -> bool:
+        """Whether this frame keeps the automatic near/far: something
+        drawn may lie outside the model's boxes, or the boxes are not
+        known (shared by the Metal view, whose camera this is)."""
+        sc = self.scene
+        if (not self.camera.perspective or sc.edit_group is not None
+                or getattr(self, "_preview_groups", None)
+                or getattr(self, "_frozen_cache_version", None) is not None
+                or self._base_map_showing() or self._terrain_showing()
+                or self._photo_showing()
+                or getattr(sc, "guides", None)
+                or getattr(getattr(sc, "shadows", None), "enabled", False)
+                or getattr(sc, "show_hidden_objects", False)
+                or getattr(sc, "show_hidden_geometry", False)):
+            return True
+        # A tool's live preview (Push/Pull's box, a pasted copy, Follow
+        # Me) can reach toward the eye past the model's nearest box.
+        tool = getattr(self, "active_tool", None)
+        provider = getattr(tool, "preview_faces", None) if tool else None
+        try:
+            if callable(provider) and provider():
+                return True
+        except Exception:
+            return True
+        return bool(getattr(tool, "wireframe_depth_tested", False))
+
+    def _fit_scene_depth(self):
+        """Fit the perspective near/far to the visible placements' boxes
+        (``OrbitCamera.fit_depth_range``) for this frame. The boxes are
+        walked once per content and placement epoch; a refusal (a box not
+        known) is cached too, so the walk is not repeated per frame."""
+        import numpy as np
+        self.camera._depth_range = None
+        if self._depth_fit_refused():
+            return
+        key = (self._placements_epoch(), _content_ver(self), id(self.scene.mesh))
+        memo = getattr(self, "_depth_boxes", None)
+        if memo is None or memo[0] != key:
+            memo = self._depth_boxes = (key, *self._depth_fit_boxes())
+        if memo[1] is not None:
+            self.camera.fit_depth_range(memo[1], memo[2])
+
+    def _depth_fit_boxes(self):
+        """``(lo, hi)`` arrays of world boxes covering everything drawn,
+        or ``(None, None)`` when one placement's box is not known."""
+        import numpy as np
+        from core.lazy_mesh import entity_count
+        boxes = []
+        for g in self._placements():
+            if not self.scene.entity_visible(g):
+                continue
+            if getattr(g, "billboard", False):
+                verts = self._billboard_mesh(g).vertices
+                if verts:
+                    a = np.asarray([v.position.toTuple() for v in verts])
+                    lo, hi = a.min(axis=0), a.max(axis=0)
+                    # Face-me figures turn about their vertical axis.
+                    ctr = (lo + hi) * .5
+                    radius = np.linalg.norm(hi[:2] - lo[:2]) * .5
+                    boxes.append(((ctr[0] - radius, ctr[1] - radius, lo[2]),
+                                  (ctr[0] + radius, ctr[1] + radius, hi[2])))
+                continue
+            box = (self._placement_bbox(g) if g.xform is not None
+                   else self._group_chunk(g).get("bbox"))
+            if box is None:
+                if entity_count(g.mesh) == 0:
+                    continue            # an empty container draws nothing
+                return None, None
+            boxes.append(box)
+        # Loose geometry has no placement box. A still-deferred mesh is
+        # read from its plan, not built.
+        from core.lazy_mesh import plan_of
+        planned = plan_of(self.scene.mesh)
+        a = (planned.pos if planned is not None else
+             np.asarray([v.position.toTuple() for v in self.scene.mesh.vertices]))
+        if len(a):
+            a = np.asarray(a, float).reshape(-1, 3)
+            boxes.append((a.min(axis=0), a.max(axis=0)))
+        for im in getattr(self.scene, "image_planes", ()) or ():
+            if self.scene.entity_visible(im):
+                a = np.asarray([p.toTuple() for p in im.corners()])
+                boxes.append((a.min(axis=0), a.max(axis=0)))
+        if not boxes:
+            return None, None
+        a = np.asarray(boxes, dtype=float).reshape(-1, 2, 3)
+        return a[:, 0], a[:, 1]
 
     def _draw_scaffold(self, mvp, w, h) -> None:
         """The axes, the guides and the dashed box of the group being
@@ -4226,7 +4327,7 @@ class Viewport(QOpenGLWidget):
                 self._gl.glStencilFunc(GL_EQUAL, 1, 0xFF)
                 self._gl.glStencilMask(0x00)
                 self._gl.glDepthFunc(GL_LESS)
-                self._draw_scaffold(mvp, w, h)
+                self._draw_scaffold_depth(mvp, w, h)
                 self._program.setUniformValue(self._loc_mvp, mvp)
                 self._gl.glDepthFunc(GL_LEQUAL)
                 self._gl.glStencilMask(0xFF)
@@ -12461,7 +12562,11 @@ class Viewport(QOpenGLWidget):
         h = max(self.height(), 1)
         ndc_x = 2.0 * x / w - 1.0
         ndc_y = 1.0 - 2.0 * y / h
-        mvp = self.camera.projection_matrix() * self.camera.view_matrix()
+        # The unfitted matrix: rays stay exactly what they were whatever
+        # depth range the frame was drawn with (fit_depth_range).
+        projection = getattr(self.camera, "picking_projection_matrix",
+                             self.camera.projection_matrix)
+        mvp = projection() * self.camera.view_matrix()
         inv, ok = mvp.inverted()
         if not ok:
             return None, None

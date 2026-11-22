@@ -160,6 +160,10 @@ class OrbitCamera:
         #: the viewport keeps up to date, or ``None`` (unknown). Parallel
         #: projection fits its depth range to it (``parallel_depth``).
         self.depth_reach = None
+        #: The perspective near/far fitted to what the view shows
+        #: (``fit_depth_range``), with the view it was fitted for, or
+        #: ``None``: the automatic planes.
+        self._depth_range = None
         #: The lens (:data:`LENS_DEFAULTS`). The frame SHIFT slides the
         #: picture without turning the camera, as a view camera's rise
         #: does: a tall facade fills the frame and its verticals stay
@@ -490,6 +494,9 @@ class OrbitCamera:
         set by hand is used as it is (Camera Settings ▸ Clipping)."""
         if self.clip_near is not None:
             return max(float(self.clip_near), NEAR_FLOOR)
+        fitted = self._fitted_depth_range()
+        if fitted is not None:
+            return fitted[0]
         return min(self.znear, max(self.distance * 0.02, NEAR_FLOOR))
 
     def min_distance(self, at: QVector3D | None = None) -> float:
@@ -509,7 +516,84 @@ class OrbitCamera:
         past the near plane."""
         if self.clip_far is not None:
             return max(float(self.clip_far), self.near_plane() * 1.01)
+        fitted = self._fitted_depth_range()
+        if fitted is not None:
+            return fitted[1]
         return max(self.zfar, self.distance * FAR_PER_DISTANCE)
+
+    # ---- Depth range fitted to the view ----------------------------------
+    def picking_projection_matrix(self) -> QMatrix4x4:
+        """The projection with the automatic near/far, for editing rays.
+
+        A ray's ideal direction does not depend on the clipping planes, but
+        the float32 rounding of the inverted matrix does: fitting the depth
+        range would move every pick and snap ray by a rounding step. Rays
+        keep the unfitted matrix so they stay byte-for-byte what they were;
+        depth read-back must still use :meth:`projection_matrix`."""
+        fitted = self._depth_range
+        self._depth_range = None
+        try:
+            return self.projection_matrix()
+        finally:
+            self._depth_range = fitted
+
+    def _depth_view_key(self):
+        return (tuple(self.view_matrix().data()), self.fov_deg, self.aspect,
+                self.perspective, self.two_point, self.znear, self.zfar,
+                self.distance, self.shift_x, self.shift_y,
+                self.clip_near, self.clip_far)
+
+    def _fitted_depth_range(self):
+        fitted = self._depth_range
+        if fitted is not None and fitted[0] == self._depth_view_key():
+            return fitted[1:]
+        return None
+
+    def fit_depth_range(self, lo, hi) -> None:
+        """Fit the perspective near/far to world-space boxes ``lo``/``hi``
+        (``N×3``) of what the view draws, for depth precision: a near plane
+        0.1 m from the eye leaves plates a few millimetres thick fighting at
+        50 m on a fixed-point or standard float depth buffer.
+
+        Only boxes inside the four side planes count (not the old near/far:
+        that would exclude geometry the fit should recover). The fit holds
+        for this exact view only and lapses as soon as the camera moves.
+        Nothing is fitted in a parallel view, with a near or far clip set by
+        hand (Camera Settings ▸ Clipping), with unknown or non-finite
+        bounds, or when a box crosses the eye: moving near inward would make
+        precision worse, never better, so the automatic near stays."""
+        import numpy as np
+        self._depth_range = None
+        if (not self.perspective or self.clip_near is not None
+                or self.clip_far is not None or len(lo) == 0):
+            return
+        lo, hi = np.asarray(lo, float), np.asarray(hi, float)
+        if not (np.isfinite(lo).all() and np.isfinite(hi).all()):
+            return
+        view = np.asarray(self.view_matrix().data()).reshape(4, 4, order="F")
+        m = np.asarray((self.projection_matrix() * self.view_matrix()).data()
+                       ).reshape(4, 4, order="F")
+        keep = np.ones(len(lo), bool)
+        for pl in (m[3] + m[0], m[3] - m[0], m[3] + m[1], m[3] - m[1]):
+            px = hi[:, 0] if pl[0] >= 0 else lo[:, 0]
+            py = hi[:, 1] if pl[1] >= 0 else lo[:, 1]
+            pz = hi[:, 2] if pl[2] >= 0 else lo[:, 2]
+            keep &= ((px * pl[0] + py * pl[1]) + pz * pl[2]) + pl[3] >= 0
+        direction, offset = -view[2, :3], -view[2, 3]
+        nx, ny, nz = direction
+        lx, hx = (lo[:, 0], hi[:, 0]) if nx >= 0 else (hi[:, 0], lo[:, 0])
+        ly, hy = (lo[:, 1], hi[:, 1]) if ny >= 0 else (hi[:, 1], lo[:, 1])
+        lz, hz = (lo[:, 2], hi[:, 2]) if nz >= 0 else (hi[:, 2], lo[:, 2])
+        near = ((lx * nx + ly * ny) + lz * nz) + offset
+        far = ((hx * nx + hy * ny) + hz * nz) + offset
+        keep &= far > NEAR_FLOOR
+        if not keep.any():
+            return
+        n = max(NEAR_FLOOR, float(near[keep].min()) * 0.95)
+        if n <= self.near_plane():
+            return
+        f = max(n + NEAR_FLOOR, float(far[keep].max()) * 1.05)
+        self._depth_range = (self._depth_view_key(), n, f)
 
     # ---- Navigation ---------------------------------------------------------
     def orbit(self, dx_pixels: float, dy_pixels: float, viewport_h: int) -> None:
