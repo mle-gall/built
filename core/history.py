@@ -4821,10 +4821,13 @@ class UnlinkCommand(Command):
     files»). Its source missing, it keeps the parts it showed.
 
     A source no placement links any more leaves the host's link registry
-    (nothing watches or reloads it): its tags and folders stay, as the
-    host's own, showing as they did. One undo step brings the live links
-    back exactly — the same part objects, meshes, registry entries and
-    tags — and redo puts the very same copies back."""
+    (nothing watches or reloads it), and its tags become the host's own:
+    out of «Linked files / <file>» to the top of the tags tree, with the
+    same keys, colours and visibility, the file's folders coming along
+    (``links.release_tags``: one of the same label already there is
+    merged into the host's). One undo step brings the live links back
+    exactly — the same part objects, meshes, registry entries and tag
+    folders — and redo puts the very same copies back."""
 
     def __init__(self, groups) -> None:
         from core import links
@@ -4877,6 +4880,40 @@ class UnlinkCommand(Command):
                 else:
                     self._pairs.extend(_nested_pairs(old, new))
 
+    def _copied(self):
+        """The groups and meshes the copies hold, the files linked inside
+        them aside (theirs are their links')."""
+        from core import links
+        groups, meshes = [], [a["mesh"] for a in self._after]
+        stack = [c for a in self._after for c in a["children"] or ()]
+        while stack:
+            g = stack.pop()
+            if links.is_linked(g):
+                continue
+            groups.append(g)
+            meshes.append(g.mesh)
+            stack.extend(g.children or ())
+        return groups, meshes
+
+    def _release(self, scene, gone) -> None:
+        """No placement links the files ``gone`` any more: their tags are
+        the host's own now, out at the top of the tree
+        (``links.release_tags``), the copies relabelled where one merged
+        into a host tag of the same label."""
+        from types import SimpleNamespace
+        from core import links
+        from core.purge import layer_counts
+        used = layer_counts(scene)
+        copies = layer_counts(SimpleNamespace(loose_mesh=None, groups=[
+            SimpleNamespace(mesh=a["mesh"], children=a["children"], layer=None)
+            for a in self._after]))
+        outside = {k: n - copies.get(k, 0) for k, n in used.items()}
+        renames: dict = {}
+        for path in gone:
+            renames.update(links.release_tags(scene, path, used, outside))
+        if renames:
+            links.relabel(*self._copied(), renames)
+
     def do(self, scene) -> None:
         from core import links
         if not self.groups:
@@ -4898,6 +4935,8 @@ class UnlinkCommand(Command):
         _move_holds(scene, self.groups, {id(a): b for a, b in self._pairs})
         gone = live - set(links.sources(scene))
         if self._tags_after is None:
+            if gone:
+                self._release(scene, gone)
             reg = links.registry(scene)
             cache = scene.__dict__.get("_link_tag_tables") or {}
             for p in gone:

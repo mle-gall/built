@@ -953,6 +953,139 @@ def fill_link(scene, group, mirror=None, host_path=None):
     return None
 
 
+def release_tags(scene, path, used, outside) -> dict:
+    """The host no longer links ``path`` (Make Unique of its last
+    placement): the file's tags become the host's own, out of «Linked
+    files / <file>» to the top of the tags tree — the same keys, labels,
+    colours and visibility — and the file's folders come along as
+    top-level folders with what they hold. The file's folder goes, and
+    «Linked files» too when nothing is left in it. A file folder the host
+    showed hidden leaves its tags and folders hidden.
+
+    A tag landing beside one of the host's with the same label is that
+    one: what wore the file's tag wears the host's, and the host's keeps
+    its colour and visibility. Two folders of one label at one level
+    become the host's, their contents merged the same way, level by level
+    — as .skp merges a component's tags into the model's by name. The
+    file's «Untagged» is the host's Untagged. A tag that something outside
+    the unlinked copies wears (``outside``: key → count) is not merged
+    away: it moves as a tag of its own.
+
+    The file's copies of the tags of the files linked inside it (its own
+    «Linked files» folder), that nothing wears any more (``used``: key →
+    count) go: those files stay links, under their own tags.
+
+    Returns ``{file tag key: host tag key}``, what the copies are to be
+    relabelled with (:func:`relabel`; the host's Untagged as
+    :data:`DEFAULT_LAYER`)."""
+    from core.layers import (DEFAULT_LAYER, folder_label, folder_parent,
+                             folder_visible, folders_of, move_folder,
+                             remove_folder, subfolders)
+    entry = registry(scene).get(_norm(path))
+    if not isinstance(entry, dict):
+        return {}
+    own = stem(path)
+    if own not in folders_of(scene) or folder_parent(scene, own) != LINKED_FOLDER:
+        return {}
+    mine = set(entry.get("tags") or ())
+    hidden = not folder_visible(scene, own)
+    renames: dict = {}
+
+    def empty(f) -> bool:
+        return (not any(ly.folder == f for ly in scene.layers)
+                and not subfolders(scene, f))
+
+    # 1. The copies of the nested files' tags that nothing wears now.
+    nested = own + SEP + LINKED_FOLDER
+    if nested in folders_of(scene) and folder_parent(scene, nested) == own:
+        below = [nested, *subfolders(scene, nested, deep=True)]
+        scene.layers[:] = [ly for ly in scene.layers
+                           if not (ly.key in mine and ly.folder in below
+                                   and not used.get(ly.key))]
+        for f in reversed(below):                   # the deepest first
+            if empty(f):
+                remove_folder(scene, f)
+
+    # 2. The rest out to the top, merged by label.
+    moving = {own, *subfolders(scene, own, deep=True)}
+    untagged = tag_name(path, None)
+
+    def merge(src, target) -> None:
+        theirs: dict = {}
+        for ly in scene.layers:
+            if (ly.folder or None) == target and ly.key not in mine:
+                theirs.setdefault(ly.name, ly)
+        for ly in [ly for ly in scene.layers
+                   if ly.folder == src and ly.key in mine]:
+            if ly.key == untagged:
+                into = scene.layer_by_key(DEFAULT_LAYER) or DEFAULT_LAYER
+            else:
+                into = theirs.get(ly.name)
+            if into is not None and not outside.get(ly.key):
+                renames[ly.key] = getattr(into, "key", into)
+                scene.layers.remove(ly)
+                continue
+            ly.folder = target
+            if hidden:
+                ly.visible = False
+        level: dict = {}
+        for f in subfolders(scene, target):
+            if f not in moving and f != LINKED_FOLDER:
+                level.setdefault(folder_label(scene, f), f)
+        for f in subfolders(scene, src):
+            twin = level.get(folder_label(scene, f))
+            if twin is not None:
+                merge(f, twin)
+                remove_folder(scene, f)
+            else:
+                move_folder(scene, f, target)
+                if hidden:
+                    scene.folder_visibility[f] = False
+
+    merge(own, None)
+    if empty(own):
+        remove_folder(scene, own)
+    if LINKED_FOLDER in folders_of(scene) and empty(LINKED_FOLDER):
+        remove_folder(scene, LINKED_FOLDER)
+    return renames
+
+
+def relabel(groups, meshes, renames) -> None:
+    """Move what ``groups`` and ``meshes`` wear onto other tags
+    (``renames``: key → key, :data:`DEFAULT_LAYER` for Untagged). A mesh
+    left deferred is relabelled in its tables, unbuilt
+    (:func:`_relabel_deferred`), and only when they name a tag that moves."""
+    from core.layers import DEFAULT_LAYER, assign_layer, layer_of
+    from core.mesh import DeferredMesh
+    if not renames:
+        return
+
+    def rename(name):
+        out = renames.get(name, name)
+        return None if out == DEFAULT_LAYER else out
+
+    for g in groups:
+        if layer_of(g) in renames:
+            assign_layer(g, renames[layer_of(g)])
+    shared: dict = {}
+    seen = set()
+    for mesh in meshes:
+        if mesh is None or id(mesh) in seen:
+            continue
+        seen.add(id(mesh))
+        if type(mesh) is DeferredMesh:
+            meta = mesh.__dict__["_deferred_source"].get("meta") or {}
+            named = {(row or {}).get("layer")
+                     for row in meta.get("face_attrs") or ()}
+            named.update(meta.get("edge_layers") or ())
+            if named & set(renames):
+                _relabel_deferred(mesh, rename, shared)
+            continue
+        for item in (*mesh.faces, *mesh.edges):
+            if layer_of(item) in renames:
+                assign_layer(item, renames[layer_of(item)])
+
+
 def adopt_parts(placement) -> None:
     """Each part of the linked ``placement`` owned by its parent, as
     :func:`_populate` leaves them: a packed link read back from the file
