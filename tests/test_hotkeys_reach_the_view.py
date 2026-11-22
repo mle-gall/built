@@ -32,8 +32,8 @@ from tools.base import ToolContext
 
 
 @pytest.fixture
-def win(monkeypatch, tmp_path):
-    monkeypatch.setenv("INGETRAZO_WGPU", "1")
+def win(monkeypatch, tmp_path, request):
+    monkeypatch.setenv("INGETRAZO_WGPU", getattr(request, "param", "1"))
     monkeypatch.setenv("INGETRAZO_AI_PORT", "0")
     from core import autosave, renderer_settings
     monkeypatch.setattr(renderer_settings, "capability",
@@ -50,6 +50,7 @@ def win(monkeypatch, tmp_path):
     w.activateWindow()
     settle()
     yield w
+    w._saved_version = w.viewport.scene.version
     w.close()
     settle()
 
@@ -223,3 +224,83 @@ def test_a_floating_tray_still_fires_the_tool_keys(win):
     QTest.keyClick(layers, Qt.Key_R)
     assert tool_name(win) == "RectangleTool"
     dock.setFloating(False)
+
+
+@pytest.mark.parametrize("win", ["0", "1"], indirect=True)
+def test_clean_screen_keeps_tool_shortcuts_and_measurements(win):
+    display = win._doc.stand_in or win.viewport
+    win._act_clean_screen.setChecked(True)
+    settle()
+    assert win.statusBar().isVisible()
+    assert focus() is display
+    QTest.keyClick(display, Qt.Key_R)
+    assert tool_name(win) == "RectangleTool"
+    QTest.keyClicks(display, "3;4")
+    buffer = display.tools.value_buffer if display is not win.viewport else display._value_buffer
+    assert buffer == "3;4"
+    win._act_clean_screen.setChecked(False)
+    QTest.keyClick(display, Qt.Key_L)
+    assert tool_name(win) == "LineTool"
+
+
+@pytest.mark.parametrize("shortcut,entry,count,x", [
+    (Qt.Key_L, "3", 1, 3.0),
+    (Qt.Key_R, "3;1", 4, 3.0),
+    (Qt.Key_C, "3", 24, 3.0),
+])
+def test_metal_retype_replaces_placed_shape(win, shortcut, entry, count, x):
+    display = win._doc.stand_in
+    QTest.keyClick(display, shortcut)
+    native = display.tools
+    native.sync()
+    for pt in (V(), V(2, 1 if shortcut == Qt.Key_R else 0, 0)):
+        ctx = ToolContext(native, pt, QPointF(), Qt.NoModifier, None)
+        native.tool.on_hover(ctx)
+        native.tool.on_click(ctx)
+    steps = len(native.history.undo_stack)
+    QTest.keyClicks(display, entry)
+    QTest.keyClick(display, Qt.Key_Return)
+    assert len(native.history.undo_stack) == steps
+    assert len(native.scene.mesh.edges) == count
+    assert max(v.position.x() for v in native.scene.mesh.vertices) == pytest.approx(x)
+
+
+@pytest.mark.parametrize("win", ["0", "1"], indirect=True)
+def test_expression_beats_window_shortcuts_and_draws_its_result(win):
+    from PySide6.QtGui import QAction, QKeySequence
+    display = win._doc.stand_in or win.viewport
+    QTest.keyClick(display, Qt.Key_L)
+    target = display.tools if display is not win.viewport else display
+    if display is not win.viewport:
+        target.sync()
+    line = win.viewport.active_tool
+    line.on_click(ToolContext(target, V(), QPointF(), Qt.NoModifier, None))
+    line.on_hover(ToolContext(target, V(2, 0, 0), QPointF(), Qt.NoModifier, None))
+
+    fired = []
+    for operator in "=+-*/()":
+        action = QAction(operator, win)
+        action.setShortcut(QKeySequence(operator))
+        action.triggered.connect(lambda: fired.append(True))
+        win.addAction(action)
+    entry = "=(1.20m+35cm)*2/2-5cm"
+    QTest.keyClicks(display, entry)
+    assert not fired
+    assert win._vcb_value.text() == entry
+    QTest.keyClick(display, Qt.Key_Return)
+    assert line.start_point.x() == pytest.approx(1.5)
+    assert win.viewport.active_tool is line
+
+
+@pytest.mark.parametrize("win", ["0", "1"], indirect=True)
+def test_zoom_accepts_calculated_lens_and_field_of_view(win):
+    display = win._doc.stand_in or win.viewport
+    cam = win.viewport.camera
+    cam.set_projection("perspective")
+    win.viewport.set_nav_mode("zoom")
+    QTest.keyClicks(display, "=20mm+1.5cm")
+    QTest.keyClick(display, Qt.Key_Return)
+    assert cam.focal_mm == pytest.approx(35)
+    QTest.keyClicks(display, "=90/2")
+    QTest.keyClick(display, Qt.Key_Return)
+    assert cam.fov_deg == pytest.approx(45)

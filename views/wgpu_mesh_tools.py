@@ -235,9 +235,18 @@ class MeshToolAccess:
         if picked is None:
             return None, None
         mesh, group, _ = picked
+        if face is None or not self.scene.entity_selectable(face):
+            return None, None
         if group is self.scene.edit_group:
             return face, None
-        return (face, group) if group is not None else (None, None)
+        # The ray hit used for a drawing plane can also hit a locked
+        # reference. Paint and the other editing tools need an editable
+        # placement, including the container selected in this context.
+        owner = self.view.context_placement(group)
+        if (owner is None or not self.scene.entity_selectable(group)
+                or not self.scene.entity_selectable(owner)):
+            return None, None
+        return face, group
 
     def pick_face(self, x, y):
         face, group = self.pick_face_any(x, y)

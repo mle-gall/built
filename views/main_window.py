@@ -2243,8 +2243,8 @@ class MainWindow(WorksessionMixin, QMainWindow):
         window_menu.addSeparator()
         clean_action = QAction(tr("Clean screen"), self)
         clean_action.setStatusTip(tr(
-            "Fold away every toolbar, panel and bar so only the model "
-            "shows; once more brings them all back."))
+            "Fold away every toolbar and panel so only the model and the "
+            "status bar show; once more brings them all back."))
         clean_action.setShortcut(QKeySequence("Ctrl+0"))
         clean_action.setCheckable(True)
         clean_action.toggled.connect(self._route_window_toggle(
@@ -2864,18 +2864,18 @@ class MainWindow(WorksessionMixin, QMainWindow):
             QTimer.singleShot(0, self, self._place_sidebar_handle)   # after the relayout
 
     def _toggle_clean_screen(self, on: bool) -> None:
-        """AutoCAD's Ctrl+0: fold away every toolbar, dock and bar so only
-        the model remains (presentations); Ctrl+0 again restores the
-        workspace exactly as it was."""
+        """Keep the model and Measurements visible while the workspace is folded."""
         from PySide6.QtWidgets import QDockWidget
+        from views.clean_screen import keep_shortcuts_alive, release_shortcuts
         if on:
             self._clean_screen_state = self.saveState()
+            self._clean_screen_actions = keep_shortcuts_alive(self)
             for tb in self.findChildren(QToolBar):
                 tb.hide()
             for dock in self.findChildren(QDockWidget):
                 dock.hide()
             self.menuBar().hide()
-            self.statusBar().hide()
+            self.statusBar().show()
             self._clean_screen_exit_button().show()
             self._place_clean_screen_exit()
             if getattr(self, "_sidebar_handle", None) is not None:
@@ -2883,6 +2883,8 @@ class MainWindow(WorksessionMixin, QMainWindow):
             if getattr(self, "_left_handle", None) is not None:
                 self._left_handle.hide()
         else:
+            release_shortcuts(self, getattr(self, "_clean_screen_actions", ()))
+            self._clean_screen_actions = []
             btn = getattr(self, "_clean_exit_btn", None)
             if btn is not None:
                 btn.hide()
@@ -2893,6 +2895,8 @@ class MainWindow(WorksessionMixin, QMainWindow):
             self.statusBar().show()
             from PySide6.QtCore import QTimer
             QTimer.singleShot(0, self, self._place_sidebar_handle)
+
+        self.viewport.setFocus()
 
     def _clean_screen_exit_button(self):
         """A small «Exit clean screen» button floating at the viewport's
