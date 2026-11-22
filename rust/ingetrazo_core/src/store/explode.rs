@@ -25,7 +25,7 @@ use super::edit::Change;
 use super::keys::{Kind, NONE};
 use super::topo::OpError;
 use super::{Store, FLAT, HIDDEN, SOFT};
-use crate::facegeom::{self, Hypot, V3};
+use crate::store::geometry::{self as facegeom, Hypot, V3};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -170,7 +170,7 @@ impl Store {
             ny += (p[2] - q[2]) * (p[0] + q[0]);
             nz += (p[0] - q[0]) * (p[1] + q[1]);
         }
-        facegeom::length(V3(nx as f32, ny as f32, nz as f32), h) as f64 > 1e-9
+        facegeom::length(V3(nx, ny, nz), h) > 1e-9
     }
 
     /// The broad phase of `_merge_overlapping_planes(scene, before, added)`

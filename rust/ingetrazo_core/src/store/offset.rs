@@ -1,23 +1,23 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Offset outline segments and install the planar arrangement's surviving faces.
 use super::{edit::Change, keys::Kind, topo::OpError, Store};
-use crate::facegeom::{length, normalized, Hypot, V3};
+use crate::store::geometry::{length, normalized, Hypot, V3};
 
 impl Store {
     pub fn offset_outline(
         &self,
         face: u32,
-        normal: [f32; 3],
+        normal: [f64; 3],
         distance: f64,
         h: Hypot,
-    ) -> Vec<([f32; 3], [f32; 3])> {
+    ) -> Vec<([f64; 3], [f64; 3])> {
         let rings = self.face_rings(face);
         let Some(outer) = rings.first() else {
             return Vec::new();
         };
         let point = |v: u32| {
             let p = self.state.vpos.get(v as usize);
-            V3(p[0] as f32, p[1] as f32, p[2] as f32)
+            V3(p[0], p[1], p[2])
         };
         let normal = normalized(V3(normal[0], normal[1], normal[2]), h);
         let mut lines = Vec::new();
@@ -29,7 +29,7 @@ impl Store {
                 continue;
             }
             let dir = normalized(delta, h);
-            let push = normalized(normal.cross(dir, h), h).mul(distance as f32);
+            let push = normalized(normal.cross(dir, h), h).mul(distance);
             lines.push((a.add(push), b.add(push), dir));
         }
         if lines.len() < 3 {
@@ -46,7 +46,7 @@ impl Store {
                 } else {
                     end.add(u.mul(start.sub(end).cross(v, h).dot(normal, h) / den))
                 };
-                ((length(corner.sub(end), h) as f64) <= 2. * distance.abs() + 1e-9)
+                (length(corner.sub(end), h) <= 2. * distance.abs() + 1e-9)
                     .then_some(corner)
             })
             .collect();
@@ -101,13 +101,13 @@ fn arrangement_axes(n: V3, h: Hypot) -> (V3, V3) {
 pub fn keep_regions(
     store: &Store,
     face: u32,
-    regions: Vec<Vec<[f32; 3]>>,
-    normal: [f32; 3],
+    regions: Vec<Vec<[f64; 3]>>,
+    normal: [f64; 3],
     distance: f64,
     h: Hypot,
 ) -> Vec<bool> {
     use crate::earcut::earcut;
-    use crate::facegeom::{is_convex, plane_axes};
+    use crate::store::geometry::{is_convex, plane_axes};
     let n = normalized(V3(normal[0], normal[1], normal[2]), h);
     let (u, v) = plane_axes(n, h);
     let (bu, bv) = arrangement_axes(n, h);
@@ -118,7 +118,7 @@ pub fn keep_regions(
         .flatten()
         .map(|&i| {
             let p = store.state.vpos.get(i as usize);
-            V3(p[0] as f32, p[1] as f32, p[2] as f32)
+            V3(p[0], p[1], p[2])
         })
         .collect();
     if boundary.len() < 3 {
@@ -126,7 +126,7 @@ pub fn keep_regions(
     }
     let flat = |p: V3| {
         let rel = p.sub(boundary[0]);
-        (rel.dot(bu, h) as f64, rel.dot(bv, h) as f64)
+        (rel.dot(bu, h), rel.dot(bv, h))
     };
     let outline: Vec<_> = boundary.iter().copied().map(flat).collect();
     regions
@@ -140,7 +140,7 @@ pub fn keep_regions(
                 .iter()
                 .map(|&p| {
                     let rel = p.sub(points[0]);
-                    (rel.dot(u, h) as f64, rel.dot(v, h) as f64)
+                    (rel.dot(u, h), rel.dot(v, h))
                 })
                 .collect();
             let triangles = if is_convex(&xy) {
@@ -163,7 +163,7 @@ pub fn keep_regions(
                 return false;
             };
             let inside = contains(&outline, flat(p));
-            let mut depth = f32::INFINITY;
+            let mut depth = f64::INFINITY;
             for (i, &a) in boundary.iter().enumerate() {
                 let j = (i + 1) % boundary.len();
                 let delta = boundary[j].sub(a);
@@ -176,7 +176,7 @@ pub fn keep_regions(
                 depth = depth.min(length(p.sub(a.add(delta.mul(t))), h));
             }
             let signed = if inside { depth } else { -depth };
-            signed as f64
+            signed
                 >= if distance > 0. {
                     distance * 0.75
                 } else {
@@ -229,8 +229,8 @@ fn meet(p: XY, q: XY, r: XY, s: XY) -> bool {
 pub fn place_holes(
     store: &Store,
     face: u32,
-    regions: &[Vec<[f32; 3]>],
-    normal: [f32; 3],
+    regions: &[Vec<[f64; 3]>],
+    normal: [f64; 3],
     h: Hypot,
 ) -> Option<Vec<i64>> {
     let n = normalized(V3(normal[0], normal[1], normal[2]), h);
@@ -239,7 +239,7 @@ pub fn place_holes(
     let origin = V3(p[0], p[1], p[2]);
     let flat = |p: V3| {
         let r = p.sub(origin);
-        (r.dot(u, h) as f64, r.dot(v, h) as f64)
+        (r.dot(u, h), r.dot(v, h))
     };
     let flat_regions: Vec<Vec<_>> = regions
         .iter()
@@ -251,7 +251,7 @@ pub fn place_holes(
             .iter()
             .map(|&s| {
                 let p = store.state.vpos.get(s as usize);
-                flat(V3(p[0] as f32, p[1] as f32, p[2] as f32))
+                flat(V3(p[0], p[1], p[2]))
             })
             .collect();
         if flat_regions

@@ -28,10 +28,6 @@ pub struct V3(pub f32, pub f32, pub f32);
 
 impl V3 {
     #[inline]
-    pub(crate) fn add(self, o: V3) -> V3 {
-        V3(self.0 + o.0, self.1 + o.1, self.2 + o.2)
-    }
-    #[inline]
     pub fn sub(self, o: V3) -> V3 {
         V3(self.0 - o.0, self.1 - o.1, self.2 - o.2)
     }

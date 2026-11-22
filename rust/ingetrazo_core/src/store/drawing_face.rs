@@ -2,7 +2,7 @@
 //! Drawing predicates on a face in the store. Intermediate pieces carry positions.
 use super::drawing::{key, point, vector};
 use super::Store;
-use crate::facegeom::{length, plane_axes, Hypot, V3};
+use crate::store::geometry::{length, plane_axes, Hypot, V3};
 type P = [f64; 3];
 type XY = [f64; 2];
 type Ring = Vec<P>;
@@ -37,13 +37,13 @@ fn locate(r: &[P], p: P, h: Hypot) -> Option<(usize, bool)> {
         .position(|(&a, &b)| {
             let a = vector(a);
             let ab = vector(b).sub(a);
-            let len = length(ab, h) as f64;
+            let len = length(ab, h);
             if len < 1e-4 {
                 return false;
             }
-            let t = p.sub(a).dot(ab, h) as f64 / (len * len);
+            let t = p.sub(a).dot(ab, h) / (len * len);
             (1e-4..=1. - 1e-4).contains(&t)
-                && (length(p.sub(a.add(ab.mul(t as f32))), h) as f64) < 1e-4
+                && length(p.sub(a.add(ab.mul(t))), h) < 1e-4
         })
         .map(|i| (i, true))
 }
@@ -111,8 +111,8 @@ impl Outline {
     fn proj(&self, p: P) -> XY {
         let rel = vector(p).sub(vector(self.rings[0][0]));
         [
-            rel.dot(self.axes.0, self.h) as f64,
-            rel.dot(self.axes.1, self.h) as f64,
+            rel.dot(self.axes.0, self.h),
+            rel.dot(self.axes.1, self.h),
         ]
     }
     fn plane(&self, p: P) -> bool {
@@ -209,7 +209,7 @@ impl Outline {
         let indices: Vec<_> = (0..pts.len() as u32).collect();
         let mut largest = 0.;
         let mut probe = None;
-        for tri in crate::facegeom::triangles(&pts, &[&indices], self.normal, self.h) {
+        for tri in crate::store::geometry::triangles(&pts, &[&indices], self.normal, self.h) {
             let [a, b, c] = tri.map(|i| pts[i as usize]);
             let cross = b.sub(a).cross(c.sub(a), self.h);
             let area = cross.dot(cross, self.h);
@@ -221,7 +221,7 @@ impl Outline {
         probe
     }
     fn covers(&self, p: P, n: V3) -> bool {
-        if (self.normal.dot(n, self.h) as f64).abs() < 0.999 || !self.plane(p) {
+        if self.normal.dot(n, self.h).abs() < 0.999 || !self.plane(p) {
             return false;
         }
         self.solid_at(p)
@@ -240,7 +240,7 @@ impl Outline {
 impl Store {
     pub fn winding_flips(&self, old: Option<&Store>, h: Hypot, compensated: bool) -> Vec<u128> {
         use super::keys::Kind;
-        use crate::facegeom::py_sum;
+        use crate::store::geometry::py_sum;
         use std::collections::HashMap;
         let faces = |s: &Store| s.state.order[2].live(&s.state.slots[2]);
         let mut old_regions = Vec::new();
@@ -267,7 +267,7 @@ impl Store {
                 py_sum(positions.iter().map(|p| p[k]), compensated) / r.len().max(1) as f64
             });
             let group = [n.0, n.1, n.2, n.dot(vector(centroid), h)]
-                .map(|x| ((x as f64).abs() * 100.).round_ties_even().to_bits());
+                .map(|x| (x.abs() * 100.).round_ties_even().to_bits());
             let idx = *index.entry(group).or_insert_with(|| {
                 groups.push((V3(0., 0., 0.), vec![]));
                 groups.len() - 1
@@ -325,20 +325,20 @@ fn pairsig(a: P, b: P) -> [[u64; 3]; 2] {
 }
 fn on_segment(p: P, a: P, b: P, h: Hypot) -> bool {
     let ab = vector(b).sub(vector(a));
-    let len = length(ab, h) as f64;
+    let len = length(ab, h);
     if len < 1e-4 {
         return key(p) == key(a);
     }
-    let t = vector(p).sub(vector(a)).dot(ab, h) as f64 / (len * len);
+    let t = vector(p).sub(vector(a)).dot(ab, h) / (len * len);
     (-1e-4..=1.0001).contains(&t)
-        && (length(vector(p).sub(vector(a).add(ab.mul(t as f32))), h) as f64) < 1e-4
+        && length(vector(p).sub(vector(a).add(ab.mul(t))), h) < 1e-4
 }
 pub(super) fn refine(r: &[P], points: &[P], tol: f64, h: Hypot) -> Ring {
     let mut out = vec![];
     for (&a, &b) in segments(r) {
         out.push(a);
         let ab = vector(b).sub(vector(a));
-        let len = length(ab, h) as f64;
+        let len = length(ab, h);
         if len < tol {
             continue;
         }
@@ -347,10 +347,10 @@ pub(super) fn refine(r: &[P], points: &[P], tol: f64, h: Hypot) -> Ring {
             if key(a) == key(p) || key(b) == key(p) {
                 continue;
             }
-            let t = vector(p).sub(vector(a)).dot(ab, h) as f64 / (len * len);
+            let t = vector(p).sub(vector(a)).dot(ab, h) / (len * len);
             if t > tol / len
                 && t < 1. - tol / len
-                && (length(vector(p).sub(vector(a).add(ab.mul(t as f32))), h) as f64) < tol
+                && length(vector(p).sub(vector(a).add(ab.mul(t))), h) < tol
             {
                 on.push((t, p))
             }
@@ -428,7 +428,7 @@ impl Store {
         h: Hypot,
     ) -> (&'static str, Option<u128>) {
         use super::keys::Kind;
-        let base = crate::facegeom::normalized(self.face_normal(face, h), h);
+        let base = crate::store::geometry::normalized(self.face_normal(face, h), h);
         let seg = pairsig(a, b);
         let mut other = None;
         for &f in faces {
@@ -436,7 +436,7 @@ impl Store {
                 continue;
             }
             let coplanar =
-                (base.dot(crate::facegeom::normalized(self.face_normal(f, h), h), h) as f64).abs()
+                base.dot(crate::store::geometry::normalized(self.face_normal(f, h), h), h).abs()
                     > 0.999;
             if !coplanar && other.is_some() {
                 continue;
@@ -525,7 +525,7 @@ impl Store {
 
 impl Outline {
     fn hole_contains(&self, other: &Outline, compensated: bool) -> bool {
-        use crate::facegeom::py_sum;
+        use crate::store::geometry::py_sum;
         let inner = &other.rings[0];
         if inner.len() < 3 || self.rings.len() < 2 {
             return false;
@@ -539,8 +539,8 @@ impl Outline {
             let rel = |p: P| {
                 let d = vector(p).sub(vector(hole[0]));
                 [
-                    d.dot(self.axes.0, self.h) as f64,
-                    d.dot(self.axes.1, self.h) as f64,
+                    d.dot(self.axes.0, self.h),
+                    d.dot(self.axes.1, self.h),
                 ]
             };
             let poly: Vec<_> = hole.iter().copied().map(rel).collect();
@@ -591,7 +591,7 @@ impl Store {
                         raw[k] += (a[i] - b[i]) * (a[j] + b[j])
                     }
                 }
-                0.5 * length(vector(raw), h) as f64
+                0.5 * length(vector(raw), h)
             })
             .collect();
         let parallel = |i: usize, j: usize| {

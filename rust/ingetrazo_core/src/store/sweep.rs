@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Follow Me station projection, wall/cap construction and loose profile cleanup.
 use super::{edit::Change, topo::OpError, Store};
-use crate::facegeom::{length, normalized, Hypot, V3};
+use crate::store::geometry::{length, normalized, Hypot, V3};
 
 type Ring = Vec<[f64; 3]>;
 pub type Station = Vec<Ring>;
 
 fn vector(p: [f64; 3]) -> V3 {
-    V3(p[0] as f32, p[1] as f32, p[2] as f32)
+    V3(p[0], p[1], p[2])
 }
 fn coords(v: V3) -> [f64; 3] {
-    [v.0 as f64, v.1 as f64, v.2 as f64]
+    [v.0, v.1, v.2]
 }
 
 impl Store {

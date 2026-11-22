@@ -6,7 +6,7 @@ use super::{
     keys::Kind,
     Store,
 };
-use crate::facegeom::{length, triangles, Hypot, V3};
+use crate::store::geometry::{length, triangles, Hypot, V3};
 use std::collections::{HashMap, HashSet};
 type P = [f64; 3];
 type Ring = Vec<P>;
@@ -43,15 +43,15 @@ pub(super) fn tris(r: &[Ring], n: V3, h: Hypot) -> Vec<[V3; 3]> {
 fn covers(t: [V3; 3], p: V3, h: Hypot) -> bool {
     let [a, b, c] = t;
     let n = b.sub(a).cross(c.sub(a), h);
-    let nl = length(n, h) as f64;
+    let nl = length(n, h);
     let sides = [b.sub(a), c.sub(b), a.sub(c)];
-    let longest = sides.iter().map(|v| v.dot(*v, h)).fold(0., f32::max);
-    if nl < 1e-12 || nl < 1e-9 * longest as f64 {
+    let longest = sides.iter().map(|v| v.dot(*v, h)).fold(0., f64::max);
+    if nl < 1e-12 || nl < 1e-9 * longest {
         return false;
     }
     (0..3).all(|i| {
-        let side = length(sides[i], h) as f64;
-        side == 0. || (sides[i].cross(p.sub(t[i]), h).dot(n, h) as f64) / (nl * side) >= -1e-7
+        let side = length(sides[i], h);
+        side == 0. || sides[i].cross(p.sub(t[i]), h).dot(n, h) / (nl * side) >= -1e-7
     })
 }
 pub(super) fn bounds(r: &[P]) -> (P, P) {
@@ -138,7 +138,7 @@ impl Store {
             if !all
                 && !ends
                     .iter()
-                    .all(|&p| (vector(p).sub(vector(o)).dot(vector(n), h) as f64).abs() < 1e-4)
+                    .all(|&p| vector(p).sub(vector(o)).dot(vector(n), h).abs() < 1e-4)
             {
                 continue;
             }
@@ -169,7 +169,7 @@ impl Store {
             if !rings
                 .iter()
                 .flatten()
-                .all(|&p| (vector(p).sub(vector(o)).dot(vector(n), h) as f64).abs() < 1e-4)
+                .all(|&p| vector(p).sub(vector(o)).dot(vector(n), h).abs() < 1e-4)
             {
                 continue;
             }

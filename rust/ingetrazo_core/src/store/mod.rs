@@ -30,6 +30,7 @@ mod drawing_face;
 mod drawing_plane;
 mod drawing_edges;
 pub mod edit;
+mod geometry;
 pub mod explode;
 pub mod keys;
 pub mod intersect;
@@ -175,8 +176,7 @@ pub struct Store {
     /// keys; a foreign one takes a fresh namespace).
     pub lineage: u64,
     pub weld: Weld,
-    /// Positions stay float32 values and moves add in float32, exactly as
-    /// `QVector3D` does, until the kernel port is done (see the design).
+    /// Diagnostic mode for legacy float32 vertex edits and weld lookup.
     pub f32_parity: bool,
 }
 

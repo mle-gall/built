@@ -2,10 +2,10 @@
 //! Plane/plane clipping in the coordinate system of one editing context.
 use super::{keys::Kind, Store};
 use crate::boxes::{touching, Box3};
-use crate::facegeom::{length, normalized, plane_axes, Hypot, V3};
+use crate::store::geometry::{length, normalized, plane_axes, Hypot, V3};
 use std::collections::HashSet;
 
-pub type Segment = ([f32; 3], [f32; 3]);
+pub type Segment = ([f64; 3], [f64; 3]);
 
 pub type WorldRings = Vec<Vec<[f64; 3]>>;
 
@@ -49,21 +49,21 @@ impl Polygon {
                 n[k] += (a[j] - b[j]) * (a[l] + b[l]);
             }
         }
-        let v3 = |p: [f64; 3]| V3(p[0] as f32, p[1] as f32, p[2] as f32);
+        let v3 = |p: [f64; 3]| V3(p[0], p[1], p[2]);
         let n = v3(n);
         if length(n, h) < 1e-12 {
             return None;
         }
         let normal = normalized(n, h);
         let axes = plane_axes(normal, h);
-        let distance = normal.dot(v3(pos(outer[0])), h) as f64;
+        let distance = normal.dot(v3(pos(outer[0])), h);
         let rings = rings
             .iter()
             .map(|r| {
                 r.iter()
                     .map(|&v| {
                         let p = v3(pos(v));
-                        [p.dot(axes.0, h) as f64, p.dot(axes.1, h) as f64]
+                        [p.dot(axes.0, h), p.dot(axes.1, h)]
                     })
                     .collect()
             })
@@ -78,7 +78,7 @@ impl Polygon {
     }
 
     fn intervals(&self, origin: V3, dir: V3, h: Hypot) -> Vec<f64> {
-        let project = |p: V3| (p.dot(self.axes.0, h) as f64, p.dot(self.axes.1, h) as f64);
+        let project = |p: V3| (p.dot(self.axes.0, h), p.dot(self.axes.1, h));
         let (ox, oy) = project(origin);
         let (dx, dy) = project(dir);
         let mut hits = Vec::new();
@@ -102,7 +102,7 @@ impl Polygon {
 
     fn cross(&self, b: &Self, h: Hypot, out: &mut Vec<Segment>) {
         let dir = self.normal.cross(b.normal, h);
-        let c = self.normal.dot(b.normal, h) as f64;
+        let c = self.normal.dot(b.normal, h);
         let den = 1. - c * c;
         if length(dir, h) < 1e-9 || den < 1e-12 {
             return;
@@ -111,11 +111,11 @@ impl Polygon {
         let add = |a: V3, b: V3| V3(a.0 + b.0, a.1 + b.1, a.2 + b.2);
         let origin = add(
             self.normal
-                .mul(((self.distance - b.distance * c) / den) as f32),
+                .mul((self.distance - b.distance * c) / den),
             b.normal
-                .mul(((b.distance - self.distance * c) / den) as f32),
+                .mul((b.distance - self.distance * c) / den),
         );
-        let point = |t: f64| add(origin, dir.mul(t as f32));
+        let point = |t: f64| add(origin, dir.mul(t));
         let a = self.intervals(origin, dir, h);
         let b = b.intervals(origin, dir, h);
         let (mut i, mut j) = (0, 0);
@@ -184,7 +184,7 @@ pub fn segments(
     if mode != "context" {
         cross(&mine, &boxes, true);
     }
-    let key = |p: [f32; 3]| p.map(|v| (v as f64 / 1e-6).round_ties_even() as i128);
+    let key = |p: [f64; 3]| p.map(|v| (v / 1e-6).round_ties_even() as i128);
     let mut seen = HashSet::new();
     out.retain(|&(p, q)| {
         let (a, b) = (key(p), key(q));

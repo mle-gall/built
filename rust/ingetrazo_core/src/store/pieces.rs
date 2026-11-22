@@ -26,7 +26,7 @@
 use super::build::Block;
 use super::keys::{Kind, NONE};
 use super::{Store, Weld, FLAT, HIDDEN, SOFT};
-use crate::facegeom::{self, Hypot, V3};
+use crate::store::geometry::{self as facegeom, Hypot, V3};
 use std::collections::HashMap;
 use std::f64::consts::TAU;
 
@@ -91,11 +91,6 @@ fn is_null(v: V3) -> bool {
 }
 
 impl Store {
-    fn pos32(&self, v: u32) -> V3 {
-        let p = self.state.vpos.get(v as usize);
-        V3(p[0] as f32, p[1] as f32, p[2] as f32)
-    }
-
     /// `connected_parts` over the given faces and edges (all live).
     pub fn connected_parts_of(&self, faces: &[u32], edges: &[u32]) -> Vec<Part> {
         let mut uf = Uf::new(self.state.slots[Kind::Vertex as usize].len());
@@ -157,7 +152,7 @@ impl Store {
             ny += (p[2] - q[2]) * (p[0] + q[0]);
             nz += (p[0] - q[0]) * (p[1] + q[1]);
         }
-        V3(nx as f32, ny as f32, nz as f32)
+        V3(nx, ny, nz)
     }
 
     /// `_inward(face, a, b, n)`.
@@ -167,7 +162,7 @@ impl Store {
             for i in 0..m {
                 let (p, q) = (ring[i], ring[(i + 1) % m]);
                 if (p == a && q == b) || (p == b && q == a) {
-                    let mut w = n.cross(self.pos32(q).sub(self.pos32(p)), h);
+                    let mut w = n.cross(self.position_vec(q).sub(self.position_vec(p)), h);
                     if k > 0 && self.ring_newell(ring).dot(n, h) > 0.0 {
                         w = V3(w.0 * -1.0, w.1 * -1.0, w.2 * -1.0);
                     }
@@ -188,7 +183,7 @@ impl Store {
             return if faces.len() == 2 { vec![(faces[0], faces[1])] } else { Vec::new() };
         }
         let [a, b] = *self.state.ends.get(e as usize);
-        let axis = self.pos32(b).sub(self.pos32(a));
+        let axis = self.position_vec(b).sub(self.position_vec(a));
         if axis.dot(axis, h) == 0.0 {
             return Vec::new();
         }
@@ -203,7 +198,7 @@ impl Store {
             }
             let Some(w) = self.inward(f, a, b, n, h) else { continue };
             let (ru, rv) = *refs.get_or_insert_with(|| (w, axis.cross(w, h)));
-            let theta = (w.dot(rv, h) as f64).atan2(w.dot(ru, h) as f64);
+            let theta = w.dot(rv, h).atan2(w.dot(ru, h));
             let spin = axis.cross(w, h).dot(n, h);
             info.push((f, theta, if spin > 0.0 { -1.0 } else { 1.0 }, w, n));
         }

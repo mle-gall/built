@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Vertex bevel. Edges shortened by a cut inherit the original edge flags.
 use super::{fillet::*, Store};
-use crate::facegeom::{length, Hypot, V3};
+use crate::store::geometry::{length, Hypot, V3};
 use std::collections::{BTreeMap, BTreeSet};
 use std::f64::consts::FRAC_PI_2;
 
@@ -38,7 +38,7 @@ pub fn plan(
             let w = other(s, e, v);
             let delta = pos(s, w) - origin;
             let need = if chosen.contains(&w) { size * 2. } else { size };
-            if need >= length(delta, h) as f64 - 1e-9 {
+            if need >= length(delta, h) - 1e-9 {
                 return Err(at("The size is too large for the edge at {p}.", origin));
             }
             cuts.insert(
@@ -66,7 +66,7 @@ pub fn plan(
             };
             let a = cut(ring[(i + ring.len() - 1) % ring.len()])?;
             let b = cut(ring[(i + 1) % ring.len()])?;
-            if (a.dot(b, h) as f64) / (size * size) < -2f64.to_radians().cos() {
+            if a.dot(b, h) / (size * size) < -2f64.to_radians().cos() {
                 return Err(at("The edges at {p} are too flat to bevel.", o));
             }
             let curve: Vec<_> = (0..=n)
@@ -144,7 +144,7 @@ pub fn plan(
             let span = tips
                 .iter()
                 .map(|&p| length(p - centre, h))
-                .fold(1., f32::max);
+                .fold(1., f64::max);
             if tips
                 .iter()
                 .any(|&p| (p - centre).dot(normal, h).abs() > 1e-3 * span)

@@ -7,7 +7,7 @@ use super::{
     topo::OpError,
     Store,
 };
-use crate::facegeom::{length, normalized, py_sum, Hypot};
+use crate::store::geometry::{length, normalized, py_sum, Hypot};
 use std::collections::{HashMap, HashSet};
 
 impl Store {
@@ -119,7 +119,7 @@ impl Store {
                     if at <= walked + 1e-9 || at >= walked + len - 1e-9 {
                         continue;
                     }
-                    let pos = point(a.add(dir.mul(((at - walked) / len) as f32)));
+                    let pos = point(a.add(dir.mul((at - walked) / len)));
                     let (mut first, mut second, _) = self.split_edge(rest, pos, ch)?;
                     if first == second {
                         break;
@@ -169,7 +169,7 @@ impl Store {
         let angle = if length(d1, h) == 0. || length(d2, h) == 0. {
             180.
         } else {
-            (normalized(d1, h).dot(normalized(d2, h), h) as f64)
+            normalized(d1, h).dot(normalized(d2, h), h)
                 .clamp(-1., 1.)
                 .acos()
                 .to_degrees()
