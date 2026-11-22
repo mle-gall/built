@@ -1,14 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""Commands of the core protocol by key (docs/core-protocol.md §1): the
-first three, each one History step on the open mesh, each answered with
-the step the change feed published for it.
-
-``run(history, name, **args)``: ``move_vertices``, ``push_pull``,
-``erase``, ``undo``, ``redo``. Arguments are keys and plain numbers; an
-unknown key raises ``KeyError`` before anything runs. The answer is
-``{"ok", "step", "error", "rejected"}`` with ``step`` the feed's record
-(a :class:`core.protocol.feed.Step`) or None when nothing happened."""
+"""Core protocol commands by key. Each edit is a History step on the open
+mesh. The result contains ok, step, error and rejected. Unknown element
+keys raise KeyError before the command runs (docs/core-protocol.md §1)."""
 from __future__ import annotations
 
 from core.protocol.keys import elements, from_json_key
@@ -102,6 +96,43 @@ def push_pull(history, face, distance, keep_base=False):
     return _answer(history, before)
 
 
+def add_edge(history, a, b, soft=None, tag=None):
+    from PySide6.QtGui import QVector3D
+    from core.edits import build_add_edge
+    before = history.revision
+    if tag is not None and history.scene.layer_by_key(tag) is None:
+        raise KeyError(f"no tag with key {tag!r}")
+    history.execute(build_add_edge(history.scene, QVector3D(*a), QVector3D(*b), soft=soft, tag=tag))
+    return _answer(history, before)
+
+
+def add_edges(history, segments):
+    from PySide6.QtGui import QVector3D
+    from core.edits import build_add_edges
+    before = history.revision
+    history.execute(build_add_edges(history.scene, [(QVector3D(*a), QVector3D(*b))
+                                                    for a, b in segments]))
+    return _answer(history, before)
+
+
+def _edge_edit(history, edges, edit, *args):
+    from core.history import SnapshotMutation
+    selected = _need(history.scene.mesh, "edge", edges)
+    before = history.revision
+    history.execute(SnapshotMutation(lambda sc: edit(sc.mesh, selected, *args)))
+    return _answer(history, before)
+
+
+def divide_edges(history, edges, n):
+    from core.edits import divide_edges as divide
+    return _edge_edit(history, edges, divide, int(n))
+
+
+def join_edges(history, edges):
+    from core.edits import join_edges as join
+    return _edge_edit(history, edges, join)
+
+
 def undo(history):
     before = history.revision
     history.undo()
@@ -114,7 +145,9 @@ def redo(history):
     return _answer(history, before)
 
 
-COMMANDS = {"move_vertices": move_vertices, "erase": erase,
+COMMANDS = {"add_edge": add_edge, "add_edges": add_edges,
+            "divide_edges": divide_edges, "join_edges": join_edges,
+            "move_vertices": move_vertices, "erase": erase,
             "push_pull": push_pull, "undo": undo, "redo": redo}
 
 

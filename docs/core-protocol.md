@@ -42,6 +42,10 @@ Built (`core.protocol.commands.run(history, name, **args)`):
 
 | Command | Arguments | Runs |
 |---|---|---|
+| `add_edge` | `a, b: [x,y,z]`, optional `soft` and `tag` key | Line, including splits and face detection |
+| `add_edges` | `segments: [[a,b], ...]` | Batch drawing as one step |
+| `divide_edges` | `edges: [edge key], n: integer` | Divide each line or curve into n pieces |
+| `join_edges` | `edges: [edge key]` | Join straight segments |
 | `move_vertices` | `vertices: [vertex key]`, `delta: [x, y, z]` | `MoveVerticesCommand` (the Move tool's: coincident vertices move along, warped faces fold) |
 | `push_pull` | `face: face key`, `distance: number`, `keep_base: bool = false` | the Push/Pull tool locked on the face, the distance typed, committed (clamped as the tool clamps) |
 | `erase` | `edges: [edge key]`, `faces: [face key]` | `EraseSelectionCommand` (the Eraser: a split line between coplanar faces dissolves) |
@@ -56,7 +60,6 @@ lists are the contract to build to):
 
 | Command | Arguments | History command |
 |---|---|---|
-| `add_edge` | `a`, `b: [x, y, z]`, `soft?`, `tag?: tag key` | `AddEdgeCommand` / `build_add_edges` |
 | `add_face` | `outer: [[x, y, z]]`, `holes?: [[[x, y, z]]]` | `AddFaceCommand` |
 | `paint_faces` | `faces: [face key]`, `material: name \| null`, `side: "front" \| "back"` | `SetFaceColorCommand` family |
 | `soften_edges` | `edges: [edge key]`, `soft: bool` | `SoftenByAngleCommand` |
