@@ -1950,10 +1950,14 @@ impl PyStoreSnapshot {
         self.inner.lineage == other.inner.lineage && self.inner.state.same_as(&other.inner.state)
     }
 
-    /// Net change between two immutable snapshots of one key namespace.
+    /// Net change between two immutable snapshots of one store. Across a
+    /// foreign restore adopted under a fresh namespace (same store, new
+    /// keys: `Scene.share_back`) everything before is removed and
+    /// everything after created (store/diff.rs). Snapshots of two
+    /// different stores refuse.
     fn changes_since(&self, py: Python<'_>, before: &PyStoreSnapshot, attrs: Vec<u128>) -> PyResult<PyChange> {
-        if self.inner.lineage != before.inner.lineage || self.inner.state.ns != before.inner.state.ns {
-            return Err(PyValueError::new_err("snapshots have different key namespaces"));
+        if self.inner.lineage != before.inner.lineage {
+            return Err(PyValueError::new_err("snapshots of different stores"));
         }
         let (new, old) = (reader(&self.inner), reader(&before.inner));
         let mut ch = py.detach(|| new.changes_since(&old));
