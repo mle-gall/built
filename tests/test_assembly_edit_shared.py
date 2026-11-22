@@ -7,6 +7,7 @@ undo takes it all back with the assembly's matrix where it was."""
 from __future__ import annotations
 
 import pytest
+from PySide6.QtCore import QPointF, Qt
 from PySide6.QtGui import QMatrix4x4, QVector3D as V
 from PySide6.QtWidgets import QApplication
 
@@ -602,4 +603,109 @@ def test_a_linked_assembly_stays_read_only(tmp_path, monkeypatch):
         assert [g.mesh for g, _m in scene.placements()] == meshes
         assert len(vp.history.undo_stack) == steps
     finally:
+        _close(win)
+
+
+# ---- Faces, scaled parents and inference, two levels deep ------------------
+
+def _scaled(m, sx, sy):
+    out = QMatrix4x4(m)
+    out.scale(sx, sy, 1)               # z kept: what is drawn stays at Z
+    return out
+
+
+def _deep_scaled():
+    """:func:`_deep` with every placement also stretched, unevenly: the
+    outer copies turned and stretched, or mirrored and stretched; the inner
+    ones turned and squeezed, or mirrored and stretched across."""
+    tops = _deep()
+    for r, (sx, sy) in zip(tops, ((2.0, 1.0), (1.5, 0.5))):
+        r.xform = _scaled(r.xform, sx, sy)
+        for a, (ax, ay) in zip(r.children, ((0.5, 0.5), (1.0, 3.0))):
+            a.xform = _scaled(a.xform, ax, ay)
+    return tops
+
+
+def _loop(vp, points):
+    for p, q in zip(points, points[1:] + points[:1]):
+        _draw(vp, p, q)
+
+
+@pytest.mark.parametrize("build", [_deep, _deep_scaled])
+@pytest.mark.parametrize("shape", ["line", "face"])
+def test_a_line_or_a_face_drawn_two_deep_reaches_every_copy(build, shape):
+    """A new loose line, or a closed loop that makes a face, drawn inside
+    one copy of an assembly inside another — the parents turned, mirrored
+    or stretched unevenly — lands in every copy in its own frame, and
+    undoes and redoes as one step with every matrix as it was."""
+    tops = build()
+    win, vp, scene = _window(*tops)
+    target = tops[1].children[1]            # mirrored in mirrored
+    pts = ([V(-11, 3, Z), V(-12, 4, Z)] if shape == "line" else
+           [V(-11, 3, Z), V(-10, 3, Z), V(-10, 4, Z), V(-11, 4, Z)])
+    want = _expected(scene, target, pts)
+    assert len(want) == 4 * len(pts)
+    inner = target.mesh
+    faces0 = len(inner.faces)
+    start = _matrices(tops)
+    steps = len(vp.history.undo_stack)
+    try:
+        vp.begin_group_edit(tops[1])
+        vp.begin_group_edit(target)
+        if shape == "line":
+            _draw(vp, *pts)
+        else:
+            _loop(vp, pts)
+        vp.end_group_edit()
+        added = 1 if shape == "face" else 0
+        assert _drawn_xy(scene) == want
+        assert len(inner.faces) == faces0 + added
+        assert all(a.mesh is inner for r in tops for a in r.children)
+        assert _matrices(tops) == start
+        assert len(vp.history.undo_stack) == steps + 1
+        for _ in range(2):
+            vp.history.undo()
+            assert _drawn_xy(scene) == set()
+            assert len(inner.faces) == faces0
+            assert _matrices(tops) == start
+            vp.history.redo()
+            assert _drawn_xy(scene) == want
+            assert len(inner.faces) == faces0 + added
+            assert _matrices(tops) == start
+    finally:
+        _close(win)
+
+
+@pytest.mark.parametrize("build", [_deep, _deep_scaled])
+def test_inference_inside_a_nested_copy_finds_its_parts_where_they_stand(build):
+    """Inside a copy, two levels down, the cursor over a corner of the part
+    it holds snaps to that corner where the part is drawn in the world —
+    not where the definition or another copy would put it."""
+    from core.purge import iter_groups
+    tops = build()
+    win, vp, scene = _window(*tops)
+    win.show()
+    win.resize(1200, 800)
+    target = tops[0].children[0]            # turned in turned (stretched)
+    part = target.children[0]
+    try:
+        vp.camera.set_view("iso")
+        vp.begin_group_edit(tops[0])
+        vp.begin_group_edit(target)
+        _app.processEvents()
+        win._activate_tool("line")
+        _app.processEvents()
+        world = next(m for g, m in scene.placements() if g is part)
+        corners = [world.map(v.position) for v in part.mesh.vertices]
+        # The top corner nearest the iso eye (+X, −Y, +Z): in sight.
+        corner = max(corners, key=lambda p: p.x() - p.y() + 2 * p.z())
+        px, py = vp._world_to_pixel(corner)
+        vp._last_mouse_pos = QPointF(px, py)
+        vp._refresh_snap()
+        snap = vp.inference.snap(px, py, Qt.NoModifier)
+        assert snap is not None and snap.kind == "endpoint", snap
+        assert (snap.point - corner).length() < 1e-6
+        assert all(g.xform is not None for g in iter_groups(tops))
+    finally:
+        vp.end_group_edit()
         _close(win)
