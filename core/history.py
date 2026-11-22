@@ -4545,11 +4545,22 @@ class ReshareInstanceCommand(Command):
         self.edited = edited
         self.inner = list(inner)
         self._before = None
+        self._after = None
 
     def do(self, scene) -> None:
         if self._before is None:
             self._before = self.proto.capture_state()
-        scene.share_back(self.group, self.proto, self.xform, self.edited)
+            scene.share_back(self.group, self.proto, self.xform, self.edited)
+            self._after = self.proto.capture_state()
+        else:
+            # Redo: the definition as the first run left it, so its
+            # elements keep the keys that run gave them (the change feed
+            # publishes the same step again). share_back would copy the
+            # edited instance once more, under fresh keys.
+            self.proto.restore_state(self._after)
+            self.proto.note_rewound()
+            self.group.mesh = self.proto
+            self.group.xform = self.xform
         scene.version += 1
 
     def undo(self, scene) -> None:
