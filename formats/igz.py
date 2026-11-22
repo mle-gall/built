@@ -2711,45 +2711,38 @@ def _load_geometry(mesh, meta, geom: dict) -> None:
     if meta.get("sequential") is True:
         source["sequential"] = True
 
-    if pos.dtype == np.dtype("<f8"):
-        # A deferred drawing plan targets Qt float coordinates. Build precise
-        # blocks directly so its projected positions never become save input.
-        from core import store_mesh
-        if store_mesh.enabled():
-            store, table = store_mesh.store_from_source(source, precise=True)
-            store_mesh.become_store(mesh, store, table)
-        else:
-            _build_geometry(mesh, meta, pos, edges, flags, curves, layers,
-                            rings, sizes, counts, face_attr, precise=True)
-        return
+    precise = pos.dtype == np.dtype("<f8")
 
     def build(mesh):
-        if source.get("sequential"):
-            # Small meshes used the per-entity JSON reader. Preserve that
-            # vertex order even though their storage is now binary.
+        from core import store_mesh
+        if store_mesh.enabled() and (precise or not (mesh.vertices or mesh.edges or mesh.faces)):
+            # The eager reader may receive a cleared store. Use the same
+            # block weld and vertex order as a deferred store's first touch.
+            store, table = store_mesh.store_from_source(source, precise=precise)
+            store_mesh.become_store(mesh, store, table)
+        elif source.get("sequential") and not precise:
             _load_mesh_small(mesh, _payload_from_arrays(source))
         else:
             _build_geometry(mesh, meta, pos, edges, flags, curves, layers,
-                            rings, sizes, counts, face_attr)
+                            rings, sizes, counts, face_attr, precise=precise)
+
     from core import _native
-    if not (_native.wanted()
-            and _mesh_mod.DeferredMesh.defer(
-                mesh, build, len(counts),
-                source)):
-        build(mesh)
+    # Built points must remain available to readers and writers at full precision.
+    if not precise and _native.wanted() and _mesh_mod.DeferredMesh.defer(
+            mesh, build, len(counts), source):
+        return
+    build(mesh)
 
 
 def _build_geometry(mesh, meta, pos, edges, flags, curves, layers, rings,
                     sizes, counts, face_attr, *, precise=False) -> None:
     """The objects of a format-3 block: :func:`_load_geometry`'s second
     half, run at once or, for a lazy mesh, on its first touch."""
-    import numpy as np
 
     if precise:
         vobjs, inverse = built.python_vertices(mesh, pos, meta.get("sequential") is True)
     else:
-        vobjs, inverse = mesh.bulk_weld(
-            pos if "_store" in mesh.__dict__ else pos.astype(np.float64))
+        vobjs, inverse = mesh.bulk_weld(pos)
     emap = None
     if len(edges):
         eflags = None

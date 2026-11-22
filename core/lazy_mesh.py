@@ -20,7 +20,7 @@ from core import mesh as _mesh
 
 @dataclass
 class Plan:
-    pos: np.ndarray            # (V, 3) float64 holding float32 values
+    pos: np.ndarray            # (V, 3) float64, in source weld precision
     edges: np.ndarray          # (E, 2) int64 vertex indices, v0 → v1
     soft: np.ndarray           # (E,) bool
     hidden: np.ndarray         # (E,) bool
@@ -46,11 +46,15 @@ class Plan:
         return len(self.ring_counts)
 
 
-def weld(pos: np.ndarray, sequential: bool = False, *, precise=False):
+def weld(pos: np.ndarray, sequential: bool = False, *, precise=None):
     """``(vpos, point_ids)``: what :meth:`Mesh.bulk_weld` returns on an EMPTY
     mesh, as positions instead of vertices (same order: the vertex list).
     ``sequential``: in the order :meth:`Mesh.vertex` called point by point
-    makes them instead — the same vertices, each where its point comes."""
+    makes them instead — the same vertices, each where its point comes.
+    By default a store uses the input precision and Qt vertices use f32.
+    A format with its own precision may select it explicitly."""
+    if precise is None:
+        precise = np.asarray(pos).dtype != np.float32 and _mesh._store_on()
     vpos, ids, origin = _weld(pos, precise=precise)
     if sequential and len(vpos):
         order = np.argsort(origin, kind="stable")
@@ -64,17 +68,20 @@ def _weld(pos: np.ndarray, *, precise=False):
     """``(vpos, point_ids, origin)`` — the weld, and the input point each
     vertex was made at."""
     scalar = np.float64 if precise else np.float32
-    pos = np.ascontiguousarray(pos, dtype=scalar).astype(np.float64)
+    pos = np.ascontiguousarray(pos, dtype=scalar)
     if not len(pos):
         return (np.zeros((0, 3)), np.empty(0, dtype=np.int64),
                 np.empty(0, dtype=np.int64))
     import core._native as _native
-    if not precise and _native.native is not None and hasattr(_native.native,
-                                              "weld_points"):
-        vpos, ids, origin = _native.native.weld_points(
-            pos.astype(np.float32), _mesh._KEY_SCALE,
-            (10.0 ** -_mesh._KEY_DECIMALS) ** 2)
+    native = _native.native
+    tol2 = (10.0 ** -_mesh._KEY_DECIMALS) ** 2
+    if precise and hasattr(native, "store_weld_indices"):
+        ids, origin = native.store_weld_indices(pos, _mesh._KEY_SCALE, tol2)
+        return pos[origin], ids, origin
+    if not precise and hasattr(native, "weld_points"):
+        vpos, ids, origin = native.weld_points(pos, _mesh._KEY_SCALE, tol2)
         return vpos.astype(np.float64), ids, origin
+    pos = pos.astype(np.float64, copy=False)
     keys = np.round(pos * _mesh._KEY_SCALE).astype(np.int64)
     view = np.ascontiguousarray(keys).view(
         [("x", "<i8"), ("y", "<i8"), ("z", "<i8")]).reshape(-1)
@@ -132,7 +139,6 @@ def _weld(pos: np.ndarray, *, precise=False):
         registry: dict = {}
         for c, vid in zip(ukeys[nc_cells].tolist(), range(len(nc_cells))):
             registry[(c[0], c[1], c[2])] = vid
-        tol2 = (10.0 ** -_mesh._KEY_DECIMALS) ** 2
         extra = []
         initial = vpos[0].astype(scalar, copy=False)
         base = len(nc_cells)
