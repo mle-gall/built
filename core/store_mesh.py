@@ -1163,6 +1163,12 @@ class StoreMesh(Mesh):
     _registry = _materialising("_registry")
     _displaced = _materialising("_displaced")
 
+    def curve_edges(self, edge):
+        cid = edge.curve
+        if cid is None:
+            return [edge]
+        return [EdgeView(self, k) for k in self._store.curve_keys(cid)]
+
     # -- what the store answers itself
     def _bump(self):
         self._chunk_dirty = True
@@ -1678,15 +1684,9 @@ class StoreMesh(Mesh):
         new ids through them."""
         self._chunk_dirty = True
         self._mut_serial += 1
-        st = self._store
-        curve = st.arrays()["curve"]
-        hit = np.flatnonzero(curve >= 0)
-        if not len(hit):
-            return
-        keys = st.keys("edge")
         by_id: dict = {}
-        for i, c in zip(hit.tolist(), curve[hit].tolist()):
-            by_id.setdefault(c, []).append(EdgeView(self, keys[i]))
+        for cid, k in self._store.curved_edges():
+            by_id.setdefault(cid, []).append(EdgeView(self, k))
         Mesh._resplit_curve_groups(by_id)
 
     def clear(self) -> None:

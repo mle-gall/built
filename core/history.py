@@ -3811,9 +3811,17 @@ class PruneOrphanEdgesCommand(Command):
         keys = [_key(v) for v in self.vertices]
         edges = push_scans.edges_near_points(scene.mesh, keys)
         faces = push_scans.faces_near_points_rings(scene.mesh, keys)
-        self.removed = orphaned_edges_at(
-            scene.edges if edges is None else edges,
-            scene.faces if faces is None else faces, self.vertices)
+        from core.store_mesh import StoreMesh, EdgeView
+        if type(scene.mesh) is StoreMesh:
+            keys = scene.mesh._store.orphaned_edges_at(
+                [v.toTuple() for v in self.vertices],
+                None if edges is None else [e.key for e in edges],
+                None if faces is None else [f.key for f in faces])
+            self.removed = [EdgeView(scene.mesh, k) for k in keys]
+        else:
+            self.removed = orphaned_edges_at(
+                scene.edges if edges is None else edges,
+                scene.faces if faces is None else faces, self.vertices)
         for edge in self.removed:
             scene.mesh.remove_edge(edge)
             scene.selection.discard(edge)
@@ -6239,8 +6247,12 @@ class RebuildPlanarFacesCommand(Command):
             self.flat = False
             return
         # Every edge endpoint must share one plane; 3D models are left alone.
-        verts = [v.position for v in mesh.vertices]
-        plane = coplanar_plane(verts)
+        from core.store_mesh import StoreMesh, FaceView, _hypot
+        if type(mesh) is StoreMesh and (hypot := _hypot()) is not None:
+            values = mesh._store.drawing_plane([], hypot)
+            plane = None if values is None else tuple(QVector3D(*p) for p in values)
+        else:
+            plane = coplanar_plane(v.position for v in mesh.vertices)
         if plane is None:
             self.flat = False
             return
@@ -6254,14 +6266,22 @@ class RebuildPlanarFacesCommand(Command):
         # output faces inherit attrs from the old face containing their interior.
         flagged = [(QVector3D(e.a), QVector3D(e.b), edge_flags(e))
                    for e in mesh.edges if not edge_is_plain(e)]
+        painted = mesh.faces
+        if type(mesh) is StoreMesh:
+            painted = (FaceView(mesh, k) for k in mesh._store.painted_candidates(list(mesh._attr_own)))
         old_attrs = [([tuple(t) for t in f.triangulate()], dict(f.attrs))
-                     for f in mesh.faces if f.attrs]
+                     for f in painted if f.attrs]
         edges, faces = planar_rebuild(segments, origin, normal)
 
         near_flagged = _segment_grid([(fa, fb) for fa, fb, _ in flagged])
 
         scene.selection.clear()
-        mesh.clear()
+        if type(mesh) is StoreMesh:
+            mesh._store.drawing_clear()
+            mesh._attr_own.clear()
+            mesh._bump()
+        else:
+            mesh.clear()
         for a, b in edges:
             if mesh.vertex(a) == mesh.vertex(b):
                 # Shorter than the weld: the arrangement keys points on a
@@ -6375,6 +6395,31 @@ class RebuildPlaneFacesCommand(Command):
             # whole mesh — which is how a 3 mm² sliver erased 447 faces.
             return
         mesh = scene.mesh
+        from core.store_mesh import StoreMesh, FaceView, EdgeView, _hypot
+        if self.faces is None and type(mesh) is StoreMesh and (hypot := _hypot()) is not None:
+            o, n = self.origin.toTuple(), self.normal.toTuple()
+            segments, flags = mesh._store.drawing_plane_edges(o, n, hypot)
+            if not segments:
+                return
+            flagged_edges = [EdgeView(mesh, k) for k in flags]
+            flagged = [(e.a, e.b, edge_flags(e)) for e in flagged_edges]
+            _, regions = planar_rebuild([(QVector3D(*a), QVector3D(*b)) for a, b in segments],
+                                        self.origin, self.normal)
+            rings = [[[p.toTuple() for p in ring] for ring in (outer, *(holes or ()))]
+                     for outer, holes in regions]
+            keys, owners = mesh._store.drawing_coverage(o, n, rings, hypot)
+            from core.triangulate import _newell
+            keep = []
+            for i, owner, normal in owners:
+                outer, holes = regions[i]
+                if QVector3D.dotProduct(_newell(outer), QVector3D(*normal)) < 0:
+                    outer = list(reversed(outer))
+                    holes = [list(reversed(h)) for h in (holes or [])]
+                keep.append((outer, holes or None, dict(FaceView(mesh, owner).attrs)))
+            mesh._store.remove_drawing_faces(keys)
+            mesh._dirty(len(keys))
+            self._restore_regions(scene, keep, flagged)
+            return
         if self.faces is not None:
             live = set(map(element_identity, mesh.faces))
             plane_faces = [f for f in self.faces if f.key in live]
@@ -6407,7 +6452,6 @@ class RebuildPlaneFacesCommand(Command):
         # crossings. Carry flags onto the arrangement's new sub-edges too.
         flagged = [(QVector3D(e.a), QVector3D(e.b), edge_flags(e))
                    for e in plane_edges if not edge_is_plain(e)]
-        near_flagged = _segment_grid([(a, b) for a, b, _flags in flagged])
         _, regions = planar_rebuild(segments, self.origin, self.normal)
 
         def ring(loop):
@@ -6465,6 +6509,12 @@ class RebuildPlaneFacesCommand(Command):
             keep.append((outer, holes or None, attrs))
         for f in plane_faces:
             mesh.remove_face(f)
+        self._restore_regions(scene, keep, flagged)
+
+    def _restore_regions(self, scene, keep, flagged):
+        from core.topology import _point_on_seg_incl
+        mesh = scene.mesh
+        near_flagged = _segment_grid([(a, b) for a, b, _flags in flagged])
         restored = set()
         for outer, holes, attrs in keep:
             f = mesh.add_face(outer, holes)

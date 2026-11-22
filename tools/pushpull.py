@@ -2769,12 +2769,12 @@ class PushPullTool(Tool):
         # Split the base loop at any existing vertex sitting on one of its edges
         # (a T-junction where the host wall ends and an earlier overhang's floor
         # begins) so each sub-edge is carried by one face and classifies right.
-        base = refine_loop_with_points(face.vertices, allverts)
+        base = refine_loop_with_points(face.vertices, allverts, mesh=scene.mesh)
         top = [v + normal * d for v in base]
         # A face with holes (an offset ring — the wall footprint) extrudes its
         # holes too: the inner walls rise and the cap keeps the opening, so a
         # ring lifts as walls-with-thickness, not the whole footprint.
-        base_holes = [refine_loop_with_points(h, allverts) for h in face.holes]
+        base_holes = [refine_loop_with_points(h, allverts, mesh=scene.mesh) for h in face.holes]
         top_holes = [[v + normal * d for v in h] for h in base_holes]
         count = len(base)
         faces = scene.faces
