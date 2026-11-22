@@ -1131,24 +1131,29 @@ def _write_container(path: Path, doc: str, blobs: dict,
     are already compressed — deflating them again costs time for nothing).
     ``fast`` deflates at level 1 (see ``_LARGE_DOCUMENT``). ``deflated``
     holds members compressed like the document — the geometry blocks."""
-    import io
     import zipfile
+    from tempfile import NamedTemporaryFile
 
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w") as zf:
-        info = zipfile.ZipInfo(_DOC_ENTRY, date_time=_ZIP_EPOCH)
-        info.compress_type = zipfile.ZIP_DEFLATED
-        zf.writestr(info, doc, compresslevel=1 if fast else None)
-        for member in sorted(deflated or ()):
-            info = zipfile.ZipInfo(member, date_time=_ZIP_EPOCH)
+    with NamedTemporaryFile(dir=path.parent, prefix=path.name + ".",
+                            suffix=".part", delete=False) as target:
+        tmp = Path(target.name)
+    try:
+        with zipfile.ZipFile(tmp, "w") as zf:
+            info = zipfile.ZipInfo(_DOC_ENTRY, date_time=_ZIP_EPOCH)
             info.compress_type = zipfile.ZIP_DEFLATED
-            zf.writestr(info, deflated[member],
-                        compresslevel=1 if fast else None)
-        for member in sorted(blobs):
-            info = zipfile.ZipInfo(member, date_time=_ZIP_EPOCH)
-            info.compress_type = zipfile.ZIP_STORED
-            zf.writestr(info, blobs[member])
-    _write_atomic(path, buf.getvalue())
+            zf.writestr(info, doc, compresslevel=1 if fast else None)
+            for member in sorted(deflated or ()):
+                info = zipfile.ZipInfo(member, date_time=_ZIP_EPOCH)
+                info.compress_type = zipfile.ZIP_DEFLATED
+                zf.writestr(info, deflated[member],
+                            compresslevel=1 if fast else None)
+            for member in sorted(blobs):
+                info = zipfile.ZipInfo(member, date_time=_ZIP_EPOCH)
+                info.compress_type = zipfile.ZIP_STORED
+                zf.writestr(info, blobs[member])
+        tmp.replace(path)
+    finally:
+        tmp.unlink(missing_ok=True)
 
 
 def _in_worker(work, pump=None):
