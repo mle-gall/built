@@ -5450,8 +5450,7 @@ def placement_is_identity(xform, tol: float = 1e-6) -> bool:
         return True
     from PySide6.QtGui import QMatrix4x4
     ident = QMatrix4x4()
-    return all(abs(xform(r, c) - ident(r, c)) <= tol
-               for r in range(4) for c in range(4))
+    return all(abs(a - b) <= tol for a, b in zip(xform.data(), ident.data()))
 
 
 def placement_rotation_deg(xform) -> float:
