@@ -317,10 +317,17 @@ class History:
         # The Structure dock shows membership, hierarchy and BIM problems.
         # These commands edit only the active mesh or construction annotations.
         # Other commands (including extensions) invalidate conservatively.
-        if self.structure_cv == before and isinstance(cmd, (
+        if isinstance(cmd, (
                 SnapshotMutation, SnapshotCompound, AddEdgeCommand, AddFaceCommand,
                 AddDimensionCommand, AddTextLabelCommand, AddGuideCommand)):
-            self.structure_cv = cv
+            if self.structure_cv == before:
+                self.structure_cv = cv
+            # Placement transforms did not change. Prototype bounds in the
+            # dimension broad phase are checked by mesh revision on lookup.
+            anchors = self.scene.__dict__.get("_anchor_placements")
+            if anchors and anchors[0] == (before, len(self.scene.groups),
+                                          id(self.scene.edit_group), id(self.scene.mesh)):
+                self.scene._anchor_placements = (cv, *anchors[0][1:]), anchors[1]
         if rows and self.rows_cv == before:
             self.rows_cv = cv
         for k, v in self.groups_cv.items():
