@@ -118,7 +118,11 @@ def parse_skp(path, progress=None) -> dict:
     """Parse ``path`` with the first pure backend that produces geometry, and
     return its payload. Raises :class:`NeedsConverter` when no pure backend can
     read the file (unrecognised format, parser error, or an empty parse) — the
-    caller reports the file as unreadable. Touches no ``Scene``."""
+    caller reports the file as unreadable. Touches no ``Scene``.
+
+    The returned payload owns its geometry: ``apply_payload`` releases each
+    group after building it. Pass ``consume=False`` to ``apply_payload`` if
+    the caller needs to retain/reapply the parsed data."""
     path = Path(path)
     fmt = detect_format(path)
     error = None
@@ -140,11 +144,12 @@ def parse_skp(path, progress=None) -> dict:
         # reading that as "empty parse" reported it as unreadable.
         if payload and (payload.get("groups") or payload.get("protos")
                         or payload.get("empty")):
+            payload["_consume_geometry"] = True
             return payload
     raise NeedsConverter(path, fmt, str(error or "")) from error
 
 
-def apply_payload(scene, payload, progress=None) -> str:
+def apply_payload(scene, payload, progress=None, *, consume: bool | None = None) -> str:
     """Add a parsed payload's geometry to ``scene`` as reference groups (an
     isolated ``Mesh`` per group, like the big-DAE import). Runs the same
     clean-up the DAE reference import does — coplanar fusion (merges the raw
@@ -158,7 +163,14 @@ def apply_payload(scene, payload, progress=None) -> str:
     stage ran for minutes without returning to the event loop, and Windows
     marked the window "Not Responding" (#787). It is only called while no
     half-built group is in the scene — inside a mesh not yet added, or
-    between whole groups."""
+    between whole groups.
+
+    ``consume=None`` uses the ownership marker set by ``parse_skp``; ordinary
+    caller-built payloads remain reusable. ``consume=True`` drops each part's
+    geometry after building it, then its placement records after placement.
+    A consumed payload must be parsed again to retry after a failed import.
+    SnapshotImport redo restores the built groups, without reading the payload.
+    ``consume=False`` retains the input geometry explicitly."""
     import gc
     from PySide6.QtGui import QVector3D
     from core.group import Group
@@ -173,13 +185,15 @@ def apply_payload(scene, payload, progress=None) -> str:
     _gc_was_enabled = gc.isenabled()
     gc.disable()
     try:
-        return _apply_payload_inner(scene, payload, progress)
+        if consume is None:
+            consume = payload.get("_consume_geometry", False)
+        return _apply_payload_inner(scene, payload, progress, consume=consume)
     finally:
         if _gc_was_enabled:
             gc.enable()
 
 
-def _apply_payload_inner(scene, payload, progress=None) -> str:
+def _apply_payload_inner(scene, payload, progress=None, *, consume=False) -> str:
     import time
     from PySide6.QtGui import QVector3D
     from core.group import Group
@@ -189,6 +203,26 @@ def _apply_payload_inner(scene, payload, progress=None) -> str:
 
     groups = payload.get("groups", []) or []
     protos = payload.get("protos", []) or []
+    remaining = {}
+    if consume:
+        for parts in (groups, protos):
+            for part in parts:
+                key = id(part)
+                remaining[key] = remaining.get(key, 0) + 1
+
+    def _release(part):
+        if not consume:
+            return
+        key = id(part)
+        remaining[key] -= 1
+        if remaining[key]:
+            return
+        del remaining[key]
+        # Replace references; never clear lists another part may share.
+        part["faces"] = []
+        for field in ("soft_edges", "loose_edges", "curves"):
+            part.pop(field, None)
+
     n_parts = max(1, len(groups) + 2 * len(protos))
     done = [0, 0.0]               # parts built, time of the last report
 
@@ -461,6 +495,7 @@ def _apply_payload_inner(scene, payload, progress=None) -> str:
         _tick(1)
         mesh = _build_mesh(gp["faces"], gp.get("soft_edges"),
                            gp.get("loose_edges"), gp.get("curves"))
+        _release(gp)
         if mesh.faces or mesh.edges:        # a group of lines is one too
             g = Group(mesh, name=gp.get("name"))
             assign_uid(g, gp.get("identity"))
@@ -492,6 +527,7 @@ def _apply_payload_inner(scene, payload, progress=None) -> str:
         _tick(1)
         proto_meshes.append(_build_mesh(pr["faces"], pr.get("soft_edges"),
                                         pr.get("loose_edges"), pr.get("curves")))
+        _release(pr)
 
     def _place(idx, xf, layer=None, depth=0, name=None, identity=None):
         pr = protos[idx]
@@ -526,6 +562,9 @@ def _apply_payload_inner(scene, payload, progress=None) -> str:
                        name=names[i] if i < len(names) else None,
                        identity=identities[i] if i < len(identities) else None)
             scene.groups.append(g)
+    if consume:
+        payload["groups"] = []
+        payload["protos"] = []
     back = payload.get("back_color")
     if back and getattr(scene, "back_face_color", None) is None:
         # Adopt the file's style back-face colour so unpainted faces seen
