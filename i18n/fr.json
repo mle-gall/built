@@ -1,4 +1,5 @@
 {
+ "{index} of {count}: {what} — click again for the next": "{index} sur {count} : {what} — cliquez encore pour le suivant",
  "Include nested linked files": "Inclure les fichiers liés imbriqués",
  "Source geometry only": "Géométrie du fichier source uniquement",
  "Contents of {name}": "Contenu de {name}",

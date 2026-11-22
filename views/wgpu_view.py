@@ -770,7 +770,12 @@ class WgpuView(QWidget):
         if selecting:
             from tools.select import SelectTool
             from core.mesh import Face
-            entity = SelectTool()._pick(self.tools, x, y) if source is not None else None
+            tool = self.tools.tool
+            if isinstance(tool, SelectTool):
+                tool.note_pointer(x, y)     # leaving the spot ends a click cycle
+            else:
+                tool = SelectTool()
+            entity = tool._pick(self.tools, x, y) if source is not None else None
             self.tools.set_hover(None if isinstance(entity, Face) else entity)
             self.hover_ms = (time.perf_counter()-start)*1000
             self.update()

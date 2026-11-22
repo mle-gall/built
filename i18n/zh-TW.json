@@ -1,4 +1,5 @@
 {
+ "{index} of {count}: {what} — click again for the next": "第 {index}/{count} 個：{what} — 再按一下選取下一個",
  "Add a terrain profile along a traced path (two clicks or drag)": "在描繪的路徑上加入地形縱斷面（點擊兩次或拖曳）",
  "Guide point": "輔助點",
  "IngeTrazo could not read {name} with its built-in .skp reader.\n\nOpen it in the program it came from and export it as COLLADA (.dae) or OBJ, then import that file here.": "IngeTrazo 無法使用內建的 .skp 讀取器讀取 {name}。\n\n請在原本的程式中開啟該檔案，匯出為 COLLADA (.dae) 或 OBJ，再於此匯入該檔案。",

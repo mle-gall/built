@@ -1,4 +1,5 @@
 {
+ "{index} of {count}: {what} — click again for the next": "{index} of {count}: {what} — click again for the next",
  "_comment": "English is the source language: keys ARE the English strings, so this identity map stays empty. Translations live in es.json and future <lang>.json files.",
  "Check for Updates…": "Check for Updates…",
  "See whether a newer version of IngeTrazo is out.": "See whether a newer version of IngeTrazo is out.",

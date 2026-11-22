@@ -246,6 +246,61 @@ def _group_pseudo_edge(idx, i: int) -> _SnapEdge:
                      in_group=True, context=context, group=owner)
 
 
+#: The depth slack of a line the Select tool may take: a fraction of the
+#: eye's distance to it, and never less than a millimetre. A line drawn on
+#: a face, or a few millimetres under or over it, z-fights that face: the
+#: renderers draw it at one angle and lose it at the next (Metal, 2 mm
+#: under a face 9 m away: drawn from 45°, gone from above), and the strict
+#: occlusion test made it unclickable — the object behind took the click.
+LINEWORK_SLACK = 5e-4
+LINEWORK_SLACK_MIN = 1e-3
+
+
+def linework_slack_point(camera, world):
+    """``world`` moved towards the eye, along its own sight line, by the
+    linework slack: whatever hides THAT point hides the line for good."""
+    if getattr(camera, "perspective", True):
+        towards = camera.eye() - world
+    else:
+        towards = -camera.forward()
+    length = towards.length()
+    if length < 1e-12:
+        return QVector3D(world)
+    depth = abs(QVector3D.dotProduct(world - camera.eye(), camera.forward()))
+    slack = max(LINEWORK_SLACK_MIN, LINEWORK_SLACK * depth)
+    return world + towards * (min(slack, 0.5 * length) / length)
+
+
+def _boxes_around(keys, x0, y0, x1, y1, px, py, owner_of, scene):
+    """The owners (``owner_of(key)``) of the screen boxes holding
+    ``(px, py)``, smallest box first, each once: ``keys`` and the four
+    bound arrays per segment, a box being the bounds of a key's segments."""
+    import numpy as np
+    if not len(keys):
+        return []
+    uniq, inv = np.unique(keys, return_inverse=True)
+    lo_x = np.full(len(uniq), np.inf)
+    lo_y = np.full(len(uniq), np.inf)
+    hi_x = np.full(len(uniq), -np.inf)
+    hi_y = np.full(len(uniq), -np.inf)
+    np.minimum.at(lo_x, inv, x0)
+    np.minimum.at(lo_y, inv, y0)
+    np.maximum.at(hi_x, inv, x1)
+    np.maximum.at(hi_y, inv, y1)
+    inside = np.flatnonzero((lo_x <= px) & (px <= hi_x)
+                            & (lo_y <= py) & (py <= hi_y))
+    area = (hi_x - lo_x) * (hi_y - lo_y)
+    out, seen = [], set()
+    for k in inside[np.argsort(area[inside])]:
+        owner = owner_of(int(uniq[k]))
+        if owner is None or id(owner) in seen \
+                or not scene.entity_selectable(owner):
+            continue
+        seen.add(id(owner))
+        out.append(owner)
+    return out
+
+
 # OpenGL constants — kept as literals so we don't depend on PyOpenGL.
 GL_FLOAT = 0x1406
 GL_LINES = 0x0001
@@ -15471,6 +15526,9 @@ class Viewport(QOpenGLWidget):
         b_gsel: list = []     # per edge: may pick_group land on it
         b_ggroups: list = []
         b_gctx: list = []     # per group: the tip's context word
+        # Per group: a placement of lines only (no faces), picked by its
+        # lines before a face under the cursor (SelectTool._linework).
+        b_gwire: list = []
         # Lazy placements (#158) keep their triangles in their own
         # arrays — spans the ray walks as they are — and go after
         # the static chunks, whose concatenation is kept: joining
@@ -15550,6 +15608,7 @@ class Viewport(QOpenGLWidget):
                 # "outside" while a group/component is open and this
                 # placement is not part of it (see _snap_context_of).
                 b_gctx.append(_snap_context_of(self, g))
+                b_gwire.append(n == 0)
         part = {"entities": b_entities, "pidx": b_pidx, "plist": b_plist,
                 "area": b_area, "vis": b_vis, "sel": b_sel,
                 "infer": b_infer,
@@ -15558,7 +15617,7 @@ class Viewport(QOpenGLWidget):
                 "spans": b_spans, "gea": b_gea, "geb": b_geb, "ggi": b_ggi,
                 "gel": b_gel,
                 "gsel": b_gsel, "ggroups": b_ggroups, "gctx": b_gctx,
-                "gbase": b_gbase,
+                "gwire": b_gwire, "gbase": b_gbase,
                 "n_ent": n_ent + count, "n_plist": n_plist + len(b_plist),
                 "n_tri": b_tri_off,
                 "n_ggroups": n_ggroups + len(b_ggroups)}
@@ -15614,6 +15673,7 @@ class Viewport(QOpenGLWidget):
             "gedge_sel": cat("gsel", None) if gea else None,
             "gedge_groups": fixed["ggroups"] + lazy["ggroups"],
             "gedge_ctx": fixed.get("gctx", []) + lazy.get("gctx", []),
+            "gedge_wire": fixed.get("gwire", []) + lazy.get("gwire", []),
             # The fixed part's edges lead, and that part outlives many lazy
             # rebuilds: their screen projection is kept across them.
             "gedge_fixed": (fixed, sum(map(len, fixed["gea"])),
@@ -15905,6 +15965,7 @@ class Viewport(QOpenGLWidget):
         gedge_layer = None
         gedge_groups: list = []
         gedge_ctx: list = []
+        gedge_wire: list = []
         if candidatos:
             block = self._pick_block[1] if getattr(self, "_pick_block", None) \
                 else {}
@@ -15915,6 +15976,7 @@ class Viewport(QOpenGLWidget):
             gedge_sel = block.get("gedge_sel")
             gedge_groups = block.get("gedge_groups", [])
             gedge_ctx = block.get("gedge_ctx", [])
+            gedge_wire = block.get("gedge_wire", [])
             gedge_fixed = block.get("gedge_fixed")
 
         edges: list = []
@@ -15986,6 +16048,7 @@ class Viewport(QOpenGLWidget):
             gedge_sel=gedge_sel,
             gedge_groups=gedge_groups,
             gedge_ctx=gedge_ctx,
+            gedge_wire=gedge_wire,
             gedge_fixed=gedge_fixed,
             tri_spans=None,
         )
@@ -16447,11 +16510,118 @@ class Viewport(QOpenGLWidget):
         Tools that want the tube's seam as a reference keep pick_edge."""
         return self._pick_edge(screen_x, screen_y, visible_only=True)
 
+    def linework_hidden(self, world: QVector3D) -> bool:
+        """Whether a line through ``world`` is hidden for the Select tool:
+        :meth:`_is_occluded` with a little depth slack, so a line lying ON
+        a face — or a hair above or below it, where the drawn line
+        z-fights the face (shown at one angle, gone at the next) — is
+        still the line the cursor is on. See :func:`linework_slack_point`."""
+        return self._is_occluded(linework_slack_point(self.camera, world))
+
+    def pick_linework_edge(self, screen_x: float, screen_y: float):
+        """``(edge, pixels)``: the loose edge the Select tool takes before a
+        face under the cursor — the nearest one within the pick threshold
+        that :meth:`linework_hidden` does not hide — or ``(None, inf)``."""
+        return self._pick_edge(screen_x, screen_y, visible_only=True,
+                               hidden=self.linework_hidden,
+                               with_distance=True)
+
+    def _linework_edge_rows(self, screen_x: float, screen_y: float):
+        """``(idx, rows, ax, ay, bx, by)``: the pick index's group edges of
+        placements made of lines only (no faces) that a click may land
+        on — their rows, kept on the index, and their screen endpoints —
+        or ``None`` when there are none (or the lazy engine holds the
+        placements: it keeps no such flag)."""
+        import numpy as np
+        if hasattr(self, "_lazy_native") and self._lazy_native() is not None:
+            return None
+        idx = self._pick_index(near=("px", screen_x, screen_y))
+        wire = getattr(idx, "gedge_wire", None)
+        if (idx.gedge_a is None or not wire
+                or len(wire) != len(idx.gedge_groups)):
+            return None
+        kept = getattr(idx, "_linework_rows", None)
+        if kept is None or kept[0] is not idx.gedge_gi:
+            rows = np.flatnonzero(np.asarray(wire, bool)[idx.gedge_gi])
+            sel = getattr(idx, "gedge_sel", None)
+            if sel is not None:
+                rows = rows[sel[rows]]
+            kept = idx._linework_rows = (idx.gedge_gi, rows)
+        rows = kept[1]
+        if not len(rows):
+            return None
+        proj = self._gedge_screen()
+        if proj is None:
+            return None
+        ax, ay, bx, by, ok = (p[rows] for p in proj)
+        rows, ax, ay, bx, by = rows[ok], ax[ok], ay[ok], bx[ok], by[ok]
+        return (idx, rows, ax, ay, bx, by) if len(rows) else None
+
+    def pick_linework_groups(self, screen_x: float, screen_y: float):
+        """``[(group, pixels)]``, nearest first: the objects made of lines
+        only whose visible lines pass within the pick threshold of the
+        cursor — what a click selects there before the face under the
+        cursor, as a lone loose line would be (a hatch or a set of
+        lines grouped on a slab had no hitbox but its 1-px lines, and the
+        slab took the click). ``group`` is what a click selects in the
+        open context."""
+        import numpy as np
+        found = self._linework_edge_rows(screen_x, screen_y)
+        if found is None:
+            return []
+        idx, rows, ax, ay, bx, by = found
+        dx, dy = bx - ax, by - ay
+        l2 = dx * dx + dy * dy
+        safe = np.where(l2 > 1e-12, l2, 1.0)
+        t = np.clip(((screen_x - ax) * dx + (screen_y - ay) * dy) / safe,
+                    0.0, 1.0)
+        d = np.hypot(ax + t * dx - screen_x, ay + t * dy - screen_y)
+        near = np.flatnonzero(d < self.pick_threshold_px)
+        out, seen = [], set()
+        for k in near[np.argsort(d[near])][:64]:
+            i = int(rows[k])
+            owner = idx.gedge_groups[int(idx.gedge_gi[i])]
+            if id(owner) in seen or not self.scene.entity_selectable(owner):
+                continue
+            a = QVector3D(*idx.gedge_a[i])
+            p = a + (QVector3D(*idx.gedge_b[i]) - a) * float(t[k])
+            if self.linework_hidden(p):
+                continue
+            seen.add(id(owner))
+            out.append((owner, float(d[k])))
+        return out
+
+    def linework_groups_around(self, screen_x: float, screen_y: float):
+        """The objects made of lines only whose screen box holds the
+        cursor, smallest box first: what a click between the lines of a
+        hatch may select (SelectTool takes one when nothing else is under
+        the cursor, and offers them on a repeated click)."""
+        import numpy as np
+        found = self._linework_edge_rows(screen_x, screen_y)
+        if found is None:
+            return []
+        idx, rows, ax, ay, bx, by = found
+        return _boxes_around(idx.gedge_gi[rows], np.minimum(ax, bx),
+                             np.minimum(ay, by), np.maximum(ax, bx),
+                             np.maximum(ay, by), screen_x, screen_y,
+                             lambda g: idx.gedge_groups[g], self.scene)
+
     def _pick_edge(self, screen_x: float, screen_y: float,
-                   visible_only: bool, which: str = "sel"):
+                   visible_only: bool, which: str = "sel", hidden=None,
+                   with_distance: bool = False):
         """``which``: "sel" for the edges a click means, "snap" for the ones a
         reference may hold — the rest of the model's loose edges, drawn
-        around an open group / component, are snappable and not selectable."""
+        around an open group / component, are snappable and not selectable.
+        ``hidden``: the visibility test of ``visible_only`` (default
+        :meth:`_is_occluded`). ``with_distance``: ``(edge, pixels)``,
+        ``(None, inf)`` for no edge."""
+        found = self._pick_edge_d(screen_x, screen_y, visible_only, which,
+                                  hidden)
+        if with_distance:
+            return found if found is not None else (None, float("inf"))
+        return found[0] if found is not None else None
+
+    def _pick_edge_d(self, screen_x, screen_y, visible_only, which, hidden):
         import numpy as np
         idx = self._pick_index(near="skip")
         if idx.edge_a is None:
@@ -16483,7 +16653,9 @@ class Viewport(QOpenGLWidget):
         d = np.where(ok, d, np.inf)
         if not visible_only:
             i = int(np.argmin(d))
-            return idx.edges[i] if d[i] < self.pick_threshold_px else None
+            return ((idx.edges[i], float(d[i]))
+                    if d[i] < self.pick_threshold_px else None)
+        hidden = hidden or self._is_occluded
         # Nearest first, skipping the ones hidden behind the model; a few
         # tries are plenty (the threshold holds only a handful).
         for i in np.argsort(d)[:8]:
@@ -16492,8 +16664,8 @@ class Viewport(QOpenGLWidget):
                 return None
             e = idx.edges[i]
             p = self.edge_point_under_cursor(e, screen_x, screen_y)
-            if p is None or not self._is_occluded(p):
-                return e
+            if p is None or not hidden(p):
+                return e, float(d[i])
         return None
 
     def pick_dimension(self, screen_x: float, screen_y: float):
