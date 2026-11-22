@@ -1387,7 +1387,11 @@ impl Ui {
                                 let show_ctl = resp.hovered() || n.eye == 0 || n.lock == 1;
                                 if n.eye >= 0 && show_ctl { paint_eye(ui, eye_r, n.eye == 1); }
                                 if n.lock >= 0 && show_ctl { paint_lock(ui, lock_r, n.lock == 1); }
-                                let right = if col.colset == 1 { rect.max.x - 170.0 } else if col.colset == 2 { rect.max.x - 160.0 } else { eye_r.min.x - 6.0 };
+                                // A row with no eye or lock (problems, library) keeps its width for the name.
+                                let bare = n.eye < 0 && n.lock < 0 && n.problems == 0;
+                                let right = if col.colset == 1 { rect.max.x - 170.0 } else if col.colset == 2 { rect.max.x - 160.0 }
+                                    else if bare && (n.count > 0 || n.row == 0) { count_col - 34.0 }
+                                    else if bare { rect.max.x - 8.0 } else { eye_r.min.x - 6.0 };
                                 // Item icon (a material row shows its swatch).
                                 let mut tx = x0 + 16.0;
                                 if n.row == 5 {

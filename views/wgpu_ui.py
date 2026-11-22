@@ -949,7 +949,7 @@ def _problem_rules(scene, registry, nodes, recipes, unfiled):
     except Exception:
         requirements = []
     ids = {}
-    missing, hidden = [], []
+    missing, hidden, candidates = [], [], []
     for g, src, root, key in structure._memberships(scene, registry):
         if key not in nodes or src:
             continue
@@ -959,11 +959,17 @@ def _problem_rules(scene, registry, nodes, recipes, unfiled):
                 missing.append(g)
             if getattr(g, "hidden", False):
                 hidden.append(g)
+            if not getattr(g, "children", None):
+                candidates.append(g)
         if requirements and rec:
             for hit in requirement_hits(g, registry, requirements):
                 ids.setdefault(hit.get("specification") or hit.get("file") or "IDS", []).append(g)
     for spec, gs in sorted(ids.items()):
         rules.append(("Blocks export", "ids:" + spec, f"IDS: {spec}", gs))
+    leaky, checked = _not_watertight(candidates)
+    rules.append(("Needs attention", "solid", "Not watertight", leaky))
+    if checked < len(candidates):
+        rules.append(("Info", "solidcut", f"Watertight: checked {checked} of {len(candidates)} items", []))
     rules.append(("Needs attention", "status", "Status missing", missing))
     rules.append(("Info", "hidden", "Hidden items in exported nodes", hidden))
     if not requirements:
@@ -971,11 +977,38 @@ def _problem_rules(scene, registry, nodes, recipes, unfiled):
     return rules
 
 
+def _not_watertight(groups, budget=1.5):
+    """The exported items whose solid leaks (the Solid Inspector's verdict),
+    one check per shared definition. A mesh not built yet is judged from its
+    load plan, without building it. Stops after ``budget`` seconds:
+    ``(leaky, items checked)``."""
+    import time
+    from core.lazy_mesh import plan_of
+    from core.solids import _lazily_open
+    from plugins.solid_inspector import inspect_mesh, is_sound
+    verdict, leaky = {}, []
+    t0 = time.perf_counter()
+    for i, g in enumerate(groups):
+        if i % 64 == 0 and time.perf_counter() - t0 > budget:
+            return leaky, i
+        m = g.mesh
+        bad = verdict.get(id(m))
+        if bad is None:
+            if plan_of(m) is not None:
+                bad = _lazily_open(m)
+            else:
+                bad = bool(m.faces) and not is_sound(inspect_mesh(m))
+            verdict[id(m)] = bad
+        if bad:
+            leaky.append(g)
+    return leaky, len(groups)
+
+
 def _problem_rows_from(view, rules, nodes, node_of, exp, sel_ids):
     view._ui_rules = {rid: gs for _sev, rid, _l, gs in rules}
     rows, order = [], []
     for sev in ("Blocks export", "Needs attention", "Info"):
-        these = [r for r in rules if r[0] == sev and (r[3] or r[1] == "noids")]
+        these = [r for r in rules if r[0] == sev and (r[3] or r[1] in ("noids", "solidcut"))]
         if not these:
             continue
         total = sum(len(r[3]) for r in these)
@@ -1294,6 +1327,18 @@ def _tree_action(win, view, action) -> None:
                 parts.on_scene_changed()
                 parts._on_copy()
                 vp.flash_status("Cut list copied")
+        elif verb == "insp" and key == "solidrepair" and len(groups) == 1:
+            from plugins.solid_inspector import RepairSolidsCommand
+            cmd = RepairSolidsCommand([groups[0].mesh])
+            vp.history.execute(cmd)
+            if vp.history.last_error:
+                vp.flash_status(vp.history.last_error)
+            else:
+                d = cmd.done
+                vp.flash_status(f"Repaired: {d['stray']} stray edges, {d['duplicates']} duplicated faces, "
+                                f"{d['holes']} holes closed, {d['partitions']} partitions, {d['reversed']} faces turned")
+            view._ui_insp_sig = None
+            vp.update()
         elif verb == "insp" and key in ("linkreload", "linkopen") and groups:
             from core import links
             from pathlib import Path
@@ -1719,6 +1764,9 @@ def _inspector(view, win) -> None:
                 prow.append(("…", f"{len(parts) - 8} more kinds"))
             sections.append(("Parts", prow))
             sections.append(("Actions", [("cutlist", "Copy cut list")]))
+        solid = _solid_section(g)
+        if solid:
+            sections += solid
         link = links.link_of(g)
         if link:
             sections.append(("Linked file", [("Source", str(link.get("path", "")).rsplit("/", 1)[-1]),
@@ -1759,6 +1807,24 @@ def _inspector(view, win) -> None:
         sections.append(("Status", [("Missing on", f"{missing} items")]))
         sections.append(("Actions", [("status:" + v, "All " + v.lower()) for v in STATUS_CHOICES]))
     view.renderer.ui_set_inspector(f"{len(sel)} selected", sections)
+
+
+def _solid_section(g):
+    """The Solid Inspector's verdict on one item, with Repair when it
+    leaks. Skipped for an assembly, a linked item or a mesh too big to
+    walk on a click."""
+    from core import links
+    from core.lazy_mesh import plan_of
+    from plugins.solid_inspector import _problem_text, inspect_mesh, is_sound
+    m = g.mesh
+    if getattr(g, "children", None) or links.link_of(g) or plan_of(m) is not None or not m.faces \
+            or len(m.faces) > 20000:
+        return []
+    report = inspect_mesh(m)
+    if is_sound(report):
+        return [("Solid", [("Watertight", f"{report['volume']:.3f} m³" if report["volume"] else "yes")])]
+    return [("Solid", [("Not watertight", _problem_text(report))]),
+            ("Actions", [("solidrepair", "Repair")])]
 
 
 def _curve_of(scene, sel):
