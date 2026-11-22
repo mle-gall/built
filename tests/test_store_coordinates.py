@@ -96,3 +96,80 @@ def test_format_three_rounds_only_the_saved_copy(tmp_path, monkeypatch):
     assert e.v0.position_tuple() == tuple(np.float32(a).astype(float))
     assert e.v1.position_tuple() == tuple(np.float32(b).astype(float))
     assert e.v0.position_tuple() != a
+
+def test_raw_lambert_draw_pick_snap_push_and_weld(view, monkeypatch):
+    from PySide6.QtGui import QVector3D as V
+    from tests.test_.skp_inference_gaps import refresh, move
+
+    mesh = view.scene.mesh
+    assert isinstance(mesh, StoreMesh)
+    monkeypatch.setattr(StoreMesh, "_materialise", lambda *_: pytest.fail("materialised"))
+    history = view.source_viewport.history
+    ring = [(650000.+dx, 6860000.+dy, 0.) for dx, dy in
+            [(.01, .02), (.03, .02), (.03, .04), (.01, .04)]]
+    assert commands.add_edge(history, *ring[:2])["ok"]
+    assert commands.add_edges(history, list(zip(ring[1:], ring[2:]+ring[:1])))["ok"]
+    assert mesh._store.counts() == (4, 4, 1)
+    np.testing.assert_array_equal([v.position_tuple() for v in mesh.vertices], ring)
+    face, = mesh.faces
+    assert mesh.vertex((650000.01006, 6860000.02, 0.)).key == mesh.vertex_at(ring[0]).key
+    refresh(view)
+    p = view.packed
+    assert p.origin == (650000., 6860000., 0.)
+    assert len(np.unique(p.vertices['pos'], axis=0)) == 4
+    view.camera.target = V(.02, .03, 0.)
+    view.camera.distance = .12
+    xy = view._world_to_pixel(view.camera.target)
+    assert view.pick_row(*xy) == 0
+    snap = move(view, V(.01,.02,0.))
+    assert snap.kind == "endpoint"
+    np.testing.assert_allclose(snap.point.toTuple(), np.subtract(ring[0], p.origin), atol=1e-8)
+    assert commands.push_pull(history, face.key, .012345)["ok"]
+    assert mesh._store.counts() == (8, 12, 6)
+    positions = {v.key: v.position_tuple() for v in mesh.vertices}
+    assert max(v[2] for v in positions.values()) == pytest.approx(.012345, abs=1e-9)
+    assert history.undo()
+    assert mesh._store.counts() == (4, 4, 1)
+    assert history.redo()
+    assert {v.key: v.position_tuple() for v in mesh.vertices} == positions
+
+
+def test_metal_mouse_tools_at_raw_lambert(view):
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QVector3D as V
+    from PySide6.QtTest import QTest
+    from tests.test_.skp_inference_gaps import click, move, refresh, use
+    from tools.line import LineTool
+    from tools.pushpull import PushPullTool
+    from tools.rectangle import RectangleTool
+
+    mesh = view.scene.mesh
+    model = np.array([650000., 6860000., 0.])
+    # The survey edge supplies the drawing origin and the first snapped corner.
+    mesh.add_edge(model + [0., .02, 0.], model + [.01, .02, 0.])
+    refresh(view)
+    view.camera.target = V(.02, .03, 0.)
+    view.camera.distance = .12
+    use(view, RectangleTool())
+    for point in (V(.01, .02, 0.), V(.03, .04, 0.)):
+        move(view, point)
+        click(view, point)
+    face, = mesh.faces
+    assert mesh._store.counts() == (5, 5, 1)
+    corners = np.array([v.position_tuple() for v in face.loop]) - model
+    np.testing.assert_allclose(corners.max(axis=0) - corners.min(axis=0), [.02, .02, 0.],
+                               atol=.00015)
+    use(view, LineTool())
+    for point in (V(.03,.04,0.), V(.045,.05,0.)):
+        move(view, point)
+        click(view, point)
+    assert mesh._store.counts() == (6, 6, 1)
+    QTest.keyClick(view, Qt.Key_Escape)
+    use(view, PushPullTool())
+    click(view, V(.02, .03, 0.))
+    assert view.tools.tool.dragging
+    QTest.keyClicks(view, '0.012345m')
+    QTest.keyClick(view, Qt.Key_Return)
+    assert not view.tools.tool.dragging
+    assert mesh._store.counts() == (10, 14, 6)
+    assert max(v.position_tuple()[2] for v in mesh.vertices) == pytest.approx(.012345, abs=1e-9)
