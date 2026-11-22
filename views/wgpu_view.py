@@ -1161,6 +1161,7 @@ class WgpuView(QWidget):
                 return
             self._look_drag = None
             self.tools._apply_tool_cursor()
+        self._cursor_pos = event.position()
         if not event.buttons():
             self.last = None
             self.hover(event.position().x(), event.position().y(), event.modifiers())
@@ -1207,12 +1208,19 @@ class WgpuView(QWidget):
         return Viewport._can_warp_pointer()
 
     def focusOutEvent(self, event):
+        # As GL's: the walking keys' releases will land elsewhere, but the
+        # tool goes on. Cancelling it here reset a line whose first point
+        # was down as soon as a tray, a field or a dialog took the focus.
         self._look_drag = None
         hook = getattr(self.tools.tool, 'on_focus_out', None)
         if hook is not None:
             hook(self.tools)
-        self.tools.cancel()
         super().focusOutEvent(event)
+
+    def focusNextPrevChild(self, next):
+        # Tab is a tool key here (reserved for the tools, views.shortcuts):
+        # Qt's focus chain took it and left the keyboard on a tray button.
+        return False
 
     def mouseReleaseEvent(self, event):
         if getattr(self, '_look_drag', None) is not None:
@@ -1242,7 +1250,11 @@ class WgpuView(QWidget):
             if self.source_viewport is not None:
                 self.source_viewport.notify_scene_changed()
             self.sync_selection()
-        if self.tools.mode == 'mesh':
+        if (self.tools.mode == 'mesh' and event.button() == Qt.LeftButton
+                and not self._drag_nav):
+            # GL's: a left release only. A wheel-button orbit's release
+            # committed a Push/Pull in progress (a release far from its
+            # press is a stroke) and set Rotate's axis along the orbit.
             self.tools.tool.on_release(self.tools)
             self.tools.update()
             self.overlay_primitives = []
@@ -1328,11 +1340,36 @@ class WgpuView(QWidget):
             self.sync_selection()
         elif self.tools.key(event):
             pass
+        elif event.key() == Qt.Key_Down and mode in ('tape', 'mesh'):
+            self._down_reference(event)
         elif mode == 'inert':
             event.ignore()
         elif self.source_viewport is not None:
             self.source_viewport.keyPressEvent(event)
         self.update()
+
+    def _down_reference(self, event):
+        """The Down arrow no tool took: GL's parallel → perpendicular →
+        free cycle on the edge under the cursor, picked here (GL's hover
+        edge is fed by GL's own picks only, so Down found nothing on this
+        view), else on the last edge the line referenced."""
+        source = self.source_viewport
+        if source is None or event.isAutoRepeat():
+            return
+        pos = getattr(self, '_cursor_pos', None)
+        edge = None
+        if pos is not None and source.reference_mode is None:
+            edge = self.tools.pick_edge_any(pos.x(), pos.y())
+        # GL's Down press: what it locks outlives a held Shift's plane mark.
+        source._shift_plane_mark = None
+        source._cycle_reference_mode(edge)
+        if pos is not None:
+            # The lock shows at once, the hand still (GL's _refresh_snap).
+            from PySide6.QtGui import QGuiApplication, QMouseEvent
+            held = QGuiApplication.keyboardModifiers()
+            self.hover(pos.x(), pos.y(), held)
+            self.tools.hover(QMouseEvent(QEvent.MouseMove, pos, pos,
+                                         Qt.NoButton, Qt.NoButton, held))
 
     def keyReleaseEvent(self, event):
         mode = self.tools.sync()

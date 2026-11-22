@@ -19368,7 +19368,20 @@ class Viewport(QOpenGLWidget):
         return best_g
 
     # ---- Tool management ----------------------------------------------------
+    #: The tool a camera mode (Orbit, Pan, Zoom) took the view from, parked
+    #: with its state: picking it again resumes it (the modeller's suspend /
+    #: resume), picking any other tool resets it.
+    suspended_tool: Optional[Tool] = None
+
     def set_active_tool(self, tool: Optional[Tool]) -> None:
+        suspended = self.suspended_tool
+        if suspended is not None:
+            self.suspended_tool = None
+            if tool is suspended:
+                self._resume_tool(tool)
+                return
+            # Any other tool: the parked one ends as a switch ends it.
+            suspended.on_deactivate(self)
         if self.active_tool is tool and self.nav_mode is None:
             # Picking the tool you already hold starts it over, the classic
             # behaviour: the first point is released, the locks let go. Issue
@@ -19407,6 +19420,24 @@ class Viewport(QOpenGLWidget):
         if tool is not None:
             tool.on_activate(self)
         self._apply_tool_cursor()
+        self.measurementChanged.emit(self._measurement_text())
+        self.update()
+
+    def _resume_tool(self, tool: Tool) -> None:
+        """Back from a camera mode to the tool it suspended, as it was: the
+        first point placed, the rubber band, the locks. Only the camera
+        drag ends."""
+        self.nav_mode = None
+        self._last_pos = None
+        self._orbit_pivot = None
+        self._pan_mode = False
+        self._look_drag = None
+        self.active_tool = tool
+        resume = getattr(tool, "on_resume", None)
+        if callable(resume):
+            resume(self)
+        self._apply_tool_cursor()
+        self._refresh_snap()
         self.measurementChanged.emit(self._measurement_text())
         self.update()
 
@@ -20098,11 +20129,23 @@ class Viewport(QOpenGLWidget):
 
         For trackpad users with no middle mouse button: while a nav mode is
         active the left-drag drives the camera (orbit or pan). The active
-        drawing tool is suspended; return to drawing by picking any tool or
-        pressing Space (Select). ``None`` clears the nav mode.
+        drawing tool is suspended with its state (``suspended_tool``):
+        picking it again resumes it where it was, a line's first point
+        still placed; picking any other tool, or Space (Select), resets it.
+        ``None`` clears the nav mode and leaves no tool, as before: the
+        suspended one is reset.
         """
+        if mode is None and self.suspended_tool is not None:
+            suspended, self.suspended_tool = self.suspended_tool, None
+            suspended.on_deactivate(self)
         if self.active_tool is not None:
-            self.active_tool.on_deactivate(self)
+            if mode is not None:
+                self.suspended_tool = self.active_tool
+                suspend = getattr(self.active_tool, "on_suspend", None)
+                if callable(suspend):
+                    suspend(self)
+            else:
+                self.active_tool.on_deactivate(self)
             self.active_tool = None
         self._hover_entity = None
         self.last_snap = None
@@ -21390,17 +21433,23 @@ class Viewport(QOpenGLWidget):
         self._refresh_snap()
         return True
 
-    def _cycle_reference_mode(self) -> None:
+    def _cycle_reference_mode(self, edge=None) -> None:
         """Down arrow: cycle None → parallel → perpendicular → None.
 
-        Captures whichever edge is currently under the cursor on entry to
-        parallel mode. If no edge is under the cursor when starting, do
-        nothing — there is nothing to be parallel/perpendicular to.
+        the modeller's: on entry to parallel mode it captures ``edge`` (the
+        Metal view's pick under the cursor), else the edge under the cursor,
+        else the last edge the line being drawn referenced (the soft
+        parallel/perpendicular the cursor picked up and then left: Down
+        makes that reference a lock). With no edge at all, do nothing —
+        there is nothing to be parallel/perpendicular to.
         """
         if self.reference_mode is None:
-            if self._hover_edge is None:
+            edge = (edge if edge is not None else self._hover_edge
+                    if self._hover_edge is not None
+                    else self.inference._acquired_edge)
+            if edge is None:
                 return  # nothing to capture
-            self.reference_edge = self._hover_edge
+            self.reference_edge = edge
             self.reference_mode = "parallel"
         elif self.reference_mode == "parallel":
             self.reference_mode = "perpendicular"
@@ -21504,6 +21553,33 @@ class Viewport(QOpenGLWidget):
             self._release_shift_plane_mark()
             self._refresh_snap()
         super().keyReleaseEvent(ev)
+
+    #: The view shown in this one's place (the Metal view), which takes the
+    #: keyboard whenever this hidden one is given it.
+    keys_stand_in = None
+
+    def setFocus(self, *args) -> None:  # noqa: N802 — Qt's name
+        """Orbit / Pan, a scene picked in its list, the camera panel, a
+        project switch… all give the keyboard back with
+        ``viewport.setFocus()``. Under Metal this viewport is hidden and Qt
+        ignores it there, so the keys stayed in the list or on a button:
+        the view the user sees takes them instead."""
+        shown = self.keys_stand_in
+        if shown is not None and not self.isVisible():
+            try:
+                visible = shown.isVisible()
+            except RuntimeError:        # its C++ side is gone
+                self.keys_stand_in = visible = None
+            if visible:
+                shown.setFocus(*args)
+                return
+        super().setFocus(*args)
+
+    def focusNextPrevChild(self, next) -> bool:  # noqa: A002 — Qt's name
+        """Tab is a tool key (``views.shortcuts.reserved_reason``): Qt's
+        focus chain took it and left the keyboard on a tray button, where
+        the arrows, typed values and Enter did nothing."""
+        return False
 
     def focusOutEvent(self, ev) -> None:
         """Focus gone means the Alt release will land somewhere else, so the
