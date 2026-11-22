@@ -1372,6 +1372,10 @@ class StoreMesh(Mesh):
         self.__dict__.pop("_bulk", None)
         return [VertexView(self, v) for v in keys]
 
+    def relink_hole(self, face, ring) -> None:
+        self._store.relink_hole(face.key, [v.key for v in ring])
+        self.__dict__.pop("_bulk", None)
+
     def remove_hole(self, face, loop) -> None:
         k = self._own(face, 2)
         loop = list(loop)
@@ -1842,7 +1846,7 @@ class MaterialisedMesh(Mesh):
 for _name in ("curve_edges", "remove_edge", "relink_vertices",
               "drop_orphan_vertices", "add_edges_welded", "add_faces_welded",
               "surface_of", "remove_face", "relink_edge", "relink_face",
-              "add_hole", "remove_hole", "edges_at", "faces_at", "registers",
+              "add_hole", "relink_hole", "remove_hole", "edges_at", "faces_at", "registers",
               "split_edge", "_weld_into", "interior_vertex_on",
               "split_edge_at", "collapsible_vertex", "collapse_vertex",
               "dissolve_edge_recorded", "dissolve_coplanar_pair",

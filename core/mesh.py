@@ -1194,6 +1194,14 @@ class Mesh:
                 edge.faces.append(face)
         return loop
 
+    def relink_hole(self, face: Face, ring: list[Vertex]) -> None:
+        """Restore a detached hole and its incidence on existing edges."""
+        face.hole_loops.append(ring)
+        for i, vertex in enumerate(ring):
+            edge = self.find_edge(vertex, ring[(i + 1) % len(ring)])
+            if edge is not None and face not in edge.faces:
+                edge.faces.append(face)
+
     def remove_hole(self, face: Face, loop: list[Vertex]) -> None:
         if loop in face.hole_loops:
             face.hole_loops.remove(loop)

@@ -723,6 +723,14 @@ impl PyMeshStore {
         Ok((lp.into_iter().map(|v| self.inner.key(Kind::Vertex, v)).collect(), ch))
     }
 
+    /// Restore a detached hole by its vertex keys, without welding.
+    fn relink_hole(&mut self, key: u128, ring: Vec<u128>) -> PyResult<PyChange> {
+        let f = live_of(&self.inner, Kind::Face, key)?;
+        let vertices = ring.into_iter().map(|k| live_of(&self.inner, Kind::Vertex, k))
+            .collect::<PyResult<_>>()?;
+        Ok(self.op(|s, ch| { s.relink_hole(f, vertices, ch); Ok(()) })?.1)
+    }
+
     /// `Mesh.remove_hole(face, loop)` with the loop as vertex keys.
     fn remove_hole(&mut self, key: u128, ring: Vec<u128>) -> PyResult<PyChange> {
         let f = any_of(&self.inner, Kind::Face, key)?;

@@ -1239,12 +1239,7 @@ class AddFaceCommand(Command):
         self._punches = []
         for face, old_loop, loop in reversed(self._hole_swaps):
             m.remove_hole(face, loop)
-            face.hole_loops.append(old_loop)
-            n = len(old_loop)
-            for i in range(n):
-                edge = m.find_edge(old_loop[i], old_loop[(i + 1) % n])
-                if edge is not None and face not in edge.faces:
-                    edge.faces.append(face)
+            m.relink_hole(face, old_loop)
         self._hole_swaps = []
         if self.face is not None:
             m.remove_face(self.face)
