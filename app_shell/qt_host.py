@@ -4,15 +4,28 @@
 read QSettings at import time. It points QSettings and the app's data dir at
 a throwaway directory unless ``BUILT_SETTINGS_DIR`` names one, so a shell
 run never touches the user's preferences or autosave slots.
+
+The application object is an offscreen ``QApplication`` (no window ever
+reaches AppKit; winit owns the screen). It used to be a QGuiApplication,
+but borrowed code that still builds a Qt widget (a QMessageBox fallback, a
+QMenu, a dialog an extension opens) then aborted the process: "Must
+construct a QApplication before a QWidget". Now such a widget can exist,
+and :class:`WidgetGuard` stops it from waiting for an answer nobody can
+see: a top-level widget that shows is rejected or closed at once, and the
+host is told, so the status says "needs the classic app" instead of the
+app hanging behind an invisible modal dialog.
 """
 from __future__ import annotations
 
 import os
 import sys
 import tempfile
+import time
+import weakref
 
 _APP = None
 _SETTINGS_DIR = None
+_GUARD = None
 
 
 def settings_dir() -> str | None:
@@ -20,7 +33,7 @@ def settings_dir() -> str | None:
 
 
 def start(settings: str | None = None) -> str:
-    """Create the offscreen QGuiApplication once; return the settings dir."""
+    """Create the offscreen QApplication once; return the settings dir."""
     global _APP, _SETTINGS_DIR
     if _APP is not None:
         return _SETTINGS_DIR
@@ -33,7 +46,7 @@ def start(settings: str | None = None) -> str:
     os.makedirs(data, exist_ok=True)
     os.environ["XDG_DATA_HOME"] = data
     from PySide6.QtCore import QCoreApplication, QSettings, QStandardPaths
-    from PySide6.QtGui import QGuiApplication
+    from PySide6.QtWidgets import QApplication
     QSettings.setDefaultFormat(QSettings.IniFormat)
     for scope in (QSettings.UserScope, QSettings.SystemScope):
         QSettings.setPath(QSettings.IniFormat, scope, _SETTINGS_DIR)
@@ -42,8 +55,10 @@ def start(settings: str | None = None) -> str:
     QStandardPaths.setTestModeEnabled(True)
     QCoreApplication.setOrganizationName("IngeTrazo")
     QCoreApplication.setApplicationName("IngeTrazo")
-    _APP = QGuiApplication.instance() or QGuiApplication([sys.argv[0] if sys.argv else "built"])
+    _APP = QApplication.instance() or QApplication([sys.argv[0] if sys.argv else "built"])
     _answer_input_state()
+    _track_timers()
+    install_widget_guard()
     return _SETTINGS_DIR
 
 
@@ -73,6 +88,122 @@ def _answer_input_state():
     QGuiApplication.queryKeyboardModifiers = staticmethod(modifiers)
     QGuiApplication.mouseButtons = staticmethod(buttons)
     QCursor.pos = staticmethod(pos)
+
+
+# ---- Qt timers: when the loop must wake ----------------------------------------
+#: QTimers started from Python (weak) and single-shot deadlines.
+_TIMERS: "weakref.WeakSet" = weakref.WeakSet()
+_SHOTS: list = []
+
+
+def _track_timers():
+    """Qt's timers fire only while :func:`pump` runs, and winit sleeps
+    until an event. To wake for them, the starts made from Python are
+    noted (``QTimer.start`` and ``QTimer.singleShot``) and
+    :func:`next_timer_ms` answers how long until the first is due. Timers
+    started from C++ alone are not seen; the view's own are polled too
+    (``Host._qt_timers_pending``)."""
+    from PySide6.QtCore import QTimer
+    if getattr(QTimer, "_shell_tracked", False):
+        return
+    start = QTimer.start
+    single = QTimer.singleShot
+
+    def tracked_start(self, *args):
+        _TIMERS.add(self)
+        return start(self, *args)
+
+    def tracked_single(msec, *args, **kwargs):
+        try:
+            _SHOTS.append(time.monotonic() + max(0, int(msec)) / 1000.0)
+        except (TypeError, ValueError):
+            pass
+        return single(msec, *args, **kwargs)
+
+    QTimer.start = tracked_start
+    QTimer.singleShot = staticmethod(tracked_single)
+    QTimer._shell_tracked = True
+
+
+def next_timer_ms() -> float | None:
+    """Milliseconds until the first Python-started Qt timer is due (0 when
+    one is), or None when none is pending."""
+    now = time.monotonic()
+    _SHOTS[:] = [t for t in _SHOTS if t > now - 0.05]
+    best = None
+    if _SHOTS:
+        best = max(0.0, (min(_SHOTS) - now) * 1000.0)
+    for timer in list(_TIMERS):
+        try:
+            if not timer.isActive():
+                _TIMERS.discard(timer)
+                continue
+            left = max(0.0, float(timer.remainingTime()))
+        except RuntimeError:          # its C++ object is gone
+            _TIMERS.discard(timer)
+            continue
+        best = left if best is None else min(best, left)
+    return best
+
+
+# ---- Qt widgets that would wait for an answer ------------------------------------
+class _Guard:
+    """Rejects any top-level Qt widget the borrowed code shows (see the
+    module's docstring). ``on_blocked(title)`` hears which."""
+
+    def __init__(self):
+        from PySide6.QtCore import QObject
+
+        guard = self
+
+        class Filter(QObject):
+            def eventFilter(self, obj, event):  # noqa: N802 — Qt API
+                from PySide6.QtCore import QEvent
+                if event.type() == QEvent.Show:
+                    guard._shown(obj)
+                return False
+
+        self.filter = Filter()
+        self.on_blocked = None
+        self.blocked = []
+
+    def _shown(self, obj):
+        from PySide6.QtCore import QTimer
+        from PySide6.QtWidgets import QDialog, QMenu, QWidget
+        if not isinstance(obj, QWidget) or not obj.isWindow():
+            return
+        title = obj.windowTitle() or type(obj).__name__
+        self.blocked.append(title)
+        if self.on_blocked is not None:
+            try:
+                self.on_blocked(title)
+            except Exception:  # noqa: BLE001 — a report never stops the reject
+                pass
+
+        def drop(w=obj):
+            try:
+                if isinstance(w, QDialog):
+                    w.reject()
+                elif isinstance(w, QMenu):
+                    w.close()
+                else:
+                    w.close()
+            except RuntimeError:
+                pass
+        # Inside the dialog's own exec() loop: a posted reject ends it.
+        QTimer.singleShot(0, drop)
+
+
+def install_widget_guard():
+    global _GUARD
+    if _GUARD is None and _APP is not None:
+        _GUARD = _Guard()
+        _APP.installEventFilter(_GUARD.filter)
+    return _GUARD
+
+
+def widget_guard():
+    return _GUARD
 
 
 def pump() -> None:

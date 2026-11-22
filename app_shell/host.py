@@ -6,6 +6,10 @@ other Python threads progress while winit waits for events.
 
 Coordinates are logical pixels (Qt's), y down, from the window's top-left.
 Modifier masks and key codes are already Qt's (rust/built_app/src/keys.rs).
+
+The window may hold several documents (app_shell.window): ``viewport`` and
+``view`` are always the ones in front; the renderer moves with them
+(:meth:`Host.hand_renderer`).
 """
 from __future__ import annotations
 
@@ -25,6 +29,12 @@ _CURSORS = {
     13: "pointer", 14: "not-allowed", 15: "help", 16: "progress",
     17: "grab", 18: "grabbing", 20: "copy", 21: "alias",
 }
+#: Qt.BitmapCursor: a pixmap cursor (the tools' icons).
+_BITMAP = 24
+
+#: The repository and venv the interpreter was started on (bootstrap).
+ROOT = None
+VENV = None
 
 
 def _log(*parts):
@@ -44,29 +54,94 @@ class Host:
         self._wake_at = None
         self._cursor = None
         self._title = None
-        self._resident_version = None
+        self._custom_cursors = {}
+        self._after_picture = []
+        self._picture_seen = False
+        self._recent_dirty = True
+        self._preedit = ""
+        self._ime_area = None
+        self.quit_now = False
         self.errors = []
+        self.not_here_log = []
         #: Set by the window handle's startSystemMove (the chrome's empty
         #: top strip); Rust starts the native window drag and clears it.
         self.window_drag_requested = False
         from app_shell.document import ShellViewport
         from app_shell.view import ShellView
         from app_shell.window import ShellWindow
+        from app_shell import files, modal
         self.window = ShellWindow(self)
-        self.viewport = ShellViewport(self)
+        viewport = ShellViewport(self)
         try:
-            self.viewport.history.max_steps = 200
+            viewport.history.max_steps = 200
         except Exception:
             pass
-        self.view = ShellView(self)
-        self.view.source_viewport = self.viewport
-        self.view.camera = self.viewport.camera
-        self.viewport.keys_stand_in = self.view
-        self.window.bind(self.viewport, self.view)
-        self.viewport.set_active_tool(None)
-        self.path = None
+        view = ShellView(self)
+        view.source_viewport = viewport
+        view.camera = viewport.camera
+        viewport.keys_stand_in = view
+        self.window.bind(viewport, view)
+        viewport.set_active_tool(None)
+        modal.install(self)
+        files.install(self.window)
+        guard = qt_host.widget_guard()
+        if guard is not None:
+            guard.on_blocked = lambda title: self.not_here(f"“{title}”")
+        try:
+            self.window._setup_autosave()
+        except Exception:
+            self._error("autosave setup")
         self.startup_ms = (time.perf_counter() - t0) * 1000
-        self._set_title()
+        self.window._update_title()
+
+    # ---- the document in front ---------------------------------------------
+    @property
+    def viewport(self):
+        return self.window.viewport
+
+    @property
+    def view(self):
+        return self.window.view
+
+    @property
+    def path(self):
+        return self.window._current_path
+
+    def hand_renderer(self, view, renderer):
+        """The window's renderer to ``view`` (a document switch): its packed
+        scene goes up again (no repack), and everything the chrome was last
+        sent is sent again for it."""
+        from PySide6.QtCore import QTimer
+        view.renderer = renderer
+        if getattr(view, "_ui_timer", None) is None:
+            view._ui_timer = QTimer(view, singleShot=True)
+            view._ui_timer.timeout.connect(view.update)
+        # What the chrome was last sent for this view is no longer what the
+        # renderer shows: the signatures go (the defaults come back), the
+        # view's own state (expanded rows, filters, mode) stays.
+        resend = ("_ui_docs", "_ui_tabs", "_ui_opts", "_ui_palette", "_ui_colset",
+                  "_ui_issues", "_ui_cursor_shape", "_ui_was_over")
+        for key in [k for k in view.__dict__ if k.startswith("_ui_")]:
+            if key.endswith(("_sig", "_sent", "_cv")) or key in resend:
+                del view.__dict__[key]
+        view._ui_attached = True
+        view._ui_tools_sent = False
+        view._ui_sheet_sig = False
+        view._ui_jobs_sig = False
+        view._ui_units_sent = False
+        if view.source_viewport is not None:
+            view.source_viewport._chrome_owns_labels = True
+        view._physical_size = None
+        view._selection_signature = None
+        view._tint_signature = None
+        view._last_camera = None
+        view._finish_resize()
+        if getattr(view, "packed", None) is not None:
+            view._upload(force=True)
+        else:
+            view.set_scene(self.viewport.scene)
+        view._shell_resident_version = self.viewport.scene.version
+        self.request_frame()
 
     # ---- the renderer --------------------------------------------------
     def attach_surface(self):
@@ -93,15 +168,60 @@ class Host:
     def cursor_changed(self, cursor):
         try:
             shape = cursor.shape() if hasattr(cursor, "shape") else cursor
-            # A tool-shaped pixmap cursor (QCursor(QPixmap)) is Qt's 24.
-            name = _CURSORS.get(int(getattr(shape, "value", shape)), "crosshair")
+            value = int(getattr(shape, "value", shape))
+            if value == _BITMAP and hasattr(cursor, "pixmap"):
+                name = self._bitmap_cursor(cursor)
+            else:
+                name = _CURSORS.get(value, "crosshair")
         except Exception:
             name = "default"
         self._cursor = name
 
+    def _bitmap_cursor(self, cursor):
+        """A tool's pixmap cursor as a native one: its picture at the
+        cursor's logical size (winit sizes a custom cursor by its pixels)."""
+        from PySide6.QtCore import Qt
+        from PySide6.QtGui import QImage
+        pm = cursor.pixmap()
+        if pm.isNull():
+            return "crosshair"
+        key = str(pm.cacheKey())
+        if key not in self._custom_cursors:
+            dpr = pm.devicePixelRatio() or 1.0
+            w = max(1, int(round(pm.width() / dpr)))
+            h = max(1, int(round(pm.height() / dpr)))
+            img = pm.toImage().scaled(w, h, Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
+            img = img.convertToFormat(QImage.Format_RGBA8888)
+            data = bytes(img.constBits())[: w * h * 4]
+            hot = cursor.hotSpot()
+            hx = min(w - 1, max(0, int(hot.x())))
+            hy = min(h - 1, max(0, int(hot.y())))
+            self._custom_cursors[key] = (w, h, hx, hy, data)
+        return "custom:" + key
+
+    def custom_cursor(self, key):
+        return self._custom_cursors.get(key)
+
+    def set_title(self, title):
+        self._title = title
+
     def _set_title(self):
-        name = self.path.name if self.path else "Untitled"
-        self._title = f"{name} — Built (Rust shell)"
+        self.window._update_title()
+
+    def recent_changed(self):
+        self._recent_dirty = True
+
+    def after_picture(self, fn):
+        """Run ``fn`` after the next picture, one per loop turn (the panels
+        and indexes the Qt app leaves until the model is on screen)."""
+        self._after_picture.append(fn)
+        self._picture_seen = False
+
+    def not_here(self, feature):
+        """Say that ``feature`` needs the classic app (and how to get there)."""
+        self.not_here_log.append(feature)
+        self.window.statusBar().showMessage(
+            f"{feature} is not in the native app yet — File ▸ Open in Classic App", 6000)
 
     # ---- one turn of the loop ------------------------------------------
     def idle(self):
@@ -113,27 +233,55 @@ class Host:
         # MainWindow._install_wgpu_display's present(): a scene whose
         # version moved since the resident pack is packed again.
         if view.renderer is not None and (scene is not getattr(view, "scene", None)
-                                          or scene.version != self._resident_version):
+                                          or scene.version != getattr(view, "_shell_resident_version", None)):
             self._frame_wanted = True
         delay = None
+
+        def sooner(ms):
+            nonlocal delay
+            if ms is not None:
+                delay = ms if delay is None else min(delay, ms)
+
         ui_timer = getattr(view, "_ui_timer", None)
         if ui_timer is not None and ui_timer.isActive():
-            delay = max(0, ui_timer.remainingTime())
+            sooner(max(0, ui_timer.remainingTime()))
         if self._wake_at is not None:
             wait = max(0.0, (self._wake_at - time.monotonic()) * 1000)
-            delay = wait if delay is None else min(delay, wait)
+            sooner(wait)
             if wait == 0:
                 self._wake_at = None
                 self._frame_wanted = True
-        # QTimers (singleShot from the borrowed code, the settle timer)
-        # fire only while we pump: poll at the Qt app's own 33 ms present
-        # cadence while any is pending, else sleep until an event.
+        # Qt timers fire only while we pump: wake when the first is due
+        # (QTimer.start / singleShot from Python, app_shell.qt_host), and
+        # poll the view's own at the Qt app's 33 ms present cadence.
+        sooner(qt_host.next_timer_ms())
         if self._qt_timers_pending():
-            delay = 33 if delay is None else min(delay, 33)
+            sooner(33)
+        # File changes of linked documents arrive as Qt posted events,
+        # which winit does not see: look for them once a second.
+        watch = self.window.__dict__.get("_links_watch")
+        if watch is not None and getattr(watch, "_fs", None) is not None and watch._fs.files():
+            sooner(1000)
+        if self._after_picture and self._picture_seen:
+            fn = self._after_picture.pop(0)
+            self._guard("after picture", fn)
+            sooner(16)
         cursor, self._cursor = self._cursor, None
         title, self._title = self._title, None
         wanted, self._frame_wanted = self._frame_wanted, False
         return wanted, delay, cursor, title
+
+    def extras(self):
+        """What else the window should do this turn (rust/built_app
+        python.rs ``Extras``)."""
+        recent = None
+        if self._recent_dirty:
+            self._recent_dirty = False
+            try:
+                recent = [p for p in self.window._recent_paths() if Path(p).exists()]
+            except Exception:
+                recent = []
+        return {"exit": bool(self.quit_now), "ime_area": self._ime_area, "recent": recent}
 
     def _qt_timers_pending(self):
         view = self.view
@@ -149,14 +297,26 @@ class Host:
         view = self.view
         scene = self.viewport.scene
         try:
-            if scene is not getattr(view, "scene", None) or scene.version != self._resident_version:
+            if scene is not getattr(view, "scene", None) or scene.version != getattr(
+                    view, "_shell_resident_version", None):
                 version = scene.version
                 view.set_scene(scene)
-                self._resident_version = version
-            return view.draw_frame()
+                view._shell_resident_version = version
+            out = view.draw_frame()
+            if out is not None:
+                self._picture_seen = True
+            return out
         except Exception:
             self._error("frame")
             return None
+
+    def modal_frame(self):
+        """A frame while a question or a job holds the loop (app_shell.modal)."""
+        ui_timer = getattr(self.view, "_ui_timer", None)
+        due = ui_timer is not None and ui_timer.isActive() and ui_timer.remainingTime() <= 0
+        if self._frame_wanted or due:
+            self._frame_wanted = False
+            self.frame()
 
     def _error(self, where):
         text = traceback.format_exc()
@@ -169,48 +329,32 @@ class Host:
         _log(f"error in {where}:\n{text}")
 
     # ---- documents -----------------------------------------------------
-    def open(self, path):
-        """Read a .built/.igz into the document (MainWindow._open_path_here,
-        without recovery prompts, links UI or trays)."""
-        path = Path(path)
+    def open_path(self, path):
+        """A file from the command line, Finder (Open With, a double-click,
+        the Dock), a drop on the window, or another `built` handing over."""
+        from app_shell import files
         t0 = time.perf_counter()
-        from formats import igz as igz_format
-        vp = self.viewport
-        suffix = path.suffix.lower()
-        if suffix not in (".built", ".igz"):
-            self.window.statusBar().showMessage(
-                f"{suffix} import is not in the shell yet; open a .built or .igz", 6000)
-            return False
-        view = self.view
-        if hasattr(view, "blank"):
-            view.blank()
-        try:
-            igz_format.load_into(vp.scene, path)
-        except Exception as exc:
-            self._error("open")
-            self.window.statusBar().showMessage(f"Open failed: {exc}", 8000)
-            return False
-        loaded = time.perf_counter()
-        vp.history.clear()
-        try:
-            vp.reset_texture_cache()
-        except Exception:
-            self._error("reset_texture_cache")
-        vp.inference.reset()
-        self.window._apply_camera_dict(getattr(vp.scene, "camera_home", None))
-        if not isinstance(getattr(vp.scene, "camera_home", None), dict):
-            self.window._on_zoom_extents()
-        self.path = path
-        self.window._current_path = path
-        vp.notify_scene_changed()
-        version = vp.scene.version
-        view.set_scene(vp.scene)
-        self._resident_version = version
-        self.open_ms = {"read": (loaded - t0) * 1000,
-                        "pack": (time.perf_counter() - loaded) * 1000}
-        self._set_title()
+        ok = bool(self._guard("open", files.open_path, self.window, Path(path)))
+        self.open_ms = {"total": (time.perf_counter() - t0) * 1000}
         self.request_frame()
-        return True
+        return ok
+
+    #: The name the first slice and its tests use.
+    open = open_path
+
+    def cold_start(self):
+        from app_shell import files
+        self._guard("cold start", files.cold_start, self.window)
+
+    def request_close(self):
+        """Close the window / quit: True once nothing unsaved stands in the
+        way (the sheet asked, through the modal pump)."""
+        from app_shell import files
+        from views import chrome_dialogs as cd
+        if cd.modal(self.window):
+            return False
+        ok = self._guard("close", files.request_close, self.window)
+        return bool(ok)
 
     # ---- input ---------------------------------------------------------
     def _guard(self, where, fn, *args):
@@ -219,6 +363,10 @@ class Host:
         except Exception:
             self._error(where)
             return None
+
+    def _modal(self):
+        from views import chrome_dialogs as cd
+        return cd.modal(self.window)
 
     def pointer(self, kind, x, y, button=0, held=0, modifiers=0):
         from app_shell.events import ContextMenuEvent, MouseEvent
@@ -230,7 +378,7 @@ class Host:
         handler = {"press": view.mousePressEvent, "release": view.mouseReleaseEvent,
                    "move": view.mouseMoveEvent, "double": view.mouseDoubleClickEvent}[kind]
         self._guard(f"pointer {kind}", handler, ev)
-        if kind == "press" and button == 2:
+        if kind == "press" and button == 2 and not self._modal():
             # Qt on the Mac sends the context menu on the right press.
             self._guard("context menu", view.contextMenuEvent, ContextMenuEvent(x, y, modifiers))
         self.request_frame()
@@ -239,12 +387,16 @@ class Host:
               modifiers=0, held=0, inverted=True):
         from app_shell.events import WheelEvent
         qt_host.INPUT["modifiers"] = int(modifiers)
+        if self._modal():
+            return
         ev = WheelEvent(x, y, pixel_dx, pixel_dy, angle_dx, angle_dy, phase, modifiers, held, inverted)
         self._guard("wheel", self.view.wheelEvent, ev)
         self.request_frame()
 
     def gesture(self, kind, value, x, y, modifiers=0):
         from app_shell.events import NativeGestureEvent
+        if self._modal():
+            return
         ev = NativeGestureEvent(kind, value, x, y, modifiers=modifiers)
         self._guard("gesture", self.view.event, ev)
         self.request_frame()
@@ -252,10 +404,21 @@ class Host:
     def key(self, pressed, key, modifiers=0, text="", repeat=False):
         """A key, as Qt delivers it: ShortcutOverride first (the chrome, the
         value box and the tool may claim it), then the window's shortcuts
-        (the tools' letters), else the view's key handler."""
+        (the tools' letters), else the view's key handler. While a sheet
+        or an exclusive job holds the window, only they hear keys."""
         from app_shell.events import KeyEvent, ShortcutOverride
+        from views import chrome_dialogs as cd
         qt_host.INPUT["modifiers"] = int(modifiers)
         view = self.view
+        if self._modal():
+            if pressed and not repeat:
+                ev = KeyEvent(True, key, modifiers, text, repeat)
+                if cd.current_sheet(self.window) is not None:
+                    self._guard("sheet key", cd.sheet_key, self.window, ev)
+                else:
+                    self._guard("job key", cd.job_key, self.window, ev)
+            self.request_frame()
+            return True
         if pressed:
             override = ShortcutOverride(key, modifiers, text, repeat)
             self._guard("shortcut override", view.event, override)
@@ -268,7 +431,6 @@ class Host:
         return True
 
     def _shortcut(self, key, modifiers):
-        from PySide6.QtCore import Qt
         from PySide6.QtGui import QKeySequence
         try:
             combo = QKeySequence(int(modifiers) | int(key))
@@ -284,15 +446,52 @@ class Host:
     def text(self, text):
         """Committed IME text: the chrome's focused field, else the tools
         hear it as key presses carrying the text."""
+        self._preedit_done()
         renderer = self.view.renderer
         if renderer is not None and renderer.ui_claims_key(""):
-            renderer.ui_text(text)
+            if hasattr(renderer, "ui_ime"):
+                renderer.ui_ime("commit", text)
+            else:
+                renderer.ui_text(text)
             self.request_frame()
             return
         for ch in text:
             code = ord(ch.upper()) if ch.isalpha() else ord(ch)
             self.key(True, code, 0, ch)
             self.key(False, code, 0, ch)
+
+    def preedit(self, text, cursor=0):
+        """The composition being typed (dead keys, an input method): drawn
+        by the chrome's focused field as egui does (underlined, in place),
+        else shown in the hint line until it commits."""
+        renderer = self.view.renderer
+        was = self._preedit
+        self._preedit = text or ""
+        field = renderer is not None and renderer.ui_claims_key("")
+        if field and hasattr(renderer, "ui_ime"):
+            if not was and self._preedit:
+                renderer.ui_ime("enabled", "")
+            renderer.ui_ime("preedit", self._preedit)
+            rect = renderer.ui_ime_rect() if hasattr(renderer, "ui_ime_rect") else None
+            self._ime_area = tuple(rect) if rect else None
+        elif self._preedit:
+            self.window.statusBar().showMessage(f"Composing: {self._preedit}", 4000)
+        else:
+            self.window.statusBar().clearMessage()
+        self.request_frame()
+
+    def _preedit_done(self):
+        if self._preedit:
+            self._preedit = ""
+            self.window.statusBar().clearMessage()
+
+    def drag_hover(self, path):
+        """A file dragged over the window (or gone again)."""
+        if path:
+            self.window.statusBar().showMessage(f"Drop to open {Path(path).name}", 3000)
+        else:
+            self.window.statusBar().clearMessage()
+        self.request_frame()
 
     def resize(self, width, height, scale):
         self.width = max(1, int(round(width)))
@@ -309,7 +508,10 @@ class Host:
     def menu(self, action):
         """A menu command from the Rust menu bar (rust/built_app/src/menu.rs)."""
         w = self.window
+        if self._modal():
+            return None                 # a question or a job holds the window
         kind, _, arg = action.partition(":")
+        out = None
         if kind == "tool":
             self._guard("tool", w._activate_tool, arg)
         elif action == "undo":
@@ -321,17 +523,29 @@ class Host:
         elif kind == "view":
             self.viewport.camera.set_view(arg)
             self.viewport.camera.fit_box(*w._extents_bounds()) if w._extents_bounds() else None
+        else:
+            out = self._guard(f"menu {action}", w.run_command, action)
+        view = self.view
+        if view is not None and kind != "tool":
+            self._guard("tool sync", view.tools.sync)
         self.request_frame()
+        return out
 
     def close(self):
-        self._guard("close", self.view.closeEvent, None)
+        for doc in list(self.window._documents):
+            view = doc.stand_in
+            if view is not None:
+                self._guard("close", view.closeEvent, None)
 
     # ---- diagnostics -----------------------------------------------------
     def state(self):
         """A few facts for scripted runs and the smoke test."""
+        from app_shell.window import BORROWED
         scene = self.viewport.scene
         mesh = scene.mesh
         tool = self.viewport.active_tool
+        win = self.window
+        guard = qt_host.widget_guard()
         return {
             "path": str(self.path) if self.path else None,
             "version": scene.version,
@@ -340,10 +554,27 @@ class Host:
             "groups": len(getattr(scene, "groups", ()) or ()),
             "selection": len(getattr(scene, "selection", ()) or ()),
             "tool": type(tool).__name__ if tool is not None else None,
-            "status": self.window.statusBar().currentMessage(),
+            "status": win.statusBar().currentMessage(),
+            "documents": [d.display_name() for d in win._documents],
+            "active": win._documents.index(win._doc) if win._doc in win._documents else -1,
+            "dirty": bool(win._is_dirty()),
+            "start_page": bool(getattr(win.__dict__.get("_start_page"), "wanted", False)),
             "errors": len(self.errors),
             "widget_gaps": self.missing(),
+            "borrowed": len(BORROWED),
+            "blocked_widgets": list(guard.blocked) if guard is not None else [],
+            "not_here": list(self.not_here_log),
+            "custom_cursors": len(self._custom_cursors),
+            "preedit": self._preedit,
+            "ime_area": self._ime_area,
+            "clipboard": bool(getattr(self.viewport, "clipboard", None)),
+            "pasteboard": self._pasteboard_types(),
         }
+
+    @staticmethod
+    def _pasteboard_types():
+        from app_shell import native
+        return [t for t in native.pasteboard_types()[0] if "ingetrazo" in t]
 
     def missing(self):
         """Qt widget/window API the borrowed code asked for and the shell
@@ -362,10 +593,20 @@ class Host:
 def bootstrap(root: str, venv: str | None):
     """sys.path for the embedded interpreter: the repository and the venv's
     site-packages (Rust calls this before importing anything else)."""
+    global ROOT, VENV
     import site
+    ROOT, VENV = root, venv
     if venv:
         for sp in sorted(Path(venv).glob("lib/python3*/site-packages")):
             site.addsitedir(str(sp))
+        # Embedded, sys.executable is the `built` binary: code that runs
+        # "sys.executable -m module" (the Metal probe, helpers) would start
+        # another app window. It is the venv's Python, as in the Qt app.
+        for name in ("python3", "python"):
+            python = Path(venv) / "bin" / name
+            if python.exists():
+                sys.executable = str(python)
+                break
     if root not in sys.path:
         sys.path.insert(0, root)
     os.chdir(root)

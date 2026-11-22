@@ -13,10 +13,11 @@
 
 mod keys;
 mod menu;
+mod native;
 mod python;
 mod script;
 
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
@@ -28,7 +29,7 @@ use winit::dpi::{LogicalSize, PhysicalPosition};
 use winit::event::{ElementState, Ime, MouseButton, MouseScrollDelta, TouchPhase, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy};
 use winit::keyboard::ModifiersState;
-use winit::window::{CursorIcon, Window, WindowId};
+use winit::window::{Cursor, CursorIcon, CustomCursor, Window, WindowId};
 
 use script::Step;
 
@@ -70,7 +71,9 @@ fn parse_args() -> Result<Args, String> {
                           [--venv dir] [--size WxH] [--new-instance] [--measure] [--check]");
                 std::process::exit(0);
             }
-            s if s.starts_with("--") => return Err(format!("unknown option {s}")),
+            // Launch Services' process serial number (old macOS, Finder launches).
+            s if s.starts_with("-psn_") => {}
+            s if s.starts_with('-') => return Err(format!("unknown option {s}")),
             s => a.file = Some(absolute(Path::new(s))),
         }
     }
@@ -160,6 +163,16 @@ struct App {
     frames: u64,
     timings: Timings,
     exit_code: i32,
+    /// Tool cursors made from the pixmaps Python draws, by key.
+    cursors: HashMap<String, CustomCursor>,
+    /// Files handed over before the window and its host exist (a cold
+    /// launch from Finder: the odoc event comes before `resumed`).
+    pending_opens: Vec<PathBuf>,
+    /// The recent files the File menu shows, as last sent.
+    recent_sig: Option<Vec<String>>,
+    /// Files given on the command line: AppKit hands them to the Open
+    /// With hook too (as odoc), which must not open them a second time.
+    cli_files: Vec<PathBuf>,
 }
 
 const DOUBLE_CLICK: Duration = Duration::from_millis(500);
@@ -215,16 +228,18 @@ impl App {
 
     fn command(&mut self, event_loop: &ActiveEventLoop, cmd: &str) {
         match cmd {
-            "open" => {
-                let picked = rfd::FileDialog::new()
-                    .set_title("Open")
-                    .add_filter("Built documents", &["built", "igz"])
-                    .pick_file();
-                if let Some(path) = picked {
-                    self.open(&path);
+            // The window's close and Quit ask about unsaved work first
+            // (app_shell.files: the sheet, answered through the modal pump).
+            "close" | "quit" => {
+                let ok = self.host.as_ref().map_or(true, |h| {
+                    h.call0("request_close")
+                        .map(|v| pyo3::Python::attach(|py| v.extract::<bool>(py).unwrap_or(false)))
+                        .unwrap_or(true)
+                });
+                if ok {
+                    event_loop.exit();
                 }
             }
-            "close" => event_loop.exit(),
             "activate" => {
                 if let Some(w) = &self.window {
                     w.focus_window();
@@ -241,9 +256,11 @@ impl App {
 
     fn open(&mut self, path: &Path) {
         let t = Instant::now();
-        if let Some(h) = &self.host {
-            h.call("open", (path.to_string_lossy().to_string(),));
-        }
+        let Some(h) = &self.host else {
+            self.pending_opens.push(path.to_path_buf());
+            return;
+        };
+        h.call("open_path", (path.to_string_lossy().to_string(),));
         let ms = t.elapsed().as_secs_f64() * 1000.0;
         eprintln!("[built] opened {} in {ms:.0} ms", path.display());
         self.timings.opened.get_or_insert(self.timings.process.elapsed());
@@ -331,6 +348,17 @@ impl App {
                 }
             }
             Step::Menu(cmd) => self.command(event_loop, &cmd),
+            Step::Preedit(text) => {
+                if let Some(h) = &self.host {
+                    let n = text.chars().count();
+                    h.call("preedit", (text, n));
+                }
+            }
+            Step::Commit(text) => {
+                if let Some(h) = &self.host {
+                    h.call("text", (text,));
+                }
+            }
             Step::Wheel(x, y, dy, phase) => {
                 if let Some(h) = &self.host {
                     h.call("wheel", (x, y, 0.0, dy, 0.0, dy * 2.0, phase.as_str(), 0u32, 0u32, true));
@@ -424,7 +452,17 @@ impl App {
             Ok(m) => self._menus = Some(m),
             Err(e) => eprintln!("[built] menu bar: {e}"),
         }
-        if let Some(file) = self.args.file.clone() {
+        let mut files: Vec<PathBuf> = self.args.file.clone().into_iter().collect();
+        files.append(&mut self.pending_opens);
+        if files.is_empty() {
+            // A cold start without a file: the start page (recents, new,
+            // templates), and the untitled drawings an earlier session
+            // left in its auto-save slots.
+            if let Some(h) = &self.host {
+                h.call0("cold_start");
+            }
+        }
+        for file in files {
             self.open(&file);
         }
         self.redraw();
@@ -445,6 +483,10 @@ impl App {
             ms(t.first_frame)
         );
     }
+}
+
+fn same_path(a: &Path, b: &Path) -> bool {
+    a == b || matches!((a.canonicalize(), b.canonicalize()), (Ok(x), Ok(y)) if x == y)
 }
 
 fn write_png(path: &Path, w: u32, h: u32, rgba: &[u8]) -> Result<(), String> {
@@ -517,13 +559,19 @@ impl ApplicationHandler<UserEvent> for App {
     fn user_event(&mut self, event_loop: &ActiveEventLoop, event: UserEvent) {
         match event {
             UserEvent::Menu(cmd) => self.command(event_loop, &cmd),
-            UserEvent::Open(path) => self.open(&path),
+            UserEvent::Open(path) => {
+                if let Some(i) = self.cli_files.iter().position(|p| same_path(p, &path)) {
+                    self.cli_files.remove(i);
+                    return;
+                }
+                self.open(&path)
+            }
         }
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         match event {
-            WindowEvent::CloseRequested => event_loop.exit(),
+            WindowEvent::CloseRequested => self.command(event_loop, "close"),
             WindowEvent::Resized(size) => {
                 let s = self.scale();
                 if let Some(h) = &self.host {
@@ -628,6 +676,16 @@ impl ApplicationHandler<UserEvent> for App {
                     self.key(pressed, code, &text, event.repeat, m);
                 }
             }
+            WindowEvent::Ime(Ime::Preedit(text, cursor)) => {
+                // The composition being typed (dead keys, input methods):
+                // shown in the chrome's focused field, or as the value
+                // being typed, until it commits.
+                if let Some(h) = &self.host {
+                    let at = cursor.map_or(text.chars().count(), |(a, _)| text[..a.min(text.len())].chars().count());
+                    h.call("preedit", (text, at));
+                }
+                self.redraw();
+            }
             WindowEvent::Ime(Ime::Commit(text)) => {
                 // A plain key already delivered its own text; a composed
                 // one (dead keys, input methods) arrives only here.
@@ -644,6 +702,16 @@ impl ApplicationHandler<UserEvent> for App {
                 }
             }
             WindowEvent::DroppedFile(path) => self.open(&path),
+            WindowEvent::HoveredFile(path) => {
+                if let Some(h) = &self.host {
+                    h.call("drag_hover", (path.to_string_lossy().to_string(),));
+                }
+            }
+            WindowEvent::HoveredFileCancelled => {
+                if let Some(h) = &self.host {
+                    h.call("drag_hover", ("",));
+                }
+            }
             _ => {}
         }
     }
@@ -654,12 +722,45 @@ impl ApplicationHandler<UserEvent> for App {
         }
         let Some(h) = &self.host else { return };
         let (wanted, wake_ms, cursor, title, drag) = h.idle();
+        let extra = h.extras();
+        if extra.exit {
+            event_loop.exit();
+            return;
+        }
+        if let Some(c) = cursor {
+            if let Some(key) = c.strip_prefix("custom:") {
+                if !self.cursors.contains_key(key) {
+                    if let Some((w, hgt, hx, hy, rgba)) = h.custom_cursor(key) {
+                        match CustomCursor::from_rgba(rgba, w, hgt, hx, hy) {
+                            Ok(src) => {
+                                let made = event_loop.create_custom_cursor(src);
+                                self.cursors.insert(key.to_owned(), made);
+                            }
+                            Err(e) => eprintln!("[built] cursor {key}: {e}"),
+                        }
+                    }
+                }
+                if let (Some(w), Some(cur)) = (&self.window, self.cursors.get(key)) {
+                    w.set_cursor(Cursor::Custom(cur.clone()));
+                }
+            } else if let Some(w) = &self.window {
+                w.set_cursor(cursor_icon(&c));
+            }
+        }
+        if let Some(recent) = extra.recent {
+            if self.recent_sig.as_ref() != Some(&recent) {
+                if let Some(m) = &self._menus {
+                    m.set_recent(&recent);
+                }
+                self.recent_sig = Some(recent);
+            }
+        }
         if let Some(w) = &self.window {
+            if let Some((x, y, cw, ch)) = extra.ime_area {
+                w.set_ime_cursor_area(winit::dpi::LogicalPosition::new(x, y), LogicalSize::new(cw, ch));
+            }
             if wanted {
                 w.request_redraw();
-            }
-            if let Some(c) = cursor {
-                w.set_cursor(cursor_icon(&c));
             }
             if let Some(t) = title {
                 w.set_title(&t);
@@ -775,6 +876,24 @@ fn main() {
             let _ = proxy.send_event(UserEvent::Menu(e.id().0.clone()));
         }));
     }
+    {
+        // Finder's Open With / double-click / Dock drop, and Quit from the
+        // Dock: AppKit asks winit's delegate, which hands them on here.
+        let proxy = std::sync::Mutex::new(proxy.clone());
+        native::install_app_hooks(move |req| {
+            let Ok(p) = proxy.lock() else { return };
+            match req {
+                native::AppRequest::Open(paths) => {
+                    for path in paths {
+                        let _ = p.send_event(UserEvent::Open(PathBuf::from(path)));
+                    }
+                }
+                native::AppRequest::Quit => {
+                    let _ = p.send_event(UserEvent::Menu("quit".into()));
+                }
+            }
+        });
+    }
     if interactive {
         listen_for_instances(proxy);
     }
@@ -793,7 +912,12 @@ fn main() {
         frames: 0,
         timings: Timings { process, python_ready, window: None, host: None, opened: None, first_frame: None },
         exit_code: 0,
+        cursors: HashMap::new(),
+        pending_opens: Vec::new(),
+        recent_sig: None,
+        cli_files: Vec::new(),
     };
+    app.cli_files = app.args.file.clone().into_iter().collect();
     if let Err(e) = event_loop.run_app(&mut app) {
         eprintln!("built: {e}");
         app.exit_code = 1;

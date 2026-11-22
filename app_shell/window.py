@@ -3,18 +3,38 @@
 The egui chrome reads the window's tool actions (checked state, text,
 shortcut), its status bar, and runs ``_activate_tool``. :class:`ShellWindow`
 answers those from the same tool registry MainWindow builds, so the chrome
-code runs unchanged. Everything else MainWindow does (docks, trays, sheets,
-dialogs) is not here yet; what the chrome and tools looked up and did not
-find is counted in :data:`app_shell.borrow.MISSING`.
+code runs unchanged.
+
+**MainWindow's own Python, on demand.** Every method, property and
+constant of ``views.main_window.MainWindow`` (and its worksession mixin)
+that the shell does not define is borrowed the first time something asks
+for it (:meth:`ShellWindow.__getattr__`, ``app_shell.borrow``): Select All,
+Undo, the links menu's verbs, the unsaved-changes question, File ▸ New…
+run as the Qt app runs them. What they reach for and the shell lacks (a
+dock, a tray, a Qt menu) raises inside them, and the host reports it as
+"not in the shell yet" with the classic app as the way out. What was
+looked up and is nowhere is still counted in
+:data:`app_shell.borrow.MISSING`.
+
+**Documents.** Each open project is a ``views.documents.Document`` with
+its own controller (``ShellViewport``: scene, history, camera) and its own
+view object (``ShellView``: the packed scene, picking, inference index,
+tool dispatch). One renderer, the window's surface, is handed to the
+document in front; a switch uploads that document's packed arrays again
+(no repack) and resends the chrome's state. The egui top bar's document
+▾ lists them (``_project_tabs`` below answers what views/wgpu_ui.py reads);
+no new tab strip yet (it waits for the design review in
+build/shell-design/).
 """
 from __future__ import annotations
 
 import time
+import types
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtGui import QKeySequence
 
-from app_shell.borrow import MISSING
+from app_shell.borrow import MISSING, _rebind
 
 
 def build_tools() -> dict:
@@ -116,6 +136,9 @@ class _Label:
     def setText(self, text):
         self._text = text
 
+    def setToolTip(self, *_):
+        pass
+
     def setMaximumWidth(self, *_):
         pass
 
@@ -157,18 +180,10 @@ class ShellStatusBar:
     def _noop(self, *args, **kwargs):
         return None
 
-    hide = show = setMaximumWidth = setMaximumHeight = _noop
+    hide = show = setMaximumWidth = setMaximumHeight = addPermanentWidget = _noop
 
     def isVisible(self):
         return False
-
-
-class _Document:
-    def __init__(self, viewport, view):
-        self.viewport = viewport
-        self.stand_in = view
-        self.view_grid = None
-        self._renderer_wgpu = True
 
 
 class _WindowHandle:
@@ -187,21 +202,311 @@ class _MenuBar:
         return []
 
 
-class ShellWindow:
+class _Relay:
+    """A signal-shaped callback: ``emit(*args)`` calls ``fn``."""
+
+    def __init__(self, fn):
+        self._fn = fn
+
+    def emit(self, *args):
+        self._fn(*args)
+
+    def connect(self, *_):
+        pass
+
+
+class _Tabs:
+    """The QTabBar surface wgpu_ui._projects reads (text, data per index)."""
+
+    def __init__(self, bar):
+        self._bar = bar
+
+    def tabText(self, i):
+        win = self._bar._win
+        doc = self._bar.documents()[i]
+        dirty = win._doc_is_dirty(doc)
+        return doc.display_name() + (self._bar.DIRTY_MARK if dirty else "")
+
+    def tabData(self, i):
+        docs = self._bar.documents()
+        return docs[i] if 0 <= i < len(docs) else None
+
+
+class ShellProjectTabs:
+    """``window._project_tabs`` as the egui top bar's document ▾ reads it
+    (views/wgpu_ui._projects and _project_action)."""
+
+    DIRTY_MARK = " •"
+
+    def __init__(self, win):
+        self._win = win
+        self.tabs = _Tabs(self)
+        self.activated = _Relay(lambda doc: win.activate_document(doc))
+        self.newRequested = _Relay(lambda: win.run_command("new"))
+        self.closeRequested = _Relay(lambda doc: win.run_command("close_tab", doc))
+        self.viewsRequested = _Relay(lambda: win.statusBar().showMessage(
+            "Several views of one model are not in the native app yet", 3000))
+
+    def documents(self):
+        return list(self._win._documents)
+
+    def count(self):
+        return len(self._win._documents)
+
+    def current(self):
+        return self._win._doc
+
+    def index_of(self, doc):
+        docs = self.documents()
+        return docs.index(doc) if doc in docs else -1
+
+    def neighbour(self, doc, step):
+        docs = self.documents()
+        if doc not in docs or len(docs) < 2:
+            return None
+        return docs[(docs.index(doc) + step) % len(docs)]
+
+    def hide(self):
+        pass
+
+    def setMaximumHeight(self, *_):
+        pass
+
+
+class _SceneRow:
+    """``window._scene_tabs`` (the scene ‹ › chips read which one is marked)."""
+
+    def __init__(self):
+        self.tabs = self
+        self._marked = None
+
+    def marked_view(self):
+        return self._marked
+
+    def mark_view(self, view):
+        self._marked = view
+
+    def setMaximumHeight(self, *_):
+        pass
+
+
+class ShellScenes:
+    """The Scenes panel's verbs the bottom bar's scene chips call
+    (views/tray.py ScenesPanel), over core's own scene commands."""
+
+    def __init__(self, win):
+        self._win = win
+
+    def _vp(self):
+        return self._win.viewport
+
+    def _touch(self):
+        vp = self._vp()
+        vp.scene.version += 1
+        vp.notify_scene_changed()
+        vp.update()
+        view = self._win._doc.stand_in
+        if view is not None:
+            view._ui_tabs = None
+
+    def show_view(self, view, animate: bool = False):
+        if view is None:
+            return
+        from core.saved_views import shown_state
+        vp = self._vp()
+        scene = vp.scene
+        before = shown_state(scene)
+        view.apply(scene, vp.camera)
+        self._win._scene_tabs.mark_view(view)
+        if shown_state(scene) != before:
+            self._touch()
+        else:
+            vp.update()
+            stand_in = self._win._doc.stand_in
+            if stand_in is not None:
+                stand_in._ui_tabs = None
+                stand_in.update()
+
+    finish_view = activate_view = show_view
+
+    def add_scene(self):
+        from core.history import AddSceneCommand
+        from core.saved_views import SavedView
+        from core.i18n import tr
+        vp = self._vp()
+        scene = vp.scene
+        taken = {v.name for v in scene.saved_views}
+        n = 1
+        while f"{tr('Scene')} {n}" in taken:
+            n += 1
+        view = SavedView.capture(f"{tr('Scene')} {n}", scene, vp.camera, self._win.active_style())
+        vp.history.execute(AddSceneCommand(view))
+        self._win._scene_tabs.mark_view(view)
+        self._touch()
+        return view
+
+    def update_view(self, view):
+        if view is None:
+            return
+        from core.history import UpdateSceneCommand
+        vp = self._vp()
+        vp.history.execute(UpdateSceneCommand(view, vp.camera, self._win.active_style()))
+        self._touch()
+
+    def rename_view(self, view, name):
+        name = (name or "").strip()
+        if view is None or not name or name == view.name:
+            return False
+        from core.saved_views import RenameSceneCommand
+        history = self._vp().history
+        history.execute(RenameSceneCommand(view, name))
+        if history.last_rejected is not None:
+            self._win.statusBar().showMessage(f"Another scene is already called «{name}»", 3500)
+            return False
+        self._touch()
+        return True
+
+    def delete_views(self, views):
+        views = [v for v in views if v is not None]
+        if not views:
+            return
+        from core.history import DeleteScenesCommand
+        self._vp().history.execute(DeleteScenesCommand(views))
+        if self._win._scene_tabs.marked_view() in views:
+            self._win._scene_tabs.mark_view(None)
+        self._touch()
+
+    def move_view(self, view, index):
+        from core import scene_folders as SF
+        from core.history import SceneTreeCommand
+        vp = self._vp()
+        scene = vp.scene
+        if view is None or not any(v is view for v in scene.saved_views):
+            return
+        order = [v for v in scene.saved_views if v is not view]
+        index = max(0, min(int(index), len(order)))
+        if index < len(order):
+            nxt = order[index]
+            folder, before = SF.folder_of(scene, nxt), nxt
+        else:
+            prev = order[-1] if order else None
+            folder = SF.folder_of(scene, prev) if prev is not None else None
+            before = None
+
+        def run(s):
+            sig = SF.signature(s)
+            SF.move_rows(s, [view], [], folder, before)
+            return SF.signature(s) != sig
+        vp.history.execute(SceneTreeCommand(run))
+        self._touch()
+
+
+class _Tray:
+    def __init__(self, win):
+        self.scenes = ShellScenes(win)
+
+
+#: MainWindow members the shell defines itself and never borrows (they
+#: build Qt widgets, or the shell has its own version).
+_OWN = {"viewport", "documents", "active_document", "activate_document",
+        "close_document", "close_documents", "_new_document", "_retire_document",
+        "_install_wgpu_display", "_choose_document_renderer", "open_path",
+        "_open_path_here", "_import_progress", "_parse_skp_threaded",
+        "_parse_stl_threaded", "show_viewport_context_menu", "closeEvent",
+        "_update_title", "_update_tab", "_refresh_scene_tabs", "setWindowTitle",
+        "_on_save", "_on_save_as", "_do_save", "_on_export_igz", "_document_picture",
+        "_show_empty_area", "_leave_empty_area", "_dismiss_home", "_on_new_window",
+        "_sync_foreign_clipboard", "_on_open", "_open_recent", "_fill_recent_menu"}
+
+#: What a borrowed method may reach for that the shell has nothing for:
+#: answered with a no-op, as a window with that panel closed would.
+_QUIET = ("_sync_style_menu", "_sync_section_menu", "_refresh_layer_views",
+          "_refresh_sheet_tabs", "_refresh_worksession", "persist_worksession",
+          "_light_views_button", "_sync_projection_buttons", "_show_renderer_note",
+          "_refresh_vcb", "_forget_panel_caches", "_show_panels_again",
+          "on_active_view_changed", "keep_other_views_style", "settle_heap_later")
+
+
+def _lazy(name):
+    """MainWindow's ``name`` copied onto ShellWindow, or None."""
+    if name in _OWN:
+        return None
+    try:
+        from views.main_window import MainWindow
+    except Exception:  # noqa: BLE001 — no Qt app module: nothing to borrow
+        return None
+    for klass in MainWindow.__mro__:
+        mod = getattr(klass, "__module__", "") or ""
+        if mod.startswith(("PySide6", "Shiboken", "shiboken6")) or klass is object:
+            continue
+        if name not in vars(klass):
+            continue
+        value = vars(klass)[name]
+        if isinstance(value, Signal):
+            return None
+        if isinstance(value, types.FunctionType):
+            value = _rebind(value, ShellWindow)
+        elif isinstance(value, property):
+            value = property(_rebind(value.fget, ShellWindow), _rebind(value.fset, ShellWindow),
+                             _rebind(value.fdel, ShellWindow), value.__doc__)
+        elif isinstance(value, (staticmethod, classmethod)):
+            value = type(value)(_rebind(value.__func__, ShellWindow))
+        setattr(ShellWindow, name, value)
+        BORROWED.add(name)
+        return value
+    return None
+
+
+#: MainWindow members borrowed so far (diagnostics, the smoke test).
+BORROWED: set = set()
+
+
+def _doc_attr(name):
+    def get(self):
+        doc = self.__dict__.get("_doc")
+        return getattr(doc, name) if doc is not None else None
+
+    def put(self, value):
+        setattr(self._doc, name, value)
+    return property(get, put)
+
+
+class ShellWindow(QObject):
+    documentChanged = Signal()
+
     def __init__(self, host):
-        if "_on_undo" not in vars(ShellWindow):
+        super().__init__()
+        if "_saved_version" not in vars(ShellWindow):
             borrow_main_window()
         self._host = host
         self._tools = build_tools()
         self._tool_actions = {}
         self._nav_actions = {}
         self._status = ShellStatusBar(host)
-        self._current_path = None
         self._tool_filter = None
-        self.viewport = None
         self._doc = None
         self._documents = []
-        self.tray = None
+        self._project_tabs = ShellProjectTabs(self)
+        self._scene_tabs = _SceneRow()
+        self.tray = _Tray(self)
+        # MainWindow's own state the borrowed methods read.
+        self._workspace = None
+        self._empty_on = False
+        self._session_path = None
+        self._opening_session = False
+        self._opening_document = False
+        self._open_in_progress = False
+        self._open_aborted = False
+        self._open_cancelled = False
+        self._closed = False
+        self.file_openers = {}
+        self._status_pending = {}
+        self._coord_label = _Label()
+        self._tool_label = _Label()
+        self._vcb_live = ""
+        self._shared_components = {}
+        self._active_file = None
+        self._session_unsaved_doc = None
         for key, tool in self._tools.items():
             shortcut = getattr(tool, "shortcut", "") or ""
             if key == "select":
@@ -209,15 +514,150 @@ class ShellWindow:
             self._tool_actions[key] = ShellAction(
                 getattr(tool, "name", key), shortcut, run=lambda k=key: self._activate_tool(k))
 
-    def bind(self, viewport, view):
-        self.viewport = viewport
-        self._doc = _Document(viewport, view)
-        self._documents = [self._doc]
-
     def __getattr__(self, name):
-        if not name.startswith("__"):
-            MISSING["window." + name] += 1
+        if name.startswith("__"):
+            raise AttributeError(name)
+        if name in _QUIET:
+            return lambda *a, **k: None
+        value = _lazy(name)
+        if value is not None:
+            return getattr(self, name)
+        MISSING["window." + name] += 1
         raise AttributeError(name)
+
+    # ---- the documents' state, as MainWindow keeps it --------------------
+    _current_path = _doc_attr("path")
+    _import_name = _doc_attr("import_name")
+    _saved_content = _doc_attr("saved_content")
+    _autosaved_version = _doc_attr("autosaved_version")
+    _composer = _doc_attr("composer")
+    _last_sheet = _doc_attr("last_sheet")
+
+    @property
+    def viewport(self):
+        doc = self.__dict__.get("_doc")
+        if doc is None:
+            return None
+        return doc.front_view if doc.front_view is not None else doc.viewport
+
+    @property
+    def view(self):
+        doc = self.__dict__.get("_doc")
+        return doc.stand_in if doc is not None else None
+
+    def documents(self):
+        return list(self._documents)
+
+    def active_document(self):
+        return self._doc
+
+    def all_viewports(self):
+        return [d.viewport for d in self._documents if d.viewport is not None]
+
+    def new_document(self, activate: bool = True):
+        """A new, empty project with its own controller and view, right of
+        the one in front."""
+        from views.documents import Document
+        from app_shell.document import ShellViewport
+        from app_shell.view import ShellView
+        host = self._host
+        doc = Document()
+        doc.untitled_no = self._free_untitled_no() if self._documents else 1
+        vp = ShellViewport(host)
+        try:
+            vp.history.max_steps = 200
+        except Exception:  # noqa: BLE001
+            pass
+        view = ShellView(host)
+        view.source_viewport = vp
+        view.camera = vp.camera
+        vp.keys_stand_in = view
+        doc.viewport = vp
+        doc.stand_in = view
+        doc._renderer_wgpu = True
+        doc.saved_content = vp.scene.content_version
+        try:
+            vp.sceneVersionChanged.connect(lambda *_: self._update_title())
+        except Exception:  # noqa: BLE001
+            pass
+        at = self._documents.index(self._doc) + 1 if self._doc in self._documents else len(self._documents)
+        self._documents.insert(at, doc)
+        vp.set_active_tool(None)
+        if self._doc is None:
+            self._doc = doc
+        if activate:
+            self.activate_document(doc)
+        return doc
+
+    # MainWindow's name for it (File ▸ New, open_path).
+    _new_document = new_document
+
+    def activate_document(self, doc, closing: bool = False) -> None:
+        """Bring ``doc`` to the front: the tool is dropped and a group left
+        in the one behind; the renderer goes to its view, which uploads its
+        packed scene again and resends the chrome."""
+        if doc is None or doc not in self._documents:
+            return
+        old = self._doc
+        if doc is old:
+            return
+        if old is not None and old.viewport is not None:
+            try:
+                old.viewport.set_active_tool(None)
+                old.viewport.end_group_edit()
+            except Exception:  # noqa: BLE001
+                pass
+        renderer = getattr(getattr(old, "stand_in", None), "renderer", None)
+        if old is not None and old.stand_in is not None:
+            old.stand_in.renderer = None
+        self._doc = doc
+        view = doc.stand_in
+        if renderer is not None:
+            self._host.hand_renderer(view, renderer)
+        from core import axes as _axes
+        from core import units as _units
+        _units.bind_scene(doc.viewport.scene)
+        _axes.sync(getattr(doc.viewport.scene, "drawing_frame", None))
+        self._scene_tabs.mark_view(None)
+        self._activate_tool("select")
+        doc.viewport.notify_scene_changed()
+        self.documentChanged.emit()
+        self._update_title()
+        self._host.request_frame()
+
+    def _retire_document(self, doc) -> None:
+        from core import autosave
+        if doc not in self._documents:
+            return
+        self._documents.remove(doc)
+        try:
+            autosave.clear(doc.path, untitled=doc.untitled_no)
+        except Exception:  # noqa: BLE001
+            pass
+        view = doc.stand_in
+        if view is not None:
+            view.renderer = None
+            try:
+                view.closeEvent(None)
+            except Exception:  # noqa: BLE001
+                pass
+        doc.viewport = None
+        doc.stand_in = None
+
+    def bind(self, viewport, view):
+        """The first document (Host.__init__ made its controller and view)."""
+        from views.documents import Document
+        doc = Document()
+        doc.viewport = viewport
+        doc.stand_in = view
+        doc._renderer_wgpu = True
+        doc.saved_content = viewport.scene.content_version
+        try:
+            viewport.sceneVersionChanged.connect(lambda *_: self._update_title())
+        except Exception:  # noqa: BLE001
+            pass
+        self._documents = [doc]
+        self._doc = doc
 
     # ---- what the chrome and tools call --------------------------------
     def statusBar(self):
@@ -225,6 +665,9 @@ class ShellWindow:
 
     def menuBar(self):
         return _MenuBar()
+
+    def window(self):
+        return self
 
     def findChildren(self, *_args, **_kwargs):
         return []
@@ -235,8 +678,20 @@ class ShellWindow:
     def windowState(self):
         return Qt.WindowNoState
 
+    def isVisible(self):
+        return bool(self._host.ns_view)
+
+    def isMinimized(self):
+        return False
+
+    def isActiveWindow(self):
+        return True
+
     def dockWidgetArea(self, _dock):
         return Qt.NoDockWidgetArea
+
+    def setWindowTitle(self, title):
+        self._host.set_title(title)
 
     def active_style(self):
         return getattr(self.viewport.scene, "display_style", None)
@@ -245,7 +700,7 @@ class ShellWindow:
         """MainWindow._activate_tool's Metal path."""
         tool = self._tools.get(key)
         if tool is None:
-            self._status.showMessage(f"{key} is not in the shell yet", 3000)
+            self._status.showMessage(f"{key} is not in the native app yet — File ▸ Open in Classic App", 4000)
             return
         self.viewport.set_active_tool(tool)
         display = self._doc.stand_in
@@ -258,19 +713,122 @@ class ShellWindow:
         hint = getattr(tool, "description", "") or ""
         self._status.showMessage(f"{name} — {hint}" if hint else name)
 
-    def show_viewport_context_menu(self, *args, **kwargs):
-        self._status.showMessage("Context menus are not in the shell yet", 2000)
+    def _show_model(self):
+        pass
 
+    def _to_sheets(self):
+        self._host.not_here("Sheets")
+
+    def show_viewport_context_menu(self, *args, **kwargs):
+        # The viewport's right-click menu waits for its design review
+        # (build/shell-design/); until then the selection bar and the
+        # tree's row menus carry the verbs.
+        self._status.showMessage(
+            "Right-click menu: not in the native app yet — use the selection bar, "
+            "the tree's row menu, or File ▸ Open in Classic App", 4000)
+
+    # ---- the title and the dirty mark ----------------------------------
+    def _doc_is_dirty(self, doc) -> bool:
+        vp = getattr(doc, "viewport", None)
+        if vp is None:
+            return False
+        if doc is self._doc:
+            return self._is_dirty()
+        return vp.scene.content_version != doc.saved_content
+
+    def _update_title(self) -> None:
+        doc = self._doc
+        if doc is None or doc.viewport is None:
+            return
+        marker = " *" if self._is_dirty() else ""
+        self.setWindowTitle(f"{doc.display_name()}{marker} — Built")
+        view = doc.stand_in
+        if view is not None:
+            view._ui_docs = None            # the document ▾ shows the • too
+
+    def _update_tab(self, doc=None) -> None:
+        view = getattr(self._doc, "stand_in", None)
+        if view is not None:
+            view._ui_docs = None
+
+    def _refresh_scene_tabs(self) -> None:
+        view = getattr(self._doc, "stand_in", None)
+        if view is not None:
+            view._ui_tabs = None
+
+    def _show_empty_area(self) -> None:
+        from views import wgpu_start
+        wgpu_start.show(self)
+
+    def _leave_empty_area(self) -> None:
+        pass
+
+    def _dismiss_home(self) -> None:
+        from views import wgpu_start
+        wgpu_start.hide(self)
+
+    # Commands from the menu bar, the chrome and the start page land here
+    # (app_shell.files).
+    def run_command(self, name, *args):
+        from app_shell import files
+        return files.command(self, name, *args)
+
+    # MainWindow's names for what app_shell.files does in the shell: the
+    # borrowed code (the unsaved-changes question's Save, the start page,
+    # the import pipelines, Paste) calls these.
+    def open_path(self, path):
+        from app_shell import files
+        return files.open_path(self, path)
+
+    def _on_open(self):
+        from app_shell import files
+        return files.open_dialog(self)
+
+    def _on_save(self):
+        from app_shell import files
+        files.save(self)
+
+    def _on_save_as(self):
+        from app_shell import files
+        files.save_as(self)
+
+    def _on_export_igz(self):
+        from app_shell import files
+        files.export_igz(self)
+
+    def _on_new_window(self):
+        from app_shell import files
+        files.new_window(self)
+
+    def _import_progress(self, title, *, monotonic=False):
+        from app_shell import files
+        return files.import_progress(self, title, monotonic=monotonic)
+
+    def _parse_skp_threaded(self, skp, cb):
+        from app_shell import files
+        return files.parse_skp_threaded(self, skp, cb)
+
+    def _dxf_options(self, path, header_scale=None):
+        from app_shell import files
+        return files.dxf_options(self, path, header_scale)
+
+    def _sync_foreign_clipboard(self):
+        from app_shell import files
+        files.sync_foreign_clipboard(self)
+
+    def _open_recent(self, path):
+        from app_shell import files
+        return files.open_path(self, path)
 
 
 #: MainWindow methods that only reach ``self.viewport`` and ``self._doc``:
-#: borrowed as they are (app_shell.borrow).
+#: borrowed eagerly (the rest come on demand, see ``ShellWindow.__getattr__``).
 _FROM_MAIN_WINDOW = ("_CAMERA_FIELDS", "_apply_camera_dict", "_apply_camera_home",
                      "_on_undo", "_on_redo", "_on_zoom_extents", "_extents_bounds",
-                     "_figure_bounds", "_image_bounds", "_on_zoom_selection")
+                     "_figure_bounds", "_image_bounds", "_on_zoom_selection",
+                     "_saved_version", "_is_dirty", "_doc_is_blank", "_free_untitled_no")
 
 
 def borrow_main_window():
-    from app_shell.borrow import borrow
-    from views.main_window import MainWindow
-    borrow(MainWindow, ShellWindow, skip=set(vars(MainWindow)) - set(_FROM_MAIN_WINDOW))
+    for name in _FROM_MAIN_WINDOW:
+        _lazy(name)

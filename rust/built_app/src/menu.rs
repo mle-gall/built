@@ -2,15 +2,17 @@
 //!
 //! Why muda and not only the egui top bar: the Mac expects the application
 //! menu (About, Hide, Quit with ⌘Q), and standard key equivalents (⌘O,
-//! ⌘Z, ⌘⇧Z, ⌘W) are dispatched by AppKit before a key reaches the view, so a
-//! value typed into the measurements box never collides with them. The egui
-//! chrome stays the place for tools and panels; the tools' single-letter
-//! shortcuts are not menu accelerators (Qt's ShortcutOverride order, see
-//! app_shell.host.Host.key).
+//! ⌘S, ⌘Z, ⌘⇧Z, ⌘W, ⌘C/⌘V) are dispatched by AppKit before a key reaches
+//! the view, so a value typed into the measurements box never collides
+//! with them. The egui chrome stays the place for tools and panels; the
+//! tools' single-letter shortcuts are not menu accelerators (Qt's
+//! ShortcutOverride order, see app_shell.host.Host.key).
 //!
 //! Each item's id is the command string the host understands
-//! (`app_shell.host.Host.menu`), or one the shell handles itself (`open`,
-//! `close`).
+//! (`app_shell.host.Host.menu`), or one the shell handles itself (`close`,
+//! `quit`: both ask about unsaved work first). Quit is our own item, not
+//! muda's predefined one: that one calls `[NSApp terminate:]`, which ends
+//! the process without asking.
 
 use muda::{
     accelerator::Accelerator, AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu,
@@ -19,12 +21,25 @@ use muda::{
 pub struct Menus {
     // Kept alive for the life of the app: dropping a muda menu removes it.
     _bar: Menu,
+    recent: Submenu,
 }
 
 fn item(id: &str, text: &str, accel: Option<&str>) -> MenuItem {
     let accel = accel.and_then(|a| a.parse::<Accelerator>().ok());
     MenuItem::with_id(id, text, true, accel)
 }
+
+/// The File menu's imports: (command, label). The command is
+/// `import:<suffix>` (app_shell.imports).
+pub const IMPORTS: &[(&str, &str)] = &[
+    ("import:skp", ".skp…"),
+    ("import:dae", "COLLADA (.dae)…"),
+    ("import:dxf", "DXF (.dxf)…"),
+    ("import:dwg", "DWG (.dwg)…"),
+    ("import:rfa", "Revit family (.rfa)…"),
+    ("import:glb", "glTF (.glb, .gltf)…"),
+    ("import:igz", "Built or IngeTrazo model, as a group…"),
+];
 
 pub fn build() -> muda::Result<Menus> {
     let bar = Menu::new();
@@ -36,10 +51,12 @@ pub fn build() -> muda::Result<Menus> {
                 Some("About Built"),
                 Some(AboutMetadata {
                     name: Some("Built".into()),
-                    comments: Some("Rust app shell (R1.1)".into()),
+                    comments: Some("Native app (Rust shell)".into()),
                     ..Default::default()
                 }),
             ),
+            &PredefinedMenuItem::separator(),
+            &item("prefs", "Settings…", Some("super+Comma")),
             &PredefinedMenuItem::separator(),
             &PredefinedMenuItem::services(None),
             &PredefinedMenuItem::separator(),
@@ -47,20 +64,49 @@ pub fn build() -> muda::Result<Menus> {
             &PredefinedMenuItem::hide_others(None),
             &PredefinedMenuItem::show_all(None),
             &PredefinedMenuItem::separator(),
-            &PredefinedMenuItem::quit(None),
+            &item("quit", "Quit Built", Some("super+KeyQ")),
         ],
     )?;
+    let recent = Submenu::with_items("Open Recent", true, &[&MenuItem::new("(no recent documents)", false, None)])?;
+    let imports: Vec<MenuItem> = IMPORTS.iter().map(|(id, label)| item(id, label, None)).collect();
+    let import_refs: Vec<&dyn muda::IsMenuItem> = imports.iter().map(|i| i as &dyn muda::IsMenuItem).collect();
+    let import = Submenu::with_items("Import", true, &import_refs)?;
     let file = Submenu::with_items(
         "File",
         true,
-        &[&item("open", "Open…", Some("super+KeyO")), &PredefinedMenuItem::separator(),
-          &item("close", "Close Window", Some("super+KeyW"))],
+        &[&item("new", "New", Some("super+KeyN")),
+          &item("new_window", "New Window", Some("super+shift+KeyN")),
+          &item("open", "Open…", Some("super+KeyO")),
+          &recent,
+          &item("home", "Start Page", None),
+          &PredefinedMenuItem::separator(),
+          &item("close_tab", "Close Project", Some("super+KeyW")),
+          &item("close", "Close Window", Some("super+shift+KeyW")),
+          &PredefinedMenuItem::separator(),
+          &item("save", "Save", Some("super+KeyS")),
+          &item("save_as", "Save As…", Some("super+shift+KeyS")),
+          &item("save_copy", "Save a Copy…", Some("super+alt+KeyS")),
+          &item("export_igz", "Save a Copy as IngeTrazo (.igz)…", None),
+          &PredefinedMenuItem::separator(),
+          &import,
+          &item("link", "Link a Document…", None),
+          &item("reload_links", "Reload Linked Files", None),
+          &PredefinedMenuItem::separator(),
+          &item("classic", "Open in Classic App", None)],
     )?;
     let edit = Submenu::with_items(
         "Edit",
         true,
         &[&item("undo", "Undo", Some("super+KeyZ")),
-          &item("redo", "Redo", Some("super+shift+KeyZ"))],
+          &item("redo", "Redo", Some("super+shift+KeyZ")),
+          &PredefinedMenuItem::separator(),
+          &item("cut", "Cut", Some("super+KeyX")),
+          &item("copy", "Copy", Some("super+KeyC")),
+          &item("paste", "Paste", Some("super+KeyV")),
+          &item("paste_in_place", "Paste in Place", Some("super+alt+KeyV")),
+          &PredefinedMenuItem::separator(),
+          &item("select_all", "Select All", Some("super+KeyA")),
+          &item("select_none", "Select None", Some("super+KeyT"))],
     )?;
     let view = Submenu::with_items(
         "Camera",
@@ -85,7 +131,10 @@ pub fn build() -> muda::Result<Menus> {
     let window = Submenu::with_items(
         "Window",
         true,
-        &[&PredefinedMenuItem::minimize(None), &PredefinedMenuItem::maximize(None)],
+        &[&PredefinedMenuItem::minimize(None), &PredefinedMenuItem::maximize(None),
+          &PredefinedMenuItem::separator(),
+          &item("next_doc", "Next Project", Some("ctrl+Tab")),
+          &item("prev_doc", "Previous Project", Some("ctrl+shift+Tab"))],
     )?;
     bar.append_items(&[&app, &file, &edit, &view, &tools, &window])?;
     #[cfg(target_os = "macos")]
@@ -93,5 +142,26 @@ pub fn build() -> muda::Result<Menus> {
         bar.init_for_nsapp();
         window.set_as_windows_menu_for_nsapp();
     }
-    Ok(Menus { _bar: bar })
+    Ok(Menus { _bar: bar, recent })
+}
+
+impl Menus {
+    /// File ▸ Open Recent from the host's list (paths, newest first):
+    /// `recent:<index>` items, then Clear.
+    pub fn set_recent(&self, paths: &[String]) {
+        for _ in 0..self.recent.items().len() {
+            let _ = self.recent.remove_at(0);
+        }
+        if paths.is_empty() {
+            let _ = self.recent.append(&MenuItem::new("(no recent documents)", false, None));
+            return;
+        }
+        for (i, p) in paths.iter().enumerate() {
+            let name = std::path::Path::new(p).file_name().map_or(p.clone(), |n| n.to_string_lossy().to_string());
+            let parent = std::path::Path::new(p).parent().map(|d| d.to_string_lossy().to_string()).unwrap_or_default();
+            let _ = self.recent.append(&item(&format!("recent:{i}"), &format!("{name}  —  {parent}"), None));
+        }
+        let _ = self.recent.append(&PredefinedMenuItem::separator());
+        let _ = self.recent.append(&item("recent:clear", "Clear Menu", None));
+    }
 }
