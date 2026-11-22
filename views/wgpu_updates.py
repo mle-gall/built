@@ -232,8 +232,29 @@ class InstanceUpdates:
             variant = next((v[code] for v in self.variants.values() if code in v), None)
             if variant is None:
                 return None
-            out.append((row, chain[-1], matrix, variant[0]))
+            world = np.eye(4, dtype=np.float32) if matrix is None else np.asarray(matrix.data(), np.float32).reshape(4, 4)
+            out.append((row, chain[-1], world, variant[0]))
         return out
+
+    def _link_swaps(self):
+        change = getattr(self.scene, '_link_mesh_changes', None)
+        if (not change or change[2] is None or not self.journal_valid
+                or self.pending or self.pending_meshes or self.pending_materials
+                or self.pending_removed or self.pending_swaps or self.scene._edit_stack
+                or change[:2] != (self.version + self.scene._placement_context_bumps,
+                                  self.scene.content_version)):
+            return None
+        swaps = []
+        for group, old_mesh in change[2]:
+            row = self.rows.get(group.uid)
+            if row is None or group.uid not in self.active:
+                return None
+            code = int(self.packed.instances['info'][row, 0])
+            variant = self.variants.get(old_mesh, {}).get(code)
+            if variant is None:
+                return None
+            swaps.append((row, group, self.packed.instances['world'][row], variant[0]))
+        return swaps
 
     def _new_prototype(self, mesh, key, paint, mode, old, fresh):
         """Allocate a prototype code for a variant never drawn before."""
@@ -260,9 +281,8 @@ class InstanceUpdates:
         if scene is not self.scene:
             return None
         local = self.unsubscribe is not None and self.journal_valid and _resident_version(scene) == self.version
-        swaps = self._resolve_swaps() if local else None
-        if swaps is None:
-            local = False
+        swaps = self._resolve_swaps() if local else self._link_swaps()
+        local = swaps is not None
         self.pending_swaps.clear()
         self.last_local = local
         placements = [] if local else [(None, None, None, 0)]
@@ -327,7 +347,7 @@ class InstanceUpdates:
             if row >= len(self.packed.instances) or value.tobytes() != self.packed.instances[row].tobytes():
                 ids.append(row)
                 values.append(value)
-        for row, group, matrix, paint in swaps or ():
+        for row, group, world, paint in swaps or ():
             # Same group, same paint and flags: its prototype and matrix.
             mesh = group.mesh
             mode = getattr(group, 'billboard', False)
@@ -340,8 +360,7 @@ class InstanceUpdates:
                 changed[id(mesh)] = old
             self.packed.groups[row] = group
             value = self.packed.instances[row].copy()
-            value['world'] = (np.eye(4, dtype=np.float32) if matrix is None
-                              else np.asarray(matrix.data(), np.float32).reshape(4, 4))
+            value['world'] = world
             value['info'][0] = code
             if value.tobytes() != self.packed.instances[row].tobytes():
                 ids.append(row)

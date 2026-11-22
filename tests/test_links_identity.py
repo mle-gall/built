@@ -1,4 +1,5 @@
 """Link identities belong to source placements, independent of labels and reloads."""
+import pytest
 from core import links
 from core.group import Group, iter_placements
 from core.scene import Scene
@@ -125,9 +126,9 @@ def test_source_only_skips_nested_file_before_selecting(tmp_path, monkeypatch):
     opened = []
     read = igz._load_into_inner
 
-    def record_read(scene, path, progress):
+    def record_read(scene, path, progress, link_meshes=None):
         opened.append(path)
-        return read(scene, path, progress)
+        return read(scene, path, progress, link_meshes)
 
     monkeypatch.setattr(igz, '_load_into_inner', record_read)
     host = Scene()
@@ -135,3 +136,59 @@ def test_source_only_skips_nested_file_before_selecting(tmp_path, monkeypatch):
                              select={'uids': [link.uid, local.uid]})
     assert opened == [middle_path]
     assert [child.name for child in placed.children] == ['local']
+
+
+def test_bridge_source_save_updates_one_binary_mesh_in_resident_scene(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from PySide6.QtGui import QVector3D as V
+    from core.history import History
+    from plugins.ai_bridge import _Bridge
+    from tests.test_wgpu_updates import assert_matches_fresh_pack
+    from views.wgpu_scene import pack_scene
+    from views.wgpu_updates import InstanceUpdates
+
+    monkeypatch.setattr(igz, "_LARGE_DOCUMENT", 0)
+    src = Scene()
+    for i in range(300):
+        g = Group(name=str(i))
+        g.xform = QMatrix4x4()
+        g.xform.translate(i, 2, 0)
+        g.mesh.add_face([V(), V(1, 0, 0), V(0, 1, 0)])
+        src.groups.append(g)
+    path = tmp_path / "assembly.igz"
+    igz.save_scene(src, path)
+    host = Scene()
+    placed = links.make_link(host, path)
+    host.groups.append(placed)
+    old_groups = list(placed.children)
+    old_meshes = [g.mesh for g in old_groups]
+    host.selection.add(old_groups[1])
+    updates = InstanceUpdates(host, pack_scene(host))
+    updates.observe(History(host))
+
+    vp = SimpleNamespace(scene=src, history=History(src), notify_scene_changed=lambda: None)
+    reply = _Bridge._tool_run_python(SimpleNamespace(_scope={}, _viewport=vp),
+                                     'm=groups[17].mesh; m.move_vertex(m.vertices[0], QVector3D(0,0,1))')
+    assert reply["changed"] and not reply["error"]
+    igz.save_scene(src, path)
+    inflated = []
+    read = igz._read_geometry_members
+
+    def track(archive, path, payload, skip=()):
+        got = read(archive, path, payload, skip)
+        inflated.extend(got)
+        return got
+
+    monkeypatch.setattr(igz, "_read_geometry_members", track)
+    monkeypatch.setattr(links, "_apply_tags", lambda *a: pytest.fail("unchanged tags"))
+    links.reload(host, path)
+    assert len(inflated) == 1
+    assert placed.children == old_groups
+    assert [i for i, g in enumerate(placed.children) if g.mesh is not old_meshes[i]] == [17]
+    assert old_groups[1] in host.selection
+    ids, rows = updates.diff(host)
+    assert updates.last_local
+    assert ids.tolist() == [17]
+    assert len(updates.changed) == 1
+    updates.apply(ids, rows)
+    assert_matches_fresh_pack(updates, host)

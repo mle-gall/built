@@ -60,7 +60,6 @@ class LinkWatcher(QObject):
 
     def _flush(self) -> None:
         from core import links
-        from core.history import _dirty_group_chunks
         paths, self._pending = self._pending, set()
         reloaded, failed = [], []
         for path in paths:
@@ -75,7 +74,6 @@ class LinkWatcher(QObject):
                 except links.LinkError as exc:
                     failed.append(str(exc))
                     continue
-                _dirty_group_chunks(scene)
                 vp = getattr(doc, "viewport", None)
                 if vp is not None:
                     notify = getattr(vp, "notify_scene_changed", None)

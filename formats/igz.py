@@ -1483,7 +1483,7 @@ def _empty_mesh():
     return _EMPTY[0]
 
 
-def load_into(scene, path: Path, progress=None, *, include_links=True) -> None:
+def load_into(scene, path: Path, progress=None, *, include_links=True, link_meshes=None) -> None:
     """Replace ``scene`` contents with what's stored at ``path``.
 
     ``progress(fraction, text)``, when given, is called at the loader's
@@ -1502,7 +1502,7 @@ def load_into(scene, path: Path, progress=None, *, include_links=True) -> None:
     _gc_was_enabled = gc.isenabled()
     gc.disable()
     try:
-        _load_into_inner(scene, path, progress)
+        _load_into_inner(scene, path, progress, link_meshes)
         _load_links(scene, path, include_links)
     finally:
         if _gc_was_enabled:
@@ -1625,7 +1625,7 @@ class _GeomMembers(dict):
 _NATIVE_ZIP_FLAGS = 0x2 | 0x4 | 0x8 | 0x800
 
 
-def _read_geometry_members(archive, path: Path, payload: dict) -> dict:
+def _read_geometry_members(archive, path: Path, payload: dict, skip=()) -> dict:
     """Format 3's binary geometry blocks, read while the archive is open.
 
     With the Rust engine the members are inflated in parallel off the GIL
@@ -1636,7 +1636,7 @@ def _read_geometry_members(archive, path: Path, payload: dict) -> dict:
     an unusual member, a block it does not accept, an engine that fails —
     is read and checked here exactly as before, so a damaged document
     fails with the same message either way."""
-    names = [n for n in archive.namelist() if n.startswith(_GEOM_PREFIX)]
+    names = [n for n in archive.namelist() if n.startswith(_GEOM_PREFIX) and n not in skip]
     out = _GeomMembers()
     native = None
     if names:
@@ -1742,7 +1742,7 @@ def _normalize_text_curve_ids(payload: dict, geom: dict) -> None:
         raw["curve"] = ids[name]
 
 
-def _load_into_inner(scene, path: Path, progress=None) -> None:
+def _load_into_inner(scene, path: Path, progress=None, link_meshes=None) -> None:
     def tick(frac, text):
         if progress is not None:
             progress(frac, text)
@@ -1754,6 +1754,19 @@ def _load_into_inner(scene, path: Path, progress=None) -> None:
     data, archive = _read_document(
         path, pump=(lambda: tick(0.1, "Reading the document…"))
         if progress is not None else None)
+    payload = data.get("scene", {})
+
+    def read_materials():
+        from core.materials import Material
+        materials = {}
+        for raw in payload.get("materials", []):
+            mat = Material.from_dict(raw)
+            if mat.name:
+                materials[mat.name] = mat
+        if link_meshes is not None:
+            link_meshes.prepare(materials, payload)
+        return materials
+
     survey = None
     geom: dict = {}
     try:
@@ -1764,12 +1777,16 @@ def _load_into_inner(scene, path: Path, progress=None) -> None:
                     scene._home_thumbnail_png = archive.read(info)
             # Format 3's binary geometry blocks, read while the archive is
             # open (it closes below).
-            geom = _read_geometry_members(archive, path, data.get("scene", {}))
             tick(0.2, "Unpacking textures…")
-            _unpack_textures(data.get("scene", {}), archive)
+            _unpack_textures(payload, archive)
+            materials = read_materials()
+            skip = link_meshes.unchanged_members(archive, payload) if link_meshes else ()
+            geom = _read_geometry_members(archive, path, payload, skip)
             # Rebuilt here, while the archive is still open — it closes below
             # and the survey's blobs live inside it.
-            survey = _unpack_photo_mesh(data.get("scene", {}), archive)
+            survey = _unpack_photo_mesh(payload, archive)
+        else:
+            materials = read_materials()
     finally:
         if archive is not None:
             archive.close()
@@ -1820,7 +1837,6 @@ def _load_into_inner(scene, path: Path, progress=None) -> None:
         Scene.__dataclass_fields__["dimension_style"].default_factory()
 
     tick(0.35, "Building geometry…")
-    _load_mesh(scene.mesh, payload, geom)
     raw_layers = payload.get("layers")
     if raw_layers:
         from core.layers import DEFAULT_LAYER, Layer
@@ -1872,12 +1888,16 @@ def _load_into_inner(scene, path: Path, progress=None) -> None:
             scene.tile_layer = TileLayer.from_dict(raw_tiles)
         except Exception:  # noqa: BLE001 — a bad block costs the map, not the file
             scene.tile_layer = None
-    from core.materials import Material
-    scene.materials = {}
-    for raw in payload.get("materials", []):
-        mat = Material.from_dict(raw)
-        if mat.name:
-            scene.materials[mat.name] = mat
+
+    scene.materials = materials
+
+    def read_mesh(mesh, block, identity):
+        if link_meshes is not None:
+            return link_meshes.read(mesh, block, geom, identity)
+        _load_mesh(mesh, block, geom)
+        return mesh
+
+    scene.mesh = read_mesh(scene.mesh, payload, ("loose",))
     from core.saved_views import SavedView
     scene.saved_views = [SavedView.from_dict(r)
                          for r in payload.get("saved_views", [])]
@@ -1906,8 +1926,7 @@ def _load_into_inner(scene, path: Path, progress=None) -> None:
     last = _time.monotonic()
     for k, raw in enumerate(raw_protos):
         m = Mesh()
-        _load_mesh(m, raw, geom)
-        proto_meshes.append(m)
+        proto_meshes.append(read_mesh(m, raw, ("proto", k)))
         if _time.monotonic() - last > 0.25:
             # Thousands of components took 25 s here without a word to the
             # window, which the desktop reads as a hang (#158).
@@ -1934,7 +1953,7 @@ def _load_into_inner(scene, path: Path, progress=None) -> None:
             group.xform = QMatrix4x4(*rm)
         else:
             group = Group(name=name, uid=uid)
-            _load_mesh(group.mesh, raw, geom)
+            group.mesh = read_mesh(group.mesh, raw, ("group", group.uid))
         if isinstance(raw.get("axes"), list) and len(raw["axes"]) == 16:
             from PySide6.QtGui import QMatrix4x4
             vals = [float(x) for x in raw["axes"]]

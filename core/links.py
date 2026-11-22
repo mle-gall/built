@@ -167,7 +167,7 @@ def locate(link: dict, host_path=None) -> Path | None:
     return p if p.is_file() else None
 
 
-def load_source(path, select=None, *, include_nested=True):
+def load_source(path, select=None, *, include_nested=True, link_meshes=None):
     """``(definition, source scene)`` for the .igz at ``path``: the whole
     document as one component definition (``core.insert``), its own links
     resolved first. Raises :class:`LinkError`."""
@@ -185,7 +185,7 @@ def load_source(path, select=None, *, include_nested=True):
     stack.append(key)
     try:
         src = Scene()
-        igz.load_into(src, Path(path), include_links=include_nested)
+        igz.load_into(src, Path(path), include_links=include_nested, link_meshes=link_meshes)
         # A cycle further down is this link's failure too; a source of the
         # source that is merely missing is not (its copies show empty).
         for err in (getattr(src, "link_errors", None) or {}).values():
@@ -227,6 +227,7 @@ def load_source(path, select=None, *, include_nested=True):
                         visit(group.children or (), world)
             visit(groups, QMatrix4x4())
             groups, mesh = selected, Mesh()
+            mesh.__dict__['_link_geometry'] = ((str(path), 'subset-root'), mesh.revision)
         comp = Group(mesh, name=stem(path))
         comp.adopt(groups)
     except LinkError:
@@ -406,7 +407,7 @@ def _restamp_faces(faces, renamed) -> None:
             back["mat"] = renamed[back["mat"]]
 
 
-def _rename_tags(comp, path) -> None:
+def _rename_tags(comp, path, reused=()) -> None:
     """Move the definition's geometry onto the host's names for the
     source's tags (:func:`tag_name`)."""
     from core.group import iter_placements
@@ -426,7 +427,7 @@ def _rename_tags(comp, path) -> None:
     for g, _m in iter_placements(comp):
         if g is not comp:
             assign_layer(g, rename(layer_of(g)))
-        if id(g.mesh) in seen:
+        if g.mesh in reused or id(g.mesh) in seen:
             continue
         seen.add(id(g.mesh))
         if _relabel_deferred(g.mesh, rename, shared):
@@ -435,6 +436,28 @@ def _rename_tags(comp, path) -> None:
             assign_layer(f, rename(layer_of(f)))
         for e in g.mesh.edges:
             assign_layer(e, rename(layer_of(e)))
+
+
+def _sync_tags(scene, path, tags):
+    """Reconcile only when the source table or its mirror in this host moved."""
+    key = _norm(path)
+    cache = scene.__dict__.setdefault('_link_tag_tables', {})
+    def mirror():
+        entry = _entry(scene, path)
+        wanted = set(entry.get("tags", ()))
+        own = stem(path)
+        folders = tuple((f, scene.folder_parents.get(f), scene.folder_visibility.get(f),
+                         scene.layer_folder_names.get(f), scene.layer_folder_uids.get(f))
+                        for f in scene.layer_folders
+                        if f in (LINKED_FOLDER, own) or f.startswith(own + SEP))
+        return ([ly.to_dict() for ly in scene.layers if ly.key in wanted], folders,
+                dict(entry['overrides']))
+    old = cache.get(key)
+    if old is None or old[0] != tags or old[1] != mirror():
+        _apply_tags(scene, path, tags)
+        cache[key] = tags, mirror()
+        return True
+    return False
 
 
 def _apply_tags(scene, path, tags) -> None:
@@ -633,32 +656,118 @@ def _Group():
     return _GROUP_CLASS
 
 
-def _populate(placement, source):
+_PLACEMENT_FIELDS = ("name", "layer", "billboard", "context", "text3d", "hidden",
+                     "material", "axes", "component", "exploded", "explode_offset", "locked")
+
+
+def _populate(placement, source, *, reconcile=False, selection=None):
+    """Install a source tree, retaining matching host objects on a reload.
+    Return the changed mesh bindings if every placement kept its draw state.
+    """
     from copy import deepcopy
     from PySide6.QtGui import QMatrix4x4
+    from core.purge import iter_groups
+    previous = {g.uid: g for g in iter_groups(placement.children)} if reconcile else {}
+
+    swaps = []
+    structure_changed = False
+    installed = {}
+    claimed = set()
+
+    def install_mesh(mesh, old):
+        if not reconcile:
+            return mesh
+        if mesh in installed:
+            return installed[mesh]
+        stamp = old.__dict__.get('_link_geometry') if old is not None else None
+        incoming = mesh.__dict__.get('_link_geometry')
+        if (stamp and incoming and stamp[0] == incoming[0]
+                and stamp[1] == old.revision and old not in claimed):
+            mesh_to_use = old
+        else:
+            mesh_to_use = mesh
+        installed[mesh] = mesh_to_use
+        claimed.add(mesh_to_use)
+        return mesh_to_use
+
     def clone(group, parent):
-        result = _clone_shell(group)
-        result.uid = stable_uid(placement.uid, group.uid)
-        # Most cloned groups carry neither: skip deepcopy's machinery for
-        # None (anything else, even an empty dict, is still copied).
-        ext = group.ext
-        result.ext = None if ext is None else deepcopy(ext)
+        nonlocal structure_changed
+        uid = stable_uid(placement.uid, group.uid)
+        result = previous.pop(uid, None)
+        old = result.mesh if result is not None else None
+        new = result is None
+        if new:
+            structure_changed = True
+            result = _clone_shell(group)
+            result.uid = uid
+        else:
+            for name in _PLACEMENT_FIELDS:
+                value = getattr(group, name, None)
+                if getattr(result, name, None) != value:
+                    structure_changed = True
+                    setattr(result, name, deepcopy(value))
+        result.mesh = install_mesh(group.mesh, old)
+        if old is not None and result.mesh is not old:
+            swaps.append((result, id(old)))
+        if new or result.ext != group.ext:
+            result.ext = deepcopy(group.ext) if group.ext is not None else None
         ifc = group.ifc
-        result.ifc = None if ifc is None else deepcopy(ifc)
-        if result.ifc:
-            for opening in result.ifc.get('openings', []):
+        if ifc and ifc.get('openings'):
+            ifc = deepcopy(ifc)
+            for opening in ifc['openings']:
                 if opening.get('group_uid'):
                     opening['group_uid'] = stable_uid(placement.uid, opening['group_uid'])
-        result.xform = QMatrix4x4(group.xform) if group.xform is not None else None
+        if new or result.ifc != ifc:
+            result.ifc = deepcopy(ifc) if ifc is not None else None
+        if new or result.xform != group.xform:
+            structure_changed = True
+            result.xform = QMatrix4x4(group.xform) if group.xform is not None else None
         result.owner = parent
-        result.children = [clone(c, result) for c in group.children or ()]
+        children = [clone(c, result) for c in group.children or ()]
+        if result.children != children:
+            structure_changed = True
+            result.children = children
         return result
-    placement.mesh = source.mesh
-    placement.children = [clone(c, placement) for c in source.children or ()]
+    old_mesh = placement.mesh
+    placement.mesh = install_mesh(source.mesh, old_mesh)
+    if placement.mesh is not old_mesh:
+        swaps.append((placement, id(old_mesh)))
+    children = [clone(c, placement) for c in source.children or ()]
+    if placement.children != children:
+        structure_changed = True
+        placement.children = children
+    if selection is not None:
+        for removed in previous.values():
+            selection.discard(removed)
     placement.component = True
+    return None if structure_changed or previous else swaps
 
 
 # ---- the entry points --------------------------------------------------------------
+
+def _read_definition(registry, path, select, include_nested, previous=None):
+    from core.link_meshes import LinkMeshes
+    from core.purge import iter_groups
+    from core.insert import merge_materials
+    reader = LinkMeshes(path, registry, previous, filtered=select is not None and 'filter' in select)
+    comp, tags, materials = load_source(path, select, include_nested=include_nested,
+                                        link_meshes=reader)
+    _rename_tags(comp, path, reader.reused)
+    renamed = merge_materials(materials, registry, comp, reused=reader.reused)
+    seen = set()
+    for group in iter_groups([comp]):
+        mesh = group.mesh
+        if mesh in seen or mesh in reader.reused:
+            continue
+        seen.add(mesh)
+        stamp = mesh.__dict__.get('_link_geometry')
+        if stamp:
+            key = stamp[0]
+            if key[0] != str(path):
+                key = (str(path), tuple(renamed.items()), 'nested', key)
+            mesh.__dict__['_link_geometry'] = key, mesh.revision
+    return comp, tags
+
 
 def make_link(scene, path, host_path=None, select=None, *, include_nested=True):
     """A copy of the .igz at ``path`` ready to place in ``scene`` (by the
@@ -667,10 +776,8 @@ def make_link(scene, path, host_path=None, select=None, *, include_nested=True):
     path = Path(path).resolve()
     if host_path is not None and _norm(path) == _norm(host_path):
         raise LinkError("a document cannot link itself")
-    comp, tags, materials = load_source(path, select, include_nested=include_nested)
-    _rename_tags(comp, path)
-    _merge_materials(scene, materials, comp)
-    _apply_tags(scene, path, tags)
+    comp, tags = _read_definition(scene.materials, path, select, include_nested)
+    _sync_tags(scene, path, tags)
     comp.ext = {LINK_KEY: _link_record(path, host_path)}
     if not include_nested:
         comp.ext[LINK_KEY]["include_nested"] = False
@@ -694,21 +801,13 @@ def _link_record(path, host_path) -> dict:
     return rec
 
 
-def _merge_materials(scene, materials, comp) -> None:
-    if materials:
-        from core.insert import merge_materials
-        merge_materials(materials, scene.materials, comp)
-
-
 def set_include_nested(scene, group, enabled):
     """Refresh one placement from disk with the chosen nested-link policy."""
     rec = link_of(group)
     path = rec["path"]
-    comp, tags, materials = load_source(path, rec.get("select"), include_nested=enabled)
-    _rename_tags(comp, path)
-    _merge_materials(scene, materials, comp)
-    _apply_tags(scene, path, tags)
-    _populate(group, comp)
+    comp, tags = _read_definition(scene.materials, path, rec.get("select"), enabled, group)
+    _sync_tags(scene, path, tags)
+    _populate(group, comp, reconcile=True, selection=scene.selection)
     rec["include_nested"] = enabled
     scene.version += 1
 
@@ -716,20 +815,34 @@ def set_include_nested(scene, group, enabled):
 def reload(scene, path, host_path=None) -> None:
     """Read ``path`` again and show it in every copy. Raises
     :class:`LinkError` (the copies keep what they showed)."""
-    # Prepare every subset before changing any placement.
+    # Prepare every subset before changing any placement or host material.
+    path = Path(path).resolve()
+    materials = dict(scene.materials)
     prepared = []
+    definitions = {}
     for group in linked_groups(scene, path):
         rec = link_of(group)
-        comp, tags, materials = load_source(path, rec.get('select'),
-                                           include_nested=rec.get('include_nested', True))
-        _rename_tags(comp, path)
-        _merge_materials(scene, materials, comp)
+        config = (repr(rec.get('select')), rec.get('include_nested', True))
+        if config not in definitions:
+            definitions[config] = _read_definition(materials, path, rec.get('select'), config[1], group)
+        comp, tags = definitions[config]
         prepared.append((group, comp, tags))
-    for group, comp, tags in prepared:
-        _apply_tags(scene, path, tags)
-        _populate(group, comp)
+    before = scene.content_version
+    swaps = []
+    scene.materials.update(materials)
+    for group, comp, _tags in prepared:
+        changed = _populate(group, comp, reconcile=True, selection=scene.selection)
+        if changed is None:
+            swaps = None
+        elif swaps is not None:
+            swaps.extend(changed)
+    if prepared and _sync_tags(scene, path, prepared[0][2]):
+        swaps = None
     _entry(scene, path)['loaded_mtime_ns'] = Path(path).stat().st_mtime_ns
     scene.version += 1
+    # A view that has exactly the previous revision can retain every matrix,
+    # paint and pick ID. A missed revision or tree/tag change uses its diff.
+    scene._link_mesh_changes = (before, scene.content_version, swaps)
 
 
 def resolve(scene, host_path=None) -> dict:

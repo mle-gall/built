@@ -10330,8 +10330,6 @@ class MainWindow(WorksessionMixin, QMainWindow):
         return True
 
     def _relink_done(self, note: str) -> None:
-        from core.history import _dirty_group_chunks
-        _dirty_group_chunks(self.viewport.scene)
         self.viewport.notify_scene_changed()
         self.viewport.update()
         self._refresh_layer_views()
