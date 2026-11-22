@@ -54,14 +54,8 @@ class _PruneOnUndo(Command):
         self._gone: list = []
 
     def do(self, scene) -> None:
-        from core.mesh import _key
-        m = scene.mesh
-        for v in self._gone:
-            m.vertices.append(v)
-            m._registry.setdefault(_key(v.position), v)
         if self._gone:
-            m._chunk_dirty = True
-            m._mut_serial += 1     # box / chunk caches key on it
+            scene.mesh.relink_vertices(self._gone)
         self._gone = []
 
     def undo(self, scene) -> None:
@@ -71,9 +65,9 @@ class _PruneOnUndo(Command):
         kept = {v.key for v in m.vertices}
         self._gone = [v for k, v in before.items() if k not in kept]
         from core.mesh import Face
-        live = set(map(id, m.faces))
+        live = {f.key for f in m.faces}
         for ent in list(scene.selection):
-            if isinstance(ent, Face) and id(ent) not in live:
+            if isinstance(ent, Face) and ent.key not in live:
                 scene.selection.discard(ent)
         scene.version += 1
 

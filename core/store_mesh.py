@@ -590,10 +590,7 @@ class FaceView(_ViewMixin, Face):
         does this (the store's own revision moves, for the view caches)."""
         st = _store_of(self._m)
         if st is None:
-            obj = self._obj()
-            obj.loop.reverse()
-            for h in obj.hole_loops:
-                h.reverse()
+            self._obj().reverse_rings()
             return
         st.reverse_face(self.key)
 
@@ -1375,6 +1372,10 @@ class StoreMesh(Mesh):
         self.__dict__.pop("_bulk", None)
         return [VertexView(self, v) for v in keys]
 
+    def relink_hole(self, face, ring) -> None:
+        self._store.relink_hole(face.key, [v.key for v in ring])
+        self.__dict__.pop("_bulk", None)
+
     def remove_hole(self, face, loop) -> None:
         k = self._own(face, 2)
         loop = list(loop)
@@ -1625,12 +1626,10 @@ class StoreMesh(Mesh):
                 _Indexed(self, st.keys("edge"), EdgeView))
 
     def revert_stitch(self, rec) -> None:
-        """A record made by the store goes back by its snapshot (LIFO, as
-        the Python per-op inverse assumes too); a Python record runs the
-        Python kernel."""
+        """Undo a stitch recorded by this store by restoring its snapshot."""
         undo = rec.get("_undo")
-        if undo is None:
-            return self._py("revert_stitch", rec)
+        if not isinstance(undo, StoreState) or undo.mesh is not self:
+            raise ValueError("stitch record has no snapshot of this mesh")
         self.restore_state(undo)
 
     def resplit_curves(self) -> None:
@@ -1845,7 +1844,7 @@ class MaterialisedMesh(Mesh):
 for _name in ("curve_edges", "remove_edge", "relink_vertices",
               "drop_orphan_vertices", "add_edges_welded", "add_faces_welded",
               "surface_of", "remove_face", "relink_edge", "relink_face",
-              "add_hole", "remove_hole", "edges_at", "faces_at", "registers",
+              "add_hole", "relink_hole", "remove_hole", "edges_at", "faces_at", "registers",
               "split_edge", "_weld_into", "interior_vertex_on",
               "split_edge_at", "collapsible_vertex", "collapse_vertex",
               "dissolve_edge_recorded", "dissolve_coplanar_pair",

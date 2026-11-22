@@ -27,6 +27,7 @@ pub mod py;
 pub mod read;
 pub mod stitch;
 pub mod topo;
+mod hole;
 #[cfg(test)]
 mod tests;
 

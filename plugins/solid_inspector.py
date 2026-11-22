@@ -365,7 +365,7 @@ def _agree_with_neighbour(mesh, face) -> None:
     if other is None:
         return
     if any(x == a and y == b for x, y in _steps(other)):
-        face.loop.reverse()
+        face.reverse_rings()
 
 
 def _cap(mesh, loop):

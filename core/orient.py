@@ -813,8 +813,7 @@ def orient_outward(mesh, seed: int = 12345, only=None) -> list:
     if not mesh_closed and to_flip:
         import copy
         for f in to_flip:
-            saved[f] = (copy.deepcopy(f.attrs), list(f.loop),
-                        [list(h) for h in f.hole_loops])
+            saved[f] = copy.deepcopy(f.attrs)
         members: dict = {}
         flip_comps = {comp_of[f] for f in to_flip}
         for f in scope:
@@ -835,19 +834,8 @@ def orient_outward(mesh, seed: int = 12345, only=None) -> list:
         if worse:
             for f in to_flip:
                 if comp_of[f] in worse:
-                    attrs, loop, holes = saved[f]
-                    f.attrs = attrs
-                    reverse = getattr(f, "reverse_rings", None)
-                    if reverse is not None:
-                        # A store-backed face: turning it over reversed
-                        # each ring, so reversing them again IS the old
-                        # rings — one store op, where writing the saved
-                        # loop back materialised the whole mesh.
-                        reverse()
-                        continue
-                    f.loop[:] = loop
-                    for h, old in zip(f.hole_loops, holes):
-                        h[:] = old
+                    f.attrs = saved[f]
+                    f.reverse_rings()
             to_flip = [f for f in to_flip if comp_of[f] not in worse]
     return shell_flips + to_flip
 
