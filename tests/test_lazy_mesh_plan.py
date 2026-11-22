@@ -30,7 +30,7 @@ def binary(monkeypatch):
 
 def _compare(plan, m):
     vid = {v.key: i for i, v in enumerate(m.vertices)}
-    assert plan.pos.tolist() == [list(v.position.toTuple())
+    assert plan.pos.tolist() == [list(v.position_tuple())
                                  for v in m.vertices]
     assert plan.edges.tolist() == [[vid[e.v0.key], vid[e.v1.key]]
                                    for e in m.edges]
@@ -68,7 +68,8 @@ def test_plan_is_the_built_mesh(binary, tmp_path, seed):
 
 
 @pytest.mark.parametrize("engine", ["numpy", "rust"])
-def test_weld_is_bulk_weld(monkeypatch, engine):
+@pytest.mark.parametrize("dtype", [np.float32, np.float64])
+def test_weld_is_bulk_weld(monkeypatch, engine, dtype):
     """The weld alone, on raw points crowded at cell borders — the NumPy
     replay and the Rust one."""
     mod = _native.available()
@@ -82,11 +83,11 @@ def test_weld_is_bulk_weld(monkeypatch, engine):
             c = [rng.randrange(-3, 3) * 0.5 + rng.choice(
                 [0, 4.9e-5, 5.1e-5, -5e-5, 1e-6, 9.9e-5]) for _ in range(3)]
             pts.append(c)
-        pts = np.array(pts)
+        pts = np.array(pts, dtype=dtype)
         m = M.Mesh()
         vobjs, ids = m.bulk_weld(pts)
         vpos, pid = lazy_mesh.weld(pts)
-        assert vpos.tolist() == [list(v.position.toTuple())
+        assert vpos.tolist() == [list(v.position_tuple())
                                  for v in m.vertices]
         assert [vobjs[i].key for i in ids.tolist()] == \
             [m.vertices[i].key for i in pid.tolist()]
@@ -125,11 +126,11 @@ def test_sequential_weld_is_vertex_by_vertex(monkeypatch, engine):
     for _ in range(30):
         pts = np.array([[rng.randrange(-3, 3) * 0.5 + rng.choice(
             [0, 4.9e-5, 5.1e-5, -5e-5, 1e-6, 9.9e-5]) for _ in range(3)]
-            for _ in range(rng.randrange(1, 300))])
+            for _ in range(rng.randrange(1, 300))], dtype=np.float32)
         m = M.Mesh()
         vs = [m.vertex(V(*p)) for p in pts.tolist()]
         vpos, pid = lazy_mesh.weld(pts, sequential=True)
-        assert vpos.tolist() == [list(v.position.toTuple())
+        assert vpos.tolist() == [list(v.position_tuple())
                                  for v in m.vertices]
         assert [m.vertices[i].key for i in pid.tolist()] == \
             [v.key for v in vs]
@@ -166,5 +167,29 @@ def test_near_coincident_cloud_keeps_the_plan_vertex_order(monkeypatch, engine, 
     mesh = M.Mesh()
     vertices, ids = mesh.bulk_weld(points)
     pos, planned_ids = lazy_mesh.weld(points)
-    assert pos.tolist() == [list(v.position.toTuple()) for v in mesh.vertices]
+    assert pos.tolist() == [list(v.position_tuple()) for v in mesh.vertices]
     assert [mesh.vertices.index(vertices[i]) for i in ids] == planned_ids.tolist()
+
+
+@pytest.mark.parametrize("dtype, vertex_count", [(np.float32, 1), (np.float64, 2)])
+def test_deferred_weld_at_the_radius(monkeypatch, dtype, vertex_count):
+    from core.group import _local_points
+    from core.store_mesh import StoreMesh
+
+    mod = pytest.importorskip("ingetrazo_core")
+    monkeypatch.setattr(_native, "native", mod)
+    monkeypatch.setenv("INGETRAZO_STORE", "1")
+    # The squared distance rounds below the threshold in f32 and above it in f64.
+    points = np.array([[0, 0, 0], [3.0003e-8, 1e-4, 0]], dtype=np.float32)
+    src = igz._json_arrays({"edges": [{"a": points[0], "b": points[1]}]})
+    src["pos"] = points.astype(dtype)
+    mesh = M.Mesh()
+    assert M.DeferredMesh.defer(mesh, lambda _: pytest.fail("object build"), 0, src)
+    # Bounds can read only the points, before the full plan exists.
+    np.testing.assert_array_equal(_local_points(mesh), points[:vertex_count])
+    plan = lazy_mesh.plan_of(mesh)
+    assert type(mesh) is M.DeferredMesh
+    np.testing.assert_array_equal(plan.pos, points[:vertex_count])
+    assert plan.edges.tolist() == ([[0, 1]] if vertex_count == 2 else [])
+    _compare(plan, mesh)
+    assert type(mesh) is StoreMesh

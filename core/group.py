@@ -1074,8 +1074,7 @@ def _local_points(mesh):
             pos = hit.pos
         else:
             s = d["_deferred_source"]
-            pos = lazy_mesh.weld(np.asarray(s["pos"], dtype=np.float64),
-                                 s.get("sequential", False))[0]
+            pos = lazy_mesh.weld(s["pos"], s.get("sequential", False))[0]
         return np.array(pos, dtype=np.float64) if len(pos) else None
     from core.store_mesh import StoreMesh
     if mesh.__class__ is StoreMesh:

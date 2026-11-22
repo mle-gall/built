@@ -100,6 +100,5 @@ def test_store_mesh_points_come_from_the_store_arrays():
         pytest.skip("mesh store off")
     got = _local_points(m)
     assert not m.__dict__.get("_pos_cache"), "no per-vertex vectors"
-    walked = np.array([[v.position.x(), v.position.y(), v.position.z()]
-                       for v in m.vertices])
+    walked = np.array([v.position_tuple() for v in m.vertices])
     assert np.array_equal(got, walked)

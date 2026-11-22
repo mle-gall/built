@@ -54,14 +54,19 @@ def arrays_of(mesh):
         if source is not None:
             # Saved indexed topology is authoritative: coincident distinct
             # points stay distinct. JSON sources instead repeat coordinates.
-            pos = np.asarray(source['pos'], dtype=np.float32).astype(float)
+            from core.store_mesh import enabled
+            pos = np.asarray(source['pos'])
+            model_f64 = enabled() and pos.dtype != np.float32
             corners = np.asarray(source['rings'], dtype=np.int64)
             if 'sequential' in source and 'arrays' not in source.get('meta', {}):
                 from core.lazy_mesh import weld
                 pos, inverse = weld(pos, source['sequential'])
                 corners = inverse[corners]
+            else:
+                pos = np.asarray(pos, dtype=np.float64)
             arrays = Arrays(pos, corners, np.asarray(source['sizes'], dtype=np.int64),
-                            np.asarray(source['counts'], dtype=np.int64))
+                            np.asarray(source['counts'], dtype=np.int64),
+                            model_f64=model_f64)
             arrays.edge_face_counts = edge_counts(arrays)
         elif store is not None:
             from core.store_mesh import faces_arrays as store_arrays
@@ -174,14 +179,7 @@ def merged(arrays):
     offsets = np.cumsum([0] + [len(a.pos) for a in parts[:-1]])
     points = np.concatenate([a.pos for a in parts])
     model_f64 = any(a.model_f64 for a in parts)
-    if model_f64:
-        from core import _native
-        from core.mesh import _KEY_SCALE, _KEY_DECIMALS
-        inverse, first = _native.available().store_weld_indices(
-            points, _KEY_SCALE, (10.0 ** -_KEY_DECIMALS) ** 2)
-        pos = points[first]
-    else:
-        pos, inverse = weld(points)
+    pos, inverse = weld(points, precise=model_f64)
     corners = np.concatenate([a.corners + offset for a, offset in zip(parts, offsets)])
     return Arrays(pos, inverse[corners], np.concatenate([a.ring_sizes for a in parts]),
                   np.concatenate([a.ring_counts for a in parts]), model_f64=model_f64)
