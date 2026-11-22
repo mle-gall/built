@@ -42,6 +42,7 @@ struct TimingSlot {
 struct Scene {
     material_shifts: Vec<i64>,
     material_data: Vec<u8>,
+    material_layout_dirty: bool,
     face_ranges: Vec<(u32, u32, bool)>,
     inst: wgpu::Buffer,
     flags: Vec<u32>,
@@ -881,6 +882,7 @@ impl Renderer {
             viewpoints,
             counters,
             face_ranges: vec![(0, count as u32, true)],
+            material_layout_dirty: true,
             material_data: vec![0; count*16],
             material_shifts,
             inst,
@@ -945,6 +947,10 @@ impl Renderer {
             return Err(PyValueError::new_err("edge capacity exceeds storage binding limit"));
         }
         if id == s.p as usize {
+            if s.material_data.len() + 16 > self.device.limits().max_storage_buffer_binding_size as usize {
+                return Err(PyValueError::new_err("material headers exceed storage binding limit"));
+            }
+            s.material_layout_dirty = true;
             let old_p = s.p as usize;
             s.p += 1;
             s.prototype_data.extend_from_slice(bounds);
@@ -1458,15 +1464,45 @@ impl Renderer {
         let data = data.as_slice()?;
         let s = self.scene.as_mut().ok_or_else(|| PyValueError::new_err("no scene"))?;
         if id >= s.p as usize || data.len()%32 != 0 { return Err(PyValueError::new_err("invalid material rows")); }
+        let limit = self.device.limits().max_storage_buffer_binding_size as usize;
+        if data.len() > limit.saturating_sub(s.material_data.len()) {
+            return Err(PyValueError::new_err("material records exceed storage binding limit"));
+        }
         let mut header = [0u32;4];
         if !data.is_empty() {
             let face: Command = bytemuck::pod_read_unaligned(&s.template_data[id*20..id*20+20]);
             header = [face.base as u32, (s.material_data.len()/16) as u32, (data.len()/32) as u32, 0];
         }
         s.material_data[id*16..(id+1)*16].copy_from_slice(bytemuck::bytes_of(&header));
+        let appended_at = s.material_data.len();
         s.material_data.extend_from_slice(data);
         s.face_ranges = face_ranges(&s.material_data, s.p);
-        self.textures.materials = buffer(&self.device, &s.material_data, wgpu::BufferUsages::STORAGE);
+        // Write only this prototype's header and its new records into the
+        // resident buffer. Allocating the whole table per call (one call per
+        // rebaked prototype) queued 432 full copies of the ride's material
+        // table on one 432-part bridge edit: ~30 GB before the GPU let any go.
+        let materials = &self.textures.materials;
+        if s.material_data.len() as u64 <= materials.size()
+            && materials.usage().contains(wgpu::BufferUsages::COPY_DST) {
+            if s.material_layout_dirty {
+                self.queue.write_buffer(materials, 0, &s.material_data);
+                s.material_layout_dirty = false;
+                return Ok(());
+            }
+            self.queue.write_buffer(materials, (id*16) as u64, bytemuck::bytes_of(&header));
+            if !data.is_empty() {
+                self.queue.write_buffer(materials, appended_at as u64, data);
+            }
+            return Ok(());
+        }
+        // Out of room (or the exact-size buffer of an open): grow to the next
+        // power of two once, so the following edits write in place.
+        s.material_layout_dirty = false;
+        let capacity = grown_capacity(materials.size() as usize, s.material_data.len()).min(limit);
+        self.gpu_memory = self.gpu_memory.saturating_sub(materials.size());
+        self.textures.materials = capacity_buffer(&self.device, &s.material_data, capacity,
+            wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST);
+        self.gpu_memory += self.textures.materials.size();
         self.texture_groups = [&self.draw, &self.xray].iter().map(|p| self.textures.bind(&self.device,p)).collect();
         self.aa.bind_textures(&self.device, &self.textures);
         self.transparency.bind_textures(&self.device, &self.textures);
@@ -1487,10 +1523,11 @@ impl Renderer {
             header[..4].copy_from_slice(&((i64::from(base) + shift) as u32).to_le_bytes());
         }
         scene.face_ranges = face_ranges(&resident, scene.p);
+        scene.material_layout_dirty = false;
         scene.material_data = resident.clone();
         let data = resident.as_slice();
         self.gpu_memory = self.gpu_memory.saturating_sub(self.textures.materials.size());
-        self.textures.materials = buffer(&self.device, data, wgpu::BufferUsages::STORAGE);
+        self.textures.materials = buffer(&self.device, data, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST);
         self.gpu_memory += self.textures.materials.size();
         self.texture_groups = [&self.draw, &self.xray].iter().map(|p| self.textures.bind(&self.device,p)).collect();
         self.aa.bind_textures(&self.device, &self.textures);

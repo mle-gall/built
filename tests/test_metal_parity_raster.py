@@ -328,3 +328,16 @@ def test_pbr_shading_changes_pixels_and_keeps_picks(native, tmp_path):
     after = capture(native)
     assert not np.array_equal(before[32, 32], after[32, 32])
     assert [native.pick(x, y) for x, y in points] == picks
+    # Replacing this prototype's records grows the table, then reuses it.
+    # Both paths must keep the recipe/normal-map bindings and the pixels.
+    packed = pack_scene(scene)
+    offset, count = map(int, packed.materials[:16].view('<u4')[1:3])
+    records = packed.materials[offset * 16:offset * 16 + count * 32]
+    assert len(records) > 0
+    sizes = [native.gpu_memory]
+    for _ in range(8):
+        native.update_prototype_materials(0, records)
+        sizes.append(native.gpu_memory)
+        np.testing.assert_array_equal(capture(native), after)
+    assert sizes[-1] > sizes[0]
+    assert any(a == b for a, b in zip(sizes, sizes[1:]))
