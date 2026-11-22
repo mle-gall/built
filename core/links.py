@@ -823,7 +823,7 @@ def _without_link(ext):
     return rest or None
 
 
-def unlinked_copy(placement, pairs=None):
+def unlinked_copy(placement, pairs=None, nested=None):
     """``(mesh, children, ext)``: what the linked ``placement`` holds, as
     the host's own content (Make Unique of a link). Every mesh is its own
     (:func:`own_mesh`) — parts that shared one inside this placement
@@ -832,11 +832,19 @@ def unlinked_copy(placement, pairs=None):
     with its other placements. The parts keep their uids (what scenes,
     records and IFC openings name them by; saved from now on as the
     host's own), names, tags, paint and matrices; they lose their link
-    parentage (``owner``, ``source_uid``), and a linked file nested in
-    the source becomes content too. ``placement`` is left as it was.
+    parentage (``owner``, ``source_uid``). ``placement`` is left as it was.
+
+    A file linked inside the source stays a link: its placement comes
+    across with its link record — the host's own link of that file from
+    now on, at the top of its chain — and its parts as they showed,
+    read-only and on the link's meshes, until :func:`fill_link` reads it
+    as a fresh link of the host would.
 
     ``pairs``, a list, receives ``(old, new)`` for every part and every
-    mesh copied (what holds on them, a dimension's, move across)."""
+    mesh copied (what holds on them, a dimension's, move across).
+    ``nested``, a list, receives ``(old, new, part_pairs)`` for each file
+    linked inside that stays a link, ``part_pairs`` the ``(old, new)`` of
+    its parts as copied (else they go to ``pairs``)."""
     from PySide6.QtGui import QMatrix4x4
     from copy import deepcopy
     meshes: dict = {}
@@ -850,22 +858,47 @@ def unlinked_copy(placement, pairs=None):
             pairs.append(out)
         return out[1]
 
-    def clone(group):
-        out = _clone_shell(group)
-        pairs.append((group, out))
-        out.mesh = own(group.mesh)
-        out.owner = None
+    def shell(group, out):
         out.context = None
-        try:
-            del out.source_uid
-        except AttributeError:
-            pass
         out.xform = QMatrix4x4(group.xform) if group.xform is not None else None
         out.axes = QMatrix4x4(group.axes) if group.axes is not None else None
         for name in ("ifc", "material", "exploded", "text3d"):
             value = getattr(group, name, None)
             if value is not None:
                 setattr(out, name, deepcopy(value))
+
+    def linked_part(group, parent, part_pairs):
+        # Read-only like every part of a link: owned, its mesh shared.
+        out = _clone_shell(group)
+        part_pairs.append((group, out))
+        out.owner = parent
+        shell(group, out)
+        if group.ext is not None:
+            out.ext = deepcopy(group.ext)
+        out.children = [linked_part(c, out, part_pairs)
+                        for c in group.children or ()]
+        return out
+
+    def clone(group):
+        out = _clone_shell(group)
+        pairs.append((group, out))
+        out.owner = None
+        try:
+            del out.source_uid
+        except AttributeError:
+            pass
+        shell(group, out)
+        if is_linked(group):
+            out.ext = deepcopy(group.ext)
+            part_pairs: list = []
+            out.children = [linked_part(c, out, part_pairs)
+                            for c in group.children or ()]
+            if nested is not None:
+                nested.append((group, out, part_pairs))
+            else:
+                pairs.extend(part_pairs)
+            return out
+        out.mesh = own(group.mesh)
         out.ext = _without_link(group.ext)
         out.children = [clone(c) for c in group.children or ()]
         return out
@@ -873,6 +906,51 @@ def unlinked_copy(placement, pairs=None):
     mesh = own(placement.mesh)
     children = [clone(c) for c in placement.children or ()]
     return mesh, children, _without_link(placement.ext)
+
+
+def fill_link(scene, group, mirror=None, host_path=None):
+    """Fill the linked placement ``group`` from its source as a fresh link
+    of the host is filled (:func:`make_link`, :func:`reload`): its parts
+    under the uids a reload gives them, the source's tags brought in under
+    the file's own folder in «Linked files». Returns the error, or None
+    (``group`` is then left as it was).
+
+    ``mirror``: the file ``group`` was linked inside until now (Make
+    Unique of that file's link). When this file was not linked directly
+    before, a tag of it the host showed switched there — the outer file's
+    copy of it, «Mid / Leaf / Steel» — shows switched here too, as the
+    host's override."""
+    rec = link_of(group)
+    if rec is None:
+        return "not a link"
+    found = locate(rec, host_path)
+    if found is None:
+        return f"{rec['path']} was not found"
+    path = Path(found).resolve()
+    if _norm(path) != _norm(rec["path"]):
+        rec["path"] = str(path)          # the project moved: follow it
+    fresh = "tags" not in (registry(scene).get(_norm(path)) or {})
+    materials = dict(scene.materials)
+    try:
+        comp, tags = _read_definition(materials, path, rec.get("select"),
+                                      rec.get("include_nested", True))
+    except LinkError as exc:
+        return str(exc)
+    scene.materials.update(materials)
+    _populate(group, comp)
+    _sync_tags(scene, path, tags)
+    entry = _entry(scene, path)
+    entry["loaded_mtime_ns"] = path.stat().st_mtime_ns
+    if fresh and mirror:
+        for name in entry.get("tags", ()):
+            ly = scene.layer_by_key(name)
+            was = scene.layer_by_key(stem(mirror) + SEP + name)
+            if ly is not None and was is not None \
+                    and bool(was.visible) != bool(ly.visible):
+                ly.visible = bool(was.visible)
+                entry["overrides"][name] = bool(was.visible)
+    scene.version += 1
+    return None
 
 
 def adopt_parts(placement) -> None:

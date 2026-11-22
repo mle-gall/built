@@ -4730,6 +4730,82 @@ def _move_holds(scene, placements, moved) -> None:
                                 if h is not None]
 
 
+class _TagState:
+    """What the tags tree, the link registry and the materials were at one
+    moment (UnlinkCommand): undo and redo go from one such state to the
+    other by changing only what differs between them, so a tag made or
+    renamed in the Layers panel in between (not on the undo stack) is
+    left alone."""
+
+    _MAPS = ("folder_parents", "folder_visibility", "layer_folder_names",
+             "layer_folder_uids")
+
+    def __init__(self, scene) -> None:
+        from copy import deepcopy
+        from core import links
+        from core.layers import folders_of
+        self.layers = list(scene.layers)
+        self.attrs = {id(ly): dict(vars(ly)) for ly in self.layers}
+        self.folders = list(folders_of(scene))
+        self.maps = {name: dict(getattr(scene, name, None) or {})
+                     for name in self._MAPS}
+        self.registry = deepcopy(links.registry(scene))
+        self.cache = dict(scene.__dict__.get("_link_tag_tables") or {})
+        self.materials = dict(scene.materials)
+        self.active = getattr(scene, "active_layer", None)
+
+    @staticmethod
+    def _sync(now: dict, old: dict, new: dict, copy=lambda v: v) -> None:
+        for key in old.keys() | new.keys():
+            a, b = old.get(key, _MISSING), new.get(key, _MISSING)
+            if a is b or (a is not _MISSING and b is not _MISSING and a == b):
+                continue
+            if b is _MISSING:
+                now.pop(key, None)
+            else:
+                now[key] = copy(b)
+
+    def go(self, scene, to: "_TagState") -> None:
+        """Change ``scene`` from this state to ``to``."""
+        from copy import deepcopy
+        from core import links
+        old_ids = {id(ly) for ly in self.layers}
+        new_ids = {id(ly) for ly in to.layers}
+        scene.layers[:] = [ly for ly in scene.layers
+                           if id(ly) in new_ids or id(ly) not in old_ids]
+        have = {id(ly) for ly in scene.layers}
+        for i, ly in enumerate(to.layers):
+            if id(ly) not in have:
+                scene.layers.insert(min(i, len(scene.layers)), ly)
+        for ly in to.layers:
+            a, b = self.attrs.get(id(ly), {}), to.attrs[id(ly)]
+            for k, v in b.items():
+                if a.get(k, _MISSING) != v:
+                    setattr(ly, k, v)
+        folders = [f for f in (scene.layer_folders or ())
+                   if f in to.folders or f not in self.folders]
+        for i, f in enumerate(to.folders):
+            if f not in folders:
+                folders.insert(min(i, len(folders)), f)
+        maps = {}
+        for name in self._MAPS:
+            now = dict(getattr(scene, name, None) or {})
+            self._sync(now, self.maps[name], to.maps[name])
+            maps[name] = now
+        for name, now in maps.items():
+            setattr(scene, name, now)
+        scene.layer_folders = folders
+        self._sync(links.registry(scene), self.registry, to.registry, deepcopy)
+        self._sync(scene.__dict__.setdefault("_link_tag_tables", {}),
+                   self.cache, to.cache)
+        self._sync(scene.materials, self.materials, to.materials)
+        if self.active != to.active:
+            scene.active_layer = to.active
+
+
+_MISSING = object()
+
+
 class UnlinkCommand(Command):
     """Make Unique of a linked file's placement: the link breaks and the
     geometry stays. Each placement in ``groups`` becomes the host's own
@@ -4738,11 +4814,17 @@ class UnlinkCommand(Command):
     painted and tagged as it was, while the other placements of the same
     file stay live links.
 
+    A file linked INSIDE the source stays a live link: the host's own
+    link of that file now, read-only, reloaded when that file changes,
+    watched and listed in the Links tab — filled as a fresh link of it is
+    (``links.fill_link``: its own tags, under its own folder in «Linked
+    files»). Its source missing, it keeps the parts it showed.
+
     A source no placement links any more leaves the host's link registry
     (nothing watches or reloads it): its tags and folders stay, as the
     host's own, showing as they did. One undo step brings the live links
-    back exactly — the same part objects, meshes and registry entries —
-    and redo puts the very same copies back."""
+    back exactly — the same part objects, meshes, registry entries and
+    tags — and redo puts the very same copies back."""
 
     def __init__(self, groups) -> None:
         from core import links
@@ -4753,8 +4835,8 @@ class UnlinkCommand(Command):
                                         for g in self.groups))
         self._before = None
         self._after = None
-        self._dropped: dict = {}
-        self._caches: dict = {}
+        self._tags_before = None
+        self._tags_after = None
         self._errors: dict = {}
         #: ``(old, new)`` for every part and mesh copied.
         self._pairs: list = []
@@ -4764,40 +4846,64 @@ class UnlinkCommand(Command):
 
     _FIELDS = ("mesh", "children", "ext", "name", "component")
 
+    def _first(self, scene) -> None:
+        """The first run: copy, then fill the files linked inside."""
+        from core import links
+        from core.kept_components import names_in_use, numbered_name
+        self._before = [{k: getattr(g, k) for k in self._FIELDS}
+                        for g in self.groups]
+        self._after = []
+        nested = []
+        for g in self.groups:
+            inner: list = []
+            mesh, children, ext = links.unlinked_copy(g, self._pairs, inner)
+            nested.append((links.link_of(g)["path"], inner))
+            name = g.name
+            if name:
+                taken = names_in_use(scene, skip=g)
+                taken.update(a["name"] for a in self._after)
+                if name in taken:
+                    name = numbered_name(name, taken)
+            self._after.append(dict(mesh=mesh, children=children,
+                                    ext=ext, name=name, component=True))
+        for g, after in zip(self.groups, self._after):
+            for k, v in after.items():
+                setattr(g, k, v)
+        host = getattr(scene, "_project_host_path", None)
+        for outer, inner in nested:
+            for old, new, part_pairs in inner:
+                if links.fill_link(scene, new, mirror=outer, host_path=host):
+                    self._pairs.extend(part_pairs)      # kept as it showed
+                else:
+                    self._pairs.extend(_nested_pairs(old, new))
+
     def do(self, scene) -> None:
         from core import links
         if not self.groups:
             raise CommandRejected("Nothing linked is selected")
-        if self._before is None:
-            self._before = [{k: getattr(g, k) for k in self._FIELDS}
-                            for g in self.groups]
-            from core.kept_components import names_in_use, numbered_name
-            self._after = []
-            for g in self.groups:
-                mesh, children, ext = links.unlinked_copy(g, self._pairs)
-                name = g.name
-                if name:
-                    taken = names_in_use(scene, skip=g)
-                    taken.update(a["name"] for a in self._after)
-                    if name in taken:
-                        name = numbered_name(name, taken)
-                self._after.append(dict(mesh=mesh, children=children,
-                                        ext=ext, name=name, component=True))
         if self.tops is None:
             from core.purge import iter_groups
             want = {id(g) for g in self.groups}
             self.tops = [root for root in scene.groups
                          if any(id(g) in want for g in iter_groups([root]))]
         live = set(links.sources(scene))
-        for g, after in zip(self.groups, self._after):
-            for k, v in after.items():
-                setattr(g, k, v)
+        if self._before is None:
+            self._tags_before = _TagState(scene)
+            self._first(scene)
+        else:
+            for g, after in zip(self.groups, self._after):
+                for k, v in after.items():
+                    setattr(g, k, v)
+            self._tags_before.go(scene, self._tags_after)
         _move_holds(scene, self.groups, {id(a): b for a, b in self._pairs})
         gone = live - set(links.sources(scene))
-        reg = links.registry(scene)
-        self._dropped = {p: reg.pop(p) for p in gone if p in reg}
-        cache = scene.__dict__.get("_link_tag_tables") or {}
-        self._caches = {p: cache.pop(p) for p in gone if p in cache}
+        if self._tags_after is None:
+            reg = links.registry(scene)
+            cache = scene.__dict__.get("_link_tag_tables") or {}
+            for p in gone:
+                reg.pop(p, None)
+                cache.pop(p, None)
+            self._tags_after = _TagState(scene)
         errors = getattr(scene, "link_errors", None)
         if isinstance(errors, dict):
             self._errors = {p: errors.pop(p) for p in list(errors)
@@ -4805,19 +4911,47 @@ class UnlinkCommand(Command):
         scene.version += 1
 
     def undo(self, scene) -> None:
-        from core import links
         if self._before is None:
             return
         for g, before in zip(self.groups, self._before):
             for k, v in before.items():
                 setattr(g, k, v)
         _move_holds(scene, self.groups, {id(b): a for a, b in self._pairs})
-        links.registry(scene).update(self._dropped)
-        if self._caches:
-            scene.__dict__.setdefault("_link_tag_tables", {}).update(self._caches)
+        self._tags_after.go(scene, self._tags_before)
         if self._errors and isinstance(getattr(scene, "link_errors", None), dict):
             scene.link_errors.update(self._errors)
         scene.version += 1
+
+
+def _nested_pairs(old, new) -> list:
+    """``(old, new)`` for the parts and meshes of a file linked inside a
+    link just unlinked, now read again as the host's own link (``new``):
+    the part read again for each one ``old`` held. ``old``'s parts came
+    through the outer file, under the uids it gave them — its copy of
+    this file named by ``old.source_uid`` (``links.stable_uid``)."""
+    from core import links
+    from core.purge import iter_groups
+    origin = getattr(old, "source_uid", None)
+    out = []
+    if old.mesh is not None and new.mesh is not None:
+        out.append((old.mesh, new.mesh))
+    if not origin:
+        return out
+    fresh = {}
+    for part in iter_groups(new.children or ()):
+        src = getattr(part, "source_uid", None)
+        if src:
+            fresh[links.stable_uid(origin, src)] = part
+    meshes = {id(old.mesh)}
+    for part in iter_groups(old.children or ()):
+        twin = fresh.get(getattr(part, "source_uid", None))
+        if twin is None:
+            continue
+        out.append((part, twin))
+        if id(part.mesh) not in meshes:
+            meshes.add(id(part.mesh))
+            out.append((part.mesh, twin.mesh))
+    return out
 
 
 class ReplaceComponentCommand(Command):

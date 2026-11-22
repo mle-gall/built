@@ -286,9 +286,14 @@ def test_a_dimension_on_the_link_follows_its_own_copy(tmp_path):
     assert id(dim.anchor_a.mesh) not in mine
 
 
-def test_a_file_linked_inside_the_source_becomes_content_too(tmp_path):
+def _nested_host(tmp_path):
+    """``Mid.igz`` links ``Leaf.igz`` (a face on its tag «Steel»); the host
+    places Mid twice."""
     leaf = Scene()
+    leaf.layers.append(Layer("Steel"))
     leaf.mesh.add_face([V(0, 0, 7), V(1, 0, 7), V(1, 1, 7)])
+    for f in leaf.mesh.faces:
+        f.attrs["layer"] = "Steel"
     leaf_path = tmp_path / "Leaf.igz"
     igz.save_scene(leaf, leaf_path)
     mid = Scene()
@@ -301,21 +306,131 @@ def test_a_file_linked_inside_the_source_becomes_content_too(tmp_path):
     host.groups.append(link)
     other = copy_group(link, V(9, 0, 0))
     host.groups.append(other)
-    look = _look(link)
-    assert any(links.is_linked(p) for p in _parts(link))     # nested link
+    return host, link, other, mid_path, leaf_path
+
+
+def _shape(g):
+    """What ``g`` shows in the world, tags and uids aside."""
+    return sorted(row[2] for row in _look(g) if row[0] == "f")
+
+
+def _tags_and_registry(scene):
+    from copy import deepcopy
+    return _tag_state(scene), deepcopy(links.registry(scene)), \
+        dict(scene.layer_folder_names), sorted(scene.materials)
+
+
+def test_a_file_linked_inside_the_source_stays_a_live_link(tmp_path):
+    host, link, other, mid_path, leaf_path = _nested_host(tmp_path)
+    (inner,) = [p for p in _parts(link) if links.is_linked(p)]
+    mirror = host.layer_by_key("Mid / Leaf / Steel")      # Mid's copy of it
+    mirror.visible = False                                 # switched here
+    shape = _shape(link)
     history = History(host)
     history.execute(UnlinkCommand([link]))
-    assert_own(link, [other])
-    assert _look(link) == look
+    assert not links.is_linked(link)
+    # Mid's own geometry is the host's; Leaf, linked inside it, stays a link
+    # of the host's own: at the top of its chain, its parts read-only and
+    # under the uids a reload of Leaf gives them.
+    (nested,) = [p for p in _parts(link) if links.is_linked(p)]
+    assert links.link_of(nested)["path"] == str(leaf_path)
+    assert links.linked_ancestor(nested.owner) is None
+    assert nested.uid == inner.uid
+    leaf_parts = _parts(nested)
+    for p in _parts(link):
+        if p is nested or p in leaf_parts:
+            continue
+        assert links.linked_ancestor(p) is None and p.owner is None
+    for p, _m in iter_placements(nested):
+        if p is not nested:
+            assert links.linked_ancestor(p) is nested
+            assert p.uid == links.stable_uid(nested.uid, p.source_uid)
+    assert _shape(link) == shape                        # looks as it did
+    # Leaf's tags are the host's link of Leaf now: its own folder in
+    # «Linked files», the switch made on Mid's copy kept as an override.
+    steel = host.layer_by_key(links.tag_name(leaf_path, "Steel"))
+    assert steel is not None and steel.folder == "Leaf"
+    assert host.folder_parents["Leaf"] == links.LINKED_FOLDER
+    assert steel.visible is False
+    entry = links.registry(host)[links._norm(leaf_path)]
+    assert entry["overrides"] == {steel.key: False}
+    face_tags = {layer_of(f) for p, _m in iter_placements(nested)
+                 for f in p.mesh.faces}
+    assert face_tags == {steel.key}
+    # Still watched (and listed): both files are linked.
     assert sorted(links.sources(host)) == sorted(
-        [links._norm(mid_path), links._norm(leaf_path)])        # ``other``
-    history.execute(UnlinkCommand([other]))
-    assert links.sources(host) == [] and links.registry(host) == {}
+        [links._norm(mid_path), links._norm(leaf_path)])
+    rows = [r for r in links.query(host) if r["uid"] == nested.uid]
+    assert rows and rows[0]["status"] == "resolved"
+    # It follows its file.
+    n, n_other = _faces(nested), _faces(other)
+    _edit_source(leaf_path)
+    links.reload(host, leaf_path)
+    assert _faces(nested) == n + 2
+    assert _faces(other) == n_other + 2       # through Mid, as before
+
+
+
+def test_undo_and_redo_around_a_nested_link_are_exact(tmp_path):
+    host, link, other, mid_path, leaf_path = _nested_host(tmp_path)
+    before = list(link.children)
+    parts = _parts(link)
+    state = _tags_and_registry(host)
+    history = History(host)
+    history.execute(UnlinkCommand([link]))
+    after = _parts(link)
+    after_state = _tags_and_registry(host)
     history.undo()
+    assert link.children == before and _parts(link) == parts
+    assert links.is_linked(link)
+    assert all(links.linked_ancestor(p.owner) is link for p in link.children)
+    assert _tags_and_registry(host) == state
+    history.redo()
+    assert _parts(link) == after                 # the very same objects
+    (nested,) = [p for p in _parts(link) if links.is_linked(p)]
+    assert links.linked_ancestor(nested.owner) is None
+    assert _tags_and_registry(host) == after_state
     history.undo()
-    assert any(links.is_linked(p) for p in _parts(link))
-    assert all(links.linked_ancestor(p.owner) is link
-               for p in link.children)
+    assert _tags_and_registry(host) == state
+
+
+def test_a_nested_file_that_cannot_be_read_keeps_what_it_showed(tmp_path):
+    host, link, other, mid_path, leaf_path = _nested_host(tmp_path)
+    (inner,) = [p for p in _parts(link) if links.is_linked(p)]
+    shape, inner_meshes = _shape(link), _meshes(inner)
+    os.remove(leaf_path)
+    history = History(host)
+    history.execute(UnlinkCommand([link]))
+    (nested,) = [p for p in _parts(link) if links.is_linked(p)]
+    assert links.linked_ancestor(nested.owner) is None
+    assert all(links.linked_ancestor(p) is nested for p in _parts(nested))
+    assert _shape(link) == shape
+    assert set(_meshes(nested)) <= set(inner_meshes) | {id(nested.mesh)}
+    history.undo()
+    assert _parts(link)[0].owner is link
+
+
+def test_a_nested_link_in_the_window_is_watched_and_listed(win, tmp_path):
+    host_scene = win.viewport.scene
+    _h, _l, _o, mid_path, leaf_path = _nested_host(tmp_path)
+    link = links.make_link(host_scene, mid_path, host_path=tmp_path / "host.igz")
+    host_scene.groups.append(link)
+    host_scene.version += 1
+    watcher = win._link_watcher()
+    watcher.refresh()
+    watched = lambda: sorted(os.path.normcase(p) for p in watcher._fs.files())
+    both = sorted([links._norm(mid_path), links._norm(leaf_path)])
+    assert watched() == both
+    host_scene.select([link])
+    win._on_make_unique()
+    assert watched() == [links._norm(leaf_path)]
+    panel = win.project_browser.links_panel
+    panel.refresh()
+    assert [r["path"] for r in panel.rows] == [str(leaf_path)]
+    win._on_undo()
+    assert watched() == both
+    win._on_redo()
+    assert watched() == [links._norm(leaf_path)]
 
 
 # ---- 2. tags and the registry ------------------------------------------------
