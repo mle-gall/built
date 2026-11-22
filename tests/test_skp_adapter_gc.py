@@ -15,7 +15,7 @@ def test_adapter_defers_collection_and_restores_state(monkeypatch,
     model, payload = object(), object()
     seen = []
 
-    def build(source, name, path):
+    def build(source, name, path, **kwargs):
         seen.append((source, name, path, gc.isenabled()))
         if failure:
             raise failure("interrupted adaptation")

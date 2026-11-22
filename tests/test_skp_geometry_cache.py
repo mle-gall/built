@@ -36,7 +36,7 @@ def test_adaptation_cleans_cache_on_failure_and_restores_outer_context(monkeypat
     source = NS(faces={1: "source face"})
     outer = adapter._GeometryCache(100)
     token = adapter._geometry_cache.set(outer)
-    def fail(*args):
+    def fail(*args, **kwargs):
         adapter._remember_geometry(source, "_geom", [1, 2], 16)
         raise RuntimeError("injected adaptation failure")
     monkeypatch.setattr(adapter, "_adapt_inner", fail)

@@ -36,7 +36,6 @@ from __future__ import annotations
 import copy
 import gc
 from collections import OrderedDict
-from contextvars import ContextVar
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional
@@ -44,6 +43,8 @@ from typing import Optional
 from PySide6.QtGui import QMatrix4x4, QVector3D
 
 from core.texture import fit_uv_affine, projection_basis
+from formats.skp_consumption import (SoftSegments, _GeometryCache, _geometry_cache,
+                                     _remember_geometry)
 from formats.skp_coordinates import PointRows as _PointRows
 
 _INCH = 0.0254          # .skp internal unit → metres
@@ -55,50 +56,6 @@ EXACT_TREE = True
 
 
 _GEOMETRY_CACHE_BYTES = 64 * 1024 * 1024
-_geometry_cache = ContextVar("skp_geometry_cache", default=None)
-
-
-class _GeometryCache:
-    """Bound adapter-owned derived geometry for one adaptation.
-
-    Eviction drops only our cached reference; callers currently reading the
-    geometry keep their local references. Raw definition geometry is untouched.
-    """
-
-    def __init__(self, limit):
-        self.limit = limit
-        self.entries = OrderedDict()
-        self.size = 0
-
-    def remember(self, definition, attribute, value, size):
-        key = (id(definition), attribute)
-        previous = self.entries.pop(key, None)
-        if previous is not None:
-            self.size -= previous[3]
-        self.entries[key] = (definition, attribute, value, size)
-        self.size += size
-        while self.size > self.limit:
-            self._evict()
-
-    def _evict(self):
-        _key, (definition, attribute, value, size) = self.entries.popitem(last=False)
-        self.size -= size
-        if getattr(definition, attribute, None) is value:
-            delattr(definition, attribute)
-
-    def clear(self):
-        while self.entries:
-            self._evict()
-
-
-def _remember_geometry(definition, attribute, value, size):
-    try:
-        setattr(definition, attribute, value)
-    except AttributeError:  # __slots__ definition: skip the cache
-        return
-    cache = _geometry_cache.get()
-    if cache is not None:
-        cache.remember(definition, attribute, value, size)
 
 
 def _ring_raw(defn, loop):
@@ -1060,6 +1017,7 @@ def _rests_on_a_face(roots, by_id, quad) -> bool:
     return any(walk(r, np.eye(4), 0, frozenset()) for r in roots)
 
 
+
 def _soft_edge_segments(defn, xform, out) -> None:
     """Append the transformed endpoint pairs of ``defn``'s soft/smooth/
     hidden edges to ``out`` — the file's own edge-display flags, used by
@@ -1086,6 +1044,16 @@ def _soft_edge_segments(defn, xform, out) -> None:
         arr = np.asarray(pairs, dtype=np.float64).reshape(-1, 3) * _INCH
         _remember_geometry(defn, "_soft_arr", arr, arr.nbytes)
     if not len(arr):
+        return
+    if isinstance(out, SoftSegments):
+        # Same arithmetic and final quantization as _world_points, without
+        # expanding the endpoint array into millions of Python floats.
+        if xform.isIdentity():
+            world = arr
+        else:
+            m = np.array(xform.data(), dtype=np.float64).reshape(4, 4, order="F")
+            world = arr @ m[:3, :3].T + m[:3, 3]
+        out.add(world.astype(np.float32))
         return
     wl = _world_points(arr, xform)
     for i in range(0, len(wl), 2):
@@ -1165,7 +1133,7 @@ def _collect(defn, xform, by_id, attr_map, out, depth, stack,
              proto_ids=frozenset(), proto_uses=None, inherited=None,
              image_uses=None, edges_out=None, layer=None,
              layer_uses=None, group_layer=None, loose_out=None, curves_out=None,
-             identity=()) -> None:
+             identity=(), release=None) -> None:
     """Append ``(outer, holes, attrs)`` faces for ``defn`` (transformed by
     ``xform``) and, recursively, for every definition its instances place.
 
@@ -1210,6 +1178,10 @@ def _collect(defn, xform, by_id, attr_map, out, depth, stack,
         _soft_edge_segments(defn, xform, edges_out)
     if loose_out is not None:
         _loose_edge_segments(defn, xform, loose_out)
+    if release is not None:
+        release(defn)
+        # No raw face/flattening locals need to survive child recursion.
+        del pos_m, raw_l, meta
     for ins in getattr(defn, "instances", []):
         rid = getattr(ins, "ref_idx", None)
         child = by_id.get(rid)
@@ -1253,7 +1225,7 @@ def _collect(defn, xform, by_id, attr_map, out, depth, stack,
         _collect(child, placed, by_id, attr_map, out, depth + 1, stack,
                  proto_ids, proto_uses, child_inherited, image_uses,
                  edges_out, child_layer, layer_uses, group_layer, loose_out,
-                 curves_out, child_identity)
+                 curves_out, child_identity, release)
 
 
 def _subtree_polys(defn, by_id, memo, stack) -> int:
@@ -1476,18 +1448,18 @@ def _is_empty_model(model, skp_path, legacy_era: bool) -> bool:
     return bool((px == px[0]).all())
 
 
-def _adapt(model, name: str, skp_path=None):
+def _adapt(model, name: str, skp_path=None, *, consume=False):
     cache = _GeometryCache(_GEOMETRY_CACHE_BYTES)
     token = _geometry_cache.set(cache)
     try:
         with _paused_gc():
-            return _adapt_inner(model, name, skp_path)
+            return _adapt_inner(model, name, skp_path, consume=consume)
     finally:
         cache.clear()
         _geometry_cache.reset(token)
 
 
-def _adapt_inner(model, name: str, skp_path=None):
+def _adapt_inner(model, name: str, skp_path=None, *, consume=False):
     """An ``SkpModel`` → a payload ``{"backend", "groups", "protos"}`` or
     ``None`` when it yields no geometry (the seam reports it as unreadable).
 
@@ -1503,6 +1475,9 @@ def _adapt_inner(model, name: str, skp_path=None):
     Definitions with faces that nothing instances are library entries not
     placed in the model — they are not part of the visible model, so we skip
     them.
+    ``consume=True`` transfers raw geometry ownership to this adaptation.
+    Geometry is discarded after its last prototype use; a failed consumed
+    adaptation must be reparsed. The default leaves caller models reusable.
     ``skp_path`` anchors where extracted texture images land; the material
     joins are guarded so PyPI 0.2.0 still imports (uncoloured)."""
     from formats.dae import _INST_MIN_POLYS, _INST_MIN_SAVED
@@ -1688,6 +1663,16 @@ def _adapt_inner(model, name: str, skp_path=None):
                 continue
             proto_ids.add(did)
 
+    release_flat = None
+    # Attachment queries inspect support faces after all prototypes are built.
+    # Retain their geometry whenever the model contains an image.
+    if consume and not any(getattr(d, "is_image", False) for d in by_id.values()):
+        from formats.skp_consumption import FlatGeometry, image_stage_geometry
+        keep_images = image_stage_geometry(by_id)
+        flat = FlatGeometry(by_id, proto_ids, uses, roots, _MAX_DEPTH, keep_images)
+        if flat.proved:
+            release_flat = flat.release
+
     groups: list = []
     proto_uses: dict = {}
     image_uses: list = []
@@ -1708,7 +1693,7 @@ def _adapt_inner(model, name: str, skp_path=None):
         lines: list = []
         _loose_edge_segments(r, ident, lines)
         if loose or lines:
-            loose_edges: list = []
+            loose_edges = SoftSegments()
             _soft_edge_segments(r, ident, loose_edges)
             groups.append({"name": name, "faces": loose,
                            "soft_edges": loose_edges, "loose_edges": lines, "curves": curves,
@@ -1734,13 +1719,14 @@ def _adapt_inner(model, name: str, skp_path=None):
                     (placed, lay, ins_name, identity))
                 continue
             sub: list = []
-            sub_edges: list = []
+            sub_edges = SoftSegments()
             sub_lines: list = []
             sub_curves = []
             _collect(child, placed, by_id, attr_map, sub, 0, set(),
                      proto_ids, proto_uses, inh, image_uses, sub_edges,
                      layer_uses=layer_uses, group_layer=lay,
-                     loose_out=sub_lines, curves_out=sub_curves, identity=identity)
+                     loose_out=sub_lines, curves_out=sub_curves, identity=identity,
+                     release=release_flat)
             if sub or sub_lines:
                 # The name the user gave the group or copy, else its
                 # definition's («Group#3» is all a .skp names a group).
@@ -1764,13 +1750,14 @@ def _adapt_inner(model, name: str, skp_path=None):
         child, placed, inh, lay, identity = layer_uses[i]
         i += 1
         sub = []
-        sub_edges = []
+        sub_edges = SoftSegments()
         sub_curves = []
         sub_lines = []
         _collect(child, placed, by_id, attr_map, sub, 0, set(),
                  proto_ids, proto_uses, inh, image_uses, sub_edges,
                  layer_uses=layer_uses, group_layer=lay,
-                 loose_out=sub_lines, curves_out=sub_curves, identity=identity)
+                 loose_out=sub_lines, curves_out=sub_curves, identity=identity,
+                     release=release_flat)
         if sub or sub_lines:
             groups.append({"name": getattr(child, "name", None) or name,
                            "faces": sub, "soft_edges": sub_edges,
@@ -1789,6 +1776,13 @@ def _adapt_inner(model, name: str, skp_path=None):
     # done inside a component: the hedge in piscina.igz is 4480 + 5120 faces
     # placed 48 times, and it arrived as 230400 real ones, twenty-four times
     # over, for the element that is 89% of that model.
+    # Count every inherited-material variant before releasing anything: a
+    # child may be flattened into several prototypes or shared by parents.
+    consumer = None
+    if release_flat is not None:
+        from formats.skp_consumption import PrototypeGeometry
+        consumer = PrototypeGeometry(by_id, proto_ids, proto_uses, roots,
+                                     _MAX_DEPTH, keep_images)
     protos: list = []
     index_of: dict = {}
 
@@ -1805,7 +1799,7 @@ def _adapt_inner(model, name: str, skp_path=None):
         idx = index_of[key] = len(protos)
         protos.append(None)
         local: list = []
-        local_edges: list = []
+        local_edges = SoftSegments()
         local_lines: list = []
         local_curves = []
         local_images: list = []
@@ -1813,6 +1807,8 @@ def _adapt_inner(model, name: str, skp_path=None):
         _collect(d, QMatrix4x4(), by_id, attr_map, local, 0, set(),
                  proto_ids, child_uses, inh, local_images,
                  edges_out=local_edges, loose_out=local_lines, curves_out=local_curves)
+        if consumer is not None:
+            consumer.release(key)
         children: list = []
         for (cid, cinh), places in child_uses.items():
             ci = _build_proto(cid, cinh)
@@ -1889,7 +1885,7 @@ def _adapt_inner(model, name: str, skp_path=None):
     # into one billboard group — the flag decides, no heuristic needed.
     for child, placed, inh, lay, identity in image_uses:
         curves = []
-        soft_edges = []
+        soft_edges = SoftSegments()
         lines = []
         if getattr(child, "is_image", False):
             faces = _image_quad_faces(child, placed, attr_map, inh)
@@ -1899,8 +1895,7 @@ def _adapt_inner(model, name: str, skp_path=None):
             # face, like a logo on a device (#429): the file has no face-me
             # flag for images, .skp never turns one.
             billboard = bool(tex and _image_has_cutout(tex)
-                             and not _rests_on_a_face(roots, by_id,
-                                                      faces[0][0]))
+                             and not _rests_on_a_face(roots, by_id, faces[0][0]))
         else:
             faces = []
             _collect(child, placed, by_id, attr_map, faces, 0, set(),
@@ -2064,7 +2059,7 @@ def parse(path, progress=None):
     openskp_compat.attach_pbr(model)    # 2025+ PBR maps and factors
     if progress is not None:
         progress(0.6, "Building geometry…")
-    return _adapt(model, Path(path).stem, skp_path=path)
+    return _adapt(model, Path(path).stem, skp_path=path, consume=True)
 
 
 @contextmanager
