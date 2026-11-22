@@ -143,6 +143,9 @@ def layer_count_steps(scene, *, photo=True, history=None):
         seen.add(id(mesh))
         src = mesh.__dict__.get("_deferred_source")
         if src is None:
+            from core.store_parts import layer_tally
+            if layer_tally(mesh, tally):
+                return      # a store-backed mesh: from its arrays
             tally.update(layer_of(f) for f in mesh.faces)
             tally.update(layer_of(e) for e in mesh.edges)
             return
@@ -236,8 +239,13 @@ def unused_layers(scene) -> list:
 
 def used_materials(scene) -> set[str]:
     """Every registry material name a face wears (``attrs["mat"]``)."""
+    from core.store_parts import material_names
     used: set[str] = set()
     for mesh in iter_meshes(scene):
+        names = material_names(mesh)     # a store-backed mesh: its rows
+        if names is not None:
+            used |= names
+            continue
         for f in mesh.faces:
             name = f.attrs.get("mat")
             if name:
