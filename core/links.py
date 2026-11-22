@@ -788,6 +788,93 @@ def copy_parts(source, copy) -> list:
     return parts
 
 
+def own_mesh(mesh):
+    """A copy of ``mesh`` that shares nothing with it, for content the host
+    now owns (:func:`unlinked_copy`). A mesh still deferred stays deferred:
+    the copy builds from the same read-only tables, with the same relabel
+    hooks (:func:`_retable_deferred`), on its own first touch — tables are
+    only ever replaced, never edited in place, so sharing them is safe. A
+    built or store-backed mesh is deep-copied (``Mesh.__deepcopy__``: the
+    same elements, flags and attributes, in the same order)."""
+    from copy import deepcopy
+    from core.mesh import DeferredMesh, Mesh
+    if type(mesh) is DeferredMesh:
+        d = mesh.__dict__
+        out = Mesh()
+        if DeferredMesh.defer(out, d["_deferred"], d["_deferred_nfaces"],
+                              d["_deferred_source"]):
+            od = out.__dict__
+            if "_deferred_hooks" in d:
+                od["_deferred_hooks"] = list(d["_deferred_hooks"])
+            for key in ("_deferred_hook_source", "_deferred_geom"):
+                if key in d:
+                    od[key] = d[key]
+            return out
+    out = deepcopy(mesh)
+    out.__dict__.pop("_link_geometry", None)
+    return out
+
+
+def _without_link(ext):
+    from copy import deepcopy
+    if not ext:
+        return None
+    rest = {k: deepcopy(v) for k, v in ext.items() if k != LINK_KEY}
+    return rest or None
+
+
+def unlinked_copy(placement, pairs=None):
+    """``(mesh, children, ext)``: what the linked ``placement`` holds, as
+    the host's own content (Make Unique of a link). Every mesh is its own
+    (:func:`own_mesh`) — parts that shared one inside this placement
+    still share their copy, so a component repeated in the source stays
+    one definition here — and no geometry is shared with the source or
+    with its other placements. The parts keep their uids (what scenes,
+    records and IFC openings name them by; saved from now on as the
+    host's own), names, tags, paint and matrices; they lose their link
+    parentage (``owner``, ``source_uid``), and a linked file nested in
+    the source becomes content too. ``placement`` is left as it was.
+
+    ``pairs``, a list, receives ``(old, new)`` for every part and every
+    mesh copied (what holds on them, a dimension's, move across)."""
+    from PySide6.QtGui import QMatrix4x4
+    from copy import deepcopy
+    meshes: dict = {}
+    if pairs is None:
+        pairs = []
+
+    def own(mesh):
+        out = meshes.get(id(mesh))
+        if out is None:
+            out = meshes[id(mesh)] = (mesh, own_mesh(mesh))
+            pairs.append(out)
+        return out[1]
+
+    def clone(group):
+        out = _clone_shell(group)
+        pairs.append((group, out))
+        out.mesh = own(group.mesh)
+        out.owner = None
+        out.context = None
+        try:
+            del out.source_uid
+        except AttributeError:
+            pass
+        out.xform = QMatrix4x4(group.xform) if group.xform is not None else None
+        out.axes = QMatrix4x4(group.axes) if group.axes is not None else None
+        for name in ("ifc", "material", "exploded", "text3d"):
+            value = getattr(group, name, None)
+            if value is not None:
+                setattr(out, name, deepcopy(value))
+        out.ext = _without_link(group.ext)
+        out.children = [clone(c) for c in group.children or ()]
+        return out
+
+    mesh = own(placement.mesh)
+    children = [clone(c) for c in placement.children or ()]
+    return mesh, children, _without_link(placement.ext)
+
+
 def adopt_parts(placement) -> None:
     """Each part of the linked ``placement`` owned by its parent, as
     :func:`_populate` leaves them: a packed link read back from the file

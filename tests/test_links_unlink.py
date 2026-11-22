@@ -1,0 +1,411 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""Make Unique of a linked file's placement breaks the link and keeps the
+geometry (core.history.UnlinkCommand).
+
+The placement becomes the host's own component: meshes of its own (none
+shared with the source or with the file's other placements), parts that
+are editable, saved in the host and no longer read from the source — and
+it looks exactly as it did: the same matrices, paint, tags and tag
+visibility, the parts under the same uids. The file's other placements
+stay live links. When none is left, the source leaves the host's link
+registry (nothing watches it), and its tags stay as the host's own. One
+undo brings the live link back exactly; redo breaks it again."""
+from __future__ import annotations
+
+import os
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+import pytest  # noqa: E402
+from PySide6.QtGui import QMatrix4x4, QVector3D as V  # noqa: E402
+from PySide6.QtWidgets import QApplication, QMessageBox  # noqa: E402
+
+from core import _native, links  # noqa: E402
+from core.group import Group, copy_group, iter_placements  # noqa: E402
+from core.history import History, MakeUniqueCommand, UnlinkCommand  # noqa: E402
+from core.layers import Layer, layer_of  # noqa: E402
+from core.materials import Material  # noqa: E402
+from core.mesh import DeferredMesh, Mesh  # noqa: E402
+from core.purge import iter_groups  # noqa: E402
+from core.scene import Scene  # noqa: E402
+from formats import igz  # noqa: E402
+
+_app = QApplication.instance() or QApplication([])
+
+
+# ---- a small source -------------------------------------------------------
+
+def _square(x=0.0, y=0.0, z=0.0, n=1):
+    m = Mesh()
+    for i in range(n):
+        m.add_face([V(x + i, y, z), V(x + i + 1, y, z), V(x + i + 1, y + 1, z),
+                    V(x + i, y + 1, z)])
+    return m
+
+
+def _source(path):
+    """An assembly holding a part placed twice (one definition), painted
+    with a PBR material and tagged, and a classic group beside it."""
+    s = Scene()
+    s.layers.append(Layer("Wood"))
+    s.layers.append(Layer("Steel"))
+    oak = s.materials["Oak"] = Material(
+        "Oak", color=(0.6, 0.4, 0.2),
+        pbr={"roughness": 0.7, "metallic": 0.1})
+    proto = _square(z=1.0, n=3)
+    for f in proto.faces:
+        f.attrs.update(oak.face_attrs())
+        f.attrs["layer"] = "Wood"
+    parts = []
+    for dx in (0.0, 5.0):
+        part = Group(proto, name="part")
+        part.xform = QMatrix4x4()
+        part.xform.translate(dx, 0, 0)
+        part.layer = "Steel"
+        parts.append(part)
+    asm = Group(_square(n=2), name="asm")
+    asm.adopt(parts)
+    asm.material = {"color": [0.1, 0.2, 0.3]}
+    s.groups.append(asm)
+    s.groups.append(Group(_square(x=3.0), name="classic"))
+    s.mesh.add_face([V(0, 9, 0), V(1, 9, 0), V(1, 10, 0)])
+    igz.save_scene(s, path)
+    return path
+
+
+def _host(tmp_path, packed=False):
+    src = _source(tmp_path / "Site.igz")
+    host = Scene()
+    link = links.make_link(host, src, host_path=tmp_path / "host.igz")
+    host.groups.append(link)
+    other = copy_group(link, V(20, 0, 0))
+    host.groups.append(other)
+    if packed:
+        links.set_packed(host, src, True)
+    host.version += 1
+    return host, link, other, src
+
+
+def _parts(g):
+    return list(iter_groups(g.children or ()))
+
+
+def _meshes(g):
+    return {id(p.mesh): p.mesh for p, _m in iter_placements(g)}
+
+
+def _key(p):
+    return tuple(round(c, 6) for c in (p.x(), p.y(), p.z()))
+
+
+def _look(g, uids=True):
+    """What ``g`` shows, in the world: each face's corners and attributes
+    (paint, PBR, tag), with the placement's own tag and paint; each edge's
+    ends, tag and flags. ``uids=False`` leaves the parts' uids out (two
+    links of one file)."""
+    out = []
+    for placed, m in iter_placements(g):
+        def world(p):
+            return _key(m.map(p) if m is not None else p)
+        # The root's name aside: Make Unique makes it free («Site #2»).
+        who = (placed.uid if uids else "",
+               "" if placed is g else placed.name, placed.layer or "",
+               repr(placed.material))
+        for f in placed.mesh.faces:
+            a = {k: v for k, v in (f.attrs or {}).items() if k != "layer"}
+            out.append(("f", who,
+                        tuple(sorted(world(v) for v in f.vertices)),
+                        repr(sorted(a.items())), layer_of(f)))
+        for e in placed.mesh.edges:
+            out.append(("e", who, tuple(sorted((world(e.a), world(e.b)))),
+                        repr(layer_of(e)), bool(getattr(e, "soft", False)),
+                        bool(getattr(e, "hidden", False))))
+    return sorted(out)
+
+
+def assert_live(g, src):
+    assert links.is_linked(g)
+    assert links.link_of(g)["path"] == str(src)
+    for p in _parts(g):
+        assert links.linked_ancestor(p) is g
+        if hasattr(p, "source_uid"):      # not on a packed link read back
+            assert p.uid == links.stable_uid(g.uid, p.source_uid)
+
+
+def assert_own(g, others):
+    """``g`` is the host's own: no link, parts editable, no mesh shared
+    with ``others`` (the source's other placements)."""
+    assert not links.is_linked(g)
+    assert g.is_component()
+    for p in _parts(g):
+        assert links.linked_ancestor(p) is None
+        assert p.owner is None
+        assert not hasattr(p, "source_uid")
+        assert not links.is_linked(p)
+    theirs = {k for o in others for k in _meshes(o)}
+    assert not set(_meshes(g)) & theirs
+
+
+def _edit_source(src):
+    """The source opened, two faces drawn in it, and saved."""
+    s = Scene()
+    igz.load_into(s, src)
+    for i in range(2):
+        s.mesh.add_face([V(i, 5, 0), V(i + 1, 5, 0), V(i + 1, 6, 0), V(i, 6, 0)])
+    igz.save_scene(s, src)
+
+
+def _faces(g):
+    return sum(len(p.mesh.faces) for p, _m in iter_placements(g))
+
+
+# ---- 1. the command ---------------------------------------------------------
+
+@pytest.mark.parametrize("packed", [False, True])
+def test_unlink_keeps_the_look_and_owns_its_geometry(tmp_path, packed):
+    host, link, other, src = _host(tmp_path, packed)
+    look, other_look = _look(link), _look(other)
+    before_parts = _parts(link)
+    before_meshes = [p.mesh for p in before_parts]
+    uids = [p.uid for p in before_parts]
+    history = History(host)
+    history.execute(UnlinkCommand([link]))
+    assert history.undo_stack and history.last_error is None
+    assert_own(link, [other])
+    assert _look(link) == look                       # looks as it did
+    assert [p.uid for p in _parts(link)] == uids     # same keys
+    # Two placements of one part in the source still share their copy.
+    a, b = [p for p in _parts(link) if p.name == "part"]
+    assert a.mesh is b.mesh
+    assert_live(other, src)
+    assert _look(other) == other_look
+    # The source still linked by ``other``: still registered, still watched.
+    assert links.sources(host) == [links._norm(src)]
+    assert links.is_packed(host, src) == packed
+    after_parts = _parts(link)
+
+    history.undo()
+    assert_live(link, src)
+    assert _parts(link) == before_parts              # the very same objects
+    assert [p.mesh for p in _parts(link)] == before_meshes
+    assert _look(link) == look
+    history.redo()
+    assert_own(link, [other])
+    assert _parts(link) == after_parts
+    assert _look(link) == look
+
+
+def test_the_unlinked_content_is_editable_and_the_others_are_not_touched(tmp_path):
+    host, link, other, src = _host(tmp_path)
+    History(host).execute(UnlinkCommand([link]))
+    part = next(p for p in _parts(link) if p.name == "classic")
+    theirs = next(p for p in _parts(other) if p.name == "classic")
+    n = len(theirs.mesh.faces)
+    part.mesh.add_face([V(0, 0, 3), V(1, 0, 3), V(1, 1, 3)])
+    assert len(theirs.mesh.faces) == n
+
+
+def test_the_name_is_made_free_like_make_unique(tmp_path):
+    host, link, other, src = _host(tmp_path)
+    assert link.name == other.name == "Site"
+    History(host).execute(UnlinkCommand([link]))
+    assert link.name == "Site #2" and other.name == "Site"
+
+
+def test_unlinking_both_placements_in_one_step(tmp_path):
+    host, link, other, src = _host(tmp_path)
+    looks = _look(link), _look(other)
+    history = History(host)
+    history.execute(UnlinkCommand([link, other]))
+    assert_own(link, [other])
+    assert_own(other, [link])
+    assert (_look(link), _look(other)) == looks
+    assert links.sources(host) == []
+    history.undo()
+    assert_live(link, src)
+    assert_live(other, src)
+    assert links.sources(host) == [links._norm(src)]
+
+
+def test_a_part_or_a_host_component_is_not_unlinked(tmp_path):
+    host, link, other, src = _host(tmp_path)
+    plain = Group(_square(), name="plain")
+    plain.xform = QMatrix4x4()
+    cmd = UnlinkCommand([_parts(link)[0], plain])
+    assert cmd.groups == []
+    history = History(host)
+    history.execute(cmd)
+    assert not history.undo_stack
+    assert_live(link, src)
+
+
+@pytest.mark.parametrize("store", [False, True])
+def test_deferred_meshes_copy_without_building_and_build_the_same(
+        tmp_path, monkeypatch, store):
+    """A mesh the document left deferred is copied deferred (nothing is
+    built for Make Unique), and built later it shows what the link did."""
+    monkeypatch.setattr(_native, "wanted", lambda: True)
+    monkeypatch.setattr(_native, "store_wanted", lambda: store)
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    ref_host, ref, _o, _s = _host(tmp_path / "a")
+    reference = _look(ref, uids=False)        # the link's look, built
+    host, link, other, src = _host(tmp_path / "b")
+    deferred = [m for m in _meshes(link).values() if type(m) is DeferredMesh]
+    assert deferred, "the source's meshes load deferred"
+    History(host).execute(UnlinkCommand([link]))
+    assert all(type(m) is DeferredMesh for m in _meshes(link).values())
+    assert all(type(m) is DeferredMesh for m in deferred)   # nor the source's
+    assert_own(link, [other])
+    assert _look(link, uids=False) == reference
+    # Building the copies left the link's shared meshes alone.
+    assert all(type(m) is DeferredMesh for m in deferred)
+    assert _look(other, uids=False) != reference      # elsewhere: 20 m away
+    assert len(_look(other)) == len(reference)
+
+
+def test_a_dimension_on_the_link_follows_its_own_copy(tmp_path):
+    from core.dimension import Dimension
+    host, link, other, src = _host(tmp_path)
+    dim = Dimension(V(0, 0, 1), V(3, 0, 1), V(0, -1, 0))
+    host.dimensions.append(dim)
+    dim.bind(host)
+    assert dim.anchored
+    history = History(host)
+    history.execute(UnlinkCommand([link]))
+    mine = set(_meshes(link))
+    assert dim.anchored and id(dim.anchor_a.mesh) in mine
+    assert dim.anchor_a.chain[0] is link
+    link.xform.translate(0, 0, 2)          # the dimension goes with it
+    host.version += 1
+    assert _key(dim.a) == (0.0, 0.0, 3.0) and _key(dim.b) == (3.0, 0.0, 3.0)
+    link.xform.translate(0, 0, -2)
+    history.undo()
+    assert _key(dim.a) == (0.0, 0.0, 1.0)
+    assert dim.anchor_a.alive(host)
+    assert id(dim.anchor_a.mesh) not in mine
+
+
+def test_a_file_linked_inside_the_source_becomes_content_too(tmp_path):
+    leaf = Scene()
+    leaf.mesh.add_face([V(0, 0, 7), V(1, 0, 7), V(1, 1, 7)])
+    leaf_path = tmp_path / "Leaf.igz"
+    igz.save_scene(leaf, leaf_path)
+    mid = Scene()
+    mid.groups.append(links.make_link(mid, leaf_path))
+    mid.mesh.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0)])
+    mid_path = tmp_path / "Mid.igz"
+    igz.save_scene(mid, mid_path)
+    host = Scene()
+    link = links.make_link(host, mid_path)
+    host.groups.append(link)
+    other = copy_group(link, V(9, 0, 0))
+    host.groups.append(other)
+    look = _look(link)
+    assert any(links.is_linked(p) for p in _parts(link))     # nested link
+    history = History(host)
+    history.execute(UnlinkCommand([link]))
+    assert_own(link, [other])
+    assert _look(link) == look
+    assert sorted(links.sources(host)) == sorted(
+        [links._norm(mid_path), links._norm(leaf_path)])        # ``other``
+    history.execute(UnlinkCommand([other]))
+    assert links.sources(host) == [] and links.registry(host) == {}
+    history.undo()
+    history.undo()
+    assert any(links.is_linked(p) for p in _parts(link))
+    assert all(links.linked_ancestor(p.owner) is link
+               for p in link.children)
+
+
+# ---- 2. tags and the registry ------------------------------------------------
+
+def _tag_state(scene):
+    return ([(ly.key, ly.name, ly.visible, ly.folder, repr(ly.color))
+             for ly in scene.layers],
+            list(scene.layer_folders), dict(scene.folder_parents),
+            dict(scene.folder_visibility))
+
+
+def test_the_last_placement_leaves_the_registry_and_keeps_its_tags(tmp_path):
+    host, link, other, src = _host(tmp_path)
+    host.groups.remove(other)
+    host.version += 1
+    wood = links.tag_name(src, "Wood")
+    host.layer_by_key(wood).visible = False            # switched in the host
+    assert links.note_visibility(host, wood, False)
+    tags = _tag_state(host)
+    entry = dict(links.registry(host)[links._norm(src)])
+    look = _look(link)
+    history = History(host)
+    history.execute(UnlinkCommand([link]))
+    assert links.registry(host) == {}
+    assert links.sources(host) == []
+    assert links.source_of_tag(host, wood) is None     # the host's own now
+    assert _tag_state(host) == tags                    # kept, as they showed
+    assert _look(link) == look
+    # Switching it now is the host's own switch, not an override.
+    assert not links.note_visibility(host, wood, True)
+    history.undo()
+    assert links.registry(host)[links._norm(src)] == entry
+    assert links.source_of_tag(host, wood) == links._norm(src)
+    assert _tag_state(host) == tags
+    history.redo()
+    assert links.registry(host) == {}
+    assert _tag_state(host) == tags
+
+
+# ---- 5. save and reopen ------------------------------------------------------
+
+@pytest.mark.parametrize("packed", [False, True])
+def test_save_reopen_and_the_source_no_longer_reaches_it(tmp_path, packed):
+    host, link, other, src = _host(tmp_path, packed)
+    History(host).execute(UnlinkCommand([link]))
+    look, uids = _look(link), [p.uid for p in _parts(link)]
+    path = tmp_path / "host.igz"
+    igz.save_scene(host, path)
+    back = Scene()
+    igz.load_into(back, path)
+    assert back.link_errors == {}
+    (mine,) = [g for g in back.groups if g.uid == link.uid]
+    (theirs,) = [g for g in back.groups if g.uid == other.uid]
+    assert not links.is_linked(mine)
+    assert all(links.linked_ancestor(p) is None for p in _parts(mine))
+    assert [p.uid for p in _parts(mine)] == uids
+    assert _look(mine) == look
+    assert_live(theirs, src)
+    n_mine, n_theirs = _faces(mine), _faces(theirs)
+    _edit_source(src)
+    if packed:
+        links.set_packed(back, src, False)
+    links.reload(back, src)
+    assert _faces(mine) == n_mine                    # no longer follows
+    assert _faces(theirs) == n_theirs + 2            # still follows
+    assert _look(mine) == look
+
+
+@pytest.mark.parametrize("packed", [False, True])
+def test_a_link_read_back_from_the_file_unlinks_too(tmp_path, monkeypatch, packed):
+    """Opened again (packed: the parts come from the host file, deferred),
+    the link unlinks like a fresh one, and the result saves as content."""
+    monkeypatch.setattr(_native, "wanted", lambda: True)
+    host, link, other, src = _host(tmp_path, packed)
+    path = tmp_path / "host.igz"
+    igz.save_scene(host, path)
+    back = Scene()
+    igz.load_into(back, path)
+    (theirs,) = [g for g in back.groups if g.uid == link.uid]
+    (rest,) = [g for g in back.groups if g.uid == other.uid]
+    history = History(back)
+    history.execute(UnlinkCommand([theirs]))
+    assert_own(theirs, [rest])
+    look = _look(theirs)
+    history.undo()
+    assert _look(theirs) == look
+    assert_live(theirs, src)
+    history.redo()
+    igz.save_scene(back, path)
+    again = Scene()
+    igz.load_into(again, path)
+    (mine,) = [g for g in again.groups if g.uid == link.uid]
+    assert not links.is_linked(mine) and _look(mine) == look

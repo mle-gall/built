@@ -4693,6 +4693,133 @@ class MakeUniqueCommand(Command):
         scene.version += 1
 
 
+def _move_holds(scene, placements, moved) -> None:
+    """The dimensions held on a vertex inside ``placements`` hold the
+    same vertex in its copy now: ``moved`` maps ``id`` of each part and
+    mesh replaced to its replacement (UnlinkCommand, either way). Their
+    holds would otherwise stay on the parts no longer placed — still
+    reading as alive through the placement at the top of their chain."""
+    dims = getattr(scene, "dimensions", None) or ()
+    if not dims or not moved:
+        return
+    from core.dimension import VertexAnchor
+    roots = {id(g) for g in placements}
+
+    def remap(h):
+        if h is None or not any(id(g) in roots or id(g) in moved
+                                for g in h.chain):
+            return h
+        mesh = moved.get(id(h.mesh), h.mesh)
+        chain = tuple(moved.get(id(g), g) for g in h.chain)
+        if mesh is h.mesh:
+            return VertexAnchor(h.vertex, mesh, chain)
+        try:
+            v = mesh.vertex_at(QVector3D(h.vertex.position))
+        except Exception:  # noqa: BLE001 — a mesh that cannot answer
+            v = None
+        return VertexAnchor(v, mesh, chain) if v is not None else None
+
+    for dim in dims:
+        for which in ("a", "b"):
+            name = "anchor_" + which
+            if getattr(dim, name, None) is not None:
+                setattr(dim, name, remap(getattr(dim, name)))
+            holds = getattr(dim, "_holds", None)
+            if holds and holds.get(which):
+                holds[which] = [h for h in map(remap, holds[which])
+                                if h is not None]
+
+
+class UnlinkCommand(Command):
+    """Make Unique of a linked file's placement: the link breaks and the
+    geometry stays. Each placement in ``groups`` becomes the host's own
+    component — its own meshes, its parts editable, saved in the host and
+    no longer read from the source (``links.unlinked_copy``) — placed,
+    painted and tagged as it was, while the other placements of the same
+    file stay live links.
+
+    A source no placement links any more leaves the host's link registry
+    (nothing watches or reloads it): its tags and folders stay, as the
+    host's own, showing as they did. One undo step brings the live links
+    back exactly — the same part objects, meshes and registry entries —
+    and redo puts the very same copies back."""
+
+    def __init__(self, groups) -> None:
+        from core import links
+        self.groups = [g for g in groups if links.is_linked(g)
+                       and links.linked_ancestor(getattr(g, "owner", None)) is None]
+        #: The source files of the placements, each once.
+        self.paths = list(dict.fromkeys(links.link_of(g)["path"]
+                                        for g in self.groups))
+        self._before = None
+        self._after = None
+        self._dropped: dict = {}
+        self._caches: dict = {}
+        self._errors: dict = {}
+        #: ``(old, new)`` for every part and mesh copied.
+        self._pairs: list = []
+        #: The top-level groups holding the placements (the Metal view
+        #: redraws only those), found on the first run.
+        self.tops = None
+
+    _FIELDS = ("mesh", "children", "ext", "name", "component")
+
+    def do(self, scene) -> None:
+        from core import links
+        if not self.groups:
+            raise CommandRejected("Nothing linked is selected")
+        if self._before is None:
+            self._before = [{k: getattr(g, k) for k in self._FIELDS}
+                            for g in self.groups]
+            from core.kept_components import names_in_use, numbered_name
+            self._after = []
+            for g in self.groups:
+                mesh, children, ext = links.unlinked_copy(g, self._pairs)
+                name = g.name
+                if name:
+                    taken = names_in_use(scene, skip=g)
+                    taken.update(a["name"] for a in self._after)
+                    if name in taken:
+                        name = numbered_name(name, taken)
+                self._after.append(dict(mesh=mesh, children=children,
+                                        ext=ext, name=name, component=True))
+        if self.tops is None:
+            from core.purge import iter_groups
+            want = {id(g) for g in self.groups}
+            self.tops = [root for root in scene.groups
+                         if any(id(g) in want for g in iter_groups([root]))]
+        live = set(links.sources(scene))
+        for g, after in zip(self.groups, self._after):
+            for k, v in after.items():
+                setattr(g, k, v)
+        _move_holds(scene, self.groups, {id(a): b for a, b in self._pairs})
+        gone = live - set(links.sources(scene))
+        reg = links.registry(scene)
+        self._dropped = {p: reg.pop(p) for p in gone if p in reg}
+        cache = scene.__dict__.get("_link_tag_tables") or {}
+        self._caches = {p: cache.pop(p) for p in gone if p in cache}
+        errors = getattr(scene, "link_errors", None)
+        if isinstance(errors, dict):
+            self._errors = {p: errors.pop(p) for p in list(errors)
+                            if links._norm(p) in gone}
+        scene.version += 1
+
+    def undo(self, scene) -> None:
+        from core import links
+        if self._before is None:
+            return
+        for g, before in zip(self.groups, self._before):
+            for k, v in before.items():
+                setattr(g, k, v)
+        _move_holds(scene, self.groups, {id(b): a for a, b in self._pairs})
+        links.registry(scene).update(self._dropped)
+        if self._caches:
+            scene.__dict__.setdefault("_link_tag_tables", {}).update(self._caches)
+        if self._errors and isinstance(getattr(scene, "link_errors", None), dict):
+            scene.link_errors.update(self._errors)
+        scene.version += 1
+
+
 class ReplaceComponentCommand(Command):
     """Replace Component: each target instance takes ``source``'s
     definition and keeps its own placement.
