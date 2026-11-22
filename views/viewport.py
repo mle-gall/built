@@ -21073,17 +21073,23 @@ class Viewport(QOpenGLWidget):
         self._refresh_snap()
         return True
 
-    def _cycle_reference_mode(self) -> None:
+    def _cycle_reference_mode(self, edge=None) -> None:
         """Down arrow: cycle None → parallel → perpendicular → None.
 
-        Captures whichever edge is currently under the cursor on entry to
-        parallel mode. If no edge is under the cursor when starting, do
-        nothing — there is nothing to be parallel/perpendicular to.
+        the modeller's: on entry to parallel mode it captures ``edge`` (the
+        Metal view's pick under the cursor), else the edge under the cursor,
+        else the last edge the line being drawn referenced (the soft
+        parallel/perpendicular the cursor picked up and then left: Down
+        makes that reference a lock). With no edge at all, do nothing —
+        there is nothing to be parallel/perpendicular to.
         """
         if self.reference_mode is None:
-            if self._hover_edge is None:
+            edge = (edge if edge is not None else self._hover_edge
+                    if self._hover_edge is not None
+                    else self.inference._acquired_edge)
+            if edge is None:
                 return  # nothing to capture
-            self.reference_edge = self._hover_edge
+            self.reference_edge = edge
             self.reference_mode = "parallel"
         elif self.reference_mode == "parallel":
             self.reference_mode = "perpendicular"

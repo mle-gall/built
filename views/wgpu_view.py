@@ -1117,6 +1117,7 @@ class WgpuView(QWidget):
                 return
             self._look_drag = None
             self.tools._apply_tool_cursor()
+        self._cursor_pos = event.position()
         if not event.buttons():
             self.last = None
             self.hover(event.position().x(), event.position().y(), event.modifiers())
@@ -1284,11 +1285,36 @@ class WgpuView(QWidget):
             self.sync_selection()
         elif self.tools.key(event):
             pass
+        elif event.key() == Qt.Key_Down and mode in ('tape', 'mesh'):
+            self._down_reference(event)
         elif mode == 'inert':
             event.ignore()
         elif self.source_viewport is not None:
             self.source_viewport.keyPressEvent(event)
         self.update()
+
+    def _down_reference(self, event):
+        """The Down arrow no tool took: GL's parallel → perpendicular →
+        free cycle on the edge under the cursor, picked here (GL's hover
+        edge is fed by GL's own picks only, so Down found nothing on this
+        view), else on the last edge the line referenced."""
+        source = self.source_viewport
+        if source is None or event.isAutoRepeat():
+            return
+        pos = getattr(self, '_cursor_pos', None)
+        edge = None
+        if pos is not None and source.reference_mode is None:
+            edge = self.tools.pick_edge_any(pos.x(), pos.y())
+        # GL's Down press: what it locks outlives a held Shift's plane mark.
+        source._shift_plane_mark = None
+        source._cycle_reference_mode(edge)
+        if pos is not None:
+            # The lock shows at once, the hand still (GL's _refresh_snap).
+            from PySide6.QtGui import QGuiApplication, QMouseEvent
+            held = QGuiApplication.keyboardModifiers()
+            self.hover(pos.x(), pos.y(), held)
+            self.tools.hover(QMouseEvent(QEvent.MouseMove, pos, pos,
+                                         Qt.NoButton, Qt.NoButton, held))
 
     def keyReleaseEvent(self, event):
         mode = self.tools.sync()
