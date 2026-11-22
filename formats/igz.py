@@ -652,6 +652,18 @@ def _backup_previous(path: Path) -> bool:
 
 def save_scene(scene, path: Path, *, backup=True) -> dict:
     """Synchronous explicit save; autosave drives the same preparation in slices."""
+    import gc
+
+    enabled = gc.isenabled()
+    gc.disable()
+    try:
+        return _save_scene(scene, path, backup=backup)
+    finally:
+        if enabled:
+            gc.enable()
+
+
+def _save_scene(scene, path, *, backup):
     from core import project, links
     if hasattr(scene, "plugin_data"):
         project.refresh_reference(scene, path)
