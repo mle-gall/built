@@ -192,3 +192,32 @@ def test_bridge_source_save_updates_one_binary_mesh_in_resident_scene(tmp_path, 
     assert len(updates.changed) == 1
     updates.apply(ids, rows)
     assert_matches_fresh_pack(updates, host)
+
+
+def test_nested_source_notification_keeps_outer_ids_tags_and_pack_policy(tmp_path):
+    from PySide6.QtGui import QVector3D as V
+    leaf, path = source(tmp_path)
+    for part in leaf.groups:
+        part.mesh.add_face([V(), V(1, 0, 0), V(0, 1, 0)])
+    igz.save_scene(leaf, path)
+    middle = Scene()
+    middle.groups.append(links.make_link(middle, path))
+    middle_path = tmp_path / 'middle.igz'
+    igz.save_scene(middle, middle_path)
+    host = Scene()
+    outer = links.make_link(host, middle_path)
+    host.groups.append(outer)
+    parts = list(outer.children[0].children)
+    original = [part.mesh for part in parts]
+    tag = parts[1].layer
+    leaf.groups[1].mesh.add_face([V(), V(0, 0, 1), V(0, 1, 0)])
+    igz.save_scene(leaf, path)
+    links.reload(host, path)
+    assert outer.children[0].children == parts
+    assert parts[1].layer == tag and len(parts[1].mesh.faces) == 2
+    assert [i for i, part in enumerate(parts) if part.mesh is not original[i]] == [1]
+    links.set_packed(host, middle_path, True)
+    leaf.groups[1].mesh.clear()
+    igz.save_scene(leaf, path)
+    links.reload(host, path)
+    assert len(parts[1].mesh.faces) == 2

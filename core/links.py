@@ -724,7 +724,7 @@ def _populate(placement, source, *, reconcile=False, selection=None):
             result.xform = QMatrix4x4(group.xform) if group.xform is not None else None
         result.owner = parent
         children = [clone(c, result) for c in group.children or ()]
-        if result.children != children:
+        if new or result.children != children:
             structure_changed = True
             result.children = children
         return result
@@ -820,25 +820,41 @@ def reload(scene, path, host_path=None) -> None:
     materials = dict(scene.materials)
     prepared = []
     definitions = {}
-    for group in linked_groups(scene, path):
+    roots = {}
+    for match in linked_groups(scene, path):
+        group = match
+        # A nested copy wears every enclosing source's tag namespace and
+        # UID mapping. Its outer definition also owns the packed policy.
+        while (parent := linked_ancestor(group.owner)) is not None:
+            group = parent
+        source_path = Path(link_of(group)['path']).resolve()
+        if group is match or not is_packed(scene, source_path):
+            roots[group] = source_path
+    tags_by_path = {}
+    for group, source_path in roots.items():
         rec = link_of(group)
-        config = (repr(rec.get('select')), rec.get('include_nested', True))
+        nested = rec.get('include_nested', True)
+        config = (source_path, repr(rec.get('select')), nested)
         if config not in definitions:
-            definitions[config] = _read_definition(materials, path, rec.get('select'), config[1], group)
+            definitions[config] = _read_definition(materials, source_path, rec.get('select'), nested, group)
         comp, tags = definitions[config]
-        prepared.append((group, comp, tags))
+        prepared.append((group, comp))
+        tags_by_path[source_path] = tags
+    if not prepared:
+        return
     before = scene.content_version
     swaps = []
     scene.materials.update(materials)
-    for group, comp, _tags in prepared:
+    for group, comp in prepared:
         changed = _populate(group, comp, reconcile=True, selection=scene.selection)
         if changed is None:
             swaps = None
         elif swaps is not None:
             swaps.extend(changed)
-    if prepared and _sync_tags(scene, path, prepared[0][2]):
-        swaps = None
-    _entry(scene, path)['loaded_mtime_ns'] = Path(path).stat().st_mtime_ns
+    for source_path, tags in tags_by_path.items():
+        if _sync_tags(scene, source_path, tags):
+            swaps = None
+        _entry(scene, source_path)['loaded_mtime_ns'] = source_path.stat().st_mtime_ns
     scene.version += 1
     # A view that has exactly the previous revision can retain every matrix,
     # paint and pick ID. A missed revision or tree/tag change uses its diff.
