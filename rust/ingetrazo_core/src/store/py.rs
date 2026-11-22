@@ -679,6 +679,19 @@ impl PyMeshStore {
         Ok((self.inner.key(Kind::Edge, e), ch))
     }
 
+    fn sweep_stations(&self, key: u128, path: Vec<[f64; 3]>, closed: bool, hypot: &str)
+        -> PyResult<Option<Vec<super::sweep::Station>>> {
+        let face = live_of(&self.inner, Kind::Face, key)?;
+        Ok(self.inner.sweep_stations(face, &path, closed, crate::hypot_of(hypot)?))
+    }
+
+    fn sweep_face(&mut self, key: u128, stations: Vec<super::sweep::Station>,
+                  closed: bool, hypot: &str) -> PyResult<PyChange> {
+        let face = live_of(&self.inner, Kind::Face, key)?;
+        let h = crate::hypot_of(hypot)?;
+        Ok(self.op_all(|s, ch| s.sweep_face(face, &stations, closed, h, ch))?.1)
+    }
+
     fn offset_outline(&self, key: u128, normal: [f32; 3], distance: f64, hypot: &str)
         -> PyResult<Vec<super::intersect::Segment>> {
         let face = live_of(&self.inner, Kind::Face, key)?;

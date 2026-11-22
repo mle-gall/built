@@ -434,10 +434,28 @@ def sweep_profile(mesh, face, path, closed) -> bool:
 
     Returns ``False`` (mesh untouched) on degenerate input — a 180° reversal
     in the path, a segment parallel to a joint plane, a zero-length span."""
-    got = sweep_rings(face, path, closed)
-    if got is None:
-        return False
-    rings, _dirs, spans = got
+    from core.store_mesh import _hypot, _store_of
+    store = _store_of(mesh)
+    h = _hypot() if store is not None else None
+    if h:
+        revolution = _revolution_rings(face, path) if closed else None
+        if revolution is None:
+            stations_xyz = store.sweep_stations(face.key, [p.toTuple() for p in path],
+                                                closed, h)
+            if stations_xyz is None:
+                return False
+            rings = [[[QVector3D(*p) for p in lp] for lp in station]
+                     for station in stations_xyz]
+        else:
+            rings = revolution[0]
+            stations_xyz = [[[p.toTuple() for p in lp] for lp in station]
+                            for station in rings]
+        spans = len(path) if closed else len(path) - 1
+    else:
+        got = sweep_rings(face, path, closed)
+        if got is None:
+            return False
+        rings, _dirs, spans = got
     n = len(path)
     stations = n                                  # one ring per path vertex
 
@@ -453,35 +471,39 @@ def sweep_profile(mesh, face, path, closed) -> bool:
          for j in range(len(lp))] for lp in profile_loops]
     span_curves = [getattr(_edge_at(mesh, path[s], path[(s + 1) % n]),
                            "curve", None) for s in range(spans)]
-    mesh.remove_face(face)                           # profile is consumed
-    for s in range(spans):
-        r0 = rings[s]
-        r1 = rings[(s + 1) % stations] if closed else rings[s + 1]
-        for lp0, lp1 in zip(r0, r1):
-            m = len(lp0)
-            for j in range(m):
-                a, b = lp0[j], lp0[(j + 1) % m]
-                b2, a2 = lp1[(j + 1) % m], lp1[j]
-                # A span that doesn't move this edge adds nothing; one that
-                # moves only one end (a point on a revolution axis) is a
-                # triangle.
-                quad = _wall([a, b, b2, a2])
-                if quad is not None:
-                    mesh.add_face(quad)
-    if not closed:
-        mesh.add_face(list(reversed(rings[0][0])),
-                      [list(reversed(h)) for h in rings[0][1:]] or None)
-        mesh.add_face(rings[-1][0], rings[-1][1:] or None)
+    if h:
+        store.sweep_face(face.key, stations_xyz, closed, h)
+        mesh._dirty()
+    else:
+        mesh.remove_face(face)                           # profile is consumed
+        for s in range(spans):
+            r0 = rings[s]
+            r1 = rings[(s + 1) % stations] if closed else rings[s + 1]
+            for lp0, lp1 in zip(r0, r1):
+                m = len(lp0)
+                for j in range(m):
+                    a, b = lp0[j], lp0[(j + 1) % m]
+                    b2, a2 = lp1[(j + 1) % m], lp1[j]
+                    # A span that doesn't move this edge adds nothing; one that
+                    # moves only one end (a point on a revolution axis) is a
+                    # triangle.
+                    quad = _wall([a, b, b2, a2])
+                    if quad is not None:
+                        mesh.add_face(quad)
+        if not closed:
+            mesh.add_face(list(reversed(rings[0][0])),
+                          [list(reversed(h)) for h in rings[0][1:]] or None)
+            mesh.add_face(rings[-1][0], rings[-1][1:] or None)
 
-    # The profile's own edges go with it: when station 0 is a mitre (the
-    # profile at a corner of a closed path) they no longer bound anything
-    # and would stay behind as loose lines.
-    for lp in profile_loops:
-        n_lp = len(lp)
-        for i in range(n_lp):
-            e = mesh.find_edge(lp[i], lp[(i + 1) % n_lp])
-            if e is not None and not e.faces:
-                mesh.remove_edge(e)
+        # The profile's own edges go with it: when station 0 is a mitre (the
+        # profile at a corner of a closed path) they no longer bound anything
+        # and would stay behind as loose lines.
+        for lp in profile_loops:
+            n_lp = len(lp)
+            for i in range(n_lp):
+                e = mesh.find_edge(lp[i], lp[(i + 1) % n_lp])
+                if e is not None and not e.faces:
+                    mesh.remove_edge(e)
     seed = {_key(p) for ring in rings for lp in ring for p in lp}
     run_stitch(mesh, seed, None, coplanar_merge=False)
     # Soften the seams of a curved sweep (shallow dihedral between successive

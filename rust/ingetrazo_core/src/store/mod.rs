@@ -28,6 +28,7 @@ pub mod offset;
 pub mod py;
 pub mod read;
 pub mod stitch;
+pub mod sweep;
 pub mod topo;
 mod hole;
 #[cfg(test)]
