@@ -39,7 +39,8 @@ pub struct Ui {
     /// Value at the cursor: caption, value, typing, cursor (points).
     cursor: Option<(String, String, bool, Pos2)>,
     /// Selection bar: summary and (id, label, shortcut) actions.
-    selection: Option<(String, Vec<(String, String, String, bool)>)>,
+    selection: Option<(String, Vec<(String, String, String, bool, bool)>)>,
+    sel_more: bool,
     actions: Vec<String>,
     /// The press started on the chrome: its drag and release stay there.
     captured: bool,
@@ -127,6 +128,7 @@ impl Ui {
             hint: String::new(),
             cursor: None,
             selection: None,
+            sel_more: false,
             actions: Vec::new(),
             captured: false,
             outside_press: false,
@@ -227,11 +229,11 @@ impl Ui {
     /// fields has focus, or Escape while one of its popups is open.
     pub fn claims_key(&self, name: &str) -> bool {
         let filing = self.column.as_ref().is_some_and(|c| c.filing.is_some() || c.row_menu.is_some());
-        (name == "Escape" && (self.view_open || filing)) || self.ctx.wants_keyboard_input()
+        (name == "Escape" && (self.view_open || self.sel_more || filing)) || self.ctx.wants_keyboard_input()
     }
     pub fn key(&mut self, name: &str, pressed: bool, mods: u8) -> bool {
-        if name == "Escape" && self.view_open {
-            if pressed { self.view_open = false; }
+        if name == "Escape" && (self.view_open || self.sel_more) {
+            if pressed { self.view_open = false; self.sel_more = false; }
             return true;
         }
         if name == "Escape" {
@@ -297,7 +299,8 @@ impl Ui {
                 });
             });
     }
-    pub fn set_selection(&mut self, summary: String, actions: Vec<(String, String, String, bool)>) {
+    pub fn set_selection(&mut self, summary: String, actions: Vec<(String, String, String, bool, bool)>) {
+        if summary.is_empty() { self.sel_more = false; }
         self.selection = (!summary.is_empty()).then_some((summary, actions));
     }
     /// Where an area was last laid out, in points (tests and harnesses).
@@ -332,6 +335,7 @@ impl Ui {
                 // field, and is the model's.
                 if !self.captured {
                     self.view_open = false;
+                    self.sel_more = false;
                     if let Some(col) = self.column.as_mut() { col.row_menu = None; }
                     self.ctx.memory_mut(|m| m.stop_text_input());
                 }
@@ -440,7 +444,9 @@ impl Ui {
     fn selection_bar(&mut self, ctx: &egui::Context, screen: Rect) {
         let Some((summary, actions)) = &self.selection else { return };
         let mut clicked = None;
-        egui::Area::new(egui::Id::new("selection"))
+        let mut toggle_more = false;
+        let has_more = actions.iter().any(|a| a.4);
+        let bar = egui::Area::new(egui::Id::new("selection"))
             .pivot(egui::Align2::CENTER_BOTTOM)
             .fixed_pos(pos2(screen.center().x, screen.max.y - 52.0))
             .order(egui::Order::Foreground)
@@ -451,15 +457,42 @@ impl Ui {
                         ui.add_space(8.0);
                         ui.label(egui::RichText::new(summary).size(12.0).color(DIM));
                         ui.add_space(6.0);
-                        for (id, label, key, enabled) in actions {
-                            if text_button(ui, label, key, *enabled) {
+                        for (id, label, key, enabled, more) in actions {
+                            if !*more && text_button(ui, label, key, *enabled) {
+                                clicked = Some(id.clone());
+                            }
+                        }
+                        if has_more && text_button(ui, if self.sel_more { "More ▴" } else { "More ▾" }, "", true) {
+                            toggle_more = true;
+                        }
+                    });
+                });
+            });
+        if toggle_more {
+            self.sel_more = !self.sel_more;
+        }
+        if self.sel_more {
+            let anchor = bar.response.rect;
+            egui::Area::new(egui::Id::new("sel_more"))
+                .pivot(egui::Align2::RIGHT_BOTTOM)
+                .fixed_pos(pos2(anchor.max.x, anchor.min.y - 6.0))
+                .order(egui::Order::Foreground)
+                .show(ctx, |ui| {
+                    frame().inner_margin(Margin::same(4)).show(ui, |ui| {
+                        ui.set_width(230.0);
+                        ui.spacing_mut().item_spacing = vec2(0.0, 1.0);
+                        for (id, label, key, enabled, more) in actions {
+                            if !*more { continue; }
+                            let item = (id.clone(), label.clone(), key.clone(), String::new(), -1i8, *enabled);
+                            if menu_row(ui, &item) {
                                 clicked = Some(id.clone());
                             }
                         }
                     });
                 });
-            });
+        }
         if let Some(id) = clicked {
+            self.sel_more = false;
             self.actions.push(format!("cmd:{id}"));
         }
     }
@@ -877,6 +910,7 @@ impl Ui {
         let shown = [("palette", !self.groups.is_empty()), ("selection", self.selection.is_some()),
                      ("cluster", !self.cluster.is_empty()), ("view_menu", self.view_open),
                      ("options", !self.options.is_empty()), ("column", self.column.is_some()),
+                     ("sel_more", self.sel_more && self.selection.is_some()),
                      ("row_menu", self.column.as_ref().is_some_and(|c| c.row_menu.is_some()))];
         self.hit = shown.iter()
             .filter(|(_, on)| *on)

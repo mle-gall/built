@@ -2032,7 +2032,7 @@ impl Renderer {
     fn ui_set_cursor_value(&mut self, caption: String, value: String, typing: bool, x: f32, y: f32) {
         if let Some(ui) = self.ui.as_mut() { ui.set_cursor_value(caption, value, typing, x, y); }
     }
-    fn ui_set_selection(&mut self, summary: String, actions: Vec<(String, String, String, bool)>) {
+    fn ui_set_selection(&mut self, summary: String, actions: Vec<(String, String, String, bool, bool)>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_selection(summary, actions); }
     }
     fn ui_set_icons(&mut self, icons: Vec<(String, usize, usize, Vec<u8>)>) {

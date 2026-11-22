@@ -15,18 +15,24 @@ from PySide6.QtGui import QImage, QKeySequence
 
 ENABLED = os.environ.get("BUILT_UI") == "1"
 
-# The tool bars' groups (MainWindow._build_toolbar), as palette sections.
+# What gets a button (Maxence 2026-11-22): the work itself and the states
+# you need to see. Commands every app shares a shortcut for (Save, Undo,
+# Redo, Cut/Copy/Paste, Select all, New/Open, Print, Preferences) get none:
+# menus, keys and F3 cover them. Modelling palette, by task:
 GROUPS = [
-    ["select", "eraser", "paint", "tape"],
+    ["select", "eraser", "paint", "eyedropper"],
     ["line", "freehand", "rectangle", "rotated_rect", "circle", "polygon",
      "arc", "arc3", "center_arc", "pie"],
-    ["pushpull", "move", "rotate", "scale", "flip", "followme", "offset", "fillet"],
-    ["protractor", "dimension", "text", "section"],
+    ["pushpull", "move", "rotate", "scale", "flip", "followme", "offset", "fillet",
+     "bridge", "make_faces"],
+    ["tape", "protractor", "north", "dimension", "text", "text3d", "geopath", "section"],
+    ["outer_shell", "solid_union", "solid_subtract", "solid_trim", "solid_intersect",
+     "solid_split"],
 ]
-# Navigation (Maxence 2026-11-22: "where are orbit, look around and all the
-# nav tools?"): every one visible in the palette, a group of its own.
-# They act on the camera, not the model: a top row of their own (his
-# follow-up), between Save and the view toggles.
+#: Palette entries that are window commands rather than tools.
+PALETTE_ACTIONS = {"eyedropper": "_act_eyedropper", "bridge": "_act_bridge",
+                   "make_faces": "_act_make_faces", "text3d": "_act_3dtext"}
+# Navigation acts on the camera, not the model: a top row of its own.
 NAV = [["orbit", "pan", "zoom", "zoom_window", "zoom_extents", "zoom_selection"],
        ["look_around", "walk", "position_camera"]]
 FONT = "/System/Library/Fonts/SFNS.ttf"
@@ -73,18 +79,23 @@ def _send_tools(view, win) -> None:
     """Once the window has built its tool actions (after the first view)."""
     tools = getattr(win, "_tools", {})
     groups = []
+    view._ui_palette_runs = {}
     for keys in GROUPS:
         row = []
         for key in keys:
-            action = win._tool_actions.get(key)
-            if key not in tools or action is None:
+            if key in PALETTE_ACTIONS:
+                action = getattr(win, PALETTE_ACTIONS[key], None)
+                if action is not None:
+                    view._ui_palette_runs[key] = action.trigger
+            else:
+                action = win._tool_actions.get(key) if key in tools else None
+            if action is None:
                 continue
             shortcut = action.shortcut().toString(QKeySequence.NativeText)
             w, h, rgba = _icon_rgba(key)
-            row.append((key, action.text(), shortcut, w, h, rgba))
+            row.append((key, action.text().replace("&", ""), shortcut, w, h, rgba))
         if row:
             groups.append(row)
-    view._ui_palette_runs = {}
     view.renderer.ui_set_tools(groups)
     # Full bleed: the palette replaces every tool bar.
     from PySide6.QtWidgets import QToolBar
@@ -107,7 +118,7 @@ def _send_tools(view, win) -> None:
         if w is not None:
             w.setMaximumWidth(0)
     icons = []
-    for key in [*(k for row in NAV for k in row), "save", "section_cuts", "view_iso", "view_top", "view_front",
+    for key in [*(k for row in NAV for k in row), "shadows", "section_cuts", "view_iso", "view_top", "view_front",
                 "view_right", "view_left", "view_back", "view_bottom"]:
         w, h, rgba = _icon_rgba(key)
         icons.append((key, w, h, rgba))
@@ -124,7 +135,9 @@ def before_frame(view) -> None:
         return
     if not view._ui_tools_sent and win._tool_actions:
         _send_tools(view, win)
+    eyedropper = getattr(win, "_act_eyedropper", None)
     active = next((k for k, a in getattr(win, "_nav_actions", {}).items() if a.isChecked()), "") \
+        or ("eyedropper" if eyedropper is not None and eyedropper.isChecked() else "") \
         or next((k for k, a in win._tool_actions.items() if a.isChecked()), "")
     view.renderer.ui_set_active(active)
     bar = win.statusBar()
@@ -215,9 +228,11 @@ def _cluster(view, win) -> None:
 
     style = win.active_style() if hasattr(win, "active_style") else None
     xray = style is not None and getattr(style, "face_mode", None) == "xray"
-    # No Undo/Redo buttons: ⌘Z / ⇧⌘Z (Maxence 2026-11-22).
-    doc = [tipped(item(getattr(win, "_act_save_tb", None), icon="save"), "Save")]
+    # No Save, Undo or Redo buttons: ⌘S, ⌘Z, ⇧⌘Z (Maxence 2026-11-22).
     toggles = [tipped(item(getattr(win, "_act_xray_toggle", None), label="X-ray", checked=xray), "X-ray"),
+               tipped(item(getattr(win, "_act_style_back_edges", None), label="Back edges"), "Back edges"),
+               tipped(item(getattr(win, "_act_hidden_geometry", None), label="Hidden"), "Hidden geometry"),
+               tipped(item(getattr(win, "_act_shadows", None), icon="shadows"), "Shadows"),
                tipped(item(getattr(win, "_act_show_scuts", None), label="Cut", icon="section_cuts"), "Section cuts")]
     nav = []
     for row in NAV:
@@ -229,7 +244,7 @@ def _cluster(view, win) -> None:
             if it is not None:
                 items.append(tipped(it, it[1]))
         nav.append(items)
-    cluster = [[i for i in doc if i], *[r for r in nav if r], [i for i in toggles if i]]
+    cluster = [*[r for r in nav if r], [i for i in toggles if i]]
     menu = []
     views = [item(a, icon=f"view_{k}") for k, a in getattr(win, "_view_actions", {}).items()]
     menu.append(("Views", [i for i in views if i]))
@@ -293,25 +308,67 @@ def _selection(view, win, active) -> None:
     if sig == getattr(view, "_ui_sel_sig", None):
         return
     view._ui_sel_sig = sig
-    view.renderer.ui_set_selection(_summary(sel), [(k, label, key, run is not None) for k, label, key, run in _commands(win, sel)])
+    view.renderer.ui_set_selection(_summary(sel), [(k, label, key, enabled, more)
+                                                   for k, label, key, run, enabled, more in _commands(win, sel)])
+
+
+def _edit_actions(win) -> dict:
+    """The Edit menu's actions by label (submenus included), cached."""
+    cached = getattr(win, "_ui_edit_actions", None)
+    if cached is not None:
+        return cached
+    out = {}
+
+    def walk(menu, prefix=""):
+        for a in menu.actions():
+            if a.isSeparator():
+                continue
+            if a.menu():
+                walk(a.menu(), a.text().replace("&", "") + " ")
+            elif a.text():
+                out[prefix + a.text().replace("&", "")] = a
+    for a in win.menuBar().actions():
+        if a.menu() and a.text().replace("&", "") == "Edit":
+            walk(a.menu())
+    win._ui_edit_actions = out
+    return out
+
+
+#: Geometry fixes, under More ▾: real work, not every-selection work.
+MORE = ["Intersect Faces With Model", "Intersect Faces With Selection", "Intersect Faces With Context",
+        "Soften / Smooth Edges…", "Reverse Faces", "Orient Faces", "Heal Overlapping Faces",
+        "Join Segments", "Rebuild Faces (Planar)", "Split into Pieces", "Simplify Mesh…",
+        "Convert Path to Geometry", "Delete Guides"]
 
 
 def _commands(win, sel):
-    """(id, label, shortcut, run) for the selection bar, in fixed places
-    (council 2026-11-22): File to…, Isolate, Hide, Inspect, then Edit for
-    a single group. ``run`` None: shown disabled."""
+    """(id, label, shortcut, run, enabled, in More) for the selection bar.
+    Fixed places (council 2026-11-22): File to…, Isolate, Hide, then what
+    the selection can become; geometry fixes under More."""
     from core.group import Group
     groups = [e for e in sel if isinstance(e, Group)]
+    edit = _edit_actions(win)
+
+    def act(label, name=None, more=False):
+        a = edit.get(label)
+        if a is None:
+            return None
+        return ("e:" + label, name or label.rstrip("…"), a.shortcut().toString(QKeySequence.NativeText),
+                a.trigger, a.isEnabled(), more)
     out = [
-        ("file", "File to…", "⌘⇧F", (lambda: _file_to(win, len(groups))) if groups else None),
-        ("isolate", "Isolate", "", lambda: _isolate(win, [getattr(e, "uid", None) for e in sel if getattr(e, "uid", None)])),
-        ("hide", "Hide", "", win._on_hide),
-        ("inspect", "Properties…", "", lambda: _dock(win, ("Properties", "Entity"))),
+        ("file", "File to…", "⌘⇧F", (lambda: _file_to(win, len(groups))) if groups else None, bool(groups), False),
+        ("isolate", "Isolate", "", lambda: _isolate(win, [getattr(e, "uid", None) for e in sel if getattr(e, "uid", None)]), True, False),
+        act("Hide"),
     ]
     if len(groups) == 1 and len(sel) == 1:
         one = groups[0]
-        out.append(("edit", "Edit", "double-click", lambda: win.viewport.begin_group_edit(one)))
-    return out
+        out.append(("edit", "Edit", "double-click", lambda: win.viewport.begin_group_edit(one), True, False))
+        out.append(act("Explode Group", "Explode"))
+    else:
+        out.append(act("Make Group", "Group"))
+    out.append(act("Make Component…", "Component"))
+    out.extend(act(label, more=True) for label in MORE)
+    return [c for c in out if c is not None]
 
 
 def _show_all(vp) -> None:
@@ -561,7 +618,7 @@ def _run(win, actions) -> None:
             _trigger(win, int(arg))
         elif kind == "cmd":
             sel = list(win.viewport.scene.selection)
-            run = next((r for k, _, _, r in _commands(win, sel) if k == arg), None)
+            run = next((r for k, _, _, r, ok, _ in _commands(win, sel) if k == arg and ok), None)
             if run is not None:
                 run()
 
