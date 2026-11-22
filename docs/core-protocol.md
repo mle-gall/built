@@ -1,0 +1,285 @@
+# The core protocol: commands, queries and a change feed by stable keys
+
+Status: first version built (branch `rust-core/protocol`, 2026-11-22).
+Code: `core/protocol/` (keys, feed, queries, commands), `core/agent_protocol.py`
+(bridge tools), `views/wgpu_updates.py` (first consumer); store side
+`StoreState.changes_since` / `StoreSnapshot.changes_since` (trunk's), backed
+by a chunk-skipping diff (`rust/ingetrazo_core/src/store/diff.rs`,
+`docs/meshstore-design.md` §22). Tests: `tests/test_core_protocol.py`.
+
+Two tracks meet here. The kernel is moving into the Rust `MeshStore`, where
+every op returns a change record by element key. The UI is being rebuilt in
+Rust (egui drawn by the wgpu renderer), and its plan's first step is "every
+edit and read behind commands, queries and a change feed, all using stable
+keys; the MCP bridge uses the same layer". This document is that layer, seen
+from the core. It is a public API. Names, arguments and records are plain
+data. No Python object and no `id()` ever crosses it.
+
+```
+   commands (name + key/value args) ──►  History  ──► ChangeFeed ──► consumers
+   queries  (read by key)           ◄──  scene / meshes (store or Python)
+```
+
+Consumers today and planned:
+
+| Consumer | Reads | Status |
+|---|---|---|
+| Metal view's incremental update (`views/wgpu_updates.py`) | which meshes a step changed, and their element records | **built**: geometry steps come from the feed (§6.1) |
+| Agent / MCP bridge (`plugins/ai_bridge.py`) | the feed, queries by key | **built**: 7 tools (§5) |
+| Outliner / Structure panels (`views/outliner.py`, Structure dock) | placements, tags, materials by key; `complete` | planned: they keep their content-version caches (`History.rows_cv`, `structure_cv`) for now |
+| egui UI (`ui/egui-spike`) | everything above, in process | planned: subscribe to `history.feed`; later the same records from a Rust-side history |
+
+## 1. Commands
+
+A command is a name plus key/value arguments. Elements are named by key
+(§2), positions and distances by plain numbers. Each command is **one History
+step** (one undo entry). It is answered with the feed record of that step:
+`{"ok", "step", "error", "rejected"}`. `step` is the `Step` of §4, or `None`
+when nothing happened (refused, rejected, clamped to nothing). A key that
+names nothing raises `KeyError` **before anything runs**.
+
+Built (`core.protocol.commands.run(history, name, **args)`):
+
+| Command | Arguments | Runs |
+|---|---|---|
+| `move_vertices` | `vertices: [vertex key]`, `delta: [x, y, z]` | `MoveVerticesCommand` (the Move tool's: coincident vertices move along, warped faces fold) |
+| `push_pull` | `face: face key`, `distance: number`, `keep_base: bool = false` | the Push/Pull tool locked on the face, the distance typed, committed (clamped as the tool clamps) |
+| `erase` | `edges: [edge key]`, `faces: [face key]` | `EraseSelectionCommand` (the Eraser: a split line between coplanar faces dissolves) |
+| `undo`, `redo` | — | `History.undo` / `redo` |
+
+All act on the open mesh (`scene.mesh`, the loose model or the group being
+edited). The bridge does not expose them yet. Agents edit through
+`run_python`, and the feed shows what that did.
+
+Planned, each over the existing History command it names (the argument
+lists are the contract to build to):
+
+| Command | Arguments | History command |
+|---|---|---|
+| `add_edge` | `a`, `b: [x, y, z]`, `soft?`, `tag?: tag key` | `AddEdgeCommand` / `build_add_edges` |
+| `add_face` | `outer: [[x, y, z]]`, `holes?: [[[x, y, z]]]` | `AddFaceCommand` |
+| `paint_faces` | `faces: [face key]`, `material: name \| null`, `side: "front" \| "back"` | `SetFaceColorCommand` family |
+| `soften_edges` | `edges: [edge key]`, `soft: bool` | `SoftenByAngleCommand` |
+| `move_placements` | `placements: [uid]`, `delta: [x, y, z]` | `MoveGroupCommand` |
+| `set_tag` | `placements: [uid]`, `tag: tag key` | `AssignLayerCommand` |
+| `hide` / `unhide` | `placements: [uid]` | `HideCommand` |
+| `delete_placements` | `placements: [uid]` | `DeleteGroupCommand` |
+| `open_placement` / `close_placement` | `placement: uid` | `begin_group_edit` / `end_group_edit` (not History steps today) |
+
+## 2. Stable keys
+
+| What | Key | Lifetime |
+|---|---|---|
+| Placement (group, component instance, nested part) | `Group.uid` (a string) | saved with the document; a copy gets its own; linked parts derive theirs from the source |
+| Tag | `Layer.key` (`docs/tags-by-key`: names are labels) | saved |
+| Material | its name in `scene.materials` | saved; a rename is a remove plus a create until materials get keys as tags did |
+| Mesh | `"m<n>"`, given the first time the protocol names a mesh (`core.protocol.keys.mesh_key`) | this session; a mesh is one geometry object (the loose model, a definition shared by instances, a group's own mesh, the world copy an open instance is edited in) |
+| Element | `(mesh key, element key)`. The element key is the int every `Vertex` / `Edge` / `Face` already carries | this session; unique across meshes in the process; kept across undo / redo, remove / relink and the store's restores; a deep copy is new elements with new keys |
+
+Element keys of a store-backed mesh encode `namespace << 40 | kind << 38 |
+generation << 26 | slot` (`docs/meshstore-design.md` §3). Their kind is in
+the key. Python-mesh keys are a plain counter. **In JSON an element key is a
+decimal string**: store keys pass 2^53, and a JavaScript client (MCP hosts
+are) would round them. Python callers use ints. `from_json_key` takes both.
+
+Mesh references accepted by queries (`resolve_mesh`): omitted or `"active"`
+(the open mesh), `"loose"`, a mesh key, or a placement uid (the mesh that
+placement draws).
+
+Never persisted: mesh keys and element keys (persisting element keys is
+`.igz` format 4, out of scope). A consumer that outlives the session keys
+by placement uid and positions.
+
+## 3. Queries
+
+Built (`core.protocol.queries`). Every answer is JSON-safe. Nothing reads by
+building Python objects for a store-backed mesh's untouched elements, takes
+an undo snapshot or materialises a store.
+
+| Query | Arguments | Answer |
+|---|---|---|
+| `mesh_info` | `mesh?` | `{mesh, backing: "store" \| "python", vertices, edges, faces, active, revision}` |
+| `faces` | `keys`, `mesh?` | per face: `rings` (positions, outer first, then holes), `corners` (vertex keys, same shape), `normal`; `missing` keys |
+| `edges` | `keys`, `mesh?` | per edge: `ends` (vertex keys), `positions`, `soft`, `hidden`, `faces` (keys, with multiplicity); `missing` |
+| `vertices` | `keys`, `mesh?` | per vertex: `position`; `missing` |
+| `selection` | — | `{mesh, placements: [uid], vertex, edge, face: [key]}` (elements of the open mesh) |
+| `select` | `faces?, edges?, vertices?: [key]`, `mode: replace \| add \| remove \| clear` | `selection` plus `missing`. Not a History step: selection is view state |
+| `feed` | `since_revision` | §4 as JSON |
+
+Planned: `faces_around(vertices)` (the store's, for the renderer's partial
+rebake), `faces_on_plane(point, normal)` and `face_at(ray)` (an agent naming
+a face it can only describe), `placements(uids)` (rows: name, tag, material,
+matrix, child uids), `tags()`, `materials()`.
+
+## 4. The change feed
+
+`History` makes a `ChangeFeed` in its constructor (`history.feed`). The feed
+listens to every execute, undo and redo through `History.add_listener`.
+After each step that ran it publishes one `Step`. A step that failed and was
+rolled back, or that a command rejected, publishes nothing (History's
+`revision` does not move either).
+
+### 4.1 A step
+
+```
+Step
+  revision     History.revision after the step (the token query_changes uses)
+  phase        "execute" | "undo" | "redo"
+  command      the command's class name
+  meshes       [MeshChange]   one per mesh the step changed
+  placements   {created, removed, modified: [uid]}
+  tags         {created, removed, modified: [tag key]}
+  materials    {created, removed, modified: [material name]}
+  complete     False when the step may have changed placements, or face
+               attrs in other meshes, that are not named here: re-read
+               what you follow
+
+MeshChange
+  mesh         mesh key            (.mesh in process: a weak reference)
+  backing      "store" | "python"
+  replaced     re-read the whole mesh (see below)
+  created      {vertex, edge, face: [key]}
+  removed      {vertex, edge, face: [key]}
+  modified     {vertex, edge, face: [key]}
+  moved        [vertex key]
+  revision     the store's revision after the step (None for Python)
+```
+
+**Store-backed mesh: the store's change record.** Before the step the feed
+takes the mesh's `capture_state()` (the store snapshot, O(1), plus the
+faces' own attrs dicts). After the step it asks
+`capture_state().changes_since(before)`, the net change between the two
+states (§22 of the store design). That is the same `StoreChange` record the ops
+return, and it covers whatever the step did: ops, field writes, a restore,
+several of those in a row.
+- `created` / `removed`: keys live after and not before, or before and not
+  after (a relinked tombstone counts as created, as the ops report it).
+- `moved`: vertices whose position changed.
+- `modified.vertex`: vertices whose edge set changed.
+- `modified.edge`: ends, soft / hidden, curve, tag, or the face list
+  (order and multiplicity).
+- `modified.face`: rings, attribute index, interior flag, or the face's own
+  attrs dict (attrs live beside the store, design decision 6;
+  `StoreState.changes_since` compares them). Past `ATTRS_COPY_MAX` (50,000)
+  faces with dicts of their own, the feed stops copying them before each
+  step; then only the faces a paint command names are reported.
+
+What follows from a move (the edges and faces around it) is not listed. A
+renderer derives it with the store's `faces_around(moved)`.
+
+**Python mesh: coarse.** `replaced` is true when its geometry serial moved
+(re-read it). A paint that names its faces is reported as `modified.face`
+without `replaced`. Any other attrs-only change sets `replaced`. A mesh that
+went from the store to Python objects, or back, during the step
+(materialisation, an undo onto a store snapshot) is `replaced` as well.
+
+**Net, and undo is the inverse.** A step's record is a diff, not a log. An
+element made and removed inside one step is in neither list. Undo is a diff
+too, so it publishes the inverse of the step it takes back: `created` and
+`removed` swap, `moved` and `modified` stay the same keys. Redo publishes the
+step again. Tested exactly against an oracle read through the mesh, for
+move, push/pull and erase with undo and redo, and for random op sequences
+(`tests/test_core_protocol.py`).
+
+**Which meshes.** The open mesh at execute; at undo / redo the mesh the
+command ran on (`_history_mesh`, even after the user left that group); a
+`SnapshotMutation`'s own target; a soften's meshes; a compound's parts'.
+A mesh with nothing changed is left out.
+
+**Document level** is compared before and after the step. Root placements
+are compared by identity; a uid both removed and created (a group replaced
+by its copy, which keeps the uid) is reported as modified. Tags and materials
+are compared by value. Nested placements a known command touches are named
+from the command (`InsertGroupCommand` / `DeleteGroupCommand` with undo
+reversed, `MoveGroupCommand`, `HideCommand`, `AssignLayerCommand`).
+Geometry-only commands (`keeps_rows`, and the snapshot / move / draw / erase
+commands) change no placement. Any other command sets `complete = False`.
+
+### 4.2 Delivery
+
+- `history.feed.subscribe(fn)` → `fn(step)` after every step, synchronously
+  on the UI thread, before every `History` listener registered after the
+  feed (all others: History subscribes it first). A subscriber that raises
+  is logged and never breaks the command.
+- `history.feed.step(revision)`, `.last`, `.since(revision)` →
+  `{revision, complete, steps}`; `complete` is false when steps older than
+  `revision` fell out of the ring (256 steps, like History's journal).
+- A command run inside another command's `do` is folded into the outer step.
+- JSON: `Step.to_json()` (keys as strings).
+
+### 4.3 Cost (this Mac, 2026-11-22, synthetic meshes)
+
+| | |
+|---|---|
+| `changes_since` after one vertex move, 300 × 300 grid (90,000 faces) | 11–15 µs (chunks both states share are not read); trunk's element-by-element walk it replaces: 10.2 ms |
+| Move + undo through the feed vs without it, same grid, store-backed | 48.1 vs 48.3 ms (45.4 vs 44.8 in an earlier run) |
+| Same, Python mesh | 1,225 vs 1,192 ms (noise: the feed reads two counters) |
+| Document comparison per step, 20,000 root placements, 300 tags, 300 materials | 2 × 1.2 ms |
+
+## 5. The agent / MCP bridge
+
+The bridge's tools for the protocol (`core/agent_protocol.py`, listed by
+`list_tools`, all read-only):
+
+| Tool | Arguments | Query |
+|---|---|---|
+| `query_feed` | `since_revision` | `feed` |
+| `query_mesh` | `mesh?` | `mesh_info` |
+| `query_faces` / `query_edges` / `query_vertices` | `keys`, `mesh?` | `faces` / `edges` / `vertices` |
+| `query_selected_elements` | — | `selection` |
+| `select_elements` | `faces?, edges?, vertices?`, `mode` | `select` |
+
+So an agent can name a face by key: select it in the app (or read it from
+`query_selected_elements`, or from the `created.face` of the step that made
+it), read its rings with `query_faces`, act on it, and read back what the
+step did with `query_feed`. `query_changes` (the command journal) stays as
+it was; its revisions are the feed's.
+
+## 6. Consumers
+
+### 6.1 Metal view: incremental update (built)
+
+`InstanceUpdates.observe(history)` already followed History's listeners and
+decided from the command class which mesh a geometry command had edited:
+the open mesh, or a snapshot mutation's target. It now takes those meshes
+from the feed's step instead. It also keeps each pending mesh's
+`MeshChange`s until the next `diff()`, and hands the records of the meshes
+it rebakes to the caller as `changed_records` (`id(mesh) → [MeshChange]`).
+A partial rebake (only the faces around `moved` plus `created` /
+`modified`, `removed` tombstoned) would start from those records; that
+choice belongs to the renderer track. Rebakes are still whole prototypes.
+Without a feed (a stand-in History) it falls back to the command class.
+
+One behaviour changed: **edit inside a group, leave the group, undo.** The
+command class named the open mesh, which by then was the loose model, and
+the resident pack kept drawing the undone edit (it no longer matched a fresh
+pack). The feed names the mesh the undo ran on, which gets rebaked
+(`test_renderer_undo_after_leaving_the_group_rebakes_it`). Every
+`tests/test_wgpu_updates.py` test passes unchanged.
+
+### 6.2 Outliner / Structure panels (planned)
+
+They rebuild from content versions today (`History.rows_cv`,
+`structure_cv`, `groups_cv`). The feed's `placements` / `tags` /
+`materials` with `complete` are what they would patch rows from. `complete =
+False` keeps today's full rebuild.
+
+### 6.3 egui UI (planned)
+
+In process, the egui layer subscribes to `history.feed`, issues §1 commands
+and §3 queries, and never holds a Python element. When History itself moves
+to Rust, the same `Step` / `MeshChange` shapes come from there. The store's
+records already are Rust (`edit::Change`).
+
+## 7. Limits of this first version
+
+- Python meshes report `replaced` (coarse) until their ops are ported.
+- On a Python mesh, paint is named by its faces only for the `SetFace*`
+  commands (on a store mesh any attrs edit is, up to `ATTRS_COPY_MAX`). A
+  material replaced across every mesh (`complete = False`) is not.
+- A step's meshes are the ones known before it ran. A soften's meshes at
+  execute are found only after, and are not reported (the renderer handles
+  soften itself).
+- Mesh keys are per session; the feed is not saved.
+- Commands are not exposed through the bridge yet (agents edit with
+  `run_python`); the planned command list is §1.

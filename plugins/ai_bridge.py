@@ -83,9 +83,11 @@ from core.agent_inspection import InspectionTools
 from core.agent_records import RecordTools
 from core.agent_facets import FacetTools
 from core.agent_structure import StructureTools
+from core.agent_protocol import ProtocolTools
 
 
-class _Bridge(QObject, InspectionTools, RecordTools, FacetTools, StructureTools):
+class _Bridge(QObject, InspectionTools, RecordTools, FacetTools, StructureTools,
+              ProtocolTools):
     """The in-app half: accepts one agent connection and executes its tool
     calls on the Qt main thread."""
 

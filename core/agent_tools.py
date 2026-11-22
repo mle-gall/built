@@ -235,3 +235,26 @@ for _name, _props, _required, _mutates in [
 ]:
     BUILTIN_TOOLS.append(dict(name=_name, description=_name.replace('_', ' '),
         inputSchema=dict(type='object', properties=_props, required=_required), mutates=_mutates))
+
+# The core protocol (docs/core-protocol.md): elements by (mesh, key), the
+# change feed. Element keys are decimal strings (they pass 2**53).
+_KEYS = {"type": "array", "items": {"type": "string"}}
+_MESH = {"type": "string", "description": "A mesh key (m<n>), a placement uid, 'active' (default: the open mesh) or 'loose'."}
+for _name, _description, _props, _required in [
+    ("query_feed", "Read the change feed after a history revision: per step, the element keys each mesh's store "
+     "created/removed/modified/moved (Python meshes: replaced=true), placements by uid, tags by key, materials by name. "
+     "Undo/redo are steps too (the inverse). complete=false: older steps expired.",
+     {"since_revision": {"type": "integer", "minimum": 0, "default": 0}}, []),
+    ("query_mesh", "Read a mesh's key, backing (store/python) and element counts.", {"mesh": _MESH}, []),
+    ("query_faces", "Read faces by key: ring positions (outer first), corner vertex keys, normal.",
+     {"keys": _KEYS, "mesh": _MESH}, ["keys"]),
+    ("query_edges", "Read edges by key: end keys and positions, soft/hidden, face keys.",
+     {"keys": _KEYS, "mesh": _MESH}, ["keys"]),
+    ("query_vertices", "Read vertex positions by key.", {"keys": _KEYS, "mesh": _MESH}, ["keys"]),
+    ("query_selected_elements", "Read the selection by keys: placements by uid, faces/edges/vertices of the open mesh by key.", {}, []),
+    ("select_elements", "Select faces/edges/vertices of the open mesh by key; returns the selection by keys and missing keys.",
+     {"faces": _KEYS, "edges": _KEYS, "vertices": _KEYS,
+      "mode": {"enum": ["replace", "add", "remove", "clear"], "default": "replace"}}, []),
+]:
+    BUILTIN_TOOLS.append(dict(name=_name, description=_description,
+        inputSchema=dict(type="object", properties=_props, required=_required)))

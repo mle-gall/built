@@ -94,6 +94,11 @@ class InstanceUpdates:
         self.pending_removed = set()
         self.journal_valid = True
         self.unsubscribe = None
+        # The change feed's records (core/protocol) of the meshes pending
+        # a rebake, per id(mesh), and after diff() those of the meshes it
+        # rebakes: the element keys a partial rebake would start from.
+        self.mesh_changes = {}
+        self.changed_records = {}
         self.roots = set(scene.groups)
         self.world_boxes = self._boxes(np.arange(len(packed.instances)))
 
@@ -122,7 +127,16 @@ class InstanceUpdates:
             if _resident_version(self.scene) != self.version:
                 self.journal_valid = False
 
+        feed = getattr(history, 'feed', None)
+
         def after(command, phase, ran):
+            # The feed published this step before any other listener ran.
+            step = feed.step(history.revision) if (ran and feed is not None) else None
+            if step is not None:
+                for change in step.meshes:
+                    mesh = change.mesh
+                    if mesh is not None and id(mesh) in self.meshes:
+                        self.mesh_changes.setdefault(id(mesh), []).append(change)
             from core.history import (MoveGroupCommand, CompoundCommand, SetRecordCommand,
                                       SetRegistryCommand, InsertGroupCommand, DeleteGroupCommand,
                                       SnapshotMutation, SnapshotCompound, MoveVerticesCommand, AddEdgeCommand,
@@ -176,6 +190,10 @@ class InstanceUpdates:
                     return True
                 if isinstance(command, (SnapshotMutation, SnapshotCompound, MoveVerticesCommand,
                                         AddEdgeCommand, AddFaceCommand, EraseSelectionCommand)):
+                    if step is not None:
+                        # The meshes the step changed, as the feed names them
+                        # (store-backed: by element; Python: replaced).
+                        return all(edited(c.mesh) for c in step.meshes if c.mesh is not None)
                     mesh = command._target(self.scene) if isinstance(command, SnapshotMutation) else self.scene.mesh
                     return edited(mesh)
                 from core.soften import SoftenByAngleCommand
@@ -453,6 +471,9 @@ class InstanceUpdates:
         for key, (mesh, _, _) in changed.items():
             for code in self.variants.get(key, ()):
                 bake[code] = mesh
+        records, self.mesh_changes = self.mesh_changes, {}
+        self.changed_records = {key: records[key] for key in {id(m) for m in bake.values()}
+                                if key in records}
         if len(bake) > self.rebake_limit():
             # Revisions and serials also move without an edit (a lazy mesh
             # built, commands that flag every group mesh), and a batch the

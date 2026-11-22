@@ -233,6 +233,11 @@ class History:
         #: takeoff that found nothing tagged still finds nothing — a Move
         #: on the plant of #158 need not walk its 21 406 groups for tags.
         self.tags_cv = None
+        #: The change feed (core/protocol, docs/core-protocol.md): one
+        #: record per step by stable keys. Subscribed first, so a step's
+        #: record is there for every other listener's ``after``.
+        from core.protocol.feed import ChangeFeed
+        self.feed = ChangeFeed(self)
 
     def add_listener(self, *, before=None, after=None):
         """Subscribe callback(command, phase, ran); return an unsubscribe function.

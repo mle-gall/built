@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Net geometry change of a compound edit (including its stitch and orientation).
-use super::{edit::Change, keys::Kind, Store};
+use super::{edit::Change, Store};
+#[cfg(test)]
+use super::keys::Kind;
 
 impl Store {
+    #[cfg(test)]
     fn same_references(
         &self,
         before: &Store,
@@ -14,7 +17,19 @@ impl Store {
             .eq(b.map(|s| before.key(kind, s)))
     }
 
+    /// The net change from `before` to this store, by key: `State::changes_since`
+    /// (store/diff.rs), which skips the chunks both still share, so a History
+    /// step costs O(chunks it wrote) rather than O(elements).
     pub fn changes_since(&self, before: &Store) -> Change {
+        let mut change = self.state.changes_since(&before.state);
+        change.revision = self.revision;
+        change
+    }
+
+    /// Element by element (the first version): kept as the oracle the
+    /// chunked diff is tested against.
+    #[cfg(test)]
+    pub fn changes_since_full(&self, before: &Store) -> Change {
         let mut change = Change {
             revision: self.revision,
             ..Default::default()
