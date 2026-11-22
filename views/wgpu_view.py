@@ -412,6 +412,8 @@ class WgpuView(QWidget):
             black_box.install_panic_log(ingetrazo_render)
             self.renderer = ingetrazo_render.Renderer(int(self.winId()), self.width(), self.height(), self.devicePixelRatioF())
             self._wrap_renderer()
+            from views import wgpu_ui
+            wgpu_ui.attach(self)
         self._resident_count = len(self.packed.instances) or 1
         if len(self.packed.instances):
             self.packed.upload(self.renderer)
@@ -612,7 +614,10 @@ class WgpuView(QWidget):
             self.overlay_ms = (time.perf_counter() - before) * 1000
             self._had_overlay = annotations or bool(primitives) or section_widgets
         # End R3c-2a section widgets.
+        from views import wgpu_ui
+        wgpu_ui.before_frame(self)
         cpu, gpu = self.renderer.render()
+        wgpu_ui.after_frame(self)
         self._pick_frame_dirty = False
         wall = (time.perf_counter()-start)*1000
         self.frameReady.emit(cpu, gpu, wall)
@@ -1138,6 +1143,9 @@ class WgpuView(QWidget):
 
     def mousePressEvent(self, event):
         self.setFocus()
+        from views import wgpu_ui
+        if wgpu_ui.pointer(self, 'press', event):
+            return
         self.last = self.press = event.position()
         self._drag_nav = event.button() == Qt.MiddleButton or bool(
             getattr(self.source_viewport, 'nav_mode', None))
@@ -1154,6 +1162,9 @@ class WgpuView(QWidget):
             self._pivot = self._orbit_pivot_at(self.press.x(), self.press.y())
 
     def mouseMoveEvent(self, event):
+        from views import wgpu_ui
+        if wgpu_ui.pointer(self, 'move', event):
+            return
         if getattr(self, '_look_drag', None) is not None:
             from views.viewport import Viewport
             if event.buttons():
@@ -1222,7 +1233,15 @@ class WgpuView(QWidget):
         # Qt's focus chain took it and left the keyboard on a tray button.
         return False
 
+    def leaveEvent(self, event):
+        from views import wgpu_ui
+        wgpu_ui.pointer(self, 'leave')
+        super().leaveEvent(event)
+
     def mouseReleaseEvent(self, event):
+        from views import wgpu_ui
+        if wgpu_ui.pointer(self, 'release', event):
+            return
         if getattr(self, '_look_drag', None) is not None:
             self._look_drag = None
             self.tools._apply_tool_cursor()
@@ -1283,6 +1302,9 @@ class WgpuView(QWidget):
             locked_group=self.tools.pick_locked_group(point.x(), point.y()))
 
     def mouseDoubleClickEvent(self, event):
+        from views import wgpu_ui
+        if wgpu_ui.pointer(self, 'press', event):
+            return
         # A double click of the wheel recentres the view on the point under
         # the cursor (on sky: at the depth of the view's centre); the tool in
         # use never hears of it and no orbit starts, as in GL (#979, #1154).
@@ -1315,6 +1337,11 @@ class WgpuView(QWidget):
             from views import trackpad_nav
             if trackpad_nav.native_gesture(self, event):
                 return True
+        if event.type() == QEvent.ShortcutOverride:
+            from views import wgpu_ui
+            if wgpu_ui.claims_key(self, event):
+                event.accept()
+                return True
         if event.type() == QEvent.ShortcutOverride and hasattr(self, 'tools'):
             mode = self.tools.sync()
             from views.viewport import Viewport
@@ -1331,6 +1358,9 @@ class WgpuView(QWidget):
         return super().event(event)
 
     def keyPressEvent(self, event):
+        from views import wgpu_ui
+        if wgpu_ui.key(self, event, True):
+            return
         mode = self.tools.sync()
         if event.key() == Qt.Key_Escape:
             self._look_drag = None
@@ -1379,6 +1409,9 @@ class WgpuView(QWidget):
                                          Qt.NoButton, Qt.NoButton, held))
 
     def keyReleaseEvent(self, event):
+        from views import wgpu_ui
+        if wgpu_ui.key(self, event, False):
+            return
         mode = self.tools.sync()
         release = getattr(self.tools.tool, 'on_key_release', None)
         if mode == 'mesh' and event.isAutoRepeat() and callable(getattr(self.tools.tool, 'claims_key', None)):
@@ -1457,6 +1490,9 @@ class WgpuView(QWidget):
         return Viewport._zoom_at(self, steps, pos)
 
     def wheelEvent(self, event):
+        from views import wgpu_ui
+        if wgpu_ui.wheel(self, event):
+            return
         from views.viewport import Viewport
         self._invert_wheel = getattr(self.source_viewport, '_invert_wheel', False)
         Viewport.wheelEvent(self, event)

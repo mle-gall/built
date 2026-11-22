@@ -2,6 +2,7 @@
 mod timing;
 mod panic_log;
 mod overlay;
+mod ui;
 mod axes;
 mod sections;
 mod preview;
@@ -180,6 +181,10 @@ struct Renderer {
     frame_stages: [f64; 5],
     read: wgpu::Buffer,
     gpu_memory: u64,
+    /// egui chrome over the view ``ui_target`` (the UI spike); off by default.
+    ui: Option<ui::Ui>,
+    ui_target: usize,
+    ui_scale: f32,
     #[pyo3(get)]
     adapter: String,
 }
@@ -614,6 +619,9 @@ impl Renderer {
             resolve,
             read,
             gpu_memory: 0,
+            ui: None,
+            ui_target: 0,
+            ui_scale: scale as f32,
             adapter: format!(
                 "{:?}; multi_draw={}",
                 a.get_info(),
@@ -1597,6 +1605,7 @@ impl Renderer {
     }
     fn resize(&mut self, w: u32, h: u32, scale: f64) {
         self.ids_dirty = true;
+        self.ui_scale = scale as f32;
         self.config.width = ((w as f64 * scale) as u32).max(1);
         self.config.height = ((h as f64 * scale) as u32).max(1);
         self.surface.configure(&self.device, &self.config);
@@ -1866,6 +1875,11 @@ impl Renderer {
         }
         self.overlay
             .draw(&mut e, &color, self.config.width, self.config.height, tq);
+        if present && self.ui_target == self.active {
+            if let Some(ui) = self.ui.as_mut() {
+                ui.paint(&self.device, &self.queue, &mut e, &color, [self.config.width, self.config.height], self.ui_scale);
+            }
+        }
         if let (Some(q), Some(k)) = (&self.queries, timing_slot) {
             e.resolve_query_set(q, 0..if self.detailed_timestamps { timing::COUNT } else { 4 }, &self.resolve, 0);
             e.copy_buffer_to_buffer(&self.resolve, 0, &self.timings[k].read, 0, timing::BYTES as u64);
@@ -1990,6 +2004,69 @@ impl Renderer {
             .upload(&self.device, &self.queue, width, height, bytes);
         Ok(())
     }
+    /// UI spike: draw egui chrome over the live view from now on.
+    #[pyo3(signature = (font=None))]
+    fn ui_enable(&mut self, font: Option<String>) -> PyResult<()> {
+        let mut ui = ui::Ui::new(&self.device, self.config.format);
+        if let Some(path) = font {
+            if let Ok(bytes) = std::fs::read(&path) { ui.set_font(bytes); }
+        }
+        self.ui = Some(ui);
+        self.ui_target = self.active;
+        Ok(())
+    }
+    fn ui_set_tools(&mut self, groups: Vec<Vec<(String, String, String, usize, usize, Vec<u8>)>>) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_tools(groups); }
+    }
+    fn ui_set_active(&mut self, id: String) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_active(id); }
+    }
+    fn ui_set_status(&mut self, status: String, hint: String) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_status(status, hint); }
+    }
+    /// ``kind``: move, press, release, leave; logical points. True when
+    /// the chrome takes the event.
+    fn ui_pointer(&mut self, kind: &str, x: f32, y: f32, button: u8, modifiers: u8) -> bool {
+        self.ui.as_mut().is_some_and(|ui| ui.pointer(kind, x, y, button, modifiers))
+    }
+    fn ui_set_cursor_value(&mut self, caption: String, value: String, typing: bool, x: f32, y: f32) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_cursor_value(caption, value, typing, x, y); }
+    }
+    fn ui_set_selection(&mut self, summary: String, actions: Vec<(String, String, String, bool)>) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_selection(summary, actions); }
+    }
+    fn ui_set_icons(&mut self, icons: Vec<(String, usize, usize, Vec<u8>)>) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_icons(icons); }
+    }
+    fn ui_set_cluster(&mut self, cluster: Vec<Vec<ui::Item>>, view_menu: Vec<(String, Vec<ui::Item>)>) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_cluster(cluster, view_menu); }
+    }
+    fn ui_claims_key(&self, name: &str) -> bool { self.ui.as_ref().is_some_and(|ui| ui.claims_key(name)) }
+    fn ui_key(&mut self, name: &str, pressed: bool, modifiers: u8) -> bool {
+        self.ui.as_mut().is_some_and(|ui| ui.key(name, pressed, modifiers))
+    }
+    fn ui_text(&mut self, text: String) -> bool { self.ui.as_mut().is_some_and(|ui| ui.text(text)) }
+    fn ui_area_rect(&self, name: &str) -> Option<(f32, f32, f32, f32)> { self.ui.as_ref().and_then(|ui| ui.area_rect(name)) }
+    fn ui_set_options(&mut self, options: Vec<(String, String, String, u8)>) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_options(options); }
+    }
+    fn ui_set_tree(&mut self, rows: Vec<(String, i64, usize, String, String, u32, u32, bool)>, unfiled: u32) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_tree(rows, unfiled); }
+    }
+    fn ui_set_inspector(&mut self, title: String, sections: Vec<(String, Vec<(String, String)>)>) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_inspector(title, sections); }
+    }
+    fn ui_start_filing(&mut self, what: String) {
+        if let Some(ui) = self.ui.as_mut() { ui.start_filing(what); }
+    }
+    fn ui_wheel(&mut self, x: f32, y: f32, dx: f32, dy: f32) -> bool {
+        self.ui.as_mut().is_some_and(|ui| ui.wheel(x, y, dx, dy))
+    }
+    fn ui_take_actions(&mut self) -> Vec<String> {
+        self.ui.as_mut().map(|ui| ui.take_actions()).unwrap_or_default()
+    }
+    fn ui_repaint_after_ms(&self) -> Option<f64> { self.ui.as_ref().and_then(|ui| ui.repaint_after_ms()) }
+    fn ui_frame_ms(&self) -> f64 { self.ui.as_ref().map_or(0., |ui| ui.frame_ms) }
     fn last_timings(&self) -> (f64, Option<f64>, f64, std::collections::BTreeMap<String, Option<f64>>, std::collections::BTreeMap<String, u64>) {
         let mut counters = self.last_counters.clone();
         counters.insert("texture_layers".into(), self.textures.layers as u64);
