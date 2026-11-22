@@ -153,6 +153,9 @@ def _command_meshes(cmd, scene, phase) -> list:
             stack.extend(c.commands)
         elif isinstance(c, SnapshotMutation):
             out.append(c._target(scene))
+        proto = _reshared_definition(c)
+        if proto is not None:
+            out.append(proto)
         meshes = getattr(c, "meshes", None)
         if callable(meshes) and type(c).__name__ in (
                 "SoftenByAngleCommand", "FlipFacesCommand", "FlipGroupsCommand"):
@@ -163,6 +166,27 @@ def _command_meshes(cmd, scene, phase) -> list:
             seen.add(id(m))
             uniq.append(m)
     return uniq
+
+
+def _reshared_definition(cmd):
+    """The shared definition a Reshare step writes (leaving an edited
+    component instance or assembly): the mesh every copy shows."""
+    from core.history import ReshareAssemblyCommand, ReshareInstanceCommand
+    if isinstance(cmd, (ReshareInstanceCommand, ReshareAssemblyCommand)):
+        return cmd.proto
+    return None
+
+
+def _placements_showing(scene, mesh) -> list:
+    """Uids of every placement, nested and hidden ones included, that
+    draws ``mesh``."""
+    out, stack = [], list(scene.groups)
+    while stack:
+        g = stack.pop()
+        if getattr(g, "mesh", None) is mesh:
+            out.append(g.uid)
+        stack.extend(getattr(g, "children", None) or ())
+    return sorted(out)
 
 
 #: Above this many faces with attrs dicts of their own, the step's
@@ -187,7 +211,9 @@ def _token(mesh):
 
 def _store_change(mesh, st, before):
     """The store's net record since ``before`` (store/changes.rs), face
-    attrs compared when ``before`` holds them; None across namespaces."""
+    attrs compared when ``before`` holds them; across a namespace change
+    (a foreign snapshot adopted under fresh keys) everything removed and
+    created; None across two stores."""
     from core.store_mesh import StoreState
     try:
         if isinstance(before, StoreState):
@@ -197,7 +223,7 @@ def _store_change(mesh, st, before):
             return now.changes_since(before)
         return st.snapshot().changes_since(before, [])
     except ValueError:
-        return None         # another namespace: a foreign snapshot adopted
+        return None         # another store's snapshot
 
 
 def _mesh_change(mesh, token, painted=()) -> MeshChange:
@@ -277,12 +303,12 @@ def _geometry_only():
             H.DeleteEdgesCommand, H.DeleteFaceCommand)
 
 
-def _known_placements(cmd, phase, step) -> bool:
+def _known_placements(cmd, phase, step, scene=None) -> bool:
     """Name the placements a known command changed; False when the
     command may change placements the feed cannot name."""
     from core import history as H
     if isinstance(cmd, H.CompoundCommand):
-        return all(_known_placements(c, phase, step) for c in cmd.commands)
+        return all(_known_placements(c, phase, step, scene) for c in cmd.commands)
     if getattr(cmd, "keeps_rows", False) or isinstance(cmd, _geometry_only()):
         return True
     from core.solids import SolidOperationCommand
@@ -311,6 +337,11 @@ def _known_placements(cmd, phase, step) -> bool:
         step.placements["modified"].append(uid)
         step.placements["removed" if undo else "created"].extend(
             p.uid for p in cmd.pieces)
+        return True
+    if isinstance(cmd, H.ReshareInstanceCommand) and scene is not None:
+        # The edited instance goes back on the definition (undo: the
+        # definition goes back as it was): every placement showing it.
+        step.placements["modified"].extend(_placements_showing(scene, cmd.proto))
         return True
     if isinstance(cmd, H.ExplodeViewCommand):
         step.placements["modified"].extend(
@@ -456,7 +487,7 @@ class ChangeFeed:
         roots1, tags1, mats1 = _doc_state(scene)
         step.placements["created"].extend(u for i, u in roots1.items() if i not in roots0)
         step.placements["removed"].extend(u for i, u in roots0.items() if i not in roots1)
-        step.complete = _known_placements(cmd, phase, step) and step.complete
+        step.complete = _known_placements(cmd, phase, step, scene) and step.complete
         _dedupe(step.placements)
         for k in tags1.keys() - tags0.keys():
             step.tags["created"].append(k)

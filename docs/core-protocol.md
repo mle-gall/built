@@ -205,8 +205,14 @@ move, push/pull and erase with undo and redo, and for random op sequences
 
 **Which meshes.** The open mesh at execute; at undo / redo the mesh the
 command ran on (`_history_mesh`, even after the user left that group); a
-`SnapshotMutation`'s own target; a soften's meshes; a compound's parts'.
-A mesh with nothing changed is left out.
+`SnapshotMutation`'s own target; a soften's meshes; a compound's parts';
+the shared definition a Reshare step writes (leaving an edited component
+instance or assembly). A mesh with nothing changed is left out.
+
+**Namespace changes.** A store mesh that adopted another store's snapshot
+during the step (the definition after `share_back`) has new keys: its
+record names every old key removed and every new key created, not
+`replaced`.
 
 **Document level** is compared before and after the step. Root placements
 are compared by identity; a uid both removed and created (a group replaced
@@ -218,7 +224,10 @@ Geometry-only commands (`keeps_rows`, and the snapshot / move / draw / erase
 commands) change no placement. Explode names the group removed and its
 lifted children created (undo: the reverse); Split into Pieces the group
 modified and its pieces created; the exploded view the parts it moved;
-Purge Unused no placement (its tags and materials are compared by value).
+Purge Unused no placement (its tags and materials are compared by value);
+leaving an edited component instance (`ReshareInstanceCommand`) every
+placement that shows its definition, nested and hidden ones included, on
+execute, undo and redo.
 Any other command sets `complete = False`.
 
 **Copies.** Explode on store-backed meshes reports `copies` = one entry,

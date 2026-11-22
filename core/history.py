@@ -4545,11 +4545,22 @@ class ReshareInstanceCommand(Command):
         self.edited = edited
         self.inner = list(inner)
         self._before = None
+        self._after = None
 
     def do(self, scene) -> None:
         if self._before is None:
             self._before = self.proto.capture_state()
-        scene.share_back(self.group, self.proto, self.xform, self.edited)
+            scene.share_back(self.group, self.proto, self.xform, self.edited)
+            self._after = self.proto.capture_state()
+        else:
+            # Redo: the definition as the first run left it, so its
+            # elements keep the keys that run gave them (the change feed
+            # publishes the same step again). share_back would copy the
+            # edited instance once more, under fresh keys.
+            self.proto.restore_state(self._after)
+            self.proto.note_rewound()
+            self.group.mesh = self.proto
+            self.group.xform = self.xform
         scene.version += 1
 
     def undo(self, scene) -> None:
@@ -5947,6 +5958,7 @@ class SplitIntoPiecesCommand(Command):
         self.group = group
         self.pieces = list(pieces)
         self.before: Optional[tuple] = None
+        self._emptied = None
         #: Where the group's faces went, for the change feed: ``[(source
         #: mesh, piece mesh, {"face": [(key, key)]})]`` for the pieces the
         #: store cut (``core.store_parts.copy_part``).
@@ -5957,8 +5969,12 @@ class SplitIntoPiecesCommand(Command):
     def do(self, scene) -> None:
         g = self.group
         self.before = (g.mesh, list(g.children), g.xform, g.exploded)
-        from core.mesh import Mesh
-        g.mesh = Mesh()
+        if self._emptied is None:
+            # The group keeps no geometry of its own: an empty mesh (in the
+            # store when the engine is on, like every Mesh()), made once so
+            # a redo shows the same mesh and mesh key.
+            self._emptied = Mesh()
+        g.mesh = self._emptied
         g.adopt(self.pieces)
         # The pieces are cut from the geometry as it stands, so they ARE
         # assembled in their new arrangement: nothing left to take back.
@@ -6453,6 +6469,34 @@ class RebuildPlanarFacesCommand(Command):
             scene.version += 1
 
 
+def _cyclic(ring, both_ways=False) -> tuple:
+    """``ring``'s position keys from its smallest one: equal for two rings
+    that are the same cycle (``both_ways``: in either direction)."""
+    keys = [_key(p) for p in ring]
+    if not keys:
+        return ()
+    def from_min(ks):
+        i = ks.index(min(ks))
+        return tuple(ks[i:] + ks[:i])
+    if not both_ways:
+        return from_min(keys)
+    return min(from_min(keys), from_min(keys[::-1]))
+
+
+def _region_is_face(face, outer, holes) -> bool:
+    """Whether a rebuilt region (``outer`` wound like ``face``, ``holes``)
+    is ``face`` itself: the same outer ring, corner for corner in the same
+    order, and the same openings. The rebuild then keeps the face (its
+    key, attrs and edges) instead of removing it and adding an equal one:
+    a stroke drawn beside a plate leaves the plate's face alone."""
+    if getattr(face, "interior", False):
+        return False                    # a re-added face would lose the flag
+    if _cyclic(face.vertices) != _cyclic(outer):
+        return False
+    have = sorted(_cyclic(h, True) for h in (face.holes or ()))
+    return have == sorted(_cyclic(h, True) for h in (holes or ()))
+
+
 class RebuildPlaneFacesCommand(Command):
     """Rebuild the faces of ONE plane of a (possibly 3D) mesh from that plane's
     edge subgraph — the per-plane cousin of :class:`RebuildPlanarFacesCommand`.
@@ -6535,16 +6579,21 @@ class RebuildPlaneFacesCommand(Command):
                      for outer, holes in regions]
             keys, owners = mesh._store.drawing_coverage(o, n, rings, hypot)
             from core.triangulate import _newell
-            keep = []
+            keep, unchanged = [], set()
             for i, owner, normal in owners:
                 outer, holes = regions[i]
                 if QVector3D.dotProduct(_newell(outer), QVector3D(*normal)) < 0:
                     outer = list(reversed(outer))
                     holes = [list(reversed(h)) for h in (holes or [])]
-                keep.append((outer, holes or None, dict(FaceView(mesh, owner).attrs)))
+                face = FaceView(mesh, owner)
+                if owner not in unchanged and _region_is_face(face, outer, holes):
+                    unchanged.add(owner)        # comes out as it was: kept
+                    continue
+                keep.append((outer, holes or None, dict(face.attrs)))
+            keys = [k for k in keys if k not in unchanged]
             mesh._store.remove_drawing_faces(keys)
             mesh._dirty(len(keys))
-            self._restore_regions(scene, keep, flagged)
+            self._restore_regions(scene, keep, flagged, len(unchanged))
             return
         if self.faces is not None:
             live = set(map(element_identity, mesh.faces))
@@ -6613,31 +6662,35 @@ class RebuildPlaneFacesCommand(Command):
             big = max(tris, key=lambda t: QVector3D.crossProduct(
                 t[1] - t[0], t[2] - t[0]).lengthSquared())
             probe = (big[0] + big[1] + big[2]) / 3.0
-            for old_tris, nrm, attrs in old:
+            for face, (old_tris, nrm, attrs) in zip(plane_faces, old):
                 if any(_point_in_tri(probe, t0, t1, t2)
                        for t0, t1, t2 in old_tris):
-                    return nrm, attrs
+                    return nrm, attrs, face
             return None
 
-        keep = []
+        keep, unchanged = [], set()
         for outer, holes in regions:
             if not holes and stays_open(outer):
                 continue                      # an existing opening
             cov = covering(outer, holes or [])
             if cov is None:
                 continue                      # uncovered region: stays empty
-            nrm, attrs = cov
+            nrm, attrs, owner = cov
             # Arrangement emits CCW around self.normal; match the old face.
             from core.triangulate import _newell
             if QVector3D.dotProduct(_newell(outer), nrm) < 0:
                 outer = list(reversed(outer))
                 holes = [list(reversed(h)) for h in (holes or [])]
+            if owner.key not in unchanged and _region_is_face(owner, outer, holes):
+                unchanged.add(owner.key)        # comes out as it was: kept
+                continue
             keep.append((outer, holes or None, attrs))
         for f in plane_faces:
-            mesh.remove_face(f)
-        self._restore_regions(scene, keep, flagged)
+            if f.key not in unchanged:
+                mesh.remove_face(f)
+        self._restore_regions(scene, keep, flagged, len(unchanged))
 
-    def _restore_regions(self, scene, keep, flagged):
+    def _restore_regions(self, scene, keep, flagged, unchanged=0):
         from core.topology import _point_on_seg_incl
         mesh = scene.mesh
         near_flagged = _segment_grid([(a, b) for a, b, _flags in flagged])
@@ -6668,7 +6721,7 @@ class RebuildPlaneFacesCommand(Command):
 
         prune_collinear_orphan_edges(mesh)
         mesh.resplit_curves()
-        self.rebuilt = len(keep)
+        self.rebuilt = len(keep) + unchanged
         scene.selection.clear()
         scene.version += 1
 
