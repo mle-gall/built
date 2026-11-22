@@ -73,7 +73,7 @@ fn parse_args() -> Result<Args, String> {
             }
             // Launch Services' process serial number (old macOS, Finder launches).
             s if s.starts_with("-psn_") => {}
-            s if s.starts_with("--") => return Err(format!("unknown option {s}")),
+            s if s.starts_with('-') => return Err(format!("unknown option {s}")),
             s => a.file = Some(absolute(Path::new(s))),
         }
     }

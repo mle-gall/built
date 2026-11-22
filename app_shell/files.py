@@ -79,6 +79,14 @@ def install(win) -> None:
     """The shell's pieces in the modules the borrowed code calls."""
     from views import filedialogs
     filedialogs.QFileDialog = ShellFileDialog
+    # The shell draws with Metal by construction: no probe process, no
+    # GL fallback to report (the start page's footer, the chrome's checks).
+    from core import renderer_settings
+    if not getattr(renderer_settings, "_shell_installed", False):
+        renderer_settings.capability = lambda: renderer_settings.Capability(True)
+        renderer_settings.wanted = lambda st=None: True
+        renderer_settings.status_text = lambda metal=None, st=None: "Metal (native app)"
+        renderer_settings._shell_installed = True
     from views import wgpu_start
     if not getattr(wgpu_start, "_shell_installed", False):
         wgpu_start.available = lambda: True

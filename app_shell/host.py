@@ -589,6 +589,14 @@ def bootstrap(root: str, venv: str | None):
     if venv:
         for sp in sorted(Path(venv).glob("lib/python3*/site-packages")):
             site.addsitedir(str(sp))
+        # Embedded, sys.executable is the `built` binary: code that runs
+        # "sys.executable -m module" (the Metal probe, helpers) would start
+        # another app window. It is the venv's Python, as in the Qt app.
+        for name in ("python3", "python"):
+            python = Path(venv) / "bin" / name
+            if python.exists():
+                sys.executable = str(python)
+                break
     if root not in sys.path:
         sys.path.insert(0, root)
     os.chdir(root)
