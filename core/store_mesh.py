@@ -1149,6 +1149,12 @@ def _on_python(name):
 class StoreMesh(Mesh):
     """A Mesh whose geometry is owned by one native MeshStore."""
 
+    def __init__(self) -> None:
+        # ``StoreMesh()`` (as ``type(scene.mesh)()``) is a new empty mesh
+        # like ``Mesh()``: store-backed when the engine is on, else objects.
+        self.__class__ = Mesh
+        Mesh.__init__(self)
+
     vertices = _seq_property("vertex", "vertices", VertexView, 0)
     edges = _seq_property("edge", "edges", EdgeView, 1)
     faces = _seq_property("face", "faces", FaceView, 2)
