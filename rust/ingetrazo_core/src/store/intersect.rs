@@ -7,6 +7,13 @@ use std::collections::HashSet;
 
 pub type Segment = ([f32; 3], [f32; 3]);
 
+pub type WorldRings = Vec<Vec<[f64; 3]>>;
+
+pub enum Input {
+    Face(u32),
+    Placement(WorldRings),
+}
+
 struct Polygon {
     bounds: Box3,
     normal: V3,
@@ -18,11 +25,18 @@ struct Polygon {
 impl Polygon {
     fn from_face(store: &Store, face: u32, h: Hypot) -> Option<Self> {
         let rings = store.face_rings(face);
+        Self::from_rings(&rings, |v| *store.state.vpos.get(v as usize), h)
+    }
+
+    fn from_rings<T: Copy>(
+        rings: &[Vec<T>],
+        pos: impl Fn(T) -> [f64; 3],
+        h: Hypot,
+    ) -> Option<Self> {
         let outer = rings.first()?;
         if outer.len() < 3 {
             return None;
         }
-        let pos = |v: u32| *store.state.vpos.get(v as usize);
         let mut bounds = ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]);
         let mut n = [0.; 3];
         for (i, &v) in outer.iter().enumerate() {
@@ -122,14 +136,20 @@ impl Polygon {
     }
 }
 
-pub fn segments(store: &Store, selected: &[u32], mode: &str, h: Hypot) -> Vec<Segment> {
-    let polygons = |faces: &[u32]| {
-        faces
-            .iter()
-            .filter_map(|&f| Polygon::from_face(store, f, h))
-            .collect::<Vec<_>>()
-    };
-    let mine = polygons(selected);
+pub fn segments(
+    store: &Store,
+    selected: &[Input],
+    other_world: &[WorldRings],
+    mode: &str,
+    h: Hypot,
+) -> Vec<Segment> {
+    let mine: Vec<_> = selected
+        .iter()
+        .filter_map(|source| match source {
+            Input::Face(f) => Polygon::from_face(store, *f, h),
+            Input::Placement(rings) => Polygon::from_rings(rings, |p| p, h),
+        })
+        .collect();
     let bounds = |p: &[Polygon]| p.iter().map(|p| p.bounds).collect::<Vec<_>>();
     let boxes = bounds(&mine);
     let mut out = Vec::new();
@@ -140,11 +160,25 @@ pub fn segments(store: &Store, selected: &[u32], mode: &str, h: Hypot) -> Vec<Se
         }
     };
     if mode != "selection" {
-        let selected: HashSet<_> = selected.iter().copied().collect();
+        let selected: HashSet<_> = selected
+            .iter()
+            .filter_map(|source| match source {
+                Input::Face(f) => Some(*f),
+                _ => None,
+            })
+            .collect();
         let kind = Kind::Face as usize;
         let mut rest = store.state.order[kind].live(&store.state.slots[kind]);
         rest.retain(|f| !selected.contains(f));
-        let others = polygons(&rest);
+        let others: Vec<_> = rest
+            .into_iter()
+            .filter_map(|f| Polygon::from_face(store, f, h))
+            .chain(
+                other_world
+                    .iter()
+                    .filter_map(|r| Polygon::from_rings(r, |p| p, h)),
+            )
+            .collect();
         cross(&others, &bounds(&others), false);
     }
     if mode != "context" {

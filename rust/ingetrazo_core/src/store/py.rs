@@ -712,16 +712,31 @@ impl PyMeshStore {
     }
 
     /// Crossing segments for loose faces in this editing context, in pair order.
-    fn intersection_segments(&self, py: Python<'_>, selected: Vec<u128>, mode: &str, hypot: &str)
+    #[pyo3(signature = (selected, mode, hypot, placements=Vec::new(), other_world=Vec::new()))]
+    fn intersection_segments(&self, py: Python<'_>, selected: Vec<u128>, mode: &str, hypot: &str,
+                             placements: Vec<(usize, super::intersect::WorldRings)>,
+                             other_world: Vec<super::intersect::WorldRings>)
         -> PyResult<Vec<super::intersect::Segment>> {
         if !matches!(mode, "context" | "selection" | "model") {
             return Err(PyValueError::new_err("unknown intersection mode"));
         }
-        let faces = selected.into_iter().map(|k| live_of(&self.inner, Kind::Face, k))
-            .collect::<PyResult<Vec<_>>>()?;
+        use super::intersect::Input;
+        let mut faces = Vec::with_capacity(selected.len() + placements.len());
+        let mut groups = placements.into_iter().peekable();
+        for (i, key) in selected.into_iter().map(Some).chain([None]).enumerate() {
+            while groups.peek().is_some_and(|(at, _)| *at == i) {
+                faces.push(Input::Placement(groups.next().unwrap().1));
+            }
+            if let Some(k) = key {
+                faces.push(Input::Face(live_of(&self.inner, Kind::Face, k)?));
+            }
+        }
+        if groups.next().is_some() {
+            return Err(PyValueError::new_err("placement offsets must be sorted within the selection"));
+        }
         let h = crate::hypot_of(hypot)?;
         let store = &self.inner;
-        Ok(py.detach(|| super::intersect::segments(store, &faces, mode, h)))
+        Ok(py.detach(|| super::intersect::segments(store, &faces, &other_world, mode, h)))
     }
 
     /// `Mesh.add_face` with the rings as positions (outer first, holes

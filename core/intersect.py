@@ -260,6 +260,15 @@ def polys_of(entities) -> list:
 WITH_MODEL, WITH_SELECTION, WITH_CONTEXT = "model", "selection", "context"
 
 
+def _placement_rings(group):
+    """Apply the scene graph's composed Qt transform to each prototype face."""
+    from core.group import iter_placements
+    for placement, matrix in iter_placements(group):
+        for face in placement.mesh.faces:
+            yield [[(matrix.map(p) if matrix is not None else p).toTuple() for p in ring]
+                   for ring in [face.vertices, *face.holes]]
+
+
 def segments_for(scene, mode: str) -> list:
     """The crossing segments Intersect Faces would add, for ``mode``:
 
@@ -274,13 +283,23 @@ def segments_for(scene, mode: str) -> list:
     if not sel:
         return []
     mesh = scene.mesh
-    kids = (scene.edit_group.children if scene.edit_group is not None else scene.groups)
-    if (hasattr(mesh, "_store") and all(isinstance(e, Face) for e in sel)
-            and (mode != WITH_MODEL or not kids)):
+    if hasattr(mesh, "_store"):
         from core.store_mesh import _hypot
         h = _hypot()
         if h:
-            pairs = mesh._store.intersection_segments([f.key for f in sel], mode, h)
+            keys, placements = [], []
+            for entity in sel:
+                if isinstance(entity, Group):
+                    placements.extend((len(keys), rings) for rings in _placement_rings(entity))
+                else:
+                    keys.append(entity.key)
+            others = []
+            if mode == WITH_MODEL:
+                kids = scene.edit_group.children if scene.edit_group is not None else scene.groups
+                selected_groups = {e for e in sel if isinstance(e, Group)}
+                others = [rings for g in kids if g not in selected_groups
+                          for rings in _placement_rings(g)]
+            pairs = mesh._store.intersection_segments(keys, mode, h, placements, others)
             return [(QVector3D(*a), QVector3D(*b)) for a, b in pairs]
     mine = polys_of(sel)
     if mode == WITH_SELECTION:
