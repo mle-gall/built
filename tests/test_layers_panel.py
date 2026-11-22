@@ -2487,3 +2487,21 @@ def test_layer_signature_reads_folders_once(monkeypatch):
     monkeypatch.setattr(L, 'folders_of', counted)
     assert layers_signature(scene)[2] == (None, 'one', None)
     assert len(calls) == 1
+
+
+def test_recount_after_host_drawing_preserves_other_mesh_counts(monkeypatch):
+    from core import purge
+    from core.history import AddEdgeCommand
+    scene = Scene(groups=[Group(Mesh())])
+    _square(scene.groups[0].mesh)
+    history = History(scene)
+    def counted():
+        return list(purge.layer_count_steps(scene, history=history))[-1]
+    before = counted()
+    history.execute(AddEdgeCommand(V(0, 0), V(1, 0)))
+    monkeypatch.setattr(purge, "iter_groups", lambda *_: pytest.fail("placement walk"))
+    assert counted()[DEFAULT_LAYER] == before[DEFAULT_LAYER] + 1
+    history.undo()
+    assert counted() == before
+    history.redo()
+    assert counted()[DEFAULT_LAYER] == before[DEFAULT_LAYER] + 1

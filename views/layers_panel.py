@@ -3406,7 +3406,8 @@ class LayersPanel(QWidget):
         key = (id(scene), scene.content_version)
         job = getattr(self, "_count_job", None)
         if job is None or job[0] != key:
-            job = self._count_job = (key, layer_count_steps(scene))
+            job = self._count_job = (key, layer_count_steps(
+                scene, history=self._window.viewport.history))
         deadline = monotonic() + 0.030
         for counts in job[1]:
             if counts is not None:

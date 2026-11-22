@@ -322,6 +322,11 @@ class History:
                 AddDimensionCommand, AddTextLabelCommand, AddGuideCommand)):
             if self.structure_cv == before:
                 self.structure_cv = cv
+            rest = getattr(self, "layer_count_rest", None)
+            if (rest and rest[0] == (id(self.scene), before, id(self.scene.mesh))
+                    and getattr(cmd, "_history_mesh", None) is self.scene.mesh
+                    and (not isinstance(cmd, SnapshotMutation) or cmd._target(self.scene) is self.scene.mesh)):
+                self.layer_count_rest = (id(self.scene), cv, id(self.scene.mesh)), rest[1]
             # Placement transforms did not change. Prototype bounds in the
             # dimension broad phase are checked by mesh revision on lookup.
             anchors = self.scene.__dict__.get("_anchor_placements")
