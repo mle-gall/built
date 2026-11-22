@@ -10,6 +10,12 @@ import sys
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+# As main.py does: a collection a worker thread starts frees nothing, so
+# no Qt object a test let go of is destroyed off the main thread.
+from core import worker_gc  # noqa: E402
+
+worker_gc.install()
+
 # The user's own extensions folder stays out of the suite, like their
 # settings below. Every MainWindow a test built loaded whatever the developer
 # had installed (core.extensions.user_plugins_dir): 09-10, with three
