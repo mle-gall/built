@@ -723,6 +723,7 @@ def _populate(placement, source, *, reconcile=False, selection=None):
             structure_changed = True
             result.xform = QMatrix4x4(group.xform) if group.xform is not None else None
         result.owner = parent
+        result.source_uid = group.uid
         children = [clone(c, result) for c in group.children or ()]
         if new or result.children != children:
             structure_changed = True
@@ -741,6 +742,59 @@ def _populate(placement, source, *, reconcile=False, selection=None):
             selection.discard(removed)
     placement.component = True
     return None if structure_changed or previous else swaps
+
+
+def copy_parts(source, copy) -> list:
+    """The parts of the linked placement ``copy``, a copy of ``source``
+    (Copy and Paste, a copy made by Move or Rotate, an array, Make Unique of
+    what holds it): what :func:`_populate` gives a fresh link of the same
+    file, without reading it again.
+
+    Each part shares its source's geometry, as every copy of a link does,
+    is owned by its parent — what keeps it read-only
+    (:func:`linked_ancestor`) — and takes the uid a fresh link or the
+    reopened file would give it, so a reload finds it again. ``source`` is
+    left as it was: :func:`copy_group` turned the classic parts of a copied
+    component into identity placements, which a link's parts must not be."""
+    from copy import deepcopy
+    from PySide6.QtGui import QMatrix4x4
+    from core.group import new_uid
+    uids = {}
+
+    def clone(group, parent):
+        out = _clone_shell(group)
+        origin = getattr(group, "source_uid", None)
+        out.uid = stable_uid(copy.uid, origin) if origin else new_uid()
+        uids[group.uid] = out.uid
+        out.owner = parent
+        out.context = None
+        out.xform = QMatrix4x4(group.xform) if group.xform is not None else None
+        out.axes = QMatrix4x4(group.axes) if group.axes is not None else None
+        for name in ("ext", "ifc", "material", "exploded", "text3d"):
+            value = getattr(group, name, None)
+            if value is not None:
+                setattr(out, name, deepcopy(value))
+        out.children = [clone(c, out) for c in group.children or ()]
+        return out
+
+    from core.purge import iter_groups
+    parts = [clone(c, copy) for c in source.children or ()]
+    if any(part.ifc for part in iter_groups(parts)):
+        # An opening names the part that fills it: the copy's own.
+        for part in iter_groups(parts):
+            for opening in (part.ifc or {}).get("openings", None) or ():
+                if isinstance(opening, dict) and opening.get("group_uid") in uids:
+                    opening["group_uid"] = uids[opening["group_uid"]]
+    return parts
+
+
+def adopt_parts(placement) -> None:
+    """Each part of the linked ``placement`` owned by its parent, as
+    :func:`_populate` leaves them: a packed link read back from the file
+    did not go through it, and its parts came back editable."""
+    for child in placement.children or ():
+        child.owner = placement
+        adopt_parts(child)
 
 
 # ---- the entry points --------------------------------------------------------------
@@ -880,6 +934,9 @@ def resolve(scene, host_path=None) -> dict:
         finally:
             stack.remove(host_key)
     for g in linked_groups(scene):
+        # A packed copy keeps what the file holds, and is not read again:
+        # its parts read-only all the same.
+        adopt_parts(g)
         link = link_of(g)
         found = locate(link, host_path)
         if found is not None and _norm(found) != _norm(link["path"]):

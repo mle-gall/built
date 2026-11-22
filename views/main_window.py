@@ -4782,9 +4782,17 @@ class MainWindow(WorksessionMixin, QMainWindow):
 
     @_repeatable("Make Unique")
     def _on_make_unique(self) -> None:
+        from core import links
         from core.history import MakeUniqueCommand
-        for g in [g for g in self.viewport.scene.selection
-                  if isinstance(g, Group) and g.is_component()]:
+        comps = [g for g in self.viewport.scene.selection
+                 if isinstance(g, Group) and g.is_component()]
+        for g in comps:
+            if links.is_linked(g):
+                # A linked file stays its source's (edited in its own file).
+                self.viewport.flash_status(tr(
+                    "“{name}” is linked from another file.",
+                    name=Path(links.link_of(g)["path"]).name), 4000)
+                continue
             self.viewport.history.execute(MakeUniqueCommand(g, rename=True))
         self.viewport.update()
 

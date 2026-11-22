@@ -4665,6 +4665,8 @@ class MakeUniqueCommand(Command):
         self._component = True
 
     def do(self, scene) -> None:
+        if self.group.ext and self.group.ext.get("link"):
+            return          # a linked file stays its source's (make_unique)
         self._proto = self.group.mesh
         self._xform = self.group.xform
         self._children = self.group.children
@@ -4680,6 +4682,8 @@ class MakeUniqueCommand(Command):
         scene.version += 1
 
     def undo(self, scene) -> None:
+        if self._proto is None:
+            return
         self.group.mesh = self._proto
         self.group.xform = self._xform
         self.group.children = self._children or []
@@ -4724,8 +4728,13 @@ class ReplaceComponentCommand(Command):
             g.mesh = src.mesh
             # Shared like a copy's subgroups are (copy_group): an edit
             # inside any instance reaches all of them.
-            g.children = [copy_group(c, _in_definition=True)
-                          for c in (src.children or ())]
+            if src.ext and src.ext.get("link"):
+                # A linked file: the parts stay its own, read-only.
+                from core.links import copy_parts
+                g.children = copy_parts(src, g)
+            else:
+                g.children = [copy_group(c, _in_definition=True)
+                              for c in (src.children or ())]
             g.name = src.name
             g.axes = QMatrix4x4(src.axes) if src.axes is not None else None
             g.component = True
