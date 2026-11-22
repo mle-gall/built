@@ -15,9 +15,10 @@ shell over :func:`sweep_profile`.
 """
 from __future__ import annotations
 
+from copy import deepcopy
+
 from PySide6.QtGui import QVector3D
 
-from copy import deepcopy
 from core.history import run_stitch
 from core.topology import _key
 
@@ -278,12 +279,13 @@ def sweep_rings(face, path, closed):
 
 def _wall_reversals(rings):
     """Outer walls follow a ring facing the next station, hole walls the opposite."""
-    from core.triangulate import _newell
-
     reverse = []
     for i, (start, end) in enumerate(zip(rings[0], rings[1])):
         travel = sum((b - a for a, b in zip(start, end)), QVector3D())
-        backwards = QVector3D.dotProduct(_newell(start), travel) < 0
+        origin = start[0]
+        area = sum((QVector3D.crossProduct(a - origin, b - origin)
+                    for a, b in zip(start, start[1:] + start[:1])), QVector3D())
+        backwards = QVector3D.dotProduct(area, travel) < 0
         reverse.append(backwards != (i > 0))
     return reverse
 
@@ -315,9 +317,8 @@ def sweep_preview_faces(face, path, closed):
                         quad.reverse()
                     out.append(Face(quad, attrs=attrs))
     if not closed:
-        out.append(Face(rings[-1][0][::-1] if reverse[0] else rings[-1][0],
-                        rings[-1][1:] or None,
-                        attrs=attrs))
+        cap = [ring[::-1] if flip else ring for ring, flip in zip(rings[-1], reverse)]
+        out.append(Face(cap[0], cap[1:] or None, attrs=attrs))
     return out
 
 
@@ -459,7 +460,12 @@ def _store_sweep(mesh, key, path, closed, h):
         from core.store_mesh import _hole_filter
         cap_holes = [_hole_filter([list(reversed(r)) for r in stations[0][1:]]),
                      _hole_filter(stations[-1][1:])]
-    store.sweep_face(key, stations, closed, h, cap_holes)
+    from core.store_mesh import FaceView
+    attrs = FaceView(mesh, key).attrs
+    change = store.sweep_face(key, stations, closed, h, cap_holes)
+    if attrs:
+        for created in change.created["face"]:
+            FaceView(mesh, created).attrs = deepcopy(attrs)
     mesh._dirty()
     seed = {_key(QVector3D(*p)) for station in stations for ring in station for p in ring}
     run_stitch(mesh, seed, None, coplanar_merge=False)
@@ -467,24 +473,22 @@ def _store_sweep(mesh, key, path, closed, h):
     for run in runs:
         store.set_curve_run(run, Mesh.next_curve_id())
     mesh._dirty()
-    from core.orient import orient_outward
-    orient_outward(mesh)
     return True
 
 
 def build_sweep_face(mesh, key, path, closed, rejection_message="degenerate sweep path"):
-    """Plan a store sweep by profile key. The resulting command exposes its net change."""
-    from core.history import CommandRejected
+    """Plan one snapshot-backed sweep from a live profile key."""
+    from core.history import CommandRejected, SnapshotMutation
+    from core.protocol.keys import elements
     from core.store_face_edit import StoreFaceMutation
-    from core.store_mesh import FaceView
-    if not mesh._store.is_live(key):
-        raise KeyError(key)
+    profile = elements(mesh, "face", [key])[key]
 
     def mutate(scene):
-        if not sweep_profile(scene.mesh, FaceView(scene.mesh, key), path, closed):
+        if not sweep_profile(scene.mesh, profile, path, closed):
             raise CommandRejected(rejection_message)
 
-    return StoreFaceMutation(mutate)
+    command = StoreFaceMutation if hasattr(mesh, "_store") else SnapshotMutation
+    return command(mutate)
 
 
 def sweep_profile(mesh, face, path, closed) -> bool:

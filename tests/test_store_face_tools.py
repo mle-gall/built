@@ -196,3 +196,41 @@ def test_direct_offset_record_and_hole_refusal(monkeypatch):
     assert edges <= set(change.modified["edge"])
     command.undo(scene)
     assert before == mesh.capture_state()
+
+
+def _check_feed(step, before):
+    from tests.test_core_protocol import _read, _got, _expected
+
+    assert step.complete
+    assert {c.mesh for c in step.meshes} == set(before)
+    for change in step.meshes:
+        if isinstance(change.mesh, S.StoreMesh):
+            assert not change.replaced
+            assert _got(change) == _expected(before[change.mesh], _read(change.mesh))
+        else:
+            assert change.replaced
+
+
+def test_reverse_profile_paints_outward_faces_only(monkeypatch):
+    from tests.test_core_protocol import _read
+    from core.protocol.commands import run
+    for scene in scenes(monkeypatch):
+        m, hist = scene.mesh, History(scene)
+        profile = m.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 0, 1), V(0, 0, 1)])
+        profile.attrs["color"] = RED
+        other = m.add_face([p + V(5, 0, 0) for p in profile.vertices])
+        before = {m: _read(m)}
+        step = run(hist, "follow_me", face=profile.key, path=[[0, 0, 0], [0, 3, 0]])["step"]
+        _check_feed(step, before)
+        center = V(.5, 1.5, .5)
+        shell = {f.key: f.normal().toTuple() for f in m.faces if f.key != other.key}
+        assert len(shell) == 6
+        for f in m.faces:
+            if f.key in shell:
+                assert V.dotProduct(f.normal(), f.centroid() - center) > 0
+                assert f.attrs["color"] == RED
+        before = {m: _read(m)}
+        step = run(hist, "follow_me", face=other.key, path=[[5, 0, 0], [5, 2, 0]])["step"]
+        _check_feed(step, before)
+        assert {f.key: f.normal().toTuple() for f in m.faces if f.key in shell} == shell
+        assert not (set(step.meshes[0].modified["face"]) & shell.keys())

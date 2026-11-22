@@ -101,6 +101,16 @@ def push_pull(history, face, distance, keep_base=False):
     return _answer(history, before)
 
 
+def follow_me(history, face, path, closed=False):
+    from PySide6.QtGui import QVector3D
+    from core.sweep import build_sweep_face
+    points = [QVector3D(*p) for p in path]
+    cmd = build_sweep_face(history.scene.mesh, from_json_key(face), points, closed)
+    before = history.revision
+    history.execute(cmd)
+    return _answer(history, before)
+
+
 def rebuild_cap(history, face):
     """Rebuild the plane of a seed face with the direct cap planner."""
     from core.cap_rebuild import apply_rebuild
@@ -266,7 +276,8 @@ def redo(history):
     return _answer(history, before)
 
 
-COMMANDS = {"add_edge": add_edge, "add_edges": add_edges,
+COMMANDS = {"follow_me": follow_me,
+            "add_edge": add_edge, "add_edges": add_edges,
             "divide_edges": divide_edges, "join_edges": join_edges,
             "move_vertices": move_vertices, "erase": erase,
             "push_pull": push_pull, "orient_faces": orient_faces,
