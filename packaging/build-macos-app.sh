@@ -50,8 +50,11 @@ cp resources/icons/ingetrazo_256.png "$ICONSET/icon_128x128@2x.png"
 cp resources/icons/ingetrazo_256.png "$ICONSET/icon_256x256.png"
 cp resources/icons/ingetrazo_512.png "$ICONSET/icon_256x256@2x.png"
 cp resources/icons/ingetrazo_512.png "$ICONSET/icon_512x512.png"
-sips -z 1024 1024 resources/icons/ingetrazo_512.png \
-    --out "$ICONSET/icon_512x512@2x.png" >/dev/null
+if [[ -f resources/icons/ingetrazo_master.png ]]; then
+    sips -z 1024 1024 resources/icons/ingetrazo_master.png --out "$ICONSET/icon_512x512@2x.png" >/dev/null
+else
+    sips -z 1024 1024 resources/icons/ingetrazo_512.png --out "$ICONSET/icon_512x512@2x.png" >/dev/null
+fi
 iconutil -c icns "$ICONSET" -o "$ICNS"
 rm -rf "$ICONSET"
 
