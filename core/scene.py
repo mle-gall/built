@@ -16,12 +16,13 @@ from core.camera_point import CameraPoint
 from core.mesh import element_identity
 from core.element_set import ElementSet
 
-from dataclasses import dataclass, field
+from dataclasses import InitVar, dataclass, field
 from typing import Iterable
 
 from PySide6.QtGui import QVector3D
 
 from core import layers as _layers
+from core import doc_model as _dm
 from core.mesh import Edge, Face, Mesh
 
 
@@ -83,7 +84,15 @@ class Scene:
     #: furnished house.
     section_version: int = 0
     # Encapsulated chunks (own meshes), isolated from the main mesh's welding.
-    groups: list = field(default_factory=list)
+    # With the Rust document (core/doc_model.py) ``groups`` and ``layers``
+    # are the lists of the scene's root node, made with the scene; the
+    # constructor still takes them.
+    if _dm.ENABLED:
+        _root: object = field(default_factory=_dm.new_scene_root,
+                              repr=False, compare=False)
+        groups: InitVar[list | None] = None
+    else:
+        groups: list = field(default_factory=list)
     # Annotation entities (static dimensions) — not geometry, drawn as overlays.
     dimensions: list = field(default_factory=list)
     # Leader-text annotations (the Text tool) — same overlay treatment.
@@ -104,10 +113,13 @@ class Scene:
     # Layers / tags: labels with visibility + lock. The default
     # layer always exists; entities reference layers by KEY (Layer.key —
     # the name they were made with), the name being only a label.
-    layers: list = field(default_factory=lambda: [
-        __import__("core.layers", fromlist=["Layer"]).Layer(
-            __import__("core.layers", fromlist=["DEFAULT_LAYER"]).DEFAULT_LAYER)
-    ])
+    if _dm.ENABLED:
+        layers: InitVar[list | None] = None
+    else:
+        layers: list = field(default_factory=lambda: [
+            __import__("core.layers", fromlist=["Layer"]).Layer(
+                __import__("core.layers", fromlist=["DEFAULT_LAYER"]).DEFAULT_LAYER)
+        ])
     # The layer new objects go to (core.layers.active_layer); None = the
     # default layer.
     active_layer: str | None = None
@@ -277,6 +289,25 @@ class Scene:
     #: the temp mesh's snapshot at entry (to tell an edit from a look).
     _edit_share: object | None = None
 
+    if _dm.ENABLED:
+        def __post_init__(self, groups, layers):
+            if groups is not None:
+                self.groups = groups
+            if layers is not None:
+                self.layers = layers
+
+        def __deepcopy__(self, memo):
+            import copy
+            out = object.__new__(type(self))
+            memo[id(self)] = out
+            for name, value in self.__dict__.items():
+                if name != "_root":
+                    object.__setattr__(out, name, copy.deepcopy(value, memo))
+            object.__setattr__(out, "_root", _dm.NATIVE.doc_new_root())
+            out.groups = copy.deepcopy(list(self.groups), memo)
+            out.layers = copy.deepcopy(list(self.layers), memo)
+            return out
+
     # ---- Geometry views (read-only over the *loose* mesh) -------------------
     # Tools, edits and topology operate on this (the loose geometry); groups are
     # walled off so drawing never welds to them.
@@ -291,6 +322,8 @@ class Scene:
     # ---- Layers --------------------------------------------------------------
     def layer_by_key(self, key: str):
         """The tag whose key is ``key`` — what entities carry."""
+        if _dm.ENABLED and isinstance(key, str):
+            return self._root._tag_by_key(key)
         for ly in self.layers:
             if ly.key == key:
                 return ly
@@ -304,6 +337,8 @@ class Scene:
         ly = self.layer_by_key(name)
         if ly is not None:
             return ly
+        if _dm.ENABLED and isinstance(name, str):
+            return self._root._tag_by_name(name)
         for ly in self.layers:
             if ly.name == name:
                 return ly
@@ -922,7 +957,8 @@ class Scene:
             if id(g) not in seen:
                 seen.add(id(g))
                 stack.extend((child, id(g)) for child in g.children or ())
-        key = (self.content_version, rows, repr([vars(layer) for layer in self.layers]),
+        from core.layers import layer_values
+        key = (self.content_version, rows, repr([layer_values(layer) for layer in self.layers]),
                repr(self.layer_folders), repr(self.folder_parents),
                repr(self.layer_folder_names), repr(self.folder_visibility))
         if key != self.__dict__.get("_revision_key"):
@@ -1243,3 +1279,27 @@ class Scene:
         self._bounds_cache = (self.version, ((minx, miny, minz),
                                              (maxx, maxy, maxz)), content)
         return CameraPoint(minx, miny, minz), CameraPoint(maxx, maxy, maxz)
+
+
+if _dm.ENABLED:
+    # ``_groups_owner``: a placement whose children stand in for the top
+    # level while a command runs inside an open group (GroupInContextCommand:
+    # with Python lists it swapped ``scene.groups`` for the children list).
+    def _groups(self):
+        owner = self.__dict__.get("_groups_owner")
+        return (self._root if owner is None else owner).children
+
+    def _set_groups(self, value):
+        owner = self.__dict__.get("_groups_owner")
+        (self._root if owner is None else owner).children = value
+
+    def _tags(self):
+        return self._root._tags
+
+    def _set_tags(self, value):
+        self._root._tags = value
+
+    Scene.groups = property(_groups, _set_groups, doc="The root placements.")
+    Scene.layers = property(_tags, _set_tags, doc="The tags, in panel order.")
+
+

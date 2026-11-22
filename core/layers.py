@@ -526,7 +526,7 @@ def to_lin(entries) -> str:
 LOCKED_FADE = 0.55
 
 
-class Layer:
+class _LayerMethods:
     """A tag with display state.
 
     Entities carry the tag's ``key`` — an identity that never changes —
@@ -539,6 +539,8 @@ class Layer:
     :func:`layer_color`); ``folder`` is the KEY of the folder the layer is
     filed under in the Layers panel, or ``None``. Folder visibility gates
     the tag without changing its own visibility flag."""
+
+    __slots__ = ()
 
     def __init__(self, name: str, visible: bool = True,
                  locked: bool = False, color=None,
@@ -724,6 +726,38 @@ class Layer:
                    hatch_cross=raw.get("hatch_cross") is True,
                    joints=raw.get("joints"),
                    mortar=raw.get("mortar") is True)
+
+
+
+from core import doc_model as _dm
+
+#: A tag's fields that live in the document (core/doc_model.py) when it
+#: is Rust; the sheet styles stay Python attributes until slice 2.
+TAG_FIELDS = ("uid", "name", "key", "visible", "locked", "color", "folder")
+
+if _dm.ENABLED:
+    class Layer(_LayerMethods, _dm.NATIVE.Tag):
+        __doc__ = _LayerMethods.__doc__
+
+        def __reduce__(self):
+            state = dict(vars(self))
+            state.update(_dm.handle_state(self, TAG_FIELDS))
+            return (_dm.new_handle, (type(self),), state)
+
+        __setstate__ = _dm.set_handle_state
+else:
+    class Layer(_LayerMethods):
+        __doc__ = _LayerMethods.__doc__
+
+
+def layer_values(ly) -> dict:
+    """Every field of a tag by name — what ``vars(ly)`` gave when all of
+    them were instance attributes."""
+    out = dict(vars(ly))
+    if _dm.ENABLED:
+        for name in TAG_FIELDS:
+            out[name] = getattr(ly, name)
+    return out
 
 
 def _finite(raw, default: float) -> float:

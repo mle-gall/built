@@ -13,6 +13,7 @@ use numpy::IntoPyArray;
 use pyo3::types::PyBytes;
 
 mod boxes;
+mod doc;
 mod earcut;
 mod facegeom;
 mod render_bake;
@@ -112,6 +113,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // keep the store's PyO3 glue (and its Python symbols) alive.
     #[cfg(not(test))]
     store::py::register(m)?;
+    doc::py::register(m)?;
     m.add_class::<scans::MeshScan>()?;
     Ok(())
 }

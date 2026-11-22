@@ -253,6 +253,21 @@ placement that shows its definition, nested and hidden ones included, on
 execute, undo and redo.
 Any other command sets `complete = False`.
 
+**With the Rust document** (`core/doc_model.py`, docs/rust-document-model.md,
+the default whenever the engine is built; `INGETRAZO_DOC=0` keeps the
+comparison above), every step runs inside a document transaction and the
+document level comes from its journal instead of a before/after walk: root
+placements created / removed are the net edits of the scene root's list
+(same identity rule, same `modified` for a uid both removed and created);
+`modified` adds every placement whose fields or child list the step wrote
+(so it can name more than the command knowledge above, never fewer); tags
+created / removed / modified come from the scene's tag list and the tags'
+fields; materials created / removed from the registry (a dict, by
+identity), modified from the material fields written. Nothing else in the
+record changes: same keys, same `complete`, same `copies`. Undo by
+transaction publishes the inverse of the same journal. Cost: a few
+microseconds instead of the 2 × 1.2 ms of §4.3.
+
 **Copies.** Explode on store-backed meshes reports `copies` = one entry,
 `source` the group's mesh (read, never changed: it is not in `meshes`),
 `target` the open mesh, and keys for every kind: each source face with the

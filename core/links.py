@@ -634,7 +634,7 @@ def _clone_shell(group):
     if cls is not _Group():
         from copy import copy
         return copy(group)
-    out = object.__new__(cls)
+    out = cls.__new__(cls)
     for name in _GROUP_SLOTS:
         try:
             value = getattr(group, name)
@@ -652,7 +652,8 @@ def _Group():
     global _GROUP_CLASS, _GROUP_SLOTS
     if _GROUP_CLASS is None:
         from core.group import Group
-        _GROUP_CLASS, _GROUP_SLOTS = Group, Group.__slots__
+        from core.group import GROUP_FIELDS
+        _GROUP_CLASS, _GROUP_SLOTS = Group, GROUP_FIELDS
     return _GROUP_CLASS
 
 

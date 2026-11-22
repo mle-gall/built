@@ -2,6 +2,7 @@
 """Extend recipe snapshots to edits of existing objects made by agent tools."""
 from copy import deepcopy
 
+from core import doc_model as _dm
 from core.group import iter_placements
 from core.history import SnapshotImport
 
@@ -24,10 +25,7 @@ class AgentSnapshot(SnapshotImport):
         meshes = {g.mesh for g in groups}
         objects = list(groups) + list(scene.layers)
         memo = {id(o): o for o in [*objects, *meshes]}
-        def attributes(o):
-            return vars(o) if hasattr(o, "__dict__") else {
-                k: getattr(o, k) for k in o.__slots__ if hasattr(o, k)}
-        attrs = [(o, deepcopy(attributes(o), memo)) for o in objects]
+        attrs = [(o, deepcopy(_dm.object_state(o), memo)) for o in objects]
         from core.mesh import DeferredMesh
         mesh_states = {m: None if type(m) is DeferredMesh else m.capture_state()
                        for m in meshes if m is not scene.mesh}
@@ -46,15 +44,10 @@ class AgentSnapshot(SnapshotImport):
         for obj, values in attrs:
             restored = deepcopy(values, memo)
             # Keep child-list references held by extensions alive.
-            if isinstance(getattr(obj, "children", None), list):
+            if _dm.is_list(getattr(obj, "children", None)):
                 obj.children[:] = restored.pop("children", [])
                 restored["children"] = obj.children
-            if hasattr(obj, "__dict__"):
-                vars(obj).clear()
-                vars(obj).update(restored)
-            else:
-                for key, value in restored.items():
-                    setattr(obj, key, value)
+            _dm.set_object_state(obj, restored)
         for mesh, values in meshes.items():
             if values is None:
                 continue
@@ -180,7 +173,7 @@ class TreeSnapshot(SnapshotImport):
         for g, (holder, children), values in state:
             # ``adopt`` swaps in a new list; extensions and the view may
             # hold the original one, so that object comes back, refilled.
-            if isinstance(holder, list):
+            if _dm.is_list(holder):
                 holder[:] = children
                 g.children = holder
             else:

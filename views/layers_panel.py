@@ -159,7 +159,7 @@ def layers_signature(scene) -> tuple:
     style = getattr(scene, "display_style", None)
     folders = tuple(L.folders_of(scene))
     known = set(folders)
-    return (tuple(repr(sorted(vars(ly).items())) for ly in scene.layers),
+    return (tuple(repr(sorted(L.layer_values(ly).items())) for ly in scene.layers),
             folders, tuple(L.folder_parent(scene, f, known=known) for f in folders),
             tuple(L.folder_label(scene, f) for f in folders),
             tuple(sorted(scene.folder_visibility.items())),

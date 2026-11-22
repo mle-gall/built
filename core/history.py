@@ -58,6 +58,7 @@ def _plog(tag: str, ms: float, extra: str = "", floor: float = 100.0) -> None:
 from PySide6.QtGui import QVector3D
 
 from core.group import Group
+from core import doc_model as _doc
 from core.materials import has_own_material
 from core.mesh import (PAINT_KEYS, Edge, Face, Mesh, Vertex, edge_flags,
                        edge_is_plain, stamp_edge_flags)
@@ -132,6 +133,19 @@ class Command(ABC):
     #: copies, IFC class, hidden, locked) changes (see ``History.rows_cv``).
     #: A push/pull on the ride no longer reads its 85 000 rows again.
     keeps_rows = False
+    #: Undone and redone by its document transaction (core/doc_model.py,
+    #: docs/rust-document-model.md §4) instead of by ``undo`` / ``do``:
+    #: everything it changes lives in the document. A method
+    #: ``doc_undo(scene) -> bool`` for commands that qualify for some
+    #: inputs only (asked right after ``do``). ``undo`` stays: it is the
+    #: Python document's path and the fallback for a nested step.
+    doc_undo = False
+
+    def doc_after(self, scene, phase) -> None:
+        """What an undo or redo by transaction still does beside the
+        document (``phase`` "undo" / "redo"): bump the version. Commands
+        that also drop things from the selection or dirty caches extend it."""
+        scene.version += 1
 
     @abstractmethod
     def do(self, scene) -> None:
@@ -233,6 +247,11 @@ class History:
         #: takeoff that found nothing tagged still finds nothing — a Move
         #: on the plant of #158 need not walk its 21 406 groups for tags.
         self.tags_cv = None
+        #: The document transaction of the last step that ran (execute,
+        #: undo or redo) and whether it is read backwards: ``(txn,
+        #: inverse)``, what the feed takes the document half of a step's
+        #: record from. ``None`` with the Python document.
+        self.last_txn = None
         #: The change feed (core/protocol, docs/core-protocol.md): one
         #: record per step by stable keys. Subscribed first, so a step's
         #: record is there for every other listener's ``after``.
@@ -385,22 +404,35 @@ class History:
         # Geometry-only commands cannot create groups, even on an active tag.
         include_groups = not cmd.keeps_rows
         objs_before = self._objects_before(include_groups=include_groups)
+        # The step's document transaction: a failure takes back what the
+        # command wrote in the document too, not only in the mesh.
+        depth = _doc.begin()
+        self.last_txn = None
         try:
             cmd.do(self.scene)
             self._tag_new_objects(objs_before, include_groups=include_groups)
         except CommandRejected as exc:
+            if depth:
+                _doc.rollback()
             self.scene.mesh.restore_state(snapshot)
             self.scene.version += 1
             self.last_error = None
             self.last_rejected = str(exc)
             return
         except Exception as exc:
+            if depth:
+                _doc.rollback()
             self.scene.mesh.restore_state(snapshot)
             self.scene.selection.clear()
             self.scene.version += 1
             self.last_error = f"{type(cmd).__name__}: {exc}"
             self._log_failure(cmd, exc)
             return
+        txn = _doc.commit() if depth else None
+        self.last_txn = (txn, False) if txn is not None else None
+        # Kept only by the commands it undoes; the others drop it once the
+        # feed has read it.
+        cmd._doc_txn = txn if txn is not None and _uses_doc_undo(cmd, self.scene) else None
         self.last_error = None
         if _PERF:
             _plog("command", (_time_mod.perf_counter() - _t0) * 1000.0,
@@ -456,7 +488,16 @@ class History:
             return False
         cmd = self.undo_stack.pop()
         before = getattr(self.scene, "content_version", None)
-        self._in_command_mesh(cmd, lambda: cmd.undo(self.scene))
+        txn = getattr(cmd, "_doc_txn", None)
+        if txn is not None:
+            def back():
+                txn.undo()
+                cmd.doc_after(self.scene, "undo")
+            self._in_command_mesh(cmd, back)
+            self.last_txn = (txn, True)
+        else:
+            self._journalled(lambda: self._in_command_mesh(
+                cmd, lambda: cmd.undo(self.scene)))
         self._keep_paint_cv(cmd, before)
         self.redo_stack.append(cmd)
         self._rebind_dimensions()
@@ -467,14 +508,36 @@ class History:
             return False
         cmd = self.redo_stack.pop()
         before = getattr(self.scene, "content_version", None)
-        include_groups = not cmd.keeps_rows
-        objs_before = self._objects_before(include_groups=include_groups)
-        self._in_command_mesh(cmd, lambda: cmd.do(self.scene))
+        txn = getattr(cmd, "_doc_txn", None)
+        if txn is not None:
+            # The transaction already holds what tagging the new objects
+            # wrote at execute.
+            def again():
+                txn.redo()
+                cmd.doc_after(self.scene, "redo")
+            self._in_command_mesh(cmd, again)
+            self.last_txn = (txn, False)
+        else:
+            include_groups = not cmd.keeps_rows
+            objs_before = self._objects_before(include_groups=include_groups)
+            self._journalled(lambda: self._in_command_mesh(
+                cmd, lambda: cmd.do(self.scene)))
+            self._tag_new_objects(objs_before, include_groups=include_groups)
         self._keep_paint_cv(cmd, before)
-        self._tag_new_objects(objs_before, include_groups=include_groups)
         self.undo_stack.append(cmd)
         self._rebind_dimensions()
         return True
+
+    def _journalled(self, fn) -> None:
+        """Run a command's own undo or redo inside a transaction kept only
+        for the feed's record (``last_txn``)."""
+        depth = _doc.begin()
+        self.last_txn = None
+        try:
+            fn()
+        finally:
+            txn = _doc.commit() if depth else None
+            self.last_txn = (txn, False) if txn is not None else None
 
     def _objects_before(self, *, include_groups=True):
         """The objects in the document before a command runs. With no
@@ -527,6 +590,16 @@ class History:
     def clear(self) -> None:
         self.undo_stack.clear()
         self.redo_stack.clear()
+
+
+def _uses_doc_undo(cmd, scene) -> bool:
+    flag = getattr(cmd, "doc_undo", False)
+    if callable(flag):
+        try:
+            return bool(flag(scene))
+        except Exception:  # noqa: BLE001 — undecided: its own undo
+            return False
+    return bool(flag)
 
 
 # ---- Concrete commands ------------------------------------------------------
@@ -1397,6 +1470,19 @@ class SetLayerVisibilityCommand(Command):
     def __init__(self, names, on, folders=()):
         self.names, self.folders, self.on = list(names), list(folders), bool(on)
 
+    def doc_undo(self, scene) -> bool:
+        # Tags only: folder visibility and the active tag are not in the
+        # document yet (slice 2).
+        return not self.folders and self.before.get("active") == getattr(
+            scene, "active_layer", None)
+
+    def doc_after(self, scene, phase) -> None:
+        if phase == "redo":
+            for entity in list(scene.selection):
+                if not scene.entity_visible(entity):
+                    scene.selection.discard(entity)
+        scene.version += 1
+
     def do(self, scene):
         from core import layers as L
         self.before = L.layer_state(scene)
@@ -1454,6 +1540,14 @@ class AssignLayerCommand(Command):
         self._layer = layer
         self._prev: list = []
         self._created = False
+
+    def doc_undo(self, scene) -> bool:
+        # Placements only: a face's or an edge's tag lives in its mesh.
+        return all(isinstance(e, Group) for e in self._entities)
+
+    def doc_after(self, scene, phase) -> None:
+        _dirty_group_chunks(scene)
+        scene.version += 1
 
     def do(self, scene) -> None:
         from core.layers import Layer, assign_layer, layer_of
@@ -1595,6 +1689,17 @@ class HideCommand(Command):
     @property
     def hides(self) -> bool:
         return self._hidden
+
+    def doc_undo(self, scene) -> bool:
+        # Placements only: hidden faces and edges live in their meshes.
+        return all(isinstance(e, Group) for e in self._entities)
+
+    def doc_after(self, scene, phase) -> None:
+        if phase == "redo" and self._hidden:
+            for e in self._entities:
+                scene.selection.discard(e)
+        _dirty_group_chunks(scene)
+        scene.version += 1
 
     def do(self, scene) -> None:
         self._prev = [_is_hidden(e) for e in self._entities]
@@ -1744,6 +1849,8 @@ class SetMaterialFinishCommand(Command):
     """Choose how a named material answers light in a render (core.finish;
     ``None`` = guess it from the name again). Only the registry entry
     changes — the viewport draws the same — so undo is exact and cheap."""
+
+    doc_undo = True
 
     def __init__(self, name, finish) -> None:
         self._name = name
@@ -4794,9 +4901,9 @@ class _TagState:
     def __init__(self, scene) -> None:
         from copy import deepcopy
         from core import links
-        from core.layers import folders_of
+        from core.layers import folders_of, layer_values
         self.layers = list(scene.layers)
-        self.attrs = {id(ly): dict(vars(ly)) for ly in self.layers}
+        self.attrs = {id(ly): layer_values(ly) for ly in self.layers}
         self.folders = list(folders_of(scene))
         self.maps = {name: dict(getattr(scene, name, None) or {})
                      for name in self._MAPS}
@@ -5211,6 +5318,19 @@ class InsertGroupCommand(Command):
     def __init__(self, group) -> None:
         self.group = group
         self._owner: Optional[list] = None
+        self._baked = False
+
+    def doc_undo(self, scene) -> bool:
+        # Not when the group's mesh was carried into the container's space.
+        return not self._baked
+
+    def doc_after(self, scene, phase) -> None:
+        if phase == "undo":
+            scene.selection.discard(self.group)
+        else:
+            scene.selection.clear()
+            scene.selection.add(self.group)
+        scene.version += 1
 
     @staticmethod
     def _target(scene):
@@ -5231,6 +5351,7 @@ class InsertGroupCommand(Command):
                         self.group.xform = inv * self.group.xform
                     else:
                         self.group.mesh = transformed_mesh(self.group.mesh, inv)
+                        self._baked = True
                         from core.group import carry_axes
                         carry_axes(self.group, inv)
         else:
@@ -5374,6 +5495,17 @@ class GroupInContextCommand(Command):
         ctx = self.context
         if ctx.children is None:
             ctx.children = []
+        if _doc.ENABLED:
+            # The document's lists cannot be swapped like Python lists:
+            # the scene reads its top level from ``ctx`` meanwhile.
+            d = scene.__dict__
+            prev = d.get("_groups_owner")
+            d["_groups_owner"] = ctx
+            try:
+                step(scene)
+            finally:
+                d["_groups_owner"] = prev
+            return
         top = scene.groups
         scene.groups = ctx.children
         try:
@@ -5476,10 +5608,18 @@ class LockCommand(Command):
     but cannot be picked, selected or opened. Previous flags are kept, so a
     mixed set undoes exactly."""
 
+    doc_undo = True
+
     def __init__(self, groups, locked: bool = True) -> None:
         self._groups = list(groups)
         self._locked = bool(locked)
         self._prev: list = []
+
+    def doc_after(self, scene, phase) -> None:
+        if phase == "redo" and self._locked:
+            for g in self._groups:
+                scene.selection.discard(g)
+        scene.version += 1
 
     def do(self, scene) -> None:
         self._prev = [bool(getattr(g, "locked", False)) for g in self._groups]
@@ -5602,6 +5742,8 @@ class SetGroupMaterialCommand(Command):
     container's ``material`` is set — ``None`` unpaints — and every face
     inside wearing the default material shows it; faces painted themselves
     keep their own. Nothing in the mesh changes, so undo is a plain swap."""
+
+    doc_undo = True
 
     def __init__(self, group, material) -> None:
         self.group = group
@@ -5927,6 +6069,8 @@ def _merge_overlapping_planes(scene, before, added, *, on_rebuild=None,
 class RenameGroupCommand(Command):
     """Give a group, component or part a new name (the Parts tray's edit)."""
 
+    doc_undo = True
+
     def __init__(self, group: Group, name: str) -> None:
         self.group = group
         self.name = name
@@ -6015,6 +6159,12 @@ class MoveGroupCommand(Command):
     def __init__(self, group: Group, delta: QVector3D) -> None:
         self.group = group
         self.delta = QVector3D(delta)
+
+    def doc_undo(self, scene) -> bool:
+        # An instance moves by its matrix (in the document), and undo puts
+        # back that exact matrix rather than composing -delta in float32.
+        # A classic group moves its vertices: its own undo.
+        return getattr(self.group, "xform", None) is not None
 
     def _shift(self, scene, delta) -> None:
         if getattr(self.group, "xform", None) is not None:
@@ -6232,10 +6382,18 @@ class DeleteGroupCommand(Command):
 
     keeps_groups = True
 
+    doc_undo = True
+
     def __init__(self, group: Group) -> None:
         self.group = group
         self.index: Optional[int] = None
         self._owner: Optional[list] = None
+
+    def doc_after(self, scene, phase) -> None:
+        if phase == "redo":
+            scene.selection.discard(self.group)
+            scene.mesh.purge_debris()
+        scene.version += 1
 
     def do(self, scene) -> None:
         owner = group_owner_list(scene, self.group)
@@ -6788,6 +6946,16 @@ class CompoundCommand(Command):
     def undo(self, scene) -> None:
         for cmd in reversed(self.commands):
             cmd.undo(scene)
+
+    def doc_undo(self, scene) -> bool:
+        """By its transaction when every part would be."""
+        return bool(self.commands) and all(
+            _uses_doc_undo(c, scene) for c in self.commands)
+
+    def doc_after(self, scene, phase) -> None:
+        parts = reversed(self.commands) if phase == "undo" else self.commands
+        for cmd in parts:
+            cmd.doc_after(scene, phase)
 
 
 class ChangeAxesCommand(Command):
