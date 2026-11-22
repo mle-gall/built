@@ -286,8 +286,31 @@ class MeshToolAccess:
                 # even when another placement covers it in the ID pass.
                 from views.wgpu_inference import context_hit
                 row = (context_hit(self.view, context, x, y)
-                       if self.view.inference_index is not None else None)
+                       if self.view.inference_index is not None
+                       else self._context_mesh_row(context, x, y))
         return row
+
+    def _context_mesh_row(self, context, x, y):
+        """The open group's row when the cursor ray meets its own faces —
+        what :func:`context_hit` answers while the snap index is still
+        being built on its worker (a second and more on a big model, after
+        opening it and after each repack). Without it a face covered in
+        the ID pass by the faded rest — a plate against a profile, a nut on
+        its bolt — took no click at all until the index came back."""
+        from views.viewport import _moller_trumbore
+        rows = [r for r in self.view.uid_rows.get(context.uid, ())
+                if 0 <= r < len(self.view.packed.instances)
+                and self.view.packed.groups[r] is context
+                and not self.view.packed.instances['info'][r, 2] & 129]
+        if not rows:
+            return None
+        _faces, _owner, v0, e1, e2 = self._face_triangles(self.scene.mesh)
+        if not len(v0):
+            return None
+        origin, direction = self._pixel_to_ray(x, y)
+        _t, hit = _moller_trumbore(np.array(origin.toTuple()),
+                                   np.array(direction.toTuple()), v0, e1, e2)
+        return rows[0] if hit.any() else None
 
     def _face_row_under(self, x, y, default):
         """The row of the front face at ``(x, y)`` among the placements
