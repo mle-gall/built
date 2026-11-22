@@ -28,10 +28,35 @@ def _paint_key(scene):
         or bool(getattr(ly, 'locked', False))))
 
 
+def _ui_claims(view, name, event):
+    """The egui chrome hears input first, in screen space, before the
+    geometry is moved into the camera frame for the tools."""
+    from views import wgpu_ui
+    if name == 'mousePressEvent':
+        view.setFocus()
+        return wgpu_ui.pointer(view, 'press', event)
+    if name == 'mouseMoveEvent':
+        return wgpu_ui.pointer(view, 'move', event)
+    if name == 'mouseReleaseEvent':
+        return wgpu_ui.pointer(view, 'release', event)
+    if name == 'mouseDoubleClickEvent':
+        return (wgpu_ui.title_double_click(view, event)
+                or wgpu_ui.pointer(view, 'press', event))
+    if name == 'keyPressEvent':
+        return wgpu_ui.key(view, event, True)
+    if name == 'keyReleaseEvent':
+        return wgpu_ui.key(view, event, False)
+    if name == 'wheelEvent':
+        return wgpu_ui.wheel(view, event)
+    return False
+
+
 def _tool_frame(method):
     from functools import wraps
     @wraps(method)
     def handle(view, *args, **kwargs):
+        if args and _ui_claims(view, method.__name__, args[0]):
+            return None
         remote = getattr(getattr(view, 'packed', None), 'model_translations', None) is not None
         if remote:
             view._sync_scene_camera()
@@ -482,6 +507,8 @@ class WgpuView(QWidget):
             black_box.install_panic_log(ingetrazo_render)
             self.renderer = ingetrazo_render.Renderer(int(self.winId()), self.width(), self.height(), self.devicePixelRatioF())
             self._wrap_renderer()
+            from views import wgpu_ui
+            wgpu_ui.attach(self)
         self._resident_count = len(self.packed.instances) or 1
         if len(self.packed.instances):
             self.packed.upload(self.renderer)
@@ -761,7 +788,10 @@ class WgpuView(QWidget):
             self.overlay_ms = (time.perf_counter() - before) * 1000
             self._had_overlay = annotations or bool(primitives) or section_widgets
         # End R3c-2a section widgets.
+        from views import wgpu_ui
+        wgpu_ui.before_frame(self)
         cpu, gpu = self.renderer.render()
+        wgpu_ui.after_frame(self)
         self._pick_frame_dirty = False
         wall = (time.perf_counter()-start)*1000
         self.frameReady.emit(cpu, gpu, wall)
@@ -1380,6 +1410,11 @@ class WgpuView(QWidget):
         # Qt's focus chain took it and left the keyboard on a tray button.
         return False
 
+    def leaveEvent(self, event):
+        from views import wgpu_ui
+        wgpu_ui.pointer(self, 'leave')
+        super().leaveEvent(event)
+
     @_tool_frame
     def mouseReleaseEvent(self, event):
         if getattr(self, '_look_drag', None) is not None:
@@ -1474,6 +1509,11 @@ class WgpuView(QWidget):
             # Pinch, smart zoom: a trackpad's, or the touch screen's (#248).
             from views import trackpad_nav
             if trackpad_nav.native_gesture(self, event):
+                return True
+        if event.type() == QEvent.ShortcutOverride:
+            from views import wgpu_ui
+            if wgpu_ui.claims_key(self, event):
+                event.accept()
                 return True
         if event.type() == QEvent.ShortcutOverride and hasattr(self, 'tools'):
             mode = self.tools.sync()

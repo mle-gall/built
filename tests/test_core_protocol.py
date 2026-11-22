@@ -428,3 +428,69 @@ def test_bridge_tools_name_faces_by_key_and_read_the_feed(bridge):
     (step,) = feed["steps"]
     assert step["meshes"][0]["mesh"] == info["mesh"]
     json.dumps(feed, allow_nan=False)
+
+
+def test_placement_commands_reach_nested_placements():
+    """hide / unhide / lock / rename_placement / set_tag (added for the
+    egui UI) take uids at any depth and answer with the feed's step."""
+    from core.group import Group
+    from core.layers import Layer
+    sc = _scene(False)
+    h = History(sc)
+    inner_mesh = M.Mesh()
+    inner_mesh.add_face([V(5, 0, 0), V(6, 0, 0), V(6, 1, 0)])
+    inner = Group(inner_mesh, name="Bolt")
+    outer = Group(M.Mesh(), name="Frame")
+    outer.children = [inner]
+    h.execute(InsertGroupCommand(outer))
+    out = C.run(h, "hide", placements=[inner.uid])
+    assert out["ok"] and inner.hidden and inner.uid in out["step"].placements["modified"]
+    assert C.run(h, "unhide", placements=[inner.uid])["ok"] and not inner.hidden
+    out = C.run(h, "lock", placements=[inner.uid])
+    assert out["ok"] and inner.locked and out["step"].placements["modified"] == [inner.uid]
+    assert C.run(h, "lock", placements=[inner.uid], locked=False)["ok"] and not inner.locked
+    out = C.run(h, "rename_placement", placement=inner.uid, name="M8 bolt")
+    assert out["ok"] and inner.name == "M8 bolt"
+    assert out["step"].placements["modified"] == [inner.uid] and out["step"].complete
+    layer = Layer("Fasteners")
+    sc.layers.append(layer)
+    assert C.run(h, "set_tag", placements=[inner.uid], tag=layer.key)["ok"]
+    assert inner.layer == layer.key
+    h.undo()
+    assert inner.layer != layer.key
+    with pytest.raises(KeyError):
+        C.run(h, "hide", placements=["nope"])
+    with pytest.raises(KeyError):
+        C.run(h, "set_tag", placements=[inner.uid], tag="no-such-tag")
+
+
+def test_resegment_curve_and_repair_solid():
+    from PySide6.QtCore import QPointF, Qt
+    from tools.base import ToolContext
+    from tools.circle import CircleTool
+    from views.viewport import Viewport
+    from core.protocol.keys import to_json_key
+    vp = Viewport(None)
+    vp.flash_status = lambda *a, **k: None
+    tool = CircleTool()
+    tool.on_activate(vp)
+    for p in (V(0, 0, 0), V(2, 0, 0)):
+        tool.on_click(ToolContext(viewport=vp, world=p, screen=QPointF(0, 0),
+                                  modifiers=Qt.NoModifier, snap=None))
+    edge = next(e for e in vp.scene.mesh.edges if e.curve is not None)
+    before = sum(1 for e in vp.scene.mesh.edges if e.curve is not None)
+    out = C.run(vp.history, "resegment_curve", edge=to_json_key(edge.key), segments=before * 2)
+    assert out["ok"]
+    assert sum(1 for e in vp.scene.mesh.edges if e.curve is not None) == before * 2
+    # An open box (no top) as a group: repair closes the flat hole.
+    from core.group import Group
+    box = M.Mesh()
+    a, b, c, d = V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0)
+    up = V(0, 0, 1)
+    box.add_face([a, d, c, b])
+    for p, q in ((a, b), (b, c), (c, d), (d, a)):
+        box.add_face([p, q, q + up, p + up])
+    g = Group(box, name="Open box")
+    vp.history.execute(InsertGroupCommand(g))
+    out = C.run(vp.history, "repair_solid", placement=g.uid)
+    assert out["ok"] and out["repaired"]["holes"] == 1

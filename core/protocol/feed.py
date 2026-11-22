@@ -323,8 +323,11 @@ def _known_placements(cmd, phase, step, scene=None) -> bool:
         adding = isinstance(cmd, H.InsertGroupCommand) != (phase == "undo")
         step.placements["created" if adding else "removed"].append(uid)
         return True
-    if isinstance(cmd, H.MoveGroupCommand) and uid:
+    if isinstance(cmd, (H.MoveGroupCommand, H.RenameGroupCommand)) and uid:
         step.placements["modified"].append(uid)
+        return True
+    if isinstance(cmd, H.LockCommand):
+        step.placements["modified"].extend(g.uid for g in cmd._groups)
         return True
     undo = phase == "undo"
     if isinstance(cmd, H.ExplodeGroupCommand) and uid:

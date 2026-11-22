@@ -10791,6 +10791,8 @@ class Viewport(QOpenGLWidget):
             painter.setBrush(Qt.NoBrush)
 
     def _draw_linear_mode_label(self, painter: QPainter) -> None:
+        if getattr(self, '_chrome_owns_labels', False):
+            return  # the egui options strip shows it (views/wgpu_ui.py)
         # The mirror image of the bug above: these had the Spanish written
         # into the source, so an English UI showed Spanish.
         text = {
@@ -12442,6 +12444,8 @@ class Viewport(QOpenGLWidget):
             painter.drawText(QPointF(px + 10, py + 16), text)
 
     def _draw_length_label(self, painter: QPainter) -> None:
+        if getattr(self, '_chrome_owns_labels', False):
+            return  # the value field on the geometry shows it (views/wgpu_ui.py)
         tool = self.active_tool
         if tool is None:
             return
@@ -12514,6 +12518,8 @@ class Viewport(QOpenGLWidget):
         return ""
 
     def _draw_axis_lock_label(self, painter: QPainter) -> None:
+        if getattr(self, '_chrome_owns_labels', False):
+            return  # the egui options strip shows it (views/wgpu_ui.py)
         label = {
             "x": ("X", QColor(220, 56, 69)),
             "y": ("Y", QColor(40, 158, 92)),

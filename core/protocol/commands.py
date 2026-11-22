@@ -253,6 +253,100 @@ def _placement(history, uid):
     raise KeyError(f"no placement with uid {uid!r} in the open context")
 
 
+def _placements(history, uids):
+    """Placements of the open context by uid, nested ones included (the
+    project tree names items at any depth)."""
+    want = list(dict.fromkeys(uids))
+    wanted, found = set(want), {}
+    stack = list(reversed(history.scene.groups))
+    while stack and len(found) < len(wanted):
+        g = stack.pop()
+        uid = getattr(g, "uid", None)
+        if uid in wanted and uid not in found:
+            found[uid] = g
+        stack.extend(reversed(getattr(g, "children", None) or ()))
+    gone = [u for u in want if u not in found]
+    if gone:
+        raise KeyError(f"no placement with uid {gone[0]!r} in the open context")
+    return [found[u] for u in want]
+
+
+def hide(history, placements):
+    """Hide placements (uids, nested included): ``HideCommand``."""
+    from core.history import HideCommand
+    gs = _placements(history, placements)
+    before = history.revision
+    history.execute(HideCommand(gs, hidden=True))
+    return _answer(history, before)
+
+
+def unhide(history, placements):
+    """Show placements again (uids, nested included): ``HideCommand``."""
+    from core.history import HideCommand
+    gs = _placements(history, placements)
+    before = history.revision
+    history.execute(HideCommand(gs, hidden=False))
+    return _answer(history, before)
+
+
+def lock(history, placements, locked=True):
+    """Lock (or unlock) placements (uids, nested included): ``LockCommand``."""
+    from core.history import LockCommand
+    gs = _placements(history, placements)
+    before = history.revision
+    history.execute(LockCommand(gs, locked=bool(locked)))
+    return _answer(history, before)
+
+
+def rename_placement(history, placement, name):
+    """Rename one placement (uid, nested included): ``RenameGroupCommand``
+    (a component's copies keep their own names)."""
+    from core.history import RenameGroupCommand
+    g, = _placements(history, [placement])
+    before = history.revision
+    history.execute(RenameGroupCommand(g, str(name)))
+    return _answer(history, before)
+
+
+def set_tag(history, placements, tag):
+    """Put placements (uids, nested included) on a tag (key):
+    ``AssignLayerCommand``."""
+    from core.history import AssignLayerCommand
+    gs = _placements(history, placements)
+    layer = history.scene.layer(tag)
+    if layer is None:
+        raise KeyError(f"no tag with key {tag!r}")
+    before = history.revision
+    history.execute(AssignLayerCommand(gs, layer.key))
+    return _answer(history, before)
+
+
+def resegment_curve(history, edge, segments):
+    """Rebuild the regular curve (circle, polygon or arc) one of whose
+    edges (key) is given with ``segments`` straight pieces, in place:
+    ``ResegmentCurveCommand``. Only a flat curve; ``rejected`` otherwise."""
+    from core.curve_segments import ResegmentCurveCommand
+    e, = _need(history.scene.mesh, "edge", [edge])
+    before = history.revision
+    history.execute(ResegmentCurveCommand(e, int(segments)))
+    return _answer(history, before)
+
+
+def repair_solid(history, placement):
+    """Repair what has one right answer in a placement's (uid) mesh, shared
+    by its copies: stray edges, duplicated faces, flat holes, partitions,
+    reversed faces (the Solid Inspector's ``RepairSolidsCommand``). The
+    counts come back as ``repaired``."""
+    from plugins.solid_inspector import RepairSolidsCommand
+    g, = _placements(history, [placement])
+    cmd = RepairSolidsCommand([g.mesh])
+    before = history.revision
+    history.execute(cmd)
+    out = _answer(history, before)
+    out["repaired"] = dict(cmd.done)
+    return out
+
+
 def explode_group(history, placement):
     """Explode the placement (uid): its geometry merges into the open mesh
     through its matrix (welding onto what is there, coplanar overlaps
@@ -338,10 +432,12 @@ COMMANDS = {"follow_me": follow_me, "intersect_faces": intersect_faces,
             "explode_group": explode_group,
             "split_into_pieces": split_into_pieces,
             "explode_view": explode_view, "purge_unused": purge_unused,
-            "purge_debris": purge_debris, "undo": undo, "redo": redo}
+            "purge_debris": purge_debris, "undo": undo, "redo": redo,
+            "hide": hide, "unhide": unhide, "lock": lock, "rename_placement": rename_placement,
+            "set_tag": set_tag, "resegment_curve": resegment_curve, "repair_solid": repair_solid}
 
 
-def run(history, name, **args):
+def run(history, name, /, **args):
     try:
         fn = COMMANDS[name]
     except KeyError:

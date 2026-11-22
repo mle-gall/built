@@ -1,0 +1,2613 @@
+"""UI spike (branch ``ui/egui-spike``): the viewport chrome drawn by egui
+inside the Metal renderer, in the same frame as the model.
+
+Off unless ``BUILT_UI=1``. Then the Metal view draws a floating tool
+palette and a status line itself, and the Qt tool bars are hidden. Qt
+still owns the window, the docks and every tool: the palette only shows
+what the window says is active and asks it to switch.
+"""
+from __future__ import annotations
+
+import os
+
+from PySide6.QtCore import Qt, QTimer, QSize
+from PySide6.QtGui import QImage, QKeySequence
+
+ENABLED = os.environ.get("BUILT_UI") == "1"
+
+# What gets a button (Maxence 2026-11-22): the work itself and the states
+# you need to see. Commands every app shares a shortcut for (Save, Undo,
+# Redo, Cut/Copy/Paste, Select all, New/Open, Print, Preferences) get none:
+# menus, keys and F3 cover them. Modelling palette, by task:
+GROUPS = [
+    ["select", "eraser", "paint", "eyedropper"],
+    ["line", "freehand", "rectangle", "rotated_rect", "circle", "polygon",
+     "arc", "arc3", "center_arc", "pie"],
+    ["pushpull", "move", "rotate", "scale", "flip", "followme", "offset", "fillet",
+     "bridge", "make_faces"],
+    ["tape", "protractor", "north", "dimension", "text", "text3d", "geopath", "section"],
+    ["outer_shell", "solid_union", "solid_subtract", "solid_trim", "solid_intersect",
+     "solid_split"],
+]
+#: Palette entries that are window commands rather than tools.
+PALETTE_ACTIONS = {"eyedropper": "_act_eyedropper", "bridge": "_act_bridge",
+                   "make_faces": "_act_make_faces", "text3d": "_act_3dtext"}
+# Navigation acts on the camera, not the model: a top row of its own.
+NAV = [["orbit", "pan", "zoom", "zoom_window", "zoom_extents", "zoom_selection"],
+       ["look_around", "walk", "position_camera"]]
+# Inter 400/500/600 (SIL OFL, resources/fonts/inter); the system font if missing.
+FONT = str(__import__("pathlib").Path(__file__).resolve().parents[1] / "resources" / "fonts" / "inter")
+if not os.path.isdir(FONT):
+    FONT = "/System/Library/Fonts/SFNS.ttf"
+_ICON_PX = 48
+
+
+def _icon_rgba(key: str) -> tuple[int, int, bytes]:
+    """The tool's own icon as white with its alpha, so egui can tint it."""
+    from views.icons import tool_icon
+    icon = tool_icon(key)
+    if icon.isNull():
+        return 0, 0, b""
+    image = icon.pixmap(QSize(_ICON_PX, _ICON_PX)).toImage().convertToFormat(
+        QImage.Format_RGBA8888)
+    w, h = image.width(), image.height()
+    data = bytearray(bytes(image.constBits())[: w * h * 4])
+    data[0::4] = data[1::4] = data[2::4] = b"\xff" * (w * h)
+    return w, h, bytes(data)
+
+
+def _drawn_icon(key: str) -> tuple[int, int, bytes]:
+    """Icons the app has no art for yet (view-state toggles), drawn in the
+    same 48-px grid and stroke as views/icons.py, white for tinting."""
+    from PySide6.QtCore import QPointF, QRectF
+    from PySide6.QtGui import QColor, QPainter, QPen
+    image = QImage(_ICON_PX, _ICON_PX, QImage.Format_RGBA8888)
+    image.fill(Qt.transparent)
+    p = QPainter(image)
+    p.setRenderHint(QPainter.Antialiasing, True)
+    solid = QPen(QColor(255, 255, 255), 3.0, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+    dashed = QPen(QColor(255, 255, 255, 200), 2.2, Qt.DashLine, Qt.RoundCap, Qt.RoundJoin)
+    dashed.setDashPattern([1.6, 1.8])
+    front, back = QRectF(10, 18, 20, 20), QRectF(18, 10, 20, 20)
+    corners = [(front.topLeft(), back.topLeft()), (front.topRight(), back.topRight()),
+               (front.bottomLeft(), back.bottomLeft()), (front.bottomRight(), back.bottomRight())]
+    if key == "xray":
+        # A cube you see through: faces washed, every edge drawn.
+        p.setPen(Qt.NoPen)
+        p.setBrush(QColor(255, 255, 255, 70))
+        p.drawRect(back)
+        p.drawRect(front)
+        p.setBrush(Qt.NoBrush)
+        p.setPen(solid)
+        p.drawRect(front)
+        p.drawRect(back)
+        for a, b in corners:
+            p.drawLine(a, b)
+    elif key == "back_edges":
+        # The near edges solid, the ones behind dashed.
+        p.setPen(dashed)
+        p.drawLine(back.topLeft(), back.bottomLeft())
+        p.drawLine(back.bottomLeft(), back.bottomRight())
+        p.drawLine(front.bottomLeft(), back.bottomLeft())
+        p.setPen(solid)
+        p.drawRect(front)
+        p.drawLine(back.topLeft(), back.topRight())
+        p.drawLine(back.topRight(), back.bottomRight())
+        p.drawLine(front.topLeft(), back.topLeft())
+        p.drawLine(front.topRight(), back.topRight())
+        p.drawLine(front.bottomRight(), back.bottomRight())
+    elif key == "section_cut":
+        # A box sliced by a plane: the near half kept, its cut face hatched,
+        # the far half gone (dashed), the plane drawn through it.
+        p.setPen(dashed)
+        p.drawLine(QPointF(25, 15), QPointF(37, 15))
+        p.drawLine(QPointF(37, 15), QPointF(37, 35))
+        p.drawLine(QPointF(37, 35), QPointF(25, 35))
+        p.setPen(Qt.NoPen)
+        p.setBrush(QColor(255, 255, 255, 90))
+        p.drawRect(QRectF(11, 15, 14, 20))
+        p.setBrush(Qt.NoBrush)
+        hatch = QPen(QColor(255, 255, 255, 190), 1.6)
+        p.setPen(hatch)
+        for k in range(0, 34, 6):
+            p.drawLine(QPointF(max(11, 11 + k - 20), min(35, 15 + k)), QPointF(min(25, 11 + k), max(15, 15 + k - 14)))
+        p.setPen(solid)
+        p.drawLine(QPointF(25, 15), QPointF(11, 15))
+        p.drawLine(QPointF(11, 15), QPointF(11, 35))
+        p.drawLine(QPointF(11, 35), QPointF(25, 35))
+        plane = QPen(QColor(255, 255, 255), 3.4, Qt.SolidLine, Qt.RoundCap)
+        p.setPen(plane)
+        p.drawLine(QPointF(25, 9), QPointF(25, 41))
+    elif key == "shadows":
+        # A sun, a box, and the shadow it casts on the ground.
+        p.setPen(Qt.NoPen)
+        p.setBrush(QColor(255, 255, 255, 110))
+        from PySide6.QtGui import QPolygonF
+        p.drawPolygon(QPolygonF([QPointF(24, 38), QPointF(36, 38), QPointF(44, 31), QPointF(32, 31)]))
+        p.setBrush(Qt.NoBrush)
+        p.setPen(solid)
+        p.drawRect(QRectF(22, 22, 14, 16))
+        p.drawEllipse(QPointF(12, 12), 4.5, 4.5)
+        ray = QPen(QColor(255, 255, 255), 2.2, Qt.SolidLine, Qt.RoundCap)
+        p.setPen(ray)
+        import math
+        for a in range(0, 360, 45):
+            r = math.radians(a)
+            p.drawLine(QPointF(12 + 7.5 * math.cos(r), 12 + 7.5 * math.sin(r)),
+                       QPointF(12 + 10 * math.cos(r), 12 + 10 * math.sin(r)))
+    elif key == "hidden_geometry":
+        # A face whose soft diagonal and smoothed edges show dashed.
+        p.setPen(solid)
+        p.drawRect(QRectF(11, 11, 26, 26))
+        p.setPen(dashed)
+        p.drawLine(QPointF(11, 37), QPointF(37, 11))
+        p.drawLine(QPointF(11, 24), QPointF(24, 11))
+        p.drawLine(QPointF(24, 37), QPointF(37, 24))
+    p.end()
+    return _ICON_PX, _ICON_PX, bytes(image.constBits())[: _ICON_PX * _ICON_PX * 4]
+
+
+def _window(view):
+    win = view.window()
+    return win if hasattr(win, "_tool_actions") else None
+
+
+def attach(view) -> None:
+    """Called once the view has its renderer."""
+    renderer = view.renderer
+    if not ENABLED or getattr(view, "_ui_attached", False) or not hasattr(renderer, "ui_enable"):
+        return
+    win = _window(view)
+    if win is None:
+        return
+    view._ui_timer = QTimer(view, singleShot=True)
+    view._ui_timer.timeout.connect(view.update)
+    renderer.ui_enable(FONT if os.path.exists(FONT) else None)
+    view._ui_tools_sent = False
+    view._ui_attached = True
+    if view.source_viewport is not None:
+        view.source_viewport._chrome_owns_labels = True
+
+
+def _send_tools(view, win) -> None:
+    """Once the window has built its tool actions (after the first view)."""
+    tools = getattr(win, "_tools", {})
+    groups = []
+    view._ui_palette_runs = {}
+    for keys in GROUPS:
+        row = []
+        for key in keys:
+            if key in PALETTE_ACTIONS:
+                action = getattr(win, PALETTE_ACTIONS[key], None)
+                if action is not None:
+                    view._ui_palette_runs[key] = action.trigger
+            else:
+                action = win._tool_actions.get(key) if key in tools else None
+            if action is None:
+                continue
+            shortcut = action.shortcut().toString(QKeySequence.NativeText)
+            w, h, rgba = _icon_rgba(key)
+            row.append((key, action.text().replace("&", ""), shortcut, w, h, rgba))
+        if row:
+            groups.append(row)
+    view.renderer.ui_set_tools(groups)
+    # Full bleed: the palette replaces every tool bar.
+    from PySide6.QtWidgets import QToolBar
+    for bar in win.findChildren(QToolBar):
+        bar.hide()
+    _merge_title_row(win)
+    _one_theme(win)
+    # Full bleed: the right column stands in for the docks; they stay
+    # reachable from the Window menu until it covers all they do.
+    from PySide6.QtWidgets import QDockWidget
+    for dock in win.findChildren(QDockWidget):
+        # Only the side panels; never a dock that holds the view itself.
+        if dock.isAncestorOf(view) or win.dockWidgetArea(dock) not in (
+                Qt.RightDockWidgetArea, Qt.LeftDockWidgetArea):
+            continue
+        dock.hide()
+    # The hint and the measurements now live in the chrome: their Qt
+    # copies keep their state but take no room.
+    status = win.statusBar()
+    for w in (getattr(status, "_msg", None), getattr(win, "_vcb_name", None),
+              getattr(win, "_vcb_value", None)):
+        if w is not None:
+            w.setMaximumWidth(0)
+    icons = []
+    for key in [*(k for row in NAV for k in row), "four_views", "view_iso", "view_top", "view_front",
+                "view_right", "view_left", "view_back", "view_bottom"]:
+        w, h, rgba = _icon_rgba(key)
+        icons.append((key, w, h, rgba))
+    for key in ("xray", "back_edges", "hidden_geometry", "section_cut", "shadows"):
+        icons.append((key, *_drawn_icon(key)))
+    view.renderer.ui_set_icons(icons)
+    view._ui_tools_sent = True
+
+
+#: Window buttons' room at the top left (mac_glass: 14 + three buttons).
+LIGHTS_ROOM = 86.0
+#: The docked top bar (ui.rs TOP_H): its empty parts move the window.
+TOP_H = 40.0
+
+
+def _merge_title_row(win) -> None:
+    """No title row at all (Maxence 2026-11-22: "can't we get rid of it?"):
+    the model reaches the window's top edge; the project tabs are a glass
+    capsule after the window buttons, on the top row of the chrome; the
+    buttons sit centred on that row."""
+    chrome = getattr(win, "_mac_chrome", None)
+    bar = getattr(win, "_project_tabs", None)
+    if bar is not None:
+        bar.hide()
+        bar.setMaximumHeight(0)
+    area = getattr(win, "_doc_area", None)
+    if area is not None and area.layout() is not None:
+        area.layout().setContentsMargins(0, 0, 0, 0)
+    if chrome is None:
+        return
+    from PySide6.QtCore import QPoint
+
+    def fit():
+        if win.windowState() & Qt.WindowFullScreen:
+            chrome._glass.place_lights(None)
+            return
+        view = getattr(getattr(win, "_doc", None), "stand_in", None)
+        top = view.mapTo(win, QPoint(0, 0)).y() if view is not None else 0
+        chrome._glass.place_lights(top + TOP_H / 2)     # the top bar's centre
+    chrome.fit_lights = fit
+    QTimer.singleShot(0, fit)
+    QTimer.singleShot(400, fit)
+
+
+def _projects(view, win) -> None:
+    bar = getattr(win, "_project_tabs", None)
+    if bar is None:
+        return
+    current = bar.current()
+    docs = []
+    for i in range(bar.count()):
+        text = bar.tabs.tabText(i)
+        dirty = text.endswith(bar.DIRTY_MARK)
+        name = text[: -len(bar.DIRTY_MARK)] if dirty else text
+        docs.append((name, bar.tabs.tabData(i) is current, dirty))
+    if docs != getattr(view, "_ui_docs", None):
+        view._ui_docs = docs
+        view.renderer.ui_set_projects(LIGHTS_ROOM, docs)
+
+
+def _project_action(win, arg) -> None:
+    bar = getattr(win, "_project_tabs", None)
+    if bar is None:
+        return
+    if arg == "views":
+        bar.viewsRequested.emit()
+    elif arg == "new":
+        bar.newRequested.emit()
+    elif arg.startswith("close:"):
+        doc = bar.tabs.tabData(int(arg.partition(":")[2]))
+        if doc is not None:
+            bar.closeRequested.emit(doc)
+    else:
+        doc = bar.tabs.tabData(int(arg))
+        if doc is not None:
+            bar.activated.emit(doc)
+
+
+#: The title row in the chrome's graphite (tokens in ui.rs): Maxence
+#: 2026-11-22, "3 different themes: black top/bottom bar, blue bottom bar,
+#: grey UI". The bottom Qt rows go; this row stays (it holds the window
+#: buttons) and takes the same colours and capsule tabs.
+_TITLE_SHEET = """
+#document_area { background: #16191D; }
+#project_tab_bar::tab { background: transparent; color: #C9CFD6; border: none;
+    border-radius: 14px; padding: 5px 14px; margin: 0 2px; min-height: 18px; }
+#project_tab_bar::tab:hover { background: rgba(255,255,255,18); color: #EEF1F4; }
+#project_tab_bar::tab:selected { background: rgba(106,165,255,61); color: #FFFFFF; }
+#project_views, #project_tab_new { border: none; border-radius: 14px; }
+#project_views:hover, #project_tab_new:hover { background: rgba(255,255,255,18); }
+"""
+
+
+def _one_theme(win) -> None:
+    area = getattr(win, "_doc_area", None)
+    if area is not None:
+        area.setStyleSheet(_TITLE_SHEET)
+    status = win.statusBar()
+    if status is not None:
+        status.hide()
+    scenes = getattr(win, "_scene_tabs", None)
+    if scenes is not None:
+        scenes.setMaximumHeight(0)
+    # The side panels' pull handles: nothing to pull with the docks hidden.
+    from PySide6.QtWidgets import QWidget
+    for name in ("sidebar_handle", "left_sidebar_handle"):
+        for w in win.findChildren(QWidget, name):
+            w.hide()
+            w.setMaximumSize(0, 0)
+
+
+def _tabs(view, win) -> None:
+    """Model / sheet and the scenes for the bottom capsule bar."""
+    scene = win.viewport.scene
+    comps = list(getattr(scene, "compositions", None) or [])
+    last = min(max(getattr(win, "_last_sheet", 0), 0), len(comps) - 1) if comps else -1
+    sheet = comps[last].name if comps else "New sheet"
+    views = list(getattr(scene, "saved_views", None) or [])
+    row = getattr(getattr(win, "_scene_tabs", None), "tabs", None)
+    marked = row.marked_view() if row is not None and hasattr(row, "marked_view") else None
+    work = [("model", "Model", "The model", "", 1, True), ("sheet", sheet, "Sheets (⌃Tab)", "", 0, True)]
+    scenes = [(f"scene:{i}", v.name, "Scene", "", 1 if v is marked else 0, True) for i, v in enumerate(views)]
+    tabs = [work, scenes]
+    if tabs != getattr(view, "_ui_tabs", None):
+        view._ui_tabs = tabs
+        view._ui_scene_views = views
+        view.renderer.ui_set_tabs(tabs)
+
+
+def before_frame(view) -> None:
+    """Mirror the window's state into the chrome (cheap: a few dict reads)."""
+    if not getattr(view, "_ui_attached", False):
+        return
+    win = _window(view)
+    if win is None:
+        return
+    if not view._ui_tools_sent and win._tool_actions:
+        _send_tools(view, win)
+    eyedropper = getattr(win, "_act_eyedropper", None)
+    active = next((k for k, a in getattr(win, "_nav_actions", {}).items() if a.isChecked()), "") \
+        or ("eyedropper" if eyedropper is not None and eyedropper.isChecked() else "") \
+        or next((k for k, a in win._tool_actions.items() if a.isChecked()), "")
+    view.renderer.ui_set_active(active)
+    bar = win.statusBar()
+    base = (getattr(bar, "_base", "") or bar.currentMessage() or "") if bar is not None else ""
+    name, _, hint = base.partition(" — ")
+    timer = getattr(bar, "_timer", None)
+    if timer is not None and timer.isActive():
+        hint = getattr(bar, "_msg", None).text() if getattr(bar, "_msg", None) is not None else hint
+    view.renderer.ui_set_status(name, hint)
+    if not getattr(view, "_ui_units_sent", False):
+        from core import units
+        view.renderer.ui_set_units(units.length_suffix(units.model_unit()).strip() or units.model_unit())
+        view._ui_units_sent = True
+    _cursor_value(view, win)
+    _selection(view, win, active)
+    _palette(view, win, active)
+    _cluster(view, win)
+    _form(view, win)
+    _tree(view, win)
+    _inspector(view, win)
+    _tabs(view, win)
+    _projects(view, win)
+    opts = [(i, label, k, state) for i, label, k, state, _ in _options(view)]
+    if opts != getattr(view, "_ui_opts", None):
+        view._ui_opts = opts
+        view.renderer.ui_set_options(opts)
+
+
+_CTRL = None
+
+
+def _ctrl() -> str:
+    """The native name of the key the tools call Ctrl (⌘ on the Mac)."""
+    global _CTRL
+    if _CTRL is None:
+        _CTRL = QKeySequence(Qt.CTRL | Qt.Key_A).toString(QKeySequence.NativeText)[:-1].strip("+") or "Ctrl"
+    return _CTRL
+
+
+def _options(view):
+    """(id, label, key, state, toggle) for the active tool's strip. Each
+    toggle does exactly what tapping the key does; locks are read-only."""
+    tool = getattr(view.source_viewport, "active_tool", None)
+    host = view.tools  # what the tools are handed as their viewport here
+    name = type(tool).__name__ if tool is not None else ""
+    out = []
+    if name == "MoveTool" and hasattr(tool, "_toggle_copy"):
+        out.append(("copy", "Copy", _ctrl(), int(bool(tool._copy)),
+                    lambda: tool._toggle_copy(host)))
+    elif name == "PushPullTool" and hasattr(tool, "_keep_mode"):
+        def keep():
+            tool._keep_mode = not tool._keep_mode
+            tool._keep_base = tool._keep_mode
+            tool.refresh_hint(host)
+            host.update()
+        out.append(("keep", "Keep base", _ctrl(), int(bool(tool._keep_mode)), keep))
+    elif name == "RectangleTool" and hasattr(tool, "_set_from_center"):
+        out.append(("centre", "From centre", _ctrl(), int(bool(tool._from_center)),
+                    lambda: tool._set_from_center(host, not tool._from_center)))
+    elif name == "DimensionTool":
+        out.append(("dimstyle", "Dimension style…", "", 0, lambda: _open_form(view, "dimstyle")))
+    vp = view.source_viewport
+    lock = getattr(vp, "axis_lock", None) if vp is not None else None
+    if lock:
+        out.append(("axis", f"{lock.upper()} axis locked", "", 2, None))
+    if vp is not None and getattr(vp, "_previous_views", None):
+        out.append(("showall", "Isolated · Show all", "", 1, lambda: _show_all(vp)))
+    mode = getattr(vp, "linear_inference_mode", "all") if vp is not None else "all"
+    if mode == "off":
+        out.append(("inf", "Inferences off", "", 2, None))
+    elif mode == "parallel_perp":
+        out.append(("inf", "Parallel / perpendicular only", "", 2, None))
+    return out
+
+
+def _shortcut(action) -> str:
+    return action.shortcut().toString(QKeySequence.NativeText)
+
+
+def _cluster(view, win) -> None:
+    """Top-right: Undo, Redo, Save · X-ray, Section cut · View ▾ (council
+    2026-11-22). Everything is the window's own QAction, so shortcuts,
+    enabled and checked states stay the window's."""
+    from PySide6.QtWidgets import QMenu
+    actions: list = []
+
+    def item(action, label=None, icon="", checked=None):
+        if action is None:
+            return None
+        actions.append(action)
+        state = (-1 if not action.isCheckable() else int(action.isChecked())) if checked is None else int(checked)
+        text = (label or action.text()).replace("&", "")
+        key = _shortcut(action)
+        return (str(len(actions) - 1), text, key, icon, state, action.isEnabled())
+
+    def tipped(it, name):
+        # Cluster buttons say what they are in the tooltip.
+        if it is None:
+            return None
+        return (it[0], it[1], f"{name}    {it[2]}".strip(), it[3], it[4], it[5])
+
+    style = win.active_style() if hasattr(win, "active_style") else None
+    xray = style is not None and getattr(style, "face_mode", None) == "xray"
+    # No Save, Undo or Redo buttons: ⌘S, ⌘Z, ⇧⌘Z (Maxence 2026-11-22).
+    toggles = [tipped(item(getattr(win, "_act_xray_toggle", None), label="X-ray", icon="xray", checked=xray), "X-ray"),
+               tipped(item(getattr(win, "_act_style_back_edges", None), label="Back edges", icon="back_edges"), "Back edges"),
+               tipped(item(getattr(win, "_act_hidden_geometry", None), label="Hidden geometry", icon="hidden_geometry"), "Hidden geometry"),
+               tipped(item(getattr(win, "_act_shadows", None), icon="shadows"), "Shadows"),
+               tipped(item(getattr(win, "_act_show_scuts", None), label="Cut", icon="section_cut"), "Section cuts")]
+    nav = []
+    for row in NAV:
+        items = []
+        for key in row:
+            action = (getattr(win, "_nav_actions", {}).get(key) or getattr(win, "_act_" + key, None)
+                      or win._tool_actions.get(key))
+            it = item(action, icon=key)
+            if it is not None:
+                items.append(tipped(it, it[1]))
+        nav.append(items)
+    cluster = [*[r for r in nav if r], [i for i in toggles if i]]
+    menu = []
+    views = [item(a, icon=f"view_{k}") for k, a in getattr(win, "_view_actions", {}).items()]
+    menu.append(("Views", [i for i in views if i]))
+    menu.append(("Projection", [item(a) for a in getattr(win, "_projection_actions", {}).values()]))
+    if not hasattr(view, "_ui_style_menu"):
+        view._ui_style_menu = next((m for m in win.findChildren(QMenu)
+                                    if m.title().replace("&", "") == "Style"), None)
+    style_menu = view._ui_style_menu
+    if style_menu is not None:
+        rows = [item(a) for a in style_menu.actions()
+                if not a.isSeparator() and a.text() and a is not getattr(win, "_act_xray_toggle", None)]
+        menu.append(("Style", rows))
+    menu.append(("Sections", [i for i in (item(getattr(win, "_act_show_splanes", None)),
+                                           item(getattr(win, "_act_section_fill", None))) if i]))
+    menu.append(("Settings", [("form-style", "Edit style…", "", "", -1, True),
+                              ("form-shadows", "Shadows and sun…", "", "", -1, True)]))
+    menu = [(t, rows) for t, rows in menu if rows]
+    view._ui_actions = actions
+    sig = (tuple(map(tuple, cluster)), tuple((t, tuple(r)) for t, r in menu))
+    if sig != getattr(view, "_ui_cluster_sig", None):
+        view._ui_cluster_sig = sig
+        view.renderer.ui_set_cluster(cluster, menu)
+
+
+def _cursor_value(view, win) -> None:
+    """The value field on the geometry it measures (Maxence 2026-11-22):
+    between the operation's first point and the cursor, a little above
+    the rubber band; near the cursor while typing before the first point.
+    Hidden when the tool takes no value or nothing is under way."""
+    label = getattr(win, "_vcb_name", None)
+    value = getattr(win, "_vcb_value", None)
+    off = ("", "", False, 0.0, 0.0)
+    if label is None or value is None or label.isHidden():
+        view.renderer.ui_set_cursor_value(*off)
+        return
+    buffer = str(getattr(win, "_vcb_buffer", "") or "")
+    pos = getattr(view, "_cursor_pos", None)
+    tool = getattr(view.source_viewport, "active_tool", None)
+    start = (getattr(view.tools, "start_point", None) or getattr(tool, "start_point", None)
+             or getattr(tool, "grab", None))
+    anchor = None
+    if start is not None and pos is not None:
+        try:
+            q = view._world_to_pixel(start)
+        except Exception:
+            q = None
+        if q is not None:
+            qx, qy = (q.x(), q.y()) if hasattr(q, "x") else (q[0], q[1])
+            anchor = ((qx + pos.x()) / 2.0, (qy + pos.y()) / 2.0 - 26.0)
+    if anchor is None and buffer and pos is not None:
+        anchor = (pos.x(), pos.y() - 40.0)
+    if anchor is None:
+        view.renderer.ui_set_cursor_value(*off)
+        return
+    view.renderer.ui_set_cursor_value(label.text(), buffer or value.text(), bool(buffer),
+                                      float(anchor[0]), float(anchor[1]))
+
+
+def _summary(sel) -> str:
+    from core.group import Group
+    groups = sum(1 for e in sel if isinstance(e, Group))
+    rest = len(sel) - groups
+    parts = []
+    if groups:
+        parts.append(f"{groups} group" + ("s" if groups != 1 else ""))
+    if rest:
+        parts.append(f"{rest} item" + ("s" if rest != 1 else ""))
+    return " · ".join(parts)
+
+
+def _selection(view, win, active) -> None:
+    """The selection bar: with Select active, something selected, no drag."""
+    scene = getattr(view, "scene", None)
+    sel = list(getattr(scene, "selection", ()) or ())
+    dragging = getattr(view, "last", None) is not None
+    if active != "select" or not sel or dragging:
+        if getattr(view, "_ui_sel_sig", None) is not None:
+            view.renderer.ui_set_selection("", [])
+            view._ui_sel_sig = None
+        return
+    sig = (id(scene), len(sel), id(sel[0]), id(sel[-1]))
+    if sig == getattr(view, "_ui_sel_sig", None):
+        return
+    view._ui_sel_sig = sig
+    view.renderer.ui_set_selection(_summary(sel), [(k, label, key, enabled, more)
+                                                   for k, label, key, run, enabled, more in _commands(win, sel)])
+
+
+def _edit_actions(win) -> dict:
+    """The Edit menu's actions by label (submenus included), cached."""
+    cached = getattr(win, "_ui_edit_actions", None)
+    if cached is not None:
+        return cached
+    out = {}
+
+    def walk(menu, prefix=""):
+        for a in menu.actions():
+            if a.isSeparator():
+                continue
+            if a.menu():
+                walk(a.menu(), a.text().replace("&", "") + " ")
+            elif a.text():
+                out[prefix + a.text().replace("&", "")] = a
+    for a in win.menuBar().actions():
+        if a.menu() and a.text().replace("&", "") == "Edit":
+            walk(a.menu())
+    win._ui_edit_actions = out
+    return out
+
+
+#: Geometry fixes, under More ▾: real work, not every-selection work.
+MORE = ["Intersect Faces With Model", "Intersect Faces With Selection", "Intersect Faces With Context",
+        "Soften / Smooth Edges…", "Reverse Faces", "Orient Faces", "Heal Overlapping Faces",
+        "Join Segments", "Rebuild Faces (Planar)", "Split into Pieces", "Simplify Mesh…",
+        "Convert Path to Geometry", "Delete Guides"]
+
+
+def _commands(win, sel):
+    """(id, label, shortcut, run, enabled, in More) for the selection bar.
+    Fixed places (council 2026-11-22): File to…, Isolate, Hide, then what
+    the selection can become; geometry fixes under More."""
+    from core.group import Group
+    groups = [e for e in sel if isinstance(e, Group)]
+    edit = _edit_actions(win)
+
+    def act(label, name=None, more=False):
+        a = edit.get(label)
+        if a is None:
+            return None
+        return ("e:" + label, name or label.rstrip("…"), a.shortcut().toString(QKeySequence.NativeText),
+                a.trigger, a.isEnabled(), more)
+    out = [
+        ("file", "File to…", "⌘⇧F", (lambda: _file_to(win, len(groups))) if groups else None, bool(groups), False),
+        ("isolate", "Isolate", "", lambda: _isolate(win, [getattr(e, "uid", None) for e in sel if getattr(e, "uid", None)]), True, False),
+        act("Hide"),
+    ]
+    if len(groups) == 1 and len(sel) == 1:
+        one = groups[0]
+        out.append(("edit", "Edit", "double-click", lambda: win.viewport.begin_group_edit(one), True, False))
+        out.append(act("Explode Group", "Explode"))
+    else:
+        out.append(act("Make Group", "Group"))
+    out.append(act("Make Component…", "Component"))
+    for label in MORE:
+        name = label.replace("Intersect Faces ", "Intersect Faces ▸ ") if label.startswith("Intersect Faces ") else None
+        out.append(act(label, name, more=True))
+    return [c for c in out if c is not None]
+
+
+def _show_all(vp) -> None:
+    from core.agent_facets import previous_display, set_display
+    if getattr(vp, "_previous_views", []):
+        previous_display(vp)
+    else:
+        set_display(vp, remember=False)
+
+
+def _isolate(win, uids) -> None:
+    from core.agent_facets import set_display
+    if uids:
+        set_display(win.viewport, {"facet": "uid", "in": list(uids)}, isolate=True, exact=False)
+
+
+# ---- Right column: project tree and inspector -------------------------------
+
+#: Plain-language kinds for the IFC classes a node promises (provisional:
+#: the kinds catalogue in docs/project-structure.md replaces this).
+KINDS = {
+    None: "Drawing only", "IfcSlab": "Floor / slab", "IfcWall": "Wall", "IfcWallStandardCase": "Wall",
+    "IfcBeam": "Beam", "IfcColumn": "Column", "IfcMember": "Member", "IfcPlate": "Plate",
+    "IfcRailing": "Railing", "IfcStair": "Stair", "IfcStairFlight": "Stair flight", "IfcRamp": "Ramp",
+    "IfcRoof": "Roof", "IfcDoor": "Door", "IfcWindow": "Window", "IfcCovering": "Covering",
+    "IfcFooting": "Footing", "IfcPile": "Pile", "IfcCurtainWall": "Curtain wall",
+    "IfcFurnishingElement": "Furniture", "IfcFurniture": "Furniture", "IfcSpace": "Space",
+    "IfcBuildingElementProxy": "Generic object", "IfcDistributionElement": "Services",
+    "IfcFlowSegment": "Pipe / duct", "IfcFlowFitting": "Fitting", "IfcFlowTerminal": "Terminal",
+    "IfcMechanicalFastener": "Fastener", "IfcDiscreteAccessory": "Accessory",
+    "IfcBuildingStorey": "Level", "IfcBuilding": "Building", "IfcSite": "Site",
+}
+
+
+def kind_of(ifc_class) -> str:
+    if ifc_class in KINDS:
+        return KINDS[ifc_class]
+    return str(ifc_class).removeprefix("Ifc") if ifc_class else "Drawing only"
+
+
+SEP = "\x1f"
+#: Item rows shown per node or definition before a "… n more" row.
+ROW_CAP = 400
+
+
+def _tree(view, win) -> None:
+    """The Project tree as display rows (council 2026-11-22, R1–R8): nodes;
+    under an expanded node its filed items, one row per placement, copies of
+    a component grouped by definition; an item's contents on expand, with
+    parts filed elsewhere as dimmed rows pointing to their node. Python owns
+    expansion and filtering; the dock only draws."""
+    scene = getattr(win.viewport, "scene", None)
+    if scene is None:
+        return
+    exp = view.__dict__.setdefault("_ui_exp", set())
+    flt = view.__dict__.get("_ui_filter", "")
+    colset = view.__dict__.get("_ui_colset", 0)
+    sel_ids = {id(e) for e in scene.selection}
+    # Problems (watertight) and the Export cells (quantities) read geometry.
+    geometric = view.__dict__.get("_ui_mode") == "problems" or colset == 2
+    cv = scene.content_version if geometric else _tree_version(view, win, scene)
+    sig = (id(scene), cv, tuple(sorted(exp)), flt, len(sel_ids), hash(frozenset(sel_ids)),
+           colset, getattr(view, "_ui_layer_rev", 0))
+    if sig == getattr(view, "_ui_tree_sig", None):
+        return
+    first = getattr(view, "_ui_tree_sig", None) is None
+    view._ui_tree_sig = sig
+    mode = view.__dict__.get("_ui_mode", "")
+    from collections import Counter, defaultdict
+    from core import bim_registry, links, structure
+    registry = bim_registry.get(scene)
+    nodes = structure._nodes(registry)
+    recipes = {k: structure.resolve(registry, k) for k in nodes}
+    children = structure.tree(registry)
+    direct, counts, problems, unfiled, to_fix = defaultdict(list), Counter(), Counter(), [], []
+    node_of = {}
+    # The tags (layers) a node's items actually carry: what its eye, lock
+    # and Drawing cells act on (recipe tags are labels, items carry keys).
+    node_layers = defaultdict(Counter)
+    for g, source, root, key in structure._memberships(scene, registry):
+        review = structure._is_unsorted(g, source, root, key, recipes)
+        if review:
+            unfiled.append(g)
+        if key in nodes:
+            node_of[id(g)] = key
+            direct[key].append(g)
+            if getattr(g, "layer", None):
+                node_layers[key][g.layer] += 1
+            counts[key] += 1
+            bad = int(recipes[key].get("class") is not None and not structure._has_status(g.ifc or {})) + int(review)
+            problems[key] += bad
+            if bad:
+                to_fix.append(g)
+    order, depth, stack = [], {}, [(k, 0) for k in reversed(children[None])]
+    while stack:
+        key, d = stack.pop()
+        order.append(key)
+        depth[key] = d
+        stack.extend((c, d + 1) for c in reversed(children[key]))
+    selected = Counter(node_of[id(e)] for e in scene.selection if id(e) in node_of)
+    for key in reversed(order):
+        parent = nodes[key]["parent"]
+        counts[parent] += counts[key]
+        problems[parent] += problems[key]
+        selected[parent] += selected[key]
+    active = registry.get("structure", {}).get("active")
+    if first:
+        exp.update(f"n:{k}" for k in order if not nodes[k]["parent"])
+        k = active
+        while k in nodes and nodes[k]["parent"]:
+            k = nodes[k]["parent"]
+            exp.add(f"n:{k}")
+    paths = {}
+
+    def node_path(key):
+        if key not in paths:
+            paths[key] = " › ".join(structure.path(registry, key))
+        return paths[key]
+
+    def main_layer(key):
+        stack = [key]
+        while stack:
+            k = stack.pop(0)
+            if node_layers[k]:
+                ly = scene.layer(node_layers[k].most_common(1)[0][0])
+                if ly is not None:
+                    return ly
+            stack.extend(children.get(k, ()))
+        return _layer(scene, recipes.get(key, {}).get("tag"))
+
+    def layer_state(key):
+        layer = main_layer(key)
+        if layer is None:
+            return -1, -1
+        return int(bool(getattr(layer, "visible", True))), int(bool(getattr(layer, "locked", False)))
+
+    # --- filtering: words match names and kinds; tokens test items ---------
+    words, tokens = [], []
+    for part in flt.lower().split():
+        (tokens if ":" in part else words).append(part)
+
+    def item_kind(g):
+        if links.is_linked(g):
+            return "link"
+        name = type(g).__name__
+        if "Section" in name:
+            return "section"
+        if "Image" in name:
+            return "image"
+        return "component" if getattr(g, "is_component", lambda: False)() else "group"
+
+    def item_hits(g, key):
+        for t in tokens:
+            neg = t.startswith("-")
+            t = t.lstrip("-")
+            ok = {"is:hidden": bool(getattr(g, "hidden", False)), "is:locked": bool(getattr(g, "locked", False)),
+                  "is:component": item_kind(g) == "component", "is:section": item_kind(g) == "section",
+                  "is:link": item_kind(g) == "link", "is:image": item_kind(g) == "image",
+                  "has:problem": id(g) in to_fix_set}.get(t, True)
+            if ok == neg:
+                return False
+        text = (g.name or "").lower()
+        return all(w in text for w in words) if words else bool(tokens)
+
+    to_fix_set = set(map(id, to_fix))
+    filtering = bool(words or tokens)
+    show_nodes, show_items = set(), defaultdict(list)
+    if filtering:
+        for key in order:
+            hit_node = bool(words) and not tokens and all(
+                w in (nodes[key]["name"] + " " + kind_of(recipes[key].get("class"))).lower() for w in words)
+            members = [g for g in direct[key] if item_hits(g, key)]
+            if hit_node or members:
+                show_items[key] = members
+                k = key
+                while k is not None:
+                    show_nodes.add(k)
+                    k = nodes[k]["parent"] if k in nodes else None
+
+    rows = []
+
+    def cells(key=None, g=None):
+        # The active column set's cells for a node (its tag's layer) or an item.
+        if colset == 1 and key is not None:
+            ly = main_layer(key)
+            if ly is None:
+                return []
+            colr = "#%02x%02x%02x" % tuple(int(max(0, min(1, c)) * 255) for c in ly.color[:3]) if ly.color else ""
+            w = "auto" if ly.lineweight is None else f"{ly.lineweight:.2f}"
+            return [colr, (ly.linetype or "continuous").replace("_", " "), w, "1" if ly.printable else "0"]
+        if colset == 2:
+            if key is not None:
+                r = recipes.get(key, {})
+                return [str(r.get("class") or "—"), str(r.get("predefined_type") or ""), _qty_text(node_qty(key))]
+            if g is not None:
+                rec = g.ifc or {}
+                return [str(rec.get("class") or "inherits"), str(rec.get("predefined_type") or ""),
+                        _qty_text(_group_qty(view, g))]
+        return []
+
+    if colset == 2:
+        _measure(view, win, auto=True)
+    qty_memo = {}
+
+    def node_qty(key):
+        # The node's measured quantities, its sub-nodes' included, per unit.
+        if key not in qty_memo:
+            total, stack = defaultdict(float), [key]
+            while stack:
+                k = stack.pop()
+                for g in direct.get(k, ()):
+                    for unit, v in _group_qty(view, g).items():
+                        total[unit] += v
+                stack.extend(children.get(k, ()))
+            qty_memo[key] = dict(total)
+        return qty_memo[key]
+
+    def add(key, name, kind, badge, icon, d, count, probs, act, row, eye, lock, expandable, expanded, sel, extra=()):
+        rows.append(([key, name, kind, badge, icon, *extra],
+                     [d, count, probs, int(act), row, eye, lock, int(expandable), int(expanded), sel]))
+
+    def add_items(groups, key, d):
+        by_def = defaultdict(list)
+        singles = []
+        for g in groups:
+            if getattr(g, "is_component", lambda: False)() and not links.is_linked(g):
+                by_def[(g.name, id(g.mesh))].append(g)
+            else:
+                singles.append(g)
+        entries = []
+        for (name, mid), gs in by_def.items():
+            if len(gs) > 1:
+                entries.append(("def", name, gs))
+            else:
+                singles.extend(gs)
+        entries += [("one", g.name or "", [g]) for g in singles]
+        import re
+        natural = lambda t: [int(p) if p.isdigit() else p for p in re.split(r"(\d+)", (t or "").lower())]
+        entries.sort(key=lambda e: natural(e[1]))
+        for n, (what, name, gs) in enumerate(entries):
+            if n >= ROW_CAP:
+                add(f"m:{key}", f"… {len(entries) - ROW_CAP} more — filter to find them", "", "", "", d, 0, 0, False,
+                    4, -1, -1, False, False, 0)
+                break
+            if what == "def":
+                dk = f"d:{key}:{id(gs[0].mesh)}"
+                sel = sum(1 for g in gs if id(g) in sel_ids)
+                add(dk, name or "Component", "", f"×{len(gs)}", "component", d, 0,
+                    sum(1 for g in gs if id(g) in to_fix_set), False, 1, -1, -1, True, dk in exp, sel)
+                if dk in exp or filtering:
+                    for g in gs:
+                        add_item(g, key, d + 1)
+            else:
+                add_item(gs[0], key, d)
+
+    def add_item(g, key, d, row=1):
+        ik = f"{'i' if row == 1 else 'c'}:{g.uid}"
+        kids = list(getattr(g, "children", None) or [])
+        badge = "⛓" if links.is_linked(g) else ""
+        add(ik, g.name or "Group", "", badge, item_kind(g), d, 0, int(id(g) in to_fix_set), False, row,
+            0 if getattr(g, "hidden", False) else 1, int(bool(getattr(g, "locked", False))),
+            bool(kids), ik in exp, int(id(g) in sel_ids), cells(g=g))
+        if kids and ik in exp:
+            for c in kids[:ROW_CAP]:
+                where = node_of.get(id(c))
+                if where is not None and where != key:
+                    add(f"g:{c.uid}", c.name or "Group", "", f"→ {nodes[where]['name']}", item_kind(c), d + 1,
+                        0, 0, False, 3, -1, -1, False, False, int(id(c) in sel_ids))
+                else:
+                    add_item(c, key, d + 1, row=2)
+
+    hidden_below = None
+    for key in order:
+        if filtering and key not in show_nodes:
+            continue
+        d = depth[key]
+        if hidden_below is not None:
+            if d > hidden_below:
+                continue
+            hidden_below = None
+        node = nodes[key]
+        name = node["name"]
+        cls = recipes[key].get("class")
+        if "source" in node:
+            stem = links.stem(node["source"])
+            name = f"{name} ↗" if name == stem else f"{name} ↗ {stem}"
+            kind = "Reference"
+        elif cls is None and children.get(key):
+            kind = ""
+        else:
+            kind = kind_of(cls)
+        nk = f"n:{key}"
+        expanded = filtering or nk in exp
+        eye, lock = layer_state(key)
+        add(nk, name, kind, "", "", d, counts[key], problems[key], key == active, 0, eye, lock,
+            bool(children.get(key)) or bool(direct[key]), expanded, selected[key], cells(key=key))
+        if not expanded:
+            hidden_below = d
+            continue
+        members = show_items[key] if filtering else direct[key]
+        if members:
+            add_items(members, key, d + 1)
+    if unfiled and not filtering:
+        uk = "n:"
+        add(uk, "Unfiled", "", "", "", 0, len(unfiled), len(unfiled), False, 0, -1, -1, True, uk in exp,
+            sum(1 for g in unfiled if id(g) in sel_ids))
+        if uk in exp:
+            add_items(unfiled, "", 1)
+    if mode == "problems":
+        rows = _problem_rows(view, scene, registry, nodes, recipes, unfiled, node_of, exp, sel_ids)
+    elif mode == "library":
+        rows = _library_rows(view, win, exp, flt)
+    view._ui_tree = dict(direct=direct, children=children, unfiled=unfiled, recipes=recipes, to_fix=to_fix,
+                         active=active, node_of=node_of, nodes=nodes,
+                         node_layers={k: list(c) for k, c in node_layers.items()})
+    view.renderer.ui_set_tree(rows, len(unfiled))
+    view.renderer.ui_set_colset(colset)
+    view.renderer.ui_set_mode({"problems": "Problems", "library": "Library"}.get(mode, ""))
+    view.renderer.ui_set_issues(bool(view.__dict__.get("_ui_issues", False)))
+    if not getattr(view, "_ui_kinds_sent", False):
+        view.renderer.ui_set_kinds(sorted(set(KINDS.values()) - {"Level", "Building", "Site"}))
+        view._ui_kinds_sent = True
+    path = node_path(active) if active in nodes else ""
+    view.renderer.ui_set_delivery(path, len(unfiled), len(to_fix))
+
+
+#: Steps that change only geometry inside meshes (the feed's own
+#: geometry-only set, and paint): the tree has nothing to show for them.
+GEOMETRY_STEPS = {"SnapshotMutation", "SnapshotCompound", "MoveVerticesCommand", "AddEdgeCommand",
+                  "AddFaceCommand", "EraseSelectionCommand", "DeleteEdgesCommand", "DeleteFaceCommand"}
+
+
+def _geometry_step(step) -> bool:
+    return step.complete and (step.command in GEOMETRY_STEPS or step.command.startswith("SetFace")) \
+        and not any(step.placements.values()) and not any(step.tags.values()) \
+        and not any(step.materials.values())
+
+
+def _tree_version(view, win, scene) -> int:
+    """The content version the tree follows: it moves on with the model,
+    except across History steps the change feed shows to be geometry only
+    (a line drawn, a face pushed), which leave every row as it was — on the
+    Ride file a rebuild costs 80–190 ms per edit."""
+    feed = getattr(getattr(win.viewport, "history", None), "feed", None)
+    cv = scene.content_version
+    last = view.__dict__.get("_ui_tree_cv")
+    if feed is None or last is None or last[0] != id(scene):
+        view._ui_tree_cv = (id(scene), cv, getattr(feed, "revision", 0), cv)
+        return cv
+    _sid, seen_cv, seen_rev, shown = last
+    if cv == seen_cv:
+        return shown
+    rev = feed.revision
+    if rev > seen_rev:
+        got = feed.since(seen_rev)
+        if got["complete"] and got["steps"] and all(_geometry_step(st) for st in got["steps"]) \
+                and len(got["steps"]) == rev - seen_rev:
+            # Only geometry since the rows were built: keep them.
+            view._ui_tree_cv = (id(scene), cv, rev, shown)
+            return shown
+    view._ui_tree_cv = (id(scene), cv, rev, cv)
+    return cv
+
+
+def _problem_rows(view, scene, registry, nodes, recipes, unfiled, node_of, exp, sel_ids):
+    """The one problems list (council 2026-11-22): severity → rule → item.
+    Picking a rule selects its items, so the bulk fix is the inspector's;
+    picking an item frames it. Scan meshes and drawing-only nodes are not
+    held to a record."""
+    from core import structure
+    from core.structure_ids import load_requirements, requirement_hits
+    cache = getattr(view, "_ui_rules_cache", None)
+    if cache is not None and cache[0] == (id(scene), scene.content_version):
+        rules = cache[1]
+    else:
+        rules = _problem_rules(scene, registry, nodes, recipes, unfiled)
+        view._ui_rules_cache = ((id(scene), scene.content_version), rules)
+    return _problem_rows_from(view, rules, nodes, node_of, exp, sel_ids)
+
+
+def _problem_rules(scene, registry, nodes, recipes, unfiled):
+    from core import structure
+    from core.structure_ids import load_requirements, requirement_hits
+    rules = []          # (severity, rule id, label, [groups])
+    rules.append(("Blocks export", "unfiled", "Not filed", list(unfiled)))
+    try:
+        requirements = load_requirements(scene, registry)
+    except Exception:
+        requirements = []
+    ids = {}
+    missing, hidden, candidates = [], [], []
+    for g, src, root, key in structure._memberships(scene, registry):
+        if key not in nodes or src:
+            continue
+        rec = g.ifc or {}
+        if recipes[key].get("class") is not None:
+            if not structure._has_status(rec):
+                missing.append(g)
+            if getattr(g, "hidden", False):
+                hidden.append(g)
+            if not getattr(g, "children", None):
+                candidates.append(g)
+        if requirements and rec:
+            for hit in requirement_hits(g, registry, requirements):
+                ids.setdefault(hit.get("specification") or hit.get("file") or "IDS", []).append(g)
+    for spec, gs in sorted(ids.items()):
+        rules.append(("Blocks export", "ids:" + spec, f"IDS: {spec}", gs))
+    from core import links
+    stale, states = [], {}
+    for g in links.linked_groups(scene):
+        rec = links.link_of(g)
+        st = states.setdefault(rec["path"], _link_state(scene, rec))
+        if st in ("missing", "modified"):
+            stale.append(g)
+    rules.append(("Needs attention", "links", "Linked file changed or missing", stale))
+    leaky, checked = _not_watertight(candidates)
+    rules.append(("Needs attention", "solid", "Not watertight", leaky))
+    if checked < len(candidates):
+        rules.append(("Info", "solidcut", f"Watertight: checked {checked} of {len(candidates)} items", []))
+    rules.append(("Needs attention", "status", "Status missing", missing))
+    rules.append(("Info", "hidden", "Hidden items in exported nodes", hidden))
+    if not requirements:
+        rules.append(("Info", "noids", "No IDS checklist in the export profiles: not checked", []))
+    return rules
+
+
+def _not_watertight(groups, budget=1.5):
+    """The exported items whose solid leaks (the Solid Inspector's verdict),
+    one check per shared definition. A mesh not built yet is judged from its
+    load plan, without building it. Stops after ``budget`` seconds:
+    ``(leaky, items checked)``."""
+    import time
+    from core.lazy_mesh import plan_of
+    from core.solids import _lazily_open
+    from plugins.solid_inspector import inspect_mesh, is_sound
+    verdict, leaky = {}, []
+    t0 = time.perf_counter()
+    for i, g in enumerate(groups):
+        if i % 64 == 0 and time.perf_counter() - t0 > budget:
+            return leaky, i
+        m = g.mesh
+        bad = verdict.get(id(m))
+        if bad is None:
+            if plan_of(m) is not None:
+                bad = _lazily_open(m)
+            else:
+                bad = bool(m.faces) and not is_sound(inspect_mesh(m))
+            verdict[id(m)] = bad
+        if bad:
+            leaky.append(g)
+    return leaky, len(groups)
+
+
+def _problem_rows_from(view, rules, nodes, node_of, exp, sel_ids):
+    view._ui_rules = {rid: gs for _sev, rid, _l, gs in rules}
+    rows, order = [], []
+    for sev in ("Blocks export", "Needs attention", "Info"):
+        these = [r for r in rules if r[0] == sev and (r[3] or r[1] in ("noids", "solidcut"))]
+        if not these:
+            continue
+        total = sum(len(r[3]) for r in these)
+        rows.append(([f"s:{sev}", sev, "", "", ""], [0, total, total if sev != "Info" else 0, 0, 0, -1, -1, 0, 1, 0]))
+        for _sev, rid, label, gs in these:
+            rk = f"r:{rid}"
+            open_ = rk in exp or (len(gs) <= 40 and f"-{rk}" not in exp)
+            rows.append(([rk, label, "", "", ""], [1, len(gs), 0, 0, 0, -1, -1, int(bool(gs)), int(open_ and bool(gs)), 0]))
+            if open_:
+                for g in gs[:ROW_CAP]:
+                    where = node_of.get(id(g))
+                    badge = nodes[where]["name"] if where in nodes else ""
+                    rows.append(([f"i:{g.uid}", g.name or "Group", "", badge, "group"],
+                                 [2, 0, 0, 0, 1, -1, -1, 0, 0, int(id(g) in sel_ids)]))
+                    order.append(g)
+    view._ui_problem_order = order
+    return rows
+
+
+def _tex_icon(view, path) -> str:
+    """A texture's thumbnail as a chrome icon (loaded once)."""
+    key = "tex:" + str(path)
+    sent = view.__dict__.setdefault("_ui_tex_icons", set())
+    if key not in sent:
+        sent.add(key)
+        img = QImage(str(path))
+        if not img.isNull():
+            img = img.scaled(48, 48, Qt.IgnoreAspectRatio, Qt.SmoothTransformation).convertToFormat(QImage.Format_RGBA8888)
+            view.renderer.ui_set_icons([(key, 48, 48, bytes(img.constBits())[: 48 * 48 * 4])])
+    return key
+
+
+def _hex(rgb) -> str:
+    return "#%02x%02x%02x" % tuple(int(max(0.0, min(1.0, float(c))) * 255) for c in rgb[:3]) if rgb else ""
+
+
+def _current_material_name():
+    from tools.paint import PaintTool
+    mat = getattr(PaintTool, "current_material", None)
+    return getattr(mat, "name", None)
+
+
+def _palette(view, win, active) -> None:
+    """With Paint active: the model's named materials as a strip."""
+    items = []
+    if active == "paint":
+        scene = win.viewport.scene
+        cur = _current_material_name()
+        for name, mat in list((getattr(scene, "materials", None) or {}).items())[:32]:
+            tex = getattr(mat, "texture", None)
+            icon = _tex_icon(view, tex["path"]) if tex and tex.get("path") else ""
+            items.append((f"m:{name}", name, _hex(mat.color), icon, name == cur))
+    if items != getattr(view, "_ui_palette", None):
+        view._ui_palette = items
+        view.renderer.ui_set_palette(items)
+
+
+def _library_rows(view, win, exp, flt):
+    """The Library mode: materials in the model, then the bundled colours
+    and texture families; picking one paints with it (Paint becomes active)."""
+    import json
+    from views import tray
+    scene = win.viewport.scene
+    words = flt.lower().split()
+    rows, cats = [], []
+    cur = _current_material_name()
+    inm = [(f"m:{n}", n, _hex(m.color), (m.texture or {}).get("path")) for n, m in (getattr(scene, "materials", None) or {}).items()]
+    cats.append(("inmodel", "In model", inm))
+    ral = []
+    if tray._RAL_FILE.exists():
+        data = json.loads(tray._RAL_FILE.read_text(encoding="utf-8"))
+        for fam in data.get("families", []):
+            for c in fam.get("colors", []):
+                ral.append((f"ral:{c['code']}", "%s · %s" % (c["code"], tray._ral_name(c)), _hex([v / 255.0 if max(c["rgb"]) > 1 else v for v in c["rgb"]]), None))
+    cats.append(("colors", "Colours", ral))
+    manifest = tray._TEX_DIR / "library.json"
+    if manifest.exists():
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+        for cat in data.get("categories", []):
+            items = [(f"lib:{cat['id']}:{i}", it["name"], "", str(tray._TEX_DIR / "library" / it["file"]))
+                     for i, it in enumerate(cat.get("items", []))]
+            if items:
+                cats.append((cat["id"], tray.MaterialsPanel.CATEGORY_NAMES.get(cat["id"], cat["id"]), items))
+    # Components: the ones in the model (most copies first), then the
+    # bundled starters and 2D people. A row places it; its menu selects the
+    # copies, swaps the selection for it or keeps it in the file.
+    comps = _components_in_model(view, win)
+    cats.insert(1, ("compmodel", "Components in model",
+                    [(f"cm:{i}", name or "Component", "", None, len(gs)) for i, (name, _f, gs, _t) in enumerate(comps)]))
+    starters = []
+    res = _components_dir()
+    for key, entry in _starter_components().items():
+        starters.append((key, entry["name"], "", str(res / ("thumbs/%s.png" % entry["key"] if key.startswith("sc:")
+                                                            else "%s.png" % entry["key"]))))
+    cats.insert(2, ("components", "Components", starters))
+    view._ui_library = {i: (cid, entry) for cid, _t, items in cats for i, entry in enumerate(items)}
+    for cid, title, items in cats:
+        if words:
+            items = [e for e in items if all(w in e[1].lower() for w in words)]
+            if not items:
+                continue
+        ck = f"c:{cid}"
+        open_ = bool(words) or (ck in exp) or (cid in ("inmodel", "compmodel") and f"-{ck}" not in exp)
+        rows.append(([ck, title, "", "", ""], [0, len(items), 0, 0, 0, -1, -1, int(bool(items)), int(open_), 0]))
+        if open_:
+            for key, name, hexc, path, *n in items[:ROW_CAP]:
+                icon = _tex_icon(view, path) if path else ""
+                active = int(name == cur and not key.startswith(("cm:", "sc:", "pp:")))
+                rows.append(([key, name, "", hexc, icon], [1, n[0] if n else 0, 0, active, 5, -1, -1, 0, 0, 0]))
+    return rows
+
+
+def _components_dir():
+    from core.paths import app_root
+    return app_root() / "resources" / "components"
+
+
+def _starter_components():
+    """The bundled set: ``sc:<key>`` 3D starters, ``pp:<key>`` 2D people."""
+    import json
+    res = _components_dir()
+    out = {}
+    if (res / "components.json").exists():
+        for e in json.loads((res / "components.json").read_text(encoding="utf-8")):
+            out["sc:" + e["key"]] = e
+    if (res / "people.json").exists():
+        for e in json.loads((res / "people.json").read_text(encoding="utf-8")):
+            out["pp:" + e["key"]] = e
+    return out
+
+
+def _components_in_model(view, win):
+    """``[(name, faces, groups, kept template)]`` from the Components tray's
+    own listing, kept until the model changes."""
+    scene = win.viewport.scene
+    sig = (id(scene), scene.content_version)
+    cache = getattr(view, "_ui_comp_cache", None)
+    if cache is not None and cache[0] == sig:
+        return cache[1]
+    panel = getattr(getattr(win, "tray", None), "components", None)
+    rows = []
+    if panel is not None:
+        gen = panel._components_in_model()
+        try:
+            while True:
+                next(gen)
+        except StopIteration as stop:
+            rows = stop.value or []
+    view._ui_comp_cache = (sig, rows)
+    return rows
+
+
+def _library_pick(win, view, key) -> None:
+    """A Library row: paint with a material, place a component."""
+    from core.i18n import tr
+    kind, _, rest = key.partition(":")
+    if kind == "sc":
+        e = _starter_components().get(key)
+        if e:
+            win._on_insert_component(e["key"], tr(e["name"]))
+    elif kind == "pp":
+        e = _starter_components().get(key)
+        if e:
+            win._on_insert_person_2d(f"{e['key']}.png", e["height"], e["name"])
+    elif kind == "cm":
+        _component_verb(win, view, "cplace", key)
+    else:
+        _paint_with(win, key)
+
+
+def _component_verb(win, view, verb, key) -> None:
+    from core.group import Group
+    from core.kept_components import make_template, place_copy
+    comps = (getattr(view, "_ui_comp_cache", None) or (None, []))[1]
+    try:
+        _name, _f, groups, kept = comps[int(key.partition(":")[2])]
+    except (ValueError, IndexError):
+        return
+    definition = kept if kept is not None else (groups[0] if groups else None)
+    if definition is None:
+        return
+    if verb == "cplace":
+        win._start_place(place_copy(kept if kept is not None else make_template(definition)))
+    elif verb == "cselect":
+        _select(win, groups)
+    elif verb == "creplace":
+        swap = [g for g in win.viewport.scene.selection
+                if isinstance(g, Group) and g.is_component() and g.mesh is not definition.mesh]
+        if swap:
+            win.replace_selection_with(definition)
+        else:
+            win.viewport.flash_status("Select copies of another component first")
+    elif verb == "ckeep":
+        win.keep_component(definition, kept is None)
+    elif verb == "crename":
+        win.rename_component(definition)
+
+
+def _paint_with(win, key) -> None:
+    """Apply a material from the strip or the Library: Paint becomes active."""
+    import json
+    from views import tray
+    panel = getattr(getattr(win, "tray", None), "materials", None)
+    if panel is None:
+        return
+    kind, _, rest = key.partition(":")
+    if kind == "m":
+        mat = (getattr(win.viewport.scene, "materials", None) or {}).get(rest)
+        if mat is None:
+            return
+        tex = getattr(mat, "texture", None)
+        if tex and tex.get("path"):
+            panel._apply_texture(tex["path"], sw=tex.get("sw"), sh=tex.get("sh"), name=mat.name, opacity=mat.opacity)
+        elif mat.color:
+            panel._apply_color(tuple(mat.color), name=mat.name)
+    elif kind == "ral" and tray._RAL_FILE.exists():
+        data = json.loads(tray._RAL_FILE.read_text(encoding="utf-8"))
+        for fam in data.get("families", []):
+            for c in fam.get("colors", []):
+                if c["code"] == rest:
+                    panel._apply_color(c["rgb"], "%s %s" % (c["code"], tray._ral_name(c)))
+                    return
+    elif kind == "lib":
+        cid, _, idx = rest.rpartition(":")
+        data = json.loads((tray._TEX_DIR / "library.json").read_text(encoding="utf-8"))
+        for cat in data.get("categories", []):
+            if cat["id"] == cid:
+                it = cat["items"][int(idx)]
+                panel._apply_texture(str(tray._TEX_DIR / "library" / it["file"]), sw=it.get("sw"), sh=it.get("sh"),
+                                     name=it["name"], opacity=it.get("opacity"))
+                return
+
+
+UNIT_TEXT = {"m2": "m²", "m3": "m³", "m": "m", "und": "u", "kg": "kg"}
+
+
+def _measure(view, win, auto=False) -> None:
+    """Quantity takeoff (the BIM panel's metrado), per item. The first
+    measure walks every tagged object (7.5 s on the 99k-object Ride file),
+    so it runs when asked; after it the memo keeps it current for the
+    cost of what changed (0.2 s there)."""
+    import time
+    from core import bim
+    scene = win.viewport.scene
+    q = view.__dict__.get("_ui_qty")
+    if q is None or q["scene"] != id(scene):
+        if auto:
+            return
+        q = view._ui_qty = {"scene": id(scene), "memo": {}, "sig": None, "by_group": {}}
+    if q["sig"] == scene.content_version:
+        return
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QApplication
+    t0 = time.perf_counter()
+    QApplication.setOverrideCursor(Qt.WaitCursor)
+    try:
+        objs = bim.collect_objects(scene, q["memo"])
+        by_group = {}
+        for obj in objs:
+            owner = obj.get("group") or obj.get("owner")
+            if owner is None:
+                continue
+            if "_q" not in obj:
+                try:
+                    obj["_q"] = bim.object_quantities(obj)[2]
+                except Exception:
+                    obj["_q"] = (None, "")
+            value, unit = obj["_q"]
+            if unit == "und":
+                value = 1.0
+            if value is None or not unit:
+                continue
+            per = by_group.setdefault(id(owner), {})
+            per[unit] = per.get(unit, 0.0) + value
+        q["by_group"] = by_group
+        q["sig"] = scene.content_version
+        q["count"] = len(objs)
+    finally:
+        QApplication.restoreOverrideCursor()
+    if not auto:
+        win.viewport.flash_status(f"Measured {len(objs)} items in {time.perf_counter() - t0:.1f} s")
+    view._ui_tree_sig = None
+    view._ui_insp_sig = None
+
+
+def _group_qty(view, g) -> dict:
+    q = view.__dict__.get("_ui_qty")
+    return q["by_group"].get(id(g), {}) if q else {}
+
+
+def _qty_text(per_unit) -> str:
+    """The main measure of a row: its largest unit's total, «+» if mixed."""
+    if not per_unit:
+        return ""
+    order = ["m3", "m2", "m", "kg", "und"]
+    unit = min(per_unit, key=lambda u: order.index(u) if u in order else 9)
+    v = per_unit[unit]
+    text = (f"{v:.0f}" if unit == "und" or v >= 100 else f"{v:.2f}") + " " + UNIT_TEXT.get(unit, unit)
+    return text + (" +" if len(per_unit) > 1 else "")
+
+
+def _qty_rows(per_unit) -> list:
+    return [(UNIT_TEXT.get(u, u), f"{v:.0f}" if u == "und" else f"{v:.3f}") for u, v in sorted(per_unit.items())]
+
+
+def _export_csv(win) -> None:
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QApplication
+    from core.bim import quantities_csv
+    from views.filedialogs import file_dialogs
+    path, _ = file_dialogs.getSaveFileName(win, "Export quantities CSV", "metrado.csv", "CSV (*.csv);;All files (*)")
+    if not path:
+        return
+    QApplication.setOverrideCursor(Qt.WaitCursor)
+    try:
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(quantities_csv(win.viewport.scene))
+    finally:
+        QApplication.restoreOverrideCursor()
+    win.viewport.flash_status(f"Quantities exported to {path}")
+
+
+def _problem_step(win, view, step) -> None:
+    """⌘] / ⌘[: select and frame the next or previous problem."""
+    order = getattr(view, "_ui_problem_order", [])
+    if not order:
+        return
+    cur = getattr(view, "_ui_problem_at", -1)
+    cur = (cur + step) % len(order)
+    view._ui_problem_at = cur
+    _select(win, [order[cur]])
+    win._on_zoom_selection()
+    view._ui_tree_sig = None
+
+
+def _layer(scene, tag):
+    """The tag (layer) a node's recipe names: by key, else by label, else by
+    the last part of a folder path."""
+    if not tag:
+        return None
+    ly = scene.layer(tag)
+    if ly is None and "/" in str(tag):
+        ly = scene.layer(str(tag).rsplit("/", 1)[-1])
+    return ly
+
+
+def _tree_groups(view, key):
+    data = getattr(view, "_ui_tree", None)
+    if not data:
+        return []
+    out, stack = [], [key]
+    while stack:
+        k = stack.pop()
+        out.extend(data["direct"].get(k, ()))
+        stack.extend(data["children"].get(k, ()))
+    return out
+
+
+def _group_by_uid(win, uid):
+    from core import structure
+    for g, _src, _root in structure._placements(win.viewport.scene):
+        if g.uid == uid:
+            return g
+    return None
+
+
+def _select(win, groups) -> None:
+    scene = win.viewport.scene
+    scene.select(g for g in groups if scene.entity_selectable(g))
+    getattr(win.viewport, "notify_scene_changed", win.viewport.update)()
+
+
+def _tree_action(win, view, action) -> None:
+    """One verb from the dock: ``verb SEP rowkey [SEP extra]``. Row keys:
+    n:<node> (n: alone is Unfiled), i:/c:<uid> items, d:<node>:<mesh>
+    copies of a definition, g:<uid> filed elsewhere."""
+    from core import bim_registry, structure
+    from core import layers as L
+    from core.group import Group
+    from core.history import CompoundCommand, MakeUniqueCommand, SetLayerVisibilityCommand, SetRegistryCommand
+    from views.structure_recipe import execute, update_node
+    if SEP not in action:
+        # The inspector's chips and the delivery counts: "verb:arg".
+        verb, _, key = action.partition(":")
+        vp = win.viewport
+        sel = list(vp.scene.selection)
+        groups = [e for e in sel if isinstance(e, Group)]
+        if verb == "insp" and key.startswith("status:"):
+            _set_status(win, groups, key.partition(":")[2])
+        elif verb == "insp" and key == "file" and groups:
+            _file_to(win, len(groups))
+        elif verb == "insp" and key.startswith(("active:", "isolate:")):
+            what, _, nk = key.partition(":")
+            _tree_action(win, view, f"{what}{SEP}n:{nk}")
+        elif verb == "insp" and key.startswith("nodestatus:"):
+            _, nk, value = key.split(":", 2)
+            _set_status(win, _tree_groups(view, nk), value)
+        elif verb == "insp" and key.startswith("cutlist"):
+            nk = key.partition(":")[2]
+            if nk:
+                _select(win, _tree_groups(view, nk))
+            parts = getattr(getattr(win, "tray", None), "parts", None)
+            if parts is not None:
+                parts.on_scene_changed()
+                parts._on_copy()
+                vp.flash_status("Cut list copied")
+        elif verb == "insp" and key.startswith("form:"):
+            _open_form(view, key[5:])
+        elif verb == "insp" and key == "measure":
+            _measure(view, win)
+            view._ui_tree_sig = None
+        elif verb == "insp" and key == "solidrepair" and len(groups) == 1:
+            out = _core(vp, "repair_solid", placement=groups[0].uid)
+            if out and out.get("error"):
+                vp.flash_status(out["error"])
+            elif out:
+                d = out["repaired"]
+                vp.flash_status(f"Repaired: {d['stray']} stray edges, {d['duplicates']} duplicated faces, "
+                                f"{d['holes']} holes closed, {d['partitions']} partitions, {d['reversed']} faces turned")
+            view._ui_insp_sig = None
+            vp.update()
+        elif verb == "insp" and key.startswith("link") and groups:
+            _link_action(win, view, groups[0], key)
+        elif verb == "unfiled":
+            _select(win, (getattr(view, "_ui_tree", None) or {}).get("unfiled", []))
+        return
+    parts = action.split(SEP)
+    verb, rk = parts[0], (parts[1] if len(parts) > 1 else "")
+    extra = parts[2] if len(parts) > 2 else ""
+    vp = win.viewport
+    scene = vp.scene
+    exp = view.__dict__.setdefault("_ui_exp", set())
+    data = getattr(view, "_ui_tree", None) or {}
+    kind, _, ident = rk.partition(":")
+    node = ident if kind == "n" else None
+
+    def item():
+        return _group_by_uid(win, ident) if kind in ("i", "c", "g") else None
+
+    def copies():
+        if kind != "d":
+            return []
+        nkey, _, mesh = ident.rpartition(":")
+        pool = data.get("direct", {}).get(nkey, []) if nkey else data.get("unfiled", [])
+        return [g for g in pool if str(id(g.mesh)) == mesh]
+
+    def members():
+        if node == "":
+            return list(data.get("unfiled", []))
+        return _tree_groups(view, node) if node else copies() or ([item()] if item() else [])
+
+    def tags(key):
+        # The layers the node's items (and its sub-nodes') carry; else the
+        # layer its recipe names, when there is one.
+        out, stack = [], [key]
+        while stack:
+            k = stack.pop()
+            out.extend(data.get("node_layers", {}).get(k, ()))
+            stack.extend(data.get("children", {}).get(k, ()))
+        if not out:
+            ly = _layer(scene, data.get("recipes", {}).get(key, {}).get("tag"))
+            if ly is not None:
+                out.append(ly.key)
+        return list(dict.fromkeys(out))
+
+    def rebuild():
+        view._ui_tree_sig = None
+        view.update()
+
+    try:
+        if verb == "toggle":
+            if rk.startswith(("r:", "c:inmodel", "c:compmodel")):
+                # Rules start open when short: remember a collapse explicitly.
+                if rk in exp:
+                    exp.discard(rk)
+                    exp.add(f"-{rk}")
+                elif f"-{rk}" in exp:
+                    exp.discard(f"-{rk}")
+                    exp.add(rk)
+                else:
+                    exp.add(f"-{rk}")
+            else:
+                exp.symmetric_difference_update({rk})
+            rebuild()
+        elif verb in ("cplace", "cselect", "creplace", "ckeep", "crename"):
+            _component_verb(win, view, verb, rk)
+            rebuild()
+        elif verb == "mat":
+            _library_pick(win, view, rk)
+            view._ui_mat_focus = rk
+            view._ui_insp_sig = None
+            rebuild()
+        elif verb == "issues":
+            view._ui_issues = not view.__dict__.get("_ui_issues", False)
+            rebuild()
+        elif verb == "mode":
+            view._ui_mode = rk
+            rebuild()
+        elif verb == "node" and kind == "r":
+            _select(win, getattr(view, "_ui_rules", {}).get(ident, []))
+            rebuild()
+        elif verb == "item" and view.__dict__.get("_ui_mode") == "problems":
+            g = item()
+            if g is not None:
+                order = getattr(view, "_ui_problem_order", [])
+                view._ui_problem_at = next((i for i, o in enumerate(order) if o is g), -1)
+                _select(win, [g])
+                win._on_zoom_selection()
+            rebuild()
+        elif verb == "filter":
+            view._ui_filter = rk
+            rebuild()
+        elif verb == "colset":
+            view._ui_colset = int(rk or 0)
+            rebuild()
+        elif verb in ("print", "color", "linetype", "weight") and node:
+            panel = getattr(getattr(win, "layers_dock", None), "panel", None)
+            ts = tags(node)
+            if panel is not None and ts:
+                if verb == "print":
+                    layer = scene.layer(ts[0])
+                    panel.set_printable(ts, not bool(getattr(layer, "printable", True)))
+                elif verb == "color":
+                    rgb = None
+                    if extra.startswith("#") and len(extra) == 7:
+                        v = int(extra[1:], 16)
+                        rgb = ((v >> 16 & 255) / 255.0, (v >> 8 & 255) / 255.0, (v & 255) / 255.0)
+                    panel.set_color(ts, rgb)
+                elif verb == "linetype":
+                    panel.set_style(ts, linetype=extra)
+                else:
+                    panel.set_style(ts, lineweight=None if extra == "auto" else float(extra))
+                view._ui_layer_rev = getattr(view, "_ui_layer_rev", 0) + 1
+                rebuild()
+                vp.update()
+        elif verb == "measure":
+            _measure(view, win)
+            rebuild()
+        elif verb == "exportcsv":
+            _export_csv(win)
+        elif verb == "expandall":
+            exp.update(f"n:{k}" for k in data.get("nodes", {}))
+            rebuild()
+        elif verb == "collapseall":
+            exp.clear()
+            rebuild()
+        elif verb in ("node", "item", "loose") or verb == "instances":
+            if verb == "node" and node:
+                view._ui_insp_node = None   # set after the selection lands
+            gs = members() if verb != "instances" else [
+                g for g, _s, _r in structure._placements(scene) if item() is not None and g.mesh is item().mesh]
+            _select(win, gs)
+            if verb == "node" and node:
+                sel = list(scene.selection)
+                view._ui_insp_node = (node, (len(sel), id(sel[0]) if sel else 0, id(sel[-1]) if sel else 0))
+        elif verb == "reveal":
+            g = item()
+            where = data.get("node_of", {}).get(id(g)) if g is not None else None
+            k = where
+            while k:
+                exp.add(f"n:{k}")
+                k = data.get("nodes", {}).get(k, {}).get("parent")
+            if g is not None:
+                _select(win, [g])
+            rebuild()
+        elif verb == "isolate":
+            _isolate(win, [g.uid for g in members()])
+        elif verb == "open":
+            g = item()
+            if g is not None:
+                vp.begin_group_edit(g)
+        elif verb == "zoom":
+            _select(win, members())
+            win._on_zoom_selection()
+        elif verb == "eye":
+            if node:
+                ts = tags(node)
+                if ts:
+                    layer = scene.layer(ts[0])
+                    on = not bool(getattr(layer, "visible", True)) if layer is not None else True
+                    vp.history.execute(SetLayerVisibilityCommand(ts, on))
+            else:
+                gs = members()
+                if gs:
+                    verb_ = "unhide" if getattr(gs[0], "hidden", False) else "hide"
+                    _core(vp, verb_, placements=[g.uid for g in gs])
+            vp.notify_scene_changed() if hasattr(vp, "notify_scene_changed") else vp.update()
+        elif verb == "lock" or verb == "lockitem":
+            if node:
+                ts = tags(node)
+                if ts:
+                    layer = scene.layer(ts[0])
+                    L.set_locked(scene, ts, not bool(getattr(layer, "locked", False)))
+                    scene.version += 1
+            else:
+                gs = members()
+                if gs:
+                    _core(vp, "lock", placements=[g.uid for g in gs], locked=not getattr(gs[0], "locked", False))
+            vp.update()
+        elif verb in ("hidemembers", "hideitem"):
+            gs = members()
+            if gs:
+                _core(vp, "hide", placements=[g.uid for g in gs])
+                vp.update()
+        elif verb == "unique":
+            gs = members()
+            comps = [g for g in gs if g.is_component()]
+            if comps:
+                vp.history.execute(CompoundCommand([MakeUniqueCommand(g, rename=True) for g in comps]))
+                vp.update()
+        elif verb == "fileto":
+            _select(win, members())
+            _file_to(win, len(members()))
+        elif verb == "rename":
+            if node:
+                update_node(vp, node, name=extra)
+            elif item() is not None:
+                _core(vp, "rename_placement", placement=item().uid, name=extra)
+                vp.update()
+        elif verb in ("file", "filehere"):
+            key = node if verb == "filehere" else ident if kind == "n" else rk
+            uids = [g.uid for g in scene.selection if isinstance(g, Group)]
+            if uids and key:
+                execute(vp, structure.file(scene, uids, key))
+                vp.flash_status(f"Filed {len(uids)} to " + " › ".join(structure.path(bim_registry.get(scene), key)))
+        elif verb == "active":
+            registry = bim_registry.get(scene)
+            registry.setdefault("structure", {})["active"] = node
+            execute(vp, SetRegistryCommand(registry))
+        elif verb == "kind" and node:
+            cls = next((c for c, k in KINDS.items() if k == extra and c), None)
+            recipe = dict(data.get("nodes", {}).get(node, {}).get("recipe", {}))
+            if cls:
+                recipe["class"] = cls
+            else:
+                recipe.pop("class", None)
+            update_node(vp, node, recipe=recipe)
+        elif verb in ("new", "newchild"):
+            registry = bim_registry.get(scene)
+            nodes = registry.setdefault("structure", {}).setdefault("nodes", {})
+            parent = node if verb == "newchild" else None
+            from core.group import new_uid
+            order = max((n["order"] for n in nodes.values() if n["parent"] == parent), default=-1) + 1
+            nodes[new_uid()] = dict(name="New node", parent=parent, order=order)
+            if parent:
+                exp.add(f"n:{parent}")
+            execute(vp, SetRegistryCommand(registry))
+        elif verb == "delete" and node:
+            n = len(structure.members(scene, node))
+            name = data.get("nodes", {}).get(node, {}).get("name", "")
+            body = (f"Its {n} items move to the parent node." if n else "It has no items.")
+            view._ui_pending = ("delete", node)
+            view.renderer.ui_set_prompt(f"Delete “{name}”?", body, [("yes", "Delete"), ("no", "Cancel")])
+        elif verb == "propose":
+            registry = bim_registry.get(scene)
+            proposal = structure.bootstrap(scene, registry)
+            view._ui_pending = ("propose", proposal)
+            nn = len(proposal["structure"]["nodes"])
+            nf = sum(len(v) for v in proposal["filing"].values())
+            nc = len(proposal["conflicts"])
+            replace = " It replaces the current structure." if structure._nodes(registry) else ""
+            view.renderer.ui_set_prompt("Propose structure from tags",
+                                        f"{nn} nodes, {nf} items filed, {nc} to review.{replace}",
+                                        [("yes", "Apply"), ("no", "Cancel")])
+        elif verb == "prompt":
+            pending, view._ui_pending = getattr(view, "_ui_pending", None), None
+            if rk == "yes" and pending:
+                what, arg = pending
+                if what == "propose":
+                    execute(vp, structure.apply_bootstrap(scene, arg))
+                elif what == "delete":
+                    _delete_node(vp, arg)
+                elif what == "scene_rename" and extra.strip():
+                    panel = getattr(getattr(win, "scenes_dock", None), "panel", None) or getattr(win.tray, "scenes", None)
+                    if panel is not None:
+                        panel.rename_view(arg, extra.strip())
+                elif what == "scene_delete":
+                    panel = getattr(getattr(win, "scenes_dock", None), "panel", None) or getattr(win.tray, "scenes", None)
+                    if panel is not None:
+                        panel.delete_views([arg])
+        elif verb == "edit":
+            what, _, arg = rk.partition(":")
+            if what == "nodename":
+                update_node(vp, arg, name=extra)
+            elif what in ("predef", "objtype"):
+                recipe = dict(structure._nodes(bim_registry.get(scene))[arg].get("recipe", {}))
+                field = "predefined_type" if what == "predef" else "object_type"
+                if extra.strip():
+                    recipe[field] = extra.strip()
+                else:
+                    recipe.pop(field, None)
+                update_node(vp, arg, recipe=recipe)
+            elif what == "segments":
+                from core.curve_segments import MAX_SEGMENTS
+                sel = list(scene.selection)
+                shape = _curve_of(scene, sel)
+                n = int(extra.strip())
+                if shape is None or not shape.flat:
+                    raise ValueError("This curve cannot be rebuilt")
+                if not shape.minimum <= n <= MAX_SEGMENTS:
+                    raise ValueError(f"Between {shape.minimum} and {MAX_SEGMENTS}")
+                if n != shape.segments:
+                    out = _core(vp, "resegment_curve", edge=sel[0].key, segments=n)
+                    if out and out.get("rejected"):
+                        raise ValueError("This curve cannot be rebuilt")
+                    vp.update()
+            elif what == "groupname":
+                g = _group_by_uid(win, arg)
+                if g is not None:
+                    _core(vp, "rename_placement", placement=g.uid, name=extra)
+                    vp.update()
+            view._ui_insp_sig = None
+            rebuild()
+        elif verb == "showall":
+            _show_all(vp)
+        elif verb == "unfiled":
+            _select(win, data.get("unfiled", []))
+    except (KeyError, ValueError) as exc:
+        vp.flash_status(str(exc))
+
+
+def _core(vp, command, /, **args):
+    """Run a core protocol command (docs/core-protocol.md §1): the UI edits
+    the model through these, by key. A key outside the open context is
+    told, not raised."""
+    from core.protocol import commands
+    try:
+        return commands.run(vp.history, command, **args)
+    except KeyError as exc:
+        vp.flash_status(str(exc).strip("'\""))
+        return None
+
+
+def _delete_node(vp, key) -> None:
+    from core import bim_registry, structure
+    from core.history import CompoundCommand, SetRegistryCommand
+    from views.structure_recipe import execute
+    scene = vp.scene
+    registry = bim_registry.get(scene)
+    section = registry["structure"]
+    if structure.tree(registry)[key]:
+        raise ValueError("Remove its child nodes first")
+    parent = section["nodes"][key]["parent"]
+    uids = structure.members(scene, key)
+    commands = []
+    if uids:
+        if not parent:
+            raise ValueError("File its items elsewhere before deleting a top node")
+        commands.append(structure.file(scene, uids, parent))
+    del section["nodes"][key]
+    if section.get("active") == key:
+        section.pop("active")
+    commands.insert(0, SetRegistryCommand(registry, refiled_uids=uids))
+    execute(vp, CompoundCommand(commands))
+
+
+ED = "\x1d"
+
+
+def _edit(id_, text) -> str:
+    """An editable inspector value (ui.rs inspector_rows)."""
+    return f"{ED}edit{ED}{id_}{ED}{text}"
+
+
+def _inspector(view, win) -> None:
+    """What is in front of you, in plain words (council 2026-11-22): a node
+    picked in the tree, one item, several, or loose geometry. Fields edit in
+    place; IFC stays under Export details."""
+    scene = win.viewport.scene
+    sel = list(scene.selection)
+    focus = getattr(view, "_ui_insp_node", None)
+    sel_sig = (len(sel), id(sel[0]) if sel else 0, id(sel[-1]) if sel else 0)
+    node_focus = focus[0] if focus and focus[1] == sel_sig else None
+    sig = (id(scene), scene.content_version, sel_sig, node_focus, getattr(view, "_ui_tree_sig", None) is not None,
+           view.__dict__.get("_ui_mat_focus"), view.__dict__.get("_ui_mode"))
+    if sig == getattr(view, "_ui_insp_sig", None):
+        return
+    view._ui_insp_sig = sig
+    from collections import Counter
+    from core import bim_registry, links, structure
+    from core.group import Group
+    registry = bim_registry.get(scene)
+    nodes = structure._nodes(registry)
+    data = getattr(view, "_ui_tree", None) or {}
+    mat_key = view.__dict__.get("_ui_mat_focus") if view.__dict__.get("_ui_mode") == "library" else None
+    if mat_key and mat_key.startswith("m:"):
+        mat = (getattr(scene, "materials", None) or {}).get(mat_key[2:])
+        if mat is not None:
+            tex = mat.texture or {}
+            rows = [("Name", mat.name), ("Colour", _hex(mat.color) or "—")]
+            if tex.get("path"):
+                rows += [("Texture", str(tex["path"]).rsplit("/", 1)[-1]),
+                         ("Tile", f"{tex.get('sw', 1):g} × {tex.get('sh', tex.get('sw', 1)):g} m")]
+            rows += [("Opacity", "opaque" if mat.opacity is None else f"{mat.opacity:.0%}"),
+                     ("Finish", str(mat.finish or "from the name"))]
+            view.renderer.ui_set_inspector(mat.name, [("Material, shared by the model", rows)])
+            return
+    if node_focus is not None and node_focus in nodes:
+        node = nodes[node_focus]
+        recipe = structure.resolve(registry, node_focus)
+        own = node.get("recipe", {})
+        members = _tree_groups(view, node_focus)
+        missing = sum(1 for g in members if (g.ifc or {}).get("class") and not structure._has_status(g.ifc or {}))
+        kind = "Reference" if "source" in node else kind_of(recipe.get("class"))
+        rows = [("Name", _edit(f"nodename:{node_focus}", node["name"])), ("Kind", kind),
+                ("Items", str(len(members)))]
+        if missing:
+            rows.append(("Missing Status", str(missing)))
+        sections = [("Node", rows),
+                    ("Actions", [(f"kindmenu:{node_focus}", "Change kind…"), (f"active:{node_focus}", "Draw into"),
+                                 (f"isolate:{node_focus}", "Isolate"), (f"cutlist:{node_focus}", "Copy cut list")])]
+        if missing:
+            sections.append(("Actions", [(f"nodestatus:{node_focus}:" + v, "All " + v.lower()) for v in STATUS_CHOICES]))
+        export = [("IFC class", str(recipe.get("class") or "none (drawing only)")),
+                  ("Predefined type", _edit(f"predef:{node_focus}", str(own.get("predefined_type") or ""))),
+                  ("Object type", _edit(f"objtype:{node_focus}", str(own.get("object_type") or ""))),
+                  ("Tag", str(recipe.get("tag") or "—"))]
+        for c in recipe.get("classifications", [])[:4]:
+            export.append((c.get("system", "Classification"), f"{c.get('code', '')} {c.get('name', '')}".strip()))
+        if recipe.get("systems"):
+            export.append(("Systems", ", ".join(recipe["systems"])))
+        if view.__dict__.get("_ui_qty"):
+            total = {}
+            for g in members:
+                for u, v in _group_qty(view, g).items():
+                    total[u] = total.get(u, 0.0) + v
+            sections.append(("Quantities", _qty_rows(total) or [("Measured", "nothing to measure")]))
+        else:
+            sections.append(("Actions", [("measure", "Measure quantities")]))
+        sections.append(("Export details", export))
+        view.renderer.ui_set_inspector(node["name"], sections)
+        return
+    if not sel:
+        view.renderer.ui_set_inspector("", [])
+        return
+    groups = [g for g in sel if isinstance(g, Group)]
+    if len(sel) == 1 and groups:
+        g = groups[0]
+        rec = g.ifc or {}
+        key = data.get("node_of", {}).get(id(g)) or structure.node_of(g)
+        filed_ok = key in nodes
+        filed = (" › ".join(structure.path(registry, key)) if filed_ok
+                 else "Its source's nodes" if links.link_of(g) else "Not filed")
+        recipe = data.get("recipes", {}).get(key, {})
+        kind = kind_of(rec.get("class") or recipe.get("class")) if (rec or recipe) else "Comes from its node"
+        rows = [("Name", _edit(f"groupname:{g.uid}", g.name or "")), ("Filed in", filed), ("Kind", kind)]
+        if g.is_component():
+            same = sum(1 for o, _s, _r in structure._placements(scene) if o.mesh is g.mesh)
+            rows.append(("Copies", str(same)))
+        if links.link_of(g):
+            needs = [("Record", "Kept in the source file")]
+        elif not filed_ok:
+            needs = [("Filing", "Needed first")]
+        elif not rec:
+            needs = [("Record", "Comes with a kind")]
+        else:
+            needs = [("Status", _status_text(rec) or "Missing")]
+        sections = [("Item", rows), ("What it needs", needs)]
+        if rec.get("class"):
+            sections.append(("Actions", [("status:" + v, v.capitalize()) for v in STATUS_CHOICES]))
+        kids = list(getattr(g, "children", None) or [])
+        if kids:
+            parts = Counter(c.name or "Part" for c in kids)
+            prow = [(n, f"×{k}") for n, k in parts.most_common(8)]
+            if len(parts) > 8:
+                prow.append(("…", f"{len(parts) - 8} more kinds"))
+            sections.append(("Parts", prow))
+            sections.append(("Actions", [("cutlist", "Copy cut list")]))
+        solid = _solid_section(g)
+        if solid:
+            sections += solid
+        link = links.link_of(g)
+        if link:
+            state = _link_state(scene, link)
+            sel_ = link.get("select")
+            subset = "Full document" if sel_ is None else (f"{len(sel_['uids'])} items" if "uids" in sel_ else "Filtered")
+            nested = link.get("include_nested", True)
+            sections.append(("Linked file", [("Source", str(link.get("path", "")).rsplit("/", 1)[-1]),
+                                             ("Status", LINK_STATES.get(state, state)), ("Subset", subset),
+                                             ("Nested links", "included" if nested else "source only")]))
+            acts = [("linkreload", "Reload" if state != "modified" else "Reload changes"), ("linkrelink", "Relink…"),
+                    ("linkopen", "Open source"),
+                    ("linkpack", "Unpack" if state == "packed" else "Pack into this file"),
+                    ("linknested", "Source only" if nested else "Include nested links")]
+            sections.append(("Actions", acts))
+        if _group_qty(view, g):
+            sections.append(("Quantities", _qty_rows(_group_qty(view, g))))
+        export = [("IFC class", str(rec.get("class") or recipe.get("class") or "generic object")),
+                  ("Predefined type", str(rec.get("predefined_type") or recipe.get("predefined_type") or "—")),
+                  ("Tag", str(getattr(g, "layer", None) or "—"))]
+        sections.append(("Export details", export))
+        view.renderer.ui_set_inspector(g.name or "Group", sections)
+        return
+    kinds = Counter()
+    unfiled = 0
+    for g in groups:
+        key = structure.node_of(g)
+        if key in nodes:
+            kinds[nodes[key]["name"]] += 1
+        else:
+            unfiled += 1
+    rows = [(name, str(n)) for name, n in kinds.most_common(8)]
+    if unfiled:
+        rows.append(("Not filed", str(unfiled)))
+    others = len(sel) - len(groups)
+    if others:
+        from collections import Counter as C2
+        from core.mesh import Edge, Face
+        loose = C2("Faces" if isinstance(e, Face) else "Edges" if isinstance(e, Edge) else type(e).__name__
+                   for e in sel if not isinstance(e, Group))
+        rows += [(t, str(n)) for t, n in loose.most_common()]
+    sections = [("By node" if groups else "Geometry", rows)]
+    if any(type(e).__name__ == "Dimension" for e in sel):
+        sections.append(("Actions", [("form:dimstyle", "Dimension style…")]))
+    shape = None if groups else _curve_of(scene, sel)
+    if shape is not None:
+        # «Sides» for a closed shape, as the Circle and Polygon tools count
+        # them; «Segments» for an arc. Only a flat curve is rebuilt.
+        label = "Sides" if shape.closed else "Segments"
+        value = _edit("segments", str(shape.segments)) if shape.flat else f"{shape.segments} (not flat)"
+        sections.insert(0, ("Circle" if shape.closed else "Arc", [(label, value)]))
+    missing = sum(1 for g in groups if (g.ifc or {}).get("class") and not structure._has_status(g.ifc or {}))
+    if missing:
+        sections.append(("Status", [("Missing on", f"{missing} items")]))
+        sections.append(("Actions", [("status:" + v, "All " + v.lower()) for v in STATUS_CHOICES]))
+    view.renderer.ui_set_inspector(f"{len(sel)} selected", sections)
+
+
+LINK_STATES = {"resolved": "Up to date", "modified": "Changed on disk", "missing": "Missing", "packed": "Packed in this file"}
+
+
+def _link_state(scene, link) -> str:
+    """links.query's status for one placement, without walking its parts."""
+    from pathlib import Path
+    from core import links
+    path = Path(link["path"])
+    if links.is_packed(scene, path):
+        return "packed"
+    if not path.is_file():
+        return "missing"
+    return "modified" if path.stat().st_mtime_ns != links._entry(scene, path).get("loaded_mtime_ns") else "resolved"
+
+
+def _link_action(win, view, g, key) -> None:
+    """The Linked files panel's verbs on the selected placement."""
+    from pathlib import Path
+    from core import links
+    vp = win.viewport
+    scene = vp.scene
+    rec = links.link_of(g)
+    if not rec:
+        return
+    try:
+        if key == "linkreload":
+            links.reload(scene, rec["path"])
+        elif key == "linkopen":
+            win.open_path(Path(rec["path"]))
+            return
+        elif key == "linkpack":
+            packed = not links.is_packed(scene, rec["path"])
+            if not packed:
+                links.reload(scene, rec["path"])
+            links.set_packed(scene, rec["path"], packed)
+        elif key == "linknested":
+            win._set_link_nested(g, not rec.get("include_nested", True))
+        elif key == "linkrelink":
+            from views.filedialogs import file_dialogs
+            path, _ = file_dialogs.getOpenFileName(win, "Relink", str(Path(rec["path"]).parent), "IngeTrazo (*.igz)")
+            if not path:
+                return
+            previous = dict(rec)
+            rec.update(links._link_record(path, win._current_path))
+            try:
+                links.reload(scene, path)
+            except Exception:
+                rec.clear()
+                rec.update(previous)
+                raise
+        win._relink_done("Linked files updated")
+    except (ValueError, OSError, links.LinkError) as exc:
+        vp.flash_status(str(exc))
+    view._ui_insp_sig = None
+    view._ui_tree_sig = None
+
+
+def _solid_section(g):
+    """The Solid Inspector's verdict on one item, with Repair when it
+    leaks. Skipped for an assembly, a linked item or a mesh too big to
+    walk on a click."""
+    from core import links
+    from core.lazy_mesh import plan_of
+    from plugins.solid_inspector import _problem_text, inspect_mesh, is_sound
+    m = g.mesh
+    if getattr(g, "children", None) or links.link_of(g) or plan_of(m) is not None or not m.faces \
+            or len(m.faces) > 20000:
+        return []
+    report = inspect_mesh(m)
+    if is_sound(report):
+        return [("Solid", [("Watertight", f"{report['volume']:.3f} m³" if report["volume"] else "yes")])]
+    return [("Solid", [("Not watertight", _problem_text(report))]),
+            ("Actions", [("solidrepair", "Repair")])]
+
+
+def _curve_of(scene, sel):
+    """One curve selected (all its edges, one curve id) that reads back as a
+    regular circle, arc or polygon; else None."""
+    from core.curve_segments import read_curve
+    from core.mesh import Edge
+    if not sel or len(sel) > 4096:
+        return None
+    ids = {getattr(e, "curve", None) if isinstance(e, Edge) else None for e in sel}
+    if len(ids) != 1 or None in ids:
+        return None
+    shape = read_curve(scene.mesh, sel[0])
+    return shape if shape is not None and len(sel) == shape.segments else None
+
+
+#: The IFC Status values offered as one click (the rest stay in the BIM panel).
+STATUS_CHOICES = ["EXISTING", "NEW", "DEMOLISH", "TEMPORARY"]
+
+
+def _status_text(rec) -> str:
+    for name, props in (rec.get("psets") or {}).items():
+        if name.endswith("Common"):
+            value = props.get("Status")
+            if isinstance(value, dict):
+                value = value.get("value")
+            if value:
+                return str(value).capitalize()
+    return ""
+
+
+def _set_status(win, groups, value) -> None:
+    """Pset_<Class>Common.Status on every selected item that has a record:
+    one undo step."""
+    from copy import deepcopy
+    from core.history import CompoundCommand, SetRecordCommand
+    from core.ifc_tables import common_pset
+    from views.structure_recipe import execute
+    commands = []
+    for g in groups:
+        rec = g.ifc or {}
+        cls = rec.get("class")
+        if not cls:
+            continue
+        psets = deepcopy(rec.get("psets") or {})
+        name = next((n for n in psets if n.endswith("Common")), common_pset(cls))
+        psets.setdefault(name, {})["Status"] = value
+        commands.append(SetRecordCommand([g], {"psets": psets}))
+    if commands:
+        execute(win.viewport, CompoundCommand(commands))
+        win.viewport.flash_status(f"Status {value.capitalize()} on {len(commands)} item" + ("s" if len(commands) != 1 else ""))
+
+
+def _dock(win, names) -> None:
+    from PySide6.QtWidgets import QDockWidget
+    for dock in win.findChildren(QDockWidget):
+        if any(n in dock.windowTitle() for n in names):
+            dock.show()
+            dock.raise_()
+            return
+
+
+def _file_to(win, n: int) -> None:
+    """The tree takes the next pick (or typed name + Enter)."""
+    view = getattr(getattr(win, "_doc", None), "stand_in", None)
+    if view is not None:
+        view.renderer.ui_start_filing(f"{n} item" + ("s" if n != 1 else ""))
+        view.update()
+
+
+def after_frame(view) -> None:
+    if not getattr(view, "_ui_attached", False):
+        return
+    renderer = view.renderer
+    actions = renderer.ui_take_actions()
+    if actions:
+        win = _window(view)
+        # Never switch tools from inside a paint.
+        QTimer.singleShot(0, view, lambda: _run(win, actions))
+    delay = renderer.ui_repaint_after_ms()
+    if delay is not None:
+        view._ui_timer.start(max(0, int(delay)))
+
+
+def _run(win, actions) -> None:
+    if win is None:
+        return
+    for action in actions:
+        kind, _, arg = action.partition(":")
+        if kind == "review":
+            continue
+        if kind == "tool":
+            view = getattr(getattr(win, "_doc", None), "stand_in", None)
+            run = getattr(view, "_ui_palette_runs", {}).get(arg)
+            if run is not None:
+                run()
+            else:
+                win._activate_tool(arg)
+        elif kind == "opt":
+            view = getattr(getattr(win, "_doc", None), "stand_in", None)
+            run = next((t for i, _, _, _, t in _options(view) if i == arg and t), None) if view else None
+            if run is not None:
+                run()
+                view.update()
+        elif kind == "tree":
+            view = getattr(getattr(win, "_doc", None), "stand_in", None)
+            _tree_action(win, view, arg)
+        elif kind == "pal":
+            _paint_with(win, arg)
+        elif kind == "cmdq":
+            view = getattr(getattr(win, "_doc", None), "stand_in", None)
+            if view is not None:
+                _command_query(view, win, arg)
+                view.update()
+        elif kind == "cmdrun":
+            view = getattr(getattr(win, "_doc", None), "stand_in", None)
+            hits = getattr(view, "_ui_cmd_hits", [])
+            i = int(arg or 0)
+            if 0 <= i < len(hits) and hits[i].isEnabled():
+                hits[i].trigger()
+        elif kind == "proj":
+            _project_action(win, arg)
+        elif kind == "tab":
+            view = getattr(getattr(win, "_doc", None), "stand_in", None)
+            if arg == "model":
+                win._show_model()
+            elif arg == "sheet":
+                win._to_sheets()
+            elif arg in ("scene:add", "scene:update", "scene:up", "scene:down", "scene:delete", "scene:rename"):
+                panel = getattr(getattr(win, "scenes_dock", None), "panel", None) or getattr(win.tray, "scenes", None)
+                row = getattr(getattr(win, "_scene_tabs", None), "tabs", None)
+                marked = row.marked_view() if row is not None else None
+                if panel is not None:
+                    if arg == "scene:add":
+                        panel.add_scene()
+                    elif marked is not None and arg == "scene:update":
+                        panel.update_view(marked)
+                        win.viewport.flash_status(f"Updated “{marked.name}” from the view")
+                    elif marked is not None and arg in ("scene:up", "scene:down"):
+                        views = list(getattr(win.viewport.scene, "saved_views", []) or [])
+                        if marked in views:
+                            i = views.index(marked) + (-1 if arg == "scene:up" else 1)
+                            if 0 <= i < len(views):
+                                panel.move_view(marked, i)
+                    elif marked is not None and arg == "scene:rename":
+                        view._ui_pending = ("scene_rename", marked)
+                        view.renderer.ui_set_prompt("Rename scene", f"{ED}edit{ED}scene{ED}{marked.name}",
+                                                    [("yes", "Rename"), ("no", "Cancel")])
+                    elif marked is not None and arg == "scene:delete":
+                        view._ui_pending = ("scene_delete", marked)
+                        view.renderer.ui_set_prompt(f"Delete “{marked.name}”?", "The scene goes; the model does not change.",
+                                                    [("yes", "Delete"), ("no", "Cancel")])
+                    view._ui_tabs = None
+            elif arg in ("scene:prev", "scene:next"):
+                views = getattr(view, "_ui_scene_views", [])
+                row = getattr(getattr(win, "_scene_tabs", None), "tabs", None)
+                marked = row.marked_view() if row is not None else None
+                if views:
+                    i = views.index(marked) if marked in views else -1
+                    i = (i + (1 if arg == "scene:next" else -1)) % len(views)
+                    win.tray.scenes.show_view(views[i])
+            elif arg.startswith("scene:"):
+                views = getattr(view, "_ui_scene_views", [])
+                i = int(arg.partition(":")[2])
+                if 0 <= i < len(views):
+                    win.tray.scenes.show_view(views[i])
+        elif kind == "deliver":
+            view = getattr(getattr(win, "_doc", None), "stand_in", None)
+            data = getattr(view, "_ui_tree", None) or {}
+            if arg in ("unfiled", "problems"):
+                view._ui_mode = "problems"
+                view._ui_tree_sig = None
+                view.update()
+            elif arg == "active" and data.get("active"):
+                _select(win, _tree_groups(view, data["active"]))
+        elif kind == "act" and arg.startswith("form-"):
+            view = getattr(getattr(win, "_doc", None), "stand_in", None)
+            if view is not None:
+                _open_form(view, arg[5:])
+        elif kind == "form":
+            view = getattr(getattr(win, "_doc", None), "stand_in", None)
+            if view is not None:
+                _form_apply(win, view, arg)
+        elif kind == "act":
+            _trigger(win, int(arg))
+        elif kind == "cmd":
+            sel = list(win.viewport.scene.selection)
+            run = next((r for k, _, _, r, ok, _ in _commands(win, sel) if k == arg and ok), None)
+            if run is not None:
+                run()
+
+
+# ---- Settings forms ---------------------------------------------------------
+# A form mirrors an existing panel's controls, so its logic (live apply,
+# daylight range, the style library) stays the panel's: (kind, widget
+# attribute, label, value text: QLabel attribute or callable, style attr).
+FORMS = {
+    "style": ("Style", "styles_panel", [
+        ("choice", "_combo", "Style"),
+        ("choice", "_mode", "Faces"),
+        ("caption", None, "Edges"),
+        ("check", "_edges", "Edges"),
+        ("color", "_edge_c", "Edge colour", None, "edge_color"),
+        ("check", "_profiles", "Profiles"),
+        ("check", "_back_edges", "Back edges, dashed"),
+        ("caption", None, "Faces and background"),
+        ("color", "_front_c", "Front colour", None, "front_color"),
+        ("color", "_back_c", "Back colour", None, "back_color"),
+        ("check", "_sky", "Sky"),
+        ("color", "_sky_c", "Sky colour", None, "sky_color"),
+        ("color", "_ground_c", "Ground", None, "ground_color"),
+        ("color", "_bg_c", "Background", None, "background"),
+        ("check", "_fill", "Section fill"),
+        ("color", "_fill_c", "Section fill colour", None, "section_fill_color"),
+        ("caption", None, "Ambient occlusion"),
+        ("check", "_ao", "Ambient occlusion"),
+        ("slider", "_ao_dist", lambda p: p._ao_dist_lbl.text().rstrip(": ") or "Distance", "_ao_dist_val"),
+        ("slider", "_ao_int", "Intensity", "_ao_int_val"),
+        ("button", "_on_save", "Save style…"),
+        ("button", "_on_delete", "Delete style", None, "_del_btn"),
+    ]),
+    "dimstyle": ("Dimension style", "dimstyle_panel", [
+        ("choice", "_units", "Unit"),
+        ("slider", "_decimals", "Decimals", lambda p: str(p._decimals.value())),
+        ("check", "_show_unit", "Show the unit"),
+        ("slider", "_font", "Text size", lambda p: f"{p._font.value()} pt"),
+        ("color", "_color_btn", "Colour", None, lambda p: [c / 255 for c in p._style().get("color", [45, 55, 75])]),
+        ("choice", "_ends", "Ends"),
+        ("slider", "_base_step", "Baseline step", lambda p: f"{p._base_step.value():g} mm", None, 2),
+        ("text", None, "Applies to every dimension in the document."),
+    ]),
+    "shadows": ("Shadows and sun", "shadows_panel", [
+        ("check", "_enable", "Show shadows"),
+        ("slider", "_doy", "Date", lambda p: p._date.date().toString("d MMMM")),
+        ("slider", "_time", "Time", "_time_lbl"),
+        ("text", None, lambda p: f"Sunrise {p._sunrise_lbl.text()} · sunset {p._sunset_lbl.text()}"
+                                  if p._sunrise_lbl.text() else ""),
+        ("slider", "_dark", "Darkness", lambda p: f"{p._dark.value()} %"),
+        ("choice", "_tz", "Time zone"),
+        ("caption", None, "Site"),
+        ("text", None, lambda p: p._site.text()),
+        ("button", "_on_north_tool", "Set north on screen"),
+        ("button", "_on_add_location", "Add location…"),
+    ]),
+}
+
+
+def _open_form(view, name) -> None:
+    win = _window(view)
+    view._ui_form = name
+    view._ui_form_sig = None
+    panel = _form_panel(win, name) if win is not None else None
+    if panel is not None and hasattr(panel, "refresh"):
+        panel.refresh()
+    view.update()
+
+
+def _form_panel(win, name):
+    spec = FORMS.get(name)
+    return getattr(win, spec[1], None) if spec else None
+
+
+def _form(view, win) -> None:
+    """Send the open form's fields (only when they changed)."""
+    name = view.__dict__.get("_ui_form")
+    if not name:
+        return
+    panel = _form_panel(win, name)
+    if panel is None:
+        view._ui_form = None
+        view.renderer.ui_set_form("", [])
+        return
+    title, _attr, spec = FORMS[name]
+    fields = []
+
+    def text_of(t):
+        if callable(t):
+            return str(t(panel))
+        if isinstance(t, str) and t.startswith("_") and hasattr(panel, t):
+            return getattr(panel, t).text()
+        return str(t or "")
+
+    for i, entry in enumerate(spec):
+        kind, attr, label = entry[:3]
+        extra = entry[3] if len(entry) > 3 else None
+        label = text_of(label) if callable(label) else label
+        fid = str(i)
+        if kind == "caption":
+            fields.append((fid, kind, label, "", 0.0, 0.0, 0.0, []))
+            continue
+        if kind == "text":
+            t = text_of(label)
+            if t:
+                fields.append((fid, kind, "", t, 0.0, 0.0, 0.0, []))
+            continue
+        if kind == "button":
+            gate = entry[4] if len(entry) > 4 else None
+            if gate and not getattr(panel, gate).isEnabled():
+                continue
+            fields.append((fid, kind, label, "", 0.0, 0.0, 0.0, []))
+            continue
+        w = getattr(panel, attr, None)
+        if w is None or w.isHidden() or not w.isEnabled():
+            continue
+        if kind == "check":
+            fields.append((fid, kind, label, "", float(w.isChecked()), 0.0, 1.0, []))
+        elif kind == "slider":
+            k = entry[5] if len(entry) > 5 else 1
+            fields.append((fid, kind, label, text_of(extra) if extra else str(w.value()),
+                           float(w.value()) * k, float(w.minimum()) * k, float(w.maximum()) * k, []))
+        elif kind == "choice":
+            opts = [w.itemText(j) for j in range(w.count())]
+            fields.append((fid, kind, label, w.currentText(), float(w.currentIndex()), 0.0, float(len(opts)), opts))
+        elif kind == "color":
+            try:
+                c = entry[4](panel) if callable(entry[4]) else panel._shown_color(entry[4])
+            except Exception:
+                c = None
+            fields.append((fid, kind, label, _hex(c) if c else "", 0.0, 0.0, 0.0, []))
+    sig = (name, tuple(fields))
+    if sig != view.__dict__.get("_ui_form_sig"):
+        view._ui_form_sig = sig
+        view.renderer.ui_set_form(title, fields)
+
+
+def _form_apply(win, view, arg) -> None:
+    if arg == "close":
+        view._ui_form = None
+        view._ui_form_sig = None
+        return
+    name = view.__dict__.get("_ui_form")
+    panel = _form_panel(win, name)
+    if panel is None:
+        return
+    fid, _, value = arg.partition(":")
+    entry = FORMS[name][2][int(fid)]
+    kind, attr = entry[0], entry[1]
+    if kind == "button":
+        getattr(panel, attr)()
+    else:
+        w = getattr(panel, attr)
+        if kind == "check":
+            w.setChecked(value == "1")
+        elif kind == "slider":
+            k = entry[5] if len(entry) > 5 else 1
+            v = float(value) / k
+            w.setValue(v if k != 1 else int(v))
+        elif kind == "choice":
+            i = int(value)
+            w.setCurrentIndex(i)
+            w.activated.emit(i)
+        elif kind == "color":
+            w.click()
+    if hasattr(panel, "refresh") and kind != "slider":
+        panel.refresh()
+    view._ui_form_sig = None
+    view._ui_cluster_sig = None
+    view.update()
+
+
+def _trigger(win, index: int) -> None:
+    view = getattr(getattr(win, "_doc", None), "stand_in", None)
+    actions = getattr(view, "_ui_actions", [])
+    if 0 <= index < len(actions):
+        actions[index].trigger()
+
+
+_KEYS = {Qt.Key_Escape: "Escape", Qt.Key_Return: "Enter", Qt.Key_Enter: "Enter",
+         Qt.Key_Backspace: "Backspace", Qt.Key_Delete: "Delete", Qt.Key_Tab: "Tab",
+         Qt.Key_Up: "ArrowUp", Qt.Key_Down: "ArrowDown", Qt.Key_Left: "ArrowLeft",
+         Qt.Key_Right: "ArrowRight", Qt.Key_Home: "Home", Qt.Key_End: "End",
+         Qt.Key_A: "A", Qt.Key_C: "C", Qt.Key_V: "V", Qt.Key_X: "X", Qt.Key_Z: "Z"}
+
+
+def _opens_commands(event) -> bool:
+    """⌘K, or F3 (the app's Search commands…)."""
+    return event.key() == Qt.Key_F3 or (event.key() == Qt.Key_K and bool(event.modifiers() & Qt.ControlModifier))
+
+
+def _all_commands(win):
+    """Every command of the window's menus: (label, path, shortcut, action)."""
+    cached = getattr(win, "_ui_commands", None)
+    if cached is not None:
+        return cached
+    out = []
+
+    def walk(menu, path):
+        for a in menu.actions():
+            if a.isSeparator():
+                continue
+            text = a.text().replace("&", "")
+            if a.menu():
+                walk(a.menu(), path + [text])
+            elif text:
+                out.append((text, " › ".join(path), a.shortcut().toString(QKeySequence.NativeText), a))
+    for a in win.menuBar().actions():
+        if a.menu():
+            walk(a.menu(), [a.text().replace("&", "")])
+    win._ui_commands = out
+    return out
+
+
+def _command_query(view, win, query) -> None:
+    words = query.lower().split()
+    cmds = _all_commands(win)
+    hits = []
+    for label, path, key, act in cmds:
+        hay = (label + " " + path).lower()
+        if all(w in hay for w in words):
+            # Label starts first, then label contains, then path only.
+            rank = 0 if words and label.lower().startswith(words[0]) else 1 if words and words[0] in label.lower() else 2
+            hits.append((rank, label, path, key, act))
+    hits.sort(key=lambda h: (h[0], h[1].lower()))
+    hits = hits[:12]
+    view._ui_cmd_hits = [h[4] for h in hits]
+    view.renderer.ui_set_command_results([(h[1], h[2], h[3], h[4].isEnabled()) for h in hits])
+
+
+def _problem_key(view, event) -> int:
+    if view.__dict__.get("_ui_mode") != "problems" or not (event.modifiers() & Qt.ControlModifier):
+        return 0
+    return {Qt.Key_BracketRight: 1, Qt.Key_BracketLeft: -1}.get(event.key(), 0)
+
+
+def claims_key(view, event) -> bool:
+    """ShortcutOverride: does the chrome own this key (a focused field, or
+    Escape while its popup is open)? Then no window shortcut fires."""
+    if not getattr(view, "_ui_attached", False):
+        return False
+    if _problem_key(view, event):
+        return True
+    if _opens_commands(event):
+        return True
+    name = _KEYS.get(event.key(), "")
+    return view.renderer.ui_claims_key(name)
+
+
+def key(view, event, pressed: bool) -> bool:
+    """Offer a key to the chrome first. True: it was the chrome's."""
+    if not getattr(view, "_ui_attached", False):
+        return False
+    if _opens_commands(event):
+        if pressed:
+            view.renderer.ui_open_commands()
+            view.update()
+        return True
+    step = _problem_key(view, event)
+    if step:
+        if pressed:
+            _problem_step(view.window(), view, step)
+            view.update()
+        return True
+    name = _KEYS.get(event.key(), "")
+    if not view.renderer.ui_claims_key(name):
+        return False
+    view.renderer.ui_key(name, pressed, _mods(event))
+    text = event.text()
+    if pressed and text and text.isprintable():
+        view.renderer.ui_text(text)
+    view.update()
+    return True
+
+
+def _mods(event) -> int:
+    m = event.modifiers()
+    return ((1 if m & Qt.AltModifier else 0) | (2 if m & Qt.MetaModifier else 0)
+            | (4 if m & Qt.ShiftModifier else 0) | (8 if m & Qt.ControlModifier else 0))
+
+
+_BUTTONS = {Qt.LeftButton: 1, Qt.RightButton: 2, Qt.MiddleButton: 3}
+
+
+def title_double_click(view, event) -> bool:
+    """A double-click on the top strip zooms the window, as on a title bar."""
+    if not getattr(view, "_ui_attached", False):
+        return False
+    if not view.renderer.ui_top_empty(float(event.position().x()), float(event.position().y())):
+        return False
+    chrome = getattr(view.window(), "_mac_chrome", None)
+    glass = getattr(chrome, "_glass", None)
+    if glass is not None:
+        glass.zoom()
+        return True
+    return False
+
+
+def wheel(view, event) -> bool:
+    if not getattr(view, "_ui_attached", False):
+        return False
+    p = event.position()
+    d = event.pixelDelta()
+    if d.isNull():
+        a = event.angleDelta()
+        dx, dy = a.x() / 8.0 * 3, a.y() / 8.0 * 3
+    else:
+        dx, dy = float(d.x()), float(d.y())
+    taken = view.renderer.ui_wheel(float(p.x()), float(p.y()), dx, dy)
+    if taken:
+        view.update()
+    return taken
+
+
+def pointer(view, kind: str, event=None) -> bool:
+    """Offer a pointer event to the chrome first. True: it was the chrome's."""
+    if not getattr(view, "_ui_attached", False):
+        return False
+    if event is None:
+        taken = view.renderer.ui_pointer(kind, -1.0, -1.0, 0, 0)
+    elif kind == "press" and event.button() == Qt.LeftButton \
+            and view.renderer.ui_top_empty(float(event.position().x()), float(event.position().y())):
+        # The empty top strip is the window's title bar: drag moves it.
+        handle = view.window().windowHandle()
+        if handle is not None:
+            handle.startSystemMove()
+        return True
+    else:
+        p = event.position()
+        taken = view.renderer.ui_pointer(kind, float(p.x()), float(p.y()),
+                                         _BUTTONS.get(event.button(), 1), _mods(event))
+    if taken or kind != "move" or getattr(view, "_ui_was_over", False):
+        view.update()  # hover highlight in, or out
+    if kind in ("move", "leave"):
+        was = getattr(view, "_ui_was_over", False)
+        if taken and not was:
+            view.setCursor(Qt.ArrowCursor)
+        elif was and not taken:
+            view.tools._apply_tool_cursor()
+        view._ui_was_over = taken
+    return taken
