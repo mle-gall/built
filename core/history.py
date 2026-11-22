@@ -6947,6 +6947,16 @@ class CompoundCommand(Command):
         for cmd in reversed(self.commands):
             cmd.undo(scene)
 
+    def doc_undo(self, scene) -> bool:
+        """By its transaction when every part would be."""
+        return bool(self.commands) and all(
+            _uses_doc_undo(c, scene) for c in self.commands)
+
+    def doc_after(self, scene, phase) -> None:
+        parts = reversed(self.commands) if phase == "undo" else self.commands
+        for cmd in parts:
+            cmd.doc_after(scene, phase)
+
 
 class ChangeAxesCommand(Command):
     """Change Axes (issue #44): give ``group`` a new frame —

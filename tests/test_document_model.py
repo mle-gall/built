@@ -10,8 +10,9 @@ from PySide6.QtGui import QMatrix4x4, QVector3D
 
 from core import doc_model
 from core.group import Group
-from core.history import (CommandRejected, Command, History, HideCommand,
-                          MoveGroupCommand, RenameGroupCommand)
+from core.history import (CommandRejected, Command, CompoundCommand, History,
+                          HideCommand, LockCommand, MoveGroupCommand,
+                          RenameGroupCommand)
 from core.layers import Layer
 from core.materials import Material
 from core.mesh import Mesh
@@ -338,3 +339,18 @@ def test_history_undoes_document_commands_by_their_transaction():
         h.redo()
     assert g.name == "moved" and g.hidden
     assert h.feed.last.placements["modified"] == [g.uid]
+
+
+def test_a_compound_of_document_commands_is_one_transaction():
+    scene = Scene()
+    gs = [Group(Mesh(), name=f"g{i}") for i in range(50)]
+    scene.groups.extend(gs)
+    h = History(scene)
+    h.execute(CompoundCommand([RenameGroupCommand(g, "R") for g in gs]
+                              + [LockCommand(gs, True)]))
+    assert h.undo_stack[-1]._doc_txn is not None
+    h.undo()
+    assert [g.name for g in gs] == [f"g{i}" for i in range(50)]
+    assert not any(g.locked for g in gs)
+    h.redo()
+    assert all(g.name == "R" and g.locked for g in gs)
