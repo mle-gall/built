@@ -505,8 +505,8 @@ def unnamed_colours_cached(scene) -> dict:
 
 
 def _pick_image(win, title):
-    from PySide6.QtWidgets import QFileDialog
-    path, _ = QFileDialog.getOpenFileName(win, title, "", "Images (*.png *.jpg *.jpeg *.webp *.bmp *.tif *.tiff)")
+    from views.filedialogs import file_dialogs
+    path, _ = file_dialogs.getOpenFileName(win, title, "", "Images (*.png *.jpg *.jpeg *.webp *.bmp *.tif *.tiff)")
     return path or None
 
 

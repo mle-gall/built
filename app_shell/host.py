@@ -37,6 +37,14 @@ ROOT = None
 VENV = None
 
 
+#: ``verb:<name>`` menu commands: MainWindow verbs whose questions are
+#: chrome forms (they answer on a later turn, nothing blocks).
+_VERBS = {"make_component": "_on_make_component", "divide": "_on_divide",
+          "field_of_view": "_ask_field_of_view", "new_tag": "_assign_new_layer",
+          "image_size": "_on_image_size", "image_opacity": "_on_image_opacity",
+          "simplify_mesh": "_on_simplify_mesh"}
+
+
 def _log(*parts):
     print("[built]", *parts, file=sys.stderr, flush=True)
 
@@ -411,6 +419,14 @@ class Host:
         qt_host.INPUT["modifiers"] = int(modifiers)
         view = self.view
         if self._modal():
+            if cd.current_sheet(self.window) is None and cd._form_up(self.window):
+                # A form on the chrome (views/chrome_forms.py): its fields
+                # type, Enter and Esc answer it; nothing else hears keys.
+                from views import wgpu_ui
+                ev = KeyEvent(pressed, key, modifiers, text, repeat)
+                self._guard("form key", wgpu_ui.key, view, ev, pressed)
+                self.request_frame()
+                return True
             if pressed and not repeat:
                 ev = KeyEvent(True, key, modifiers, text, repeat)
                 if cd.current_sheet(self.window) is not None:
@@ -520,6 +536,10 @@ class Host:
             self._guard("redo", w._on_redo)
         elif action == "zoom_extents":
             self._guard("zoom extents", w._on_zoom_extents)
+        elif kind == "verb" and arg in _VERBS:
+            # The ported prompts (views/chrome_forms.py), by name: the
+            # window's own MainWindow methods, borrowed.
+            self._guard(f"verb {arg}", getattr(w, _VERBS[arg]))
         elif kind == "view":
             self.viewport.camera.set_view(arg)
             self.viewport.camera.fit_box(*w._extents_bounds()) if w._extents_bounds() else None
