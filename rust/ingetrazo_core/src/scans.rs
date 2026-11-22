@@ -113,6 +113,7 @@ pub struct MeshScan {
     fbox: Option<Vec<Box6>>,
     ebox: Option<Vec<Box6>>,
     fplane: Option<Vec<Plane>>,
+    graph: Option<crate::store::drawing::DrawingGraph>,
     ecells: Option<FxHashMap<(i64, i64, i64), Vec<u32>>>,
 }
 
@@ -148,6 +149,7 @@ impl MeshScan {
             ebox: None,
             fplane: None,
             ecells: None,
+            graph: None,
         }
     }
 
@@ -690,6 +692,49 @@ impl MeshScan {
                 d.abs() <= tol + slack(span) && (pl.vague || c.abs() >= dot_min)
             })
             .collect())
+    }
+
+    fn split_plan(
+        &mut self,
+        py: Python<'_>,
+        a: [f64; 3],
+        b: [f64; 3],
+        indices: Vec<usize>,
+        extras: Vec<[[f64; 3]; 2]>,
+        hypot: &str,
+        compensated: bool,
+    ) -> PyResult<(Vec<[f64; 3]>, Vec<(usize, [f64; 3])>)> {
+        self.need(py, EDGES)?;
+        let h = crate::hypot_of(hypot)?;
+        if indices.iter().any(|&i| i >= self.ends.len()) {
+            return Err(PyValueError::new_err("edge index outside scan"));
+        }
+        let edges = indices
+            .into_iter()
+            .map(|i| self.ends[i].map(|v| self.pos[v as usize]))
+            .chain(extras);
+        Ok(crate::store::drawing::split_plan(a, b, edges, h, compensated))
+    }
+
+    fn drawing_cycles(
+        &mut self,
+        py: Python<'_>,
+        a: [f64; 3],
+        b: [f64; 3],
+        removed: Vec<usize>,
+        extra: Vec<[[f64; 3]; 2]>,
+        limit: usize,
+        both: bool,
+    ) -> PyResult<Vec<Vec<[f64; 3]>>> {
+        self.need(py, EDGES)?;
+        let graph = self.graph.get_or_insert_with(|| {
+            let mut graph = crate::store::drawing::DrawingGraph::default();
+            for (i, ends) in self.ends.iter().enumerate() {
+                graph.append(i, ends.map(|v| self.pos[v as usize]));
+            }
+            graph
+        });
+        Ok(graph.cycles(a, b, removed.into_iter().collect(), extra, limit, both))
     }
 
     /// Edges with an end whose topology key cell may be ``cell``:

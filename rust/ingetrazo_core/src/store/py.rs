@@ -67,6 +67,19 @@ impl PyMeshStore {
         (live, dense)
     }
 
+    fn net_change(&self, before: &super::State) -> PyChange {
+        let mut inner = self.inner.state.changes_since(before);
+        inner.revision = self.inner.revision;
+        PyChange { inner }
+    }
+
+    fn drawing_candidates(&self, kind: Kind, keys: Option<Vec<u128>>) -> PyResult<Vec<u32>> {
+        match keys {
+            None => Ok(self.inner.live_slots(kind)),
+            Some(keys) => keys.into_iter().map(|k| live_of(&self.inner, kind, k)).collect(),
+        }
+    }
+
     /// Run an op with a fresh change record; the revision is bumped even
     /// when the op fails half way (a vertex made before a NaN), so the
     /// caches above never see a changed store under an old revision.
@@ -778,6 +791,231 @@ impl PyMeshStore {
         let vb = live_of(&self.inner, Kind::Vertex, b)?;
         let (e, ch) = self.op(|s, ch| s.link_edge(va, vb, ch))?;
         Ok((self.inner.key(Kind::Edge, e), ch))
+    }
+
+    #[pyo3(signature = (hypot, compensated, before=None))]
+    fn winding_flips(
+        &self,
+        hypot: &str,
+        compensated: bool,
+        before: Option<&PyStoreSnapshot>,
+    ) -> PyResult<Vec<u128>> {
+        let old = before.map(|snapshot| reader(&snapshot.inner));
+        Ok(self
+            .inner
+            .winding_flips(old.as_ref(), crate::hypot_of(hypot)?, compensated))
+    }
+
+    fn divide_edges(
+        &mut self,
+        keys: Vec<u128>,
+        n: usize,
+        next_curve: i64,
+        hypot: &str,
+        compensated: bool,
+    ) -> PyResult<((usize, i64), PyChange)> {
+        let edges = keys
+            .into_iter()
+            .map(|k| live_of(&self.inner, Kind::Edge, k))
+            .collect::<PyResult<Vec<_>>>()?;
+        let h = crate::hypot_of(hypot)?;
+        let before = self.inner.state.clone();
+        let (value, _) = self.op_all(|s, ch| s.divide_drawing_edges(&edges, n, next_curve, h, compensated, ch))?;
+        Ok((value, self.net_change(&before)))
+    }
+
+    fn join_edges(
+        &mut self,
+        keys: Vec<u128>,
+        hypot: &str,
+        compensated: bool,
+    ) -> PyResult<((Vec<u128>, Vec<(u128, &'static str)>, usize), PyChange)> {
+        let edges = keys
+            .into_iter()
+            .map(|k| live_of(&self.inner, Kind::Edge, k))
+            .collect::<PyResult<Vec<_>>>()?;
+        let h = crate::hypot_of(hypot)?;
+        let before = self.inner.state.clone();
+        let (value, _) = self.op_all(|s, ch| s.join_drawing_edges(edges, h, compensated, ch))?;
+        Ok((value, self.net_change(&before)))
+    }
+
+    fn drawing_clear(&mut self) -> PyResult<PyChange> {
+        Ok(self
+            .op(|s, ch| {
+                s.drawing_clear(ch);
+                Ok(())
+            })?
+            .1)
+    }
+    fn painted_candidates(&self, own: Vec<u128>) -> Vec<u128> {
+        self.inner.painted_candidates(&own.into_iter().collect())
+    }
+    fn drawing_plane_edges(
+        &self,
+        o: [f64; 3],
+        n: [f64; 3],
+        hypot: &str,
+    ) -> PyResult<(Vec<[[f64; 3]; 2]>, Vec<u128>)> {
+        Ok(self.inner.drawing_plane_edges(o, n, crate::hypot_of(hypot)?))
+    }
+    fn drawing_coverage(
+        &self,
+        o: [f64; 3],
+        n: [f64; 3],
+        regions: Vec<Vec<Vec<[f64; 3]>>>,
+        hypot: &str,
+    ) -> PyResult<(Vec<u128>, Vec<(usize, u128, [f64; 3])>)> {
+        Ok(self.inner.drawing_coverage(o, n, &regions, crate::hypot_of(hypot)?))
+    }
+    fn remove_drawing_faces(&mut self, keys: Vec<u128>) -> PyResult<PyChange> {
+        let faces = self.drawing_candidates(Kind::Face, Some(keys))?;
+        Ok(self
+            .op_all(|s, ch| {
+                for f in faces {
+                    s.remove_face(f, ch);
+                }
+                Ok(())
+            })?
+            .1)
+    }
+    fn multiple_hole_faces(&self) -> Vec<u128> {
+        self.inner
+            .live_slots(Kind::Face)
+            .into_iter()
+            .filter(|&f| self.inner.state.frings.get(f as usize).n_rings > 2)
+            .map(|f| self.inner.key(Kind::Face, f))
+            .collect()
+    }
+    fn heal_candidates(&self, partial: bool, pad: f64, hypot: &str) -> PyResult<Vec<u128>> {
+        Ok(self.inner.heal_candidates(partial, pad, crate::hypot_of(hypot)?))
+    }
+
+    fn containing_face(
+        &self,
+        points: Vec<[f64; 3]>,
+        candidates: Option<Vec<u128>>,
+        exclude: Option<u128>,
+        hypot: &str,
+    ) -> PyResult<Option<u128>> {
+        Ok(self.inner.containing_face(
+            &self.drawing_candidates(Kind::Face, candidates)?,
+            &points,
+            exclude,
+            crate::hypot_of(hypot)?,
+        ))
+    }
+
+    fn curved_edges(&self) -> Vec<(i64, u128)> {
+        self.inner
+            .live_slots(Kind::Edge)
+            .into_iter()
+            .filter_map(|e| {
+                let cid = *self.inner.state.ecurve.get(e as usize);
+                (cid >= 0).then(|| (cid, self.inner.key(Kind::Edge, e)))
+            })
+            .collect()
+    }
+
+    fn refine_ring(
+        &self,
+        ring: Vec<[f64; 3]>,
+        points: Vec<[f64; 3]>,
+        tol: f64,
+        hypot: &str,
+    ) -> PyResult<Vec<[f64; 3]>> {
+        Ok(super::drawing_face::refine(
+            &ring,
+            &points,
+            tol,
+            crate::hypot_of(hypot)?,
+        ))
+    }
+
+    fn carve_face(&self, face: u128, ring: Vec<[f64; 3]>, hypot: &str) -> PyResult<Option<Vec<Vec<[f64; 3]>>>> {
+        let f = live_of(&self.inner, Kind::Face, face)?;
+        Ok(self.inner.outline(f, crate::hypot_of(hypot)?).carve(&ring))
+    }
+
+    fn shared_hole(
+        &self,
+        face: u128,
+        ring: Vec<[f64; 3]>,
+        hypot: &str,
+    ) -> PyResult<Option<(usize, Vec<[f64; 3]>, Vec<[f64; 3]>)>> {
+        let f = live_of(&self.inner, Kind::Face, face)?;
+        Ok(self.inner.outline(f, crate::hypot_of(hypot)?).shared_hole(&ring))
+    }
+
+    fn classify_segment(
+        &self,
+        face: u128,
+        a: [f64; 3],
+        b: [f64; 3],
+        candidates: Option<Vec<u128>>,
+        hypot: &str,
+    ) -> PyResult<(&'static str, Option<u128>)> {
+        let fs = self.drawing_candidates(Kind::Face, candidates)?;
+        Ok(self.inner.classify_segment(
+            live_of(&self.inner, Kind::Face, face)?,
+            a,
+            b,
+            &fs,
+            crate::hypot_of(hypot)?,
+        ))
+    }
+
+    fn orphaned_edges_at(
+        &self,
+        points: Vec<[f64; 3]>,
+        edges: Option<Vec<u128>>,
+        faces: Option<Vec<u128>>,
+    ) -> PyResult<Vec<u128>> {
+        Ok(self.inner.orphan_edges(
+            &self.drawing_candidates(Kind::Edge, edges)?,
+            &self.drawing_candidates(Kind::Face, faces)?,
+            &points,
+        ))
+    }
+
+    fn loop_inside_face(
+        &self,
+        face: u128,
+        ring: Vec<[f64; 3]>,
+        exclude_holes: bool,
+        hypot: &str,
+    ) -> PyResult<bool> {
+        let f = live_of(&self.inner, Kind::Face, face)?;
+        Ok(self
+            .inner
+            .outline(f, crate::hypot_of(hypot)?)
+            .contains(&ring, exclude_holes))
+    }
+    fn split_face_loops(
+        &self,
+        face: u128,
+        chain: Vec<[f64; 3]>,
+        chord: bool,
+        hypot: &str,
+    ) -> PyResult<Option<Vec<Vec<[f64; 3]>>>> {
+        let f = live_of(&self.inner, Kind::Face, face)?;
+        Ok(self.inner.outline(f, crate::hypot_of(hypot)?).pieces(&chain, chord))
+    }
+    fn subdividing_chain(&self, face: u128, ring: Vec<[f64; 3]>, hypot: &str) -> PyResult<Option<Vec<[f64; 3]>>> {
+        let f = live_of(&self.inner, Kind::Face, face)?;
+        Ok(self.inner.outline(f, crate::hypot_of(hypot)?).chain(&ring))
+    }
+
+    fn drawing_plane(&self, points: Vec<[f64; 3]>, hypot: &str) -> PyResult<Option<[[f64; 3]; 2]>> {
+        Ok(self.inner.drawing_plane(&points, crate::hypot_of(hypot)?))
+    }
+
+    fn rebuild_plane(&self, points: Vec<[f64; 3]>, cap: usize, hypot: &str) -> PyResult<Option<[[f64; 3]; 2]>> {
+        Ok(self.inner.rebuild_plane(&points, cap, crate::hypot_of(hypot)?))
+    }
+
+    fn curve_keys(&self, curve: i64) -> Vec<u128> {
+        self.inner.curve_keys(curve)
     }
 
     /// `Mesh.add_edge(a, b)`: `(key, change)`.
