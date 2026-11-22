@@ -24,6 +24,7 @@ pub mod fillet;
 pub mod build;
 mod changes;
 pub mod cow;
+pub mod diff;
 pub mod edit;
 pub mod keys;
 pub mod intersect;
