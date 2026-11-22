@@ -333,7 +333,8 @@ def _corner(p) -> tuple:
 class SmoothNormals:
     """The smooth normals of one export, worked out once per vertex.
 
-    Around a vertex, the faces joined through it by **soft** edges are one
+    Around a vertex, the faces joined through it by **soft** edges (not
+    ``flat`` ones: Soften Edges' «Smooth normals» off) are one
     surface there (a cylinder's sides, a sphere's patches): their corner-angle-weighted normals
     are summed into one, so the file shades the surface round instead of
     showing every facet. A hard edge splits the fan, so a cylinder's cap
@@ -393,7 +394,8 @@ class SmoothNormals:
         got = self._at.get(v)
         if got is not None:
             return got
-        soft = [e for e in v.edges if e.soft and len(e.faces) > 1]
+        soft = [e for e in v.edges if e.soft and not getattr(e, "flat", False)
+                and len(e.faces) > 1]
         if not soft:                     # most vertices: nothing curved here
             self._at[v] = self._NONE
             return self._NONE

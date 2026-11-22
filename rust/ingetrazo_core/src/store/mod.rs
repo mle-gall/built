@@ -38,6 +38,9 @@ use std::sync::Arc;
 /// Edge flag bits, as `.igz` format 3 stores them (`edge_flags`).
 pub const SOFT: u8 = 1;
 pub const HIDDEN: u8 = 2;
+/// A soft edge the shading does not smooth across (`Edge.flat`: Soften
+/// Edges with «Smooth normals» off). Without it a soft edge smooths.
+pub const FLAT: u8 = 4;
 /// Face flag bits (`Face.interior`; read and written from step 3 on).
 #[allow(dead_code)]
 pub const INTERIOR: u8 = 1;

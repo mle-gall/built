@@ -53,6 +53,12 @@ class SoftenDialog(QDialog):
         row.addWidget(self.slider)
         row.addWidget(self.angle)
         layout.addLayout(row)
+        # the modeller's two checkboxes: «Smooth normals» shades the faces
+        # across a softened edge smoothly; off, the edge is only soft (its
+        # line hidden, each face keeping its flat shade). On by default.
+        self.smooth = QCheckBox(tr("Smooth normals"))
+        self.smooth.setChecked(True)
+        layout.addWidget(self.smooth)
         self.coplanar = QCheckBox(tr("Soften coplanar edges"))
         self.coplanar.setChecked(True)
         layout.addWidget(self.coplanar)
@@ -63,7 +69,8 @@ class SoftenDialog(QDialog):
         self.materials.setChecked(True)
         layout.addWidget(self.materials)
         self.harden = QCheckBox(tr("Unsoften all selected edges"))
-        for widget in (self.angle, self.slider, self.coplanar, self.materials):
+        for widget in (self.angle, self.slider, self.smooth, self.coplanar,
+                       self.materials):
             self.harden.toggled.connect(
                 lambda on, w=widget: w.setEnabled(not on))
         layout.addWidget(self.harden)
@@ -72,4 +79,4 @@ class SoftenDialog(QDialog):
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
-        self.resize(470, 220)
+        self.resize(470, 240)

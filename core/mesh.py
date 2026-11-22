@@ -159,7 +159,7 @@ class Edge:
     """
 
     __slots__ = ("key", "v0", "v1", "faces", "soft", "curve", "layer",
-                 "hidden")
+                 "hidden", "flat")
 
     def __init__(self, v0: Vertex, v1: Vertex, *, key: int | None = None) -> None:
         self.key = next(_STANDALONE_KEYS) if key is None else key
@@ -169,6 +169,13 @@ class Edge:
         # A "soft" edge is a curve segment (circle/arc): kept in the topology but
         # hidden from the edge render, so the curve reads smooth.
         self.soft: bool = False
+        # A soft edge shades smooth across it — the modeller's soft edge with
+        # «Smooth normals» on, and what every soft edge was before the two
+        # were told apart (a file without this flag reads that way). A
+        # ``flat`` soft edge is soft only: its line leaves the render but
+        # the faces on either side keep their own flat shading (Soften
+        # Edges with «Smooth normals» off). Meaningless on a hard edge.
+        self.flat: bool = False
         # A "hidden" edge is fully invisible: unlike soft it draws neither
         # as a line nor as a profile/silhouette (imported foliage cards —
         # the leaf's outline is its texture mask, not its quad).
@@ -222,8 +229,14 @@ PAINT_KEYS = ("color", "mat", "texture", "opacity", "pbr")
 #: Marco hid an edge, grouped the drawing, and the edge came back (2026-09-10)
 #: because ``hidden`` was added to ``Edge`` later and only some of the copies
 #: learned about it. Adding a flag here now teaches every one of them at once.
-EDGE_FLAG_NAMES = ("soft", "curve", "layer", "hidden")
-EDGE_FLAG_DEFAULTS = (False, None, None, False)
+EDGE_FLAG_NAMES = ("soft", "curve", "layer", "hidden", "flat")
+EDGE_FLAG_DEFAULTS = (False, None, None, False, False)
+
+
+def smooths(edge) -> bool:
+    """Whether the shading runs smooth across ``edge``: a soft edge not
+    marked ``flat`` (Soften Edges' «Smooth normals»)."""
+    return bool(getattr(edge, "soft", False)) and not getattr(edge, "flat", False)
 
 
 def edge_flags(edge) -> tuple:
@@ -933,7 +946,7 @@ class Mesh:
         equivalent of :meth:`add_edge` per pair: endpoints that welded to one
         vertex are skipped (the ``ValueError`` case), duplicates return the
         existing edge. ``flags`` is an optional per-edge ``(soft, curve,
-        layer)`` tuple list. Returns ``{packed pair: Edge}`` over ``vobjs``
+        layer[, hidden[, flat]])`` tuple list. Returns ``{packed pair: Edge}`` over ``vobjs``
         indices — pass it to :meth:`add_faces_welded` so face boundaries
         reuse these edges without rescanning ``self.edges``."""
         self._chunk_dirty = True
@@ -963,6 +976,8 @@ class Mesh:
                     e.soft = True
                 if len(flags[i]) > 3 and flags[i][3]:
                     e.hidden = True
+                if len(flags[i]) > 4 and flags[i][4]:
+                    e.flat = True
                 if curve is not None:
                     e.curve = curve
                 if layer is not None:
@@ -1215,6 +1230,7 @@ class Mesh:
             "vedges": {v.key: set(v.edges) for v in self.vertices},
             "efaces": {e.key: list(e.faces) for e in self.edges},
             "esoft": {e.key: e.soft for e in self.edges},
+            "eflat": {e.key: e.flat for e in self.edges},
             "ehidden": {e.key: e.hidden for e in self.edges},
             "elayer": {e.key: e.layer for e in self.edges},
             "ecurve": {e.key: e.curve for e in self.edges},
@@ -1264,6 +1280,9 @@ class Mesh:
         for e, hidden in snap.get("ehidden", {}).items():
             e = by_key[e]
             e.hidden = hidden
+        for e, flat in snap.get("eflat", {}).items():
+            e = by_key[e]
+            e.flat = flat
         for e, layer in snap.get("elayer", {}).items():
             e = by_key[e]
             e.layer = layer
@@ -1670,6 +1689,7 @@ class Mesh:
         for sub, was_new in ((e0, e0_new), (e1, e1_new)):
             if was_new:
                 sub.soft = edge.soft
+                sub.flat = edge.flat
                 sub.layer = edge.layer
                 sub.curve = edge.curve
         for face in incident:

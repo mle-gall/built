@@ -2,9 +2,11 @@
 """Soften / Smooth Edges: the angle-based smoothing an import runs
 (:func:`formats.fuse.soften_smooth_edges`) as an undoable user command.
 
-A soft edge is the one flag the app has for it: the line leaves the render
-and the shading runs smooth across it, in the GL viewport and in the Metal
-view alike (the shared corner-fan kernel). The angle is read as the import
+As in the modeller's Soften Edges, softening hides the line and «Smooth
+normals» (on by default) also shades the faces across it smoothly, in the
+GL viewport and in the Metal view alike (the shared corner-fan kernel).
+With it off the edge is soft only (``Edge.flat``): no line, but each face
+keeps its own flat shade. The angle is read as the import
 reads it, between the two faces whatever their winding, so a face drawn the
 other way round does not leave a seam. By default an edge between two
 materials keeps its line, as an import keeps it.
@@ -76,17 +78,20 @@ class SoftenByAngleCommand(Command):
 
     ``coplanar``: soften the edges between faces in one plane too.
     ``materials``: soften across two materials too (an import keeps that
-    line). ``harden``: unsoften every edge instead.
+    line). ``smooth``: the softened edges shade smooth too (the modeller's
+    «Smooth normals»); off, they are soft only (``Edge.flat``).
+    ``harden``: unsoften every edge instead.
 
     The change is worked out once, as ``(mesh, key, before, after)`` per
-    edge that changes; undo and redo replay it by key, which survives the
-    other commands' undo."""
+    edge that changes, each a ``(soft, flat)`` pair; undo and redo replay
+    it by key, which survives the other commands' undo."""
 
     keeps_bounds = True
     keeps_rows = True
 
     def __init__(self, targets, angle: float = 30.0, coplanar: bool = True,
-                 harden: bool = False, materials: bool = False) -> None:
+                 harden: bool = False, materials: bool = False,
+                 smooth: bool = True) -> None:
         self.targets = targets
         self.angle = float(angle)
         if not math.isfinite(self.angle) or not 0.0 <= self.angle <= 180.0:
@@ -94,6 +99,7 @@ class SoftenByAngleCommand(Command):
         self.coplanar = bool(coplanar)
         self.harden = bool(harden)
         self.materials = bool(materials)
+        self.smooth = bool(smooth)
         self.changes = None
 
     def meshes(self) -> list:
@@ -139,8 +145,12 @@ class SoftenByAngleCommand(Command):
                 if edge.key not in keys:
                     continue
                 soft = self._wanted(edge, normals)
-                if soft is not None and bool(edge.soft) != soft:
-                    changes.append((mesh, edge.key, bool(edge.soft), soft))
+                if soft is None:
+                    continue
+                now = (bool(edge.soft), bool(getattr(edge, "flat", False)))
+                want = (soft, soft and not self.smooth)
+                if now != want:
+                    changes.append((mesh, edge.key, now, want))
         return changes
 
     def _apply(self, scene, after: bool) -> None:
@@ -149,9 +159,9 @@ class SoftenByAngleCommand(Command):
             by_mesh.setdefault(id(mesh), (mesh, {}))[1][key] = new if after else old
         for mesh, flags in by_mesh.values():
             for edge in mesh.edges:
-                soft = flags.get(edge.key)
-                if soft is not None:
-                    edge.soft = soft
+                state = flags.get(edge.key)
+                if state is not None:
+                    edge.soft, edge.flat = state
             # The shading's normals change with the flag: the caches keyed
             # on the geometry (GL chunk, Metal prototype) rebuild this mesh.
             mesh.mark_modified()

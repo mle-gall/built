@@ -475,7 +475,8 @@ impl PyMeshStore {
         slots.into_iter().map(|f| st.key(Kind::Face, f)).collect()
     }
 
-    /// `Edge.soft` / `hidden` as format-3 bits (soft 1, hidden 2).
+    /// `Edge.soft` / `hidden` / `flat` as format-3 bits (soft 1, hidden 2,
+    /// flat 4).
     fn set_edge_flags(&mut self, key: u128, flags: u8) -> PyResult<u64> {
         let e = any_of(&self.inner, Kind::Edge, key)?;
         Ok(self.inner.set_edge_flags(e, flags))

@@ -6661,7 +6661,8 @@ class MainWindow(WorksessionMixin, QMainWindow):
             selected_edges(scene), dialog.angle.value(),
             coplanar=dialog.coplanar.isChecked(),
             harden=dialog.harden.isChecked(),
-            materials=dialog.materials.isChecked())
+            materials=dialog.materials.isChecked(),
+            smooth=dialog.smooth.isChecked())
         command.changes = command.prepare()
         if not command.changes:
             self.viewport.flash_status(tr("No edges need changing"), 4000)
@@ -6669,7 +6670,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         self.viewport.history.execute(command)
         self.viewport.flash_status(
             tr("Smoothed {n} edge(s)", n=sum(1 for c in command.changes
-                                             if c[3]))
+                                             if c[3][0]))
             if not dialog.harden.isChecked() else
             tr("Unsoftened {n} edge(s)", n=len(command.changes)), 3000)
         self.viewport.update()

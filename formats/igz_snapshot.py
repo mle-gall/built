@@ -69,7 +69,8 @@ def geometry_steps(mesh):
 
     for i, e in enumerate(mesh.edges):
         edges.extend((vertex(e.v0), vertex(e.v1)))
-        flags.append(int(e.soft) | (int(e.hidden) << 1))
+        flags.append(int(e.soft) | (int(e.hidden) << 1)
+                     | (int(e.soft and e.flat) << 2))
         curves.append(-1 if e.curve is None else e.curve)
         layer = e.layer
         if layer is None:

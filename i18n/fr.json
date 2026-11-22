@@ -3842,6 +3842,7 @@
  "Soften / Smooth Edges": "Adoucir / Lisser les arêtes",
  "Edges between faces at this angle or less become smooth; sharper edges stay hard. Selected groups include their nested geometry, and component copies share the change.": "Les arêtes entre des faces formant cet angle ou moins sont lissées ; les arêtes plus vives restent dures. Les groupes sélectionnés incluent leur géométrie imbriquée, et les copies d’un composant partagent la modification.",
  "Angle between faces": "Angle entre les faces",
+ "Smooth normals": "Lisser les normales",
  "Soften coplanar edges": "Adoucir les arêtes coplanaires",
  "Soften between different materials": "Adoucir entre matériaux différents",
  "Unsoften all selected edges": "Rendre vives toutes les arêtes sélectionnées",

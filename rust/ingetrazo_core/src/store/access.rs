@@ -12,7 +12,7 @@
 //! still materialises the mesh (see the design, §8 and §14).
 
 use super::keys::{Kind, NONE};
-use super::{Store, HIDDEN, SOFT};
+use super::{Store, FLAT, HIDDEN, SOFT};
 use std::sync::Arc;
 
 impl Store {
@@ -40,9 +40,10 @@ impl Store {
         out
     }
 
-    /// `Edge.soft` / `Edge.hidden` (the other format-3 bits are not kept).
+    /// `Edge.soft` / `Edge.hidden` / `Edge.flat` (the other format-3 bits
+    /// are not kept).
     pub fn set_edge_flags(&mut self, e: u32, flags: u8) -> u64 {
-        let f = flags & (SOFT | HIDDEN);
+        let f = flags & (SOFT | HIDDEN | FLAT);
         if *self.state.eflags.get(e as usize) != f {
             self.state.eflags.set(e as usize, f);
         }

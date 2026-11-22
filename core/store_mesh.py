@@ -25,7 +25,7 @@ Reading goes through view objects (:class:`VertexView`, :class:`EdgeView`,
 classes (``isinstance`` checks keep working) and compare and hash BY KEY.
 Two views of one element are equal, never identical (no interning). The
 writes that change no topology stay in the store: edge ``soft`` /
-``hidden`` / ``curve`` / ``layer``, face ``interior``, face ``attrs`` (a
+``flat`` / ``hidden`` / ``curve`` / ``layer``, face ``interior``, face ``attrs`` (a
 per-face dict once a face's attrs are touched, the shared table entry until
 then), ``move_vertex`` / ``place_vertex``.
 
@@ -296,6 +296,8 @@ class EdgeView(_ViewMixin, Edge):
             return getattr(self._stale(), name)
         if name == "soft":
             return bool(flags & 1)
+        if name == "flat":
+            return bool(flags & 4)
         if name == "hidden":
             return bool(flags & 2)
         if name == "curve":
@@ -308,9 +310,9 @@ class EdgeView(_ViewMixin, Edge):
         if st is None:
             setattr(self._obj(), name, value)
             return
-        if name in ("soft", "hidden"):
+        if name in ("soft", "hidden", "flat"):
             flags = st.edge(self.key)[2]
-            bit = 1 if name == "soft" else 2
+            bit = {"soft": 1, "hidden": 2, "flat": 4}[name]
             flags = (flags | bit) if value else (flags & ~bit)
             if not isinstance(value, bool) and value not in (0, 1):
                 # A non-bool flag (never written by the app): Python keeps
@@ -333,6 +335,8 @@ class EdgeView(_ViewMixin, Edge):
                     lambda self, v: self._set_flag("soft", v))
     hidden = property(lambda self: self._flag("hidden"),
                       lambda self, v: self._set_flag("hidden", v))
+    flat = property(lambda self: self._flag("flat"),
+                    lambda self, v: self._set_flag("flat", v))
     curve = property(lambda self: self._flag("curve"),
                      lambda self, v: self._set_flag("curve", v))
     layer = property(lambda self: self._flag("layer"),
@@ -1000,7 +1004,7 @@ class StoreState(Mapping):
 
     # -- the Python snapshot's entries
     _KEYS = ("vertices", "edges", "faces", "registry", "vpos", "vedges",
-             "efaces", "esoft", "ehidden", "elayer", "ecurve", "floop",
+             "efaces", "esoft", "eflat", "ehidden", "elayer", "ecurve", "floop",
              "fholes", "fattrs", "finterior")
 
     def __iter__(self):
@@ -1053,6 +1057,8 @@ class StoreState(Mapping):
             return {e: bool(f & 1) for e, f in zip(ek, fl)}
         if name == "ehidden":
             return {e: bool(f & 2) for e, f in zip(ek, fl)}
+        if name == "eflat":
+            return {e: bool(f & 4) for e, f in zip(ek, fl)}
         if name == "ecurve":
             return {e: (None if c < 0 else c)
                     for e, c in zip(ek, a["curve"].tolist())}
@@ -1968,6 +1974,7 @@ def _materialise_objects(m) -> None:
         e.v1 = v1
         e.faces = []
         e.soft = bool(fl & 1)
+        e.flat = bool(fl & 4)
         e.hidden = bool(fl & 2)
         e.curve = None if c < 0 else c
         e.layer = None if la < 0 else names[la]
@@ -2061,6 +2068,7 @@ def _materialise_tombstones(st, objmap, own, table, names) -> None:
         e.v0, e.v1 = objmap[a], objmap[b]
         e.faces = [objmap[j] for j in st.edge_faces(k)]
         e.soft = bool(fl & 1)
+        e.flat = bool(fl & 4)
         e.hidden = bool(fl & 2)
         e.curve = None if c < 0 else c
         e.layer = la
@@ -2150,6 +2158,8 @@ def _bulk_edges(m, b, ia, ib, flags):
             bits = 1 if soft else 0
             if len(row) > 3 and row[3]:
                 bits |= 2
+            if len(row) > 4 and row[4]:
+                bits |= 4
             fl[i] = bits
             if curve is not None:
                 cv[i] = curve

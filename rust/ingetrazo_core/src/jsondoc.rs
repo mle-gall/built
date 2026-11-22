@@ -383,11 +383,11 @@ fn parse_edges(d: &[u8], s: usize, b: &mut Block, names: &mut HashMap<Vec<u8>, i
                         pb = p;
                     }
                 }
-                b"\"soft\"" | b"\"hidden\"" => {
-                    bit = if key == b"\"soft\"" { 4 } else { 8 };
+                b"\"soft\"" | b"\"hidden\"" | b"\"flat\"" => {
+                    bit = if key == b"\"soft\"" { 4 } else if key == b"\"hidden\"" { 8 } else { 64 };
                     let (on, e) = flag(d, v)?;
                     if on {
-                        fl |= if bit == 4 { 1 } else { 2 };
+                        fl |= match bit { 4 => 1, 8 => 2, _ => 4 };
                     }
                     end = e;
                 }

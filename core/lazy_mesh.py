@@ -32,6 +32,14 @@ class Plan:
     ef_start: np.ndarray       # (E + 1,) CSR into ef_face
     ef_face: np.ndarray        # incident face index, edge.faces order
     extra: dict = field(default_factory=dict)
+    #: (E,) bool: soft edges the shading does not smooth across
+    #: (``Edge.flat``); None for a plan made before the flag (none are).
+    flat: np.ndarray | None = None
+
+    @property
+    def smooth(self) -> np.ndarray:
+        """(E,) bool: the edges the shading runs smooth across."""
+        return self.soft if self.flat is None else self.soft & ~self.flat
 
     @property
     def nfaces(self) -> int:
@@ -201,12 +209,14 @@ def plan(pos, edges, flags, curves, layers, layer_names, rings, sizes,
         np.zeros((0, 2), np.int64)
     soft = np.zeros(ne1, dtype=bool)
     hidden = np.zeros(ne1, dtype=bool)
+    flat = np.zeros(ne1, dtype=bool)
     curve = [None] * ne1
     layer = [None] * ne1
     if flags is not None and len(idx):
         f = flags[idx]
         np.logical_or.at(soft, einv, (f & 1).astype(bool))
         np.logical_or.at(hidden, einv, (f & 2).astype(bool))
+        np.logical_or.at(flat, einv, (f & 4).astype(bool))
         if curves is not None:
             for e, c in zip(einv.tolist(), curves[idx].tolist()):
                 if c >= 0:
@@ -257,6 +267,7 @@ def plan(pos, edges, flags, curves, layers, layer_names, rings, sizes,
         nn = len(new)
         soft = np.concatenate([soft, np.zeros(nn, dtype=bool)])
         hidden = np.concatenate([hidden, np.zeros(nn, dtype=bool)])
+        flat = np.concatenate([flat, np.zeros(nn, dtype=bool)])
         curve = curve + [None] * nn
         layer = layer + [None] * nn
         # edge.faces: per edge, its segments' faces in global segment order.
@@ -270,7 +281,7 @@ def plan(pos, edges, flags, curves, layers, layer_names, rings, sizes,
         np.cumsum(np.bincount(seg_edge, minlength=len(all_edges)),
                   out=ef_start[1:])
     return Plan(vpos, all_edges, soft, hidden, curve, layer, corners,
-                sizes, counts, ef_start, ef_face)
+                sizes, counts, ef_start, ef_face, flat=flat)
 
 
 def plan_of(mesh) -> Plan | None:
