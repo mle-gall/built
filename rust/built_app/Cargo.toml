@@ -20,3 +20,11 @@ raw-window-handle = "0.6"
 rfd = "0.18"
 muda = "0.21"
 png = "0.18"
+
+# AppKit pieces winit 0.30 does not expose: the modal pump, the pasteboard,
+# Open With and Dock quit on winit's own app delegate (src/native.rs).
+# Versions as already locked through muda.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSData", "NSDate", "NSArray", "NSURL", "NSGeometry", "NSObjCRuntime", "NSRunLoop"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSResponder", "NSEvent", "NSView", "NSWindow", "NSPasteboard", "NSRunningApplication", "NSGraphics", "NSGraphicsContext"] }

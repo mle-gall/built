@@ -37,7 +37,9 @@ impl Layout {
 /// Register the renderer module and start the interpreter (once).
 pub fn start(layout: &Layout) -> PyResult<()> {
     use ingetrazo_render::ingetrazo_render;
+    use crate::native::built_shell;
     pyo3::append_to_inittab!(ingetrazo_render);
+    pyo3::append_to_inittab!(built_shell);
     Python::initialize();
     Python::attach(|py| {
         let sys = py.import("sys")?;
@@ -54,6 +56,13 @@ pub fn start(layout: &Layout) -> PyResult<()> {
         )?;
         Ok(())
     })
+}
+
+#[derive(Default, Debug)]
+pub struct Extras {
+    pub exit: bool,
+    pub ime_area: Option<(f64, f64, f64, f64)>,
+    pub recent: Option<Vec<String>>,
 }
 
 /// The `app_shell.host.Host` for one window.
@@ -168,6 +177,34 @@ impl Host {
         .unwrap_or_else(|e| {
             Python::attach(|py| report(py, e, "state"));
             "{}".into()
+        })
+    }
+
+    /// What else the window should do this turn (`Host.extras()`): end the
+    /// app, where the IME's candidate window goes, the recent files for
+    /// File ▸ Open Recent.
+    pub fn extras(&self) -> Extras {
+        Python::attach(|py| -> PyResult<Extras> {
+            let v = self.obj.bind(py).call_method0("extras")?;
+            let exit: bool = v.get_item("exit")?.extract()?;
+            let ime_area: Option<(f64, f64, f64, f64)> = v.get_item("ime_area")?.extract()?;
+            let recent: Option<Vec<String>> = v.get_item("recent")?.extract()?;
+            Ok(Extras { exit, ime_area, recent })
+        })
+        .unwrap_or_else(|e| {
+            Python::attach(|py| report(py, e, "extras"));
+            Extras::default()
+        })
+    }
+
+    /// A tool cursor's picture: (width, height, hot x, hot y, RGBA).
+    pub fn custom_cursor(&self, key: &str) -> Option<(u16, u16, u16, u16, Vec<u8>)> {
+        Python::attach(|py| match self.obj.bind(py).call_method1("custom_cursor", (key,)) {
+            Ok(v) => v.extract().ok(),
+            Err(e) => {
+                report(py, e, "custom_cursor");
+                None
+            }
         })
     }
 
