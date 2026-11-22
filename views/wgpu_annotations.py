@@ -44,7 +44,6 @@ class AnnotationLayout:
     """Isolated scene/camera projection for a logical annotation canvas."""
 
     # Explicit allowlist: no accidental delegation into live widget geometry.
-    _world_to_pixel = Viewport._world_to_pixel
     _clip_pixel_line = Viewport._clip_pixel_line
     _clip_segment_front = Viewport._clip_segment_front
     _draw_dimensions = Viewport._draw_dimensions
@@ -84,6 +83,8 @@ class AnnotationLayout:
         if self._width <= 0 or self._height <= 0:
             raise ValueError("Annotation canvas dimensions must be positive")
         self.camera.aspect = self._width / self._height
+        self._mvp = self.camera.projection_matrix() * self.camera.view_matrix()
+        self._clear_points = set()
         self._clear_segment = clear_segment
         self._occluded = occluded
         self._hover_entity = hover
@@ -94,14 +95,22 @@ class AnnotationLayout:
     def height(self):
         return self._height
 
+    def _world_to_pixel(self, point, mvp=None):
+        return Viewport._world_to_pixel(self, point, self._mvp if mvp is None else mvp)
+
     def _occluded_on_screen(self, point):
-        return bool(self._occluded(point)) if self._occluded else False
+        if not self._occluded or point.toTuple() in self._clear_points:
+            return False
+        return bool(self._occluded(point))
 
     def _draw_occluded_segment(self, painter, a, b):
         # Keep the same projected strokes and pen joins when the resident
         # boxes prove this entire line is in front of any possible occluder.
         occluded = self._occluded
         if self._clear_segment and self._clear_segment(a, b):
+            # The dimension's arrowheads and label query these same points
+            # immediately after the stroke. Its clear segment covers all three.
+            self._clear_points.update((a.toTuple(), b.toTuple(), ((a + b) * .5).toTuple()))
             self._occluded = None
         try:
             Viewport._draw_occluded_segment(self, painter, a, b)
@@ -109,8 +118,7 @@ class AnnotationLayout:
             self._occluded = occluded
 
     def _project_samples(self, points):
-        mvp = self.camera.projection_matrix() * self.camera.view_matrix()
-        return [(self._world_to_pixel(p, mvp), not self._occluded_on_screen(p))
+        return [(self._world_to_pixel(p), not self._occluded_on_screen(p))
                 for p in points]
 
 
