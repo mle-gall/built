@@ -388,3 +388,69 @@ def test_hidden_object_readback_survives_gpu_growth(native):
     ghosts()
     native.set_style(dict(show_hidden_objects=True,sky=False))
     np.testing.assert_array_equal(before,capture(native))
+
+
+def test_intersected_wall_occludes_loose_slab_edges(native, monkeypatch):
+    import math
+    from PySide6.QtGui import QVector3D
+    from core.camera import OrbitCamera
+    from core.history import History
+    from core.intersect import WITH_CONTEXT
+    from core.protocol.commands import run
+    from core.store_mesh import StoreMesh
+    from tests.test_intersect_faces import _box, RED, BLUE
+    from views.wgpu_scene import pack_scene
+
+    monkeypatch.setenv("INGETRAZO_STORE", "1")
+    scene = Scene()
+    mesh = scene.mesh
+    assert isinstance(mesh, StoreMesh)
+    for box in (_box(0, 0, 0, 2, 2, 2, RED),
+                _box(-.5, .5, .5, 2.5, 1.5, 1.5, BLUE)):
+        for face in box.mesh.faces:
+            mesh.add_face(face.vertices).attrs = dict(face.attrs)
+    history = History(scene)
+
+    def slab_faces():
+        return [f.key for f in mesh.faces if f.attrs["color"] == list(BLUE)]
+
+    assert run(history, "intersect_faces", mode=WITH_CONTEXT, faces=slab_faces())["ok"]
+    assert history.undo() and history.redo()
+    assert run(history, "erase", faces=slab_faces())["ok"]
+
+    camera = OrbitCamera()
+    camera.target = QVector3D(2, 1, 1)
+    camera.distance = 5
+    camera.yaw = math.radians(-20)
+    camera.pitch = math.radians(20)
+    camera.aspect = 1
+    native.set_camera(list(camera.view_matrix().data()), list(camera.projection_matrix().data()))
+    native.set_style(dict(edges=True, profiles=False, sky=False))
+
+    def frame():
+        pack_scene(scene).upload(native)
+        return capture(native)
+
+    after_erase = frame()
+    inside = [e for e in mesh.edges if not e.faces and {e.a.x(), e.b.x()} == {0, 2}]
+    assert len(inside) == 4
+    # Opening just the inner face exposes the same four edges. This also
+    # catches an empty triangle stream for a face that can still be picked.
+    inner = next(f for f in mesh.faces if not f.holes and f.net_area() == 1
+                 and all(p.x() == 2 for p in f.vertices))
+    assert run(history, "erase", faces=[inner.key])["ok"]
+    open_with_edges = frame()
+    assert run(history, "erase", edges=[e.key for e in inside])["ok"]
+    assert np.any(frame() != open_with_edges)
+    assert history.undo() and history.undo()
+
+    for edge in inside:
+        mesh.remove_edge(edge)
+    np.testing.assert_array_equal(frame(), after_erase)
+
+    # The near end of the slab extends half a unit beyond the wall.
+    outside = [e for e in mesh.edges if not e.faces and max(e.a.x(), e.b.x()) == 2.5]
+    assert len(outside) == 8
+    for edge in outside:
+        mesh.remove_edge(edge)
+    assert np.any(frame() != after_erase)

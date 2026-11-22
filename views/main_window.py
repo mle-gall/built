@@ -7619,7 +7619,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         viewport under Metal. Do not run that duplicate whole-scene pass.
         """
         from core import renderer_settings
-        if doc is None:
+        if doc is None or doc.viewport is None:
             return
         if getattr(self, "_opening_document", False):
             return
@@ -7691,6 +7691,8 @@ class MainWindow(WorksessionMixin, QMainWindow):
             # ``progress``: the opening document's bar is still up and this
             # is its last stage (MainWindow._open_path_here).
             nonlocal resident_version
+            if doc.viewport is None:
+                return
             if getattr(self, "_opening_document", False) and progress is None:
                 return
             from core import renderer_settings
@@ -7708,7 +7710,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         doc.viewport.sceneVersionChanged.connect(lambda *_: refresh.start(0))
         display._refresh_timer = refresh
         def present():
-            if not display._presentable():
+            if doc.viewport is None or not display._presentable():
                 return
             # Outliner and editing commands can request a paint on the hidden
             # GL viewport. Its paint would normally announce the new version.
@@ -8752,6 +8754,13 @@ class MainWindow(WorksessionMixin, QMainWindow):
                 except Exception:  # noqa: BLE001 — never block closing
                     pass
             grid.deleteLater()
+        # Release peer surfaces before closing their shared Metal renderer.
+        from views.wgpu_view import WgpuView
+        if isinstance(stand_in, WgpuView):
+            stand_in._refresh_timer.stop()
+            stand_in._repaint_timer.stop()
+            stand_in.close()
+            stand_in.deleteLater()
         self._update_title()
 
     # ---- The central widget as extensions see it (#1066) ---------------------
