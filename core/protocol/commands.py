@@ -10,6 +10,7 @@ unknown key raises ``KeyError`` before anything runs. The answer is
 (a :class:`core.protocol.feed.Step`) or None when nothing happened."""
 from __future__ import annotations
 
+from core.history import Command
 from core.protocol.keys import elements, from_json_key, store_of
 
 
@@ -318,6 +319,78 @@ def set_tag(history, placements, tag):
         raise KeyError(f"no tag with key {tag!r}")
     before = history.revision
     history.execute(AssignLayerCommand(gs, layer.key))
+    return _answer(history, before)
+
+
+class SetTagStateCommand(Command):
+    """Show / hide and lock / unlock tags and tag folders as one step. A
+    linked file's tag switched here is the host's *override* of it
+    (``core.links``: kept by the host, never written to the source, the
+    source's later switches no longer reach it), recorded now rather than
+    guessed at the next reload; undo puts the overrides back with the
+    flags."""
+    keeps_paint = True
+    keeps_rows = True
+    doc_undo = False
+
+    def __init__(self, tags, folders, visible, locked):
+        self.tags, self.folders = list(tags), list(folders)
+        self.visible, self.locked = visible, locked
+
+    def doc_after(self, scene, phase) -> None:
+        pass
+
+    def do(self, scene):
+        from copy import deepcopy
+        from core import layers as L, links
+        self.before = L.layer_state(scene)
+        self.links_before = deepcopy({k: e.get("overrides") for k, e in links.registry(scene).items()
+                                      if isinstance(e, dict)})
+        if self.visible is not None:
+            for key in self.folders:
+                scene.folder_visibility[key] = bool(self.visible)
+            L.set_visible(scene, self.tags, self.visible)
+            for key in self.tags:
+                links.note_visibility(scene, key, bool(self.visible))
+            for entity in list(scene.selection):
+                if not scene.entity_visible(entity):
+                    scene.selection.discard(entity)
+        if self.locked is not None:
+            L.set_locked(scene, self.tags, self.locked)
+        scene.version += 1
+
+    def undo(self, scene):
+        from core import layers as L, links
+        L.apply_layer_state(scene, self.before)
+        for key, entry in links.registry(scene).items():
+            if isinstance(entry, dict) and key in self.links_before:
+                entry["overrides"] = dict(self.links_before[key] or {})
+        scene.version += 1
+
+
+def set_tag_state(history, tags=(), folders=(), visible=None, locked=None):
+    """Show or hide (``visible``) and lock or unlock (``locked``) tags
+    (keys) and tag folders (keys; visibility only) as one undoable step.
+    A linked file's tag (``"A / Rails"``) records the host's override in
+    ``plugin_data["links"][path]["overrides"]`` (§1). Unknown keys raise
+    ``KeyError`` before anything runs."""
+    scene = history.scene
+    tags, folders = list(dict.fromkeys(tags)), list(dict.fromkeys(folders))
+    for key in tags:
+        if scene.layer_by_key(key) is None:
+            raise KeyError(f"no tag with key {key!r}")
+    known = set(getattr(scene, "layer_folders", ()) or ())
+    for key in folders:
+        if key not in known:
+            raise KeyError(f"no tag folder with key {key!r}")
+    if visible is None and locked is None:
+        raise ValueError("set_tag_state needs visible or locked")
+    if folders and locked is not None and visible is None:
+        raise ValueError("tag folders have no lock")
+    cmd = SetTagStateCommand(tags, folders, None if visible is None else bool(visible),
+                             None if locked is None else bool(locked))
+    before = history.revision
+    history.execute(cmd)
     return _answer(history, before)
 
 
@@ -666,7 +739,7 @@ COMMANDS = {"follow_me": follow_me, "intersect_faces": intersect_faces,
             "explode_view": explode_view, "purge_unused": purge_unused,
             "purge_debris": purge_debris, "undo": undo, "redo": redo,
             "hide": hide, "unhide": unhide, "lock": lock, "rename_placement": rename_placement,
-            "set_tag": set_tag, "resegment_curve": resegment_curve, "repair_solid": repair_solid,
+            "set_tag": set_tag, "set_tag_state": set_tag_state, "resegment_curve": resegment_curve, "repair_solid": repair_solid,
             "rename_material": rename_material, "edit_material": edit_material,
             "duplicate_material": duplicate_material, "delete_material": delete_material,
             "delete_placements": delete_placements, "rename_component": rename_component,

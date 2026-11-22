@@ -65,6 +65,7 @@ Built (`core.protocol.commands.run(history, name, **args)`):
 | `lock` | `placements: [uid]`, `locked: bool = true` | `LockCommand` |
 | `rename_placement` | `placement: uid`, `name: string` | `RenameGroupCommand` |
 | `set_tag` | `placements: [uid]`, `tag: tag key` | `AssignLayerCommand` |
+| `set_tag_state` | `tags: [tag key]`, `folders: [tag folder key]`, `visible: bool?`, `locked: bool?` (at least one; folders have no lock) | `SetTagStateCommand` (`core/protocol/commands.py`): the flags, one step. A linked file's tag (`"A / Rails"`, nested `"A / C / Flights"`) also records the host's override in `plugin_data["links"][path]["overrides"]`, so the source's later switch of that tag no longer reaches it (`core/links.py`); undo restores flags and overrides. The Project tree's eye and lock use it, on the host's nodes and on a linked file's (its row: the file's tag folder, `"A"`) |
 | `resegment_curve` | `edge: edge key`, `segments: integer` | `ResegmentCurveCommand` (`core/curve_segments.py`): the regular circle, polygon or arc rebuilt in place with that many pieces; a curve that is not flat is `rejected` |
 | `repair_solid` | `placement: uid` | the Solid Inspector's `RepairSolidsCommand` on the placement's mesh (shared by its copies); the answer adds `repaired` counts |
 | `rename_material` | `name`, `new_name` | `RestampMaterialCommand` under the new name: every face (front and back) and container wearing it follows. A name another material has raises `ValueError` |

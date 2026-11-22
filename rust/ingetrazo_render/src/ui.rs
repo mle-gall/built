@@ -275,6 +275,8 @@ pub struct Node {
     expanded: bool,
     selected: u32,
     icon: String,
+    /// What the kind means, on hover (Python sends "kind\u{1e}tip").
+    tip: String,
     /// The active column set's cells (Drawing: colour, line type, weight,
     /// print; Export: class, predefined type).
     cells: Vec<String>,
@@ -513,13 +515,19 @@ impl Ui {
         });
         let g = |v: &Vec<i64>, i: usize| v.get(i).copied().unwrap_or(0);
         let s = |v: &Vec<String>, i: usize| v.get(i).cloned().unwrap_or_default();
-        col.nodes = rows.into_iter().map(|(t, n)| Node {
-            key: s(&t, 0), name: s(&t, 1), kind: s(&t, 2), badge: s(&t, 3), icon: s(&t, 4),
+        col.nodes = rows.into_iter().map(|(t, n)| {
+            let raw = s(&t, 2);
+            let (kind, tip) = match raw.split_once('\u{1e}') {
+                Some((k, tip)) => (k.to_string(), tip.to_string()),
+                None => (raw, String::new()),
+            };
+            Node {
+            key: s(&t, 0), name: s(&t, 1), kind, tip, badge: s(&t, 3), icon: s(&t, 4),
             depth: g(&n, 0) as usize, count: g(&n, 1) as u32, problems: g(&n, 2) as u32, active: g(&n, 3) != 0,
             row: g(&n, 4) as u8, eye: g(&n, 5) as i8, lock: g(&n, 6) as i8, expandable: g(&n, 7) != 0,
             expanded: g(&n, 8) != 0, selected: g(&n, 9) as u32,
             cells: t.get(5..).map(|c| c.to_vec()).unwrap_or_default(),
-        }).collect();
+        }}).collect();
         col.unfiled = unfiled;
     }
     pub fn set_mode(&mut self, mode: String) {
@@ -1558,7 +1566,8 @@ impl Ui {
                                 let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ROW), Sense::click());
                                 // Items in the selection are lit like a picked row; nodes count them.
                                 let lit = col.highlighted.as_deref() == Some(n.key.as_str()) || (n.row != 0 && n.selected > 0);
-                                let filing = col.filing.is_some() && n.row == 0;
+                                let linked = n.row == 0 && n.key.starts_with("n:link");
+                                let filing = col.filing.is_some() && n.row == 0 && !linked;
                                 if lit {
                                     ui.painter().rect_filled(rect, CornerRadius::same(R_ROW), ACTIVE);
                                     ui.painter().rect_filled(Rect::from_center_size(pos2(rect.min.x + 1.0, rect.center().y), vec2(2.0, 12.0)),
@@ -1703,7 +1712,8 @@ impl Ui {
                                 let g = ui.painter().layout_job(one_line(name, font, ink, right - tx));
                                 let name_w = g.size().x;
                                 // A name cut at the column shows whole on hover.
-                                let resp = if g.elided || name_w >= right - tx - 1.0 { resp.on_hover_text(full) } else { resp };
+                                let cut = g.elided || name_w >= right - tx - 1.0;
+                                let resp = if cut { resp.on_hover_text(full) } else { resp };
                                 ui.painter().galley(pos2(tx, cy - g.size().y / 2.0), g, ink);
                                 let mut kx = tx + name_w + 8.0;
                                 if !n.badge.is_empty() && n.row != 5 && kx + 20.0 < right {
@@ -1715,7 +1725,18 @@ impl Ui {
                                 }
                                 if !n.kind.is_empty() && kx + 30.0 < right {
                                     let g = ui.painter().layout_job(one_line(n.kind.clone(), meta(), FAINT, right - kx));
-                                    ui.painter().galley(pos2(kx, cy - g.size().y / 2.0), g, FAINT);
+                                    let at = pos2(kx, cy - g.size().y / 2.0);
+                                    let kind_rect = Rect::from_min_size(at, g.size());
+                                    ui.painter().galley(at, g, FAINT);
+                                    // What "Reference", "Drawing only" and the like mean.
+                                    if !n.tip.is_empty() {
+                                        ui.interact(kind_rect, ui.id().with(("kind_tip", i)), Sense::hover())
+                                            .on_hover_text(n.tip.clone());
+                                    }
+                                } else if !n.tip.is_empty() && resp.hovered() && n.kind.is_empty() {
+                                    // A row with no kind word (Linked files): the tip on the name.
+                                    let r = Rect::from_min_max(pos2(tx, rect.min.y), pos2(kx, rect.max.y));
+                                    ui.interact(r, ui.id().with(("kind_tip", i)), Sense::hover()).on_hover_text(n.tip.clone());
                                 }
                                 if let Some(g) = sel_g {
                                     ui.painter().galley(pos2(sel_right - g.size().x, cy - g.size().y / 2.0), g, ACCENT);
@@ -1743,7 +1764,7 @@ impl Ui {
                                     } else if n.lock >= 0 && lock_r.expand(2.0).contains(p) {
                                         actions.push(format!("lock\u{1f}{}", n.key));
                                     } else if col.filing.is_some() {
-                                        if n.row == 0 {
+                                        if n.row == 0 && !linked {
                                             actions.push(format!("file\u{1f}{}", n.key));
                                             col.filing = None;
                                             col.filter.clear();
@@ -1859,7 +1880,12 @@ impl Ui {
                 ("unique", "Make unique"), ("zoom", "Zoom to"), ("-", ""), ("fileto", "File to…")];
             let comp_menu: &[(&str, &str)] = &[("cplace", "Place a copy"), ("cselect", "Select instances"),
                 ("creplace", "Replace selection with this"), ("-", ""), ("ckeep", "Keep in file"), ("crename", "Rename…")];
-            let menu = if row == 0 { node_menu } else if row == 5 { comp_menu } else { item_menu };
+            // A linked file's rows are read-only here: no filing, kind or rename.
+            let link_menu: &[(&str, &str)] = &[("node", "Select"), ("contents", "Select contents"),
+                ("isolate", "Isolate"), ("zoom", "Zoom to"), ("-", ""), ("eye", "Show / hide"), ("lock", "Lock / unlock"),
+                ("-", ""), ("linkopen", "Open source"), ("linkreload", "Reload")];
+            let menu = if row == 0 && key.starts_with("n:link") { link_menu } else if row == 0 { node_menu }
+                else if row == 5 { comp_menu } else { item_menu };
             let resp = egui::Area::new(egui::Id::new("row_menu"))
                 .fixed_pos(at + vec2(4.0, 4.0))
                 .order(egui::Order::Tooltip)

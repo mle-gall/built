@@ -457,8 +457,15 @@ def bootstrap(scene, registry):
         label = folder_label(scene, f)
         add(folder_keys[f], label.split(links.SEP, 1)[-1] if source else label, parent,
             **({'source': source, 'mount': mount} if source else {}))
+    # Only the host's own links get a mount: a link inside a linked file
+    # comes with that file's structure (core/link_structure.py), never as
+    # a top-level node of the host.
+    from core.link_structure import walk
+    top = {links.stem(inner[-1][1]) for _g, chain, inner, _r in walk(scene) if inner != chain and not chain}
     for stem, src in source_paths.items():
         key = 'link:' + stem
+        if key not in nodes and stem not in top:
+            continue
         if key not in nodes:
             add(key, stem, None, source=src, mount=True)
         # Authored source keys and effective recipes survive differing host vocabularies.

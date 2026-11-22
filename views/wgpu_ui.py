@@ -733,70 +733,109 @@ def kind_of(ifc_class) -> str:
 
 
 SEP = "\x1f"
-#: Item rows shown per node or definition before a "… n more" row.
-ROW_CAP = 400
+#: Item rows shown per node, definition or item before a "Show more" row;
+#: each click on it shows this many more (ui/tree-links: the old cap had
+#: no way past it but the filter).
+ROW_CAP = 200
+#: Between a row's kind and its tooltip (ui.rs splits the kind on it).
+TIP = "\x1e"
+TIPS = {
+    "Reference": "Reference — a linked file. Its contents are read from {path} and are never edited "
+                 "in this document: open the source to change them. Eye and lock here are this "
+                 "document's own overrides of the file's tags; the file itself is not touched.",
+    "Drawing only": "Drawing only — this node has no IFC class: its items are drawn, measured and "
+                    "printed, but not exported as building elements. Give it a kind to export them.",
+    "Linked files": "The files this document references. Each one shows its own structure, read-only.",
+}
+
+
+def _kind_tip(kind, path=None, source=None) -> str:
+    """The row's kind with its tooltip, as ui.rs takes them."""
+    tip = TIPS.get(kind, "").format(path=path or "its file")
+    if source:
+        tip = (tip + "\n\n" if tip else "") + f"From {source} — read-only here."
+    return f"{kind}{TIP}{tip}" if tip else kind
+
+
+def _tree_model(view, scene, cv):
+    """The tree's nodes and memberships (core/link_structure.py), kept
+    until the model changes: a click that only changes the selection
+    rebuilds the rows from it without walking every placement again."""
+    from collections import Counter, defaultdict
+    from core import bim_registry, link_structure, structure
+    cached = view.__dict__.get("_ui_tree_model")
+    key = (id(scene), cv)
+    if cached is not None and cached[0] == key:
+        return cached[1]
+    registry = bim_registry.get(scene)
+    tree = link_structure.Tree(scene, registry)
+    recipes = {k: n["recipe"] for k, n in tree.nodes.items()}
+    counts, problems, to_fix = Counter(), Counter(), []
+    node_layers = defaultdict(Counter)
+    unfiled = set(map(id, tree.unfiled))
+    for k, gs in tree.direct.items():
+        host = tree.nodes.get(k, {}).get("kind") == "host"
+        for g in gs:
+            counts[k] += 1
+            if getattr(g, "layer", None):
+                node_layers[k][g.layer] += 1
+            if host:
+                bad = int(recipes[k].get("class") is not None and not structure._has_status(g.ifc or {})) \
+                    + int(id(g) in unfiled)
+                problems[k] += bad
+                if bad:
+                    to_fix.append(g)
+    order = tree.order()
+    for k, _d in reversed(order):
+        parent = tree.nodes[k]["parent"]
+        counts[parent] += counts[k]
+        problems[parent] += problems[k]
+    model = dict(tree=tree, registry=registry, recipes=recipes, counts=counts, problems=problems,
+                 to_fix=to_fix, node_layers=node_layers, order=order)
+    view._ui_tree_model = (key, model)
+    return model
 
 
 def _tree(view, win) -> None:
     """The Project tree as display rows (council 2026-11-22, R1–R8): nodes;
     under an expanded node its filed items, one row per placement, copies of
     a component grouped by definition; an item's contents on expand, with
-    parts filed elsewhere as dimmed rows pointing to their node. Python owns
-    expansion and filtering; the dock only draws."""
+    parts filed elsewhere as dimmed rows pointing to their node. Linked
+    files sit under «Linked files», each with its own structure below it
+    (core/link_structure.py). Item lists are paged. Python owns expansion
+    and filtering; the dock only draws."""
     scene = getattr(win.viewport, "scene", None)
     if scene is None:
         return
     exp = view.__dict__.setdefault("_ui_exp", set())
+    pages = view.__dict__.setdefault("_ui_pages", {})
     flt = view.__dict__.get("_ui_filter", "")
     colset = view.__dict__.get("_ui_colset", 0)
     sel_ids = {id(e) for e in scene.selection}
     # Problems (watertight) and the Export cells (quantities) read geometry.
     geometric = view.__dict__.get("_ui_mode") == "problems" or colset == 2
     cv = scene.content_version if geometric else _tree_version(view, win, scene)
-    sig = (id(scene), cv, tuple(sorted(exp)), flt, len(sel_ids), hash(frozenset(sel_ids)),
-           colset, getattr(view, "_ui_layer_rev", 0))
+    sig = (id(scene), cv, tuple(sorted(exp)), tuple(sorted(pages.items())), flt, len(sel_ids),
+           hash(frozenset(sel_ids)), colset, getattr(view, "_ui_layer_rev", 0))
     if sig == getattr(view, "_ui_tree_sig", None):
         return
     first = getattr(view, "_ui_tree_sig", None) is None
     view._ui_tree_sig = sig
     mode = view.__dict__.get("_ui_mode", "")
     from collections import Counter, defaultdict
-    from core import bim_registry, links, structure
-    registry = bim_registry.get(scene)
-    nodes = structure._nodes(registry)
-    recipes = {k: structure.resolve(registry, k) for k in nodes}
-    children = structure.tree(registry)
-    direct, counts, problems, unfiled, to_fix = defaultdict(list), Counter(), Counter(), [], []
-    node_of = {}
-    # The tags (layers) a node's items actually carry: what its eye, lock
-    # and Drawing cells act on (recipe tags are labels, items carry keys).
-    node_layers = defaultdict(Counter)
-    for g, source, root, key in structure._memberships(scene, registry):
-        review = structure._is_unsorted(g, source, root, key, recipes)
-        if review:
-            unfiled.append(g)
-        if key in nodes:
-            node_of[id(g)] = key
-            direct[key].append(g)
-            if getattr(g, "layer", None):
-                node_layers[key][g.layer] += 1
-            counts[key] += 1
-            bad = int(recipes[key].get("class") is not None and not structure._has_status(g.ifc or {})) + int(review)
-            problems[key] += bad
-            if bad:
-                to_fix.append(g)
-    order, depth, stack = [], {}, [(k, 0) for k in reversed(children[None])]
-    while stack:
-        key, d = stack.pop()
-        order.append(key)
-        depth[key] = d
-        stack.extend((c, d + 1) for c in reversed(children[key]))
+    from core import links, structure
+    from core import layers as L
+    model = _tree_model(view, scene, cv)
+    tree, registry, recipes = model["tree"], model["registry"], model["recipes"]
+    counts, problems, to_fix = model["counts"], model["problems"], model["to_fix"]
+    node_layers, order = model["node_layers"], model["order"]
+    nodes, children, direct, unfiled = tree.nodes, tree.children, tree.direct, tree.unfiled
+    node_of = tree.member
+    depth = dict(order)
+    order = [k for k, _d in order]
     selected = Counter(node_of[id(e)] for e in scene.selection if id(e) in node_of)
     for key in reversed(order):
-        parent = nodes[key]["parent"]
-        counts[parent] += counts[key]
-        problems[parent] += problems[key]
-        selected[parent] += selected[key]
+        selected[nodes[key]["parent"]] += selected[key]
     active = registry.get("structure", {}).get("active")
     if first:
         exp.update(f"n:{k}" for k in order if not nodes[k]["parent"])
@@ -811,22 +850,59 @@ def _tree(view, win) -> None:
             paths[key] = " › ".join(structure.path(registry, key))
         return paths[key]
 
+    tag_memo = {}
+
+    def node_tags(key):
+        # The tags a row's eye and lock act on: those its items (and its
+        # sub-nodes' items) carry, and the tags its recipes name.
+        if key not in tag_memo:
+            out = []
+            for k in tree.subtree(key):
+                out.extend(node_layers[k])
+                n = nodes[k]
+                if n["kind"] == "host":
+                    ly = _layer(scene, n["recipe"].get("tag"))
+                    if ly is not None:
+                        out.append(ly.key)
+                elif n["tag"]:
+                    out.append(n["tag"])
+            tag_memo[key] = list(dict.fromkeys(out))
+        return tag_memo[key]
+
     def main_layer(key):
-        stack = [key]
-        while stack:
-            k = stack.pop(0)
-            if node_layers[k]:
-                ly = scene.layer(node_layers[k].most_common(1)[0][0])
-                if ly is not None:
-                    return ly
-            stack.extend(children.get(k, ()))
-        return _layer(scene, recipes.get(key, {}).get("tag"))
+        if nodes[key]["kind"] == "host":
+            stack = [key]
+            while stack:
+                k = stack.pop(0)
+                if node_layers[k]:
+                    ly = scene.layer(node_layers[k].most_common(1)[0][0])
+                    if ly is not None:
+                        return ly
+                stack.extend(children.get(k, ()))
+            return _layer(scene, recipes.get(key, {}).get("tag"))
+        ts = node_tags(key)
+        return scene.layer(ts[0]) if ts else None
 
     def layer_state(key):
+        n = nodes[key]
+        if n["kind"] in ("link", "linked"):
+            bases = [n["folder"]] if n["kind"] == "link" else [
+                nodes[c]["folder"] for c in children.get(key, ()) if nodes[c]["kind"] == "link"]
+            if not bases:
+                return -1, -1
+            ts = tree.file_tags(key)
+            eye = int(all(L.folder_visible(scene, b) for b in bases))
+            lock = int(bool(ts) and all(bool(getattr(scene.layer(t), "locked", False)) for t in ts))
+            return eye, lock
+        if n["kind"] == "tagfolder":
+            ts = node_tags(key)
+            return int(L.folder_visible(scene, n["folder"])), \
+                int(bool(ts) and bool(getattr(scene.layer(ts[0]), "locked", False)))
         layer = main_layer(key)
         if layer is None:
             return -1, -1
-        return int(bool(getattr(layer, "visible", True))), int(bool(getattr(layer, "locked", False)))
+        visible = L.effective_visible(scene, layer) if n["kind"] != "host" else bool(getattr(layer, "visible", True))
+        return int(visible), int(bool(getattr(layer, "locked", False)))
 
     # --- filtering: words match names and kinds; tokens test items ---------
     words, tokens = [], []
@@ -899,19 +975,25 @@ def _tree(view, win) -> None:
     def node_qty(key):
         # The node's measured quantities, its sub-nodes' included, per unit.
         if key not in qty_memo:
-            total, stack = defaultdict(float), [key]
-            while stack:
-                k = stack.pop()
-                for g in direct.get(k, ()):
-                    for unit, v in _group_qty(view, g).items():
-                        total[unit] += v
-                stack.extend(children.get(k, ()))
+            total = defaultdict(float)
+            for g in tree.members(key):
+                for unit, v in _group_qty(view, g).items():
+                    total[unit] += v
             qty_memo[key] = dict(total)
         return qty_memo[key]
 
     def add(key, name, kind, badge, icon, d, count, probs, act, row, eye, lock, expandable, expanded, sel, extra=()):
         rows.append(([key, name, kind, badge, icon, *extra],
                      [d, count, probs, int(act), row, eye, lock, int(expandable), int(expanded), sel]))
+
+    def more(key, shown, total, d):
+        # The page's end: one row that shows the next page when clicked.
+        left = total - shown
+        add(f"m:{key}", f"Show {min(ROW_CAP, left)} more ({left} not shown)", "", "", "", d, 0, 0, False,
+            4, -1, -1, False, False, 0)
+
+    import re
+    natural = lambda t: [int(p) if p.isdigit() else p for p in re.split(r"(\d+)", (t or "").lower())]
 
     def add_items(groups, key, d):
         by_def = defaultdict(list)
@@ -928,13 +1010,11 @@ def _tree(view, win) -> None:
             else:
                 singles.extend(gs)
         entries += [("one", g.name or "", [g]) for g in singles]
-        import re
-        natural = lambda t: [int(p) if p.isdigit() else p for p in re.split(r"(\d+)", (t or "").lower())]
         entries.sort(key=lambda e: natural(e[1]))
+        cap = pages.get(key, ROW_CAP)
         for n, (what, name, gs) in enumerate(entries):
-            if n >= ROW_CAP:
-                add(f"m:{key}", f"… {len(entries) - ROW_CAP} more — filter to find them", "", "", "", d, 0, 0, False,
-                    4, -1, -1, False, False, 0)
+            if n >= cap:
+                more(key, cap, len(entries), d)
                 break
             if what == "def":
                 dk = f"d:{key}:{id(gs[0].mesh)}"
@@ -942,8 +1022,11 @@ def _tree(view, win) -> None:
                 add(dk, name or "Component", "", f"×{len(gs)}", "component", d, 0,
                     sum(1 for g in gs if id(g) in to_fix_set), False, 1, -1, -1, True, dk in exp, sel)
                 if dk in exp or filtering:
-                    for g in gs:
+                    dcap = pages.get(dk, ROW_CAP)
+                    for g in gs[:dcap]:
                         add_item(g, key, d + 1)
+                    if len(gs) > dcap:
+                        more(dk, dcap, len(gs), d + 1)
             else:
                 add_item(gs[0], key, d)
 
@@ -955,13 +1038,16 @@ def _tree(view, win) -> None:
             0 if getattr(g, "hidden", False) else 1, int(bool(getattr(g, "locked", False))),
             bool(kids), ik in exp, int(id(g) in sel_ids), cells(g=g))
         if kids and ik in exp:
-            for c in kids[:ROW_CAP]:
+            cap = pages.get(ik, ROW_CAP)
+            for c in kids[:cap]:
                 where = node_of.get(id(c))
-                if where is not None and where != key:
+                if where is not None and where != key and where in nodes:
                     add(f"g:{c.uid}", c.name or "Group", "", f"→ {nodes[where]['name']}", item_kind(c), d + 1,
                         0, 0, False, 3, -1, -1, False, False, int(id(c) in sel_ids))
                 else:
                     add_item(c, key, d + 1, row=2)
+            if len(kids) > cap:
+                more(ik, cap, len(kids), d + 1)
 
     hidden_below = None
     for key in order:
@@ -975,14 +1061,18 @@ def _tree(view, win) -> None:
         node = nodes[key]
         name = node["name"]
         cls = recipes[key].get("class")
-        if "source" in node:
-            stem = links.stem(node["source"])
-            name = f"{name} ↗" if name == stem else f"{name} ↗ {stem}"
-            kind = "Reference"
+        source = links.stem(node["path"]) + ".igz" if node["path"] else None
+        if node["kind"] == "link":
+            name = f"{name} ↗"
+            kind = _kind_tip("Reference", path=node["path"])
+        elif node["kind"] == "linked":
+            kind = TIP + TIPS["Linked files"]
+        elif node["kind"] in ("tag", "tagfolder"):
+            kind = _kind_tip("Tag" if node["kind"] == "tag" else "", source=source)
         elif cls is None and children.get(key):
-            kind = ""
+            kind = _kind_tip("", source=source)
         else:
-            kind = kind_of(cls)
+            kind = _kind_tip(kind_of(cls), source=source)
         nk = f"n:{key}"
         expanded = filtering or nk in exp
         eye, lock = layer_state(key)
@@ -1001,9 +1091,12 @@ def _tree(view, win) -> None:
         if uk in exp:
             add_items(unfiled, "", 1)
     if mode == "problems":
-        rows = _problem_rows(view, scene, registry, nodes, recipes, unfiled, node_of, exp, sel_ids)
+        host = structure._nodes(registry)
+        host_of = {i: k for i, k in node_of.items() if k in host}
+        rows = _problem_rows(view, scene, registry, host, {k: recipes[k] for k in host if k in recipes},
+                             unfiled, host_of, exp, sel_ids)
     view._ui_tree = dict(direct=direct, children=children, unfiled=unfiled, recipes=recipes, to_fix=to_fix,
-                         active=active, node_of=node_of, nodes=nodes,
+                         active=active, node_of=node_of, nodes=nodes, tree=tree, counts=counts,
                          node_layers={k: list(c) for k, c in node_layers.items()})
     view.renderer.ui_set_tree(rows, len(unfiled))
     view.renderer.ui_set_colset(colset)
@@ -1012,7 +1105,7 @@ def _tree(view, win) -> None:
     if not getattr(view, "_ui_kinds_sent", False):
         view.renderer.ui_set_kinds(sorted(set(KINDS.values()) - {"Level", "Building", "Site"}))
         view._ui_kinds_sent = True
-    path = node_path(active) if active in nodes else ""
+    path = node_path(active) if active in structure._nodes(registry) else ""
     view.renderer.ui_set_delivery(path, len(unfiled), len(to_fix))
 
 
@@ -1472,7 +1565,7 @@ def _tree_action(win, view, action) -> None:
     from core import bim_registry, structure
     from core import layers as L
     from core.group import Group
-    from core.history import CompoundCommand, MakeUniqueCommand, SetLayerVisibilityCommand, SetRegistryCommand
+    from core.history import CompoundCommand, MakeUniqueCommand, SetRegistryCommand
     from views.structure_recipe import execute, update_node
     if SEP not in action:
         # The inspector's chips and the delivery counts: "verb:arg".
@@ -1517,6 +1610,9 @@ def _tree_action(win, view, action) -> None:
                                 f"{d['holes']} holes closed, {d['partitions']} partitions, {d['reversed']} faces turned")
             view._ui_insp_sig = None
             vp.update()
+        elif verb == "insp" and key.startswith("lnk:"):
+            what, _, nk = key[4:].partition(":")
+            _tree_action(win, view, f"{'eye' if what == 'eye' else what}{SEP}n:{nk}")
         elif verb == "insp" and key.startswith("link") and groups:
             _link_action(win, view, groups[0], key)
         elif verb == "unfiled":
@@ -1542,24 +1638,62 @@ def _tree_action(win, view, action) -> None:
         pool = data.get("direct", {}).get(nkey, []) if nkey else data.get("unfiled", [])
         return [g for g in pool if str(id(g.mesh)) == mesh]
 
+    from core import link_structure
+    tree = data.get("tree")
+    linked = link_structure.is_linked_key(node)
+    tnode = (data.get("nodes") or {}).get(node) or {}
+
     def members():
         if node == "":
             return list(data.get("unfiled", []))
         return _tree_groups(view, node) if node else copies() or ([item()] if item() else [])
 
+    def placements():
+        # A linked row's own placements: the link placements of the files
+        # it stands for (one item each), never their tens of thousands of parts.
+        if tree is None or not node:
+            return []
+        keys = [node] if tnode.get("kind") == "link" else [
+            c for c in tree.children.get(node, ()) if tree.nodes[c]["kind"] == "link"]
+        return [g for k in keys for g in tree.links.get(k, ())]
+
+    def shown():
+        # What Isolate, Zoom and the like act on for this row.
+        if linked and tnode.get("kind") in ("link", "linked"):
+            return placements()
+        return members()
+
     def tags(key):
-        # The layers the node's items (and its sub-nodes') carry; else the
-        # layer its recipe names, when there is one.
+        # The layers the node's items (and its sub-nodes') carry, and the
+        # tags its recipes name.
         out, stack = [], [key]
+        nodes_ = data.get("nodes", {})
         while stack:
             k = stack.pop()
             out.extend(data.get("node_layers", {}).get(k, ()))
+            n = nodes_.get(k) or {}
+            if n.get("kind") == "host":
+                ly = _layer(scene, n.get("recipe", {}).get("tag"))
+                if ly is not None:
+                    out.append(ly.key)
+            elif n.get("tag"):
+                out.append(n["tag"])
             stack.extend(data.get("children", {}).get(k, ()))
-        if not out:
-            ly = _layer(scene, data.get("recipes", {}).get(key, {}).get("tag"))
-            if ly is not None:
-                out.append(ly.key)
         return list(dict.fromkeys(out))
+
+    def link_folders(key):
+        n = data.get("nodes", {}).get(key) or {}
+        if n.get("kind") == "link":
+            return [n["folder"]]
+        if n.get("kind") == "linked":
+            return [data["nodes"][c]["folder"] for c in data.get("children", {}).get(key, ())
+                    if data["nodes"][c].get("kind") == "link"]
+        if n.get("kind") == "tagfolder":
+            return [n["folder"]]
+        return []
+
+    def read_only():
+        vp.flash_status("A linked file's structure is read-only here: open its source to change it")
 
     def rebuild():
         view._ui_tree_sig = None
@@ -1637,6 +1771,36 @@ def _tree_action(win, view, action) -> None:
         elif verb == "collapseall":
             exp.clear()
             rebuild()
+        elif verb == "loose" and kind == "m":
+            # "Show more": the next page of that list.
+            pages = view.__dict__.setdefault("_ui_pages", {})
+            pages[ident] = pages.get(ident, ROW_CAP) + ROW_CAP
+            rebuild()
+        elif verb == "node" and linked:
+            # A linked row selects the link placement(s) it stands for (a
+            # node inside a file selects nothing): the inspector says what
+            # it is. Its parts come with "Select contents".
+            view._ui_insp_node = None
+            _select(win, placements() if tnode.get("kind") in ("link", "linked") else [])
+            sel = list(scene.selection)
+            view._ui_insp_node = (node, (len(sel), id(sel[0]) if sel else 0, id(sel[-1]) if sel else 0))
+        elif verb == "contents":
+            _select(win, members())
+        elif verb in ("linkopen", "linkreload", "linkunlink") and linked:
+            gs = placements()
+            if not gs:
+                return
+            if verb == "linkunlink":
+                _select(win, gs[:1])
+                unlink = getattr(win, "_on_make_unique", None)
+                if unlink is not None:
+                    unlink()
+            else:
+                _link_action(win, view, gs[0], verb)
+            rebuild()
+        elif verb in ("active", "filehere", "file", "newchild", "delete", "kind", "rename", "hidemembers") \
+                and (linked or (verb == "file" and link_structure.is_linked_key(ident if kind == "n" else rk))):
+            read_only()
         elif verb in ("node", "item", "loose") or verb == "instances":
             if verb == "node" and node:
                 view._ui_insp_node = None   # set after the selection lands
@@ -1657,21 +1821,28 @@ def _tree_action(win, view, action) -> None:
                 _select(win, [g])
             rebuild()
         elif verb == "isolate":
-            _isolate(win, [g.uid for g in members()])
+            _isolate(win, [g.uid for g in shown()])
         elif verb == "open":
             g = item()
             if g is not None:
                 vp.begin_group_edit(g)
         elif verb == "zoom":
-            _select(win, members())
+            _select(win, shown())
             win._on_zoom_selection()
         elif verb == "eye":
-            if node:
+            folders = link_folders(node) if node else []
+            if folders:
+                # A linked file (or one of its tag folders): its folder in
+                # the host, so its nested files follow.
+                on = not all(L.folder_visible(scene, f) for f in folders)
+                _core(vp, "set_tag_state", folders=folders, visible=on)
+            elif node:
                 ts = tags(node)
                 if ts:
                     layer = scene.layer(ts[0])
-                    on = not bool(getattr(layer, "visible", True)) if layer is not None else True
-                    vp.history.execute(SetLayerVisibilityCommand(ts, on))
+                    shown_now = (L.effective_visible(scene, layer) if linked else bool(layer.visible)) \
+                        if layer is not None else False
+                    _core(vp, "set_tag_state", tags=ts, visible=not shown_now)
             else:
                 gs = members()
                 if gs:
@@ -1680,11 +1851,11 @@ def _tree_action(win, view, action) -> None:
             vp.notify_scene_changed() if hasattr(vp, "notify_scene_changed") else vp.update()
         elif verb == "lock" or verb == "lockitem":
             if node:
-                ts = tags(node)
+                ts = tree.file_tags(node) if tree is not None and tnode.get("kind") in ("link", "linked") \
+                    else tags(node)
                 if ts:
                     layer = scene.layer(ts[0])
-                    L.set_locked(scene, ts, not bool(getattr(layer, "locked", False)))
-                    scene.version += 1
+                    _core(vp, "set_tag_state", tags=ts, locked=not bool(getattr(layer, "locked", False)))
             else:
                 gs = members()
                 if gs:
@@ -1722,7 +1893,7 @@ def _tree_action(win, view, action) -> None:
             execute(vp, SetRegistryCommand(registry))
         elif verb == "kind" and node:
             cls = next((c for c, k in KINDS.items() if k == extra and c), None)
-            recipe = dict(data.get("nodes", {}).get(node, {}).get("recipe", {}))
+            recipe = dict(structure._nodes(bim_registry.get(scene)).get(node, {}).get("recipe", {}))
             if cls:
                 recipe["class"] = cls
             else:
@@ -1897,6 +2068,10 @@ def _inspector(view, win) -> None:
         if got is not None:
             view.renderer.ui_set_inspector(*got)
             return
+    if node_focus is not None and node_focus in (data.get("nodes") or {}) \
+            and data["nodes"][node_focus].get("kind") != "host":
+        view.renderer.ui_set_inspector(*_linked_inspector(view, win, data, node_focus))
+        return
     if node_focus is not None and node_focus in nodes:
         node = nodes[node_focus]
         recipe = structure.resolve(registry, node_focus)
@@ -2027,6 +2202,68 @@ def _inspector(view, win) -> None:
         sections.append(("Status", [("Missing on", f"{missing} items")]))
         sections.append(("Actions", [("status:" + v, "All " + v.lower()) for v in STATUS_CHOICES]))
     view.renderer.ui_set_inspector(f"{len(sel)} selected", sections)
+
+
+def _linked_inspector(view, win, data, key):
+    """A linked row in the inspector: what it is (a reference to another
+    file, read-only here), where that file is, its state and visibility,
+    and what can be done with it."""
+    from pathlib import Path
+    from core import layers as L
+    from core import links
+    scene = win.viewport.scene
+    tree = data["tree"]
+    node = tree.nodes[key]
+    count = data.get("counts", {}).get(key, 0)
+    kind = node["kind"]
+    if kind == "linked":
+        files = [tree.nodes[c] for c in tree.children.get(key, ()) if tree.nodes[c]["kind"] == "link"]
+        rows = [("What", "Files this document references"), ("Files", str(len(files))), ("Items", str(count))]
+        rows += [(f["name"], str(data["counts"].get(c, 0)) + " items")
+                 for c, f in ((c, tree.nodes[c]) for c in tree.children.get(key, ()))
+                 if f["kind"] == "link"][:12]
+        acts = [("lnk:eye:" + key, "Show / hide all"), ("isolate:" + key, "Isolate")]
+        return node["name"], [("Linked files", rows), ("Actions", acts)]
+    path = node["path"] or ""
+    stems = node["stems"]
+    if kind == "link":
+        copies = tree.links.get(key, [])
+        top = len(stems) == 1
+        state = _link_state(scene, links.link_of(copies[0])) if copies else "missing"
+        visible = L.folder_visible(scene, node["folder"])
+        entry = links.registry(scene).get(path) or {}
+        overrides = len(entry.get("overrides") or {})
+        parent = Path(path).parent
+        where = str(parent) if len(parent.parts) <= 3 else "…/" + "/".join(parent.parts[-2:])
+        rows = [("What", "Reference (read-only)"), ("File", Path(path).name),
+                ("Folder", where), ("Status", LINK_STATES.get(state, state)),
+                ("Placed", f"{len(copies)} " + ("copy" if len(copies) == 1 else "copies")),
+                ("Items", str(count)),
+                ("Visibility", ("Shown" if visible else "Hidden")
+                 + (f" · {overrides} tag override{'s' * (overrides != 1)}" if overrides else ""))]
+        if not top:
+            rows.insert(2, ("Inside", " › ".join(stems[:-1])))
+        acts = [("lnk:eye:" + key, "Hide" if visible else "Show"), ("isolate:" + key, "Isolate"),
+                ("lnk:contents:" + key, "Select contents"), ("lnk:linkopen:" + key, "Open source")]
+        if top:
+            acts += [("lnk:linkreload:" + key, "Reload" if state != "modified" else "Reload changes"),
+                     ("lnk:linkunlink:" + key, "Unlink (keep geometry)")]
+        return node["name"], [("Linked file", rows), ("Actions", acts)]
+    ts = [t for t in (data.get("node_layers", {}).get(k, ()) for k in tree.subtree(key)) for t in t]
+    if node["tag"]:
+        ts.append(node["tag"])
+    layer = scene.layer(ts[0]) if ts else None
+    visible = L.effective_visible(scene, layer) if layer is not None else True
+    cls = node["recipe"].get("class")
+    rows = [("Name", node["name"]), ("Kind", "Tag" if kind == "tag" else "Tag folder" if kind == "tagfolder"
+                                       else kind_of(cls) if cls or not tree.children.get(key) else "Group of nodes"),
+            ("From", Path(path).name + " — read-only here"), ("Items", str(count)),
+            ("Visibility", "Shown" if visible else "Hidden")]
+    acts = [("lnk:eye:" + key, "Hide" if visible else "Show"), ("isolate:" + key, "Isolate"),
+            ("lnk:contents:" + key, "Select contents")]
+    export = [("IFC class", str(cls or "none (drawing only)")),
+              ("Tag", str(scene.layer(node["tag"]).name if node["tag"] and scene.layer(node["tag"]) else "—"))]
+    return node["name"], [("Node", rows), ("Actions", acts), ("Export details", export)]
 
 
 LINK_STATES = {"resolved": "Up to date", "modified": "Changed on disk", "missing": "Missing", "packed": "Packed in this file"}
