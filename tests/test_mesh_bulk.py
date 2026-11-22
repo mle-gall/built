@@ -11,6 +11,7 @@ import pytest
 from PySide6.QtGui import QVector3D
 
 from core.mesh import Mesh
+from core.store_mesh import StoreMesh
 
 
 def _gen_faces(n, seed):
@@ -37,7 +38,10 @@ def _gen_faces(n, seed):
 def _build_sequential(faces):
     mesh = Mesh()
     for outer, holes, attrs in faces:
-        f = mesh.add_face([QVector3D(*p) for p in outer],
+        if isinstance(mesh, StoreMesh):
+            f = mesh.add_face(outer, holes)
+        else:
+            f = mesh.add_face([QVector3D(*p) for p in outer],
                           [[QVector3D(*p) for p in h] for h in holes] or None)
         if attrs:
             f.attrs.update(attrs)
@@ -111,15 +115,22 @@ def _reference_bulk_weld(mesh, points):
     """Scalar oracle: isolated cells first, then candidate points in order."""
     from core.mesh import _key
 
-    points = [QVector3D(*p) for p in np.asarray(points, dtype=np.float32).tolist()]
-    keys = [_key(p) for p in points]
+    if isinstance(mesh, StoreMesh):
+        from core.mesh import _KEY_SCALE
+        points = np.asarray(points, dtype=np.float64).tolist()
+        keys = [tuple(round(x * _KEY_SCALE) for x in p) for p in points]
+        registry = set(map(tuple, mesh._store.registry()[0].tolist()))
+    else:
+        points = [QVector3D(*p) for p in np.asarray(points, dtype=np.float32).tolist()]
+        keys = [_key(p) for p in points]
+        registry = mesh._registry
     first = {}
     for i, key in enumerate(keys):
         first.setdefault(key, i)
     cells = set(first)
     candidates = {
         key for key in cells if any(
-            (key[0] + dx, key[1] + dy, key[2] + dz) in mesh._registry
+            (key[0] + dx, key[1] + dy, key[2] + dz) in registry
             or ((dx or dy or dz)
                 and (key[0] + dx, key[1] + dy, key[2] + dz) in cells)
             for dx in (-1, 0, 1) for dy in (-1, 0, 1) for dz in (-1, 0, 1))

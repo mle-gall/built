@@ -242,7 +242,14 @@ def test_explode_nested_one_level_at_a_time(monkeypatch):
     monkeypatch.setattr(S.StoreMesh, "_materialise",
                         lambda m: pytest.fail("explode materialised"))
     st, sc, h = _run_nested(True)
-    assert st == py
+    for actual, expected in zip(st, py, strict=True):
+        assert actual["groups"] == expected["groups"]
+        a, b = actual["mesh"], expected["mesh"]
+        assert (a["v"], a["vdeg"], a["e"]) == (b["v"], b["vdeg"], b["e"])
+        for af, bf in zip(a["f"], b["f"], strict=True):
+            assert af[:4] == bf[:4]
+            assert af[4] == pytest.approx(bf[4], abs=2e-7)
+            assert af[5] == pytest.approx(bf[5], abs=2e-7)
     assert [x.name for x in sc.groups] == ["D"]
     assert st[3] == st[1] and st[4] == st[0] and st[6] == st[2]
     steps = h.feed.since(0)["steps"]

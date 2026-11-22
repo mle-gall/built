@@ -46,7 +46,7 @@ def _scene(store):
 
 def _read(m):
     """What the mesh shows, by key (the oracle)."""
-    vs = {v.key: (v.position.toTuple(), frozenset(e.key for e in v.edges))
+    vs = {v.key: (v.position_tuple(), frozenset(e.key for e in v.edges))
           for v in m.vertices}
     es = {e.key: ((e.v0.key, e.v1.key), bool(e.soft), bool(e.hidden),
                   e.curve, e.layer, tuple(f.key for f in e.faces))

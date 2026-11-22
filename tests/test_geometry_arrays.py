@@ -422,7 +422,9 @@ def test_tag_cache_invalidates_on_tag_epoch():
 
 
 @pytest.mark.parametrize('closed', [False, True])
-def test_uniform_far_from_origin_preserves_float32_volume(closed):
+@pytest.mark.parametrize("store", [False, True])
+def test_uniform_far_from_origin_preserves_volume(closed, store, monkeypatch):
+    monkeypatch.setenv("INGETRAZO_STORE", str(int(store)))
     from core.geometry_arrays import owned_placements, placement_quantities
     g = cube() if closed else Group()
     if not closed:
@@ -435,7 +437,8 @@ def test_uniform_far_from_origin_preserves_float32_volume(closed):
         arrays._measurements = None
     expected = quantities(reference)
     if closed:
-        assert expected[2] != pytest.approx(1e-6, rel=1e-3, abs=1e-12)
+        cube_volume = pytest.approx(1e-6, rel=1e-3, abs=1e-12)
+        assert (expected[2] == cube_volume) == reference[0].model_f64
     assert placement_quantities(list(owned_placements(g))) == pytest.approx(expected)
 
 

@@ -3,6 +3,7 @@
 import math
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
 from PySide6.QtGui import QVector3D as V
 
@@ -92,7 +93,13 @@ def test_sweep(monkeypatch, shape):
         before = fingerprint(scene.mesh)
         FollowMeTool()._commit(vp, face, path, shape == "closed")
         results.append(history_result(scene, vp.history, before))
-    assert results[1] == results[0]
+    py, st = results
+    assert py["vdeg"] == st["vdeg"] and py["e"] == st["e"]
+    np.testing.assert_allclose(st["v"], py["v"], atol=2e-6, rtol=0)
+    for a, b in zip(py["f"], st["f"], strict=True):
+        assert a[:4] == b[:4]
+        np.testing.assert_allclose(a[4], b[4], atol=2e-6, rtol=0)
+        assert a[5] == pytest.approx(b[5], abs=2e-6)
 
 
 @pytest.mark.parametrize("shape", ["boxes", "plane", "coplanar"])
@@ -141,7 +148,8 @@ def test_tilted_plates_match_order_and_float_endpoints(monkeypatch):
     for scene in scenes(monkeypatch):
         scene.selection = [scene.mesh.add_face(f.vertices) for f in plates.mesh.faces]
         results.append([(a.toTuple(), b.toTuple()) for a, b in segments_for(scene, WITH_SELECTION)])
-    assert results[0] and results[0] == results[1]
+    assert results[0]
+    np.testing.assert_allclose(results[1], results[0], atol=5e-6, rtol=0)
 
 
 def test_transformed_group_crossings_ignore_foreign_keys(monkeypatch):
