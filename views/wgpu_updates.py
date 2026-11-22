@@ -361,7 +361,7 @@ class InstanceUpdates:
 
     def diff(self, scene):
         """Return changed resident rows, retaining prototype and placement IDs."""
-        if any(self.packed.origin) or any(any(o) for o in self.packed.prototype_origins):
+        if self.packed.model_translations is not None:
             return None
         if scene is not self.scene:
             return None
