@@ -264,7 +264,10 @@ def solid_parts(mesh: Mesh) -> list:
             k = owner.get(vid)
             if k is not None:
                 votes[k] = votes.get(k, 0) + 1
-        best = max(votes.items(), key=lambda kv: kv[1]) if votes else None
+        # The most votes; a tie goes to the first solid (``corners`` is a
+        # set, so its order must not decide).
+        best = (max(votes.items(), key=lambda kv: (kv[1], -kv[0]))
+                if votes else None)
         if best is not None and best[1] >= ATTACH_SHARE * len(corners):
             pieces[best[0]].extend(fs)
         else:
