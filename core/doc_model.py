@@ -199,7 +199,14 @@ def _bind(value, key, which):
         if src is not None:
             value._built_source = src
     else:
-        raise TypeError(f"a placement matrix is a QMatrix4x4, not {t.__name__}")
+        # 16 numbers, column-major as ``QMatrix4x4.data()`` gives them.
+        try:
+            data = [float(v) for v in value]
+        except (TypeError, ValueError):
+            data = ()
+        if len(data) != 16:
+            raise TypeError(f"a placement matrix is a QMatrix4x4, not {t.__name__}")
+        value = _make(key, which, data, None)
     value._doc_bind = (key, which)
     return value, value.data(), getattr(value, "_built_source", None)
 
@@ -250,6 +257,46 @@ def handle_state(obj, fields) -> dict:
             value = list(value)
         out[name] = value
     return out
+
+
+def is_list(value) -> bool:
+    """A list, or a document list (``g.children``, ``scene.groups``,
+    ``scene.layers``) that behaves as one."""
+    return isinstance(value, list) or (
+        ENABLED and type(value) is NATIVE.HandleList)
+
+
+def object_state(obj) -> dict:
+    """Every attribute of a placement or a tag by name, what ``vars(obj)``
+    or its ``__slots__`` gave when all of them were Python attributes
+    (document lists as plain lists)."""
+    from core.group import GROUP_FIELDS, Group
+    from core.layers import Layer, layer_values
+    if isinstance(obj, Group):
+        return handle_state(obj, GROUP_FIELDS)
+    if isinstance(obj, Layer):
+        return layer_values(obj)
+    if hasattr(obj, "__dict__"):
+        return vars(obj)
+    return {k: getattr(obj, k) for k in obj.__slots__ if hasattr(obj, k)}
+
+
+def set_object_state(obj, values: dict) -> None:
+    """Put back an :func:`object_state` (the instance dict replaced, as
+    ``vars(obj).clear(); vars(obj).update(values)`` did)."""
+    from core.layers import TAG_FIELDS, Layer
+    values = dict(values)
+    doc = {}
+    if ENABLED and isinstance(obj, Layer):
+        doc = {k: values.pop(k) for k in TAG_FIELDS if k in values}
+    if hasattr(obj, "__dict__"):
+        vars(obj).clear()
+        vars(obj).update(values)
+    else:
+        for key, value in values.items():
+            setattr(obj, key, value)
+    for key, value in doc.items():
+        setattr(obj, key, value)
 
 
 def set_handle_state(obj, state) -> None:
