@@ -167,8 +167,8 @@ class SavedView:
     def apply_camera(self, camera) -> None:
         """Only the camera, its lens included (a scene transition glides it
         there first)."""
-        from PySide6.QtGui import QVector3D
-        camera.target = QVector3D(*self.target)
+        from core.camera_point import CameraPoint
+        camera.target = CameraPoint(self.target)
         camera.distance = self.distance
         camera.yaw = self.yaw
         camera.pitch = self.pitch

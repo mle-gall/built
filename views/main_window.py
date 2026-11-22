@@ -6855,7 +6855,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         """The box Zoom Extents frames: the model, its face-me figures, its
         visible reference images — or the survey alone — as ``(lo, hi)``;
         ``None`` when there is nothing to frame."""
-        from PySide6.QtGui import QVector3D
+        from core.camera_point import CameraPoint
         bounds = self.viewport.scene.bounds()
         # Face-me figures count too, as a Zoom Extents should:
         # ``Scene.bounds()`` leaves them out (they draw per frame), so a new
@@ -6868,9 +6868,9 @@ class MainWindow(WorksessionMixin, QMainWindow):
                 continue
             lo, hi = extra
             if bounds[0] is not None:
-                lo = QVector3D(min(lo.x(), bounds[0].x()), min(lo.y(), bounds[0].y()),
+                lo = CameraPoint(min(lo.x(), bounds[0].x()), min(lo.y(), bounds[0].y()),
                                min(lo.z(), bounds[0].z()))
-                hi = QVector3D(max(hi.x(), bounds[1].x()), max(hi.y(), bounds[1].y()),
+                hi = CameraPoint(max(hi.x(), bounds[1].x()), max(hi.y(), bounds[1].y()),
                                max(hi.z(), bounds[1].z()))
             bounds = (lo, hi)
         if bounds[0] is None:
@@ -6898,7 +6898,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         if back is not None and back[1] == self._camera_pose():
             cam = self.viewport.camera
             x, y, z, cam.distance, cam.yaw, cam.pitch = back[0]
-            cam.target = QVector3D(x, y, z)
+            cam.target = (x, y, z)
             self._smart_zoom_back = None
             self.viewport.update()
             return
@@ -6920,8 +6920,11 @@ class MainWindow(WorksessionMixin, QMainWindow):
             grid.fit_box(lo, hi)             # as Zoom Extents does
 
     def _figure_bounds(self):
-        """World box of the visible face-me figures, or None."""
-        from PySide6.QtGui import QVector3D
+        """Visible figure bounds for framing. Omit a distant starter figure
+        when there is authored geometry to frame."""
+        from core.camera_point import CameraPoint
+        from core.scale_figure import is_marked
+        from core.coordinate_frame import REBASE_DISTANCE
         from core.group import placement_points
         scene = self.viewport.scene
         lo = hi = None
@@ -6932,11 +6935,17 @@ class MainWindow(WorksessionMixin, QMainWindow):
             if not len(pts):
                 continue
             a, b = pts.min(axis=0), pts.max(axis=0)
+            if is_marked(g):
+                model_lo, model_hi = scene.bounds()
+                if model_lo is not None and any(
+                        x - q > REBASE_DISTANCE or p - y > REBASE_DISTANCE
+                        for x, y, p, q in zip(model_lo.toTuple(), model_hi.toTuple(), a, b)):
+                    continue
             lo = a if lo is None else [min(x, y) for x, y in zip(lo, a)]
             hi = b if hi is None else [max(x, y) for x, y in zip(hi, b)]
         if lo is None:
             return None
-        return QVector3D(*map(float, lo)), QVector3D(*map(float, hi))
+        return CameraPoint(lo), CameraPoint(hi)
 
     def _image_bounds(self):
         """World box of the visible reference images, or None."""
@@ -7414,6 +7423,8 @@ class MainWindow(WorksessionMixin, QMainWindow):
             return getattr(vp.scene, "camera_home", None)
         t = cam.target
         out = {"target": [float(t.x()), float(t.y()), float(t.z())]}
+        if cam.up.toTuple() != (0., 0., 1.):
+            out["up"] = list(cam.up.toTuple())
         for k in self._CAMERA_FIELDS:
             out[k] = getattr(cam, k)
         lens = cam.lens_dict()
@@ -7433,8 +7444,13 @@ class MainWindow(WorksessionMixin, QMainWindow):
         cam = self.viewport.camera
         t = home.get("target")
         if isinstance(t, (list, tuple)) and len(t) == 3:
-            from PySide6.QtGui import QVector3D
-            cam.target = QVector3D(*[float(v) for v in t])
+            cam.target = tuple(map(float, t))
+        up = home.get("up")
+        cam.up = (0., 0., 1.)
+        if isinstance(up, (list, tuple)) and len(up) == 3:
+            from math import isfinite
+            if all(isinstance(v, (float, int)) and isfinite(v) for v in up) and any(up):
+                cam.up = up
         for k in self._CAMERA_FIELDS:
             if k in home:
                 try:

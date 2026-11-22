@@ -16,7 +16,11 @@ and validation. Empty meshes can use empty JSON edge and face lists.
 Points are triples in metres. A block with even one coordinate that changes
 on conversion to IEEE binary32 uses `<f8` for the whole point array.
 Other blocks may use `<f4`. Placement `xform` is a column-major list of
-16 binary64 values encoded as round-trippable JSON numbers. Element keys
+16 binary64 values encoded as round-trippable JSON numbers. The document
+camera uses the same JSON precision for its model-space `target` and optional
+`up` triples. The default up is (0, 0, 1). Yaw, pitch and distance determine
+the eye relative to the target. A compatibility export rounds the coordinate
+triples to binary32. Element keys
 are session-local. Later versions may introduce additional geometry arrays
 and metadata.
 

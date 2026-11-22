@@ -12,6 +12,7 @@ position-matching to rediscover topology.
 to rebuild its dynamic VBOs.
 """
 from __future__ import annotations
+from core.camera_point import CameraPoint
 from core.mesh import element_identity
 from core.element_set import ElementSet
 
@@ -799,7 +800,7 @@ class Scene:
         return self._loose_mesh if self.edit_group is not None else self.mesh
 
     # ---- Render views (loose + every group) ---------------------------------
-    def placements(self):
+    def placements(self, *, precise=False):
         """Every visible placement in the scene: each group and, below it,
         the nested ones a component keeps inside itself, as
         ``(group, world_matrix_or_None)``.
@@ -826,7 +827,12 @@ class Scene:
         for g in self.groups:
             if not self.entity_visible(g) or getattr(g, "billboard", False):
                 continue
-            yield from walk(g, None)
+            if precise:
+                from core.group import model_placements
+                yield from model_placements(g, visible=lambda child:
+                                            not child.billboard and self.entity_visible(child))
+            else:
+                yield from walk(g, None)
 
     def render_edges(self):
         for e in self.loose_mesh.edges:
@@ -1062,7 +1068,7 @@ class Scene:
         frame a dot (#627). Not cached: it runs once per command, over the
         selection only."""
         import numpy as np
-        from core.group import iter_placements
+        from core.group import placement_points
         from core.guide import is_guide
         pts: list = []
 
@@ -1077,20 +1083,13 @@ class Scene:
                 else:
                     add(ent.point)
             elif hasattr(ent, "mesh"):        # Group / component instance
-                for g, m in iter_placements(ent):
-                    verts = g.mesh.vertices
-                    if not verts:
-                        continue
-                    arr = np.array([[v.position.x(), v.position.y(),
-                                     v.position.z()] for v in verts])
-                    if m is not None:
-                        d = m.data()          # column-major
-                        rot = np.array([[d[0], d[4], d[8]],
-                                        [d[1], d[5], d[9]],
-                                        [d[2], d[6], d[10]]])
-                        arr = arr @ rot.T + np.array([d[12], d[13], d[14]])
-                    pts.append(tuple(arr.min(axis=0)))
-                    pts.append(tuple(arr.max(axis=0)))
+                arr = placement_points(ent)
+                if len(arr):
+                    pts.extend((arr.min(axis=0), arr.max(axis=0)))
+            elif isinstance(ent, Face):
+                pts.extend(v.position_tuple() for v in ent.loop)
+            elif isinstance(ent, Edge):
+                pts.extend((ent.v0.position_tuple(), ent.v1.position_tuple()))
             elif hasattr(ent, "vertices"):    # Face
                 for v in ent.vertices:
                     add(v)
@@ -1104,7 +1103,7 @@ class Scene:
             return None, None
         arr = np.array(pts, dtype=float)
         lo, hi = arr.min(axis=0), arr.max(axis=0)
-        return QVector3D(*lo), QVector3D(*hi)
+        return CameraPoint(lo), CameraPoint(hi)
 
     def _bounds_key(self):
         """What :meth:`bounds` depends on besides the content: the edit
@@ -1148,17 +1147,16 @@ class Scene:
             lo, hi = cached[1]
             if lo is None:
                 return None, None
-            return QVector3D(*lo), QVector3D(*hi)
+            return CameraPoint(lo), CameraPoint(hi)
         import numpy as np
         inf = float("inf")
         minx = miny = minz = inf
         maxx = maxy = maxz = -inf
         seen = False
 
-        def absorb(v: QVector3D) -> None:
+        def absorb(x, y, z) -> None:
             nonlocal minx, miny, minz, maxx, maxy, maxz, seen
             seen = True
-            x, y, z = v.x(), v.y(), v.z()
             if x < minx: minx = x
             if y < miny: miny = y
             if z < minz: minz = z
@@ -1168,12 +1166,12 @@ class Scene:
 
         for edge in self.loose_mesh.edges:
             if self.entity_visible(edge):
-                absorb(edge.a)
-                absorb(edge.b)
+                absorb(*edge.v0.position_tuple())
+                absorb(*edge.v1.position_tuple())
         for face in self.loose_mesh.faces:
             if self.entity_visible(face):
-                for v in face.vertices:
-                    absorb(v)
+                for v in face.loop:
+                    absorb(*v.position_tuple())
         # One vertex array per MESH, not per placement: a model of 21 406
         # placements over 2 722 meshes read 14 million vertices one by one
         # to learn its box, ~7 s (issue #158).
@@ -1187,7 +1185,8 @@ class Scene:
         parts = getattr(self, "_bounds_parts", None) or {}
         kept: dict = {}
         from core.lazy_mesh import plan_of
-        for g, m in self.placements():
+        from core.group import _local_points
+        for g, m in self.placements(precise=True):
             key = id(g.mesh)
             arr = per_mesh.get(key)
             if arr is None:
@@ -1196,9 +1195,9 @@ class Scene:
                     arr = plan.pos
                     lazy = True
                 else:
-                    arr = np.array(
-                        [[v.position.x(), v.position.y(), v.position.z()]
-                         for v in g.mesh.vertices])
+                    arr = _local_points(g.mesh)
+                    if arr is None:
+                        continue
                     lazy = False
                 # Its own box, centre and half size, for _inside below.
                 local = None
@@ -1211,7 +1210,7 @@ class Scene:
                 arr, lazy, local = arr
             if not len(arr):
                 continue
-            d = tuple(m.data()) if m is not None else None  # column-major
+            d = tuple(m.ravel()) if m is not None else None  # column-major
             part = None
             if lazy:
                 pkey = (id(arr), d)
@@ -1243,4 +1242,4 @@ class Scene:
             return None, None
         self._bounds_cache = (self.version, ((minx, miny, minz),
                                              (maxx, maxy, maxz)), content)
-        return QVector3D(minx, miny, minz), QVector3D(maxx, maxy, maxz)
+        return CameraPoint(minx, miny, minz), CameraPoint(maxx, maxy, maxz)

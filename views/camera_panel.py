@@ -28,7 +28,6 @@ from __future__ import annotations
 import math
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QVector3D
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDoubleSpinBox,
                                QFormLayout, QHBoxLayout, QLabel,
                                QPushButton, QScrollArea, QStyle, QVBoxLayout,
@@ -576,8 +575,9 @@ class CameraSettingsDialog(QDialog):
         cam = self._camera()
         if cam is None:
             return
-        eye = QVector3D(*(b.value() for b in self.eye))
-        target = QVector3D(*(b.value() for b in self.target))
+        from core.camera_point import CameraPoint
+        eye = CameraPoint(*(b.value() for b in self.eye))
+        target = CameraPoint(*(b.value() for b in self.target))
         cam.place(eye, target)
         self._repaint()
 
