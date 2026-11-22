@@ -24,6 +24,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(SPECPATH).resolve()
+from runpy import run_path
+built_extension = run_path(str(ROOT / "formats" / "built.py"))["BUILT_SUFFIX"][1:]
 
 # ── Bundled assets — destinations MIRROR the repo layout ─────────────────────
 datas = [
@@ -471,7 +473,20 @@ if sys.platform == 'darwin':
             'NSHumanReadableCopyright': 'GPL-3.0-or-later — Marco Sumari Tellez and IngeTrazo contributors',
             # .igz / .skp double-click-to-open, same association the other
             # platforms register (packaging/ingetrazo.desktop, the .iss).
+            'UTExportedTypeDeclarations': [{
+                'UTTypeIdentifier': 'com.ingetrazo.built-document',
+                'UTTypeDescription': 'Built document',
+                'UTTypeConformsTo': ['public.zip-archive'],
+                'UTTypeTagSpecification': {'public.filename-extension': [built_extension]},
+            }],
             'CFBundleDocumentTypes': [
+                {
+                    'CFBundleTypeName': 'Built document',
+                    'CFBundleTypeExtensions': [built_extension],
+                    'LSItemContentTypes': ['com.ingetrazo.built-document'],
+                    'CFBundleTypeRole': 'Editor',
+                    'LSHandlerRank': 'Owner',
+                },
                 {
                     'CFBundleTypeName': 'IngeTrazo document',
                     'CFBundleTypeExtensions': ['igz'],
