@@ -17,7 +17,9 @@ all and only a selection box gets them. The causes, reproduced here:
 The lines now come first within the pick tolerance (the modeller's rule: an
 edge before the face under the cursor), with a small depth slack. Between
 the lines of a hatch the slab under the cursor still wins; a hatch with
-nothing under it is picked by its box.
+nothing under it is picked by its box. A plain click again at the same spot
+cycles through what lies there (line, the slab, the hatch's box…), the
+status bar naming it.
 
 The Metal cases run device-free: the ID pass is stood in for by the CPU ray
 test over the resident rows (``_front_at``). With QT_QPA_PLATFORM=cocoa on
@@ -236,6 +238,72 @@ def test_between_the_lines_of_a_hatch_in_the_air_its_box_picks_it(make):
         assert tool._pick(view.picks, *between) is hatch
         outside = view.pixel(V(3.6, 3.6, 0))
         assert tool._pick(view.picks, *outside) is None
+    finally:
+        view.close()
+
+
+@pytest.mark.parametrize("make", VIEWS)
+def test_repeated_clicks_cycle_through_what_lies_under_the_cursor(make):
+    scene, slab, (hatch,) = build("hatch")
+    view = make(scene)
+    try:
+        _aim(view, "top")
+        tool = SelectTool()
+        on = view.pixel(V(2, 2.0, 0))
+        assert _click(view, tool, on) == {hatch}
+        assert _click(view, tool, (on[0] + 1, on[1])) == {slab}
+        assert "2 of 2" in view.flashed[-1] and "slab" in view.flashed[-1]
+        assert _click(view, tool, on) == {hatch}            # and back
+        # Between the lines the slab comes first, the hatch's box next.
+        between = view.pixel(V(2, 1.75, 0))
+        tool.note_pointer(*between)
+        assert _click(view, tool, between) == {slab}
+        assert _click(view, tool, between) == {hatch}
+    finally:
+        view.close()
+
+
+@pytest.mark.parametrize("make", VIEWS)
+def test_a_loose_line_cycles_to_the_group_and_back(make):
+    scene, slab, lines = build("loose")
+    view = make(scene)
+    try:
+        _aim(view, "oblique")
+        tool = SelectTool()
+        on = view.pixel(V(2, 2.0, 0))
+        first = _click(view, tool, on)
+        assert len(first) == 1 and isinstance(next(iter(first)), Edge)
+        assert _click(view, tool, on) == {slab}
+        assert _click(view, tool, on) == first
+    finally:
+        view.close()
+
+
+@pytest.mark.parametrize("make", VIEWS)
+def test_without_the_repeat_a_click_picks_as_before(make):
+    scene, slab, (hatch,) = build("hatch")
+    view = make(scene)
+    try:
+        _aim(view, "top")
+        tool = SelectTool()
+        on = view.pixel(V(2, 2.0, 0))
+        assert _click(view, tool, on) == {hatch}
+        # Leaving the spot ends the cycle: back there, the first pick again.
+        tool.note_pointer(on[0] + 40, on[1])
+        tool.note_pointer(*on)
+        assert _click(view, tool, on) == {hatch}
+        # The selection changed in between (Esc): no cycle either.
+        scene.clear_selection()
+        assert _click(view, tool, on) == {hatch}
+        # Shift toggles the same pick, as it always did.
+        assert _click(view, tool, on, Qt.ShiftModifier) == set()
+        assert _click(view, tool, on, Qt.ShiftModifier) == {hatch}
+        # A plain click on the slab, away from the lines: the slab, and
+        # only one candidate, so nothing to announce.
+        before = len(view.flashed)
+        away = view.pixel(V(0.5, 0.5, 0))
+        assert _click(view, tool, away) == {slab}
+        assert len(view.flashed) == before
     finally:
         view.close()
 

@@ -1,4 +1,5 @@
 {
+ "{index} of {count}: {what} — click again for the next": "{index} от {count}: {what} — щракнете отново за следващия",
  "Add a terrain profile along a traced path (two clicks or drag)": "Добавяне на теренен профил по начертано трасе (две щраквания или плъзгане)",
  "Guide point": "Помощна точка",
  "IngeTrazo could not read {name} with its built-in .skp reader.\n\nOpen it in the program it came from and export it as COLLADA (.dae) or OBJ, then import that file here.": "IngeTrazo не успя да прочете {name} с вградения си четец за .skp файлове.\n\nОтворете файла в програмата, в която е създаден, и го експортирайте във формат COLLADA (.dae) или OBJ, след което импортирайте получения файл тук.",

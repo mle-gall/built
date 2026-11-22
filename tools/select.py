@@ -18,6 +18,8 @@ Behavior:
 """
 from __future__ import annotations
 
+import math
+
 from views import prompts as _prompts
 
 from PySide6.QtCore import Qt
@@ -610,6 +612,21 @@ def _seg_rect_overlap(a, b, rect) -> bool:
     return any(_seg_seg_2d(a, b, corners[i], corners[(i + 1) % 4]) for i in range(4))
 
 
+def describe_pick(entity) -> str:
+    """A few words for the status bar naming what a click picked."""
+    from core.i18n import tr
+    if isinstance(entity, Group):
+        kind = tr("Component") if entity.is_instance() else tr("Group")
+        name = (getattr(entity, "name", "") or "").strip()
+        return f"{kind} «{name}»" if name else kind
+    for cls, word in ((Edge, "Edge"), (Face, "Face"), (Dimension, "Dimension"),
+                      (TextLabel, "Text"), (SectionPlane, "Section Plane")):
+        if isinstance(entity, cls):
+            return tr(word)
+    return tr("Image") if type(entity).__name__ == "ImagePlane" \
+        else type(entity).__name__
+
+
 class SelectTool(Tool):
     name = "Select"
     shortcut = ""  # Space, bound in main_window; "S" is Scale
@@ -625,6 +642,11 @@ class SelectTool(Tool):
 
     def on_deactivate(self, viewport) -> None:
         viewport.set_hover(None)
+
+    #: A plain click again within this many pixels of the last one, the
+    #: pointer not having left that spot, takes the next of what lies
+    #: under the cursor (:meth:`_candidates`).
+    CYCLE_PX = 4.0
 
     @staticmethod
     def _linework(viewport, screen_x: float, screen_y: float) -> list:
@@ -652,7 +674,7 @@ class SelectTool(Tool):
         (screen-space priority), then a dimension annotation, then the
         front face; last, an object of lines only whose box holds the
         cursor. ``linework=False``: what the click takes once the lines
-        are passed over."""
+        are passed over (the next candidates of a repeated click)."""
         pick_label = getattr(viewport, "pick_text_label", None)
         if pick_label is not None:
             # The text block overdraws all geometry, so a click on the glyphs
@@ -738,6 +760,76 @@ class SelectTool(Tool):
         pick_image = getattr(viewport, "pick_image_plane", None)
         return pick_image(screen_x, screen_y) if pick_image else None
 
+    def _candidates(self, viewport, screen_x: float, screen_y: float) -> list:
+        """Everything a click at ``(x, y)`` may select, in the order
+        repeated clicks there go through them: what a click takes
+        (:meth:`_pick`), the other lines within reach, what the click
+        takes past the lines (the face's object, the face), the objects
+        of lines whose box holds the cursor. Each once."""
+        found: list = []
+
+        def add(entity):
+            if entity is not None and all(entity is not e for e in found):
+                found.append(entity)
+        add(self._pick(viewport, screen_x, screen_y))
+        for entity, _d in self._linework(viewport, screen_x, screen_y):
+            add(entity)
+        add(self._pick(viewport, screen_x, screen_y, linework=False))
+        group = viewport.pick_group(screen_x, screen_y)
+        add(group)
+        add(self._pick_rest(viewport, screen_x, screen_y))
+        around = getattr(viewport, "linework_groups_around", None)
+        for entity in (around(screen_x, screen_y) if around else ()):
+            add(entity)
+        return found
+
+    def note_pointer(self, screen_x: float, screen_y: float) -> None:
+        """The pointer is at ``(x, y)``: leaving the spot of the last click
+        ends its cycle (the next click there starts again)."""
+        cycle = getattr(self, "_cycle", None)
+        if cycle is not None and math.hypot(
+                screen_x - cycle["at"][0],
+                screen_y - cycle["at"][1]) > self.CYCLE_PX:
+            self._cycle = None
+
+    def _cycled_pick(self, viewport, screen_x: float, screen_y: float,
+                     mode: str):
+        """What a click selects, with the cycle: a plain click again at
+        the spot of the last one — the pointer has not left it, the
+        selection is still what that click made, the same things lie
+        under the cursor — takes the next candidate, and the status bar
+        says which. Any other click picks as :meth:`_pick`."""
+        cycle = getattr(self, "_cycle", None)
+        self._cycle = None
+        if mode != "replace":
+            return self._pick(viewport, screen_x, screen_y)
+        candidates = self._candidates(viewport, screen_x, screen_y)
+        if not candidates:
+            return None
+        index = 0
+        if (cycle is not None and cycle["viewport"] is viewport
+                and math.hypot(screen_x - cycle["at"][0],
+                               screen_y - cycle["at"][1]) <= self.CYCLE_PX
+                and len(cycle["candidates"]) == len(candidates)
+                and all(a is b for a, b in zip(cycle["candidates"],
+                                                candidates))
+                and set(viewport.scene.selection) == cycle["selected"]):
+            index = (cycle["index"] + 1) % len(candidates)
+        entity = candidates[index]
+        picked = self._expand(viewport, entity)
+        self._cycle = {"viewport": viewport, "at": (screen_x, screen_y),
+                       "candidates": candidates, "index": index,
+                       "selected": set(picked)}
+        if len(candidates) > 1:
+            flash = getattr(viewport, "flash_status", None)
+            if callable(flash):
+                from core.i18n import tr
+                flash(tr("{index} of {count}: {what} — click again for "
+                         "the next").format(index=index + 1,
+                                            count=len(candidates),
+                                            what=describe_pick(entity)))
+        return entity
+
     def on_click(self, ctx: ToolContext) -> None:
         viewport = ctx.viewport
         mode = selection_mode(ctx.modifiers)
@@ -752,7 +844,8 @@ class SelectTool(Tool):
             return
         if getattr(viewport, "extension_pick", None) is not None:
             viewport.clear_extension_pick()
-        entity = self._pick(viewport, ctx.screen.x(), ctx.screen.y())
+        entity = self._cycled_pick(viewport, ctx.screen.x(), ctx.screen.y(),
+                                   mode)
         if entity is None:
             if viewport.scene.edit_group is not None and mode == "replace" \
                     and not viewport.scene.selection:
@@ -791,6 +884,7 @@ class SelectTool(Tool):
         edges; an edge selects itself plus its faces — and a GROUP opens for
         editing (Groups v2: draw, push, erase inside it)."""
         viewport = ctx.viewport
+        self._cycle = None
         entity = self._pick(viewport, ctx.screen.x(), ctx.screen.y())
         if isinstance(entity, Group):
             # A 3D text too: double-click ENTERS it, as users expect (its
@@ -867,6 +961,7 @@ class SelectTool(Tool):
         """Triple click: everything physically connected to the
         picked entity (the whole solid), walked through shared vertices."""
         viewport = ctx.viewport
+        self._cycle = None
         entity = self._pick(viewport, ctx.screen.x(), ctx.screen.y())
         if not isinstance(entity, (Face, Edge)):
             self.on_click(ctx)
@@ -878,6 +973,7 @@ class SelectTool(Tool):
 
     def on_hover(self, ctx: ToolContext) -> None:
         viewport = ctx.viewport
+        self.note_pointer(ctx.screen.x(), ctx.screen.y())
         entity = self._pick(viewport, ctx.screen.x(), ctx.screen.y())
         # A face under the cursor is not marked, as in .skp (#832:
         # «very visually distracting»); edges still light up, thin lines
