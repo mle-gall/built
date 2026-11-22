@@ -681,7 +681,10 @@ def _tree(view, win) -> None:
     flt = view.__dict__.get("_ui_filter", "")
     colset = view.__dict__.get("_ui_colset", 0)
     sel_ids = {id(e) for e in scene.selection}
-    sig = (id(scene), scene.content_version, tuple(sorted(exp)), flt, len(sel_ids), hash(frozenset(sel_ids)),
+    # Problems (watertight) and the Export cells (quantities) read geometry.
+    geometric = view.__dict__.get("_ui_mode") == "problems" or colset == 2
+    cv = scene.content_version if geometric else _tree_version(view, win, scene)
+    sig = (id(scene), cv, tuple(sorted(exp)), flt, len(sel_ids), hash(frozenset(sel_ids)),
            colset, getattr(view, "_ui_layer_rev", 0))
     if sig == getattr(view, "_ui_tree_sig", None):
         return
@@ -944,6 +947,44 @@ def _tree(view, win) -> None:
         view._ui_kinds_sent = True
     path = node_path(active) if active in nodes else ""
     view.renderer.ui_set_delivery(path, len(unfiled), len(to_fix))
+
+
+#: Steps that change only geometry inside meshes (the feed's own
+#: geometry-only set, and paint): the tree has nothing to show for them.
+GEOMETRY_STEPS = {"SnapshotMutation", "SnapshotCompound", "MoveVerticesCommand", "AddEdgeCommand",
+                  "AddFaceCommand", "EraseSelectionCommand", "DeleteEdgesCommand", "DeleteFaceCommand"}
+
+
+def _geometry_step(step) -> bool:
+    return step.complete and (step.command in GEOMETRY_STEPS or step.command.startswith("SetFace")) \
+        and not any(step.placements.values()) and not any(step.tags.values()) \
+        and not any(step.materials.values())
+
+
+def _tree_version(view, win, scene) -> int:
+    """The content version the tree follows: it moves on with the model,
+    except across History steps the change feed shows to be geometry only
+    (a line drawn, a face pushed), which leave every row as it was — on the
+    Ride file a rebuild costs 80–190 ms per edit."""
+    feed = getattr(getattr(win.viewport, "history", None), "feed", None)
+    cv = scene.content_version
+    last = view.__dict__.get("_ui_tree_cv")
+    if feed is None or last is None or last[0] != id(scene):
+        view._ui_tree_cv = (id(scene), cv, getattr(feed, "revision", 0), cv)
+        return cv
+    _sid, seen_cv, seen_rev, shown = last
+    if cv == seen_cv:
+        return shown
+    rev = feed.revision
+    if rev > seen_rev:
+        got = feed.since(seen_rev)
+        if got["complete"] and got["steps"] and all(_geometry_step(st) for st in got["steps"]) \
+                and len(got["steps"]) == rev - seen_rev:
+            # Only geometry since the rows were built: keep them.
+            view._ui_tree_cv = (id(scene), cv, rev, shown)
+            return shown
+    view._ui_tree_cv = (id(scene), cv, rev, cv)
+    return cv
 
 
 def _problem_rows(view, scene, registry, nodes, recipes, unfiled, node_of, exp, sel_ids):
