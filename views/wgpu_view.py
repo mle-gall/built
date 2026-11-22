@@ -27,6 +27,26 @@ def _paint_key(scene):
         or bool(getattr(ly, 'locked', False))))
 
 
+def _tool_frame(method):
+    from functools import wraps
+    @wraps(method)
+    def handle(view, *args, **kwargs):
+        origin = getattr(getattr(view, "packed", None), "origin", ())
+        prototypes = getattr(view, '_remote_meshes', ())
+        if not any(origin) and not prototypes:
+            return method(view, *args, **kwargs)
+        from core.coordinate_frame import mesh_frame
+        from contextlib import ExitStack
+        active = view.scene.mesh
+        with ExitStack() as frames:
+            frames.enter_context(mesh_frame(active, origin))
+            for mesh, local_origin in prototypes:
+                if mesh is not active:
+                    frames.enter_context(mesh_frame(mesh, local_origin))
+            return method(view, *args, **kwargs)
+    return handle
+
+
 class WgpuView(QWidget):
     frameReady = Signal(float, object, float)
     _ZOOM_OUT_STEP = 0.05
@@ -127,6 +147,7 @@ class WgpuView(QWidget):
             self.tools.sync()
             self.update()
 
+    @_tool_frame
     def hideEvent(self, event):
         self.tools.cancel()
         super().hideEvent(event)
@@ -243,8 +264,23 @@ class WgpuView(QWidget):
             self.build_seconds = time.perf_counter() - start
             self.update()
             return
+        old_origin = getattr(self.packed, 'origin', (0., 0., 0.))
         self.packed = pack_scene(scene, getattr(self.source_viewport, 'view_tint', None),
-                                 progress=progress)
+                                 progress=progress, previous_origin=old_origin)
+        remote = {}
+        if any(any(o) for o in self.packed.prototype_origins):
+            for group, code in zip(self.packed.groups, self.packed.instances['info'][:, 0]):
+                anchor = self.packed.prototype_origins[code]
+                if group is not None and any(anchor):
+                    remote[id(group.mesh)] = (group.mesh, anchor)
+        self._remote_meshes = tuple(remote.values())
+        if old_origin != self.packed.origin:
+            from copy import copy
+            # Keep camera movement, depth fitting and screen rays in the same
+            # frame as the instance matrices. Qt never holds the model offset.
+            self.camera = copy(self.camera)
+            self.camera.target = QVector3D(*self.packed.world_bounds.mean(axis=0))
+
         from views.wgpu_billboards import Billboards
         self._billboards = Billboards(self.packed)
         self._scene_dirty = True
@@ -352,6 +388,7 @@ class WgpuView(QWidget):
         self._resident_edit_copies = ()
         self._parent_map = None
         self.packed = pack_scene(Scene())
+        self._remote_meshes = ()
         from views.wgpu_billboards import Billboards
         self._billboards = Billboards(self.packed)
         self._content_token = None
@@ -492,7 +529,8 @@ class WgpuView(QWidget):
                 return None
         self.tools.sync()
         if self.source_viewport is not None:
-            self.camera = self.source_viewport.camera
+            if not any(self.packed.origin):
+                self.camera = self.source_viewport.camera
             self._mirror_cursor()
         # R-look 3c: compute each camera matrix once, after updating aspect.
         self.camera.aspect = self.width()/max(1, self.height())
@@ -684,7 +722,7 @@ class WgpuView(QWidget):
             self._scene_dirty = False
         elif self._scene_dirty:
             self._upload()
-        camera = copy(source.camera)
+        camera = copy(self.camera if any(self.packed.origin) else source.camera)
         camera.aspect = width_px / height_px
         view, projection = camera.view_matrix(), camera.projection_matrix()
         payload = style_payload(source.scene, source._effective_style(),
@@ -789,6 +827,7 @@ class WgpuView(QWidget):
         from views.viewport import Viewport
         return Viewport._world_to_pixel(self, point)
 
+    @_tool_frame
     def hover(self, x, y, modifiers=Qt.NoModifier):
         from views.wgpu_inference import snap
         from views.wgpu_overlay import snap_glyph, Primitive
@@ -1136,6 +1175,7 @@ class WgpuView(QWidget):
         self.update()
         self.selection_ms = (time.perf_counter()-start)*1000
 
+    @_tool_frame
     def mousePressEvent(self, event):
         self.setFocus()
         self.last = self.press = event.position()
@@ -1153,6 +1193,7 @@ class WgpuView(QWidget):
         if self._drag_nav:
             self._pivot = self._orbit_pivot_at(self.press.x(), self.press.y())
 
+    @_tool_frame
     def mouseMoveEvent(self, event):
         if getattr(self, '_look_drag', None) is not None:
             from views.viewport import Viewport
@@ -1207,6 +1248,7 @@ class WgpuView(QWidget):
         from views.viewport import Viewport
         return Viewport._can_warp_pointer()
 
+    @_tool_frame
     def focusOutEvent(self, event):
         # As GL's: the walking keys' releases will land elsewhere, but the
         # tool goes on. Cancelling it here reset a line whose first point
@@ -1222,6 +1264,7 @@ class WgpuView(QWidget):
         # Qt's focus chain took it and left the keyboard on a tray button.
         return False
 
+    @_tool_frame
     def mouseReleaseEvent(self, event):
         if getattr(self, '_look_drag', None) is not None:
             self._look_drag = None
@@ -1282,6 +1325,7 @@ class WgpuView(QWidget):
             event.globalPos(), locked_image=under if under is not picked else None,
             locked_group=self.tools.pick_locked_group(point.x(), point.y()))
 
+    @_tool_frame
     def mouseDoubleClickEvent(self, event):
         # A double click of the wheel recentres the view on the point under
         # the cursor (on sky: at the depth of the view's centre); the tool in
@@ -1330,6 +1374,7 @@ class WgpuView(QWidget):
                 return True
         return super().event(event)
 
+    @_tool_frame
     def keyPressEvent(self, event):
         mode = self.tools.sync()
         if event.key() == Qt.Key_Escape:
@@ -1378,6 +1423,7 @@ class WgpuView(QWidget):
             self.tools.hover(QMouseEvent(QEvent.MouseMove, pos, pos,
                                          Qt.NoButton, Qt.NoButton, held))
 
+    @_tool_frame
     def keyReleaseEvent(self, event):
         mode = self.tools.sync()
         release = getattr(self.tools.tool, 'on_key_release', None)

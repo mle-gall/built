@@ -343,7 +343,9 @@ class NativeTools(MeshToolAccess):
             if revision != getattr(self, '_notified_revision', revision):
                 notify = getattr(self.view.source_viewport, 'notify_scene_changed', None)
                 if notify is not None:
-                    notify()
+                    from core.coordinate_frame import ZERO, mesh_frame
+                    with mesh_frame(self.scene.mesh, ZERO):
+                        notify()
             self._notified_revision = revision
         self.view.update()
 
@@ -399,4 +401,6 @@ class NativeTools(MeshToolAccess):
         return self.view.edit_group_box_contains_pixel(x, y)
 
     def __getattr__(self, name):
+        if name == "camera" and getattr(self.view, "camera", None) is not None:
+            return self.view.camera
         return getattr(self.view.source_viewport, name)
