@@ -972,6 +972,30 @@ def _tree_action(win, view, action) -> None:
             _set_status(win, groups, key.partition(":")[2])
         elif verb == "insp" and key == "file" and groups:
             _file_to(win, len(groups))
+        elif verb == "insp" and key.startswith(("active:", "isolate:")):
+            what, _, nk = key.partition(":")
+            _tree_action(win, view, f"{what}{SEP}n:{nk}")
+        elif verb == "insp" and key.startswith("nodestatus:"):
+            _, nk, value = key.split(":", 2)
+            _set_status(win, _tree_groups(view, nk), value)
+        elif verb == "insp" and key.startswith("cutlist"):
+            nk = key.partition(":")[2]
+            if nk:
+                _select(win, _tree_groups(view, nk))
+            parts = getattr(getattr(win, "tray", None), "parts", None)
+            if parts is not None:
+                parts.on_scene_changed()
+                parts._on_copy()
+                vp.flash_status("Cut list copied")
+        elif verb == "insp" and key in ("linkreload", "linkopen") and groups:
+            from core import links
+            from pathlib import Path
+            link = links.link_of(groups[0])
+            if link and key == "linkreload":
+                links.reload(vp.scene, link["path"])
+                vp.notify_scene_changed() if hasattr(vp, "notify_scene_changed") else vp.update()
+            elif link:
+                win.open_path(Path(link["path"]))
         elif verb == "unfiled":
             _select(win, (getattr(view, "_ui_tree", None) or {}).get("unfiled", []))
         return
@@ -1055,9 +1079,14 @@ def _tree_action(win, view, action) -> None:
             exp.clear()
             rebuild()
         elif verb in ("node", "item", "loose") or verb == "instances":
+            if verb == "node" and node:
+                view._ui_insp_node = None   # set after the selection lands
             gs = members() if verb != "instances" else [
                 g for g, _s, _r in structure._placements(scene) if item() is not None and g.mesh is item().mesh]
             _select(win, gs)
+            if verb == "node" and node:
+                sel = list(scene.selection)
+                view._ui_insp_node = (node, (len(sel), id(sel[0]) if sel else 0, id(sel[-1]) if sel else 0))
         elif verb == "reveal":
             g = item()
             where = data.get("node_of", {}).get(id(g)) if g is not None else None
@@ -1174,6 +1203,25 @@ def _tree_action(win, view, action) -> None:
                     execute(vp, structure.apply_bootstrap(scene, arg))
                 elif what == "delete":
                     _delete_node(vp, arg)
+        elif verb == "edit":
+            what, _, arg = rk.partition(":")
+            if what == "nodename":
+                update_node(vp, arg, name=extra)
+            elif what in ("predef", "objtype"):
+                recipe = dict(structure._nodes(bim_registry.get(scene))[arg].get("recipe", {}))
+                field = "predefined_type" if what == "predef" else "object_type"
+                if extra.strip():
+                    recipe[field] = extra.strip()
+                else:
+                    recipe.pop(field, None)
+                update_node(vp, arg, recipe=recipe)
+            elif what == "groupname":
+                g = _group_by_uid(win, arg)
+                if g is not None:
+                    vp.history.execute(RenameGroupCommand(g, extra))
+                    vp.update()
+            view._ui_insp_sig = None
+            rebuild()
         elif verb == "showall":
             _show_all(vp)
         elif verb == "unfiled":
@@ -1205,57 +1253,110 @@ def _delete_node(vp, key) -> None:
     execute(vp, CompoundCommand(commands))
 
 
+ED = "\x1d"
+
+
+def _edit(id_, text) -> str:
+    """An editable inspector value (ui.rs inspector_rows)."""
+    return f"{ED}edit{ED}{id_}{ED}{text}"
+
+
 def _inspector(view, win) -> None:
-    """What the selection is, in plain words; IFC under Export details."""
+    """What is in front of you, in plain words (council 2026-11-22): a node
+    picked in the tree, one item, several, or loose geometry. Fields edit in
+    place; IFC stays under Export details."""
     scene = win.viewport.scene
     sel = list(scene.selection)
-    sig = (id(scene), scene.content_version, len(sel), id(sel[0]) if sel else 0, id(sel[-1]) if sel else 0)
+    focus = getattr(view, "_ui_insp_node", None)
+    sel_sig = (len(sel), id(sel[0]) if sel else 0, id(sel[-1]) if sel else 0)
+    node_focus = focus[0] if focus and focus[1] == sel_sig else None
+    sig = (id(scene), scene.content_version, sel_sig, node_focus, getattr(view, "_ui_tree_sig", None) is not None)
     if sig == getattr(view, "_ui_insp_sig", None):
         return
     view._ui_insp_sig = sig
     from collections import Counter
-    from core import bim_registry, structure
+    from core import bim_registry, links, structure
     from core.group import Group
+    registry = bim_registry.get(scene)
+    nodes = structure._nodes(registry)
+    data = getattr(view, "_ui_tree", None) or {}
+    if node_focus is not None and node_focus in nodes:
+        node = nodes[node_focus]
+        recipe = structure.resolve(registry, node_focus)
+        own = node.get("recipe", {})
+        members = _tree_groups(view, node_focus)
+        missing = sum(1 for g in members if (g.ifc or {}).get("class") and not structure._has_status(g.ifc or {}))
+        kind = "Reference" if "source" in node else kind_of(recipe.get("class"))
+        rows = [("Name", _edit(f"nodename:{node_focus}", node["name"])), ("Kind", kind),
+                ("Items", str(len(members)))]
+        if missing:
+            rows.append(("Missing Status", str(missing)))
+        sections = [("Node", rows),
+                    ("Actions", [(f"kindmenu:{node_focus}", "Change kind…"), (f"active:{node_focus}", "Draw into"),
+                                 (f"isolate:{node_focus}", "Isolate"), (f"cutlist:{node_focus}", "Copy cut list")])]
+        if missing:
+            sections.append(("Actions", [(f"nodestatus:{node_focus}:" + v, "All " + v.lower()) for v in STATUS_CHOICES]))
+        export = [("IFC class", str(recipe.get("class") or "none (drawing only)")),
+                  ("Predefined type", _edit(f"predef:{node_focus}", str(own.get("predefined_type") or ""))),
+                  ("Object type", _edit(f"objtype:{node_focus}", str(own.get("object_type") or ""))),
+                  ("Tag", str(recipe.get("tag") or "—"))]
+        for c in recipe.get("classifications", [])[:4]:
+            export.append((c.get("system", "Classification"), f"{c.get('code', '')} {c.get('name', '')}".strip()))
+        if recipe.get("systems"):
+            export.append(("Systems", ", ".join(recipe["systems"])))
+        sections.append(("Export details", export))
+        view.renderer.ui_set_inspector(node["name"], sections)
+        return
     if not sel:
         view.renderer.ui_set_inspector("", [])
         return
-    registry = bim_registry.get(scene)
-    nodes = structure._nodes(registry)
     groups = [g for g in sel if isinstance(g, Group)]
     if len(sel) == 1 and groups:
         g = groups[0]
         rec = g.ifc or {}
         key = structure.node_of(g)
-        filed = " › ".join(structure.path(registry, key)) if key in nodes else "Not filed"
-        recipe = (getattr(view, "_ui_tree", None) or {}).get("recipes", {}).get(key, {})
-        title = g.name or getattr(getattr(g, "definition", None), "name", "") or "Group"
         filed_ok = key in nodes
+        filed = " › ".join(structure.path(registry, key)) if filed_ok else "Not filed"
+        recipe = data.get("recipes", {}).get(key, {})
         kind = kind_of(rec.get("class") or recipe.get("class")) if (rec or recipe) else "Comes from its node"
-        rows = [("Filed in", filed), ("Kind", kind)]
-        status = structure._has_status(rec)
+        rows = [("Name", _edit(f"groupname:{g.uid}", g.name or "")), ("Filed in", filed), ("Kind", kind)]
+        if g.is_component():
+            same = sum(1 for o, _s, _r in structure._placements(scene) if o.mesh is g.mesh)
+            rows.append(("Copies", str(same)))
         if not filed_ok:
             needs = [("Filing", "Needed first")]
         elif not rec:
             needs = [("Record", "Comes with a kind")]
         else:
             needs = [("Status", _status_text(rec) or "Missing")]
-        acts = [("file", "Refile…" if filed_ok else "File to…"), ("isolate", "Isolate"), ("edit", "Edit group")]
-        status_acts = [("status:" + v, v.capitalize()) for v in STATUS_CHOICES] if rec.get("class") else []
+        sections = [("Item", rows), ("What it needs", needs)]
+        if rec.get("class"):
+            sections.append(("Actions", [("status:" + v, v.capitalize()) for v in STATUS_CHOICES]))
+        kids = list(getattr(g, "children", None) or [])
+        if kids:
+            parts = Counter(c.name or "Part" for c in kids)
+            prow = [(n, f"×{k}") for n, k in parts.most_common(8)]
+            if len(parts) > 8:
+                prow.append(("…", f"{len(parts) - 8} more kinds"))
+            sections.append(("Parts", prow))
+            sections.append(("Actions", [("cutlist", "Copy cut list")]))
+        link = links.link_of(g)
+        if link:
+            sections.append(("Linked file", [("Source", str(link.get("path", "")).rsplit("/", 1)[-1]),
+                                             ("Subset", str(link.get("subset") or "all"))]))
+            sections.append(("Actions", [("linkreload", "Reload"), ("linkopen", "Open source")]))
         export = [("IFC class", str(rec.get("class") or recipe.get("class") or "generic object")),
                   ("Predefined type", str(rec.get("predefined_type") or recipe.get("predefined_type") or "—")),
-                  ("Tag", str(recipe.get("tag") or "—"))]
-        sections = [("Where", rows), ("What it needs", needs)]
-        if status_acts:
-            sections.append(("Actions", status_acts))
+                  ("Tag", str(getattr(g, "layer", None) or "—"))]
         sections.append(("Export details", export))
-        view.renderer.ui_set_inspector(title, sections)
+        view.renderer.ui_set_inspector(g.name or "Group", sections)
         return
     kinds = Counter()
     unfiled = 0
     for g in groups:
         key = structure.node_of(g)
         if key in nodes:
-            kinds[" › ".join(structure.path(registry, key)[-1:])] += 1
+            kinds[nodes[key]["name"]] += 1
         else:
             unfiled += 1
     rows = [(name, str(n)) for name, n in kinds.most_common(8)]
@@ -1263,9 +1364,10 @@ def _inspector(view, win) -> None:
         rows.append(("Not filed", str(unfiled)))
     others = len(sel) - len(groups)
     if others:
-        rows.append(("Loose geometry", str(others)))
-    acts = [("file", "File to…"), ("isolate", "Isolate")] if groups else [("isolate", "Isolate")]
-    sections = [("By node", rows)]
+        from collections import Counter as C2
+        loose = C2(type(e).__name__ for e in sel if not isinstance(e, Group))
+        rows += [({"Face": "Faces", "Edge": "Edges"}.get(t, t), str(n)) for t, n in loose.most_common()]
+    sections = [("By node" if groups else "Geometry", rows)]
     missing = sum(1 for g in groups if (g.ifc or {}).get("class") and not structure._has_status(g.ifc or {}))
     if missing:
         sections.append(("Status", [("Missing on", f"{missing} items")]))

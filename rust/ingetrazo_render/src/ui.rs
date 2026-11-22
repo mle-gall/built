@@ -251,6 +251,8 @@ pub struct Column {
     pick: Option<(String, String, Vec<String>, Pos2)>,
     /// The colour being picked for a row, and where.
     color_pick: Option<(String, Color32, Pos2)>,
+    /// The inspector's editable fields: id → text being typed.
+    edits: std::collections::HashMap<String, String>,
     inspector_title: String,
     inspector: Vec<(String, Vec<(String, String)>)>,
     highlighted: Option<String>,
@@ -436,7 +438,7 @@ impl Ui {
         let col = self.column.get_or_insert_with(|| Column {
             nodes: Vec::new(), unfiled: 0, expanded: Default::default(), filter: String::new(),
             filing: None, focus_filter: false, row_menu: None, renaming: None, head_menu: None,
-            kind_menu: None, kinds: Vec::new(), prompt: None, colset: 0, pick: None, color_pick: None,
+            kind_menu: None, kinds: Vec::new(), prompt: None, colset: 0, pick: None, color_pick: None, edits: Default::default(),
             inspector_title: String::new(),
             inspector: Vec::new(), highlighted: None,
         });
@@ -464,6 +466,9 @@ impl Ui {
     }
     pub fn set_inspector(&mut self, title: String, sections: Vec<(String, Vec<(String, String)>)>) {
         if let Some(col) = self.column.as_mut() {
+            if col.inspector_title != title || col.inspector != sections {
+                col.edits.clear();
+            }
             col.inspector_title = title;
             col.inspector = sections;
         }
@@ -1131,7 +1136,8 @@ impl Ui {
                             for i in range {
                                 let n = &col.nodes[i];
                                 let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ROW), Sense::click());
-                                let lit = col.highlighted.as_deref() == Some(n.key.as_str());
+                                // Items in the selection are lit like a picked row; nodes count them.
+                                let lit = col.highlighted.as_deref() == Some(n.key.as_str()) || (n.row != 0 && n.selected > 0);
                                 let filing = col.filing.is_some() && n.row == 0;
                                 if lit {
                                     ui.painter().rect_filled(rect, CornerRadius::same(R_ROW), ACTIVE);
@@ -1251,7 +1257,7 @@ impl Ui {
                                     let g = ui.painter().layout_job(one_line(n.kind.clone(), meta(), FAINT, right - kx));
                                     ui.painter().galley(pos2(kx, cy - g.size().y / 2.0), g, FAINT);
                                 }
-                                if n.selected > 0 {
+                                if n.selected > 0 && n.row == 0 {
                                     let t = format!("{} sel.", n.selected);
                                     let g = ui.painter().layout_no_wrap(t, meta(), ACCENT);
                                     ui.painter().galley(pos2(right - g.size().x, cy - g.size().y / 2.0), g, ACCENT);
@@ -1340,7 +1346,8 @@ impl Ui {
                             });
                         }
                         ui.add_space(4.0);
-                        for (title, rows) in &col.inspector {
+                        let sections = col.inspector.clone();
+                        for (title, rows) in &sections {
                             if title == "Actions" {
                                 // What to do next, as commands: (id, label).
                                 ui.add_space(6.0);
@@ -1348,37 +1355,26 @@ impl Ui {
                                     ui.add_space(8.0);
                                     ui.spacing_mut().item_spacing = vec2(6.0, 6.0);
                                     for (id, label) in rows {
+                                        let at = ui.cursor().min;
                                         if chip_button(ui, label) {
-                                            actions.push(format!("insp:{id}"));
+                                            if let Some(key) = id.strip_prefix("kindmenu:") {
+                                                col.kind_menu = Some((key.to_owned(), pos2(at.x, at.y + 28.0)));
+                                            } else {
+                                                actions.push(format!("insp:{id}"));
+                                            }
                                         }
                                     }
                                 });
                                 continue;
                             }
-                            let folded = title.starts_with("Export");
-                            let body = |ui: &mut egui::Ui| {
-                                for (label, value) in rows {
-                                    // Value right-aligned; the label takes what is left, cut short.
-                                    let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 18.0), Sense::hover());
-                                    let v = ui.painter().layout_no_wrap(value.clone(), egui::FontId::proportional(12.0), INK);
-                                    let vw = v.size().x.min(r.width() * 0.6);
-                                    ui.painter().galley(pos2(r.max.x - 8.0 - vw, r.center().y - v.size().y / 2.0), v, INK);
-                                    let mut job = egui::text::LayoutJob::single_section(label.clone(), egui::TextFormat {
-                                        font_id: egui::FontId::proportional(11.5), color: DIM, ..Default::default() });
-                                    job.wrap.max_width = (r.width() - vw - 26.0).max(20.0);
-                                    job.wrap.max_rows = 1;
-                                    job.wrap.break_anywhere = true;
-                                    let l = ui.painter().layout_job(job);
-                                    ui.painter().galley(pos2(r.min.x + 8.0, r.center().y - l.size().y / 2.0), l, DIM);
-                                }
-                            };
-                            if folded {
+                            if title.starts_with("Export") {
                                 egui::CollapsingHeader::new(egui::RichText::new(title.to_uppercase()).font(strong(10.0)).color(FAINT))
-                                    .id_salt(title).default_open(false).show(ui, body);
+                                    .id_salt(title).default_open(false)
+                                    .show(ui, |ui| inspector_rows(ui, rows, &mut col.edits, &mut actions));
                             } else {
                                 ui.add_space(8.0);
                                 caption(ui, title);
-                                body(ui);
+                                inspector_rows(ui, rows, &mut col.edits, &mut actions);
                             }
                         }
                     });
@@ -1753,6 +1749,41 @@ fn doc_tab(ui: &mut egui::Ui, name: &str, active: bool, dirty: bool) -> Option<b
         return Some(on_x && (active || resp.hovered()));
     }
     None
+}
+
+/// Inspector rows: label left, value right; a value written
+/// "\u{1d}edit\u{1d}<id>\u{1d}<text>" is an editable field (Enter applies).
+fn inspector_rows(ui: &mut egui::Ui, rows: &[(String, String)], edits: &mut std::collections::HashMap<String, String>,
+                  actions: &mut Vec<String>) {
+    for (label, value) in rows {
+        if let Some(rest) = value.strip_prefix("\u{1d}edit\u{1d}") {
+            let (id, text) = rest.split_once('\u{1d}').unwrap_or((rest, ""));
+            let buf = edits.entry(id.to_owned()).or_insert_with(|| text.to_owned());
+            ui.horizontal(|ui| {
+                ui.add_space(8.0);
+                let (lr, _) = ui.allocate_exact_size(vec2(88.0, 24.0), Sense::hover());
+                ui.painter().text(lr.left_center(), egui::Align2::LEFT_CENTER, label, egui::FontId::proportional(11.5), DIM);
+                let w = (ui.available_width() - 8.0).max(60.0);
+                let r = ui.add(egui::TextEdit::singleline(buf).font(body()).margin(Margin::symmetric(6, 3)).desired_width(w));
+                if r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) && buf.as_str() != text {
+                    actions.push(format!("edit\u{1f}{id}\u{1f}{buf}"));
+                }
+            });
+            continue;
+        }
+        // Value right-aligned; the label takes what is left, cut short.
+        let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 18.0), Sense::hover());
+        let v = ui.painter().layout_no_wrap(value.clone(), egui::FontId::proportional(12.0), INK);
+        let vw = v.size().x.min(r.width() * 0.6);
+        ui.painter().galley(pos2(r.max.x - 8.0 - vw, r.center().y - v.size().y / 2.0), v, INK);
+        let mut job = egui::text::LayoutJob::single_section(label.clone(), egui::TextFormat {
+            font_id: egui::FontId::proportional(11.5), color: DIM, ..Default::default() });
+        job.wrap.max_width = (r.width() - vw - 26.0).max(20.0);
+        job.wrap.max_rows = 1;
+        job.wrap.break_anywhere = true;
+        let l = ui.painter().layout_job(job);
+        ui.painter().galley(pos2(r.min.x + 8.0, r.center().y - l.size().y / 2.0), l, DIM);
+    }
 }
 
 /// A bar button that opens a menu: label and ▾; returns its rect when clicked.
