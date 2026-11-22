@@ -50,7 +50,7 @@ def test_the_drawing_really_rebuilds_an_edge_the_mesh_welds():
         [(e.v0.position, e.v1.position) for e in scene.mesh.edges],
         V(0, 0, 0), V(0, 0, 1))
     probe = Mesh()
-    assert any(probe.vertex(a) is probe.vertex(b) for a, b in edges)
+    assert any(probe.vertex(a) == probe.vertex(b) for a, b in edges)
 
 
 def test_a_hair_short_edge_is_dropped_instead_of_undoing_the_stroke():

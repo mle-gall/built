@@ -157,7 +157,7 @@ def test_a_root_loose_edge_is_a_linear_reference_but_not_a_pick():
                     if {tuple(e.a.toTuple()), tuple(e.b.toTuple())}
                     == {(6.0, 0.0, 0.0), (8.0, 0.0, 0.0)})
         px = vp._world_to_pixel(V(7.0, 0.0, 0.0))
-        assert vp.pick_edge_any(px[0], px[1]) is edge
+        assert vp.pick_edge_any(px[0], px[1]) == edge
         assert vp.pick_edge(px[0], px[1]) is None
     finally:
         win._saved_version = vp.scene.version

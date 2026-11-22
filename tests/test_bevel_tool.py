@@ -296,7 +296,7 @@ def test_hovering_near_an_end_picks_that_corner(viewport):
     viewport.set_active_tool(tool)
     viewport._hover_edge = edge_at(mesh, (0, 0, 1), (2, 0, 1))
     tool.on_hover(_ctx(viewport, (1.8, 0, 1)))
-    assert tool.hover_vertex is mesh.vertex_at(QVector3D(2, 0, 1))
+    assert tool.hover_vertex == mesh.vertex_at(QVector3D(2, 0, 1))
     assert tool.vcb_caption() == "Distance"
     assert "Vertices" in tool.status_clause()
     assert len(tool.preview_faces()) == 8 * 8          # the round cap

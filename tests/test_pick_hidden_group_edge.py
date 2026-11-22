@@ -112,7 +112,7 @@ def test_a_lines_only_group_under_a_loose_face_is_not_picked_through_it():
     covered = vp._world_to_pixel(V(0, 3, 0))      # under the lid
     assert vp.pick_group(*covered) is None
     picked = SelectTool()._pick(vp, *covered)
-    assert isinstance(picked, Face) and picked is lid
+    assert isinstance(picked, Face) and picked == lid
     open_ = vp._world_to_pixel(V(6, 3, 0))        # beyond the lid
     assert vp.pick_group(*open_) is lines
 

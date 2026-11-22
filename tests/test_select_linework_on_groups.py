@@ -206,7 +206,7 @@ def test_a_line_on_a_grouped_face_takes_the_click(make, kind, dz, angle):
         on = view.pixel(V(2, 2.0, dz))
         for px in (on, (on[0], on[1] + 4)):          # on it, 4 px off it
             picked = tool._pick(view.picks, *px)
-            assert any(picked is t for t in targets), (px, picked)
+            assert any(picked == t for t in targets), (px, picked)
         # The face away from the lines still selects the slab's object.
         away = view.pixel(V(2, 0.5, 0))
         assert tool._pick(view.picks, *away) is slab

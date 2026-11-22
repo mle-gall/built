@@ -101,7 +101,7 @@ def test_a_divided_slit_line_is_divided_on_both_sides(n, tmp_path):
               if abs(v.position.x() - 2) < 1e-6 and 0 < v.position.y() < 1]
     assert len(points) == n - 1
     for v in points:                                # up the slit and back down
-        assert sum(1 for w in wall.loop if w is v) == 2
+        assert sum(1 for w in wall.loop if w == v) == 2
     back = _reopened(scene, tmp_path)
     _check_incidence(back)
     assert _shape(back) == _shape(m)
@@ -153,7 +153,7 @@ def test_a_jamb_two_openings_share_is_divided_in_both(punched, n, tmp_path):
               if abs(v.position.x() - 3) < 1e-6 and 1 < v.position.y() < 2]
     assert len(points) == n - 1
     for hole in wall.hole_loops:
-        assert all(any(w is v for w in hole) for v in points)
+        assert all(any(w == v for w in hole) for v in points)
     _check_incidence(m)
     back = _reopened(scene, tmp_path)
     _check_incidence(back)
@@ -168,6 +168,6 @@ def test_a_split_shared_by_two_faces_lists_each_once():
     shared = m.find_edge(m.vertex_at(V(2, 0)), m.vertex_at(V(2, 2)))
     e0, e1 = m.split_edge(shared, V(2, 1))
     for half in (e0, e1):
-        assert sorted(map(id, half.faces)) == sorted([id(a), id(b)])
+        assert sorted(f.key for f in half.faces) == sorted([a.key, b.key])
     assert len(a.loop) == 5 and len(b.loop) == 5
     _check_incidence(m)

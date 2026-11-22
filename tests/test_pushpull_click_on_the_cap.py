@@ -74,7 +74,7 @@ def test_the_pull_follows_the_cursor_past_the_horizon_and_the_top_click_commits(
         tool = vp.active_tool
         cx, cy = vp._world_to_pixel(QVector3D(4, 2.5, 0))
         _hover(vp, cx, cy)
-        assert tool.hovered_face is face
+        assert tool.hovered_face == face
         _click(vp, cx, cy)
         assert tool.dragging
         # The cursor climbs; above the horizon the ground no longer answers

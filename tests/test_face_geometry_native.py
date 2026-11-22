@@ -155,7 +155,7 @@ def test_face_geometry_is_the_python_one(seed):
     a, b, c = (m.vertex(V(0, 0, 0)), m.vertex(V(1, 0, 0)),
                m.vertex(V(2, 1e-7, 0)))
     faces += [Face([a, b, c]), Face([a, b]), Face([a, b, a, b])]
-    vid = {id(v): i for i, v in enumerate(m.vertices)}
+    vid = {v.key: i for i, v in enumerate(m.vertices)}
     pos = np.array([v.position.toTuple() for v in m.vertices],
                    dtype=np.float32)
     corners, sizes, counts = [], [], []
@@ -164,7 +164,7 @@ def test_face_geometry_is_the_python_one(seed):
         counts.append(len(rings))
         for r in rings:
             sizes.append(len(r))
-            corners.extend(vid[id(v)] for v in r)
+            corners.extend(vid[v.key] for v in r)
     normal, ln, cen, tris, tri_face, unit, tris_u, tri_face_u = \
         nat.face_geometry(
         pos, np.array(corners, dtype=np.int64),

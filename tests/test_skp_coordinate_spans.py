@@ -75,11 +75,13 @@ def test_mixed_payload_matches_legacy_weld_order_and_archive(count, tmp_path, mo
                      dtype=np.float64).reshape(-1, 3))
         skp.apply_payload(expected, payload(True))
     calls = []
-    original = Mesh.bulk_weld
-    def weld(self, pos):
-        calls.append(len(pos))
-        return original(self, pos)
-    monkeypatch.setattr(Mesh, 'bulk_weld', weld)
+    # A store-backed mesh has its own bulk weld: watch whichever runs.
+    from core.store_mesh import StoreMesh
+    for cls in (Mesh, StoreMesh):
+        def weld(self, pos, original=cls.__dict__['bulk_weld']):
+            calls.append(len(pos))
+            return original(self, pos)
+        monkeypatch.setattr(cls, 'bulk_weld', weld)
     skp.apply_payload(actual, payload(False))
     assert bool(calls) == (count == 400)
     assert _signature(actual) == _signature(expected)

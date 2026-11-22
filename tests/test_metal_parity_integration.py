@@ -79,7 +79,7 @@ def test_pushpull_recess_qt_events_suppress_without_repack(view, monkeypatch):
     # drag-axis projection isolates native event/suppression lifetime from snap.
     point = pixel(view, QVector3D(1,1,0))
     QTest.mouseClick(view, Qt.LeftButton, Qt.NoModifier, point)
-    assert tool.dragging and tool.base_face is f
+    assert tool.dragging and tool.base_face == f
     tool._attached = True
     monkeypatch.setattr(tool, '_infer_reference_distance', lambda ctx: -.5)
     captured = dict(mesh=[], suppressed=[])

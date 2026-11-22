@@ -76,7 +76,7 @@ def test_work_plane_over_an_instance_face_is_the_placed_copy():
         px = vp._world_to_pixel(V(3.5, 0.5, 1.0))
         assert px is not None
         face, grp = vp.pick_face_any(px[0], px[1])
-        assert grp is b and face is top
+        assert grp == b and face == top
         from tools.select import SelectTool
         vp.active_tool = SelectTool()
         point, normal = vp._current_work_plane(cursor=(px[0], px[1]))

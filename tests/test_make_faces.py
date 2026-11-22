@@ -250,7 +250,7 @@ def test_the_button_faces_the_selection_in_one_undo_step(win):
     win._act_make_faces.trigger()
     assert len(scene.mesh.faces) == 3
     # The new faces end up selected, ready for Push/Pull.
-    assert set(map(id, scene.selection)) == set(map(id, scene.mesh.faces))
+    assert set(scene.selection) == set(scene.mesh.faces)
     win.viewport.history.undo()
     assert not scene.mesh.faces and len(scene.mesh.edges) == 8
     win.viewport.history.redo()

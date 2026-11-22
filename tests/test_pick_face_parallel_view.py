@@ -54,8 +54,8 @@ def test_the_face_in_front_wins_in_both_cameras(viewport, perspective):
     viewport.camera.perspective = perspective
     px = viewport._world_to_pixel(V(2, 0, 1.5))
     face, group = viewport.pick_face_any(px[0], px[1])
-    assert face is front and group is None
-    assert viewport.pick_face(px[0], px[1]) is front
+    assert face == front and group is None
+    assert viewport.pick_face(px[0], px[1]) == front
 
 
 def test_truly_coplanar_faces_still_tie_break_by_size(viewport):
@@ -71,5 +71,5 @@ def test_truly_coplanar_faces_still_tie_break_by_size(viewport):
     viewport.camera.pitch = 0.0
     viewport.camera.perspective = False
     px = viewport._world_to_pixel(V(2, 0, 1.5))
-    assert viewport.pick_face(px[0], px[1]) is small
-    assert viewport.pick_face_any(px[0], px[1])[0] is small
+    assert viewport.pick_face(px[0], px[1]) == small
+    assert viewport.pick_face_any(px[0], px[1])[0] == small

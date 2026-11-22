@@ -275,7 +275,7 @@ def test_repush_top_extends_holed_wall_keeping_opening():
     winface = next(
         f for f in scene.faces
         if all(abs(v.y()) < 1e-9 for v in f.vertices) and len(f.vertices) == 4
-        and f is not front
+        and f != front
     )
     _push(scene, winface, 0.5)  # recess the window
     assert len(front.holes) == 1

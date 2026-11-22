@@ -134,9 +134,9 @@ def test_an_arc_folds_into_a_smooth_cone_with_one_visible_fold():
     scene, hist, front = _curved_front_box(segments, 1.0, curve=True)
     _lower_the_top_front(scene, hist, front)
     _healthy(scene)
-    slope = {id(f) for f in _slope(scene)}
+    slope = {f.key for f in _slope(scene)}
     folds = [e for e in scene.mesh.edges
-             if len(e.faces) == 2 and all(id(f) in slope for f in e.faces)]
+             if len(e.faces) == 2 and all(f.key in slope for f in e.faces)]
     assert len(folds) == segments                # 11 in the fan + 1
     assert sum(1 for e in folds if e.soft) == segments - 1
     assert sum(1 for e in folds if not e.soft) == 1

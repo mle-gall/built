@@ -52,16 +52,24 @@ def _orphans(mesh) -> list:
     held = set()
     for f in mesh.faces:
         for v in f.loop:
-            held.add(id(v))
+            held.add(v.key)
         for hole in f.hole_loops:
             for v in hole:
-                held.add(id(v))
-    return [v for v in mesh.vertices if not v.edges and id(v) not in held]
+                held.add(v.key)
+    return [v for v in mesh.vertices if not v.edges and v.key not in held]
 
 
 def _registry_ghosts(mesh) -> list:
-    live = {id(v) for v in mesh.vertices}
-    return [k for k, v in mesh._registry.items() if id(v) not in live]
+    store = mesh.__dict__.get("_store")
+    if store is not None:
+        # A store files list indices; a cell held by a vertex that is no
+        # longer listed has none.
+        cells, index = store.registry()
+        n = len(mesh.vertices)
+        return [tuple(c) for c, i in zip(cells.tolist(), index.tolist())
+                if not 0 <= i < n]
+    live = {v.key for v in mesh.vertices}
+    return [k for k, v in mesh._registry.items() if v.key not in live]
 
 
 def _snapshot(mesh) -> tuple:
@@ -137,7 +145,7 @@ def test_deleting_a_group_sweeps_a_ghost_the_session_carried():
     hist = History(scene)
     hist.execute(MakeGroupCommand([list(scene.mesh.faces)[0]], []))
     ghost = scene.mesh.vertex(V(9, 9, 9))         # a corner nothing uses
-    assert scene.mesh.vertex_at(V(9, 9, 9)) is ghost
+    assert scene.mesh.vertex_at(V(9, 9, 9)) == ghost
     hist.execute(DeleteGroupCommand(scene.groups[0]))
     assert _orphans(scene.mesh) == []
     assert scene.mesh.vertex_at(V(9, 9, 9)) is None

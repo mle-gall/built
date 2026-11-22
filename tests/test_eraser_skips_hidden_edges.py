@@ -47,7 +47,7 @@ def test_a_stroke_over_the_front_face_leaves_the_edge_behind():
     win, vp, back = _box_seen_from_the_front()
     try:
         px, py = vp._world_to_pixel(V(1, 2, 1))
-        assert vp.pick_edge(px, py) is back      # it IS under the cursor
+        assert vp.pick_edge(px, py) == back      # it IS under the cursor
         tool = EraserTool()
         tool._mark(vp, px, py)
         assert back not in tool.marked

@@ -250,7 +250,7 @@ def test_a_long_drag_down_and_back_scales_every_vertex():
     tool = ScaleTool()
     tool.on_activate(vp)
     grip = max(tool._grips, key=lambda g: g.params)          # a corner
-    before = {id(v): QVector3D(v.position) for v in scene.mesh.vertices}
+    before = {v.key: QVector3D(v.position) for v in scene.mesh.vertices}
     anchor = None
     tool._grab(vp, grip, (0.0, 0.0))
     anchor = QVector3D(tool._anchor)
@@ -261,6 +261,6 @@ def test_a_long_drag_down_and_back_scales_every_vertex():
     tool._apply_preview(vp, (0.5, 0.5, 0.5))
     tool._commit(vp, (0.5, 0.5, 0.5))
     for v in scene.mesh.vertices:
-        want = anchor + (before[id(v)] - anchor) * 0.5
+        want = anchor + (before[v.key] - anchor) * 0.5
         assert (v.position - want).length() < 1e-5
     assert len(scene.mesh.vertices) == len(before)

@@ -131,8 +131,8 @@ def test_sequential_weld_is_vertex_by_vertex(monkeypatch, engine):
         vpos, pid = lazy_mesh.weld(pts, sequential=True)
         assert vpos.tolist() == [list(v.position.toTuple())
                                  for v in m.vertices]
-        assert [id(m.vertices[i]) for i in pid.tolist()] == \
-            [id(v) for v in vs]
+        assert [m.vertices[i].key for i in pid.tolist()] == \
+            [v.key for v in vs]
 
 
 def test_planned_vertices_read_like_the_vertex_list(binary, tmp_path):

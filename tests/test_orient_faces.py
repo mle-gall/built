@@ -59,7 +59,7 @@ def test_a_scrambled_cube_winds_like_the_chosen_face():
     seed = faces["bottom"]
     before = _normal(seed)
     flip = faces_to_flip(seed)
-    assert {id(f) for f in flip} == {id(faces[k]) for k in ("top", "left", "back")}
+    assert {f.key for f in flip} == {faces[k].key for k in ("top", "left", "back")}
     FlipFacesCommand(flip).do(_Scene(m))
     assert _agree(m)
     assert _normal(seed) == before           # the chosen face never turns

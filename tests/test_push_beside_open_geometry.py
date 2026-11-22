@@ -60,11 +60,11 @@ def test_the_open_cube_itself_is_left_as_it_was():
     scene = Scene()
     hist = History(scene)
     _open_cube(scene, hist)
-    before = {id(f): f.normal() for f in scene.mesh.faces}
+    before = {f.key: f.normal() for f in scene.mesh.faces}
     _push(scene, hist, _rect_face(scene, hist, 3.0), 1.0)
     for f in scene.mesh.faces:
-        if id(f) in before:
-            assert V.dotProduct(f.normal(), before[id(f)]) > 0.999
+        if f.key in before:
+            assert V.dotProduct(f.normal(), before[f.key]) > 0.999
 
 
 def test_a_misread_flip_through_an_open_mesh_is_taken_back(monkeypatch):
