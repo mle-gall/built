@@ -61,9 +61,14 @@ impl State {
                 && a.efaces.same_chunk(&b.efaces, c)
         }, |s, live_b, live_a, same_key| {
             let (eb, ea) = (live_b.then(|| *b.ends.get(s as usize)), live_a.then(|| *a.ends.get(s as usize)));
-            if !same_key || eb != ea {
+            if !same_key {
                 touched.extend(eb.into_iter().flatten());
                 touched.extend(ea.into_iter().flatten());
+            } else if let (Some(old), Some(new)) = (eb, ea) {
+                // A split keeps the first half's edge key. Its shared end
+                // still has exactly the same incident edge.
+                touched.extend(old.into_iter().filter(|v| !new.contains(v)));
+                touched.extend(new.into_iter().filter(|v| !old.contains(v)));
             }
             if !same_key {
                 return false;
