@@ -221,7 +221,25 @@ pub struct Ui {
     top_right_w: f32,
     units: String,
     glass: crate::glass::Glass,
+    /// The app's one question or message (unsaved changes, errors,
+    /// confirmations): Python owns its keys and waits for the answer.
+    sheet: Option<Sheet>,
+    /// Work in progress, in the top bar: open, import, save, auto-save.
+    jobs: Vec<Job>,
 }
+
+/// A sheet: title, body, tone (question, info, warning, error) and its
+/// buttons (id, label, key hint, role: 0 plain, 1 default, 2 discard, 3 cancel).
+#[derive(Clone)]
+pub struct Sheet {
+    title: String,
+    body: String,
+    tone: String,
+    buttons: Vec<(String, String, String, u8)>,
+}
+
+/// One job: id, what (the file), phase, fraction (< 0: no percentage), cancellable.
+pub type Job = (String, String, String, f32, bool);
 
 /// One tree row as Python sends it, in display order (Python owns
 /// expansion and filtering; the dock only draws and reports).
@@ -403,6 +421,8 @@ impl Ui {
             top_groups: Vec::new(),
             top_right_w: 0.0,
             units: "mm".into(),
+            sheet: None,
+            jobs: Vec::new(),
         }
     }
 
@@ -541,6 +561,21 @@ impl Ui {
         self.form = Some(Form { title, fields, choice_open });
     }
     pub fn set_units(&mut self, units: String) { self.units = units; }
+    /// Shows (or replaces) the sheet; an empty title takes it down. A
+    /// sheet closes whatever menu was open: one float at a time.
+    pub fn set_sheet(&mut self, title: String, body: String, tone: String, buttons: Vec<(String, String, String, u8)>) {
+        if title.is_empty() { self.sheet = None; return; }
+        self.view_open = false;
+        self.sel_more = false;
+        self.menu = None;
+        self.cmd_open = false;
+        if let Some(col) = self.column.as_mut() {
+            col.row_menu = None; col.kind_menu = None; col.head_menu = None; col.pick = None; col.color_pick = None;
+        }
+        self.ctx.memory_mut(|m| m.stop_text_input());
+        self.sheet = Some(Sheet { title, body, tone, buttons });
+    }
+    pub fn set_jobs(&mut self, jobs: Vec<Job>) { self.jobs = jobs; }
     pub fn set_tabs(&mut self, tabs: Vec<Vec<Item>>) { self.tabs = tabs; }
     pub fn set_delivery(&mut self, active: String, unfiled: u32, problems: u32) {
         self.delivery = Some((active, unfiled, problems));
@@ -556,10 +591,13 @@ impl Ui {
     pub fn claims_key(&self, name: &str) -> bool {
         let filing = self.column.as_ref().is_some_and(|c| c.filing.is_some() || c.row_menu.is_some() || !c.mode.is_empty()
             || c.kind_menu.is_some() || c.head_menu.is_some() || c.prompt.is_some());
-        self.cmd_open || (name == "Escape" && (self.view_open || self.sel_more || self.menu.is_some() || self.form.is_some() || filing))
+        self.sheet.is_some() || self.cmd_open || (name == "Escape" && (self.view_open || self.sel_more || self.menu.is_some() || self.form.is_some() || filing))
             || self.ctx.wants_keyboard_input()
     }
     pub fn key(&mut self, name: &str, pressed: bool, mods: u8) -> bool {
+        // The sheet's keys are answered in Python (Enter, Esc, ⌘D); none
+        // reaches what is under it.
+        if self.sheet.is_some() { return true; }
         if self.cmd_open && pressed {
             match name {
                 "Escape" => { self.cmd_open = false; self.ctx.memory_mut(|m| m.stop_text_input()); return true; }
@@ -866,6 +904,7 @@ impl Ui {
     pub fn top_empty(&self, x: f32, y: f32) -> bool {
         let p = pos2(x, y);
         y <= TOP_H && !self.top_groups.iter().any(|r| r.contains(p))
+            && !self.ctx.memory(|m| m.area_rect(egui::Id::new("jobs"))).is_some_and(|r| !self.jobs.is_empty() && r.contains(p))
             && !(self.projects.is_none() && x < 86.0)
     }
 
@@ -1926,6 +1965,143 @@ impl Ui {
         }
     }
 
+    /// Work in progress in the middle of the top bar (council: a state,
+    /// never a sheet): ring, what, phase, percentage, Cancel when it can
+    /// stop. Several: the first, and how many more.
+    fn jobs_chip(&mut self, ctx: &egui::Context, screen: Rect) {
+        let Some((id, what, phase, fraction, cancel)) = self.jobs.first().cloned() else { return };
+        let more = self.jobs.len() - 1;
+        // Between the bar's two groups, centred on the window.
+        let left = self.top_groups.first().map_or(GUT, |r| r.max.x) + 12.0;
+        let right = self.top_groups.get(1).map_or(screen.max.x - GUT, |r| r.min.x) - 12.0;
+        let room = (right - left).max(0.0);
+        if room < 60.0 { return; }
+        let mut cancelled = false;
+        // No fade in: a save draws one frame of it, then blocks.
+        egui::Area::new(egui::Id::new("jobs"))
+            .fade_in(false)
+            .pivot(egui::Align2::CENTER_CENTER)
+            .fixed_pos(pos2(screen.center().x.clamp(left + room.min(420.0) / 2.0, (right - room.min(420.0) / 2.0).max(left)), TOP_H / 2.0))
+            .order(egui::Order::Foreground)
+            .show(ctx, |ui| {
+                glass(Surface::Pill).corner_radius(CornerRadius::same(R_CONTROL)).inner_margin(Margin { left: 8, right: 4, top: 2, bottom: 2 }).show(ui, |ui| {
+                    ui.set_max_width(room.min(420.0));
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing = vec2(6.0, 0.0);
+                        // The ring: the share done, or a quiet arc when unknown.
+                        let (r, _) = ui.allocate_exact_size(vec2(16.0, 24.0), Sense::hover());
+                        let c = r.center();
+                        ui.painter().circle_stroke(c, 6.0, Stroke::new(2.0_f32, FIELD));
+                        let (a0, span) = if fraction >= 0.0 { (-std::f32::consts::FRAC_PI_2, fraction.clamp(0.0, 1.0) * std::f32::consts::TAU) }
+                                         else { (-std::f32::consts::FRAC_PI_2, std::f32::consts::FRAC_PI_2) };
+                        let n = ((span / std::f32::consts::TAU) * 32.0).ceil().max(2.0) as usize;
+                        let pts: Vec<Pos2> = (0..=n).map(|i| {
+                            let a = a0 + span * i as f32 / n as f32;
+                            c + vec2(a.cos(), a.sin()) * 6.0
+                        }).collect();
+                        if span > 0.0 { ui.painter().add(egui::Shape::line(pts, Stroke::new(2.0_f32, ACCENT))); }
+                        // What, then the phase and the share, cut to the room left.
+                        let pct = if fraction >= 0.0 { format!("{:.0} %", (fraction * 100.0).clamp(0.0, 100.0)) } else { String::new() };
+                        let extra = if more > 0 { format!("  +{more}") } else { String::new() };
+                        let mut job = egui::text::LayoutJob::default();
+                        job.append(&what, 0.0, egui::TextFormat { font_id: strong(12.0), color: INK, ..Default::default() });
+                        if !phase.is_empty() {
+                            job.append(&format!("  ·  {phase}"), 0.0, egui::TextFormat { font_id: body(), color: DIM, ..Default::default() });
+                        }
+                        let tail = 16.0 + 6.0 + if pct.is_empty() { 0.0 } else { 44.0 } + if cancel { 30.0 } else { 4.0 } + extra.len() as f32 * 7.0;
+                        job.wrap.max_width = (room.min(420.0) - 12.0 - tail).max(40.0);
+                        job.wrap.max_rows = 1;
+                        job.wrap.break_anywhere = true;
+                        let g = ui.painter().layout_job(job);
+                        let (tr_, _) = ui.allocate_exact_size(vec2(g.size().x, 24.0), Sense::hover());
+                        ui.painter().galley(pos2(tr_.min.x, tr_.center().y - g.size().y / 2.0), g, INK);
+                        if !pct.is_empty() {
+                            let (pr, _) = ui.allocate_exact_size(vec2(38.0, 24.0), Sense::hover());
+                            ui.painter().text(pr.right_center(), egui::Align2::RIGHT_CENTER, &pct, meta(), DIM);
+                        }
+                        if !extra.is_empty() {
+                            ui.label(egui::RichText::new(extra.trim()).font(meta()).color(FAINT));
+                        }
+                        if cancel {
+                            let (xr, resp) = ui.allocate_exact_size(vec2(24.0, 24.0), Sense::click());
+                            let st = state_of(&resp, false, true);
+                            paint_state(ui, xr, st, R_ROW);
+                            let k = 3.5;
+                            let pen = Stroke::new(1.3_f32, if resp.hovered() { INK } else { DIM });
+                            let c = xr.center();
+                            ui.painter().line_segment([c + vec2(-k, -k), c + vec2(k, k)], pen);
+                            ui.painter().line_segment([c + vec2(-k, k), c + vec2(k, -k)], pen);
+                            if resp.on_hover_text("Cancel (esc)").clicked() { cancelled = true; }
+                        } else {
+                            ui.add_space(4.0);
+                        }
+                    });
+                });
+            });
+        if cancelled { self.actions.push(format!("job:cancel:{id}")); }
+    }
+
+    /// The sheet: hung under the top bar over the free model area, a scrim
+    /// over everything else taking every click (Python makes it modal).
+    /// Discard sits apart on the left; the default is the accent button.
+    fn sheet_popup(&mut self, ctx: &egui::Context, screen: Rect) {
+        let Some(sheet) = self.sheet.clone() else { return };
+        let mut clicked: Option<String> = None;
+        let left = if self.review { GUT } else { GUT + 72.0 + GUT };
+        let right = if self.review { screen.max.x - GUT } else { self.free_right(ctx, screen) - GUT };
+        let w = 400.0_f32.min((right - left).max(280.0)).min(screen.width() - 2.0 * GUT);
+        let x = ((left + right) / 2.0 - w / 2.0).clamp(GUT, (screen.max.x - GUT - w).max(GUT));
+        egui::Area::new(egui::Id::new("sheet"))
+            .fade_in(false)
+            .fixed_pos(Pos2::ZERO)
+            .order(egui::Order::Tooltip)
+            .show(ctx, |ui| {
+                // The scrim: every click under the sheet is the sheet's.
+                let (all, _) = ui.allocate_exact_size(screen.size(), Sense::click_and_drag());
+                ui.painter().rect_filled(Rect::from_min_max(pos2(all.min.x, TOP_H), all.max), CornerRadius::ZERO,
+                                         Color32::from_black_alpha(72));
+                let at = Rect::from_min_size(pos2(x, TOP_H + 48.0), vec2(w, screen.height() - TOP_H - 56.0));
+                ui.scope_builder(egui::UiBuilder::new().max_rect(at), |ui| {
+                    glass(Surface::Raised).inner_margin(Margin::same(14)).show(ui, |ui| {
+                        ui.set_width(w - 28.0);
+                        ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing = vec2(8.0, 0.0);
+                            let (glyph, ink) = match sheet.tone.as_str() {
+                                "warning" | "error" => ("!", WARN),
+                                "info" => ("i", ACCENT),
+                                _ => ("?", ACCENT),
+                            };
+                            let (r, _) = ui.allocate_exact_size(vec2(20.0, 20.0), Sense::hover());
+                            ui.painter().circle_stroke(r.center(), 8.5, Stroke::new(1.4_f32, ink));
+                            ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, glyph, strong(11.0), ink);
+                            ui.add(egui::Label::new(egui::RichText::new(&sheet.title).font(title_font()).color(INK)).wrap());
+                        });
+                        if !sheet.body.is_empty() {
+                            ui.add_space(8.0);
+                            ui.horizontal(|ui| {
+                                ui.add_space(28.0);
+                                ui.add(egui::Label::new(egui::RichText::new(&sheet.body).font(body()).color(DIM)).wrap());
+                            });
+                        }
+                        ui.add_space(14.0);
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing = vec2(6.0, 0.0);
+                            for (id, label, hint, role) in sheet.buttons.iter().filter(|b| b.3 == 2) {
+                                if sheet_button(ui, label, hint, *role) { clicked = Some(id.clone()); }
+                            }
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                for (id, label, hint, role) in sheet.buttons.iter().rev().filter(|b| b.3 != 2) {
+                                    if sheet_button(ui, label, hint, *role) { clicked = Some(id.clone()); }
+                                }
+                            });
+                        });
+                    });
+                });
+            });
+        if let Some(id) = clicked { self.actions.push(format!("sheet:{id}")); }
+    }
+
     /// The value field on the geometry it measures (Maxence 2026-11-22):
     /// Python anchors it (middle of the rubber band, beside a pulled face);
     /// it stays inside the free area. Typing lights it up; Enter applies.
@@ -1995,6 +2171,8 @@ impl Ui {
             self.form_popup(ctx);
             self.command_palette(ctx, screen);
             if !self.review { self.selection_more(ctx); }
+            self.jobs_chip(ctx, screen);
+            self.sheet_popup(ctx, screen);
         });
         let work = !self.review;
         let shown = [("top", true), ("palette", work && !self.groups.is_empty()),
@@ -2009,7 +2187,9 @@ impl Ui {
                      ("head_menu", self.column.as_ref().is_some_and(|c| c.head_menu.is_some())),
                      ("prompt", self.column.as_ref().is_some_and(|c| c.prompt.is_some())),
                      ("pick_menu", self.column.as_ref().is_some_and(|c| c.pick.is_some())),
-                     ("color_pick", self.column.as_ref().is_some_and(|c| c.color_pick.is_some()))];
+                     ("color_pick", self.column.as_ref().is_some_and(|c| c.color_pick.is_some())),
+                     ("jobs", !self.jobs.is_empty()),
+                     ("sheet", self.sheet.is_some())];
         self.hit = shown.iter()
             .filter(|(_, on)| *on)
             .filter_map(|(n, _)| ctx.memory(|m| m.area_rect(egui::Id::new(*n))))
@@ -2205,6 +2385,34 @@ fn chip_button(ui: &mut egui::Ui, label: &str) -> bool {
     paint_state(ui, rect, st, R_CONTROL);
     ui.painter().rect_stroke(rect, CornerRadius::same(R_CONTROL), Stroke::new(1.0_f32, EDGE), egui::StrokeKind::Inside);
     ui.painter().galley(rect.center() - g.size() / 2.0, g, INK);
+    resp.clicked()
+}
+
+/// A sheet button, 28 high: the default in accent, the rest a neutral
+/// wash; the key that answers it in faint type after the label.
+fn sheet_button(ui: &mut egui::Ui, label: &str, hint: &str, role: u8) -> bool {
+    let primary = role == 1;
+    let ink = if primary { Color32::WHITE } else { INK };
+    let g = ui.painter().layout_no_wrap(label.to_owned(), strong(12.0), ink);
+    let k = (!hint.is_empty()).then(|| ui.painter().layout_no_wrap(hint.to_owned(), meta(),
+        if primary { Color32::from_rgba_unmultiplied(255, 255, 255, 150) } else { FAINT }));
+    let kw = k.as_ref().map_or(0.0, |k| k.size().x + 8.0);
+    let (rect, resp) = ui.allocate_exact_size(vec2((g.size().x + kw + 24.0).max(72.0), 28.0), Sense::click());
+    let r = CornerRadius::same(R_CONTROL);
+    if primary {
+        let fill = if resp.is_pointer_button_down_on() { Color32::from_rgb(0x55, 0x8C, 0xE6) }
+                   else if resp.hovered() { Color32::from_rgb(0x7A, 0xB0, 0xFF) } else { ACCENT };
+        ui.painter().rect_filled(rect, r, fill);
+    } else {
+        ui.painter().rect_filled(rect, r, HOVER);
+        paint_state(ui, rect, state_of(&resp, false, true), R_CONTROL);
+        ui.painter().rect_stroke(rect, r, Stroke::new(1.0_f32, EDGE), egui::StrokeKind::Inside);
+    }
+    let x0 = rect.center().x - (g.size().x + kw) / 2.0;
+    ui.painter().galley(pos2(x0, rect.center().y - g.size().y / 2.0), g.clone(), ink);
+    if let Some(k) = k {
+        ui.painter().galley(pos2(x0 + g.size().x + 8.0, rect.center().y - k.size().y / 2.0), k, ink);
+    }
     resp.clicked()
 }
 
