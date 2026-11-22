@@ -331,14 +331,20 @@ class SetTagStateCommand(Command):
     flags."""
     keeps_paint = True
     keeps_rows = True
-    doc_undo = False
+    #: Tag flags, folder visibility and the links' overrides (plugin data)
+    #: are all document state: the step's transaction undoes it.
+    doc_undo = True
 
     def __init__(self, tags, folders, visible, locked):
         self.tags, self.folders = list(tags), list(folders)
         self.visible, self.locked = visible, locked
 
     def doc_after(self, scene, phase) -> None:
-        pass
+        if phase == "redo":
+            for entity in list(scene.selection):
+                if not scene.entity_visible(entity):
+                    scene.selection.discard(entity)
+        scene.version += 1
 
     def do(self, scene):
         from copy import deepcopy

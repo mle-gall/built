@@ -255,24 +255,41 @@ if ENABLED:
 # would, and its root re-read at every boundary from then on (``suspect``):
 # edits made through the plain reference are written back too.
 
-_DIRTY: dict = {}       # id(root) -> root: edited since the last flush
-_SUSPECT: dict = {}     # id(root) -> root: holds containers it does not track
+_DIRTY: dict = {}       # id(anchor) -> anchor: edited since the last flush
+_SUSPECT: dict = {}     # id(anchor) -> anchor: holds containers it does not track
 
 
-def _wrap(value, root):
+class _Anchor:
+    """What every container of one tracked value points at: the binding
+    (``(key, attr)``, or None once replaced) and a weak reference to the
+    top container. Weak, so a tracked value is no reference cycle: a
+    record's dicts go with their node by reference counting, not by the
+    collector (a model's links registry is tens of thousands of them)."""
+
+    __slots__ = ("bind", "root")
+
+    def __init__(self):
+        self.bind = None
+        self.root = None
+
+
+def _wrap(value, anchor):
     t = type(value)
     if t is dict or t is TrackedDict:
         out = TrackedDict.__new__(TrackedDict)
-        top = out if root is None else root
-        out._doc_root = top
-        dict.__init__(out, ((k, _wrap(v, top)) for k, v in dict.items(value)))
     elif t is list or t is TrackedList:
         out = TrackedList.__new__(TrackedList)
-        top = out if root is None else root
-        out._doc_root = top
-        list.__init__(out, [_wrap(v, top) for v in list.__iter__(value)])
     else:
         return value
+    if anchor is None:
+        import weakref
+        anchor = _Anchor()
+        anchor.root = weakref.ref(out)
+    out._doc_root = anchor
+    if t is dict or t is TrackedDict:
+        dict.__init__(out, ((k, _wrap(v, anchor)) for k, v in dict.items(value)))
+    else:
+        list.__init__(out, [_wrap(v, anchor) for v in list.__iter__(value)])
     return out
 
 
@@ -286,18 +303,18 @@ def _plain(value):
 
 
 def _edited(node) -> None:
-    root = node._doc_root
-    if getattr(root, "_doc_bind", None) is not None:
-        _DIRTY[id(root)] = root
+    anchor = node._doc_root
+    if anchor.bind is not None:
+        _DIRTY[id(anchor)] = anchor
 
 
 def _stored(node, value):
     """``value`` going into ``node``: a container this root does not track
     makes the root suspect (see above)."""
     if isinstance(value, (dict, list)) and getattr(value, "_doc_root", None) is not node._doc_root:
-        root = node._doc_root
-        if getattr(root, "_doc_bind", None) is not None:
-            _SUSPECT[id(root)] = root
+        anchor = node._doc_root
+        if anchor.bind is not None:
+            _SUSPECT[id(anchor)] = anchor
     return value
 
 
@@ -307,20 +324,25 @@ def flush() -> None:
     meanwhile becomes a plain one."""
     if not ENABLED or not (_DIRTY or _SUSPECT):
         return
-    roots = list(_DIRTY.values())
+    anchors = dict(_SUSPECT)
+    anchors.update(_DIRTY)
     _DIRTY.clear()
-    roots.extend(r for k, r in _SUSPECT.items() if k not in {id(x) for x in roots})
-    for root in roots:
-        bind = getattr(root, "_doc_bind", None)
-        if bind is None or not NATIVE.doc_attr_changed(bind[0], bind[1], root):
-            root._doc_bind = None        # replaced: a plain container now
-            _SUSPECT.pop(id(root), None)
+    for anchor in anchors.values():
+        root = anchor.root() if anchor.root is not None else None
+        bind = anchor.bind
+        if root is None or bind is None or not NATIVE.doc_attr_changed(bind[0], bind[1], root):
+            anchor.bind = None           # replaced: a plain container now
+            _SUSPECT.pop(id(anchor), None)
 
 
 class TrackedDict(dict):
     """A document attribute's dict (see above)."""
 
-    __slots__ = ("_doc_root", "_doc_bind")
+    __slots__ = ("_doc_root", "__weakref__")
+
+    @property
+    def _doc_bind(self):
+        return self._doc_root.bind
 
     def __setitem__(self, k, v):
         dict.__setitem__(self, k, _stored(self, v))
@@ -377,7 +399,11 @@ class TrackedDict(dict):
 class TrackedList(list):
     """A document attribute's list (see above)."""
 
-    __slots__ = ("_doc_root", "_doc_bind")
+    __slots__ = ("_doc_root", "__weakref__")
+
+    @property
+    def _doc_bind(self):
+        return self._doc_root.bind
 
     def append(self, v):
         list.append(self, _stored(self, v))
@@ -457,8 +483,52 @@ def _track(key, attr, value):
     """Rust → the tracked container attribute ``attr`` of node ``key`` is
     handed out as."""
     out = _wrap(value, None)
-    out._doc_bind = (key, attr)
+    out._doc_root.bind = (key, attr)
     return out
+
+
+def _patch(old, new, root):
+    """``old`` (a container in a tracked attribute, tracked or plain) made
+    equal to ``new`` (plain) in place, keeping the containers it holds
+    where they still are containers of the same kind: a reference held to
+    one of them sees the value too. Order follows ``new``."""
+    if isinstance(old, dict):
+        items = []
+        for k, v in new.items():
+            cur = dict.get(old, k, _patch)
+            if isinstance(cur, dict) and type(v) is dict or (
+                    isinstance(cur, list) and type(v) is list):
+                _patch(cur, v, root)
+                items.append((k, cur))
+            else:
+                items.append((k, _wrap(v, root)))
+        dict.clear(old)
+        for k, v in items:
+            dict.__setitem__(old, k, v)
+        return
+    out = []
+    for i, v in enumerate(new):
+        cur = list.__getitem__(old, i) if i < list.__len__(old) else None
+        if isinstance(cur, dict) and type(v) is dict or (
+                isinstance(cur, list) and type(v) is list):
+            _patch(cur, v, root)
+            out.append(cur)
+        else:
+            out.append(_wrap(v, root))
+    list.__setitem__(old, slice(None), out)
+
+
+def _refill(view, value) -> bool:
+    """Rust → an undo, redo or rollback put ``value`` back into the
+    attribute ``view`` is the tracked container of: refill it in place (a
+    held reference sees the value, as a command's own undo editing the
+    dict in place showed it). False when it cannot (another kind)."""
+    if isinstance(view, TrackedDict) and type(value) is dict or (
+            isinstance(view, TrackedList) and type(value) is list):
+        _patch(view, value, view._doc_root)
+        _DIRTY.pop(id(view._doc_root), None)
+        return True
+    return False
 
 
 def plain(value):
@@ -468,6 +538,7 @@ def plain(value):
 
 if ENABLED:
     NATIVE.doc_set_track_hook(_track)
+    NATIVE.doc_set_refill_hook(_refill)
 
 
 def attribute(name: str, track: bool = True):

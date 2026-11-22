@@ -65,6 +65,55 @@ fn hooks(py: Python<'_>) -> PyResult<(Py<PyAny>, Py<PyAny>)> {
     }
 }
 
+/// `refill(view, value) -> bool`: put `value` into the tracked container
+/// `view` in place (`core.doc_model._refill`); False when it cannot.
+static REFILL: Mutex<Option<Py<PyAny>>> = Mutex::new(None);
+
+/// After a replay: refill the tracked containers it wrote (see
+/// `Doc::refills`); one that cannot take the value stops being the view.
+fn run_refills(py: Python<'_>) -> PyResult<()> {
+    let todo = std::mem::take(&mut lock().refills);
+    if todo.is_empty() {
+        return Ok(());
+    }
+    let hook = REFILL.lock().unwrap_or_else(|e| e.into_inner()).as_ref().map(|h| h.clone_ref(py));
+    let mut first_err = None;
+    for (k, a, view, val) in todo {
+        let ok = match &hook {
+            Some(h) => match val.to_py(py).and_then(|v| h.bind(py).call1((view.bind(py), v))) {
+                Ok(r) => r.is_truthy().unwrap_or(false),
+                Err(e) => {
+                    first_err.get_or_insert(e);
+                    false
+                }
+            },
+            None => false,
+        };
+        if !ok {
+            let gone = {
+                let mut d = lock();
+                d.node_mut(k).and_then(|n| {
+                    let i = n.attr_views.iter().position(|(x, v)| *x == a && v.as_ptr() == view.as_ptr())?;
+                    Some(n.attr_views.swap_remove(i).1)
+                })
+            };
+            drop(gone);
+        }
+        drop(view);
+    }
+    match first_err {
+        Some(e) => Err(e),
+        None => Ok(()),
+    }
+}
+
+/// Install the refill hook (`core.doc_model._refill`).
+#[pyfunction]
+fn doc_set_refill_hook(refill: Py<PyAny>) {
+    let old = REFILL.lock().unwrap_or_else(|e| e.into_inner()).replace(refill);
+    drop(old);
+}
+
 fn track_hook(py: Python<'_>) -> Option<Py<PyAny>> {
     TRACK.lock().unwrap_or_else(|e| e.into_inner()).as_ref().map(|t| t.clone_ref(py))
 }
@@ -1829,7 +1878,9 @@ impl PyTransaction {
         };
         drop(trash);
         drain_pending();
-        r.map_err(PyRuntimeError::new_err)
+        let refilled = run_refills(py);
+        r.map_err(PyRuntimeError::new_err)?;
+        refilled
     }
 }
 
@@ -1876,7 +1927,9 @@ fn doc_rollback(py: Python<'_>) -> PyResult<()> {
     };
     drop(trash);
     drain_pending();
-    r.map_err(PyRuntimeError::new_err)
+    let refilled = run_refills(py);
+    r.map_err(PyRuntimeError::new_err)?;
+    refilled
 }
 
 /// Install the matrix-view hooks: `make(key, which, data16, src)` builds a
@@ -2159,6 +2212,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(doc_set_many, m)?)?;
     m.add_function(wrap_pyfunction!(doc_parent_mode, m)?)?;
     m.add_function(wrap_pyfunction!(doc_set_track_hook, m)?)?;
+    m.add_function(wrap_pyfunction!(doc_set_refill_hook, m)?)?;
     m.add_function(wrap_pyfunction!(doc_attr_changed, m)?)?;
     m.add_class::<DocAttr>()?;
     m.add_function(wrap_pyfunction!(doc_walk, m)?)?;

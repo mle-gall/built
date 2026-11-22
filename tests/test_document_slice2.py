@@ -373,3 +373,32 @@ def test_a_transaction_names_the_placements_it_wrote():
     t = txn(edit)
     assert list(t.placements(["hidden", "layer"])) == [a]
     assert list(t.placements()) == [a, b]
+
+
+def test_a_held_container_sees_the_undo():
+    """Undo by transaction refills the attribute's tracked container in
+    place, nested ones included, as a command's own undo editing the dict
+    showed it (a tree view holding a links-registry entry across Ctrl+Z)."""
+    scene = Scene()
+    scene.plugin_data["links"] = {"a.igz": {"overrides": {}}}
+    doc_model.flush()
+    entry = scene.plugin_data["links"]["a.igz"]
+    t = txn(lambda: entry["overrides"].update({"A / Rails": False}))
+    t.undo()
+    assert entry["overrides"] == {} and scene.plugin_data["links"]["a.igz"] is entry
+    t.redo()
+    assert entry["overrides"] == {"A / Rails": False}
+
+
+def test_tracked_values_are_no_reference_cycles():
+    import weakref
+    g = Group(Mesh(), name="g")
+    g.ext = {"link": {"path": "a.igz", "parts": [{"uid": "x"}]}}
+    inner = weakref.ref(g.ext["link"]["parts"][0])
+    top = weakref.ref(g.ext)
+    gc.disable()
+    try:
+        del g
+        assert inner() is None and top() is None     # no collector needed
+    finally:
+        gc.enable()

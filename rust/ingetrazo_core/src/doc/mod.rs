@@ -585,6 +585,12 @@ pub struct Doc {
     /// Set while a journal is replayed (undo, redo, rollback): the tree
     /// invariant was checked when it was recorded.
     pub replaying: bool,
+    /// Tracked containers whose attribute a replay (undo, redo, rollback)
+    /// wrote: kept as the attribute's view and refilled in place with the
+    /// value once the lock is gone (`py::run_refills`), so a reference held
+    /// across the undo (`entry = links.registry(scene)[path]`) sees it, as
+    /// a Python command's own undo editing the dict in place showed it.
+    pub refills: Vec<(Key, u16, Py<PyAny>, Value)>,
 }
 
 /// The arena's lock. Every caller holds the GIL and nothing calls into
@@ -970,12 +976,26 @@ impl Doc {
     pub fn write(&mut self, py: Python<'_>, k: Key, f: Field, v: FVal, trash: &mut Trash) -> Result<FVal, String> {
         let journal = self.journal_open() && !self.open.as_ref().is_some_and(|o| o.born.contains(&k));
         let new = if journal { Some(v.clone()) } else { None };
+        let replaying = self.replaying;
+        let mut refill = None;
         let old = {
             let n = self.node_mut(k).ok_or_else(|| format!("no document node {k:#x}"))?;
+            let keep = match (&f, &v) {
+                (Field::Attr(a), FVal::Val(Some(val @ (Value::Dict(_) | Value::List(_))))) if replaying => {
+                    n.attr_view(*a).map(|view| (*a, view.clone_ref(py), val.clone()))
+                }
+                _ => None,
+            };
             let old = n.put(f, v)?;
-            n.drop_view(f, trash);
+            match keep {
+                Some(r) => refill = Some(r),
+                None => n.drop_view(f, trash),
+            }
             old
         };
+        if let Some((a, view, val)) = refill {
+            self.refills.push((k, a, view, val));
+        }
         self.serial += 1;
         if let Some(new) = new {
             self.pin(py, k);
