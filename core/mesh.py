@@ -803,6 +803,18 @@ class Mesh:
         self._mut_serial += 1
         return len(doomed), len(ghosts)
 
+    def _relist_corners(self, vertices) -> None:
+        """Before a relink: list again each of ``vertices`` the mesh no
+        longer has (a restore to a state older than the vertex, then the
+        redo of the edge or face it carries), in order, so the relinked
+        element never rests on an unlisted vertex."""
+        listed = {v.key for v in self.vertices}
+        for v in vertices:
+            if v.key not in listed:
+                self.vertices.append(v)
+                listed.add(v.key)
+                self._registry.setdefault(_key(v.position), v)
+
     def relink_vertices(self, vertices) -> None:
         """Re-attach vertices a previous :meth:`drop_orphan_vertices` took
         out (redo), preserving their identity; a position already filed
@@ -1189,6 +1201,7 @@ class Mesh:
         identity so other commands' references stay valid."""
         if edge in self.edges:
             return
+        self._relist_corners((edge.v0, edge.v1))
         edge.v0.edges.add(edge)
         edge.v1.edges.add(edge)
         self.edges.append(edge)
@@ -1201,6 +1214,7 @@ class Mesh:
         missing boundary edges and re-registering incidence."""
         if face in self.faces:
             return
+        self._relist_corners([v for lp in (face.loop, *face.hole_loops) for v in lp])
         for lp in (face.loop, *face.hole_loops):
             n = len(lp)
             for i in range(n):
