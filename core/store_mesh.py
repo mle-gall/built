@@ -75,8 +75,7 @@ def enabled() -> bool:
     if not _native.store_wanted():
         return False
     mod = _native.native
-    return mod is not None and hasattr(mod, "MeshStore") and hasattr(
-        mod.MeshStore, "face_rings")
+    return mod is not None and hasattr(getattr(mod, "StoreSnapshot", None), "cap_scope")
 
 
 def _module():
