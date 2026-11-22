@@ -183,7 +183,7 @@ def test_save_from_the_menu_saves_that_project(win, tmp_path, monkeypatch):
     from core.i18n import tr
     from views import main_window
     a, b, c = _three(win)
-    target = tmp_path / "desde-el-menu.igz"
+    target = tmp_path / "desde-el-menu.built"
     monkeypatch.setattr(main_window.file_dialogs, "getSaveFileName",
                         lambda *a_, **k: (str(target), ""))
     _actions(win._build_project_tab_menu(b))[tr("Save")].trigger()
