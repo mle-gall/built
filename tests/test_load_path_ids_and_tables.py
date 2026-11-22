@@ -127,7 +127,10 @@ def test_populate_clones_with_stable_ids_and_copied_records():
     # Every slot the source had is there, as copy.copy gave.
     from core.group import Group as G
     for name in G.__slots__:
+        if name == "source_uid":
+            continue                 # set on a link's parts (73ca3c85)
         assert hasattr(l, name) == hasattr(leaf, name), name
+    assert c.source_uid == child.uid and l.source_uid == leaf.uid
 
 
 def test_populate_keeps_an_empty_record_a_copy_of_its_own():

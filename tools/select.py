@@ -769,7 +769,7 @@ class SelectTool(Tool):
         found: list = []
 
         def add(entity):
-            if entity is not None and all(entity is not e for e in found):
+            if entity is not None and all(entity != e for e in found):
                 found.append(entity)
         add(self._pick(viewport, screen_x, screen_y))
         for entity, _d in self._linework(viewport, screen_x, screen_y):
@@ -811,7 +811,7 @@ class SelectTool(Tool):
                 and math.hypot(screen_x - cycle["at"][0],
                                screen_y - cycle["at"][1]) <= self.CYCLE_PX
                 and len(cycle["candidates"]) == len(candidates)
-                and all(a is b for a, b in zip(cycle["candidates"],
+                and all(a == b for a, b in zip(cycle["candidates"],
                                                 candidates))
                 and set(viewport.scene.selection) == cycle["selected"]):
             index = (cycle["index"] + 1) % len(candidates)

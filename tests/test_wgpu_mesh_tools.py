@@ -122,7 +122,9 @@ def test_erase_stroke_commits_on_release(inside):
     native.tool.on_release(native)
     assert len(history.undo_stack) == 1
     assert not scene.mesh.edges
-    assert len(updates.changed) == 1
+    # Inside a group that started empty the placement never had a GPU row;
+    # emptied again it retires instead of rebaking (3689a2ae).
+    assert len(updates.changed) == (0 if inside else 1)
     history.undo()
     native.update()
     assert edge in scene.mesh.edges

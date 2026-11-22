@@ -438,7 +438,7 @@ class MeshToolAccess:
         """Whether every viewing ray to this segment ends before resident geometry."""
         from views.wgpu_inference import _screen_rows
         view = self.view
-        index = view.inference_index
+        index = getattr(view, "inference_index", None)
         if index is None:
             return True
         pa, pb = self._world_to_pixel(a), self._world_to_pixel(b)
