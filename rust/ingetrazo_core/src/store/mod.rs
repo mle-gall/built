@@ -46,6 +46,7 @@ mod solid;
 mod caps;
 mod cap_outline;
 mod orient_seed;
+mod winding;
 #[cfg(test)]
 mod tests;
 

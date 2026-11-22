@@ -1562,6 +1562,15 @@ impl PyMeshStore {
         Ok(self.net_change(&before))
     }
 
+    fn reverse_faces(&mut self, keys: Vec<u128>) -> PyResult<PyChange> {
+        let slots = keys.into_iter().map(|k| live_of(&self.inner, Kind::Face, k))
+            .collect::<PyResult<Vec<_>>>()?;
+        Ok(self.op(|s, ch| {
+            s.reverse_faces(slots, ch);
+            Ok(())
+        })?.1)
+    }
+
     /// `turn_face_over`'s ring reversal (outer and holes).
     fn reverse_face(&mut self, key: u128) -> PyResult<PyChange> {
         let f = any_of(&self.inner, Kind::Face, key)?;

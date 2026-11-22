@@ -154,7 +154,8 @@ def _command_meshes(cmd, scene, phase) -> list:
         elif isinstance(c, SnapshotMutation):
             out.append(c._target(scene))
         meshes = getattr(c, "meshes", None)
-        if callable(meshes) and type(c).__name__ == "SoftenByAngleCommand":
+        if callable(meshes) and type(c).__name__ in (
+                "SoftenByAngleCommand", "FlipFacesCommand", "FlipGroupsCommand"):
             out.extend(meshes())
     seen, uniq = set(), []
     for m in out:
