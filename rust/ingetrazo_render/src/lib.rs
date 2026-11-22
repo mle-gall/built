@@ -2373,8 +2373,10 @@ impl Renderer {
         Ok(bytes)
     }
 }
+/// Public so the `built` app can register the module statically
+/// (`append_to_inittab`) and share one renderer with the embedded Python.
 #[pymodule]
-fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
+pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(panic_log::install_panic_log, m)?)?;
     m.add_function(wrap_pyfunction!(panic_log::_panic_for_test, m)?)?;
     m.add_class::<Renderer>()
