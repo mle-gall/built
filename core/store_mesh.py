@@ -75,8 +75,7 @@ def enabled() -> bool:
     if not _native.store_wanted():
         return False
     mod = _native.native
-    return mod is not None and hasattr(mod, "MeshStore") and hasattr(
-        mod.MeshStore, "face_rings")
+    return mod is not None and hasattr(getattr(mod, "StoreSnapshot", None), "cap_scope")
 
 
 def _module():
@@ -604,6 +603,15 @@ class FaceView(_ViewMixin, Face):
         if rings is None:
             return Face._newell(self)
         return _newell(rings[0])
+
+    def triangulate(self, normal=None):
+        from core._native import qt_hypot
+        store = _store_of(self._m)
+        if store is not None and qt_hypot() and store.is_live(self.key):
+            triangles = store.face_triangles(self.key, qt_hypot(),
+                                             normal.toTuple() if normal is not None else None)
+            return [tuple(QVector3D(*p) for p in t) for t in triangles]
+        return Face.triangulate(self, normal)
 
     def normal(self) -> QVector3D:
         m = self._m
@@ -1937,6 +1945,15 @@ def _restore_store_state(m, snap: StoreState) -> None:
     m.__class__ = StoreMesh
     m._chunk_dirty = True
     m._mut_serial += 1
+
+
+def empty_store_mesh():
+    """Fresh empty store for a result built from store-backed operands."""
+    from core import _native
+    mesh = Mesh()
+    store = _native.available().MeshStore(next(_mesh._KEY_NAMESPACES), **_weld_args())
+    become_store(mesh, store, [])
+    return mesh
 
 
 def become_store(m, store, table, own=None) -> None:

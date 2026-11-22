@@ -43,6 +43,9 @@ Built (`core.protocol.commands.run(history, name, **args)`):
 | Command | Arguments | Runs |
 |---|---|---|
 | `move_vertices` | `vertices: [vertex key]`, `delta: [x, y, z]` | `MoveVerticesCommand` (the Move tool's: coincident vertices move along, warped faces fold) |
+| `solid_operation` | `operation` (outer_shell, union, subtract, trim, intersect, split), `placements` (sibling uids in pick order) | Runs the Solid Tools command. The step names consumed and result placements. |
+| `rebuild_cap` | `face: seed face key` | Rebuild its plane, including debris pruning. Undo and redo restore the original and replacement keys. |
+| `orient_faces` | `face: seed face key` | Flip inconsistent neighbours across two-face edges. All keys survive. |
 | `push_pull` | `face: face key`, `distance: number`, `keep_base: bool = false` | the Push/Pull tool locked on the face, the distance typed, committed (clamped as the tool clamps) |
 | `erase` | `edges: [edge key]`, `faces: [face key]` | `EraseSelectionCommand` (the Eraser: a split line between coplanar faces dissolves) |
 | `undo`, `redo` | — | `History.undo` / `redo` |
@@ -98,6 +101,9 @@ an undo snapshot or materialises a store.
 
 | Query | Arguments | Answer |
 |---|---|---|
+| `face_set_volume` | `keys, mesh?` | `{mesh, missing, volume}` for the selected face rings |
+| `solid_report` | `mesh?` | `{mesh, solid, volume}`, local cubic metres or null |
+| `triangles` | `keys, mesh?` | Face keys, oriented triangle coordinates and missing keys |
 | `mesh_info` | `mesh?` | `{mesh, backing: "store" \| "python", vertices, edges, faces, active, revision}` |
 | `faces` | `keys`, `mesh?` | per face: `rings` (positions, outer first, then holes), `corners` (vertex keys, same shape), `normal`; `missing` keys |
 | `edges` | `keys`, `mesh?` | per edge: `ends` (vertex keys), `positions`, `soft`, `hidden`, `faces` (keys, with multiplicity); `missing` |

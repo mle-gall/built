@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import math
 import random
+import sys
 from collections import defaultdict
 from typing import Optional
 
@@ -54,6 +55,14 @@ from core.orient import (
 
 # A point this close to the plane (along its normal) counts as on it.
 _ON_PLANE = 1e-4
+
+
+def _snapshot_triangles(mesh, keys):
+    from core._native import qt_hypot
+    from core.orient import _PackedTris
+    positions, tris, owners, _ = mesh._store.snapshot().indexed_surface(qt_hypot(), keys)
+    a = positions[tris[:, 0]]
+    return _PackedTris(a, positions[tris[:, 1]] - a, positions[tris[:, 2]] - a, owners)
 
 
 class RebuildCache:
@@ -100,7 +109,17 @@ class RebuildCache:
         """Face key → edge-connected component label, recomputed when the mesh
         changes."""
         if self._comp is None or self._comp_token != self.token:
-            self._comp = {f.key: c for f, c in _face_components(mesh).items()}
+            from core.store_mesh import StoreMesh, FaceView, EdgeView
+            if isinstance(mesh, StoreMesh):
+                seeds = [f.key for f in self.seed_faces]
+                labels, edges = mesh._store.snapshot().cap_scope(seeds)
+                self._comp = dict(labels)
+                live = {self._comp[k] for k in seeds if k in self._comp}
+                self._scope = ([FaceView(mesh, k) for k, c in labels if c in live],
+                               [EdgeView(mesh, k) for k in edges]) if live else None
+                self._scope_token = self.token
+            else:
+                self._comp = {f.key: c for f, c in _face_components(mesh).items()}
             self._comp_token = self.token
         return self._comp
 
@@ -121,9 +140,11 @@ class RebuildCache:
         the cost, more than the scans themselves."""
         if not self.seed_faces:
             return None
-        if self._scope is not None and self._scope_token == self.token:
+        if self._scope_token == self.token:
             return self._scope
         comp = self.components(mesh)
+        if self._scope_token == self.token:
+            return self._scope
         live = {comp[f.key] for f in self.seed_faces if f.key in comp}
         if not live:
             self._scope, self._scope_token = None, self.token
@@ -169,10 +190,14 @@ class RebuildCache:
         if tok == self.token and k == key and val is not None:
             return val
         comp = self.components(mesh) if want is not None else None
-        val = _pack_lists([
-            self.triangles(f) for f in mesh.faces
-            if not f.interior and f not in shadowed
-            and (want is None or comp.get(f.key) in want)])
+        from core._native import qt_hypot
+        from core.store_mesh import StoreMesh
+        selected = (f for f in mesh.faces if f not in shadowed
+                    and (want is None or comp.get(f.key) in want))
+        if isinstance(mesh, StoreMesh) and qt_hypot():
+            val = _snapshot_triangles(mesh, [f.key for f in selected])
+        else:
+            val = _pack_lists([self.triangles(f) for f in selected if not f.interior])
         self._packed = (self.token, key, val)
         return val
 
@@ -353,6 +378,10 @@ def _union_outline(solid_regions_xy, keep_segs=None) -> list:
             if ok and len(loop) >= 3:
                 loops.append([coords[k] for k in loop])
 
+    return _nest_outlines(loops)
+
+
+def _nest_outlines(loops):
     # Classify: CCW loops are outer faces, CW loops are holes; nest each hole in
     # the smallest outer that contains it.
     outers = [lp for lp in loops if _signed_area(lp) > _area_floor(lp)]
@@ -416,11 +445,19 @@ def rebuild_plane(mesh, origin: QVector3D, normal: QVector3D,
     def to3d(xy):
         return origin + u * xy[0] + v * xy[1]
 
-    segs = [
-        (e.a, e.b)
-        for e in scope_edges
-        if _on_plane(e.a, origin, normal) and _on_plane(e.b, origin, normal)
-    ]
+    from core._native import qt_hypot
+    from core.store_mesh import EdgeView, StoreMesh
+    native = isinstance(mesh, StoreMesh) and qt_hypot()
+    if native:
+        rows = mesh._store.snapshot().cap_segments(
+            origin.toTuple(), normal.toTuple(), _ON_PLANE, qt_hypot(),
+            None if scope is None else [e.key for e in scope_edges])
+        plane_edges = [EdgeView(mesh, k) for k, _ in rows]
+        segs = [(QVector3D(*a), QVector3D(*b)) for _, (a, b) in rows]
+    else:
+        plane_edges = [e for e in scope_edges if _on_plane(e.a, origin, normal)
+                       and _on_plane(e.b, origin, normal)]
+        segs = [(e.a, e.b) for e in plane_edges]
     if len(segs) < 3:
         return None
 
@@ -489,7 +526,10 @@ def rebuild_plane(mesh, origin: QVector3D, normal: QVector3D,
     # cannot change the verdict — while its *unmarked* interior partitions
     # could, by adding a lone third crossing. A single-component mesh gets the
     # whole mesh, so ordinary drawn geometry is unaffected.
-    if cache is None:
+    if cache is None and native:
+        keys = [f.key for f in mesh.faces if f not in shadowed] if shadowed else None
+        packed = _snapshot_triangles(mesh, keys)
+    elif cache is None:
         packed = _pack_lists([t for f, t in _face_triangles(mesh).items()
                               if not f.interior and f not in shadowed])
     else:
@@ -526,22 +566,32 @@ def rebuild_plane(mesh, origin: QVector3D, normal: QVector3D,
     # side — the sweep envelops old boundary faces that still miscount); a
     # Ctrl push never declares (it removes nothing and its quads are
     # divisions).
-    fresh_polys = ([] if keep_mode else
-                   _proj_polys(f for f in fresh_set if not f.interior))
-    fresh_cover_polys = _proj_polys(f for f in fresh_set if not f.interior)
-    old_polys = _proj_polys(f for f in scope_faces
-                            if f not in fresh_set or f.interior)
-    # An OUTWARD push whose side lands back to back on a boundary face — the
-    # riser a step's pulled-up square rises against: the old face and the
-    # fresh side cover the same spot with OPPOSITE windings, and material
-    # now reads on both sides because the push put it there. That strip is
-    # inside the solid; it goes, as it should. Kept as a «partition» it
-    # left the side standing inside the solid, three faces on its edges,
-    # and the guard refused the pull (issue #94, @xyont: «cannot pull up…
-    # push down working properly»). Only that exact pairing: any other old
-    # face covering a both-sides region keeps its partition role.
-    old_boundary_polys = _proj_polys(f for f in scope_faces
-                                     if f not in fresh_set and not f.interior)
+    samples = []
+    for outer, holes in regions_3d:
+        outer_xy = [to2d(p) for p in outer]
+        holes_xy = [[to2d(p) for p in h] for h in holes]
+        samples.append((outer_xy, holes_xy, _region_test_point(outer_xy, holes_xy)))
+
+    if native:
+        coverage = mesh._store.snapshot().cap_coverage(
+            origin.toTuple(), normal.toTuple(), [p for _, _, p in samples],
+            [f.key for f in fresh_set], _ON_PLANE, qt_hypot(), sys.version_info >= (3, 12),
+            None if scope is None else [f.key for f in scope_faces])
+    else:
+        fresh_polys = _proj_polys(f for f in fresh_set if not f.interior)
+        old_polys = _proj_polys(f for f in scope_faces if f not in fresh_set or f.interior)
+        skin_polys = _proj_polys(f for f in scope_faces if f not in fresh_set and not f.interior)
+
+        def winding_mask(polys, probe):
+            mask = 0
+            for poly, positive in polys:
+                if _poly_covers(poly, probe):
+                    mask |= 1 if positive else 2
+            return mask
+
+        coverage = [(any(_poly_covers(poly, p) for poly, _ in old_polys),
+                     winding_mask(skin_polys, p), winding_mask(fresh_polys, p))
+                    for _, _, p in samples]
 
     # Group boundary regions by which side holds the material — each group is
     # unioned separately because its faces wind the other way (outward points
@@ -561,10 +611,7 @@ def rebuild_plane(mesh, origin: QVector3D, normal: QVector3D,
     solid_by_side: dict = {True: [], False: []}  # material on +side / on -side
     partitions: list = []
     sheets: list = []
-    for outer, holes in regions_3d:
-        outer_xy = [to2d(p) for p in outer]
-        holes_xy = [[to2d(p) for p in h] for h in holes]
-        ip_xy = _region_test_point(outer_xy, holes_xy)
+    for (outer_xy, holes_xy, ip_xy), (old, skin, fresh_mask) in zip(samples, coverage):
         ip = to3d(ip_xy)
         mat_plus = ray_parity_outside(
             ip + normal * _SAMPLE_OFF, normal, None, rng,
@@ -575,18 +622,15 @@ def rebuild_plane(mesh, origin: QVector3D, normal: QVector3D,
         if mat_plus != mat_minus:
             solid_by_side[mat_plus].append((outer_xy, holes_xy))
             continue
-        decl = {p for poly, p in fresh_polys if _poly_covers(poly, ip_xy)}
+        decl = 0 if keep_mode else fresh_mask
         if mat_plus:  # material on both sides
-            if removing and len(decl) == 1:
+            if removing and decl in (1, 2):
                 # One fresh winding covers the spot: the carve declares which
                 # side emptied (parity can be blind to a void still walled in
                 # by an untrimmed neighbouring plane).
-                solid_by_side[not decl.pop()].append((outer_xy, holes_xy))
+                solid_by_side[decl == 2].append((outer_xy, holes_xy))
             elif (not removing and not keep_mode
-                    and any(_poly_covers(poly, ip_xy) and any(
-                        _poly_covers(fpoly, ip_xy) and fplus != plus
-                        for fpoly, fplus in fresh_polys)
-                        for poly, plus in old_boundary_polys)):
+                    and ((skin & 1 and decl & 2) or (skin & 2 and decl & 1))):
                 # The strip is inside the solid now, and so is its outline:
                 # the old crease along its rim (a riser's top edge) is the
                 # op's seam from here on, free to dissolve when the next
@@ -598,23 +642,18 @@ def rebuild_plane(mesh, origin: QVector3D, normal: QVector3D,
                     op.extend(rim)
                 if cache is not None:
                     cache.dropped.extend(rim)
-            elif (not removing or not decl) and (
-                any(_poly_covers(poly, ip_xy) for poly, _ in old_polys)
-                or (keep_mode and any(_poly_covers(poly, ip_xy)
-                                      for poly, _ in fresh_cover_polys))
-            ):
+            elif (not removing or not decl) and (old or (keep_mode and fresh_mask)):
                 # Existing structure — or, in keep mode, the stack's own fresh
                 # quad cutting through solid interior: a Ctrl-stack grown into
                 # the body lays brand-new divisions where no face existed.
                 partitions.append((outer_xy, holes_xy))
         else:         # material on neither side
-            if not removing and len(decl) == 1:
+            if not removing and decl in (1, 2):
                 # An outward sweep envelops old boundary faces that still
                 # count in parity ("void below" misread): its own quad
                 # declares the new material side.
-                solid_by_side[not decl.pop()].append((outer_xy, holes_xy))
-            elif not decl and any(
-                    _poly_covers(poly, ip_xy) for poly, _ in old_polys):
+                solid_by_side[decl == 2].append((outer_xy, holes_xy))
+            elif not decl and old:
                 sheets.append((outer_xy, holes_xy))
             # otherwise: op debris (a flush-landed cap or collapsed fin)
 
@@ -655,9 +694,7 @@ def rebuild_plane(mesh, origin: QVector3D, normal: QVector3D,
         return any(a != attrs[0] for a in attrs[1:])
 
     keep_segs: list = []
-    for e in scope_edges:
-        if not (_on_plane(e.a, origin, normal) and _on_plane(e.b, origin, normal)):
-            continue
+    for e in plane_edges:
         if any(abs(QVector3D.dotProduct(_fnormal(f), normal)) < 0.999
                for f in e.faces):
             keep_segs.append((to2d(e.a), to2d(e.b)))
@@ -665,11 +702,18 @@ def rebuild_plane(mesh, origin: QVector3D, normal: QVector3D,
                                              or _parts_paint(e)):
             keep_segs.append((to2d(e.a), to2d(e.b)))
 
+    def outlines(regions):
+        if native:
+            loops = mesh._store.snapshot().trace_cap_outlines(regions, keep_segs, _TOL)
+            if loops is not None:
+                return _nest_outlines(loops)
+        return _union_outline(regions, keep_segs)
+
     result = []
     for mat_plus, regions in solid_by_side.items():
         if not regions:
             continue
-        for outer, holes in _union_outline(regions, keep_segs):
+        for outer, holes in outlines(regions):
             # CCW in (u, v) gives a +normal face; flip when the material is on
             # the +side so the face points outward (toward the empty side).
             if mat_plus:
@@ -682,7 +726,7 @@ def rebuild_plane(mesh, origin: QVector3D, normal: QVector3D,
     if partitions:
         # Interior partitions have no outward side; keep the arrangement's
         # winding (orientation leaves them as-is anyway).
-        for outer, holes in _union_outline(partitions, keep_segs):
+        for outer, holes in outlines(partitions):
             result.append(
                 ([to3d(p) for p in outer],
                  [[to3d(p) for p in h] for h in holes], True)
@@ -690,7 +734,7 @@ def rebuild_plane(mesh, origin: QVector3D, normal: QVector3D,
     if sheets:
         # Free sheets (flat drawing attached to the solid) — not boundary, not
         # partition; they survive the rebuild as plain faces.
-        for outer, holes in _union_outline(sheets, keep_segs):
+        for outer, holes in outlines(sheets):
             result.append(
                 ([to3d(p) for p in outer],
                  [[to3d(p) for p in h] for h in holes], False)
@@ -778,11 +822,30 @@ def apply_rebuild(mesh, origin: QVector3D, normal: QVector3D,
          [[to2d(p) for p in h] for h in f.holes], dict(f.attrs))
         for f in old if f.attrs
     ]
-    for f in old:
-        mesh.remove_face(f)
-    for outer, holes, interior in rebuilt:
-        nf = mesh.add_face(outer, holes or None)
-        nf.interior = interior
+    from core.store_mesh import FaceView, StoreMesh, _fallback
+    replacements = None
+    if isinstance(mesh, StoreMesh):
+        from core.topology import _maximal_holes
+        caps = []
+        for outer, holes, interior in rebuilt:
+            rings = [outer, *(_maximal_holes(holes) if len(holes) > 1 else holes)]
+            caps.append(([[p.toTuple() for p in ring] for ring in rings], interior))
+        try:
+            keys, _change = mesh._store.replace_plane_faces([f.key for f in old], caps)
+        except _fallback():
+            mesh._materialise()
+        else:
+            replacements = [FaceView(mesh, k) for k in keys]
+            mesh._dirty()
+    if replacements is None:
+        for f in old:
+            mesh.remove_face(f)
+    for index, (outer, holes, interior) in enumerate(rebuilt):
+        if replacements is None:
+            nf = mesh.add_face(outer, holes or None)
+            nf.interior = interior
+        else:
+            nf = replacements[index]
         if donors:
             ip = _region_test_point([to2d(p) for p in outer],
                                     [[to2d(p) for p in h] for h in (holes or [])])
@@ -801,6 +864,14 @@ def prune_plane_debris(mesh, origin: QVector3D, normal: QVector3D) -> None:
     seams a union dissolved. Perimeter edges still border a wall, so they keep
     a face and survive. Vertices those edges leave behind with no incidence at
     all go too (they would otherwise haunt snapping)."""
+    from core._native import qt_hypot
+    from core.store_mesh import StoreMesh
+    if isinstance(mesh, StoreMesh) and qt_hypot():
+        change = mesh._store.prune_plane_debris(origin.toTuple(), normal.toTuple(),
+                                                _ON_PLANE, qt_hypot())
+        if any(change.removed.values()):
+            mesh._dirty()
+        return
     for e in list(mesh.edges):
         if (not e.faces
                 and _on_plane(e.a, origin, normal)
@@ -847,6 +918,14 @@ def crack_planes(mesh, near=None) -> list:
     face of the Plaza (09-10) — and planes far from the push recomputed."""
     seen: dict = {}
 
+    from core.store_mesh import StoreMesh
+    from core._native import qt_hypot
+    if isinstance(mesh, StoreMesh) and qt_hypot():
+        for p, n in mesh._store.snapshot().crack_planes(qt_hypot(), sys.version_info >= (3, 12), near):
+            key, origin, normal = plane_key(QVector3D(*p), QVector3D(*n))
+            seen.setdefault(key, (origin, normal))
+        return list(seen.values())
+
     def inside(p) -> bool:
         return (near[0] <= p.x() <= near[3] and near[1] <= p.y() <= near[4]
                 and near[2] <= p.z() <= near[5])
@@ -875,6 +954,13 @@ def edges_along(mesh, segments) -> list:
     material and capped a hole."""
     if not segments:
         return []
+
+    from core.store_mesh import EdgeView, StoreMesh
+    from core._native import qt_hypot
+    if isinstance(mesh, StoreMesh) and qt_hypot():
+        lines = [(a.toTuple(), b.toTuple()) for a, b in segments]
+        keys = mesh._store.snapshot().edges_along(lines, _ON_PLANE, qt_hypot())
+        return [EdgeView(mesh, k) for k in keys]
 
     def on(p, a, b) -> bool:
         ab = b - a
@@ -938,6 +1024,19 @@ def seam_planes(mesh, new_faces) -> list:
     out of the arrangement, and the whole floor went as «not traced» --
     the push refused, more often the bigger the model (#1076)."""
     seen: dict = {}
+    from core.store_mesh import StoreMesh
+    from core._native import qt_hypot
+    if isinstance(mesh, StoreMesh) and qt_hypot():
+        rows = mesh._store.snapshot().seam_planes(
+            [f.key for f in new_faces], _ON_PLANE, _HAIR_COS2, qt_hypot(), sys.version_info >= (3, 12))
+        for point, normal, correction in rows:
+            key, origin, cn = plane_key(QVector3D(*point), QVector3D(*normal))
+            if correction is not None and not seen.get(key, (False,))[0]:
+                _, _, cn = plane_key(origin, QVector3D(*correction))
+                seen[key] = (True, origin, cn)
+            else:
+                seen.setdefault(key, (False, origin, cn))
+        return [(o, n) for _, o, n in seen.values()]
     for f in new_faces:
         if f not in mesh.faces:
             continue

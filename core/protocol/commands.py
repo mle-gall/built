@@ -1,11 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""Commands of the core protocol by key (docs/core-protocol.md §1): the
-first three, each one History step on the open mesh, each answered with
-the step the change feed published for it.
+"""Commands of the core protocol by key (docs/core-protocol.md §1): each
+command runs through History and returns the step published by its change feed.
 
-``run(history, name, **args)``: ``move_vertices``, ``push_pull``,
-``erase``, ``undo``, ``redo``. Arguments are keys and plain numbers; an
+``run(history, name, **args)`` dispatches the names in ``COMMANDS``.
+Arguments are keys, placement uids and plain values. An
 unknown key raises ``KeyError`` before anything runs. The answer is
 ``{"ok", "step", "error", "rejected"}`` with ``step`` the feed's record
 (a :class:`core.protocol.feed.Step`) or None when nothing happened."""
@@ -102,6 +101,50 @@ def push_pull(history, face, distance, keep_base=False):
     return _answer(history, before)
 
 
+def rebuild_cap(history, face):
+    """Rebuild the plane of a seed face with the direct cap planner."""
+    from core.cap_rebuild import apply_rebuild
+    from core.history import CommandRejected, SnapshotMutation
+    seed, = _need(history.scene.mesh, "face", [face])
+    origin, normal = seed.centroid(), seed.normal()
+
+    def rebuild(scene):
+        if not apply_rebuild(scene.mesh, origin, normal):
+            raise CommandRejected("Cap already matches its plane")
+
+    before = history.revision
+    history.execute(SnapshotMutation(rebuild))
+    return _answer(history, before)
+
+
+def orient_faces(history, face):
+    """Orient the connected sheet to the seed face; all keys survive."""
+    from core.orient_faces import faces_to_flip
+    from core.history import FlipFacesCommand
+    seed, = _need(history.scene.mesh, "face", [face])
+    flip = faces_to_flip(seed)
+    before = history.revision
+    if flip:
+        history.execute(FlipFacesCommand(flip))
+    return _answer(history, before)
+
+
+def solid_operation(history, operation, placements):
+    """Run a solid tool with placement uids in pick order."""
+    from core.solids import OPS, SolidOperationCommand
+    if operation not in OPS:
+        raise ValueError(operation)
+    if len(set(placements)) != len(placements):
+        raise ValueError("duplicate placement uid")
+    scene = history.scene
+    siblings = scene.edit_group.children if scene.edit_group else scene.groups
+    groups = {g.uid: g for g in siblings}
+    inputs = [groups[uid] for uid in placements]
+    before = history.revision
+    history.execute(SolidOperationCommand(operation, inputs))
+    return _answer(history, before)
+
+
 def undo(history):
     before = history.revision
     history.undo()
@@ -114,8 +157,8 @@ def redo(history):
     return _answer(history, before)
 
 
-COMMANDS = {"move_vertices": move_vertices, "erase": erase,
-            "push_pull": push_pull, "undo": undo, "redo": redo}
+COMMANDS = {"move_vertices": move_vertices, "erase": erase, "orient_faces": orient_faces,
+            "rebuild_cap": rebuild_cap, "solid_operation": solid_operation, "push_pull": push_pull, "undo": undo, "redo": redo}
 
 
 def run(history, name, **args):

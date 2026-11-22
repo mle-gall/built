@@ -99,9 +99,13 @@ pub struct Geom {
 /// a `QVector3D`, divided by its own length (not `normalized()`), or
 /// `(0, 0, 1)` under three corners or below a length of 1e-9.
 pub fn face_normal(pos: &[V3], outer: &[u32], h: Hypot) -> V3 {
+    face_normal_length(pos, outer, h).0
+}
+
+pub(crate) fn face_normal_length(pos: &[V3], outer: &[u32], h: Hypot) -> (V3, f32) {
     let m = outer.len();
     if m < 3 {
-        return V3(0.0, 0.0, 1.0);
+        return (V3(0.0, 0.0, 1.0), 0.0);
     }
     let (mut nx, mut ny, mut nz) = (0.0f64, 0.0f64, 0.0f64);
     for k in 0..m {
@@ -116,9 +120,9 @@ pub fn face_normal(pos: &[V3], outer: &[u32], h: Hypot) -> V3 {
     let raw = V3(nx as f32, ny as f32, nz as f32);
     let len = facegeom::length(raw, h);
     if (len as f64) < 1e-9 {
-        V3(0.0, 0.0, 1.0)
+        (V3(0.0, 0.0, 1.0), len)
     } else {
-        div(raw, len)
+        (div(raw, len), len)
     }
 }
 
@@ -184,7 +188,7 @@ impl Geom {
 }
 
 /// `core.arrangement.plane_basis(normal)`.
-fn plane_basis(normal: V3, h: Hypot) -> (V3, V3) {
+pub(crate) fn plane_basis(normal: V3, h: Hypot) -> (V3, V3) {
     let n = facegeom::normalized(normal, h);
     let mut r = V3(1.0, 0.0, 0.0);
     if (r.dot(n, h) as f64).abs() > 0.9 {
@@ -839,6 +843,15 @@ pub struct Params {
     pub jitter: f64,
 }
 
+pub(crate) fn component_root(p: &mut [u32], mut x: u32) -> u32 {
+    while p[x as usize] != x {
+        let gp = p[p[x as usize] as usize];
+        p[x as usize] = gp;
+        x = gp;
+    }
+    x
+}
+
 /// `core.orient.orient_outward(mesh, seed, only)` on a scan whose parts
 /// RINGS, EFACES and FFLAGS are read and whose `geom` is built.
 pub fn orient(scan: &MeshScan, g: &Geom, only: Option<&[u32]>, prm: &Params) -> Decision {
@@ -870,27 +883,19 @@ pub fn orient(scan: &MeshScan, g: &Geom, only: Option<&[u32]>, prm: &Params) -> 
     }
     // _face_components: union-find through shared edges.
     let mut parent: Vec<u32> = (0..nf as u32).collect();
-    fn find(p: &mut [u32], mut x: u32) -> u32 {
-        while p[x as usize] != x {
-            let gp = p[p[x as usize] as usize];
-            p[x as usize] = gp;
-            x = gp;
-        }
-        x
-    }
     for e in 0..scan.n_edges() {
         let fs = scan.faces_of_edge(e);
         let mut it = fs.iter().copied().filter(|&f| f != NONE && (f as usize) < nf);
         let Some(first) = it.next() else { continue };
         for j in it {
-            let ra = find(&mut parent, first);
-            let rb = find(&mut parent, j);
+            let ra = component_root(&mut parent, first);
+            let rb = component_root(&mut parent, j);
             if ra != rb {
                 parent[ra as usize] = rb;
             }
         }
     }
-    let comp: Vec<u32> = (0..nf as u32).map(|f| find(&mut parent, f)).collect();
+    let comp: Vec<u32> = (0..nf as u32).map(|f| component_root(&mut parent, f)).collect();
     lap("coplanar + components", &mut t);
     let mut scope: Vec<u32> = match only {
         None => (0..nf as u32).collect(),

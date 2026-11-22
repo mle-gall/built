@@ -720,7 +720,8 @@ def transformed_mesh(src: Mesh, m) -> Mesh:
 def _transformed_mesh_walk(src: Mesh, m) -> Mesh:
     """Sequential per-entity copy — exact semantics for small meshes."""
     from PySide6.QtGui import QVector3D
-    new = Mesh()
+    from core.store_mesh import StoreMesh, empty_store_mesh
+    new = empty_store_mesh() if isinstance(src, StoreMesh) else Mesh()
     mirror = _is_mirror(m)
 
     def W(p) -> QVector3D:

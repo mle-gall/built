@@ -42,9 +42,21 @@ def _walks(face, a, b) -> bool:
     return any(x == a and y == b for x, y in _directed_edges(face, False))
 
 
+def _store_orientation(seed):
+    from core.store_mesh import FaceView, StoreMesh
+    if isinstance(seed, FaceView) and isinstance(seed._m, StoreMesh):
+        if seed._m._store.is_live(seed.key):
+            return seed._m._store.snapshot().seed_orientation(seed.key)
+    return None
+
+
 def faces_to_flip(seed) -> list:
     """The faces connected to ``seed`` that must be reversed so they all
     wind like it. ``seed`` itself is never in the list."""
+    native = _store_orientation(seed)
+    if native is not None:
+        from core.store_mesh import FaceView
+        return [FaceView(seed._m, k) for k in native[0]]
     flip = {seed.key: False}
     faces = {seed.key: seed}
     todo = deque([seed])
@@ -66,6 +78,9 @@ def faces_to_flip(seed) -> list:
 
 def connected_count(seed) -> int:
     """How many faces the orientation reached, ``seed`` included."""
+    native = _store_orientation(seed)
+    if native is not None:
+        return native[1]
     seen = {seed.key}
     todo = deque([seed])
     while todo:

@@ -258,6 +258,12 @@ def _known_placements(cmd, phase, step) -> bool:
         return all(_known_placements(c, phase, step) for c in cmd.commands)
     if getattr(cmd, "keeps_rows", False) or isinstance(cmd, _geometry_only()):
         return True
+    from core.solids import SolidOperationCommand
+    if isinstance(cmd, SolidOperationCommand):
+        added, gone = (cmd.removed, cmd.created) if phase == "undo" else (cmd.created, cmd.removed)
+        step.placements["created"].extend(g.uid for g in added or ())
+        step.placements["removed"].extend(g.uid for g in gone or ())
+        return True
     group = getattr(cmd, "group", None)
     uid = getattr(group, "uid", None)
     if isinstance(cmd, (H.InsertGroupCommand, H.DeleteGroupCommand)) and uid:

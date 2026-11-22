@@ -541,8 +541,18 @@ impl PyMeshStore {
             .collect())
     }
 
-    /// A face's rings as positions: what `normal()` / `area()` /
-    /// `vertices` read, in one call.
+    #[pyo3(signature = (key, hypot, normal=None))]
+    fn face_triangles(
+        &self,
+        key: u128,
+        hypot: &str,
+        normal: Option<[f32; 3]>,
+    ) -> PyResult<Vec<[[f32; 3]; 3]>> {
+        let store = &self.inner;
+        let face = slot_of(store, Kind::Face, key)?;
+        Ok(store.face_triangles(face, normal, crate::hypot_of(hypot)?))
+    }
+
     fn face_positions(&self, key: u128) -> PyResult<Vec<Vec<(f64, f64, f64)>>> {
         let f = any_of(&self.inner, Kind::Face, key)?;
         let st = &self.inner.state;
@@ -1197,6 +1207,38 @@ impl PyMeshStore {
         Ok((r.map(|(f, _, n)| (stacked, f, n)), ch))
     }
 
+    fn replace_plane_faces(
+        &mut self,
+        old: Vec<u128>,
+        caps: Vec<super::caps::Cap>,
+    ) -> PyResult<(Vec<u128>, PyChange)> {
+        let faces: PyResult<Vec<_>> = old.iter().map(|&k| slot_of(&self.inner, Kind::Face, k)).collect();
+        let faces = faces?;
+        if faces
+            .iter()
+            .copied()
+            .collect::<std::collections::HashSet<_>>()
+            .len()
+            != faces.len()
+        {
+            return Err(PyValueError::new_err("duplicate face key"));
+        }
+        self.op_all(|s, ch| s.replace_caps(&faces, &caps, ch))
+    }
+
+    fn prune_plane_debris(
+        &mut self,
+        origin: [f32; 3],
+        normal: [f32; 3],
+        tolerance: f64,
+        hypot: &str,
+    ) -> PyResult<PyChange> {
+        let h = crate::hypot_of(hypot)?;
+        Ok(self
+            .op(|s, ch| s.prune_plane_debris(origin, normal, tolerance, h, ch))?
+            .1)
+    }
+
     /// `turn_face_over`'s ring reversal (outer and holes).
     fn reverse_face(&mut self, key: u128) -> PyResult<PyChange> {
         let f = any_of(&self.inner, Kind::Face, key)?;
@@ -1325,6 +1367,220 @@ fn reader(snap: &Snapshot) -> Store {
 
 #[pymethods]
 impl PyStoreSnapshot {
+    fn cap_scope(&self, py: Python<'_>, seeds: Vec<u128>) -> (Vec<(u128, u32)>, Vec<u128>) {
+        let store = reader(&self.inner);
+        py.detach(|| store.cap_scope(&seeds))
+    }
+
+    #[pyo3(signature = (hypot, compensated, near=None))]
+    fn crack_planes(
+        &self,
+        py: Python<'_>,
+        hypot: &str,
+        compensated: bool,
+        near: Option<[f64; 6]>,
+    ) -> PyResult<Vec<([f32; 3], [f32; 3])>> {
+        let store = reader(&self.inner);
+        let h = crate::hypot_of(hypot)?;
+        Ok(py.detach(|| store.crack_planes(near, h, compensated)))
+    }
+
+    fn seam_planes(
+        &self,
+        py: Python<'_>,
+        keys: Vec<u128>,
+        tolerance: f64,
+        hair_cos2: f64,
+        hypot: &str,
+        compensated: bool,
+    ) -> PyResult<Vec<super::caps::Seam>> {
+        let store = reader(&self.inner);
+        let faces = keys
+            .into_iter()
+            .filter_map(|k| store.slot(Kind::Face, k))
+            .collect::<Vec<_>>();
+        let h = crate::hypot_of(hypot)?;
+        Ok(py.detach(|| store.seam_planes(&faces, tolerance / 2., hair_cos2, h, compensated)))
+    }
+
+    fn edges_along(
+        &self,
+        py: Python<'_>,
+        segments: Vec<[[f32; 3]; 2]>,
+        tolerance: f64,
+        hypot: &str,
+    ) -> PyResult<Vec<u128>> {
+        let store = reader(&self.inner);
+        let h = crate::hypot_of(hypot)?;
+        Ok(py.detach(|| store.edges_along(&segments, tolerance, h)))
+    }
+
+    fn triangles_by_face(
+        &self,
+        py: Python<'_>,
+        keys: Vec<u128>,
+        hypot: &str,
+    ) -> PyResult<Vec<Option<Vec<[[f32; 3]; 3]>>>> {
+        let store = reader(&self.inner);
+        let h = crate::hypot_of(hypot)?;
+        Ok(py.detach(|| {
+            keys.into_iter()
+                .map(|k| {
+                    store
+                        .slot(Kind::Face, k)
+                        .map(|f| store.face_triangles(f, None, h))
+                })
+                .collect()
+        }))
+    }
+
+    #[staticmethod]
+    fn trace_cap_outlines(
+        py: Python<'_>,
+        regions: Vec<super::cap_outline::Region>,
+        creases: Vec<[[f64; 2]; 2]>,
+        tolerance: f64,
+    ) -> Option<Vec<Vec<[f64; 2]>>> {
+        py.detach(|| super::cap_outline::trace(regions, &creases, tolerance))
+    }
+
+    #[pyo3(signature = (origin, normal, probes, fresh, tolerance, hypot, compensated, scope=None))]
+    fn cap_coverage(
+        &self,
+        py: Python<'_>,
+        origin: [f32; 3],
+        normal: [f32; 3],
+        probes: Vec<(f64, f64)>,
+        fresh: Vec<u128>,
+        tolerance: f64,
+        hypot: &str,
+        compensated: bool,
+        scope: Option<Vec<u128>>,
+    ) -> PyResult<Vec<(bool, u8, u8)>> {
+        let store = reader(&self.inner);
+        let h = crate::hypot_of(hypot)?;
+        let slots = |keys: Vec<u128>| {
+            keys.into_iter()
+                .map(|k| slot_of(&store, Kind::Face, k))
+                .collect::<PyResult<Vec<_>>>()
+        };
+        let scope = match scope {
+            Some(keys) => slots(keys)?,
+            None => store.live_slots(Kind::Face),
+        };
+        let fresh = slots(fresh)?;
+        Ok(py.detach(|| {
+            store.cap_coverage(&scope, &fresh, origin, normal, &probes, tolerance, h, compensated)
+        }))
+    }
+
+    #[pyo3(signature = (origin, normal, tolerance, hypot, keys=None))]
+    fn cap_segments(
+        &self,
+        py: Python<'_>,
+        origin: [f32; 3],
+        normal: [f32; 3],
+        tolerance: f64,
+        hypot: &str,
+        keys: Option<Vec<u128>>,
+    ) -> PyResult<Vec<(u128, [[f64; 3]; 2])>> {
+        use crate::facegeom::V3;
+        let store = reader(&self.inner);
+        let h = crate::hypot_of(hypot)?;
+        let edges = match keys {
+            Some(keys) => keys
+                .into_iter()
+                .map(|k| slot_of(&store, Kind::Edge, k))
+                .collect::<PyResult<_>>()?,
+            None => store.live_slots(Kind::Edge),
+        };
+        let o = V3(origin[0], origin[1], origin[2]);
+        let n = V3(normal[0], normal[1], normal[2]);
+        Ok(py.detach(|| {
+            edges
+                .into_iter()
+                .filter(|&e| store.edge_on_cap_plane(e, o, n, tolerance, h))
+                .map(|e| {
+                    (
+                        store.key(Kind::Edge, e),
+                        store
+                            .state
+                            .ends
+                            .get(e as usize)
+                            .map(|v| *store.state.vpos.get(v as usize)),
+                    )
+                })
+                .collect()
+        }))
+    }
+
+    fn edge_defects(&self, py: Python<'_>) -> [Vec<u128>; 3] {
+        let store = reader(&self.inner);
+        py.detach(|| store.edge_defects())
+    }
+
+    #[pyo3(signature = (hypot, keys=None))]
+    fn indexed_surface<'py>(
+        &self,
+        py: Python<'py>,
+        hypot: &str,
+        keys: Option<Vec<u128>>,
+    ) -> PyResult<(
+        Bound<'py, PyArray2<f64>>,
+        Bound<'py, PyArray2<u32>>,
+        Bound<'py, PyArray1<u32>>,
+        Vec<u128>,
+    )> {
+        let store = reader(&self.inner);
+        let h = crate::hypot_of(hypot)?;
+        let faces = match keys {
+            Some(keys) => keys
+                .into_iter()
+                .map(|k| slot_of(&store, Kind::Face, k))
+                .collect::<PyResult<_>>()?,
+            None => store.live_slots(Kind::Face),
+        };
+        let surface = py.detach(|| store.indexed_surface(&faces, h));
+        Ok((
+            rows3(py, &surface.positions),
+            rows3(py, &surface.triangles),
+            surface.owners.into_pyarray(py),
+            surface.faces,
+        ))
+    }
+
+    fn seed_orientation(&self, py: Python<'_>, key: u128) -> PyResult<(Vec<u128>, usize)> {
+        let store = reader(&self.inner);
+        let face = slot_of(&store, Kind::Face, key)?;
+        Ok(py.detach(|| store.seed_orientation(face)))
+    }
+
+    #[pyo3(signature = (key, hypot, normal=None))]
+    fn face_triangles(
+        &self,
+        key: u128,
+        hypot: &str,
+        normal: Option<[f32; 3]>,
+    ) -> PyResult<Vec<[[f32; 3]; 3]>> {
+        let store = &reader(&self.inner);
+        let face = slot_of(store, Kind::Face, key)?;
+        Ok(store.face_triangles(face, normal, crate::hypot_of(hypot)?))
+    }
+
+    fn solid_volume(&self, py: Python<'_>, hypot: &str) -> PyResult<Option<f64>> {
+        let store = reader(&self.inner);
+        let h = crate::hypot_of(hypot)?;
+        Ok(py.detach(|| store.solid_volume(h)))
+    }
+
+    fn face_set_volume(&self, py: Python<'_>, keys: Vec<u128>, hypot: &str) -> PyResult<Option<f64>> {
+        let store = reader(&self.inner);
+        let faces: PyResult<Vec<_>> = keys.into_iter().map(|k| slot_of(&store, Kind::Face, k)).collect();
+        let faces = faces?;
+        let h = crate::hypot_of(hypot)?;
+        Ok(py.detach(|| store.face_set_volume(&faces, h)))
+    }
+
     #[getter]
     fn namespace(&self) -> u64 {
         self.inner.state.ns
