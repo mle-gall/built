@@ -40,7 +40,7 @@ impl V3 {
         V3(self.0 * s, self.1 * s, self.2 * s)
     }
     #[inline]
-    fn div(self, s: f32) -> V3 {
+    pub(crate) fn div(self, s: f32) -> V3 {
         V3(self.0 / s, self.1 / s, self.2 / s)
     }
     #[inline]
@@ -654,7 +654,7 @@ fn earcut_impl(pts: &[(f64, f64)], holes: &[usize], spatial: bool) -> Vec<[usize
 }
 
 /// `core.triangulate.is_convex`.
-fn is_convex(poly: &[(f64, f64)]) -> bool {
+pub(crate) fn is_convex(poly: &[(f64, f64)]) -> bool {
     let n = poly.len();
     if n < 4 {
         return true;

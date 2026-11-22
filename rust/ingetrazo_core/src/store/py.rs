@@ -698,6 +698,12 @@ impl PyMeshStore {
         Ok(self.inner.offset_outline(face, normal, distance, crate::hypot_of(hypot)?))
     }
 
+    fn keep_offset_regions(&self, key: u128, regions: Vec<Vec<[f32; 3]>>, normal: [f32; 3],
+                           distance: f64, hypot: &str) -> PyResult<Vec<bool>> {
+        let face = live_of(&self.inner, Kind::Face, key)?;
+        Ok(super::offset::keep_regions(&self.inner, face, regions, normal, distance, crate::hypot_of(hypot)?))
+    }
+
     fn offset_face(&mut self, key: u128, regions: Vec<Vec<Vec<[f64; 3]>>>)
         -> PyResult<(Vec<u128>, PyChange)> {
         let face = live_of(&self.inner, Kind::Face, key)?;

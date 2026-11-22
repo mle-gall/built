@@ -84,3 +84,104 @@ impl Store {
         Ok(faces)
     }
 }
+
+/// The largest triangulated ear provides an interior witness even for concave
+/// regions. Measure its signed clearance from the original boundary.
+pub fn keep_regions(
+    store: &Store,
+    face: u32,
+    regions: Vec<Vec<[f32; 3]>>,
+    normal: [f32; 3],
+    distance: f64,
+    h: Hypot,
+) -> Vec<bool> {
+    use crate::earcut::earcut;
+    use crate::facegeom::{is_convex, plane_axes};
+    let n = normalized(V3(normal[0], normal[1], normal[2]), h);
+    let (u, v) = plane_axes(n, h);
+    let basis_ref = if n.0.abs() > 0.9 {
+        V3(0., 1., 0.)
+    } else {
+        V3(1., 0., 0.)
+    };
+    let bu = normalized(basis_ref.sub(n.mul(basis_ref.dot(n, h))), h);
+    let bv = normalized(n.cross(bu, h), h);
+    let rings = store.face_rings(face);
+    let boundary: Vec<_> = rings
+        .first()
+        .into_iter()
+        .flatten()
+        .map(|&i| {
+            let p = store.state.vpos.get(i as usize);
+            V3(p[0] as f32, p[1] as f32, p[2] as f32)
+        })
+        .collect();
+    if boundary.len() < 3 {
+        return vec![false; regions.len()];
+    }
+    let flat = |p: V3| {
+        let rel = p.sub(boundary[0]);
+        (rel.dot(bu, h) as f64, rel.dot(bv, h) as f64)
+    };
+    let outline: Vec<_> = boundary.iter().copied().map(flat).collect();
+    regions
+        .into_iter()
+        .map(|region| {
+            if region.len() < 3 {
+                return false;
+            }
+            let points: Vec<_> = region.iter().map(|p| V3(p[0], p[1], p[2])).collect();
+            let xy: Vec<_> = points
+                .iter()
+                .map(|&p| {
+                    let rel = p.sub(points[0]);
+                    (rel.dot(u, h) as f64, rel.dot(v, h) as f64)
+                })
+                .collect();
+            let triangles = if is_convex(&xy) {
+                (1..points.len() - 1).map(|i| [0, i, i + 1]).collect()
+            } else {
+                earcut(&xy.iter().map(|&(x, y)| [x, y]).collect::<Vec<_>>(), &[])
+            };
+            let mut best = 0.;
+            let mut witness = None;
+            for [a, b, c] in triangles {
+                let (a, b, c) = (points[a], points[b], points[c]);
+                let cross = b.sub(a).cross(c.sub(a), h);
+                let area = cross.dot(cross, h);
+                if area > best {
+                    best = area;
+                    witness = Some(a.add(b).add(c).div(3.));
+                }
+            }
+            let Some(p) = witness else {
+                return false;
+            };
+            let (x, y) = flat(p);
+            let mut inside = false;
+            let mut depth = f32::INFINITY;
+            for (i, &a) in boundary.iter().enumerate() {
+                let j = (i + 1) % boundary.len();
+                let delta = boundary[j].sub(a);
+                let l2 = delta.dot(delta, h);
+                let t = if l2 < 1e-18 {
+                    0.
+                } else {
+                    (p.sub(a).dot(delta, h) / l2).clamp(0., 1.)
+                };
+                depth = depth.min(length(p.sub(a.add(delta.mul(t))), h));
+                let ((xi, yi), (xj, yj)) = (outline[j], outline[i]);
+                if (yi > y) != (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi + 1e-30) + xi {
+                    inside = !inside;
+                }
+            }
+            let signed = if inside { depth } else { -depth };
+            signed as f64
+                >= if distance > 0. {
+                    distance * 0.75
+                } else {
+                    distance
+                }
+        })
+        .collect()
+}

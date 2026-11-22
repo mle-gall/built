@@ -139,7 +139,7 @@ def _offset_segments(loop: list, normal: QVector3D, d: float) -> list:
     return segments
 
 
-def offset_regions(loop: list, normal: QVector3D, d: float, *, segments=None) -> list:
+def offset_regions(loop: list, normal: QVector3D, d: float) -> list:
     """Offset ``loop`` by ``d`` (positive inward) and return the regions that
     survive, as ``[(outer, [holes]), …]``.
 
@@ -152,8 +152,7 @@ def offset_regions(loop: list, normal: QVector3D, d: float, *, segments=None) ->
     unit = normal.normalized()
     if unit.lengthSquared() < 0.5:
         return []
-    if segments is None:
-        segments = _offset_segments(loop, unit, d)
+    segments = _offset_segments(loop, unit, d)
     if not segments:
         return []
     try:
@@ -175,6 +174,23 @@ def offset_regions(loop: list, normal: QVector3D, d: float, *, segments=None) ->
             continue
         kept.append((outer, holes))
     return kept
+
+
+def store_offset_regions(store, face_key, loop, normal, distance, hypot):
+    """Slide and classify the store face using the drawing kernel's planar arrangement."""
+    from core.arrangement import planar_arrangement
+    if len(loop) < 3 or abs(distance) < 1e-9:
+        return []
+    pairs = store.offset_outline(face_key, normal.toTuple(), distance, hypot)
+    segments = [(QVector3D(*a), QVector3D(*b)) for a, b in pairs]
+    try:
+        faces = planar_arrangement(segments, loop[0], normal.normalized())
+    except Exception:
+        return []
+    keep = store.keep_offset_regions(face_key, [[p.toTuple() for p in outer]
+                                                for outer, _ in faces],
+                                     normal.toTuple(), distance, hypot)
+    return [face for face, ok in zip(faces, keep) if ok]
 
 
 def offset_chain(points: list, normal: QVector3D, d: float) -> Optional[list]:

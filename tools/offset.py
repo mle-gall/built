@@ -443,12 +443,12 @@ class OffsetTool(Tool):
         mesh = viewport.scene.mesh
         from core.store_mesh import _store_of, _hypot
         store = _store_of(mesh)
-        segments = None
         if store is not None and (h := _hypot()):
-            pairs = store.offset_outline(self.base_face.key, self._normal.toTuple(),
-                                         self.distance, h)
-            segments = [(QVector3D(*a), QVector3D(*b)) for a, b in pairs]
-        regions = offset_regions(self._loop, self._normal, self.distance, segments=segments)
+            from core.offset import store_offset_regions
+            regions = store_offset_regions(store, self.base_face.key, self._loop,
+                                           self._normal, self.distance, h)
+        else:
+            regions = offset_regions(self._loop, self._normal, self.distance)
         if not regions:
             # Safety net: the exact slide-and-intersect path still runs when
             # the arrangement finds nothing, so a bug here can only lose the
