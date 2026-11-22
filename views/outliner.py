@@ -2941,7 +2941,9 @@ class OutlinerPanel(QWidget):
         a name of its own («Silla #2», #620) — as ONE undo step (from the
         view, each copy was a step). Whether anything changed."""
         from core.history import CompoundCommand, MakeUniqueCommand
-        comps = [g for g in groups if g is not None and g.is_component()]
+        from core import links
+        comps = [g for g in groups if g is not None and g.is_component()
+                 and not links.is_linked(g)]   # a link stays its file's
         if not comps:
             return False
         why = self.inside_component_refusal(comps)

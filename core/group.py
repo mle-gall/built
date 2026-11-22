@@ -114,7 +114,7 @@ class Group:
     __slots__ = ("mesh", "name", "layer", "ifc", "billboard", "xform",
                  "children", "owner", "context", "text3d", "hidden", "uid",
                  "material", "axes", "component", "exploded",
-                 "explode_offset", "ext", "locked")
+                 "explode_offset", "ext", "locked", "source_uid")
 
     def __init__(self, mesh: Mesh | None = None, name: str | None = None,
                  uid: str | None = None) -> None:
@@ -214,6 +214,11 @@ class Group:
         #: :meth:`is_component` (issue #90, @fafecm: «the parent group
         #: always becomes a component»).
         self.component = True
+        # ``source_uid``: set only on the parts of a linked file
+        # (core/links.py), never in ``__init__``: the uid the part has in
+        # its source document, from which its uid in this one is derived —
+        # what lets a copy of the link give its parts the uids a fresh link
+        # (or the file reopened) gives them. Read it with ``getattr``.
 
     def is_component(self) -> bool:
         """A component instance, as the user knows it — not merely a group
@@ -268,6 +273,10 @@ class Group:
         in) bakes into a classic group without nested placements
         (``materialize``), or keeps its tree, privately, with them."""
         from PySide6.QtGui import QMatrix4x4
+        if _is_link(self):
+            # A linked file is its source's: nothing of it is this copy's to
+            # make its own (it is edited in its own document).
+            return
         if self.is_component():
             self.mesh = transformed_mesh(self.mesh, QMatrix4x4())
             self.children = [_independent_copy(c)
@@ -818,7 +827,10 @@ def copy_group(group, delta=None, _in_definition=False, _ifc_copy_context=None):
         _ifc_copy_context = {'groups': {}, 'openings': {}, 'copies': []}
     share = _in_definition or (group.xform is not None
                                and bool(getattr(group, "component", True)))
-    if share:
+    # A linked file's placement: its parts are the source's, read-only,
+    # and the copy is a live link of the same file (links.copy_parts).
+    linked = _is_link(group)
+    if share and not linked:
         for child in group.children or ():
             if child.xform is None:
                 child.xform = QMatrix4x4()
@@ -869,8 +881,13 @@ def copy_group(group, delta=None, _in_definition=False, _ifc_copy_context=None):
     g.explode_offset = group.explode_offset
     # Nested placements ride along untranslated: ``delta`` already moved the
     # parent, and a child's transform is relative to it.
-    g.children = [copy_group(c, _in_definition=share, _ifc_copy_context=_ifc_copy_context)
-                  for c in (group.children or ())]
+    if linked:
+        from core.links import copy_parts
+        g.children = copy_parts(group, g)
+    else:
+        g.children = [copy_group(c, _in_definition=share,
+                                 _ifc_copy_context=_ifc_copy_context)
+                      for c in (group.children or ())]
     if copy_root:
         # Resolve after the complete tree is copied: a filling can precede
         # its host in traversal order. External references stay external.
@@ -886,15 +903,28 @@ def copy_group(group, delta=None, _in_definition=False, _ifc_copy_context=None):
     return g
 
 
+def _is_link(group) -> bool:
+    """Whether ``group`` is a placed linked file (core/links.py), without
+    importing it for every copied group."""
+    ext = getattr(group, "ext", None)
+    link = ext.get("link") if isinstance(ext, dict) else None
+    return isinstance(link, dict) and bool(link.get("path"))
+
+
 def _independent_copy(group):
     """``copy_group`` without the sharing: every mesh in the subtree is a
     copy of its own, so editing it never reaches the original's copies.
     The copy keeps the uid — it REPLACES the original in its parent."""
     from PySide6.QtGui import QMatrix4x4
     g = copy_group(group)
+    g.uid = group.uid
+    if _is_link(group):
+        # A linked file stays the file: still its geometry, still read-only.
+        from core.links import copy_parts
+        g.children = copy_parts(group, g)
+        return g
     if group.xform is not None:
         g.mesh = transformed_mesh(group.mesh, QMatrix4x4())
-    g.uid = group.uid
     g.children = [_independent_copy(c) for c in (group.children or ())]
     return g
 
