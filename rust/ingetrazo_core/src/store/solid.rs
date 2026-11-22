@@ -84,8 +84,51 @@ impl Store {
                     + a[2] * (b[0] * c[1] - b[1] * c[0]))
                     / 6.0
             });
-        Some(crate::facegeom::py_sum(terms, true).abs())
+        Some(fsum(terms).abs())
     }
+}
+
+/// Sum finite tetrahedron terms with non-overlapping partials, like math.fsum.
+/// The final half-even correction matters when two partials straddle a tie.
+fn fsum(terms: impl Iterator<Item = f64>) -> f64 {
+    let mut partials = Vec::<f64>::new();
+    for mut x in terms {
+        let mut kept = 0;
+        for i in 0..partials.len() {
+            let mut y = partials[i];
+            if x.abs() < y.abs() {
+                std::mem::swap(&mut x, &mut y);
+            }
+            let hi = x + y;
+            let lo = y - (hi - x);
+            if lo != 0.0 {
+                partials[kept] = lo;
+                kept += 1;
+            }
+            x = hi;
+        }
+        partials.truncate(kept);
+        if x != 0.0 {
+            partials.push(x);
+        }
+    }
+    let mut hi = partials.pop().unwrap_or(0.);
+    while let Some(y) = partials.pop() {
+        let old = hi;
+        hi += y;
+        let lo = y - (hi - old);
+        if lo != 0.0 {
+            if partials.last().is_some_and(|p| p.signum() == lo.signum()) {
+                let twice = lo * 2.;
+                let rounded = hi + twice;
+                if rounded - hi == twice {
+                    hi = rounded;
+                }
+            }
+            break;
+        }
+    }
+    hi
 }
 
 pub struct Surface {

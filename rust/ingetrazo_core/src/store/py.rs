@@ -541,8 +541,6 @@ impl PyMeshStore {
             .collect())
     }
 
-    /// A face's rings as positions: what `normal()` / `area()` /
-    /// `vertices` read, in one call.
     #[pyo3(signature = (key, hypot, normal=None))]
     fn face_triangles(&self, key: u128, hypot: &str, normal: Option<[f32;3]>) -> PyResult<Vec<[[f32;3];3]>> {
         let store = &self.inner;
@@ -1346,6 +1344,14 @@ fn reader(snap: &Snapshot) -> Store {
 
 #[pymethods]
 impl PyStoreSnapshot {
+    fn triangles_by_face(&self, py: Python<'_>, keys: Vec<u128>, hypot: &str)
+        -> PyResult<Vec<Option<Vec<[[f32;3];3]>>>> {
+        let store = reader(&self.inner);
+        let h = crate::hypot_of(hypot)?;
+        Ok(py.detach(|| keys.into_iter().map(|k| store.slot(Kind::Face,k)
+            .map(|f| store.face_triangles(f,None,h))).collect()))
+    }
+
     #[staticmethod]
     fn trace_cap_outlines(py: Python<'_>, regions: Vec<super::cap_outline::Region>,
                           creases: Vec<[[f64;2];2]>, tolerance: f64) -> Option<Vec<Vec<[f64;2]>>> {

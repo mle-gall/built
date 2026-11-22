@@ -101,6 +101,7 @@ an undo snapshot or materialises a store.
 
 | Query | Arguments | Answer |
 |---|---|---|
+| `face_set_volume` | `keys, mesh?` | `{mesh, missing, volume}` for the selected face rings |
 | `solid_report` | `mesh?` | `{mesh, solid, volume}`, local cubic metres or null |
 | `triangles` | `keys, mesh?` | Face keys, oriented triangle coordinates and missing keys |
 | `mesh_info` | `mesh?` | `{mesh, backing: "store" \| "python", vertices, edges, faces, active, revision}` |

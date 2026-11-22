@@ -39,6 +39,7 @@ def test_solid_reads(monkeypatch, fixture, want):
         assert solid_report(sc.mesh) == (want is not None, want)
         assert queries.solid_report(sc)['volume'] == want
         assert face_set_volume(sc.mesh.faces) == want
+        assert queries.face_set_volume(sc, [f.key for f in sc.mesh.faces])["volume"] == want
 
 
 def test_triangle_order_and_snapshot(monkeypatch):
@@ -140,3 +141,20 @@ def test_store_solid_tool_feed(monkeypatch, op, expected):
     undo = run(history, "undo")["step"].placements
     assert set(undo["removed"]) == set(delta["created"])
     assert set(undo["created"]) == set(delta["removed"])
+
+
+def test_partition_between_boxes(monkeypatch):
+    from plugins.solid_inspector import inspect_mesh
+    monkeypatch.setattr(StoreMesh, '_materialise', lambda self: pytest.fail('materialised'))
+    for store in (False, True):
+        sc = empty(store)
+        box(sc.mesh, 0)
+        box(sc.mesh, 1)
+        partitions = [f for f in sc.mesh.faces if all(p.x() == 1 for p in f.vertices)]
+        assert len(partitions) == 2
+        sc.mesh.remove_face(partitions[1])
+        assert solid_report(sc.mesh) == (False, None)
+        assert len(inspect_mesh(sc.mesh)["over"]) == 4
+        partitions[0].interior = True
+        assert solid_report(sc.mesh) == (True, 2)
+        assert inspect_mesh(sc.mesh)["volume"] == 2

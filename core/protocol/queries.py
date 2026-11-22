@@ -148,9 +148,30 @@ def triangles(scene, keys, mesh=None):
     """Oriented triangles in face order, with mesh-local corner positions."""
     m = resolve_mesh(scene, mesh)
     keys = [from_json_key(k) for k in keys]
+    from core._native import qt_hypot
+    st = store_of(m)
+    if st is not None and qt_hypot():
+        # Invalid-size integers cannot name a native key and count as missing.
+        valid = [k if k >= 0 and k >> 40 == st.namespace else 0 for k in keys]
+        rows = st.snapshot().triangles_by_face(valid, qt_hypot())
+        return {"mesh": mesh_key(m),
+                "faces": [{"key": to_json_key(k), "triangles": row}
+                          for k, row in zip(keys, rows) if row is not None],
+                "missing": [to_json_key(k) for k, row in zip(keys, rows) if row is None]}
     found = elements(m, "face", keys)
     return {"mesh": mesh_key(m),
             "faces": [{"key": to_json_key(k),
                        "triangles": [[_xyz(p) for p in t] for t in found[k].triangulate()]}
                       for k in keys if k in found],
             "missing": [to_json_key(k) for k in keys if k not in found]}
+
+
+def face_set_volume(scene, keys, mesh=None):
+    """Volume enclosed by these faces, or null for an incomplete selection."""
+    from core.bim import face_set_volume as measure
+    m = resolve_mesh(scene, mesh)
+    keys = [from_json_key(k) for k in keys]
+    found = elements(m, "face", keys)
+    missing = [to_json_key(k) for k in keys if k not in found]
+    return {"mesh": mesh_key(m), "missing": missing,
+            "volume": None if missing else measure(found[k] for k in keys)}
