@@ -1455,6 +1455,29 @@ class StoreMesh(Mesh):
         return StoreState(self._store.snapshot(), d["_attr_own"],
                           d["_attr_table"], self)
 
+    def fillet_edges(self, keys, radius, segments=8, profile=0.5,
+                     measure="radius", corners="round", shape=None):
+        """Round live edge keys, returning one StoreChange for the whole edit."""
+        from core.fillet import plan_fillet
+        plan = plan_fillet(self, [EdgeView(self, k) for k in keys], radius,
+                           segments, profile, measure, corners, shape)
+        return self._apply_round_plan(plan)
+
+    def bevel_vertices(self, keys, size, segments=8, profile=0.5):
+        """Cut live vertex keys, returning one StoreChange for the whole edit."""
+        from core.vertex_bevel import plan_vertex_bevel
+        plan = plan_vertex_bevel(self, [VertexView(self, k) for k in keys],
+                                 size, segments, profile)
+        return self._apply_round_plan(plan)
+
+    def _apply_round_plan(self, plan):
+        from core.fillet import apply_fillet
+        if isinstance(plan, str):
+            raise ValueError(plan)
+        if plan._store_plan is None:
+            raise _fallback()("native fillet requires a supported Qt vector kernel")
+        return apply_fillet(self, plan)
+
     def split_edge(self, edge, position):
         k = self._live(edge, 1)
         if k is None:

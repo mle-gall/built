@@ -44,7 +44,7 @@ from PySide6.QtGui import QVector3D
 
 from core import bevel_profiles
 from core.i18n import tr
-from core.mesh import stamp_edge_flags
+from core.mesh import edge_flags, stamp_edge_flags
 
 #: Faces meeting at less than this angle (or more than 180° minus it) are
 #: too flat or too sharp to round.
@@ -163,6 +163,8 @@ class FilletPlan:
     face_attrs: dict = field(default_factory=dict) # attrs for new faces
     # (p, q, edge flags) carried to the edge p–q once the faces are in
     flags: list = field(default_factory=list)
+
+    _store_plan: object = field(default=None, repr=False, compare=False)
 
     @property
     def new_faces(self) -> list:
@@ -305,10 +307,20 @@ def plan_fillet(mesh, edges, radius: float, segments: int = 8,
         shape = tuple((float(x), float(y), bool(sm)) for x, y, sm in shape)
     elif shape not in bevel_profiles.PRESETS:
         shape = None
-    if shape is not None:
-        outline = bevel_profiles.sample(shape, segments)
     circular = abs(profile - CIRCULAR) < 1e-9
     segments = max(int(segments), 1)
+    store = getattr(mesh, "_store", None)
+    if store is not None and hasattr(store, "plan_fillet"):
+        from core.store_mesh import _hypot
+        hypot = _hypot()
+        if hypot:
+            return _store_round_plan(
+                mesh, FilletPlan(radius, segments, profile, measure, corners, shape),
+                store.plan_fillet, [e.key for e in edges], radius, segments,
+                profile, measure, corners, "custom" if isinstance(shape, tuple) else shape or "",
+                shape if isinstance(shape, tuple) else [], hypot, vertices=False)
+    if shape is not None:
+        outline = bevel_profiles.sample(shape, segments)
     rounds: dict[int, _EdgeRound] = {}
     for e in edges:
         faces = list(e.faces)
@@ -1177,10 +1189,64 @@ def _corner_patch(group, sections, radius, segments, profile=None,
     return tris, soft
 
 
-def apply_fillet(mesh, plan: FilletPlan) -> None:
+def _store_round_plan(mesh, plan, planner, *args, vertices):
+    """Adapt a native preview to the same FilletPlan the tools display."""
+    from core.store_mesh import EdgeView, FaceView
+    try:
+        native = planner(*args)
+    except ValueError as exc:
+        if len(exc.args) != 2:
+            raise
+        message, point = exc.args
+        return tr(message, p=_fmt(QVector3D(*point))) if point else tr(message)
+
+    def vectors(points):
+        return [QVector3D(*p) for p in points]
+
+    plan._store_plan = native
+    plan.strips = [vectors(r) for r in native.strips]
+    plan.patches = [vectors(r) for r in native.patches]
+    plan.curves = [vectors(r) for r in native.curves]
+    plan.soft = [tuple(vectors(pair)) for pair in native.soft]
+    plan.removed_edges = [EdgeView(mesh, k) for k in native.edges]
+    plan.removed_faces = [FaceView(mesh, k) for k in native.faces]
+    for face, rings in zip(plan.removed_faces, native.rebuilt):
+        plan.rebuilt.append((vectors(rings[0]), [vectors(h) for h in rings[1:]],
+                             dict(face.attrs), face.interior))
+    sources = [FaceView(mesh, k) for k in native.materials]
+    plan.flags = [(QVector3D(*a), QVector3D(*b), edge_flags(EdgeView(mesh, k)))
+                  for k, a, b in native.flags]
+    if not vertices:
+        material = _shared_attrs(*sources)
+    else:
+        paints = [{k: f.attrs[k] for k in ("color", "texture", "mat", "opacity", "pbr")
+                   if k in f.attrs} for f in sources]
+        material = paints[0] if paints and all(p == paints[0] for p in paints) else {}
+    plan.face_attrs["strip"] = material
+    return plan
+
+
+def apply_fillet(mesh, plan: FilletPlan):
     """Apply a plan to the mesh: remove the cut faces and edges, add the
     rebuilt faces, the strips and the patches, soften the seams, tag the
     end arcs as curves."""
+    if plan._store_plan is not None:
+        change = mesh._store.apply_fillet(
+            plan._store_plan, [mesh.next_curve_id() for _ in plan.curves])
+        created = change.created["face"]
+        own = mesh.__dict__["_attr_own"]
+        for key, (_, _, attrs, _) in zip(created, plan.rebuilt):
+            own[key] = dict(attrs)
+        material = plan.face_attrs["strip"]
+        if material:
+            for key in created[len(plan.rebuilt):]:
+                own[key] = dict(material)
+        segments = sum(len(loop) + sum(map(len, holes))
+                       for loop, holes, _, _ in plan.rebuilt)
+        segments += sum(map(len, plan.strips)) + sum(map(len, plan.patches))
+        mesh._dirty(len(created) + segments + len(plan.curves)
+                    + len(change.removed["face"]) + len(change.removed["edge"]))
+        return change
     for f in plan.removed_faces:
         mesh.remove_face(f)
     for e in plan.removed_edges:

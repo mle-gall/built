@@ -452,7 +452,8 @@ class FilletTool(Tool):
         key = (tuple(e.key for e in edges), round(FilletTool.radius, 6),
                FilletTool.segments, FilletTool.profile, FilletTool.measure,
                FilletTool.corners, FilletTool.affect, FilletTool.shape,
-               getattr(mesh, "_mut_serial", 0))
+               getattr(mesh, "_mut_serial", 0),
+               getattr(getattr(mesh, "_store", None), "revision", None))
         if key == self._plan_key:
             return
         self._plan_key = key
@@ -481,8 +482,11 @@ class FilletTool(Tool):
         mesh = viewport.scene.mesh
         n = len(self.edges)
         r = FilletTool.radius
-        cmd = SnapshotMutation(lambda scene: apply_fillet(scene.mesh, plan),
-                               mesh=mesh)
+        command = SnapshotMutation
+        if plan._store_plan is not None:
+            from core.store_face_edit import StoreFaceMutation
+            command = StoreFaceMutation
+        cmd = command(lambda scene: apply_fillet(scene.mesh, plan), mesh=mesh)
         viewport.history.execute(cmd)
         viewport.scene.clear_selection()
         self._reset()
