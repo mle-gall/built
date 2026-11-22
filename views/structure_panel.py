@@ -177,6 +177,9 @@ class StructureDock(QDockWidget):
     def on_scene_changed(self):
         if self._front and self.isVisible():
             scene = self.vp.scene
+            if (self._signature and self._signature[0] is scene
+                    and self.vp.history.structure_cv == scene.content_version):
+                self._signature = (scene, scene.content_version)
             if self._signature != (scene, scene.content_version):
                 self.tree.setEnabled(False)
                 self.file_button.setEnabled(False)
@@ -263,6 +266,7 @@ class StructureDock(QDockWidget):
             self.tree.setCurrentItem(self.items[current_key])
         self.tree.setEnabled(True)
         self._signature, self._building = signature, None
+        self.vp.history.structure_cv = signature[1]
 
     def expanded(self, item):
         if item is getattr(self, 'review', None) and not item.childCount():

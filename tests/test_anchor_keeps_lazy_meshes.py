@@ -36,3 +36,31 @@ def test_an_anchor_builds_only_the_mesh_it_sits_on(binary, monkeypatch,
     # The classic group's corner is found too, after the cache of
     # placements was made.
     assert resolve_vertex_anchor(lazy, V(2, 30, 0)) is not None
+
+
+def test_shared_placements_are_filtered_before_vertex_lookup(monkeypatch):
+    from PySide6.QtGui import QMatrix4x4
+    from core.group import Group
+    from core.scene import Scene
+    mesh = M.Mesh()
+    mesh.add_edge(V(0, 0, 0), V(1, 0, 0))
+    scene = Scene()
+    for i in range(64):
+        group = Group(mesh)
+        group.xform = QMatrix4x4()
+        group.xform.translate(4*i, 0, 0)
+        group.xform.rotate(45, 0, 0, 1)
+        scene.groups.append(group)
+    checks = []
+    lookup = mesh.vertex_at
+    def counted(point):
+        checks.append(point)
+        return lookup(point)
+    monkeypatch.setattr(mesh, "vertex_at", counted)
+    anchor = resolve_vertex_anchor(scene, V(252, 0, 0))
+    assert anchor.chain == (scene.groups[-1],)
+    assert len(checks) == 1
+    # A growing shared prototype gets its new bounds on the next lookup.
+    mesh.add_edge(V(0, 5, 0), V(1, 5, 0))
+    p = scene.groups[-1].xform.map(V(0, 5, 0))
+    assert resolve_vertex_anchor(scene, p).chain == (scene.groups[-1],)

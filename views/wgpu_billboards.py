@@ -24,10 +24,13 @@ def fitted_maps(pos, corners, sizes, counts, maps):
 
 class Billboards:
     """Cache world-space anchors/normals once per scene edit, O(figures) per orbit."""
-    def __init__(self, packed):
+    def __init__(self, packed, candidates=None):
         self.packed = packed
-        self.ids = np.array([i for i, g in enumerate(packed.groups)
-                             if getattr(g, 'billboard', False)], np.int64)
+        flags = packed.instances['info'][:, 2]
+        if candidates is None:
+            self.ids = np.flatnonzero(flags & 8)
+        else:
+            self.ids = candidates[(flags[candidates] & 8) != 0]
         self.base = packed.instances['world'][self.ids].copy()
         self.key = None
         self.entries = []

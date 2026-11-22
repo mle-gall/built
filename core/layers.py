@@ -1203,11 +1203,11 @@ def _parent_in(parents: dict, known: set, name: str) -> str | None:
     return parent
 
 
-def folder_parent(scene, name: str) -> str | None:
+def folder_parent(scene, name: str, *, known=None) -> str | None:
     """The folder ``name`` sits in, or ``None`` at the top. A parent that
     no longer exists, or one that would make a loop, reads as the top."""
     return _parent_in(getattr(scene, "folder_parents", None) or {},
-                      set(folders_of(scene)), name)
+                      set(folders_of(scene)) if known is None else known, name)
 
 
 def subfolders(scene, name: str, deep: bool = False) -> list[str]:

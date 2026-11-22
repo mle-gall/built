@@ -220,6 +220,7 @@ class History:
         #: The same, for the Browser's rows (views/outliner.py): a command
         #: that keeps paint moves things, and no row shows where a thing is.
         self.rows_cv = None
+        self.structure_cv = None  # membership table last built by the Structure dock
         #: Per reader («paint» the materials panel, «rows» the Browser), the
         #: content version up to which nothing but commands that keep paint
         #: or keep groups changed the model since that reader last went
@@ -313,6 +314,25 @@ class History:
                 self.paint_cv = cv
             if self.tags_cv == before:
                 self.tags_cv = cv
+        # The Structure dock shows membership, hierarchy and BIM problems.
+        # These commands edit only the active mesh or construction annotations.
+        # Other commands (including extensions) invalidate conservatively.
+        if isinstance(cmd, (
+                SnapshotMutation, SnapshotCompound, AddEdgeCommand, AddFaceCommand,
+                AddDimensionCommand, AddTextLabelCommand, AddGuideCommand)):
+            if self.structure_cv == before:
+                self.structure_cv = cv
+            rest = getattr(self, "layer_count_rest", None)
+            if (rest and rest[0] == (id(self.scene), before, id(self.scene.mesh))
+                    and getattr(cmd, "_history_mesh", None) is self.scene.mesh
+                    and (not isinstance(cmd, SnapshotMutation) or cmd._target(self.scene) is self.scene.mesh)):
+                self.layer_count_rest = (id(self.scene), cv, id(self.scene.mesh)), rest[1]
+            # Placement transforms did not change. Prototype bounds in the
+            # dimension broad phase are checked by mesh revision on lookup.
+            anchors = self.scene.__dict__.get("_anchor_placements")
+            if anchors and anchors[0] == (before, len(self.scene.groups),
+                                          id(self.scene.edit_group), id(self.scene.mesh)):
+                self.scene._anchor_placements = (cv, *anchors[0][1:]), anchors[1]
         if rows and self.rows_cv == before:
             self.rows_cv = cv
         for k, v in self.groups_cv.items():
@@ -2017,6 +2037,8 @@ class AddDimensionCommand(Command):
     """Add a dimension annotation to ``scene.dimensions``, anchored to the
     vertices under its endpoints (if any) so it follows the geometry."""
 
+    keeps_rows = True
+
     def __init__(self, dimension) -> None:
         self.dimension = dimension
 
@@ -2056,6 +2078,8 @@ class DeleteDimensionsCommand(Command):
 
 class AddTextLabelCommand(Command):
     """Add a leader-text annotation to ``scene.text_labels``."""
+
+    keeps_rows = True
 
     def __init__(self, label) -> None:
         self.label = label

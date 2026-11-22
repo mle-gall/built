@@ -205,9 +205,15 @@ class WgpuView(QWidget):
                 if getattr(self, 'suppressed_faces', ()) and self.renderer is not None:
                     self.renderer.set_suppressed_faces(face_ranges(self, self.suppressed_faces))
             hidden_geometry(self)
-            self._rest_signature = None
+            # Rebaking a mesh leaves its placement and rest-of-model flags intact.
+            if not tracker.last_local or len(ids) or tracker.removed:
+                self._rest_signature = None
             from views.wgpu_billboards import Billboards
-            self._billboards = Billboards(self.packed)
+            # Existing figures plus rewritten/new rows cover every placement
+            # that can face the camera after this delta.
+            previous = getattr(self, '_billboards', None)
+            candidates = None if previous is None else np.union1d(previous.ids, ids)
+            self._billboards = Billboards(self.packed, candidates)
             if len(ids) or tracker.changed or tracker.removed:
                 mapping_changed = bool(tracker.removed)
                 for row in ids:
@@ -222,8 +228,7 @@ class WgpuView(QWidget):
                     self._tint_signature = None
                 self._resident_count = len(self.packed.instances)
                 if self.inference_index is not None:
-                    self.inference_index.update(ids, self.packed,
-                                                [code for _, _, code in tracker.changed])
+                    self.inference_index.update(ids, self.packed, code_rows=tracker.changed_code_rows)
                 else:
                     self.inference_index = None
                     previous = getattr(self, '_inference_future', None)
@@ -780,12 +785,14 @@ class WgpuView(QWidget):
             self.hover_ms = (time.perf_counter()-start)*1000
             self.update()
             return None
-        if self.tools.sync() == 'mesh':
-            self.tools.work_point(x, y)
+        work_point = None
+        mesh_mode = self.tools.sync() == 'mesh'
+        if mesh_mode:
+            work_point = self.tools.work_point(x, y, picked_row=self.hovered_row)
         tool = getattr(source, 'active_tool', None)
         if tool is not None and not tool.uses_snap and self.tools.mode == 'mesh':
             from types import SimpleNamespace
-            point = self.tools.work_point(x, y)
+            point = work_point
             if point is not None:
                 self.last_snap = SimpleNamespace(point=point, kind=None, context=None)
             self.update()
@@ -817,6 +824,8 @@ class WgpuView(QWidget):
         if self.inference_index is not None:
             if hasattr(inference, 'note_drawing_refs'):
                 options.update(inference=inference, modifiers=modifiers)
+            if mesh_mode:
+                options['work_point'] = work_point
             self.last_snap = snap(self.inference_index, self.hovered_row, self, x, y, **options)
             if hasattr(inference, 'finish_snap') and self.last_snap is not None:
                 # The axis-source cue picks through this view's tools (the
@@ -839,7 +848,7 @@ class WgpuView(QWidget):
             if abs(denominator) > 1e-9:
                 point = origin + direction * (QVector3D.dotProduct(plane-origin, normal)/denominator)
                 if self.tools.mode == 'mesh':
-                    point = self.tools.work_point(x, y) or point
+                    point = work_point or point
                 self.last_snap = compute_snap(point, (x, y), SimpleNamespace(edges=[]),
                                               self._world_to_pixel, 12., **options)
         if inference is not None and self.last_snap is not None:
@@ -904,8 +913,7 @@ class WgpuView(QWidget):
             return
         touched = [np.asarray(ids, np.int64), np.asarray(tracker.removed, np.int64)]
         if tracker.changed:
-            codes = [code for _, _, code in tracker.changed]
-            touched.append(np.flatnonzero(np.isin(self.packed.instances['info'][:, 0], codes)))
+            touched.extend(tracker.changed_code_rows.values())
         touched = np.concatenate(touched)
         for group, box in boxes.items():
             rows = box_rows.get(group)

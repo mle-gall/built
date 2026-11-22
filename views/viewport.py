@@ -12108,6 +12108,11 @@ class Viewport(QOpenGLWidget):
         eb = self._world_to_pixel(p3b, mvp)
         n = samples
         if ea is not None and eb is not None:
+            # With both ends in front of the eye, the projected segment
+            # stays between them. Allow for the annotation pen and AA.
+            if (max(ea[0], eb[0]) < -2 or min(ea[0], eb[0]) > self.width() + 2
+                    or max(ea[1], eb[1]) < -2 or min(ea[1], eb[1]) > self.height() + 2):
+                return
             span = math.hypot(eb[0] - ea[0], eb[1] - ea[1])
             n = max(samples, min(self._OCCLUSION_MAX_SAMPLES,
                                  int(span / self._OCCLUSION_STEP_PX)))

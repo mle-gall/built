@@ -130,7 +130,7 @@ def layer_counts(scene, *, photo: bool = True) -> dict[str, int]:
                 if counts is not None)
 
 
-def layer_count_steps(scene, *, photo=True):
+def layer_count_steps(scene, *, photo=True, history=None):
     """Yield between meshes and group batches, then publish one complete tally."""
     from collections import Counter
     import numpy as np
@@ -160,15 +160,35 @@ def layer_count_steps(scene, *, photo=True):
         for raw, n in zip(table, per_row.tolist()):
             if n:
                 tally[(raw or {}).get("layer")] += n
-    count_mesh(scene.loose_mesh)
-    yield None
-    for i, group in enumerate(iter_groups(_document_groups(scene))):
-        tally[layer_of(group)] += 1
-        if id(group.mesh) not in seen:
-            count_mesh(group.mesh)
-            yield None
-        elif i % 256 == 0:
-            yield None
+    # For the panel, retain counts outside the active mesh while History
+    # can account for every intervening edit. The edited mesh may also be
+    # instanced elsewhere. Counts include each distinct mesh just once.
+    key = (id(scene), scene.content_version, id(scene.mesh)) if history is not None else None
+    cached = getattr(history, "layer_count_rest", None)
+    if cached is not None and cached[0] == key:
+        tally.update(cached[1])
+        count_mesh(scene.mesh)
+    else:
+        active = scene.mesh if history is not None else None
+        # A detached edit mesh is possible in scripted documents. Count it
+        # only if the normal document walk actually encounters it.
+        seen.add(id(active))
+        active_present = scene.loose_mesh is active
+        count_mesh(scene.loose_mesh)
+        yield None
+        for i, group in enumerate(iter_groups(_document_groups(scene))):
+            tally[layer_of(group)] += 1
+            active_present |= group.mesh is active
+            if id(group.mesh) not in seen:
+                count_mesh(group.mesh)
+                yield None
+            elif i % 256 == 0:
+                yield None
+        if active is not None and active_present:
+            if history is not None and scene.content_version == key[1]:
+                history.layer_count_rest = key, tally.copy()
+            seen.remove(id(active))
+            count_mesh(active)
     counts: dict[str, int] = {}
 
     def add(name, n=1):

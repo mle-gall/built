@@ -83,4 +83,5 @@ def test_a_metal_first_frame_clears_the_rust_engine_guard(monkeypatch):
         MainWindow._document_first_frame(window, doc)
     except AttributeError:
         pass  # the rest of the hook needs a real window; the guard call comes first
+    MainWindow._document_first_frame(window, doc)
     assert calls == [1]

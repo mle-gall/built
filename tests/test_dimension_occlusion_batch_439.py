@@ -163,3 +163,12 @@ def test_without_a_snapshot_it_still_answers_per_point(vp_with_wall):
     for p, (px, vis) in zip(pts, batch):
         assert px == vp._world_to_pixel(p)
         assert vis == (not vp._occluded_on_screen(p))
+
+
+def test_offscreen_segment_skips_depth_samples(vp_with_wall, monkeypatch):
+    vp = vp_with_wall
+    monkeypatch.setattr(vp, "_project_samples",
+                        lambda *_: pytest.fail("sampled offscreen segment"))
+    pen = _RecordingPainter()
+    vp._draw_occluded_segment(pen, V(100, 0, 1), V(102, 0, 1))
+    assert not pen.lines

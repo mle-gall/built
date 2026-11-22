@@ -105,9 +105,12 @@ def test_shared_mutation_bakes_once(monkeypatch):
     original = pack_scene
     monkeypatch.setattr('views.wgpu_updates.pack_scene', lambda scene, **kw: (calls.append(scene), original(scene, **kw))[1])
     mesh = scene.groups[0].mesh
+    boxes = updates.world_boxes
     mesh.move_vertex(mesh.vertices[0], QVector3D(0, 0, 2))
     renderer = Renderer()
     updates.apply(*updates.diff(scene), renderer)
+    assert updates.world_boxes is boxes
+    assert updates.changed_code_rows[0].tolist() == [0, 1]
     assert len(calls) == 1
     assert len(calls[0].groups) == 1
     assert [name for name, _ in renderer.calls] == ['replace_prototype', 'update_prototype_materials']
@@ -862,3 +865,32 @@ def test_reupload_after_offscreen_bridge_edit_keeps_material_headers():
     fresh_first = int(fresh.materials.view('<u4').reshape(-1, 4)[0, 1])
     np.testing.assert_array_equal(stream[first*16:first*16+96],
                                   fresh.materials[fresh_first*16:fresh_first*16+96])
+
+
+def test_adding_annotations_preserves_local_journal():
+    from core.dimension import Dimension
+    from core.history import AddDimensionCommand, AddTextLabelCommand, History
+    from core.textlabel import TextLabel
+    scene, updates = fixture_scene()
+    history = History(scene)
+    updates.observe(history)
+    for command in (AddDimensionCommand(Dimension(QVector3D(), QVector3D(2, 0, 0),
+                                                  QVector3D(0, 1, 0))),
+                    AddTextLabelCommand(TextLabel(QVector3D(), QVector3D(1, 1, 0), "axis"))):
+        history.execute(command)
+        for step in (lambda: None, history.undo, history.redo):
+            step()
+            ids, rows = updates.diff(scene)
+            assert updates.last_local and not len(ids) and not updates.changed
+            updates.apply(ids, rows)
+
+
+def test_first_loose_edge_only_adds_its_own_row():
+    from core.history import AddEdgeCommand, History
+    scene, updates = fixture_scene()
+    history = History(scene)
+    updates.observe(history)
+    history.execute(AddEdgeCommand(QVector3D(), QVector3D(1, 0, 0)))
+    updates.apply(*updates.diff(scene))
+    assert updates.last_local
+    assert_matches_fresh_pack(updates, scene)

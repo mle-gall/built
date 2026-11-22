@@ -223,3 +223,16 @@ def test_capture_occlusion_callback_and_painter_state():
         draw_annotations(p, scene, camera, (360, 100), annotations_only=True)
         assert before == (p.pen(), p.brush(), p.font(), p.transform())
     painted(paint)
+
+
+def test_clear_dimension_stroke_covers_arrows_and_label_for_this_frame():
+    scene, camera = fixture()
+    a, b = V(-1, 0, 0), V(1, 0, 0)
+    reads = []
+    layout = AnnotationLayout(scene, camera, (360, 100),
+                              clear_segment=lambda a, b: True,
+                              occluded=lambda p: reads.append(p) or True)
+    painted(lambda painter: layout._draw_occluded_segment(painter, a, b))
+    assert not any(layout._occluded_on_screen(p) for p in [a, b, (a + b) * .5])
+    assert not reads
+    assert layout._occluded_on_screen(V(0, 1, 0))

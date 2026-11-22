@@ -34,6 +34,8 @@ from __future__ import annotations
 
 from PySide6.QtGui import QMatrix4x4, QVector3D
 
+from core.mesh import DeferredMesh
+
 
 #: Holds an endpoint remembers (see Dimension._live).
 _MAX_HOLDS = 8
@@ -122,7 +124,6 @@ def _may_hold(mesh, local: QVector3D, tol: float) -> bool:
     from its source positions, without building a single Python object:
     asking its registry built the whole mesh, and resolving one anchor on a
     3 400-placement model built all 164 of them (2 s on opening a sheet)."""
-    from core.mesh import DeferredMesh
     if type(mesh) is not DeferredMesh:
         return True
     d = mesh.__dict__
@@ -149,28 +150,82 @@ def _may_hold(mesh, local: QVector3D, tol: float) -> bool:
     return bool(near.any())
 
 
-def _placements_with_inverses(scene) -> list:
-    """``[(top_group, placed, inverse or None)]`` for every placement,
-    kept while the model does not change: each anchor resolved walked all
-    of them and inverted every matrix again."""
-    from core.group import iter_placements
-    key = (getattr(scene, "version", None), len(getattr(scene, "groups", ()) or ()))
-    cached = scene.__dict__.get("_anchor_placements")
-    if cached is not None and cached[0] == key:
-        return cached[1]
-    out = []
-    for g in getattr(scene, "groups", None) or ():
-        if getattr(g, "billboard", False):
-            continue
-        for placed, m in iter_placements(g):
-            if m is None:
-                out.append((g, placed, None))
+class _AnchorPlacements:
+    """Depth-first order, with a broad phase for widely instanced meshes."""
+
+    def __init__(self, groups):
+        from collections import defaultdict
+        import numpy as np
+        from core.group import iter_placements
+
+        self.entries = []
+        by_mesh = defaultdict(list)
+        for root in groups:
+            if getattr(root, "billboard", False):
                 continue
-            inv, ok = m.inverted()
-            if ok:
-                out.append((g, placed, inv))
-    scene.__dict__["_anchor_placements"] = (key, out)
-    return out
+            for placed, matrix in iter_placements(root):
+                inverse = None
+                if matrix is not None:
+                    inverse, ok = matrix.inverted()
+                    if not ok:
+                        continue
+                if inverse is not None and inverse.isAffine():
+                    by_mesh[placed.mesh].append(len(self.entries))
+                self.entries.append((root, placed, inverse))
+
+        self.batches = []
+        self.boxes = {}
+        for mesh, rows in by_mesh.items():
+            if len(rows) >= 32:
+                matrices = np.array([self.entries[i][2].data() for i in rows])
+                affine = matrices.reshape(-1, 4, 4).transpose(0, 2, 1)[:, :3]
+                self.batches.append((mesh, np.array(rows), affine))
+
+    def candidates(self, point, tol):
+        if not self.batches:
+            return self.entries
+        import numpy as np
+        from core.group import _local_points
+
+        keep = np.ones(len(self.entries), bool)
+        p = np.array([*point.toTuple(), 1.])
+        for mesh, rows, affine in self.batches:
+            store = mesh.__dict__.get("_store")
+            key = (mesh.revision, id(store), getattr(store, "revision", None))
+            cached = self.boxes.get(mesh)
+            if cached is None or cached[0] != key:
+                source = mesh.__dict__.get("_deferred_source")
+                if type(mesh) is DeferredMesh and not source:
+                    continue  # a custom deferred builder without source positions
+                if source:
+                    pos = source["pos"]
+                elif store is not None:
+                    pos = store.positions()
+                else:
+                    pos = _local_points(mesh)
+                box = None if pos is None or not len(pos) else (np.min(pos, axis=0), np.max(pos, axis=0))
+                self.boxes[mesh] = key, box
+            else:
+                _, box = cached
+            if box is None:
+                keep[rows] = False
+                continue
+            local = affine @ p
+            # QVector3D.map rounds in float32. Bound cancellation as well as
+            # the weld tolerance, then let the original Qt/registry test decide.
+            slack = 4*tol + 8*np.finfo(np.float32).eps*(np.abs(affine) @ np.abs(p))
+            keep[rows] = ~np.any((local < box[0]-slack) | (local > box[1]+slack), axis=1)
+        return (self.entries[i] for i in np.flatnonzero(keep))
+
+
+def _anchor_candidates(scene, point, tol):
+    groups = getattr(scene, "groups", ()) or ()
+    key = (getattr(scene, "content_version", getattr(scene, "version", None)), len(groups),
+           id(getattr(scene, "edit_group", None)), id(scene.mesh))
+    cached = scene.__dict__.get("_anchor_placements")
+    if cached is None or cached[0] != key:
+        cached = scene._anchor_placements = key, _AnchorPlacements(groups)
+    return cached[1].candidates(point, tol)
 
 
 def resolve_vertex_anchor(scene, point: QVector3D, tol: float = 1e-4):
@@ -207,7 +262,7 @@ def resolve_vertex_anchor(scene, point: QVector3D, tol: float = 1e-4):
     v = hit(loose, QVector3D(point))
     if v is not None:
         return VertexAnchor(v, loose, ())
-    for g, placed, inv in _placements_with_inverses(scene):
+    for g, placed, inv in _anchor_candidates(scene, point, tol):
         local = QVector3D(point) if inv is None else inv.map(QVector3D(point))
         v = hit(placed.mesh, local)
         if v is not None:

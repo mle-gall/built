@@ -190,7 +190,6 @@ class ResidentInference:
         self.packed = packed
         self.scene = scene
         self.features = _CurveFeatures(curves)
-        self.context_rows = {}
         self.screen_cache = None
         self.screen_dirty = set()
         self.epoch = 0
@@ -203,18 +202,18 @@ class ResidentInference:
         self.local = {}
         self.replaced = np.zeros(len(packed.instances), bool)
 
-    def update(self, ids, packed, changed_codes=()):
+    def update(self, ids, packed, changed_codes=(), *, code_rows=None):
         self.epoch += 1
         self.packed = packed
         if len(self.replaced) < len(packed.instances):
-            self.context_rows.clear()
             self.replaced = np.pad(self.replaced, (0, len(packed.instances)-len(self.replaced)))
-        for code in dict.fromkeys(changed_codes):
+        for code in code_rows if code_rows is not None else dict.fromkeys(changed_codes):
             while len(self.protos) <= code:
                 self.protos.append(None)
                 self.bounds.append(None)
 
-            affected = np.flatnonzero(packed.instances['info'][:, 0] == code)
+            affected = (code_rows[code] if code_rows is not None else
+                        np.flatnonzero(packed.instances['info'][:, 0] == code))
             self.protos[code], curves = _prototype(
                 packed, code, self.scene, affected[0] if len(affected) else -1)
             self.bounds[code] = packed.bounds[code].copy()
@@ -293,7 +292,9 @@ def prepare(packed, scene=None):
     we = np.einsum('nij,nj->ni', abs(matrix[:, :3, :3]), extent)
     protos, base = native.build_snap_index(arrays, ids, mats, np.ascontiguousarray(wc-we),
                                            np.ascontiguousarray(wc+we))
-    return ResidentInference(base, protos, list(protos), packed, scene)
+    index = ResidentInference(base, protos, list(protos), packed, scene)
+    index.world_box_cache = wc, we
+    return index
 
 
 def surface(index, row, origin, direction, limit=float('inf')):
@@ -457,9 +458,13 @@ def _screen_rows(index, packed, mvp, width, height, x, y, radius, rows):
     if candidates is not None:
         if moved:
             candidates = np.union1d(candidates, np.fromiter(moved, np.int64))
-        mask = np.zeros(len(lo), bool)
-        mask[rows] = True
-        rows = candidates[mask[candidates]]
+        if rows is not None:
+            candidates = candidates[np.isin(candidates, rows)]
+        rows = candidates
+    if rows is None:
+        rows = eligible_rows(index, packed)
+    else:
+        rows = rows[(packed.instances['info'][rows, 2] & 129) == 0]
     gap = np.maximum(np.maximum(lo[rows]-[x,y], [x,y]-hi[rows]), 0.)
     return rows[np.einsum('ij,ij->i', gap, gap) < radius*radius]
 
@@ -491,12 +496,9 @@ def nearby_edges(index, packed, camera, width, height, x, y, *,
     """World-space pseudo edges, nearest first; row/edge_id identify source."""
     if cap <= 0:
         return []
-    if rows is None:
-        rows = eligible_rows(index, packed)
-    else:
+    if rows is not None:
         rows = np.asarray(rows, np.int64)
         rows = rows[(rows >= 0) & (rows < len(packed.instances))]
-        rows = rows[(packed.instances['info'][rows, 2] & 129) == 0]
     mvp = camera.projection_matrix() * camera.view_matrix()
     rows = _screen_rows(index, packed, mvp, width, height, x, y, radius_px, rows)
     pl, ids, a, b, distances = index.edges_near(
@@ -584,7 +586,8 @@ def _occluded(index, view, candidate, rows=None):
     if eye is None or ray is None:
         return True
     if rows is None:
-        rows = eligible_rows(index, view.packed)
+        mvp = view.camera.projection_matrix() * view.camera.view_matrix()
+        rows = _screen_rows(index, view.packed, mvp, view.width(), view.height(), *pixel, 1., None)
     reach = (candidate-eye).length() - 1e-4
     fixed = rows[~index.replaced[rows]]
     hidden, doubt = index.base.occluded(fixed, eye.toTuple(),
@@ -604,10 +607,10 @@ def _occluded_many(index, view, points, rows=None):
         return []
     if _see_through(view):
         return [False] * len(points)
+    if not getattr(view.camera, 'perspective', False) or index.rows or index.changed:
+        return [_occluded(index, view, p, rows) for p in points]
     if rows is None:
         rows = eligible_rows(index, view.packed)
-    if not getattr(view.camera, 'perspective', False) or index.replaced.any():
-        return [_occluded(index, view, p, rows) for p in points]
     eye = view.camera.eye()
     delta = np.array([p.toTuple() for p in points], float)-eye.toTuple()
     lengths = np.linalg.norm(delta, axis=1)
@@ -620,23 +623,28 @@ def _occluded_many(index, view, points, rows=None):
     return result
 
 
-def snap(index, row, view, x, y, **options):
+def snap(index, row, view, x, y, *, work_point=..., **options):
     """GL SnapResult; row may be None (guides/edges do not need a face ID)."""
     if index is None:
         return None
-    rows = eligible_rows(index, view.packed)
+    mvp = view.camera.projection_matrix() * view.camera.view_matrix()
+    rows = _screen_rows(index, view.packed, mvp, view.width(), view.height(), x, y, 64., None)
+    picked = row is not None and 0 <= row < len(view.packed.instances) and not (
+        view.packed.instances['info'][row, 2] & 129)
     origin, direction = view._pixel_to_ray(x, y)
     if origin is None or direction is None:
         return None
     engine = options.pop('inference', None)
     modifiers = options.pop('modifiers', None)
-    hit = surface_hit(index, row, origin, direction) if row in rows else None
+    hit = surface_hit(index, row, origin, direction) if picked else None
     point, face_normal = hit if hit is not None else (None, None)
     on_face = point is not None
     tool = getattr(getattr(view, 'tools', None), 'tool', None)
     if point is None:
         work = getattr(getattr(view, 'tools', None), 'work_point', lambda x, y: None)
-        point = work(x, y) if tool is not None else None
+        point = work_point
+        if point is ...:
+            point = work(x, y) if tool is not None else None
         if point is None:
             normal = getattr(view.camera, 'forward', lambda: direction)()
             denominator = QVector3D.dotProduct(direction, normal)
@@ -644,19 +652,17 @@ def snap(index, row, view, x, y, **options):
                 view.camera.target-origin, normal)/denominator)
                 if abs(denominator) > 1e-9 else QVector3D(view.camera.target))
     context = view.scene.edit_group
-    context_key = id(context)
-    if context_key not in index.context_rows:
-        groups = getattr(view.packed, 'groups', None) or ()
-        index.context_rows[context_key] = np.array(
-            [r for r, group in enumerate(groups) if group is context], np.int64)
-    loose_rows = index.context_rows[context_key]
-    group_rows = rows[~np.isin(rows, loose_rows)] if len(loose_rows) else rows
+    # Classify just the nearby placements. Hidden or far-away links cannot
+    # contribute edges inside either snap radius.
+    groups = getattr(view.packed, 'groups', None)
+    is_loose = np.array([groups is not None and groups[r] is context for r in rows], dtype=bool)
+    loose_rows, group_rows = rows[is_loose], rows[~is_loose]
     edges = (nearby_edges(index, view.packed, view.camera, view.width(), view.height(),
                          x, y, rows=loose_rows, radius_px=64., cap=400, edit_group=context)
              if len(loose_rows) else [])
     edges += nearby_edges(index, view.packed, view.camera, view.width(), view.height(),
                           x, y, rows=group_rows, edit_group=context)
-    if row in rows and len(group_rows) > 1 and not np.isin(row, loose_rows):
+    if picked and len(group_rows) > 1 and row not in loose_rows:
         # The placement visible under the cursor, asked on its own: the query
         # above keeps the nearest 48 edges of ALL groups by screen distance,
         # whatever their depth, and dense geometry BEHIND a corner filled it
@@ -678,7 +684,7 @@ def snap(index, row, view, x, y, **options):
     exclude = getattr(tool, 'snap_excluded', lambda: None)()
     if exclude is not None and exclude[1]:
         edges = [e for e in edges if id(e.group) not in exclude[1]]
-    feature_rows = list(dict.fromkeys([e.row for e in edges] + ([row] if row in rows else [])))
+    feature_rows = list(dict.fromkeys([e.row for e in edges] + ([row] if picked else [])))
     for r in feature_rows:
         value = index.rows.get(r, index.packed.instances[r])
         matrix = value['world'].astype(float).T
@@ -723,7 +729,7 @@ def snap(index, row, view, x, y, **options):
         keys = [p.toTuple() for p in points]
         missing = {key: point for key, point in zip(keys, points) if key not in memo}
         if missing:
-            memo.update(zip(missing, _occluded_many(index, view, list(missing.values()), rows)))
+            memo.update(zip(missing, _occluded_many(index, view, list(missing.values()))))
         return [memo[key] for key in keys]
     options.setdefault('is_occluded', lambda p: hidden_many([p])[0])
     options.setdefault('are_occluded', hidden_many)
@@ -747,7 +753,7 @@ def snap(index, row, view, x, y, **options):
             p, n, lambda q: on_surface(index, view, row, q, project),
             placement_context(view, row, context)))
         options.setdefault('face_crossing', lambda p=point, n=face_normal: face_crossing(
-            index, view, x, y, row, p, n, rows, project, context))
+            index, view, x, y, row, p, n, None, project, context))
     plane = getattr(getattr(view, 'tools', None), '_last_work_plane', None)
     if plane is not None:
         options.setdefault('work_plane_normal', plane[1])
@@ -755,7 +761,7 @@ def snap(index, row, view, x, y, **options):
         options.setdefault('work_plane_normal', face_normal)
     start = options.get('start_point')
     if start is not None:
-        options.setdefault('start_edges', start_edges(index, view, start, rows))
+        options.setdefault('start_edges', start_edges(index, view, start, None))
     if engine is not None:
         _acquire(engine, view, edges, on_face, point, face_normal,
                  options, x, y, modifiers)

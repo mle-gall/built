@@ -158,8 +158,9 @@ def layers_signature(scene) -> tuple:
     (a push, a move) leaves it as it was and does not rebuild the list."""
     style = getattr(scene, "display_style", None)
     folders = tuple(L.folders_of(scene))
+    known = set(folders)
     return (tuple(repr(sorted(vars(ly).items())) for ly in scene.layers),
-            folders, tuple(L.folder_parent(scene, f) for f in folders),
+            folders, tuple(L.folder_parent(scene, f, known=known) for f in folders),
             tuple(L.folder_label(scene, f) for f in folders),
             tuple(sorted(scene.folder_visibility.items())),
             L.active_layer(scene),
@@ -2965,7 +2966,7 @@ class LayersPanel(QWidget):
             item.setFlags(item.flags() | Qt.ItemIsEditable)
             folders[name] = item
         for name, item in folders.items():
-            parent = folders.get(L.folder_parent(scene, name))
+            parent = folders.get(L.folder_parent(scene, name, known=folders))
             if parent is not None:
                 parent.addChild(item)
             else:
@@ -2974,12 +2975,7 @@ class LayersPanel(QWidget):
         self._alone = self.isolated_layers()         # whose target is filled
         folder_layers = {name: [] for name in folders}
         for order, ly in enumerate(scene.layers):
-            item = _Row([ly.name])
-            item.setData(COL_NAME, Qt.UserRole, (KIND_LAYER, ly.key))
-            item.setData(COL_NAME, ROLE_ORDER, order)
-            if ly.key != L.DEFAULT_LAYER:
-                item.setFlags(item.flags() | Qt.ItemIsEditable)
-            self._paint_layer_row(item, ly, ly.key == active)
+            item = self._new_layer_row(ly, order, active)
             parent = folders.get(ly.folder)
             if parent is not None:
                 parent.addChild(item)
@@ -3186,6 +3182,8 @@ class LayersPanel(QWidget):
         changes the active layer: what you draw next stays where it was."""
         from PySide6.QtWidgets import QApplication
         names = L.selection_layers(self._scene())
+        if not names and getattr(self, "_marked_names", None) == names:
+            return
         # Strong enough to find at a glance — next to a row picked in the
         # list, a faint tint went unseen — yet lighter than that pick.
         tint = QColor(QApplication.palette().highlight().color())
@@ -3243,8 +3241,10 @@ class LayersPanel(QWidget):
 
     def _structure(self):
         scene = self._scene()
+        folders = L.folders_of(scene)
+        known = set(folders)
         return (tuple((ly.key, ly.folder) for ly in scene.layers),
-                tuple((f, L.folder_parent(scene, f)) for f in L.folders_of(scene)))
+                tuple((f, L.folder_parent(scene, f, known=known)) for f in folders))
 
     def _update_rows(self):
         scene = self._scene()
@@ -3269,6 +3269,15 @@ class LayersPanel(QWidget):
         self.color_by_layer.blockSignals(False)
         self._mark_selection()
         self._apply_filter()
+
+    def _new_layer_row(self, ly, order, active):
+        item = _Row([ly.name])
+        item.setData(COL_NAME, Qt.UserRole, (KIND_LAYER, ly.key))
+        item.setData(COL_NAME, ROLE_ORDER, order)
+        if ly.key != L.DEFAULT_LAYER:
+            item.setFlags(item.flags() | Qt.ItemIsEditable)
+        self._paint_layer_row(item, ly, ly.key == active)
+        return item
 
     def _paint_layer_row(self, item, ly, active: bool) -> None:
         item.setIcon(COL_ACTIVE, _pencil_icon(active))
@@ -3366,7 +3375,7 @@ class LayersPanel(QWidget):
         item.setData(COL_EYE, Qt.UserRole + 1, int(shown))
         item.setData(COL_LOCK, Qt.UserRole + 1, int(locked))
         item.setToolTip(COL_EYE, tr("Show or hide the folder"))
-        self._dim_eye(item, not L.folder_visible(scene, L.folder_parent(scene, key)))
+        self._dim_eye(item, not L.folder_visible(scene, self._key(item.parent())[1] if item.parent() else None))
         printed = (not layers
                    or any(getattr(ly, "printable", True) for ly in layers))
         item.setIcon(COL_PRINT, printer_icon(printed))
@@ -3401,7 +3410,8 @@ class LayersPanel(QWidget):
         key = (id(scene), scene.content_version)
         job = getattr(self, "_count_job", None)
         if job is None or job[0] != key:
-            job = self._count_job = (key, layer_count_steps(scene))
+            job = self._count_job = (key, layer_count_steps(
+                scene, history=self._window.viewport.history))
         deadline = monotonic() + 0.030
         for counts in job[1]:
             if counts is not None:
@@ -3574,6 +3584,9 @@ class LayersPanel(QWidget):
         # No filter at all: every row shows — an empty folder too, which
         # has no layer to be shown through (a new folder was invisible).
         nothing = not text and state is None and not invert
+        if nothing and getattr(self, "_unfiltered", False):
+            return
+        self._unfiltered = nothing
 
         def show(item, inherited: bool) -> bool:
             kind, name = self._key(item)
@@ -5383,17 +5396,48 @@ class LayersPanel(QWidget):
         change of the model, the counts — the filter too: «Selection» shows
         the layers of what is picked — when the rows are what they were;
         otherwise the tree is rebuilt."""
-        if (self._signature() == getattr(self, "_drawn_signature", None)
-                and self.tree.topLevelItemCount()):
+        signature = self._signature()
+        previous = getattr(self, "_drawn_signature", None)
+        if signature == previous and self.tree.topLevelItemCount():
             self._mark_selection()
             self._apply_filter()
             if self._scene().content_version != self._counted_version:
                 self._count_timer.start(300)
             return
+        if previous is not None and self._append_root_layers(previous, signature):
+            return
         if self._structure() == getattr(self, "_drawn_structure", None):
             self._update_rows()
         else:
             self.refresh()
+
+    def _append_root_layers(self, previous, signature):
+        """Creating the first guide may append a tag to a large existing tree."""
+        old, isolation = previous
+        new, current_isolation = signature
+        n = len(old[0])
+        if (n >= len(new[0]) or new[0][:n] != old[0] or old[1:] != new[1:]
+                or isolation != current_isolation):
+            return False
+        scene = self._scene()
+        added = scene.layers[n:]
+        if any(ly.folder for ly in added) or self.isolated_layers() != self._alone:
+            return False
+        self._updating = True
+        try:
+            active = L.active_layer(scene)
+            for order, ly in enumerate(added, n):
+                self.tree.addTopLevelItem(self._new_layer_row(ly, order, active))
+            self.tree.sortItems(*self._sort)
+        finally:
+            self._updating = False
+        self._mark_selection()
+        self._apply_filter()
+        self._drawn_signature = signature
+        self._drawn_structure = self._structure()
+        self._count_timer.start(300)
+        self._tell_order()
+        return True
 
     def _signature(self) -> tuple:
         return (layers_signature(self._scene()), tuple(self._isolated))
