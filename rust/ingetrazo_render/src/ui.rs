@@ -251,6 +251,10 @@ pub struct Column {
     pick: Option<(String, String, Vec<String>, Pos2)>,
     /// The colour being picked for a row, and where.
     color_pick: Option<(String, Color32, Pos2)>,
+    /// A dock mode replacing the tree ("" = the Project tree, else e.g. "Problems").
+    mode: String,
+    /// Issues shown (dots in the tree, counts in the header) or kept out of the way.
+    issues: bool,
     /// The inspector's editable fields: id → text being typed.
     edits: std::collections::HashMap<String, String>,
     inspector_title: String,
@@ -438,7 +442,7 @@ impl Ui {
         let col = self.column.get_or_insert_with(|| Column {
             nodes: Vec::new(), unfiled: 0, expanded: Default::default(), filter: String::new(),
             filing: None, focus_filter: false, row_menu: None, renaming: None, head_menu: None,
-            kind_menu: None, kinds: Vec::new(), prompt: None, colset: 0, pick: None, color_pick: None, edits: Default::default(),
+            kind_menu: None, kinds: Vec::new(), prompt: None, colset: 0, pick: None, color_pick: None, edits: Default::default(), mode: String::new(), issues: false,
             inspector_title: String::new(),
             inspector: Vec::new(), highlighted: None,
         });
@@ -452,6 +456,12 @@ impl Ui {
             cells: t.get(5..).map(|c| c.to_vec()).unwrap_or_default(),
         }).collect();
         col.unfiled = unfiled;
+    }
+    pub fn set_mode(&mut self, mode: String) {
+        if let Some(col) = self.column.as_mut() { col.mode = mode; }
+    }
+    pub fn set_issues(&mut self, on: bool) {
+        if let Some(col) = self.column.as_mut() { col.issues = on; }
     }
     pub fn set_colset(&mut self, colset: u8) {
         if let Some(col) = self.column.as_mut() { col.colset = colset.min(2); }
@@ -498,7 +508,7 @@ impl Ui {
     /// Keyboard ownership: the chrome takes a key only while one of its
     /// fields has focus, or Escape while one of its popups is open.
     pub fn claims_key(&self, name: &str) -> bool {
-        let filing = self.column.as_ref().is_some_and(|c| c.filing.is_some() || c.row_menu.is_some()
+        let filing = self.column.as_ref().is_some_and(|c| c.filing.is_some() || c.row_menu.is_some() || !c.mode.is_empty()
             || c.kind_menu.is_some() || c.head_menu.is_some() || c.prompt.is_some());
         (name == "Escape" && (self.view_open || self.sel_more || self.menu.is_some() || filing)) || self.ctx.wants_keyboard_input()
     }
@@ -510,12 +520,17 @@ impl Ui {
         if name == "Escape" {
             if let Some(col) = self.column.as_mut() {
                 if col.row_menu.is_some() || col.filing.is_some() || col.kind_menu.is_some() || col.head_menu.is_some()
-                    || col.prompt.is_some() {
+                    || col.prompt.is_some() || !col.mode.is_empty() {
                     if pressed {
                         if col.kind_menu.take().is_none() && col.head_menu.take().is_none()
                             && col.prompt.take().is_none() && col.row_menu.take().is_none() {
-                            col.filing = None;
-                            col.filter.clear();
+                            if col.filing.is_some() {
+                                col.filing = None;
+                                col.filter.clear();
+                            } else if !col.mode.is_empty() {
+                                col.mode.clear();
+                                self.actions.push("tree:mode\u{1f}".into());
+                            }
                         }
                         self.ctx.memory_mut(|m| m.stop_text_input());
                     }
@@ -1049,13 +1064,21 @@ impl Ui {
             .show(ctx, |ui| {
                 glass(Surface::Panel).inner_margin(Margin::same(10)).show(ui, |ui| {
                     ui.set_width(W - 20.0);
+                    ui.set_max_width(W - 20.0);
                     ui.set_height(height - 20.0);
                     ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
                     // Header: title, Unfiled chip.
                     ui.horizontal(|ui| {
                         ui.set_min_height(24.0);
                         ui.add_space(8.0);
-                        caption_plain(ui, "Project");
+                        if col.mode.is_empty() {
+                            caption_plain(ui, "Project");
+                        } else {
+                            let back = (String::new(), "‹ Project".to_owned(), "Back to the tree (Esc)".to_owned(), String::new(), -1i8, true);
+                            if item_button(ui, &back, None) { actions.push("mode\u{1f}".into()); }
+                            ui.add_space(4.0);
+                            caption_plain(ui, &col.mode);
+                        }
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             let dots = (String::new(), "⋯".to_owned(), "Structure: new node, propose from tags…".to_owned(), String::new(), -1i8, true);
                             let before = ui.cursor();
@@ -1063,13 +1086,19 @@ impl Ui {
                                 col.head_menu = Some(pos2(before.max.x, before.min.y + 30.0));
                             }
                             // What stands between the model and delivery (one home: here).
-                            let to_fix = delivery.as_ref().map_or(0, |d| d.2);
-                            if to_fix > 0 && amber_button(ui, &format!("{to_fix} to fix")) { cmds.push("deliver:problems".into()); }
-                            if col.unfiled > 0 && amber_button(ui, &format!("{} unfiled", col.unfiled)) { cmds.push("deliver:unfiled".into()); }
+                            let total = if col.mode.is_empty() && col.issues {
+                                delivery.as_ref().map_or(0, |d| d.2) + col.unfiled
+                            } else { 0 };
+                            if total > 0 && amber_button(ui, &format!("{total} issues")) { cmds.push("deliver:problems".into()); }
+                            if col.mode.is_empty() {
+                                let tip = if col.issues { "Hide issues" } else { "Show issues: problem dots and what blocks delivery" };
+                                let t = (String::new(), "Issues".to_owned(), tip.to_owned(), String::new(), if col.issues { 1 } else { 0 }, true);
+                                if item_button(ui, &t, None) { actions.push("issues\u{1f}".into()); }
+                            }
                         });
                     });
                     ui.add_space(4.0);
-                    ui.horizontal(|ui| {
+                    if col.mode.is_empty() { ui.horizontal(|ui| {
                         ui.add_space(4.0);
                         ui.spacing_mut().item_spacing = vec2(2.0, 0.0);
                         for (i, label) in ["Filing", "Drawing", "Export"].iter().enumerate() {
@@ -1080,7 +1109,7 @@ impl Ui {
                                 actions.push(format!("colset\u{1f}{i}"));
                             }
                         }
-                    });
+                    }); }
                     ui.add_space(6.0);
                     if let Some(what) = &col.filing {
                         let banner = format!("File {what} to…  click a node, or type and press Enter");
@@ -1093,7 +1122,7 @@ impl Ui {
                     let edit = egui::TextEdit::singleline(&mut col.filter)
                         .hint_text(egui::RichText::new(if col.filing.is_some() { "Node name or kind" } else { "Filter nodes" }).color(FAINT))
                         .margin(Margin::symmetric(8, 5))
-                        .desired_width(f32::INFINITY)
+                        .desired_width((W - 20.0 - 16.0 - 4.0).max(40.0))
                         .font(egui::FontId::proportional(12.0));
                     let resp = ui.add(edit);
                     if col.focus_filter {
@@ -1188,7 +1217,7 @@ impl Ui {
                                     }
                                 }
                                 let warn_col = if col.colset != 0 { rect.max.x + 1000.0 } else { warn_col };
-                                if n.problems > 0 {
+                                if n.problems > 0 && (col.issues || !col.mode.is_empty()) {
                                     let g = ui.painter().layout_no_wrap(n.problems.to_string(), meta(), WARN);
                                     let w = g.size().x;
                                     ui.painter().galley(pos2(warn_col - w, cy - g.size().y / 2.0), g, WARN);
@@ -1225,7 +1254,7 @@ impl Ui {
                                 if renaming_here {
                                     let buf = &mut col.renaming.as_mut().unwrap().1;
                                     let field = egui::TextEdit::singleline(buf).font(body()).margin(Margin::symmetric(4, 1))
-                                        .desired_width(right - tx - 4.0);
+                                        .desired_width((right - tx - 16.0).max(30.0)).clip_text(true);
                                     let r = ui.put(Rect::from_min_max(pos2(tx - 4.0, rect.min.y + 1.0), pos2(right, rect.max.y - 1.0)), field);
                                     r.request_focus();
                                     if r.lost_focus() {
@@ -1317,16 +1346,25 @@ impl Ui {
                             ui.horizontal(|ui| { ui.add_space(8.0); ui.label(egui::RichText::new("Nothing selected").font(body()).color(FAINT)); });
                             return;
                         }
-                        ui.horizontal(|ui| {
-                            ui.add_space(8.0);
-                            ui.label(egui::RichText::new(&col.inspector_title).font(title()).color(INK));
+                        {
+                            // Title and selection count on one line, painted (a
+                            // Label would widen the panel to fit a long name).
+                            let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 22.0), Sense::hover());
+                            let mut right = r.max.x - 8.0;
                             if let Some((summary, _)) = &selection {
-                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                    ui.add_space(8.0);
-                                    ui.label(egui::RichText::new(summary).font(meta()).color(FAINT));
-                                });
+                                let g = ui.painter().layout_no_wrap(summary.clone(), meta(), FAINT);
+                                right -= g.size().x;
+                                ui.painter().galley(pos2(right, r.center().y - g.size().y / 2.0), g, FAINT);
+                                right -= 10.0;
                             }
-                        });
+                            let mut job = egui::text::LayoutJob::single_section(col.inspector_title.clone(), egui::TextFormat {
+                                font_id: title(), color: INK, ..Default::default() });
+                            job.wrap.max_width = (right - r.min.x - 8.0).max(40.0);
+                            job.wrap.max_rows = 1;
+                            job.wrap.break_anywhere = true;
+                            let g = ui.painter().layout_job(job);
+                            ui.painter().galley(pos2(r.min.x + 8.0, r.center().y - g.size().y / 2.0), g, INK);
+                        }
                         // The selection's actions: the selection bar's job, in its one home.
                         if let Some((_, acts)) = &selection {
                             ui.add_space(6.0);
@@ -1763,8 +1801,11 @@ fn inspector_rows(ui: &mut egui::Ui, rows: &[(String, String)], edits: &mut std:
                 ui.add_space(8.0);
                 let (lr, _) = ui.allocate_exact_size(vec2(88.0, 24.0), Sense::hover());
                 ui.painter().text(lr.left_center(), egui::Align2::LEFT_CENTER, label, egui::FontId::proportional(11.5), DIM);
-                let w = (ui.available_width() - 8.0).max(60.0);
-                let r = ui.add(egui::TextEdit::singleline(buf).font(body()).margin(Margin::symmetric(6, 3)).desired_width(w));
+                // desired_width is the text's width: leave room for the field's
+                // own margins, or the panel grows a little every frame.
+                let w = (ui.available_width() - 8.0 - 12.0 - 4.0).max(40.0);
+                let r = ui.add(egui::TextEdit::singleline(buf).font(body()).margin(Margin::symmetric(6, 3))
+                    .desired_width(w).clip_text(true));
                 if r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) && buf.as_str() != text {
                     actions.push(format!("edit\u{1f}{id}\u{1f}{buf}"));
                 }

@@ -681,6 +681,7 @@ def _tree(view, win) -> None:
         return
     first = getattr(view, "_ui_tree_sig", None) is None
     view._ui_tree_sig = sig
+    mode = view.__dict__.get("_ui_mode", "")
     from collections import Counter, defaultdict
     from core import bim_registry, links, structure
     registry = bim_registry.get(scene)
@@ -903,16 +904,105 @@ def _tree(view, win) -> None:
             sum(1 for g in unfiled if id(g) in sel_ids))
         if uk in exp:
             add_items(unfiled, "", 1)
+    if mode == "problems":
+        rows = _problem_rows(view, scene, registry, nodes, recipes, unfiled, node_of, exp, sel_ids)
     view._ui_tree = dict(direct=direct, children=children, unfiled=unfiled, recipes=recipes, to_fix=to_fix,
                          active=active, node_of=node_of, nodes=nodes,
                          node_layers={k: list(c) for k, c in node_layers.items()})
     view.renderer.ui_set_tree(rows, len(unfiled))
     view.renderer.ui_set_colset(colset)
+    view.renderer.ui_set_mode("Problems" if mode == "problems" else "")
+    view.renderer.ui_set_issues(bool(view.__dict__.get("_ui_issues", False)))
     if not getattr(view, "_ui_kinds_sent", False):
         view.renderer.ui_set_kinds(sorted(set(KINDS.values()) - {"Level", "Building", "Site"}))
         view._ui_kinds_sent = True
     path = node_path(active) if active in nodes else ""
     view.renderer.ui_set_delivery(path, len(unfiled), len(to_fix))
+
+
+def _problem_rows(view, scene, registry, nodes, recipes, unfiled, node_of, exp, sel_ids):
+    """The one problems list (council 2026-11-22): severity → rule → item.
+    Picking a rule selects its items, so the bulk fix is the inspector's;
+    picking an item frames it. Scan meshes and drawing-only nodes are not
+    held to a record."""
+    from core import structure
+    from core.structure_ids import load_requirements, requirement_hits
+    cache = getattr(view, "_ui_rules_cache", None)
+    if cache is not None and cache[0] == (id(scene), scene.content_version):
+        rules = cache[1]
+    else:
+        rules = _problem_rules(scene, registry, nodes, recipes, unfiled)
+        view._ui_rules_cache = ((id(scene), scene.content_version), rules)
+    return _problem_rows_from(view, rules, nodes, node_of, exp, sel_ids)
+
+
+def _problem_rules(scene, registry, nodes, recipes, unfiled):
+    from core import structure
+    from core.structure_ids import load_requirements, requirement_hits
+    rules = []          # (severity, rule id, label, [groups])
+    rules.append(("Blocks export", "unfiled", "Not filed", list(unfiled)))
+    try:
+        requirements = load_requirements(scene, registry)
+    except Exception:
+        requirements = []
+    ids = {}
+    missing, hidden = [], []
+    for g, src, root, key in structure._memberships(scene, registry):
+        if key not in nodes or src:
+            continue
+        rec = g.ifc or {}
+        if recipes[key].get("class") is not None:
+            if not structure._has_status(rec):
+                missing.append(g)
+            if getattr(g, "hidden", False):
+                hidden.append(g)
+        if requirements and rec:
+            for hit in requirement_hits(g, registry, requirements):
+                ids.setdefault(hit.get("specification") or hit.get("file") or "IDS", []).append(g)
+    for spec, gs in sorted(ids.items()):
+        rules.append(("Blocks export", "ids:" + spec, f"IDS: {spec}", gs))
+    rules.append(("Needs attention", "status", "Status missing", missing))
+    rules.append(("Info", "hidden", "Hidden items in exported nodes", hidden))
+    if not requirements:
+        rules.append(("Info", "noids", "No IDS checklist in the export profiles: not checked", []))
+    return rules
+
+
+def _problem_rows_from(view, rules, nodes, node_of, exp, sel_ids):
+    view._ui_rules = {rid: gs for _sev, rid, _l, gs in rules}
+    rows, order = [], []
+    for sev in ("Blocks export", "Needs attention", "Info"):
+        these = [r for r in rules if r[0] == sev and (r[3] or r[1] == "noids")]
+        if not these:
+            continue
+        total = sum(len(r[3]) for r in these)
+        rows.append(([f"s:{sev}", sev, "", "", ""], [0, total, total if sev != "Info" else 0, 0, 0, -1, -1, 0, 1, 0]))
+        for _sev, rid, label, gs in these:
+            rk = f"r:{rid}"
+            open_ = rk in exp or (len(gs) <= 40 and f"-{rk}" not in exp)
+            rows.append(([rk, label, "", "", ""], [1, len(gs), 0, 0, 0, -1, -1, int(bool(gs)), int(open_ and bool(gs)), 0]))
+            if open_:
+                for g in gs[:ROW_CAP]:
+                    where = node_of.get(id(g))
+                    badge = nodes[where]["name"] if where in nodes else ""
+                    rows.append(([f"i:{g.uid}", g.name or "Group", "", badge, "group"],
+                                 [2, 0, 0, 0, 1, -1, -1, 0, 0, int(id(g) in sel_ids)]))
+                    order.append(g)
+    view._ui_problem_order = order
+    return rows
+
+
+def _problem_step(win, view, step) -> None:
+    """⌘] / ⌘[: select and frame the next or previous problem."""
+    order = getattr(view, "_ui_problem_order", [])
+    if not order:
+        return
+    cur = getattr(view, "_ui_problem_at", -1)
+    cur = (cur + step) % len(order)
+    view._ui_problem_at = cur
+    _select(win, [order[cur]])
+    win._on_zoom_selection()
+    view._ui_tree_sig = None
 
 
 def _layer(scene, tag):
@@ -1044,7 +1134,35 @@ def _tree_action(win, view, action) -> None:
 
     try:
         if verb == "toggle":
-            exp.symmetric_difference_update({rk})
+            if rk.startswith("r:"):
+                # Rules start open when short: remember a collapse explicitly.
+                if rk in exp:
+                    exp.discard(rk)
+                    exp.add(f"-{rk}")
+                elif f"-{rk}" in exp:
+                    exp.discard(f"-{rk}")
+                    exp.add(rk)
+                else:
+                    exp.add(f"-{rk}")
+            else:
+                exp.symmetric_difference_update({rk})
+            rebuild()
+        elif verb == "issues":
+            view._ui_issues = not view.__dict__.get("_ui_issues", False)
+            rebuild()
+        elif verb == "mode":
+            view._ui_mode = rk
+            rebuild()
+        elif verb == "node" and kind == "r":
+            _select(win, getattr(view, "_ui_rules", {}).get(ident, []))
+            rebuild()
+        elif verb == "item" and view.__dict__.get("_ui_mode") == "problems":
+            g = item()
+            if g is not None:
+                order = getattr(view, "_ui_problem_order", [])
+                view._ui_problem_at = next((i for i, o in enumerate(order) if o is g), -1)
+                _select(win, [g])
+                win._on_zoom_selection()
             rebuild()
         elif verb == "filter":
             view._ui_filter = rk
@@ -1490,10 +1608,10 @@ def _run(win, actions) -> None:
         elif kind == "deliver":
             view = getattr(getattr(win, "_doc", None), "stand_in", None)
             data = getattr(view, "_ui_tree", None) or {}
-            if arg == "unfiled":
-                _select(win, data.get("unfiled", []))
-            elif arg == "problems":
-                _select(win, data.get("to_fix", []))
+            if arg in ("unfiled", "problems"):
+                view._ui_mode = "problems"
+                view._ui_tree_sig = None
+                view.update()
             elif arg == "active" and data.get("active"):
                 _select(win, _tree_groups(view, data["active"]))
         elif kind == "act":
@@ -1519,11 +1637,19 @@ _KEYS = {Qt.Key_Escape: "Escape", Qt.Key_Return: "Enter", Qt.Key_Enter: "Enter",
          Qt.Key_A: "A", Qt.Key_C: "C", Qt.Key_V: "V", Qt.Key_X: "X", Qt.Key_Z: "Z"}
 
 
+def _problem_key(view, event) -> int:
+    if view.__dict__.get("_ui_mode") != "problems" or not (event.modifiers() & Qt.ControlModifier):
+        return 0
+    return {Qt.Key_BracketRight: 1, Qt.Key_BracketLeft: -1}.get(event.key(), 0)
+
+
 def claims_key(view, event) -> bool:
     """ShortcutOverride: does the chrome own this key (a focused field, or
     Escape while its popup is open)? Then no window shortcut fires."""
     if not getattr(view, "_ui_attached", False):
         return False
+    if _problem_key(view, event):
+        return True
     name = _KEYS.get(event.key(), "")
     return view.renderer.ui_claims_key(name)
 
@@ -1532,6 +1658,12 @@ def key(view, event, pressed: bool) -> bool:
     """Offer a key to the chrome first. True: it was the chrome's."""
     if not getattr(view, "_ui_attached", False):
         return False
+    step = _problem_key(view, event)
+    if step:
+        if pressed:
+            _problem_step(view.window(), view, step)
+            view.update()
+        return True
     name = _KEYS.get(event.key(), "")
     if not view.renderer.ui_claims_key(name):
         return False
