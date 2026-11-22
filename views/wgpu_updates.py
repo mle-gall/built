@@ -151,9 +151,7 @@ class InstanceUpdates:
                     return False
                 if isinstance(command, CompoundCommand):
                     return all(visit(c) for c in command.commands)
-                if isinstance(command, (SnapshotMutation, SnapshotCompound, MoveVerticesCommand,
-                                        AddEdgeCommand, AddFaceCommand, EraseSelectionCommand)):
-                    mesh = command._target(self.scene) if isinstance(command, SnapshotMutation) else self.scene.mesh
+                def edited(mesh):
                     old = self.meshes.get(id(mesh))
                     if old is None:
                         # The open group's world copy, first edited.
@@ -166,6 +164,14 @@ class InstanceUpdates:
                         return False
                     self.pending_meshes.add(id(mesh))
                     return True
+                if isinstance(command, (SnapshotMutation, SnapshotCompound, MoveVerticesCommand,
+                                        AddEdgeCommand, AddFaceCommand, EraseSelectionCommand)):
+                    mesh = command._target(self.scene) if isinstance(command, SnapshotMutation) else self.scene.mesh
+                    return edited(mesh)
+                from core.soften import SoftenByAngleCommand
+                if isinstance(command, SoftenByAngleCommand):
+                    # Soft flags only: each mesh's prototypes rebake, smooth.
+                    return all(edited(mesh) for mesh in command.meshes())
                 if isinstance(command, ReshareInstanceCommand):
                     # Leaving an edited instance: back on the definition,
                     # which every copy shows (all its variants rebake).
