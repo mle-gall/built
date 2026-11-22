@@ -170,6 +170,7 @@ def test_the_tray_slider_is_one_undo_step_per_drag():
     win = MainWindow()
     scene = win.viewport.scene
     _s, box = _assembly()
+    _s.groups.remove(box)                  # one parent per placement
     scene.groups.append(box)
     scene.selection.clear()
     scene.selection.add(box)

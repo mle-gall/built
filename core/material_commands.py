@@ -13,6 +13,8 @@ from core.history import Command, RestampMaterialCommand, _dirty_group_chunks
 class AddMaterialCommand(Command):
     """Put ``material`` in the registry (nothing wears it yet)."""
 
+    doc_undo = True     # the registry is in the document (slice 2)
+
     def __init__(self, material) -> None:
         self.material = material
 

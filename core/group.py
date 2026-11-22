@@ -121,6 +121,11 @@ GROUP_FIELDS = ("mesh", "name", "layer", "ifc", "billboard", "xform",
                 "explode_offset", "ext", "locked", "source_uid")
 DOC_FIELDS = ("name", "layer", "xform", "children", "hidden", "uid",
               "material", "axes", "component", "locked")
+#: Custom attributes: document values too (slice 2), handed out as tracked
+#: containers that write back when edited in place (core/doc_model.py).
+ATTR_FIELDS = ("ifc", "ext", "text3d", "exploded", "explode_offset")
+if _dm.ENABLED:
+    DOC_FIELDS = DOC_FIELDS + ATTR_FIELDS
 _PY_FIELDS = tuple(f for f in GROUP_FIELDS if f not in DOC_FIELDS)
 
 
@@ -139,19 +144,22 @@ class _GroupMethods:
         if py:
             self.layer = None
         # BIM tag ({"class": "IfcWall", "name": ...}) or None — see core/bim.py.
-        self.ifc = None
+        if py:
+            self.ifc = None
         # Face-me billboard: the group's textured quad rotates
         # around its vertical anchor axis to face the camera every frame.
         self.billboard = False
         # 3D text (core/text3d.py): the parameters this container was
         # generated from — text, font, height… — so it can be re-edited and
         # laid out again in place. ``None`` on every other group.
-        self.text3d = None
+        if py:
+            self.text3d = None
         # Extensions' own parameters for this container, by extension key
         # ({"windowizer": {...}}): kept with copies and saved in the .igz,
         # and apart from ``ifc``, which the BIM panel replaces when it
         # retags. ``None`` when no extension wrote here.
-        self.ext = None
+        if py:
+            self.ext = None
         # Hide: the object stays in the document but draws,
         # picks, snaps and exports as if it were not there — until Unhide,
         # or the scene that remembers it visible (Rafael, 2026-09-16: «una
@@ -185,8 +193,9 @@ class _GroupMethods:
         #: On a part: the ``(x, y, z)`` translation, in the container's
         #: frame, the explosion added to its matrix — what Reassemble
         #: takes back off, so a part moved by hand meanwhile keeps that.
-        self.exploded: dict | None = None
-        self.explode_offset: tuple | None = None
+        if py:
+            self.exploded = None
+            self.explode_offset = None
         # Component instance: when set, ``mesh`` is a PROTOTYPE in
         # local coordinates SHARED with sibling instances, and ``xform`` maps
         # local -> world. ``None`` = classic group (mesh in world coords).
@@ -258,7 +267,17 @@ class _GroupMethods:
         group's own mesh while leaving its children behind. An identity
         transform costs nothing and closes that road."""
         from PySide6.QtGui import QMatrix4x4
-        self.children = list(children)
+        children = list(children)
+        if _dm.ENABLED and getattr(self, "_doc_key", 0):
+            # One parent per placement: adopting takes a child out of the
+            # list that held it (a loaded file's top level, a subset of a
+            # tree), unless that list is this group's own. (A viewport
+            # proxy holds no document list: it takes nothing away.)
+            for c in children:
+                if getattr(c, "_doc_key", 0) and c._parent is not None \
+                        and c._parent is not self:
+                    c._detach()
+        self.children = children
         if self.children and self.xform is None:
             self.xform = QMatrix4x4()
 
@@ -332,10 +351,51 @@ if _dm.ENABLED:
                     _dm.handle_state(self, GROUP_FIELDS))
 
         __setstate__ = _dm.set_handle_state
+
+    for _name in ATTR_FIELDS:
+        setattr(Group, _name, _dm.attribute(_name))
+    del _name
+
+    class PlacementProxy(Group):
+        """A placement the VIEWPORT makes (``Viewport._expand_placements``:
+        one per nested part, carrying its composed world matrix, inherited
+        tag and paint): a ``Group`` to every draw, pick and ``isinstance``,
+        and no part of the document. Every field is a Python slot of its
+        own (they shadow the document's descriptors) and the handle names
+        no node (``_detached``), so building 18,000 of them per pack writes
+        nothing into the document and reads at slot speed."""
+        __slots__ = DOC_FIELDS
+
+        def __new__(cls, *_args, **_kwargs):
+            return _dm.NATIVE.Placement.__new__(cls, _detached=True)
+
+        def __init__(self, mesh: Mesh | None = None, name: str | None = None,
+                     uid: str | None = None) -> None:
+            _GroupMethods.__init__(self, mesh, name, uid)
+            self.ifc = self.ext = self.text3d = None
+            self.exploded = self.explode_offset = None
+            self.layer = None
+            self.hidden = False
+            self.locked = False
+            self.material = None
+            self.xform = None
+            self.children = []
+            self.axes = None
+            self.component = True
+
+        def __reduce__(self):
+            return (_dm.new_handle, (type(self),),
+                    _dm.handle_state(self, GROUP_FIELDS))
 else:
     class Group(_GroupMethods):
         """A placement: a group, a component instance or a nested part."""
         __slots__ = GROUP_FIELDS
+
+    class PlacementProxy(Group):
+        """A placement the viewport makes for a nested part (see the Rust
+        document's version above); the Python document's is a plain
+        ``Group``."""
+        __slots__ = ()
 
 
 # ---- Local axes (issue #44) ---------------------------------------------------

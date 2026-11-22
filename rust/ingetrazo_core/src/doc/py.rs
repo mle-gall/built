@@ -10,9 +10,10 @@
 
 use super::value::Value;
 use super::{
-    drain_pending, handle_dropped, lock, try_lock, FVal, Field, Key, Kind, ListId, Op, Trash, Xform, VIEW_AXES,
-    VIEW_MATERIAL, VIEW_XFORM,
+    attr_id, drain_pending, handle_dropped, lock, str_view, try_lock, FVal, Field, Key, Kind, ListId, Op, Trash,
+    Xform, VIEW_AXES, VIEW_MATERIAL, VIEW_XFORM,
 };
+use numpy::PyArrayMethods;
 use pyo3::exceptions::{PyIndexError, PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::gc::PyVisit;
 use pyo3::prelude::*;
@@ -25,19 +26,172 @@ use std::sync::Mutex;
 fn err(e: String) -> PyErr {
     if e.contains("no document node") {
         PyRuntimeError::new_err(e)
+    } else if e.starts_with("one parent") {
+        PyValueError::new_err(e)
     } else {
         PyTypeError::new_err(e)
     }
 }
 
+/// The tree-invariant reports of the list op that just ran, as Python
+/// warnings (`PARENT_MODE` 1; see `doc_parent_mode`).
+fn parent_reports(py: Python<'_>) -> PyResult<()> {
+    let msgs: Vec<String> = {
+        let mut r = super::PARENT_REPORTS.lock().unwrap_or_else(|e| e.into_inner());
+        if r.is_empty() {
+            return Ok(());
+        }
+        std::mem::take(&mut *r)
+    };
+    let cat = py.get_type::<pyo3::exceptions::PyUserWarning>();
+    for m in msgs {
+        let c = std::ffi::CString::new(m).unwrap_or_default();
+        PyErr::warn(py, &cat, &c, 1)?;
+    }
+    Ok(())
+}
+
 /// `(make, bind)`: the Python side of matrix views (`core/doc_model.py`).
 static HOOKS: Mutex<Option<(Py<PyAny>, Py<PyAny>)>> = Mutex::new(None);
+/// `track(key, attr, container)`: the tracked container an attribute's dict
+/// or list is handed out as (`core.doc_model.track`).
+static TRACK: Mutex<Option<Py<PyAny>>> = Mutex::new(None);
 
 fn hooks(py: Python<'_>) -> PyResult<(Py<PyAny>, Py<PyAny>)> {
     let h = HOOKS.lock().unwrap_or_else(|e| e.into_inner());
     match h.as_ref() {
         Some((a, b)) => Ok((a.clone_ref(py), b.clone_ref(py))),
         None => Err(PyRuntimeError::new_err("document matrix hooks not installed (core.doc_model)")),
+    }
+}
+
+fn track_hook(py: Python<'_>) -> Option<Py<PyAny>> {
+    TRACK.lock().unwrap_or_else(|e| e.into_inner()).as_ref().map(|t| t.clone_ref(py))
+}
+
+// ------------------------------------------------------------- attributes
+
+/// An attribute's value as Python: the tracked container cached for it,
+/// or (a dict or a list, `track`) a new one, or a plain value.
+fn read_attr<'py>(py: Python<'py>, me: &Bound<'py, PyAny>, k: Key, a: u16, track: bool) -> PyResult<Bound<'py, PyAny>> {
+    let (v, serial) = {
+        let mut d = lock();
+        if !me.is_none() {
+            d.set_handle(k, me.as_ptr());
+        }
+        let n = d.need(k).map_err(err)?;
+        if let Some(c) = n.attr_view(a) {
+            return Ok(c.clone_ref(py).into_bound(py));
+        }
+        (n.attr(a).cloned(), d.serial)
+    };
+    let Some(v) = v else { return Ok(py.None().into_bound(py)) };
+    let container = matches!(v, Value::Dict(_) | Value::List(_));
+    let out = v.to_py(py)?;
+    if !(track && container) {
+        return Ok(out);
+    }
+    let Some(hook) = track_hook(py) else { return Ok(out) };
+    let view = hook.bind(py).call1((k, a, out))?;
+    let keep = view.clone().unbind();
+    let stale = {
+        let mut d = lock();
+        let same = d.serial == serial;
+        match d.node_mut(k) {
+            Some(n) if same && n.attr_view(a).is_none() => {
+                n.attr_views.push((a, keep));
+                None
+            }
+            Some(n) if n.attr_view(a).is_some() => {
+                let other = n.attr_view(a).map(|v| v.clone_ref(py));
+                drop(d);
+                drop(keep);
+                return Ok(other.expect("checked").into_bound(py));
+            }
+            _ => Some(keep),
+        }
+    };
+    drop(stale);
+    Ok(view)
+}
+
+fn write_attr(py: Python<'_>, me: &Bound<'_, PyAny>, k: Key, a: u16, value: &Bound<'_, PyAny>) -> PyResult<()> {
+    {
+        let d = lock();
+        if let Some(n) = d.node(k) {
+            if n.attr_view(a).map(|v| v.as_ptr()) == Some(value.as_ptr()) {
+                return Ok(()); // its own tracked container assigned back
+            }
+        }
+    }
+    let v = if value.is_none() { None } else { Some(Value::from_py(value)?) };
+    let mut trash = Trash::default();
+    let r = {
+        let mut d = lock();
+        if !me.is_none() {
+            d.set_handle(k, me.as_ptr());
+        }
+        d.write(py, k, Field::Attr(a), FVal::Val(v), &mut trash)
+    };
+    drop(trash);
+    drain_pending();
+    r.map(|_| ()).map_err(err)
+}
+
+fn handle_key(obj: &Bound<'_, PyAny>) -> PyResult<Key> {
+    if let Ok(p) = obj.cast::<PyPlacement>() {
+        return Ok(p.get().key);
+    }
+    if let Ok(t) = obj.cast::<PyTag>() {
+        return Ok(t.get().key);
+    }
+    if let Ok(m) = obj.cast::<PyMaterial>() {
+        return Ok(m.get().key);
+    }
+    Err(PyTypeError::new_err(format!("{} is not a document handle", obj.get_type().name()?)))
+}
+
+/// A class attribute that keeps an instance's value in the document
+/// (`Field::Attr`): `Group.ifc = DocAttr("ifc", track=True)`. With
+/// `track`, a dict or list value is handed out as a tracked container
+/// that writes back when edited in place (`g.ext["link"]["x"] = 1`).
+#[pyclass(module = "ingetrazo_core", name = "DocAttr", frozen)]
+pub struct DocAttr {
+    id: u16,
+    name: String,
+    track: bool,
+}
+
+#[pymethods]
+impl DocAttr {
+    #[new]
+    #[pyo3(signature = (name, track = false))]
+    fn new(name: &str, track: bool) -> PyResult<Self> {
+        Ok(DocAttr { id: attr_id(name).map_err(PyValueError::new_err)?, name: name.to_owned(), track })
+    }
+
+    #[getter]
+    fn id(&self) -> u16 {
+        self.id
+    }
+
+    #[getter]
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn __get__<'py>(slf: &Bound<'py, Self>, obj: Option<&Bound<'py, PyAny>>, _owner: Option<&Bound<'py, PyAny>>) -> PyResult<Bound<'py, PyAny>> {
+        let Some(obj) = obj.filter(|o| !o.is_none()) else { return Ok(slf.clone().into_any()) };
+        let me = slf.get();
+        read_attr(slf.py(), obj, handle_key(obj)?, me.id, me.track)
+    }
+
+    fn __set__(&self, obj: &Bound<'_, PyAny>, value: &Bound<'_, PyAny>) -> PyResult<()> {
+        write_attr(obj.py(), obj, handle_key(obj)?, self.id, value)
+    }
+
+    fn __delete__(&self, obj: &Bound<'_, PyAny>) -> PyResult<()> {
+        write_attr(obj.py(), obj, handle_key(obj)?, self.id, &obj.py().None().into_bound(obj.py()))
     }
 }
 
@@ -90,12 +244,44 @@ fn read<'py>(py: Python<'py>, me: &Bound<'py, PyAny>, k: Key, f: Field) -> PyRes
     if f == Field::Material {
         return read_material(py, me, k);
     }
-    let v = {
+    let (v, cache) = {
         let mut d = lock();
         d.set_handle(k, me.as_ptr());
-        d.need(k).map_err(err)?.get(f).map_err(err)?
+        let n = d.need(k).map_err(err)?;
+        let slot = str_view(n.kind, f);
+        if let Some(slot) = slot {
+            if let Some(c) = &n.views[slot] {
+                return Ok(c.clone_ref(py).into_bound(py));
+            }
+        }
+        match n.get(f).map_err(err)? {
+            FVal::Bool(b) => {
+                drop(d);
+                return Ok(pyo3::types::PyBool::new(py, b).to_owned().into_any());
+            }
+            v => (v, slot.map(|s| (s, d.serial))),
+        }
     };
-    fval_to_py(py, v)
+    let out = fval_to_py(py, v)?;
+    // A string field: keep its `str`, so the next read is an incref.
+    if let Some((slot, serial)) = cache {
+        if !out.is_none() {
+            let keep = out.clone().unbind();
+            let stale = {
+                let mut d = lock();
+                let same = d.serial == serial;
+                match d.node_mut(k) {
+                    Some(n) if same && n.views[slot].is_none() => {
+                        n.views[slot] = Some(keep);
+                        None
+                    }
+                    _ => Some(keep),
+                }
+            };
+            drop(stale);
+        }
+    }
+    Ok(out)
 }
 
 /// A placement's paint dict: built once per value and handed out again
@@ -251,10 +437,7 @@ fn list_view<'py>(py: Python<'py>, me: &Bound<'py, PyAny>, k: Key, list: ListId)
         let mut d = lock();
         d.set_handle(k, me.as_ptr());
         let n = d.need(k).map_err(err)?;
-        let allowed = match list {
-            ListId::Children => n.kind == Kind::Root || n.kind == Kind::Placement,
-            ListId::Tags => n.kind == Kind::Root,
-        };
+        let allowed = list != ListId::Mats && list.owned_by(n.kind);
         if !allowed {
             return Err(PyTypeError::new_err(format!("a {} has no such list", n.kind.name())));
         }
@@ -390,7 +573,8 @@ fn set_list(py: Python<'_>, me: &Bound<'_, PyAny>, k: Key, list: ListId, items: 
         }
     }
     drain_pending();
-    r.map_err(err)
+    r.map_err(err)?;
+    parent_reports(py)
 }
 
 fn traverse_node(k: Key, visit: &PyVisit<'_>) -> Result<(), PyTraverseError> {
@@ -400,7 +584,10 @@ fn traverse_node(k: Key, visit: &PyVisit<'_>) -> Result<(), PyTraverseError> {
     for v in n.views.iter() {
         visit.call(v)?;
     }
-    for l in [&n.children, &n.tags] {
+    for (_, v) in n.attr_views.iter() {
+        visit.call(v)?;
+    }
+    for l in [&n.children, &n.tags, &n.kept, &n.mats] {
         let mut seen: Option<HashSet<Key>> = if l.len() > 1 { Some(HashSet::new()) } else { None };
         for &c in l {
             if let Some(s) = seen.as_mut() {
@@ -444,12 +631,21 @@ impl Drop for PyPlacement {
 
 #[pymethods]
 impl PyPlacement {
+    /// `Placement.__new__(cls, _detached=True)`: a handle with no node,
+    /// for a subclass that keeps every field in Python slots (the
+    /// viewport's placement proxies, `core.group.PlacementProxy`): it is a
+    /// `Group` to every `isinstance` and no part of the document.
     #[new]
     #[pyo3(signature = (*_args, **_kwargs))]
-    fn new(_args: &Bound<'_, PyTuple>, _kwargs: Option<&Bound<'_, PyDict>>) -> Self {
+    fn new(_args: &Bound<'_, PyTuple>, _kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
+        if let Some(kw) = _kwargs {
+            if kw.get_item("_detached")?.is_some_and(|v| v.is_truthy().unwrap_or(false)) {
+                return Ok(PyPlacement { key: 0 });
+            }
+        }
         drain_pending();
         let key = lock().alloc(Kind::Placement);
-        PyPlacement { key }
+        Ok(PyPlacement { key })
     }
 
     #[getter]
@@ -573,6 +769,70 @@ impl PyPlacement {
     #[setter(_tags)]
     fn set_tag_list(slf: &Bound<'_, Self>, v: &Bound<'_, PyAny>) -> PyResult<()> {
         set_list(slf.py(), slf.as_any(), slf.get().key, ListId::Tags, v)
+    }
+
+    /// The attribute `name` (`Field::Attr`): a scene root's tables are read
+    /// this way (`Scene.layer_folders`…); `track` as for `DocAttr`.
+    #[pyo3(signature = (name, track = true))]
+    fn _attr<'py>(slf: &Bound<'py, Self>, name: &str, track: bool) -> PyResult<Bound<'py, PyAny>> {
+        let a = attr_id(name).map_err(PyValueError::new_err)?;
+        read_attr(slf.py(), slf.as_any(), slf.get().key, a, track)
+    }
+
+    fn _set_attr(slf: &Bound<'_, Self>, name: &str, value: &Bound<'_, PyAny>) -> PyResult<()> {
+        let a = attr_id(name).map_err(PyValueError::new_err)?;
+        write_attr(slf.py(), slf.as_any(), slf.get().key, a, value)
+    }
+
+    /// Take this placement out of the lists that hold it (journalled);
+    /// returns how many held it.
+    fn _detach(slf: &Bound<'_, Self>) -> PyResult<usize> {
+        let mut trash = Trash::default();
+        let r = {
+            let mut d = lock();
+            d.set_handle(slf.get().key, slf.as_ptr());
+            d.detach(slf.py(), slf.get().key, &mut trash)
+        };
+        drop(trash);
+        drain_pending();
+        r.map_err(err)
+    }
+
+    /// The node holding this placement in one of its lists, or None.
+    #[getter]
+    fn _parent(&self, py: Python<'_>) -> PyResult<Option<Py<PyAny>>> {
+        let d = lock();
+        let n = d.need(self.key).map_err(err)?;
+        Ok(n.owners.first().and_then(|&o| d.handle_ref(py, o)))
+    }
+
+    /// A root's kept component definitions (`scene.kept_components`).
+    #[getter]
+    fn _kept<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
+        list_view(slf.py(), slf.as_any(), slf.get().key, ListId::Kept)
+    }
+    #[setter(_kept)]
+    fn set_kept(slf: &Bound<'_, Self>, v: &Bound<'_, PyAny>) -> PyResult<()> {
+        set_list(slf.py(), slf.as_any(), slf.get().key, ListId::Kept, v)
+    }
+
+    /// A root's materials registry (`scene.materials`): a live mapping.
+    #[getter]
+    fn _materials(slf: &Bound<'_, Self>) -> PyResult<Py<Registry>> {
+        {
+            let mut d = lock();
+            d.set_handle(slf.get().key, slf.as_ptr());
+            let n = d.need(slf.get().key).map_err(err)?;
+            if n.kind != Kind::Root {
+                return Err(PyTypeError::new_err("only a scene root has a materials registry"));
+            }
+        }
+        Py::new(slf.py(), Registry { owner: slf.get().key, owner_ref: slf.clone().into_any().unbind() })
+    }
+    #[setter(_materials)]
+    fn set_materials(slf: &Bound<'_, Self>, v: &Bound<'_, PyAny>) -> PyResult<()> {
+        let pairs = registry_pairs(v)?;
+        registry_set(slf.py(), slf.get().key, pairs)
     }
 
     /// A root's tag whose key is `key` (`Scene.layer_by_key`), or None:
@@ -862,7 +1122,8 @@ impl HandleList {
             d.list_insert(py, self.owner, self.l(), at, k)
         };
         drain_pending();
-        r.map_err(err)
+        r.map_err(err)?;
+        parent_reports(py)
     }
 
     fn remove_at(&self, py: Python<'_>, at: usize) -> PyResult<Py<PyAny>> {
@@ -897,7 +1158,8 @@ impl HandleList {
         drop(members);
         drop(trash);
         drain_pending();
-        r.map_err(err)
+        r.map_err(err)?;
+        parent_reports(py)
     }
 
     fn norm(&self, i: isize, len: usize) -> Option<usize> {
@@ -1071,7 +1333,8 @@ impl HandleList {
         };
         drop(members);
         drain_pending();
-        r.map_err(err)
+        r.map_err(err)?;
+        parent_reports(py)
     }
 
     fn remove(&self, py: Python<'_>, obj: &Bound<'_, PyAny>) -> PyResult<()> {
@@ -1160,6 +1423,253 @@ impl HandleList {
     }
 }
 
+// --------------------------------------------------------------- Registry
+
+/// `(name, material)` pairs of a mapping (a dict, a `Registry`, or pairs).
+fn registry_pairs<'py>(v: &Bound<'py, PyAny>) -> PyResult<Vec<(String, Key, Bound<'py, PyAny>)>> {
+    let mut out = Vec::new();
+    if v.is_none() {
+        return Ok(out);
+    }
+    let items = if v.hasattr("items")? { v.call_method0("items")? } else { v.clone() };
+    for item in items.try_iter()? {
+        let (name, mat): (String, Bound<'py, PyAny>) = item?.extract()?;
+        let k = match mat.cast::<PyMaterial>() {
+            Ok(m) => m.get().key,
+            Err(_) => {
+                return Err(PyTypeError::new_err(format!(
+                    "scene.materials holds Material entries, not {}",
+                    mat.get_type().name()?
+                )))
+            }
+        };
+        out.push((name, k, mat));
+    }
+    Ok(out)
+}
+
+fn registry_set(py: Python<'_>, owner: Key, pairs: Vec<(String, Key, Bound<'_, PyAny>)>) -> PyResult<()> {
+    let mut trash = Trash::default();
+    let r = {
+        let mut d = lock();
+        for (_, k, h) in &pairs {
+            d.set_handle(*k, h.as_ptr());
+        }
+        let new = pairs.iter().map(|(n, k, _)| (n.clone(), *k)).collect();
+        d.registry_replace(py, owner, new, &mut trash)
+    };
+    drop(pairs);
+    drop(trash);
+    drain_pending();
+    r.map_err(err)
+}
+
+/// `scene.materials`: the scene's materials registry, a live mapping of
+/// name → `Material` kept in the document (slice 2). Behaves as the dict it
+/// replaces; `copy()` and `dict(...)` are plain dicts.
+#[pyclass(module = "ingetrazo_core", name = "Registry", frozen, mapping)]
+pub struct Registry {
+    owner: Key,
+    owner_ref: Py<PyAny>,
+}
+
+impl Registry {
+    fn pairs(&self) -> PyResult<Vec<(String, Key)>> {
+        lock().registry(self.owner).map_err(err)
+    }
+
+    fn handles<'py>(&self, py: Python<'py>) -> PyResult<Vec<(String, Py<PyAny>)>> {
+        let d = lock();
+        let pairs = d.registry(self.owner).map_err(err)?;
+        let mut out = Vec::with_capacity(pairs.len());
+        for (n, k) in pairs {
+            out.push((n, d.handle_ref(py, k).ok_or_else(|| PyRuntimeError::new_err("a registered material lost its handle"))?));
+        }
+        Ok(out)
+    }
+
+    fn dict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        let out = PyDict::new(py);
+        for (n, h) in self.handles(py)? {
+            out.set_item(n, h)?;
+        }
+        Ok(out)
+    }
+
+    fn store(&self, py: Python<'_>, pairs: Vec<(String, Key)>, extra: &[Bound<'_, PyAny>]) -> PyResult<()> {
+        let mut trash = Trash::default();
+        let r = {
+            let mut d = lock();
+            for h in extra {
+                if let Ok(m) = h.cast::<PyMaterial>() {
+                    d.set_handle(m.get().key, h.as_ptr());
+                }
+            }
+            d.registry_replace(py, self.owner, pairs, &mut trash)
+        };
+        drop(trash);
+        drain_pending();
+        r.map_err(err)
+    }
+
+    fn material_key(v: &Bound<'_, PyAny>) -> PyResult<Key> {
+        match v.cast::<PyMaterial>() {
+            Ok(m) => Ok(m.get().key),
+            Err(_) => Err(PyTypeError::new_err(format!(
+                "scene.materials holds Material entries, not {}",
+                v.get_type().name()?
+            ))),
+        }
+    }
+}
+
+#[pymethods]
+impl Registry {
+    fn __len__(&self) -> PyResult<usize> {
+        Ok(self.pairs()?.len())
+    }
+
+    fn __bool__(&self) -> PyResult<bool> {
+        Ok(!self.pairs()?.is_empty())
+    }
+
+    fn __contains__(&self, name: &Bound<'_, PyAny>) -> PyResult<bool> {
+        let Ok(name) = name.extract::<String>() else { return Ok(false) };
+        Ok(self.pairs()?.iter().any(|(n, _)| *n == name))
+    }
+
+    fn __getitem__<'py>(&self, py: Python<'py>, name: &Bound<'py, PyAny>) -> PyResult<Py<PyAny>> {
+        let key_err = || pyo3::exceptions::PyKeyError::new_err(name.clone().unbind());
+        let Ok(want) = name.extract::<String>() else { return Err(key_err()) };
+        let d = lock();
+        let n = d.need(self.owner).map_err(err)?;
+        match n.mat_names.iter().position(|x| *x == want) {
+            Some(i) => d.handle_ref(py, n.mats[i]).ok_or_else(|| PyRuntimeError::new_err("a registered material lost its handle")),
+            None => Err(key_err()),
+        }
+    }
+
+    fn __setitem__(&self, py: Python<'_>, name: String, value: &Bound<'_, PyAny>) -> PyResult<()> {
+        let k = Self::material_key(value)?;
+        let mut pairs = self.pairs()?;
+        match pairs.iter_mut().find(|(n, _)| *n == name) {
+            Some(p) => p.1 = k,
+            None => pairs.push((name, k)),
+        }
+        self.store(py, pairs, std::slice::from_ref(value))
+    }
+
+    fn __delitem__(&self, py: Python<'_>, name: &Bound<'_, PyAny>) -> PyResult<()> {
+        let want: String = name.extract().map_err(|_| pyo3::exceptions::PyKeyError::new_err(name.clone().unbind()))?;
+        let mut pairs = self.pairs()?;
+        let Some(i) = pairs.iter().position(|(n, _)| *n == want) else {
+            return Err(pyo3::exceptions::PyKeyError::new_err(name.clone().unbind()));
+        };
+        pairs.remove(i);
+        self.store(py, pairs, &[])
+    }
+
+    fn __iter__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let names: Vec<String> = self.pairs()?.into_iter().map(|(n, _)| n).collect();
+        Ok(PyList::new(py, names)?.as_any().try_iter()?.into_any())
+    }
+
+    fn keys<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        self.dict(py)?.call_method0("keys")
+    }
+
+    fn values<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        self.dict(py)?.call_method0("values")
+    }
+
+    fn items<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        self.dict(py)?.call_method0("items")
+    }
+
+    #[pyo3(signature = (name, default = None))]
+    fn get<'py>(&self, py: Python<'py>, name: &Bound<'py, PyAny>, default: Option<Py<PyAny>>) -> PyResult<Py<PyAny>> {
+        match self.__getitem__(py, name) {
+            Ok(v) => Ok(v),
+            Err(e) if e.is_instance_of::<pyo3::exceptions::PyKeyError>(py) => Ok(default.unwrap_or_else(|| py.None())),
+            Err(e) => Err(e),
+        }
+    }
+
+    #[pyo3(signature = (name, *default))]
+    fn pop<'py>(&self, py: Python<'py>, name: &Bound<'py, PyAny>, default: &Bound<'py, PyTuple>) -> PyResult<Py<PyAny>> {
+        match self.__getitem__(py, name) {
+            Ok(v) => {
+                self.__delitem__(py, name)?;
+                Ok(v)
+            }
+            Err(e) if e.is_instance_of::<pyo3::exceptions::PyKeyError>(py) && !default.is_empty() => {
+                Ok(default.get_item(0)?.unbind())
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    #[pyo3(signature = (name, default = None))]
+    fn setdefault<'py>(&self, py: Python<'py>, name: &Bound<'py, PyAny>, default: Option<&Bound<'py, PyAny>>) -> PyResult<Py<PyAny>> {
+        if let Ok(v) = self.__getitem__(py, name) {
+            return Ok(v);
+        }
+        let value = default.cloned().unwrap_or_else(|| py.None().into_bound(py));
+        self.__setitem__(py, name.extract()?, &value)?;
+        Ok(value.unbind())
+    }
+
+    #[pyo3(signature = (other = None, **kw))]
+    fn update<'py>(&self, py: Python<'py>, other: Option<&Bound<'py, PyAny>>, kw: Option<&Bound<'py, PyDict>>) -> PyResult<()> {
+        let mut pairs = self.pairs()?;
+        let mut items: Vec<(String, Key, Bound<'py, PyAny>)> = Vec::new();
+        if let Some(o) = other {
+            items.extend(registry_pairs(o)?);
+        }
+        if let Some(kw) = kw {
+            items.extend(registry_pairs(kw.as_any())?);
+        }
+        let mut keep: Vec<Bound<'py, PyAny>> = Vec::new();
+        for (n, k, h) in items {
+            match pairs.iter_mut().find(|(x, _)| *x == n) {
+                Some(p) => p.1 = k,
+                None => pairs.push((n, k)),
+            }
+            keep.push(h);
+        }
+        self.store(py, pairs, &keep)
+    }
+
+    fn clear(&self, py: Python<'_>) -> PyResult<()> {
+        self.store(py, Vec::new(), &[])
+    }
+
+    fn copy<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        self.dict(py)
+    }
+
+    fn __copy__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        self.dict(py)
+    }
+
+    fn __richcmp__<'py>(&self, py: Python<'py>, other: &Bound<'py, PyAny>, op: pyo3::basic::CompareOp) -> PyResult<Bound<'py, PyAny>> {
+        let me = self.dict(py)?;
+        let other = match other.cast::<Registry>() {
+            Ok(r) => r.get().dict(py)?.into_any(),
+            Err(_) => other.clone(),
+        };
+        me.as_any().rich_compare(other, op)
+    }
+
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        Ok(self.dict(py)?.repr()?.to_string())
+    }
+
+    fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
+        visit.call(&self.owner_ref)
+    }
+}
+
 // ------------------------------------------------------------ Transaction
 
 /// One History step's journal: what it wrote, in order, and the handles it
@@ -1170,22 +1680,72 @@ pub struct PyTransaction {
     pins: Vec<Py<PyAny>>,
 }
 
+/// The record names of `keys` as Python strings: the nodes' cached `str`
+/// where they have one (an incref), new strings for the rest.
+fn record_names<'py>(py: Python<'py>, d: &super::Doc, keys: &[Key], into: &mut Vec<Result<Py<PyAny>, String>>) {
+    for &k in keys {
+        let Some(n) = d.node(k) else { continue };
+        let Some((name, slot)) = n.record_name() else { continue };
+        match &n.views[slot] {
+            Some(v) => into.push(Ok(v.clone_ref(py))),
+            None => into.push(Err(name.to_owned())),
+        }
+    }
+}
+
 fn changes_dict<'py>(py: Python<'py>, ops: &[Op], inverse: bool, root: Option<Key>) -> PyResult<Bound<'py, PyDict>> {
-    let c = { lock().changes(ops, inverse, root) };
+    let scene: Vec<&'static str>;
+    let registry: [Vec<String>; 3];
+    let groups: Vec<Vec<Result<Py<PyAny>, String>>> = {
+        let d = lock();
+        let mut c = d.changes(ops, inverse, root);
+        scene = c.scene_modified.clone();
+        registry = [
+            std::mem::take(&mut c.materials_created),
+            std::mem::take(&mut c.materials_removed),
+            std::mem::take(&mut c.materials_replaced),
+        ];
+        [&c.created, &c.removed, &c.modified, &c.tags_created, &c.tags_removed, &c.tags_modified, &c.materials_modified]
+            .iter()
+            .map(|keys| {
+                let mut v = Vec::with_capacity(keys.len());
+                record_names(py, &d, keys, &mut v);
+                v
+            })
+            .collect()
+    };
+    let mut lists = Vec::with_capacity(groups.len());
+    for g in groups {
+        let l = PyList::empty(py);
+        for item in g {
+            match item {
+                Ok(o) => l.append(o)?,
+                Err(s) => l.append(s)?,
+            }
+        }
+        lists.push(l);
+    }
     let out = PyDict::new(py);
     let p = PyDict::new(py);
-    p.set_item("created", c.created)?;
-    p.set_item("removed", c.removed)?;
-    p.set_item("modified", c.modified)?;
+    p.set_item("created", &lists[0])?;
+    p.set_item("removed", &lists[1])?;
+    p.set_item("modified", &lists[2])?;
     let t = PyDict::new(py);
-    t.set_item("created", c.tags_created)?;
-    t.set_item("removed", c.tags_removed)?;
-    t.set_item("modified", c.tags_modified)?;
+    t.set_item("created", &lists[3])?;
+    t.set_item("removed", &lists[4])?;
+    t.set_item("modified", &lists[5])?;
     out.set_item("placements", p)?;
     out.set_item("tags", t)?;
     let m = PyDict::new(py);
-    m.set_item("modified", c.materials_modified)?;
+    m.set_item("modified", &lists[6])?;
+    let [mc, mr, mx] = registry;
+    m.set_item("created", mc)?;
+    m.set_item("removed", mr)?;
+    m.set_item("replaced", mx)?;
     out.set_item("materials", m)?;
+    let sc = PyDict::new(py);
+    sc.set_item("modified", scene)?;
+    out.set_item("scene", sc)?;
     Ok(out)
 }
 
@@ -1213,15 +1773,35 @@ impl PyTransaction {
         changes_dict(py, &self.ops, inverse, root)
     }
 
+    /// The handles of the placements this step changed: `fields` (names,
+    /// as `"hidden"`, `"layer"`; all fields when empty) written to a new
+    /// value, or, with `lists`, a child list edited (the owner and the
+    /// members that came or went). Each once.
+    #[pyo3(signature = (fields = Vec::new(), lists = false))]
+    fn placements<'py>(&self, py: Python<'py>, fields: Vec<String>, lists: bool) -> PyResult<Bound<'py, PyList>> {
+        let mut fs = Vec::with_capacity(fields.len());
+        for name in &fields {
+            fs.push(Field::from_name(name).ok_or_else(|| PyValueError::new_err(format!("no document field {name}")))?);
+        }
+        let hs: Vec<Py<PyAny>> = {
+            let d = lock();
+            let keys = d.written_placements(&self.ops, &fs, lists);
+            keys.iter().filter_map(|&k| d.handle_ref(py, k)).collect()
+        };
+        PyList::new(py, hs)
+    }
+
     /// The ops as `(kind, ...)` tuples, for tests and debugging.
     fn ops<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
         let out = PyList::empty(py);
         for op in &self.ops {
             let t = match op {
                 Op::Set { k, f, .. } => ("set", *k, f.name().to_string()).into_pyobject(py)?.into_any(),
+                Op::SetMany { keys, f, .. } => ("set_many", keys.len(), f.name().to_string()).into_pyobject(py)?.into_any(),
                 Op::Ins { owner, at, k, .. } => ("insert", *owner, *at, *k).into_pyobject(py)?.into_any(),
                 Op::Rem { owner, at, k, .. } => ("remove", *owner, *at, *k).into_pyobject(py)?.into_any(),
                 Op::Rep { owner, old, new, .. } => ("replace", *owner, old.len(), new.len()).into_pyobject(py)?.into_any(),
+                Op::Reg { owner, old, new } => ("registry", *owner, old.len(), new.len()).into_pyobject(py)?.into_any(),
             };
             out.append(t)?;
         }
@@ -1307,6 +1887,37 @@ fn doc_set_hooks(make: Py<PyAny>, bind: Py<PyAny>) {
     drop(old);
 }
 
+/// Install the tracked-container hook: `track(key, attr, container)`.
+#[pyfunction]
+fn doc_set_track_hook(track: Py<PyAny>) {
+    let old = TRACK.lock().unwrap_or_else(|e| e.into_inner()).replace(track);
+    drop(old);
+}
+
+/// A tracked container was edited in place: store its value as attribute
+/// `attr` of `key` if it is still that attribute's view. Returns whether it
+/// was (False: it has been replaced; the container is a plain one now).
+#[pyfunction]
+fn doc_attr_changed(py: Python<'_>, key: Key, attr: u16, view: &Bound<'_, PyAny>) -> PyResult<bool> {
+    let bound = |d: &super::Doc| d.node(key).and_then(|n| n.attr_view(attr)).map(|v| v.as_ptr()) == Some(view.as_ptr());
+    if !bound(&lock()) {
+        return Ok(false);
+    }
+    let v = Value::from_py(view)?;
+    let mut trash = Trash::default();
+    let r = {
+        let mut d = lock();
+        if bound(&d) {
+            d.write_keep_view(py, key, Field::Attr(attr), FVal::Val(Some(v)), &mut trash).map(|_| true)
+        } else {
+            Ok(false)
+        }
+    };
+    drop(trash);
+    drain_pending();
+    r.map_err(err)
+}
+
 /// A bound matrix view was edited in place: store its values if it is
 /// still the node's view. Returns whether it was.
 #[pyfunction]
@@ -1330,6 +1941,177 @@ fn doc_view_changed(py: Python<'_>, key: Key, which: u8, view: &Bound<'_, PyAny>
     drop(trash);
     drain_pending();
     r.map_err(err)
+}
+
+fn fval_for(f: Field, v: &Bound<'_, PyAny>) -> PyResult<FVal> {
+    Ok(match f {
+        Field::Component | Field::Hidden | Field::Locked | Field::Visible => FVal::Bool(v.is_truthy()?),
+        Field::Uid | Field::Name | Field::Tag | Field::Key | Field::Folder | Field::Finish => FVal::Str(str_of(v)?),
+        Field::Material | Field::Color | Field::Texture | Field::Opacity | Field::Pbr => opt_value(v)?,
+        Field::Attr(_) => opt_value(v)?,
+        Field::Xform | Field::Axes => return Err(PyTypeError::new_err("matrices are written one placement at a time")),
+    })
+}
+
+/// `setattr(h, field, value)` for every handle of `handles` in one call,
+/// journalled as one op: what a command writing one value over a
+/// selection uses (Lock, Hide, Tag of 20,000 placements).
+#[pyfunction]
+fn doc_set_many(py: Python<'_>, handles: &Bound<'_, PyAny>, field: &str, value: &Bound<'_, PyAny>) -> PyResult<()> {
+    let f = Field::from_name(field).ok_or_else(|| PyValueError::new_err(format!("no document field {field}")))?;
+    let v = fval_for(f, value)?;
+    let members = keys_of(handles)?;
+    let keys: Vec<Key> = members.iter().map(|m| m.0).collect();
+    let mut trash = Trash::default();
+    let r = {
+        let mut d = lock();
+        for (m, ptr, _) in &members {
+            d.set_handle(*m, *ptr);
+        }
+        d.write_many(py, &keys, f, &v, &mut trash)
+    };
+    drop(members);
+    drop(trash);
+    drain_pending();
+    r.map_err(err)
+}
+
+/// One field of every handle of `handles`, as a list (one call instead of
+/// one attribute read each). Matrices are not read this way.
+#[pyfunction]
+fn doc_get_many<'py>(py: Python<'py>, handles: &Bound<'py, PyAny>, field: &str) -> PyResult<Bound<'py, PyList>> {
+    let f = Field::from_name(field).ok_or_else(|| PyValueError::new_err(format!("no document field {field}")))?;
+    if matches!(f, Field::Xform | Field::Axes) {
+        return Err(PyTypeError::new_err("matrices are read one placement at a time"));
+    }
+    let members = keys_of(handles)?;
+    let vals: Vec<FVal> = {
+        let d = lock();
+        let mut out = Vec::with_capacity(members.len());
+        for (k, _, _) in &members {
+            out.push(d.need(*k).map_err(err)?.get(f).map_err(err)?);
+        }
+        out
+    };
+    let out = PyList::empty(py);
+    for v in vals {
+        out.append(fval_to_py(py, v)?)?;
+    }
+    Ok(out)
+}
+
+/// The distinct placements of the trees under `roots`, in document order
+/// (`core.purge.iter_groups`): one call, no list view per node.
+#[pyfunction]
+fn doc_walk<'py>(py: Python<'py>, roots: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyList>> {
+    let members = keys_of(roots)?;
+    let hs: Vec<Py<PyAny>> = {
+        let mut d = lock();
+        for (m, ptr, _) in &members {
+            d.set_handle(*m, *ptr);
+        }
+        if let Some((m, _, _)) = members.iter().find(|m| d.node(m.0).is_none()) {
+            return Err(PyTypeError::new_err(format!("not a document placement: {m:#x}")));
+        }
+        let mut seen: super::FastSet<Key> = super::FastSet::default();
+        let mut out = Vec::new();
+        let mut stack: Vec<Key> = members.iter().rev().map(|m| m.0).collect();
+        while let Some(k) = stack.pop() {
+            if !seen.insert(k) {
+                continue;
+            }
+            let Some(n) = d.node(k) else { continue };
+            if let Some(h) = d.handle_ref(py, k) {
+                out.push(h);
+            }
+            stack.extend(n.children.iter().rev());
+        }
+        out
+    };
+    drop(members);
+    PyList::new(py, hs)
+}
+
+/// The placements under `roots` as `model_placements` walks them (pre-order,
+/// a shared subtree once per occurrence): `(handles, parent, local, has,
+/// hidden)` — `parent[i]` the index of the placement holding `i` (-1 for a
+/// root), `local[i]` its matrix in f64 as `formats.built.placement_values`
+/// reads it (16 values, Qt's column-major order; identity where `has[i]`
+/// is false: no matrix), `hidden[i]` its own Hide flag. The caller composes
+/// (`views.wgpu_scene`), so the products are NumPy's, bit for bit.
+#[pyfunction]
+fn doc_tree<'py>(
+    py: Python<'py>,
+    roots: &Bound<'py, PyAny>,
+) -> PyResult<(
+    Bound<'py, PyList>,
+    Bound<'py, numpy::PyArray1<i64>>,
+    Bound<'py, numpy::PyArray2<f64>>,
+    Bound<'py, numpy::PyArray1<bool>>,
+    Bound<'py, numpy::PyArray1<bool>>,
+)> {
+    let members = keys_of(roots)?;
+    let mut hs: Vec<Py<PyAny>> = Vec::new();
+    let mut parent: Vec<i64> = Vec::new();
+    let mut local: Vec<f64> = Vec::new();
+    let mut has: Vec<bool> = Vec::new();
+    let mut hidden: Vec<bool> = Vec::new();
+    {
+        let mut d = lock();
+        for (m, ptr, _) in &members {
+            d.set_handle(*m, *ptr);
+        }
+        if let Some((m, _, _)) = members.iter().find(|m| d.node(m.0).is_none_or(|n| n.kind != Kind::Placement)) {
+            return Err(PyTypeError::new_err(format!("not a document placement: {m:#x}")));
+        }
+        let mut stack: Vec<(Key, i64)> = members.iter().rev().map(|m| (m.0, -1)).collect();
+        while let Some((k, up)) = stack.pop() {
+            let Some(n) = d.node(k) else { continue };
+            let super::Data::Placement(p) = &n.data else { continue };
+            let i = hs.len() as i64;
+            hs.push(d.handle_ref(py, k).ok_or_else(|| PyRuntimeError::new_err("a listed node lost its handle"))?);
+            parent.push(up);
+            hidden.push(p.hidden);
+            match &p.xform {
+                Some(x) => {
+                    has.push(true);
+                    for j in 0..16 {
+                        let c = x.f[j] as f64;
+                        local.push(match &x.src {
+                            Some(b) if b.1[j] == c => b.0[j],
+                            _ => c,
+                        });
+                    }
+                }
+                None => {
+                    has.push(false);
+                    for j in 0..16 {
+                        local.push(if j % 5 == 0 { 1.0 } else { 0.0 });
+                    }
+                }
+            }
+            for &c in n.children.iter().rev() {
+                stack.push((c, i));
+            }
+        }
+    }
+    drop(members);
+    let n = hs.len();
+    let local = numpy::PyArray1::from_vec(py, local).reshape([n, 16])?;
+    Ok((
+        PyList::new(py, hs)?,
+        numpy::PyArray1::from_vec(py, parent),
+        local,
+        numpy::PyArray1::from_vec(py, has),
+        numpy::PyArray1::from_vec(py, hidden),
+    ))
+}
+
+/// The tree invariant's mode: 0 off, 1 report as warnings, 2 refuse
+/// (`ValueError`, the default). Returns the previous mode.
+#[pyfunction]
+fn doc_parent_mode(mode: u8) -> u8 {
+    super::PARENT_MODE.swap(mode.min(2), Ordering::Relaxed)
 }
 
 /// Counts for probes and tests.
@@ -1364,6 +2146,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyTag>()?;
     m.add_class::<PyMaterial>()?;
     m.add_class::<HandleList>()?;
+    m.add_class::<Registry>()?;
     m.add_class::<PyTransaction>()?;
     m.add_function(wrap_pyfunction!(doc_new_root, m)?)?;
     m.add_function(wrap_pyfunction!(doc_begin, m)?)?;
@@ -1373,6 +2156,14 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(doc_set_hooks, m)?)?;
     m.add_function(wrap_pyfunction!(doc_view_changed, m)?)?;
     m.add_function(wrap_pyfunction!(doc_stats, m)?)?;
+    m.add_function(wrap_pyfunction!(doc_set_many, m)?)?;
+    m.add_function(wrap_pyfunction!(doc_parent_mode, m)?)?;
+    m.add_function(wrap_pyfunction!(doc_set_track_hook, m)?)?;
+    m.add_function(wrap_pyfunction!(doc_attr_changed, m)?)?;
+    m.add_class::<DocAttr>()?;
+    m.add_function(wrap_pyfunction!(doc_walk, m)?)?;
+    m.add_function(wrap_pyfunction!(doc_tree, m)?)?;
+    m.add_function(wrap_pyfunction!(doc_get_many, m)?)?;
     m.add_function(wrap_pyfunction!(doc_serial, m)?)?;
     Ok(())
 }

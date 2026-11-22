@@ -83,8 +83,9 @@ def test_a_group_exploded_out_of_a_copy_is_its_own_when_opened():
         comp = scene.groups[-1]
         dup = copy_group(comp, V(0, 5, 0))
         scene.groups.append(dup)
+        kids = list(dup.children)
         vp.history.execute(ExplodeGroupCommand(dup))
-        freed = dup.children[0]
+        freed = kids[0]           # out of the copy (one parent per placement)
         assert freed in scene.groups
         vp.begin_group_edit(freed)
         assert freed.mesh is not comp.children[0].mesh   # made unique

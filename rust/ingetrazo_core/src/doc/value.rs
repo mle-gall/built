@@ -11,6 +11,24 @@ use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyDict, PyFloat, PyInt, PyList, PyString, PyTuple};
 
+/// A Python object that is not JSON-like (a set an extension put in its
+/// plugin data, an array): kept as the object itself, compared by identity.
+/// Saves drop what they cannot write, as they did before.
+#[derive(Clone)]
+pub struct Opaque(pub std::sync::Arc<Py<PyAny>>);
+
+impl PartialEq for Opaque {
+    fn eq(&self, other: &Opaque) -> bool {
+        self.0.as_ptr() == other.0.as_ptr()
+    }
+}
+
+impl std::fmt::Debug for Opaque {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Opaque({:p})", self.0.as_ptr())
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Value {
     None,
@@ -22,6 +40,7 @@ pub enum Value {
     Tuple(Vec<Value>),
     /// Insertion order, as a Python dict.
     Dict(Vec<(Value, Value)>),
+    Opaque(Opaque),
 }
 
 const MAX_DEPTH: usize = 64;
@@ -82,10 +101,13 @@ impl Value {
                 return Ok(Value::Float(f));
             }
         }
-        Err(PyTypeError::new_err(format!(
-            "the document keeps JSON-like values (None, bool, int, float, str, list, tuple, dict), not {}",
-            obj.get_type().name()?
-        )))
+        if depth == usize::MAX {
+            return Err(PyTypeError::new_err(format!(
+                "the document keeps JSON-like values (None, bool, int, float, str, list, tuple, dict), not {}",
+                obj.get_type().name()?
+            )));
+        }
+        Ok(Value::Opaque(Opaque(std::sync::Arc::new(obj.clone().unbind()))))
     }
 
     pub fn to_py<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
@@ -116,6 +138,7 @@ impl Value {
                 }
                 d.into_any()
             }
+            Value::Opaque(o) => o.0.clone_ref(py).into_bound(py),
         })
     }
 

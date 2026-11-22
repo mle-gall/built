@@ -732,8 +732,14 @@ class _LayerMethods:
 from core import doc_model as _dm
 
 #: A tag's fields that live in the document (core/doc_model.py) when it
-#: is Rust; the sheet styles stay Python attributes until slice 2.
-TAG_FIELDS = ("uid", "name", "key", "visible", "locked", "color", "folder")
+#: is Rust: its core fields, and (slice 2) its sheet styles, as document
+#: attributes (plain values: tuples, numbers, strings).
+CORE_TAG_FIELDS = ("uid", "name", "key", "visible", "locked", "color", "folder")
+STYLE_FIELDS = ("linetype", "lineweight", "cut_weight", "hatch",
+                "hatch_ground", "hatch_color", "hatch_angle", "hatch_scale",
+                "hatch_offset", "hatch_on_paper", "brick", "hatch_cross",
+                "joints", "mortar", "opacity", "printable")
+TAG_FIELDS = CORE_TAG_FIELDS + STYLE_FIELDS
 
 if _dm.ENABLED:
     class Layer(_LayerMethods, _dm.NATIVE.Tag):
@@ -745,6 +751,10 @@ if _dm.ENABLED:
             return (_dm.new_handle, (type(self),), state)
 
         __setstate__ = _dm.set_handle_state
+
+    for _name in STYLE_FIELDS:
+        setattr(Layer, _name, _dm.attribute(_name, track=False))
+    del _name
 else:
     class Layer(_LayerMethods):
         __doc__ = _LayerMethods.__doc__
@@ -752,12 +762,21 @@ else:
 
 def layer_values(ly) -> dict:
     """Every field of a tag by name — what ``vars(ly)`` gave when all of
-    them were instance attributes."""
+    them were instance attributes (in the order ``__init__`` sets them)."""
     out = dict(vars(ly))
     if _dm.ENABLED:
-        for name in TAG_FIELDS:
-            out[name] = getattr(ly, name)
+        doc = {name: getattr(ly, name) for name in _INIT_ORDER}
+        doc.update(out)
+        return doc
     return out
+
+
+#: The order ``Layer.__init__`` sets its fields in.
+_INIT_ORDER = ("uid", "name", "key", "visible", "locked", "color", "folder",
+               "linetype", "lineweight", "cut_weight", "hatch",
+               "hatch_ground", "hatch_color", "hatch_angle", "hatch_scale",
+               "hatch_offset", "hatch_on_paper", "brick", "hatch_cross",
+               "joints", "mortar", "opacity", "printable")
 
 
 def _finite(raw, default: float) -> float:

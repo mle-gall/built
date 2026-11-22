@@ -316,8 +316,92 @@ def _placement_state(scene):
     return state
 
 
+def _doc_worlds(local, has, parent):
+    """World matrices of a ``doc_tree`` walk, as ``model_placements``
+    composes them (``local @ parent``, f64, None while the chain has no
+    matrix): batched by depth, each product NumPy's own 4×4 matmul."""
+    n = len(parent)
+    local = local.reshape(n, 4, 4)
+    world = np.empty((n, 4, 4))
+    defined = np.zeros(n, bool)
+    depth = np.zeros(n, np.int64)
+    par = parent.tolist()
+    dep = depth.tolist() if n else []
+    for i, p in enumerate(par):
+        if p >= 0:
+            dep[i] = dep[p] + 1
+    depth = np.asarray(dep, np.int64)
+    roots = depth == 0
+    world[roots] = local[roots]
+    defined[roots] = has[roots]
+    for d in range(1, int(depth.max()) + 1 if n else 0):
+        level = np.flatnonzero(depth == d)
+        up = parent[level]
+        up_defined = defined[up]
+        own = has[level]
+        both = level[own & up_defined]
+        if len(both):
+            world[both] = np.matmul(local[both], world[parent[both]])
+        only = level[own & ~up_defined]
+        world[only] = local[only]
+        inherit = level[~own & up_defined]
+        world[inherit] = world[parent[inherit]]
+        defined[level] = own | up_defined
+    return world, defined
+
+
+def _placement_records_doc(scene, roots, vp, state):
+    """``_placement_records(double=True)`` reading the tree from the Rust
+    document in one call (``doc_tree``): handles, parents, f64 matrices and
+    Hide flags as arrays, no attribute read per placement for them."""
+    from views.viewport import Viewport
+    from core import doc_model
+    handles, parent, local, has, own_hidden = doc_model.NATIVE.doc_tree(roots)
+    world, defined = _doc_worlds(local, has, parent)
+    proxies = []
+    for root in roots:
+        proxies.extend(Viewport._expand_placements(vp, root))
+    allowed = getattr(scene, '_navigator_allowed', None)
+    par = parent.tolist()
+    own_hidden = own_hidden.tolist()
+    defined = defined.tolist()
+    n = len(par)
+    hidden_of = [False] * n
+    object_hidden_of = [False] * n
+    filtered_of = [False] * n
+    layer_state = scene._layer_state
+    similar_hidden = scene.similar_hidden
+    for i in range(n):
+        g, proxy, p = handles[i], proxies[i], par[i]
+        hidden = not state(proxy)[0]
+        obj = own_hidden[i]
+        filtered = (not layer_state(proxy)[0] or similar_hidden(proxy)
+                    or (allowed is not None and g.uid not in allowed))
+        if p >= 0:
+            hidden = hidden or hidden_of[p]
+            obj = obj or object_hidden_of[p]
+            filtered = filtered or filtered_of[p]
+        hidden_of[i], object_hidden_of[i], filtered_of[i] = hidden, obj, filtered
+        flags = (int(hidden) | (OBJECT_HIDDEN if obj else 0)
+                 | (VISIBILITY_FILTERED if filtered else 0))
+        yield g, (world[i] if defined[i] else None), proxy, flags
+
+
 def _placement_records(scene, roots, vp, state, *, double=False):
     from views.viewport import Viewport
+    if double:
+        from core import doc_model
+        if doc_model.ENABLED:
+            try:
+                rows = _placement_records_doc(scene, roots, vp, state)
+                first = next(rows, None)
+            except TypeError:
+                rows = first = None          # not all document placements
+            if rows is not None:
+                if first is not None:
+                    yield first
+                    yield from rows
+                return
     # Visibility is inherited down the tree, as the GL proxies do it: a
     # placement inside a hidden group, or inside a group whose tag is off,
     # is hidden whatever its own flags say. Taking only the root's state

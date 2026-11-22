@@ -426,7 +426,10 @@ def test_explode_view_and_the_new_commands_refuse_unknown_placements():
     with pytest.raises(KeyError):
         C.run(h, "explode_group", placement="no-such-uid")
     r = C.run(h, "explode_view", placement=g.uid, factor=1.0, mode="z")
-    assert r["ok"] and r["step"].placements["modified"] == [kid.uid]
+    # The part it moved (and, read from the Rust document's journal, the
+    # container whose exploded state it wrote).
+    assert r["ok"] and kid.uid in r["step"].placements["modified"]
+    assert set(r["step"].placements["modified"]) <= {kid.uid, g.uid}
     assert r["step"].complete
     with pytest.raises(ValueError):
         C.run(h, "explode_view", placement=g.uid, factor=1.0, mode="w")

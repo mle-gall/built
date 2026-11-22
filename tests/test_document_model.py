@@ -31,7 +31,16 @@ def placements():
 
 # ------------------------------------------------------------------ lists
 
-def test_lists_behave_as_python_lists():
+@pytest.fixture
+def no_parent_check():
+    """Lists exercised as plain lists (the same placement twice): the tree
+    invariant is off meanwhile."""
+    old = doc_model.parent_mode("off")
+    yield
+    doc_model.parent_mode(old)
+
+
+def test_lists_behave_as_python_lists(no_parent_check):
     rng = random.Random(7)
     pool = [Group(Mesh(), name=f"g{i}") for i in range(8)]
     owner = Group(Mesh(), name="owner")

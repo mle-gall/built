@@ -25,10 +25,70 @@ pub mod value;
 
 use pyo3::prelude::*;
 use pyo3::ffi;
+use std::cell::UnsafeCell;
 use std::collections::{HashMap, HashSet};
-use std::sync::{Mutex, MutexGuard};
+use std::hash::{BuildHasherDefault, Hasher};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 use std::thread::ThreadId;
 use value::Value;
+
+/// A small multiplicative hasher for keys (`u64`) and `(key, field)`
+/// pairs: the journal's maps are hit once per write, and SipHash was most
+/// of a bulk write's cost.
+#[derive(Default, Clone, Copy)]
+pub struct KeyHasher(u64);
+
+impl Hasher for KeyHasher {
+    #[inline]
+    fn finish(&self) -> u64 {
+        self.0
+    }
+    #[inline]
+    fn write(&mut self, bytes: &[u8]) {
+        let mut chunks = bytes.chunks_exact(8);
+        for c in &mut chunks {
+            self.write_u64(u64::from_le_bytes(c.try_into().expect("8 bytes")));
+        }
+        let rest = chunks.remainder();
+        if !rest.is_empty() {
+            let mut b = [0u8; 8];
+            b[..rest.len()].copy_from_slice(rest);
+            self.write_u64(u64::from_le_bytes(b) ^ ((rest.len() as u64) << 59));
+        }
+    }
+    #[inline]
+    fn write_u64(&mut self, v: u64) {
+        self.0 = (self.0.rotate_left(5) ^ v).wrapping_mul(0x51_7c_c1_b7_27_22_0a_95);
+    }
+    #[inline]
+    fn write_u32(&mut self, v: u32) {
+        self.write_u64(v as u64)
+    }
+    #[inline]
+    fn write_u16(&mut self, v: u16) {
+        self.write_u64(v as u64)
+    }
+    #[inline]
+    fn write_u8(&mut self, v: u8) {
+        self.write_u64(v as u64)
+    }
+    #[inline]
+    fn write_usize(&mut self, v: usize) {
+        self.write_u64(v as u64)
+    }
+}
+
+/// The tree invariant (slice 2): a placement is in one list (a group's
+/// children, a scene's top level or its kept definitions), once. 0 = not
+/// checked, 1 = reported (`PARENT_REPORTS`, turned into Python warnings by
+/// the list ops), 2 = refused (`ValueError`). Undo and redo replay
+/// journals unchecked.
+pub static PARENT_MODE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(2);
+pub static PARENT_REPORTS: Mutex<Vec<String>> = Mutex::new(Vec::new());
+
+pub type FastMap<K, V> = HashMap<K, V, BuildHasherDefault<KeyHasher>>;
+pub type FastSet<K> = HashSet<K, BuildHasherDefault<KeyHasher>>;
 
 pub type Key = u64;
 
@@ -92,9 +152,59 @@ pub enum Field {
     Opacity,
     Finish,
     Pbr,
+    /// A named attribute ([`attr_id`]): a custom attribute of a placement
+    /// (`ifc`, `ext`, `text3d`), a tag's sheet style, a scene table (tag
+    /// folders, the active tag, plugin data). Absent reads as None.
+    Attr(u16),
+}
+
+/// The attribute names, by id (interned once per process: the Python
+/// classes declare theirs at import).
+static ATTR_NAMES: Mutex<Vec<&'static str>> = Mutex::new(Vec::new());
+
+/// The id of attribute `name`, made on first use.
+pub fn attr_id(name: &str) -> Result<u16, String> {
+    let mut names = ATTR_NAMES.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(i) = names.iter().position(|&n| n == name) {
+        return Ok(i as u16);
+    }
+    if names.len() >= u16::MAX as usize {
+        return Err("too many document attributes".into());
+    }
+    names.push(Box::leak(name.to_owned().into_boxed_str()));
+    Ok((names.len() - 1) as u16)
+}
+
+pub fn attr_name(id: u16) -> &'static str {
+    let names = ATTR_NAMES.lock().unwrap_or_else(|e| e.into_inner());
+    names.get(id as usize).copied().unwrap_or("?")
 }
 
 impl Field {
+    /// The field a Python attribute name stands for (`layer` is the tag).
+    pub fn from_name(name: &str) -> Option<Field> {
+        Some(match name {
+            "uid" => Field::Uid,
+            "name" => Field::Name,
+            "layer" => Field::Tag,
+            "xform" => Field::Xform,
+            "axes" => Field::Axes,
+            "component" => Field::Component,
+            "hidden" => Field::Hidden,
+            "locked" => Field::Locked,
+            "material" => Field::Material,
+            "key" => Field::Key,
+            "visible" => Field::Visible,
+            "color" => Field::Color,
+            "folder" => Field::Folder,
+            "texture" => Field::Texture,
+            "opacity" => Field::Opacity,
+            "finish" => Field::Finish,
+            "pbr" => Field::Pbr,
+            _ => return None,
+        })
+    }
+
     pub fn name(self) -> &'static str {
         match self {
             Field::Uid => "uid",
@@ -114,6 +224,7 @@ impl Field {
             Field::Opacity => "opacity",
             Field::Finish => "finish",
             Field::Pbr => "pbr",
+            Field::Attr(a) => attr_name(a),
         }
     }
 }
@@ -130,16 +241,35 @@ pub enum FVal {
 pub enum ListId {
     Children = 0,
     Tags = 1,
+    /// A scene's kept component definitions (`scene.kept_components`).
+    Kept = 2,
+    /// A scene's materials registry (`scene.materials`), with its names.
+    Mats = 3,
 }
+
+pub const LISTS: [ListId; 4] = [ListId::Children, ListId::Tags, ListId::Kept, ListId::Mats];
 
 impl ListId {
     pub fn from_u8(v: u8) -> ListId {
-        if v == 1 { ListId::Tags } else { ListId::Children }
+        match v {
+            1 => ListId::Tags,
+            2 => ListId::Kept,
+            3 => ListId::Mats,
+            _ => ListId::Children,
+        }
     }
     fn member(self) -> Kind {
         match self {
-            ListId::Children => Kind::Placement,
+            ListId::Children | ListId::Kept => Kind::Placement,
             ListId::Tags => Kind::Tag,
+            ListId::Mats => Kind::Material,
+        }
+    }
+    /// Who may own this list.
+    pub fn owned_by(self, k: Kind) -> bool {
+        match self {
+            ListId::Children => matches!(k, Kind::Root | Kind::Placement),
+            _ => k == Kind::Root,
         }
     }
 }
@@ -200,21 +330,45 @@ pub const VIEW_XFORM: usize = 0;
 pub const VIEW_AXES: usize = 1;
 /// The paint dict a placement's `material` read returned last.
 pub const VIEW_MATERIAL: usize = 2;
+/// The Python strings its string fields were last read as (a read is then
+/// an incref, not a new `str`): slot by field, see [`str_view`].
+pub const VIEW_STR0: usize = 3;
+pub const N_VIEWS: usize = 6;
+
+/// The view slot caching a string field's Python `str`, if it has one.
+#[inline]
+pub fn str_view(kind: Kind, f: Field) -> Option<usize> {
+    match (kind, f) {
+        (Kind::Placement, Field::Name) | (Kind::Tag, Field::Name) | (Kind::Material, Field::Name) => Some(VIEW_STR0),
+        (Kind::Placement, Field::Uid) | (Kind::Tag, Field::Uid) => Some(VIEW_STR0 + 1),
+        (Kind::Placement, Field::Tag) | (Kind::Tag, Field::Key) => Some(VIEW_STR0 + 2),
+        _ => None,
+    }
+}
 
 pub struct Node {
     pub kind: Kind,
     pub data: Data,
     pub children: Vec<Key>,
     pub tags: Vec<Key>,
+    pub kept: Vec<Key>,
+    pub mats: Vec<Key>,
+    /// The registry name of each of `mats` (a dict's keys).
+    pub mat_names: Vec<String>,
     /// The nodes whose lists name this one, one entry per occurrence.
     pub owners: Vec<Key>,
     pub handle: HPtr,
     pub strong: Option<Py<PyAny>>,
-    pub views: [Option<Py<PyAny>>; 3],
+    pub views: [Option<Py<PyAny>>; N_VIEWS],
     /// The live `HandleList` of each list (children, tags), borrowed: the
     /// view holds its owner's handle (a list keeps what it lists alive),
     /// and clears this when it goes.
-    pub list_views: [HPtr; 2],
+    pub list_views: [HPtr; 4],
+    /// Named attributes ([`Field::Attr`]), set ones only.
+    pub attrs: Vec<(u16, Value)>,
+    /// The tracked Python container an attribute was last read as
+    /// (`core.doc_model.TrackedDict`): edited in place it writes back.
+    pub attr_views: Vec<(u16, Py<PyAny>)>,
 }
 
 impl Node {
@@ -230,11 +384,36 @@ impl Node {
             data,
             children: Vec::new(),
             tags: Vec::new(),
+            kept: Vec::new(),
+            mats: Vec::new(),
+            mat_names: Vec::new(),
             owners: Vec::new(),
             handle: HPtr(std::ptr::null_mut()),
             strong: None,
-            views: [None, None, None],
-            list_views: [HPtr(std::ptr::null_mut()), HPtr(std::ptr::null_mut())],
+            views: Default::default(),
+            list_views: [HPtr(std::ptr::null_mut()); 4],
+            attrs: Vec::new(),
+            attr_views: Vec::new(),
+        }
+    }
+
+    /// Forget the cached Python view of `f` (its value changed).
+    #[inline]
+    pub fn drop_view(&mut self, f: Field, trash: &mut Trash) {
+        if let Field::Attr(a) = f {
+            if let Some(i) = self.attr_views.iter().position(|(x, _)| *x == a) {
+                trash.0.push(self.attr_views.swap_remove(i).1);
+            }
+            return;
+        }
+        let slot = match f {
+            Field::Xform => Some(VIEW_XFORM),
+            Field::Axes => Some(VIEW_AXES),
+            Field::Material => Some(VIEW_MATERIAL),
+            _ => str_view(self.kind, f),
+        };
+        if let Some(slot) = slot {
+            trash.push(self.views[slot].take());
         }
     }
 
@@ -242,6 +421,8 @@ impl Node {
         match l {
             ListId::Children => &self.children,
             ListId::Tags => &self.tags,
+            ListId::Kept => &self.kept,
+            ListId::Mats => &self.mats,
         }
     }
 
@@ -249,34 +430,23 @@ impl Node {
         match l {
             ListId::Children => &mut self.children,
             ListId::Tags => &mut self.tags,
+            ListId::Kept => &mut self.kept,
+            ListId::Mats => &mut self.mats,
         }
     }
 
-    pub fn uid(&self) -> Option<&str> {
-        match &self.data {
-            Data::Placement(p) => p.uid.as_deref(),
-            Data::Tag(t) => t.uid.as_deref(),
-            Data::Root | Data::Material(_) => None,
-        }
+    pub fn attr(&self, a: u16) -> Option<&Value> {
+        self.attrs.iter().find(|(x, _)| *x == a).map(|(_, v)| v)
     }
 
-    /// What the feed names a material by: its name.
-    pub fn material_name(&self) -> Option<&str> {
-        match &self.data {
-            Data::Material(m) => m.name.as_deref(),
-            _ => None,
-        }
-    }
-
-    /// What the feed names a tag by: its key.
-    pub fn tag_key(&self) -> Option<&str> {
-        match &self.data {
-            Data::Tag(t) => t.key.as_deref(),
-            _ => None,
-        }
+    pub fn attr_view(&self, a: u16) -> Option<&Py<PyAny>> {
+        self.attr_views.iter().find(|(x, _)| *x == a).map(|(_, v)| v)
     }
 
     pub fn get(&self, f: Field) -> Result<FVal, String> {
+        if let Field::Attr(a) = f {
+            return Ok(FVal::Val(self.attr(a).cloned()));
+        }
         let bad = || Err(format!("a {} has no field {}", self.kind.name(), f.name()));
         Ok(match (&self.data, f) {
             (Data::Placement(p), Field::Uid) => FVal::Str(p.uid.clone()),
@@ -307,6 +477,22 @@ impl Node {
 
     /// Store `v` in `f`, returning what was there.
     fn put(&mut self, f: Field, v: FVal) -> Result<FVal, String> {
+        if let Field::Attr(a) = f {
+            let FVal::Val(v) = v else {
+                return Err(format!("attribute {} holds values", attr_name(a)));
+            };
+            let i = self.attrs.iter().position(|(x, _)| *x == a);
+            let old = match (i, v) {
+                (Some(i), Some(v)) => Some(std::mem::replace(&mut self.attrs[i].1, v)),
+                (Some(i), None) => Some(self.attrs.swap_remove(i).1),
+                (None, Some(v)) => {
+                    self.attrs.push((a, v));
+                    None
+                }
+                (None, None) => None,
+            };
+            return Ok(FVal::Val(old));
+        }
         let kind = self.kind;
         let bad = || Err(format!("a {} has no field {} of that type", kind.name(), f.name()));
         Ok(match (&mut self.data, f, v) {
@@ -346,9 +532,15 @@ pub struct Slot {
 #[derive(Clone, Debug)]
 pub enum Op {
     Set { k: Key, f: Field, old: FVal, new: FVal },
+    /// One field set to one value over many nodes (a bulk write: Lock,
+    /// Hide, Tag of a selection): one op, not one per node.
+    SetMany { f: Field, keys: Vec<Key>, old: Vec<FVal>, new: FVal },
     Ins { owner: Key, list: ListId, at: usize, k: Key },
     Rem { owner: Key, list: ListId, at: usize, k: Key },
     Rep { owner: Key, list: ListId, old: Vec<Key>, new: Vec<Key> },
+    /// A materials registry replaced (`scene.materials`): names and
+    /// handles before and after. Writes in one transaction coalesce.
+    Reg { owner: Key, old: Vec<(String, Key)>, new: Vec<(String, Key)> },
 }
 
 /// The open transaction (one at a time; nested `begin`s are savepoints).
@@ -359,13 +551,13 @@ pub struct Open {
     pub marks: Vec<usize>,
     /// `(node, field)` → index of its `Set` op, for coalescing; only
     /// entries at or past the innermost mark are coalesced into.
-    pub index: HashMap<(Key, Field), usize>,
-    pub pinned: HashSet<Key>,
+    pub index: FastMap<(Key, Field), usize>,
+    pub pinned: FastSet<Key>,
     /// Nodes made while this transaction is open: their field writes are
     /// not journalled (nothing named them before; undo takes them out of
     /// the lists that hold them, and their fields keep the values redo and
     /// the change record need, a new tag's key for one).
-    pub born: HashSet<Key>,
+    pub born: FastSet<Key>,
     pub pins: Vec<Py<PyAny>>,
 }
 
@@ -390,51 +582,79 @@ pub struct Doc {
     /// Every write (journalled or not) bumps this: a cheap "anything
     /// changed?" for caches keyed on the document.
     pub serial: u64,
+    /// Set while a journal is replayed (undo, redo, rollback): the tree
+    /// invariant was checked when it was recorded.
+    pub replaying: bool,
 }
 
-static DOC: Mutex<Option<Doc>> = Mutex::new(None);
+/// The arena's lock. Every caller holds the GIL and nothing calls into
+/// Python while holding it (the lock rule above), so it is never contended
+/// in practice: an atomic flag (a few ns) instead of a pthread mutex (most
+/// of a field read's cost through the facade).
+pub struct DocCell {
+    locked: AtomicBool,
+    doc: UnsafeCell<Option<Doc>>,
+}
+
+unsafe impl Sync for DocCell {}
+
+static DOC: DocCell = DocCell { locked: AtomicBool::new(false), doc: UnsafeCell::new(None) };
 /// Handles freed while the lock was held elsewhere (never in practice
 /// under the lock rule; kept as a safety net). Drained by every op.
 static PENDING: Mutex<Vec<Key>> = Mutex::new(Vec::new());
 
-pub struct DocGuard(MutexGuard<'static, Option<Doc>>);
+pub struct DocGuard(&'static DocCell);
+
+impl Drop for DocGuard {
+    fn drop(&mut self) {
+        self.0.locked.store(false, Ordering::Release);
+    }
+}
 
 impl std::ops::Deref for DocGuard {
     type Target = Doc;
     fn deref(&self) -> &Doc {
-        self.0.as_ref().expect("document initialised")
+        // SAFETY: the flag is held by this guard.
+        unsafe { (*self.0.doc.get()).as_ref().expect("document initialised") }
     }
 }
 impl std::ops::DerefMut for DocGuard {
     fn deref_mut(&mut self) -> &mut Doc {
-        self.0.as_mut().expect("document initialised")
+        // SAFETY: the flag is held by this guard.
+        unsafe { (*self.0.doc.get()).as_mut().expect("document initialised") }
     }
+}
+
+fn guard() -> DocGuard {
+    let g = DocGuard(&DOC);
+    // SAFETY: the flag is held.
+    unsafe {
+        let d = &mut *DOC.doc.get();
+        if d.is_none() {
+            *d = Some(Doc::default());
+        }
+    }
+    g
 }
 
 pub fn lock() -> DocGuard {
-    let mut g = DOC.lock().unwrap_or_else(|e| e.into_inner());
-    if g.is_none() {
-        *g = Some(Doc::default());
+    let mut spins = 0u32;
+    while DOC.locked.compare_exchange_weak(false, true, Ordering::Acquire, Ordering::Relaxed).is_err() {
+        spins += 1;
+        if spins < 64 {
+            std::hint::spin_loop();
+        } else {
+            std::thread::yield_now();
+        }
     }
-    DocGuard(g)
+    guard()
 }
 
 pub fn try_lock() -> Option<DocGuard> {
-    match DOC.try_lock() {
-        Ok(mut g) => {
-            if g.is_none() {
-                *g = Some(Doc::default());
-            }
-            Some(DocGuard(g))
-        }
-        Err(std::sync::TryLockError::Poisoned(e)) => {
-            let mut g = e.into_inner();
-            if g.is_none() {
-                *g = Some(Doc::default());
-            }
-            Some(DocGuard(g))
-        }
-        Err(std::sync::TryLockError::WouldBlock) => None,
+    if DOC.locked.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_ok() {
+        Some(guard())
+    } else {
+        None
     }
 }
 
@@ -546,9 +766,13 @@ impl Doc {
         for v in node.views.iter_mut() {
             trash.push(v.take());
         }
+        for (_, v) in node.attr_views.drain(..) {
+            trash.0.push(v);
+        }
         trash.push(node.strong.take());
         // Members of its lists lose an owner.
-        for l in [ListId::Children, ListId::Tags] {
+        node.mat_names.clear();
+        for l in LISTS {
             for c in std::mem::take(node.list_mut(l)) {
                 self.drop_owner(c, k, trash);
             }
@@ -616,9 +840,9 @@ impl Doc {
                     thread: here,
                     ops: Vec::new(),
                     marks: vec![0],
-                    index: HashMap::new(),
-                    pinned: HashSet::new(),
-                    born: HashSet::new(),
+                    index: FastMap::default(),
+                    pinned: FastSet::default(),
+                    born: FastSet::default(),
                     pins: Vec::new(),
                 });
                 1
@@ -649,7 +873,16 @@ impl Doc {
         let ops = o
             .ops
             .into_iter()
-            .filter(|op| !matches!(op, Op::Set { old, new, .. } if old == new))
+            .filter_map(|op| match op {
+                Op::Set { ref old, ref new, .. } if old == new => None,
+                Op::Reg { ref old, ref new, .. } if old == new => None,
+                Op::SetMany { f, keys, old, new } => {
+                    let (keys, old): (Vec<Key>, Vec<FVal>) =
+                        keys.into_iter().zip(old).filter(|(_, o)| *o != new).unzip();
+                    if keys.is_empty() { None } else { Some(Op::SetMany { f, keys, old, new }) }
+                }
+                op => Some(op),
+            })
             .collect();
         Some((ops, o.pins))
     }
@@ -685,10 +918,24 @@ impl Doc {
     /// Apply `ops` backwards (undo) or forwards (redo). Journalled when a
     /// transaction is open on this thread.
     pub fn apply(&mut self, py: Python<'_>, ops: &[Op], backwards: bool, trash: &mut Trash) -> Result<(), String> {
+        let was = std::mem::replace(&mut self.replaying, true);
+        let r = self.apply_ops(py, ops, backwards, trash);
+        self.replaying = was;
+        r
+    }
+
+    fn apply_ops(&mut self, py: Python<'_>, ops: &[Op], backwards: bool, trash: &mut Trash) -> Result<(), String> {
         let mut run = |d: &mut Doc, op: &Op| -> Result<(), String> {
             match (op, backwards) {
                 (Op::Set { k, f, old, .. }, true) => d.write(py, *k, *f, old.clone(), trash).map(|_| ()),
                 (Op::Set { k, f, new, .. }, false) => d.write(py, *k, *f, new.clone(), trash).map(|_| ()),
+                (Op::SetMany { f, keys, old, .. }, true) => {
+                    for (k, o) in keys.iter().zip(old.iter()).rev() {
+                        d.write(py, *k, *f, o.clone(), trash)?;
+                    }
+                    Ok(())
+                }
+                (Op::SetMany { f, keys, new, .. }, false) => d.write_many(py, keys, *f, new, trash),
                 (Op::Ins { owner, list, at, k }, true) | (Op::Rem { owner, list, at, k }, false) => {
                     let got = d.list_remove(py, *owner, *list, *at, trash)?;
                     if got != *k {
@@ -701,6 +948,8 @@ impl Doc {
                 }
                 (Op::Rep { owner, list, old, .. }, true) => d.list_replace(py, *owner, *list, old.clone(), trash),
                 (Op::Rep { owner, list, new, .. }, false) => d.list_replace(py, *owner, *list, new.clone(), trash),
+                (Op::Reg { owner, old, .. }, true) => d.registry_replace(py, *owner, old.clone(), trash),
+                (Op::Reg { owner, new, .. }, false) => d.registry_replace(py, *owner, new.clone(), trash),
             }
         };
         if backwards {
@@ -724,12 +973,7 @@ impl Doc {
         let old = {
             let n = self.node_mut(k).ok_or_else(|| format!("no document node {k:#x}"))?;
             let old = n.put(f, v)?;
-            match f {
-                Field::Xform => trash.push(n.views[VIEW_XFORM].take()),
-                Field::Axes => trash.push(n.views[VIEW_AXES].take()),
-                Field::Material => trash.push(n.views[VIEW_MATERIAL].take()),
-                _ => {}
-            }
+            n.drop_view(f, trash);
             old
         };
         self.serial += 1;
@@ -755,6 +999,17 @@ impl Doc {
     /// Like `write`, keeping the cached matrix view (the view itself was
     /// edited in place and is the new value's face).
     pub fn write_keep_view(&mut self, py: Python<'_>, k: Key, f: Field, v: FVal, trash: &mut Trash) -> Result<(), String> {
+        if let Field::Attr(a) = f {
+            let view = self.node_mut(k).and_then(|n| {
+                let i = n.attr_views.iter().position(|(x, _)| *x == a)?;
+                Some(n.attr_views.swap_remove(i))
+            });
+            let r = self.write(py, k, f, v, trash);
+            if let (Some(view), Some(n)) = (view, self.node_mut(k)) {
+                n.attr_views.push(view);
+            }
+            return r.map(|_| ());
+        }
         let slot = match f {
             Field::Xform => VIEW_XFORM,
             Field::Axes => VIEW_AXES,
@@ -768,12 +1023,45 @@ impl Doc {
         r.map(|_| ())
     }
 
+    /// Write one value into `f` of every node of `keys`: journalled as one
+    /// `SetMany` op (nodes born in this transaction are left out of it).
+    pub fn write_many(&mut self, py: Python<'_>, keys: &[Key], f: Field, v: &FVal, trash: &mut Trash) -> Result<(), String> {
+        for &k in keys {
+            self.need(k)?.get(f)?;
+        }
+        let journal = self.journal_open();
+        let mut jkeys = Vec::new();
+        let mut olds = Vec::new();
+        for &k in keys {
+            let n = self.node_mut(k).expect("checked");
+            let old = n.put(f, v.clone())?;
+            n.drop_view(f, trash);
+            if journal && !self.open.as_ref().is_some_and(|o| o.born.contains(&k)) {
+                jkeys.push(k);
+                olds.push(old);
+            }
+        }
+        self.serial += 1;
+        if !jkeys.is_empty() {
+            for &k in &jkeys {
+                self.pin(py, k);
+            }
+            let o = self.open.as_mut().expect("open");
+            // A later single write of one of these nodes must not coalesce
+            // into an op older than this one.
+            if !o.index.is_empty() {
+                for &k in &jkeys {
+                    o.index.remove(&(k, f));
+                }
+            }
+            o.ops.push(Op::SetMany { f, keys: jkeys, old: olds, new: v.clone() });
+        }
+        Ok(())
+    }
+
     fn check_member(&self, owner: Key, list: ListId, k: Key) -> Result<(), String> {
         let o = self.need(owner)?;
-        let ok_owner = match list {
-            ListId::Children => matches!(o.kind, Kind::Root | Kind::Placement),
-            ListId::Tags => o.kind == Kind::Root,
-        };
+        let ok_owner = list.owned_by(o.kind);
         if !ok_owner {
             return Err(format!("a {} has no such list", o.kind.name()));
         }
@@ -794,8 +1082,58 @@ impl Doc {
         self.open.as_mut().expect("open").ops.push(op);
     }
 
+    /// A placement, named for a message.
+    fn label(&self, k: Key) -> String {
+        match self.node(k).map(|n| &n.data) {
+            Some(Data::Placement(p)) => format!("{:?} ({})", p.name.as_deref().unwrap_or(""), p.uid.as_deref().unwrap_or("")),
+            Some(_) => "the scene".to_owned(),
+            None => format!("{k:#x}"),
+        }
+    }
+
+    /// The tree invariant for `adding` going into `owner`'s `list`, which
+    /// held `old` (a replace) — see [`PARENT_MODE`].
+    fn one_parent(&self, owner: Key, list: ListId, adding: &[Key], old: Option<&[Key]>) -> Result<(), String> {
+        let mode = PARENT_MODE.load(Ordering::Relaxed);
+        if mode == 0 || self.replaying || !matches!(list, ListId::Children | ListId::Kept) {
+            return Ok(());
+        }
+        let mut bad: Option<(Key, Option<Key>)> = None;
+        for (i, &k) in adding.iter().enumerate() {
+            if adding[..i].contains(&k) {
+                bad = Some((k, Some(owner)));
+                break;
+            }
+            let Some(n) = self.node(k) else { continue };
+            let here = old.map_or(0, |o| o.iter().filter(|&&x| x == k).count());
+            let mut others = n.owners.clone();
+            for _ in 0..here {
+                if let Some(j) = others.iter().position(|&o| o == owner) {
+                    others.remove(j);
+                }
+            }
+            if let Some(&other) = others.first() {
+                bad = Some((k, Some(other)));
+                break;
+            }
+        }
+        let Some((k, other)) = bad else { return Ok(()) };
+        let msg = format!(
+            "one parent per placement: {} is already in the list of {} (take it out before putting it in {})",
+            self.label(k),
+            other.map_or_else(|| "another".to_owned(), |o| self.label(o)),
+            self.label(owner)
+        );
+        if mode >= 2 {
+            return Err(msg);
+        }
+        PARENT_REPORTS.lock().unwrap_or_else(|e| e.into_inner()).push(msg);
+        Ok(())
+    }
+
     pub fn list_insert(&mut self, py: Python<'_>, owner: Key, list: ListId, at: usize, k: Key) -> Result<(), String> {
         self.check_member(owner, list, k)?;
+        self.one_parent(owner, list, &[k], None)?;
         let at = {
             let l = self.node_mut(owner).expect("checked").list_mut(list);
             let at = at.min(l.len());
@@ -831,6 +1169,10 @@ impl Doc {
         if new.is_empty() {
             self.need(owner)?;
         }
+        {
+            let old = self.need(owner)?.list(list).clone();
+            self.one_parent(owner, list, &new, Some(&old))?;
+        }
         let old = std::mem::replace(self.node_mut(owner).expect("checked").list_mut(list), new.clone());
         if old == new {
             return Ok(());
@@ -850,6 +1192,85 @@ impl Doc {
         Ok(())
     }
 
+    /// The registry of root `owner` as `(name, material)` pairs.
+    pub fn registry(&self, owner: Key) -> Result<Vec<(String, Key)>, String> {
+        let n = self.need(owner)?;
+        Ok(n.mat_names.iter().cloned().zip(n.mats.iter().copied()).collect())
+    }
+
+    /// Replace the materials registry of root `owner` (journalled; the
+    /// writes of one transaction level coalesce into one op).
+    pub fn registry_replace(&mut self, py: Python<'_>, owner: Key, new: Vec<(String, Key)>, trash: &mut Trash) -> Result<(), String> {
+        for (_, k) in &new {
+            self.check_member(owner, ListId::Mats, *k)?;
+        }
+        if new.is_empty() {
+            self.check_member_owner(owner, ListId::Mats)?;
+        }
+        let old = self.registry(owner)?;
+        if old == new {
+            return Ok(());
+        }
+        {
+            let n = self.node_mut(owner).expect("checked");
+            n.mat_names = new.iter().map(|(s, _)| s.clone()).collect();
+            n.mats = new.iter().map(|(_, k)| *k).collect();
+        }
+        if self.journal_open() && !self.open.as_ref().is_some_and(|o| o.born.contains(&owner)) {
+            self.pin(py, owner);
+            for (_, k) in old.iter().chain(new.iter()) {
+                self.pin(py, *k);
+            }
+            let o = self.open.as_mut().expect("open");
+            let floor = *o.marks.last().unwrap_or(&0);
+            let ix = (owner, Field::Attr(u16::MAX));
+            match o.index.get(&ix) {
+                Some(&i) if i >= floor => {
+                    if let Op::Reg { new: n, .. } = &mut o.ops[i] {
+                        *n = new.clone();
+                    }
+                }
+                _ => {
+                    o.index.insert(ix, o.ops.len());
+                    o.ops.push(Op::Reg { owner, old: old.clone(), new: new.clone() });
+                }
+            }
+        }
+        for (_, k) in &new {
+            self.add_owner(py, *k, owner);
+        }
+        for (_, k) in &old {
+            self.drop_owner(*k, owner, trash);
+        }
+        self.serial += 1;
+        Ok(())
+    }
+
+    fn check_member_owner(&self, owner: Key, list: ListId) -> Result<(), String> {
+        let o = self.need(owner)?;
+        if !list.owned_by(o.kind) {
+            return Err(format!("a {} has no such list", o.kind.name()));
+        }
+        Ok(())
+    }
+
+    /// Take placement `k` out of every list that holds it (a group's
+    /// children, a scene's top level or kept definitions), journalled:
+    /// what `Group.adopt` does first, so adopting keeps one parent.
+    pub fn detach(&mut self, py: Python<'_>, k: Key, trash: &mut Trash) -> Result<usize, String> {
+        let owners = self.need(k)?.owners.clone();
+        let mut n = 0;
+        for owner in owners {
+            for list in [ListId::Children, ListId::Kept] {
+                while let Some(at) = self.node(owner).and_then(|o| o.list(list).iter().position(|&x| x == k)) {
+                    self.list_remove(py, owner, list, at, trash)?;
+                    n += 1;
+                }
+            }
+        }
+        Ok(n)
+    }
+
     /// GC `tp_clear` of a handle: release what its node holds.
     pub fn clear_node(&mut self, k: Key, trash: &mut Trash) {
         let lists = match self.node_mut(k) {
@@ -857,7 +1278,16 @@ impl Doc {
                 for v in n.views.iter_mut() {
                     trash.push(v.take());
                 }
-                [std::mem::take(&mut n.children), std::mem::take(&mut n.tags)]
+                for (_, v) in n.attr_views.drain(..) {
+                    trash.0.push(v);
+                }
+                n.mat_names.clear();
+                [
+                    std::mem::take(&mut n.children),
+                    std::mem::take(&mut n.tags),
+                    std::mem::take(&mut n.kept),
+                    std::mem::take(&mut n.mats),
+                ]
             }
             None => return,
         };
@@ -872,61 +1302,160 @@ impl Doc {
 
 // ---------------------------------------------------------------- changes
 
-/// What a transaction did, by stable keys (`docs/core-protocol.md` §4).
-#[derive(Default, Debug)]
-pub struct Changes {
-    pub created: Vec<String>,
-    pub removed: Vec<String>,
-    pub modified: Vec<String>,
-    pub tags_created: Vec<String>,
-    pub tags_removed: Vec<String>,
-    pub tags_modified: Vec<String>,
-    pub materials_modified: Vec<String>,
+impl Doc {
+    /// The placements whose `fields` (any field when empty) `ops` changed,
+    /// or whose child list they edited when `lists` is set: each once, in
+    /// the order first written. What the renderer re-validates after a
+    /// step (docs/rust-document-model.md §5).
+    pub fn written_placements(&self, ops: &[Op], fields: &[Field], lists: bool) -> Vec<Key> {
+        let mut seen: FastSet<Key> = FastSet::default();
+        let mut out = Vec::new();
+        let want = |f: &Field| fields.is_empty() || fields.contains(f);
+        let mut add = |k: Key, out: &mut Vec<Key>| {
+            if self.node(k).is_some_and(|n| n.kind == Kind::Placement) && seen.insert(k) {
+                out.push(k);
+            }
+        };
+        for op in ops {
+            match op {
+                Op::Set { k, f, old, new } if old != new && want(f) => add(*k, &mut out),
+                Op::SetMany { f, keys, old, new } if want(f) => {
+                    for (k, o) in keys.iter().zip(old) {
+                        if o != new {
+                            add(*k, &mut out);
+                        }
+                    }
+                }
+                Op::Ins { owner, k, .. } | Op::Rem { owner, k, .. } if lists => {
+                    add(*owner, &mut out);
+                    add(*k, &mut out);
+                }
+                Op::Rep { owner, old, new, .. } if lists => {
+                    add(*owner, &mut out);
+                    for k in old.iter().chain(new.iter()) {
+                        add(*k, &mut out);
+                    }
+                }
+                _ => {}
+            }
+        }
+        out
+    }
 }
 
-fn push_unique(v: &mut Vec<String>, seen: &mut HashSet<String>, s: Option<&str>) {
-    if let Some(s) = s {
-        if seen.insert(s.to_owned()) {
-            v.push(s.to_owned());
+/// What a transaction did, by stable keys (`docs/core-protocol.md` §4):
+/// the nodes, each named once by its uid (placements), key (tags) or name
+/// (materials); [`Doc::names`] gives the strings.
+#[derive(Default, Debug)]
+pub struct Changes {
+    pub created: Vec<Key>,
+    pub removed: Vec<Key>,
+    pub modified: Vec<Key>,
+    pub tags_created: Vec<Key>,
+    pub tags_removed: Vec<Key>,
+    pub tags_modified: Vec<Key>,
+    pub materials_modified: Vec<Key>,
+    /// Attributes written on the scene root (tag folders, the active tag,
+    /// plugin data), by name.
+    pub scene_modified: Vec<&'static str>,
+    /// Registry names added, taken out, or given another material.
+    pub materials_created: Vec<String>,
+    pub materials_removed: Vec<String>,
+    pub materials_replaced: Vec<String>,
+}
+
+impl Node {
+    /// The name the change record gives this node (uid, tag key, material
+    /// name) and the view slot caching its Python `str`.
+    pub fn record_name(&self) -> Option<(&str, usize)> {
+        match &self.data {
+            Data::Placement(p) => p.uid.as_deref().map(|u| (u, VIEW_STR0 + 1)),
+            Data::Tag(t) => t.key.as_deref().map(|k| (k, VIEW_STR0 + 2)),
+            Data::Material(m) => m.name.as_deref().map(|n| (n, VIEW_STR0)),
+            Data::Root => None,
         }
     }
 }
 
 impl Doc {
+    /// `keys` that have a record name, keeping the first of each name
+    /// (`seen`: names already taken by another list of the record).
+    fn unique_named<'a>(&'a self, keys: impl IntoIterator<Item = Key>, seen: &mut FastSet<&'a str>) -> Vec<Key> {
+        let mut out = Vec::new();
+        for k in keys {
+            if let Some((name, _)) = self.node(k).and_then(|n| n.record_name()) {
+                if seen.insert(name) {
+                    out.push(k);
+                }
+            }
+        }
+        out
+    }
+
     /// The record of `ops`; `root` limits created/removed placements and
     /// tags to that scene root's lists (None: every root).
     pub fn changes(&self, ops: &[Op], inverse: bool, root: Option<Key>) -> Changes {
-        let mut net: HashMap<(ListId, Key), i64> = HashMap::new();
+        let mut net: FastMap<(ListId, Key), i64> = FastMap::default();
         let mut order: Vec<(ListId, Key)> = Vec::new();
         let mut modified: Vec<Key> = Vec::new();
         let mut tags_mod: Vec<Key> = Vec::new();
         let mut mats_mod: Vec<Key> = Vec::new();
-        let mut bump = |l: ListId, k: Key, by: i64, net: &mut HashMap<(ListId, Key), i64>| {
+        let mut bump = |l: ListId, k: Key, by: i64, net: &mut FastMap<(ListId, Key), i64>| {
             let e = net.entry((l, k)).or_insert_with(|| {
                 order.push((l, k));
                 0
             });
             *e += by;
         };
+        let mut scene_mod: Vec<&'static str> = Vec::new();
+        let mut field_written = |k: Key, f: Field, modified: &mut Vec<Key>, tags_mod: &mut Vec<Key>, mats_mod: &mut Vec<Key>| {
+            match self.node(k).map(|n| n.kind) {
+                Some(Kind::Placement) => modified.push(k),
+                Some(Kind::Tag) => tags_mod.push(k),
+                Some(Kind::Material) => mats_mod.push(k),
+                Some(Kind::Root) if root.is_none_or(|r| r == k) => {
+                    if let Field::Attr(a) = f {
+                        let name = attr_name(a);
+                        if !scene_mod.contains(&name) {
+                            scene_mod.push(name);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        };
+        // Only the model's placements and the tag list are named as created
+        // and removed (kept definitions are not in the model).
+        let counted = |l: ListId| matches!(l, ListId::Children | ListId::Tags);
+        let mut reg: FastMap<Key, Vec<(String, Key)>> = FastMap::default();
+        let mut reg_new: FastMap<Key, Vec<(String, Key)>> = FastMap::default();
         for op in ops {
             match op {
-                Op::Set { k, old, new, .. } if old != new => match self.node(*k).map(|n| n.kind) {
-                    Some(Kind::Placement) => modified.push(*k),
-                    Some(Kind::Tag) => tags_mod.push(*k),
-                    Some(Kind::Material) => mats_mod.push(*k),
-                    _ => {}
-                },
+                Op::Set { k, f, old, new } if old != new => field_written(*k, *f, &mut modified, &mut tags_mod, &mut mats_mod),
                 Op::Set { .. } => {}
+                Op::SetMany { f, keys, old, new } => {
+                    for (k, o) in keys.iter().zip(old) {
+                        if o != new {
+                            field_written(*k, *f, &mut modified, &mut tags_mod, &mut mats_mod);
+                        }
+                    }
+                }
                 Op::Ins { owner, list, k, .. } | Op::Rem { owner, list, k, .. } => {
                     let by = if matches!(op, Op::Ins { .. }) { 1 } else { -1 };
                     match self.node(*owner).map(|n| n.kind) {
-                        Some(Kind::Root) if root.is_none_or(|r| r == *owner) => bump(*list, *k, by, &mut net),
+                        Some(Kind::Root) if counted(*list) && root.is_none_or(|r| r == *owner) => bump(*list, *k, by, &mut net),
                         Some(Kind::Placement) => modified.push(*owner),
                         _ => {}
                     }
                 }
+                Op::Reg { owner, old, new } => {
+                    if root.is_none_or(|r| r == *owner) {
+                        reg.entry(*owner).or_insert_with(|| old.clone());
+                        reg_new.insert(*owner, new.clone());
+                    }
+                }
                 Op::Rep { owner, list, old, new } => match self.node(*owner).map(|n| n.kind) {
-                    Some(Kind::Root) if root.is_none_or(|r| r == *owner) => {
+                    Some(Kind::Root) if counted(*list) && root.is_none_or(|r| r == *owner) => {
                         for k in old {
                             bump(*list, *k, -1, &mut net);
                         }
@@ -939,45 +1468,50 @@ impl Doc {
                 },
             }
         }
-        let mut c = Changes::default();
-        let mut s1: HashSet<String> = HashSet::new();
-        let mut s2: HashSet<String> = HashSet::new();
-        let mut s3: HashSet<String> = HashSet::new();
-        let mut s4: HashSet<String> = HashSet::new();
-        let mut s5: HashSet<String> = HashSet::new();
-        let mut s6: HashSet<String> = HashSet::new();
+        let mut lists: [Vec<Key>; 4] = Default::default();
         for (l, k) in order {
             let n = net[&(l, k)];
             if n == 0 {
                 continue;
             }
             let added = (n > 0) != inverse;
-            let Some(node) = self.node(k) else { continue };
-            match (l, added) {
-                (ListId::Children, true) => push_unique(&mut c.created, &mut s1, node.uid()),
-                (ListId::Children, false) => push_unique(&mut c.removed, &mut s2, node.uid()),
-                (ListId::Tags, true) => push_unique(&mut c.tags_created, &mut s4, node.tag_key()),
-                (ListId::Tags, false) => push_unique(&mut c.tags_removed, &mut s5, node.tag_key()),
-            }
+            let i = match (l, added) {
+                (ListId::Children, true) => 0,
+                (ListId::Children, false) => 1,
+                (ListId::Tags, true) => 2,
+                (ListId::Tags, false) => 3,
+                _ => continue,
+            };
+            lists[i].push(k);
         }
+        let [created, removed, tags_created, tags_removed] = lists;
+        let mut c = Changes::default();
+        let (mut s1, mut s2, mut s4, mut s5) = (FastSet::default(), FastSet::default(), FastSet::default(), FastSet::default());
+        c.created = self.unique_named(created, &mut s1);
+        c.removed = self.unique_named(removed, &mut s2);
+        c.tags_created = self.unique_named(tags_created, &mut s4);
+        c.tags_removed = self.unique_named(tags_removed, &mut s5);
         // Made or taken away in this step: named as such, not as modified.
-        for u in c.created.iter().chain(c.removed.iter()) {
-            s3.insert(u.clone());
-        }
-        for k in modified {
-            if let Some(n) = self.node(k) {
-                push_unique(&mut c.modified, &mut s3, n.uid());
+        let mut s3: FastSet<&str> = s1.union(&s2).copied().collect();
+        c.modified = self.unique_named(modified, &mut s3);
+        c.tags_modified = self.unique_named(tags_mod, &mut FastSet::default());
+        c.materials_modified = self.unique_named(mats_mod, &mut FastSet::default());
+        c.scene_modified = scene_mod;
+        // The registry: names that came, went, or now name another material.
+        for (owner, first) in reg {
+            let last = &reg_new[&owner];
+            let (before, after) = if inverse { (last, &first) } else { (&first, last) };
+            for (name, k) in after {
+                match before.iter().find(|(n, _)| n == name) {
+                    None => c.materials_created.push(name.clone()),
+                    Some((_, k0)) if k0 != k => c.materials_replaced.push(name.clone()),
+                    _ => {}
+                }
             }
-        }
-        for k in tags_mod {
-            if let Some(n) = self.node(k) {
-                push_unique(&mut c.tags_modified, &mut s6, n.tag_key());
-            }
-        }
-        let mut s7: HashSet<String> = HashSet::new();
-        for k in mats_mod {
-            if let Some(n) = self.node(k) {
-                push_unique(&mut c.materials_modified, &mut s7, n.material_name());
+            for (name, _) in before {
+                if !after.iter().any(|(n, _)| n == name) {
+                    c.materials_removed.push(name.clone());
+                }
             }
         }
         c

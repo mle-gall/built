@@ -70,8 +70,8 @@ def component_from_scene(src, name: str):
     if loose and not groups:
         return Group(mesh, name=name)
     comp = Group(mesh, name=name)
-    comp.adopt(groups)          # a container is always an instance
-    return comp
+    comp.adopt(groups)          # a container is always an instance (and
+    return comp                 # takes them out of src: one parent)
 
 
 def merge_materials(src_materials: dict, dst_materials: dict, comp, *, reused=()) -> dict:
