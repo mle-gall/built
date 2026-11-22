@@ -371,6 +371,7 @@ def before_frame(view) -> None:
         view._ui_units_sent = True
     _cursor_value(view, win)
     _selection(view, win, active)
+    _palette(view, win, active)
     _cluster(view, win)
     _tree(view, win)
     _inspector(view, win)
@@ -906,12 +907,14 @@ def _tree(view, win) -> None:
             add_items(unfiled, "", 1)
     if mode == "problems":
         rows = _problem_rows(view, scene, registry, nodes, recipes, unfiled, node_of, exp, sel_ids)
+    elif mode == "library":
+        rows = _library_rows(view, win, exp, flt)
     view._ui_tree = dict(direct=direct, children=children, unfiled=unfiled, recipes=recipes, to_fix=to_fix,
                          active=active, node_of=node_of, nodes=nodes,
                          node_layers={k: list(c) for k, c in node_layers.items()})
     view.renderer.ui_set_tree(rows, len(unfiled))
     view.renderer.ui_set_colset(colset)
-    view.renderer.ui_set_mode("Problems" if mode == "problems" else "")
+    view.renderer.ui_set_mode({"problems": "Problems", "library": "Library"}.get(mode, ""))
     view.renderer.ui_set_issues(bool(view.__dict__.get("_ui_issues", False)))
     if not getattr(view, "_ui_kinds_sent", False):
         view.renderer.ui_set_kinds(sorted(set(KINDS.values()) - {"Level", "Building", "Site"}))
@@ -990,6 +993,121 @@ def _problem_rows_from(view, rules, nodes, node_of, exp, sel_ids):
                     order.append(g)
     view._ui_problem_order = order
     return rows
+
+
+def _tex_icon(view, path) -> str:
+    """A texture's thumbnail as a chrome icon (loaded once)."""
+    key = "tex:" + str(path)
+    sent = view.__dict__.setdefault("_ui_tex_icons", set())
+    if key not in sent:
+        sent.add(key)
+        img = QImage(str(path))
+        if not img.isNull():
+            img = img.scaled(48, 48, Qt.IgnoreAspectRatio, Qt.SmoothTransformation).convertToFormat(QImage.Format_RGBA8888)
+            view.renderer.ui_set_icons([(key, 48, 48, bytes(img.constBits())[: 48 * 48 * 4])])
+    return key
+
+
+def _hex(rgb) -> str:
+    return "#%02x%02x%02x" % tuple(int(max(0.0, min(1.0, float(c))) * 255) for c in rgb[:3]) if rgb else ""
+
+
+def _current_material_name():
+    from tools.paint import PaintTool
+    mat = getattr(PaintTool, "current_material", None)
+    return getattr(mat, "name", None)
+
+
+def _palette(view, win, active) -> None:
+    """With Paint active: the model's named materials as a strip."""
+    items = []
+    if active == "paint":
+        scene = win.viewport.scene
+        cur = _current_material_name()
+        for name, mat in list((getattr(scene, "materials", None) or {}).items())[:32]:
+            tex = getattr(mat, "texture", None)
+            icon = _tex_icon(view, tex["path"]) if tex and tex.get("path") else ""
+            items.append((f"m:{name}", name, _hex(mat.color), icon, name == cur))
+    if items != getattr(view, "_ui_palette", None):
+        view._ui_palette = items
+        view.renderer.ui_set_palette(items)
+
+
+def _library_rows(view, win, exp, flt):
+    """The Library mode: materials in the model, then the bundled colours
+    and texture families; picking one paints with it (Paint becomes active)."""
+    import json
+    from views import tray
+    scene = win.viewport.scene
+    words = flt.lower().split()
+    rows, cats = [], []
+    cur = _current_material_name()
+    inm = [(f"m:{n}", n, _hex(m.color), (m.texture or {}).get("path")) for n, m in (getattr(scene, "materials", None) or {}).items()]
+    cats.append(("inmodel", "In model", inm))
+    ral = []
+    if tray._RAL_FILE.exists():
+        data = json.loads(tray._RAL_FILE.read_text(encoding="utf-8"))
+        for fam in data.get("families", []):
+            for c in fam.get("colors", []):
+                ral.append((f"ral:{c['code']}", "%s · %s" % (c["code"], tray._ral_name(c)), _hex([v / 255.0 if max(c["rgb"]) > 1 else v for v in c["rgb"]]), None))
+    cats.append(("colors", "Colours", ral))
+    manifest = tray._TEX_DIR / "library.json"
+    if manifest.exists():
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+        for cat in data.get("categories", []):
+            items = [(f"lib:{cat['id']}:{i}", it["name"], "", str(tray._TEX_DIR / "library" / it["file"]))
+                     for i, it in enumerate(cat.get("items", []))]
+            if items:
+                cats.append((cat["id"], tray.MaterialsPanel.CATEGORY_NAMES.get(cat["id"], cat["id"]), items))
+    view._ui_library = {i: (cid, entry) for cid, _t, items in cats for i, entry in enumerate(items)}
+    for cid, title, items in cats:
+        if words:
+            items = [e for e in items if all(w in e[1].lower() for w in words)]
+            if not items:
+                continue
+        ck = f"c:{cid}"
+        open_ = bool(words) or (ck in exp) or (cid == "inmodel" and f"-{ck}" not in exp)
+        rows.append(([ck, title, "", "", ""], [0, len(items), 0, 0, 0, -1, -1, int(bool(items)), int(open_), 0]))
+        if open_:
+            for key, name, hexc, path in items[:ROW_CAP]:
+                icon = _tex_icon(view, path) if path else ""
+                rows.append(([key, name, "", hexc, icon], [1, 0, 0, int(name == cur), 5, -1, -1, 0, 0, 0]))
+    return rows
+
+
+def _paint_with(win, key) -> None:
+    """Apply a material from the strip or the Library: Paint becomes active."""
+    import json
+    from views import tray
+    panel = getattr(getattr(win, "tray", None), "materials", None)
+    if panel is None:
+        return
+    kind, _, rest = key.partition(":")
+    if kind == "m":
+        mat = (getattr(win.viewport.scene, "materials", None) or {}).get(rest)
+        if mat is None:
+            return
+        tex = getattr(mat, "texture", None)
+        if tex and tex.get("path"):
+            panel._apply_texture(tex["path"], sw=tex.get("sw"), sh=tex.get("sh"), name=mat.name, opacity=mat.opacity)
+        elif mat.color:
+            panel._apply_color(tuple(mat.color), name=mat.name)
+    elif kind == "ral" and tray._RAL_FILE.exists():
+        data = json.loads(tray._RAL_FILE.read_text(encoding="utf-8"))
+        for fam in data.get("families", []):
+            for c in fam.get("colors", []):
+                if c["code"] == rest:
+                    panel._apply_color(c["rgb"], "%s %s" % (c["code"], tray._ral_name(c)))
+                    return
+    elif kind == "lib":
+        cid, _, idx = rest.rpartition(":")
+        data = json.loads((tray._TEX_DIR / "library.json").read_text(encoding="utf-8"))
+        for cat in data.get("categories", []):
+            if cat["id"] == cid:
+                it = cat["items"][int(idx)]
+                panel._apply_texture(str(tray._TEX_DIR / "library" / it["file"]), sw=it.get("sw"), sh=it.get("sh"),
+                                     name=it["name"], opacity=it.get("opacity"))
+                return
 
 
 def _problem_step(win, view, step) -> None:
@@ -1134,7 +1252,7 @@ def _tree_action(win, view, action) -> None:
 
     try:
         if verb == "toggle":
-            if rk.startswith("r:"):
+            if rk.startswith(("r:", "c:inmodel")):
                 # Rules start open when short: remember a collapse explicitly.
                 if rk in exp:
                     exp.discard(rk)
@@ -1146,6 +1264,11 @@ def _tree_action(win, view, action) -> None:
                     exp.add(f"-{rk}")
             else:
                 exp.symmetric_difference_update({rk})
+            rebuild()
+        elif verb == "mat":
+            _paint_with(win, rk)
+            view._ui_mat_focus = rk
+            view._ui_insp_sig = None
             rebuild()
         elif verb == "issues":
             view._ui_issues = not view.__dict__.get("_ui_issues", False)
@@ -1321,6 +1444,14 @@ def _tree_action(win, view, action) -> None:
                     execute(vp, structure.apply_bootstrap(scene, arg))
                 elif what == "delete":
                     _delete_node(vp, arg)
+                elif what == "scene_rename" and extra.strip():
+                    panel = getattr(getattr(win, "scenes_dock", None), "panel", None) or getattr(win.tray, "scenes", None)
+                    if panel is not None:
+                        panel.rename_view(arg, extra.strip())
+                elif what == "scene_delete":
+                    panel = getattr(getattr(win, "scenes_dock", None), "panel", None) or getattr(win.tray, "scenes", None)
+                    if panel is not None:
+                        panel.delete_views([arg])
         elif verb == "edit":
             what, _, arg = rk.partition(":")
             if what == "nodename":
@@ -1388,7 +1519,8 @@ def _inspector(view, win) -> None:
     focus = getattr(view, "_ui_insp_node", None)
     sel_sig = (len(sel), id(sel[0]) if sel else 0, id(sel[-1]) if sel else 0)
     node_focus = focus[0] if focus and focus[1] == sel_sig else None
-    sig = (id(scene), scene.content_version, sel_sig, node_focus, getattr(view, "_ui_tree_sig", None) is not None)
+    sig = (id(scene), scene.content_version, sel_sig, node_focus, getattr(view, "_ui_tree_sig", None) is not None,
+           view.__dict__.get("_ui_mat_focus"), view.__dict__.get("_ui_mode"))
     if sig == getattr(view, "_ui_insp_sig", None):
         return
     view._ui_insp_sig = sig
@@ -1398,6 +1530,19 @@ def _inspector(view, win) -> None:
     registry = bim_registry.get(scene)
     nodes = structure._nodes(registry)
     data = getattr(view, "_ui_tree", None) or {}
+    mat_key = view.__dict__.get("_ui_mat_focus") if view.__dict__.get("_ui_mode") == "library" else None
+    if mat_key and mat_key.startswith("m:"):
+        mat = (getattr(scene, "materials", None) or {}).get(mat_key[2:])
+        if mat is not None:
+            tex = mat.texture or {}
+            rows = [("Name", mat.name), ("Colour", _hex(mat.color) or "—")]
+            if tex.get("path"):
+                rows += [("Texture", str(tex["path"]).rsplit("/", 1)[-1]),
+                         ("Tile", f"{tex.get('sw', 1):g} × {tex.get('sh', tex.get('sw', 1)):g} m")]
+            rows += [("Opacity", "opaque" if mat.opacity is None else f"{mat.opacity:.0%}"),
+                     ("Finish", str(mat.finish or "from the name"))]
+            view.renderer.ui_set_inspector(mat.name, [("Material, shared by the model", rows)])
+            return
     if node_focus is not None and node_focus in nodes:
         node = nodes[node_focus]
         recipe = structure.resolve(registry, node_focus)
@@ -1584,6 +1729,8 @@ def _run(win, actions) -> None:
         elif kind == "tree":
             view = getattr(getattr(win, "_doc", None), "stand_in", None)
             _tree_action(win, view, arg)
+        elif kind == "pal":
+            _paint_with(win, arg)
         elif kind == "proj":
             _project_action(win, arg)
         elif kind == "tab":
@@ -1592,6 +1739,31 @@ def _run(win, actions) -> None:
                 win._show_model()
             elif arg == "sheet":
                 win._to_sheets()
+            elif arg in ("scene:add", "scene:update", "scene:up", "scene:down", "scene:delete", "scene:rename"):
+                panel = getattr(getattr(win, "scenes_dock", None), "panel", None) or getattr(win.tray, "scenes", None)
+                row = getattr(getattr(win, "_scene_tabs", None), "tabs", None)
+                marked = row.marked_view() if row is not None else None
+                if panel is not None:
+                    if arg == "scene:add":
+                        panel.add_scene()
+                    elif marked is not None and arg == "scene:update":
+                        panel.update_view(marked)
+                        win.viewport.flash_status(f"Updated “{marked.name}” from the view")
+                    elif marked is not None and arg in ("scene:up", "scene:down"):
+                        views = list(getattr(win.viewport.scene, "saved_views", []) or [])
+                        if marked in views:
+                            i = views.index(marked) + (-1 if arg == "scene:up" else 1)
+                            if 0 <= i < len(views):
+                                panel.move_view(marked, i)
+                    elif marked is not None and arg == "scene:rename":
+                        view._ui_pending = ("scene_rename", marked)
+                        view.renderer.ui_set_prompt("Rename scene", f"{ED}edit{ED}scene{ED}{marked.name}",
+                                                    [("yes", "Rename"), ("no", "Cancel")])
+                    elif marked is not None and arg == "scene:delete":
+                        view._ui_pending = ("scene_delete", marked)
+                        view.renderer.ui_set_prompt(f"Delete “{marked.name}”?", "The scene goes; the model does not change.",
+                                                    [("yes", "Delete"), ("no", "Cancel")])
+                    view._ui_tabs = None
             elif arg in ("scene:prev", "scene:next"):
                 views = getattr(view, "_ui_scene_views", [])
                 row = getattr(getattr(win, "_scene_tabs", None), "tabs", None)

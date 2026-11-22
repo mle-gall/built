@@ -193,6 +193,8 @@ pub struct Ui {
     /// (left edge, [(name, active, unsaved)]).
     projects: Option<(f32, Vec<(String, bool, bool)>)>,
     review: bool,
+    /// The Paint tool's strip: (id, name, colour hex or "", icon key or "", active).
+    palette_items: Vec<(String, String, String, String, bool)>,
     /// The open bar menu: kind ("docs", "work", "scenes") and its button.
     menu: Option<(String, Rect)>,
     view_anchor: Rect,
@@ -370,6 +372,7 @@ impl Ui {
             tabs: Vec::new(),
             projects: None,
             review: false,
+            palette_items: Vec::new(),
             menu: None,
             view_anchor: Rect::NOTHING,
             sel_more_anchor: Rect::NOTHING,
@@ -494,6 +497,7 @@ impl Ui {
     pub fn set_projects(&mut self, left: f32, docs: Vec<(String, bool, bool)>) {
         self.projects = Some((left, docs));
     }
+    pub fn set_palette(&mut self, items: Vec<(String, String, String, String, bool)>) { self.palette_items = items; }
     pub fn set_units(&mut self, units: String) { self.units = units; }
     pub fn set_tabs(&mut self, tabs: Vec<Vec<Item>>) { self.tabs = tabs; }
     pub fn set_delivery(&mut self, active: String, unfiled: u32, problems: u32) {
@@ -868,6 +872,47 @@ impl Ui {
         if let Some(a) = clicked { self.actions.push(a); }
     }
 
+    /// With Paint active: the model's materials as a strip above the bottom
+    /// bar, the current one ringed; Library opens the full catalogue in the dock.
+    fn paint_strip(&mut self, ctx: &egui::Context, screen: Rect) {
+        if self.palette_items.is_empty() { return; }
+        let (_, band_bottom) = self.band(ctx, screen);
+        let centre = (GUT + 72.0 + self.free_right(ctx, screen)) / 2.0;
+        let mut clicked: Option<String> = None;
+        egui::Area::new(egui::Id::new("paint_strip"))
+            .pivot(egui::Align2::CENTER_BOTTOM)
+            .fixed_pos(pos2(centre, band_bottom))
+            .order(egui::Order::Foreground)
+            .show(ctx, |ui| {
+                glass(Surface::Pill).inner_margin(Margin::same(4)).show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing = vec2(4.0, 0.0);
+                        for (id, name, hex, icon, active) in &self.palette_items {
+                            let (r, resp) = ui.allocate_exact_size(vec2(28.0, 28.0), Sense::click());
+                            let inner = r.shrink(3.0);
+                            if let Some(tex) = self.icons.get(icon) {
+                                egui::Image::new(tex).corner_radius(CornerRadius::same(5)).paint_at(ui, inner);
+                            } else if let Some(c) = parse_hex(hex) {
+                                ui.painter().rect_filled(inner, CornerRadius::same(5), c);
+                            }
+                            ui.painter().rect_stroke(inner, CornerRadius::same(5), Stroke::new(1.0_f32, EDGE), egui::StrokeKind::Inside);
+                            if *active {
+                                ui.painter().rect_stroke(r, CornerRadius::same(R_CONTROL), Stroke::new(1.5_f32, ACCENT), egui::StrokeKind::Inside);
+                            } else if resp.hovered() {
+                                ui.painter().rect_stroke(r, CornerRadius::same(R_CONTROL), Stroke::new(1.0_f32, INK_2), egui::StrokeKind::Inside);
+                            }
+                            if resp.on_hover_text(name).clicked() { clicked = Some(format!("pal:{id}")); }
+                        }
+                        bar_divider(ui);
+                        if text_button(ui, "Library", "All materials, in the dock", true) {
+                            clicked = Some("tree:mode\u{1f}library".into());
+                        }
+                    });
+                });
+            });
+        if let Some(a) = clicked { self.actions.push(a); }
+    }
+
     /// The one open menu: documents, workspace or scenes (View has its own).
     fn bar_menu(&mut self, ctx: &egui::Context) {
         let Some((kind, anchor)) = self.menu.clone() else { return };
@@ -902,10 +947,30 @@ impl Ui {
                         }
                         "work" | "scenes" => {
                             let group = if kind == "work" { 0 } else { 1 };
+                            let mut current = None;
                             if let Some(items) = self.tabs.get(group) {
                                 for item in items {
+                                    if item.4 == 1 { current = Some(item.1.clone()); }
                                     let row = (item.0.clone(), item.1.clone(), String::new(), "check".into(), check(item.4 == 1), true);
                                     if menu_row(ui, &row) { clicked = Some(format!("tab:{}", item.0)); }
+                                }
+                            }
+                            if kind == "scenes" {
+                                // Managing scenes, under the list (council: one place).
+                                let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 7.0), Sense::hover());
+                                ui.painter().hline(r.x_range().shrink(6.0), r.center().y, Stroke::new(1.0_f32, EDGE));
+                                let mut rows: Vec<(&str, String)> = vec![("scene:add", "Add scene from this view".into())];
+                                if let Some(c) = &current {
+                                    rows.push(("scene:update", format!("Update “{c}” from this view")));
+                                    rows.push(("scene:rename", format!("Rename “{c}”…")));
+                                    rows.push(("scene:up", "Move earlier".into()));
+                                    rows.push(("scene:down", "Move later".into()));
+                                    rows.push(("scene:delete", format!("Delete “{c}”")));
+                                }
+                                for (id, label) in rows {
+                                    if menu_row(ui, &(id.to_owned(), label, String::new(), "check".into(), -1, true)) {
+                                        clicked = Some(format!("tab:{id}"));
+                                    }
                                 }
                             }
                         }
@@ -1053,6 +1118,7 @@ impl Ui {
         let mut cmds: Vec<String> = Vec::new();
         let mut more_at: Option<Rect> = None;
         let (top, bottom) = self.band(ctx, screen);
+        let self_icons = self.icons.clone();
         let Some(col) = self.column.as_mut() else { return };
         const W: f32 = DOCK_W;
         const ROW: f32 = 22.0;
@@ -1234,9 +1300,21 @@ impl Ui {
                                 if n.eye >= 0 && show_ctl { paint_eye(ui, eye_r, n.eye == 1); }
                                 if n.lock >= 0 && show_ctl { paint_lock(ui, lock_r, n.lock == 1); }
                                 let right = if col.colset == 1 { rect.max.x - 170.0 } else if col.colset == 2 { rect.max.x - 160.0 } else { eye_r.min.x - 6.0 };
-                                // Item icon.
+                                // Item icon (a material row shows its swatch).
                                 let mut tx = x0 + 16.0;
-                                if n.row != 0 && n.row != 4 {
+                                if n.row == 5 {
+                                    let sw = Rect::from_center_size(pos2(tx + 8.0, cy), vec2(16.0, 16.0));
+                                    if let Some(tex) = self_icons.get(&n.icon) {
+                                        egui::Image::new(tex).corner_radius(CornerRadius::same(3)).paint_at(ui, sw);
+                                    } else if let Some(c) = parse_hex(&n.badge) {
+                                        ui.painter().rect_filled(sw, CornerRadius::same(3), c);
+                                    }
+                                    ui.painter().rect_stroke(sw, CornerRadius::same(3), Stroke::new(1.0_f32, EDGE), egui::StrokeKind::Inside);
+                                    if n.active {
+                                        ui.painter().rect_stroke(sw.expand(2.0), CornerRadius::same(4), Stroke::new(1.5_f32, ACCENT), egui::StrokeKind::Outside);
+                                    }
+                                    tx += 22.0;
+                                } else if n.row != 0 && n.row != 4 {
                                     let glyph = match n.icon.as_str() { "component" => "◇", "section" => "⊟", "image" => "▨", "link" => "⛓", _ => "▢" };
                                     ui.painter().text(pos2(tx + 6.0, cy), egui::Align2::CENTER_CENTER, glyph, meta(),
                                         if n.row == 3 { OFF } else { FAINT });
@@ -1270,12 +1348,12 @@ impl Ui {
                                     3 | 4 => (FAINT, meta()),
                                     _ => (if lit { Color32::WHITE } else { INK_2 }, body()),
                                 };
-                                let name = if n.active { format!("✎ {}", n.name) } else { n.name.clone() };
+                                let name = if n.active && n.row != 5 { format!("✎ {}", n.name) } else { n.name.clone() };
                                 let g = ui.painter().layout_job(one_line(name, font, ink, right - tx));
                                 let name_w = g.size().x;
                                 ui.painter().galley(pos2(tx, cy - g.size().y / 2.0), g, ink);
                                 let mut kx = tx + name_w + 8.0;
-                                if !n.badge.is_empty() && kx + 20.0 < right {
+                                if !n.badge.is_empty() && n.row != 5 && kx + 20.0 < right {
                                     let col_b = if n.row == 3 { ACCENT } else { FAINT };
                                     let g = ui.painter().layout_job(one_line(n.badge.clone(), meta(), col_b, right - kx));
                                     let w = g.size().x;
@@ -1322,7 +1400,7 @@ impl Ui {
                                         }
                                     } else {
                                         col.highlighted = Some(n.key.clone());
-                                        let verb = match n.row { 0 => "node", 3 => "reveal", 4 => "loose", _ => "item" };
+                                        let verb = match n.row { 0 => "node", 3 => "reveal", 4 => "loose", 5 => "mat", _ => "item" };
                                         actions.push(format!("{verb}\u{1f}{}", n.key));
                                     }
                                 }
@@ -1554,20 +1632,41 @@ impl Ui {
                         ui.set_width(W - 40.0);
                         ui.label(egui::RichText::new(&title).font(title_font()).color(INK));
                         ui.add_space(6.0);
-                        ui.label(egui::RichText::new(&body_text).font(body()).color(DIM));
+                        // A body written "\u{1d}edit\u{1d}<id>\u{1d}<text>" is a field to type in.
+                        let field = body_text.strip_prefix("\u{1d}edit\u{1d}").map(|r| {
+                            let (id, text) = r.split_once('\u{1d}').unwrap_or((r, ""));
+                            (id.to_owned(), text.to_owned())
+                        });
+                        let mut enter = false;
+                        if let Some((id, text)) = &field {
+                            let buf = col.edits.entry(format!("prompt:{id}")).or_insert_with(|| text.clone());
+                            let r = ui.add(egui::TextEdit::singleline(buf).font(body()).margin(Margin::symmetric(6, 4))
+                                .desired_width((W - 40.0 - 40.0).max(60.0)).clip_text(true));
+                            r.request_focus();
+                            enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                        } else {
+                            ui.label(egui::RichText::new(&body_text).font(body()).color(DIM));
+                        }
                         ui.add_space(10.0);
+                        let typed = field.as_ref().map(|(id, _)| col.edits.get(&format!("prompt:{id}")).cloned().unwrap_or_default());
                         ui.horizontal(|ui| {
                             ui.spacing_mut().item_spacing = vec2(6.0, 0.0);
-                            for (id, label) in &buttons {
-                                if chip_button(ui, label) {
-                                    actions.push(format!("prompt\u{1f}{id}"));
+                            for (i, (id, label)) in buttons.iter().enumerate() {
+                                if chip_button(ui, label) || (enter && i == 0) {
+                                    match &typed {
+                                        Some(t) => actions.push(format!("prompt\u{1f}{id}\u{1f}{t}")),
+                                        None => actions.push(format!("prompt\u{1f}{id}")),
+                                    }
                                     answered = true;
                                 }
                             }
                         });
                     });
                 });
-            if answered { col.prompt = None; }
+            if answered {
+                col.prompt = None;
+                col.edits.retain(|k, _| !k.starts_with("prompt:"));
+            }
         }
         for a in actions {
             self.actions.push(format!("tree:{a}"));
@@ -1640,6 +1739,7 @@ impl Ui {
                 self.palette(ctx, screen);
                 self.right_column(ctx, screen);
                 self.bottom_bar(ctx, screen);
+                self.paint_strip(ctx, screen);
             }
             self.cursor_value(ctx, screen);
             self.bar_menu(ctx);
@@ -1651,6 +1751,7 @@ impl Ui {
                      ("view_menu", self.view_open), ("menu", self.menu.is_some()),
                      ("column", work && self.column.is_some()), ("bottom", work),
                      ("sel_more", work && self.sel_more && self.selection.is_some()),
+                     ("paint_strip", work && !self.palette_items.is_empty()),
                      ("sel_sub", work && self.sel_more && self.sel_sub.is_some()),
                      ("row_menu", self.column.as_ref().is_some_and(|c| c.row_menu.is_some())),
                      ("kind_menu", self.column.as_ref().is_some_and(|c| c.kind_menu.is_some())),

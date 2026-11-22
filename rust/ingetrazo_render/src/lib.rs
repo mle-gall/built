@@ -2100,6 +2100,9 @@ impl Renderer {
     fn ui_set_issues(&mut self, on: bool) {
         if let Some(ui) = self.ui.as_mut() { ui.set_issues(on); }
     }
+    fn ui_set_palette(&mut self, items: Vec<(String, String, String, String, bool)>) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_palette(items); }
+    }
     fn ui_take_actions(&mut self) -> Vec<String> {
         self.ui.as_mut().map(|ui| ui.take_actions()).unwrap_or_default()
     }
