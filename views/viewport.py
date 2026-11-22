@@ -12443,6 +12443,8 @@ class Viewport(QOpenGLWidget):
             painter.drawText(QPointF(px + 10, py + 16), text)
 
     def _draw_length_label(self, painter: QPainter) -> None:
+        if getattr(self, '_chrome_owns_labels', False):
+            return  # the value field on the geometry shows it (views/wgpu_ui.py)
         tool = self.active_tool
         if tool is None:
             return

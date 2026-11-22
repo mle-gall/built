@@ -2081,6 +2081,10 @@ impl Renderer {
     fn ui_set_projects(&mut self, left: f32, docs: Vec<(String, bool, bool)>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_projects(left, docs); }
     }
+    fn ui_top_empty(&self, x: f32, y: f32) -> bool { self.ui.as_ref().is_some_and(|ui| ui.top_empty(x, y)) }
+    fn ui_set_units(&mut self, units: String) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_units(units); }
+    }
     fn ui_take_actions(&mut self) -> Vec<String> {
         self.ui.as_mut().map(|ui| ui.take_actions()).unwrap_or_default()
     }

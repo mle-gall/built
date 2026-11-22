@@ -36,6 +36,11 @@ const R_CONTROL: u8 = 8;    // 28-pt controls, tabs, chips
 const R_ROW: u8 = 6;        // menu and tree rows, fields
 const BAR_H: f32 = 36.0;
 const EDGE_GAP: f32 = 12.0;
+// The frame: bars docked to the window's edges, side panes floating 8 in.
+const TOP_H: f32 = 40.0;
+const BOT_H: f32 = 36.0;
+const GUT: f32 = 8.0;
+const DOCK_W: f32 = 300.0;
 // Type roles (Inter 400 / 500 / 600 when bundled, else the system font).
 fn body() -> egui::FontId { egui::FontId::proportional(12.0) }
 fn meta() -> egui::FontId { egui::FontId::proportional(11.0) }
@@ -71,7 +76,7 @@ fn ink_of(st: State) -> Color32 {
 /// Glass surfaces (council 2026-11-22): Panel for data (tree, inspector),
 /// Raised for menus, Pill for compact chrome (palette, rows, bars).
 #[derive(Clone, Copy)]
-enum Surface { Panel, Raised, Pill }
+enum Surface { Panel, Raised, Pill, Bar }
 impl Surface {
     fn look(self) -> crate::glass::Look {
         // (tint mix, saturation, peak, lit rim, quiet rim, top, inner shadow)
@@ -79,16 +84,19 @@ impl Surface {
             Surface::Panel => (0.72, 0.30, 0.080, 0.20, 0.045, 0.022, 0.12),
             Surface::Raised => (0.82, 0.16, 0.065, 0.23, 0.055, 0.030, 0.14),
             Surface::Pill => (0.61, 0.45, 0.085, 0.20, 0.045, 0.022, 0.10),
+            // Docked bars: quieter rim, no glow (their outer edges are the window's).
+            Surface::Bar => (0.70, 0.35, 0.080, 0.06, 0.03, 0.0, 0.0),
         };
         crate::glass::Look { tint: [0.01444, 0.01764, 0.02315, mix], saturation: sat, rim: [lit, quiet],
                              rim_width: 1.25, glow: top, peak, inner_shadow: inner }
     }
-    fn radius(self) -> u8 { match self { Surface::Panel => 14, Surface::Raised => 12, Surface::Pill => 12 } }
+    fn radius(self) -> u8 { match self { Surface::Panel => 14, Surface::Raised => 12, Surface::Pill => 12, Surface::Bar => 0 } }
     fn shadow(self) -> Shadow {
         let (y, blur, alpha) = match self {
             Surface::Panel => (8, 24, 100),
             Surface::Raised => (12, 32, 128),
             Surface::Pill => (4, 14, 90),
+            Surface::Bar => (0, 0, 0),
         };
         Shadow { offset: [0, y], blur, spread: 0, color: Color32::from_black_alpha(alpha) }
     }
@@ -147,6 +155,14 @@ pub struct Ui {
     /// Project tabs at the top left, after the window buttons' room:
     /// (left edge, [(name, active, unsaved)]).
     projects: Option<(f32, Vec<(String, bool, bool)>)>,
+    review: bool,
+    /// The open bar menu: kind ("docs", "work", "scenes") and its button.
+    menu: Option<(String, Rect)>,
+    view_anchor: Rect,
+    sel_more_anchor: Rect,
+    top_groups: Vec<Rect>,
+    top_right_w: f32,
+    units: String,
     glass: crate::glass::Glass,
 }
 
@@ -284,6 +300,13 @@ impl Ui {
             delivery: None,
             tabs: Vec::new(),
             projects: None,
+            review: false,
+            menu: None,
+            view_anchor: Rect::NOTHING,
+            sel_more_anchor: Rect::NOTHING,
+            top_groups: Vec::new(),
+            top_right_w: 0.0,
+            units: "mm".into(),
         }
     }
 
@@ -386,6 +409,7 @@ impl Ui {
     pub fn set_projects(&mut self, left: f32, docs: Vec<(String, bool, bool)>) {
         self.projects = Some((left, docs));
     }
+    pub fn set_units(&mut self, units: String) { self.units = units; }
     pub fn set_tabs(&mut self, tabs: Vec<Vec<Item>>) { self.tabs = tabs; }
     pub fn set_delivery(&mut self, active: String, unfiled: u32, problems: u32) {
         self.delivery = Some((active, unfiled, problems));
@@ -400,11 +424,11 @@ impl Ui {
     /// fields has focus, or Escape while one of its popups is open.
     pub fn claims_key(&self, name: &str) -> bool {
         let filing = self.column.as_ref().is_some_and(|c| c.filing.is_some() || c.row_menu.is_some());
-        (name == "Escape" && (self.view_open || self.sel_more || filing)) || self.ctx.wants_keyboard_input()
+        (name == "Escape" && (self.view_open || self.sel_more || self.menu.is_some() || filing)) || self.ctx.wants_keyboard_input()
     }
     pub fn key(&mut self, name: &str, pressed: bool, mods: u8) -> bool {
-        if name == "Escape" && (self.view_open || self.sel_more) {
-            if pressed { self.view_open = false; self.sel_more = false; }
+        if name == "Escape" && (self.view_open || self.sel_more || self.menu.is_some()) {
+            if pressed { self.view_open = false; self.sel_more = false; self.menu = None; }
             return true;
         }
         if name == "Escape" {
@@ -447,30 +471,6 @@ impl Ui {
     pub fn set_cursor_value(&mut self, caption: String, value: String, typing: bool, x: f32, y: f32) {
         self.cursor = (!caption.is_empty() || typing).then(|| (caption, value, typing, pos2(x, y)));
     }
-    /// The canonical measurements box: fixed at the bottom right.
-    fn measure_box(&self, ctx: &egui::Context, screen: Rect) {
-        let Some((caption, value, typing, _)) = &self.cursor else { return };
-        egui::Area::new(egui::Id::new("measure"))
-            .pivot(egui::Align2::RIGHT_BOTTOM)
-            .fixed_pos(pos2(self.free_right(ctx, screen) - 12.0, screen.max.y - 12.0))
-            .order(egui::Order::Foreground)
-            .interactable(false)
-            .show(ctx, |ui| {
-                let edge = if *typing { ACCENT } else { EDGE };
-                glass(Surface::Pill).stroke(Stroke::new(1.0_f32, edge))
-                    .inner_margin(Margin::symmetric(14, 4)).show(ui, |ui| {
-                    ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                        ui.set_min_height(28.0);
-                        ui.spacing_mut().item_spacing = vec2(10.0, 0.0);
-                        ui.label(egui::RichText::new(caption).font(meta()).color(DIM));
-                        let (rect, _) = ui.allocate_exact_size(vec2(110.0, 16.0), Sense::hover());
-                        let shown = if value.is_empty() && *typing { "|" } else { value.as_str() };
-                        ui.painter().text(rect.right_center(), egui::Align2::RIGHT_CENTER, shown,
-                            egui::FontId::monospace(13.0), if *typing { Color32::WHITE } else { INK });
-                    });
-                });
-            });
-    }
     pub fn set_selection(&mut self, summary: String, actions: Vec<(String, String, String, bool, bool)>) {
         if summary.is_empty() { self.sel_more = false; }
         self.selection = (!summary.is_empty()).then_some((summary, actions));
@@ -508,6 +508,7 @@ impl Ui {
                 if !self.captured {
                     self.view_open = false;
                     self.sel_more = false;
+                    self.menu = None;
                     if let Some(col) = self.column.as_mut() { col.row_menu = None; }
                     self.ctx.memory_mut(|m| m.stop_text_input());
                 }
@@ -557,16 +558,17 @@ impl Ui {
         let mut clicked = None;
         // Two columns while they fit above the status line; wider, never
         // scrolled or folded, when the window is short (council 2026-11-22).
-        let room = screen.height() - (if self.projects.is_some() { EDGE_GAP + BAR_H + 8.0 } else { EDGE_GAP }) - 60.0;
+        let (band_top, band_bottom) = self.band(ctx, screen);
+        let room = band_bottom - band_top;
         let tall = |cols: usize| self.groups.iter().map(|g| g.len().div_ceil(cols) as f32 * 32.0).sum::<f32>()
             + self.groups.len().saturating_sub(1) as f32 * 9.0 + 8.0;
         let cols = (2..=5).find(|c| tall(*c) <= room).unwrap_or(5);
-        let top = if self.projects.is_some() { EDGE_GAP + BAR_H + 8.0 } else { EDGE_GAP };
         egui::Area::new(egui::Id::new("palette"))
-            .fixed_pos(pos2(EDGE_GAP, top))
+            .fixed_pos(pos2(GUT, band_top))
             .order(egui::Order::Foreground)
             .show(ctx, |ui| {
                 frame().corner_radius(CornerRadius::same(12)).inner_margin(Margin::same(4)).show(ui, |ui| {
+                    ui.set_min_height(room - 8.0);
                     ui.spacing_mut().item_spacing = vec2(2.0, 2.0);
                     for (gi, group) in self.groups.iter().enumerate() {
                         if gi > 0 {
@@ -591,217 +593,322 @@ impl Ui {
         }
     }
 
-    fn status_line(&self, ctx: &egui::Context, screen: Rect) {
-        if self.status.is_empty() && self.hint.is_empty() {
-            return;
-        }
-        egui::Area::new(egui::Id::new("status"))
-            .pivot(egui::Align2::LEFT_BOTTOM)
-            .fixed_pos(pos2(EDGE_GAP, screen.max.y - EDGE_GAP))
+
+    // ---- The frame (Round 4, council + Maxence 2026-11-22) -----------------
+    // Top and bottom bars docked edge to edge; the tool rail and the project
+    // dock float between them; at most one menu floats over the model.
+
+    /// The top bar: window buttons' room, document, workspace, scene |
+    /// navigation, view toggles, review, View ▾. Its empty parts move the window.
+    fn top_bar(&mut self, ctx: &egui::Context, screen: Rect) {
+        let mut clicked: Option<String> = None;
+        let mut open: Option<(&'static str, Rect)> = None;
+        let mut groups = Vec::new();
+        let lights = self.projects.as_ref().map_or(86.0, |p| p.0);
+        egui::Area::new(egui::Id::new("top"))
+            .fixed_pos(Pos2::ZERO)
             .order(egui::Order::Foreground)
-            .interactable(false)
             .show(ctx, |ui| {
-                glass(Surface::Pill).inner_margin(Margin::symmetric(14, 4)).show(ui, |ui| {
-                    ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                        ui.set_min_height(28.0);
-                        ui.spacing_mut().item_spacing = vec2(10.0, 0.0);
+                glass(Surface::Bar).inner_margin(Margin { left: lights as i8, right: 8, top: 6, bottom: 6 }).show(ui, |ui| {
+                    ui.set_width(screen.width() - lights - 8.0);
+                    ui.set_height(TOP_H - 12.0);
+                    ui.spacing_mut().interact_size.y = 28.0;
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing = vec2(2.0, 0.0);
+                        let left = ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing = vec2(2.0, 0.0);
+                            if let Some((_, docs)) = &self.projects {
+                                let cur = docs.iter().find(|d| d.1).or(docs.first());
+                                let label = cur.map_or("Untitled".to_owned(), |d| if d.2 { format!("{} •", d.0) } else { d.0.clone() });
+                                let more = if docs.len() > 1 { format!("  {}", docs.len()) } else { String::new() };
+                                if let Some(r) = menu_button(ui, &format!("{label}{more}"), self.menu.as_ref().is_some_and(|m| m.0 == "docs")) {
+                                    open = Some(("docs", r));
+                                }
+                                bar_divider(ui);
+                            }
+                            if self.review {
+                                if text_button(ui, "Exit review", "Show the panels again", true) { clicked = Some("review".into()); }
+                                bar_divider(ui);
+                            }
+                            let work = self.tabs.first().and_then(|g| g.iter().find(|i| i.4 == 1)).map_or("Model".to_owned(), |i| i.1.clone());
+                            if let Some(r) = menu_button(ui, &work, self.menu.as_ref().is_some_and(|m| m.0 == "work")) {
+                                open = Some(("work", r));
+                            }
+                            if let Some(scenes) = self.tabs.get(1).filter(|g| !g.is_empty()) {
+                                let cur = scenes.iter().position(|i| i.4 == 1);
+                                let prev = (String::new(), "‹".to_owned(), "Previous scene (⇞)".to_owned(), String::new(), -1i8, true);
+                                if item_button(ui, &prev, None) { clicked = Some("scene:prev".into()); }
+                                let name = cur.map_or("Scenes".to_owned(), |i| scenes[i].1.clone());
+                                if let Some(r) = menu_button(ui, &name, self.menu.as_ref().is_some_and(|m| m.0 == "scenes")) {
+                                    open = Some(("scenes", r));
+                                }
+                                let next = (String::new(), "›".to_owned(), "Next scene (⇟)".to_owned(), String::new(), -1i8, true);
+                                if item_button(ui, &next, None) { clicked = Some("scene:next".into()); }
+                            }
+                        });
+                        groups.push(left.response.rect);
+                        // The right group, laid out left to right and pushed to
+                        // the right edge by its width from the last frame.
+                        ui.add_space((ui.available_width() - self.top_right_w).max(0.0));
+                        {
+                            let right = ui.horizontal(|ui| {
+                                ui.spacing_mut().item_spacing = vec2(2.0, 0.0);
+                                for (gi, group) in self.cluster.iter().enumerate() {
+                                    if gi > 0 { bar_divider(ui); }
+                                    for item in group {
+                                        if item_button(ui, item, self.icons.get(&item.3)) {
+                                            clicked = Some(format!("act:{}", item.0));
+                                        }
+                                    }
+                                }
+                                bar_divider(ui);
+                                if !self.view_menu.is_empty() {
+                                    if let Some(r) = menu_button(ui, "View", self.view_open) {
+                                        open = Some(("view", r));
+                                    }
+                                }
+                            });
+                            groups.push(right.response.rect);
+                        }
+                    });
+                });
+            });
+        if let Some(r) = groups.get(1) { self.top_right_w = r.width(); }
+        self.top_groups = groups;
+        if let Some((kind, r)) = open {
+            if kind == "view" {
+                self.view_open = !self.view_open;
+                self.view_anchor = r;
+                self.menu = None;
+            } else if self.menu.as_ref().is_some_and(|m| m.0 == kind) {
+                self.menu = None;
+            } else {
+                self.menu = Some((kind.to_owned(), r));
+                self.view_open = false;
+            }
+        }
+        match clicked.as_deref() {
+            Some("review") => { self.review = !self.review; self.actions.push("review".into()); }
+            Some(a) => self.actions.push(if a.starts_with("act:") { a.to_owned() } else { format!("tab:{a}") }),
+            None => {}
+        }
+    }
+
+    /// Is ``pos`` on the top bar but on none of its controls (it then moves
+    /// the window, as a title bar does)?
+    pub fn top_empty(&self, x: f32, y: f32) -> bool {
+        let p = pos2(x, y);
+        y <= TOP_H && !self.top_groups.iter().any(|r| r.contains(p))
+            && !(self.projects.is_none() && x < 86.0)
+    }
+
+    /// The bottom bar: units | tool, its options, hint or message | where
+    /// new geometry goes.
+    fn bottom_bar(&mut self, ctx: &egui::Context, screen: Rect) {
+        let mut clicked: Option<String> = None;
+        egui::Area::new(egui::Id::new("bottom"))
+            .fixed_pos(pos2(0.0, screen.max.y - BOT_H))
+            .order(egui::Order::Foreground)
+            .show(ctx, |ui| {
+                glass(Surface::Bar).inner_margin(Margin::symmetric(8, 4)).show(ui, |ui| {
+                    ui.set_width(screen.width() - 16.0);
+                    ui.set_height(BOT_H - 8.0);
+                    ui.spacing_mut().interact_size.y = 28.0;
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing = vec2(2.0, 0.0);
+                        let (r, _) = ui.allocate_exact_size(vec2(56.0, 28.0), Sense::hover());
+                        ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, &self.units, meta(), FAINT);
+                        bar_divider(ui);
+                        ui.add_space(6.0);
+                        let icon = self.groups.iter().flatten().find(|t| t.id == self.active).and_then(|t| t.icon.clone())
+                            .or_else(|| self.icons.get(&self.active).cloned());
+                        if let Some(tex) = icon {
+                            let (r, _) = ui.allocate_exact_size(vec2(22.0, 28.0), Sense::hover());
+                            egui::Image::new(&tex).tint(INK).paint_at(ui, Rect::from_center_size(r.center(), vec2(22.0, 22.0)));
+                            ui.add_space(4.0);
+                        }
                         if !self.status.is_empty() {
                             ui.label(egui::RichText::new(&self.status).font(strong(12.0)).color(INK));
+                            ui.add_space(6.0);
                         }
-                        if !self.hint.is_empty() {
-                            ui.label(egui::RichText::new(&self.hint).font(body()).color(DIM));
-                        }
-                    });
-                });
-            });
-    }
-
-    /// Bottom right: the node new geometry goes into, and what stands
-    /// between the model and delivery (council 2026-11-22, as-built lens).
-    fn delivery_pill(&mut self, ctx: &egui::Context, screen: Rect) {
-        let Some((active, unfiled, problems)) = self.delivery.clone() else { return };
-        if active.is_empty() && unfiled == 0 && problems == 0 {
-            return;
-        }
-        let measure = self.cursor.is_some().then(|| ctx.memory(|m| m.area_rect(egui::Id::new("measure")))).flatten();
-        let right = measure.map_or(self.free_right(ctx, screen) - 12.0, |r| r.min.x - 8.0);
-        let mut clicked = None;
-        egui::Area::new(egui::Id::new("delivery"))
-            .pivot(egui::Align2::RIGHT_BOTTOM)
-            .fixed_pos(pos2(right, screen.max.y - 12.0))
-            .order(egui::Order::Foreground)
-            .show(ctx, |ui| {
-                glass(Surface::Pill).inner_margin(Margin::same(4)).show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing = vec2(4.0, 0.0);
-                        if !active.is_empty() {
-                            if text_button(ui, &format!("✎ {active}"), "New geometry goes here", true) {
-                                clicked = Some("active");
-                            }
-                        }
-                        if unfiled > 0 && amber_button(ui, &format!("{unfiled} unfiled")) {
-                            clicked = Some("unfiled");
-                        }
-                        if problems > 0 && amber_button(ui, &format!("{problems} to fix")) {
-                            clicked = Some("problems");
-                        }
-                        if unfiled == 0 && problems == 0 {
-                            ui.label(egui::RichText::new("Ready to deliver").font(meta()).color(DIM));
-                        }
-                    });
-                });
-            });
-        if let Some(what) = clicked {
-            self.actions.push(format!("deliver:{what}"));
-        }
-    }
-
-    /// Model / sheet and the scenes, one capsule bar on the bottom row,
-    /// centred in the free viewport (the old Qt status bar and scene row).
-    fn tab_bar(&mut self, ctx: &egui::Context, screen: Rect) {
-        if self.tabs.iter().all(|g| g.is_empty()) {
-            return;
-        }
-        let centre = (screen.min.x + self.free_right(ctx, screen)) / 2.0;
-        let mut clicked = None;
-        egui::Area::new(egui::Id::new("tabs"))
-            .pivot(egui::Align2::CENTER_BOTTOM)
-            .fixed_pos(pos2(centre, screen.max.y - EDGE_GAP))
-            .order(egui::Order::Foreground)
-            .show(ctx, |ui| {
-                glass(Surface::Pill).inner_margin(Margin::same(4)).show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing = vec2(2.0, 0.0);
-                        for (gi, group) in self.tabs.iter().filter(|g| !g.is_empty()).enumerate() {
-                            if gi > 0 {
-                                let (r, _) = ui.allocate_exact_size(vec2(9.0, 28.0), Sense::hover());
-                                ui.painter().vline(r.center().x, r.y_range().shrink(7.0), Stroke::new(1.0_f32, EDGE));
-                            }
-                            for item in group {
-                                if item_button(ui, item, None) {
-                                    clicked = Some(item.0.clone());
-                                }
-                            }
-                        }
-                    });
-                });
-            });
-        if let Some(id) = clicked {
-            self.actions.push(format!("tab:{id}"));
-        }
-    }
-
-    /// The project tabs: view layout, one capsule per project (× to close on
-    /// hover or when current, a dot while unsaved), + for a new one.
-    fn project_bar(&mut self, ctx: &egui::Context) {
-        let Some((left, docs)) = self.projects.clone() else { return };
-        let mut clicked = None;
-        let views_icon = self.icons.get("four_views").cloned();
-        egui::Area::new(egui::Id::new("projects"))
-            .fixed_pos(pos2(left, EDGE_GAP))
-            .order(egui::Order::Foreground)
-            .show(ctx, |ui| {
-                glass(Surface::Pill).inner_margin(Margin::same(4)).show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing = vec2(2.0, 0.0);
-                        let views = (String::new(), "Views".to_owned(), "View layout: one to four views".to_owned(),
-                                     String::new(), -1i8, true);
-                        if item_button(ui, &views, views_icon.as_ref()) {
-                            clicked = Some("views".to_owned());
-                        }
-                        for (i, (name, active, dirty)) in docs.iter().enumerate() {
-                            match doc_tab(ui, name, *active, *dirty) {
-                                Some(true) => clicked = Some(format!("close:{i}")),
-                                Some(false) => clicked = Some(format!("{i}")),
-                                None => {}
-                            }
-                        }
-                        let plus = (String::new(), "+".to_owned(), "New project (⌘N)".to_owned(), String::new(), -1i8, true);
-                        if item_button(ui, &plus, None) {
-                            clicked = Some("new".to_owned());
-                        }
-                    });
-                });
-            });
-        if let Some(id) = clicked {
-            self.actions.push(format!("proj:{id}"));
-        }
-    }
-
-    fn selection_bar(&mut self, ctx: &egui::Context, screen: Rect) {
-        let Some((summary, actions)) = &self.selection else { return };
-        let mut clicked = None;
-        let mut toggle_more = false;
-        let has_more = actions.iter().any(|a| a.4);
-        let bar = egui::Area::new(egui::Id::new("selection"))
-            .pivot(egui::Align2::CENTER_BOTTOM)
-            .fixed_pos(pos2(screen.center().x, screen.max.y - EDGE_GAP - BAR_H - 8.0))
-            .order(egui::Order::Foreground)
-            .show(ctx, |ui| {
-                glass(Surface::Pill).inner_margin(Margin::same(4)).show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing = vec2(2.0, 0.0);
-                        ui.add_space(12.0);
-                        ui.label(egui::RichText::new(summary).font(meta()).color(FAINT));
-                        ui.add_space(8.0);
-                        let (r, _) = ui.allocate_exact_size(vec2(1.0, 28.0), Sense::hover());
-                        ui.painter().vline(r.center().x, r.y_range().shrink(6.0), Stroke::new(1.0_f32, EDGE));
-                        ui.add_space(4.0);
-                        for (id, label, key, enabled, more) in actions {
-                            if !*more && text_button(ui, label, key, *enabled) {
-                                clicked = Some(id.clone());
-                            }
-                        }
-                        if has_more && text_button(ui, if self.sel_more { "More ▴" } else { "More ▾" }, "", true) {
-                            toggle_more = true;
-                        }
-                    });
-                });
-            });
-        if toggle_more {
-            self.sel_more = !self.sel_more;
-        }
-        if self.sel_more {
-            let anchor = bar.response.rect;
-            egui::Area::new(egui::Id::new("sel_more"))
-                .pivot(egui::Align2::RIGHT_BOTTOM)
-                .fixed_pos(pos2(anchor.max.x, anchor.min.y - 6.0))
-                .order(egui::Order::Foreground)
-                .show(ctx, |ui| {
-                    glass(Surface::Raised).inner_margin(Margin::same(6)).show(ui, |ui| {
-                        ui.set_width(230.0);
-                        ui.spacing_mut().item_spacing = vec2(0.0, 1.0);
-                        let mut seen: Vec<String> = Vec::new();
-                        for (id, label, key, enabled, more) in actions {
-                            if !*more { continue; }
-                            if let Some((prefix, _)) = label.split_once(" ▸ ") {
-                                // One row opens the submenu; its items live there.
-                                if seen.iter().any(|p| p == prefix) { continue; }
-                                seen.push(prefix.to_owned());
-                                let open = self.sel_sub.as_ref().is_some_and(|(p, _)| p == prefix);
-                                let item = (String::new(), prefix.to_owned(), "›".to_owned(), String::new(), -1i8, true);
-                                let (resp, rect) = menu_row_resp(ui, &item);
-                                if open {
-                                    ui.painter().rect_filled(rect, CornerRadius::same(R_ROW), HOVER);
-                                }
-                                if resp.hovered() || resp.clicked() {
-                                    self.sel_sub = Some((prefix.to_owned(), rect));
-                                }
+                        for (id, label, key, state) in &self.options {
+                            if *state == 2 {
+                                ui.label(egui::RichText::new(label).font(meta()).color(WARN));
+                                ui.add_space(6.0);
                                 continue;
                             }
-                            let item = (id.clone(), label.clone(), key.clone(), String::new(), -1i8, *enabled);
-                            let (resp, _) = menu_row_resp(ui, &item);
-                            if resp.hovered() { self.sel_sub = None; }
-                            if resp.clicked() && *enabled {
-                                clicked = Some(id.clone());
+                            let text = if key.is_empty() { label.clone() } else { format!("{label}  {key}") };
+                            let item = (id.clone(), text, String::new(), String::new(), *state as i8, true);
+                            if item_button(ui, &item, None) { clicked = Some(format!("opt:{id}")); }
+                        }
+                        if !self.options.is_empty() { bar_divider(ui); }
+                        ui.add_space(6.0);
+                        let dock_w = if self.review { 0.0 } else { DOCK_W };
+                        let room = (ui.available_width() - dock_w - 8.0).max(40.0);
+                        let mut job = egui::text::LayoutJob::single_section(self.hint.clone(), egui::TextFormat {
+                            font_id: body(), color: DIM, ..Default::default() });
+                        job.wrap.max_width = room;
+                        job.wrap.max_rows = 1;
+                        job.wrap.break_anywhere = true;
+                        let g = ui.painter().layout_job(job);
+                        let (r, _) = ui.allocate_exact_size(vec2(room, 28.0), Sense::hover());
+                        ui.painter().galley(pos2(r.min.x, r.center().y - g.size().y / 2.0), g, DIM);
+                        if !self.review {
+                            if let Some((active, _, _)) = &self.delivery {
+                                if !active.is_empty() {
+                                    bar_divider(ui);
+                                    if text_button(ui, &format!("✎ {active}"), "New geometry goes here — click to see its items", true) {
+                                        clicked = Some("deliver:active".into());
+                                    }
+                                }
                             }
                         }
                     });
                 });
+            });
+        if let Some(a) = clicked { self.actions.push(a); }
+    }
+
+    /// The one open menu: documents, workspace or scenes (View has its own).
+    fn bar_menu(&mut self, ctx: &egui::Context) {
+        let Some((kind, anchor)) = self.menu.clone() else { return };
+        let mut clicked: Option<String> = None;
+        egui::Area::new(egui::Id::new("menu"))
+            .fixed_pos(pos2(anchor.min.x, anchor.max.y + 8.0))
+            .order(egui::Order::Foreground)
+            .show(ctx, |ui| {
+                glass(Surface::Raised).inner_margin(Margin::same(6)).show(ui, |ui| {
+                    ui.set_width(220.0);
+                    ui.spacing_mut().item_spacing = vec2(0.0, 1.0);
+                    let check = |on: bool| if on { 1i8 } else { 0i8 };
+                    match kind.as_str() {
+                        "docs" => {
+                            if let Some((_, docs)) = &self.projects {
+                                for (i, (name, active, dirty)) in docs.iter().enumerate() {
+                                    let label = if *dirty { format!("{name} •") } else { name.clone() };
+                                    if menu_row(ui, &(String::new(), label, String::new(), "check".into(), check(*active), true)) {
+                                        clicked = Some(format!("proj:{i}"));
+                                    }
+                                }
+                                ui.add_space(4.0);
+                                if menu_row(ui, &(String::new(), "New project".into(), "⌘N".into(), "check".into(), -1, true)) {
+                                    clicked = Some("proj:new".into());
+                                }
+                                if let Some(i) = docs.iter().position(|d| d.1) {
+                                    if menu_row(ui, &(String::new(), "Close project".into(), "⌘W".into(), "check".into(), -1, true)) {
+                                        clicked = Some(format!("proj:close:{i}"));
+                                    }
+                                }
+                            }
+                        }
+                        "work" | "scenes" => {
+                            let group = if kind == "work" { 0 } else { 1 };
+                            if let Some(items) = self.tabs.get(group) {
+                                for item in items {
+                                    let row = (item.0.clone(), item.1.clone(), String::new(), "check".into(), check(item.4 == 1), true);
+                                    if menu_row(ui, &row) { clicked = Some(format!("tab:{}", item.0)); }
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                });
+            });
+        if let Some(a) = clicked {
+            self.menu = None;
+            self.actions.push(a);
         }
-        if let (true, Some((prefix, row))) = (self.sel_more, self.sel_sub.clone()) {
+    }
+
+    /// View ▾, under its button at the right of the top bar.
+    fn view_popup(&mut self, ctx: &egui::Context) {
+        if !self.view_open { return; }
+        let mut clicked: Option<String> = None;
+        let mut close = false;
+        let mut toggle_review = false;
+        let a = self.view_anchor;
+        egui::Area::new(egui::Id::new("view_menu"))
+            .pivot(egui::Align2::RIGHT_TOP)
+            .fixed_pos(pos2(a.max.x, a.max.y + 8.0))
+            .order(egui::Order::Foreground)
+            .show(ctx, |ui| {
+                glass(Surface::Raised).inner_margin(Margin::same(6)).show(ui, |ui| {
+                    ui.set_width(236.0);
+                    ui.spacing_mut().item_spacing = vec2(2.0, 2.0);
+                    let review = (String::new(), "Review — hide the panels".to_owned(), String::new(), "check".to_owned(),
+                                  if self.review { 1 } else { 0 }, true);
+                    if menu_row(ui, &review) { toggle_review = true; }
+                    ui.add_space(4.0);
+                    for (si, (title, items)) in self.view_menu.iter().enumerate() {
+                        if si > 0 { ui.add_space(4.0); }
+                        caption_at(ui, title, 12.0);
+                        let icons_only = items.iter().all(|i| self.icons.contains_key(&i.3));
+                        if icons_only {
+                            ui.horizontal_wrapped(|ui| {
+                                for item in items {
+                                    if item_button(ui, item, self.icons.get(&item.3)) { clicked = Some(item.0.clone()); }
+                                }
+                            });
+                        } else {
+                            for item in items {
+                                if menu_row(ui, item) {
+                                    clicked = Some(item.0.clone());
+                                    close = item.4 < 0;
+                                }
+                            }
+                        }
+                    }
+                });
+            });
+        if close { self.view_open = false; }
+        if toggle_review {
+            self.review = !self.review;
+            self.view_open = false;
+        }
+        if let Some(id) = clicked { self.actions.push(format!("act:{id}")); }
+    }
+
+    /// More ▾ of the selection actions (opened from the inspector), with
+    /// the modeller's secondary menus as submenus; both open leftwards, into
+    /// the model, since the dock sits at the right.
+    fn selection_more(&mut self, ctx: &egui::Context) {
+        let Some((_, actions)) = &self.selection else { self.sel_more = false; return };
+        if !self.sel_more { self.sel_sub = None; return; }
+        let mut clicked = None;
+        let a = self.sel_more_anchor;
+        let menu = egui::Area::new(egui::Id::new("sel_more"))
+            .pivot(egui::Align2::RIGHT_TOP)
+            .fixed_pos(pos2(a.max.x, a.max.y + 6.0))
+            .order(egui::Order::Foreground)
+            .show(ctx, |ui| {
+                glass(Surface::Raised).inner_margin(Margin::same(6)).show(ui, |ui| {
+                    ui.set_width(230.0);
+                    ui.spacing_mut().item_spacing = vec2(0.0, 1.0);
+                    let mut seen: Vec<String> = Vec::new();
+                    for (id, label, key, enabled, more) in actions {
+                        if !*more { continue; }
+                        if let Some((prefix, _)) = label.split_once(" ▸ ") {
+                            if seen.iter().any(|p| p == prefix) { continue; }
+                            seen.push(prefix.to_owned());
+                            let open = self.sel_sub.as_ref().is_some_and(|(p, _)| p == prefix);
+                            let item = (String::new(), prefix.to_owned(), "‹".to_owned(), String::new(), -1i8, true);
+                            let (resp, rect) = menu_row_resp(ui, &item);
+                            if open { ui.painter().rect_filled(rect, CornerRadius::same(R_ROW), HOVER); }
+                            if resp.hovered() || resp.clicked() { self.sel_sub = Some((prefix.to_owned(), rect)); }
+                            continue;
+                        }
+                        let item = (id.clone(), label.clone(), key.clone(), String::new(), -1i8, *enabled);
+                        let (resp, _) = menu_row_resp(ui, &item);
+                        if resp.hovered() { self.sel_sub = None; }
+                        if resp.clicked() && *enabled { clicked = Some(id.clone()); }
+                    }
+                });
+            });
+        let left = menu.response.rect.min.x;
+        if let Some((prefix, row)) = self.sel_sub.clone() {
             egui::Area::new(egui::Id::new("sel_sub"))
-                .fixed_pos(pos2(row.max.x + 8.0, row.min.y - 4.0))
+                .pivot(egui::Align2::RIGHT_TOP)
+                .fixed_pos(pos2(left - 6.0, row.min.y - 6.0))
                 .order(egui::Order::Foreground)
                 .show(ctx, |ui| {
                     glass(Surface::Raised).inner_margin(Margin::same(6)).show(ui, |ui| {
@@ -811,9 +918,7 @@ impl Ui {
                             if let Some((p, rest)) = label.split_once(" ▸ ") {
                                 if p != prefix { continue; }
                                 let item = (id.clone(), rest.to_owned(), key.clone(), String::new(), -1i8, *enabled);
-                                if menu_row(ui, &item) && *enabled {
-                                    clicked = Some(id.clone());
-                                }
+                                if menu_row(ui, &item) && *enabled { clicked = Some(id.clone()); }
                             }
                         }
                     });
@@ -824,135 +929,16 @@ impl Ui {
             self.sel_sub = None;
             self.actions.push(format!("cmd:{id}"));
         }
-        if !self.sel_more {
-            self.sel_sub = None;
-        }
     }
-
-    fn top_right(&mut self, ctx: &egui::Context, screen: Rect) {
-        if self.cluster.is_empty() {
-            return;
-        }
-        let mut clicked: Option<String> = None;
-        let mut toggle_menu = false;
-        let chip = egui::Area::new(egui::Id::new("cluster"))
-            .pivot(egui::Align2::RIGHT_TOP)
-            .fixed_pos(pos2(screen.max.x - 12.0, 12.0))
-            .order(egui::Order::Foreground)
-            .show(ctx, |ui| {
-                frame().inner_margin(Margin::same(4)).show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing = vec2(2.0, 0.0);
-                        for (gi, group) in self.cluster.iter().enumerate() {
-                            if gi > 0 {
-                                let (r, _) = ui.allocate_exact_size(vec2(7.0, 26.0), Sense::hover());
-                                ui.painter().vline(r.center().x, r.y_range().shrink(5.0), Stroke::new(1.0_f32, EDGE));
-                            }
-                            for item in group {
-                                if item_button(ui, item, self.icons.get(&item.3)) {
-                                    clicked = Some(item.0.clone());
-                                }
-                            }
-                        }
-                        if !self.view_menu.is_empty() {
-                            let label = if self.view_open { "View ▴" } else { "View ▾" };
-                            let chip = (String::new(), label.to_owned(), "Views, projection, style".to_owned(),
-                                        String::new(), if self.view_open { 1 } else { -1 }, true);
-                            if item_button(ui, &chip, None) {
-                                toggle_menu = true;
-                            }
-                        }
-                    });
-                });
-            });
-        if toggle_menu {
-            self.view_open = !self.view_open;
-        }
-        if self.view_open {
-            let top = chip.response.rect.max.y + 6.0;
-            let mut close = false;
-            egui::Area::new(egui::Id::new("view_menu"))
-                .pivot(egui::Align2::RIGHT_TOP)
-                .fixed_pos(pos2(screen.max.x - 12.0, top))
-                .order(egui::Order::Foreground)
-                .show(ctx, |ui| {
-                    glass(Surface::Raised).inner_margin(Margin::same(6)).show(ui, |ui| {
-                        ui.set_width(236.0);
-                        ui.spacing_mut().item_spacing = vec2(2.0, 2.0);
-                        for (si, (title, items)) in self.view_menu.iter().enumerate() {
-                            if si > 0 {
-                                ui.add_space(4.0);
-                            }
-                            caption_at(ui, title, 12.0);
-                            let icons_only = items.iter().all(|i| self.icons.contains_key(&i.3));
-                            if icons_only {
-                                ui.horizontal_wrapped(|ui| {
-                                    for item in items {
-                                        if item_button(ui, item, self.icons.get(&item.3)) {
-                                            clicked = Some(item.0.clone());
-                                        }
-                                    }
-                                });
-                            } else {
-                                for item in items {
-                                    if menu_row(ui, item) {
-                                        clicked = Some(item.0.clone());
-                                        close = !item.4.is_positive() && item.4 < 0;
-                                    }
-                                }
-                            }
-                        }
-                    });
-                });
-            if close {
-                self.view_open = false;
-            }
-        }
-        if let Some(id) = clicked {
-            self.actions.push(format!("act:{id}"));
-        }
-    }
-
-    /// The active tool's modes and locks, right of the palette's top row
-    /// (council 2026-11-22): left edge fixed, only what matters now.
-    fn options_strip(&mut self, ctx: &egui::Context) {
-        if self.options.is_empty() {
-            return;
-        }
-        let palette = ctx.memory(|m| m.area_rect(egui::Id::new("palette")));
-        let left = palette.map_or(80.0, |r| r.max.x) + 8.0;
-        let top = palette.map_or(EDGE_GAP, |r| r.min.y);
-        let mut clicked = None;
-        egui::Area::new(egui::Id::new("options"))
-            .fixed_pos(pos2(left, top))
-            .order(egui::Order::Foreground)
-            .show(ctx, |ui| {
-                frame().inner_margin(Margin::same(4)).show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing = vec2(2.0, 0.0);
-                        for (id, label, key, state) in &self.options {
-                            if *state == 2 {
-                                let (rect, _) = ui.allocate_exact_size(
-                                    vec2(ui.painter().layout_no_wrap(label.clone(), egui::FontId::proportional(12.0), INK).size().x + 18.0, 26.0),
-                                    Sense::hover());
-                                ui.painter().rect_stroke(rect.shrink(1.0), CornerRadius::same(5),
-                                    Stroke::new(1.0_f32, Color32::from_rgb(0xD2, 0x96, 0x28)), egui::StrokeKind::Inside);
-                                ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, label,
-                                    egui::FontId::proportional(12.0), Color32::from_rgb(0xF0, 0xC0, 0x60));
-                                continue;
-                            }
-                            let text = if key.is_empty() { label.clone() } else { format!("{label}  {key}") };
-                            let item = (id.clone(), text, String::new(), String::new(), *state as i8, true);
-                            if item_button(ui, &item, None) {
-                                clicked = Some(id.clone());
-                            }
-                        }
-                    });
-                });
-            });
-        if let Some(id) = clicked {
-            self.actions.push(format!("opt:{id}"));
-        }
+    /// Top and bottom of the band between the bars, measured from where the
+    /// bars were laid out (so the side panes keep the same 8 pt above and
+    /// below, whatever the bars' content).
+    fn band(&self, ctx: &egui::Context, screen: Rect) -> (f32, f32) {
+        let top = ctx.memory(|m| m.area_rect(egui::Id::new("top"))).map_or(TOP_H, |r| r.max.y);
+        let bottom = if self.review { screen.max.y } else {
+            ctx.memory(|m| m.area_rect(egui::Id::new("bottom"))).map_or(screen.max.y - BOT_H, |r| r.min.y)
+        };
+        (top + GUT, bottom - GUT)
     }
 
     /// The right edge of the free viewport (left of the column).
@@ -962,19 +948,24 @@ impl Ui {
     }
 
     fn right_column(&mut self, ctx: &egui::Context, screen: Rect) {
+        let delivery = self.delivery.clone();
+        let selection = self.selection.clone();
+        let sel_more = self.sel_more;
+        let mut cmds: Vec<String> = Vec::new();
+        let mut more_at: Option<Rect> = None;
+        let (top, bottom) = self.band(ctx, screen);
         let Some(col) = self.column.as_mut() else { return };
-        const W: f32 = 300.0;
+        const W: f32 = DOCK_W;
         const ROW: f32 = 22.0;
-        let top = ctx.memory(|m| m.area_rect(egui::Id::new("cluster"))).map_or(12.0, |r| r.max.y + 8.0);
-        let height = (screen.max.y - 12.0 - top).max(200.0);
+        let height = (bottom - top).max(200.0);
         let mut actions: Vec<String> = Vec::new();
         egui::Area::new(egui::Id::new("column"))
-            .fixed_pos(pos2(screen.max.x - 12.0 - W, top))
+            .fixed_pos(pos2(screen.max.x - GUT - W, top))
             .order(egui::Order::Foreground)
             .show(ctx, |ui| {
                 glass(Surface::Panel).inner_margin(Margin::same(10)).show(ui, |ui| {
-                    ui.set_width(W - 12.0);
-                    ui.set_height(height - 12.0);
+                    ui.set_width(W - 20.0);
+                    ui.set_height(height - 20.0);
                     ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
                     // Header: title, Unfiled chip.
                     ui.horizontal(|ui| {
@@ -982,11 +973,10 @@ impl Ui {
                         ui.add_space(8.0);
                         caption_plain(ui, "Project");
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if col.unfiled > 0 {
-                                let item = (String::new(), format!("{} unfiled", col.unfiled), "Select the unfiled items".to_owned(),
-                                            String::new(), -1, true);
-                                if amber_button(ui, &item.1) { actions.push("unfiled".into()); }
-                            }
+                            // What stands between the model and delivery (one home: here).
+                            let to_fix = delivery.as_ref().map_or(0, |d| d.2);
+                            if to_fix > 0 && amber_button(ui, &format!("{to_fix} to fix")) { cmds.push("deliver:problems".into()); }
+                            if col.unfiled > 0 && amber_button(ui, &format!("{} unfiled", col.unfiled)) { cmds.push("deliver:unfiled".into()); }
                         });
                     });
                     ui.add_space(6.0);
@@ -1131,7 +1121,34 @@ impl Ui {
                             ui.horizontal(|ui| { ui.add_space(8.0); ui.label(egui::RichText::new("Nothing selected").font(body()).color(FAINT)); });
                             return;
                         }
-                        ui.horizontal(|ui| { ui.add_space(8.0); ui.label(egui::RichText::new(&col.inspector_title).font(title()).color(INK)); });
+                        ui.horizontal(|ui| {
+                            ui.add_space(8.0);
+                            ui.label(egui::RichText::new(&col.inspector_title).font(title()).color(INK));
+                            if let Some((summary, _)) = &selection {
+                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                    ui.add_space(8.0);
+                                    ui.label(egui::RichText::new(summary).font(meta()).color(FAINT));
+                                });
+                            }
+                        });
+                        // The selection's actions: the selection bar's job, in its one home.
+                        if let Some((_, acts)) = &selection {
+                            ui.add_space(6.0);
+                            ui.horizontal_wrapped(|ui| {
+                                ui.add_space(8.0);
+                                ui.spacing_mut().item_spacing = vec2(6.0, 6.0);
+                                for (id, label, _key, enabled, more) in acts {
+                                    if !*more && *enabled && chip_button(ui, label) { cmds.push(format!("cmd:{id}")); }
+                                }
+                                if acts.iter().any(|a| a.4) {
+                                    let label = if sel_more { "More ▴" } else { "More ▾" };
+                                    let before = ui.cursor().min;
+                                    if chip_button(ui, label) {
+                                        more_at = Some(Rect::from_min_size(before, vec2(70.0, 24.0)));
+                                    }
+                                }
+                            });
+                        }
                         ui.add_space(4.0);
                         for (title, rows) in &col.inspector {
                             if title == "Actions" {
@@ -1202,33 +1219,42 @@ impl Ui {
         for a in actions {
             self.actions.push(format!("tree:{a}"));
         }
+        self.actions.extend(cmds);
+        if let Some(r) = more_at {
+            self.sel_more = !self.sel_more;
+            self.sel_more_anchor = r;
+        }
     }
 
+    /// The value field on the geometry it measures (Maxence 2026-11-22):
+    /// Python anchors it (middle of the rubber band, beside a pulled face);
+    /// it stays inside the free area. Typing lights it up; Enter applies.
     fn cursor_value(&self, ctx: &egui::Context, screen: Rect) {
         let Some((caption, value, typing, at)) = &self.cursor else { return };
-        if !screen.contains(*at) {
+        if !screen.contains(*at) || (value.is_empty() && !*typing) {
             return;
         }
-        // Below-right of the cursor; flipped when it would leave the view.
-        let size = vec2(150.0, 24.0);
-        let mut pos = *at + vec2(18.0, 20.0);
-        if pos.x + size.x > screen.max.x - 8.0 { pos.x = at.x - 18.0 - size.x; }
-        if pos.y + size.y > screen.max.y - 48.0 { pos.y = at.y - 20.0 - size.y; }
+        let left = if self.review { GUT } else { GUT + 72.0 + GUT };
+        let right = if self.review { screen.max.x - GUT } else { self.free_right(ctx, screen) - GUT };
+        let bottom = if self.review { screen.max.y - GUT } else { screen.max.y - BOT_H - GUT };
+        let size = vec2(170.0, 30.0);
+        let pos = pos2((at.x - size.x / 2.0).clamp(left, (right - size.x).max(left)),
+                       (at.y - size.y / 2.0).clamp(TOP_H + GUT, (bottom - size.y).max(TOP_H + GUT)));
         egui::Area::new(egui::Id::new("cursor_value"))
             .fixed_pos(pos)
             .order(egui::Order::Tooltip)
             .interactable(false)
             .show(ctx, |ui| {
                 let edge = if *typing { ACCENT } else { EDGE };
-                glass(Surface::Pill).stroke(Stroke::new(1.0_f32, edge)).corner_radius(CornerRadius::same(8))
-                    .inner_margin(Margin::symmetric(10, 4)).show(ui, |ui| {
+                glass(Surface::Raised).stroke(Stroke::new(1.0_f32, edge)).corner_radius(CornerRadius::same(R_CONTROL))
+                    .inner_margin(Margin::symmetric(10, 6)).show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing = vec2(6.0, 0.0);
+                        ui.spacing_mut().item_spacing = vec2(8.0, 0.0);
                         if !caption.is_empty() {
-                            ui.label(egui::RichText::new(caption).size(11.0).color(DIM));
+                            ui.label(egui::RichText::new(caption).font(meta()).color(FAINT));
                         }
-                        let shown = if value.is_empty() && *typing { "|" } else { value.as_str() };
-                        ui.label(egui::RichText::new(shown).size(12.5).monospace()
+                        let shown = if *typing { format!("{value}▏") } else { value.clone() };
+                        ui.label(egui::RichText::new(shown).font(strong(13.0))
                             .color(if *typing { Color32::WHITE } else { INK }));
                     });
                 });
@@ -1256,27 +1282,23 @@ impl Ui {
         raw.viewports.entry(egui::ViewportId::ROOT).or_default().native_pixels_per_point = Some(scale);
         let ctx = self.ctx.clone();
         let out = ctx.run(raw, |ctx| {
-            self.palette(ctx, screen);
-            self.status_line(ctx, screen);
-            self.selection_bar(ctx, screen);
-            self.top_right(ctx, screen);
-            self.options_strip(ctx);
-            self.right_column(ctx, screen);
-            self.measure_box(ctx, screen);
-            self.delivery_pill(ctx, screen);
-            self.tab_bar(ctx, screen);
-            self.project_bar(ctx);
-            if self.cursor.as_ref().is_some_and(|c| c.2) {
-                self.cursor_value(ctx, screen);
+            self.top_bar(ctx, screen);
+            if !self.review {
+                self.palette(ctx, screen);
+                self.right_column(ctx, screen);
+                self.bottom_bar(ctx, screen);
             }
+            self.cursor_value(ctx, screen);
+            self.bar_menu(ctx);
+            self.view_popup(ctx);
+            if !self.review { self.selection_more(ctx); }
         });
-        let shown = [("palette", !self.groups.is_empty()), ("selection", self.selection.is_some()),
-                     ("cluster", !self.cluster.is_empty()), ("view_menu", self.view_open),
-                     ("options", !self.options.is_empty()), ("column", self.column.is_some()),
-                     ("delivery", self.delivery.is_some()), ("tabs", !self.tabs.is_empty()),
-                     ("projects", self.projects.is_some()),
-                     ("sel_more", self.sel_more && self.selection.is_some()),
-                     ("sel_sub", self.sel_more && self.sel_sub.is_some()),
+        let work = !self.review;
+        let shown = [("top", true), ("palette", work && !self.groups.is_empty()),
+                     ("view_menu", self.view_open), ("menu", self.menu.is_some()),
+                     ("column", work && self.column.is_some()), ("bottom", work),
+                     ("sel_more", work && self.sel_more && self.selection.is_some()),
+                     ("sel_sub", work && self.sel_more && self.sel_sub.is_some()),
                      ("row_menu", self.column.as_ref().is_some_and(|c| c.row_menu.is_some()))];
         self.hit = shown.iter()
             .filter(|(_, on)| *on)
@@ -1407,6 +1429,23 @@ fn doc_tab(ui: &mut egui::Ui, name: &str, active: bool, dirty: bool) -> Option<b
         return Some(on_x && (active || resp.hovered()));
     }
     None
+}
+
+/// A bar button that opens a menu: label and ▾; returns its rect when clicked.
+fn menu_button(ui: &mut egui::Ui, label: &str, open: bool) -> Option<Rect> {
+    let g = ui.painter().layout_no_wrap(label.to_owned(), body(), INK);
+    let (rect, resp) = ui.allocate_exact_size(vec2(g.size().x + 36.0, 28.0), Sense::click());
+    let st = state_of(&resp, false, true);
+    paint_state(ui, rect, if open { State::Press } else { st }, R_CONTROL);
+    ui.painter().galley(pos2(rect.min.x + 10.0, rect.center().y - g.size().y / 2.0), g, INK);
+    ui.painter().text(pos2(rect.max.x - 12.0, rect.center().y), egui::Align2::CENTER_CENTER, "▾", meta(), FAINT);
+    resp.clicked().then_some(rect)
+}
+
+/// A hairline between groups in a bar.
+fn bar_divider(ui: &mut egui::Ui) {
+    let (r, _) = ui.allocate_exact_size(vec2(9.0, 28.0), Sense::hover());
+    ui.painter().vline(r.center().x, r.y_range().shrink(7.0), Stroke::new(1.0_f32, EDGE));
 }
 
 /// A small command chip (inspector next steps): neutral wash, 22 high.

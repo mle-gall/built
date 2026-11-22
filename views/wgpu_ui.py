@@ -96,6 +96,45 @@ def _drawn_icon(key: str) -> tuple[int, int, bytes]:
         p.drawLine(front.topLeft(), back.topLeft())
         p.drawLine(front.topRight(), back.topRight())
         p.drawLine(front.bottomRight(), back.bottomRight())
+    elif key == "section_cut":
+        # A box sliced by a plane: the near half kept, its cut face hatched,
+        # the far half gone (dashed), the plane drawn through it.
+        p.setPen(dashed)
+        p.drawLine(QPointF(25, 15), QPointF(37, 15))
+        p.drawLine(QPointF(37, 15), QPointF(37, 35))
+        p.drawLine(QPointF(37, 35), QPointF(25, 35))
+        p.setPen(Qt.NoPen)
+        p.setBrush(QColor(255, 255, 255, 90))
+        p.drawRect(QRectF(11, 15, 14, 20))
+        p.setBrush(Qt.NoBrush)
+        hatch = QPen(QColor(255, 255, 255, 190), 1.6)
+        p.setPen(hatch)
+        for k in range(0, 34, 6):
+            p.drawLine(QPointF(max(11, 11 + k - 20), min(35, 15 + k)), QPointF(min(25, 11 + k), max(15, 15 + k - 14)))
+        p.setPen(solid)
+        p.drawLine(QPointF(25, 15), QPointF(11, 15))
+        p.drawLine(QPointF(11, 15), QPointF(11, 35))
+        p.drawLine(QPointF(11, 35), QPointF(25, 35))
+        plane = QPen(QColor(255, 255, 255), 3.4, Qt.SolidLine, Qt.RoundCap)
+        p.setPen(plane)
+        p.drawLine(QPointF(25, 9), QPointF(25, 41))
+    elif key == "shadows":
+        # A sun, a box, and the shadow it casts on the ground.
+        p.setPen(Qt.NoPen)
+        p.setBrush(QColor(255, 255, 255, 110))
+        from PySide6.QtGui import QPolygonF
+        p.drawPolygon(QPolygonF([QPointF(24, 38), QPointF(36, 38), QPointF(44, 31), QPointF(32, 31)]))
+        p.setBrush(Qt.NoBrush)
+        p.setPen(solid)
+        p.drawRect(QRectF(22, 22, 14, 16))
+        p.drawEllipse(QPointF(12, 12), 4.5, 4.5)
+        ray = QPen(QColor(255, 255, 255), 2.2, Qt.SolidLine, Qt.RoundCap)
+        p.setPen(ray)
+        import math
+        for a in range(0, 360, 45):
+            r = math.radians(a)
+            p.drawLine(QPointF(12 + 7.5 * math.cos(r), 12 + 7.5 * math.sin(r)),
+                       QPointF(12 + 10 * math.cos(r), 12 + 10 * math.sin(r)))
     elif key == "hidden_geometry":
         # A face whose soft diagonal and smoothed edges show dashed.
         p.setPen(solid)
@@ -175,11 +214,11 @@ def _send_tools(view, win) -> None:
         if w is not None:
             w.setMaximumWidth(0)
     icons = []
-    for key in [*(k for row in NAV for k in row), "four_views", "shadows", "section_cuts", "view_iso", "view_top", "view_front",
+    for key in [*(k for row in NAV for k in row), "four_views", "view_iso", "view_top", "view_front",
                 "view_right", "view_left", "view_back", "view_bottom"]:
         w, h, rgba = _icon_rgba(key)
         icons.append((key, w, h, rgba))
-    for key in ("xray", "back_edges", "hidden_geometry"):
+    for key in ("xray", "back_edges", "hidden_geometry", "section_cut", "shadows"):
         icons.append((key, *_drawn_icon(key)))
     view.renderer.ui_set_icons(icons)
     view._ui_tools_sent = True
@@ -187,8 +226,8 @@ def _send_tools(view, win) -> None:
 
 #: Window buttons' room at the top left (mac_glass: 14 + three buttons).
 LIGHTS_ROOM = 86.0
-#: The strip along the top that moves the window, as a title bar would.
-DRAG_STRIP = 28.0
+#: The docked top bar (ui.rs TOP_H): its empty parts move the window.
+TOP_H = 40.0
 
 
 def _merge_title_row(win) -> None:
@@ -214,7 +253,7 @@ def _merge_title_row(win) -> None:
             return
         view = getattr(getattr(win, "_doc", None), "stand_in", None)
         top = view.mapTo(win, QPoint(0, 0)).y() if view is not None else 0
-        chrome._glass.place_lights(top + 12 + 18)     # the top row's centre
+        chrome._glass.place_lights(top + TOP_H / 2)     # the top bar's centre
     chrome.fit_lights = fit
     QTimer.singleShot(0, fit)
     QTimer.singleShot(400, fit)
@@ -320,9 +359,16 @@ def before_frame(view) -> None:
         or next((k for k, a in win._tool_actions.items() if a.isChecked()), "")
     view.renderer.ui_set_active(active)
     bar = win.statusBar()
-    text = (bar.currentMessage() or getattr(bar, "_base", "") or "") if bar is not None else ""
-    name, _, hint = text.partition(" — ")
+    base = (getattr(bar, "_base", "") or bar.currentMessage() or "") if bar is not None else ""
+    name, _, hint = base.partition(" — ")
+    timer = getattr(bar, "_timer", None)
+    if timer is not None and timer.isActive():
+        hint = getattr(bar, "_msg", None).text() if getattr(bar, "_msg", None) is not None else hint
     view.renderer.ui_set_status(name, hint)
+    if not getattr(view, "_ui_units_sent", False):
+        from core import units
+        view.renderer.ui_set_units(units.length_suffix(units.model_unit()).strip() or units.model_unit())
+        view._ui_units_sent = True
     _cursor_value(view, win)
     _selection(view, win, active)
     _cluster(view, win)
@@ -414,7 +460,7 @@ def _cluster(view, win) -> None:
                tipped(item(getattr(win, "_act_style_back_edges", None), label="Back edges", icon="back_edges"), "Back edges"),
                tipped(item(getattr(win, "_act_hidden_geometry", None), label="Hidden geometry", icon="hidden_geometry"), "Hidden geometry"),
                tipped(item(getattr(win, "_act_shadows", None), icon="shadows"), "Shadows"),
-               tipped(item(getattr(win, "_act_show_scuts", None), label="Cut", icon="section_cuts"), "Section cuts")]
+               tipped(item(getattr(win, "_act_show_scuts", None), label="Cut", icon="section_cut"), "Section cuts")]
     nav = []
     for row in NAV:
         items = []
@@ -449,18 +495,37 @@ def _cluster(view, win) -> None:
 
 
 def _cursor_value(view, win) -> None:
-    """The measurements box, mirrored: fixed at the bottom right, echoed
-    at the cursor while typing (council 2026-11-22). The Qt labels stay
-    "visible" for the window's own logic but take no room."""
+    """The value field on the geometry it measures (Maxence 2026-11-22):
+    between the operation's first point and the cursor, a little above
+    the rubber band; near the cursor while typing before the first point.
+    Hidden when the tool takes no value or nothing is under way."""
     label = getattr(win, "_vcb_name", None)
     value = getattr(win, "_vcb_value", None)
+    off = ("", "", False, 0.0, 0.0)
     if label is None or value is None or label.isHidden():
-        view.renderer.ui_set_cursor_value("", "", False, 0.0, 0.0)
+        view.renderer.ui_set_cursor_value(*off)
         return
     buffer = str(getattr(win, "_vcb_buffer", "") or "")
     pos = getattr(view, "_cursor_pos", None)
-    x, y = (float(pos.x()), float(pos.y())) if pos is not None else (-1.0, -1.0)
-    view.renderer.ui_set_cursor_value(label.text(), buffer or value.text(), bool(buffer), x, y)
+    tool = getattr(view.source_viewport, "active_tool", None)
+    start = (getattr(view.tools, "start_point", None) or getattr(tool, "start_point", None)
+             or getattr(tool, "grab", None))
+    anchor = None
+    if start is not None and pos is not None:
+        try:
+            q = view._world_to_pixel(start)
+        except Exception:
+            q = None
+        if q is not None:
+            qx, qy = (q.x(), q.y()) if hasattr(q, "x") else (q[0], q[1])
+            anchor = ((qx + pos.x()) / 2.0, (qy + pos.y()) / 2.0 - 26.0)
+    if anchor is None and buffer and pos is not None:
+        anchor = (pos.x(), pos.y() - 40.0)
+    if anchor is None:
+        view.renderer.ui_set_cursor_value(*off)
+        return
+    view.renderer.ui_set_cursor_value(label.text(), buffer or value.text(), bool(buffer),
+                                      float(anchor[0]), float(anchor[1]))
 
 
 def _summary(sel) -> str:
@@ -756,7 +821,7 @@ def _inspector(view, win) -> None:
         sections = [("Where", rows), ("What it needs", needs)]
         if status_acts:
             sections.append(("Actions", status_acts))
-        sections += [("Actions", acts), ("Export details", export)]
+        sections.append(("Export details", export))
         view.renderer.ui_set_inspector(title, sections)
         return
     kinds = Counter()
@@ -779,7 +844,6 @@ def _inspector(view, win) -> None:
     if missing:
         sections.append(("Status", [("Missing on", f"{missing} items")]))
         sections.append(("Actions", [("status:" + v, "All " + v.lower()) for v in STATUS_CHOICES]))
-    sections.append(("Actions", acts))
     view.renderer.ui_set_inspector(f"{len(sel)} selected", sections)
 
 
@@ -856,6 +920,8 @@ def _run(win, actions) -> None:
         return
     for action in actions:
         kind, _, arg = action.partition(":")
+        if kind == "review":
+            continue
         if kind == "tool":
             view = getattr(getattr(win, "_doc", None), "stand_in", None)
             run = getattr(view, "_ui_palette_runs", {}).get(arg)
@@ -880,6 +946,14 @@ def _run(win, actions) -> None:
                 win._show_model()
             elif arg == "sheet":
                 win._to_sheets()
+            elif arg in ("scene:prev", "scene:next"):
+                views = getattr(view, "_ui_scene_views", [])
+                row = getattr(getattr(win, "_scene_tabs", None), "tabs", None)
+                marked = row.marked_view() if row is not None else None
+                if views:
+                    i = views.index(marked) if marked in views else -1
+                    i = (i + (1 if arg == "scene:next" else -1)) % len(views)
+                    win.tray.scenes.show_view(views[i])
             elif arg.startswith("scene:"):
                 views = getattr(view, "_ui_scene_views", [])
                 i = int(arg.partition(":")[2])
@@ -952,9 +1026,9 @@ _BUTTONS = {Qt.LeftButton: 1, Qt.RightButton: 2, Qt.MiddleButton: 3}
 
 def title_double_click(view, event) -> bool:
     """A double-click on the top strip zooms the window, as on a title bar."""
-    if not getattr(view, "_ui_attached", False) or event.position().y() > DRAG_STRIP:
+    if not getattr(view, "_ui_attached", False):
         return False
-    if view.renderer.ui_pointer("move", float(event.position().x()), float(event.position().y()), 0, 0):
+    if not view.renderer.ui_top_empty(float(event.position().x()), float(event.position().y())):
         return False
     chrome = getattr(view.window(), "_mac_chrome", None)
     glass = getattr(chrome, "_glass", None)
@@ -986,8 +1060,8 @@ def pointer(view, kind: str, event=None) -> bool:
         return False
     if event is None:
         taken = view.renderer.ui_pointer(kind, -1.0, -1.0, 0, 0)
-    elif kind == "press" and event.position().y() <= DRAG_STRIP and event.button() == Qt.LeftButton \
-            and not view.renderer.ui_pointer("move", float(event.position().x()), float(event.position().y()), 0, 0):
+    elif kind == "press" and event.button() == Qt.LeftButton \
+            and view.renderer.ui_top_empty(float(event.position().x()), float(event.position().y())):
         # The empty top strip is the window's title bar: drag moves it.
         handle = view.window().windowHandle()
         if handle is not None:
