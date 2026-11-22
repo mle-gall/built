@@ -1297,7 +1297,9 @@ impl Ui {
                             }
                         }
                     }
-                    let tree_h = ((col.nodes.len().max(1) as f32) * ROW + 4.0).min(ui.available_height() * 0.6).max(66.0);
+                    // A dock mode with nothing to inspect gives the whole dock to its list.
+                    let room = if !col.mode.is_empty() && col.inspector.is_empty() { ui.available_height() - 44.0 } else { ui.available_height() * 0.6 };
+                    let tree_h = ((col.nodes.len().max(1) as f32) * ROW + 4.0).min(room).max(66.0);
                     if col.nodes.is_empty() {
                         ui.add_space(6.0);
                         ui.horizontal_wrapped(|ui| {
@@ -1390,10 +1392,12 @@ impl Ui {
                                 let mut tx = x0 + 16.0;
                                 if n.row == 5 {
                                     let sw = Rect::from_center_size(pos2(tx + 8.0, cy), vec2(16.0, 16.0));
-                                    if let Some(tex) = self_icons.get(&n.icon) {
+                                    if let Some(tex) = self_icons.get(&n.icon).filter(|_| !n.icon.is_empty()) {
                                         egui::Image::new(tex).corner_radius(CornerRadius::same(3)).paint_at(ui, sw);
                                     } else if let Some(c) = parse_hex(&n.badge) {
                                         ui.painter().rect_filled(sw, CornerRadius::same(3), c);
+                                    } else {
+                                        ui.painter().text(sw.center(), egui::Align2::CENTER_CENTER, "◇", meta(), DIM);
                                     }
                                     ui.painter().rect_stroke(sw, CornerRadius::same(3), Stroke::new(1.0_f32, EDGE), egui::StrokeKind::Inside);
                                     if n.active {
@@ -1494,7 +1498,7 @@ impl Ui {
                                     let verb = if n.row == 0 { "isolate" } else { "open" };
                                     actions.push(format!("{verb}\u{1f}{}", n.key));
                                 }
-                                if resp.secondary_clicked() && n.row != 4 {
+                                if resp.secondary_clicked() && n.row != 4 && (n.row != 5 || n.key.starts_with("cm:")) {
                                     col.row_menu = resp.interact_pointer_pos().map(|p| (n.key.clone(), n.row, p));
                                 }
                             }
@@ -1592,7 +1596,9 @@ impl Ui {
             let item_menu: &[(&str, &str)] = &[("item", "Select"), ("open", "Open for editing"), ("rename", "Rename"),
                 ("-", ""), ("hideitem", "Hide"), ("lockitem", "Lock / unlock"), ("instances", "Select instances"),
                 ("unique", "Make unique"), ("zoom", "Zoom to"), ("-", ""), ("fileto", "File to…")];
-            let menu = if row == 0 { node_menu } else { item_menu };
+            let comp_menu: &[(&str, &str)] = &[("cplace", "Place a copy"), ("cselect", "Select instances"),
+                ("creplace", "Replace selection with this"), ("-", ""), ("ckeep", "Keep in file"), ("crename", "Rename…")];
+            let menu = if row == 0 { node_menu } else if row == 5 { comp_menu } else { item_menu };
             let resp = egui::Area::new(egui::Id::new("row_menu"))
                 .fixed_pos(at + vec2(4.0, 4.0))
                 .order(egui::Order::Tooltip)

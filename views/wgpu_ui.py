@@ -1059,6 +1059,18 @@ def _library_rows(view, win, exp, flt):
                      for i, it in enumerate(cat.get("items", []))]
             if items:
                 cats.append((cat["id"], tray.MaterialsPanel.CATEGORY_NAMES.get(cat["id"], cat["id"]), items))
+    # Components: the ones in the model (most copies first), then the
+    # bundled starters and 2D people. A row places it; its menu selects the
+    # copies, swaps the selection for it or keeps it in the file.
+    comps = _components_in_model(view, win)
+    cats.insert(1, ("compmodel", "Components in model",
+                    [(f"cm:{i}", name or "Component", "", None, len(gs)) for i, (name, _f, gs, _t) in enumerate(comps)]))
+    starters = []
+    res = _components_dir()
+    for key, entry in _starter_components().items():
+        starters.append((key, entry["name"], "", str(res / ("thumbs/%s.png" % entry["key"] if key.startswith("sc:")
+                                                            else "%s.png" % entry["key"]))))
+    cats.insert(2, ("components", "Components", starters))
     view._ui_library = {i: (cid, entry) for cid, _t, items in cats for i, entry in enumerate(items)}
     for cid, title, items in cats:
         if words:
@@ -1066,13 +1078,100 @@ def _library_rows(view, win, exp, flt):
             if not items:
                 continue
         ck = f"c:{cid}"
-        open_ = bool(words) or (ck in exp) or (cid == "inmodel" and f"-{ck}" not in exp)
+        open_ = bool(words) or (ck in exp) or (cid in ("inmodel", "compmodel") and f"-{ck}" not in exp)
         rows.append(([ck, title, "", "", ""], [0, len(items), 0, 0, 0, -1, -1, int(bool(items)), int(open_), 0]))
         if open_:
-            for key, name, hexc, path in items[:ROW_CAP]:
+            for key, name, hexc, path, *n in items[:ROW_CAP]:
                 icon = _tex_icon(view, path) if path else ""
-                rows.append(([key, name, "", hexc, icon], [1, 0, 0, int(name == cur), 5, -1, -1, 0, 0, 0]))
+                active = int(name == cur and not key.startswith(("cm:", "sc:", "pp:")))
+                rows.append(([key, name, "", hexc, icon], [1, n[0] if n else 0, 0, active, 5, -1, -1, 0, 0, 0]))
     return rows
+
+
+def _components_dir():
+    from core.paths import app_root
+    return app_root() / "resources" / "components"
+
+
+def _starter_components():
+    """The bundled set: ``sc:<key>`` 3D starters, ``pp:<key>`` 2D people."""
+    import json
+    res = _components_dir()
+    out = {}
+    if (res / "components.json").exists():
+        for e in json.loads((res / "components.json").read_text(encoding="utf-8")):
+            out["sc:" + e["key"]] = e
+    if (res / "people.json").exists():
+        for e in json.loads((res / "people.json").read_text(encoding="utf-8")):
+            out["pp:" + e["key"]] = e
+    return out
+
+
+def _components_in_model(view, win):
+    """``[(name, faces, groups, kept template)]`` from the Components tray's
+    own listing, kept until the model changes."""
+    scene = win.viewport.scene
+    sig = (id(scene), scene.content_version)
+    cache = getattr(view, "_ui_comp_cache", None)
+    if cache is not None and cache[0] == sig:
+        return cache[1]
+    panel = getattr(getattr(win, "tray", None), "components", None)
+    rows = []
+    if panel is not None:
+        gen = panel._components_in_model()
+        try:
+            while True:
+                next(gen)
+        except StopIteration as stop:
+            rows = stop.value or []
+    view._ui_comp_cache = (sig, rows)
+    return rows
+
+
+def _library_pick(win, view, key) -> None:
+    """A Library row: paint with a material, place a component."""
+    from core.i18n import tr
+    kind, _, rest = key.partition(":")
+    if kind == "sc":
+        e = _starter_components().get(key)
+        if e:
+            win._on_insert_component(e["key"], tr(e["name"]))
+    elif kind == "pp":
+        e = _starter_components().get(key)
+        if e:
+            win._on_insert_person_2d(f"{e['key']}.png", e["height"], e["name"])
+    elif kind == "cm":
+        _component_verb(win, view, "cplace", key)
+    else:
+        _paint_with(win, key)
+
+
+def _component_verb(win, view, verb, key) -> None:
+    from core.group import Group
+    from core.kept_components import make_template, place_copy
+    comps = (getattr(view, "_ui_comp_cache", None) or (None, []))[1]
+    try:
+        _name, _f, groups, kept = comps[int(key.partition(":")[2])]
+    except (ValueError, IndexError):
+        return
+    definition = kept if kept is not None else (groups[0] if groups else None)
+    if definition is None:
+        return
+    if verb == "cplace":
+        win._start_place(place_copy(kept if kept is not None else make_template(definition)))
+    elif verb == "cselect":
+        _select(win, groups)
+    elif verb == "creplace":
+        swap = [g for g in win.viewport.scene.selection
+                if isinstance(g, Group) and g.is_component() and g.mesh is not definition.mesh]
+        if swap:
+            win.replace_selection_with(definition)
+        else:
+            win.viewport.flash_status("Select copies of another component first")
+    elif verb == "ckeep":
+        win.keep_component(definition, kept is None)
+    elif verb == "crename":
+        win.rename_component(definition)
 
 
 def _paint_with(win, key) -> None:
@@ -1252,7 +1351,7 @@ def _tree_action(win, view, action) -> None:
 
     try:
         if verb == "toggle":
-            if rk.startswith(("r:", "c:inmodel")):
+            if rk.startswith(("r:", "c:inmodel", "c:compmodel")):
                 # Rules start open when short: remember a collapse explicitly.
                 if rk in exp:
                     exp.discard(rk)
@@ -1265,8 +1364,11 @@ def _tree_action(win, view, action) -> None:
             else:
                 exp.symmetric_difference_update({rk})
             rebuild()
+        elif verb in ("cplace", "cselect", "creplace", "ckeep", "crename"):
+            _component_verb(win, view, verb, rk)
+            rebuild()
         elif verb == "mat":
-            _paint_with(win, rk)
+            _library_pick(win, view, rk)
             view._ui_mat_focus = rk
             view._ui_insp_sig = None
             rebuild()
@@ -1464,6 +1566,20 @@ def _tree_action(win, view, action) -> None:
                 else:
                     recipe.pop(field, None)
                 update_node(vp, arg, recipe=recipe)
+            elif what == "segments":
+                from core.curve_segments import MAX_SEGMENTS, ResegmentCurveCommand
+                sel = list(scene.selection)
+                shape = _curve_of(scene, sel)
+                n = int(extra.strip())
+                if shape is None or not shape.flat:
+                    raise ValueError("This curve cannot be rebuilt")
+                if not shape.minimum <= n <= MAX_SEGMENTS:
+                    raise ValueError(f"Between {shape.minimum} and {MAX_SEGMENTS}")
+                if n != shape.segments:
+                    vp.history.execute(ResegmentCurveCommand(sel[0], n))
+                    if getattr(vp.history, "last_rejected", None):
+                        raise ValueError("This curve cannot be rebuilt")
+                    vp.update()
             elif what == "groupname":
                 g = _group_by_uid(win, arg)
                 if g is not None:
@@ -1631,11 +1747,32 @@ def _inspector(view, win) -> None:
         loose = C2(type(e).__name__ for e in sel if not isinstance(e, Group))
         rows += [({"Face": "Faces", "Edge": "Edges"}.get(t, t), str(n)) for t, n in loose.most_common()]
     sections = [("By node" if groups else "Geometry", rows)]
+    shape = None if groups else _curve_of(scene, sel)
+    if shape is not None:
+        # «Sides» for a closed shape, as the Circle and Polygon tools count
+        # them; «Segments» for an arc. Only a flat curve is rebuilt.
+        label = "Sides" if shape.closed else "Segments"
+        value = _edit("segments", str(shape.segments)) if shape.flat else f"{shape.segments} (not flat)"
+        sections.insert(0, ("Circle" if shape.closed else "Arc", [(label, value)]))
     missing = sum(1 for g in groups if (g.ifc or {}).get("class") and not structure._has_status(g.ifc or {}))
     if missing:
         sections.append(("Status", [("Missing on", f"{missing} items")]))
         sections.append(("Actions", [("status:" + v, "All " + v.lower()) for v in STATUS_CHOICES]))
     view.renderer.ui_set_inspector(f"{len(sel)} selected", sections)
+
+
+def _curve_of(scene, sel):
+    """One curve selected (all its edges, one curve id) that reads back as a
+    regular circle, arc or polygon; else None."""
+    from core.curve_segments import read_curve
+    from core.mesh import Edge
+    if not sel or len(sel) > 4096:
+        return None
+    ids = {getattr(e, "curve", None) if isinstance(e, Edge) else None for e in sel}
+    if len(ids) != 1 or None in ids:
+        return None
+    shape = read_curve(scene.mesh, sel[0])
+    return shape if shape is not None and len(sel) == shape.segments else None
 
 
 #: The IFC Status values offered as one click (the rest stay in the BIM panel).
