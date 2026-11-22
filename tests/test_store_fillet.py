@@ -205,6 +205,7 @@ def test_tool_uses_native_preview_and_one_snapshot_command(vertices, monkeypatch
     assert tool.on_value(vp, .15)
     assert vp.history.last_error is None
     assert len(vp.history.undo_stack) == 1
+    assert vp.history.undo_stack[-1].change.created["face"]
     after = sm.capture_state()
     assert after != before
     assert vp.history.undo() and sm.capture_state() == before

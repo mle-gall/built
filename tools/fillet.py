@@ -482,8 +482,11 @@ class FilletTool(Tool):
         mesh = viewport.scene.mesh
         n = len(self.edges)
         r = FilletTool.radius
-        cmd = SnapshotMutation(lambda scene: apply_fillet(scene.mesh, plan),
-                               mesh=mesh)
+        command = SnapshotMutation
+        if plan._store_plan is not None:
+            from core.store_face_edit import StoreFaceMutation
+            command = StoreFaceMutation
+        cmd = command(lambda scene: apply_fillet(scene.mesh, plan), mesh=mesh)
         viewport.history.execute(cmd)
         viewport.scene.clear_selection()
         self._reset()
