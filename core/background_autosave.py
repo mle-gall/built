@@ -154,7 +154,7 @@ class BackgroundAutosave(QObject):
             prepared = done.value
             self.steps = None
             slot = self.job['slot']
-            stage = slot.with_name('.' + slot.name + '.' + uuid.uuid4().hex + '.pending')
+            stage = slot.with_name('.' + slot.name + '.' + uuid.uuid4().hex + '.pending' + slot.suffix)
             results = self.results
             self.writing = True
             # The worker captures only detached data and its staging path.
