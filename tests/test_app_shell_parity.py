@@ -300,3 +300,21 @@ def test_mainwindow_members_are_borrowed_on_demand(host):
     assert "_on_select_all" in BORROWED
     with pytest.raises(AttributeError):
         host.window.no_such_member_anywhere  # noqa: B018
+
+
+def test_background_autosave_writes_a_recovery_slot(host, tmp_path):
+    """MainWindow's auto-save tick and BackgroundAutosave run on the shell's
+    window: its 16 ms slices are Qt timers the loop's pump delivers."""
+    import time
+    from app_shell import qt_host
+    from core import autosave
+    src = _copy(tmp_path)
+    host.open_path(src)
+    _draw(host)
+    host.window._setup_autosave()                      # armed as at start
+    host.window._on_autosave_tick()
+    deadline = time.monotonic() + 20
+    while autosave.pending(src) is None and time.monotonic() < deadline:
+        qt_host.pump()
+        time.sleep(0.02)
+    assert autosave.pending(src) is not None
