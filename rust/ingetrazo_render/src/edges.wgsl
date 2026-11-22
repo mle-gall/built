@@ -55,8 +55,11 @@ struct EdgePlacement { eye: vec4f, transform: mat4x4f }
  }
  // Clip at the near plane before dividing by w; crossing edges must not
  // expand across the screen or flip their normal behind the camera.
- if a.z < 0. && b.z >= 0. { a = mix(a,b,-a.z/(b.z-a.z)); }
- if b.z < 0. && a.z >= 0. { b = mix(b,a,-b.z/(a.z-b.z)); }
+ // Reverse-Z: the near plane is z = w, so w - z is the signed distance
+ // in front of it.
+ let na = a.w-a.z; let nb = b.w-b.z;
+ if na < 0. && nb >= 0. { a = mix(a,b,-na/(nb-na)); }
+ if nb < 0. && na >= 0. { b = mix(b,a,-nb/(na-nb)); }
  let direction = (b.xy/max(b.w,1e-6)-a.xy/max(a.w,1e-6))*camera.size.xy;
  // Reject zero-area edges after clipping. A nonzero subpixel threshold
  // changes coverage, including at the default width; retain those edges.

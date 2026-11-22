@@ -112,9 +112,9 @@ impl Lines {
                 depth_stencil: Some(wgpu::DepthStencilState {
                     format: wgpu::TextureFormat::Depth32Float,
                     depth_write_enabled: false,
-                    depth_compare: wgpu::CompareFunction::LessEqual,
+                    depth_compare: crate::depth::compare(wgpu::CompareFunction::LessEqual),
                     stencil: Default::default(),
-                    bias: wgpu::DepthBiasState { constant: -2, slope_scale: -1., clamp: 0. },
+                    bias: crate::depth::bias(wgpu::DepthBiasState { constant: -2, slope_scale: -1., clamp: 0. }),
                 }),
                 multisample: wgpu::MultisampleState { count: samples, ..Default::default() },
                 multiview: None,

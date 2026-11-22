@@ -496,6 +496,7 @@ class WgpuView(QWidget):
             self._mirror_cursor()
         # R-look 3c: compute each camera matrix once, after updating aspect.
         self.camera.aspect = self.width()/max(1, self.height())
+        self._fit_depth()
         view = self.camera.view_matrix()
         projection = self.camera.projection_matrix()
         if self.source_viewport is not None:
@@ -543,11 +544,15 @@ class WgpuView(QWidget):
         if physical != getattr(self, '_physical_size', None):
             self.renderer.resize(*physical)
             self._physical_size = physical
+        # Reverse-Z reaches to infinity unless a far clip was set by hand
+        # (Camera Settings ▸ Clipping): only then does the renderer keep
+        # the projection's far plane.
+        far_clip = getattr(self.camera, 'clip_far', None) is not None
         camera_key = (tuple(view.data()), tuple(projection.data()))
-        if camera_key != self._last_camera:
-            self._last_camera = camera_key
+        if (camera_key, far_clip) != self._last_camera:
+            self._last_camera = (camera_key, far_clip)
             self._settle_timer.start(80)
-        self.renderer.set_camera(*camera_key)
+        self.renderer.set_camera(*camera_key, **({'far_clip': True} if far_clip else {}))
         # Face-me figures turn to the first view's camera: their rows are
         # the document's, one set for every view.
         if self._shared is self and getattr(self, '_billboards', None) is not None:
@@ -612,6 +617,29 @@ class WgpuView(QWidget):
         wall = (time.perf_counter()-start)*1000
         self.frameReady.emit(cpu, gpu, wall)
         return cpu, gpu, wall
+
+    def _fit_depth(self):
+        """The GL view's depth fit (``Viewport._fit_scene_depth``) on the
+        shown placements' box. Reverse-Z already keeps millimetres apart
+        at any distance here, so this only keeps the shared camera's planes
+        the same in both views; the same refusals apply, and a live mesh
+        tool preview (the renderer's preview mesh) refuses it too."""
+        camera = self.camera
+        camera._depth_range = None
+        source = self.source_viewport
+        packed = self.packed
+        if (source is None or packed is None or not len(packed.instances)
+                or self.tools.mode == 'mesh' or getattr(self, 'preview_faces', None)):
+            return
+        from views.viewport import Viewport
+        try:
+            refused = Viewport._depth_fit_refused(source)
+        except Exception:
+            return
+        lo, hi = np.asarray(packed.world_bounds, float)
+        if refused or not (hi >= lo).all() or (hi == lo).all():
+            return
+        camera.fit_depth_range(lo[None], hi[None])
 
     def _paint_section_widgets(self, image):
         """R3c-2a: reuse GL's frame, brackets and symbols at Metal's size."""
@@ -696,7 +724,10 @@ class WgpuView(QWidget):
             self.renderer.set_section_geometry(data)
             pixels = bytes(self.renderer.render_image(
                 width_px, height_px, tuple(view.data()), tuple(projection.data()), payload,
-                rows.view(np.uint8).reshape(-1)))
+                rows.view(np.uint8).reshape(-1),
+                # A far clip set by hand; otherwise reverse-Z reaches to
+                # infinity (stand-in renderers need not know the flag).
+                **({'far_clip': True} if getattr(camera, 'clip_far', None) is not None else {})))
         finally:
             if billboard_ids:
                 self.renderer.set_instance_world(billboard_ids, resident_world.reshape(-1))

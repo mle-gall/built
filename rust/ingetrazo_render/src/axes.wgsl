@@ -17,8 +17,11 @@ struct Out { @builtin(position) position: vec4f, @location(0) color: vec3f }
  let origin = axes.frame[3].xyz;
  var a = camera.vp * vec4f(origin + direction*select(t0,t1,end),1.);
  var b = camera.vp * vec4f(origin + direction*select(t1,t0,end),1.);
- if a.z < 0. && b.z >= 0. { a = mix(a,b,-a.z/(b.z-a.z)); }
- if b.z < 0. && a.z >= 0. { b = mix(b,a,-b.z/(a.z-b.z)); }
+ // Reverse-Z: the near plane is z = w, so w - z is the signed distance
+ // in front of it.
+ let na = a.w-a.z; let nb = b.w-b.z;
+ if na < 0. && nb >= 0. { a = mix(a,b,-na/(nb-na)); }
+ if nb < 0. && na >= 0. { b = mix(b,a,-nb/(na-nb)); }
  let delta = (b.xy/max(b.w,1e-6)-a.xy/max(a.w,1e-6))*camera.size.xy;
  var out: Out;
  if length(delta) == 0. { out.position = vec4f(0.,0.,2.,1.); return out; }

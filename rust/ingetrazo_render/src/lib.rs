@@ -13,6 +13,7 @@ mod style;
 mod background;
 mod antialias;
 mod depth_resolve;
+mod depth;
 mod edges;
 mod faces;
 mod xray;
@@ -419,9 +420,9 @@ impl Renderer {
                 depth_stencil: Some(wgpu::DepthStencilState {
                     format: wgpu::TextureFormat::Depth32Float,
                     depth_write_enabled: write,
-                    depth_compare: compare,
+                    depth_compare: depth::compare(compare),
                     stencil: Default::default(),
-                    bias,
+                    bias: depth::bias(bias),
                 }),
                 multisample: wgpu::MultisampleState {
                     count: samples,
@@ -431,12 +432,18 @@ impl Renderer {
                 cache: None,
             })
         };
+        // Faces back off by their own slope, as GL's polygon-offset fill and
+        // the antialiased pass do: with reverse-Z the edges' constant bias is
+        // a few float steps at the face's own depth, far less than the old
+        // fixed-point-like step near 1, and alone it lost edge pixels to a
+        // face sloping away under the line's half-pixel width.
+        let face_bias = wgpu::DepthBiasState { constant: 1, slope_scale: 1., clamp: 0. };
         let draw = pipeline(
             wgpu::PrimitiveTopology::TriangleList,
             "fs",
             wgpu::CompareFunction::Less,
             true,
-            Default::default(),
+            face_bias,
             1,
         );
         // Keep the same explicit layouts so resident draw groups can be reused.
@@ -456,7 +463,7 @@ impl Renderer {
                     ids.then_some(wgpu::ColorTargetState { format: wgpu::TextureFormat::R32Uint, blend: None, write_mask: wgpu::ColorWrites::ALL })] }),
             primitive: Default::default(),
             depth_stencil: Some(wgpu::DepthStencilState { format: wgpu::TextureFormat::Depth32Float,
-                depth_write_enabled: true, depth_compare: wgpu::CompareFunction::Less, stencil: Default::default(), bias: Default::default() }),
+                depth_write_enabled: true, depth_compare: depth::compare(wgpu::CompareFunction::Less), stencil: Default::default(), bias: depth::bias(face_bias) }),
             multisample: Default::default(), multiview: None, cache: None,
         });
         let draw_plain = face_variant(true, true);
@@ -531,7 +538,7 @@ impl Renderer {
             fragment: Some(wgpu::FragmentState { module: &vs, entry_point: Some("edge_fs"), compilation_options: Default::default(),
                 targets: &[Some(wgpu::ColorTargetState { format, blend: Some(wgpu::BlendState::ALPHA_BLENDING), write_mask: wgpu::ColorWrites::ALL }), Some(wgpu::ColorTargetState { format: wgpu::TextureFormat::R32Uint, blend: None, write_mask: wgpu::ColorWrites::ALL })] }),
             primitive: Default::default(),
-            depth_stencil: Some(wgpu::DepthStencilState { format: wgpu::TextureFormat::Depth32Float, depth_write_enabled: false, depth_compare: wgpu::CompareFunction::LessEqual, stencil: Default::default(), bias }),
+            depth_stencil: Some(wgpu::DepthStencilState { format: wgpu::TextureFormat::Depth32Float, depth_write_enabled: false, depth_compare: depth::compare(wgpu::CompareFunction::LessEqual), stencil: Default::default(), bias: depth::bias(bias) }),
             multisample: Default::default(), multiview: None, cache: None,
         });
         let mut aa = antialias::Antialias::new(&device, format, &look.buffer, w, h);
@@ -1345,9 +1352,10 @@ impl Renderer {
     }
     /// Render with resident geometry and textures into isolated sheet targets.
     /// Surface configuration and interactive attachments are never replaced.
-    #[pyo3(signature = (width, height, view, projection, style, instances=None))]
+    #[pyo3(signature = (width, height, view, projection, style, instances=None, far_clip=false))]
     fn render_image(&mut self, width: u32, height: u32, view: Vec<f32>,
-                    projection: Vec<f32>, style: &Bound<'_, PyAny>, instances: Option<PyReadonlyArray1<'_, u8>>) -> PyResult<Vec<u8>> {
+                    projection: Vec<f32>, style: &Bound<'_, PyAny>, instances: Option<PyReadonlyArray1<'_, u8>>,
+                    far_clip: bool) -> PyResult<Vec<u8>> {
         if width == 0 || height == 0 || width > self.device.limits().max_texture_dimension_2d
             || height > self.device.limits().max_texture_dimension_2d {
             return Err(PyValueError::new_err("invalid offscreen dimensions"));
@@ -1399,7 +1407,7 @@ impl Renderer {
         let lines_enabled = std::mem::replace(&mut self.lines.enabled, false);
         let result = (|| {
             self.set_style(style)?;
-            self.set_camera(view, projection)?;
+            self.set_camera(view, projection, far_clip)?;
             self.capture_next = true;
             self.render(false)?;
             Ok(self.captured.take().unwrap_or_default())
@@ -1433,18 +1441,20 @@ impl Renderer {
         self.ids_dirty |= self.edges != enabled;
         self.edges = enabled;
     }
-    fn set_camera(&mut self, view: Vec<f32>, proj: Vec<f32>) -> PyResult<()> {
+    /// ``far_clip``: keep the projection's far plane (a far clip set by
+    /// hand); otherwise a perspective view reaches to infinity, which costs
+    /// no precision with reverse-Z (see ``depth``).
+    #[pyo3(signature = (view, proj, far_clip=false))]
+    fn set_camera(&mut self, view: Vec<f32>, proj: Vec<f32>, far_clip: bool) -> PyResult<()> {
         let v: [f32; 16] = view
             .try_into()
             .map_err(|_| PyValueError::new_err("view needs 16 floats"))?;
         let p: [f32; 16] = proj
             .try_into()
             .map_err(|_| PyValueError::new_err("projection needs 16 floats"))?;
-        let correction = glam::Mat4::from_cols_array(&[
-            1., 0., 0., 0., 0., 1., 0., 0., 0., 0., 0.5, 0., 0., 0., 0.5, 1.,
-        ]);
-        self.ao.camera(correction * glam::Mat4::from_cols_array(&p));
-        let vp = correction * glam::Mat4::from_cols_array(&p) * glam::Mat4::from_cols_array(&v);
+        let projection = depth::projection(&p, far_clip);
+        self.ao.camera(projection);
+        let vp = projection * glam::Mat4::from_cols_array(&v);
         let mut data = vp.to_cols_array().to_vec();
         data.extend([
             self.config.width as f32,
@@ -1726,7 +1736,7 @@ impl Renderer {
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                     view: &depth,
                     depth_ops: Some(wgpu::Operations {
-                        load: if edge_only { wgpu::LoadOp::Load } else { wgpu::LoadOp::Clear(1.) },
+                        load: if edge_only { wgpu::LoadOp::Load } else { wgpu::LoadOp::Clear(depth::CLEAR) },
                         store: wgpu::StoreOp::Store,
                     }),
                     stencil_ops: None,
@@ -2036,7 +2046,7 @@ impl Renderer {
                     ],
                     depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                         view: &depth, stencil_ops: None,
-                        depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(1.), store: wgpu::StoreOp::Store }),
+                        depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(depth::CLEAR), store: wgpu::StoreOp::Store }),
                     }),
                     timestamp_writes: timing::writes(self.queries.as_ref(), "id"), occlusion_query_set: None,
                 });

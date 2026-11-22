@@ -49,8 +49,8 @@ impl Preview {
                     targets: &[Some(wgpu::ColorTargetState { format, blend: Some(wgpu::BlendState::ALPHA_BLENDING), write_mask: wgpu::ColorWrites::ALL })] }),
                 primitive: wgpu::PrimitiveState { topology: if edge { wgpu::PrimitiveTopology::LineList } else { wgpu::PrimitiveTopology::TriangleList }, ..Default::default() },
                 depth_stencil: Some(wgpu::DepthStencilState { format: wgpu::TextureFormat::Depth32Float, depth_write_enabled: !marks && !ghost && !edge,
-                    depth_compare: wgpu::CompareFunction::LessEqual, stencil: Default::default(),
-                    bias: wgpu::DepthBiasState { constant: if marks || edge {-2} else {0}, slope_scale: if marks || edge {-1.} else {0.}, clamp: 0. } }),
+                    depth_compare: crate::depth::compare(wgpu::CompareFunction::LessEqual), stencil: Default::default(),
+                    bias: crate::depth::bias(wgpu::DepthBiasState { constant: if marks || edge {-2} else {0}, slope_scale: if marks || edge {-1.} else {0.}, clamp: 0. }) }),
                 multisample: wgpu::MultisampleState { count: samples, ..Default::default() }, multiview: None, cache: None })
         })).collect();
         let group = crate::bind(d, &bindings, &[camera, style]);
