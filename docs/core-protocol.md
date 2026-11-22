@@ -73,10 +73,18 @@ Built (`core.protocol.commands.run(history, name, **args)`):
 | `delete_material` | `name` | `DeleteMaterialCommand`: the registry entry goes and what wore it shows the default material; undo restores faces and containers exactly |
 | `delete_placements` | `placements: [uid]` (nested included) | one `DeleteGroupCommand` each, as one `CompoundCommand` step |
 | `rename_component` | `placement: uid` of any copy or of the kept template, `name` | `RenameGroupCommand` on every copy and the kept template, one step |
+| `create_material` | one base: `color: [r,g,b]` or `texture: {path, sw, sh}`; optional `name`, `opacity`, `pbr`, `finish`, `reuse = true` | `AddMaterialCommand`. With `reuse` and no `pbr`, a material with the same plain recipe is answered (`reused: true`, no step). Unnamed: `Colour #RRGGBB` or the image's name. The answer adds `name` |
+| `set_material_base` | `name`, `base: "color" \| "image"`, optional `color` or `texture` | `RestampMaterialCommand`: the base switches, PBR values, opacity and finish are kept; what wears it follows. An image base with no image raises `ValueError` |
+| `set_material_pbr` | `name`, any of `metallic`, `roughness`, `ao_strength` (0–1), `normal_scale` (≥ 0), `metallic_map`, `roughness_map`, `normal_map`, `ao_map` (path or `{path, flip_y?}`); `null` removes | `RestampMaterialCommand`; the same channels for a colour or an image base. No channel left: no `pbr` (contract: `docs/skp-pbr-format.md`) |
+| `name_unnamed_colours` | — | `NameColoursCommand`: "Name these". Each distinct colour painted without a material (older files: front, back, containers) becomes a material, reusing one with the same recipe. The answer adds `named`. Files are never rewritten on open |
 
 The material and component commands (`rename_material` to
-`rename_component`) were added for the Library (`views/wgpu_library.py`);
-a material is named by its registry name (§2). The placement commands above (`hide` to `repair_solid`, added for the egui
+`name_unnamed_colours`) were added for the Library (`views/wgpu_library.py`);
+a material is named by its registry name (§2). Every paint is a material:
+a colour or an image is its *base*, and PBR values, opacity and finish sit on
+top of either. The Paint tool never stamps an anonymous colour any more: a raw
+colour reuses a material with the same recipe or creates one in the same
+undo step (`core.material_commands.material_for_paint`). The placement commands above (`hide` to `repair_solid`, added for the egui
 UI) take placements at any depth of the open context, as the project tree
 names them; the older ones take top-level placements.
 

@@ -194,34 +194,91 @@ class Provider:
         pass
 
 
-class _Paints(Provider):
-    """Materials (textured) and Colours (plain): the model's registry split
-    by whether a material carries an image, then My library and the
-    bundled sets."""
-    textured = True
+#: Inspector encodings ui.rs draws (inspector_rows): a field, a switch, a swatch.
+_ED = "\x1d"
+
+
+def _choice(id_, options, at) -> str:
+    return f"{_ED}choice{_ED}{id_}{_ED}{'|'.join(options)}{_ED}{at}"
+
+
+def _swatch(id_, hexc) -> str:
+    return f"{_ED}color{_ED}{id_}{_ED}{hexc}"
+
+
+def _file_stem(path) -> str:
+    return re.sub(r"^[0-9a-f]{12,}-", "", str(path).replace("\\", "/").rsplit("/", 1)[-1])
+
+
+#: PBR rows of the editor: (channel, label, map channel).
+PBR_ROWS = [("metallic", "Metallic", "metallic_map"), ("roughness", "Roughness", "roughness_map"),
+            ("normal_scale", "Normal", "normal_map"), ("ao_strength", "Occlusion", "ao_map")]
+
+
+class MaterialsProvider(Provider):
+    """Every paint is a Material (Maxence 2026-11-22: "do colors really need
+    to be separate from materials?"): a colour or an image as its base, the
+    same PBR values and opacity on top. The model's registry, its unnamed
+    colours (older files), My library, then the bundled images by category
+    and the bundled colours (RAL) as one more category."""
+    id, label = "materials", "Materials"
     apply_label = "Paint with it"
+    empty = "No materials yet."
+    #: Browsing by base, offered in the sort menu.
+    facets = [("facet:all", "Every base"), ("facet:colour", "Colour bases"), ("facet:image", "Image bases")]
+
+    def verbs(self):
+        return super().verbs() + [("name", "Name these colours")]
 
     def _model_items(self, ctx):
         uses = material_uses(ctx.scene)
         out = []
         for name, mat in (getattr(ctx.scene, "materials", None) or {}).items():
             tex = (mat.texture or {}).get("path")
-            if bool(tex) != self.textured:
-                continue
             out.append({"key": f"m:{name}", "name": name, "source": "model", "category": "",
+                        "base": "image" if tex else "colour",
                         "uses": uses.get(name, 0), "hex": _hex(mat.color), "thumb": tex,
                         "verbs": ("apply", "edit", "select", "-", "duplicate", "rename", "keep", "-", "delete")})
+        for key, entry in unnamed_colours_cached(ctx.scene).items():
+            n = len(entry["faces"]) + len(entry["groups"])
+            out.append({"key": f"uc:{key}", "name": key.split("@")[0], "source": "model",
+                        "category": "Unnamed colours", "base": "colour", "uses": n,
+                        "hex": _hex(entry["color"]), "thumb": None, "verbs": ("apply", "select", "-", "name")})
         return out
 
     def _mine_items(self, ctx):
         out = []
         for i, e in enumerate(_settings_json(_MINE_KEY, [])):
-            if not isinstance(e, dict) or e.get("type") != self.id:
+            if not isinstance(e, dict) or e.get("type") not in (self.id, "colours"):
                 continue
             tex = (e.get("texture") or {}).get("path")
             out.append({"key": f"my:{i}", "name": e.get("name", ""), "source": "mine",
-                        "category": e.get("category", ""), "uses": material_uses(ctx.scene).get(e.get("name"), 0),
+                        "category": e.get("category", ""), "base": "image" if tex else "colour",
+                        "uses": material_uses(ctx.scene).get(e.get("name"), 0),
                         "hex": _hex(e.get("color")), "thumb": tex, "verbs": ("apply", "-", "unkeep")})
+        return out
+
+    def _bundled(self, ctx):
+        from views import tray
+        out = []
+        manifest = tray._TEX_DIR / "library.json"
+        if manifest.exists():
+            data = json.loads(manifest.read_text(encoding="utf-8"))
+            for cat in data.get("categories", []):
+                title = tray.MaterialsPanel.CATEGORY_NAMES.get(cat["id"], cat["id"])
+                for i, it in enumerate(cat.get("items", [])):
+                    out.append({"key": f"lib:{cat['id']}:{i}", "name": it["name"], "label": _pretty(it["name"]),
+                                "source": "bundled", "category": title, "base": "image", "uses": 0, "hex": "",
+                                "thumb": str(tray._TEX_DIR / "library" / it["file"]), "verbs": ("apply",)})
+        if tray._RAL_FILE.exists():
+            data = json.loads(tray._RAL_FILE.read_text(encoding="utf-8"))
+            for fam in data.get("families", []):
+                for c in fam.get("colors", []):
+                    rgb = [v / 255.0 if max(c["rgb"]) > 1 else v for v in c["rgb"]]
+                    out.append({"key": f"ral:{c['code']}", "name": "%s %s" % (c["code"], tray._ral_name(c)),
+                                "short": c["code"],
+                                "source": "bundled", "category": "Colours (RAL)", "base": "colour", "uses": 0,
+                                "hex": _hex(rgb), "thumb": None, "verbs": ("apply",)})
         return out
 
     def items(self, ctx):
@@ -232,12 +289,21 @@ class _Paints(Provider):
     def type_actions(self, ctx):
         from core.purge import unused_materials
         n = len(unused_materials(ctx.scene))
-        return [("purge", f"Purge unused materials ({n})" if n else "Purge unused materials (none)")]
+        acts = [("purge", f"Purge unused materials ({n})" if n else "Purge unused materials (none)")]
+        k = len(unnamed_colours_cached(ctx.scene))
+        if k:
+            acts.insert(0, ("name", f"Name these: {k} unnamed colour" + ("s" if k != 1 else "")))
+        return acts
 
     def type_action(self, ctx, action):
         if action == "purge":
             out = ctx.core("purge_unused", layers=False, materials=True)
             ctx.flash("Unused materials purged" if out and out.get("ok") else "Every material is in use")
+        elif action == "name":
+            out = ctx.core("name_unnamed_colours") or {}
+            n = out.get("named", 0)
+            ctx.flash(f"{n} colour{'s' if n != 1 else ''} named: each is a material now" if n
+                      else "Every colour already has a name")
 
     def _mine_entry(self, item):
         i = int(item["key"].partition(":")[2])
@@ -246,7 +312,22 @@ class _Paints(Provider):
     def run(self, ctx, verb, item, arg=""):
         key, name = item["key"], item["name"]
         kind = key.partition(":")[0]
-        if verb == "apply":
+        if verb == "name":
+            self.type_action(ctx, "name")
+        elif kind == "uc":
+            entry = unnamed_colours_cached(ctx.scene).get(key[3:])
+            if entry is None:
+                return
+            if verb == "apply":
+                panel = _materials_panel(ctx.win)
+                if panel is not None:
+                    panel._apply_color(entry["color"])   # paints as a named material
+            elif verb == "select":
+                loose = set(map(id, ctx.scene.mesh.faces))
+                faces = [f for f, side in entry["faces"] if side == "front" and id(f) in loose]
+                ctx.scene.select(faces + [g for g in entry["groups"] if g in ctx.scene.groups])
+                getattr(ctx.vp, "notify_scene_changed", ctx.vp.update)()
+        elif verb == "apply":
             if kind == "my":
                 e = self._mine_entry(item)
                 panel = _materials_panel(ctx.win)
@@ -285,7 +366,7 @@ class _Paints(Provider):
             mat = ctx.scene.materials.get(name)
             if mat is not None:
                 mine = _settings_json(_MINE_KEY, [])
-                mine = [e for e in mine if not (e.get("type") == self.id and e.get("name") == name)]
+                mine = [e for e in mine if not (e.get("type") in (self.id, "colours") and e.get("name") == name)]
                 mine.append({"type": self.id, "name": name, "color": list(mat.color) if mat.color else None,
                              "texture": dict(mat.texture) if mat.texture else None, "opacity": mat.opacity})
                 _store_json(_MINE_KEY, mine)
@@ -298,6 +379,30 @@ class _Paints(Provider):
                 mine.pop(i)
                 _store_json(_MINE_KEY, mine)
                 _state(ctx.view)["mine_rev"] += 1
+        elif verb in ("map", "unmap") and kind == "m":
+            channel = arg if arg in {m for _c, _l, m in PBR_ROWS} else ""
+            if not channel:
+                return
+            if verb == "unmap":
+                ctx.core("set_material_pbr", name=name, **{channel: None})
+                return
+            label = next(lab for _c, lab, m in PBR_ROWS if m == channel)
+            path = _pick_image(ctx.win, f"{label} map")
+            if path:
+                values = {channel: {"path": path}}
+                scalar = next(c for c, _l, m in PBR_ROWS if m == channel)
+                mat = ctx.scene.materials.get(name)
+                if mat is not None and scalar not in (mat.pbr or {}):
+                    values[scalar] = 1.0      # a map with no strength would show nothing
+                ctx.core("set_material_pbr", name=name, **values)
+        elif verb == "image" and kind == "m":
+            path = _pick_image(ctx.win, "Base image")
+            if path:
+                mat = ctx.scene.materials.get(name)
+                tex = dict((mat.texture or {}) if mat else {})
+                tex.update(path=path)
+                tex.pop("embed", None)
+                ctx.core("set_material_base", name=name, base="image", texture=tex)
 
     def confirmed(self, ctx, what, key, text=""):
         if what == "delete":
@@ -305,36 +410,72 @@ class _Paints(Provider):
             ctx.view._ui_mat_focus = None
 
     def inspector(self, ctx, item):
-        if not item["key"].startswith("m:"):
-            return None
         from views.wgpu_ui import _edit
+        key = item["key"]
+        if key.startswith("uc:"):
+            n = item.get("uses", 0)
+            rows = [("Colour", item["name"]), ("Uses", str(n)), ("Name", "none (an older file)")]
+            k = len(unnamed_colours_cached(ctx.scene))
+            acts = [(f"lib:name:{key}", f"Name these ({k})"), (f"lib:select:{key}", "Select uses"),
+                    (f"lib:apply:{key}", "Paint with it")]
+            return "Unnamed colour", [("Colour without a material", rows), ("Actions", acts)]
+        if not key.startswith("m:"):
+            return None
         mat = ctx.scene.materials.get(item["name"])
         if mat is None:
             return None
         name = mat.name
         tex = mat.texture or {}
+        image = bool(tex.get("path"))
         rows = [("Name", _edit(f"libmat:name:{name}", name)),
-                ("Colour", _edit(f"libmat:color:{name}", _hex(mat.color)) if not tex.get("path") or mat.color
-                 else "from the image")]
-        if tex.get("path"):
-            stem = re.sub(r"^[0-9a-f]{12,}-", "", str(tex["path"]).rsplit("/", 1)[-1])
-            rows += [("Image", stem),
-                     ("Tile (m)", _edit(f"libmat:tile:{name}", f"{tex.get('sw', 1):g} × {tex.get('sh', tex.get('sw', 1)):g}"))]
+                ("Base", _choice(f"libmat:base:{name}", ["Colour", "Image"], 1 if image else 0))]
+        acts = [(f"lib:apply:{key}", "Paint with it"), (f"lib:select:{key}", "Select uses")]
+        if image:
+            rows += [("Image", _file_stem(tex["path"])),
+                     ("Tile (m)", _edit(f"libmat:tile:{name}",
+                                        f"{tex.get('sw', 1):g} × {tex.get('sh', tex.get('sw', 1)):g}"))]
+            acts.append((f"lib:image:{key}", "Other image…"))
+        else:
+            rows.append(("Colour", _swatch(f"libmat:color:{name}", _hex(mat.color) or "#cccccc")))
+        pbr = mat.pbr or {}
+        surface = []
+        for channel, label, map_key in PBR_ROWS:
+            value = pbr.get(channel)
+            surface.append((label, _edit(f"libmat:{channel}:{name}", "" if value is None else f"{float(value):g}")))
+            if pbr.get(map_key):
+                surface.append((f"{label} map", _file_stem(pbr[map_key].get("path", ""))))
+        maps = [(f"lib:map:{key}:{m}" if not pbr.get(m) else f"lib:unmap:{key}:{m}",
+                 (f"{label} map…" if not pbr.get(m) else f"Clear {label.lower()} map"))
+                for _c, label, m in PBR_ROWS]
         opacity = 100 if mat.opacity is None else round(mat.opacity * 100)
-        rows += [("Opacity (%)", _edit(f"libmat:opacity:{name}", f"{opacity}")),
-                 ("Finish", str(mat.finish or "from the name")),
-                 ("Used by", f"{item.get('uses', 0)} object" + ("s" if item.get("uses", 0) != 1 else ""))]
-        acts = [(f"lib:apply:{item['key']}", "Paint with it"), (f"lib:select:{item['key']}", "Select uses"),
-                (f"lib:duplicate:{item['key']}", "Duplicate"), (f"lib:keep:{item['key']}", "Add to My library"),
-                (f"lib:delete:{item['key']}", "Delete…")]
-        return name, [("Material in this model" if self.textured else "Colour in this model", rows), ("Actions", acts)]
+        look = [("Opacity (%)", _edit(f"libmat:opacity:{name}", f"{opacity}")),
+                ("Finish", str(mat.finish or "from the name")),
+                ("Used by", f"{item.get('uses', 0)} object" + ("s" if item.get("uses", 0) != 1 else ""))]
+        more = [(f"lib:duplicate:{key}", "Duplicate"), (f"lib:keep:{key}", "Add to My library"),
+                (f"lib:delete:{key}", "Delete…")]
+        return name, [("Material", rows), ("Actions", acts),
+                      ("Surface · PBR (empty = off)", surface), ("Actions", maps),
+                      ("Look", look), ("Actions", more)]
 
     def edit(self, ctx, item, field, text):
         name = item["name"]
+        text = (text or "").strip()
         if field == "name":
             self.run(ctx, "rename", item, text)
+        elif field == "base":
+            if text.lower().startswith("image"):
+                mat = ctx.scene.materials.get(name)
+                if mat is not None and (mat.texture or {}).get("path"):
+                    return
+                self.run(ctx, "image", {**item, "key": f"m:{name}"})
+            else:
+                ctx.core("set_material_base", name=name, base="color")
         elif field == "color":
-            ctx.core("edit_material", name=name, color=list(_parse_hex(text)))
+            mat = ctx.scene.materials.get(name)
+            if mat is not None and (mat.texture or {}).get("path"):
+                ctx.core("edit_material", name=name, color=list(_parse_hex(text)))
+            else:
+                ctx.core("set_material_base", name=name, base="color", color=list(_parse_hex(text)))
         elif field == "tile":
             parts = [p for p in re.split(r"[^0-9.,]+", text.replace(",", ".")) if p]
             if not parts:
@@ -345,49 +486,28 @@ class _Paints(Provider):
                 raise ValueError("A tile is larger than zero")
             ctx.core("edit_material", name=name, tile=[w, h])
         elif field == "opacity":
-            v = float(text.strip().rstrip("%"))
+            v = float(text.rstrip("%"))
             if not 0 <= v <= 100:
                 raise ValueError("Opacity is between 0 and 100 %")
             ctx.core("edit_material", name=name, opacity=v / 100.0)
+        elif field in {c for c, _l, _m in PBR_ROWS}:
+            ctx.core("set_material_pbr", name=name, **{field: float(text.replace(",", ".")) if text else None})
 
 
-class MaterialsProvider(_Paints):
-    id, label, textured = "materials", "Materials", True
-    empty = "No materials yet."
-
-    def _bundled(self, ctx):
-        from views import tray
-        manifest = tray._TEX_DIR / "library.json"
-        out = []
-        if manifest.exists():
-            data = json.loads(manifest.read_text(encoding="utf-8"))
-            for cat in data.get("categories", []):
-                title = tray.MaterialsPanel.CATEGORY_NAMES.get(cat["id"], cat["id"])
-                for i, it in enumerate(cat.get("items", [])):
-                    out.append({"key": f"lib:{cat['id']}:{i}", "name": it["name"], "label": _pretty(it["name"]),
-                                "source": "bundled", "category": title, "uses": 0, "hex": "",
-                                "thumb": str(tray._TEX_DIR / "library" / it["file"]), "verbs": ("apply",)})
-        return out
+def unnamed_colours_cached(scene) -> dict:
+    sig = (id(scene), scene.content_version)
+    cached = getattr(scene, "_lib_unnamed", None)
+    if cached is None or cached[0] != sig:
+        from core.material_commands import unnamed_colours
+        cached = (sig, unnamed_colours(scene))
+        scene._lib_unnamed = cached
+    return cached[1]
 
 
-class ColoursProvider(_Paints):
-    id, label, textured = "colours", "Colours", False
-    empty = "No colours yet."
-
-    def _bundled(self, ctx):
-        from views import tray
-        out = []
-        if tray._RAL_FILE.exists():
-            data = json.loads(tray._RAL_FILE.read_text(encoding="utf-8"))
-            for fam in data.get("families", []):
-                family = fam.get("name") or fam.get("id") or "RAL"
-                for c in fam.get("colors", []):
-                    rgb = [v / 255.0 if max(c["rgb"]) > 1 else v for v in c["rgb"]]
-                    name = "%s %s" % (c["code"], tray._ral_name(c))
-                    out.append({"key": f"ral:{c['code']}", "name": name, "source": "bundled",
-                                "category": f"RAL · {family}", "uses": 0, "hex": _hex(rgb), "thumb": None,
-                                "verbs": ("apply",)})
-        return out
+def _pick_image(win, title):
+    from PySide6.QtWidgets import QFileDialog
+    path, _ = QFileDialog.getOpenFileName(win, title, "", "Images (*.png *.jpg *.jpeg *.webp *.bmp *.tif *.tiff)")
+    return path or None
 
 
 class ComponentsProvider(Provider):
@@ -538,7 +658,7 @@ def _rename_paint(old, new) -> None:
 
 
 #: The registry, in tab order.
-PROVIDERS = [MaterialsProvider(), ColoursProvider(), ComponentsProvider(), ProfilesProvider()]
+PROVIDERS = [MaterialsProvider(), ComponentsProvider(), ProfilesProvider()]
 
 
 def provider(type_id):
@@ -557,12 +677,16 @@ def _state(view) -> dict:
               "sig": None, "items": {}}
         if st["sort"] not in dict(SORTS):
             st["sort"] = "name"
+        st["facet"] = saved.get("facet", "all")
+        if st["type"] not in [p.id for p in PROVIDERS if p.ready]:
+            st["type"] = "materials"      # "colours" was a type of its own before 2026-11-22
         view._ui_lib = st
     return st
 
 
 def _save_state(st) -> None:
     _store_json("library/state", {"type": st["type"], "view": st["view"], "sort": st["sort"],
+                                  "facet": st.get("facet", "all"),
                                   "fold": sorted(st["fold"])})
 
 
@@ -580,9 +704,18 @@ def rows_for(items, st, current=None):
     categories inside, items sorted; folded headers hide their items. A
     filter shows every match unfolded. Returns ``(rows, item_by_key)``."""
     words = st["filter"].lower().split()
+    # Browsing by base: the facet, or the tokens is:colour / is:image.
+    bases = {"is:colour": "colour", "is:color": "colour", "is:image": "image"}
+    base = next((bases[w] for w in words if w in bases), None)
+    words = [w for w in words if w not in bases]
+    facet = st.get("facet", "all")
+    base = base or (facet if facet in ("colour", "image") else None)
+    if base:
+        items = [e for e in items if e.get("base", base) == base]
     if words:
         items = [e for e in items
-                 if all(w in f"{e.get('label') or e['name']} {e['category']}".lower() for w in words)]
+                 if all(w in f"{e['name']} {e.get('label', '')} {e.get('short', '')} {e['category']}".lower()
+                        for w in words)]
     by_key = {e["key"]: e for e in items}
     rows = []
 
@@ -621,7 +754,9 @@ def rows_for(items, st, current=None):
             for e in members[:ROW_CAP]:
                 meta = " · ".join(x for x in (e["category"], dict(SECTIONS)[e["source"]],
                                               f"used by {e['uses']}" if e["uses"] else "") if x)
-                row(2, e["key"], e.get("label") or e["name"], meta, e["hex"], e.get("icon", ""), ",".join(e["verbs"]),
+                # A tile has room for a short name (a RAL code); a list row for all of it.
+                shown = (e.get("short") if st["view"] == 0 else None) or e.get("label") or e["name"]
+                row(2, e["key"], shown, meta, e["hex"], e.get("icon", ""), ",".join(e["verbs"]),
                     count=e["uses"], active=int(current is not None and e["name"] == current))
             if len(members) > ROW_CAP:
                 row(3, f"n:{sec}:{cat}:more", f"{len(members) - ROW_CAP} more — filter to find them")
@@ -654,7 +789,7 @@ def before_frame(view, win) -> None:
     st = _state(view)
     scene = win.viewport.scene
     current = _current_material_name()
-    sig = (st["type"], st["view"], st["sort"], st["filter"], tuple(sorted(st["fold"])), tuple(sorted(st["open"])),
+    sig = (st["type"], st["view"], st["sort"], st.get("facet"), st["filter"], tuple(sorted(st["fold"])), tuple(sorted(st["open"])),
            id(scene), scene.content_version, current, tuple(st["recent"][:12]), st["mine_rev"])
     if sig == st["sig"]:
         return
@@ -671,11 +806,12 @@ def before_frame(view, win) -> None:
     prov = provider(st["type"])
     for e in active_items:
         e["icon"] = _thumb(view, e["thumb"])
-    rows, by_key = rows_for(active_items, st, current if prov.id in ("materials", "colours") else None)
+    rows, by_key = rows_for(active_items, st, current if prov.id == "materials" else None)
     st["items"] = {e["key"]: e for e in active_items}
     view.renderer.ui_set_library(
-        [(p.id, p.label, counts.get(p.id, 0), p.ready) for p in PROVIDERS], prov.id, st["view"], st["sort"],
-        SORTS, prov.verbs(), prov.type_actions(ctx), prov.empty, st["filter"], rows)
+        [(p.id, p.label, counts.get(p.id, 0), p.ready) for p in PROVIDERS], prov.id, st["view"],
+        f"{st['sort']},facet:{st.get('facet', 'all')}" if getattr(prov, "facets", None) else st["sort"],
+        SORTS + ([("-", "")] + prov.facets if getattr(prov, "facets", None) else []), prov.verbs(), prov.type_actions(ctx), prov.empty, st["filter"], rows)
 
 
 def item(view, key):
@@ -710,7 +846,7 @@ def _land(view, win) -> None:
     if type(tool).__name__ == "PlaceGroupTool":
         st["type"] = "components"
     elif _active_tool(win) == "paint":
-        st["type"] = "materials" if getattr(PaintTool, "current_texture", None) else "colours"
+        st["type"] = "materials"
 
 
 def _active_tool(win) -> str:
@@ -822,6 +958,9 @@ def action(win, view, arg) -> None:
             _save_state(st)
         elif verb == "view":
             st["view"] = 1 if key == "list" else 0
+            _save_state(st)
+        elif verb == "sort" and key.startswith("facet:"):
+            st["facet"] = key[6:] if key[6:] in ("all", "colour", "image") else "all"
             _save_state(st)
         elif verb == "sort":
             st["sort"] = key if key in dict(SORTS) else "name"

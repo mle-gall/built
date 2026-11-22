@@ -512,6 +512,113 @@ def delete_placements(history, placements):
     return _answer(history, before)
 
 
+def create_material(history, name=None, color=None, texture=None, opacity=None, pbr=None, finish=None,
+                    reuse=True):
+    """Add a material: a colour base (``color`` ``[r,g,b]`` 0–1) or an image
+    base (``texture`` ``{"path", "sw", "sh"}``), with optional ``opacity``,
+    ``pbr`` and ``finish``. With ``reuse`` and no ``pbr``, a material with
+    the same plain recipe is answered instead (``reused`` true, no step).
+    Unnamed, it is named after its colour (``Colour #A0703C``) or image.
+    The answer adds ``name``."""
+    from core.material_commands import AddMaterialCommand, find_material, fresh_name, material_for_paint
+    from core.materials import Material
+    if (color is None) == (texture is None):
+        raise ValueError("a material has one base: a colour or an image")
+    materials = history.scene.materials
+    rgb = tuple(float(c) for c in color[:3]) if color is not None else None
+    before = history.revision
+    if reuse and pbr is None:
+        found = find_material(materials, color=rgb, texture=texture, opacity=opacity)
+        if found is not None and (name is None or name == found):
+            return {"ok": True, "step": None, "error": None, "rejected": None, "name": found, "reused": True}
+    if name is None:
+        name = material_for_paint(history.scene, color=rgb, texture=texture, opacity=opacity).name
+        name = fresh_name(materials, name)
+    elif name in materials:
+        raise ValueError(f"there is already a material called {name!r}")
+    mat = Material(name, color=rgb, texture=dict(texture) if texture else None,
+                   opacity=None if opacity is None or float(opacity) >= 0.999 else float(opacity),
+                   pbr=dict(pbr) if pbr else None, finish=finish)
+    history.execute(AddMaterialCommand(mat))
+    out = _answer(history, before)
+    out.update(name=name, reused=False)
+    return out
+
+
+def set_material_base(history, name, base, color=None, texture=None):
+    """Switch a material's base between a colour (``base="color"``,
+    ``color`` or its current colour) and an image (``base="image"``,
+    ``texture`` ``{"path", "sw", "sh"}``, or the image it had). Its PBR
+    values, opacity and finish are kept; what wears it follows
+    (``RestampMaterialCommand``)."""
+    from dataclasses import replace
+    from core.history import RestampMaterialCommand
+    mat = _material(history, name)
+    before = history.revision
+    if base == "color":
+        rgb = tuple(float(c) for c in (color if color is not None else (mat.color or (0.8, 0.8, 0.8)))[:3])
+        new = replace(mat, color=rgb, texture=None)
+    elif base == "image":
+        tex = dict(texture) if texture else (dict(mat.texture) if mat.texture else None)
+        if not tex or not tex.get("path"):
+            raise ValueError("an image base needs an image")
+        tex.setdefault("sw", 1.0)
+        tex.setdefault("sh", tex["sw"])
+        new = replace(mat, texture=tex, color=mat.color if mat.pbr is not None else None)
+    else:
+        raise ValueError("base is 'color' or 'image'")
+    if new == mat:
+        return _answer(history, before, ok=False)
+    history.execute(RestampMaterialCommand(name, new))
+    return _answer(history, before)
+
+
+def set_material_pbr(history, name, **channels):
+    """Set PBR channels of a material, whatever its base: ``metallic``,
+    ``roughness``, ``ao_strength`` (0–1), ``normal_scale`` (≥ 0), and maps
+    ``metallic_map``, ``roughness_map``, ``normal_map``, ``ao_map`` (a
+    path or ``{"path", "flip_y"?}``). ``None`` removes a channel; with none
+    left the material has no PBR. ``RestampMaterialCommand``."""
+    from dataclasses import replace
+    from core.history import RestampMaterialCommand
+    from core.material_commands import PBR_KEYS, PBR_MAPS
+    mat = _material(history, name)
+    unknown = sorted(set(channels) - set(PBR_KEYS))
+    if unknown:
+        raise ValueError(f"unknown PBR channel {unknown[0]!r}; one of {list(PBR_KEYS)}")
+    pbr = dict(mat.pbr or {})
+    for key, value in channels.items():
+        if value is None:
+            pbr.pop(key, None)
+        elif key in PBR_MAPS:
+            pbr[key] = {"path": value} if isinstance(value, str) else dict(value)
+        else:
+            v = float(value)
+            pbr[key] = max(v, 0.0) if key == "normal_scale" else min(max(v, 0.0), 1.0)
+    before = history.revision
+    new = replace(mat, pbr=pbr or None)
+    if new == mat:
+        return _answer(history, before, ok=False)
+    history.execute(RestampMaterialCommand(name, new))
+    return _answer(history, before)
+
+
+def name_unnamed_colours(history):
+    """"Name these": each distinct colour painted without a material
+    (older files) becomes a material, reusing one with the same recipe;
+    the faces and containers take its name (``NameColoursCommand``). The
+    answer adds ``named``, the number of colours."""
+    from core.material_commands import NameColoursCommand
+    cmd = NameColoursCommand()
+    before = history.revision
+    n = cmd.count(history.scene)
+    if n:
+        history.execute(cmd)
+    out = _answer(history, before, ok=bool(n))
+    out["named"] = n
+    return out
+
+
 def rename_component(history, placement, name):
     """Rename a component definition: every copy (placed or nested) and the
     template kept in the file take ``name``, as one step. ``placement`` is
@@ -562,7 +669,9 @@ COMMANDS = {"follow_me": follow_me, "intersect_faces": intersect_faces,
             "set_tag": set_tag, "resegment_curve": resegment_curve, "repair_solid": repair_solid,
             "rename_material": rename_material, "edit_material": edit_material,
             "duplicate_material": duplicate_material, "delete_material": delete_material,
-            "delete_placements": delete_placements, "rename_component": rename_component}
+            "delete_placements": delete_placements, "rename_component": rename_component,
+            "create_material": create_material, "set_material_base": set_material_base,
+            "set_material_pbr": set_material_pbr, "name_unnamed_colours": name_unnamed_colours}
 
 
 def run(history, name, /, **args):

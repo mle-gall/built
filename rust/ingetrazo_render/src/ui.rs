@@ -712,6 +712,7 @@ impl Ui {
                         col.head_menu = None;
                         col.pick = None;
                         col.color_pick = None;
+                        col.edits.remove("\u{1d}pick");
                     }
                     self.ctx.memory_mut(|m| m.stop_text_input());
                 }
@@ -1450,15 +1451,18 @@ impl Ui {
                         break 'tree;
                     }
                     if let Some(what) = &col.filing {
-                        let banner = format!("File {what} to…  click a node, or type and press Enter");
-                        let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 22.0), Sense::hover());
+                        // Two short lines, never cut off at the dock's edge.
+                        let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 36.0), Sense::hover());
                         ui.painter().rect_filled(r, CornerRadius::same(R_ROW), ACTIVE);
-                        ui.painter().text(r.left_center() + vec2(8.0, 0.0), egui::Align2::LEFT_CENTER, banner,
-                            egui::FontId::proportional(11.5), Color32::WHITE);
+                        ui.painter().text(pos2(r.min.x + 8.0, r.min.y + 11.0), egui::Align2::LEFT_CENTER,
+                            format!("File {what} to…"), strong(11.5), Color32::WHITE);
+                        ui.painter().text(pos2(r.min.x + 8.0, r.max.y - 10.0), egui::Align2::LEFT_CENTER,
+                            "Click a node, or type a name and Enter", meta(), INK_2);
                         ui.add_space(4.0);
                     }
                     let edit = egui::TextEdit::singleline(&mut col.filter)
-                        .hint_text(egui::RichText::new(if col.filing.is_some() { "Node name or kind" } else { "Filter nodes" }).color(FAINT))
+                        .hint_text(egui::RichText::new(if col.filing.is_some() { "Node name or kind" }
+                            else if col.mode == "Problems" { "Filter problems" } else { "Filter nodes" }).color(FAINT))
                         .margin(Margin::symmetric(8, 5))
                         .desired_width((W - 20.0 - 16.0 - 4.0).max(40.0))
                         .font(egui::FontId::proportional(12.0));
@@ -1648,8 +1652,11 @@ impl Ui {
                                 let sel_right = right;
                                 let right = match &sel_g { Some(g) => right - g.size().x - 8.0, None => right };
                                 let name = if n.active && n.row != 5 { format!("✎ {}", n.name) } else { n.name.clone() };
+                                let full = name.clone();
                                 let g = ui.painter().layout_job(one_line(name, font, ink, right - tx));
                                 let name_w = g.size().x;
+                                // A name cut at the column shows whole on hover.
+                                let resp = if g.elided || name_w >= right - tx - 1.0 { resp.on_hover_text(full) } else { resp };
                                 ui.painter().galley(pos2(tx, cy - g.size().y / 2.0), g, ink);
                                 let mut kx = tx + name_w + 8.0;
                                 if !n.badge.is_empty() && n.row != 5 && kx + 20.0 < right {
@@ -1719,7 +1726,8 @@ impl Ui {
                     egui::ScrollArea::vertical().id_salt("inspector").auto_shrink([false, false]).show(ui, |ui| {
                         ui.spacing_mut().item_spacing = vec2(0.0, 3.0);
                         if col.inspector_title.is_empty() {
-                            ui.horizontal(|ui| { ui.add_space(8.0); ui.label(egui::RichText::new("Nothing selected").font(body()).color(FAINT)); });
+                            let empty = if in_library { "Pick an item to see and edit it here" } else { "Nothing selected" };
+                            ui.horizontal(|ui| { ui.add_space(8.0); ui.label(egui::RichText::new(empty).font(body()).color(FAINT)); });
                             return;
                         }
                         {
@@ -2090,7 +2098,8 @@ impl Ui {
                      ("pick_menu", self.column.as_ref().is_some_and(|c| c.pick.is_some())),
                      ("color_pick", self.column.as_ref().is_some_and(|c| c.color_pick.is_some())),
                      ("lib_menu", work && self.library.menu_open()),
-                     ("dock_grip", work && self.column.is_some())];
+                     ("dock_grip", work && self.column.is_some()),
+                     ("insp_color", work && self.column.as_ref().is_some_and(|c| c.edits.contains_key("\u{1d}pick")))];
         self.hit = shown.iter()
             .filter(|(_, on)| *on)
             .filter_map(|(n, _)| ctx.memory(|m| m.area_rect(egui::Id::new(*n))))
@@ -2227,6 +2236,72 @@ fn doc_tab(ui: &mut egui::Ui, name: &str, active: bool, dirty: bool) -> Option<b
 fn inspector_rows(ui: &mut egui::Ui, rows: &[(String, String)], edits: &mut std::collections::HashMap<String, String>,
                   actions: &mut Vec<String>) {
     for (label, value) in rows {
+        // "\u{1d}choice\u{1d}<id>\u{1d}A|B\u{1d}<at>": a switch (the material's base).
+        if let Some(rest) = value.strip_prefix("\u{1d}choice\u{1d}") {
+            let parts: Vec<&str> = rest.split('\u{1d}').collect();
+            let id = parts.first().copied().unwrap_or_default();
+            let labels: Vec<&str> = parts.get(1).copied().unwrap_or_default().split('|').collect();
+            let at = parts.get(2).and_then(|a| a.parse::<usize>().ok()).unwrap_or(0);
+            ui.horizontal(|ui| {
+                ui.add_space(8.0);
+                let (lr, _) = ui.allocate_exact_size(vec2(88.0, 24.0), Sense::hover());
+                ui.painter().text(lr.left_center(), egui::Align2::LEFT_CENTER, label, egui::FontId::proportional(11.5), DIM);
+                let w = (ui.available_width() - 8.0).max(60.0);
+                if let Some(i) = library::segmented(ui, &labels, at, w) {
+                    if i != at { actions.push(format!("edit\u{1f}{id}\u{1f}{}", labels[i])); }
+                }
+            });
+            continue;
+        }
+        // "\u{1d}color\u{1d}<id>\u{1d}#rrggbb": a swatch; a click opens the picker.
+        if let Some(rest) = value.strip_prefix("\u{1d}color\u{1d}") {
+            let (id, hex) = rest.split_once('\u{1d}').unwrap_or((rest, ""));
+            let mut swatch_rect = Rect::NOTHING;
+            ui.horizontal(|ui| {
+                ui.add_space(8.0);
+                let (lr, _) = ui.allocate_exact_size(vec2(88.0, 24.0), Sense::hover());
+                ui.painter().text(lr.left_center(), egui::Align2::LEFT_CENTER, label, egui::FontId::proportional(11.5), DIM);
+                let (r, resp) = ui.allocate_exact_size(vec2((ui.available_width() - 8.0).max(60.0), 24.0), Sense::click());
+                paint_state(ui, r, state_of(&resp, false, true), R_ROW);
+                let sw = Rect::from_min_size(r.min + vec2(3.0, 3.0), vec2(36.0, 18.0));
+                ui.painter().rect_filled(sw, CornerRadius::same(4), parse_hex(hex).unwrap_or(Color32::GRAY));
+                ui.painter().rect_stroke(sw, CornerRadius::same(4), Stroke::new(1.0_f32, EDGE), egui::StrokeKind::Inside);
+                ui.painter().text(pos2(sw.max.x + 8.0, r.center().y), egui::Align2::LEFT_CENTER, hex.to_uppercase(), body(), INK);
+                swatch_rect = r;
+                if resp.on_hover_text("Pick a colour").clicked() {
+                    edits.insert("\u{1d}pick".into(), id.to_owned());
+                    edits.insert("\u{1d}pickc".into(), hex.to_owned());
+                }
+            });
+            if edits.get("\u{1d}pick").map(String::as_str) == Some(id) {
+                let mut c = edits.get("\u{1d}pickc").and_then(|h| parse_hex(h)).unwrap_or(Color32::GRAY);
+                let mut done = false;
+                egui::Area::new(egui::Id::new("insp_color"))
+                    .pivot(egui::Align2::RIGHT_TOP)
+                    .fixed_pos(pos2(swatch_rect.max.x, swatch_rect.max.y + 4.0))
+                    .order(egui::Order::Tooltip)
+                    .show(ui.ctx(), |ui| {
+                        glass(Surface::Raised).inner_margin(Margin::same(10)).show(ui, |ui| {
+                            egui::widgets::color_picker::color_picker_color32(ui, &mut c, egui::widgets::color_picker::Alpha::Opaque);
+                            ui.add_space(6.0);
+                            ui.horizontal(|ui| {
+                                if chip_button(ui, "Apply") {
+                                    actions.push(format!("edit\u{1f}{id}\u{1f}#{:02x}{:02x}{:02x}", c.r(), c.g(), c.b()));
+                                    done = true;
+                                }
+                                if chip_button(ui, "Cancel") { done = true; }
+                            });
+                        });
+                    });
+                if done {
+                    edits.remove("\u{1d}pick");
+                    edits.remove("\u{1d}pickc");
+                } else {
+                    edits.insert("\u{1d}pickc".into(), format!("#{:02x}{:02x}{:02x}", c.r(), c.g(), c.b()));
+                }
+            }
+            continue;
+        }
         if let Some(rest) = value.strip_prefix("\u{1d}edit\u{1d}") {
             let (id, text) = rest.split_once('\u{1d}').unwrap_or((rest, ""));
             let buf = edits.entry(id.to_owned()).or_insert_with(|| text.to_owned());

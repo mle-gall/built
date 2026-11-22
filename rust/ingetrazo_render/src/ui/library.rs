@@ -192,7 +192,8 @@ impl Library {
             if resp.changed() { out.push(format!("filter{SEP}{}", self.filter)); }
             if icon_toggle(ui, self.view == 0, "Grid", paint_grid_glyph) && self.view != 0 { out.push(format!("view{SEP}grid")); }
             if icon_toggle(ui, self.view == 1, "List", paint_list_glyph) && self.view != 1 { out.push(format!("view{SEP}list")); }
-            let sort_label = self.sorts.iter().find(|(id, _)| *id == self.sort).map(|(_, l)| l.clone()).unwrap_or_default();
+            let first = self.sort.split(',').next().unwrap_or_default().to_owned();
+            let sort_label = self.sorts.iter().find(|(id, _)| *id == first).map(|(_, l)| l.clone()).unwrap_or_default();
             if let Some(r) = small_menu_button(ui, &sort_label, 62.0, "Sort") {
                 self.menu = Some(("sort".into(), pos2(r.min.x, r.max.y + 4.0)));
             }
@@ -400,7 +401,12 @@ impl Library {
                 (format!("{v}{SEP}{key}"), label, -1)
             }).collect()
         } else if what == "sort" {
-            self.sorts.iter().map(|(id, l)| (format!("sort{SEP}{id}"), l.clone(), (*id == self.sort) as i8)).collect()
+            // Sorts, then (after "-") facets; `sort` names the ones in force: "name,facet:all".
+            let on: Vec<&str> = self.sort.split(',').collect();
+            self.sorts.iter().map(|(id, l)| {
+                if id == "-" { ("-".to_owned(), String::new(), -1) }
+                else { (format!("sort{SEP}{id}"), l.clone(), on.contains(&id.as_str()) as i8) }
+            }).collect()
         } else {
             self.type_actions.iter().map(|(id, l)| (format!("typeact{SEP}{id}"), l.clone(), -1)).collect()
         };
@@ -411,7 +417,7 @@ impl Library {
             .order(egui::Order::Tooltip)
             .show(ctx, |ui| {
                 glass(Surface::Raised).inner_margin(Margin::same(6)).show(ui, |ui| {
-                    ui.set_width(if what == "sort" { 150.0 } else { 200.0 });
+                    ui.set_width(if what == "sort" { 160.0 } else { 210.0 });
                     ui.spacing_mut().item_spacing = vec2(0.0, 1.0);
                     for (id, label, checked) in &rows {
                         if id == "-" {

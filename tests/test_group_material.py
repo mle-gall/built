@@ -236,7 +236,8 @@ def test_paint_clicked_on_a_group_from_outside_paints_the_group():
     PaintTool.current_material = None
     tool = PaintTool()
     tool.on_click(_ctx(vp))
-    assert g.material == {"color": [1.0, 0.0, 0.0]}
+    # A raw colour paints as a named material (no anonymous paint, 2026-11-22).
+    assert g.material == {"color": [1.0, 0.0, 0.0], "mat": "Colour #FF0000"}
     assert "color" not in default_face.attrs                    # the face itself untouched
     assert blue.attrs["color"] == [0.0, 0.0, 1.0]
     vp.history.undo()

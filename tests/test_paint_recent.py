@@ -141,10 +141,11 @@ def test_painting_puts_the_material_first():
     _click(vp, face)
     _use(color=(0.9, 0.8, 0.7))
     _click(vp, face)
-    assert [e.get("mat") for e in PaintTool.recent] == [None, "Azul"]
+    # A raw colour paints as a named material (no anonymous paint, 2026-11-22).
+    assert [e.get("mat") for e in PaintTool.recent] == ["Colour #E6CCB2", "Azul"]
     _use(color=(0.1, 0.2, 0.3), name="Azul")
     _click(vp, face)
-    assert [e.get("mat") for e in PaintTool.recent] == ["Azul", None]
+    assert [e.get("mat") for e in PaintTool.recent] == ["Azul", "Colour #E6CCB2"]
 
 
 def test_seven_materials_keep_the_last_six():

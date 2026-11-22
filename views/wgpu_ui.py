@@ -1693,10 +1693,20 @@ def _tree_action(win, view, action) -> None:
             nn = len(proposal["structure"]["nodes"])
             nf = sum(len(v) for v in proposal["filing"].values())
             nc = len(proposal["conflicts"])
+            if not nn:
+                # Nothing to propose: say why and offer the way that works.
+                view._ui_pending = None
+                view.renderer.ui_set_prompt("Nothing to propose from tags",
+                                            "Every item is on the same tag, so there is no grouping to build "
+                                            "nodes from. Start one with New node, then File to… from the selection.",
+                                            [("new", "New node"), ("no", "Close")])
+                return
             replace = " It replaces the current structure." if structure._nodes(registry) else ""
             view.renderer.ui_set_prompt("Propose structure from tags",
                                         f"{nn} nodes, {nf} items filed, {nc} to review.{replace}",
                                         [("yes", "Apply"), ("no", "Cancel")])
+        elif verb == "prompt" and rk == "new":
+            _tree_action(win, view, f"new{SEP}")
         elif verb == "prompt":
             pending, view._ui_pending = getattr(view, "_ui_pending", None), None
             if rk == "yes" and pending:
@@ -1876,7 +1886,8 @@ def _inspector(view, win) -> None:
         filed = (" › ".join(structure.path(registry, key)) if filed_ok
                  else "Its source's nodes" if links.link_of(g) else "Not filed")
         recipe = data.get("recipes", {}).get(key, {})
-        kind = kind_of(rec.get("class") or recipe.get("class")) if (rec or recipe) else "Comes from its node"
+        kind = (kind_of(rec.get("class") or recipe.get("class")) if (rec or recipe)
+                else "From its node, once filed" if not filed_ok else "Drawing only")
         rows = [("Name", _edit(f"groupname:{g.uid}", g.name or "")), ("Filed in", filed), ("Kind", kind)]
         if g.is_component():
             same = sum(1 for o, _s, _r in structure._placements(scene) if o.mesh is g.mesh)
