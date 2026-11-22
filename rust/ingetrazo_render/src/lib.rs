@@ -2075,6 +2075,12 @@ impl Renderer {
     fn ui_set_delivery(&mut self, active: String, unfiled: u32, problems: u32) {
         if let Some(ui) = self.ui.as_mut() { ui.set_delivery(active, unfiled, problems); }
     }
+    fn ui_set_tabs(&mut self, tabs: Vec<Vec<ui::Item>>) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_tabs(tabs); }
+    }
+    fn ui_set_projects(&mut self, left: f32, docs: Vec<(String, bool, bool)>) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_projects(left, docs); }
+    }
     fn ui_take_actions(&mut self) -> Vec<String> {
         self.ui.as_mut().map(|ui| ui.take_actions()).unwrap_or_default()
     }

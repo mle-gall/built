@@ -156,6 +156,8 @@ def _send_tools(view, win) -> None:
     from PySide6.QtWidgets import QToolBar
     for bar in win.findChildren(QToolBar):
         bar.hide()
+    _merge_title_row(win)
+    _one_theme(win)
     # Full bleed: the right column stands in for the docks; they stay
     # reachable from the Window menu until it covers all they do.
     from PySide6.QtWidgets import QDockWidget
@@ -173,7 +175,7 @@ def _send_tools(view, win) -> None:
         if w is not None:
             w.setMaximumWidth(0)
     icons = []
-    for key in [*(k for row in NAV for k in row), "shadows", "section_cuts", "view_iso", "view_top", "view_front",
+    for key in [*(k for row in NAV for k in row), "four_views", "shadows", "section_cuts", "view_iso", "view_top", "view_front",
                 "view_right", "view_left", "view_back", "view_bottom"]:
         w, h, rgba = _icon_rgba(key)
         icons.append((key, w, h, rgba))
@@ -181,6 +183,126 @@ def _send_tools(view, win) -> None:
         icons.append((key, *_drawn_icon(key)))
     view.renderer.ui_set_icons(icons)
     view._ui_tools_sent = True
+
+
+#: Window buttons' room at the top left (mac_glass: 14 + three buttons).
+LIGHTS_ROOM = 86.0
+#: The strip along the top that moves the window, as a title bar would.
+DRAG_STRIP = 28.0
+
+
+def _merge_title_row(win) -> None:
+    """No title row at all (Maxence 2026-11-22: "can't we get rid of it?"):
+    the model reaches the window's top edge; the project tabs are a glass
+    capsule after the window buttons, on the top row of the chrome; the
+    buttons sit centred on that row."""
+    chrome = getattr(win, "_mac_chrome", None)
+    bar = getattr(win, "_project_tabs", None)
+    if bar is not None:
+        bar.hide()
+        bar.setMaximumHeight(0)
+    area = getattr(win, "_doc_area", None)
+    if area is not None and area.layout() is not None:
+        area.layout().setContentsMargins(0, 0, 0, 0)
+    if chrome is None:
+        return
+    from PySide6.QtCore import QPoint
+
+    def fit():
+        if win.windowState() & Qt.WindowFullScreen:
+            chrome._glass.place_lights(None)
+            return
+        view = getattr(getattr(win, "_doc", None), "stand_in", None)
+        top = view.mapTo(win, QPoint(0, 0)).y() if view is not None else 0
+        chrome._glass.place_lights(top + 12 + 18)     # the top row's centre
+    chrome.fit_lights = fit
+    QTimer.singleShot(0, fit)
+    QTimer.singleShot(400, fit)
+
+
+def _projects(view, win) -> None:
+    bar = getattr(win, "_project_tabs", None)
+    if bar is None:
+        return
+    current = bar.current()
+    docs = []
+    for i in range(bar.count()):
+        text = bar.tabs.tabText(i)
+        dirty = text.endswith(bar.DIRTY_MARK)
+        name = text[: -len(bar.DIRTY_MARK)] if dirty else text
+        docs.append((name, bar.tabs.tabData(i) is current, dirty))
+    if docs != getattr(view, "_ui_docs", None):
+        view._ui_docs = docs
+        view.renderer.ui_set_projects(LIGHTS_ROOM, docs)
+
+
+def _project_action(win, arg) -> None:
+    bar = getattr(win, "_project_tabs", None)
+    if bar is None:
+        return
+    if arg == "views":
+        bar.viewsRequested.emit()
+    elif arg == "new":
+        bar.newRequested.emit()
+    elif arg.startswith("close:"):
+        doc = bar.tabs.tabData(int(arg.partition(":")[2]))
+        if doc is not None:
+            bar.closeRequested.emit(doc)
+    else:
+        doc = bar.tabs.tabData(int(arg))
+        if doc is not None:
+            bar.activated.emit(doc)
+
+
+#: The title row in the chrome's graphite (tokens in ui.rs): Maxence
+#: 2026-11-22, "3 different themes: black top/bottom bar, blue bottom bar,
+#: grey UI". The bottom Qt rows go; this row stays (it holds the window
+#: buttons) and takes the same colours and capsule tabs.
+_TITLE_SHEET = """
+#document_area { background: #16191D; }
+#project_tab_bar::tab { background: transparent; color: #C9CFD6; border: none;
+    border-radius: 14px; padding: 5px 14px; margin: 0 2px; min-height: 18px; }
+#project_tab_bar::tab:hover { background: rgba(255,255,255,18); color: #EEF1F4; }
+#project_tab_bar::tab:selected { background: rgba(106,165,255,61); color: #FFFFFF; }
+#project_views, #project_tab_new { border: none; border-radius: 14px; }
+#project_views:hover, #project_tab_new:hover { background: rgba(255,255,255,18); }
+"""
+
+
+def _one_theme(win) -> None:
+    area = getattr(win, "_doc_area", None)
+    if area is not None:
+        area.setStyleSheet(_TITLE_SHEET)
+    status = win.statusBar()
+    if status is not None:
+        status.hide()
+    scenes = getattr(win, "_scene_tabs", None)
+    if scenes is not None:
+        scenes.setMaximumHeight(0)
+    # The side panels' pull handles: nothing to pull with the docks hidden.
+    from PySide6.QtWidgets import QWidget
+    for name in ("sidebar_handle", "left_sidebar_handle"):
+        for w in win.findChildren(QWidget, name):
+            w.hide()
+            w.setMaximumSize(0, 0)
+
+
+def _tabs(view, win) -> None:
+    """Model / sheet and the scenes for the bottom capsule bar."""
+    scene = win.viewport.scene
+    comps = list(getattr(scene, "compositions", None) or [])
+    last = min(max(getattr(win, "_last_sheet", 0), 0), len(comps) - 1) if comps else -1
+    sheet = comps[last].name if comps else "New sheet"
+    views = list(getattr(scene, "saved_views", None) or [])
+    row = getattr(getattr(win, "_scene_tabs", None), "tabs", None)
+    marked = row.marked_view() if row is not None and hasattr(row, "marked_view") else None
+    work = [("model", "Model", "The model", "", 1, True), ("sheet", sheet, "Sheets (⌃Tab)", "", 0, True)]
+    scenes = [(f"scene:{i}", v.name, "Scene", "", 1 if v is marked else 0, True) for i, v in enumerate(views)]
+    tabs = [work, scenes]
+    if tabs != getattr(view, "_ui_tabs", None):
+        view._ui_tabs = tabs
+        view._ui_scene_views = views
+        view.renderer.ui_set_tabs(tabs)
 
 
 def before_frame(view) -> None:
@@ -206,6 +328,8 @@ def before_frame(view) -> None:
     _cluster(view, win)
     _tree(view, win)
     _inspector(view, win)
+    _tabs(view, win)
+    _projects(view, win)
     opts = [(i, label, k, state) for i, label, k, state, _ in _options(view)]
     if opts != getattr(view, "_ui_opts", None):
         view._ui_opts = opts
@@ -582,6 +706,8 @@ def _tree_action(win, view, action) -> None:
                 _isolate(win, [getattr(e, "uid", None) for e in sel if getattr(e, "uid", None)])
             elif key == "edit" and len(groups) == 1:
                 vp.begin_group_edit(groups[0])
+            elif key.startswith("status:"):
+                _set_status(win, groups, key.partition(":")[2])
         elif verb == "unfiled":
             _select(win, (getattr(view, "_ui_tree", None) or {}).get("unfiled", []))
     except (KeyError, ValueError) as exc:
@@ -617,17 +743,21 @@ def _inspector(view, win) -> None:
         rows = [("Filed in", filed), ("Kind", kind)]
         status = structure._has_status(rec)
         if not filed_ok:
-            needs = [("Filing", "File it to give it a kind and a record")]
+            needs = [("Filing", "Needed first")]
         elif not rec:
-            needs = [("Record", "Made when its node has a kind")]
+            needs = [("Record", "Comes with a kind")]
         else:
-            needs = [("Status", "Set" if status else "Missing")]
+            needs = [("Status", _status_text(rec) or "Missing")]
         acts = [("file", "Refile…" if filed_ok else "File to…"), ("isolate", "Isolate"), ("edit", "Edit group")]
+        status_acts = [("status:" + v, v.capitalize()) for v in STATUS_CHOICES] if rec.get("class") else []
         export = [("IFC class", str(rec.get("class") or recipe.get("class") or "generic object")),
                   ("Predefined type", str(rec.get("predefined_type") or recipe.get("predefined_type") or "—")),
                   ("Tag", str(recipe.get("tag") or "—"))]
-        view.renderer.ui_set_inspector(title, [("Where", rows), ("What it needs", needs), ("Actions", acts),
-                                               ("Export details", export)])
+        sections = [("Where", rows), ("What it needs", needs)]
+        if status_acts:
+            sections.append(("Actions", status_acts))
+        sections += [("Actions", acts), ("Export details", export)]
+        view.renderer.ui_set_inspector(title, sections)
         return
     kinds = Counter()
     unfiled = 0
@@ -644,7 +774,50 @@ def _inspector(view, win) -> None:
     if others:
         rows.append(("Loose geometry", str(others)))
     acts = [("file", "File to…"), ("isolate", "Isolate")] if groups else [("isolate", "Isolate")]
-    view.renderer.ui_set_inspector(f"{len(sel)} selected", [("By node", rows), ("Actions", acts)])
+    sections = [("By node", rows)]
+    missing = sum(1 for g in groups if (g.ifc or {}).get("class") and not structure._has_status(g.ifc or {}))
+    if missing:
+        sections.append(("Status", [("Missing on", f"{missing} items")]))
+        sections.append(("Actions", [("status:" + v, "All " + v.lower()) for v in STATUS_CHOICES]))
+    sections.append(("Actions", acts))
+    view.renderer.ui_set_inspector(f"{len(sel)} selected", sections)
+
+
+#: The IFC Status values offered as one click (the rest stay in the BIM panel).
+STATUS_CHOICES = ["EXISTING", "NEW", "DEMOLISH", "TEMPORARY"]
+
+
+def _status_text(rec) -> str:
+    for name, props in (rec.get("psets") or {}).items():
+        if name.endswith("Common"):
+            value = props.get("Status")
+            if isinstance(value, dict):
+                value = value.get("value")
+            if value:
+                return str(value).capitalize()
+    return ""
+
+
+def _set_status(win, groups, value) -> None:
+    """Pset_<Class>Common.Status on every selected item that has a record:
+    one undo step."""
+    from copy import deepcopy
+    from core.history import CompoundCommand, SetRecordCommand
+    from core.ifc_tables import common_pset
+    from views.structure_recipe import execute
+    commands = []
+    for g in groups:
+        rec = g.ifc or {}
+        cls = rec.get("class")
+        if not cls:
+            continue
+        psets = deepcopy(rec.get("psets") or {})
+        name = next((n for n in psets if n.endswith("Common")), common_pset(cls))
+        psets.setdefault(name, {})["Status"] = value
+        commands.append(SetRecordCommand([g], {"psets": psets}))
+    if commands:
+        execute(win.viewport, CompoundCommand(commands))
+        win.viewport.flash_status(f"Status {value.capitalize()} on {len(commands)} item" + ("s" if len(commands) != 1 else ""))
 
 
 def _dock(win, names) -> None:
@@ -699,6 +872,19 @@ def _run(win, actions) -> None:
         elif kind == "tree":
             view = getattr(getattr(win, "_doc", None), "stand_in", None)
             _tree_action(win, view, arg)
+        elif kind == "proj":
+            _project_action(win, arg)
+        elif kind == "tab":
+            view = getattr(getattr(win, "_doc", None), "stand_in", None)
+            if arg == "model":
+                win._show_model()
+            elif arg == "sheet":
+                win._to_sheets()
+            elif arg.startswith("scene:"):
+                views = getattr(view, "_ui_scene_views", [])
+                i = int(arg.partition(":")[2])
+                if 0 <= i < len(views):
+                    win.tray.scenes.show_view(views[i])
         elif kind == "deliver":
             view = getattr(getattr(win, "_doc", None), "stand_in", None)
             data = getattr(view, "_ui_tree", None) or {}
@@ -764,6 +950,20 @@ def _mods(event) -> int:
 _BUTTONS = {Qt.LeftButton: 1, Qt.RightButton: 2, Qt.MiddleButton: 3}
 
 
+def title_double_click(view, event) -> bool:
+    """A double-click on the top strip zooms the window, as on a title bar."""
+    if not getattr(view, "_ui_attached", False) or event.position().y() > DRAG_STRIP:
+        return False
+    if view.renderer.ui_pointer("move", float(event.position().x()), float(event.position().y()), 0, 0):
+        return False
+    chrome = getattr(view.window(), "_mac_chrome", None)
+    glass = getattr(chrome, "_glass", None)
+    if glass is not None:
+        glass.zoom()
+        return True
+    return False
+
+
 def wheel(view, event) -> bool:
     if not getattr(view, "_ui_attached", False):
         return False
@@ -786,6 +986,13 @@ def pointer(view, kind: str, event=None) -> bool:
         return False
     if event is None:
         taken = view.renderer.ui_pointer(kind, -1.0, -1.0, 0, 0)
+    elif kind == "press" and event.position().y() <= DRAG_STRIP and event.button() == Qt.LeftButton \
+            and not view.renderer.ui_pointer("move", float(event.position().x()), float(event.position().y()), 0, 0):
+        # The empty top strip is the window's title bar: drag moves it.
+        handle = view.window().windowHandle()
+        if handle is not None:
+            handle.startSystemMove()
+        return True
     else:
         p = event.position()
         taken = view.renderer.ui_pointer(kind, float(p.x()), float(p.y()),

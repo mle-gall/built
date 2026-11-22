@@ -25,9 +25,17 @@ const FIELD: Color32 = Color32::from_rgba_premultiplied(0, 0, 0, 71);        // 
 const WARN: Color32 = Color32::from_rgb(0xF5, 0xB8, 0x4A);
 const WARN_FILL: Color32 = Color32::from_rgba_premultiplied(34, 26, 10, 36);  // warn @ 14 %
 const PANEL: Color32 = Color32::from_rgba_premultiplied(29, 31, 36, 245);    // tooltips (opaque)
-// Radii: concentric — control 6 inside bars/menus (margin 4) = 10, inside panels (margin 6) = 12.
-const R_CONTROL: u8 = 6;
-const R_ROW: u8 = 6;
+// Geometry (Maxence 2026-11-22: "padding issues, rectangular buttons"):
+// round controls, capsule bars, concentric radii. A bar is 28-pt controls
+// in 4 pt of padding = 36 high, radius 18; menus pad 6 (radius 14, rows 8);
+// the column pads 10 (radius 18, rows 8). Everything sits 12 from the
+// window's edges and 8 from its neighbours.
+// Rounded squares, not circles (Maxence 2026-11-22: "buttons can remain
+// rounded squares … reduce the radii, it's a bit too much").
+const R_CONTROL: u8 = 8;    // 28-pt controls, tabs, chips
+const R_ROW: u8 = 6;        // menu and tree rows, fields
+const BAR_H: f32 = 36.0;
+const EDGE_GAP: f32 = 12.0;
 // Type roles (Inter 400 / 500 / 600 when bundled, else the system font).
 fn body() -> egui::FontId { egui::FontId::proportional(12.0) }
 fn meta() -> egui::FontId { egui::FontId::proportional(11.0) }
@@ -75,7 +83,7 @@ impl Surface {
         crate::glass::Look { tint: [0.01444, 0.01764, 0.02315, mix], saturation: sat, rim: [lit, quiet],
                              rim_width: 1.25, glow: top, peak, inner_shadow: inner }
     }
-    fn radius(self) -> u8 { match self { Surface::Panel => 12, Surface::Raised | Surface::Pill => 10 } }
+    fn radius(self) -> u8 { match self { Surface::Panel => 14, Surface::Raised => 12, Surface::Pill => 12 } }
     fn shadow(self) -> Shadow {
         let (y, blur, alpha) = match self {
             Surface::Panel => (8, 24, 100),
@@ -134,6 +142,11 @@ pub struct Ui {
     column: Option<Column>,
     /// Ready-to-deliver: active node path, unfiled count, items to fix.
     delivery: Option<(String, u32, u32)>,
+    /// Bottom centre: workspaces (Model, sheet) then scenes, as groups.
+    tabs: Vec<Vec<Item>>,
+    /// Project tabs at the top left, after the window buttons' room:
+    /// (left edge, [(name, active, unsaved)]).
+    projects: Option<(f32, Vec<(String, bool, bool)>)>,
     glass: crate::glass::Glass,
 }
 
@@ -202,7 +215,12 @@ impl Glass {
 }
 
 /// A section caption: small, spaced capitals, faint.
-fn caption(ui: &mut egui::Ui, text: &str) {
+fn caption(ui: &mut egui::Ui, text: &str) { caption_at(ui, text, 8.0) }
+/// A caption lined up with the text of the rows under it (8 in the column, 12 in menus).
+fn caption_at(ui: &mut egui::Ui, text: &str, pad: f32) {
+    ui.horizontal(|ui| { ui.add_space(pad); caption_plain(ui, text); });
+}
+fn caption_plain(ui: &mut egui::Ui, text: &str) {
     let job = egui::text::LayoutJob::single_section(text.to_uppercase(), egui::TextFormat {
         font_id: strong(10.0), color: FAINT, extra_letter_spacing: 0.6, ..Default::default() });
     ui.label(job);
@@ -224,9 +242,9 @@ impl Ui {
             s.visuals.extreme_bg_color = FIELD;
             s.visuals.widgets.inactive.bg_stroke = Stroke::new(1.0_f32, EDGE);
             s.visuals.widgets.hovered.bg_stroke = Stroke::new(1.0_f32, Color32::from_rgba_premultiplied(46, 46, 46, 46));
-            s.visuals.widgets.inactive.corner_radius = CornerRadius::same(R_CONTROL);
-            s.visuals.widgets.hovered.corner_radius = CornerRadius::same(R_CONTROL);
-            s.visuals.widgets.active.corner_radius = CornerRadius::same(R_CONTROL);
+            s.visuals.widgets.inactive.corner_radius = CornerRadius::same(R_ROW);
+            s.visuals.widgets.hovered.corner_radius = CornerRadius::same(R_ROW);
+            s.visuals.widgets.active.corner_radius = CornerRadius::same(R_ROW);
             s.visuals.selection.stroke = Stroke::new(1.0_f32, ACCENT);
             s.visuals.selection.bg_fill = ACTIVE;
             s.visuals.window_corner_radius = CornerRadius::same(R_CONTROL);
@@ -264,6 +282,8 @@ impl Ui {
             options: Vec::new(),
             column: None,
             delivery: None,
+            tabs: Vec::new(),
+            projects: None,
         }
     }
 
@@ -363,6 +383,10 @@ impl Ui {
             col.filter.clear();
         }
     }
+    pub fn set_projects(&mut self, left: f32, docs: Vec<(String, bool, bool)>) {
+        self.projects = Some((left, docs));
+    }
+    pub fn set_tabs(&mut self, tabs: Vec<Vec<Item>>) { self.tabs = tabs; }
     pub fn set_delivery(&mut self, active: String, unfiled: u32, problems: u32) {
         self.delivery = Some((active, unfiled, problems));
     }
@@ -434,10 +458,11 @@ impl Ui {
             .show(ctx, |ui| {
                 let edge = if *typing { ACCENT } else { EDGE };
                 glass(Surface::Pill).stroke(Stroke::new(1.0_f32, edge))
-                    .inner_margin(Margin::symmetric(10, 5)).show(ui, |ui| {
-                    ui.horizontal(|ui| {
+                    .inner_margin(Margin::symmetric(14, 4)).show(ui, |ui| {
+                    ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                        ui.set_min_height(28.0);
                         ui.spacing_mut().item_spacing = vec2(10.0, 0.0);
-                        ui.label(egui::RichText::new(caption).size(12.0).color(DIM));
+                        ui.label(egui::RichText::new(caption).font(meta()).color(DIM));
                         let (rect, _) = ui.allocate_exact_size(vec2(110.0, 16.0), Sense::hover());
                         let shown = if value.is_empty() && *typing { "|" } else { value.as_str() };
                         ui.painter().text(rect.right_center(), egui::Align2::RIGHT_CENTER, shown,
@@ -532,15 +557,16 @@ impl Ui {
         let mut clicked = None;
         // Two columns while they fit above the status line; wider, never
         // scrolled or folded, when the window is short (council 2026-11-22).
-        let room = screen.height() - 12.0 - 60.0;
+        let room = screen.height() - (if self.projects.is_some() { EDGE_GAP + BAR_H + 8.0 } else { EDGE_GAP }) - 60.0;
         let tall = |cols: usize| self.groups.iter().map(|g| g.len().div_ceil(cols) as f32 * 32.0).sum::<f32>()
             + self.groups.len().saturating_sub(1) as f32 * 9.0 + 8.0;
         let cols = (2..=5).find(|c| tall(*c) <= room).unwrap_or(5);
+        let top = if self.projects.is_some() { EDGE_GAP + BAR_H + 8.0 } else { EDGE_GAP };
         egui::Area::new(egui::Id::new("palette"))
-            .fixed_pos(pos2(12.0, 12.0))
+            .fixed_pos(pos2(EDGE_GAP, top))
             .order(egui::Order::Foreground)
             .show(ctx, |ui| {
-                frame().inner_margin(Margin::same(4)).show(ui, |ui| {
+                frame().corner_radius(CornerRadius::same(12)).inner_margin(Margin::same(4)).show(ui, |ui| {
                     ui.spacing_mut().item_spacing = vec2(2.0, 2.0);
                     for (gi, group) in self.groups.iter().enumerate() {
                         if gi > 0 {
@@ -570,12 +596,14 @@ impl Ui {
             return;
         }
         egui::Area::new(egui::Id::new("status"))
-            .fixed_pos(pos2(12.0, screen.max.y - 36.0))
+            .pivot(egui::Align2::LEFT_BOTTOM)
+            .fixed_pos(pos2(EDGE_GAP, screen.max.y - EDGE_GAP))
             .order(egui::Order::Foreground)
             .interactable(false)
             .show(ctx, |ui| {
-                glass(Surface::Pill).inner_margin(Margin::symmetric(10, 5)).show(ui, |ui| {
-                    ui.horizontal(|ui| {
+                glass(Surface::Pill).inner_margin(Margin::symmetric(14, 4)).show(ui, |ui| {
+                    ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                        ui.set_min_height(28.0);
                         ui.spacing_mut().item_spacing = vec2(10.0, 0.0);
                         if !self.status.is_empty() {
                             ui.label(egui::RichText::new(&self.status).font(strong(12.0)).color(INK));
@@ -628,6 +656,78 @@ impl Ui {
         }
     }
 
+    /// Model / sheet and the scenes, one capsule bar on the bottom row,
+    /// centred in the free viewport (the old Qt status bar and scene row).
+    fn tab_bar(&mut self, ctx: &egui::Context, screen: Rect) {
+        if self.tabs.iter().all(|g| g.is_empty()) {
+            return;
+        }
+        let centre = (screen.min.x + self.free_right(ctx, screen)) / 2.0;
+        let mut clicked = None;
+        egui::Area::new(egui::Id::new("tabs"))
+            .pivot(egui::Align2::CENTER_BOTTOM)
+            .fixed_pos(pos2(centre, screen.max.y - EDGE_GAP))
+            .order(egui::Order::Foreground)
+            .show(ctx, |ui| {
+                glass(Surface::Pill).inner_margin(Margin::same(4)).show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing = vec2(2.0, 0.0);
+                        for (gi, group) in self.tabs.iter().filter(|g| !g.is_empty()).enumerate() {
+                            if gi > 0 {
+                                let (r, _) = ui.allocate_exact_size(vec2(9.0, 28.0), Sense::hover());
+                                ui.painter().vline(r.center().x, r.y_range().shrink(7.0), Stroke::new(1.0_f32, EDGE));
+                            }
+                            for item in group {
+                                if item_button(ui, item, None) {
+                                    clicked = Some(item.0.clone());
+                                }
+                            }
+                        }
+                    });
+                });
+            });
+        if let Some(id) = clicked {
+            self.actions.push(format!("tab:{id}"));
+        }
+    }
+
+    /// The project tabs: view layout, one capsule per project (× to close on
+    /// hover or when current, a dot while unsaved), + for a new one.
+    fn project_bar(&mut self, ctx: &egui::Context) {
+        let Some((left, docs)) = self.projects.clone() else { return };
+        let mut clicked = None;
+        let views_icon = self.icons.get("four_views").cloned();
+        egui::Area::new(egui::Id::new("projects"))
+            .fixed_pos(pos2(left, EDGE_GAP))
+            .order(egui::Order::Foreground)
+            .show(ctx, |ui| {
+                glass(Surface::Pill).inner_margin(Margin::same(4)).show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing = vec2(2.0, 0.0);
+                        let views = (String::new(), "Views".to_owned(), "View layout: one to four views".to_owned(),
+                                     String::new(), -1i8, true);
+                        if item_button(ui, &views, views_icon.as_ref()) {
+                            clicked = Some("views".to_owned());
+                        }
+                        for (i, (name, active, dirty)) in docs.iter().enumerate() {
+                            match doc_tab(ui, name, *active, *dirty) {
+                                Some(true) => clicked = Some(format!("close:{i}")),
+                                Some(false) => clicked = Some(format!("{i}")),
+                                None => {}
+                            }
+                        }
+                        let plus = (String::new(), "+".to_owned(), "New project (⌘N)".to_owned(), String::new(), -1i8, true);
+                        if item_button(ui, &plus, None) {
+                            clicked = Some("new".to_owned());
+                        }
+                    });
+                });
+            });
+        if let Some(id) = clicked {
+            self.actions.push(format!("proj:{id}"));
+        }
+    }
+
     fn selection_bar(&mut self, ctx: &egui::Context, screen: Rect) {
         let Some((summary, actions)) = &self.selection else { return };
         let mut clicked = None;
@@ -635,13 +735,13 @@ impl Ui {
         let has_more = actions.iter().any(|a| a.4);
         let bar = egui::Area::new(egui::Id::new("selection"))
             .pivot(egui::Align2::CENTER_BOTTOM)
-            .fixed_pos(pos2(screen.center().x, screen.max.y - 52.0))
+            .fixed_pos(pos2(screen.center().x, screen.max.y - EDGE_GAP - BAR_H - 8.0))
             .order(egui::Order::Foreground)
             .show(ctx, |ui| {
-                glass(Surface::Pill).corner_radius(CornerRadius::same(12)).inner_margin(Margin::same(3)).show(ui, |ui| {
+                glass(Surface::Pill).inner_margin(Margin::same(4)).show(ui, |ui| {
                     ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing = vec2(2.0, 0.0);
-                        ui.add_space(8.0);
+                        ui.add_space(12.0);
                         ui.label(egui::RichText::new(summary).font(meta()).color(FAINT));
                         ui.add_space(8.0);
                         let (r, _) = ui.allocate_exact_size(vec2(1.0, 28.0), Sense::hover());
@@ -668,7 +768,7 @@ impl Ui {
                 .fixed_pos(pos2(anchor.max.x, anchor.min.y - 6.0))
                 .order(egui::Order::Foreground)
                 .show(ctx, |ui| {
-                    glass(Surface::Raised).inner_margin(Margin::same(4)).show(ui, |ui| {
+                    glass(Surface::Raised).inner_margin(Margin::same(6)).show(ui, |ui| {
                         ui.set_width(230.0);
                         ui.spacing_mut().item_spacing = vec2(0.0, 1.0);
                         let mut seen: Vec<String> = Vec::new();
@@ -704,7 +804,7 @@ impl Ui {
                 .fixed_pos(pos2(row.max.x + 8.0, row.min.y - 4.0))
                 .order(egui::Order::Foreground)
                 .show(ctx, |ui| {
-                    glass(Surface::Raised).inner_margin(Margin::same(4)).show(ui, |ui| {
+                    glass(Surface::Raised).inner_margin(Margin::same(6)).show(ui, |ui| {
                         ui.set_width(170.0);
                         ui.spacing_mut().item_spacing = vec2(0.0, 1.0);
                         for (id, label, key, enabled, _) in actions {
@@ -740,7 +840,7 @@ impl Ui {
             .fixed_pos(pos2(screen.max.x - 12.0, 12.0))
             .order(egui::Order::Foreground)
             .show(ctx, |ui| {
-                frame().inner_margin(Margin::same(3)).show(ui, |ui| {
+                frame().inner_margin(Margin::same(4)).show(ui, |ui| {
                     ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing = vec2(2.0, 0.0);
                         for (gi, group) in self.cluster.iter().enumerate() {
@@ -783,7 +883,7 @@ impl Ui {
                             if si > 0 {
                                 ui.add_space(4.0);
                             }
-                            caption(ui, title);
+                            caption_at(ui, title, 12.0);
                             let icons_only = items.iter().all(|i| self.icons.contains_key(&i.3));
                             if icons_only {
                                 ui.horizontal_wrapped(|ui| {
@@ -819,13 +919,15 @@ impl Ui {
         if self.options.is_empty() {
             return;
         }
-        let left = ctx.memory(|m| m.area_rect(egui::Id::new("palette"))).map_or(80.0, |r| r.max.x) + 8.0;
+        let palette = ctx.memory(|m| m.area_rect(egui::Id::new("palette")));
+        let left = palette.map_or(80.0, |r| r.max.x) + 8.0;
+        let top = palette.map_or(EDGE_GAP, |r| r.min.y);
         let mut clicked = None;
         egui::Area::new(egui::Id::new("options"))
-            .fixed_pos(pos2(left, 12.0))
+            .fixed_pos(pos2(left, top))
             .order(egui::Order::Foreground)
             .show(ctx, |ui| {
-                frame().inner_margin(Margin::same(3)).show(ui, |ui| {
+                frame().inner_margin(Margin::same(4)).show(ui, |ui| {
                     ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing = vec2(2.0, 0.0);
                         for (id, label, key, state) in &self.options {
@@ -870,13 +972,15 @@ impl Ui {
             .fixed_pos(pos2(screen.max.x - 12.0 - W, top))
             .order(egui::Order::Foreground)
             .show(ctx, |ui| {
-                glass(Surface::Panel).inner_margin(Margin::same(8)).show(ui, |ui| {
+                glass(Surface::Panel).inner_margin(Margin::same(10)).show(ui, |ui| {
                     ui.set_width(W - 12.0);
                     ui.set_height(height - 12.0);
                     ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
                     // Header: title, Unfiled chip.
                     ui.horizontal(|ui| {
-                        caption(ui, "Project");
+                        ui.set_min_height(24.0);
+                        ui.add_space(8.0);
+                        caption_plain(ui, "Project");
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if col.unfiled > 0 {
                                 let item = (String::new(), format!("{} unfiled", col.unfiled), "Select the unfiled items".to_owned(),
@@ -885,7 +989,7 @@ impl Ui {
                             }
                         });
                     });
-                    ui.add_space(4.0);
+                    ui.add_space(6.0);
                     if let Some(what) = &col.filing {
                         let banner = format!("File {what} to…  click a node, or type and press Enter");
                         let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 22.0), Sense::hover());
@@ -1024,17 +1128,18 @@ impl Ui {
                     egui::ScrollArea::vertical().id_salt("inspector").auto_shrink([false, false]).show(ui, |ui| {
                         ui.spacing_mut().item_spacing = vec2(0.0, 3.0);
                         if col.inspector_title.is_empty() {
-                            ui.label(egui::RichText::new("Nothing selected").font(body()).color(FAINT));
+                            ui.horizontal(|ui| { ui.add_space(8.0); ui.label(egui::RichText::new("Nothing selected").font(body()).color(FAINT)); });
                             return;
                         }
-                        ui.label(egui::RichText::new(&col.inspector_title).font(title()).color(INK));
+                        ui.horizontal(|ui| { ui.add_space(8.0); ui.label(egui::RichText::new(&col.inspector_title).font(title()).color(INK)); });
                         ui.add_space(4.0);
                         for (title, rows) in &col.inspector {
                             if title == "Actions" {
                                 // What to do next, as commands: (id, label).
                                 ui.add_space(6.0);
                                 ui.horizontal_wrapped(|ui| {
-                                    ui.spacing_mut().item_spacing = vec2(4.0, 4.0);
+                                    ui.add_space(8.0);
+                                    ui.spacing_mut().item_spacing = vec2(6.0, 6.0);
                                     for (id, label) in rows {
                                         if chip_button(ui, label) {
                                             actions.push(format!("insp:{id}"));
@@ -1050,14 +1155,14 @@ impl Ui {
                                     let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 18.0), Sense::hover());
                                     let v = ui.painter().layout_no_wrap(value.clone(), egui::FontId::proportional(12.0), INK);
                                     let vw = v.size().x.min(r.width() * 0.6);
-                                    ui.painter().galley(pos2(r.max.x - 4.0 - vw, r.center().y - v.size().y / 2.0), v, INK);
+                                    ui.painter().galley(pos2(r.max.x - 8.0 - vw, r.center().y - v.size().y / 2.0), v, INK);
                                     let mut job = egui::text::LayoutJob::single_section(label.clone(), egui::TextFormat {
                                         font_id: egui::FontId::proportional(11.5), color: DIM, ..Default::default() });
-                                    job.wrap.max_width = (r.width() - vw - 14.0).max(20.0);
+                                    job.wrap.max_width = (r.width() - vw - 26.0).max(20.0);
                                     job.wrap.max_rows = 1;
                                     job.wrap.break_anywhere = true;
                                     let l = ui.painter().layout_job(job);
-                                    ui.painter().galley(pos2(r.min.x, r.center().y - l.size().y / 2.0), l, DIM);
+                                    ui.painter().galley(pos2(r.min.x + 8.0, r.center().y - l.size().y / 2.0), l, DIM);
                                 }
                             };
                             if folded {
@@ -1079,7 +1184,7 @@ impl Ui {
                 .fixed_pos(at + vec2(4.0, 4.0))
                 .order(egui::Order::Tooltip)
                 .show(ctx, |ui| {
-                    glass(Surface::Raised).inner_margin(Margin::same(4)).show(ui, |ui| {
+                    glass(Surface::Raised).inner_margin(Margin::same(6)).show(ui, |ui| {
                         ui.set_width(190.0);
                         ui.spacing_mut().item_spacing = vec2(0.0, 1.0);
                         for (id, label) in [("active", "Draw into this node"), ("filehere", "File selection here"),
@@ -1115,8 +1220,8 @@ impl Ui {
             .interactable(false)
             .show(ctx, |ui| {
                 let edge = if *typing { ACCENT } else { EDGE };
-                glass(Surface::Pill).stroke(Stroke::new(1.0_f32, edge))
-                    .inner_margin(Margin::symmetric(7, 3)).show(ui, |ui| {
+                glass(Surface::Pill).stroke(Stroke::new(1.0_f32, edge)).corner_radius(CornerRadius::same(8))
+                    .inner_margin(Margin::symmetric(10, 4)).show(ui, |ui| {
                     ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing = vec2(6.0, 0.0);
                         if !caption.is_empty() {
@@ -1159,6 +1264,8 @@ impl Ui {
             self.right_column(ctx, screen);
             self.measure_box(ctx, screen);
             self.delivery_pill(ctx, screen);
+            self.tab_bar(ctx, screen);
+            self.project_bar(ctx);
             if self.cursor.as_ref().is_some_and(|c| c.2) {
                 self.cursor_value(ctx, screen);
             }
@@ -1166,7 +1273,8 @@ impl Ui {
         let shown = [("palette", !self.groups.is_empty()), ("selection", self.selection.is_some()),
                      ("cluster", !self.cluster.is_empty()), ("view_menu", self.view_open),
                      ("options", !self.options.is_empty()), ("column", self.column.is_some()),
-                     ("delivery", self.delivery.is_some()),
+                     ("delivery", self.delivery.is_some()), ("tabs", !self.tabs.is_empty()),
+                     ("projects", self.projects.is_some()),
                      ("sel_more", self.sel_more && self.selection.is_some()),
                      ("sel_sub", self.sel_more && self.sel_sub.is_some()),
                      ("row_menu", self.column.as_ref().is_some_and(|c| c.row_menu.is_some()))];
@@ -1230,7 +1338,7 @@ fn item_button(ui: &mut egui::Ui, item: &Item, icon: Option<&egui::TextureHandle
     let (_, label, tip, _, checked, enabled) = item;
     let width = match icon {
         Some(_) => 28.0,
-        None => ui.painter().layout_no_wrap(label.clone(), body(), INK).size().x + 16.0,
+        None => ui.painter().layout_no_wrap(label.clone(), body(), INK).size().x + 24.0,
     };
     let sense = if *enabled { Sense::click() } else { Sense::hover() };
     let (rect, resp) = ui.allocate_exact_size(vec2(width, 28.0), sense);
@@ -1261,21 +1369,50 @@ fn menu_row_resp(ui: &mut egui::Ui, item: &Item) -> (egui::Response, Rect) {
     let st = state_of(&resp, false, *enabled);
     paint_state(ui, rect, st, R_ROW);
     let ink = if *enabled { INK } else { OFF };
-    let x = if lane == "check" || *checked >= 0 { 24.0 } else { 10.0 };
+    let x = if lane == "check" || *checked >= 0 { 28.0 } else { 12.0 };
     if *checked == 1 {
-        ui.painter().text(pos2(rect.min.x + 12.0, rect.center().y), egui::Align2::CENTER_CENTER, "✓", body(), ACCENT);
+        ui.painter().text(pos2(rect.min.x + 14.0, rect.center().y), egui::Align2::CENTER_CENTER, "✓", body(), ACCENT);
     }
     ui.painter().text(pos2(rect.min.x + x, rect.center().y), egui::Align2::LEFT_CENTER, label, body(), ink);
     if !tip.is_empty() {
-        ui.painter().text(pos2(rect.max.x - 10.0, rect.center().y), egui::Align2::RIGHT_CENTER, tip, meta(), FAINT);
+        ui.painter().text(pos2(rect.max.x - 12.0, rect.center().y), egui::Align2::RIGHT_CENTER, tip, meta(), FAINT);
     }
     (resp, rect)
+}
+
+/// A project tab: capsule, name (and • while unsaved), × on the right when
+/// current or hovered. Some(true): close clicked; Some(false): tab clicked.
+fn doc_tab(ui: &mut egui::Ui, name: &str, active: bool, dirty: bool) -> Option<bool> {
+    let label = if dirty { format!("{name} •") } else { name.to_owned() };
+    let g = ui.painter().layout_no_wrap(label, body(), INK);
+    let (rect, resp) = ui.allocate_exact_size(vec2(g.size().x + 12.0 + 26.0, 28.0), Sense::click());
+    let st = state_of(&resp, active, true);
+    paint_state(ui, rect, st, R_CONTROL);
+    let ink = if active { Color32::WHITE } else if resp.hovered() { INK } else { INK_2 };
+    ui.painter().galley(pos2(rect.min.x + 12.0, rect.center().y - g.size().y / 2.0), g, ink);
+    let x = Rect::from_center_size(pos2(rect.max.x - 14.0, rect.center().y), vec2(18.0, 18.0));
+    let over_x = resp.hover_pos().is_some_and(|p| x.contains(p));
+    if active || resp.hovered() {
+        if over_x {
+            ui.painter().circle_filled(x.center(), 9.0, PRESS);
+        }
+        let c = x.center();
+        let k = 3.5;
+        let pen = Stroke::new(1.3_f32, if over_x { INK } else { DIM });
+        ui.painter().line_segment([c + vec2(-k, -k), c + vec2(k, k)], pen);
+        ui.painter().line_segment([c + vec2(-k, k), c + vec2(k, -k)], pen);
+    }
+    if resp.clicked() {
+        let on_x = resp.interact_pointer_pos().is_some_and(|p| x.contains(p));
+        return Some(on_x && (active || resp.hovered()));
+    }
+    None
 }
 
 /// A small command chip (inspector next steps): neutral wash, 22 high.
 fn chip_button(ui: &mut egui::Ui, label: &str) -> bool {
     let g = ui.painter().layout_no_wrap(label.to_owned(), meta(), INK);
-    let (rect, resp) = ui.allocate_exact_size(vec2(g.size().x + 16.0, 22.0), Sense::click());
+    let (rect, resp) = ui.allocate_exact_size(vec2(g.size().x + 20.0, 24.0), Sense::click());
     let st = state_of(&resp, false, true);
     ui.painter().rect_filled(rect, CornerRadius::same(R_CONTROL), HOVER);
     paint_state(ui, rect, st, R_CONTROL);
@@ -1287,13 +1424,13 @@ fn chip_button(ui: &mut egui::Ui, label: &str) -> bool {
 /// A warning chip: amber text on an amber wash, no outline.
 fn amber_button(ui: &mut egui::Ui, label: &str) -> bool {
     let g = ui.painter().layout_no_wrap(label.to_owned(), strong(11.0), WARN);
-    let (rect, resp) = ui.allocate_exact_size(vec2(g.size().x + 16.0, 20.0), Sense::click());
+    let (rect, resp) = ui.allocate_exact_size(vec2(g.size().x + 20.0, 24.0), Sense::click());
     let fill = if resp.is_pointer_button_down_on() {
         Color32::from_rgba_premultiplied(54, 40, 16, 56)
     } else if resp.hovered() {
         Color32::from_rgba_premultiplied(44, 33, 13, 46)
     } else { WARN_FILL };
-    ui.painter().rect_filled(rect, CornerRadius::same(10), fill);
+    ui.painter().rect_filled(rect, CornerRadius::same(R_CONTROL), fill);
     ui.painter().galley(rect.center() - g.size() / 2.0, g, WARN);
     resp.clicked()
 }
@@ -1302,11 +1439,11 @@ fn amber_button(ui: &mut egui::Ui, label: &str) -> bool {
 fn text_button(ui: &mut egui::Ui, label: &str, key: &str, enabled: bool) -> bool {
     let galley = ui.painter().layout_no_wrap(label.to_owned(), body(), INK);
     let sense = if enabled { Sense::click() } else { Sense::hover() };
-    let (rect, resp) = ui.allocate_exact_size(vec2(galley.size().x + 16.0, 28.0), sense);
+    let (rect, resp) = ui.allocate_exact_size(vec2(galley.size().x + 24.0, 28.0), sense);
     let st = state_of(&resp, false, enabled);
     paint_state(ui, rect, st, R_CONTROL);
     let ink = if enabled { INK } else { OFF };
-    ui.painter().galley(pos2(rect.min.x + 8.0, rect.center().y - galley.size().y / 2.0), galley, ink);
+    ui.painter().galley(pos2(rect.min.x + 12.0, rect.center().y - galley.size().y / 2.0), galley, ink);
     let resp = if key.is_empty() { resp } else { resp.on_hover_text(key) };
     resp.clicked()
 }

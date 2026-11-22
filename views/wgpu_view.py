@@ -1303,6 +1303,8 @@ class WgpuView(QWidget):
 
     def mouseDoubleClickEvent(self, event):
         from views import wgpu_ui
+        if wgpu_ui.title_double_click(self, event):
+            return
         if wgpu_ui.pointer(self, 'press', event):
             return
         # A double click of the wheel recentres the view on the point under
