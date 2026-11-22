@@ -276,6 +276,12 @@ class Face:
         # the surviving/covering face — see tests/test_face_attrs.py.
         self.attrs: dict = {}
 
+    def reverse_rings(self) -> None:
+        """Reverse the winding of every ring, preserving paint and incidence."""
+        self.loop.reverse()
+        for hole in self.hole_loops:
+            hole.reverse()
+
     # ---- Legacy-compatible read interface (positions) -----------------------
     @property
     def vertices(self) -> list[QVector3D]:
@@ -2156,13 +2162,7 @@ def turn_face_over(face) -> None:
         if front:
             attrs["back"] = front
         face.attrs = attrs
-    reverse = getattr(face, "reverse_rings", None)
-    if reverse is not None:
-        reverse()              # a store-backed face (core.store_mesh)
-        return
-    face.loop.reverse()
-    for h in face.hole_loops:
-        h.reverse()
+    face.reverse_rings()
 
 
 def _dominant_attrs(faces) -> dict:

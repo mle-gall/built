@@ -590,10 +590,7 @@ class FaceView(_ViewMixin, Face):
         does this (the store's own revision moves, for the view caches)."""
         st = _store_of(self._m)
         if st is None:
-            obj = self._obj()
-            obj.loop.reverse()
-            for h in obj.hole_loops:
-                h.reverse()
+            self._obj().reverse_rings()
             return
         st.reverse_face(self.key)
 

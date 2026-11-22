@@ -1334,9 +1334,7 @@ class FlipFacesCommand(Command):
 
     def _flip(self, scene) -> None:
         for f in self._faces:
-            f.loop.reverse()
-            for h in getattr(f, "hole_loops", []) or []:
-                h.reverse()
+            f.reverse_rings()
         # A reversed loop changes no count, coordinate or paint — all a
         # cached group chunk is checked against — so the group went on
         # drawing the old winding until some edit changed a count (#197).
@@ -3528,9 +3526,7 @@ class FlipGroupsCommand(Command):
             from core.group import carry_axes
             carry_axes(g, m)                  # an involution, like the rest
             for f in g.mesh.faces:
-                f.loop.reverse()
-                for h in getattr(f, "hole_loops", []) or []:
-                    h.reverse()
+                f.reverse_rings()
         _dirty_group_chunks(scene)
         scene.version += 1
 
@@ -3565,9 +3561,7 @@ class FlipVerticesCommand(Command):
         rotate_points(scene, {_key(p) for p in self.src}, m)
         for f in self._faces:
             if hasattr(f, "loop"):
-                f.loop.reverse()
-                for h in getattr(f, "hole_loops", []) or []:
-                    h.reverse()
+                f.reverse_rings()
         fold_nonplanar_faces(scene.mesh)
         self._after = scene.mesh.capture_state()
 
