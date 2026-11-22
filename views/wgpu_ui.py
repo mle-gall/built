@@ -1731,6 +1731,17 @@ def _run(win, actions) -> None:
             _tree_action(win, view, arg)
         elif kind == "pal":
             _paint_with(win, arg)
+        elif kind == "cmdq":
+            view = getattr(getattr(win, "_doc", None), "stand_in", None)
+            if view is not None:
+                _command_query(view, win, arg)
+                view.update()
+        elif kind == "cmdrun":
+            view = getattr(getattr(win, "_doc", None), "stand_in", None)
+            hits = getattr(view, "_ui_cmd_hits", [])
+            i = int(arg or 0)
+            if 0 <= i < len(hits) and hits[i].isEnabled():
+                hits[i].trigger()
         elif kind == "proj":
             _project_action(win, arg)
         elif kind == "tab":
@@ -1809,6 +1820,50 @@ _KEYS = {Qt.Key_Escape: "Escape", Qt.Key_Return: "Enter", Qt.Key_Enter: "Enter",
          Qt.Key_A: "A", Qt.Key_C: "C", Qt.Key_V: "V", Qt.Key_X: "X", Qt.Key_Z: "Z"}
 
 
+def _opens_commands(event) -> bool:
+    """⌘K, or F3 (the app's Search commands…)."""
+    return event.key() == Qt.Key_F3 or (event.key() == Qt.Key_K and bool(event.modifiers() & Qt.ControlModifier))
+
+
+def _all_commands(win):
+    """Every command of the window's menus: (label, path, shortcut, action)."""
+    cached = getattr(win, "_ui_commands", None)
+    if cached is not None:
+        return cached
+    out = []
+
+    def walk(menu, path):
+        for a in menu.actions():
+            if a.isSeparator():
+                continue
+            text = a.text().replace("&", "")
+            if a.menu():
+                walk(a.menu(), path + [text])
+            elif text:
+                out.append((text, " › ".join(path), a.shortcut().toString(QKeySequence.NativeText), a))
+    for a in win.menuBar().actions():
+        if a.menu():
+            walk(a.menu(), [a.text().replace("&", "")])
+    win._ui_commands = out
+    return out
+
+
+def _command_query(view, win, query) -> None:
+    words = query.lower().split()
+    cmds = _all_commands(win)
+    hits = []
+    for label, path, key, act in cmds:
+        hay = (label + " " + path).lower()
+        if all(w in hay for w in words):
+            # Label starts first, then label contains, then path only.
+            rank = 0 if words and label.lower().startswith(words[0]) else 1 if words and words[0] in label.lower() else 2
+            hits.append((rank, label, path, key, act))
+    hits.sort(key=lambda h: (h[0], h[1].lower()))
+    hits = hits[:12]
+    view._ui_cmd_hits = [h[4] for h in hits]
+    view.renderer.ui_set_command_results([(h[1], h[2], h[3], h[4].isEnabled()) for h in hits])
+
+
 def _problem_key(view, event) -> int:
     if view.__dict__.get("_ui_mode") != "problems" or not (event.modifiers() & Qt.ControlModifier):
         return 0
@@ -1822,6 +1877,8 @@ def claims_key(view, event) -> bool:
         return False
     if _problem_key(view, event):
         return True
+    if _opens_commands(event):
+        return True
     name = _KEYS.get(event.key(), "")
     return view.renderer.ui_claims_key(name)
 
@@ -1830,6 +1887,11 @@ def key(view, event, pressed: bool) -> bool:
     """Offer a key to the chrome first. True: it was the chrome's."""
     if not getattr(view, "_ui_attached", False):
         return False
+    if _opens_commands(event):
+        if pressed:
+            view.renderer.ui_open_commands()
+            view.update()
+        return True
     step = _problem_key(view, event)
     if step:
         if pressed:

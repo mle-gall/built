@@ -2103,6 +2103,12 @@ impl Renderer {
     fn ui_set_palette(&mut self, items: Vec<(String, String, String, String, bool)>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_palette(items); }
     }
+    fn ui_open_commands(&mut self) {
+        if let Some(ui) = self.ui.as_mut() { ui.open_commands(); }
+    }
+    fn ui_set_command_results(&mut self, results: Vec<(String, String, String, bool)>) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_command_results(results); }
+    }
     fn ui_take_actions(&mut self) -> Vec<String> {
         self.ui.as_mut().map(|ui| ui.take_actions()).unwrap_or_default()
     }

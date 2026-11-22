@@ -6,7 +6,7 @@
 use std::sync::Arc;
 use std::time::Instant;
 
-use egui::{pos2, vec2, Color32, CornerRadius, Margin, Pos2, Rect, Sense, Shadow, Stroke};
+use egui::{pos2, vec2, Color32, CornerRadius, Margin, Pos2, Rect, Sense, Shadow, Stroke, Vec2};
 
 // ---- Design tokens (council 2026-11-22; one place, every component
 // below draws from these). Text on graphite glass, three levels plus off.
@@ -195,6 +195,12 @@ pub struct Ui {
     review: bool,
     /// The Paint tool's strip: (id, name, colour hex or "", icon key or "", active).
     palette_items: Vec<(String, String, String, String, bool)>,
+    /// The command palette (⌘K / F3): open, query, results (label, path, shortcut, enabled), picked row.
+    cmd_open: bool,
+    cmd_query: String,
+    cmd_results: Vec<(String, String, String, bool)>,
+    cmd_at: usize,
+    cmd_focus: bool,
     /// The open bar menu: kind ("docs", "work", "scenes") and its button.
     menu: Option<(String, Rect)>,
     view_anchor: Rect,
@@ -373,6 +379,11 @@ impl Ui {
             projects: None,
             review: false,
             palette_items: Vec::new(),
+            cmd_open: false,
+            cmd_query: String::new(),
+            cmd_results: Vec::new(),
+            cmd_at: 0,
+            cmd_focus: false,
             menu: None,
             view_anchor: Rect::NOTHING,
             sel_more_anchor: Rect::NOTHING,
@@ -497,6 +508,17 @@ impl Ui {
     pub fn set_projects(&mut self, left: f32, docs: Vec<(String, bool, bool)>) {
         self.projects = Some((left, docs));
     }
+    pub fn open_commands(&mut self) {
+        self.cmd_open = true;
+        self.cmd_query.clear();
+        self.cmd_at = 0;
+        self.cmd_focus = true;
+        self.actions.push("cmdq:".into());
+    }
+    pub fn set_command_results(&mut self, results: Vec<(String, String, String, bool)>) {
+        self.cmd_results = results;
+        self.cmd_at = self.cmd_at.min(self.cmd_results.len().saturating_sub(1));
+    }
     pub fn set_palette(&mut self, items: Vec<(String, String, String, String, bool)>) { self.palette_items = items; }
     pub fn set_units(&mut self, units: String) { self.units = units; }
     pub fn set_tabs(&mut self, tabs: Vec<Vec<Item>>) { self.tabs = tabs; }
@@ -514,9 +536,26 @@ impl Ui {
     pub fn claims_key(&self, name: &str) -> bool {
         let filing = self.column.as_ref().is_some_and(|c| c.filing.is_some() || c.row_menu.is_some() || !c.mode.is_empty()
             || c.kind_menu.is_some() || c.head_menu.is_some() || c.prompt.is_some());
-        (name == "Escape" && (self.view_open || self.sel_more || self.menu.is_some() || filing)) || self.ctx.wants_keyboard_input()
+        self.cmd_open || (name == "Escape" && (self.view_open || self.sel_more || self.menu.is_some() || filing))
+            || self.ctx.wants_keyboard_input()
     }
     pub fn key(&mut self, name: &str, pressed: bool, mods: u8) -> bool {
+        if self.cmd_open && pressed {
+            match name {
+                "Escape" => { self.cmd_open = false; self.ctx.memory_mut(|m| m.stop_text_input()); return true; }
+                "ArrowDown" => { self.cmd_at = (self.cmd_at + 1).min(self.cmd_results.len().saturating_sub(1)); return true; }
+                "ArrowUp" => { self.cmd_at = self.cmd_at.saturating_sub(1); return true; }
+                "Enter" => {
+                    if self.cmd_results.get(self.cmd_at).is_some_and(|r| r.3) {
+                        self.actions.push(format!("cmdrun:{}", self.cmd_at));
+                    }
+                    self.cmd_open = false;
+                    self.ctx.memory_mut(|m| m.stop_text_input());
+                    return true;
+                }
+                _ => {}
+            }
+        }
         if name == "Escape" && (self.view_open || self.sel_more || self.menu.is_some()) {
             if pressed { self.view_open = false; self.sel_more = false; self.menu = None; }
             return true;
@@ -606,6 +645,7 @@ impl Ui {
                     self.view_open = false;
                     self.sel_more = false;
                     self.menu = None;
+                    self.cmd_open = false;
                     if let Some(col) = self.column.as_mut() {
                         col.row_menu = None;
                         col.kind_menu = None;
@@ -911,6 +951,52 @@ impl Ui {
                 });
             });
         if let Some(a) = clicked { self.actions.push(a); }
+    }
+
+    /// ⌘K / F3: every command of the window by name, at the top of the model.
+    fn command_palette(&mut self, ctx: &egui::Context, screen: Rect) {
+        if !self.cmd_open { return; }
+        let mut run: Option<usize> = None;
+        let mut changed = false;
+        egui::Area::new(egui::Id::new("commands"))
+            .pivot(egui::Align2::CENTER_TOP)
+            .fixed_pos(pos2(screen.center().x, TOP_H + 60.0))
+            .order(egui::Order::Tooltip)
+            .show(ctx, |ui| {
+                glass(Surface::Raised).inner_margin(Margin::same(8)).show(ui, |ui| {
+                    ui.set_width(520.0);
+                    ui.set_max_width(520.0);
+                    let r = ui.add(egui::TextEdit::singleline(&mut self.cmd_query)
+                        .hint_text(egui::RichText::new("Search commands").color(FAINT))
+                        .font(egui::FontId::proportional(14.0)).margin(Margin::symmetric(10, 7))
+                        .desired_width(520.0 - 20.0 - 4.0).clip_text(true));
+                    if self.cmd_focus { r.request_focus(); self.cmd_focus = false; }
+                    if r.changed() { changed = true; self.cmd_at = 0; }
+                    ui.add_space(6.0);
+                    ui.spacing_mut().item_spacing = vec2(0.0, 1.0);
+                    for (i, (label, path, key, enabled)) in self.cmd_results.iter().enumerate() {
+                        let (rect, resp) = ui.allocate_exact_size(vec2(520.0 - 16.0, 26.0), Sense::click());
+                        if i == self.cmd_at { ui.painter().rect_filled(rect, CornerRadius::same(R_ROW), ACTIVE); }
+                        else if resp.hovered() { ui.painter().rect_filled(rect, CornerRadius::same(R_ROW), HOVER); }
+                        let ink = if *enabled { INK } else { OFF };
+                        let g = ui.painter().layout_no_wrap(label.clone(), body(), ink);
+                        let lw = g.size().x;
+                        ui.painter().galley(pos2(rect.min.x + 10.0, rect.center().y - g.size().y / 2.0), g, ink);
+                        ui.painter().text(pos2(rect.min.x + 18.0 + lw, rect.center().y), egui::Align2::LEFT_CENTER, path, meta(), FAINT);
+                        ui.painter().text(pos2(rect.max.x - 10.0, rect.center().y), egui::Align2::RIGHT_CENTER, key, meta(), FAINT);
+                        if resp.clicked() && *enabled { run = Some(i); }
+                        if resp.hovered() && ui.input(|i| i.pointer.delta() != Vec2::ZERO) { self.cmd_at = i; }
+                    }
+                    if self.cmd_results.is_empty() && !self.cmd_query.is_empty() {
+                        ui.label(egui::RichText::new("No command matches").font(body()).color(FAINT));
+                    }
+                });
+            });
+        if changed { self.actions.push(format!("cmdq:{}", self.cmd_query)); }
+        if let Some(i) = run {
+            self.cmd_open = false;
+            self.actions.push(format!("cmdrun:{i}"));
+        }
     }
 
     /// The one open menu: documents, workspace or scenes (View has its own).
@@ -1744,6 +1830,7 @@ impl Ui {
             self.cursor_value(ctx, screen);
             self.bar_menu(ctx);
             self.view_popup(ctx);
+            self.command_palette(ctx, screen);
             if !self.review { self.selection_more(ctx); }
         });
         let work = !self.review;
@@ -1752,6 +1839,7 @@ impl Ui {
                      ("column", work && self.column.is_some()), ("bottom", work),
                      ("sel_more", work && self.sel_more && self.selection.is_some()),
                      ("paint_strip", work && !self.palette_items.is_empty()),
+                     ("commands", self.cmd_open),
                      ("sel_sub", work && self.sel_more && self.sel_sub.is_some()),
                      ("row_menu", self.column.as_ref().is_some_and(|c| c.row_menu.is_some())),
                      ("kind_menu", self.column.as_ref().is_some_and(|c| c.kind_menu.is_some())),
