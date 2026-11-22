@@ -257,6 +257,9 @@ def _merge_title_row(win) -> None:
     from PySide6.QtCore import QPoint
 
     def fit():
+        from views.mac_glass import _window_alive
+        if not _window_alive(win):
+            return
         if win.windowState() & Qt.WindowFullScreen:
             chrome._glass.place_lights(None)
             return

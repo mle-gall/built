@@ -139,6 +139,18 @@ def _set_frame(view, rect: QRect, host_h: float) -> None:
     _send(view, "setFrame:", r, restype=None, argtypes=(_CGRect,))
 
 
+def _window_alive(w) -> bool:
+    """The Qt window still exists, is shown and still owns a native window."""
+    try:
+        from shiboken6 import isValid
+        if w is None or not isValid(w):
+            return False
+        handle = w.windowHandle()
+        return bool(w.isVisible() and handle is not None)
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _bounds(view) -> _CGRect:
     return _send(view, "bounds", restype=_CGRect)
 
@@ -339,9 +351,19 @@ class GlassWindow(QObject):
         self._regions = regions
         self._pool: list[int] = []
         self._tint = None
-        self._ns_view = int(window.winId())
+        self._bind(int(window.winId()))
+        self._sync = QTimer(self, singleShot=True, interval=0,
+                            timeout=self.sync)
+        self.watch(window)
+
+    def _bind(self, ns_view: int) -> None:
+        """Take hold of the window's native views (again after Qt recreated
+        them: a closed and reopened window gets a new NSWindow)."""
+        self._ns_view = ns_view
         self._ns_window = _send(self._ns_view, "window")
         self._frame = _send(self._ns_view, "superview")
+        self._pool = []
+        self._lights_area = None
         nw = self._ns_window
         _send(nw, "setOpaque:", False, restype=None, argtypes=(ctypes.c_bool,))
         _send(nw, "setBackgroundColor:", _send(_cls("NSColor"), "clearColor"),
@@ -357,9 +379,23 @@ class GlassWindow(QObject):
         # the title bar in place_lights().
         self._lights: list = []
         self._lights_out = False
-        self._sync = QTimer(self, singleShot=True, interval=0,
-                            timeout=self.sync)
-        self.watch(window)
+
+    def _native_ok(self) -> bool:
+        """Whether the native views can be messaged now. A deferred sync or
+        light placement can land after the window closed, when AppKit has
+        freed them: messaging those crashed the app (closing the sheet
+        editor, 2026-11-22)."""
+        if not _window_alive(self._window):
+            return False
+        try:
+            wid = int(self._window.internalWinId())
+        except Exception:  # noqa: BLE001
+            return False
+        if not wid:
+            return False
+        if wid != self._ns_view:
+            self._bind(wid)
+        return True
 
     def watch(self, widget) -> None:
         widget.installEventFilter(self)
@@ -375,6 +411,8 @@ class GlassWindow(QObject):
         ``centre_y`` (window coordinates, from the top), and hide the title
         bar; ``None`` gives them back to the title bar (full screen, where
         AppKit's title bar slides in with them)."""
+        if not self._native_ok():
+            return
         nw = self._ns_window
         if not self._lights:
             for kind in range(3):       # close, miniaturize, zoom
@@ -477,6 +515,8 @@ class GlassWindow(QObject):
     def retint(self) -> None:
         """The wash for the theme in force (views.theme calls it through
         apply_palette)."""
+        if getattr(self, "_wash", None) is None:
+            return
         from PySide6.QtGui import QPalette
         from PySide6.QtWidgets import QApplication
         from views.theme import brand_tint
@@ -525,6 +565,8 @@ class GlassWindow(QObject):
             _send(b, "superview") != self._frame for b, _h in self._lights)
 
     def sync(self) -> None:
+        if not self._native_ok():
+            return
         if getattr(self, "_lights_y", None) is not None and self.lights_displaced():
             self.place_lights(self._lights_y)
         try:
@@ -787,6 +829,11 @@ class _Chrome(QObject):
         AppKit's title bar and no room kept."""
         lights = self._lights
         if lights is None:
+            return
+        # A deferred call can land after the window closed: its NSWindow and
+        # title-bar views are gone, and messaging them crashed the app
+        # (closing the sheet editor, 2026-11-22).
+        if not _window_alive(self._window):
             return
         full = bool(self._window.windowState() & Qt.WindowFullScreen)
         lights.setVisible(not full)
