@@ -382,3 +382,47 @@ def test_renderer_undo_after_leaving_the_group_rebakes_it(store):
     updates.apply(*updates.diff(scene))
     assert updates.last_local and [c[0] for c in updates.changed] == [mesh]
     assert_matches_fresh_pack(updates, scene)
+
+
+@pytest.fixture
+def bridge(monkeypatch):
+    from plugins.ai_bridge import _Bridge
+    from views.main_window import MainWindow
+    monkeypatch.setenv("INGETRAZO_AI_PORT", "0")
+    win = MainWindow()
+    scene = win.viewport.scene
+    scene.mesh.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0)])
+    b = _Bridge(win.viewport)
+    yield win, b
+    b.stop()
+    win._saved_version = scene.version
+    win.close()
+
+
+def _call(b, tool, **args):
+    job = dict(req=dict(id=1, tool=tool, args=args), done=threading.Event())
+    b._run_on_main(job)
+    assert job["reply"]["ok"], job["reply"]
+    return job["reply"]["result"]
+
+
+def test_bridge_tools_name_faces_by_key_and_read_the_feed(bridge):
+    win, b = bridge
+    vp = win.viewport
+    names = {t["name"] for t in _call(b, "list_tools")["tools"]}
+    assert {"query_feed", "query_mesh", "query_faces", "query_edges",
+            "query_vertices", "query_selected_elements",
+            "select_elements"} <= names
+    info = _call(b, "query_mesh")
+    face_key = str(vp.scene.mesh.faces[0].key)
+    got = _call(b, "query_faces", keys=[face_key], mesh=info["mesh"])
+    assert got["faces"][0]["key"] == face_key
+    sel = _call(b, "select_elements", faces=[face_key])
+    assert sel["face"] == [face_key]
+    assert _call(b, "query_selected_elements")["face"] == [face_key]
+    rev = _call(b, "query_feed")["revision"]
+    C.run(vp.history, "push_pull", face=face_key, distance=0.5)
+    feed = _call(b, "query_feed", since_revision=rev)
+    (step,) = feed["steps"]
+    assert step["meshes"][0]["mesh"] == info["mesh"]
+    json.dumps(feed, allow_nan=False)
