@@ -205,7 +205,9 @@ class WgpuView(QWidget):
                 if getattr(self, 'suppressed_faces', ()) and self.renderer is not None:
                     self.renderer.set_suppressed_faces(face_ranges(self, self.suppressed_faces))
             hidden_geometry(self)
-            self._rest_signature = None
+            # Rebaking a mesh leaves its placement and rest-of-model flags intact.
+            if not tracker.last_local or len(ids) or tracker.removed:
+                self._rest_signature = None
             from views.wgpu_billboards import Billboards
             # Existing figures plus rewritten/new rows cover every placement
             # that can face the camera after this delta.
