@@ -335,17 +335,19 @@ def build_intersection_edit(scene, segments):
         return StoreFaceCompound(command.inner, heal=command._heal)
     return StoreFaceMutation(command.do)
 
+
 def build_intersect_faces(scene, mode, face_keys=None):
     """Plan an intersection by face keys, or from the current selection including groups.
 
     Return (segment count, snapshot command). A sub-weld segment collapses
     to one vertex and cannot be installed as an edge.
     """
+    from core.mesh import _KEY_SCALE
     if face_keys is None:
         pairs = segments_for(scene, mode)
     else:
         from core.store_mesh import FaceView
         faces = [FaceView(scene.mesh, k) for k in face_keys]
         pairs = segments_for(scene, mode, faces)
-    segments = [(p, q) for p, q in pairs if (q - p).length() >= 1e-4]
+    segments = [(p, q) for p, q in pairs if (q - p).length() >= 1.0 / _KEY_SCALE]
     return len(segments), build_intersection_edit(scene, segments) if segments else None

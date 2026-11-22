@@ -686,11 +686,12 @@ impl PyMeshStore {
         Ok(self.inner.sweep_stations(face, &path, closed, crate::hypot_of(hypot)?, compensated))
     }
 
+    #[pyo3(signature = (key, stations, closed, hypot, cap_holes=None))]
     fn sweep_face(&mut self, key: u128, stations: Vec<super::sweep::Station>,
-                  closed: bool, hypot: &str) -> PyResult<PyChange> {
+                  closed: bool, hypot: &str, cap_holes: Option<[Vec<bool>; 2]>) -> PyResult<PyChange> {
         let face = live_of(&self.inner, Kind::Face, key)?;
         let h = crate::hypot_of(hypot)?;
-        Ok(self.op_all(|s, ch| s.sweep_face(face, &stations, closed, h, ch))?.1)
+        Ok(self.op_all(|s, ch| s.sweep_face(face, &stations, closed, h, cap_holes.as_ref(), ch))?.1)
     }
 
     fn finish_sweep(&mut self, before: &PyStoreSnapshot, key: u128, path: Vec<[f64; 3]>,

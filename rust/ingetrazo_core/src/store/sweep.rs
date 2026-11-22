@@ -80,6 +80,7 @@ impl Store {
         stations: &[Station],
         closed: bool,
         h: Hypot,
+        cap_holes: Option<&[Vec<bool>; 2]>,
         ch: &mut Change,
     ) -> Result<(), OpError> {
         if stations.len() < 2
@@ -92,6 +93,10 @@ impl Store {
             })
         {
             return Err(OpError::Fallback("incompatible sweep station rings"));
+        }
+        if cap_holes.is_some_and(|ends| ends.iter().any(|mask| mask.len() + 1 != stations[0].len()))
+        {
+            return Err(OpError::Fallback("incompatible cap hole mask"));
         }
         let profile = self.face_rings(face);
         self.remove_face(face, ch);
@@ -121,12 +126,23 @@ impl Store {
             }
         }
         if !closed {
-            let start = stations[0]
-                .iter()
-                .map(|r| r.iter().copied().rev().collect())
-                .collect::<Vec<_>>();
-            self.add_face(&start, ch)?;
-            self.add_face(stations.last().unwrap(), ch)?;
+            for (end, station) in [&stations[0], stations.last().unwrap()]
+                .into_iter()
+                .enumerate()
+            {
+                let mut cap = Vec::new();
+                for (i, ring) in station.iter().enumerate() {
+                    if i > 0 && cap_holes.is_some_and(|m| !m[end][i - 1]) {
+                        continue;
+                    }
+                    cap.push(if end == 0 {
+                        ring.iter().copied().rev().collect()
+                    } else {
+                        ring.clone()
+                    });
+                }
+                self.add_face(&cap, ch)?;
+            }
         }
         for ring in profile {
             for (i, &v) in ring.iter().enumerate() {

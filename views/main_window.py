@@ -126,8 +126,6 @@ _SAVE_TIP = ("Save the document — the model and every sheet — to its .igz "
 _RESET_TOOLBARS_TIP = ("Every toolbar back in its factory place and order, "
                        "the hidden ones shown again. The panels stay as "
                        "they are.")
-# The mesh welds points closer than this (core/mesh.py, 4 decimals).
-_WELD_LENGTH = 1e-4
 _TEXT3D_TIP = ("Build a text as an extruded solid, in the font and height "
                "you choose.")
 
