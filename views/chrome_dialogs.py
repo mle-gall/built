@@ -30,10 +30,23 @@ It greys out the menu bar and refuses window closes. The view's own
 pointer events go to the chrome, whose scrim covers the model. Sheets
 stack. A question asked while another waits goes on top, and its loop
 finishes first, so nested loops always unwind in order.
+
+In the ``built`` shell
+----------------------
+The shell (``rust/built_app``) owns the event loop. ``app_shell.modal``
+gives :func:`ask` a ``live`` that knows the shell's view and a
+``QEventLoop`` whose ``exec()`` turns the shell's modal pump, so the
+blocking call works there too. Forms (``views/chrome_forms.py``) and
+:func:`ask_later` never block at all: they take a continuation
+(``done(answer)``) that the chrome's click calls on a later turn, so the
+window's ordinary input (typing into a field) keeps flowing through the
+host while they are up. With no chrome on screen they fall back to a Qt
+dialog run inline (``done`` has run when they return).
 """
 from __future__ import annotations
 
 import itertools
+import sys
 
 from PySide6.QtCore import QEvent, QEventLoop, QObject, QTimer, Signal
 from PySide6.QtGui import QGuiApplication
@@ -45,11 +58,20 @@ _FALLBACK = object()
 _ids = itertools.count(1)
 
 
+def in_shell() -> bool:
+    """True inside the ``built`` binary (its built-in ``built_shell``
+    module is there), where no Qt window can show."""
+    return "built_shell" in sys.builtin_module_names
+
+
 # ---- Is the chrome there to answer? ------------------------------------------
 def window_of(parent):
     """The main window ``parent`` belongs to, if it is one."""
     if parent is None:
         return None
+    if hasattr(parent, "_tool_actions") and hasattr(parent, "_documents") \
+            and not hasattr(parent, "isWindow"):
+        return parent                   # the shell's window (no QWidget)
     try:
         win = parent.window()
     except (AttributeError, RuntimeError):
@@ -185,6 +207,45 @@ def ask(parent, title: str, text: str, buttons, *, default=None, cancel=None,
     return sheet.answer
 
 
+def ask_later(parent, title: str, text: str, buttons, done, *, default=None,
+              cancel=None, discard=None, tone: str = "question") -> None:
+    """:func:`ask` without blocking: ``done(answer)`` runs once the sheet
+    is answered (a later turn of the loop), or at once with the answer of
+    a Qt question box when the chrome is not on screen."""
+    view = live(parent)
+    if view is None:
+        if in_shell():
+            done(cancel)                # no Qt box can show in the shell
+            return
+        done(_qt_ask(parent, title, text, buttons, default, cancel, discard, tone))
+        return
+    win = window_of(parent)
+    sheet = _Sheet(title, text, tone, _roles(buttons, default, cancel, discard),
+                   default, cancel, discard, False)
+    sheet.done = done
+    _push(win, sheet)
+
+
+def _qt_ask(parent, title, text, buttons, default, cancel, discard, tone):
+    """The Qt box :func:`ask_later` falls back to: same buttons, same ids."""
+    icon = {"question": QMessageBox.Question, "warning": QMessageBox.Warning,
+            "error": QMessageBox.Critical}.get(tone, QMessageBox.Information)
+    box = QMessageBox(icon, title, text, QMessageBox.NoButton, parent)
+    box.setOption(QMessageBox.Option.DontUseNativeDialog, True)
+    made = {}
+    for bid, label in buttons:
+        role = (QMessageBox.RejectRole if bid == cancel else
+                QMessageBox.DestructiveRole if bid == discard else QMessageBox.AcceptRole)
+        made[bid] = box.addButton(label, role)
+    if default in made:
+        box.setDefaultButton(made[default])
+    if cancel in made:
+        box.setEscapeButton(made[cancel])
+    box.exec()
+    clicked = box.clickedButton()
+    return next((bid for bid, b in made.items() if b is clicked), cancel)
+
+
 def notify(parent, title: str, text: str, *, tone: str = "info", button: str = "OK") -> bool:
     """A message that does not wait: shown on the sheet, dismissed by its
     button, Enter or Esc. False when the chrome cannot show it."""
@@ -223,6 +284,8 @@ def answer(win, bid: str) -> bool:
             sheet.loop.quit()
     else:
         _pop(win, sheet)
+        if sheet.done is not None:
+            sheet.done(bid)
     return True
 
 
@@ -283,7 +346,7 @@ def _standard(parent, tone, title, text, buttons, default):
     key = lambda b: str(int(b.value)) if b is not None else None
     got = ask(parent, title, text, [(key(b), tr(label)) for b, label, _ in chosen],
               default=key(default), cancel=key(escape), discard=key(discard), tone=tone)
-    return None if got is None else ids[got]
+    return None if got is None else ids.get(got)
 
 
 def _box(tone, qt_name):
@@ -376,6 +439,13 @@ class _Guard(QObject):
         if kind in self._KEYS:
             if kind == QEvent.ShortcutOverride:
                 event.accept()          # the key is "taken": no shortcut fires
+            elif current_sheet(self.win) is None and _form_up(self.win) \
+                    and kind in (QEvent.KeyPress, QEvent.KeyRelease):
+                # A form on the chrome: its fields take the keys.
+                from views import wgpu_ui
+                view = view_of(self.win)
+                if view is not None:
+                    wgpu_ui.key(view, event, kind == QEvent.KeyPress)
             elif kind == QEvent.KeyPress and not event.isAutoRepeat():
                 if current_sheet(self.win) is not None:
                     sheet_key(self.win, event)
@@ -387,6 +457,19 @@ class _Guard(QObject):
         if kind in self._CLICKS and isinstance(obj, QWidget):
             return obj is not view_of(self.win)
         return False
+
+
+def _form_up(win) -> bool:
+    return bool(win.__dict__.get("_chrome_forms"))
+
+
+def engage(win) -> None:
+    """Hold the window as a sheet does (views/chrome_forms.py)."""
+    _Guard.engage(win)
+
+
+def release(win) -> None:
+    _Guard.release(win)
 
 
 def modal(win) -> bool:

@@ -9,6 +9,8 @@ use std::time::Instant;
 use egui::{pos2, vec2, Color32, CornerRadius, Margin, Pos2, Rect, Sense, Shadow, Stroke, Vec2};
 
 mod library;
+/// The chrome's modal forms (views/chrome_forms.py).
+pub mod dialog;
 /// The start page (views/wgpu_start.py): a full-window state of the chrome.
 mod start;
 
@@ -233,6 +235,9 @@ pub struct Ui {
     /// The app's one question or message (unsaved changes, errors,
     /// confirmations): Python owns its keys and waits for the answer.
     sheet: Option<Sheet>,
+    /// A modal form (prompts, Preferences, export options): Python owns
+    /// its values; a sheet may still go over it (ui/dialog.rs).
+    dialog: Option<dialog::Dialog>,
     /// Work in progress, in the top bar: open, import, save, auto-save.
     jobs: Vec<Job>,
     /// The Library dock place (ui/library.rs): typed resources.
@@ -442,6 +447,7 @@ impl Ui {
             top_right_w: 0.0,
             units: "mm".into(),
             sheet: None,
+            dialog: None,
             jobs: Vec::new(),
             library: Default::default(),
             dock_w: DOCK_W,
@@ -638,13 +644,14 @@ impl Ui {
     pub fn claims_key(&self, name: &str) -> bool {
         let filing = self.column.as_ref().is_some_and(|c| c.filing.is_some() || c.row_menu.is_some() || !c.mode.is_empty()
             || c.kind_menu.is_some() || c.head_menu.is_some() || c.prompt.is_some());
-        self.sheet.is_some() || self.cmd_open || (name == "Escape" && (self.view_open || self.sel_more || self.menu.is_some() || self.form.is_some() || filing))
+        self.sheet.is_some() || self.dialog.is_some() || self.cmd_open || (name == "Escape" && (self.view_open || self.sel_more || self.menu.is_some() || self.form.is_some() || filing))
             || self.ctx.wants_keyboard_input()
     }
     pub fn key(&mut self, name: &str, pressed: bool, mods: u8) -> bool {
         // The sheet's keys are answered in Python (Enter, Esc, ⌘D); none
         // reaches what is under it.
         if self.sheet.is_some() { return true; }
+        if self.dialog.is_some() { return self.dialog_key(name, pressed, mods); }
         if self.cmd_open && pressed {
             match name {
                 "Escape" => { self.cmd_open = false; self.ctx.memory_mut(|m| m.stop_text_input()); return true; }
@@ -2320,6 +2327,7 @@ impl Ui {
             }
             self.command_palette(ctx, screen);
             if !self.review && !start { self.selection_more(ctx); }
+            self.dialog_popup(ctx, screen);
             self.jobs_chip(ctx, screen);
             self.sheet_popup(ctx, screen);
         });
@@ -2338,6 +2346,7 @@ impl Ui {
                      ("pick_menu", self.column.as_ref().is_some_and(|c| c.pick.is_some())),
                      ("color_pick", self.column.as_ref().is_some_and(|c| c.color_pick.is_some())),
                      ("jobs", !self.jobs.is_empty()),
+                     ("dialog", self.dialog.is_some()),
                      ("sheet", self.sheet.is_some()),
                      ("lib_menu", work && self.library.menu_open()),
                      ("dock_grip", work && self.column.is_some()),

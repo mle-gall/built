@@ -379,6 +379,14 @@ def _sheet_and_jobs(view, win) -> None:
     view._ui_poll_jobs = bool(rows)
 
 
+def _chrome_form(view, win) -> None:
+    """The form on top, if any (views/chrome_forms.py)."""
+    if not hasattr(view.renderer, "ui_set_dialog"):
+        return
+    from views import chrome_forms
+    chrome_forms.before_frame(view, win)
+
+
 def chrome_only(view) -> bool:
     """Exclusive work holds the window (an open, an import): the model is
     half there, so a frame draws only the chrome over what is resident."""
@@ -401,6 +409,7 @@ def chrome_frame(view):
     if win is not None:
         _projects(view, win)
         _sheet_and_jobs(view, win)
+        _chrome_form(view, win)
         from views import wgpu_start
         wgpu_start.before_frame(view, win)
     cpu, gpu = renderer.render()
@@ -416,6 +425,7 @@ def before_frame(view) -> None:
     if win is None:
         return
     _sheet_and_jobs(view, win)
+    _chrome_form(view, win)
     from views import wgpu_start
     wgpu_start.before_frame(view, win)
     if not view._ui_tools_sent and win._tool_actions:
@@ -2468,6 +2478,11 @@ def _run(win, actions) -> None:
             job = chrome_dialogs.find_job(win, jid)
             if verb == "cancel" and job is not None:
                 job.cancel()
+            continue
+        if kind == "dlg":
+            if chrome_dialogs.current_sheet(win) is None:
+                from views import chrome_forms
+                chrome_forms.action(win, arg)
             continue
         if chrome_dialogs.modal(win):
             continue    # a click queued before the sheet came up

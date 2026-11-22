@@ -2134,6 +2134,13 @@ impl Renderer {
     fn ui_set_palette(&mut self, items: Vec<(String, String, String, String, bool)>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_palette(items); }
     }
+    /// A modal form (views/chrome_forms.py); an empty `seq` closes it.
+    #[pyo3(signature = (seq, title="".to_string(), note="".to_string(), width=420.0, fields=Vec::new(), buttons=Vec::new()))]
+    fn ui_set_dialog(&mut self, seq: String, title: String, note: String, width: f32,
+                     fields: Vec<ui::dialog::Field>, buttons: Vec<ui::dialog::Button>) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_dialog(seq, title, note, width, fields, buttons); }
+    }
+    fn ui_dialog_open(&self) -> bool { self.ui.as_ref().is_some_and(|ui| ui.dialog_open()) }
     fn ui_set_form(&mut self, title: String, fields: Vec<ui::FormField>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_form(title, fields); }
     }
