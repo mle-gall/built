@@ -220,6 +220,7 @@ class History:
         #: The same, for the Browser's rows (views/outliner.py): a command
         #: that keeps paint moves things, and no row shows where a thing is.
         self.rows_cv = None
+        self.structure_cv = None  # membership table last built by the Structure dock
         #: Per reader («paint» the materials panel, «rows» the Browser), the
         #: content version up to which nothing but commands that keep paint
         #: or keep groups changed the model since that reader last went
@@ -313,6 +314,13 @@ class History:
                 self.paint_cv = cv
             if self.tags_cv == before:
                 self.tags_cv = cv
+        # The Structure dock shows membership, hierarchy and BIM problems.
+        # These commands edit only the active mesh or construction annotations.
+        # Other commands (including extensions) invalidate conservatively.
+        if self.structure_cv == before and isinstance(cmd, (
+                SnapshotMutation, SnapshotCompound, AddEdgeCommand, AddFaceCommand,
+                AddDimensionCommand, AddTextLabelCommand, AddGuideCommand)):
+            self.structure_cv = cv
         if rows and self.rows_cv == before:
             self.rows_cv = cv
         for k, v in self.groups_cv.items():
@@ -2013,6 +2021,8 @@ class AddDimensionCommand(Command):
     """Add a dimension annotation to ``scene.dimensions``, anchored to the
     vertices under its endpoints (if any) so it follows the geometry."""
 
+    keeps_rows = True
+
     def __init__(self, dimension) -> None:
         self.dimension = dimension
 
@@ -2052,6 +2062,8 @@ class DeleteDimensionsCommand(Command):
 
 class AddTextLabelCommand(Command):
     """Add a leader-text annotation to ``scene.text_labels``."""
+
+    keeps_rows = True
 
     def __init__(self, label) -> None:
         self.label = label

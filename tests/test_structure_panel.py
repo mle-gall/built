@@ -238,3 +238,17 @@ def test_mounted_rows_and_exact_nested_members(panel):
         view.close()
     dock.display('sections')
     assert scene._navigator_allowed == {filed.uid, leaf.uid}
+
+
+def test_drawing_preserves_structure_rows(panel):
+    from core.history import AddEdgeCommand
+    from PySide6.QtGui import QVector3D
+    dock, _, _ = panel
+    row = dock.items['ride']
+    history = dock.vp.history
+    history.execute(AddEdgeCommand(QVector3D(), QVector3D(1, 0, 0)))
+    for step in (lambda: None, history.undo, history.redo):
+        step()
+        dock.on_scene_changed()
+        dock.refresh()
+        assert dock.items['ride'] is row
