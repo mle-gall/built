@@ -161,10 +161,11 @@ def test_explode_feed_names_both_meshes_the_placement_and_the_keys(
     assert change.key == mesh_key(m) and change.backing == "store"
     assert _got(change)["created"] == want["created"]
     assert _got(change)["removed"] == want["removed"]
-    # The loose box's wall went into the rebuilt one; its other faces keep
-    # their keys; every vertex it had is still there (welded onto).
+    # The group's wall lands exactly on the loose box's wall: the plane
+    # rebuild keeps that face (same ring), so every face of the box keeps
+    # its key; every vertex it had is still there (welded onto).
     assert set(before[0]) <= set(after[0])
-    assert len(set(before[2]) & set(after[2])) == 5
+    assert set(before[2]) <= set(after[2]) and not want["removed"]["face"]
     # Placements: the group went, its child came out.
     assert step.placements["removed"] == [g.uid]
     assert step.placements["created"] == [kid.uid] and step.complete

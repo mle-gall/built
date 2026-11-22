@@ -136,3 +136,89 @@ def test_leaving_an_instance_names_the_definition_and_its_copies(store, guard):
             assert _got(change) == rec, phase
         else:
             assert (change.backing, change.replaced) == ("python", True), phase
+
+
+# ------------------------------------------- 2. drawing beside small plates
+
+def _plates(store):
+    sc = _scene(store)
+    m = sc.mesh
+    m.add_face([V(4, 0, 0), V(8, 0, 0), V(8, 4, 0), V(4, 4, 0)])
+    m.add_face([V(10, 0, 0), V(14, 0, 0), V(14, 4, 0), V(10, 4, 0)])
+    m.faces[0].attrs["color"] = [10, 20, 30]
+    return sc
+
+
+def _faces(m):
+    return {f.key: (tuple(v.key for v in f.loop), dict(f.attrs)) for f in m.faces}
+
+
+def _draw_beside(store):
+    sc = _plates(store)
+    h = History(sc)
+    plates = _faces(sc.mesh)
+    seen, records = [fingerprint(sc.mesh)], []
+
+    def run(name, **args):
+        before = _read(sc.mesh)
+        r = C.run(h, name, **args)
+        assert r["ok"], r
+        (change,) = r["step"].meshes
+        records.append((change, _expected(before, _read(sc.mesh))))
+        seen.append(fingerprint(sc.mesh))
+        # The plates keep their faces: keys, corners and attrs.
+        now = _faces(sc.mesh)
+        assert {k: now.get(k) for k in plates} == plates, name
+
+    run("add_edges", segments=[[(0, 0, 0), (2, 0, 0)], [(2, 0, 0), (2, 2, 0)],
+                               [(2, 2, 0), (0, 2, 0)]])
+    run("undo")
+    run("redo")
+    run("add_edge", a=(0, 2, 0), b=(0, 0, 0))     # closes a new square
+    assert len(sc.mesh.faces) == 3
+    return seen, records, sc
+
+
+@pytest.mark.parametrize("store", STORE)
+def test_drawing_beside_small_plates_keeps_their_faces(store, guard):
+    seen, records, sc = _draw_beside(store)
+    if store:
+        assert type(sc.mesh) is S.StoreMesh
+        for change, want in records:
+            assert change.backing == "store" and not change.replaced
+            assert _got(change) == want
+        (draw, w), _undo, _redo, (close, c) = records
+        # Three free edges: their vertices and edges, nothing else.
+        assert [len(w["created"][k]) for k in ("vertex", "edge", "face")] == [4, 3, 0]
+        assert not any(w["removed"].values()) and not any(w["modified"].values())
+        # The closing line: its edge and the one new face; no plate.
+        assert [len(c["created"][k]) for k in ("vertex", "edge", "face")] == [0, 1, 1]
+        assert not any(c["removed"].values()) and not c["modified"]["face"]
+    else:
+        for change, _want in records:
+            assert (change.backing, change.replaced) == ("python", True)
+
+
+@pytest.mark.parametrize("store", STORE[1:])
+def test_drawing_beside_plates_matches_python(store, guard, monkeypatch):
+    monkeypatch.setenv("INGETRAZO_STORE", "0")
+    py, _r, sc = _draw_beside(False)
+    assert type(sc.mesh) is M.Mesh
+    monkeypatch.setenv("INGETRAZO_STORE", "1")
+    st, _r, _s = _draw_beside(True)
+    assert st == py
+
+
+@pytest.mark.parametrize("store", STORE)
+def test_a_plate_whose_ring_changes_is_still_rebuilt(store):
+    """A line from outside onto the middle of a plate's side adds a corner
+    to its ring: that plate is rebuilt (new key), the other one kept."""
+    sc = _plates(store)
+    h = History(sc)
+    a, b = sc.mesh.faces
+    r = C.run(h, "add_edges", segments=[[(6, -2, 0), (6, 0, 0)]])
+    assert r["ok"], r
+    keys = {f.key for f in sc.mesh.faces}
+    assert len(keys) == 2 and b.key in keys and a.key not in keys
+    split = next(f for f in sc.mesh.faces if f.key != b.key)
+    assert len(split.loop) == 5 and split.attrs.get("color") == [10, 20, 30]
