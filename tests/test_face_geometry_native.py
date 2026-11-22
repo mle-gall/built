@@ -96,7 +96,10 @@ def _geometry_python(face):
 
 
 @pytest.mark.parametrize("seed", range(6))
-def test_face_geometry_is_the_python_one(seed):
+def test_face_geometry_is_the_python_one(seed, monkeypatch):
+    # nat is the subject. Keep the reference on Qt/Python for both normal
+    # variants, including Face.triangulate and its earcut fallback.
+    monkeypatch.setattr(_native, "native", None)
     rng = random.Random(seed)
     m = Mesh()
     faces = []
@@ -200,3 +203,18 @@ def test_face_geometry_is_the_python_one(seed):
         assert by_face_u[i] == [tuple(tuple(p.toTuple()) for p in t)
                                 for t in want_t], i
     assert differ, "some face where the two normals differ"
+
+
+def test_store_triangulation_keeps_model_corners(monkeypatch):
+    from core.protocol.queries import triangles
+    from core.scene import Scene
+
+    monkeypatch.setattr(_native, "native", nat)
+    monkeypatch.setenv("INGETRAZO_STORE", "1")
+    scene = Scene()
+    ring = [(650000.01 + x, 6860000.02 + y, 0.) for x, y in
+            [(0., 0.), (.02, 0.), (.02, .02), (0., .02)]]
+    face = scene.mesh.add_face(ring)
+    got = triangles(scene, [face.key])["faces"][0]["triangles"]
+    np.testing.assert_array_equal(got, [[ring[0], ring[1], ring[2]],
+                                        [ring[0], ring[2], ring[3]]])
