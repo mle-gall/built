@@ -84,7 +84,14 @@ def push_pull(history, face, distance, keep_base=False):
     clamped where the tool clamps (a push stopped at an opposite face)."""
     from tools.pushpull import PushPullTool
     (f,) = _need(history.scene.mesh, "face", [face])
-    tool = PushPullTool()
+    from core.coordinate_frame import ZERO, choose_origin, mesh_frame
+    st = store_of(history.scene.mesh)
+    origin = choose_origin(st.face_positions(f.key)[0][0]) if st is not None else ZERO
+    with mesh_frame(history.scene.mesh, origin):
+        return _push_face(history, f, distance, keep_base, PushPullTool())
+
+
+def _push_face(history, f, distance, keep_base, tool):
     tool.base_face = f
     tool.dragging = True
     tool._group = None
@@ -191,21 +198,32 @@ def solid_operation(history, operation, placements):
 
 
 def add_edge(history, a, b, soft=None, tag=None):
-    from PySide6.QtGui import QVector3D
-    from core.edits import build_add_edge
-    before = history.revision
     if tag is not None and history.scene.layer_by_key(tag) is None:
         raise KeyError(f"no tag with key {tag!r}")
-    history.execute(build_add_edge(history.scene, QVector3D(*a), QVector3D(*b), soft=soft, tag=tag))
-    return _answer(history, before)
+    return _draw_segments(history, [(a, b)], single=True, soft=soft, tag=tag)
 
 
 def add_edges(history, segments):
-    from PySide6.QtGui import QVector3D
-    from core.edits import build_add_edges
+    return _draw_segments(history, list(segments))
+
+
+def _draw_segments(history, segments, single=False, **options):
+    from core.coordinate_frame import ZERO, choose_origin, mesh_frame, point_in_frame
+    from core.edits import build_add_edge, build_add_edges
+    from core.coordinate_frame import planned_points
+    mesh = history.scene.mesh
+    st = store_of(mesh)
+    origin = choose_origin(segments[0][0]) if st is not None and segments else ZERO
+    local = [(point_in_frame(a, origin), point_in_frame(b, origin)) for a, b in segments]
     before = history.revision
-    history.execute(build_add_edges(history.scene, [(QVector3D(*a), QVector3D(*b))
-                                                    for a, b in segments]))
+    with mesh_frame(mesh, origin):
+        cmd = (build_add_edge(history.scene, *local[0], **options) if single else
+               build_add_edges(history.scene, local))
+        exact = {p.toTuple(): tuple(v-o for v, o in zip(raw, origin))
+                 for pair, args in zip(local, segments) for p, raw in zip(pair, args)
+                 } if st is not None else {}
+        with planned_points(mesh, exact):
+            history.execute(cmd)
     return _answer(history, before)
 
 

@@ -256,6 +256,13 @@ class History:
         return unsubscribe
 
     def _notify(self, listeners, index, cmd, phase, ran):
+        target = getattr(cmd, "_history_mesh", None) or self.scene.mesh
+        store = target.__dict__.get("_store")
+        if store is not None and any(store.frame_origin):
+            # Feed subscribers may read the model synchronously during a click.
+            from core.coordinate_frame import ZERO, mesh_frame
+            with mesh_frame(target, ZERO):
+                return self._notify(listeners, index, cmd, phase, ran)
         for entry in listeners:
             fn = entry[index]
             if fn is not None:
@@ -277,6 +284,15 @@ class History:
         if getattr(self.scene, 'worksession_read_only', False):
             self.last_rejected = 'Choose this file in Worksession before editing it.'
             return False
+        target = getattr(cmd, "_history_mesh", None) or self.scene.mesh
+        st = target.__dict__.get("_store")
+        if st is not None and phase == "execute" and any(st.frame_origin):
+            cmd._tool_origin = tuple(st.frame_origin)
+        frame = getattr(cmd, "_tool_origin", None)
+        if frame is not None and st is not None and tuple(st.frame_origin) != frame:
+            from core.coordinate_frame import mesh_frame
+            with mesh_frame(target, frame):
+                return self._run(cmd, phase, operation)
         listeners = tuple(self._listeners)
         self._notify(listeners, 0, cmd, phase, False)
         ran = False

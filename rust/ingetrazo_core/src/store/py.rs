@@ -1634,6 +1634,29 @@ impl PyMeshStore {
     }
 
     /// `capture_state`: O(chunks), whatever the mesh size.
+    #[getter]
+    fn frame_origin(&self) -> [f64; 3] {
+        self.inner.state.frame_origin
+    }
+
+    #[pyo3(signature = (origin, original=None))]
+    fn in_frame(&self, origin: [f64; 3], original: Option<&PyMeshStore>) -> Self {
+        let mut st = self.inner.clone();
+        st.state = st.state.in_frame(origin, original.map(|m| &m.inner.state));
+        Self::wrap(st)
+    }
+
+    fn _publish_frame(&mut self, source: &PyMeshStore) -> PyResult<()> {
+        if self.inner.lineage != source.inner.lineage {
+            return Err(PyValueError::new_err("coordinate frames must share a lineage"));
+        }
+        let state = source.inner.state.in_frame(self.inner.state.frame_origin, Some(&self.inner.state));
+        self.inner = source.inner.clone();
+        self.inner.state = state;
+        *self.cache.lock().unwrap() = Default::default();
+        Ok(())
+    }
+
     fn snapshot(&self) -> PyStoreSnapshot {
         PyStoreSnapshot { inner: self.inner.snapshot() }
     }
@@ -1958,7 +1981,8 @@ impl PyStoreSnapshot {
     /// `capture_state() == other` between two snapshots of one store:
     /// chunk pointers first, content only where they differ.
     fn same_as(&self, other: &PyStoreSnapshot) -> bool {
-        self.inner.lineage == other.inner.lineage && self.inner.state.same_as(&other.inner.state)
+        self.inner.lineage == other.inner.lineage && self.inner.state.same_as(
+            &other.inner.state.in_frame(self.inner.state.frame_origin, Some(&self.inner.state)))
     }
 
     /// Net change between two immutable snapshots of one store. Across a
@@ -1970,7 +1994,8 @@ impl PyStoreSnapshot {
         if self.inner.lineage != before.inner.lineage {
             return Err(PyValueError::new_err("snapshots of different stores"));
         }
-        let (new, old) = (reader(&self.inner), reader(&before.inner));
+        let (new, mut old) = (reader(&self.inner), reader(&before.inner));
+        old.state = old.state.in_frame(new.state.frame_origin, Some(&new.state));
         let mut ch = py.detach(|| new.changes_since(&old));
         ch.modified[2].extend(attrs.into_iter().filter(|&k|
             new.slot(Kind::Face, k).is_some() && old.slot(Kind::Face, k).is_some()));

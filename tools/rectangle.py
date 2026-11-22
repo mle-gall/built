@@ -447,6 +447,14 @@ class RectangleTool(PlaneLock, Tool):
             u, v = last["u"], last["v"]
         else:
             u, v = self._axes()
+        from core.coordinate_frame import drawing_point, planned_points
+        exact = {}
+        mesh = viewport.scene.mesh
+        if last is not None and "_store" in mesh.__dict__:
+            import numpy as np
+            layout = dict(last, start=drawing_point(mesh, last["start"]),
+                          u=np.array(u.toTuple()), v=np.array(v.toTuple()))
+            exact = {p.toTuple(): tuple(xyz) for p, xyz in zip(corners, _laid_out(layout))}
         corners = face_the_plane(corners, QVector3D.crossProduct(u, v))
         segments = [(corners[i], corners[(i + 1) % 4]) for i in range(4)]
         # The rectangle owns its face explicitly (the loop spans corner to
@@ -459,7 +467,8 @@ class RectangleTool(PlaneLock, Tool):
             extra=[AddFaceCommand(list(corners))],
             plane_rebuild=True,     # on a populated plane (#538)
         )
-        viewport.history.execute(cmd)
+        with planned_points(mesh, exact):
+            viewport.history.execute(cmd)
         if last is not None and viewport.history.undo_stack \
                 and viewport.history.undo_stack[-1] is cmd:
             last["cmd"] = cmd

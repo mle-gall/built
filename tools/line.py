@@ -204,18 +204,27 @@ class LineTool(Tool):
             new_endpoint = self.start_point + direction * value
 
         self._draw_segment(viewport, self.start_point, new_endpoint,
-                           self._retype_state(self.start_point, new_endpoint))
+                           self._retype_state(self.start_point, new_endpoint),
+                           offset=value if isinstance(value, tuple) else
+                           tuple(n * value for n in direction.toTuple()))
         return True
 
     def _draw_segment(self, viewport, start: QVector3D, end: QVector3D,
-                      last: dict, ended: bool = False) -> bool:
+                      last: dict, ended: bool = False, offset=None) -> bool:
         """Commit the segment ``start``–``end`` and move the chain on: it
         ends when the segment makes a face (or ``ended`` says it already
         had), else it continues from ``end``. False if the history
         refused the segment."""
         faces_before = len(viewport.scene.faces)
         cmd = self._commit_edge(viewport, start, end)
-        viewport.history.execute(cmd)
+        from core.coordinate_frame import drawing_point, planned_points
+        mesh = viewport.scene.mesh
+        exact = {}
+        if offset is not None and "_store" in mesh.__dict__:
+            a = drawing_point(mesh, start)
+            exact = {start.toTuple(): tuple(a), end.toTuple(): tuple(a + offset)}
+        with planned_points(mesh, exact):
+            viewport.history.execute(cmd)
         if not retype_open(viewport, cmd):
             return False
         ended = ended or len(viewport.scene.faces) > faces_before
@@ -288,7 +297,8 @@ class LineTool(Tool):
         self.work_plane = last["work_plane"]
         if not self._draw_segment(viewport, start, end,
                                   dict(last, end=QVector3D(end)),
-                                  ended=last["ended"]):
+                                  ended=last["ended"], offset=value if isinstance(value, tuple) else
+                                  tuple(n * value for n in delta.normalized().toTuple())):
             # Refused: the segment already drawn comes back instead of
             # vanishing with the undo above, and the window stays open.
             viewport.history.redo()

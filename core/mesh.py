@@ -57,7 +57,8 @@ _KEY_SCALE = 10.0 ** _KEY_DECIMALS
 #: belong to the store (``core.store_mesh.STORE_SIDE``): never deep-copied.
 _STORE_SIDE = frozenset(("_store", "_objmap", "_attr_table", "_attr_own",
                          "_bulk", "_py_base", "_pos_cache",
-                         "_face_cache"))
+                         "_face_cache", "_frame_parent", "_tool_frame_cache",
+                         "_planned_points"))
 
 
 def _store_on() -> bool:

@@ -43,7 +43,8 @@ LOCAL_MASK = (1 << 40) - 1
 #: ``mesh.__dict__`` entries that belong to the store side and never travel
 #: with a deep copy of the Python state.
 STORE_SIDE = ("_store", "_objmap", "_attr_table", "_attr_own", "_bulk",
-              "_py_base", "_pos_cache", "_face_cache")
+              "_py_base", "_pos_cache", "_face_cache", "_frame_parent",
+              "_tool_frame_cache", "_planned_points")
 
 
 def enabled() -> bool:
@@ -1171,8 +1172,13 @@ class StoreMesh(Mesh):
         self._mut_serial += 1
         self.__dict__.pop("_bulk", None)
 
+    def _input_point(self, position):
+        xyz = _xyz(position)
+        planned = self.__dict__.get('_planned_points')
+        return planned.get(xyz, xyz) if planned else xyz
+
     def vertex_at(self, position):
-        k = self._store.vertex_at(_xyz(position))
+        k = self._store.vertex_at(self._input_point(position))
         return None if k is None else VertexView(self, k)
 
     def _lookup(self, position):
@@ -1293,7 +1299,7 @@ class StoreMesh(Mesh):
 
     def vertex(self, position):
         self.__dict__.pop("_bulk", None)
-        k, _ch = self._store.vertex(_xyz(position))
+        k, _ch = self._store.vertex(self._input_point(position))
         return VertexView(self, k)
 
     def _probe_neighbours(self, k, position):
@@ -1311,7 +1317,7 @@ class StoreMesh(Mesh):
 
     def add_edge(self, a, b):
         self.__dict__.pop("_bulk", None)
-        k, _ch = self._store.add_edge(_xyz(a), _xyz(b))
+        k, _ch = self._store.add_edge(self._input_point(a), self._input_point(b))
         self._dirty(1)
         return EdgeView(self, k)
 
@@ -1328,7 +1334,7 @@ class StoreMesh(Mesh):
                 for p in loop:
                     self.vertex(p)
                 raise
-        rings = [[_xyz(p) for p in loop]] + [[_xyz(p) for p in h]
+        rings = [[self._input_point(p) for p in loop]] + [[self._input_point(p) for p in h]
                                              for h in raw]
         k, _ch = self._store.add_face(rings)
         self._dirty(sum(len(r) for r in rings))
@@ -1383,7 +1389,7 @@ class StoreMesh(Mesh):
         if k is None or not self._store.is_live(k):
             return self._py("add_hole", face, loop)
         try:
-            keys, _ch = self._store.add_hole(k, [_xyz(p) for p in loop])
+            keys, _ch = self._store.add_hole(k, [self._input_point(p) for p in loop])
         except _fallback():
             return self._py("add_hole", face, loop)
         self._dirty(len(loop))
@@ -1484,7 +1490,7 @@ class StoreMesh(Mesh):
         if k is None:
             return self._py("split_edge", edge, position)
         try:
-            (e0, e1, n), _ch = self._store.split_edge(k, _xyz(position))
+            (e0, e1, n), _ch = self._store.split_edge(k, self._input_point(position))
         except _fallback():
             return self._py("split_edge", edge, position)
         self._dirty(n)
@@ -1981,6 +1987,9 @@ def _restore_store_state(m, snap: StoreState) -> None:
     namespace: new keys (design decision 3)."""
     d = m.__dict__
     st = snap.owner if snap.mesh is m else d.get("_store")
+    current = d.get("_store")
+    if snap.mesh is m and current is not None and current.lineage == st.lineage:
+        st = current
     d["_store"] = st
     foreign = st is None or st.lineage != snap.snap.lineage
     if st is None:
