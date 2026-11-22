@@ -8,6 +8,7 @@ Save, Save As) onto :mod:`formats.igz`.
 from __future__ import annotations
 
 from views import chrome_dialogs as _dialogs
+from views import chrome_forms as _forms
 from views import prompts as _prompts
 
 import sys
@@ -4802,17 +4803,18 @@ class MainWindow(WorksessionMixin, QMainWindow):
             # issue #90) — it used to make one component per group, or
             # refuse outright when loose geometry came along.
             from core.history import MakeComponentOfCommand
-            name, ok = _prompts.get_text(
-                self, tr("Make Component"), tr("Component name:"),
-                text=tr("Component #{n}", n=count))
-            if not ok:
-                return
-            self._execute_make(MakeComponentOfCommand(
-                faces, edges, groups,
-                name=name.strip() or tr("Component #{n}", n=count)))
-            self.viewport.update()
-            self.statusBar().showMessage(tr(
-                "Component created — copies will share its definition"), 4000)
+
+            def make_of(name):
+                if name is None:
+                    return
+                self._execute_make(MakeComponentOfCommand(
+                    faces, edges, groups,
+                    name=name.strip() or tr("Component #{n}", n=count)))
+                self.viewport.update()
+                self.statusBar().showMessage(tr(
+                    "Component created — copies will share its definition"), 4000)
+            _forms.ask_text(self, tr("Make Component"), tr("Component name:"),
+                            text=tr("Component #{n}", n=count), done=make_of)
             return
         if groups:
             # One group converts in place — its mesh becomes the shared
@@ -4825,32 +4827,34 @@ class MainWindow(WorksessionMixin, QMainWindow):
                 self.viewport.flash_status(tr("It is a component already"))
                 return
             from core.history import GroupToComponentCommand
-            name, ok = _prompts.get_text(
-                self, tr("Make Component"), tr("Component name:"),
-                text=g.name or tr("Component"))
-            if not ok:
-                return
-            self._execute_make(
-                GroupToComponentCommand(g, name.strip() or None))
-            self.viewport.update()
-            self.statusBar().showMessage(tr(
-                "Component created — copies will share its definition"), 4000)
+
+            def convert(name):
+                if name is None:
+                    return
+                self._execute_make(
+                    GroupToComponentCommand(g, name.strip() or None))
+                self.viewport.update()
+                self.statusBar().showMessage(tr(
+                    "Component created — copies will share its definition"), 4000)
+            _forms.ask_text(self, tr("Make Component"), tr("Component name:"),
+                            text=g.name or tr("Component"), done=convert)
             return
         if not faces and not edges:
             self.viewport.flash_status(
                 tr("Select the geometry for the component first"))
             return
-        name, ok = _prompts.get_text(
-            self, tr("Make Component"), tr("Component name:"),
-            text=tr("Component #{n}", n=count))
-        if not ok:
-            return
-        self._execute_make(MakeGroupCommand(
-            faces, edges, component=True,
-            name=name.strip() or tr("Component #{n}", n=count)))
-        self.viewport.update()
-        self.statusBar().showMessage(tr(
-            "Component created — copies will share its definition"), 4000)
+
+        def make(name):
+            if name is None:
+                return
+            self._execute_make(MakeGroupCommand(
+                faces, edges, component=True,
+                name=name.strip() or tr("Component #{n}", n=count)))
+            self.viewport.update()
+            self.statusBar().showMessage(tr(
+                "Component created — copies will share its definition"), 4000)
+        _forms.ask_text(self, tr("Make Component"), tr("Component name:"),
+                        text=tr("Component #{n}", n=count), done=make)
 
     @_repeatable("Make Unique")
     def _on_make_unique(self) -> None:
@@ -5058,15 +5062,18 @@ class MainWindow(WorksessionMixin, QMainWindow):
     def rename_component(self, definition) -> None:
         """Rename a component definition: every copy, placed or nested,
         and the kept template take the new name, as one undo step."""
+        def rename(name):
+            name = (name or "").strip()
+            if not name or name == definition.name:
+                return
+            self._rename_component_to(definition, name)
+        _forms.ask_text(self, tr("Rename Component"), tr("Component name:"),
+                        text=definition.name or "", done=rename)
+
+    def _rename_component_to(self, definition, name) -> None:
         from core.history import CompoundCommand, RenameGroupCommand
         from core.kept_components import copies_of, kept_template
         scene = self.viewport.scene
-        name, ok = _prompts.get_text(
-            self, tr("Rename Component"), tr("Component name:"),
-            text=definition.name or "")
-        name = name.strip()
-        if not ok or not name or name == definition.name:
-            return
         targets = copies_of(scene, definition.mesh)
         kept = kept_template(scene, definition.mesh)
         if kept is not None and kept not in targets:
@@ -5246,14 +5253,16 @@ class MainWindow(WorksessionMixin, QMainWindow):
                 self.viewport.flash_status(tr("There is no mesh to simplify"))
             return
 
-        angle, ok = QInputDialog.getDouble(
+        _forms.ask_number(
             self, tr("Simplify Mesh"),
             tr("Maximum facet angle in degrees "
                "(0 = coplanar only; higher values may change rounded geometry):"),
-            1.0, 0.0, 5.0, 2)
-        if not ok:
-            return
+            1.0, 0.0, 5.0, 2, done=self._simplify_mesh_by, suffix="°")
 
+    def _simplify_mesh_by(self, angle) -> None:
+        if angle is None:
+            return
+        from core.history import SimplifyMeshCommand
         self.viewport.history.execute(SimplifyMeshCommand(angle))
         error = self.viewport.history.last_error
         if error:
@@ -6337,11 +6346,13 @@ class MainWindow(WorksessionMixin, QMainWindow):
         n = 1
         while scene.layer(f"{base} {n}") is not None:
             n += 1
-        name, ok = _prompts.get_text(
-            self, tr("New layer"), tr("Layer name:"), text=f"{base} {n}")
-        name = (name or "").strip()
-        if ok and name:
-            self._assign_layer(name)
+
+        def assign(name):
+            name = (name or "").strip()
+            if name:
+                self._assign_layer(name)
+        _forms.ask_text(self, tr("New layer"), tr("Layer name:"),
+                        text=f"{base} {n}", done=assign)
 
     def _hideable(self, entities) -> list:
         """The objects, faces and edges in ``entities`` that Hide acts on
@@ -6451,27 +6462,29 @@ class MainWindow(WorksessionMixin, QMainWindow):
 
     @_repeatable("Divide")
     def _on_divide(self) -> None:
-        """Divide the selected edges / curves into N equal pieces (#63)."""
-        from PySide6.QtWidgets import QInputDialog
-        from core.edits import divide_edges
-        from core.history import SnapshotMutation
+        """Divide the selected edges / curves into N equal pieces (#63),
+        through the core protocol, once the count is answered."""
         scene = self.viewport.scene
         edges = [e for e in scene.selection if isinstance(e, Edge)
                  and e in scene.mesh.edges]
         if not edges:
             return
-        n, ok = QInputDialog.getInt(
-            self, tr("Divide"), tr("Number of segments:"), 2, 2, 500, 1)
-        if not ok:
-            return
-        made = []
-        self.viewport.history.execute(SnapshotMutation(
-            lambda sc: made.append(divide_edges(sc.mesh, edges, n))))
-        scene.selection.clear()
-        scene.version += 1
-        self.viewport.update()
-        self.statusBar().showMessage(
-            tr("Divided into {n} segments", n=n), 3000)
+
+        def divide(n):
+            if n is None:
+                return
+            from core.protocol import commands as protocol
+            live = [e for e in edges if e in scene.mesh.edges]
+            if not live:
+                return
+            protocol.divide_edges(self.viewport.history, [e.key for e in live], int(n))
+            scene.selection.clear()
+            scene.version += 1
+            self.viewport.update()
+            self.statusBar().showMessage(
+                tr("Divided into {n} segments", n=n), 3000)
+        _forms.ask_number(self, tr("Divide"), tr("Number of segments:"), 2, 2, 500,
+                          done=divide)
 
     @_repeatable("Join Segments")
     def _on_explode_curve(self) -> None:
@@ -7497,12 +7510,13 @@ class MainWindow(WorksessionMixin, QMainWindow):
             return
         from PySide6.QtWidgets import QInputDialog
         lo, hi = self.FOV_RANGE
-        value, ok = QInputDialog.getDouble(
-            self, tr("Field of view"),
-            tr("Field of view in degrees (1–120):"),
-            float(cam.fov_deg), lo, hi, 1)
-        if ok:
-            self.set_field_of_view(value)
+
+        def apply(value):
+            if value is not None:
+                self.set_field_of_view(value)
+        _forms.ask_number(self, tr("Field of view"),
+                          tr("Field of view in degrees (1–120):"),
+                          float(cam.fov_deg), lo, hi, 1, done=apply, suffix="°")
 
     def _show_camera_settings(self):
         """Camera ▸ Camera Settings…: one window, kept, raised if open —
@@ -9698,15 +9712,16 @@ class MainWindow(WorksessionMixin, QMainWindow):
                 tr("The image has no transparency — it will show as a "
                    "solid rectangle. A PNG with transparent background "
                    "works best."))
-        height, ok = QInputDialog.getDouble(
-            self, tr("Face-me image"), tr("Real height (m):"),
-            1.75, 0.05, 500.0, 2)
-        if not ok:
-            return
-        group = make_billboard_group(
-            path_str, height, Path(path_str).stem,
-            img.width() / img.height())
-        self._start_place(group)
+
+        def place(height):
+            if height is None:
+                return
+            group = make_billboard_group(
+                path_str, height, Path(path_str).stem,
+                img.width() / img.height())
+            self._start_place(group)
+        _forms.ask_number(self, tr("Face-me image"), tr("Real height (m):"),
+                          1.75, 0.05, 500.0, 2, done=place, suffix="m")
 
     def _on_insert_component(self, key: str, name: str | None = None) -> None:
         """Insert a bundled starter component as a Group at the origin,
@@ -10908,17 +10923,18 @@ class MainWindow(WorksessionMixin, QMainWindow):
         if not sel:
             return
         image = sel[0]
-        width, ok = QInputDialog.getDouble(
-            self, tr("Image size"), tr("Width (m):"),
-            image.width(), 0.0001, 1_000_000.0, 4)
-        if not ok or width <= 0.0:
-            return
-        u, v = image.scaled(width, keep_aspect=True)
-        self.viewport.history.execute(
-            TransformImagePlaneCommand(image, u=u, v=v))
-        self.viewport.update()
-        self.statusBar().showMessage(
-            tr("Image resized to {size}", size=fmt_pair(u.length(), v.length())), 4000)
+
+        def resize(width):
+            if width is None or width <= 0.0:
+                return
+            u, v = image.scaled(width, keep_aspect=True)
+            self.viewport.history.execute(
+                TransformImagePlaneCommand(image, u=u, v=v))
+            self.viewport.update()
+            self.statusBar().showMessage(
+                tr("Image resized to {size}", size=fmt_pair(u.length(), v.length())), 4000)
+        _forms.ask_number(self, tr("Image size"), tr("Width (m):"),
+                          image.width(), 0.0001, 1_000_000.0, 4, done=resize, suffix="m")
 
     def _on_image_opacity(self) -> None:
         """Fade a reference image so the model and its lines read over it
@@ -10931,14 +10947,16 @@ class MainWindow(WorksessionMixin, QMainWindow):
         if not sel:
             return
         image = sel[0]
-        pct, ok = QInputDialog.getInt(
-            self, tr("Image opacity"), tr("Opacity (%):"),
-            int(round(100 * float(getattr(image, "opacity", 1.0)))), 5, 100, 5)
-        if not ok:
-            return
-        self.viewport.history.execute(
-            SetImagePlaneOpacityCommand(image, pct / 100.0))
-        self.viewport.update()
+
+        def fade(pct):
+            if pct is None:
+                return
+            self.viewport.history.execute(
+                SetImagePlaneOpacityCommand(image, pct / 100.0))
+            self.viewport.update()
+        _forms.ask_number(self, tr("Image opacity"), tr("Opacity (%):"),
+                          int(round(100 * float(getattr(image, "opacity", 1.0)))), 5, 100,
+                          done=fade, suffix="%", step=5)
 
     def _on_import_orthophoto(self) -> None:
         """Import a GeoTIFF orthomosaic (a WebODM ``odm_orthophoto.tif``, a

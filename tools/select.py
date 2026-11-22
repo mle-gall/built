@@ -902,14 +902,15 @@ class SelectTool(Tool):
         if isinstance(entity, TextLabel):
             # As usual, double-clicking a leader text edits its text.
             from core.i18n import tr
-            from views.prompts import get_multiline_text
-            text, ok = get_multiline_text(
-                viewport.window(), tr("Text"), tr("Label text:"),
-                entity.text)
-            if ok and text.strip() and text.strip() != entity.text:
-                viewport.history.execute(
-                    EditTextLabelCommand(entity, text.strip()))
-            viewport.update()
+            from views import chrome_forms
+
+            def edit(text):
+                if text is not None and text.strip() and text.strip() != entity.text:
+                    viewport.history.execute(
+                        EditTextLabelCommand(entity, text.strip()))
+                viewport.update()
+            chrome_forms.ask_text(viewport.window(), tr("Text"), tr("Label text:"),
+                                  entity.text, done=edit, multiline=True)
             return
         if isinstance(entity, Dimension):
             # Double-clicking the dimension text edits it; "<>"
@@ -923,17 +924,20 @@ class SelectTool(Tool):
             measured = (fmt(entity.value(), style) if fmt is not None
                         else entity.label())
             current = entity.text if entity.text else measured
-            text, ok = _prompts.get_text(
-                viewport.window(), tr("Dimension"),
-                tr("Dimension text (<> = measured value):"), text=current)
-            if ok:
-                new = text.strip()
-                if new in ("", "<>", measured):
-                    new = None
-                if new != entity.text:
-                    viewport.history.execute(
-                        EditDimensionTextCommand(entity, new))
-            viewport.update()
+            from views import chrome_forms
+
+            def retext(text):
+                if text is not None:
+                    new = text.strip()
+                    if new in ("", "<>", measured):
+                        new = None
+                    if new != entity.text:
+                        viewport.history.execute(
+                            EditDimensionTextCommand(entity, new))
+                viewport.update()
+            chrome_forms.ask_text(viewport.window(), tr("Dimension"),
+                                  tr("Dimension text (<> = measured value):"),
+                                  current, done=retext)
             return
         if not isinstance(entity, (Face, Edge)):
             self.on_click(ctx)

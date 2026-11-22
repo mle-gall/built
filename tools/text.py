@@ -58,15 +58,21 @@ class TextTool(AxisMagnet, Tool):
             return
         # Second click: label position → ask for the text.
         offset = ctx.world - self.anchor
-        from views.prompts import get_multiline_text
-        text, ok = get_multiline_text(
-            ctx.viewport.window(), tr("Text"), tr("Label text:"),
-            self._default_text)
-        if ok and text.strip():
-            ctx.viewport.history.execute(AddTextLabelCommand(
-                TextLabel(QVector3D(self.anchor), offset, text.strip())))
+        anchor = QVector3D(self.anchor)
+        viewport = ctx.viewport
+
+        def place(text):
+            # Answered now (Qt) or on a later turn (the chrome's form).
+            if text is not None and text.strip():
+                viewport.history.execute(AddTextLabelCommand(
+                    TextLabel(anchor, offset, text.strip())))
+            viewport.update()
+        default = self._default_text
         self._reset()
-        ctx.viewport.update()
+        from views import chrome_forms
+        chrome_forms.ask_text(viewport.window(), tr("Text"), tr("Label text:"),
+                              default, done=place, multiline=True)
+        viewport.update()
 
     def _describe(self, ctx: ToolContext) -> str:
         """The default label: what did the anchor click land on?"""
