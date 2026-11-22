@@ -435,12 +435,13 @@ def _material_columns(pos, corners, sizes, counts, table, attributes, texture_id
     from core.materials import back_is_default
     from core.texture import face_uv_axes
     maps = np.broadcast_to(np.zeros(16, np.float32), (len(counts), 16))
-    paints = np.zeros((len(counts), 3), np.uint32)
-    palette = np.zeros((len(table), 3), np.uint32)
     # The common unpainted prototype has no back or texture rows to resolve.
     # Avoid per-face palette gathers and temporary masks for this case.
     if not any(table):
-        return maps, paints
+        return maps, np.zeros((len(counts), 3), np.uint32)
+    palette = np.zeros((len(table), 3), np.uint32)
+    native_pack = getattr(_native.native, "pack_materials", None)
+    colors = []
     textures = []
     for k, own in enumerate(table):
         back = own.get('back')
@@ -451,7 +452,9 @@ def _material_columns(pos, corners, sizes, counts, table, attributes, texture_id
             color = (1., 1., 1.)
         if color is None and (back.get('texture') or 'opacity' in back):
             color = (210/255,)*3
-        if color is not None:
+        if native_pack is not None:
+            colors.append(None if color is None else (*color[:3], _alpha(back)))
+        elif color is not None:
             palette[k, 0] = np.array([*np.clip(np.array(color[:3])*255,0,255),_alpha(back)], np.uint8).view('<u4')[0]
         sides = []
         for side, attrs in enumerate((own, back)):
@@ -466,7 +469,10 @@ def _material_columns(pos, corners, sizes, counts, table, attributes, texture_id
                     texture_ids[path] = len(texture_ids)+1
                 palette[k, side+1] = texture_ids[path]
         textures.append(sides)
-    paints[:] = palette[attributes]
+    if native_pack is None:
+        paints = palette[attributes]
+    else:
+        paints = native_pack(colors, palette[:, 1:].tolist(), np.asarray(attributes, np.int64))
     textured = np.flatnonzero(np.any(paints[:,1:] != 0, axis=1))
     if len(textured):
         maps = np.zeros((len(counts), 16), np.float32)

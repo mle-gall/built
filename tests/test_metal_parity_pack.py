@@ -191,3 +191,64 @@ def test_hidden_material_corners_follow_visible_edge_gap():
         for command in commands:
             first, count, base = map(int, (command['first'], command['count'], command['base']))
             assert np.all(packed.indices[first:first+count] + base < len(packed.vertices))
+
+
+def test_native_material_palette_matches_fallback(monkeypatch):
+    """Quantization must preserve truncation, opacity rounding and both sides."""
+    native = _native.available()
+    if not hasattr(native, 'pack_materials'):
+        pytest.skip('new native palette kernel required')
+    from views.wgpu_scene import _material_columns
+    table = [{}, {'color': (-.1, .499, 1.2), 'opacity': .5},
+             {'back': {'color': (.2, .3, .4), 'opacity': .1}},
+             {'texture': {'path': 'missing.png', 'uvw': [1,0,0,0,0,1,0,0]}}]
+    pos = np.array([[0,0,0], [1,0,0], [0,1,0]], np.float32)
+    corners = np.tile(np.arange(3), 4)
+    sizes = np.full(4, 3, np.int64)
+    counts = np.ones(4, np.int64)
+    attributes = np.arange(4, dtype=np.int64)
+    monkeypatch.setattr(_native, 'native', native)
+    actual = _material_columns(pos, corners, sizes, counts, table, attributes, {})
+    monkeypatch.setattr(_native, 'native', None)
+    expected = _material_columns(pos, corners, sizes, counts, table, attributes, {})
+    for a, b in zip(actual, expected):
+        assert a.dtype == b.dtype and a.shape == b.shape
+        assert a.tobytes() == b.tobytes()
+    with pytest.raises(ValueError):
+        native.pack_materials([None], [[0,0]], np.array([-1], np.int64))
+
+
+def test_mixed_material_pack_matches_python_palette(monkeypatch, tmp_path):
+    from PySide6.QtGui import QColor
+    from views import wgpu_scene
+    path = str(tmp_path / 'swatch.png')
+    image = QImage(2, 2, QImage.Format_RGB32)
+    image.fill(QColor('red'))
+    assert image.save(path)
+    mesh = Mesh()
+    for x, paint in enumerate([
+        {'color': (.3, .6, .9)},
+        {'texture': {'path': path}},
+        {'pbr': {'metallic': .7}, 'back': {'pbr': {'roughness': .2}}},
+        {},
+    ]):
+        face = mesh.add_face([QVector3D(x, 0, 0), QVector3D(x+1, 0, 0), QVector3D(x, 1, 0)])
+        face.attrs.update(paint)
+    scene = Scene(groups=[Group(mesh)])
+    overrides = {face.key: {'back': {'color': (.21, .42, .73), 'opacity': .66}}}
+    native = _native.available()
+    assert hasattr(native, 'pack_materials')
+    monkeypatch.setattr(_native, 'native', native)
+    actual = wgpu_scene.pack_scene(scene, face_overrides=overrides)
+    # Disable only the new kernel so every other pack stage stays identical.
+    class PreviousCore:
+        def __getattr__(self, name):
+            if name == 'pack_materials':
+                raise AttributeError(name)
+            return getattr(native, name)
+    monkeypatch.setattr(_native, 'native', PreviousCore())
+    expected = wgpu_scene.pack_scene(scene, face_overrides=overrides)
+    assert actual.materials.tobytes() == expected.materials.tobytes()
+    assert actual.vertices.tobytes() == expected.vertices.tobytes()
+    assert actual.texture_paths == expected.texture_paths
+    assert actual.textures == expected.textures
