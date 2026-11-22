@@ -46,6 +46,36 @@ fn body() -> egui::FontId { egui::FontId::proportional(12.0) }
 fn meta() -> egui::FontId { egui::FontId::proportional(11.0) }
 fn strong(size: f32) -> egui::FontId { egui::FontId::new(size, egui::FontFamily::Name("medium".into())) }
 fn title() -> egui::FontId { egui::FontId::new(13.0, egui::FontFamily::Name("semibold".into())) }
+fn title_font() -> egui::FontId { title() }
+
+/// The visibility eye: open, or closed with a slash.
+fn paint_eye(ui: &egui::Ui, r: Rect, on: bool) {
+    let c = r.center();
+    let col = if on { DIM } else { WARN };
+    let pts: Vec<Pos2> = (0..=16).map(|i| {
+        let t = std::f32::consts::PI * i as f32 / 16.0;
+        pos2(c.x - 6.0 * t.cos(), c.y - 3.6 * t.sin())
+    }).chain((0..=16).map(|i| {
+        let t = std::f32::consts::PI * i as f32 / 16.0;
+        pos2(c.x + 6.0 * t.cos(), c.y + 3.6 * t.sin())
+    })).collect();
+    ui.painter().add(egui::Shape::closed_line(pts, Stroke::new(1.2_f32, col)));
+    ui.painter().circle_filled(c, 1.8, col);
+    if !on {
+        ui.painter().line_segment([c + vec2(-6.0, 5.0), c + vec2(6.0, -5.0)], Stroke::new(1.3_f32, col));
+    }
+}
+
+/// The lock: shackle closed when locked, open when not.
+fn paint_lock(ui: &egui::Ui, r: Rect, on: bool) {
+    let c = r.center();
+    let col = if on { INK } else { FAINT };
+    let body = Rect::from_center_size(c + vec2(0.0, 2.0), vec2(9.0, 7.0));
+    ui.painter().rect_filled(body, CornerRadius::same(2), col);
+    let shackle = Rect::from_center_size(c + vec2(if on { 0.0 } else { 2.5 }, -2.5), vec2(6.0, 7.0));
+    ui.painter().rect_stroke(shackle, CornerRadius::same(3), Stroke::new(1.3_f32, col), egui::StrokeKind::Middle);
+    ui.painter().rect_filled(body, CornerRadius::same(2), col);
+}
 
 /// The one state painter: every control's fill and line come from here.
 #[derive(Clone, Copy, PartialEq)]
@@ -166,17 +196,26 @@ pub struct Ui {
     glass: crate::glass::Glass,
 }
 
-/// One tree node as Python sends it, in depth-first order.
+/// One tree row as Python sends it, in display order (Python owns
+/// expansion and filtering; the dock only draws and reports).
 pub struct Node {
     key: String,
-    parent: Option<usize>,
     depth: usize,
     name: String,
     kind: String,
     count: u32,
     problems: u32,
     active: bool,
-    has_children: bool,
+    /// 0 node, 1 item, 2 nested item, 3 filed elsewhere (ghost), 4 loose geometry.
+    row: u8,
+    badge: String,
+    /// -1 none, 0 off, 1 on.
+    eye: i8,
+    lock: i8,
+    expandable: bool,
+    expanded: bool,
+    selected: u32,
+    icon: String,
 }
 
 pub struct Column {
@@ -187,7 +226,15 @@ pub struct Column {
     /// "File to…": the next row clicked (or Enter) receives the selection.
     filing: Option<String>,
     focus_filter: bool,
-    row_menu: Option<(String, Pos2)>,
+    /// The row menu: row key, row type, where.
+    row_menu: Option<(String, u8, Pos2)>,
+    /// Inline rename: row key and the text being typed.
+    renaming: Option<(String, String)>,
+    head_menu: Option<Pos2>,
+    kind_menu: Option<(String, Pos2)>,
+    kinds: Vec<String>,
+    /// A confirmation over the dock: title, body, (id, label) buttons.
+    prompt: Option<(String, String, Vec<(String, String)>)>,
     inspector_title: String,
     inspector: Vec<(String, Vec<(String, String)>)>,
     highlighted: Option<String>,
@@ -367,30 +414,32 @@ impl Ui {
             }
         }
     }
-    /// rows: (key, parent index or -1, depth, name, kind, count, problems, active).
-    pub fn set_tree(&mut self, rows: Vec<(String, i64, usize, String, String, u32, u32, bool)>, unfiled: u32) {
+    /// rows: ([key, name, kind, badge, icon], [depth, count, problems, active,
+    /// row, eye, lock, expandable, expanded, selected]).
+    pub fn set_tree(&mut self, rows: Vec<(Vec<String>, Vec<i64>)>, unfiled: u32) {
         let col = self.column.get_or_insert_with(|| Column {
             nodes: Vec::new(), unfiled: 0, expanded: Default::default(), filter: String::new(),
-            filing: None, focus_filter: false, row_menu: None, inspector_title: String::new(),
+            filing: None, focus_filter: false, row_menu: None, renaming: None, head_menu: None,
+            kind_menu: None, kinds: Vec::new(), prompt: None, inspector_title: String::new(),
             inspector: Vec::new(), highlighted: None,
         });
-        let first = col.nodes.is_empty();
-        let mut nodes: Vec<Node> = rows.into_iter().map(|(key, parent, depth, name, kind, count, problems, active)| Node {
-            key, parent: (parent >= 0).then_some(parent as usize), depth, name, kind, count, problems, active,
-            has_children: false,
+        let g = |v: &Vec<i64>, i: usize| v.get(i).copied().unwrap_or(0);
+        let s = |v: &Vec<String>, i: usize| v.get(i).cloned().unwrap_or_default();
+        col.nodes = rows.into_iter().map(|(t, n)| Node {
+            key: s(&t, 0), name: s(&t, 1), kind: s(&t, 2), badge: s(&t, 3), icon: s(&t, 4),
+            depth: g(&n, 0) as usize, count: g(&n, 1) as u32, problems: g(&n, 2) as u32, active: g(&n, 3) != 0,
+            row: g(&n, 4) as u8, eye: g(&n, 5) as i8, lock: g(&n, 6) as i8, expandable: g(&n, 7) != 0,
+            expanded: g(&n, 8) != 0, selected: g(&n, 9) as u32,
         }).collect();
-        for i in 0..nodes.len() {
-            if let Some(p) = nodes[i].parent { nodes[p].has_children = true; }
-        }
-        if first {
-            // Open the roots, and the way to the active node.
-            for n in &nodes { if n.depth == 0 { col.expanded.insert(n.key.clone()); } }
-            if let Some(mut i) = nodes.iter().position(|n| n.active) {
-                while let Some(p) = nodes[i].parent { col.expanded.insert(nodes[p].key.clone()); i = p; }
-            }
-        }
-        col.nodes = nodes;
         col.unfiled = unfiled;
+    }
+    pub fn set_kinds(&mut self, kinds: Vec<String>) {
+        if let Some(col) = self.column.as_mut() { col.kinds = kinds; }
+    }
+    pub fn set_prompt(&mut self, title: String, body: String, buttons: Vec<(String, String)>) {
+        if let Some(col) = self.column.as_mut() {
+            col.prompt = (!title.is_empty()).then_some((title, body, buttons));
+        }
     }
     pub fn set_inspector(&mut self, title: String, sections: Vec<(String, Vec<(String, String)>)>) {
         if let Some(col) = self.column.as_mut() {
@@ -423,7 +472,8 @@ impl Ui {
     /// Keyboard ownership: the chrome takes a key only while one of its
     /// fields has focus, or Escape while one of its popups is open.
     pub fn claims_key(&self, name: &str) -> bool {
-        let filing = self.column.as_ref().is_some_and(|c| c.filing.is_some() || c.row_menu.is_some());
+        let filing = self.column.as_ref().is_some_and(|c| c.filing.is_some() || c.row_menu.is_some()
+            || c.kind_menu.is_some() || c.head_menu.is_some() || c.prompt.is_some());
         (name == "Escape" && (self.view_open || self.sel_more || self.menu.is_some() || filing)) || self.ctx.wants_keyboard_input()
     }
     pub fn key(&mut self, name: &str, pressed: bool, mods: u8) -> bool {
@@ -433,9 +483,11 @@ impl Ui {
         }
         if name == "Escape" {
             if let Some(col) = self.column.as_mut() {
-                if col.row_menu.is_some() || col.filing.is_some() {
+                if col.row_menu.is_some() || col.filing.is_some() || col.kind_menu.is_some() || col.head_menu.is_some()
+                    || col.prompt.is_some() {
                     if pressed {
-                        if col.row_menu.take().is_none() {
+                        if col.kind_menu.take().is_none() && col.head_menu.take().is_none()
+                            && col.prompt.take().is_none() && col.row_menu.take().is_none() {
                             col.filing = None;
                             col.filter.clear();
                         }
@@ -509,7 +561,11 @@ impl Ui {
                     self.view_open = false;
                     self.sel_more = false;
                     self.menu = None;
-                    if let Some(col) = self.column.as_mut() { col.row_menu = None; }
+                    if let Some(col) = self.column.as_mut() {
+                        col.row_menu = None;
+                        col.kind_menu = None;
+                        col.head_menu = None;
+                    }
                     self.ctx.memory_mut(|m| m.stop_text_input());
                 }
                 self.outside_press = !self.captured;
@@ -973,6 +1029,11 @@ impl Ui {
                         ui.add_space(8.0);
                         caption_plain(ui, "Project");
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            let dots = (String::new(), "⋯".to_owned(), "Structure: new node, propose from tags…".to_owned(), String::new(), -1i8, true);
+                            let before = ui.cursor();
+                            if item_button(ui, &dots, None) {
+                                col.head_menu = Some(pos2(before.max.x, before.min.y + 30.0));
+                            }
                             // What stands between the model and delivery (one home: here).
                             let to_fix = delivery.as_ref().map_or(0, |d| d.2);
                             if to_fix > 0 && amber_button(ui, &format!("{to_fix} to fix")) { cmds.push("deliver:problems".into()); }
@@ -999,65 +1060,58 @@ impl Ui {
                         col.focus_filter = false;
                     }
                     let enter = resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                    if resp.changed() {
+                        actions.push(format!("filter\u{1f}{}", col.filter));
+                    }
                     ui.add_space(4.0);
-                    // Rows: filter (with ancestors) or expansion.
-                    let needle = col.filter.to_lowercase();
-                    let visible: Vec<usize> = if needle.is_empty() {
-                        let mut out = Vec::new();
-                        let mut hidden_below: Option<usize> = None;
-                        for (i, n) in col.nodes.iter().enumerate() {
-                            if let Some(d) = hidden_below { if n.depth > d { continue; } hidden_below = None; }
-                            out.push(i);
-                            if n.has_children && !col.expanded.contains(&n.key) { hidden_below = Some(n.depth); }
-                        }
-                        out
-                    } else {
-                        let mut keep = vec![false; col.nodes.len()];
-                        for (i, n) in col.nodes.iter().enumerate() {
-                            if n.name.to_lowercase().contains(&needle) || n.kind.to_lowercase().contains(&needle) {
-                                let mut j = Some(i);
-                                while let Some(k) = j { keep[k] = true; j = col.nodes[k].parent; }
+                    // Rows, as Python sends them (it owns expansion and filtering).
+                    if enter {
+                        if col.filing.is_some() {
+                            if let Some(n) = col.nodes.iter().find(|n| n.row == 0) {
+                                actions.push(format!("file\u{1f}{}", n.key));
+                                col.filing = None;
+                                col.filter.clear();
+                                actions.push("filter\u{1f}".into());
                             }
                         }
-                        (0..col.nodes.len()).filter(|i| keep[*i]).collect()
-                    };
-                    if enter {
-                        if let (Some(_), Some(i)) = (&col.filing, visible.iter().copied()
-                            .find(|i| col.nodes[*i].name.to_lowercase().contains(&needle) || needle.is_empty())) {
-                            actions.push(format!("file:{}", col.nodes[i].key));
-                            col.filing = None;
-                            col.filter.clear();
-                        }
                     }
-                    let tree_h = ((visible.len().max(1) as f32) * (ROW + 0.0) + 4.0).min(ui.available_height() * 0.6).max(66.0);
+                    let tree_h = ((col.nodes.len().max(1) as f32) * ROW + 4.0).min(ui.available_height() * 0.6).max(66.0);
                     if col.nodes.is_empty() {
                         ui.add_space(6.0);
-                        ui.label(egui::RichText::new("No project structure yet. Proposing one from the tags is in the Structure panel (Window menu) for now.")
-                            .size(11.5).color(DIM));
+                        ui.horizontal_wrapped(|ui| {
+                            ui.add_space(8.0);
+                            ui.label(egui::RichText::new("No project structure yet.").font(body()).color(DIM));
+                        });
+                        ui.add_space(6.0);
+                        ui.horizontal(|ui| {
+                            ui.add_space(8.0);
+                            if chip_button(ui, "Propose from tags…") { actions.push("propose\u{1f}".into()); }
+                            if chip_button(ui, "New node") { actions.push("new\u{1f}".into()); }
+                        });
                     }
+                    let nodes_len = col.nodes.len();
                     egui::ScrollArea::vertical().id_salt("tree").max_height(tree_h).auto_shrink([false, false])
-                        .show_rows(ui, ROW, visible.len(), |ui, range| {
-                            for &i in &visible[range] {
+                        .show_rows(ui, ROW, nodes_len, |ui, range| {
+                            for i in range {
                                 let n = &col.nodes[i];
                                 let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ROW), Sense::click());
                                 let lit = col.highlighted.as_deref() == Some(n.key.as_str());
-                                let filing = col.filing.is_some();
+                                let filing = col.filing.is_some() && n.row == 0;
                                 if lit {
-                                    // Selected: accent wash and a 2 × 12 mark at the leading edge.
                                     ui.painter().rect_filled(rect, CornerRadius::same(R_ROW), ACTIVE);
                                     ui.painter().rect_filled(Rect::from_center_size(pos2(rect.min.x + 1.0, rect.center().y), vec2(2.0, 12.0)),
                                         CornerRadius::same(1), ACCENT);
                                 } else if resp.hovered() {
                                     ui.painter().rect_filled(rect, CornerRadius::same(R_ROW), if filing { ACTIVE } else { HOVER });
                                 }
+                                let cy = rect.center().y;
                                 let x0 = rect.min.x + 4.0 + n.depth as f32 * 14.0;
                                 let tri = Rect::from_min_size(pos2(x0, rect.min.y), vec2(14.0, ROW));
-                                if n.has_children {
-                                    let open = col.expanded.contains(&n.key) || !needle.is_empty();
-                                    ui.painter().text(tri.center(), egui::Align2::CENTER_CENTER, if open { "▾" } else { "▸" }, meta(), FAINT);
+                                if n.expandable {
+                                    ui.painter().text(tri.center(), egui::Align2::CENTER_CENTER, if n.expanded { "▾" } else { "▸" },
+                                        meta(), if n.row == 0 { FAINT } else { OFF });
                                 }
-                                // Right: problems (dot + number) and count, each in a fixed 40-pt column.
-                                let cy = rect.center().y;
+                                // Right columns: problems, count, then eye and lock.
                                 let warn_col = rect.max.x - 6.0;
                                 if n.problems > 0 {
                                     let g = ui.painter().layout_no_wrap(n.problems.to_string(), meta(), WARN);
@@ -1065,14 +1119,25 @@ impl Ui {
                                     ui.painter().galley(pos2(warn_col - w, cy - g.size().y / 2.0), g, WARN);
                                     ui.painter().circle_filled(pos2(warn_col - w - 6.0, cy), 2.5, WARN);
                                 }
-                                let count_col = warn_col - 44.0;
-                                let g = ui.painter().layout_no_wrap(n.count.to_string(), meta(), DIM);
-                                ui.painter().galley(pos2(count_col - g.size().x, cy - g.size().y / 2.0), g, DIM);
-                                let right = count_col - 44.0;
-                                // Name, then kind, both cut short before the numbers.
-                                let ink = if lit || n.active { Color32::WHITE } else { INK };
-                                let font = if n.active { strong(12.0) } else { body() };
-                                let name = if n.active { format!("✎ {}", n.name) } else { n.name.clone() };
+                                let count_col = warn_col - 40.0;
+                                if n.count > 0 || n.row == 0 {
+                                    let g = ui.painter().layout_no_wrap(n.count.to_string(), meta(), DIM);
+                                    ui.painter().galley(pos2(count_col - g.size().x, cy - g.size().y / 2.0), g, DIM);
+                                }
+                                let lock_r = Rect::from_center_size(pos2(count_col - 44.0, cy), vec2(16.0, 16.0));
+                                let eye_r = Rect::from_center_size(pos2(count_col - 64.0, cy), vec2(16.0, 16.0));
+                                let show_ctl = resp.hovered() || n.eye == 0 || n.lock == 1;
+                                if n.eye >= 0 && show_ctl { paint_eye(ui, eye_r, n.eye == 1); }
+                                if n.lock >= 0 && show_ctl { paint_lock(ui, lock_r, n.lock == 1); }
+                                let right = eye_r.min.x - 6.0;
+                                // Item icon.
+                                let mut tx = x0 + 16.0;
+                                if n.row != 0 && n.row != 4 {
+                                    let glyph = match n.icon.as_str() { "component" => "◇", "section" => "⊟", "image" => "▨", "link" => "⛓", _ => "▢" };
+                                    ui.painter().text(pos2(tx + 6.0, cy), egui::Align2::CENTER_CENTER, glyph, meta(),
+                                        if n.row == 3 { OFF } else { FAINT });
+                                    tx += 16.0;
+                                }
                                 let one_line = |text: String, font: egui::FontId, color: Color32, width: f32| {
                                     let mut job = egui::text::LayoutJob::single_section(text, egui::TextFormat {
                                         font_id: font, color, ..Default::default() });
@@ -1081,32 +1146,74 @@ impl Ui {
                                     job.wrap.break_anywhere = true;
                                     job
                                 };
-                                let g = ui.painter().layout_job(one_line(name, font, ink, right - x0 - 16.0));
+                                let renaming_here = col.renaming.as_ref().is_some_and(|(k, _)| *k == n.key);
+                                if renaming_here {
+                                    let buf = &mut col.renaming.as_mut().unwrap().1;
+                                    let field = egui::TextEdit::singleline(buf).font(body()).margin(Margin::symmetric(4, 1))
+                                        .desired_width(right - tx - 4.0);
+                                    let r = ui.put(Rect::from_min_max(pos2(tx - 4.0, rect.min.y + 1.0), pos2(right, rect.max.y - 1.0)), field);
+                                    r.request_focus();
+                                    if r.lost_focus() {
+                                        let (key, name) = col.renaming.take().unwrap();
+                                        if ui.input(|i| i.key_pressed(egui::Key::Enter)) && !name.trim().is_empty() {
+                                            actions.push(format!("rename\u{1f}{key}\u{1f}{}", name.trim()));
+                                        }
+                                    }
+                                    continue;
+                                }
+                                let (ink, font) = match n.row {
+                                    0 => (if lit || n.active { Color32::WHITE } else { INK }, if n.active { strong(12.0) } else { body() }),
+                                    3 | 4 => (FAINT, meta()),
+                                    _ => (if lit { Color32::WHITE } else { INK_2 }, body()),
+                                };
+                                let name = if n.active { format!("✎ {}", n.name) } else { n.name.clone() };
+                                let g = ui.painter().layout_job(one_line(name, font, ink, right - tx));
                                 let name_w = g.size().x;
-                                ui.painter().galley(pos2(x0 + 16.0, cy - g.size().y / 2.0), g, ink);
-                                let kx = x0 + 16.0 + name_w + 8.0;
+                                ui.painter().galley(pos2(tx, cy - g.size().y / 2.0), g, ink);
+                                let mut kx = tx + name_w + 8.0;
+                                if !n.badge.is_empty() && kx + 20.0 < right {
+                                    let col_b = if n.row == 3 { ACCENT } else { FAINT };
+                                    let g = ui.painter().layout_job(one_line(n.badge.clone(), meta(), col_b, right - kx));
+                                    let w = g.size().x;
+                                    ui.painter().galley(pos2(kx, cy - g.size().y / 2.0), g, col_b);
+                                    kx += w + 8.0;
+                                }
                                 if !n.kind.is_empty() && kx + 30.0 < right {
                                     let g = ui.painter().layout_job(one_line(n.kind.clone(), meta(), FAINT, right - kx));
                                     ui.painter().galley(pos2(kx, cy - g.size().y / 2.0), g, FAINT);
                                 }
+                                if n.selected > 0 {
+                                    let t = format!("{} sel.", n.selected);
+                                    let g = ui.painter().layout_no_wrap(t, meta(), ACCENT);
+                                    ui.painter().galley(pos2(right - g.size().x, cy - g.size().y / 2.0), g, ACCENT);
+                                }
                                 if resp.clicked() {
-                                    let on_tri = n.has_children && resp.interact_pointer_pos().is_some_and(|p| tri.contains(p));
-                                    if on_tri {
-                                        if !col.expanded.remove(&n.key) { col.expanded.insert(n.key.clone()); }
+                                    let p = resp.interact_pointer_pos().unwrap_or(rect.center());
+                                    if n.expandable && tri.contains(p) {
+                                        actions.push(format!("toggle\u{1f}{}", n.key));
+                                    } else if n.eye >= 0 && eye_r.expand(2.0).contains(p) {
+                                        actions.push(format!("eye\u{1f}{}", n.key));
+                                    } else if n.lock >= 0 && lock_r.expand(2.0).contains(p) {
+                                        actions.push(format!("lock\u{1f}{}", n.key));
                                     } else if col.filing.is_some() {
-                                        actions.push(format!("file:{}", n.key));
-                                        col.filing = None;
-                                        col.filter.clear();
+                                        if n.row == 0 {
+                                            actions.push(format!("file\u{1f}{}", n.key));
+                                            col.filing = None;
+                                            col.filter.clear();
+                                            actions.push("filter\u{1f}".into());
+                                        }
                                     } else {
                                         col.highlighted = Some(n.key.clone());
-                                        actions.push(format!("node:{}", n.key));
+                                        let verb = match n.row { 0 => "node", 3 => "reveal", 4 => "loose", _ => "item" };
+                                        actions.push(format!("{verb}\u{1f}{}", n.key));
                                     }
                                 }
                                 if resp.double_clicked() && col.filing.is_none() {
-                                    actions.push(format!("isolate:{}", n.key));
+                                    let verb = if n.row == 0 { "isolate" } else { "open" };
+                                    actions.push(format!("{verb}\u{1f}{}", n.key));
                                 }
-                                if resp.secondary_clicked() {
-                                    col.row_menu = resp.interact_pointer_pos().map(|p| (n.key.clone(), p));
+                                if resp.secondary_clicked() && n.row != 4 {
+                                    col.row_menu = resp.interact_pointer_pos().map(|p| (n.key.clone(), n.row, p));
                                 }
                             }
                         });
@@ -1194,27 +1301,114 @@ impl Ui {
                     });
                 });
             });
-        // The row menu, near the pointer.
-        if let Some((key, at)) = col.row_menu.clone() {
+        // The row menu, near the pointer: node verbs or item verbs.
+        if let Some((key, row, at)) = col.row_menu.clone() {
             let mut close = false;
-            egui::Area::new(egui::Id::new("row_menu"))
+            let node_menu: &[(&str, &str)] = &[("active", "Draw into this node"), ("filehere", "File selection here"),
+                ("node", "Select its items"), ("isolate", "Isolate"), ("hidemembers", "Hide its items"),
+                ("-", ""), ("rename", "Rename"), ("newchild", "New child node"), ("kind", "Kind  ›"),
+                ("-", ""), ("delete", "Delete node")];
+            let item_menu: &[(&str, &str)] = &[("item", "Select"), ("open", "Open for editing"), ("rename", "Rename"),
+                ("-", ""), ("hideitem", "Hide"), ("lockitem", "Lock / unlock"), ("instances", "Select instances"),
+                ("unique", "Make unique"), ("zoom", "Zoom to"), ("-", ""), ("fileto", "File to…")];
+            let menu = if row == 0 { node_menu } else { item_menu };
+            let resp = egui::Area::new(egui::Id::new("row_menu"))
                 .fixed_pos(at + vec2(4.0, 4.0))
                 .order(egui::Order::Tooltip)
                 .show(ctx, |ui| {
                     glass(Surface::Raised).inner_margin(Margin::same(6)).show(ui, |ui| {
-                        ui.set_width(190.0);
+                        ui.set_width(200.0);
                         ui.spacing_mut().item_spacing = vec2(0.0, 1.0);
-                        for (id, label) in [("active", "Draw into this node"), ("filehere", "File selection here"),
-                                            ("node", "Select its items"), ("isolate", "Isolate")] {
-                            let item = (id.to_owned(), label.to_owned(), String::new(), String::new(), -1i8, true);
-                            if menu_row(ui, &item) {
-                                actions.push(format!("{id}:{key}"));
+                        for (id, label) in menu {
+                            if *id == "-" {
+                                let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 7.0), Sense::hover());
+                                ui.painter().hline(r.x_range().shrink(6.0), r.center().y, Stroke::new(1.0_f32, EDGE));
+                                continue;
+                            }
+                            let item = (id.to_string(), label.to_string(), String::new(), String::new(), -1i8, true);
+                            let (r, rect) = menu_row_resp(ui, &item);
+                            if r.clicked() {
+                                match *id {
+                                    "rename" => {
+                                        let name = col.nodes.iter().find(|n| n.key == key).map(|n| n.name.clone()).unwrap_or_default();
+                                        col.renaming = Some((key.clone(), name));
+                                    }
+                                    "kind" => { col.kind_menu = Some((key.clone(), pos2(rect.max.x + 4.0, rect.min.y))); }
+                                    _ => actions.push(format!("{id}\u{1f}{key}")),
+                                }
                                 close = true;
                             }
                         }
                     });
                 });
+            let _ = resp;
             if close { col.row_menu = None; }
+        }
+        if let Some((key, at)) = col.kind_menu.clone() {
+            let mut close = false;
+            egui::Area::new(egui::Id::new("kind_menu"))
+                .fixed_pos(at)
+                .order(egui::Order::Tooltip)
+                .show(ctx, |ui| {
+                    glass(Surface::Raised).inner_margin(Margin::same(6)).show(ui, |ui| {
+                        ui.set_width(190.0);
+                        ui.spacing_mut().item_spacing = vec2(0.0, 1.0);
+                        for k in &col.kinds {
+                            if menu_row(ui, &(k.clone(), k.clone(), String::new(), String::new(), -1i8, true)) {
+                                actions.push(format!("kind\u{1f}{key}\u{1f}{k}"));
+                                close = true;
+                            }
+                        }
+                    });
+                });
+            if close { col.kind_menu = None; }
+        }
+        if let Some(at) = col.head_menu {
+            let mut close = false;
+            egui::Area::new(egui::Id::new("head_menu"))
+                .pivot(egui::Align2::RIGHT_TOP)
+                .fixed_pos(at)
+                .order(egui::Order::Tooltip)
+                .show(ctx, |ui| {
+                    glass(Surface::Raised).inner_margin(Margin::same(6)).show(ui, |ui| {
+                        ui.set_width(220.0);
+                        ui.spacing_mut().item_spacing = vec2(0.0, 1.0);
+                        for (id, label) in [("new", "New node"), ("propose", "Propose structure from tags…"),
+                                            ("expandall", "Expand all"), ("collapseall", "Collapse all"), ("showall", "Show all")] {
+                            if menu_row(ui, &(id.to_owned(), label.to_owned(), String::new(), String::new(), -1i8, true)) {
+                                actions.push(format!("{id}\u{1f}"));
+                                close = true;
+                            }
+                        }
+                    });
+                });
+            if close { col.head_menu = None; }
+        }
+        if let Some((title, body_text, buttons)) = col.prompt.clone() {
+            let mut answered = false;
+            egui::Area::new(egui::Id::new("prompt"))
+                .pivot(egui::Align2::CENTER_CENTER)
+                .fixed_pos(pos2(screen.max.x - GUT - W / 2.0, top + 160.0))
+                .order(egui::Order::Tooltip)
+                .show(ctx, |ui| {
+                    glass(Surface::Raised).inner_margin(Margin::same(14)).show(ui, |ui| {
+                        ui.set_width(W - 40.0);
+                        ui.label(egui::RichText::new(&title).font(title_font()).color(INK));
+                        ui.add_space(6.0);
+                        ui.label(egui::RichText::new(&body_text).font(body()).color(DIM));
+                        ui.add_space(10.0);
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing = vec2(6.0, 0.0);
+                            for (id, label) in &buttons {
+                                if chip_button(ui, label) {
+                                    actions.push(format!("prompt\u{1f}{id}"));
+                                    answered = true;
+                                }
+                            }
+                        });
+                    });
+                });
+            if answered { col.prompt = None; }
         }
         for a in actions {
             self.actions.push(format!("tree:{a}"));
@@ -1299,7 +1493,10 @@ impl Ui {
                      ("column", work && self.column.is_some()), ("bottom", work),
                      ("sel_more", work && self.sel_more && self.selection.is_some()),
                      ("sel_sub", work && self.sel_more && self.sel_sub.is_some()),
-                     ("row_menu", self.column.as_ref().is_some_and(|c| c.row_menu.is_some()))];
+                     ("row_menu", self.column.as_ref().is_some_and(|c| c.row_menu.is_some())),
+                     ("kind_menu", self.column.as_ref().is_some_and(|c| c.kind_menu.is_some())),
+                     ("head_menu", self.column.as_ref().is_some_and(|c| c.head_menu.is_some())),
+                     ("prompt", self.column.as_ref().is_some_and(|c| c.prompt.is_some()))];
         self.hit = shown.iter()
             .filter(|(_, on)| *on)
             .filter_map(|(n, _)| ctx.memory(|m| m.area_rect(egui::Id::new(*n))))

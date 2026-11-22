@@ -2060,7 +2060,7 @@ impl Renderer {
     fn ui_set_options(&mut self, options: Vec<(String, String, String, u8)>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_options(options); }
     }
-    fn ui_set_tree(&mut self, rows: Vec<(String, i64, usize, String, String, u32, u32, bool)>, unfiled: u32) {
+    fn ui_set_tree(&mut self, rows: Vec<(Vec<String>, Vec<i64>)>, unfiled: u32) {
         if let Some(ui) = self.ui.as_mut() { ui.set_tree(rows, unfiled); }
     }
     fn ui_set_inspector(&mut self, title: String, sections: Vec<(String, Vec<(String, String)>)>) {
@@ -2084,6 +2084,12 @@ impl Renderer {
     fn ui_top_empty(&self, x: f32, y: f32) -> bool { self.ui.as_ref().is_some_and(|ui| ui.top_empty(x, y)) }
     fn ui_set_units(&mut self, units: String) {
         if let Some(ui) = self.ui.as_mut() { ui.set_units(units); }
+    }
+    fn ui_set_kinds(&mut self, kinds: Vec<String>) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_kinds(kinds); }
+    }
+    fn ui_set_prompt(&mut self, title: String, body: String, buttons: Vec<(String, String)>) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_prompt(title, body, buttons); }
     }
     fn ui_take_actions(&mut self) -> Vec<String> {
         self.ui.as_mut().map(|ui| ui.take_actions()).unwrap_or_default()

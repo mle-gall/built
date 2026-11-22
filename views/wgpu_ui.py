@@ -657,14 +657,27 @@ def kind_of(ifc_class) -> str:
     return str(ifc_class).removeprefix("Ifc") if ifc_class else "Drawing only"
 
 
+SEP = "\x1f"
+#: Item rows shown per node or definition before a "… n more" row.
+ROW_CAP = 400
+
+
 def _tree(view, win) -> None:
-    """Send the Project Structure tree when the model changed."""
+    """The Project tree as display rows (council 2026-11-22, R1–R8): nodes;
+    under an expanded node its filed items, one row per placement, copies of
+    a component grouped by definition; an item's contents on expand, with
+    parts filed elsewhere as dimmed rows pointing to their node. Python owns
+    expansion and filtering; the dock only draws."""
     scene = getattr(win.viewport, "scene", None)
     if scene is None:
         return
-    sig = (id(scene), scene.content_version)
+    exp = view.__dict__.setdefault("_ui_exp", set())
+    flt = view.__dict__.get("_ui_filter", "")
+    sel_ids = {id(e) for e in scene.selection}
+    sig = (id(scene), scene.content_version, tuple(sorted(exp)), flt, len(sel_ids), hash(frozenset(sel_ids)))
     if sig == getattr(view, "_ui_tree_sig", None):
         return
+    first = getattr(view, "_ui_tree_sig", None) is None
     view._ui_tree_sig = sig
     from collections import Counter, defaultdict
     from core import bim_registry, links, structure
@@ -673,15 +686,16 @@ def _tree(view, win) -> None:
     recipes = {k: structure.resolve(registry, k) for k in nodes}
     children = structure.tree(registry)
     direct, counts, problems, unfiled, to_fix = defaultdict(list), Counter(), Counter(), [], []
+    node_of = {}
     for g, source, root, key in structure._memberships(scene, registry):
         review = structure._is_unsorted(g, source, root, key, recipes)
         if review:
             unfiled.append(g)
         if key in nodes:
+            node_of[id(g)] = key
             direct[key].append(g)
             counts[key] += 1
-            expects = recipes[key].get("class") is not None
-            bad = int(expects and not structure._has_status(g.ifc or {})) + int(review)
+            bad = int(recipes[key].get("class") is not None and not structure._has_status(g.ifc or {})) + int(review)
             problems[key] += bad
             if bad:
                 to_fix.append(g)
@@ -691,33 +705,176 @@ def _tree(view, win) -> None:
         order.append(key)
         depth[key] = d
         stack.extend((c, d + 1) for c in reversed(children[key]))
+    selected = Counter(node_of[id(e)] for e in scene.selection if id(e) in node_of)
     for key in reversed(order):
         parent = nodes[key]["parent"]
         counts[parent] += counts[key]
         problems[parent] += problems[key]
-    index = {k: i for i, k in enumerate(order)}
+        selected[parent] += selected[key]
     active = registry.get("structure", {}).get("active")
+    if first:
+        exp.update(f"n:{k}" for k in order if not nodes[k]["parent"])
+        k = active
+        while k in nodes and nodes[k]["parent"]:
+            k = nodes[k]["parent"]
+            exp.add(f"n:{k}")
+    paths = {}
+
+    def node_path(key):
+        if key not in paths:
+            paths[key] = " › ".join(structure.path(registry, key))
+        return paths[key]
+
+    def layer_state(key):
+        tag = recipes.get(key, {}).get("tag")
+        layer = scene.layer_by_key(tag) if tag and hasattr(scene, "layer_by_key") else None
+        if layer is None:
+            return -1, -1
+        return int(bool(getattr(layer, "visible", True))), int(bool(getattr(layer, "locked", False)))
+
+    # --- filtering: words match names and kinds; tokens test items ---------
+    words, tokens = [], []
+    for part in flt.lower().split():
+        (tokens if ":" in part else words).append(part)
+
+    def item_kind(g):
+        if links.is_linked(g):
+            return "link"
+        name = type(g).__name__
+        if "Section" in name:
+            return "section"
+        if "Image" in name:
+            return "image"
+        return "component" if getattr(g, "is_component", lambda: False)() else "group"
+
+    def item_hits(g, key):
+        for t in tokens:
+            neg = t.startswith("-")
+            t = t.lstrip("-")
+            ok = {"is:hidden": bool(getattr(g, "hidden", False)), "is:locked": bool(getattr(g, "locked", False)),
+                  "is:component": item_kind(g) == "component", "is:section": item_kind(g) == "section",
+                  "is:link": item_kind(g) == "link", "is:image": item_kind(g) == "image",
+                  "has:problem": id(g) in to_fix_set}.get(t, True)
+            if ok == neg:
+                return False
+        text = (g.name or "").lower()
+        return all(w in text for w in words) if words else bool(tokens)
+
+    to_fix_set = set(map(id, to_fix))
+    filtering = bool(words or tokens)
+    show_nodes, show_items = set(), defaultdict(list)
+    if filtering:
+        for key in order:
+            hit_node = bool(words) and not tokens and all(
+                w in (nodes[key]["name"] + " " + kind_of(recipes[key].get("class"))).lower() for w in words)
+            members = [g for g in direct[key] if item_hits(g, key)]
+            if hit_node or members:
+                show_items[key] = members
+                k = key
+                while k is not None:
+                    show_nodes.add(k)
+                    k = nodes[k]["parent"] if k in nodes else None
+
     rows = []
+
+    def add(key, name, kind, badge, icon, d, count, probs, act, row, eye, lock, expandable, expanded, sel):
+        rows.append(([key, name, kind, badge, icon],
+                     [d, count, probs, int(act), row, eye, lock, int(expandable), int(expanded), sel]))
+
+    def add_items(groups, key, d):
+        by_def = defaultdict(list)
+        singles = []
+        for g in groups:
+            if getattr(g, "is_component", lambda: False)() and not links.is_linked(g):
+                by_def[(g.name, id(g.mesh))].append(g)
+            else:
+                singles.append(g)
+        entries = []
+        for (name, mid), gs in by_def.items():
+            if len(gs) > 1:
+                entries.append(("def", name, gs))
+            else:
+                singles.extend(gs)
+        entries += [("one", g.name or "", [g]) for g in singles]
+        import re
+        natural = lambda t: [int(p) if p.isdigit() else p for p in re.split(r"(\d+)", (t or "").lower())]
+        entries.sort(key=lambda e: natural(e[1]))
+        for n, (what, name, gs) in enumerate(entries):
+            if n >= ROW_CAP:
+                add(f"m:{key}", f"… {len(entries) - ROW_CAP} more — filter to find them", "", "", "", d, 0, 0, False,
+                    4, -1, -1, False, False, 0)
+                break
+            if what == "def":
+                dk = f"d:{key}:{id(gs[0].mesh)}"
+                sel = sum(1 for g in gs if id(g) in sel_ids)
+                add(dk, name or "Component", "", f"×{len(gs)}", "component", d, 0,
+                    sum(1 for g in gs if id(g) in to_fix_set), False, 1, -1, -1, True, dk in exp, sel)
+                if dk in exp or filtering:
+                    for g in gs:
+                        add_item(g, key, d + 1)
+            else:
+                add_item(gs[0], key, d)
+
+    def add_item(g, key, d, row=1):
+        ik = f"{'i' if row == 1 else 'c'}:{g.uid}"
+        kids = list(getattr(g, "children", None) or [])
+        badge = "⛓" if links.is_linked(g) else ""
+        add(ik, g.name or "Group", "", badge, item_kind(g), d, 0, int(id(g) in to_fix_set), False, row,
+            0 if getattr(g, "hidden", False) else 1, int(bool(getattr(g, "locked", False))),
+            bool(kids), ik in exp, int(id(g) in sel_ids))
+        if kids and ik in exp:
+            for c in kids[:ROW_CAP]:
+                where = node_of.get(id(c))
+                if where is not None and where != key:
+                    add(f"g:{c.uid}", c.name or "Group", "", f"→ {nodes[where]['name']}", item_kind(c), d + 1,
+                        0, 0, False, 3, -1, -1, False, False, int(id(c) in sel_ids))
+                else:
+                    add_item(c, key, d + 1, row=2)
+
+    hidden_below = None
     for key in order:
+        if filtering and key not in show_nodes:
+            continue
+        d = depth[key]
+        if hidden_below is not None:
+            if d > hidden_below:
+                continue
+            hidden_below = None
         node = nodes[key]
         name = node["name"]
+        cls = recipes[key].get("class")
         if "source" in node:
             stem = links.stem(node["source"])
             name = f"{name} ↗" if name == stem else f"{name} ↗ {stem}"
-        cls = recipes[key].get("class")
-        if "source" in node:
             kind = "Reference"
         elif cls is None and children.get(key):
-            kind = ""  # a container: its children say what they are
+            kind = ""
         else:
             kind = kind_of(cls)
-        parent = node["parent"]
-        rows.append((key, index.get(parent, -1) if parent else -1, depth[key], name, kind,
-                     int(counts[key]), int(problems[key]), key == active))
+        nk = f"n:{key}"
+        expanded = filtering or nk in exp
+        eye, lock = layer_state(key)
+        add(nk, name, kind, "", "", d, counts[key], problems[key], key == active, 0, eye, lock,
+            bool(children.get(key)) or bool(direct[key]), expanded, selected[key])
+        if not expanded:
+            hidden_below = d
+            continue
+        members = show_items[key] if filtering else direct[key]
+        if members:
+            add_items(members, key, d + 1)
+    if unfiled and not filtering:
+        uk = "n:"
+        add(uk, "Unfiled", "", "", "", 0, len(unfiled), len(unfiled), False, 0, -1, -1, True, uk in exp,
+            sum(1 for g in unfiled if id(g) in sel_ids))
+        if uk in exp:
+            add_items(unfiled, "", 1)
     view._ui_tree = dict(direct=direct, children=children, unfiled=unfiled, recipes=recipes, to_fix=to_fix,
-                         active=active)
+                         active=active, node_of=node_of, nodes=nodes)
     view.renderer.ui_set_tree(rows, len(unfiled))
-    path = " › ".join(structure.path(registry, active)) if active in nodes else ""
+    if not getattr(view, "_ui_kinds_sent", False):
+        view.renderer.ui_set_kinds(sorted(set(KINDS.values()) - {"Level", "Building", "Site"}))
+        view._ui_kinds_sent = True
+    path = node_path(active) if active in nodes else ""
     view.renderer.ui_set_delivery(path, len(unfiled), len(to_fix))
 
 
@@ -733,6 +890,14 @@ def _tree_groups(view, key):
     return out
 
 
+def _group_by_uid(win, uid):
+    from core import structure
+    for g, _src, _root in structure._placements(win.viewport.scene):
+        if g.uid == uid:
+            return g
+    return None
+
+
 def _select(win, groups) -> None:
     scene = win.viewport.scene
     scene.select(g for g in groups if scene.entity_selectable(g))
@@ -740,43 +905,229 @@ def _select(win, groups) -> None:
 
 
 def _tree_action(win, view, action) -> None:
+    """One verb from the dock: ``verb SEP rowkey [SEP extra]``. Row keys:
+    n:<node> (n: alone is Unfiled), i:/c:<uid> items, d:<node>:<mesh>
+    copies of a definition, g:<uid> filed elsewhere."""
     from core import bim_registry, structure
+    from core import layers as L
     from core.group import Group
-    from core.history import SetRegistryCommand
-    from views.structure_recipe import execute
-    verb, _, key = action.partition(":")
-    vp = win.viewport
-    try:
-        if verb == "node":
-            _select(win, _tree_groups(view, key))
-        elif verb == "isolate":
-            _isolate(win, [g.uid for g in _tree_groups(view, key)])
-        elif verb in ("file", "filehere"):
-            uids = [g.uid for g in vp.scene.selection if isinstance(g, Group)]
-            if uids:
-                execute(vp, structure.file(vp.scene, uids, key))
-                path = " › ".join(structure.path(bim_registry.get(vp.scene), key))
-                vp.flash_status(f"Filed {len(uids)} to {path}")
-        elif verb == "active":
-            registry = bim_registry.get(vp.scene)
-            registry.setdefault("structure", {})["active"] = key
-            execute(vp, SetRegistryCommand(registry))
-        elif verb == "insp":
-            from core.group import Group
-            sel = list(vp.scene.selection)
-            groups = [e for e in sel if isinstance(e, Group)]
-            if key == "file" and groups:
-                _file_to(win, len(groups))
-            elif key == "isolate":
-                _isolate(win, [getattr(e, "uid", None) for e in sel if getattr(e, "uid", None)])
-            elif key == "edit" and len(groups) == 1:
-                vp.begin_group_edit(groups[0])
-            elif key.startswith("status:"):
-                _set_status(win, groups, key.partition(":")[2])
+    from core.history import (CompoundCommand, HideCommand, LockCommand, MakeUniqueCommand,
+                              RenameGroupCommand, SetLayerVisibilityCommand, SetRegistryCommand)
+    from views.structure_recipe import execute, update_node
+    if SEP not in action:
+        # The inspector's chips and the delivery counts: "verb:arg".
+        verb, _, key = action.partition(":")
+        vp = win.viewport
+        sel = list(vp.scene.selection)
+        groups = [e for e in sel if isinstance(e, Group)]
+        if verb == "insp" and key.startswith("status:"):
+            _set_status(win, groups, key.partition(":")[2])
+        elif verb == "insp" and key == "file" and groups:
+            _file_to(win, len(groups))
         elif verb == "unfiled":
             _select(win, (getattr(view, "_ui_tree", None) or {}).get("unfiled", []))
+        return
+    parts = action.split(SEP)
+    verb, rk = parts[0], (parts[1] if len(parts) > 1 else "")
+    extra = parts[2] if len(parts) > 2 else ""
+    vp = win.viewport
+    scene = vp.scene
+    exp = view.__dict__.setdefault("_ui_exp", set())
+    data = getattr(view, "_ui_tree", None) or {}
+    kind, _, ident = rk.partition(":")
+    node = ident if kind == "n" else None
+
+    def item():
+        return _group_by_uid(win, ident) if kind in ("i", "c", "g") else None
+
+    def copies():
+        if kind != "d":
+            return []
+        nkey, _, mesh = ident.rpartition(":")
+        pool = data.get("direct", {}).get(nkey, []) if nkey else data.get("unfiled", [])
+        return [g for g in pool if str(id(g.mesh)) == mesh]
+
+    def members():
+        if node == "":
+            return list(data.get("unfiled", []))
+        return _tree_groups(view, node) if node else copies() or ([item()] if item() else [])
+
+    def tags(key):
+        out, stack = [], [key]
+        while stack:
+            k = stack.pop()
+            t = data.get("recipes", {}).get(k, {}).get("tag")
+            if t:
+                out.append(t)
+            stack.extend(data.get("children", {}).get(k, ()))
+        return out
+
+    def rebuild():
+        view._ui_tree_sig = None
+        view.update()
+
+    try:
+        if verb == "toggle":
+            exp.symmetric_difference_update({rk})
+            rebuild()
+        elif verb == "filter":
+            view._ui_filter = rk
+            rebuild()
+        elif verb == "expandall":
+            exp.update(f"n:{k}" for k in data.get("nodes", {}))
+            rebuild()
+        elif verb == "collapseall":
+            exp.clear()
+            rebuild()
+        elif verb in ("node", "item", "loose") or verb == "instances":
+            gs = members() if verb != "instances" else [
+                g for g, _s, _r in structure._placements(scene) if item() is not None and g.mesh is item().mesh]
+            _select(win, gs)
+        elif verb == "reveal":
+            g = item()
+            where = data.get("node_of", {}).get(id(g)) if g is not None else None
+            k = where
+            while k:
+                exp.add(f"n:{k}")
+                k = data.get("nodes", {}).get(k, {}).get("parent")
+            if g is not None:
+                _select(win, [g])
+            rebuild()
+        elif verb == "isolate":
+            _isolate(win, [g.uid for g in members()])
+        elif verb == "open":
+            g = item()
+            if g is not None:
+                vp.begin_group_edit(g)
+        elif verb == "zoom":
+            _select(win, members())
+            win._on_zoom_selection()
+        elif verb == "eye":
+            if node:
+                ts = tags(node)
+                if ts:
+                    layer = scene.layer_by_key(ts[0])
+                    on = not bool(getattr(layer, "visible", True)) if layer is not None else True
+                    vp.history.execute(SetLayerVisibilityCommand(ts, on))
+            else:
+                gs = members()
+                if gs:
+                    vp.history.execute(HideCommand(gs, hidden=not bool(getattr(gs[0], "hidden", False))))
+            vp.notify_scene_changed() if hasattr(vp, "notify_scene_changed") else vp.update()
+        elif verb == "lock" or verb == "lockitem":
+            if node:
+                ts = tags(node)
+                if ts:
+                    layer = scene.layer_by_key(ts[0])
+                    L.set_locked(scene, ts, not bool(getattr(layer, "locked", False)))
+                    scene.version += 1
+            else:
+                gs = members()
+                if gs:
+                    vp.history.execute(LockCommand(gs, locked=not bool(getattr(gs[0], "locked", False))))
+            vp.update()
+        elif verb in ("hidemembers", "hideitem"):
+            gs = members()
+            if gs:
+                vp.history.execute(HideCommand(gs, hidden=True))
+                vp.update()
+        elif verb == "unique":
+            gs = members()
+            comps = [g for g in gs if g.is_component()]
+            if comps:
+                vp.history.execute(CompoundCommand([MakeUniqueCommand(g, rename=True) for g in comps]))
+                vp.update()
+        elif verb == "fileto":
+            _select(win, members())
+            _file_to(win, len(members()))
+        elif verb == "rename":
+            if node:
+                update_node(vp, node, name=extra)
+            elif item() is not None:
+                vp.history.execute(RenameGroupCommand(item(), extra))
+                vp.update()
+        elif verb in ("file", "filehere"):
+            key = node if verb == "filehere" else ident if kind == "n" else rk
+            uids = [g.uid for g in scene.selection if isinstance(g, Group)]
+            if uids and key:
+                execute(vp, structure.file(scene, uids, key))
+                vp.flash_status(f"Filed {len(uids)} to " + " › ".join(structure.path(bim_registry.get(scene), key)))
+        elif verb == "active":
+            registry = bim_registry.get(scene)
+            registry.setdefault("structure", {})["active"] = node
+            execute(vp, SetRegistryCommand(registry))
+        elif verb == "kind" and node:
+            cls = next((c for c, k in KINDS.items() if k == extra and c), None)
+            recipe = dict(data.get("nodes", {}).get(node, {}).get("recipe", {}))
+            if cls:
+                recipe["class"] = cls
+            else:
+                recipe.pop("class", None)
+            update_node(vp, node, recipe=recipe)
+        elif verb in ("new", "newchild"):
+            registry = bim_registry.get(scene)
+            nodes = registry.setdefault("structure", {}).setdefault("nodes", {})
+            parent = node if verb == "newchild" else None
+            from core.group import new_uid
+            order = max((n["order"] for n in nodes.values() if n["parent"] == parent), default=-1) + 1
+            nodes[new_uid()] = dict(name="New node", parent=parent, order=order)
+            if parent:
+                exp.add(f"n:{parent}")
+            execute(vp, SetRegistryCommand(registry))
+        elif verb == "delete" and node:
+            n = len(structure.members(scene, node))
+            name = data.get("nodes", {}).get(node, {}).get("name", "")
+            body = (f"Its {n} items move to the parent node." if n else "It has no items.")
+            view._ui_pending = ("delete", node)
+            view.renderer.ui_set_prompt(f"Delete “{name}”?", body, [("yes", "Delete"), ("no", "Cancel")])
+        elif verb == "propose":
+            registry = bim_registry.get(scene)
+            proposal = structure.bootstrap(scene, registry)
+            view._ui_pending = ("propose", proposal)
+            nn = len(proposal["structure"]["nodes"])
+            nf = sum(len(v) for v in proposal["filing"].values())
+            nc = len(proposal["conflicts"])
+            replace = " It replaces the current structure." if structure._nodes(registry) else ""
+            view.renderer.ui_set_prompt("Propose structure from tags",
+                                        f"{nn} nodes, {nf} items filed, {nc} to review.{replace}",
+                                        [("yes", "Apply"), ("no", "Cancel")])
+        elif verb == "prompt":
+            pending, view._ui_pending = getattr(view, "_ui_pending", None), None
+            if rk == "yes" and pending:
+                what, arg = pending
+                if what == "propose":
+                    execute(vp, structure.apply_bootstrap(scene, arg))
+                elif what == "delete":
+                    _delete_node(vp, arg)
+        elif verb == "showall":
+            _show_all(vp)
+        elif verb == "unfiled":
+            _select(win, data.get("unfiled", []))
     except (KeyError, ValueError) as exc:
         vp.flash_status(str(exc))
+
+
+def _delete_node(vp, key) -> None:
+    from core import bim_registry, structure
+    from core.history import CompoundCommand, SetRegistryCommand
+    from views.structure_recipe import execute
+    scene = vp.scene
+    registry = bim_registry.get(scene)
+    section = registry["structure"]
+    if structure.tree(registry)[key]:
+        raise ValueError("Remove its child nodes first")
+    parent = section["nodes"][key]["parent"]
+    uids = structure.members(scene, key)
+    commands = []
+    if uids:
+        if not parent:
+            raise ValueError("File its items elsewhere before deleting a top node")
+        commands.append(structure.file(scene, uids, parent))
+    del section["nodes"][key]
+    if section.get("active") == key:
+        section.pop("active")
+    commands.insert(0, SetRegistryCommand(registry, refiled_uids=uids))
+    execute(vp, CompoundCommand(commands))
 
 
 def _inspector(view, win) -> None:
