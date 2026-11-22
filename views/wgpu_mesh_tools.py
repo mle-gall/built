@@ -245,6 +245,11 @@ class MeshToolAccess:
 
     def _selection_row(self, x, y):
         row = self.view.pick_row(x, y)
+        if row is not None and self.view.inference_index is not None \
+                and self._linework_rows()[row]:
+            # GL's pick_group: the face under the cursor before a line
+            # drawn over it (the lines are SelectTool._linework's).
+            row = self._face_row_under(x, y, row)
         context = self.scene.edit_group
         if context is not None:
             group = self.view.packed.groups[row] if row is not None else None
@@ -255,6 +260,20 @@ class MeshToolAccess:
                 row = (context_hit(self.view, context, x, y)
                        if self.view.inference_index is not None else None)
         return row
+
+    def _face_row_under(self, x, y, default):
+        """The row of the front face at ``(x, y)`` among the placements
+        that have faces — the ID pass shows the line of a lines-only
+        placement drawn over it — else ``default``."""
+        from views.wgpu_inference import _front_at, eligible_rows
+        v = self.view
+        rows = eligible_rows(v.inference_index, v.packed)
+        rows = rows[~self._linework_rows()[rows]]
+        if not len(rows):
+            return default
+        mvp = v.camera.projection_matrix() * v.camera.view_matrix()
+        hit = _front_at(v.inference_index, v, x, y, rows, mvp)
+        return default if hit is None else hit[2]
 
     def pick_group(self, x, y):
         row = self._selection_row(x, y)
@@ -283,8 +302,14 @@ class MeshToolAccess:
         from views.viewport import Viewport
         return Viewport._context_pick(self, x, y)
 
-    def pick_edge(self, x, y):
-        best, distance = None, 12.
+    #: How near (logical pixels) a click must come to a line to take it.
+    EDGE_PICK_PX = 12.
+
+    def _pick_loose_edge(self, x, y, hidden):
+        """``(edge, pixels)`` of the nearest selectable loose edge within
+        :attr:`EDGE_PICK_PX` that ``hidden`` does not hide, else ``(None,
+        inf)``."""
+        best, distance = None, self.EDGE_PICK_PX
         for edge in self.scene.mesh.edges:
             if not self.scene.entity_selectable(edge) or (
                     (getattr(edge, 'hidden', False) or getattr(edge, 'soft', False))
@@ -297,11 +322,99 @@ class MeshToolAccess:
             d = b-a
             t = np.clip(np.dot(np.array([x, y])-a, d)/max(np.dot(d, d), 1e-12), 0, 1)
             dist = np.linalg.norm(a+t*d-[x, y])
-            if dist < distance and not self._is_occluded(edge.a + (edge.b-edge.a)*float(t)):
+            if dist < distance and not hidden(edge.a + (edge.b-edge.a)*float(t)):
                 best, distance = edge, dist
-        return best
+        return best, (float(distance) if best is not None else float('inf'))
+
+    def pick_edge(self, x, y):
+        return self._pick_loose_edge(x, y, self._is_occluded)[0]
 
     pick_visible_edge = pick_edge
+
+    def linework_hidden(self, point):
+        """``Viewport.linework_hidden``: occlusion with the depth slack of
+        a line lying on (or a hair off) a face."""
+        from views.viewport import linework_slack_point
+        return self._is_occluded(linework_slack_point(self.view.camera, point))
+
+    def pick_linework_edge(self, x, y):
+        """``(edge, pixels)``: the loose edge the Select tool takes before
+        the face under the cursor (``Viewport.pick_linework_edge``)."""
+        return self._pick_loose_edge(x, y, self.linework_hidden)
+
+    def _linework_rows(self):
+        """Mask over the resident rows: placements of lines only (their
+        prototype draws no face, shown or hidden)."""
+        packed = self.view.packed
+        key = id(packed)
+        cached = self.__dict__.get('_linework_rows_memo')
+        if cached is not None and cached[0] == key and cached[1] is packed:
+            return cached[2]
+        faces = packed.commands['count'].astype(np.int64)
+        hidden = getattr(packed, 'hidden_commands', None)
+        if hidden is not None:
+            faces = faces + hidden['count']
+        mask = faces[packed.instances['info'][:, 0]] == 0
+        self._linework_rows_memo = (key, packed, mask)
+        return mask
+
+    def pick_linework_groups(self, x, y):
+        """``[(group, pixels)]``, nearest first: the objects made of lines
+        only whose visible lines pass within :attr:`EDGE_PICK_PX` of the
+        cursor (``Viewport.pick_linework_groups``). Their 1-px lines in
+        the ID pass were all the hitbox they had: off by a pixel, at a
+        grazing angle or z-fighting the face below, the face's group
+        took the click."""
+        v = self.view
+        if v.inference_index is None or v.packed is None or not len(v.packed.instances):
+            return []
+        wire = self._linework_rows()
+        if not wire.any():
+            return []
+        from views.wgpu_inference import nearby_edges
+        rows = np.flatnonzero(wire)
+        edges = nearby_edges(v.inference_index, v.packed, v.camera, v.width(),
+                             v.height(), x, y, radius_px=self.EDGE_PICK_PX,
+                             cap=48, rows=rows, edit_group=self.scene.edit_group)
+        from views.viewport import Viewport
+        out, seen = [], set()
+        for e in edges:
+            if not e.in_group or not e.distance < self.EDGE_PICK_PX:
+                continue
+            target = v.context_placement(e.group)
+            if target is None or id(target) in seen or not self.scene.entity_selectable(target):
+                continue
+            p = Viewport.edge_point_under_cursor(self, e, x, y)
+            if p is None or self.linework_hidden(p):
+                continue
+            seen.add(id(target))
+            out.append((target, float(e.distance)))
+        return out
+
+    def linework_groups_around(self, x, y):
+        """The objects made of lines only whose screen box holds the
+        cursor, smallest first (``Viewport.linework_groups_around``)."""
+        v = self.view
+        if v.inference_index is None or v.packed is None or not len(v.packed.instances):
+            return []
+        wire = self._linework_rows()
+        if not wire.any():
+            return []
+        from views.wgpu_inference import eligible_rows, screen_boxes
+        from views.viewport import _boxes_around
+        mvp = v.camera.projection_matrix() * v.camera.view_matrix()
+        lo, hi, _grid, _moved = screen_boxes(v.inference_index, v.packed, mvp,
+                                             v.width(), v.height())
+        rows = eligible_rows(v.inference_index, v.packed)
+        rows = rows[wire[rows] & np.isfinite(lo[rows]).all(axis=1)
+                    & np.isfinite(hi[rows]).all(axis=1)]
+        edit = self.scene.edit_group
+
+        def owner(row):
+            group = v.packed.groups[row]
+            return None if group is edit else v.context_placement(group)
+        return _boxes_around(rows, lo[rows, 0], lo[rows, 1], hi[rows, 0],
+                             hi[rows, 1], x, y, owner, self.scene)
 
     def _project_px(self, pts):
         matrix = np.asarray((self.view.camera.projection_matrix() *

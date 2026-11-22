@@ -626,10 +626,33 @@ class SelectTool(Tool):
     def on_deactivate(self, viewport) -> None:
         viewport.set_hover(None)
 
-    def _pick(self, viewport, screen_x: float, screen_y: float):
-        """A group (picked as a unit) takes priority; then the edge under the
-        cursor (screen-space priority), then a dimension annotation, then the
-        front face."""
+    @staticmethod
+    def _linework(viewport, screen_x: float, screen_y: float) -> list:
+        """``[(entity, pixels)]``, nearest first: the visible lines within
+        the pick threshold — a loose edge, or an object made of lines only
+        — that a click takes BEFORE the face under the cursor, whoever owns
+        that face, as a thin line is the more deliberate target. A loose
+        edge wins a tie. Empty on a viewport without the linework picks."""
+        found = []
+        pick_edge = getattr(viewport, "pick_linework_edge", None)
+        if pick_edge is not None:
+            edge, d = pick_edge(screen_x, screen_y)
+            if edge is not None:
+                found.append((edge, d))
+        pick_groups = getattr(viewport, "pick_linework_groups", None)
+        if pick_groups is not None:
+            found.extend(pick_groups(screen_x, screen_y))
+        found.sort(key=lambda hit: hit[1])
+        return found
+
+    def _pick(self, viewport, screen_x: float, screen_y: float,
+              linework: bool = True):
+        """The visible line under the cursor first (:meth:`_linework`),
+        then a group (picked as a unit), then the edge under the cursor
+        (screen-space priority), then a dimension annotation, then the
+        front face; last, an object of lines only whose box holds the
+        cursor. ``linework=False``: what the click takes once the lines
+        are passed over."""
         pick_label = getattr(viewport, "pick_text_label", None)
         if pick_label is not None:
             # The text block overdraws all geometry, so a click on the glyphs
@@ -638,17 +661,25 @@ class SelectTool(Tool):
             label = pick_label(screen_x, screen_y, rect_only=True)
             if label is not None:
                 return label
+        has_linework = hasattr(viewport, "pick_linework_edge")
+        if linework and has_linework:
+            # A line on a group's face (loose, or grouped as a hatch), or a
+            # hair above or below it, outranks the object behind; only a
+            # line the user can see — one hidden behind the faces leaves
+            # the object as the pick.
+            lines = self._linework(viewport, screen_x, screen_y)
+            if lines:
+                return lines[0][0]
         group = viewport.pick_group(screen_x, screen_y)
-        # Only an edge the user can SEE takes the click (issue #71): the
-        # hidden seams of a smooth surface, or edges behind the model, left
-        # a cylinder's side all but unclickable.
-        pick_visible = getattr(viewport, "pick_visible_edge", None)
-        edge = (pick_visible or viewport.pick_edge)(screen_x, screen_y)
+        if has_linework:
+            edge = None     # _linework answered for the visible edges
+        else:
+            # Only an edge the user can SEE takes the click (issue #71): the
+            # hidden seams of a smooth surface, or edges behind the model,
+            # left a cylinder's side all but unclickable.
+            pick_visible = getattr(viewport, "pick_visible_edge", None)
+            edge = (pick_visible or viewport.pick_edge)(screen_x, screen_y)
         if group is not None and edge is not None:
-            # A loose line drawn ON a group's face (or crossing in front of
-            # it) is the deliberate target — the thin edge is picked
-            # before the object behind it. Only a VISIBLE edge wins: one
-            # hidden behind the group's faces leaves the group as the pick.
             point = getattr(viewport, "edge_point_under_cursor", None)
             occluded = getattr(viewport, "_is_occluded", None)
             if point is not None and occluded is not None:
@@ -659,6 +690,20 @@ class SelectTool(Tool):
             return group
         if edge is not None:
             return edge
+        rest = self._pick_rest(viewport, screen_x, screen_y)
+        if rest is not None:
+            return rest
+        # Between the lines of a hatch with nothing else under the cursor:
+        # the object of lines whose box holds it (the smallest).
+        around = getattr(viewport, "linework_groups_around", None)
+        boxes = around(screen_x, screen_y) if around is not None else ()
+        return boxes[0] if boxes else None
+
+    @staticmethod
+    def _pick_rest(viewport, screen_x: float, screen_y: float):
+        """:meth:`_pick` past the lines and the groups: a dimension, a
+        label, a geo path, a section plane, a guide, the front face, a
+        reference image."""
         dim = viewport.pick_dimension(screen_x, screen_y)
         if dim is not None:
             return dim
