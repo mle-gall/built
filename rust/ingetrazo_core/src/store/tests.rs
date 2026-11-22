@@ -22,7 +22,7 @@ fn block<'a>(
     counts: &'a [i64],
 ) -> Block<'a> {
     Block {
-        pos,
+        pos: super::build::Points::Double(pos),
         edges,
         flags,
         curves,

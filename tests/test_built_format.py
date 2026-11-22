@@ -15,13 +15,15 @@ POINTS = np.array([[650000.01, 6860000.02, 0], [650000.02, 6860001.02, 0]])
 
 
 def precise_scene():
+    from unittest.mock import patch
     if _native.available() is None:
         pytest.skip("native store unavailable")
     scene = Scene()
     empty = np.empty(0, dtype=np.int64)
     src = dict(pos=POINTS, edges=[[0, 1]], flags=None, counts=empty,
                sizes=empty, rings=empty)
-    store, table = store_mesh.store_from_source(src, precise=True)
+    with patch.object(_native, "native", _native.available()):
+        store, table = store_mesh.store_from_source(src, precise=True)
     store_mesh.become_store(scene.mesh, store, table)
     return scene
 
@@ -116,3 +118,45 @@ def test_export_includes_placement_rounding_and_scale(tmp_path):
     delta = (POINTS - rounded) * [2, 1, 1]
     delta[:, 0] += matrix[12] - float(np.float32(matrix[12]))
     assert warnings == pytest.approx([np.linalg.norm(delta, axis=1).max() * 1000])
+
+
+def test_python_reader_handles_distinct_points_in_one_float32_cell(tmp_path, monkeypatch):
+    monkeypatch.setattr(_native, "native", None)
+    monkeypatch.setenv("INGETRAZO_RUST", "0")
+    points = np.array([[650000.01, 6860000.02, 0], [650000.02, 6860000.02, 0]], dtype="<f8")
+    assert np.array_equal(*points.astype("<f4"))
+    # A minimal independently constructed archive, usable without the engine.
+    arrays = {
+        "pos": ["<f8", [2, 3], 0], "edges": ["<i4", [1, 2], 48],
+        "edge_flags": ["|u1", [1], 56],
+        **{key: ["<i4", [0], 64] for key in ("rings", "ring_sizes", "ring_counts", "face_attr")},
+    }
+    path = tmp_path / "fixture.built"
+    member = "geom/0.bin"
+    data = {"built_format": 1, "scene": {"geom": {"member": member, "arrays": arrays}}}
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("document.json", json.dumps(data))
+        archive.writestr(member, points.tobytes() + np.array([0, 1], dtype="<i4").tobytes() + bytes(8))
+    scene = Scene()
+    igz.load_into(scene, path)
+    assert len(scene.mesh.edges) == 1
+    np.testing.assert_array_equal([built.position(v) for v in scene.mesh.vertices], points)
+    saved = tmp_path / "roundtrip.built"
+    igz.save_scene(scene, saved)
+    assert manifest(saved)["scene"]["geom"]["arrays"]["pos"][0] == "<f8"
+
+
+def test_legacy_float32_weld_threshold_is_preserved(monkeypatch):
+    mod = _native.available()
+    if mod is None:
+        pytest.skip("native store unavailable")
+    monkeypatch.setattr(_native, "native", mod)
+    # Squaring these binary32 components in binary64 puts the second point
+    # just outside the weld radius. Original IGZ readers weld this edge shut.
+    points = np.array([[0, 0, 0], [3.0003e-8, 1e-4, 0]], dtype="f")
+    empty = np.empty(0, dtype=np.int64)
+    source = dict(pos=points, edges=[[0, 1]], sizes=empty, counts=empty, rings=empty)
+    legacy, _ = store_mesh.store_from_source(source)
+    precise, _ = store_mesh.store_from_source(source, precise=True)
+    assert legacy.counts() == (1, 0, 0)
+    assert precise.counts() == (2, 1, 0)

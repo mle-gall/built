@@ -496,7 +496,7 @@ impl Store {
             });
         }
         let block = Block {
-            pos: &pos,
+            pos: super::build::Points::Double(&pos),
             edges: &eix,
             flags: Some(&flags),
             curves: Some(&curves),

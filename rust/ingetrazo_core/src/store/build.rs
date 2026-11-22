@@ -23,9 +23,35 @@ use super::{FaceRings, Inc, State, Store, Weld};
 use crate::weld;
 use std::sync::Arc;
 
+/// Probe neighbouring cells in the source precision. At the tolerance
+/// boundary a binary32 squared distance can select a different vertex.
+pub enum Points<'a> {
+    Single(&'a [[f32; 3]]),
+    Double(&'a [[f64; 3]]),
+}
+
+impl Points<'_> {
+    fn len(&self) -> usize {
+        match self {
+            Self::Single(p) => p.len(),
+            Self::Double(p) => p.len(),
+        }
+    }
+
+    fn weld(&self, w: Weld) -> (Vec<[f64; 3]>, Vec<i64>, Vec<i64>) {
+        match self {
+            Self::Single(p) => {
+                let (points, ids, origins) = weld::weld(p, w.scale, w.tol2);
+                (points.into_iter().map(|p| p.map(f64::from)).collect(), ids, origins)
+            }
+            Self::Double(p) => weld::weld(p, w.scale, w.tol2),
+        }
+    }
+}
+
 /// Borrowed arrays of one block, as `formats/igz.py` holds them.
 pub struct Block<'a> {
-    pub pos: &'a [[f64; 3]],
+    pub pos: Points<'a>,
     pub edges: &'a [[i64; 2]],
     pub flags: Option<&'a [u8]>,
     pub curves: Option<&'a [i64]>,
@@ -115,7 +141,7 @@ impl Edges {
 impl Store {
     pub fn from_block(ns: u64, b: &Block, weld_c: Weld) -> Result<Store, String> {
         check(b)?;
-        let (mut vpos, mut ids, origin) = weld::weld(b.pos, weld_c.scale, weld_c.tol2);
+        let (mut vpos, mut ids, origin) = b.pos.weld(weld_c);
         if b.sequential && !vpos.is_empty() {
             // `lazy_mesh.weld(sequential=True)`: vertices in the order of
             // the point each was made at.
