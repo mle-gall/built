@@ -20,7 +20,7 @@ ENABLED = os.environ.get("BUILT_UI") != "0"
 # Redo, Cut/Copy/Paste, Select all, New/Open, Print, Preferences) get none:
 # menus, keys and F3 cover them. Modelling palette, by task:
 GROUPS = [
-    ["select", "eraser", "paint", "eyedropper"],
+    ["select", "eraser", "paint", "eyedropper", "components"],
     ["line", "freehand", "rectangle", "rotated_rect", "circle", "polygon",
      "arc", "arc3", "center_arc", "pie"],
     ["pushpull", "move", "rotate", "scale", "flip", "followme", "offset", "fillet",
@@ -31,6 +31,7 @@ GROUPS = [
 ]
 #: Palette entries that are window commands rather than tools.
 PALETTE_ACTIONS = {"eyedropper": "_act_eyedropper", "bridge": "_act_bridge",
+                   "components": "_act_library_components",
                    "make_faces": "_act_make_faces", "text3d": "_act_3dtext"}
 # Navigation acts on the camera, not the model: a top row of its own.
 NAV = [["orbit", "pan", "zoom", "zoom_window", "zoom_extents", "zoom_selection"],
@@ -163,6 +164,14 @@ def attach(view) -> None:
     view._ui_timer = QTimer(view, singleShot=True)
     view._ui_timer.timeout.connect(view.update)
     renderer.ui_enable(FONT if os.path.exists(FONT) else None)
+    from views import wgpu_library
+    wgpu_library.install(win)
+    if hasattr(renderer, "ui_set_dock_width"):
+        from PySide6.QtCore import QSettings
+        try:
+            renderer.ui_set_dock_width(float(QSettings().value("ui/dock_width", 300.0)))
+        except (TypeError, ValueError):
+            pass
     view._ui_tools_sent = False
     view._ui_attached = True
     if view.source_viewport is not None:
@@ -426,6 +435,8 @@ def before_frame(view) -> None:
     _cluster(view, win)
     _form(view, win)
     _tree(view, win)
+    from views import wgpu_library
+    wgpu_library.before_frame(view, win)
     _inspector(view, win)
     _tabs(view, win)
     _projects(view, win)
@@ -984,8 +995,6 @@ def _tree(view, win) -> None:
             add_items(unfiled, "", 1)
     if mode == "problems":
         rows = _problem_rows(view, scene, registry, nodes, recipes, unfiled, node_of, exp, sel_ids)
-    elif mode == "library":
-        rows = _library_rows(view, win, exp, flt)
     view._ui_tree = dict(direct=direct, children=children, unfiled=unfiled, recipes=recipes, to_fix=to_fix,
                          active=active, node_of=node_of, nodes=nodes,
                          node_layers={k: list(c) for k, c in node_layers.items()})
@@ -1187,61 +1196,6 @@ def _palette(view, win, active) -> None:
     if items != getattr(view, "_ui_palette", None):
         view._ui_palette = items
         view.renderer.ui_set_palette(items)
-
-
-def _library_rows(view, win, exp, flt):
-    """The Library mode: materials in the model, then the bundled colours
-    and texture families; picking one paints with it (Paint becomes active)."""
-    import json
-    from views import tray
-    scene = win.viewport.scene
-    words = flt.lower().split()
-    rows, cats = [], []
-    cur = _current_material_name()
-    inm = [(f"m:{n}", n, _hex(m.color), (m.texture or {}).get("path")) for n, m in (getattr(scene, "materials", None) or {}).items()]
-    cats.append(("inmodel", "In model", inm))
-    ral = []
-    if tray._RAL_FILE.exists():
-        data = json.loads(tray._RAL_FILE.read_text(encoding="utf-8"))
-        for fam in data.get("families", []):
-            for c in fam.get("colors", []):
-                ral.append((f"ral:{c['code']}", "%s · %s" % (c["code"], tray._ral_name(c)), _hex([v / 255.0 if max(c["rgb"]) > 1 else v for v in c["rgb"]]), None))
-    cats.append(("colors", "Colours", ral))
-    manifest = tray._TEX_DIR / "library.json"
-    if manifest.exists():
-        data = json.loads(manifest.read_text(encoding="utf-8"))
-        for cat in data.get("categories", []):
-            items = [(f"lib:{cat['id']}:{i}", it["name"], "", str(tray._TEX_DIR / "library" / it["file"]))
-                     for i, it in enumerate(cat.get("items", []))]
-            if items:
-                cats.append((cat["id"], tray.MaterialsPanel.CATEGORY_NAMES.get(cat["id"], cat["id"]), items))
-    # Components: the ones in the model (most copies first), then the
-    # bundled starters and 2D people. A row places it; its menu selects the
-    # copies, swaps the selection for it or keeps it in the file.
-    comps = _components_in_model(view, win)
-    cats.insert(1, ("compmodel", "Components in model",
-                    [(f"cm:{i}", name or "Component", "", None, len(gs)) for i, (name, _f, gs, _t) in enumerate(comps)]))
-    starters = []
-    res = _components_dir()
-    for key, entry in _starter_components().items():
-        starters.append((key, entry["name"], "", str(res / ("thumbs/%s.png" % entry["key"] if key.startswith("sc:")
-                                                            else "%s.png" % entry["key"]))))
-    cats.insert(2, ("components", "Components", starters))
-    view._ui_library = {i: (cid, entry) for cid, _t, items in cats for i, entry in enumerate(items)}
-    for cid, title, items in cats:
-        if words:
-            items = [e for e in items if all(w in e[1].lower() for w in words)]
-            if not items:
-                continue
-        ck = f"c:{cid}"
-        open_ = bool(words) or (ck in exp) or (cid in ("inmodel", "compmodel") and f"-{ck}" not in exp)
-        rows.append(([ck, title, "", "", ""], [0, len(items), 0, 0, 0, -1, -1, int(bool(items)), int(open_), 0]))
-        if open_:
-            for key, name, hexc, path, *n in items[:ROW_CAP]:
-                icon = _tex_icon(view, path) if path else ""
-                active = int(name == cur and not key.startswith(("cm:", "sc:", "pp:")))
-                rows.append(([key, name, "", hexc, icon], [1, n[0] if n else 0, 0, active, 5, -1, -1, 0, 0, 0]))
-    return rows
 
 
 def _components_dir():
@@ -1538,6 +1492,9 @@ def _tree_action(win, view, action) -> None:
                 parts.on_scene_changed()
                 parts._on_copy()
                 vp.flash_status("Cut list copied")
+        elif verb == "insp" and key.startswith("lib:"):
+            from views import wgpu_library
+            wgpu_library.action(win, view, key[4:])
         elif verb == "insp" and key.startswith("form:"):
             _open_form(view, key[5:])
         elif verb == "insp" and key == "measure":
@@ -1619,17 +1576,12 @@ def _tree_action(win, view, action) -> None:
         elif verb in ("cplace", "cselect", "creplace", "ckeep", "crename"):
             _component_verb(win, view, verb, rk)
             rebuild()
-        elif verb == "mat":
-            _library_pick(win, view, rk)
-            view._ui_mat_focus = rk
-            view._ui_insp_sig = None
-            rebuild()
         elif verb == "issues":
             view._ui_issues = not view.__dict__.get("_ui_issues", False)
             rebuild()
         elif verb == "mode":
-            view._ui_mode = rk
-            rebuild()
+            from views import wgpu_library
+            wgpu_library.set_mode(view, win, rk)
         elif verb == "node" and kind == "r":
             _select(win, getattr(view, "_ui_rules", {}).get(ident, []))
             rebuild()
@@ -1792,10 +1744,20 @@ def _tree_action(win, view, action) -> None:
             nn = len(proposal["structure"]["nodes"])
             nf = sum(len(v) for v in proposal["filing"].values())
             nc = len(proposal["conflicts"])
+            if not nn:
+                # Nothing to propose: say why and offer the way that works.
+                view._ui_pending = None
+                view.renderer.ui_set_prompt("Nothing to propose from tags",
+                                            "Every item is on the same tag, so there is no grouping to build "
+                                            "nodes from. Start one with New node, then File to… from the selection.",
+                                            [("new", "New node"), ("no", "Close")])
+                return
             replace = " It replaces the current structure." if structure._nodes(registry) else ""
             view.renderer.ui_set_prompt("Propose structure from tags",
                                         f"{nn} nodes, {nf} items filed, {nc} to review.{replace}",
                                         [("yes", "Apply"), ("no", "Cancel")])
+        elif verb == "prompt" and rk == "new":
+            _tree_action(win, view, f"new{SEP}")
         elif verb == "prompt":
             pending, view._ui_pending = getattr(view, "_ui_pending", None), None
             if rk == "yes" and pending:
@@ -1804,6 +1766,9 @@ def _tree_action(win, view, action) -> None:
                     execute(vp, structure.apply_bootstrap(scene, arg))
                 elif what == "delete":
                     _delete_node(vp, arg)
+                elif what == "lib":
+                    from views import wgpu_library
+                    wgpu_library.confirmed(win, view, arg, extra)
                 elif what == "scene_rename" and extra.strip():
                     panel = getattr(getattr(win, "scenes_dock", None), "panel", None) or getattr(win.tray, "scenes", None)
                     if panel is not None:
@@ -1838,6 +1803,9 @@ def _tree_action(win, view, action) -> None:
                     if out and out.get("rejected"):
                         raise ValueError("This curve cannot be rebuilt")
                     vp.update()
+            elif what == "libmat":
+                from views import wgpu_library
+                wgpu_library.edit_field(win, view, arg, extra)
             elif what == "groupname":
                 g = _group_by_uid(win, arg)
                 if g is not None:
@@ -1916,18 +1884,11 @@ def _inspector(view, win) -> None:
     registry = bim_registry.get(scene)
     nodes = structure._nodes(registry)
     data = getattr(view, "_ui_tree", None) or {}
-    mat_key = view.__dict__.get("_ui_mat_focus") if view.__dict__.get("_ui_mode") == "library" else None
-    if mat_key and mat_key.startswith("m:"):
-        mat = (getattr(scene, "materials", None) or {}).get(mat_key[2:])
-        if mat is not None:
-            tex = mat.texture or {}
-            rows = [("Name", mat.name), ("Colour", _hex(mat.color) or "—")]
-            if tex.get("path"):
-                rows += [("Texture", str(tex["path"]).rsplit("/", 1)[-1]),
-                         ("Tile", f"{tex.get('sw', 1):g} × {tex.get('sh', tex.get('sw', 1)):g} m")]
-            rows += [("Opacity", "opaque" if mat.opacity is None else f"{mat.opacity:.0%}"),
-                     ("Finish", str(mat.finish or "from the name"))]
-            view.renderer.ui_set_inspector(mat.name, [("Material, shared by the model", rows)])
+    if view.__dict__.get("_ui_mode") == "library":
+        from views import wgpu_library
+        got = wgpu_library.inspector(view, win)
+        if got is not None:
+            view.renderer.ui_set_inspector(*got)
             return
     if node_focus is not None and node_focus in nodes:
         node = nodes[node_focus]
@@ -1976,7 +1937,8 @@ def _inspector(view, win) -> None:
         filed = (" › ".join(structure.path(registry, key)) if filed_ok
                  else "Its source's nodes" if links.link_of(g) else "Not filed")
         recipe = data.get("recipes", {}).get(key, {})
-        kind = kind_of(rec.get("class") or recipe.get("class")) if (rec or recipe) else "Comes from its node"
+        kind = (kind_of(rec.get("class") or recipe.get("class")) if (rec or recipe)
+                else "From its node, once filed" if not filed_ok else "Drawing only")
         rows = [("Name", _edit(f"groupname:{g.uid}", g.name or "")), ("Filed in", filed), ("Kind", kind)]
         if g.is_component():
             same = sum(1 for o, _s, _r in structure._placements(scene) if o.mesh is g.mesh)
@@ -2257,6 +2219,12 @@ def _run(win, actions) -> None:
             _tree_action(win, view, arg)
         elif kind == "pal":
             _paint_with(win, arg)
+        elif kind == "lib":
+            from views import wgpu_library
+            wgpu_library.action(win, getattr(getattr(win, "_doc", None), "stand_in", None), arg)
+        elif kind == "dockw":
+            from PySide6.QtCore import QSettings
+            QSettings().setValue("ui/dock_width", float(arg or 300))
         elif kind == "cmdq":
             view = getattr(getattr(win, "_doc", None), "stand_in", None)
             if view is not None:
@@ -2699,9 +2667,13 @@ def pointer(view, kind: str, event=None) -> bool:
         view.update()  # hover highlight in, or out
     if kind in ("move", "leave"):
         was = getattr(view, "_ui_was_over", False)
-        if taken and not was:
+        shape = view.renderer.ui_cursor_shape() if taken and hasattr(view.renderer, "ui_cursor_shape") else ""
+        if shape == "resize_h":
+            view.setCursor(Qt.SizeHorCursor)
+        elif taken and (not was or getattr(view, "_ui_cursor_shape", "")):
             view.setCursor(Qt.ArrowCursor)
         elif was and not taken:
             view.tools._apply_tool_cursor()
         view._ui_was_over = taken
+        view._ui_cursor_shape = shape
     return taken

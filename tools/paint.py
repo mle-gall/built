@@ -367,6 +367,17 @@ class PaintTool(Tool):
                 flash(tr("Material sampled — click a face to paint it"))
             return
 
+        # No anonymous paint (Maxence 2026-11-22): a raw colour (the wheel,
+        # the eyedropper on a bare-colour face) or an unnamed image paints
+        # as a named material — one with the same recipe when the model has
+        # it, else a new one the stroke's tag command registers.
+        if not PaintTool.current_is_default and PaintTool.current_material is None:
+            from core.material_commands import material_for_paint
+            PaintTool.current_material = material_for_paint(
+                vp.scene,
+                color=None if PaintTool.current_texture is not None else PaintTool.current_color,
+                texture=PaintTool.current_texture, opacity=PaintTool.current_opacity)
+
         # A face inside a container clicked from OUTSIDE it paints the
         # container — the group or component instance as a whole
         # (issue #47, @pacaeiro: «it's painting the picked face, instead of

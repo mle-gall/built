@@ -411,6 +411,238 @@ def purge_debris(history):
     return _answer(history, before)
 
 
+def _material(history, name):
+    mat = (getattr(history.scene, "materials", None) or {}).get(name)
+    if mat is None:
+        raise KeyError(f"no material called {name!r}")
+    return mat
+
+
+def rename_material(history, name, new_name):
+    """Rename a registry material (its name is its key, §2) on every face
+    and container that wears it: ``RestampMaterialCommand``. A name another
+    material has is refused (that would merge two materials)."""
+    from dataclasses import replace
+    from core.history import RestampMaterialCommand
+    mat = _material(history, name)
+    new_name = str(new_name).strip()
+    if not new_name:
+        raise ValueError("a material needs a name")
+    before = history.revision
+    if new_name == name:
+        return _answer(history, before, ok=False)
+    if new_name in history.scene.materials:
+        raise ValueError(f"there is already a material called {new_name!r}")
+    history.execute(RestampMaterialCommand(name, replace(mat, name=new_name)))
+    return _answer(history, before)
+
+
+def edit_material(history, name, color=None, opacity=None, tile=None):
+    """Change a registry material everywhere it is worn. ``color`` is
+    ``[r, g, b]`` 0–1 (a textured material takes it as its tint),
+    ``opacity`` 0–1 (1 = opaque), ``tile`` ``[width, height]`` in metres
+    (textured only). Plain: ``RestampMaterialCommand``; textured:
+    ``EditTexturedMaterialCommand`` (each face keeps its own placement)."""
+    from dataclasses import replace
+    from core.history import EditTexturedMaterialCommand, RestampMaterialCommand
+    mat = _material(history, name)
+    before = history.revision
+    if mat.texture and (color is not None or tile is not None) and opacity is None:
+        tex = mat.texture
+        size = None
+        if tile is not None:
+            size = (float(tile[0]), float(tile[1]), float(tex.get("rot", 0.0)))
+        tint = tuple(color) if color is not None else (tuple(mat.color) if mat.color is not None else None)
+        history.execute(EditTexturedMaterialCommand(name, tint, size=size))
+        return _answer(history, before)
+    if tile is not None and not mat.texture:
+        raise ValueError("only a textured material has a tile size")
+    changes = {}
+    if color is not None:
+        changes["color"] = tuple(float(c) for c in color[:3])
+    if opacity is not None:
+        o = float(opacity)
+        changes["opacity"] = None if o >= 0.999 else max(0.0, o)
+    if not changes:
+        return _answer(history, before, ok=False)
+    history.execute(RestampMaterialCommand(name, replace(mat, **changes)))
+    return _answer(history, before)
+
+
+def duplicate_material(history, name, new_name=None):
+    """A copy of a registry material under a new name (``"<name> copy"``,
+    numbered when taken), worn by nothing yet: ``AddMaterialCommand``. The
+    answer adds ``name``."""
+    from copy import deepcopy
+    from dataclasses import replace
+    from core.material_commands import AddMaterialCommand
+    mat = _material(history, name)
+    taken = history.scene.materials
+    if new_name is None:
+        new_name, n = f"{name} copy", 2
+        while new_name in taken:
+            new_name, n = f"{name} copy {n}", n + 1
+    elif new_name in taken:
+        raise ValueError(f"there is already a material called {new_name!r}")
+    before = history.revision
+    history.execute(AddMaterialCommand(replace(deepcopy(mat), name=new_name)))
+    out = _answer(history, before)
+    out["name"] = new_name
+    return out
+
+
+def delete_material(history, name):
+    """Remove a registry material; what wore it shows the default
+    material: ``DeleteMaterialCommand``."""
+    from core.material_commands import DeleteMaterialCommand
+    _material(history, name)
+    before = history.revision
+    history.execute(DeleteMaterialCommand(name))
+    return _answer(history, before)
+
+
+def delete_placements(history, placements):
+    """Delete placements (uids, nested included) with their geometry: one
+    ``DeleteGroupCommand`` each, as one step."""
+    from core.history import CompoundCommand, DeleteGroupCommand
+    groups = _placements(history, placements)
+    before = history.revision
+    if groups:
+        history.execute(CompoundCommand([DeleteGroupCommand(g) for g in groups]))
+    return _answer(history, before)
+
+
+def create_material(history, name=None, color=None, texture=None, opacity=None, pbr=None, finish=None,
+                    reuse=True):
+    """Add a material: a colour base (``color`` ``[r,g,b]`` 0–1) or an image
+    base (``texture`` ``{"path", "sw", "sh"}``), with optional ``opacity``,
+    ``pbr`` and ``finish``. With ``reuse`` and no ``pbr``, a material with
+    the same plain recipe is answered instead (``reused`` true, no step).
+    Unnamed, it is named after its colour (``Colour #A0703C``) or image.
+    The answer adds ``name``."""
+    from core.material_commands import AddMaterialCommand, find_material, fresh_name, material_for_paint
+    from core.materials import Material
+    if (color is None) == (texture is None):
+        raise ValueError("a material has one base: a colour or an image")
+    materials = history.scene.materials
+    rgb = tuple(float(c) for c in color[:3]) if color is not None else None
+    before = history.revision
+    if reuse and pbr is None:
+        found = find_material(materials, color=rgb, texture=texture, opacity=opacity)
+        if found is not None and (name is None or name == found):
+            return {"ok": True, "step": None, "error": None, "rejected": None, "name": found, "reused": True}
+    if name is None:
+        name = material_for_paint(history.scene, color=rgb, texture=texture, opacity=opacity).name
+        name = fresh_name(materials, name)
+    elif name in materials:
+        raise ValueError(f"there is already a material called {name!r}")
+    mat = Material(name, color=rgb, texture=dict(texture) if texture else None,
+                   opacity=None if opacity is None or float(opacity) >= 0.999 else float(opacity),
+                   pbr=dict(pbr) if pbr else None, finish=finish)
+    history.execute(AddMaterialCommand(mat))
+    out = _answer(history, before)
+    out.update(name=name, reused=False)
+    return out
+
+
+def set_material_base(history, name, base, color=None, texture=None):
+    """Switch a material's base between a colour (``base="color"``,
+    ``color`` or its current colour) and an image (``base="image"``,
+    ``texture`` ``{"path", "sw", "sh"}``, or the image it had). Its PBR
+    values, opacity and finish are kept; what wears it follows
+    (``RestampMaterialCommand``)."""
+    from dataclasses import replace
+    from core.history import RestampMaterialCommand
+    mat = _material(history, name)
+    before = history.revision
+    if base == "color":
+        rgb = tuple(float(c) for c in (color if color is not None else (mat.color or (0.8, 0.8, 0.8)))[:3])
+        new = replace(mat, color=rgb, texture=None)
+    elif base == "image":
+        tex = dict(texture) if texture else (dict(mat.texture) if mat.texture else None)
+        if not tex or not tex.get("path"):
+            raise ValueError("an image base needs an image")
+        tex.setdefault("sw", 1.0)
+        tex.setdefault("sh", tex["sw"])
+        new = replace(mat, texture=tex, color=mat.color if mat.pbr is not None else None)
+    else:
+        raise ValueError("base is 'color' or 'image'")
+    if new == mat:
+        return _answer(history, before, ok=False)
+    history.execute(RestampMaterialCommand(name, new))
+    return _answer(history, before)
+
+
+def set_material_pbr(history, name, **channels):
+    """Set PBR channels of a material, whatever its base: ``metallic``,
+    ``roughness``, ``ao_strength`` (0–1), ``normal_scale`` (≥ 0), and maps
+    ``metallic_map``, ``roughness_map``, ``normal_map``, ``ao_map`` (a
+    path or ``{"path", "flip_y"?}``). ``None`` removes a channel; with none
+    left the material has no PBR. ``RestampMaterialCommand``."""
+    from dataclasses import replace
+    from core.history import RestampMaterialCommand
+    from core.material_commands import PBR_KEYS, PBR_MAPS
+    mat = _material(history, name)
+    unknown = sorted(set(channels) - set(PBR_KEYS))
+    if unknown:
+        raise ValueError(f"unknown PBR channel {unknown[0]!r}; one of {list(PBR_KEYS)}")
+    pbr = dict(mat.pbr or {})
+    for key, value in channels.items():
+        if value is None:
+            pbr.pop(key, None)
+        elif key in PBR_MAPS:
+            pbr[key] = {"path": value} if isinstance(value, str) else dict(value)
+        else:
+            v = float(value)
+            pbr[key] = max(v, 0.0) if key == "normal_scale" else min(max(v, 0.0), 1.0)
+    before = history.revision
+    new = replace(mat, pbr=pbr or None)
+    if new == mat:
+        return _answer(history, before, ok=False)
+    history.execute(RestampMaterialCommand(name, new))
+    return _answer(history, before)
+
+
+def name_unnamed_colours(history):
+    """"Name these": each distinct colour painted without a material
+    (older files) becomes a material, reusing one with the same recipe;
+    the faces and containers take its name (``NameColoursCommand``). The
+    answer adds ``named``, the number of colours."""
+    from core.material_commands import NameColoursCommand
+    cmd = NameColoursCommand()
+    before = history.revision
+    n = cmd.count(history.scene)
+    if n:
+        history.execute(cmd)
+    out = _answer(history, before, ok=bool(n))
+    out["named"] = n
+    return out
+
+
+def rename_component(history, placement, name):
+    """Rename a component definition: every copy (placed or nested) and the
+    template kept in the file take ``name``, as one step. ``placement`` is
+    the uid of any copy, or of the kept template."""
+    from core.history import CompoundCommand, RenameGroupCommand
+    from core.kept_components import copies_of, kept_template
+    scene = history.scene
+    name = str(name).strip()
+    if not name:
+        raise ValueError("a component needs a name")
+    kept = {getattr(t, "uid", None): t for t in getattr(scene, "kept_components", None) or ()}
+    g = kept.get(placement) or _placements(history, [placement])[0]
+    targets = copies_of(scene, g.mesh)
+    template = kept_template(scene, g.mesh)
+    for extra in (template, g):
+        if extra is not None and extra not in targets:
+            targets.append(extra)
+    before = history.revision
+    targets = [t for t in targets if t.name != name]
+    if targets:
+        history.execute(CompoundCommand([RenameGroupCommand(t, name) for t in targets]))
+    return _answer(history, before)
+
+
 def undo(history):
     before = history.revision
     history.undo()
@@ -434,7 +666,12 @@ COMMANDS = {"follow_me": follow_me, "intersect_faces": intersect_faces,
             "explode_view": explode_view, "purge_unused": purge_unused,
             "purge_debris": purge_debris, "undo": undo, "redo": redo,
             "hide": hide, "unhide": unhide, "lock": lock, "rename_placement": rename_placement,
-            "set_tag": set_tag, "resegment_curve": resegment_curve, "repair_solid": repair_solid}
+            "set_tag": set_tag, "resegment_curve": resegment_curve, "repair_solid": repair_solid,
+            "rename_material": rename_material, "edit_material": edit_material,
+            "duplicate_material": duplicate_material, "delete_material": delete_material,
+            "delete_placements": delete_placements, "rename_component": rename_component,
+            "create_material": create_material, "set_material_base": set_material_base,
+            "set_material_pbr": set_material_pbr, "name_unnamed_colours": name_unnamed_colours}
 
 
 def run(history, name, /, **args):

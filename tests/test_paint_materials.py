@@ -96,7 +96,10 @@ def test_paint_named_material_stamps_and_registers():
     assert "Concreto visto" not in vp.scene.materials
 
 
-def test_anonymous_paint_clears_identity():
+def test_raw_colour_paint_takes_a_name_of_its_own():
+    """No anonymous paint (2026-11-22, Maxence: one kind of resource): a raw
+    colour over a named face paints as its own material, ``Colour #RRGGBB``,
+    registered by the stroke; the old identity no longer claims the face."""
     vp = _FakeViewport()
     face = _quad(vp.scene.mesh)
     vp.scene.materials["Concreto visto"] = Material(
@@ -108,9 +111,10 @@ def test_anonymous_paint_clears_identity():
     PaintTool.current_texture = None
     _click(vp, face)
 
-    assert "mat" not in face.attrs                    # takeoff stays honest
+    assert face.attrs["mat"] == "Colour #CC1A1A"      # takeoff stays honest
     assert tuple(face.attrs["color"]) == (0.8, 0.1, 0.1)
     assert "Concreto visto" in vp.scene.materials     # registry untouched
+    assert "Colour #CC1A1A" in vp.scene.materials
 
     vp.history.undo()
     assert face.attrs["mat"] == "Concreto visto"      # exact restore

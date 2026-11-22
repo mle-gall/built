@@ -2103,6 +2103,24 @@ impl Renderer {
     fn ui_set_colset(&mut self, colset: u8) {
         if let Some(ui) = self.ui.as_mut() { ui.set_colset(colset); }
     }
+    #[pyo3(signature = (types, active, view, sort, sorts, verbs, type_actions, empty, filter, rows))]
+    #[allow(clippy::too_many_arguments)]
+    fn ui_set_library(&mut self, types: Vec<(String, String, u32, bool)>, active: String, view: u8, sort: String,
+                      sorts: Vec<(String, String)>, verbs: Vec<(String, String)>, type_actions: Vec<(String, String)>,
+                      empty: String, filter: String, rows: Vec<(Vec<String>, Vec<i64>)>) {
+        if let Some(ui) = self.ui.as_mut() {
+            ui.set_library(types, active, view, sort, sorts, verbs, type_actions, empty, filter, rows);
+        }
+    }
+    fn ui_set_dock_width(&mut self, width: f32) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_dock_width(width); }
+    }
+    fn ui_cursor_shape(&self) -> String {
+        self.ui.as_ref().map_or(String::new(), |ui| ui.cursor_shape().to_owned())
+    }
+    fn ui_library_opened(&mut self) {
+        if let Some(ui) = self.ui.as_mut() { ui.library_opened(); }
+    }
     fn ui_set_mode(&mut self, mode: String) {
         if let Some(ui) = self.ui.as_mut() { ui.set_mode(mode); }
     }
