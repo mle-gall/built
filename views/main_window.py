@@ -6988,7 +6988,11 @@ class MainWindow(WorksessionMixin, QMainWindow):
         if getattr(self, "_composer", None) is None:
             from views.composer import ComposerWindow
             from views.documents import DocumentHost
-            comp = ComposerWindow(self)
+            from views import wgpu_sheets
+            # With the Built chrome on Metal, sheets are a workspace of this
+            # window: the composer is never shown (views/wgpu_sheets.py).
+            cls = wgpu_sheets.composer_class() if wgpu_sheets.embeds(self) else ComposerWindow
+            comp = cls(self)
             # One per project: it keeps reading ITS project's model while
             # another tab is in front (#1066).
             host = DocumentHost(self, self._doc)
@@ -7134,7 +7138,11 @@ class MainWindow(WorksessionMixin, QMainWindow):
 
     def _show_model(self) -> None:
         from views.composer import bring_to_front
-        bring_to_front(self)
+        comp = getattr(self, "_composer", None)
+        if comp is not None and getattr(comp, "EMBEDDED", False):
+            comp.hide()                     # the Sheets workspace gives the frame back
+        else:
+            bring_to_front(self)
         self._refresh_sheet_tabs()
 
     def _show_sheet(self, index: int) -> None:

@@ -577,6 +577,9 @@ class WgpuView(QWidget):
             from views import wgpu_ui
             if wgpu_ui.chrome_only(self):   # a document is coming in
                 return wgpu_ui.chrome_frame(self)
+            from views import wgpu_sheets
+            if wgpu_sheets.shown(self):     # the Sheets workspace: the page, not the model
+                return wgpu_sheets.frame(self)
             return self._present_frame()
         finally:
             self._drawing_frame = False
@@ -1482,6 +1485,9 @@ class WgpuView(QWidget):
         self.update()
 
     def contextMenuEvent(self, event):
+        from views import wgpu_sheets
+        if wgpu_sheets.context_menu(self, event):   # the sheet's own menus
+            return
         self.tools.sync()
         tool = self.tools.tool
         menu = getattr(tool, 'context_menu', None)
@@ -1534,6 +1540,9 @@ class WgpuView(QWidget):
 
     def event(self, event):
         if event.type() == QEvent.NativeGesture:
+            from views import wgpu_sheets
+            if wgpu_sheets.gesture(self, event):    # pinch on the sheet
+                return True
             # Pinch, smart zoom: a trackpad's, or the touch screen's (#248).
             from views import trackpad_nav
             if trackpad_nav.native_gesture(self, event):
