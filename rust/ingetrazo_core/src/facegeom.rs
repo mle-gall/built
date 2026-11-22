@@ -32,7 +32,7 @@ impl V3 {
         V3(self.0 - o.0, self.1 - o.1, self.2 - o.2)
     }
     #[inline]
-    fn mul(self, s: f32) -> V3 {
+    pub(crate) fn mul(self, s: f32) -> V3 {
         V3(self.0 * s, self.1 * s, self.2 * s)
     }
     #[inline]

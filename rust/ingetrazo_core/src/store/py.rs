@@ -679,6 +679,19 @@ impl PyMeshStore {
         Ok((self.inner.key(Kind::Edge, e), ch))
     }
 
+    /// Crossing segments for loose faces in this editing context, in pair order.
+    fn intersection_segments(&self, py: Python<'_>, selected: Vec<u128>, mode: &str, hypot: &str)
+        -> PyResult<Vec<super::intersect::Segment>> {
+        if !matches!(mode, "context" | "selection" | "model") {
+            return Err(PyValueError::new_err("unknown intersection mode"));
+        }
+        let faces = selected.into_iter().map(|k| live_of(&self.inner, Kind::Face, k))
+            .collect::<PyResult<Vec<_>>>()?;
+        let h = crate::hypot_of(hypot)?;
+        let store = &self.inner;
+        Ok(py.detach(|| super::intersect::segments(store, &faces, mode, h)))
+    }
+
     /// `Mesh.add_face` with the rings as positions (outer first, holes
     /// already filtered): `(key, change)`.
     fn add_face(&mut self, rings: Vec<Vec<(f64, f64, f64)>>) -> PyResult<(u128, PyChange)> {

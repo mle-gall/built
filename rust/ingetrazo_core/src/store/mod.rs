@@ -23,6 +23,7 @@ pub mod build;
 pub mod cow;
 pub mod edit;
 pub mod keys;
+pub mod intersect;
 pub mod py;
 pub mod read;
 pub mod stitch;

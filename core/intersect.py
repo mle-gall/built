@@ -273,6 +273,15 @@ def segments_for(scene, mode: str) -> list:
     sel = [e for e in scene.selection if isinstance(e, (Face, Group))]
     if not sel:
         return []
+    mesh = scene.mesh
+    kids = (scene.edit_group.children if scene.edit_group is not None else scene.groups)
+    if (hasattr(mesh, "_store") and all(isinstance(e, Face) for e in sel)
+            and (mode != WITH_MODEL or not kids)):
+        from core.store_mesh import _hypot
+        h = _hypot()
+        if h:
+            pairs = mesh._store.intersection_segments([f.key for f in sel], mode, h)
+            return [(QVector3D(*a), QVector3D(*b)) for a, b in pairs]
     mine = polys_of(sel)
     if mode == WITH_SELECTION:
         return intersect(mine, mine, same=True)
