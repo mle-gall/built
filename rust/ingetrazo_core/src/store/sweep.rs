@@ -99,6 +99,24 @@ impl Store {
             return Err(OpError::Fallback("incompatible cap hole mask"));
         }
         let profile = self.face_rings(face);
+        // Orient each ring against its motion. A pole of a lathe can stay
+        // fixed, so use the whole ring for the direction of travel.
+        let reverse: Vec<bool> = stations[0]
+            .iter()
+            .zip(&stations[1])
+            .enumerate()
+            .map(|(i, (start, end))| {
+                let mut area = V3(0., 0., 0.);
+                let mut travel = V3(0., 0., 0.);
+                for j in 0..start.len() {
+                    let a = vector(start[j]).sub(vector(start[0]));
+                    let b = vector(start[(j + 1) % start.len()]).sub(vector(start[0]));
+                    area = area.add(a.cross(b, h));
+                    travel = travel.add(vector(end[j]).sub(vector(start[j])));
+                }
+                (area.dot(travel, h) < 0.) != (i > 0)
+            })
+            .collect();
         self.remove_face(face, ch);
         let spans = if closed {
             stations.len()
@@ -106,7 +124,11 @@ impl Store {
             stations.len() - 1
         };
         for i in 0..spans {
-            for (a, b) in stations[i].iter().zip(&stations[(i + 1) % stations.len()]) {
+            for (ring, (a, b)) in stations[i]
+                .iter()
+                .zip(&stations[(i + 1) % stations.len()])
+                .enumerate()
+            {
                 for j in 0..a.len() {
                     let k = (j + 1) % a.len();
                     let mut wall = Vec::with_capacity(4);
@@ -120,6 +142,9 @@ impl Store {
                         wall.pop();
                     }
                     if wall.len() >= 3 {
+                        if reverse[ring] {
+                            wall.reverse();
+                        }
                         self.add_face(&[wall], ch)?;
                     }
                 }
@@ -135,7 +160,7 @@ impl Store {
                     if i > 0 && cap_holes.is_some_and(|m| !m[end][i - 1]) {
                         continue;
                     }
-                    cap.push(if end == 0 {
+                    cap.push(if (end == 0) != reverse[i] {
                         ring.iter().copied().rev().collect()
                     } else {
                         ring.clone()

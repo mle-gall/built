@@ -15,12 +15,12 @@ even-odd rule) and what both keep is the new edge. Coplanar faces do not
 cross — nothing is drawn for them.
 """
 from __future__ import annotations
-from core.mesh import element_identity
-
 import math
 
 from PySide6.QtGui import QVector3D
 
+from core.history import CompoundCommand
+from core.mesh import element_identity
 from core.triangulate import plane_axes
 
 #: Below this a crossing is a point, not an edge.
@@ -322,32 +322,175 @@ def segments_for(scene, mode: str, selection=None) -> list:
     return intersect(mine, others)
 
 
+def _partition_faces(mesh, segments):
+    """Weld the lines, then partition each original face in its own plane."""
+    from core import scan_index
+    from core.edits import _ScanEdges
+    from core.mesh import edge_flags, stamp_edge_flags
+    from core.topology import plan_edge_split, _strictly_inside_2d
+
+    lines = {}
+    for a, b in segments:
+        sc = scan_index.scan(mesh)
+        pieces, cuts = (_ScanEdges(sc).split_plan(a, b) if sc is not None
+                        else plan_edge_split(mesh.edges, a, b))
+        for edge, point in cuts.items():
+            flags = edge_flags(edge)
+            was_cut_line = lines.pop(edge.key, None) is not None
+            for half in mesh.split_edge(edge, point):
+                stamp_edge_flags(half, flags)
+                if was_cut_line:
+                    lines[half.key] = half
+        for p, q in pieces:
+            edge = mesh.add_edge(p, q)
+            lines[edge.key] = edge
+
+    # Collect all lines before replacing any face. One cut can be a chord
+    # on one operand and part of a closed interior contour on the other.
+    sc = scan_index.scan(mesh)
+    cuts_by_face = {}
+    polys = {}
+    for edge in lines.values():
+        a, b = edge.a, edge.b
+        length = (b - a).length()
+        direction = (b - a).normalized()
+        bounds = list(zip(a.toTuple(), b.toTuple()))
+        box = (tuple(min(v) - 1e-4 for v in bounds), tuple(max(v) + 1e-4 for v in bounds))
+        faces = sc.faces(sc.faces_meeting(box)) if sc is not None else mesh.faces
+        for face in faces:
+            if face.key not in polys:
+                polys[face.key] = world_polys(face)
+            poly = polys[face.key]
+            if poly is None or any(abs(QVector3D.dotProduct(p - poly.rings[0][0], poly.n))
+                                   > 1e-4 for p in (a, b)):
+                continue
+            for lo, hi in _overlap([(0., length)], _intervals(poly, a, direction)):
+                mid = a + direction * ((lo + hi) / 2)
+                xy = (QVector3D.dotProduct(mid, poly.u), QVector3D.dotProduct(mid, poly.v))
+                if hi - lo < _MIN_LEN or not _strictly_inside_2d(xy, poly.rings2d[0]):
+                    continue
+                cut = (a if lo == 0 else a + direction * lo,
+                       b if hi == length else a + direction * hi)
+                cuts_by_face.setdefault(face, []).append(cut)
+
+    for face, cuts in cuts_by_face.items():
+        _replace_regions(mesh, face, polys[face.key], cuts)
+
+
+def _replace_regions(mesh, face, poly, cuts):
+    from copy import deepcopy
+    from core.arrangement import planar_rebuild
+    from core.make_faces import _probe
+    from core.topology import _strictly_inside_2d
+    from core.triangulate import _newell
+
+    boundary = [(a, b) for ring in poly.rings for a, b in zip(ring, ring[1:] + ring[:1])]
+    _, regions = planar_rebuild(boundary + cuts, poly.rings[0][0], poly.n)
+    # Arrangement also returns a cell for each existing opening.
+    covered = []
+    for outer, holes in regions:
+        if poly.rings2d[1:]:
+            mid = _probe(outer, holes, poly.n)
+            if mid is None:
+                continue
+            xy = (QVector3D.dotProduct(mid, poly.u), QVector3D.dotProduct(mid, poly.v))
+            if any(_strictly_inside_2d(xy, h) for h in poly.rings2d[1:]):
+                continue
+        if QVector3D.dotProduct(_newell(outer), poly.n) < 0:
+            outer.reverse()
+            for hole in holes:
+                hole.reverse()
+        covered.append((outer, holes))
+    if len(covered) > 1:
+        attrs, interior = face.attrs, face.interior
+        mesh.remove_face(face)
+        for outer, holes in covered:
+            new = mesh.add_face(outer, holes)
+            new.attrs = deepcopy(attrs)
+            new.interior = interior
+
+
+def _intersection_mutation(mesh, segments):
+    from core.history import SnapshotMutation
+    from core.store_face_edit import StoreFaceMutation
+
+    def apply(scene):
+        _partition_faces(mesh, segments)
+
+    cls = StoreFaceMutation if hasattr(mesh, "_store") else SnapshotMutation
+    return cls(apply, mesh=mesh)
+
+
 def build_intersection_edit(scene, segments):
-    """Install crossing segments through the drawing planner under one snapshot."""
-    from core.edits import build_add_edges
-    from core.history import SnapshotCompound
-    from core.store_face_edit import resident_edit, StoreFaceMutation, StoreFaceCompound
-    if not hasattr(scene.mesh, "_store"):
-        return build_add_edges(scene, segments, detect_faces=True)
-    with resident_edit(scene.mesh):
-        command = build_add_edges(scene, segments, detect_faces=True)
-    if isinstance(command, SnapshotCompound):
-        return StoreFaceCompound(command.inner, heal=command._heal)
-    return StoreFaceMutation(command.do)
+    return _intersection_mutation(scene.mesh, segments)
 
 
-def build_intersect_faces(scene, mode, face_keys=None):
+class _PlacementCuts(CompoundCommand):
+    # History protects the open mesh. Each child snapshot protects its
+    # own prototype, including a child that fails halfway through.
+    def do(self, scene):
+        for i, command in enumerate(self.commands):
+            try:
+                command.do(scene)
+            except Exception:
+                for attempted in reversed(self.commands[:i + 1]):
+                    attempted.undo(scene)
+                raise
+
+
+def _placement_intersections(groups):
+    """Intersect different selected placements, keeping cuts in local space."""
+    from itertools import combinations
+    from core.group import iter_placements
+    from core.mesh import _KEY_SCALE
+
+    owners = []
+    for root in groups:
+        for group, xf in iter_placements(root):
+            inverse = None
+            if xf is not None:
+                inverse, ok = xf.inverted()
+                if not ok:
+                    raise ValueError("singular placement transform")
+            polys = [p for f in group.mesh.faces if (p := world_polys(f, xf)) is not None]
+            owners.append((group.mesh, inverse, polys))
+    local = {}
+    world = []
+    for left, right in combinations(owners, 2):
+        segments = intersect(left[2], right[2])
+        world.extend(segments)
+        for mesh, inverse, _ in (left, right):
+            cuts = local.setdefault(mesh, [])
+            for p, q in segments:
+                if inverse is not None:
+                    p, q = inverse.map(p), inverse.map(q)
+                if (q - p).length() >= 1.0 / _KEY_SCALE:
+                    cuts.append((p, q))
+    commands = [_intersection_mutation(mesh, _dedupe(cuts))
+                for mesh, cuts in local.items() if cuts]
+    return len(_dedupe(world)), _PlacementCuts(commands) if commands else None
+
+
+def build_intersect_faces(scene, mode, face_keys=None, placements=None):
     """Plan an intersection by face keys, or from the current selection including groups.
 
     Return (segment count, snapshot command). A sub-weld segment collapses
     to one vertex and cannot be installed as an edge.
     """
     from core.mesh import _KEY_SCALE
+    from core.group import Group
+    selection = list(scene.selection) if placements is None else placements
+    if mode == "placements" or (mode == WITH_SELECTION and face_keys is None
+                                and selection and all(isinstance(g, Group) for g in selection)):
+        if face_keys is not None or not all(isinstance(g, Group) for g in selection):
+            raise ValueError("placements mode requires groups or components")
+        return _placement_intersections(selection)
     if face_keys is None:
         pairs = segments_for(scene, mode)
     else:
-        from core.store_mesh import FaceView
-        faces = [FaceView(scene.mesh, k) for k in face_keys]
+        from core.protocol.keys import elements
+        by_key = elements(scene.mesh, "face", face_keys)
+        faces = [by_key[k] for k in face_keys]
         pairs = segments_for(scene, mode, faces)
     segments = [(p, q) for p, q in pairs if (q - p).length() >= 1.0 / _KEY_SCALE]
     return len(segments), build_intersection_edit(scene, segments) if segments else None
