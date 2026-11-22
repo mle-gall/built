@@ -308,3 +308,18 @@ def test_group_face_pick_at_raw_coordinates(view):
     picked, context = view.tools.pick_face_placement(x, y)
     assert picked.key == face.key and context is not None
     assert face.loop[0].position_tuple() == (650000.01, 6860000.02, 0.)
+
+
+def test_format_three_reopens_edge_with_original_float32_weld_decision(tmp_path, monkeypatch):
+    from formats import igz
+    scene = Scene()
+    points = np.array([[0.,0.,0.], [3.0003e-8,1e-4,0.]], dtype="f4").astype(float)
+    scene.mesh.add_edge(*points)
+    assert scene.mesh._store.counts() == (2,1,0)
+    monkeypatch.setattr(igz, "_LARGE_DOCUMENT", 0)
+    path = tmp_path / "weld-boundary.igz"
+    igz.save_scene(scene, path)
+    restored = Scene()
+    igz.load_into(restored, path)
+    assert len(restored.mesh.edges) == 0
+    assert len(restored.mesh.vertices) == 1
