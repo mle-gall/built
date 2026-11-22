@@ -1,0 +1,318 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
+"""The core protocol (docs/core-protocol.md): the change feed History
+publishes, its keys, the keyed commands and queries, the renderer's use
+of the feed and the agent bridge's tools.
+
+The feed's per-mesh record on a store-backed mesh is checked against an
+oracle read through the mesh itself before and after each step (keys,
+positions, ends, faces, rings, edge sets): created / removed / moved /
+modified must be exactly what changed, and an undo exactly the inverse."""
+from __future__ import annotations
+
+import json
+import threading
+
+import numpy as np
+import pytest
+from PySide6.QtGui import QMatrix4x4, QVector3D as V
+
+import core._native as _native
+from core import mesh as M
+from core import store_mesh as S
+from core.history import (AssignLayerCommand, History, InsertGroupCommand,
+                          SetFaceColorCommand)
+from core.protocol import commands as C
+from core.protocol import queries as Q
+from core.protocol.keys import mesh_key, resolve_mesh
+from core.scene import Scene
+
+mod = _native.available()
+needs_store = pytest.mark.skipif(
+    mod is None or not hasattr(getattr(mod, "StoreSnapshot", None), "changes_since"),
+    reason="native module without StoreSnapshot.changes_since")
+
+
+def _scene(store):
+    sc = Scene()
+    if store:
+        S.become_store(sc.mesh, mod.MeshStore(next(M._KEY_NAMESPACES),
+                                              **S._weld_args()), [])
+    sc.mesh.add_face([V(0, 0, 0), V(2, 0, 0), V(2, 2, 0), V(0, 2, 0)])
+    return sc
+
+
+def _read(m):
+    """What the mesh shows, by key (the oracle)."""
+    vs = {v.key: (v.position.toTuple(), frozenset(e.key for e in v.edges))
+          for v in m.vertices}
+    es = {e.key: ((e.v0.key, e.v1.key), bool(e.soft), bool(e.hidden),
+                  e.curve, e.layer, tuple(f.key for f in e.faces))
+          for e in m.edges}
+    fs = {f.key: (tuple(v.key for v in f.loop),
+                  tuple(tuple(v.key for v in h) for h in (f.hole_loops or ())),
+                  bool(f.interior))
+          for f in m.faces}
+    return vs, es, fs
+
+
+def _expected(before, after):
+    out = {"created": {}, "removed": {}, "modified": {}, "moved": set()}
+    for kind, a, b in zip(("vertex", "edge", "face"), before, after):
+        out["created"][kind] = set(b) - set(a)
+        out["removed"][kind] = set(a) - set(b)
+        both = set(a) & set(b)
+        if kind == "vertex":
+            out["moved"] = {k for k in both if a[k][0] != b[k][0]}
+            out["modified"][kind] = {k for k in both if a[k][1] != b[k][1]}
+        else:
+            out["modified"][kind] = {k for k in both if a[k] != b[k]}
+    return out
+
+
+def _got(change):
+    return {"created": {k: set(v) for k, v in change.created.items()},
+            "removed": {k: set(v) for k, v in change.removed.items()},
+            "modified": {k: set(v) for k, v in change.modified.items()},
+            "moved": set(change.moved)}
+
+
+def _inverse(rec):
+    return {**rec, "created": rec["removed"], "removed": rec["created"]}
+
+
+@needs_store
+def test_store_steps_report_exactly_what_changed_and_undo_the_inverse():
+    """Move, push/pull and erase through the keyed commands on a
+    store-backed mesh, each undone and redone: every step's record is the
+    oracle's difference, undo its inverse, redo the step again; the mesh
+    never leaves the store."""
+    sc = _scene(True)
+    h = History(sc)
+    m = sc.mesh
+    face = m.faces[0]
+    # A push makes a box; then a move of its top and an erase of an edge.
+    steps = [("push_pull", lambda: dict(face=str(face.key), distance=1.0))]
+    steps.append(("move_vertices", lambda: dict(
+        vertices=[str(v.key) for v in sc.mesh.vertices
+                  if v.position.z() > 0.5], delta=[0.0, 0.0, 0.5])))
+    steps.append(("erase", lambda: dict(edges=[str(next(
+        e.key for e in sc.mesh.edges
+        if e.v0.position.z() > 0.5 and e.v1.position.z() > 0.5))])))
+    for name, args in steps:
+        before = _read(sc.mesh)
+        r = C.run(h, name, **args())
+        assert r["ok"], (name, r)
+        after = _read(sc.mesh)
+        assert type(sc.mesh) is S.StoreMesh, name
+        step = r["step"]
+        assert (step.phase, step.revision) == ("execute", h.revision)
+        assert [c.key for c in step.meshes] == [mesh_key(sc.mesh)]
+        change = step.meshes[0]
+        assert change.backing == "store" and not change.replaced
+        want = _expected(before, after)
+        assert _got(change) == want, name
+        assert any(want["created"].values()) or want["moved"] or any(
+            want["removed"].values())
+        undo = C.run(h, "undo")["step"]
+        assert undo.phase == "undo"
+        assert _read(sc.mesh) == before
+        assert _got(undo.meshes[0]) == _inverse(want), name
+        redo = C.run(h, "redo")["step"]
+        assert redo.phase == "redo"
+        assert _read(sc.mesh) == after
+        assert _got(redo.meshes[0]) == want, name
+        assert type(sc.mesh) is S.StoreMesh, name
+    assert [(s.command, s.phase) for s in h.feed.since(0)["steps"]] == [
+        (c, p) for c in ("SnapshotMutation", "MoveVerticesCommand",
+                         "EraseSelectionCommand")
+        for p in ("execute", "undo", "redo")]
+
+
+@needs_store
+@pytest.mark.parametrize("seed", range(8))
+def test_store_changes_since_matches_the_oracle_over_random_ops(seed):
+    """The store's ``changes_since`` (snapshot to snapshot) after every op of the store-op fuzz
+    (tests/test_store_topology_ops: draws, removals, relinks, holes,
+    purges, moves, snapshot restores) is exactly what the mesh shows
+    changed. (Undo as the inverse: the command tests above.)"""
+    from tests.test_store_topology_ops import Run
+    r = Run(700 + seed)
+    checked = 0
+    for _ in range(140):
+        sm = r.sm
+        snap = sm._store.snapshot()
+        before = _read(sm)
+        r.step()
+        if type(r.sm) is not S.StoreMesh:
+            break
+        after = _read(sm)
+        ch = sm._store.snapshot().changes_since(snap, [])
+        assert _got(ch) == _expected(before, after), (seed, r.ops)
+        checked += 1
+    assert checked > 30
+
+
+def test_python_steps_report_the_mesh_replaced():
+    sc = _scene(False)
+    h = History(sc)
+    face = sc.mesh.faces[0]
+    r = C.run(h, "push_pull", face=str(face.key), distance=1.0)
+    for got in (r, C.run(h, "undo"), C.run(h, "redo"),
+                C.run(h, "move_vertices", vertices=[str(sc.mesh.vertices[0].key)],
+                      delta=[0, 0, 0.25]),
+                C.run(h, "erase", edges=[str(sc.mesh.edges[0].key)])):
+        assert got["ok"]
+        (change,) = got["step"].meshes
+        assert (change.backing, change.replaced) == ("python", True)
+        assert change.key == mesh_key(sc.mesh)
+        assert not any(change.created.values()) and not change.moved
+    assert [s.phase for s in h.feed.since(0)["steps"]] == [
+        "execute", "undo", "redo", "execute", "execute"]
+
+
+@pytest.mark.parametrize("store", [False, pytest.param(True, marks=needs_store)])
+def test_paint_reports_the_faces_and_nothing_else(store):
+    sc = _scene(store)
+    h = History(sc)
+    f = sc.mesh.faces[0]
+    h.execute(SetFaceColorCommand([f], [1.0, 0.0, 0.0]))
+    (change,) = h.feed.last.meshes
+    assert change.modified["face"] == [f.key]
+    assert not change.replaced and not change.moved
+    h.undo()
+    assert h.feed.last.meshes[0].modified["face"] == [f.key]
+
+
+@needs_store
+def test_store_attrs_edits_are_face_modifications(monkeypatch):
+    """Face attrs live beside the store: an edit by any command shows as
+    a modified face (StoreState.changes_since); past ATTRS_COPY_MAX the
+    feed no longer copies them, and paint commands still name theirs."""
+    from core.history import SnapshotMutation
+    from core.protocol import feed as F
+    sc = _scene(True)
+    h = History(sc)
+    f = sc.mesh.faces[0]
+
+    def stamp(scene):
+        scene.mesh.faces[0].attrs["mat"] = "Oak"
+    h.execute(SnapshotMutation(stamp))
+    (change,) = h.feed.last.meshes
+    assert change.modified["face"] == [f.key] and not change.replaced
+    monkeypatch.setattr(F, "ATTRS_COPY_MAX", -1)
+    h.execute(SetFaceColorCommand([f], [0.0, 1.0, 0.0]))
+    assert h.feed.last.meshes[0].modified["face"] == [f.key]
+    assert type(sc.mesh) is S.StoreMesh
+
+
+def test_document_changes_by_key():
+    from core.layers import Layer
+    sc = _scene(False)
+    h = History(sc)
+    g = M.Mesh()
+    g.add_face([V(5, 0, 0), V(6, 0, 0), V(6, 1, 0)])
+    from core.group import Group
+    group = Group(g, name="Box")
+    h.execute(InsertGroupCommand(group))
+    step = h.feed.last
+    assert step.placements["created"] == [group.uid] and step.complete
+    assert not step.meshes          # the open mesh did not change
+    h.undo()
+    assert h.feed.last.placements["removed"] == [group.uid]
+    h.redo()
+    layer = Layer("Walls")
+    sc.layers.append(layer)
+    h.execute(AssignLayerCommand([group], layer.key))
+    step = h.feed.last
+    assert step.placements["modified"] == [group.uid]
+    # The tag was added outside History: the next step sees no change of
+    # it; renaming it inside one does.
+    assert step.tags == {"created": [], "removed": [], "modified": []}
+    from core.history import SnapshotMutation
+
+    def rename(scene):
+        layer.name = "Muros"
+    h.execute(SnapshotMutation(rename))
+    assert h.feed.last.tags["modified"] == [layer.key]
+
+
+def test_since_and_the_ring():
+    sc = _scene(False)
+    h = History(sc)
+    for i in range(3):
+        C.run(h, "move_vertices", vertices=[str(sc.mesh.vertices[0].key)],
+              delta=[0, 0, 0.1])
+    got = h.feed.since(1)
+    assert got["complete"] and [s.revision for s in got["steps"]] == [2, 3]
+    h.feed._steps.popleft()
+    assert not h.feed.since(0)["complete"] and h.feed.since(1)["complete"]
+    with pytest.raises(ValueError):
+        h.feed.since(99)
+    # JSON-safe, keys as strings.
+    text = json.dumps(Q.feed(h, 0), allow_nan=False)
+    assert '"steps"' in text
+
+
+def test_a_failed_or_rejected_step_publishes_nothing():
+    from core.history import SnapshotMutation
+    sc = _scene(False)
+    h = History(sc)
+
+    def boom(scene):
+        scene.mesh.move_vertex(scene.mesh.vertices[0], V(0, 0, 1))
+        raise RuntimeError("no")
+    h.error_log = "/dev/null"
+    h.execute(SnapshotMutation(boom))
+    assert h.last_error and h.feed.last is None and h.revision == 0
+
+
+def test_feed_subscribers_and_a_failing_one():
+    sc = _scene(False)
+    h = History(sc)
+    seen = []
+
+    def bad(step):
+        raise RuntimeError("consumer bug")
+    h.feed.subscribe(bad)
+    off = h.feed.subscribe(seen.append)
+    C.run(h, "move_vertices", vertices=[str(sc.mesh.vertices[0].key)], delta=[0, 0, 1])
+    assert [s.revision for s in seen] == [1]
+    off()
+    C.run(h, "undo")
+    assert len(seen) == 1
+
+
+@pytest.mark.parametrize("store", [False, pytest.param(True, marks=needs_store)])
+def test_queries_name_faces_by_key(store):
+    sc = _scene(store)
+    m = sc.mesh
+    f = m.faces[0]
+    info = Q.mesh_info(sc)
+    assert info["mesh"] == mesh_key(m) and (info["faces"], info["edges"]) == (1, 4)
+    assert info["backing"] == ("store" if store else "python")
+    got = Q.faces(sc, [str(f.key), "12345"])
+    (face,) = got["faces"]
+    assert face["rings"][0][1] == [2.0, 0.0, 0.0]
+    assert face["corners"][0] == [str(v.key) for v in f.loop]
+    assert got["missing"] == ["12345"]
+    e = m.edges[0]
+    (edge,) = Q.edges(sc, [str(e.key)])["edges"]
+    assert edge["faces"] == [str(f.key)]
+    sel = Q.select(sc, faces=[str(f.key)], edges=[str(e.key)])
+    assert sel["face"] == [str(f.key)] and sel["edge"] == [str(e.key)]
+    assert Q.selection(sc)["mesh"] == mesh_key(m)
+    assert Q.select(sc, mode="clear")["face"] == []
+    assert resolve_mesh(sc, mesh_key(m)) is m and resolve_mesh(sc, "active") is m
+    if store:
+        assert type(m) is S.StoreMesh       # no query materialised it
+
+
+def test_unknown_keys_refuse_before_running():
+    sc = _scene(False)
+    h = History(sc)
+    with pytest.raises(KeyError):
+        C.run(h, "erase", edges=["1"])
+    with pytest.raises(ValueError):
+        C.run(h, "explode")
+    assert h.revision == 0
