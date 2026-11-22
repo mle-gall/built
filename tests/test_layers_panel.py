@@ -2360,7 +2360,7 @@ def test_a_scene_change_rebuilds_after_the_event_loop_not_inside_it(win):
     of changes pays one rebuild, on the next turn."""
     panel = win.layers_dock.panel
     scene = win.viewport.scene
-    scene.layers += [Layer("Nueva")]        # a change the rows must follow
+    L.add_folder(scene, "Nueva")            # hierarchy changes require a full rebuild
     calls, real = _count_rebuilds(panel)
     try:
         win.viewport.notify_scene_changed()
