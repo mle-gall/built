@@ -707,6 +707,14 @@ fn check(args: &Args) -> i32 {
 }
 
 fn main() {
+    #[cfg(built_bundle)]
+    if std::env::args_os().nth(1).as_deref() == Some(std::ffi::OsStr::new("--qt")) {
+        use std::os::unix::process::CommandExt;
+        let classic = std::env::current_exe().unwrap().with_file_name("ingetrazo");
+        let error = std::process::Command::new(classic).args(std::env::args_os().skip(2)).exec();
+        eprintln!("built: launching classic app: {error}");
+        std::process::exit(1);
+    }
     let process = Instant::now();
     let args = match parse_args() {
         Ok(a) => a,
@@ -737,6 +745,20 @@ fn main() {
     }
     let python_ready = process.elapsed();
     if args.check {
+        #[cfg(built_bundle)]
+        let args = {
+            if let Err(error) = pyo3::Python::attach(|py| {
+                use pyo3::prelude::*;
+                py.import("native_check")?.call_method0("check")?;
+                PyResult::Ok(())
+            }) {
+                pyo3::Python::attach(|py| python::report(py, error, "bundle check"));
+                std::process::exit(1);
+            }
+            let mut args = args;
+            args.file.get_or_insert_with(|| layout.root.join("examples/slab-and-cube.igz"));
+            args
+        };
         std::process::exit(check(&args));
     }
     let event_loop = match EventLoop::<UserEvent>::with_user_event().build() {

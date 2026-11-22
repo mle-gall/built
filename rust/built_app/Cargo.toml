@@ -20,3 +20,6 @@ raw-window-handle = "0.6"
 rfd = "0.18"
 muda = "0.21"
 png = "0.18"
+
+[build-dependencies]
+cc = "1"

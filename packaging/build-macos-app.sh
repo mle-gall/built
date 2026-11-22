@@ -38,25 +38,7 @@ echo "==> icon (.icns from the committed PNGs, via iconutil)"
 # The Windows .ico is built by scripts/gen_app_icon.py + ImageMagick/Inkscape;
 # .icns only needs macOS's own iconutil, so it is generated here rather than
 # committed — one less binary in git, and every Mac already has the tool.
-ICONSET="$WORK/ingetrazo.iconset"
-ICNS="$ROOT/resources/icons/ingetrazo.icns"
-rm -rf "$ICONSET"; mkdir -p "$ICONSET"
-cp resources/icons/ingetrazo_16.png  "$ICONSET/icon_16x16.png"
-cp resources/icons/ingetrazo_32.png  "$ICONSET/icon_16x16@2x.png"
-cp resources/icons/ingetrazo_32.png  "$ICONSET/icon_32x32.png"
-cp resources/icons/ingetrazo_64.png  "$ICONSET/icon_32x32@2x.png"
-cp resources/icons/ingetrazo_128.png "$ICONSET/icon_128x128.png"
-cp resources/icons/ingetrazo_256.png "$ICONSET/icon_128x128@2x.png"
-cp resources/icons/ingetrazo_256.png "$ICONSET/icon_256x256.png"
-cp resources/icons/ingetrazo_512.png "$ICONSET/icon_256x256@2x.png"
-cp resources/icons/ingetrazo_512.png "$ICONSET/icon_512x512.png"
-if [[ -f resources/icons/ingetrazo_master.png ]]; then
-    sips -z 1024 1024 resources/icons/ingetrazo_master.png --out "$ICONSET/icon_512x512@2x.png" >/dev/null
-else
-    sips -z 1024 1024 resources/icons/ingetrazo_512.png --out "$ICONSET/icon_512x512@2x.png" >/dev/null
-fi
-iconutil -c icns "$ICONSET" -o "$ICNS"
-rm -rf "$ICONSET"
+bash packaging/macos-icon.sh "$ROOT" "$WORK"
 
 echo "==> PyInstaller"
 "$PYTHON" -m PyInstaller --version >/dev/null 2>&1 \

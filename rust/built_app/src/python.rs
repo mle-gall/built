@@ -10,7 +10,7 @@
 
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 /// Where the repository (core/, tools/, views/, app_shell/) and its venv are.
 #[derive(Clone, Debug)]
@@ -20,12 +20,21 @@ pub struct Layout {
 }
 
 impl Layout {
+    #[cfg(built_bundle)]
+    pub fn find(_: Option<PathBuf>, _: Option<PathBuf>) -> Layout {
+        let exe = std::env::current_exe().expect("locate Built.app");
+        let root = exe.parent().unwrap().join("../Frameworks").canonicalize()
+            .expect("locate bundled Python");
+        Layout { root, venv: None }
+    }
+
+    #[cfg(not(built_bundle))]
     /// `--root`, else `BUILT_ROOT`, else the checkout this binary was built
     /// from; the venv is `--venv`, `VIRTUAL_ENV`, or `<root>/.venv`.
     pub fn find(root: Option<PathBuf>, venv: Option<PathBuf>) -> Layout {
         let root = root
             .or_else(|| std::env::var_os("BUILT_ROOT").map(PathBuf::from))
-            .unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."));
+            .unwrap_or_else(|| std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."));
         let root = root.canonicalize().unwrap_or(root);
         let venv = venv
             .or_else(|| std::env::var_os("VIRTUAL_ENV").map(PathBuf::from))
@@ -38,9 +47,23 @@ impl Layout {
 pub fn start(layout: &Layout) -> PyResult<()> {
     use ingetrazo_render::ingetrazo_render;
     pyo3::append_to_inittab!(ingetrazo_render);
+    #[cfg(built_bundle)]
+    {
+        use std::{ffi::CString, os::unix::ffi::OsStrExt};
+        extern "C" { fn built_initialize(root: *const i8, exe: *const i8); }
+        let exe = std::env::current_exe().expect("locate Built.app");
+        let root = CString::new(layout.root.as_os_str().as_bytes()).unwrap();
+        let exe = CString::new(exe.as_os_str().as_bytes()).unwrap();
+        // Called once on the main thread before PyO3 attaches.
+        unsafe { built_initialize(root.as_ptr(), exe.as_ptr()) };
+        std::env::set_var("QT_PLUGIN_PATH", layout.root.join("PySide6/Qt/plugins"));
+    }
+    #[cfg(not(built_bundle))]
     Python::initialize();
     Python::attach(|py| {
         let sys = py.import("sys")?;
+        #[cfg(built_bundle)]
+        sys.setattr("_MEIPASS", &layout.root)?;
         let path = sys.getattr("path")?;
         path.call_method1("insert", (0, layout.root.to_string_lossy().to_string()))?;
         sys.setattr("argv", vec!["built".to_string()])?;

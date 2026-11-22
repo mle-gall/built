@@ -191,6 +191,7 @@ dependencies = [
 name = "built_app"
 version = "0.1.0"
 dependencies = [
+ "cc",
  "ingetrazo_render",
  "muda",
  "png",
