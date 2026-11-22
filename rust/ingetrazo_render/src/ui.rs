@@ -48,6 +48,13 @@ fn strong(size: f32) -> egui::FontId { egui::FontId::new(size, egui::FontFamily:
 fn title() -> egui::FontId { egui::FontId::new(13.0, egui::FontFamily::Name("semibold".into())) }
 fn title_font() -> egui::FontId { title() }
 
+fn parse_hex(s: &str) -> Option<Color32> {
+    let h = s.strip_prefix('#')?;
+    if h.len() != 6 { return None; }
+    let v = u32::from_str_radix(h, 16).ok()?;
+    Some(Color32::from_rgb((v >> 16) as u8, (v >> 8) as u8, v as u8))
+}
+
 /// The visibility eye: open, or closed with a slash.
 fn paint_eye(ui: &egui::Ui, r: Rect, on: bool) {
     let c = r.center();
@@ -216,6 +223,9 @@ pub struct Node {
     expanded: bool,
     selected: u32,
     icon: String,
+    /// The active column set's cells (Drawing: colour, line type, weight,
+    /// print; Export: class, predefined type).
+    cells: Vec<String>,
 }
 
 pub struct Column {
@@ -235,6 +245,12 @@ pub struct Column {
     kinds: Vec<String>,
     /// A confirmation over the dock: title, body, (id, label) buttons.
     prompt: Option<(String, String, Vec<(String, String)>)>,
+    /// 0 Filing, 1 Drawing, 2 Export.
+    colset: u8,
+    /// A choice menu over a cell: verb, row key, options, where.
+    pick: Option<(String, String, Vec<String>, Pos2)>,
+    /// The colour being picked for a row, and where.
+    color_pick: Option<(String, Color32, Pos2)>,
     inspector_title: String,
     inspector: Vec<(String, Vec<(String, String)>)>,
     highlighted: Option<String>,
@@ -420,7 +436,8 @@ impl Ui {
         let col = self.column.get_or_insert_with(|| Column {
             nodes: Vec::new(), unfiled: 0, expanded: Default::default(), filter: String::new(),
             filing: None, focus_filter: false, row_menu: None, renaming: None, head_menu: None,
-            kind_menu: None, kinds: Vec::new(), prompt: None, inspector_title: String::new(),
+            kind_menu: None, kinds: Vec::new(), prompt: None, colset: 0, pick: None, color_pick: None,
+            inspector_title: String::new(),
             inspector: Vec::new(), highlighted: None,
         });
         let g = |v: &Vec<i64>, i: usize| v.get(i).copied().unwrap_or(0);
@@ -430,8 +447,12 @@ impl Ui {
             depth: g(&n, 0) as usize, count: g(&n, 1) as u32, problems: g(&n, 2) as u32, active: g(&n, 3) != 0,
             row: g(&n, 4) as u8, eye: g(&n, 5) as i8, lock: g(&n, 6) as i8, expandable: g(&n, 7) != 0,
             expanded: g(&n, 8) != 0, selected: g(&n, 9) as u32,
+            cells: t.get(5..).map(|c| c.to_vec()).unwrap_or_default(),
         }).collect();
         col.unfiled = unfiled;
+    }
+    pub fn set_colset(&mut self, colset: u8) {
+        if let Some(col) = self.column.as_mut() { col.colset = colset.min(2); }
     }
     pub fn set_kinds(&mut self, kinds: Vec<String>) {
         if let Some(col) = self.column.as_mut() { col.kinds = kinds; }
@@ -565,6 +586,8 @@ impl Ui {
                         col.row_menu = None;
                         col.kind_menu = None;
                         col.head_menu = None;
+                        col.pick = None;
+                        col.color_pick = None;
                     }
                     self.ctx.memory_mut(|m| m.stop_text_input());
                 }
@@ -1040,6 +1063,19 @@ impl Ui {
                             if col.unfiled > 0 && amber_button(ui, &format!("{} unfiled", col.unfiled)) { cmds.push("deliver:unfiled".into()); }
                         });
                     });
+                    ui.add_space(4.0);
+                    ui.horizontal(|ui| {
+                        ui.add_space(4.0);
+                        ui.spacing_mut().item_spacing = vec2(2.0, 0.0);
+                        for (i, label) in ["Filing", "Drawing", "Export"].iter().enumerate() {
+                            let item = (String::new(), label.to_string(), String::new(), String::new(),
+                                        if col.colset == i as u8 { 1 } else { 0 }, true);
+                            if item_button(ui, &item, None) && col.colset != i as u8 {
+                                col.colset = i as u8;
+                                actions.push(format!("colset\u{1f}{i}"));
+                            }
+                        }
+                    });
                     ui.add_space(6.0);
                     if let Some(what) = &col.filing {
                         let banner = format!("File {what} to…  click a node, or type and press Enter");
@@ -1111,8 +1147,41 @@ impl Ui {
                                     ui.painter().text(tri.center(), egui::Align2::CENTER_CENTER, if n.expanded { "▾" } else { "▸" },
                                         meta(), if n.row == 0 { FAINT } else { OFF });
                                 }
-                                // Right columns: problems, count, then eye and lock.
+                                // Right columns: problems, count, then eye and lock —
+                                // or the Drawing / Export cells.
+                                let mut cell_hits: Vec<(Rect, &'static str)> = Vec::new();
                                 let warn_col = rect.max.x - 6.0;
+                                if col.colset != 0 {
+                                    let cells = &n.cells;
+                                    let cell = |i: usize| cells.get(i).cloned().unwrap_or_default();
+                                    let inherited = n.row != 0;
+                                    let ink_c = if inherited { OFF } else { DIM };
+                                    if col.colset == 1 && !cells.is_empty() {
+                                        // print, weight, line type, colour (right to left)
+                                        let pr = Rect::from_center_size(pos2(warn_col - 8.0, cy), vec2(16.0, 16.0));
+                                        ui.painter().text(pr.center(), egui::Align2::CENTER_CENTER,
+                                            if cell(3) == "1" { "✓" } else { "–" }, meta(), if cell(3) == "1" { ink_c } else { OFF });
+                                        let wr = Rect::from_min_max(pos2(pr.min.x - 40.0, rect.min.y), pos2(pr.min.x - 4.0, rect.max.y));
+                                        ui.painter().text(wr.right_center(), egui::Align2::RIGHT_CENTER, cell(2), meta(), ink_c);
+                                        let lr = Rect::from_min_max(pos2(wr.min.x - 64.0, rect.min.y), pos2(wr.min.x - 6.0, rect.max.y));
+                                        ui.painter().text(lr.right_center(), egui::Align2::RIGHT_CENTER, cell(1), meta(), ink_c);
+                                        let sr = Rect::from_center_size(pos2(lr.min.x - 10.0, cy), vec2(12.0, 12.0));
+                                        if let Some(c) = parse_hex(&cell(0)) {
+                                            ui.painter().rect_filled(sr, CornerRadius::same(3), c);
+                                            ui.painter().rect_stroke(sr, CornerRadius::same(3), Stroke::new(1.0_f32, EDGE), egui::StrokeKind::Inside);
+                                        } else {
+                                            ui.painter().rect_stroke(sr, CornerRadius::same(3), Stroke::new(1.0_f32, FAINT), egui::StrokeKind::Inside);
+                                        }
+                                        if !inherited {
+                                            cell_hits = vec![(pr, "print"), (wr, "weight"), (lr, "linetype"), (sr.expand(3.0), "color")];
+                                        }
+                                    } else if col.colset == 2 {
+                                        let er = Rect::from_min_max(pos2(warn_col - 150.0, rect.min.y), pos2(warn_col, rect.max.y));
+                                        let text = if cell(1).is_empty() { cell(0) } else { format!("{} · {}", cell(0), cell(1)) };
+                                        ui.painter().text(er.right_center(), egui::Align2::RIGHT_CENTER, text, meta(), ink_c);
+                                    }
+                                }
+                                let warn_col = if col.colset != 0 { rect.max.x + 1000.0 } else { warn_col };
                                 if n.problems > 0 {
                                     let g = ui.painter().layout_no_wrap(n.problems.to_string(), meta(), WARN);
                                     let w = g.size().x;
@@ -1129,7 +1198,7 @@ impl Ui {
                                 let show_ctl = resp.hovered() || n.eye == 0 || n.lock == 1;
                                 if n.eye >= 0 && show_ctl { paint_eye(ui, eye_r, n.eye == 1); }
                                 if n.lock >= 0 && show_ctl { paint_lock(ui, lock_r, n.lock == 1); }
-                                let right = eye_r.min.x - 6.0;
+                                let right = if col.colset == 1 { rect.max.x - 170.0 } else if col.colset == 2 { rect.max.x - 160.0 } else { eye_r.min.x - 6.0 };
                                 // Item icon.
                                 let mut tx = x0 + 16.0;
                                 if n.row != 0 && n.row != 4 {
@@ -1189,7 +1258,21 @@ impl Ui {
                                 }
                                 if resp.clicked() {
                                     let p = resp.interact_pointer_pos().unwrap_or(rect.center());
-                                    if n.expandable && tri.contains(p) {
+                                    if let Some((r, what)) = cell_hits.iter().find(|(r, _)| r.contains(p)) {
+                                        match *what {
+                                            "print" => actions.push(format!("print\u{1f}{}", n.key)),
+                                            "color" => {
+                                                let c = parse_hex(&n.cells.first().cloned().unwrap_or_default()).unwrap_or(Color32::GRAY);
+                                                col.color_pick = Some((n.key.clone(), c, pos2(r.min.x - 210.0, r.max.y + 4.0)));
+                                            }
+                                            "linetype" => col.pick = Some(("linetype".into(), n.key.clone(),
+                                                ["continuous", "dashed", "dashed_short", "dashed_long", "dotted", "dashdot", "center", "phantom", "border"]
+                                                    .iter().map(|s| s.to_string()).collect(), pos2(r.min.x, r.max.y + 4.0))),
+                                            _ => col.pick = Some(("weight".into(), n.key.clone(),
+                                                ["auto", "0.13", "0.18", "0.25", "0.35", "0.50", "0.70", "1.00"]
+                                                    .iter().map(|s| s.to_string()).collect(), pos2(r.min.x, r.max.y + 4.0))),
+                                        }
+                                    } else if n.expandable && tri.contains(p) {
                                         actions.push(format!("toggle\u{1f}{}", n.key));
                                     } else if n.eye >= 0 && eye_r.expand(2.0).contains(p) {
                                         actions.push(format!("eye\u{1f}{}", n.key));
@@ -1363,6 +1446,48 @@ impl Ui {
                 });
             if close { col.kind_menu = None; }
         }
+        if let Some((verb, key, options, at)) = col.pick.clone() {
+            let mut close = false;
+            egui::Area::new(egui::Id::new("pick_menu"))
+                .fixed_pos(at)
+                .order(egui::Order::Tooltip)
+                .show(ctx, |ui| {
+                    glass(Surface::Raised).inner_margin(Margin::same(6)).show(ui, |ui| {
+                        ui.set_width(150.0);
+                        ui.spacing_mut().item_spacing = vec2(0.0, 1.0);
+                        for o in &options {
+                            if menu_row(ui, &(o.clone(), o.replace('_', " "), String::new(), String::new(), -1i8, true)) {
+                                actions.push(format!("{verb}\u{1f}{key}\u{1f}{o}"));
+                                close = true;
+                            }
+                        }
+                    });
+                });
+            if close { col.pick = None; }
+        }
+        if let Some((key, mut c, at)) = col.color_pick.clone() {
+            let mut done = false;
+            egui::Area::new(egui::Id::new("color_pick"))
+                .fixed_pos(at)
+                .order(egui::Order::Tooltip)
+                .show(ctx, |ui| {
+                    glass(Surface::Raised).inner_margin(Margin::same(10)).show(ui, |ui| {
+                        egui::widgets::color_picker::color_picker_color32(ui, &mut c, egui::widgets::color_picker::Alpha::Opaque);
+                        ui.add_space(6.0);
+                        ui.horizontal(|ui| {
+                            if chip_button(ui, "Apply") {
+                                actions.push(format!("color\u{1f}{key}\u{1f}#{:02x}{:02x}{:02x}", c.r(), c.g(), c.b()));
+                                done = true;
+                            }
+                            if chip_button(ui, "Automatic") {
+                                actions.push(format!("color\u{1f}{key}\u{1f}"));
+                                done = true;
+                            }
+                        });
+                    });
+                });
+            col.color_pick = if done { None } else { Some((key, c, at)) };
+        }
         if let Some(at) = col.head_menu {
             let mut close = false;
             egui::Area::new(egui::Id::new("head_menu"))
@@ -1496,7 +1621,9 @@ impl Ui {
                      ("row_menu", self.column.as_ref().is_some_and(|c| c.row_menu.is_some())),
                      ("kind_menu", self.column.as_ref().is_some_and(|c| c.kind_menu.is_some())),
                      ("head_menu", self.column.as_ref().is_some_and(|c| c.head_menu.is_some())),
-                     ("prompt", self.column.as_ref().is_some_and(|c| c.prompt.is_some()))];
+                     ("prompt", self.column.as_ref().is_some_and(|c| c.prompt.is_some())),
+                     ("pick_menu", self.column.as_ref().is_some_and(|c| c.pick.is_some())),
+                     ("color_pick", self.column.as_ref().is_some_and(|c| c.color_pick.is_some()))];
         self.hit = shown.iter()
             .filter(|(_, on)| *on)
             .filter_map(|(n, _)| ctx.memory(|m| m.area_rect(egui::Id::new(*n))))

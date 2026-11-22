@@ -673,8 +673,10 @@ def _tree(view, win) -> None:
         return
     exp = view.__dict__.setdefault("_ui_exp", set())
     flt = view.__dict__.get("_ui_filter", "")
+    colset = view.__dict__.get("_ui_colset", 0)
     sel_ids = {id(e) for e in scene.selection}
-    sig = (id(scene), scene.content_version, tuple(sorted(exp)), flt, len(sel_ids), hash(frozenset(sel_ids)))
+    sig = (id(scene), scene.content_version, tuple(sorted(exp)), flt, len(sel_ids), hash(frozenset(sel_ids)),
+           colset, getattr(view, "_ui_layer_rev", 0))
     if sig == getattr(view, "_ui_tree_sig", None):
         return
     first = getattr(view, "_ui_tree_sig", None) is None
@@ -687,6 +689,9 @@ def _tree(view, win) -> None:
     children = structure.tree(registry)
     direct, counts, problems, unfiled, to_fix = defaultdict(list), Counter(), Counter(), [], []
     node_of = {}
+    # The tags (layers) a node's items actually carry: what its eye, lock
+    # and Drawing cells act on (recipe tags are labels, items carry keys).
+    node_layers = defaultdict(Counter)
     for g, source, root, key in structure._memberships(scene, registry):
         review = structure._is_unsorted(g, source, root, key, recipes)
         if review:
@@ -694,6 +699,8 @@ def _tree(view, win) -> None:
         if key in nodes:
             node_of[id(g)] = key
             direct[key].append(g)
+            if getattr(g, "layer", None):
+                node_layers[key][g.layer] += 1
             counts[key] += 1
             bad = int(recipes[key].get("class") is not None and not structure._has_status(g.ifc or {})) + int(review)
             problems[key] += bad
@@ -725,9 +732,19 @@ def _tree(view, win) -> None:
             paths[key] = " › ".join(structure.path(registry, key))
         return paths[key]
 
+    def main_layer(key):
+        stack = [key]
+        while stack:
+            k = stack.pop(0)
+            if node_layers[k]:
+                ly = scene.layer(node_layers[k].most_common(1)[0][0])
+                if ly is not None:
+                    return ly
+            stack.extend(children.get(k, ()))
+        return _layer(scene, recipes.get(key, {}).get("tag"))
+
     def layer_state(key):
-        tag = recipes.get(key, {}).get("tag")
-        layer = scene.layer_by_key(tag) if tag and hasattr(scene, "layer_by_key") else None
+        layer = main_layer(key)
         if layer is None:
             return -1, -1
         return int(bool(getattr(layer, "visible", True))), int(bool(getattr(layer, "locked", False)))
@@ -777,8 +794,26 @@ def _tree(view, win) -> None:
 
     rows = []
 
-    def add(key, name, kind, badge, icon, d, count, probs, act, row, eye, lock, expandable, expanded, sel):
-        rows.append(([key, name, kind, badge, icon],
+    def cells(key=None, g=None):
+        # The active column set's cells for a node (its tag's layer) or an item.
+        if colset == 1 and key is not None:
+            ly = main_layer(key)
+            if ly is None:
+                return []
+            colr = "#%02x%02x%02x" % tuple(int(max(0, min(1, c)) * 255) for c in ly.color[:3]) if ly.color else ""
+            w = "auto" if ly.lineweight is None else f"{ly.lineweight:.2f}"
+            return [colr, (ly.linetype or "continuous").replace("_", " "), w, "1" if ly.printable else "0"]
+        if colset == 2:
+            if key is not None:
+                r = recipes.get(key, {})
+                return [str(r.get("class") or "—"), str(r.get("predefined_type") or "")]
+            if g is not None:
+                rec = g.ifc or {}
+                return [str(rec.get("class") or "inherits"), str(rec.get("predefined_type") or "")]
+        return []
+
+    def add(key, name, kind, badge, icon, d, count, probs, act, row, eye, lock, expandable, expanded, sel, extra=()):
+        rows.append(([key, name, kind, badge, icon, *extra],
                      [d, count, probs, int(act), row, eye, lock, int(expandable), int(expanded), sel]))
 
     def add_items(groups, key, d):
@@ -821,7 +856,7 @@ def _tree(view, win) -> None:
         badge = "⛓" if links.is_linked(g) else ""
         add(ik, g.name or "Group", "", badge, item_kind(g), d, 0, int(id(g) in to_fix_set), False, row,
             0 if getattr(g, "hidden", False) else 1, int(bool(getattr(g, "locked", False))),
-            bool(kids), ik in exp, int(id(g) in sel_ids))
+            bool(kids), ik in exp, int(id(g) in sel_ids), cells(g=g))
         if kids and ik in exp:
             for c in kids[:ROW_CAP]:
                 where = node_of.get(id(c))
@@ -855,7 +890,7 @@ def _tree(view, win) -> None:
         expanded = filtering or nk in exp
         eye, lock = layer_state(key)
         add(nk, name, kind, "", "", d, counts[key], problems[key], key == active, 0, eye, lock,
-            bool(children.get(key)) or bool(direct[key]), expanded, selected[key])
+            bool(children.get(key)) or bool(direct[key]), expanded, selected[key], cells(key=key))
         if not expanded:
             hidden_below = d
             continue
@@ -869,13 +904,26 @@ def _tree(view, win) -> None:
         if uk in exp:
             add_items(unfiled, "", 1)
     view._ui_tree = dict(direct=direct, children=children, unfiled=unfiled, recipes=recipes, to_fix=to_fix,
-                         active=active, node_of=node_of, nodes=nodes)
+                         active=active, node_of=node_of, nodes=nodes,
+                         node_layers={k: list(c) for k, c in node_layers.items()})
     view.renderer.ui_set_tree(rows, len(unfiled))
+    view.renderer.ui_set_colset(colset)
     if not getattr(view, "_ui_kinds_sent", False):
         view.renderer.ui_set_kinds(sorted(set(KINDS.values()) - {"Level", "Building", "Site"}))
         view._ui_kinds_sent = True
     path = node_path(active) if active in nodes else ""
     view.renderer.ui_set_delivery(path, len(unfiled), len(to_fix))
+
+
+def _layer(scene, tag):
+    """The tag (layer) a node's recipe names: by key, else by label, else by
+    the last part of a folder path."""
+    if not tag:
+        return None
+    ly = scene.layer(tag)
+    if ly is None and "/" in str(tag):
+        ly = scene.layer(str(tag).rsplit("/", 1)[-1])
+    return ly
 
 
 def _tree_groups(view, key):
@@ -953,14 +1001,18 @@ def _tree_action(win, view, action) -> None:
         return _tree_groups(view, node) if node else copies() or ([item()] if item() else [])
 
     def tags(key):
+        # The layers the node's items (and its sub-nodes') carry; else the
+        # layer its recipe names, when there is one.
         out, stack = [], [key]
         while stack:
             k = stack.pop()
-            t = data.get("recipes", {}).get(k, {}).get("tag")
-            if t:
-                out.append(t)
+            out.extend(data.get("node_layers", {}).get(k, ()))
             stack.extend(data.get("children", {}).get(k, ()))
-        return out
+        if not out:
+            ly = _layer(scene, data.get("recipes", {}).get(key, {}).get("tag"))
+            if ly is not None:
+                out.append(ly.key)
+        return list(dict.fromkeys(out))
 
     def rebuild():
         view._ui_tree_sig = None
@@ -973,6 +1025,29 @@ def _tree_action(win, view, action) -> None:
         elif verb == "filter":
             view._ui_filter = rk
             rebuild()
+        elif verb == "colset":
+            view._ui_colset = int(rk or 0)
+            rebuild()
+        elif verb in ("print", "color", "linetype", "weight") and node:
+            panel = getattr(getattr(win, "layers_dock", None), "panel", None)
+            ts = tags(node)
+            if panel is not None and ts:
+                if verb == "print":
+                    layer = scene.layer(ts[0])
+                    panel.set_printable(ts, not bool(getattr(layer, "printable", True)))
+                elif verb == "color":
+                    rgb = None
+                    if extra.startswith("#") and len(extra) == 7:
+                        v = int(extra[1:], 16)
+                        rgb = ((v >> 16 & 255) / 255.0, (v >> 8 & 255) / 255.0, (v & 255) / 255.0)
+                    panel.set_color(ts, rgb)
+                elif verb == "linetype":
+                    panel.set_style(ts, linetype=extra)
+                else:
+                    panel.set_style(ts, lineweight=None if extra == "auto" else float(extra))
+                view._ui_layer_rev = getattr(view, "_ui_layer_rev", 0) + 1
+                rebuild()
+                vp.update()
         elif verb == "expandall":
             exp.update(f"n:{k}" for k in data.get("nodes", {}))
             rebuild()
@@ -1006,7 +1081,7 @@ def _tree_action(win, view, action) -> None:
             if node:
                 ts = tags(node)
                 if ts:
-                    layer = scene.layer_by_key(ts[0])
+                    layer = scene.layer(ts[0])
                     on = not bool(getattr(layer, "visible", True)) if layer is not None else True
                     vp.history.execute(SetLayerVisibilityCommand(ts, on))
             else:
@@ -1018,7 +1093,7 @@ def _tree_action(win, view, action) -> None:
             if node:
                 ts = tags(node)
                 if ts:
-                    layer = scene.layer_by_key(ts[0])
+                    layer = scene.layer(ts[0])
                     L.set_locked(scene, ts, not bool(getattr(layer, "locked", False)))
                     scene.version += 1
             else:

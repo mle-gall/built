@@ -2091,6 +2091,9 @@ impl Renderer {
     fn ui_set_prompt(&mut self, title: String, body: String, buttons: Vec<(String, String)>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_prompt(title, body, buttons); }
     }
+    fn ui_set_colset(&mut self, colset: u8) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_colset(colset); }
+    }
     fn ui_take_actions(&mut self) -> Vec<String> {
         self.ui.as_mut().map(|ui| ui.take_actions()).unwrap_or_default()
     }
