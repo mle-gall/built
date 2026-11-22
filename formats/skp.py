@@ -193,6 +193,49 @@ def apply_payload(scene, payload, progress=None, *, consume: bool | None = None)
             gc.enable()
 
 
+def _soften_bulk_edges(mesh, vertices, edge_map, segments, tick):
+    """Use the weld's vertices and face pass's edge index for display flags.
+
+    Exact stored positions need no second weld lookup. Other endpoints
+    (including points welded across cell boundaries) use the final registry:
+    a point's vertex during construction is not necessarily what vertex_at
+    returns after a later point has claimed its cell. Cache those lookups too.
+    """
+    from PySide6.QtGui import QVector3D
+
+    point_ids = {v.position.toTuple(): i for i, v in enumerate(vertices)}
+    vertex_ids = None
+    missing = object()
+
+    def resolve(point):
+        nonlocal vertex_ids
+        vertex = mesh.vertex_at(QVector3D(*point))
+        if vertex_ids is None:
+            vertex_ids = {v: i for i, v in enumerate(vertices)}
+        index = vertex_ids.get(vertex)
+        point_ids[point] = index
+        return index
+
+    count = len(vertices)
+    for k, (a, b) in enumerate(segments):
+        if not k & 4095:
+            tick()
+        a, b = tuple(a), tuple(b)
+        ia = point_ids.get(a, missing)
+        ib = point_ids.get(b, missing)
+        if ia is missing:
+            ia = resolve(a)
+        if ib is missing:
+            ib = resolve(b)
+        if ia is None or ib is None or ia == ib:
+            continue
+        key = ia * count + ib if ia <= ib else ib * count + ia
+        edge = (mesh.find_edge(vertices[ia], vertices[ib]) if edge_map is None
+                else edge_map.get(key))
+        if edge is not None:
+            edge.soft = True
+
+
 def _apply_payload_inner(scene, payload, progress=None, *, consume=False) -> str:
     import time
     from PySide6.QtGui import QVector3D
@@ -299,11 +342,16 @@ def _apply_payload_inner(scene, payload, progress=None, *, consume=False) -> str
                     flat_rings.append(r)
                     corner_count += len(r)
                 attrs_list.append(attrs)
+            bulk = None
             if ring_counts:
                 if corner_count >= 1024:          # corners; bulk wins above ~700
-                    mesh.add_faces_bulk(
-                        flatten_rings(flat_rings, corner_count),
-                        ring_sizes, ring_counts, attrs_list)
+                    vertices, inverse = mesh.bulk_weld(flatten_rings(flat_rings, corner_count))
+                    # A store has its own native pair index. Passing a Python
+                    # dict to it would materialize the entire mesh.
+                    edge_map = {} if soft_edges and type(mesh) is Mesh else None
+                    mesh.add_faces_welded(vertices, inverse, ring_sizes, ring_counts,
+                                          attrs_list, edge_map=edge_map)
+                    bulk = vertices, edge_map
                 else:
                     # Small group: the bulk pass's fixed NumPy cost loses to
                     # the plain per-face walk (a file with a thousand small
@@ -324,7 +372,9 @@ def _apply_payload_inner(scene, payload, progress=None, *, consume=False) -> str
                             continue
                         if attrs_list[fi]:
                             face.attrs.update(attrs_list[fi])
-            if soft_edges:
+            if soft_edges and bulk is not None:
+                _soften_bulk_edges(mesh, *bulk, soft_edges, _tick)
+            elif soft_edges:
                 # Soften through the WELD itself: resolve each flagged
                 # segment's endpoints to their shared vertices and mark that
                 # edge — the weld tolerance is the matching tolerance, so
