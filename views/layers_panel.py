@@ -158,8 +158,9 @@ def layers_signature(scene) -> tuple:
     (a push, a move) leaves it as it was and does not rebuild the list."""
     style = getattr(scene, "display_style", None)
     folders = tuple(L.folders_of(scene))
+    known = set(folders)
     return (tuple(repr(sorted(vars(ly).items())) for ly in scene.layers),
-            folders, tuple(L.folder_parent(scene, f) for f in folders),
+            folders, tuple(L.folder_parent(scene, f, known=known) for f in folders),
             tuple(L.folder_label(scene, f) for f in folders),
             tuple(sorted(scene.folder_visibility.items())),
             L.active_layer(scene),
@@ -2965,7 +2966,7 @@ class LayersPanel(QWidget):
             item.setFlags(item.flags() | Qt.ItemIsEditable)
             folders[name] = item
         for name, item in folders.items():
-            parent = folders.get(L.folder_parent(scene, name))
+            parent = folders.get(L.folder_parent(scene, name, known=folders))
             if parent is not None:
                 parent.addChild(item)
             else:
@@ -3186,6 +3187,8 @@ class LayersPanel(QWidget):
         changes the active layer: what you draw next stays where it was."""
         from PySide6.QtWidgets import QApplication
         names = L.selection_layers(self._scene())
+        if not names and getattr(self, "_marked_names", None) == names:
+            return
         # Strong enough to find at a glance — next to a row picked in the
         # list, a faint tint went unseen — yet lighter than that pick.
         tint = QColor(QApplication.palette().highlight().color())
@@ -3243,8 +3246,10 @@ class LayersPanel(QWidget):
 
     def _structure(self):
         scene = self._scene()
+        folders = L.folders_of(scene)
+        known = set(folders)
         return (tuple((ly.key, ly.folder) for ly in scene.layers),
-                tuple((f, L.folder_parent(scene, f)) for f in L.folders_of(scene)))
+                tuple((f, L.folder_parent(scene, f, known=known)) for f in folders))
 
     def _update_rows(self):
         scene = self._scene()
@@ -3366,7 +3371,7 @@ class LayersPanel(QWidget):
         item.setData(COL_EYE, Qt.UserRole + 1, int(shown))
         item.setData(COL_LOCK, Qt.UserRole + 1, int(locked))
         item.setToolTip(COL_EYE, tr("Show or hide the folder"))
-        self._dim_eye(item, not L.folder_visible(scene, L.folder_parent(scene, key)))
+        self._dim_eye(item, not L.folder_visible(scene, self._key(item.parent())[1] if item.parent() else None))
         printed = (not layers
                    or any(getattr(ly, "printable", True) for ly in layers))
         item.setIcon(COL_PRINT, printer_icon(printed))
@@ -3574,6 +3579,9 @@ class LayersPanel(QWidget):
         # No filter at all: every row shows — an empty folder too, which
         # has no layer to be shown through (a new folder was invisible).
         nothing = not text and state is None and not invert
+        if nothing and getattr(self, "_unfiltered", False):
+            return
+        self._unfiltered = nothing
 
         def show(item, inherited: bool) -> bool:
             kind, name = self._key(item)

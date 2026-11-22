@@ -2472,3 +2472,18 @@ def test_the_layer_of_what_is_picked_in_the_model_stands_out(win):
     scene.selection.clear()
     panel._mark_selection()
     assert not item.font(COL_NAME).bold()
+
+
+def test_layer_signature_reads_folders_once(monkeypatch):
+    from views.layers_panel import layers_signature
+    scene = Scene()
+    scene.layer_folders = ['one', 'two', 'three']
+    scene.folder_parents = {'two': 'one', 'three': 'missing'}
+    read = L.folders_of
+    calls = []
+    def counted(scene):
+        calls.append(1)
+        return read(scene)
+    monkeypatch.setattr(L, 'folders_of', counted)
+    assert layers_signature(scene)[2] == (None, 'one', None)
+    assert len(calls) == 1
