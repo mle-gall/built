@@ -367,7 +367,9 @@ def _commands(win, sel):
     else:
         out.append(act("Make Group", "Group"))
     out.append(act("Make Component…", "Component"))
-    out.extend(act(label, more=True) for label in MORE)
+    for label in MORE:
+        name = label.replace("Intersect Faces ", "Intersect Faces ▸ ") if label.startswith("Intersect Faces ") else None
+        out.append(act(label, name, more=True))
     return [c for c in out if c is not None]
 
 

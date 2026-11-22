@@ -3,6 +3,7 @@ mod timing;
 mod panic_log;
 mod overlay;
 mod ui;
+mod glass;
 mod axes;
 mod sections;
 mod preview;
@@ -1877,7 +1878,7 @@ impl Renderer {
             .draw(&mut e, &color, self.config.width, self.config.height, tq);
         if present && self.ui_target == self.active {
             if let Some(ui) = self.ui.as_mut() {
-                ui.paint(&self.device, &self.queue, &mut e, &color, [self.config.width, self.config.height], self.ui_scale);
+                ui.paint(&self.device, &self.queue, &mut e, target, &color, [self.config.width, self.config.height], self.ui_scale);
             }
         }
         if let (Some(q), Some(k)) = (&self.queries, timing_slot) {
