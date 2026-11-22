@@ -270,3 +270,15 @@ def test_smoothing_inside_a_component_reaches_its_copies(monkeypatch):
     finally:
         win._saved_version = win.viewport.scene.version
         win.close()
+
+
+def test_the_dialog_softens_across_materials_by_default_as_.skp():
+    """the modeller's Soften Edges has no material rule: the dialog starts
+    with «Soften between different materials» ticked."""
+    from PySide6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    from views.soften_dialog import SoftenDialog
+    dialog = SoftenDialog()
+    assert dialog.materials.isChecked()
+    assert dialog.coplanar.isChecked()
+    dialog.deleteLater()

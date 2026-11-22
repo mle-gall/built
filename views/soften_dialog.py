@@ -56,8 +56,11 @@ class SoftenDialog(QDialog):
         self.coplanar = QCheckBox(tr("Soften coplanar edges"))
         self.coplanar.setChecked(True)
         layout.addWidget(self.coplanar)
+        # the modeller's Soften Edges has no material rule: the angle alone
+        # decides. Ticked by default to match; untick it to keep the line
+        # between two materials, as a .skp import does.
         self.materials = QCheckBox(tr("Soften between different materials"))
-        self.materials.setChecked(False)
+        self.materials.setChecked(True)
         layout.addWidget(self.materials)
         self.harden = QCheckBox(tr("Unsoften all selected edges"))
         for widget in (self.angle, self.slider, self.coplanar, self.materials):
