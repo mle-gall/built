@@ -256,21 +256,17 @@ class History:
         return unsubscribe
 
     def _notify(self, listeners, index, cmd, phase, ran):
-        target = getattr(cmd, "_history_mesh", None) or self.scene.mesh
-        store = target.__dict__.get("_store")
-        if store is not None and any(store.frame_origin):
-            # Feed subscribers may read the model synchronously during a click.
-            from core.coordinate_frame import ZERO, mesh_frame
-            with mesh_frame(target, ZERO):
-                return self._notify(listeners, index, cmd, phase, ran)
-        for entry in listeners:
-            fn = entry[index]
-            if fn is not None:
-                try:
-                    fn(cmd, phase, ran)
-                except Exception:
-                    logging.getLogger("ingetrazo.history").exception(
-                        "Command listener failed (%s)", phase)
+        from core.coordinate_frame import model_frame
+        # Feed subscribers may read any placement synchronously during a click.
+        with model_frame():
+            for entry in listeners:
+                fn = entry[index]
+                if fn is not None:
+                    try:
+                        fn(cmd, phase, ran)
+                    except Exception:
+                        logging.getLogger("ingetrazo.history").exception(
+                            "Command listener failed (%s)", phase)
 
     def changes_since(self, revision=0):
         """Bounded command journal; not a geometric diff or a persisted log."""

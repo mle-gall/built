@@ -157,7 +157,7 @@ def _baked_paint(paint):
     return None
 
 
-def _source_arrays(mesh, paint=None, texture_ids=None, face_overrides=None, billboard=False, origins=None):
+def _source_arrays(mesh, paint=None, texture_ids=None, face_overrides=None, billboard=False, origins=None, previous_origin=(0., 0., 0.)):
     """Use source topology directly; the resident renderer needs no welded Plan."""
     if face_overrides:
         # Resolve lazy faces before reading topology; never mutate document attrs.
@@ -207,7 +207,7 @@ def _source_arrays(mesh, paint=None, texture_ids=None, face_overrides=None, bill
         frame = mesh._store.frame_origin if type(mesh).__name__ == 'StoreMesh' else ZERO
         box = (np.array([pos.min(axis=0), pos.max(axis=0)], dtype=float)
                if len(pos) else np.zeros((2, 3)))
-        origin = choose_origin(box.mean(axis=0) + frame)
+        origin = choose_origin(box.mean(axis=0) + frame, previous_origin)
         origins.append((origin, box + np.subtract(frame, origin)))
         if tuple(frame) != origin:
             pos = np.asarray(pos, float) + np.subtract(frame, origin)
@@ -348,7 +348,7 @@ def _profile_endpoints(mesh):
 
 
 def pack_scene(scene, view_tint=None, *, face_overrides=None, texture_images=True,
-               baked_paints=None, progress=None, previous_origin=(0., 0., 0.)):
+               baked_paints=None, progress=None, previous_origin=(0., 0., 0.), previous_pack=None):
     """``baked_paints`` (id(group) -> paint) bakes those groups with that
     paint instead of the one they resolve to: the incremental bake of a
     changed prototype variant (views.wgpu_updates). ``progress(fraction,
@@ -369,6 +369,11 @@ def pack_scene(scene, view_tint=None, *, face_overrides=None, texture_images=Tru
     groups = []
     prototype_paints = {}
     coordinates = []
+    old_anchors = {}
+    if previous_pack is not None:
+        for (mesh_id, _, _), code in (previous_pack.prototype_lookup or {}).items():
+            if 0 <= code < len(previous_pack.prototype_origins):
+                old_anchors[mesh_id] = previous_pack.prototype_origins[code]
     from itertools import chain
     placements = chain([(None, None, None, 0)], _placement_records(scene, scene.groups, vp, state, double=True))
     total = 0
@@ -391,7 +396,8 @@ def pack_scene(scene, view_tint=None, *, face_overrides=None, texture_images=Tru
         billboard = getattr(group, "billboard", False)
         key = (id(mesh), repr(baked_paint), billboard)
         if key not in lookup:
-            arrays = _source_arrays(mesh, baked_paint, texture_ids, face_overrides, billboard, coordinates)
+            arrays = _source_arrays(mesh, baked_paint, texture_ids, face_overrides, billboard,
+                                    coordinates, old_anchors.get(id(mesh), (0., 0., 0.)))
             lookup[key] = len(meshes) if len(arrays[0]) else -1
             if len(arrays[0]):
                 prototype_paints[len(meshes)] = baked_paint

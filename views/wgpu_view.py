@@ -272,7 +272,8 @@ class WgpuView(QWidget):
             return
         old_origin = getattr(self.packed, 'origin', (0., 0., 0.))
         self.packed = pack_scene(scene, getattr(self.source_viewport, 'view_tint', None),
-                                 progress=progress, previous_origin=old_origin if same_document else (0., 0., 0.))
+                                 progress=progress, previous_origin=old_origin if same_document else (0., 0., 0.),
+                                 previous_pack=self.packed if same_document else None)
         remote = {}
         if any(any(o) for o in self.packed.prototype_origins):
             for group, code in zip(self.packed.groups, self.packed.instances['info'][:, 0]):
@@ -444,6 +445,7 @@ class WgpuView(QWidget):
                          edge_commands=self.packed.edge_commands.copy())
         if any(packed.origin) or any(any(o) for o in packed.prototype_origins):
             _, first = np.unique(packed.instances['info'][:, 0], return_index=True)
+            packed.groups = list(packed.groups)
             packed._snap_sources = {}
             for row in first:
                 group = packed.groups[row]

@@ -1,9 +1,11 @@
 """Floating origins shared by the Metal buffers and its Qt geometry planners."""
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
+from contextvars import ContextVar
 
 import numpy as np
 
 ZERO = (0., 0., 0.)
+_active = ContextVar("geometry_frames", default=())
 # At 512 m a float32 step is 0.061 mm, below the 0.1 mm weld tolerance.
 REBASE_DISTANCE = 512.
 
@@ -38,11 +40,14 @@ def mesh_frame(mesh, origin):
     else:
         local = st._in_frame(origin)
     start = local.revision
+    active = tuple(m for m in _active.get() if m is not mesh)
+    token = _active.set(active + (mesh,) if any(origin) else active)
     d['_frame_parent'] = st
     d['_store'] = local
     try:
         yield
     finally:
+        _active.reset(token)
         local = d.get('_store')
         if local is None:
             # A compatibility command explicitly requested Python objects.
@@ -73,6 +78,18 @@ def mesh_frame(mesh, origin):
             d['_tool_frame_cache'] = (st, st.revision, tuple(origin), local)
         else:
             d.pop('_tool_frame_cache', None)
+
+
+@contextmanager
+def model_frame():
+    active = _active.get()
+    if not active:
+        yield
+        return
+    with ExitStack() as frames:
+        for mesh in active:
+            frames.enter_context(mesh_frame(mesh, ZERO))
+        yield
 
 
 @contextmanager

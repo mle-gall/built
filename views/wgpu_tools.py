@@ -343,8 +343,8 @@ class NativeTools(MeshToolAccess):
             if revision != getattr(self, '_notified_revision', revision):
                 notify = getattr(self.view.source_viewport, 'notify_scene_changed', None)
                 if notify is not None:
-                    from core.coordinate_frame import ZERO, mesh_frame
-                    with mesh_frame(self.scene.mesh, ZERO):
+                    from core.coordinate_frame import model_frame
+                    with model_frame():
                         notify()
             self._notified_revision = revision
         self.view.update()
