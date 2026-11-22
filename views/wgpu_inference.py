@@ -521,6 +521,57 @@ def context_hit(view, context, x, y):
     return int(placements[0]) if len(placements) else None
 
 
+class ResidentEdges(Sequence):
+    """Keep nearby placement/edge ordinals packed until a rule needs a Qt reference."""
+    def __init__(self, columns, groups, context):
+        self.rows, self.ids, self.a, self.b, self.distances = columns
+        self.groups = groups
+        self.context = context
+        self.prefix = []
+        self.features = []
+
+    def __len__(self):
+        return len(self.prefix) + len(self.rows) + len(self.features)
+
+    def __getitem__(self, index):
+        if isinstance(index, slice):
+            return [self[i] for i in range(*index.indices(len(self)))]
+        if index < 0:
+            index += len(self)
+        if index < 0 or index >= len(self):
+            raise IndexError(index)
+        if index < len(self.prefix):
+            return self.prefix[index]
+        i = index - len(self.prefix)
+        if i >= len(self.rows):
+            return self.features[i-len(self.rows)]
+        row = int(self.rows[i])
+        group = self.groups[row] if self.groups is not None else None
+        loose = group is self.context
+        word = None if loose else ('component' if group is not None and group.is_instance() else 'group')
+        return SimpleNamespace(a=QVector3D(*self.a[i]), b=QVector3D(*self.b[i]),
+            row=row, edge_id=int(self.ids[i]), distance=float(self.distances[i]), group=group,
+            in_group=not loose, context=word)
+
+    def snap_columns(self):
+        from core.snap_query import edge_columns
+        count = len(self.rows)
+        if self.groups is None:
+            grouped = [self.context is not None] * count
+        else:
+            rows, inverse = np.unique(self.rows, return_inverse=True)
+            grouped = np.asarray([self.groups[r] is not self.context for r in rows],
+                                 dtype=bool)[inverse].tolist()
+        tags = [0] * count
+        if not self.prefix and not self.features:
+            return self.a, self.b, tags, grouped
+        first_a, first_b, first_tags, first_groups = edge_columns(self.prefix)
+        last_a, last_b, last_tags, last_groups = edge_columns(self.features)
+        return (np.concatenate((first_a, self.a, last_a)),
+                np.concatenate((first_b, self.b, last_b)),
+                first_tags + tags + last_tags, first_groups + grouped + last_groups)
+
+
 def nearby_edges(index, packed, camera, width, height, x, y, *,
                  radius_px=48., cap=48, rows=None, edit_group=None):
     """World-space pseudo edges, nearest first; row/edge_id identify source."""
@@ -535,15 +586,8 @@ def nearby_edges(index, packed, camera, width, height, x, y, *,
         rows, mvp.data(), float(width), float(height), float(x), float(y),
         float(radius_px), int(cap))
     groups = getattr(packed, 'groups', None)
-    result = []
-    for row, eid, aa, bb, distance in zip(pl, ids, a, b, distances):
-        group = groups[int(row)] if groups is not None else None
-        loose = group is edit_group
-        context = None if loose else ('component' if group is not None and group.is_instance() else 'group')
-        result.append(SimpleNamespace(a=QVector3D(*aa), b=QVector3D(*bb),
-            row=int(row), edge_id=int(eid), distance=float(distance), group=group,
-            in_group=not loose, context=context))
-    return result
+    result = ResidentEdges((pl, ids, a, b, distances), groups, edit_group)
+    return list(result)
 
 
 def scene_edges(view):
@@ -687,21 +731,26 @@ def snap(index, row, view, x, y, *, work_point=..., **options):
     groups = getattr(view.packed, 'groups', None)
     is_loose = np.array([groups is not None and groups[r] is context for r in rows], dtype=bool)
     loose_rows, group_rows = rows[is_loose], rows[~is_loose]
-    edges = (nearby_edges(index, view.packed, view.camera, view.width(), view.height(),
-                         x, y, rows=loose_rows, radius_px=64., cap=400, edit_group=context)
-             if len(loose_rows) else [])
-    edges += nearby_edges(index, view.packed, view.camera, view.width(), view.height(),
-                          x, y, rows=group_rows, edit_group=context)
-    if picked and len(group_rows) > 1 and row not in loose_rows:
-        # The placement visible under the cursor, asked on its own: the query
-        # above keeps the nearest 48 edges of ALL groups by screen distance,
-        # whatever their depth, and dense geometry BEHIND a corner filled it
-        # and pushed out the corner's own edges — hovering beside a vertex
-        # found no point. One more query on one placement.
-        seen = {(e.row, e.edge_id) for e in edges}
-        edges += [e for e in nearby_edges(
-            index, view.packed, view.camera, view.width(), view.height(), x, y,
-            rows=[row], edit_group=context) if (e.row, e.edge_id) not in seen]
+    batches = []
+
+    def gather(subset, reach, cap):
+        return index.edges_near(subset, mvp.data(), float(view.width()), float(view.height()),
+                                float(x), float(y), reach, cap)
+
+    if len(loose_rows):
+        batches.append(gather(loose_rows, 64., 400))
+    # The outer window is 64 px; group edges keep the original 48 px reach.
+    group_rows = _screen_rows(index, view.packed, mvp, view.width(), view.height(),
+                              x, y, 48., group_rows)
+    batches.append(gather(group_rows, 48., 48))
+    if picked and len(rows) - len(loose_rows) > 1 and row in group_rows:
+        extra = gather(np.array([row], np.int64), 48., 48)
+        seen = set(zip(batches[-1][0], batches[-1][1]))
+        keep = np.array([key not in seen for key in zip(extra[0], extra[1])], dtype=bool)
+        batches.append(tuple(column[keep] for column in extra))
+    columns = (batches[0] if len(batches) == 1 else
+               tuple(np.concatenate(c) for c in zip(*batches)))
+    edges = ResidentEdges(columns, groups, context)
     tool = getattr(getattr(view, 'tools', None), 'tool', None)
     moving = getattr(tool, '_verts', ()) if getattr(tool, 'grab', None) is not None else ()
     if moving and not getattr(tool, '_copy', False):
@@ -714,7 +763,13 @@ def snap(index, row, view, x, y, *, work_point=..., **options):
     exclude = getattr(tool, 'snap_excluded', lambda: None)()
     if exclude is not None and exclude[1]:
         edges = [e for e in edges if id(e.group) not in exclude[1]]
-    feature_rows = list(dict.fromkeys([e.row for e in edges] + ([row] if picked else [])))
+    if isinstance(edges, ResidentEdges):
+        _, first = np.unique(edges.rows, return_index=True)
+        edge_rows = edges.rows[np.sort(first)].tolist()
+    else:
+        edge_rows = [e.row for e in edges]
+    feature_rows = list(dict.fromkeys(edge_rows + ([row] if picked else [])))
+    named_edges = edges.features if isinstance(edges, ResidentEdges) else edges
     for r in feature_rows:
         value = index.rows.get(r, index.packed.instances[r])
         matrix = value['world'].astype(float).T
@@ -728,7 +783,7 @@ def snap(index, row, view, x, y, *, work_point=..., **options):
         centers, _tangents, mids = index.features[int(value['info'][0])]
         for center in centers:
             center = QVector3D(*(matrix[:3, :3] @ center + matrix[:3, 3]))
-            edges.append(SimpleNamespace(a=center, b=center, center=True,
+            named_edges.append(SimpleNamespace(a=center, b=center, center=True,
                                          context=named))
         # GL's «Arc midpoint» (Viewport._arc_midpoints): the middle of each
         # open arc's sweep, from the same per-prototype fit as the centres —
@@ -739,7 +794,7 @@ def snap(index, row, view, x, y, *, work_point=..., **options):
             group is not None and group.is_instance()) else None
         for mid in mids:
             mid = QVector3D(*(matrix[:3, :3] @ mid + matrix[:3, 3]))
-            edges.append(SimpleNamespace(a=mid, b=mid, arc_midpoint=True,
+            named_edges.append(SimpleNamespace(a=mid, b=mid, arc_midpoint=True,
                                          context=word))
         if group is not None and group.is_instance():
             # Not ``rows.get(r, initial[r])``: the default is evaluated
@@ -749,9 +804,12 @@ def snap(index, row, view, x, y, *, work_point=..., **options):
             if value is None:
                 value = index.initial[r]
             anchor = QVector3D(*value['world'][3, :3])
-            edges.append(SimpleNamespace(a=anchor, b=anchor, component_origin=True,
+            named_edges.append(SimpleNamespace(a=anchor, b=anchor, component_origin=True,
                                          context=word))
-    edges = scene_edges(view) + edges
+    if isinstance(edges, ResidentEdges):
+        edges.prefix = scene_edges(view)
+    else:
+        edges = scene_edges(view) + edges
     threshold = options.pop('threshold_px', getattr(view, 'snap_threshold_px', 12.))
     options.setdefault('edge_threshold_px', getattr(view, 'edge_snap_threshold_px', None))
     memo = {}
@@ -768,6 +826,7 @@ def snap(index, row, view, x, y, *, work_point=..., **options):
     from views.viewport import Viewport
     mvp = view.camera.projection_matrix() * view.camera.view_matrix()
     project = lambda p: Viewport._world_to_pixel(view, p, mvp)
+    project.snap_projection = (mvp.data(), (view.width(), view.height()))
     if 'face_centers' not in options:
         options['face_centers'] = face_centers_near(view, x, y, on_face, project)
     if on_face and face_normal is not None:
@@ -1013,7 +1072,15 @@ def _acquire(engine, view, edges, on_face, point, face_normal,
     if drawing:
         reach = options.get('edge_threshold_px') or 14.
         occluded = options.get('is_occluded')
-        near = sorted((e for e in edges if hasattr(e, 'distance')
+        if isinstance(edges, ResidentEdges):
+            indexes = np.flatnonzero(edges.distances <= reach)
+            indexes = indexes[np.argsort(edges.distances[indexes], kind='stable')]
+            candidates = (edges[len(edges.prefix)+i] for i in indexes)
+            import itertools
+            near = list(itertools.islice((e for e in candidates
+                        if (e.b-e.a).lengthSquared() > 1e-18), 3))
+        else:
+            near = sorted((e for e in edges if hasattr(e, 'distance')
                        and e.distance <= reach
                        and (e.b - e.a).lengthSquared() > 1e-18),
                       key=lambda e: e.distance)

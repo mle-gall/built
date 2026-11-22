@@ -175,7 +175,7 @@ impl DrawingGraph {
 }
 
 /// Closest points in units of distance along each line.
-fn intersection(
+pub(crate) fn intersection(
     [a, b]: [Point; 2],
     [c, d]: [Point; 2],
     h: Hypot,
