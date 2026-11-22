@@ -374,3 +374,18 @@ def test_leaving_a_group_clears_the_rest_after_an_update_reset(view):
     view.scene.edit_group = None
     view.sync_edit_context()
     assert calls[-1] == ([], 'hide')
+
+
+def test_locked_tag_group_provides_a_reference_without_accepting_selection(view):
+    from core.layers import Layer, assign_layer
+    group = view.scene.groups[0]
+    tag = Layer("Survey", key="survey-key", locked=True)
+    view.scene.layers.append(tag)
+    assign_layer(group, tag.key)
+    px = view._world_to_pixel(QVector3D(6, 5, 0))
+    assert snap(view.inference_index, 0, view, *px).kind == "endpoint"
+    view.select_rows([0])
+    assert not view.scene.selection
+    assert view.tools.pick_group(*px) is None
+    center = view._world_to_pixel(QVector3D(5, 4, 0))
+    assert view.tools.pick_face_any(*center) == (None, None)

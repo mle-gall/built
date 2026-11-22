@@ -95,14 +95,20 @@ def test_hidden_locked_group_does_not_offer_edges(box):
     assert vp._nearby_group_edges(*px) == []
 
 
-def test_a_locked_layer_keeps_its_existing_snap_policy(box):
-    from core.layers import Layer
+def test_locked_tag_is_a_reference_until_its_folder_is_hidden(box):
+    from core.layers import Layer, assign_layer
     vp, group, transform = box
-    vp.scene.layers.append(Layer("reference", locked=True))
-    group.layer = "reference"
-    group.locked = True
+    tag = Layer("Survey", key="survey-key", folder="refs", locked=True)
+    vp.scene.layers.append(tag)
+    assign_layer(group, tag.key)
     vp.scene.version += 1
     px = vp._world_to_pixel(transform.map(V(1, 0, 1)))
+    assert vp._snap_at(*px, Qt.NoModifier).kind == "endpoint"
+    assert vp.pick_group(*px) is None
+    vp.begin_group_edit(group)
+    assert vp.scene.edit_group is None
+    vp.scene.folder_visibility["refs"] = False
+    vp.scene.version += 1
     assert vp._nearby_group_edges(*px) == []
 
 
@@ -132,7 +138,7 @@ def test_native_candidates_keep_locked_references_out_of_editable_picks(monkeypa
     )
     monkeypatch.setattr(viewport_module, "_LAZY_NATIVE", True)
     native = Viewport._lazy_native(stub)
-    assert native[1].tolist() == [0, 1, 4]
+    assert native[1].tolist() == [0, 1, 3, 4]
     assert native[2].tolist() == [0, 1, 3, 4]
     assert Viewport._lazy_sel_rows(stub, native).tolist() == [0]
 

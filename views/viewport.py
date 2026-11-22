@@ -19692,8 +19692,10 @@ class Viewport(QOpenGLWidget):
         A locked group (the Browser's padlock), or one inside a locked
         group, does not open — whichever road asks: a double-click, the
         right-click's Edit Group or a part clicked in the Parts tab."""
-        from core.outliner import locked_on_path
-        if locked_on_path(self.scene.groups, group):
+        from core.outliner import path_to
+        path = path_to(self.scene.groups, group) or []
+        if any(getattr(g, "locked", False) or self.scene._layer_state(g)[1]
+               for g in [*path, group]):
             self.flash_status(tr("Unlock it first"), 3000)
             return
         # A linked document (core/links.py) is edited in its own file: going
