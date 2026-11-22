@@ -102,6 +102,22 @@ def push_pull(history, face, distance, keep_base=False):
     return _answer(history, before)
 
 
+def rebuild_cap(history, face):
+    """Rebuild the plane of a seed face with the direct cap planner."""
+    from core.cap_rebuild import apply_rebuild
+    from core.history import CommandRejected, SnapshotMutation
+    seed, = _need(history.scene.mesh, "face", [face])
+    origin, normal = seed.centroid(), seed.normal()
+
+    def rebuild(scene):
+        if not apply_rebuild(scene.mesh, origin, normal):
+            raise CommandRejected("Cap already matches its plane")
+
+    before = history.revision
+    history.execute(SnapshotMutation(rebuild))
+    return _answer(history, before)
+
+
 def orient_faces(history, face):
     """Orient the connected sheet to the seed face; all keys survive."""
     from core.orient_faces import faces_to_flip
@@ -143,7 +159,7 @@ def redo(history):
 
 
 COMMANDS = {"move_vertices": move_vertices, "erase": erase, "orient_faces": orient_faces,
-            "solid_operation": solid_operation, "push_pull": push_pull, "undo": undo, "redo": redo}
+            "rebuild_cap": rebuild_cap, "solid_operation": solid_operation, "push_pull": push_pull, "undo": undo, "redo": redo}
 
 
 def run(history, name, **args):

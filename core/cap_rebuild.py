@@ -56,6 +56,14 @@ from core.orient import (
 _ON_PLANE = 1e-4
 
 
+def _snapshot_triangles(mesh, keys):
+    from core._native import qt_hypot
+    from core.orient import _PackedTris
+    positions, tris, owners, _ = mesh._store.snapshot().indexed_surface(qt_hypot(), keys)
+    a = positions[tris[:, 0]]
+    return _PackedTris(a, positions[tris[:, 1]] - a, positions[tris[:, 2]] - a, owners)
+
+
 class RebuildCache:
     """Per-face memos shared across one push's plane rebuilds.
 
@@ -169,10 +177,14 @@ class RebuildCache:
         if tok == self.token and k == key and val is not None:
             return val
         comp = self.components(mesh) if want is not None else None
-        val = _pack_lists([
-            self.triangles(f) for f in mesh.faces
-            if not f.interior and f not in shadowed
-            and (want is None or comp.get(f.key) in want)])
+        from core._native import qt_hypot
+        from core.store_mesh import StoreMesh
+        selected = (f for f in mesh.faces if f not in shadowed
+                    and (want is None or comp.get(f.key) in want))
+        if isinstance(mesh, StoreMesh) and qt_hypot():
+            val = _snapshot_triangles(mesh, [f.key for f in selected])
+        else:
+            val = _pack_lists([self.triangles(f) for f in selected if not f.interior])
         self._packed = (self.token, key, val)
         return val
 
@@ -416,11 +428,19 @@ def rebuild_plane(mesh, origin: QVector3D, normal: QVector3D,
     def to3d(xy):
         return origin + u * xy[0] + v * xy[1]
 
-    segs = [
-        (e.a, e.b)
-        for e in scope_edges
-        if _on_plane(e.a, origin, normal) and _on_plane(e.b, origin, normal)
-    ]
+    from core._native import qt_hypot
+    from core.store_mesh import EdgeView, StoreMesh
+    native = isinstance(mesh, StoreMesh) and qt_hypot()
+    if native:
+        rows = mesh._store.snapshot().cap_segments(
+            origin.toTuple(), normal.toTuple(), _ON_PLANE, qt_hypot(),
+            None if scope is None else [e.key for e in scope_edges])
+        plane_edges = [EdgeView(mesh, k) for k, _ in rows]
+        segs = [(QVector3D(*a), QVector3D(*b)) for _, (a, b) in rows]
+    else:
+        plane_edges = [e for e in scope_edges if _on_plane(e.a, origin, normal)
+                       and _on_plane(e.b, origin, normal)]
+        segs = [(e.a, e.b) for e in plane_edges]
     if len(segs) < 3:
         return None
 
@@ -489,7 +509,10 @@ def rebuild_plane(mesh, origin: QVector3D, normal: QVector3D,
     # cannot change the verdict — while its *unmarked* interior partitions
     # could, by adding a lone third crossing. A single-component mesh gets the
     # whole mesh, so ordinary drawn geometry is unaffected.
-    if cache is None:
+    if cache is None and native:
+        keys = [f.key for f in mesh.faces if f not in shadowed] if shadowed else None
+        packed = _snapshot_triangles(mesh, keys)
+    elif cache is None:
         packed = _pack_lists([t for f, t in _face_triangles(mesh).items()
                               if not f.interior and f not in shadowed])
     else:
@@ -655,9 +678,7 @@ def rebuild_plane(mesh, origin: QVector3D, normal: QVector3D,
         return any(a != attrs[0] for a in attrs[1:])
 
     keep_segs: list = []
-    for e in scope_edges:
-        if not (_on_plane(e.a, origin, normal) and _on_plane(e.b, origin, normal)):
-            continue
+    for e in plane_edges:
         if any(abs(QVector3D.dotProduct(_fnormal(f), normal)) < 0.999
                for f in e.faces):
             keep_segs.append((to2d(e.a), to2d(e.b)))
@@ -992,3 +1013,4 @@ def seam_planes(mesh, new_faces) -> list:
                         elif key not in seen:
                             seen[key] = (False, origin, cn)
     return [(o, n) for _a, o, n in seen.values()]
+

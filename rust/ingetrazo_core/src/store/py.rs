@@ -1346,6 +1346,23 @@ fn reader(snap: &Snapshot) -> Store {
 
 #[pymethods]
 impl PyStoreSnapshot {
+    #[pyo3(signature = (origin, normal, tolerance, hypot, keys=None))]
+    fn cap_segments(&self, py: Python<'_>, origin: [f32;3], normal: [f32;3], tolerance: f64,
+                    hypot: &str, keys: Option<Vec<u128>>) -> PyResult<Vec<(u128, [[f64;3];2])>> {
+        use crate::facegeom::V3;
+        let store = reader(&self.inner);
+        let h = crate::hypot_of(hypot)?;
+        let edges = match keys {
+            Some(keys) => keys.into_iter().map(|k| slot_of(&store,Kind::Edge,k)).collect::<PyResult<_>>()?,
+            None => store.live_slots(Kind::Edge),
+        };
+        let o = V3(origin[0], origin[1], origin[2]);
+        let n = V3(normal[0], normal[1], normal[2]);
+        Ok(py.detach(|| edges.into_iter().filter(|&e| store.edge_on_cap_plane(e,o,n,tolerance,h))
+            .map(|e| (store.key(Kind::Edge,e), store.state.ends.get(e as usize)
+                .map(|v| *store.state.vpos.get(v as usize)))).collect()))
+    }
+
     fn edge_defects(&self, py: Python<'_>) -> [Vec<u128>;3] {
         let store = reader(&self.inner);
         py.detach(|| store.edge_defects())

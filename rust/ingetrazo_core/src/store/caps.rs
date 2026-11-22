@@ -30,6 +30,13 @@ impl Store {
         Ok(keys)
     }
 
+    pub fn edge_on_cap_plane(&self, edge: u32, o: V3, n: V3, tol: f64, h: Hypot) -> bool {
+        self.state.ends.get(edge as usize).iter().all(|&v| {
+            let [x, y, z] = *self.state.vpos.get(v as usize);
+            (V3(x as f32, y as f32, z as f32).sub(o).dot(n, h).abs() as f64) < tol
+        })
+    }
+
     pub fn prune_plane_debris(
         &mut self,
         origin: [f32; 3],
@@ -41,12 +48,7 @@ impl Store {
         let o = V3(origin[0], origin[1], origin[2]);
         let n = V3(normal[0], normal[1], normal[2]);
         for e in self.live_slots(Kind::Edge) {
-            if self.edge_faces(e).is_empty()
-                && self.state.ends.get(e as usize).iter().all(|&v| {
-                    let [x, y, z] = *self.state.vpos.get(v as usize);
-                    (V3(x as f32, y as f32, z as f32).sub(o).dot(n, h).abs() as f64) < tol
-                })
-            {
+            if self.edge_faces(e).is_empty() && self.edge_on_cap_plane(e, o, n, tol, h) {
                 self.remove_edge(e, ch);
             }
         }
