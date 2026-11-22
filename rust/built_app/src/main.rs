@@ -348,6 +348,17 @@ impl App {
                 }
             }
             Step::Menu(cmd) => self.command(event_loop, &cmd),
+            Step::Preedit(text) => {
+                if let Some(h) = &self.host {
+                    let n = text.chars().count();
+                    h.call("preedit", (text, n));
+                }
+            }
+            Step::Commit(text) => {
+                if let Some(h) = &self.host {
+                    h.call("text", (text,));
+                }
+            }
             Step::Wheel(x, y, dy, phase) => {
                 if let Some(h) = &self.host {
                     h.call("wheel", (x, y, 0.0, dy, 0.0, dy * 2.0, phase.as_str(), 0u32, 0u32, true));

@@ -12,6 +12,8 @@
 //! drag 400 300 600 300 [middle] [steps] [mods]   # press, moves, release
 //! key escape [mods]             # a key press and release ("l", "enter", "f3")
 //! type 2.5                      # characters as key presses, then nothing else
+//! ime ka                        # an input method composing (preedit), then:
+//! commit か                     # what it commits
 //! tool pushpull                 # a menu command (tool:<key>, undo, view:iso...)
 //! wheel 400 300 -40 [phase]     # pixel delta (trackpad slide)
 //! notch 400 300 1               # mouse-wheel notches
@@ -31,6 +33,9 @@ pub enum Step {
     Drag { from: (f64, f64), to: (f64, f64), button: u32, steps: u32, mods: u32 },
     Key(String, u32),
     Type(String),
+    /// An input method's composition (as winit's Ime::Preedit), then its commit.
+    Preedit(String),
+    Commit(String),
     Menu(String),
     Wheel(f64, f64, f64, String),
     Notch(f64, f64, f64),
@@ -107,6 +112,8 @@ pub fn parse(text: &str) -> Result<Vec<Step>, String> {
                 w.get(2).map(|m| crate::keys::qt_modifiers_by_name(m)).unwrap_or(0),
             ),
             "type" => Step::Type(rest(1)),
+            "ime" => Step::Preedit(rest(1)),
+            "commit" => Step::Commit(rest(1)),
             "tool" => Step::Menu(format!("tool:{}", rest(1))),
             "menu" => Step::Menu(rest(1)),
             "wheel" => Step::Wheel(

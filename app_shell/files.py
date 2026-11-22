@@ -836,6 +836,8 @@ def open_in_classic(win, path=None, why: str | None = None) -> bool:
 #: the classic app and the native one paste each other's copies.
 PASTEBOARD_TYPE = "com.trolltech.anymime.application--x-ingetrazo-clipboard"
 _OWN_COUNT = [None]
+#: The clipboard dict that write was made from (the project that copied).
+_OWN_CLIP = [None]
 
 
 def _publish(win) -> None:
@@ -851,6 +853,7 @@ def _publish(win) -> None:
         return
     if native.pasteboard_write([(PASTEBOARD_TYPE, data)]):
         _OWN_COUNT[0] = native.pasteboard_types()[1]
+        _OWN_CLIP[0] = clip
 
 
 def clipboard_copy(win) -> None:
@@ -875,19 +878,28 @@ def sync_foreign_clipboard(win) -> None:
     from app_shell import native
     from formats import clip as clip_transfer
     types, count = native.pasteboard_types()
-    if count == _OWN_COUNT[0] or PASTEBOARD_TYPE not in types:
+    if PASTEBOARD_TYPE not in types:
         return
+    vp = win.viewport
+    if count == _OWN_COUNT[0] and _OWN_CLIP[0] is not None and (
+            vp.clipboard is _OWN_CLIP[0]
+            or getattr(vp, "_clip_adopted_from", None) is _OWN_CLIP[0]):
+        return                          # this project's copy, or adopted already
     data = native.pasteboard_read(PASTEBOARD_TYPE)
     other = clip_transfer.decode(data) if data else None
     if other is None:
         return
-    vp = win.viewport
     old = vp.clipboard
     drop = getattr(vp, "_drop_clip_protos", None)
     if old and callable(drop):
         drop(old)
     vp.clipboard = other
-    _OWN_COUNT[0] = count
+    if count == _OWN_COUNT[0]:
+        vp._clip_adopted_from = _OWN_CLIP[0]   # another project's copy here
+    else:
+        # Another app's copy: from now on it is the one to compare with.
+        _OWN_COUNT[0], _OWN_CLIP[0] = count, other
+        vp._clip_adopted_from = None
 
 
 def _field_has_focus(win) -> bool:

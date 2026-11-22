@@ -257,15 +257,25 @@ fn post_key(view: usize, key_code: u16, chars: &str, command: bool) -> bool {
 
 // ---- the pasteboard -----------------------------------------------------------
 
+/// The general pasteboard, or the private one `BUILT_PASTEBOARD` names
+/// (scripted runs and tests: the user's clipboard stays untouched).
+#[cfg(target_os = "macos")]
+fn board() -> objc2::rc::Retained<objc2_app_kit::NSPasteboard> {
+    use objc2_app_kit::NSPasteboard;
+    match std::env::var("BUILT_PASTEBOARD") {
+        Ok(name) if !name.is_empty() => NSPasteboard::pasteboardWithName(&objc2_foundation::NSString::from_str(&name)),
+        _ => NSPasteboard::generalPasteboard(),
+    }
+}
+
 /// Replace the general pasteboard's contents: (type, bytes) pairs; a
 /// `public.utf8-plain-text` entry is written as a string.
 #[pyfunction]
 fn pasteboard_write(items: Vec<(String, Vec<u8>)>) -> bool {
     #[cfg(target_os = "macos")]
     {
-        use objc2_app_kit::NSPasteboard;
         use objc2_foundation::{NSArray, NSData, NSString};
-        let pb = NSPasteboard::generalPasteboard();
+        let pb = board();
         let types: Vec<objc2::rc::Retained<NSString>> = items.iter().map(|(t, _)| NSString::from_str(t)).collect();
         let refs: Vec<&NSString> = types.iter().map(|t| &**t).collect();
         let array = NSArray::from_slice(&refs);
@@ -292,9 +302,8 @@ fn pasteboard_write(items: Vec<(String, Vec<u8>)>) -> bool {
 fn pasteboard_read(kind: &str) -> Option<Vec<u8>> {
     #[cfg(target_os = "macos")]
     {
-        use objc2_app_kit::NSPasteboard;
         use objc2_foundation::NSString;
-        let pb = NSPasteboard::generalPasteboard();
+        let pb = board();
         let t = NSString::from_str(kind);
         if kind == "public.utf8-plain-text" {
             return pb.stringForType(&t).map(|s| s.to_string().into_bytes());
@@ -313,8 +322,7 @@ fn pasteboard_read(kind: &str) -> Option<Vec<u8>> {
 fn pasteboard_types() -> (Vec<String>, isize) {
     #[cfg(target_os = "macos")]
     {
-        use objc2_app_kit::NSPasteboard;
-        let pb = NSPasteboard::generalPasteboard();
+        let pb = board();
         let types = pb.types().map(|a| a.iter().map(|s| s.to_string()).collect()).unwrap_or_default();
         (types, pb.changeCount())
     }

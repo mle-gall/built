@@ -2056,6 +2056,10 @@ impl Renderer {
         self.ui.as_mut().is_some_and(|ui| ui.key(name, pressed, modifiers))
     }
     fn ui_text(&mut self, text: String) -> bool { self.ui.as_mut().is_some_and(|ui| ui.text(text)) }
+    /// IME composition for the chrome's focused field (enabled, preedit, commit, disabled).
+    fn ui_ime(&mut self, kind: &str, text: String) -> bool { self.ui.as_mut().is_some_and(|ui| ui.ime(kind, text)) }
+    /// The focused field's text cursor (points), for the candidate window.
+    fn ui_ime_rect(&self) -> Option<(f32, f32, f32, f32)> { self.ui.as_ref().and_then(|ui| ui.ime_rect()) }
     fn ui_area_rect(&self, name: &str) -> Option<(f32, f32, f32, f32)> { self.ui.as_ref().and_then(|ui| ui.area_rect(name)) }
     fn ui_set_options(&mut self, options: Vec<(String, String, String, u8)>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_options(options); }

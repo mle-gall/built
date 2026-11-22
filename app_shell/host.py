@@ -564,7 +564,17 @@ class Host:
             "borrowed": len(BORROWED),
             "blocked_widgets": list(guard.blocked) if guard is not None else [],
             "not_here": list(self.not_here_log),
+            "custom_cursors": len(self._custom_cursors),
+            "preedit": self._preedit,
+            "ime_area": self._ime_area,
+            "clipboard": bool(getattr(self.viewport, "clipboard", None)),
+            "pasteboard": self._pasteboard_types(),
         }
+
+    @staticmethod
+    def _pasteboard_types():
+        from app_shell import native
+        return [t for t in native.pasteboard_types()[0] if "ingetrazo" in t]
 
     def missing(self):
         """Qt widget/window API the borrowed code asked for and the shell

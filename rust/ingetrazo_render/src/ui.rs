@@ -190,6 +190,9 @@ pub struct Ui {
     /// A press that started on the model: the chrome ignores its drag.
     outside_press: bool,
     repaint_ms: Option<f64>,
+    /// Where the focused field wants the input method's candidate window
+    /// (egui's IME output, points): (x, y, w, h) of the text cursor.
+    ime_rect: Option<(f32, f32, f32, f32)>,
     pub frame_ms: f64,
     /// Interactive areas as last laid out (points).
     hit: Vec<Rect>,
@@ -410,6 +413,7 @@ impl Ui {
             captured: false,
             outside_press: false,
             repaint_ms: None,
+            ime_rect: None,
             frame_ms: 0.,
             hit: Vec::new(),
             icons: Default::default(),
@@ -694,6 +698,23 @@ impl Ui {
         }
         true
     }
+    /// An input method's composition for the focused field: kind is
+    /// enabled, preedit (the text being composed, drawn underlined in
+    /// place by egui), commit or disabled.
+    pub fn ime(&mut self, kind: &str, text: String) -> bool {
+        if !self.ctx.wants_keyboard_input() {
+            return false;
+        }
+        let event = match kind {
+            "enabled" => egui::ImeEvent::Enabled,
+            "preedit" => egui::ImeEvent::Preedit(text),
+            "commit" => egui::ImeEvent::Commit(text),
+            _ => egui::ImeEvent::Disabled,
+        };
+        self.events.push(egui::Event::Ime(event));
+        true
+    }
+    pub fn ime_rect(&self) -> Option<(f32, f32, f32, f32)> { self.ime_rect }
     pub fn text(&mut self, text: String) -> bool {
         if !self.ctx.wants_keyboard_input() {
             return false;
@@ -2305,6 +2326,10 @@ impl Ui {
             .map(|v| v.repaint_delay)
             .filter(|d| d.as_secs() < 60)
             .map(|d| d.as_secs_f64() * 1000.);
+        self.ime_rect = out.platform_output.ime.map(|ime| {
+            let r = ime.cursor_rect;
+            (r.min.x, r.min.y, r.width().max(1.0), r.height().max(1.0))
+        });
         let jobs = ctx.tessellate(out.shapes, out.pixels_per_point);
         for (id, delta) in &out.textures_delta.set {
             self.painter.update_texture(device, queue, *id, delta);
