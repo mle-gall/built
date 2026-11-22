@@ -34,6 +34,8 @@ later refinement). Both joins are guarded, so PyPI 0.2.0 still imports (uncolour
 from __future__ import annotations
 
 import copy
+import gc
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional
 
@@ -1350,6 +1352,11 @@ def _is_empty_model(model, skp_path, legacy_era: bool) -> bool:
 
 
 def _adapt(model, name: str, skp_path=None):
+    with _paused_gc():
+        return _adapt_inner(model, name, skp_path)
+
+
+def _adapt_inner(model, name: str, skp_path=None):
     """An ``SkpModel`` → a payload ``{"backend", "groups", "protos"}`` or
     ``None`` when it yields no geometry (the seam reports it as unreadable).
 
@@ -1919,10 +1926,28 @@ def parse(path, progress=None):
     openskp_compat.reset_group_definitions()
     if progress is not None:
         progress(0.1, "Parsing .skp (OpenSKP)…")
-    model = openskp.SkpFile.open(str(path)).parse()
-    openskp_compat.resolve_face_layers(model)   # tag ids → names (#700)
+    model = _parse_raw(openskp, openskp_compat, path)
     openskp_compat.resolve_vff_annotations(model)   # dims/texts (#1226)
     openskp_compat.attach_pbr(model)    # 2025+ PBR maps and factors
     if progress is not None:
         progress(0.6, "Building geometry…")
     return _adapt(model, Path(path).stem, skp_path=path)
+
+
+@contextmanager
+def _paused_gc():
+    """Defer cyclic scans of the growing import graph during construction."""
+    enabled = gc.isenabled()
+    gc.disable()
+    try:
+        yield
+    finally:
+        if enabled:
+            gc.enable()
+
+
+def _parse_raw(openskp, openskp_compat, path):
+    with _paused_gc():
+        model = openskp.SkpFile.open(str(path)).parse()
+        openskp_compat.resolve_face_layers(model)   # tag ids → names (#700)
+        return model
