@@ -93,6 +93,16 @@ class NativeTools(MeshToolAccess):
             if self.mode in ('tape', 'move') and self.start_point is not None and getattr(tool, 'start_point', None) is None:
                 self.cancel()
             return self.mode
+        if (tool is None and self.tool is not None
+                and getattr(source, 'suspended_tool', None) is self.tool):
+            return self._suspend()
+        parked = self.__dict__.pop('_parked', None)
+        if parked is not None:
+            if tool is parked['tool']:
+                return self._resume(parked)
+            # Another tool after the camera mode: the parked one is
+            # cancelled here as any switch cancels it.
+            self.__dict__.update(parked)
         preview = getattr(self.view, '_texture_preview', None)
         if preview is not None:
             preview.restore()
@@ -113,6 +123,36 @@ class NativeTools(MeshToolAccess):
             self._apply_tool_cursor()
         if self.mode == 'inert':
             source.flash_status('not yet available on the Metal renderer')
+        return self.mode
+
+    #: What a camera mode parks of the tool it suspends (GL's
+    #: ``Viewport.suspended_tool``) and gives back when that tool resumes:
+    #: the first point, a Move's preview rows, the typed value.
+    _PARKED = ('tool', 'mode', 'start_point', 'original', 'ids', 'value_buffer')
+
+    def _suspend(self):
+        """Orbit / Pan / Zoom took the view from the tool: park it as it is.
+        No ``on_cancel``, and a Move's rows stay where the preview put them
+        (the preview mesh too), so the model shows what was being done
+        while the camera turns."""
+        self._parked = {name: getattr(self, name) for name in self._PARKED}
+        self.tool = None
+        self.mode = 'select'
+        self.start_point = None
+        self.original = None
+        self.value_buffer = ""
+        self._mesh_hover = None
+        self.view.overlay_primitives = []
+        if hasattr(self.view, 'setCursor'):
+            self._apply_tool_cursor()
+        return self.mode
+
+    def _resume(self, parked):
+        self.__dict__.update(parked)
+        if hasattr(self.tool, '_viewport'):
+            self.tool._viewport = self
+        if hasattr(self.view, 'setCursor'):
+            self._apply_tool_cursor()
         return self.mode
 
     def claim(self):

@@ -19078,7 +19078,20 @@ class Viewport(QOpenGLWidget):
         return best_g
 
     # ---- Tool management ----------------------------------------------------
+    #: The tool a camera mode (Orbit, Pan, Zoom) took the view from, parked
+    #: with its state: picking it again resumes it (the modeller's suspend /
+    #: resume), picking any other tool resets it.
+    suspended_tool: Optional[Tool] = None
+
     def set_active_tool(self, tool: Optional[Tool]) -> None:
+        suspended = self.suspended_tool
+        if suspended is not None:
+            self.suspended_tool = None
+            if tool is suspended:
+                self._resume_tool(tool)
+                return
+            # Any other tool: the parked one ends as a switch ends it.
+            suspended.on_deactivate(self)
         if self.active_tool is tool and self.nav_mode is None:
             # Picking the tool you already hold starts it over, the classic
             # behaviour: the first point is released, the locks let go. Issue
@@ -19117,6 +19130,24 @@ class Viewport(QOpenGLWidget):
         if tool is not None:
             tool.on_activate(self)
         self._apply_tool_cursor()
+        self.measurementChanged.emit(self._measurement_text())
+        self.update()
+
+    def _resume_tool(self, tool: Tool) -> None:
+        """Back from a camera mode to the tool it suspended, as it was: the
+        first point placed, the rubber band, the locks. Only the camera
+        drag ends."""
+        self.nav_mode = None
+        self._last_pos = None
+        self._orbit_pivot = None
+        self._pan_mode = False
+        self._look_drag = None
+        self.active_tool = tool
+        resume = getattr(tool, "on_resume", None)
+        if callable(resume):
+            resume(self)
+        self._apply_tool_cursor()
+        self._refresh_snap()
         self.measurementChanged.emit(self._measurement_text())
         self.update()
 
@@ -19781,11 +19812,23 @@ class Viewport(QOpenGLWidget):
 
         For trackpad users with no middle mouse button: while a nav mode is
         active the left-drag drives the camera (orbit or pan). The active
-        drawing tool is suspended; return to drawing by picking any tool or
-        pressing Space (Select). ``None`` clears the nav mode.
+        drawing tool is suspended with its state (``suspended_tool``):
+        picking it again resumes it where it was, a line's first point
+        still placed; picking any other tool, or Space (Select), resets it.
+        ``None`` clears the nav mode and leaves no tool, as before: the
+        suspended one is reset.
         """
+        if mode is None and self.suspended_tool is not None:
+            suspended, self.suspended_tool = self.suspended_tool, None
+            suspended.on_deactivate(self)
         if self.active_tool is not None:
-            self.active_tool.on_deactivate(self)
+            if mode is not None:
+                self.suspended_tool = self.active_tool
+                suspend = getattr(self.active_tool, "on_suspend", None)
+                if callable(suspend):
+                    suspend(self)
+            else:
+                self.active_tool.on_deactivate(self)
             self.active_tool = None
         self._hover_entity = None
         self.last_snap = None

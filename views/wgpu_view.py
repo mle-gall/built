@@ -1199,7 +1199,11 @@ class WgpuView(QWidget):
             if self.source_viewport is not None:
                 self.source_viewport.notify_scene_changed()
             self.sync_selection()
-        if self.tools.mode == 'mesh':
+        if (self.tools.mode == 'mesh' and event.button() == Qt.LeftButton
+                and not self._drag_nav):
+            # GL's: a left release only. A wheel-button orbit's release
+            # committed a Push/Pull in progress (a release far from its
+            # press is a stroke) and set Rotate's axis along the orbit.
             self.tools.tool.on_release(self.tools)
             self.tools.update()
             self.overlay_primitives = []

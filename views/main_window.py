@@ -4546,6 +4546,9 @@ class MainWindow(WorksessionMixin, QMainWindow):
                 tr("{name} is not available here.", name=tr(self._tools[key].name)), 3000)
             return
         tool = self._tools[key]
+        # Back from Orbit / Pan / Zoom to the tool they suspended: it goes
+        # on where it was (Viewport.suspended_tool), not from the hover.
+        resuming = getattr(self.viewport, "suspended_tool", None) is tool
         self.viewport.set_active_tool(tool)
         if metal:
             display = self._doc.stand_in
@@ -4555,7 +4558,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         grid = self._doc.view_grid if self.__dict__.get("_doc") else None
         if grid is not None and key != "select":
             grid.cross.hide()
-        if key == "tape" and not metal:
+        if key == "tape" and not metal and not resuming:
             tool.start_from_hover(self.viewport)
         from views.wgpu_tools import TOOL_DISPATCH
         if metal and type(tool).__name__ not in TOOL_DISPATCH:
