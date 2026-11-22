@@ -205,6 +205,13 @@ impl RoundPlan {
                 }
             }
         }
+        // A section can weld onto a previously isolated vertex. Its position
+        // survives, but the new disk incidence belongs in the change feed.
+        for &key in &ch.created[1] {
+            if let Some(e) = s.slot(Kind::Edge, key) {
+                ch.modified[0].extend(ends(s, e).map(|v| s.key(Kind::Vertex, v)));
+            }
+        }
         // Removing incident faces marked the subsequently removed edges modified.
         ch.modified[1].retain(|&k| s.slot(Kind::Edge, k).is_some());
         Ok(())

@@ -215,6 +215,7 @@ def test_tool_uses_native_preview_and_one_snapshot_command(vertices, monkeypatch
 @pytest.mark.parametrize("vertices", [False, True])
 def test_keyed_command(vertices):
     sm = store_copy(box())
+    before = sm._store.snapshot()
     if vertices:
         key = sm.vertices[0].key
         change = sm.bevel_vertices([key], .1)
@@ -224,7 +225,9 @@ def test_keyed_command(vertices):
         change = sm.fillet_edges([key], .1)
         assert not sm._store.is_live(key)
     assert change.created["face"] and change.removed["face"]
+    net = sm._store.snapshot().changes_since(before, [])
     for kind in ("vertex", "edge", "face"):
+        assert set(change.modified[kind]) == set(net.modified[kind])
         removed = set(change.removed[kind])
         created = set(change.created[kind])
         modified = set(change.modified[kind])
@@ -334,3 +337,13 @@ def test_nonplanar_apex_refuses_a_flat_cap():
         messages.append(plan_vertex_bevel(m, [v], .15, 1))
         assert m.capture_state() == before
     assert messages[0] == messages[1] and "not flat enough" in messages[0]
+
+
+def test_welding_to_a_live_vertex_reports_its_new_incidence():
+    sm = store_copy(box())
+    cut = sm.vertex(V(.125, 0, 0))
+    snapshot = sm._store.snapshot()
+    change = sm.bevel_vertices([sm.vertex_at(V()).key], .125, 1)
+    assert cut.key in change.modified["vertex"]
+    net = sm._store.snapshot().changes_since(snapshot, [])
+    assert set(change.modified["vertex"]) == set(net.modified["vertex"])
