@@ -17,6 +17,7 @@ mod edges;
 mod faces;
 mod xray;
 mod ao;
+mod resident_readback;
 use numpy::PyReadonlyArray1;
 use pyo3::{exceptions::PyValueError, prelude::*};
 use raw_window_handle::{
@@ -56,7 +57,7 @@ struct Scene {
     edge_records: wgpu::Buffer,
     viewpoints: wgpu::Buffer,
     counters: wgpu::Buffer,
-    vertex_data: Vec<u8>,
+    vertex_bytes: usize,
     index_data: Vec<u8>,
     vertex: wgpu::Buffer,
     index: wgpu::Buffer,
@@ -892,7 +893,7 @@ impl Renderer {
             survivors,
             template_data: cmd.to_vec(),
             capacity,
-            vertex_data: v.to_vec(),
+            vertex_bytes: v.len(),
             index_data: ix.to_vec(),
             flags: instances
                 .chunks_exact(80)
@@ -941,7 +942,7 @@ impl Renderer {
         let (edge, expanded_ix, mut commands) = edges::expand(v, ix, bytemuck::cast_slice(&source), 1).map_err(PyValueError::new_err)?;
         let (face, indices, shifts) = faces::compact(v, &expanded_ix, &mut commands, 1);
         let edge_base = s.edge_data.len()/48;
-        let vertex_base = s.vertex_data.len()/28;
+        let vertex_base = s.vertex_bytes/28;
         let index_base = s.index_data.len()/4;
         if (s.edge_data.len()+edge.len()).next_power_of_two() > self.device.limits().max_storage_buffer_binding_size as usize {
             return Err(PyValueError::new_err("edge capacity exceeds storage binding limit"));
@@ -966,16 +967,16 @@ impl Renderer {
         s.face_ranges = face_ranges(&s.material_data, s.p);
         s.material_shifts[id] = vertex_base as i64 + shifts[0];
         s.prototype_data[id*32..(id+1)*32].copy_from_slice(bounds);
-        s.vertex_data.extend_from_slice(&face);
+        s.vertex_bytes += face.len();
         s.index_data.extend_from_slice(&indices);
         s.edge_data.extend_from_slice(&edge);
-        for (target, data, usage, offset, addition) in [
-            (&mut s.vertex, &s.vertex_data, wgpu::BufferUsages::VERTEX, vertex_base*28, face.as_slice()),
-            (&mut s.index, &s.index_data, wgpu::BufferUsages::INDEX, index_base*4, indices.as_slice()),
-            (&mut s.edge_records, &s.edge_data, wgpu::BufferUsages::STORAGE, edge_base*48, edge.as_slice())] {
-            if data.len() as u64 > target.size() {
+        for (target, length, usage, offset, addition) in [
+            (&mut s.vertex, s.vertex_bytes, wgpu::BufferUsages::VERTEX, vertex_base*28, face.as_slice()),
+            (&mut s.index, s.index_data.len(), wgpu::BufferUsages::INDEX, index_base*4, indices.as_slice()),
+            (&mut s.edge_records, s.edge_data.len(), wgpu::BufferUsages::STORAGE, edge_base*48, edge.as_slice())] {
+            if length as u64 > target.size() {
                 *target = grown_buffer(&self.device, &self.queue, target, offset,
-                    grown_capacity(target.size() as usize, data.len()), usage);
+                    grown_capacity(target.size() as usize, length), usage);
             }
             if !addition.is_empty() { self.queue.write_buffer(target, offset as u64, addition); }
         }
@@ -1326,8 +1327,12 @@ impl Renderer {
         hidden_commands: PyReadonlyArray1<'_, u8>, hidden_edge_commands: PyReadonlyArray1<'_, u8>, object_rows: Vec<usize>) -> PyResult<()> {
         let s = self.scene.as_ref().ok_or_else(|| PyValueError::new_err("set_scene first"))?;
         let (vertices,indices,faces,edges)=(vertices.as_slice()?,indices.as_slice()?,hidden_commands.as_slice()?,hidden_edge_commands.as_slice()?);
-        let (triangles,lines)=ghost_mesh(s,vertices,indices,faces,edges,&object_rows,false).map_err(PyValueError::new_err)?;
-        let (objects,object_edges)=ghost_mesh(s,vertices,indices,faces,edges,&object_rows,true).map_err(PyValueError::new_err)?;
+        // Only hidden-object ghosts need compact resident faces. Read them on
+        // demand instead of retaining a second full CPU vertex allocation.
+        let resident = resident_readback::read(&self.device, &self.queue, s, &object_rows)
+            .map_err(PyValueError::new_err)?;
+        let (triangles,lines)=ghost_mesh(s,&resident,vertices,indices,faces,edges,&object_rows,false).map_err(PyValueError::new_err)?;
+        let (objects,object_edges)=ghost_mesh(s,&resident,vertices,indices,faces,edges,&object_rows,true).map_err(PyValueError::new_err)?;
         self.ghost_geometry.upload(&self.device,&triangles,&lines).map_err(PyValueError::new_err)?;
         self.ghost_objects.upload(&self.device,&objects,&object_edges).map_err(PyValueError::new_err)?;
         Ok(())
@@ -2541,7 +2546,7 @@ fn suppressed_indices(source: &[u8], commands: &[u8], prototypes: usize, ranges:
     use super::Command;
 }
 
-fn ghost_mesh(s:&Scene, vertices:&[u8], indices:&[u8], faces:&[u8], edges:&[u8], objects:&[usize], object_pass:bool) -> Result<(Vec<u8>,Vec<u8>), &'static str> {
+fn ghost_mesh(s:&Scene, resident:&resident_readback::Readback, vertices:&[u8], indices:&[u8], faces:&[u8], edges:&[u8], objects:&[usize], object_pass:bool) -> Result<(Vec<u8>,Vec<u8>), &'static str> {
     if vertices.len()%28!=0 || indices.len()%4!=0 || faces.len()!=s.p as usize*20 || edges.len()!=faces.len() || objects.iter().any(|&i|i>=s.n as usize) {return Err("invalid hidden geometry layout");}
     let objects:std::collections::HashSet<_>=objects.iter().copied().collect();
     let mut triangles=Vec::new();let mut lines=Vec::new();
@@ -2551,21 +2556,24 @@ fn ghost_mesh(s:&Scene, vertices:&[u8], indices:&[u8], faces:&[u8], edges:&[u8],
         let prototype=u32::from_le_bytes(row[64..68].try_into().unwrap()) as usize;
         let world=glam::Mat4::from_cols_array(&bytemuck::pod_read_unaligned::<[f32;16]>(&row[..64]));
         let normal=glam::Mat3::from_mat4(world).inverse().transpose();
-        let emit=|v:&[u8],ix:&[u8],commands:&[u8],out:&mut Vec<u8>,arity:u32| -> Result<(), &'static str> {
+        let emit=|v:Option<&[u8]>,ix:&[u8],commands:&[u8],out:&mut Vec<u8>,arity:u32| -> Result<(), &'static str> {
             let c:Command=bytemuck::pod_read_unaligned(&commands[prototype*20..prototype*20+20]);
             if c.count%arity!=0 || (u64::from(c.first)+u64::from(c.count))*4>ix.len() as u64 {return Err("invalid hidden command range");}
             for i in ix[c.first as usize*4..(c.first+c.count) as usize*4].chunks_exact(4) {
                 let index=i64::from(u32::from_le_bytes(i.try_into().unwrap()))+i64::from(c.base);
-                if index<0 || index as usize>=v.len()/28 {return Err("hidden vertex out of range");}
-                let source=&v[index as usize*28..index as usize*28+28];
+                let index = usize::try_from(index).map_err(|_| "negative hidden vertex")?;
+                let source = match v {
+                    Some(bytes) => bytes.get(index*28..index*28+28),
+                    None => resident.vertex(index),
+                }.ok_or("hidden vertex out of range")?;
                 let pos=world.transform_point3(glam::Vec3::from_array(bytemuck::pod_read_unaligned(&source[..12])));
                 let n=(normal*glam::Vec3::from_array(bytemuck::pod_read_unaligned(&source[12..24]))).normalize_or_zero();
                 out.extend_from_slice(bytemuck::cast_slice(&pos.to_array()));out.extend_from_slice(bytemuck::cast_slice(&n.to_array()));out.extend_from_slice(&source[24..28]);
             } Ok(())
         };
-        emit(vertices,indices,faces,&mut triangles,3)?;emit(vertices,indices,edges,&mut lines,2)?;
+        emit(Some(vertices),indices,faces,&mut triangles,3)?;emit(Some(vertices),indices,edges,&mut lines,2)?;
         if object_pass {
-            emit(&s.vertex_data,&s.index_data,&s.template_data,&mut triangles,3)?;
+            emit(None,&s.index_data,&s.template_data,&mut triangles,3)?;
             let c:[u32;5]=bytemuck::pod_read_unaligned(&s.template_data[(s.p as usize+prototype)*20..(s.p as usize+prototype+1)*20]);
             for edge in s.edge_data[(c[2]/6) as usize*48..((c[2]+c[0])/6) as usize*48].chunks_exact(48) {
                 for endpoint in [&edge[..12],&edge[12..24]] {

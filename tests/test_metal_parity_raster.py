@@ -369,3 +369,22 @@ def test_pbr_shading_changes_pixels_and_keeps_picks(native, tmp_path):
         np.testing.assert_array_equal(capture(native), after)
     assert sizes[-1] > sizes[0]
     assert any(a == b for a, b in zip(sizes, sizes[1:]))
+
+def test_hidden_object_readback_survives_gpu_growth(native):
+    """GPU-owned faces must still supply identical ghosts after an append."""
+    v,i,b,c,r=synthetic_pack(255)
+    r['info'][:,2]=1
+    native.set_scene(tuple(x.view(np.uint8).ravel() for x in (v,i,b,c)),r.view(np.uint8).ravel())
+    empty=c[:1].copy(); empty['count']=0
+    def ghosts():
+        native.set_hidden_geometry(v.view(np.uint8).ravel(),i.view(np.uint8),
+                                   empty.view(np.uint8),empty.view(np.uint8),[0])
+    native.set_style(dict(show_hidden_objects=True,sky=False))
+    ghosts()
+    before=capture(native)
+    native.set_style(dict(show_hidden_objects=False,sky=False))
+    assert np.any(before != capture(native))
+    native.replace_prototype(0,v.view(np.uint8).ravel(),i.view(np.uint8),b.view(np.uint8).ravel(),12)
+    ghosts()
+    native.set_style(dict(show_hidden_objects=True,sky=False))
+    np.testing.assert_array_equal(before,capture(native))
