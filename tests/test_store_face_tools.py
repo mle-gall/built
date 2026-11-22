@@ -9,7 +9,7 @@ from PySide6.QtGui import QVector3D as V
 from core import store_mesh as S
 from core.history import History
 from core.intersect import WITH_CONTEXT, segments_for
-from core.intersect import build_intersection_edit
+from core.intersect import build_intersect_faces
 from core.mesh import _KEY_NAMESPACES
 from core.scene import Scene
 from tests.test_store_mesh import fingerprint
@@ -54,7 +54,7 @@ def history_result(scene, history, before):
 
 
 @pytest.mark.parametrize("shape,distance", [
-    ("square", .25), ("square", -.25), ("ell", .25), ("hole", .25)])
+    ("square", .25), ("square", -.25), ("ell", .25), ("hole", .25), ("hole", -.25)])
 def test_offset(monkeypatch, shape, distance):
     results = []
     for scene in scenes(monkeypatch):
@@ -79,6 +79,12 @@ def test_sweep(monkeypatch, shape):
             path = [V(4 * math.cos(i * math.pi / 6), 4 * math.sin(i * math.pi / 6), 0)
                     for i in range(12 if shape == "closed" else 5)]
         face = scene.mesh.add_face([path[0] + V(x, 0, z) for x,z in [(0,0),(1,0),(1,1),(0,1)]])
+        if shape == "arc":
+            import core.mesh
+            monkeypatch.setattr(core.mesh, "_CURVE_COUNTER", 300)
+            for p, q in zip(path, path[1:]):
+                scene.mesh.add_edge(p, q)
+            scene.mesh.tag_curve(path, closed=False)
         vp = SimpleNamespace(scene=scene, history=History(scene), set_hover=lambda *_: None,
                              update=lambda: None, flash_status=lambda *_: None)
         before = fingerprint(scene.mesh)
@@ -111,8 +117,13 @@ def test_intersect(monkeypatch, shape):
         assert len(segs) == (6 if shape == "boxes" else 4)
         hist = History(scene)
         before = fingerprint(m)
+        # Preserve the source order used by the differential query.
+        scene.selection = selected
+        count, command = build_intersect_faces(
+            scene, WITH_CONTEXT, [f.key for f in selected] if isinstance(m, S.StoreMesh) else None)
+        assert count == len(segs)
         scene.selection = set(selected)
-        hist.execute(build_intersection_edit(scene, segs))
+        hist.execute(command)
         results.append(history_result(scene, hist, before))
     if results:
         assert results[1] == results[0]
@@ -148,3 +159,40 @@ def test_transformed_group_crossings_ignore_foreign_keys(monkeypatch):
         pairs = segments_for(scene, WITH_MODEL)
         results.append([(a.toTuple(), b.toTuple()) for a, b in pairs])
     assert len(results[0]) == 6 and results[1] == results[0]
+
+
+def test_rejected_sweep_preserves_snapshot(monkeypatch):
+    from core.sweep import build_sweep_face
+
+    scene = list(scenes(monkeypatch))[-1]
+    mesh = scene.mesh
+    face = mesh.add_face([V(0, 0, 0), V(1, 0, 0), V(0, 0, 1)])
+    path = [V(0, 0, 0), V(0, 1, 0), V(0, 0, 0)]
+    before = mesh.capture_state()
+    history = History(scene)
+    history.execute(build_sweep_face(mesh, face.key, path, False))
+    assert history.last_rejected and not history.undo_stack
+    assert before == mesh.capture_state()
+
+
+def test_direct_offset_record_and_hole_refusal(monkeypatch):
+    from core.offset import build_offset_face, OffsetHoleCollision
+
+    scene = list(scenes(monkeypatch))[-1]
+    mesh = scene.mesh
+    outer = [V(x, y, 0) for x, y in [(0, 0), (4, 0), (4, 4), (0, 4)]]
+    hole = [V(x, y, 0) for x, y in [(1, 1), (2, 1), (2, 2), (1, 2)]]
+    face = mesh.add_face(outer, [hole])
+    before = mesh.capture_state()
+    with pytest.raises(OffsetHoleCollision):
+        build_offset_face(mesh, face.key, 1.0)
+    assert before == mesh.capture_state()
+    edges = set(mesh._store.keys("edge"))
+    command = build_offset_face(mesh, face.key, .25)
+    change = command.apply(scene)
+    assert change.removed["face"] == [face.key]
+    assert len(change.created["face"]) == 2
+    assert edges <= set(mesh._store.keys("edge"))
+    assert edges <= set(change.modified["edge"])
+    command.undo(scene)
+    assert before == mesh.capture_state()
