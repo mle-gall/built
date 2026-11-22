@@ -460,6 +460,21 @@ def world_mesh(group, placements=None) -> Mesh:
     return _merged_placements(group, placements)
 
 
+def _ring_coordinates(face):
+    """Outer ring and maximal holes at the source mesh's model precision."""
+    from core.store_mesh import FaceView, StoreMesh, _hole_filter
+    from core.topology import _maximal_holes
+    if isinstance(face, FaceView) and isinstance(face._m, StoreMesh):
+        outer, *holes = face._m._store.face_positions(face.key)
+        if len(holes) > 1:
+            holes = [r for r, keep in zip(holes, _hole_filter(holes)) if keep]
+        return [outer, *holes]
+    holes = face.holes or []
+    if len(holes) > 1:
+        holes = _maximal_holes([list(h) for h in holes])
+    return [[p.toTuple() for p in ring] for ring in (face.vertices, *holes)]
+
+
 def _merged_placements(group, placements=None) -> Mesh:
     """Every placement of ``group`` welded into ONE mesh, in a single
     vectorized pass.
@@ -471,7 +486,6 @@ def _merged_placements(group, placements=None) -> Mesh:
     the whole component welds once, the same recipe ``transformed_mesh`` and
     the ``.igz`` loader use."""
     import numpy as np
-    from core.topology import _maximal_holes
     new = Mesh()
     edge_parts: list = []
     face_parts: list = []
@@ -486,20 +500,15 @@ def _merged_placements(group, placements=None) -> Mesh:
         epts: list = []
         fpts: list = []
         for e in src.edges:
-            epts.append((e.a.x(), e.a.y(), e.a.z()))
-            epts.append((e.b.x(), e.b.y(), e.b.z()))
+            epts.append(e.v0.position_tuple())
+            epts.append(e.v1.position_tuple())
             edge_flags.append((e.soft, e.curve, None))
         for f in src.faces:
-            holes = f.holes or []
-            if len(holes) > 1:
-                holes = _maximal_holes([list(h) for h in holes])
-            ring_counts.append(1 + len(holes))
-            ring_sizes.append(len(f.vertices))
-            fpts.extend((v.x(), v.y(), v.z())
-                        for v in _ring(f.vertices, mirror))
-            for h in holes:
-                ring_sizes.append(len(h))
-                fpts.extend((v.x(), v.y(), v.z()) for v in _ring(h, mirror))
+            rings = _ring_coordinates(f)
+            ring_counts.append(len(rings))
+            for ring in rings:
+                ring_sizes.append(len(ring))
+                fpts.extend(_ring(ring, mirror))
             # The texture's world->UV map travels with the placement, so a
             # nested leaf keeps its wood grain instead of inheriting the
             # parent's frame.
@@ -677,27 +686,22 @@ def transformed_mesh(src: Mesh, m) -> Mesh:
     if len(src.edges) * 2 + len(src.faces) * 4 < 1024:
         return _transformed_mesh_walk(src, m)
     import numpy as np
-    from core.topology import _maximal_holes
     new = Mesh()
     mirror = _is_mirror(m)
     flat: list = []
     for e in src.edges:
-        flat.append((e.a.x(), e.a.y(), e.a.z()))
-        flat.append((e.b.x(), e.b.y(), e.b.z()))
+        flat.append(e.v0.position_tuple())
+        flat.append(e.v1.position_tuple())
     n_edge_pts = len(flat)
     ring_sizes: list = []
     ring_counts: list = []
     attrs_list: list = []
     for f in src.faces:
-        holes = f.holes or []
-        if len(holes) > 1:
-            holes = _maximal_holes([list(h) for h in holes])
-        ring_counts.append(1 + len(holes))
-        ring_sizes.append(len(f.vertices))
-        flat.extend((v.x(), v.y(), v.z()) for v in _ring(f.vertices, mirror))
-        for h in holes:
-            ring_sizes.append(len(h))
-            flat.extend((v.x(), v.y(), v.z()) for v in _ring(h, mirror))
+        rings = _ring_coordinates(f)
+        ring_counts.append(len(rings))
+        for ring in rings:
+            ring_sizes.append(len(ring))
+            flat.extend(_ring(ring, mirror))
         attrs_list.append(dict(f.attrs) if f.attrs else None)
     if not flat:
         return new
@@ -719,30 +723,34 @@ def transformed_mesh(src: Mesh, m) -> Mesh:
 
 def _transformed_mesh_walk(src: Mesh, m) -> Mesh:
     """Sequential per-entity copy — exact semantics for small meshes."""
-    from PySide6.QtGui import QVector3D
     from core.store_mesh import StoreMesh, empty_store_mesh
     new = empty_store_mesh() if isinstance(src, StoreMesh) else Mesh()
     mirror = _is_mirror(m)
 
-    def W(p) -> QVector3D:
-        return m.map(p)
+    if isinstance(src, StoreMesh):
+        rot, trans = np_affine(m)
+        def mapped(v):
+            return rot @ v.position_tuple() + trans
+    else:
+        def mapped(v):
+            return m.map(v.position)
 
     for f in src.faces:
         try:
-            nf = new.add_face([W(v) for v in _ring(f.vertices, mirror)],
-                              [[W(v) for v in _ring(h, mirror)]
-                               for h in f.holes] or None)
+            nf = new.add_face([mapped(v) for v in _ring(f.loop, mirror)],
+                              [[mapped(v) for v in _ring(h, mirror)]
+                               for h in f.hole_loops] or None)
         except Exception:  # noqa: BLE001 — degenerate under the transform
             continue
         if f.attrs:
             nf.attrs.update(dict(f.attrs))
     for e in src.edges:
-        v0, v1 = new.vertex_at(W(e.a)), new.vertex_at(W(e.b))
+        v0, v1 = new.vertex_at(mapped(e.v0)), new.vertex_at(mapped(e.v1))
         ne = (new.find_edge(v0, v1)
               if v0 is not None and v1 is not None else None)
         if ne is None:
             try:
-                ne = new.add_edge(W(e.a), W(e.b))
+                ne = new.add_edge(mapped(e.v0), mapped(e.v1))
             except Exception:  # noqa: BLE001
                 continue
         ne.soft = e.soft

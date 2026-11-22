@@ -3424,8 +3424,12 @@ class MoveVerticesCommand(Command):
 
     def __init__(self, positions: Iterable[QVector3D], delta: QVector3D,
                  carry_textures: bool = False) -> None:
-        self.src = [QVector3D(p) for p in positions]
-        self.delta = QVector3D(delta)
+        if isinstance(delta, QVector3D):
+            self.src = [QVector3D(p) for p in positions]
+            self.delta = QVector3D(delta)
+        else:
+            self.src = [tuple(p) for p in positions]
+            self.delta = tuple(delta)
         #: The Move tool's moves: a textured face moved whole takes its
         #: image along instead of being re-projected where it lands (#1034).
         self.carry_textures = carry_textures
@@ -3442,7 +3446,10 @@ class MoveVerticesCommand(Command):
         self._before = scene.mesh.capture_state()
         keys = {_key(p) for p in self.src}
         moving = {v.key for v in _vertices_at(scene.mesh, keys)}
-        landing = {_key(p + self.delta) for p in self.src}
+        if isinstance(self.delta, tuple):
+            landing = {_key(tuple(x + d for x, d in zip(p, self.delta))) for p in self.src}
+        else:
+            landing = {_key(p + self.delta) for p in self.src}
         before = None
         if any(v.key not in moving
                for v in _vertices_at(scene.mesh, landing)):

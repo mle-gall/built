@@ -450,7 +450,8 @@ def _store_sweep(mesh, key, path, closed, h):
     import sys
     store = mesh._store
     from core.mesh import Mesh
-    points = [p.toTuple() for p in path]
+    from core.store_mesh import _xyz
+    points = [_xyz(p) for p in path]
     stations = store.sweep_stations(key, points, closed, h, sys.version_info >= (3, 12))
     if stations is None:
         return False
@@ -467,7 +468,7 @@ def _store_sweep(mesh, key, path, closed, h):
         for created in change.created["face"]:
             FaceView(mesh, created).attrs = deepcopy(attrs)
     mesh._dirty()
-    seed = {_key(QVector3D(*p)) for station in stations for ring in station for p in ring}
+    seed = {_key(p) for station in stations for ring in station for p in ring}
     run_stitch(mesh, seed, None, coplanar_merge=False)
     runs, _ = store.finish_sweep(before, key, points, stations, closed, h)
     for run in runs:

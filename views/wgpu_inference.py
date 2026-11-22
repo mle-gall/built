@@ -84,7 +84,7 @@ def _prototype_arrays(packed, code, scene, first_row, cache):
             visible = getattr(scene, 'edge_snappable', lambda e: not e.hidden or reveal)
             for e in mesh.edges:
                 if (group is None or reveal or not e.soft) and visible(e):
-                    lines.extend((e.a.toTuple(), e.b.toTuple()))
+                    lines.extend((e.v0.position_tuple(), e.v1.position_tuple()))
                     named.append(-1 if e.curve is None else e.curve)
             pos = lines
         pos = np.ascontiguousarray(pos, dtype=float).reshape(-1, 3)

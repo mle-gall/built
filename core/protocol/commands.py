@@ -10,7 +10,7 @@ unknown key raises ``KeyError`` before anything runs. The answer is
 (a :class:`core.protocol.feed.Step`) or None when nothing happened."""
 from __future__ import annotations
 
-from core.protocol.keys import elements, from_json_key
+from core.protocol.keys import elements, from_json_key, store_of
 
 
 def _need(mesh, kind, keys):
@@ -37,8 +37,12 @@ def move_vertices(history, vertices, delta):
     from core.history import MoveVerticesCommand
     vs = _need(history.scene.mesh, "vertex", vertices)
     before = history.revision
-    history.execute(MoveVerticesCommand([QVector3D(v.position) for v in vs],
-                                        QVector3D(*map(float, delta))))
+    if store_of(history.scene.mesh) is not None:
+        x, y, z = map(float, delta)
+        cmd = MoveVerticesCommand([v.position_tuple() for v in vs], (x, y, z))
+    else:
+        cmd = MoveVerticesCommand([v.position for v in vs], QVector3D(*map(float, delta)))
+    history.execute(cmd)
     return _answer(history, before)
 
 
@@ -104,7 +108,8 @@ def push_pull(history, face, distance, keep_base=False):
 def follow_me(history, face, path, closed=False):
     from PySide6.QtGui import QVector3D
     from core.sweep import build_sweep_face
-    points = [QVector3D(*p) for p in path]
+    points = (list(path) if store_of(history.scene.mesh) is not None else
+              [QVector3D(*p) for p in path])
     cmd = build_sweep_face(history.scene.mesh, from_json_key(face), points, closed)
     before = history.revision
     history.execute(cmd)

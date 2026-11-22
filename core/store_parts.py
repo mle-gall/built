@@ -17,7 +17,6 @@ import weakref
 from collections.abc import Mapping, Sequence
 
 import numpy as np
-from PySide6.QtGui import QVector3D
 
 
 def _store_mesh(mesh):
@@ -184,7 +183,7 @@ def explode_geometry(m, src, xform, inverse, invertible, paint):
     ``keys[kind]`` the ``(source key, key in m)`` pairs (vertices and
     edges: the one now at the source element's mapped place); None when
     the store cannot do it (the Python loop runs)."""
-    from core.group import placed_face_paint
+    from core.group import np_affine, placed_face_paint
     from core.materials import effective_attrs
     from core.store_mesh import FaceView, _hole_filter
     if _store_mesh(m) is None or _store_mesh(src) is None:
@@ -198,10 +197,8 @@ def explode_geometry(m, src, xform, inverse, invertible, paint):
     if xform is None:
         mapped = np.ascontiguousarray(pos, dtype=np.float64).reshape(-1, 3)
     else:
-        w = xform.map
-        mapped = np.array([w(QVector3D(x, y, z)).toTuple()
-                           for x, y, z in pos.tolist()],
-                          dtype=np.float64).reshape(-1, 3)
+        rot, trans = np_affine(xform)
+        mapped = pos @ rot.T + trans
     sd = src.__dict__
     src_table, src_own = sd["_attr_table"], sd["_attr_own"]
     fkeys = sst.keys("face")

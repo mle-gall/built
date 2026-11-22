@@ -193,6 +193,11 @@ class VertexView(_ViewMixin, Vertex):
             return self._obj().position
         return _position(m, self.key)
 
+    def position_tuple(self):
+        """Model coordinates for geometry consumers, including sub-float32 edits."""
+        st = _store_of(self._m)
+        return tuple(st.vertex_position(self.key)) if st is not None else self.position.toTuple()
+
     @position.setter
     def position(self, value):
         self._obj().position = value
@@ -362,9 +367,8 @@ class EdgeView(_ViewMixin, Edge):
         if st is None:
             return self._obj().length()
         a, b = st.edge_ends(self.key)
-        p = QVector3D(*st.vertex_position(a))
-        q = QVector3D(*st.vertex_position(b))
-        return (q - p).length()
+        from math import dist
+        return dist(st.vertex_position(a), st.vertex_position(b))
 
 
 def _position(m, key) -> QVector3D:
@@ -1227,8 +1231,7 @@ class StoreMesh(Mesh):
         keys = self._store.keys("vertex")
         out = []
         for i in idx:
-            p = QVector3D(*pos[i])
-            if keyfn(p) in cells:
+            if keyfn(pos[i].tolist()) in cells:
                 out.append(VertexView(self, keys[i]))
         return out
 
@@ -1237,7 +1240,7 @@ class StoreMesh(Mesh):
         out = set()
         for k in vertex_keys:
             try:
-                out.add(keyfn(QVector3D(*st.vertex_position(k))))
+                out.add(keyfn(st.vertex_position(k)))
             except (KeyError, OverflowError, TypeError):
                 pass
         return out
@@ -1317,9 +1320,9 @@ class StoreMesh(Mesh):
         loop = list(loop_positions)
         raw = [list(h) for h in (hole_loops or [])]
         if len(raw) > 1:
-            from core.topology import _maximal_holes
             try:
-                raw = _maximal_holes(raw)
+                mask = _hole_filter(raw)
+                raw = [ring for ring, keep in zip(raw, mask) if keep]
             except Exception:
                 # Python welds the outer loop before filtering the holes.
                 for p in loop:
@@ -1861,10 +1864,9 @@ def _hole_filter(holes):
     over the merged face's holes, given as positions: a bool per hole. The
     store calls it when a dissolve's face has several holes, before it
     changes anything."""
-    from core.topology import _maximal_holes
-    rings = [[QVector3D(*p) for p in h] for h in holes]
-    kept = {id(h) for h in _maximal_holes(rings)}
-    return [id(r) in kept for r in rings]
+    rings = [[_xyz(p) for p in ring] for ring in holes]
+    from core import _native
+    return _native.available().MeshStore.maximal_holes(rings, _hypot() or "libstdc++")
 
 
 def _xyz(p):
@@ -2575,6 +2577,6 @@ def faces_arrays(m):
     out = Arrays(np.asarray(pos, dtype=float).reshape(-1, 3),
                  np.asarray(corners, dtype=np.int64),
                  np.asarray(a["ring_sizes"], dtype=np.int64),
-                 np.asarray(a["ring_counts"], dtype=np.int64))
+                 np.asarray(a["ring_counts"], dtype=np.int64), model_f64=True)
     out.edge_face_counts = np.diff(a["ef_start"])
     return out

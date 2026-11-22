@@ -9,7 +9,7 @@ def _brep(w: object, faces, context_id: int) -> int:
     point_ids: dict = {}
 
     def pt(v) -> int:
-        key = (round(v.x(), 6), round(v.y(), 6), round(v.z(), 6))
+        key = tuple(round(x, 6) for x in v.position_tuple())
         pid = point_ids.get(key)
         if pid is None:
             pid = w.add("IFCCARTESIANPOINT",
@@ -21,12 +21,12 @@ def _brep(w: object, faces, context_id: int) -> int:
     for f in faces:
         bounds = []
         outer = w.add("IFCPOLYLOOP",
-                      "(" + ",".join(f"#{pt(v.position)}" for v in f.loop)
+                      "(" + ",".join(f"#{pt(v)}" for v in f.loop)
                       + ")")
         bounds.append(f"#{w.add('IFCFACEOUTERBOUND', f'#{outer}', '.T.')}")
         for h in f.hole_loops:
             loop = w.add("IFCPOLYLOOP",
-                         "(" + ",".join(f"#{pt(v.position)}" for v in h) + ")")
+                         "(" + ",".join(f"#{pt(v)}" for v in h) + ")")
             bounds.append(f"#{w.add('IFCFACEBOUND', f'#{loop}', '.T.')}")
         face_ids.append(w.add("IFCFACE", "(" + ",".join(bounds) + ")"))
 
@@ -108,7 +108,7 @@ def mapped_body(w, group, base, excluded, context_id, geometry, cache, axis):
     import numpy as np
     from core.bim import _compose
     from core.group import np_affine
-    from core.geometry_arrays import Arrays, arrays_of
+    from core.geometry_arrays import arrays_of, placed_arrays
 
     items = []
 
@@ -135,8 +135,7 @@ def mapped_body(w, group, base, excluded, context_id, geometry, cache, axis):
                                   f'#{directions[2]}')
                 item = w.add('IFCMAPPEDITEM', f'#{cache[key]}', f'#{transform}')
             else:
-                baked = Arrays((a.pos @ rot.T + trans).astype(np.float32).astype(float),
-                               a.corners, a.ring_sizes, a.ring_counts, a.edge_face_counts)
+                baked = placed_arrays(a, matrix)
                 rep = array_body(w, baked, context_id, geometry)
                 # A mapped identity wrapper permits mixed baked and shared bodies
                 # in one MappedRepresentation, including open surface models.
