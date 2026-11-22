@@ -207,7 +207,11 @@ class WgpuView(QWidget):
             hidden_geometry(self)
             self._rest_signature = None
             from views.wgpu_billboards import Billboards
-            self._billboards = Billboards(self.packed)
+            # Existing figures plus rewritten/new rows cover every placement
+            # that can face the camera after this delta.
+            previous = getattr(self, '_billboards', None)
+            candidates = None if previous is None else np.union1d(previous.ids, ids)
+            self._billboards = Billboards(self.packed, candidates)
             if len(ids) or tracker.changed or tracker.removed:
                 mapping_changed = bool(tracker.removed)
                 for row in ids:

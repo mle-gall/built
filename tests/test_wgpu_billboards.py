@@ -190,3 +190,12 @@ def test_blank_discards_previous_billboard_row_cache():
         assert view._billboards.packed is view.packed
     finally:
         view.close()
+
+
+def test_refresh_from_changed_rows_skips_removed_figure():
+    sprite = figure()
+    scene = Scene(groups=[sprite, Group(sprite.mesh), figure('mesh')])
+    packed = pack_scene(scene, texture_images=False)
+    packed.instances['info'][0, 2] = 1  # deleted row remains in packed.groups
+    figures = Billboards(packed, np.array([0, 2]))
+    assert figures.ids.tolist() == [2]
