@@ -490,7 +490,7 @@ def _options(view):
     lock = getattr(vp, "axis_lock", None) if vp is not None else None
     if lock:
         out.append(("axis", f"{lock.upper()} axis locked", "", 2, None))
-    if vp is not None and getattr(vp, "_previous_views", None):
+    if vp is not None and (getattr(vp, "_previous_views", None) or vp.__dict__.get("_isolate_base")):
         out.append(("showall", "Isolated · Show all", "", 1, lambda: _show_all(vp)))
     mode = getattr(vp, "linear_inference_mode", "all") if vp is not None else "all"
     if mode == "off":
@@ -695,17 +695,43 @@ def _commands(win, sel):
 
 
 def _show_all(vp) -> None:
+    """«Isolated · Show all»: back to exactly what was shown before the
+    first Isolate (a saved view's filter included), and the selection
+    Isolate dropped, when nothing changed in between."""
+    from copy import deepcopy
     from core.agent_facets import previous_display, set_display
-    if getattr(vp, "_previous_views", []):
+    base = vp.__dict__.pop("_isolate_base", None)
+    if base is not None:
+        (expr, color, isolate, key, exact), previous, selection, cv = base
+        set_display(vp, deepcopy(expr), color, isolate=isolate, key=key, remember=False, exact=exact)
+        vp._previous_views = previous
+        scene = vp.scene
+        if cv == scene.content_version:
+            scene.select(e for e in selection if scene.entity_selectable(e))
+        getattr(vp, "notify_scene_changed", vp.update)()
+    elif getattr(vp, "_previous_views", []):
         previous_display(vp)
     else:
         set_display(vp, remember=False)
 
 
 def _isolate(win, uids) -> None:
+    """Show only the placements ``uids`` (at any depth: a part of a linked
+    file shows through the file's placement) until «Show all»."""
+    from copy import deepcopy
     from core.agent_facets import set_display
-    if uids:
-        set_display(win.viewport, {"facet": "uid", "in": list(uids)}, isolate=True, exact=False)
+    vp = win.viewport
+    uids = [u for u in dict.fromkeys(uids) if u]
+    if not uids:
+        vp.flash_status("Nothing to isolate: select objects first")
+        return
+    if vp.__dict__.get("_isolate_base") is None:
+        state = (deepcopy(getattr(vp, "_view_expression", None)), getattr(vp, "_view_color", None),
+                 getattr(vp, "_view_isolate", True), getattr(vp, "active_view_key", None),
+                 getattr(vp, "_view_exact", False))
+        vp._isolate_base = (state, list(getattr(vp, "_previous_views", []) or []),
+                            list(vp.scene.selection), vp.scene.content_version)
+    set_display(vp, {"facet": "uid", "in": uids}, isolate=True, exact=False)
 
 
 # ---- Right column: project tree and inspector -------------------------------

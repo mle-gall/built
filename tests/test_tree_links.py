@@ -4,7 +4,8 @@ synthetic composite (tests/composite_fixture.py): a host linking A and B,
 A linking C and D, A with 20 000 placements. Each linked file's structure
 nests under its row with its items counted there; one root order; a link
 row selects its placement; item lists are paged; eye and lock work on
-mounted nodes and undo."""
+mounted nodes and undo; Isolate works on host groups, link rows, mounted
+nodes and mixed selections, and Show all restores what was there."""
 from __future__ import annotations
 
 import time
@@ -220,3 +221,76 @@ def test_set_tag_state_refuses_unknown_keys(ui):
     with pytest.raises(ValueError):
         commands.run(win.viewport.history, "set_tag_state", folders=["A"], locked=True)
     assert not win.viewport.history.undo_stack
+
+
+def _visible(scene, g):
+    """Drawn by the Metal pack: not filtered, its holders included."""
+    from types import SimpleNamespace
+    from core.group import iter_placements
+    from views import wgpu_scene
+    root = g
+    while getattr(root, "owner", None) is not None:
+        root = root.owner
+    root = next((r for r in scene.groups if r is root or any(p is g for p, _m in iter_placements(r))), root)
+    for p, _m, _x, f in wgpu_scene._placement_records(scene, [root], SimpleNamespace(scene=scene),
+                                                      wgpu_scene._placement_state(scene)):
+        if p is g:
+            return not f & (wgpu_scene.VISIBILITY_FILTERED | 1)
+    return False
+
+
+def test_isolate_link_row_mounted_node_host_group_and_mixed_then_show_all(ui):
+    from core.agent_facets import set_display
+    import views.wgpu_ui as wu
+    scene, win, view, rows, act = ui
+    vp = win.viewport
+    tree = view._ui_tree["tree"]
+    a = tree.links["link:A"][0]
+    b = tree.links["link:B"][0]
+    host = tree.direct[_key(view, "Paths")][0]
+    rail = tree.direct[_key(view, "Rails")][0]
+    tie = tree.direct[_key(view, "Ties")][0]
+    flight = tree.direct[_key(view, "Flights")][0]
+    # A saved view's filter was on before: Show all comes back to it.
+    set_display(vp, {"facet": "uid", "in": [a.uid, b.uid, host.uid]}, isolate=True, remember=False)
+    before = (dict(vp._view_expression), list(getattr(vp, "_previous_views", [])))
+    scene.select([host])
+    t = time.perf_counter()
+    act("isolate", "n:link:A")
+    assert time.perf_counter() - t < 2.0
+    assert _visible(scene, a) and _visible(scene, rail) and _visible(scene, flight)
+    assert not _visible(scene, b) and not _visible(scene, host)
+    # A mounted node: its items show through the link placement holding them.
+    act("isolate", "n:" + _key(view, "Rails"))
+    assert _visible(scene, rail) and not _visible(scene, tie) and not _visible(scene, flight)
+    assert a.uid in scene._navigator_through and a.uid not in scene._navigator_allowed
+    # A host group, then a mixed selection (host group + linked parts).
+    act("isolate", "n:" + _key(view, "Paths"))
+    assert _visible(scene, host) and not _visible(scene, rail)
+    wu._isolate(win, [host.uid, flight.uid])
+    assert _visible(scene, host) and _visible(scene, flight) and not _visible(scene, rail)
+    wu._show_all(vp)
+    assert (vp._view_expression, vp._previous_views) == before
+    assert scene.selection == {host}
+    # Back to no filter at all: Show all with nothing isolated clears it.
+    set_display(vp, remember=False)
+    act("isolate", "n:link:B")
+    wu._show_all(vp)
+    assert scene._navigator_allowed is None and _visible(scene, rail)
+
+
+def test_packer_draws_isolated_parts_through_their_link(ui):
+    """The Metal pack: an isolated part inside a link is drawn, the link's
+    own geometry and the other parts are not."""
+    from views import wgpu_scene
+    scene, win, view, rows, act = ui
+    tree = view._ui_tree["tree"]
+    a = tree.links["link:A"][0]
+    rail = tree.direct[_key(view, "Rails")][0]
+    tie = tree.direct[_key(view, "Ties")][0]
+    act("isolate", "n:" + _key(view, "Rails"))
+    from types import SimpleNamespace
+    flags = {id(g): f for g, _m, _p, f in wgpu_scene._placement_records(
+        scene, [a], SimpleNamespace(scene=scene), wgpu_scene._placement_state(scene))}
+    filt = wgpu_scene.VISIBILITY_FILTERED
+    assert flags[id(a)] & filt and not flags[id(rail)] & filt and flags[id(tie)] & filt

@@ -46,6 +46,11 @@ def set_display(viewport, filter=None, color_by=None, *, isolate=True, key=None,
     viewport.scene._navigator_view_key = key
     viewport.view_filter = wanted
     viewport.scene._navigator_allowed = allowed
+    # The groups holding an isolated part (a linked file's placement above
+    # its parts): drawn through, their own geometry filtered, so they never
+    # hide what was isolated inside them.
+    viewport.scene._navigator_through = None if allowed is None else {
+        p for uid in allowed for p in index[uid]['path_uids']} - allowed
     if allowed is not None:
         from core.group import Group
         viewport.scene.selection.difference_update([

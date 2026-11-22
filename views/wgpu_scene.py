@@ -286,6 +286,11 @@ def _placement_state(scene):
     def state(group):
         if group is None:
             visible = True
+        elif group.uid in (getattr(scene, '_navigator_through', None) or ()):
+            # Holds an isolated part: drawn through (its own geometry is
+            # filtered in _placement_records), so its parts are not hidden.
+            visible = not (scene.entity_hidden(group) or scene.similar_hidden(group)) \
+                and scene._layer_state(group)[0]
         elif scene._edit_stack or getattr(scene, '_navigator_allowed', None) is not None:
             visible = scene.entity_visible(group)
         else:
@@ -341,11 +346,14 @@ def _placement_records(scene, roots, vp, state, *, double=False):
             hidden_of[id(g)] = inherited or not state(proxy)[0]
             object_hidden_of[id(g)] = bool(getattr(g, 'hidden', False)) or object_hidden_of.get(id(parent), False)
             allowed = getattr(scene, '_navigator_allowed', None)
+            # Isolated out: its own geometry; its parts too, unless it only
+            # holds something isolated (scene._navigator_through).
+            nav = allowed is not None and g.uid not in allowed
             filtered_of[id(g)] = (filtered_of.get(id(parent), False)
                 or not scene._layer_state(proxy)[0] or scene.similar_hidden(proxy)
-                or (allowed is not None and g.uid not in allowed))
+                or (nav and g.uid not in (getattr(scene, '_navigator_through', None) or ())))
             flags = (int(hidden_of[id(g)]) | (OBJECT_HIDDEN if object_hidden_of[id(g)] else 0)
-                     | (VISIBILITY_FILTERED if filtered_of[id(g)] else 0))
+                     | (VISIBILITY_FILTERED if filtered_of[id(g)] or nav else 0))
             yield g, matrix, proxy, flags
 
 
