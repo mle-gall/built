@@ -52,10 +52,16 @@ Built (`core.protocol.commands.run(history, name, **args)`):
 | `orient_faces` | `face: seed face key` | Flip inconsistent neighbours across two-face edges. All keys survive. |
 | `push_pull` | `face: face key`, `distance: number`, `keep_base: bool = false` | the Push/Pull tool locked on the face, the distance typed, committed (clamped as the tool clamps) |
 | `erase` | `edges: [edge key]`, `faces: [face key]` | `EraseSelectionCommand` (the Eraser: a split line between coplanar faces dissolves) |
+| `explode_group` | `placement: uid` | `ExplodeGroupCommand`: the placement's geometry merges into the open mesh through its matrix (corners weld onto what is there, coplanar overlaps rebuilt into one face), its nested placements come out whole. The step's `copies` say where each source vertex, edge and face went |
+| `split_into_pieces` | `placement: uid` | `SplitIntoPiecesCommand` over `core.pieces.split_into_pieces`: one child group per physical piece. `ok` false and no step when it already is its pieces |
+| `explode_view` | `placement: uid`, `factor: number`, `mode: "outward" \| "x" \| "y" \| "z" = "outward"` | `ExplodeViewCommand` (`core/explode.py`): the parts pulled apart, `factor` 0 reassembles |
+| `purge_unused` | `layers: bool = true`, `materials: bool = true` | `PurgeUnusedCommand`: tags and materials nothing uses go (a tag a saved view hides stays). `ok` false and no step when nothing would go |
+| `purge_debris` | — | `Mesh.purge_debris` on the open mesh as one snapshot step: vertices no edge and no face uses |
 | `undo`, `redo` | — | `History.undo` / `redo` |
 
 All act on the open mesh (`scene.mesh`, the loose model or the group being
-edited). The bridge does not expose them yet. Agents edit through
+edited); a `placement` is a top-level placement of the open context
+(`scene.groups`), unknown uids raise `KeyError` before anything runs. The bridge does not expose them yet. Agents edit through
 `run_python`, and the feed shows what that did.
 
 Planned, each over the existing History command it names (the argument
@@ -142,6 +148,10 @@ Step
   complete     False when the step may have changed placements, or face
                attrs in other meshes, that are not named here: re-read
                what you follow
+  copies       [{source, target, keys}]: elements the step copied from
+               one mesh into another (Explode, Split into Pieces), the two
+               mesh keys and per kind (source key, key in target) pairs;
+               empty on undo (the copies are gone: `removed` names them)
 
 MeshChange
   mesh         mesh key            (.mesh in process: a weak reference)
@@ -202,7 +212,23 @@ are compared by value. Nested placements a known command touches are named
 from the command (`InsertGroupCommand` / `DeleteGroupCommand` with undo
 reversed, `MoveGroupCommand`, `HideCommand`, `AssignLayerCommand`).
 Geometry-only commands (`keeps_rows`, and the snapshot / move / draw / erase
-commands) change no placement. Any other command sets `complete = False`.
+commands) change no placement. Explode names the group removed and its
+lifted children created (undo: the reverse); Split into Pieces the group
+modified and its pieces created; the exploded view the parts it moved;
+Purge Unused no placement (its tags and materials are compared by value).
+Any other command sets `complete = False`.
+
+**Copies.** Explode on store-backed meshes reports `copies` = one entry,
+`source` the group's mesh (read, never changed: it is not in `meshes`),
+`target` the open mesh, and keys for every kind: each source face with the
+face made from it, each source vertex and edge with the one now at its
+mapped place (a corner that welded onto a vertex the mesh had names that
+vertex; faces a coplanar merge rebuilt are left out, `created` has their
+successors). Redo reports the same keys (the store puts back the state the
+first run made). Split into Pieces reports one entry per piece the store
+cut, `face` pairs only, when the group had no nested placements (with
+them, the source is a merged world copy no one can name). Python-mesh
+runs report no copies.
 
 ### 4.2 Delivery
 
@@ -292,3 +318,5 @@ records already are Rust (`edit::Change`).
 - Mesh keys are per session; the feed is not saved.
 - Commands are not exposed through the bridge yet (agents edit with
   `run_python`); the planned command list is §1.
+- `copies` of a split name faces only; vertices and edges of the piece are
+  new keys the feed lists as the piece mesh is first named.
