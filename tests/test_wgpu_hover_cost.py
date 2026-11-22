@@ -20,6 +20,7 @@ import math
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 from PySide6.QtCore import QPointF, Qt
 from PySide6.QtGui import QMouseEvent, QVector3D as V
 from PySide6.QtWidgets import QApplication
@@ -186,3 +187,18 @@ def test_edge_grid_near_is_unique_sorted():
         gap = np.maximum(np.maximum(lo_x - px, px - hi_x), 0) ** 2 + \
             np.maximum(np.maximum(lo_y - py, py - hi_y), 0) ** 2
         assert set(np.flatnonzero(gap <= 48. ** 2)) <= set(got.tolist())
+
+
+def test_nearby_edges_filters_visibility_after_grid_lookup(view, monkeypatch):
+    from views import wgpu_inference as W
+    _box(view.scene.mesh, (0, 0, 0), (1, 1, 1))
+    _look(view, V(), distance=6.0, pitch=45.)
+    refresh(view)
+    monkeypatch.setattr(W, "eligible_rows", lambda *a: pytest.fail("scanned every row"))
+    x, y = view._world_to_pixel(V(0, 0, 0))
+    def near():
+        return W.nearby_edges(view.inference_index, view.packed, view.camera,
+                              view.width(), view.height(), x, y)
+    assert near()
+    view.packed.instances['info'][:, 2] |= 128
+    assert not near()
