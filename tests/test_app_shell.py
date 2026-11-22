@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtCore import Qt
+from tests.shell_isolation import restore_shell_patches  # noqa: F401  (autouse)
 
 FIXTURE = Path(__file__).parent / "fixtures" / "shell" / "slab-and-cube.igz"
 

@@ -12,6 +12,7 @@ import pytest
 from PySide6.QtCore import QTimer
 from PySide6.QtGui import QVector3D
 from PySide6.QtWidgets import QMessageBox
+from tests.shell_isolation import restore_shell_patches  # noqa: F401  (autouse)
 
 FIXTURES = Path(__file__).parent / "fixtures" / "shell"
 SLAB = FIXTURES / "slab-and-cube.igz"
