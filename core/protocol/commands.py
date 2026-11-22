@@ -411,6 +411,131 @@ def purge_debris(history):
     return _answer(history, before)
 
 
+def _material(history, name):
+    mat = (getattr(history.scene, "materials", None) or {}).get(name)
+    if mat is None:
+        raise KeyError(f"no material called {name!r}")
+    return mat
+
+
+def rename_material(history, name, new_name):
+    """Rename a registry material (its name is its key, §2) on every face
+    and container that wears it: ``RestampMaterialCommand``. A name another
+    material has is refused (that would merge two materials)."""
+    from dataclasses import replace
+    from core.history import RestampMaterialCommand
+    mat = _material(history, name)
+    new_name = str(new_name).strip()
+    if not new_name:
+        raise ValueError("a material needs a name")
+    before = history.revision
+    if new_name == name:
+        return _answer(history, before, ok=False)
+    if new_name in history.scene.materials:
+        raise ValueError(f"there is already a material called {new_name!r}")
+    history.execute(RestampMaterialCommand(name, replace(mat, name=new_name)))
+    return _answer(history, before)
+
+
+def edit_material(history, name, color=None, opacity=None, tile=None):
+    """Change a registry material everywhere it is worn. ``color`` is
+    ``[r, g, b]`` 0–1 (a textured material takes it as its tint),
+    ``opacity`` 0–1 (1 = opaque), ``tile`` ``[width, height]`` in metres
+    (textured only). Plain: ``RestampMaterialCommand``; textured:
+    ``EditTexturedMaterialCommand`` (each face keeps its own placement)."""
+    from dataclasses import replace
+    from core.history import EditTexturedMaterialCommand, RestampMaterialCommand
+    mat = _material(history, name)
+    before = history.revision
+    if mat.texture and (color is not None or tile is not None) and opacity is None:
+        tex = mat.texture
+        size = None
+        if tile is not None:
+            size = (float(tile[0]), float(tile[1]), float(tex.get("rot", 0.0)))
+        tint = tuple(color) if color is not None else (tuple(mat.color) if mat.color is not None else None)
+        history.execute(EditTexturedMaterialCommand(name, tint, size=size))
+        return _answer(history, before)
+    if tile is not None and not mat.texture:
+        raise ValueError("only a textured material has a tile size")
+    changes = {}
+    if color is not None:
+        changes["color"] = tuple(float(c) for c in color[:3])
+    if opacity is not None:
+        o = float(opacity)
+        changes["opacity"] = None if o >= 0.999 else max(0.0, o)
+    if not changes:
+        return _answer(history, before, ok=False)
+    history.execute(RestampMaterialCommand(name, replace(mat, **changes)))
+    return _answer(history, before)
+
+
+def duplicate_material(history, name, new_name=None):
+    """A copy of a registry material under a new name (``"<name> copy"``,
+    numbered when taken), worn by nothing yet: ``AddMaterialCommand``. The
+    answer adds ``name``."""
+    from copy import deepcopy
+    from dataclasses import replace
+    from core.material_commands import AddMaterialCommand
+    mat = _material(history, name)
+    taken = history.scene.materials
+    if new_name is None:
+        new_name, n = f"{name} copy", 2
+        while new_name in taken:
+            new_name, n = f"{name} copy {n}", n + 1
+    elif new_name in taken:
+        raise ValueError(f"there is already a material called {new_name!r}")
+    before = history.revision
+    history.execute(AddMaterialCommand(replace(deepcopy(mat), name=new_name)))
+    out = _answer(history, before)
+    out["name"] = new_name
+    return out
+
+
+def delete_material(history, name):
+    """Remove a registry material; what wore it shows the default
+    material: ``DeleteMaterialCommand``."""
+    from core.material_commands import DeleteMaterialCommand
+    _material(history, name)
+    before = history.revision
+    history.execute(DeleteMaterialCommand(name))
+    return _answer(history, before)
+
+
+def delete_placements(history, placements):
+    """Delete placements (uids, nested included) with their geometry: one
+    ``DeleteGroupCommand`` each, as one step."""
+    from core.history import CompoundCommand, DeleteGroupCommand
+    groups = _placements(history, placements)
+    before = history.revision
+    if groups:
+        history.execute(CompoundCommand([DeleteGroupCommand(g) for g in groups]))
+    return _answer(history, before)
+
+
+def rename_component(history, placement, name):
+    """Rename a component definition: every copy (placed or nested) and the
+    template kept in the file take ``name``, as one step. ``placement`` is
+    the uid of any copy, or of the kept template."""
+    from core.history import CompoundCommand, RenameGroupCommand
+    from core.kept_components import copies_of, kept_template
+    scene = history.scene
+    name = str(name).strip()
+    if not name:
+        raise ValueError("a component needs a name")
+    kept = {getattr(t, "uid", None): t for t in getattr(scene, "kept_components", None) or ()}
+    g = kept.get(placement) or _placements(history, [placement])[0]
+    targets = copies_of(scene, g.mesh)
+    template = kept_template(scene, g.mesh)
+    for extra in (template, g):
+        if extra is not None and extra not in targets:
+            targets.append(extra)
+    before = history.revision
+    targets = [t for t in targets if t.name != name]
+    if targets:
+        history.execute(CompoundCommand([RenameGroupCommand(t, name) for t in targets]))
+    return _answer(history, before)
+
+
 def undo(history):
     before = history.revision
     history.undo()
@@ -434,7 +559,10 @@ COMMANDS = {"follow_me": follow_me, "intersect_faces": intersect_faces,
             "explode_view": explode_view, "purge_unused": purge_unused,
             "purge_debris": purge_debris, "undo": undo, "redo": redo,
             "hide": hide, "unhide": unhide, "lock": lock, "rename_placement": rename_placement,
-            "set_tag": set_tag, "resegment_curve": resegment_curve, "repair_solid": repair_solid}
+            "set_tag": set_tag, "resegment_curve": resegment_curve, "repair_solid": repair_solid,
+            "rename_material": rename_material, "edit_material": edit_material,
+            "duplicate_material": duplicate_material, "delete_material": delete_material,
+            "delete_placements": delete_placements, "rename_component": rename_component}
 
 
 def run(history, name, /, **args):

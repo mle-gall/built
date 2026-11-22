@@ -67,8 +67,16 @@ Built (`core.protocol.commands.run(history, name, **args)`):
 | `set_tag` | `placements: [uid]`, `tag: tag key` | `AssignLayerCommand` |
 | `resegment_curve` | `edge: edge key`, `segments: integer` | `ResegmentCurveCommand` (`core/curve_segments.py`): the regular circle, polygon or arc rebuilt in place with that many pieces; a curve that is not flat is `rejected` |
 | `repair_solid` | `placement: uid` | the Solid Inspector's `RepairSolidsCommand` on the placement's mesh (shared by its copies); the answer adds `repaired` counts |
+| `rename_material` | `name`, `new_name` | `RestampMaterialCommand` under the new name: every face (front and back) and container wearing it follows. A name another material has raises `ValueError` |
+| `edit_material` | `name`, optional `color: [r,g,b]` 0–1, `opacity` 0–1 (1 = opaque), `tile: [w, h]` metres | plain: `RestampMaterialCommand`; textured colour/tile: `EditTexturedMaterialCommand` (each face keeps its own texture placement). `tile` on a plain material raises `ValueError` |
+| `duplicate_material` | `name`, optional `new_name` | `AddMaterialCommand` (`core/material_commands.py`): a copy worn by nothing; default name `"<name> copy"` (numbered when taken); the answer adds `name` |
+| `delete_material` | `name` | `DeleteMaterialCommand`: the registry entry goes and what wore it shows the default material; undo restores faces and containers exactly |
+| `delete_placements` | `placements: [uid]` (nested included) | one `DeleteGroupCommand` each, as one `CompoundCommand` step |
+| `rename_component` | `placement: uid` of any copy or of the kept template, `name` | `RenameGroupCommand` on every copy and the kept template, one step |
 
-The placement commands above (`hide` to `repair_solid`, added for the egui
+The material and component commands (`rename_material` to
+`rename_component`) were added for the Library (`views/wgpu_library.py`);
+a material is named by its registry name (§2). The placement commands above (`hide` to `repair_solid`, added for the egui
 UI) take placements at any depth of the open context, as the project tree
 names them; the older ones take top-level placements.
 
@@ -86,7 +94,6 @@ lists are the contract to build to):
 | `paint_faces` | `faces: [face key]`, `material: name \| null`, `side: "front" \| "back"` | `SetFaceColorCommand` family |
 | `soften_edges` | `edges: [edge key]`, `soft: bool` | `SoftenByAngleCommand` |
 | `move_placements` | `placements: [uid]`, `delta: [x, y, z]` | `MoveGroupCommand` |
-| `delete_placements` | `placements: [uid]` | `DeleteGroupCommand` |
 | `open_placement` / `close_placement` | `placement: uid` | `begin_group_edit` / `end_group_edit` (not History steps today) |
 
 ## 2. Stable keys

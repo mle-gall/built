@@ -8,6 +8,8 @@ use std::time::Instant;
 
 use egui::{pos2, vec2, Color32, CornerRadius, Margin, Pos2, Rect, Sense, Shadow, Stroke, Vec2};
 
+mod library;
+
 // ---- Design tokens (council 2026-11-22; one place, every component
 // below draws from these). Text on graphite glass, three levels plus off.
 const INK: Color32 = Color32::from_rgb(0xEE, 0xF1, 0xF4);        // primary text, active icons
@@ -41,6 +43,8 @@ const TOP_H: f32 = 40.0;
 const BOT_H: f32 = 36.0;
 const GUT: f32 = 8.0;
 const DOCK_W: f32 = 300.0;
+const DOCK_MIN_W: f32 = 260.0;
+const DOCK_MAX_W: f32 = 560.0;
 // Type roles (Inter 400 / 500 / 600 when bundled, else the system font).
 fn body() -> egui::FontId { egui::FontId::proportional(12.0) }
 fn meta() -> egui::FontId { egui::FontId::proportional(11.0) }
@@ -221,6 +225,12 @@ pub struct Ui {
     top_right_w: f32,
     units: String,
     glass: crate::glass::Glass,
+    /// The Library dock place (ui/library.rs): typed resources.
+    library: library::Library,
+    /// The dock's width (points): dragged on its left edge, kept by Python.
+    dock_w: f32,
+    /// The pointer shape the chrome asks for ("" or "resize_h").
+    cursor_shape: &'static str,
 }
 
 /// One tree row as Python sends it, in display order (Python owns
@@ -403,6 +413,9 @@ impl Ui {
             top_groups: Vec::new(),
             top_right_w: 0.0,
             units: "mm".into(),
+            library: Default::default(),
+            dock_w: DOCK_W,
+            cursor_shape: "",
         }
     }
 
@@ -485,8 +498,25 @@ impl Ui {
         col.unfiled = unfiled;
     }
     pub fn set_mode(&mut self, mode: String) {
-        if let Some(col) = self.column.as_mut() { col.mode = mode; }
+        if let Some(col) = self.column.as_mut() {
+            if mode == "Library" && col.mode != "Library" { self.library.opened(); }
+            col.mode = mode;
+        }
     }
+    /// The Library's content (views/wgpu_library.py): type tabs, the active
+    /// type, grid/list, sort, menus, and the rows already filtered and sorted.
+    #[allow(clippy::too_many_arguments)]
+    pub fn set_library(&mut self, types: Vec<(String, String, u32, bool)>, active: String, view: u8, sort: String,
+                       sorts: Vec<(String, String)>, verbs: Vec<(String, String)>, type_actions: Vec<(String, String)>,
+                       empty: String, filter: String, rows: Vec<(Vec<String>, Vec<i64>)>) {
+        self.library.set(types, active, view, sort, sorts, verbs, type_actions, empty, filter, rows);
+    }
+    /// The dock's width as last kept (clamped to what the window allows).
+    pub fn set_dock_width(&mut self, w: f32) { self.dock_w = w.clamp(DOCK_MIN_W, DOCK_MAX_W); }
+    /// The pointer the chrome wants over it: "resize_h" over the dock's grip.
+    pub fn cursor_shape(&self) -> &'static str { self.cursor_shape }
+    /// Opened again from elsewhere (Paint strip, ⌘K, the rail): the filter takes the keys.
+    pub fn library_opened(&mut self) { self.library.opened(); }
     pub fn set_issues(&mut self, on: bool) {
         if let Some(col) = self.column.as_mut() { col.issues = on; }
     }
@@ -582,6 +612,13 @@ impl Ui {
                 self.view_open = false; self.sel_more = false; self.menu = None;
             }
             return true;
+        }
+        if self.column.as_ref().is_some_and(|c| c.mode == "Library" && c.prompt.is_none()) && pressed {
+            if let Some(a) = self.library.key(name) {
+                if !a.is_empty() { self.actions.push(format!("lib:{a}")); }
+                if name == "Enter" { self.ctx.memory_mut(|m| m.stop_text_input()); }
+                return true;
+            }
         }
         if name == "Escape" {
             if let Some(col) = self.column.as_mut() {
@@ -910,7 +947,7 @@ impl Ui {
                         }
                         if !self.options.is_empty() { bar_divider(ui); }
                         ui.add_space(6.0);
-                        let dock_w = if self.review { 0.0 } else { DOCK_W };
+                        let dock_w = if self.review { 0.0 } else { self.dock_w };
                         let room = (ui.available_width() - dock_w - 8.0).max(40.0);
                         let mut job = egui::text::LayoutJob::single_section(self.hint.clone(), egui::TextFormat {
                             font_id: body(), color: DIM, ..Default::default() });
@@ -1342,10 +1379,12 @@ impl Ui {
         let (top, bottom) = self.band(ctx, screen);
         let self_icons = self.icons.clone();
         let Some(col) = self.column.as_mut() else { return };
-        const W: f32 = DOCK_W;
+        #[allow(non_snake_case)]
+        let W: f32 = self.dock_w.min((screen.width() * 0.45).max(DOCK_MIN_W));
         const ROW: f32 = 22.0;
         let height = (bottom - top).max(200.0);
         let mut actions: Vec<String> = Vec::new();
+        let mut lib_actions: Vec<String> = Vec::new();
         egui::Area::new(egui::Id::new("column"))
             .fixed_pos(pos2(screen.max.x - GUT - W, top))
             .order(egui::Order::Foreground)
@@ -1355,18 +1394,22 @@ impl Ui {
                     ui.set_max_width(W - 20.0);
                     ui.set_height(height - 20.0);
                     ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
-                    // Header: title, Unfiled chip.
+                    // Header: the dock's places (Project | Library) as one
+                    // switch, Project's mode (Problems) with its way back,
+                    // then the issues toggle and the structure menu.
+                    let in_library = col.mode == "Library";
                     ui.horizontal(|ui| {
-                        ui.set_min_height(24.0);
-                        ui.add_space(8.0);
-                        if col.mode.is_empty() {
-                            caption_plain(ui, "Project");
-                        } else {
-                            let back = (String::new(), "‹ Project".to_owned(), "Back to the tree (Esc)".to_owned(), String::new(), -1i8, true);
-                            if item_button(ui, &back, None) { actions.push("mode\u{1f}".into()); }
-                            ui.add_space(4.0);
-                            caption_plain(ui, &col.mode);
+                        ui.set_min_height(28.0);
+                        let at = if in_library { 1 } else { 0 };
+                        match library::segmented(ui, &["Project", "Library"], at, 150.0) {
+                            Some(0) if in_library || !col.mode.is_empty() => actions.push("mode\u{1f}".into()),
+                            Some(1) if !in_library => actions.push("mode\u{1f}library".into()),
+                            _ => {}
                         }
+                        if !col.mode.is_empty() && !in_library && library::caption_mode(ui, &col.mode) {
+                            actions.push("mode\u{1f}".into());
+                        }
+                        if in_library { return; }
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             let dots = (String::new(), "⋯".to_owned(), "Structure: new node, propose from tags…".to_owned(), String::new(), -1i8, true);
                             let before = ui.cursor();
@@ -1385,20 +1428,27 @@ impl Ui {
                             }
                         });
                     });
-                    ui.add_space(4.0);
-                    if col.mode.is_empty() { ui.horizontal(|ui| {
-                        ui.add_space(4.0);
-                        ui.spacing_mut().item_spacing = vec2(2.0, 0.0);
-                        for (i, label) in ["Filing", "Drawing", "Export"].iter().enumerate() {
-                            let item = (String::new(), label.to_string(), String::new(), String::new(),
-                                        if col.colset == i as u8 { 1 } else { 0 }, true);
-                            if item_button(ui, &item, None) && col.colset != i as u8 {
+                    ui.add_space(6.0);
+                    if col.mode.is_empty() {
+                        // Column sets: second-level tabs over the same rows.
+                        let sets: Vec<(String, String, bool)> = ["Filing", "Drawing", "Export"].iter()
+                            .map(|l| (l.to_string(), String::new(), true)).collect();
+                        if let Some(i) = library::underline_tabs(ui, &sets, col.colset as usize) {
+                            if col.colset != i as u8 {
                                 col.colset = i as u8;
                                 actions.push(format!("colset\u{1f}{i}"));
                             }
                         }
-                    }); }
+                    }
                     ui.add_space(6.0);
+                    // The Library takes the tree's place (the tree code below
+                    // stays as it was, in a block it can leave).
+                    'tree: {
+                    if in_library {
+                        let room = if col.inspector_title.is_empty() { ui.available_height() - 40.0 } else { ui.available_height() * 0.62 };
+                        self.library.show(ui, &self_icons, room - 70.0, &mut lib_actions);
+                        break 'tree;
+                    }
                     if let Some(what) = &col.filing {
                         let banner = format!("File {what} to…  click a node, or type and press Enter");
                         let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 22.0), Sense::hover());
@@ -1660,6 +1710,7 @@ impl Ui {
                                 }
                             }
                         });
+                    } // 'tree
                     // Inspector.
                     ui.add_space(6.0);
                     let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 1.0), Sense::hover());
@@ -1916,8 +1967,36 @@ impl Ui {
                 col.edits.retain(|k, _| !k.starts_with("prompt:"));
             }
         }
+        if col.mode == "Library" { self.library.popups(ctx, &mut lib_actions); } else { self.library.menu = None; }
+        // The grip on the dock's left edge: drag to resize, double-click resets.
+        let mut shape = "";
+        if let Some(r) = ctx.memory(|m| m.area_rect(egui::Id::new("column"))) {
+            let dock_w = &mut self.dock_w;
+            egui::Area::new(egui::Id::new("dock_grip"))
+                .fixed_pos(pos2(r.min.x - 6.0, r.min.y + 14.0))
+                .order(egui::Order::Foreground)
+                .show(ctx, |ui| {
+                    let (g, resp) = ui.allocate_exact_size(vec2(9.0, (r.height() - 28.0).max(20.0)), Sense::click_and_drag());
+                    if resp.hovered() || resp.dragged() {
+                        shape = "resize_h";
+                        ui.painter().vline(g.center().x + 1.0, g.y_range().shrink(g.height() * 0.3), Stroke::new(2.0_f32, ACCENT_LINE));
+                    }
+                    let max_w = (screen.width() * 0.45).clamp(DOCK_MIN_W, DOCK_MAX_W);
+                    if resp.dragged() {
+                        *dock_w = (*dock_w - resp.drag_delta().x).clamp(DOCK_MIN_W, max_w);
+                    }
+                    if resp.double_clicked() { *dock_w = DOCK_W; }
+                    if resp.drag_stopped() || resp.double_clicked() {
+                        cmds.push(format!("dockw:{}", dock_w.round()));
+                    }
+                });
+        }
+        self.cursor_shape = shape;
         for a in actions {
             self.actions.push(format!("tree:{a}"));
+        }
+        for a in lib_actions {
+            self.actions.push(format!("lib:{a}"));
         }
         self.actions.extend(cmds);
         if let Some(r) = more_at {
@@ -2009,7 +2088,9 @@ impl Ui {
                      ("head_menu", self.column.as_ref().is_some_and(|c| c.head_menu.is_some())),
                      ("prompt", self.column.as_ref().is_some_and(|c| c.prompt.is_some())),
                      ("pick_menu", self.column.as_ref().is_some_and(|c| c.pick.is_some())),
-                     ("color_pick", self.column.as_ref().is_some_and(|c| c.color_pick.is_some()))];
+                     ("color_pick", self.column.as_ref().is_some_and(|c| c.color_pick.is_some())),
+                     ("lib_menu", work && self.library.menu_open()),
+                     ("dock_grip", work && self.column.is_some())];
         self.hit = shown.iter()
             .filter(|(_, on)| *on)
             .filter_map(|(n, _)| ctx.memory(|m| m.area_rect(egui::Id::new(*n))))
