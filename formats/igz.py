@@ -47,12 +47,14 @@ only up to format 2 refuse it with a message instead of opening it empty.
 """
 from __future__ import annotations
 
+from contextlib import contextmanager, nullcontext
 import json
 from types import SimpleNamespace
 import math
 from pathlib import Path
 
 from core.version import __version__
+from formats.igz_stream import Fragment, SaveStream
 
 from PySide6.QtGui import QVector3D
 
@@ -152,7 +154,7 @@ def _texture_slots(node):
             yield from _texture_slots(value)
 
 
-def _pack_textures(payload) -> tuple[dict, int]:
+def _pack_textures(payload, *, blobs=None, resolved=None) -> tuple[dict, int]:
     """Rewrite the payload's texture entries in place for storage inside the
     container: ``"path"`` (a machine-local absolute path) → ``"embed"`` (an
     archive member name). Returns ``({member name: image bytes}, missing)``,
@@ -162,8 +164,8 @@ def _pack_textures(payload) -> tuple[dict, int]:
     import hashlib
     from core.texture import is_image_file, texture_file_name
 
-    blobs: dict = {}
-    resolved: dict = {}          # source path → member name ("" = unreadable)
+    blobs = {} if blobs is None else blobs
+    resolved = {} if resolved is None else resolved
     missing = 0
     def _member_for(src):
         nonlocal missing
@@ -523,13 +525,13 @@ def _write_geometry(arrays, table, layer_table, sink: dict) -> dict:
     offset = 0
     for name, arr in arrays.items():
         arr = np.ascontiguousarray(arr)
-        data = arr.tobytes()
+        data = memoryview(arr.reshape(-1)).cast("B")
         layout[name] = [arr.dtype.str, list(arr.shape), offset]
         pad = (-len(data)) % 8
-        chunks.append(data + b"\0" * pad)
+        chunks.extend((data, b"\0" * pad))
         offset += len(data) + pad
     member = f"{_GEOM_PREFIX}{len(sink)}.bin"
-    sink[member] = b"".join(chunks)
+    sink[member] = sink.store(chunks) if isinstance(sink, SaveStream) else b"".join(chunks)
     meta = {"member": member, "arrays": layout}
     if table:
         meta["face_attrs"] = table
@@ -682,30 +684,43 @@ def _save_scene(scene, path, *, backup):
         project.refresh_reference(scene, path)
         project.sync_files(scene, path)
         links.refresh_paths(scene, path)
-    steps = prepare_scene_steps(scene)
+    large = _live_element_count(scene) > _LARGE_DOCUMENT
+    with SaveStream() if large else nullcontext() as stream:
+        return _prepare_and_write(scene, path, backup, stream)
+
+
+def _prepare_and_write(scene, path, backup, stream):
+    steps = prepare_scene_steps(scene, stream=stream, large=stream is not None)
     while True:
         try:
             next(steps)
         except StopIteration as done:
-            backup_failed = backup and not _backup_previous(path)
-            stats = write_prepared(done.value, path)
-            if backup_failed:
-                stats["backup_failed"] = True
-            return stats
+            prepared = done.value
+            break
+    backup_failed = backup and not _backup_previous(path)
+    stats = write_prepared(prepared, path, stream=stream)
+    if backup_failed:
+        stats["backup_failed"] = True
+    return stats
 
 
-def prepare_scene_steps(scene, mesh_steps=None):
+def prepare_scene_steps(scene, mesh_steps=None, *, stream=None, large=None):
     """Yield between model blocks, returning an unencoded document payload."""
     # Accept a Scene or a bare Mesh (the M1 read-compat path feeds a Mesh).
     mesh = scene.mesh if hasattr(scene, "mesh") else scene
     # Decided BEFORE anything is serialized: a large document writes its
     # big meshes as binary blocks (format 3) and never builds their JSON.
-    large = mesh_steps is not None or _live_element_count(scene) > _LARGE_DOCUMENT
-    geom: dict | None = {} if large else None
+    if large is None:
+        large = mesh_steps is not None or _live_element_count(scene) > _LARGE_DOCUMENT
+    geom = stream if stream is not None else ({} if large else None)
     def block(m):
         if mesh_steps is not None:
             return (yield from mesh_steps(m))
-        return _mesh_json(m, geom)
+        block = _mesh_json(m, geom)
+        if stream is not None:
+            for key, value in block.items():
+                block[key] = _spool_json(value, stream)
+        return block
 
     payload = yield from block(mesh)
     groups = getattr(scene, "groups", None)
@@ -1021,18 +1036,39 @@ def prepare_scene_steps(scene, mesh_steps=None):
     return payload, geom, large, survey_blobs
 
 
-def write_prepared(prepared, path: Path, background=False) -> dict:
+def _spool_json(value, stream):
+    _, missing = _pack_textures(value, blobs=stream.blobs, resolved=stream.resolved)
+    stream.missing += missing
+    try:
+        return stream.json(value)
+    except ValueError:
+        raise NonFiniteDocumentError(_non_finite_where(value)) from None
+
+
+def write_prepared(prepared, path: Path, background=False, *, stream=None) -> dict:
     """Encode and write a detached payload. Never reads the live scene."""
+    if background:
+        with SaveStream() as scratch:
+            return _write_prepared(prepared, path, background, scratch)
+    return _write_prepared(prepared, path, background, stream)
+
+
+def _write_prepared(prepared, path, background, stream):
     payload, geom, large, survey_blobs = prepared
     if background:
+        geom = stream
         from formats.igz_snapshot import resolve_geometry
-        resolve_geometry(payload, geom)
+        resolve_geometry(payload, geom, lambda meta: _spool_json(meta, stream))
         from formats.igz_snapshot import Survey
         if isinstance(survey_blobs, Survey):
             from georef.photomesh import pack_mesh
             meta, survey_blobs = pack_mesh(survey_blobs.mesh)
             payload["photo_mesh"] = meta
-    blobs, missing = _pack_textures(payload)
+    if stream is None:
+        blobs, missing = _pack_textures(payload)
+    else:
+        blobs, missing = _pack_textures(payload, blobs=stream.blobs, resolved=stream.resolved)
+        missing += stream.missing
     blobs.update(survey_blobs)
     data = {
         "igz_format": (GEOMETRY_FORMAT if geom else
@@ -1041,11 +1077,8 @@ def write_prepared(prepared, path: Path, background=False) -> dict:
         "scene": payload,
     }
     try:
-        if background:
-            # The Python encoder yields the GIL between chunks; the C
-            # encoder can hold it throughout a huge placement hierarchy.
-            doc = "".join(json.JSONEncoder(separators=(",", ":"),
-                                           allow_nan=False).iterencode(data))
+        if stream is not None:
+            doc = stream.document(data)
         elif large:
             doc = json.dumps(data, separators=(",", ":"), allow_nan=False)
         else:
@@ -1058,7 +1091,7 @@ def write_prepared(prepared, path: Path, background=False) -> dict:
     if blobs or geom:
         _write_container(path, doc, blobs, fast=large, deflated=geom)
     else:
-        _write_atomic(path, doc.encode("utf-8"))
+        _write_atomic(path, doc if isinstance(doc, Fragment) else doc.encode("utf-8"))
     return {"embedded": len(blobs), "missing": missing}
 
 
@@ -1113,16 +1146,28 @@ def _non_finite_where(node, path: str = "scene") -> str:
     return path
 
 
-def _write_atomic(path: Path, data: bytes) -> None:
-    """Write via a sibling temp file + rename: a failure mid-write must not
-    leave the user's existing document truncated."""
-    tmp = path.with_name(path.name + ".part")
+@contextmanager
+def _atomic_output(path):
+    """Publish only a closed, complete file; simultaneous saves own separate temps."""
+    from uuid import uuid4
+
+    tmp = path.with_name(f".{uuid4().hex}.part")
+    target = tmp.open("xb")
     try:
-        tmp.write_bytes(data)
+        with target:
+            yield target
         tmp.replace(path)
-    except OSError:
+    finally:
         tmp.unlink(missing_ok=True)
-        raise
+
+
+def _write_atomic(path: Path, data: bytes | Fragment) -> None:
+    with _atomic_output(path) as dest:
+        if isinstance(data, Fragment):
+            for chunk in data.chunks():
+                dest.write(chunk)
+        else:
+            dest.write(data)
 
 
 def _write_container(path: Path, doc: str, blobs: dict,
@@ -1132,28 +1177,26 @@ def _write_container(path: Path, doc: str, blobs: dict,
     ``fast`` deflates at level 1 (see ``_LARGE_DOCUMENT``). ``deflated``
     holds members compressed like the document — the geometry blocks."""
     import zipfile
-    from tempfile import NamedTemporaryFile
+    with _atomic_output(path) as target:
+        with zipfile.ZipFile(target, "w") as zf:
+            def write(member, data, compression):
+                info = zipfile.ZipInfo(member, date_time=_ZIP_EPOCH)
+                info.compress_type = compression
+                level = 1 if fast else None
+                if isinstance(data, Fragment):
+                    info.file_size = data.size
+                    info._compresslevel = level
+                    with zf.open(info, "w") as dest:
+                        for chunk in data.chunks():
+                            dest.write(chunk)
+                else:
+                    zf.writestr(info, data, compresslevel=level)
 
-    with NamedTemporaryFile(dir=path.parent, prefix=path.name + ".",
-                            suffix=".part", delete=False) as target:
-        tmp = Path(target.name)
-    try:
-        with zipfile.ZipFile(tmp, "w") as zf:
-            info = zipfile.ZipInfo(_DOC_ENTRY, date_time=_ZIP_EPOCH)
-            info.compress_type = zipfile.ZIP_DEFLATED
-            zf.writestr(info, doc, compresslevel=1 if fast else None)
+            write(_DOC_ENTRY, doc, zipfile.ZIP_DEFLATED)
             for member in sorted(deflated or ()):
-                info = zipfile.ZipInfo(member, date_time=_ZIP_EPOCH)
-                info.compress_type = zipfile.ZIP_DEFLATED
-                zf.writestr(info, deflated[member],
-                            compresslevel=1 if fast else None)
+                write(member, deflated[member], zipfile.ZIP_DEFLATED)
             for member in sorted(blobs):
-                info = zipfile.ZipInfo(member, date_time=_ZIP_EPOCH)
-                info.compress_type = zipfile.ZIP_STORED
-                zf.writestr(info, blobs[member])
-        tmp.replace(path)
-    finally:
-        tmp.unlink(missing_ok=True)
+                write(member, blobs[member], zipfile.ZIP_STORED)
 
 
 def _in_worker(work, pump=None):

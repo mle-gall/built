@@ -142,7 +142,7 @@ def snapshot_steps(scene):
     return (yield from copy_steps(prepared))
 
 
-def resolve_geometry(payload, sink):
+def resolve_geometry(payload, sink, encode_meta):
     """Worker-only: encode captured arrays into the usual format-3 blocks."""
     import numpy as np
     from formats.igz import (_write_geometry, _pack_plan, _bulk_sized,
@@ -179,6 +179,7 @@ def resolve_geometry(payload, sink):
                         if not _bulk_sized(len(arrays['edges']),
                                            len(arrays['ring_counts'])):
                             hit['sequential'] = True
+                    hit = encode_meta(hit)
                     encoded[id(snapshot)] = hit
                 node['geom'] = hit
             stack.extend(node.values())
