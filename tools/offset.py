@@ -17,14 +17,9 @@ from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QPainter, QPen, QVector3D
 
 from core.edits import build_add_edges
-from core.history import (
-    AddFaceCommand,
-    DeleteFaceCommand,
-    SnapshotCompound,
-)
 from core.i18n import tr
 from core.mesh import Edge, Face
-from core.offset import offset_chain, offset_regions
+from core.offset import offset_chain
 from core.topology import max_offset_distance, offset_loop
 from core.units import fmt_len
 from tools.base import Tool, ToolContext
@@ -415,62 +410,21 @@ class OffsetTool(Tool):
         if self._chain:
             self._commit_chain(viewport)
             return
-        regions = offset_regions(self._loop, self._normal, self.distance)
-        if not regions:
-            # Safety net: the exact slide-and-intersect path still runs when
-            # the arrangement finds nothing, so a bug here can only lose the
-            # new cases, never the ones that already worked.
-            fallback = offset_loop(self._loop, self._normal, self.distance)
-            if fallback is not None:
-                regions = [(fallback, [])]
-        if not regions:
+        from core.offset import build_offset_face, OffsetHoleCollision
+        try:
+            mesh = viewport.scene.mesh
+            target = self.base_face.key if hasattr(mesh, "_store") else self.base_face
+            cmd = build_offset_face(mesh, target, self.distance)
+        except OffsetHoleCollision:
+            viewport.flash_status(tr(
+                "{d} runs into a hole of this face — try a smaller "
+                "offset", d=fmt_len(abs(self.distance))), 5000)
+            self._reset()
+            viewport.update()
+            return
+        if cmd is None:
             self._refuse(viewport)
             return
-        # Inward: the original boundary is the outer ring and each surviving
-        # region is a hole in it — plural, because a shape pinched at the
-        # waist really does come apart (a dumbbell with a 60 cm neck splits
-        # in two at 40 cm). Outward: the biggest region is the ring and the
-        # original is its single hole.
-        attrs = dict(getattr(self.base_face, "attrs", None) or {})
-        # The face's own holes go back with it (#537): a ring on top of
-        # four walls came back as a full square over the room otherwise.
-        own_holes = [list(h) for h in
-                     (getattr(self.base_face, "holes", None) or [])]
-        if self.distance > 0:
-            outer = self._loop
-            inners = [loop for loop, _holes in regions]
-            placed = _place_holes(own_holes, inners, self._normal)
-            if placed is None:
-                viewport.flash_status(tr(
-                    "{d} runs into a hole of this face — try a smaller "
-                    "offset", d=fmt_len(abs(self.distance))), 5000)
-                self._reset()
-                viewport.update()
-                return
-            inner_holes, strip_holes = placed
-        else:
-            outer = max((loop for loop, _holes in regions),
-                        key=lambda lp: _loop_extent(lp))
-            inners = [self._loop]
-            inner_holes, strip_holes = [own_holes], []
-        commands = [DeleteFaceCommand(self.base_face),
-                    AddFaceCommand(list(outer), auto=False,
-                                   holes=[list(lp) for lp in inners]
-                                   + strip_holes,
-                                   attrs=dict(attrs))]
-        for loop, holes in zip(inners, inner_holes):
-            commands.append(AddFaceCommand(list(loop), auto=False,
-                                           holes=holes or None,
-                                           attrs=dict(attrs)))
-        # Curve ids only when the offset kept the source's shape one-to-one:
-        # with the boundary re-arranged there is no run to mirror.
-        if len(regions) == 1 and len(regions[0][0]) == len(self._loop):
-            commands.extend(self._curve_tags(viewport.scene.mesh,
-                                             list(regions[0][0])))
-        # Snapshot undo: Delete/Add compose fine forward, but the hole edges
-        # the ring creates don't reverse cleanly command-by-command (they
-        # leaked on undo). One snapshot reverses exactly.
-        cmd = SnapshotCompound(commands)
         viewport.history.execute(cmd)
         sign = -1.0 if self.distance < 0 else 1.0
         self._last = {
@@ -538,31 +492,6 @@ class OffsetTool(Tool):
                 5000)
         self._reset()
         viewport.update()
-
-    def _curve_tags(self, mesh, off: list[QVector3D]) -> list:
-        from core.history import TagCurveCommand
-
-        loop = self._loop
-        n = len(loop)
-        ids: list = []
-        for i in range(n):
-            va = mesh.vertex_at(loop[i])
-            vb = mesh.vertex_at(loop[(i + 1) % n])
-            e = mesh.find_edge(va, vb) if va is not None and vb is not None \
-                else None
-            ids.append(e.curve if e is not None else None)
-        if ids[0] is not None and all(c == ids[0] for c in ids):
-            return [TagCurveCommand(list(off), closed=True)]  # full circle
-        tags = []
-        for k in range(n):
-            if ids[k] is None or ids[(k - 1) % n] == ids[k]:
-                continue                                       # not a run start
-            pts, j = [off[k]], k
-            while ids[j] == ids[k]:
-                pts.append(off[(j + 1) % n])
-                j = (j + 1) % n
-            tags.append(TagCurveCommand(pts, closed=False))
-        return tags
 
     def _reset(self) -> None:
         self.hovered_face = None
@@ -660,74 +589,3 @@ def _run_from_edge(edge: Edge):
     back, _ = walk(edge.v0, edge)
     return list(reversed(back)) + [QVector3D(edge.v0.position),
                                    QVector3D(edge.v1.position)] + fwd, False
-
-
-def _place_holes(holes: list, regions: list, normal: QVector3D):
-    """Where each of a face's ``holes`` goes after an inward offset:
-    ``(per_region, strip)`` — the holes inside each of ``regions`` (in
-    order), and those left in the strip between the outline and the
-    regions. ``None`` when a hole crosses or touches a region's outline:
-    the offset reaches into the hole, and no face drawn from these loops
-    would be right (#537)."""
-    from core.arrangement import _point_in_polygon, plane_basis
-    u, w = plane_basis(normal)
-    origin = regions[0][0] if regions else QVector3D()
-
-    def flat(loop):
-        return [(QVector3D.dotProduct(p - origin, u),
-                 QVector3D.dotProduct(p - origin, w)) for p in loop]
-
-    flat_regions = [flat(r) for r in regions]
-    per_region = [[] for _ in regions]
-    strip = []
-    for hole in holes:
-        fh = flat(hole)
-        if any(_outlines_meet(fh, fr) for fr in flat_regions):
-            return None
-        # Outlines that do not meet are nested or apart: one vertex says
-        # which. A region inside the hole means the offset went past it.
-        for i, fr in enumerate(flat_regions):
-            if _point_in_polygon(fh[0], fr):
-                per_region[i].append(list(hole))
-                break
-            if _point_in_polygon(fr[0], fh):
-                return None
-        else:
-            strip.append(list(hole))
-    return per_region, strip
-
-
-def _outlines_meet(a: list, b: list, eps: float = 1e-6) -> bool:
-    """Whether two closed 2D outlines cross, touch or overlap anywhere."""
-    def orient(p, q, r):
-        v = (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])
-        return 0 if abs(v) < eps else (1 if v > 0 else -1)
-
-    def on_seg(p, q, r):
-        return (min(p[0], r[0]) - eps <= q[0] <= max(p[0], r[0]) + eps
-                and min(p[1], r[1]) - eps <= q[1] <= max(p[1], r[1]) + eps)
-
-    for i in range(len(a)):
-        p1, p2 = a[i], a[(i + 1) % len(a)]
-        for j in range(len(b)):
-            q1, q2 = b[j], b[(j + 1) % len(b)]
-            o1, o2 = orient(p1, p2, q1), orient(p1, p2, q2)
-            o3, o4 = orient(q1, q2, p1), orient(q1, q2, p2)
-            if o1 != o2 and o3 != o4:
-                return True
-            if (o1 == 0 and on_seg(p1, q1, p2)
-                    or o2 == 0 and on_seg(p1, q2, p2)
-                    or o3 == 0 and on_seg(q1, p1, q2)
-                    or o4 == 0 and on_seg(q1, p2, q2)):
-                return True
-    return False
-
-
-def _loop_extent(loop) -> float:
-    """A cheap size for picking the biggest region: the bounding box's
-    diagonal. Area would need the plane; this only has to rank."""
-    xs = [p.x() for p in loop]
-    ys = [p.y() for p in loop]
-    zs = [p.z() for p in loop]
-    return ((max(xs) - min(xs)) ** 2 + (max(ys) - min(ys)) ** 2
-            + (max(zs) - min(zs)) ** 2)

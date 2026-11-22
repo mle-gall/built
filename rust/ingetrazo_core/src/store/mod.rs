@@ -20,12 +20,17 @@
 
 pub mod access;
 pub mod build;
+mod changes;
 pub mod cow;
 pub mod edit;
 pub mod keys;
+pub mod intersect;
+pub mod offset;
 pub mod py;
 pub mod read;
+mod revolution;
 pub mod stitch;
+pub mod sweep;
 pub mod topo;
 mod hole;
 #[cfg(test)]
@@ -136,6 +141,7 @@ pub struct State {
 /// (pack, snap index) borrow off the GIL while the live store moves on.
 #[derive(Clone, Debug)]
 pub struct Snapshot {
+    pub revision: u64,
     pub lineage: u64,
     pub state: State,
 }
@@ -206,7 +212,7 @@ impl Store {
 
     /// `capture_state`: O(chunks).
     pub fn snapshot(&self) -> Snapshot {
-        Snapshot { lineage: self.lineage, state: self.state.clone() }
+        Snapshot { revision: self.revision, lineage: self.lineage, state: self.state.clone() }
     }
 
     /// `restore_state`. Python clears `_displaced` on restore (it is not in

@@ -28,15 +28,19 @@ pub struct V3(pub f32, pub f32, pub f32);
 
 impl V3 {
     #[inline]
+    pub(crate) fn add(self, o: V3) -> V3 {
+        V3(self.0 + o.0, self.1 + o.1, self.2 + o.2)
+    }
+    #[inline]
     pub fn sub(self, o: V3) -> V3 {
         V3(self.0 - o.0, self.1 - o.1, self.2 - o.2)
     }
     #[inline]
-    fn mul(self, s: f32) -> V3 {
+    pub(crate) fn mul(self, s: f32) -> V3 {
         V3(self.0 * s, self.1 * s, self.2 * s)
     }
     #[inline]
-    fn div(self, s: f32) -> V3 {
+    pub(crate) fn div(self, s: f32) -> V3 {
         V3(self.0 / s, self.1 / s, self.2 / s)
     }
     #[inline]
@@ -650,7 +654,7 @@ fn earcut_impl(pts: &[(f64, f64)], holes: &[usize], spatial: bool) -> Vec<[usize
 }
 
 /// `core.triangulate.is_convex`.
-fn is_convex(poly: &[(f64, f64)]) -> bool {
+pub(crate) fn is_convex(poly: &[(f64, f64)]) -> bool {
     let n = poly.len();
     if n < 4 {
         return true;

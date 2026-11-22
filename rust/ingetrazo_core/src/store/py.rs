@@ -679,6 +679,104 @@ impl PyMeshStore {
         Ok((self.inner.key(Kind::Edge, e), ch))
     }
 
+    #[pyo3(signature = (key, path, closed, hypot, compensated=true))]
+    fn sweep_stations(&self, key: u128, path: Vec<[f64; 3]>, closed: bool, hypot: &str, compensated: bool)
+        -> PyResult<Option<Vec<super::sweep::Station>>> {
+        let face = live_of(&self.inner, Kind::Face, key)?;
+        Ok(self.inner.sweep_stations(face, &path, closed, crate::hypot_of(hypot)?, compensated))
+    }
+
+    #[pyo3(signature = (key, stations, closed, hypot, cap_holes=None))]
+    fn sweep_face(&mut self, key: u128, stations: Vec<super::sweep::Station>,
+                  closed: bool, hypot: &str, cap_holes: Option<[Vec<bool>; 2]>) -> PyResult<PyChange> {
+        let face = live_of(&self.inner, Kind::Face, key)?;
+        let h = crate::hypot_of(hypot)?;
+        Ok(self.op_all(|s, ch| s.sweep_face(face, &stations, closed, h, cap_holes.as_ref(), ch))?.1)
+    }
+
+    fn finish_sweep(&mut self, before: &PyStoreSnapshot, key: u128, path: Vec<[f64; 3]>,
+                    stations: Vec<super::sweep::Station>, closed: bool, hypot: &str)
+        -> PyResult<(Vec<Vec<u128>>, PyChange)> {
+        if before.inner.lineage != self.inner.lineage || before.inner.state.ns != self.inner.state.ns {
+            return Err(PyValueError::new_err("foreign sweep snapshot"));
+        }
+        if path.len() < 2 || path.len() != stations.len() || stations.iter().any(|s|
+            s.len() != stations[0].len() || s.iter().zip(&stations[0]).any(|(a,b)| a.len()!=b.len())) {
+            return Err(PyValueError::new_err("incompatible sweep stations"));
+        }
+        let old = reader(&before.inner);
+        let face = live_of(&old, Kind::Face, key)?;
+        let h = crate::hypot_of(hypot)?;
+        self.op(|s, ch| {
+            s.soften_sweep(&old, h, ch);
+            Ok(s.sweep_curves(&old, face, &path, &stations, closed))
+        })
+    }
+
+    fn set_curve_run(&mut self, keys: Vec<u128>, curve: i64) -> PyResult<PyChange> {
+        let edges = keys.into_iter().map(|k| live_of(&self.inner, Kind::Edge, k))
+            .collect::<PyResult<Vec<_>>>()?;
+        Ok(self.op(|s,ch| {
+            for e in edges {
+                s.state.ecurve.set(e as usize,curve);
+                ch.modified[1].push(s.key(Kind::Edge,e));
+            }
+            Ok(())
+        })?.1)
+    }
+
+    fn offset_outline(&self, key: u128, normal: [f32; 3], distance: f64, hypot: &str)
+        -> PyResult<Vec<super::intersect::Segment>> {
+        let face = live_of(&self.inner, Kind::Face, key)?;
+        Ok(self.inner.offset_outline(face, normal, distance, crate::hypot_of(hypot)?))
+    }
+
+    fn offset_hole_targets(&self, key: u128, regions: Vec<Vec<[f32; 3]>>, normal: [f32; 3],
+                           hypot: &str) -> PyResult<Option<Vec<i64>>> {
+        let face = live_of(&self.inner, Kind::Face, key)?;
+        Ok(super::offset::place_holes(&self.inner, face, &regions, normal, crate::hypot_of(hypot)?))
+    }
+
+    fn keep_offset_regions(&self, key: u128, regions: Vec<Vec<[f32; 3]>>, normal: [f32; 3],
+                           distance: f64, hypot: &str) -> PyResult<Vec<bool>> {
+        let face = live_of(&self.inner, Kind::Face, key)?;
+        Ok(super::offset::keep_regions(&self.inner, face, regions, normal, distance, crate::hypot_of(hypot)?))
+    }
+
+    fn offset_face(&mut self, key: u128, regions: Vec<Vec<Vec<[f64; 3]>>>)
+        -> PyResult<(Vec<u128>, PyChange)> {
+        let face = live_of(&self.inner, Kind::Face, key)?;
+        self.op_all(|s, ch| s.offset_face(face, &regions, ch))
+    }
+
+    /// Crossing segments for loose faces in this editing context, in pair order.
+    #[pyo3(signature = (selected, mode, hypot, placements=Vec::new(), other_world=Vec::new()))]
+    fn intersection_segments(&self, py: Python<'_>, selected: Vec<u128>, mode: &str, hypot: &str,
+                             placements: Vec<(usize, super::intersect::WorldRings)>,
+                             other_world: Vec<super::intersect::WorldRings>)
+        -> PyResult<Vec<super::intersect::Segment>> {
+        if !matches!(mode, "context" | "selection" | "model") {
+            return Err(PyValueError::new_err("unknown intersection mode"));
+        }
+        use super::intersect::Input;
+        let mut faces = Vec::with_capacity(selected.len() + placements.len());
+        let mut groups = placements.into_iter().peekable();
+        for (i, key) in selected.into_iter().map(Some).chain([None]).enumerate() {
+            while groups.peek().is_some_and(|(at, _)| *at == i) {
+                faces.push(Input::Placement(groups.next().unwrap().1));
+            }
+            if let Some(k) = key {
+                faces.push(Input::Face(live_of(&self.inner, Kind::Face, k)?));
+            }
+        }
+        if groups.next().is_some() {
+            return Err(PyValueError::new_err("placement offsets must be sorted within the selection"));
+        }
+        let h = crate::hypot_of(hypot)?;
+        let store = &self.inner;
+        Ok(py.detach(|| super::intersect::segments(store, &faces, &other_world, mode, h)))
+    }
+
     /// `Mesh.add_face` with the rings as positions (outer first, holes
     /// already filtered): `(key, change)`.
     fn add_face(&mut self, rings: Vec<Vec<(f64, f64, f64)>>) -> PyResult<(u128, PyChange)> {
@@ -1029,6 +1127,7 @@ fn reader(snap: &Snapshot) -> Store {
     let mut st = Store::empty(snap.state.ns, Weld::default());
     st.state = snap.state.clone();
     st.lineage = snap.lineage;
+    st.revision = snap.revision;
     st
 }
 
@@ -1048,6 +1147,19 @@ impl PyStoreSnapshot {
     /// chunk pointers first, content only where they differ.
     fn same_as(&self, other: &PyStoreSnapshot) -> bool {
         self.inner.lineage == other.inner.lineage && self.inner.state.same_as(&other.inner.state)
+    }
+
+    /// Net change between two immutable snapshots of one key namespace.
+    fn changes_since(&self, py: Python<'_>, before: &PyStoreSnapshot, attrs: Vec<u128>) -> PyResult<PyChange> {
+        if self.inner.lineage != before.inner.lineage || self.inner.state.ns != before.inner.state.ns {
+            return Err(PyValueError::new_err("snapshots have different key namespaces"));
+        }
+        let (new, old) = (reader(&self.inner), reader(&before.inner));
+        let mut ch = py.detach(|| new.changes_since(&old));
+        ch.modified[2].extend(attrs.into_iter().filter(|&k|
+            new.slot(Kind::Face, k).is_some() && old.slot(Kind::Face, k).is_some()));
+        ch.dedup();
+        Ok(PyChange { inner: ch })
     }
 
     /// Live keys of `kind` in the snapshot, list order, as ints.

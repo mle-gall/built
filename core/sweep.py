@@ -429,11 +429,67 @@ def orient_closed_path(pts, face):
     return pts
 
 
+def _store_sweep(mesh, key, path, closed, h):
+    import sys
+    store = mesh._store
+    from core.mesh import Mesh
+    points = [p.toTuple() for p in path]
+    stations = store.sweep_stations(key, points, closed, h, sys.version_info >= (3, 12))
+    if stations is None:
+        return False
+    before = store.snapshot()
+    cap_holes = None
+    if not closed and len(stations[0]) > 2:
+        from core.store_mesh import _hole_filter
+        cap_holes = [_hole_filter([list(reversed(r)) for r in stations[0][1:]]),
+                     _hole_filter(stations[-1][1:])]
+    store.sweep_face(key, stations, closed, h, cap_holes)
+    mesh._dirty()
+    seed = {_key(QVector3D(*p)) for station in stations for ring in station for p in ring}
+    run_stitch(mesh, seed, None, coplanar_merge=False)
+    runs, _ = store.finish_sweep(before, key, points, stations, closed, h)
+    for run in runs:
+        store.set_curve_run(run, Mesh.next_curve_id())
+    mesh._dirty()
+    orient_outward(mesh)
+    return True
+
+
+def build_sweep_face(mesh, key, path, closed, rejection_message="degenerate sweep path"):
+    """Plan a store sweep by profile key. The resulting command exposes its net change."""
+    from core.history import CommandRejected
+    from core.store_face_edit import StoreFaceMutation
+    from core.store_mesh import FaceView
+    if not mesh._store.is_live(key):
+        raise KeyError(key)
+
+    def mutate(scene):
+        if not sweep_profile(scene.mesh, FaceView(scene.mesh, key), path, closed):
+            raise CommandRejected(rejection_message)
+
+    return StoreFaceMutation(mutate)
+
+
 def sweep_profile(mesh, face, path, closed) -> bool:
     """Sweep ``face`` (with holes) along ``path``; mutates ``mesh`` in place.
 
     Returns ``False`` (mesh untouched) on degenerate input — a 180° reversal
     in the path, a segment parallel to a joint plane, a zero-length span."""
+    from core.store_mesh import _hypot, _store_of
+    store = _store_of(mesh)
+    h = _hypot() if store is not None else None
+    if h:
+        if mesh.__dict__.get("_resident_edit"):
+            return _store_sweep(mesh, face.key, path, closed, h)
+        from core.store_face_edit import resident_edit
+        before = mesh.capture_state()
+        with resident_edit(mesh):
+            try:
+                return _store_sweep(mesh, face.key, path, closed, h)
+            except Exception:
+                mesh.restore_state(before)
+                raise
+
     got = sweep_rings(face, path, closed)
     if got is None:
         return False

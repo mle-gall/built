@@ -260,7 +260,16 @@ def polys_of(entities) -> list:
 WITH_MODEL, WITH_SELECTION, WITH_CONTEXT = "model", "selection", "context"
 
 
-def segments_for(scene, mode: str) -> list:
+def _placement_rings(group):
+    """Apply the scene graph's composed Qt transform to each prototype face."""
+    from core.group import iter_placements
+    for placement, matrix in iter_placements(group):
+        for face in placement.mesh.faces:
+            yield [[(matrix.map(p) if matrix is not None else p).toTuple() for p in ring]
+                   for ring in [face.vertices, *face.holes]]
+
+
+def segments_for(scene, mode: str, selection=None) -> list:
     """The crossing segments Intersect Faces would add, for ``mode``:
 
     * **model** — the selection against everything it touches (the whole
@@ -270,9 +279,29 @@ def segments_for(scene, mode: str) -> list:
       edited (inside a group: its own geometry)."""
     from core.group import Group
     from core.mesh import Face
-    sel = [e for e in scene.selection if isinstance(e, (Face, Group))]
+    entities = scene.selection if selection is None else selection
+    sel = [e for e in entities if isinstance(e, (Face, Group))]
     if not sel:
         return []
+    mesh = scene.mesh
+    if hasattr(mesh, "_store"):
+        from core.store_mesh import _hypot
+        h = _hypot()
+        if h:
+            keys, placements = [], []
+            for entity in sel:
+                if isinstance(entity, Group):
+                    placements.extend((len(keys), rings) for rings in _placement_rings(entity))
+                else:
+                    keys.append(entity.key)
+            others = []
+            if mode == WITH_MODEL:
+                kids = scene.edit_group.children if scene.edit_group is not None else scene.groups
+                selected_groups = {e for e in sel if isinstance(e, Group)}
+                others = [rings for g in kids if g not in selected_groups
+                          for rings in _placement_rings(g)]
+            pairs = mesh._store.intersection_segments(keys, mode, h, placements, others)
+            return [(QVector3D(*a), QVector3D(*b)) for a, b in pairs]
     mine = polys_of(sel)
     if mode == WITH_SELECTION:
         return intersect(mine, mine, same=True)
@@ -291,3 +320,34 @@ def segments_for(scene, mode: str) -> list:
         return _dedupe(intersect(mine, others)
                        + intersect(mine, mine, same=True))
     return intersect(mine, others)
+
+
+def build_intersection_edit(scene, segments):
+    """Install crossing segments through the drawing planner under one snapshot."""
+    from core.edits import build_add_edges
+    from core.history import SnapshotCompound
+    from core.store_face_edit import resident_edit, StoreFaceMutation, StoreFaceCompound
+    if not hasattr(scene.mesh, "_store"):
+        return build_add_edges(scene, segments, detect_faces=True)
+    with resident_edit(scene.mesh):
+        command = build_add_edges(scene, segments, detect_faces=True)
+    if isinstance(command, SnapshotCompound):
+        return StoreFaceCompound(command.inner, heal=command._heal)
+    return StoreFaceMutation(command.do)
+
+
+def build_intersect_faces(scene, mode, face_keys=None):
+    """Plan an intersection by face keys, or from the current selection including groups.
+
+    Return (segment count, snapshot command). A sub-weld segment collapses
+    to one vertex and cannot be installed as an edge.
+    """
+    from core.mesh import _KEY_SCALE
+    if face_keys is None:
+        pairs = segments_for(scene, mode)
+    else:
+        from core.store_mesh import FaceView
+        faces = [FaceView(scene.mesh, k) for k in face_keys]
+        pairs = segments_for(scene, mode, faces)
+    segments = [(p, q) for p, q in pairs if (q - p).length() >= 1.0 / _KEY_SCALE]
+    return len(segments), build_intersection_edit(scene, segments) if segments else None
