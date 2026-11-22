@@ -509,3 +509,69 @@ def test_the_gl_view_still_gives_its_frame(win, monkeypatch, tmp_path):
     again = saved_picture(path)
     assert again is not None and again == picture
 
+
+# ---- Removing recents ----------------------------------------------------------
+def test_remove_from_recents_leaves_the_file(win, monkeypatch, tmp_path):
+    on(monkeypatch)
+    a, b = doc(tmp_path, "a.built"), doc(tmp_path, "b.built")
+    recent.remember(a)
+    recent.remember(b)                                  # Continue: b
+    ws.show(win)
+    ws.action(win, "forget" + ws.SEP + str(b.resolve()))
+    assert [r["path"] for r in recent.entries()] == [str(a.resolve())]
+    assert b.is_file()
+    assert QSettings().value("home/last_file", "") == ""
+    wait_loader(win)
+    files, cont = frame(win).rows()[0], frame(win).rows()[3]
+    assert [f[0][0] for f in files] == [str(a.resolve())]
+    assert cont[0] == str(a.resolve())                  # Continue falls back
+    # Gone for good: the legacy list does not bring it back.
+    ws.action(win, "forget" + ws.SEP + str(a.resolve()))
+    assert recent.entries() == []
+
+
+def test_a_moved_file_hides_its_dead_duplicate(win, monkeypatch, tmp_path):
+    on(monkeypatch)
+    (tmp_path / "Project").mkdir()
+    ride = doc(tmp_path / "Project", "ride.igz")
+    other = doc(tmp_path, "other.igz")
+    old_ride = tmp_path / "old" / "ride.igz"            # gone: same name, moved
+    old_site = tmp_path / "old" / "site.igz"            # gone: nothing replaces it
+    for p in (old_site, old_ride, other, ride):
+        recent.remember(p)
+    # A missing row ABOVE the existing one stays (it is not "further up").
+    stale = tmp_path / "older" / "other.igz"
+    rows = recent.entries()
+    rows.insert(0, {"path": str(stale), "pinned": False})
+    QSettings().setValue("home/recent_files", json.dumps(rows))
+    ws.show(win)
+    wait_loader(win)
+    files = frame(win).rows()[0]
+    paths = [f[0][0] for f in files]
+    assert str(old_ride.resolve()) not in paths
+    assert str(ride.resolve()) in paths
+    assert str(old_site.resolve()) in paths and str(stale) in paths
+    site = next(f for f in files if f[0][0] == str(old_site.resolve()))
+    assert site[1][1] == 1 and site[0][2].startswith("Not found — click to locate")
+    # Still on the list (hidden, not dropped) until Clear missing.
+    assert str(old_ride.resolve()) in [r["path"] for r in recent.entries()]
+    ws.action(win, "clearmissing")
+    left = [r["path"] for r in recent.entries()]
+    assert left == [str(ride.resolve()), str(other.resolve())]
+    files = frame(win).rows()[0]
+    assert [f[0][0] for f in files] == left
+
+
+def test_a_missing_tile_still_offers_to_locate(win, monkeypatch, tmp_path):
+    on(monkeypatch)
+    from views.filedialogs import file_dialogs
+    found = doc(tmp_path, "found.built")
+    gone = tmp_path / "away" / "lost.built"
+    recent.remember(gone)
+    asked = []
+    monkeypatch.setattr(file_dialogs, "getOpenFileName", lambda *a: (asked.append(a), (str(found), ""))[1])
+    ws.show(win)
+    wait_loader(win)
+    assert frame(win).rows()[0][0][1][1] == 1           # shown, missing
+    ws.action(win, "open" + ws.SEP + str(gone.resolve()))
+    assert asked and win._doc.path.resolve() == found.resolve()

@@ -342,7 +342,7 @@ class Page:
             return key
 
         files = []
-        for r in recent.entries("files"):
+        for r in visible_files():
             path = r["path"]
             c = _cached(path) or {}
             m = recent.meta(path)
@@ -403,6 +403,30 @@ def last_file() -> str:
     rows = recent.entries("files")
     plain = [r for r in rows if not r.get("pinned")]
     return (plain or rows)[0]["path"] if rows else ""
+
+
+def visible_files() -> list:
+    """The recent files the page shows: all of them but a missing one whose
+    name a file higher up the list has, and that one exists — the same
+    document, moved (``…/old/ride.igz`` gone, ``…/Project/ride.igz`` opened
+    since). Whether a file exists is what the worker found; until it has
+    looked, every row shows."""
+    rows, here = [], set()
+    for r in recent.entries("files"):
+        c = _cached(r["path"]) or {}
+        name = Path(r["path"]).name.casefold()
+        if c.get("exists") is False and name in here:
+            continue
+        if c.get("exists"):
+            here.add(name)
+        rows.append(r)
+    return rows
+
+
+def missing_files() -> list:
+    """The recent files the worker found gone (hidden duplicates included)."""
+    return [r["path"] for r in recent.entries("files")
+            if (_cached(r["path"]) or {}).get("exists") is False]
 
 
 def _folder(path) -> str:
@@ -727,6 +751,17 @@ def action(win, arg: str) -> None:
     elif verb == "pin" and rest:
         row = next((r for k in ("files", "projects") for r in recent.entries(k) if r["path"] == rest), None)
         recent.remember(rest, pinned=not (row or {}).get("pinned", False))
+        p.dirty = True
+        p.repaint()
+    elif verb == "forget" and rest:
+        # Off the list only; the file stays where it is.
+        recent.forget(rest)
+        p.dirty = True
+        p.repaint()
+    elif verb == "clearmissing":
+        gone = missing_files()
+        if gone:
+            recent.forget(gone)
         p.dirty = True
         p.repaint()
     elif verb == "template" and rest:

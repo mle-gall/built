@@ -34,6 +34,34 @@ def remember(path, pinned=None, settings=None, replace=None):
         st.setValue('home/last_file', path)
 
 
+def forget(paths, settings=None):
+    """Take ``paths`` (one or several) off the recent lists: the files
+    themselves are left alone. The start page's «Continue» and what it
+    remembered of them go too."""
+    st = settings or QSettings()
+    if isinstance(paths, (str, Path)):
+        paths = [paths]
+    gone = {str(p) for p in paths}
+    gone |= {str(Path(p).resolve()) for p in paths}
+    for kind in ('files', 'projects'):
+        rows = entries(kind, st)
+        kept = [r for r in rows if r['path'] not in gone]
+        if len(kept) != len(rows):
+            st.setValue('home/recent_' + kind, json.dumps(kept))
+            if kind == 'files':
+                # The legacy list would bring them back once the new one
+                # is empty (``entries``): keep the two in step.
+                st.setValue('recent_files', [r['path'] for r in kept])
+    if st.value('home/last_file', '') in gone:
+        st.remove('home/last_file')
+    try:
+        table = json.loads(st.value('home/meta', '{}'))
+    except (TypeError, ValueError):
+        table = {}
+    if isinstance(table, dict) and gone & set(table):
+        st.setValue('home/meta', json.dumps({k: v for k, v in table.items() if k not in gone}))
+
+
 def query(settings=None):
     return {kind: entries(kind, settings) for kind in ('files', 'projects')}
 
