@@ -1,4 +1,5 @@
 {
+ "Edge Style": "Edge Style",
  "{index} of {count}: {what} — click again for the next": "{count}개 중 {index}: {what} — 다시 클릭하면 다음 항목",
  "Add a terrain profile along a traced path (two clicks or drag)": "추적 경로를 따라 지형 단면 추가 (두 번 클릭 또는 드래그)",
  "Guide point": "가이드 점",
