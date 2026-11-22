@@ -138,6 +138,9 @@ struct Renderer {
     capture_next: bool,
     captured: Option<Vec<u8>>,
     overlay: overlay::Overlay,
+    /// The Sheets workspace's page (views/wgpu_sheets.py): drawn by
+    /// ``render_page`` instead of the scene.
+    page: overlay::Overlay,
     axes: axes::Axes,
     sections: sections::Sections,
     preview: preview::Preview,
@@ -571,6 +574,7 @@ impl Renderer {
             capture_next: false,
             captured: None,
             overlay: overlay::Overlay::new(&device, format),
+            page: overlay::Overlay::new(&device, format),
             axes: axes::Axes::new(&device, format, &camera),
             sections: sections::Sections::new(&device, format, &camera),
             lines: lines::Lines::new(&device, format, &camera),
@@ -2004,6 +2008,147 @@ impl Renderer {
         self.overlay
             .upload(&self.device, &self.queue, width, height, bytes);
         Ok(())
+    }
+    /// The Sheets page layer: the ``w`` × ``h`` rectangle at ``x``, ``y`` of
+    /// a ``width`` × ``height`` image (physical pixels, straight RGBA). The
+    /// image is (re)made at that size first; False when the rectangle does
+    /// not fit it.
+    #[allow(clippy::too_many_arguments)]
+    fn page_upload(&mut self, width: u32, height: u32, x: u32, y: u32, w: u32, h: u32,
+                   rgba: PyReadonlyArray1<'_, u8>) -> PyResult<bool> {
+        let bytes = rgba.as_slice()?;
+        if width == 0 || height == 0 {
+            return Err(PyValueError::new_err("page must have a size"));
+        }
+        self.page.ensure(&self.device, width, height);
+        Ok(self.page.upload_region(&self.queue, x, y, w, h, bytes))
+    }
+    /// The page layer's image size, or None.
+    fn page_size(&self) -> Option<(u32, u32)> { self.page.size() }
+    /// Let the page layer go (leaving the workspace).
+    fn page_clear(&mut self) { self.page.clear(); }
+    /// A frame of the Sheets workspace: the desk, the page layer, the chrome
+    /// over it. No scene pass runs; the resident scene stays as it is.
+    #[pyo3(signature = (present=true))]
+    fn render_page(&mut self, present: bool) -> PyResult<(f64, Option<f64>)> {
+        let start = Instant::now();
+        self.device.poll(wgpu::Maintain::Poll);
+        let polled = Instant::now();
+        let frame = if present { Some(self.surface.get_current_texture()
+            .map_err(|e| PyValueError::new_err(e.to_string()))?) } else { None };
+        let target = frame.as_ref().map(|f| &f.texture).unwrap_or(&self.offscreen);
+        let acquired = Instant::now();
+        self.last_acquire = acquired.duration_since(polled).as_secs_f64() * 1000.;
+        let color = target.create_view(&Default::default());
+        let mut e = self.device.create_command_encoder(&Default::default());
+        {
+            // The composer's desk (slate, 70 76 84) where the page has no pixels yet.
+            let _pass = e.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("page desk"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &color,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color { r: 0.061, g: 0.072, b: 0.088, a: 1.0 }),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+        }
+        self.page.draw(&mut e, &color, self.config.width, self.config.height, None);
+        if present && self.ui_target == self.active {
+            if let Some(ui) = self.ui.as_mut() {
+                ui.paint(&self.device, &self.queue, &mut e, target, &color, [self.config.width, self.config.height], self.ui_scale);
+            }
+        }
+        let stride = (self.config.width * 4).div_ceil(256) * 256;
+        let capture = self.capture_next.then(|| {
+            let read = self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("page capture"),
+                size: stride as u64 * self.config.height as u64,
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                mapped_at_creation: false,
+            });
+            e.copy_texture_to_buffer(
+                wgpu::TexelCopyTextureInfo { texture: target, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
+                wgpu::TexelCopyBufferInfo { buffer: &read, layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0, bytes_per_row: Some(stride), rows_per_image: Some(self.config.height) } },
+                wgpu::Extent3d { width: self.config.width, height: self.config.height, depth_or_array_layers: 1 },
+            );
+            read
+        });
+        let encoded = Instant::now();
+        self.queue.submit([e.finish()]);
+        let submitted = Instant::now();
+        if let Some(read) = capture {
+            let (tx, rx) = std::sync::mpsc::channel();
+            read.slice(..).map_async(wgpu::MapMode::Read, move |r| { let _ = tx.send(r); });
+            self.device.poll(wgpu::Maintain::Wait);
+            rx.recv().map_err(|e| PyValueError::new_err(e.to_string()))?
+                .map_err(|e| PyValueError::new_err(e.to_string()))?;
+            let mapped = read.slice(..).get_mapped_range();
+            let mut rgba = Vec::with_capacity((self.config.width * self.config.height * 4) as usize);
+            for row in mapped.chunks_exact(stride as usize) {
+                rgba.extend_from_slice(&row[..self.config.width as usize * 4]);
+            }
+            if matches!(self.config.format, wgpu::TextureFormat::Bgra8UnormSrgb | wgpu::TextureFormat::Bgra8Unorm) {
+                for pixel in rgba.chunks_exact_mut(4) { pixel.swap(0, 2); }
+            }
+            drop(mapped);
+            read.unmap();
+            self.captured = Some(rgba);
+            self.capture_next = false;
+        }
+        let before_present = Instant::now();
+        if let Some(frame) = frame { frame.present(); }
+        self.frame_stages = [polled.duration_since(start), acquired.duration_since(polled),
+            encoded.duration_since(acquired), submitted.duration_since(encoded), before_present.elapsed()]
+            .map(|d| d.as_secs_f64() * 1000.);
+        let cpu = start.elapsed().as_secs_f64() * 1000.;
+        self.last_cpu = cpu;
+        Ok((cpu, None))
+    }
+    /// The Sheets workspace on (the page replaces the model) or off.
+    fn ui_show_sheets(&mut self, shown: bool) {
+        if let Some(ui) = self.ui.as_mut() { ui.show_sheets(shown); }
+    }
+    fn ui_sheets_shown(&self) -> bool { self.ui.as_ref().is_some_and(|ui| ui.sheets_shown()) }
+    /// The sheet tools, as ``ui_set_tools``.
+    fn ui_set_sheet_tools(&mut self, groups: Vec<Vec<(String, String, String, usize, usize, Vec<u8>)>>) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_sheet_tools(groups); }
+    }
+    fn ui_set_sheet_active(&mut self, id: String) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_sheet_active(id); }
+    }
+    /// The sheets: (name, caption, current).
+    fn ui_set_sheet_list(&mut self, rows: Vec<(String, String, bool)>) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_sheet_list(rows); }
+    }
+    /// The selected item's fields, as ``ui_set_inspector`` (plus the pick,
+    /// check, text and button kinds of ui/sheets.rs).
+    fn ui_set_sheet_inspector(&mut self, title: String, sections: Vec<(String, Vec<(String, String)>)>) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_sheet_inspector(title, sections); }
+    }
+    /// The export buttons: (id, label, enabled).
+    fn ui_set_sheet_exports(&mut self, exports: Vec<(String, String, bool)>) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_sheet_exports(exports); }
+    }
+    /// The bottom bar: paper, scale, tool, hint, cursor, zoom.
+    fn ui_set_sheet_status(&mut self, paper: String, scale: String, tool: String, hint: String, cursor: String, zoom: String) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_sheet_status(paper, scale, tool, hint, cursor, zoom); }
+    }
+    /// A question in the dock (an empty title takes it down); ``field`` is
+    /// an editable line's text, or None.
+    #[pyo3(signature = (title, body, field, buttons))]
+    fn ui_set_sheet_prompt(&mut self, title: String, body: String, field: Option<String>, buttons: Vec<(String, String)>) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_sheet_prompt(title, body, field, buttons); }
+    }
+    /// Rename sheet ``i`` in place, in the dock.
+    fn ui_rename_sheet(&mut self, i: usize) {
+        if let Some(ui) = self.ui.as_mut() { ui.rename_sheet(i); }
     }
     /// UI spike: draw egui chrome over the live view from now on.
     #[pyo3(signature = (font=None))]

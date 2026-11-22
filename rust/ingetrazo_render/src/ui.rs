@@ -11,6 +11,8 @@ use egui::{pos2, vec2, Color32, CornerRadius, Margin, Pos2, Rect, Sense, Shadow,
 mod library;
 /// The start page (views/wgpu_start.py): a full-window state of the chrome.
 mod start;
+/// Sheets, a workspace of the window (views/wgpu_sheets.py).
+mod sheets;
 
 // ---- Design tokens (council 2026-11-22; one place, every component
 // below draws from these). Text on graphite glass, three levels plus off.
@@ -243,6 +245,8 @@ pub struct Ui {
     cursor_shape: &'static str,
     /// The start page: while shown it is the whole window (ui/start.rs).
     home: start::Start,
+    /// The Sheets workspace: while on, the page replaces the model (ui/sheets.rs).
+    sheets: sheets::Sheets,
 }
 
 /// A sheet: title, body, tone (question, info, warning, error) and its
@@ -447,6 +451,7 @@ impl Ui {
             dock_w: DOCK_W,
             cursor_shape: "",
             home: Default::default(),
+            sheets: Default::default(),
         }
     }
 
@@ -636,6 +641,7 @@ impl Ui {
     /// Keyboard ownership: the chrome takes a key only while one of its
     /// fields has focus, or Escape while one of its popups is open.
     pub fn claims_key(&self, name: &str) -> bool {
+        if self.sheets.shown && !self.home.shown { return self.sheets_claims_key(name); }
         let filing = self.column.as_ref().is_some_and(|c| c.filing.is_some() || c.row_menu.is_some() || !c.mode.is_empty()
             || c.kind_menu.is_some() || c.head_menu.is_some() || c.prompt.is_some());
         self.sheet.is_some() || self.cmd_open || (name == "Escape" && (self.view_open || self.sel_more || self.menu.is_some() || self.form.is_some() || filing))
@@ -661,6 +667,7 @@ impl Ui {
                 _ => {}
             }
         }
+        if self.sheets.shown && !self.home.shown { return self.sheets_key(name, pressed, mods); }
         if name == "Escape" && (self.view_open || self.sel_more || self.menu.is_some() || self.form.is_some()) {
             if pressed {
                 if self.form.take().is_some() { self.actions.push("form:close".into()); }
@@ -778,6 +785,7 @@ impl Ui {
                     self.sel_more = false;
                     self.menu = None;
                     self.cmd_open = false;
+                    self.sheets_close_popups();
                     if let Some(col) = self.column.as_mut() {
                         col.row_menu = None;
                         col.kind_menu = None;
@@ -2305,6 +2313,13 @@ impl Ui {
                 // The whole window: only the palette, the jobs and the sheet over it.
                 self.top_groups.clear();
                 self.start_page(ctx, screen);
+            } else if self.sheets.shown {
+                // The Sheets workspace: the window's top bar, the sheet's chrome under it.
+                self.top_bar(ctx, screen);
+                self.sheets_frame(ctx, screen);
+                self.bar_menu(ctx);
+                self.view_popup(ctx);
+                self.form_popup(ctx);
             } else {
             self.top_bar(ctx, screen);
             if !self.review {
@@ -2319,30 +2334,34 @@ impl Ui {
             self.form_popup(ctx);
             }
             self.command_palette(ctx, screen);
-            if !self.review && !start { self.selection_more(ctx); }
+            if !self.review && !start && !self.sheets.shown { self.selection_more(ctx); }
             self.jobs_chip(ctx, screen);
             self.sheet_popup(ctx, screen);
         });
         let work = !self.review && !start;
-        let shown = [("top", !start), ("start", start), ("palette", work && !self.groups.is_empty()),
+        // The model's own areas are not drawn in the Sheets workspace: their
+        // last rects must not take the pointer there.
+        let model = !(self.sheets.shown && !start);
+        let shown = [("top", !start), ("start", start), ("palette", work && model && !self.groups.is_empty()),
                      ("view_menu", self.view_open && !start), ("menu", self.menu.is_some() && !start), ("form", self.form.is_some() && !start),
-                     ("column", work && self.column.is_some()), ("bottom", work),
-                     ("sel_more", work && self.sel_more && self.selection.is_some()),
-                     ("paint_strip", work && !self.palette_items.is_empty()),
+                     ("column", work && model && self.column.is_some()), ("bottom", work),
+                     ("sel_more", work && model && self.sel_more && self.selection.is_some()),
+                     ("paint_strip", work && model && !self.palette_items.is_empty()),
                      ("commands", self.cmd_open),
-                     ("sel_sub", work && self.sel_more && self.sel_sub.is_some()),
-                     ("row_menu", self.column.as_ref().is_some_and(|c| c.row_menu.is_some())),
-                     ("kind_menu", self.column.as_ref().is_some_and(|c| c.kind_menu.is_some())),
-                     ("head_menu", self.column.as_ref().is_some_and(|c| c.head_menu.is_some())),
-                     ("prompt", self.column.as_ref().is_some_and(|c| c.prompt.is_some())),
-                     ("pick_menu", self.column.as_ref().is_some_and(|c| c.pick.is_some())),
-                     ("color_pick", self.column.as_ref().is_some_and(|c| c.color_pick.is_some())),
+                     ("sel_sub", work && model && self.sel_more && self.sel_sub.is_some()),
+                     ("row_menu", model && self.column.as_ref().is_some_and(|c| c.row_menu.is_some())),
+                     ("kind_menu", model && self.column.as_ref().is_some_and(|c| c.kind_menu.is_some())),
+                     ("head_menu", model && self.column.as_ref().is_some_and(|c| c.head_menu.is_some())),
+                     ("prompt", model && self.column.as_ref().is_some_and(|c| c.prompt.is_some())),
+                     ("pick_menu", model && self.column.as_ref().is_some_and(|c| c.pick.is_some())),
+                     ("color_pick", model && self.column.as_ref().is_some_and(|c| c.color_pick.is_some())),
                      ("jobs", !self.jobs.is_empty()),
                      ("sheet", self.sheet.is_some()),
-                     ("lib_menu", work && self.library.menu_open()),
-                     ("dock_grip", work && self.column.is_some()),
-                     ("insp_color", work && self.column.as_ref().is_some_and(|c| c.edits.contains_key("\u{1d}pick")))];
-        self.hit = shown.iter()
+                     ("lib_menu", work && model && self.library.menu_open()),
+                     ("dock_grip", work && model && self.column.is_some()),
+                     ("insp_color", work && model && self.column.as_ref().is_some_and(|c| c.edits.contains_key("\u{1d}pick")))];
+        let sheet_areas = if start { [("", false); 4] } else { self.sheets_areas() };
+        self.hit = shown.iter().chain(sheet_areas.iter())
             .filter(|(_, on)| *on)
             .filter_map(|(n, _)| ctx.memory(|m| m.area_rect(egui::Id::new(*n))))
             .collect();

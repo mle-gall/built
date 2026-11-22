@@ -6391,6 +6391,11 @@ class ComposerWindow(QMainWindow):
     right. Compositions live in ``scene.compositions`` and persist in the
     .igz; every mutation goes through the composer's own undo history."""
 
+    #: True for the composer behind the Built window's Sheets workspace
+    #: (views/wgpu_sheets.py): never shown, so no glass chrome, no menu bar
+    #: of its own, and no window geometry read or written.
+    EMBEDDED = False
+
     def _apply_desk_colour(self) -> None:
         """The desk behind the sheet: slate on the dark chrome, a soft grey
         on the light one — slate there glared against the white paper
@@ -6420,12 +6425,13 @@ class ComposerWindow(QMainWindow):
         self.setWindowFlag(Qt.Window, True)
         # macOS 26+: the same Liquid Glass chrome as the model window.
         from views import mac_glass
-        mac_glass.prepare(self)
+        if not self.EMBEDDED:
+            mac_glass.prepare(self)
         self._window = main_window
         from views.floating_toolbar import watch_toolbars
         watch_toolbars(self)        # a torn-off bar gets a title and a ×
         import sys as _sys
-        if _sys.platform == "darwin":
+        if _sys.platform == "darwin" and not self.EMBEDDED:
             # macOS has ONE menu bar, and a window without its own shows its
             # parent's: the model's menus — and their key equivalents — stayed
             # live over the composer, so Cmd+0 blanked the model window
@@ -6479,7 +6485,7 @@ class ComposerWindow(QMainWindow):
         self.set_document_title(None)
         self.resize(1280, 840)
         # Size, place, monitor and maximised as the user left them.
-        geometry = QSettings().value("composer/geometry")
+        geometry = None if self.EMBEDDED else QSettings().value("composer/geometry")
         if geometry:
             self.restoreGeometry(geometry)
         self.tool_mode = "select"
@@ -6544,7 +6550,7 @@ class ComposerWindow(QMainWindow):
         # fresh profile shows the toolbars as they are laid out here
         # (tools left, sheet + arrange top) — the factory look (Marco,
         # 2026-09-14). Restored AFTER every toolbar exists (objectName).
-        state = QSettings().value("composer/window_state")
+        state = None if self.EMBEDDED else QSettings().value("composer/window_state")
         if state:
             self.restoreState(state)
             # Arrange's own setting stays the word on whether it shows.
@@ -6606,7 +6612,8 @@ class ComposerWindow(QMainWindow):
                   activated=lambda: self.step_sheet(1))
 
         self._rebuild_canvas()
-        mac_glass.install(self)
+        if not self.EMBEDDED:
+            mac_glass.install(self)
 
     def save_document(self) -> None:
         """Ctrl+S here saves the whole document — model and sheets."""
@@ -8981,19 +8988,21 @@ class ComposerWindow(QMainWindow):
         if show:
             self._rebuild_canvas()
 
-    def delete_sheet(self, index: int, parent=None) -> bool:
-        """Delete sheet *index* after asking; a document keeps at least
-        one sheet. If this window showed it, the neighbour takes over."""
+    def delete_sheet(self, index: int, parent=None, confirm: bool = True) -> bool:
+        """Delete sheet *index* after asking (``confirm``: the caller asked
+        already); a document keeps at least one sheet. If this window
+        showed it, the neighbour takes over."""
         comps = self._scene().compositions
         if not (0 <= index < len(comps)):
             return False
         if len(comps) <= 1:
-            QMessageBox.information(
-                parent or self, tr("Delete sheet"),
-                tr("A document keeps at least one sheet."))
+            if confirm:
+                QMessageBox.information(
+                    parent or self, tr("Delete sheet"),
+                    tr("A document keeps at least one sheet."))
             return False
         victim = comps[index]
-        if QMessageBox.question(
+        if confirm and QMessageBox.question(
                 parent or self, tr("Delete sheet"),
                 tr("Delete '{name}'?", name=victim.name)) \
                 != QMessageBox.Yes:
@@ -14135,36 +14144,42 @@ class ComposerWindow(QMainWindow):
             self, tr("Export view as DXF…"), "vista.dxf", "DXF (*.dxf)")
         if not path:
             return
+        self.export_frame_dxf(item.model, path)
+
+    def export_frame_dxf(self, frame: MarcoVista, path: str) -> int:
+        """Write ``frame``'s hidden-line view to ``path`` as DXF at its
+        scale. Returns the lines written."""
         from formats.dxf_out import save_dxf_layers
-        drawing = self.model_view_drawing(item.model, for_dxf=True)
+        drawing = self.model_view_drawing(frame, for_dxf=True)
         from core.hlr import KIND_CUT, KIND_EDGE, KIND_HIDDEN, KIND_PROFILE
-        layer = frame_title_text(item.model).split(" — ")[0]
+        layer = frame_title_text(frame).split(" — ")[0]
         k = drawing.kinds
         if drawing.layers is not None:
             # Each model layer as a DXF layer of its own, with its colour
             # and line type; the cut and the hidden lines keep theirs.
             texts: list = []
             groups = dxf_groups_by_layer(drawing, layer,
-                                         getattr(item.model, "hidden_lines",
+                                         getattr(frame, "hidden_lines",
                                                  False), texts)
-            lines, solids = self.dxf_cut_layers(item.model)
+            lines, solids = self.dxf_cut_layers(frame)
             n = save_dxf_layers(path, groups + lines, solids, texts)
             self.statusBar().showMessage(
                 tr("Exported {n} lines to {name}", n=n, name=path), 5000)
-            return
+            return n
         # One layer per line class — IngeCAD's pen table does the weights;
         # the hidden lines go on their own layer, dashed (#81).
         groups = [
             (layer, drawing.segs[k == KIND_EDGE]),
             (f"{layer}-PERFIL", drawing.segs[k == KIND_PROFILE]),
             (f"{layer}-CORTE", drawing.segs[k == KIND_CUT])]
-        if getattr(item.model, "hidden_lines", False):
+        if getattr(frame, "hidden_lines", False):
             groups.append((f"{layer}-OCULTAS", drawing.segs[k == KIND_HIDDEN],
                            "DASHED"))
-        lines, solids = self.dxf_cut_layers(item.model)
+        lines, solids = self.dxf_cut_layers(frame)
         n = save_dxf_layers(path, groups + lines, solids)
         self.statusBar().showMessage(
             tr("Exported {n} lines to {name}", n=n, name=path), 5000)
+        return n
 
     def _on_export_svg(self) -> None:
         """The selected frame as an SVG at its own scale and pens, or
@@ -14527,6 +14542,10 @@ class ComposerWindow(QMainWindow):
 
     # ---- lifecycle -----------------------------------------------------------
     def closeEvent(self, event) -> None:
+        if self.EMBEDDED:
+            # Never on screen: nothing of a window to remember.
+            super().closeEvent(event)
+            return
         from PySide6.QtCore import QSettings
         st = QSettings()
         self._remember_side_sizes()
@@ -14952,6 +14971,16 @@ class ComposerWindow(QMainWindow):
 
     def showEvent(self, event) -> None:
         QTimer.singleShot(0, self._ensure_toolbars)
+        self._adopt_document()
+        super().showEvent(event)
+        # First impression: the whole page in view, whatever the paper size.
+        self._view.fitInView(self.canvas.sceneRect(), Qt.KeepAspectRatio)
+        self.update_zoom_label()
+
+    def _adopt_document(self) -> None:
+        """Coming on screen (the window, or the Sheets workspace): the
+        frames that went stale while away re-render, and the document's
+        sheets are this composer's again."""
         QTimer.singleShot(0, self._auto_render_stale)
         QTimer.singleShot(0, self._reload_scale_options)
         # The document may have been swapped under us (New / Open) while
@@ -14967,10 +14996,6 @@ class ComposerWindow(QMainWindow):
         self._reload_comp_combo()
         self._invalidate_geometry_caches()
         self._rebuild_canvas()
-        super().showEvent(event)
-        # First impression: the whole page in view, whatever the paper size.
-        self._view.fitInView(self.canvas.sceneRect(), Qt.KeepAspectRatio)
-        self.update_zoom_label()
 
 
 class SceneThumbnailer:
