@@ -140,3 +140,131 @@ impl Store {
         Ok(())
     }
 }
+
+impl Store {
+    fn sweep_edge(&self, a: [f64; 3], b: [f64; 3]) -> Option<u32> {
+        let (a, b) = (self.lookup(a)?, self.lookup(b)?);
+        if a == b {
+            None
+        } else {
+            self.find_edge(a, b)
+        }
+    }
+
+    /// Post-stitch seams. Only an edge with two sweep faces, or a newly
+    /// created edge, can become soft. The original flags otherwise survive.
+    pub fn soften_sweep(&mut self, before: &Store, h: Hypot, ch: &mut Change) {
+        use super::{keys::Kind, SOFT};
+        for e in self.live_slots(Kind::Edge) {
+            let key = self.key(Kind::Edge, e);
+            let flags = *self.state.eflags.get(e as usize);
+            let [a, b] = *self.edge_faces(e) else {
+                continue;
+            };
+            if flags & SOFT != 0
+                || (before.slot(Kind::Edge, key).is_some()
+                    && [a, b]
+                        .iter()
+                        .any(|&f| before.slot(Kind::Face, self.key(Kind::Face, f)).is_some()))
+            {
+                continue;
+            }
+            let dot = normalized(self.face_normal(a, h), h)
+                .dot(normalized(self.face_normal(b, h), h), h) as f64;
+            if dot > 0.85 && dot < 0.99995 {
+                self.state.eflags.set(e as usize, flags | SOFT);
+                ch.modified[1].push(key);
+            }
+        }
+    }
+
+    /// Order of curve allocations is observable. End-cap runs come first,
+    /// then the rails from each profile corner in station order.
+    pub fn sweep_curves(
+        &self,
+        before: &Store,
+        face: u32,
+        path: &[[f64; 3]],
+        stations: &[Station],
+        closed: bool,
+    ) -> Vec<Vec<u128>> {
+        use super::{keys::Kind, SOFT};
+        let mut out = Vec::new();
+        let mut tagged = std::collections::HashSet::new();
+        let mut tag = |edges: Vec<u32>| {
+            let group: Vec<_> = edges
+                .into_iter()
+                .filter(|&e| {
+                    *self.state.ecurve.get(e as usize) < 0
+                        && self.state.eflags.get(e as usize) & SOFT == 0
+                        && tagged.insert(e)
+                })
+                .map(|e| self.key(Kind::Edge, e))
+                .collect();
+            if !group.is_empty() {
+                out.push(group);
+            }
+        };
+        let curve = |e: Option<u32>| e.map_or(-1, |e| *before.state.ecurve.get(e as usize));
+        if !closed {
+            let rings = before.face_rings(face);
+            for cap in [&stations[0], stations.last().unwrap()] {
+                for (ring, source) in cap.iter().zip(&rings) {
+                    let mut groups: Vec<(i64, Vec<u32>)> = Vec::new();
+                    for (i, &v) in ring.iter().enumerate().take(source.len()) {
+                        let c = curve(before.find_edge(source[i], source[(i + 1) % source.len()]));
+                        if c < 0 {
+                            continue;
+                        }
+                        let at = groups.iter().position(|g| g.0 == c).unwrap_or_else(|| {
+                            groups.push((c, Vec::new()));
+                            groups.len() - 1
+                        });
+                        if let Some(e) = self.sweep_edge(v, ring[(i + 1) % ring.len()]) {
+                            groups[at].1.push(e);
+                        }
+                    }
+                    for (_, edges) in groups {
+                        tag(edges);
+                    }
+                }
+            }
+        }
+        let spans = if closed { path.len() } else { path.len() - 1 };
+        let curves: Vec<_> = (0..spans)
+            .map(|i| curve(before.sweep_edge(path[i], path[(i + 1) % path.len()])))
+            .collect();
+        if curves.iter().all(|c| *c < 0) {
+            return out;
+        }
+        let start = if closed {
+            (0..spans)
+                .find(|&i| curves[i] != curves[(i + spans - 1) % spans])
+                .unwrap_or(0)
+        } else {
+            0
+        };
+        for (l, ring) in stations[0].iter().enumerate() {
+            for j in 0..ring.len() {
+                let mut run = Vec::new();
+                let mut current = -1;
+                for k in 0..spans {
+                    let i = (start + k) % spans;
+                    if current != curves[i] {
+                        tag(std::mem::take(&mut run));
+                        current = curves[i];
+                    }
+                    if current >= 0 {
+                        if let Some(e) = self
+                            .sweep_edge(stations[i][l][j], stations[(i + 1) % stations.len()][l][j])
+                        {
+                            run.push(e);
+                        }
+                    }
+                }
+                tag(run);
+            }
+        }
+        out
+    }
+}

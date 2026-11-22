@@ -693,6 +693,37 @@ impl PyMeshStore {
         Ok(self.op_all(|s, ch| s.sweep_face(face, &stations, closed, h, ch))?.1)
     }
 
+    fn finish_sweep(&mut self, before: &PyStoreSnapshot, key: u128, path: Vec<[f64; 3]>,
+                    stations: Vec<super::sweep::Station>, closed: bool, hypot: &str)
+        -> PyResult<(Vec<Vec<u128>>, PyChange)> {
+        if before.inner.lineage != self.inner.lineage || before.inner.state.ns != self.inner.state.ns {
+            return Err(PyValueError::new_err("foreign sweep snapshot"));
+        }
+        if path.len() < 2 || path.len() != stations.len() || stations.iter().any(|s|
+            s.len() != stations[0].len() || s.iter().zip(&stations[0]).any(|(a,b)| a.len()!=b.len())) {
+            return Err(PyValueError::new_err("incompatible sweep stations"));
+        }
+        let old = reader(&before.inner);
+        let face = live_of(&old, Kind::Face, key)?;
+        let h = crate::hypot_of(hypot)?;
+        self.op(|s, ch| {
+            s.soften_sweep(&old, h, ch);
+            Ok(s.sweep_curves(&old, face, &path, &stations, closed))
+        })
+    }
+
+    fn set_curve_run(&mut self, keys: Vec<u128>, curve: i64) -> PyResult<PyChange> {
+        let edges = keys.into_iter().map(|k| live_of(&self.inner, Kind::Edge, k))
+            .collect::<PyResult<Vec<_>>>()?;
+        Ok(self.op(|s,ch| {
+            for e in edges {
+                s.state.ecurve.set(e as usize,curve);
+                ch.modified[1].push(s.key(Kind::Edge,e));
+            }
+            Ok(())
+        })?.1)
+    }
+
     fn offset_outline(&self, key: u128, normal: [f32; 3], distance: f64, hypot: &str)
         -> PyResult<Vec<super::intersect::Segment>> {
         let face = live_of(&self.inner, Kind::Face, key)?;
