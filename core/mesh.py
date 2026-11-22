@@ -24,6 +24,7 @@ into the running app yet.
 """
 from __future__ import annotations
 
+from contextvars import ContextVar
 from typing import Iterable, Optional
 from itertools import count
 
@@ -2003,6 +2004,11 @@ def _deferred_state(name):
     return property(get, put)
 
 
+# During an agent transaction, take the undo snapshot on first touch, once
+# the original elements exist and before the operation can change them.
+on_mesh_materialized = ContextVar("on_mesh_materialized", default=None)
+
+
 class DeferredMesh(Mesh):
     """A mesh read from a document whose vertices, edges and faces are not
     built yet (the experimental engine's lazy meshes): the first touch of
@@ -2040,8 +2046,13 @@ class DeferredMesh(Mesh):
         (``core.store_mesh.from_deferred``), else the Python objects the
         loader's build makes."""
         from core import store_mesh
-        if store_mesh.from_deferred(self):
-            return
+        if not store_mesh.from_deferred(self):
+            self._build_python_mesh()
+        observe = on_mesh_materialized.get()
+        if observe is not None:
+            observe(self)
+
+    def _build_python_mesh(self):
         self.__dict__.pop("_deferred_hooks", None)
         self.__dict__.pop("_deferred_hook_source", None)
         build = self.__dict__.pop("_deferred")
@@ -2065,7 +2076,10 @@ def _first_touch(name):
     """A Mesh method called on a still-deferred mesh: build it (a store or
     Python objects), then run the method of what it became."""
     def method(self, *args, **kw):
-        self._materialize()
+        # Python binds m.move_vertex before evaluating m.vertices[0]. The
+        # argument can therefore have materialised this very mesh already.
+        if isinstance(self, DeferredMesh):
+            self._materialize()
         return getattr(self, name)(*args, **kw)
     method.__name__ = name
     return method

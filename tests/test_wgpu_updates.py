@@ -795,3 +795,33 @@ def test_rebaked_billboard_keeps_hidden_edges_at_their_own_offsets():
     mesh.move_vertex(mesh.vertices[0], QVector3D(.25, 0, 1))
     updates.apply(*updates.diff(scene))
     assert_matches_fresh_pack(updates, scene)
+
+
+def test_callable_agent_edits_leave_other_deferred_meshes_resident():
+    from core.ai import run_callable_transactional
+    from core.history import History
+    from core.mesh import DeferredMesh
+
+    def build(m):
+        m.add_face([QVector3D(), QVector3D(1, 0, 0), QVector3D(0, 1, 0)])
+
+    meshes = [Mesh(), Mesh()]
+    for m in meshes:
+        DeferredMesh.defer(m, build, 1)
+    scene = Scene(groups=[Group(m) for m in meshes])
+    history = History(scene)
+    viewport = SimpleNamespace(scene=scene, history=history, notify_scene_changed=lambda: None)
+    def edit():
+        m = meshes[0]
+        m.move_vertex(m.vertices[0], QVector3D(0, 0, 2))
+        return True
+    assert run_callable_transactional(viewport, edit)
+    assert type(meshes[1]) is DeferredMesh
+    vertex = meshes[0].vertices[0]
+    assert vertex.position.z() == 2
+    history.undo()
+    assert type(meshes[1]) is DeferredMesh
+    assert vertex is meshes[0].vertices[0] and vertex.position.z() == 0
+    history.redo()
+    assert type(meshes[1]) is DeferredMesh
+    assert vertex is meshes[0].vertices[0] and vertex.position.z() == 2
