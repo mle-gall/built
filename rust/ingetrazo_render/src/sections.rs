@@ -89,6 +89,7 @@ mod tests {
 
 // A projected world AABB conservatively bounds every cached cap and boundary.
 // Near-plane crossings retain the full viewport instead of dividing by w <= 0.
+// Reverse-Z (crate::depth): in front of the near plane is z > w.
 fn scissor(bounds: [glam::Vec3; 2], camera: &[f32]) -> Option<[u32; 4]> {
     if camera.len() < 18 { return None; }
     let vp = glam::Mat4::from_cols_array(camera[..16].try_into().unwrap());
@@ -99,7 +100,7 @@ fn scissor(bounds: [glam::Vec3; 2], camera: &[f32]) -> Option<[u32; 4]> {
         let p = glam::Vec3::new(bounds[(k & 1) as usize].x,
             bounds[((k >> 1) & 1) as usize].y, bounds[((k >> 2) & 1) as usize].z);
         let q = vp * p.extend(1.);
-        if !q.is_finite() || q.w <= 0. || q.z < 0. { return None; }
+        if !q.is_finite() || q.w <= 0. || q.z > q.w { return None; }
         let pixel = (glam::Vec2::new(q.x, -q.y) / q.w + glam::Vec2::ONE) * size * 0.5;
         lo = lo.min(pixel);
         hi = hi.max(pixel);
@@ -118,7 +119,7 @@ mod scissor_tests {
         camera.extend([100., 200.]);
         assert_eq!(super::scissor([glam::Vec3::new(-0.5, 0., 0.2),
             glam::Vec3::new(0.5, 0.5, 0.8)], &camera), Some([24, 49, 52, 52]));
-        assert_eq!(super::scissor([glam::Vec3::new(-0.5, 0., -0.2),
-            glam::Vec3::new(0.5, 0.5, 0.8)], &camera), None);
+        assert_eq!(super::scissor([glam::Vec3::new(-0.5, 0., 0.2),
+            glam::Vec3::new(0.5, 0.5, 1.2)], &camera), None);
     }
 }
