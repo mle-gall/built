@@ -605,6 +605,15 @@ class FaceView(_ViewMixin, Face):
             return Face._newell(self)
         return _newell(rings[0])
 
+    def triangulate(self, normal=None):
+        from core._native import qt_hypot
+        store = _store_of(self._m)
+        if store is not None and qt_hypot() and store.is_live(self.key):
+            triangles = store.face_triangles(self.key, qt_hypot(),
+                                             normal.toTuple() if normal is not None else None)
+            return [tuple(QVector3D(*p) for p in t) for t in triangles]
+        return Face.triangulate(self, normal)
+
     def normal(self) -> QVector3D:
         m = self._m
         if m.__class__ is not StoreMesh:

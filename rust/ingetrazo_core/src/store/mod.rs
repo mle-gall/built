@@ -36,6 +36,7 @@ pub mod stitch;
 pub mod sweep;
 pub mod topo;
 mod hole;
+mod solid;
 #[cfg(test)]
 mod tests;
 

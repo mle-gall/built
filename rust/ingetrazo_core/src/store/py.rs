@@ -543,6 +543,13 @@ impl PyMeshStore {
 
     /// A face's rings as positions: what `normal()` / `area()` /
     /// `vertices` read, in one call.
+    #[pyo3(signature = (key, hypot, normal=None))]
+    fn face_triangles(&self, key: u128, hypot: &str, normal: Option<[f32;3]>) -> PyResult<Vec<[[f32;3];3]>> {
+        let store = &self.inner;
+        let face = slot_of(store, Kind::Face, key)?;
+        Ok(store.face_triangles(face, normal, crate::hypot_of(hypot)?))
+    }
+
     fn face_positions(&self, key: u128) -> PyResult<Vec<Vec<(f64, f64, f64)>>> {
         let f = any_of(&self.inner, Kind::Face, key)?;
         let st = &self.inner.state;
@@ -1325,6 +1332,27 @@ fn reader(snap: &Snapshot) -> Store {
 
 #[pymethods]
 impl PyStoreSnapshot {
+    #[pyo3(signature = (key, hypot, normal=None))]
+    fn face_triangles(&self, key: u128, hypot: &str, normal: Option<[f32;3]>) -> PyResult<Vec<[[f32;3];3]>> {
+        let store = &reader(&self.inner);
+        let face = slot_of(store, Kind::Face, key)?;
+        Ok(store.face_triangles(face, normal, crate::hypot_of(hypot)?))
+    }
+
+    fn solid_volume(&self, py: Python<'_>, hypot: &str) -> PyResult<Option<f64>> {
+        let store = reader(&self.inner);
+        let h = crate::hypot_of(hypot)?;
+        Ok(py.detach(|| store.solid_volume(h)))
+    }
+
+    fn face_set_volume(&self, py: Python<'_>, keys: Vec<u128>, hypot: &str) -> PyResult<Option<f64>> {
+        let store = reader(&self.inner);
+        let faces: PyResult<Vec<_>> = keys.into_iter().map(|k| slot_of(&store,Kind::Face,k)).collect();
+        let faces = faces?;
+        let h = crate::hypot_of(hypot)?;
+        Ok(py.detach(|| store.face_set_volume(&faces,h)))
+    }
+
     #[getter]
     fn namespace(&self) -> u64 {
         self.inner.state.ns

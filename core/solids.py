@@ -69,6 +69,11 @@ def solid_report(mesh) -> tuple[bool, float | None]:
         return False, None
     if not mesh.faces:
         return False, None
+    from core._native import qt_hypot
+    from core.store_mesh import StoreMesh
+    if isinstance(mesh, StoreMesh) and qt_hypot():
+        vol = mesh._store.snapshot().solid_volume(qt_hypot())
+        return vol is not None, vol
     for e in mesh.edges:
         n = sum(1 for f in e.faces if not getattr(f, "interior", False))
         if n != 2:

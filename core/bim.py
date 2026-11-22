@@ -177,7 +177,16 @@ def face_set_volume(faces):
     faces = list(faces)
     if not faces:
         return None
-    fset = set(faces)
+    from core._native import qt_hypot
+    from core.store_mesh import FaceView, StoreMesh
+    first = faces[0]
+    if isinstance(first, FaceView) and isinstance(first._m, StoreMesh) and qt_hypot():
+        if all(isinstance(f, FaceView) and f._m is first._m for f in faces):
+            snapshot = first._m._store.snapshot()
+            try:
+                return snapshot.face_set_volume([f.key for f in faces], qt_hypot())
+            except KeyError:
+                pass  # The caller included a detached face.
     counts: dict = {}
     for f in faces:
         for lp in (f.loop, *f.hole_loops):

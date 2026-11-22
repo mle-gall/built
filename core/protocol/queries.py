@@ -134,3 +134,23 @@ def feed(history, since_revision=0) -> dict:
     got = history.feed.since(since_revision)
     return {"revision": got["revision"], "complete": got["complete"],
             "steps": [s.to_json() for s in got["steps"]]}
+
+
+def solid_report(scene, mesh=None):
+    """Mesh-local closure and enclosed volume in cubic metres."""
+    from core.solids import solid_report as report
+    m = resolve_mesh(scene, mesh)
+    solid, volume = report(m)
+    return {"mesh": mesh_key(m), "solid": solid, "volume": volume}
+
+
+def triangles(scene, keys, mesh=None):
+    """Oriented triangles in face order, with mesh-local corner positions."""
+    m = resolve_mesh(scene, mesh)
+    keys = [from_json_key(k) for k in keys]
+    found = elements(m, "face", keys)
+    return {"mesh": mesh_key(m),
+            "faces": [{"key": to_json_key(k),
+                       "triangles": [[_xyz(p) for p in t] for t in found[k].triangulate()]}
+                      for k in keys if k in found],
+            "missing": [to_json_key(k) for k in keys if k not in found]}
