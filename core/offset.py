@@ -139,7 +139,7 @@ def _offset_segments(loop: list, normal: QVector3D, d: float) -> list:
     return segments
 
 
-def offset_regions(loop: list, normal: QVector3D, d: float) -> list:
+def offset_regions(loop: list, normal: QVector3D, d: float, *, segments=None) -> list:
     """Offset ``loop`` by ``d`` (positive inward) and return the regions that
     survive, as ``[(outer, [holes]), …]``.
 
@@ -152,7 +152,8 @@ def offset_regions(loop: list, normal: QVector3D, d: float) -> list:
     unit = normal.normalized()
     if unit.lengthSquared() < 0.5:
         return []
-    segments = _offset_segments(loop, unit, d)
+    if segments is None:
+        segments = _offset_segments(loop, unit, d)
     if not segments:
         return []
     try:

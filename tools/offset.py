@@ -39,6 +39,31 @@ def _point_segment_distance(p: QVector3D, a: QVector3D, b: QVector3D) -> float:
     return (p - (a + ab * t)).length()
 
 
+class _OffsetFace:
+    """The topology step inside the tool's snapshot compound."""
+
+    def __init__(self, face, faces, attrs):
+        self.face = face
+        self.faces = faces
+        self.attrs = attrs
+
+    def do(self, scene):
+        from core.store_mesh import FaceView
+        from core.topology import _maximal_holes
+        regions = []
+        for outer, *holes in self.faces:
+            if len(holes) > 1:
+                holes = _maximal_holes(holes)
+            regions.append([[p.toTuple() for p in loop] for loop in [outer, *holes]])
+        mesh = scene.mesh
+        keys, self.change = mesh._store.offset_face(self.face.key, regions)
+        mesh._dirty()
+        for k in keys:
+            FaceView(mesh, k).attrs.update(self.attrs)
+        scene.selection.discard(self.face)
+        scene.version += 1
+
+
 class OffsetTool(Tool):
     name = "Offset"
     shortcut = "F"
@@ -415,7 +440,15 @@ class OffsetTool(Tool):
         if self._chain:
             self._commit_chain(viewport)
             return
-        regions = offset_regions(self._loop, self._normal, self.distance)
+        mesh = viewport.scene.mesh
+        from core.store_mesh import _store_of, _hypot
+        store = _store_of(mesh)
+        segments = None
+        if store is not None and (h := _hypot()):
+            pairs = store.offset_outline(self.base_face.key, self._normal.toTuple(),
+                                         self.distance, h)
+            segments = [(QVector3D(*a), QVector3D(*b)) for a, b in pairs]
+        regions = offset_regions(self._loop, self._normal, self.distance, segments=segments)
         if not regions:
             # Safety net: the exact slide-and-intersect path still runs when
             # the arrangement finds nothing, so a bug here can only lose the
@@ -453,15 +486,14 @@ class OffsetTool(Tool):
                         key=lambda lp: _loop_extent(lp))
             inners = [self._loop]
             inner_holes, strip_holes = [own_holes], []
-        commands = [DeleteFaceCommand(self.base_face),
-                    AddFaceCommand(list(outer), auto=False,
-                                   holes=[list(lp) for lp in inners]
-                                   + strip_holes,
-                                   attrs=dict(attrs))]
-        for loop, holes in zip(inners, inner_holes):
-            commands.append(AddFaceCommand(list(loop), auto=False,
-                                           holes=holes or None,
-                                           attrs=dict(attrs)))
+        faces = [[list(outer), *inners, *strip_holes]]
+        faces.extend([list(loop), *holes] for loop, holes in zip(inners, inner_holes))
+        if store is not None:
+            commands = [_OffsetFace(self.base_face, faces, attrs)]
+        else:
+            commands = [DeleteFaceCommand(self.base_face)]
+            commands.extend(AddFaceCommand(rings[0], auto=False, holes=rings[1:],
+                                           attrs=dict(attrs)) for rings in faces)
         # Curve ids only when the offset kept the source's shape one-to-one:
         # with the boundary re-arranged there is no run to mirror.
         if len(regions) == 1 and len(regions[0][0]) == len(self._loop):

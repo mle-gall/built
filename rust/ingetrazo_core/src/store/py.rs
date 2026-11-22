@@ -679,6 +679,18 @@ impl PyMeshStore {
         Ok((self.inner.key(Kind::Edge, e), ch))
     }
 
+    fn offset_outline(&self, key: u128, normal: [f32; 3], distance: f64, hypot: &str)
+        -> PyResult<Vec<super::intersect::Segment>> {
+        let face = live_of(&self.inner, Kind::Face, key)?;
+        Ok(self.inner.offset_outline(face, normal, distance, crate::hypot_of(hypot)?))
+    }
+
+    fn offset_face(&mut self, key: u128, regions: Vec<Vec<Vec<[f64; 3]>>>)
+        -> PyResult<(Vec<u128>, PyChange)> {
+        let face = live_of(&self.inner, Kind::Face, key)?;
+        self.op_all(|s, ch| s.offset_face(face, &regions, ch))
+    }
+
     /// Crossing segments for loose faces in this editing context, in pair order.
     fn intersection_segments(&self, py: Python<'_>, selected: Vec<u128>, mode: &str, hypot: &str)
         -> PyResult<Vec<super::intersect::Segment>> {

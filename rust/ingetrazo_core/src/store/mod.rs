@@ -24,6 +24,7 @@ pub mod cow;
 pub mod edit;
 pub mod keys;
 pub mod intersect;
+pub mod offset;
 pub mod py;
 pub mod read;
 pub mod stitch;
