@@ -1,4 +1,5 @@
 """Native Metal input and presentation sharing the document camera and selection."""
+from contextlib import ExitStack, contextmanager
 import math
 import time
 import numpy as np
@@ -35,14 +36,7 @@ def _tool_frame(method):
         prototypes = getattr(view, '_remote_meshes', ())
         if not any(origin) and not prototypes:
             return method(view, *args, **kwargs)
-        from core.coordinate_frame import mesh_frame
-        from contextlib import ExitStack
-        active = view.scene.mesh
-        with ExitStack() as frames:
-            frames.enter_context(mesh_frame(active, origin))
-            for mesh, local_origin in prototypes:
-                if mesh is not active:
-                    frames.enter_context(mesh_frame(mesh, local_origin))
+        with view._geometry_frame():
             return method(view, *args, **kwargs)
     return handle
 
@@ -50,6 +44,17 @@ def _tool_frame(method):
 class WgpuView(QWidget):
     frameReady = Signal(float, object, float)
     _ZOOM_OUT_STEP = 0.05
+
+    @contextmanager
+    def _geometry_frame(self):
+        from core.coordinate_frame import mesh_frame
+        with ExitStack() as frames:
+            active = self.scene.mesh
+            frames.enter_context(mesh_frame(active, self.packed.origin))
+            for mesh, origin in getattr(self, '_remote_meshes', ()):
+                if mesh is not active:
+                    frames.enter_context(mesh_frame(mesh, origin))
+            yield
 
     def _model_diag(self):
         return float(np.linalg.norm(self.packed.world_bounds[1]-self.packed.world_bounds[0]))

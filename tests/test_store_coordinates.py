@@ -293,3 +293,18 @@ def test_metal_camera_tracks_document_controls_without_quantising_local_pan(view
     view._sync_scene_camera()
     assert view.camera.target.toTuple() == precise
     assert view.camera.yaw == source.yaw and view.camera.fov_deg == 50.
+
+
+def test_group_face_pick_at_raw_coordinates(view):
+    from core.group import Group
+    from core.mesh import Mesh
+    from tests.test_.skp_inference_gaps import refresh
+    group = Group(Mesh())
+    face = group.mesh.add_face([(650000.+dx, 6860000.+dy, 0.) for dx, dy in
+                                [(.01,.02),(.03,.02),(.03,.04),(.01,.04)]])
+    view.scene.groups.append(group)
+    refresh(view)
+    x, y = view._world_to_pixel(view.camera.target)
+    picked, context = view.tools.pick_face_placement(x, y)
+    assert picked.key == face.key and context is not None
+    assert face.loop[0].position_tuple() == (650000.01, 6860000.02, 0.)

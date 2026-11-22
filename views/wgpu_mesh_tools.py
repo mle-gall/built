@@ -176,6 +176,13 @@ class MeshToolAccess:
         and the face centre), ~4 ms over 600 faces and without bound on a
         big loose mesh. The same Möller–Trumbore thresholds, the same
         first-face-wins on a tie."""
+        packed = getattr(self.view, 'packed', None)
+        if any(getattr(packed, 'origin', ())) or getattr(self.view, '_remote_meshes', ()):
+            with self.view._geometry_frame():
+                return self._face_placement_at(x, y)
+        return self._face_placement_at(x, y)
+
+    def _face_placement_at(self, x, y):
         from types import SimpleNamespace
         from views.viewport import _moller_trumbore
         picked = self._picked_mesh(x, y)
