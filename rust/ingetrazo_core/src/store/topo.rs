@@ -524,9 +524,6 @@ impl Store {
             return None;
         }
         let [a, b] = *self.state.ends.get(e as usize);
-        if !self.alive(Kind::Vertex, a) || !self.alive(Kind::Vertex, b) {
-            return Some("relink_edge onto a gone vertex");
-        }
         if self.find_edge(a, b).is_some() {
             return Some("relink_edge beside another edge between its ends");
         }
@@ -546,6 +543,11 @@ impl Store {
         if let Some(why) = self.relink_edge_blocked(e) {
             return Err(OpError::Fallback(why));
         }
+        // An end a restore took away comes back first (`_relist_corners`).
+        let [a, b] = *self.state.ends.get(e as usize);
+        let gone: Vec<u32> = if a == b { vec![a] } else { vec![a, b] };
+        let gone: Vec<u32> = gone.into_iter().filter(|&v| !self.alive(Kind::Vertex, v)).collect();
+        self.relink_vertices(&gone, ch);
         self.wake(Kind::Edge, e);
         self.disk_link(e);
         let [a, b] = *self.state.ends.get(e as usize);
@@ -567,9 +569,15 @@ impl Store {
             return Ok(false);
         }
         let rings = self.face_rings(f);
-        if rings.iter().flatten().any(|&v| !self.alive(Kind::Vertex, v)) {
-            return Err(OpError::Fallback("relink_face onto a gone vertex"));
+        // Corners a restore took away come back first, in ring order
+        // (`_relist_corners`).
+        let mut gone: Vec<u32> = Vec::new();
+        for &v in rings.iter().flatten() {
+            if !self.alive(Kind::Vertex, v) && !gone.contains(&v) {
+                gone.push(v);
+            }
         }
+        self.relink_vertices(&gone, ch);
         for ring in &rings {
             let n = ring.len();
             for i in 0..n {
