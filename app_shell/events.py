@@ -171,6 +171,8 @@ class WheelEvent(_Event):
         self._mods = mods(modifiers)
         self._buttons = buttons(held)
         self._inverted = bool(inverted)
+        # A notch (no pixel delta) is a mouse wheel; a pixel delta a trackpad.
+        self._device = _Device(mouse=self._pixel.isNull())
 
     def position(self):
         return QPointF(self._pos)
@@ -200,7 +202,10 @@ class WheelEvent(_Event):
         return Qt.MouseEventNotSynthesized
 
     def device(self):
-        return None
+        return self._device
+
+    def pointingDevice(self):
+        return self._device
 
 
 _GESTURES = {"zoom": Qt.ZoomNativeGesture, "rotate": Qt.RotateNativeGesture,
@@ -212,13 +217,20 @@ _GESTURES = {"zoom": Qt.ZoomNativeGesture, "rotate": Qt.RotateNativeGesture,
 class _Device:
     """``event.device().type()``: trackpad (TouchPad) or touch screen."""
 
-    def __init__(self, touch_screen=False):
+    def __init__(self, touch_screen=False, mouse=False):
         from PySide6.QtGui import QInputDevice
-        self._type = (QInputDevice.DeviceType.TouchScreen if touch_screen
+        self._type = (QInputDevice.DeviceType.Mouse if mouse
+                      else QInputDevice.DeviceType.TouchScreen if touch_screen
                       else QInputDevice.DeviceType.TouchPad)
 
     def type(self):
         return self._type
+
+    def systemId(self):
+        return 0
+
+    def name(self):
+        return "mouse" if self._type.name == "Mouse" else "trackpad"
 
 
 class NativeGestureEvent(_Event):
