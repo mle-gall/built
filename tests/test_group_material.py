@@ -53,9 +53,7 @@ def test_effective_material_reaches_a_nested_piece_through_its_owner():
     top.material = RED
     piece = Group(Mesh(), "pata")
     piece.owner = top
-    # Equal, not the same dict: with the Rust document the paint is a
-    # document value, read back as a dict (core/doc_model.py).
-    assert effective_material(piece) == RED
+    assert effective_material(piece) is RED
     piece.material = {"color": [0, 1, 0]}
     assert effective_material(piece)["color"] == [0, 1, 0]   # its own first
     assert effective_material(Group()) is None

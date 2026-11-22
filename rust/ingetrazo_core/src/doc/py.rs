@@ -200,6 +200,27 @@ fn write_matrix(py: Python<'_>, me: &Bound<'_, PyAny>, k: Key, f: Field, value: 
     if value.is_none() {
         return write(py, me, k, f, FVal::Xf(None));
     }
+    // Another placement's matrix (the viewport's proxies get their part's
+    // on every pack) holding what this one holds already: no write, no
+    // copy. A matrix Python made still becomes the view (below).
+    if let Ok(dict) = value.getattr(pyo3::intern!(py, "__dict__")) {
+        if let Ok(dict) = dict.cast::<PyDict>() {
+            if let Some(b) = dict.get_item("_doc_bind")? {
+                let bound: (Key, u8) = b.extract()?;
+                if bound != (k, which_of(f)) {
+                    let data = value.call_method0(pyo3::intern!(py, "data"))?;
+                    let src = dict.get_item("_built_source")?.unwrap_or_else(|| py.None().into_bound(py));
+                    let x = xform_of(&data, &src)?;
+                    let d = lock();
+                    if let Some(n) = d.node(k) {
+                        if n.views[view_slot(f)].is_some() && n.get(f).ok() == Some(FVal::Xf(Some(x))) {
+                            return Ok(());
+                        }
+                    }
+                }
+            }
+        }
+    }
     let (_, bind) = hooks(py)?;
     let got = bind.bind(py).call1((value, k, which_of(f)))?;
     let (view, data, src): (Bound<'_, PyAny>, Bound<'_, PyAny>, Bound<'_, PyAny>) = got.extract()?;
@@ -493,8 +514,35 @@ impl PyPlacement {
     }
     #[setter]
     fn set_material(slf: &Bound<'_, Self>, v: &Bound<'_, PyAny>) -> PyResult<()> {
+        let (py, k) = (slf.py(), slf.get().key);
+        // The very dict this placement shows already (the viewport's
+        // proxies are handed their part's dict on every pack): no write.
+        {
+            let d = lock();
+            if let Some(n) = d.node(k) {
+                if n.views[VIEW_MATERIAL].as_ref().map(|x| x.as_ptr()) == Some(v.as_ptr()) {
+                    return Ok(());
+                }
+            }
+        }
         let val = if v.is_none() { None } else { Some(Value::from_py(v)?) };
-        write(slf.py(), slf.as_any(), slf.get().key, Field::Material, FVal::Val(val))
+        write(py, slf.as_any(), k, Field::Material, FVal::Val(val))?;
+        // A dict assigned is the dict read back, as the attribute gave it.
+        if v.is_exact_instance_of::<PyDict>() {
+            let keep = v.clone().unbind();
+            let stale = {
+                let mut d = lock();
+                match d.node_mut(k) {
+                    Some(n) if n.views[VIEW_MATERIAL].is_none() => {
+                        n.views[VIEW_MATERIAL] = Some(keep);
+                        None
+                    }
+                    _ => Some(keep),
+                }
+            };
+            drop(stale);
+        }
+        Ok(())
     }
     #[getter]
     fn xform<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
@@ -531,12 +579,44 @@ impl PyPlacement {
         set_list(slf.py(), slf.as_any(), slf.get().key, ListId::Tags, v)
     }
 
+    /// A root's tag whose key is `key` (`Scene.layer_by_key`), or None:
+    /// compared in the document, no string made per tag.
+    fn _tag_by_key<'py>(&self, py: Python<'py>, key: &str) -> PyResult<Option<Py<PyAny>>> {
+        self.find_tag(py, key, Field::Key)
+    }
+
+    /// The first tag labelled `name`, or None.
+    fn _tag_by_name<'py>(&self, py: Python<'py>, name: &str) -> PyResult<Option<Py<PyAny>>> {
+        self.find_tag(py, name, Field::Name)
+    }
+
     fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
         traverse_node(self.key, &visit)
     }
 
     fn __clear__(&self) {
         clear_node(self.key);
+    }
+}
+
+impl PyPlacement {
+    fn find_tag(&self, py: Python<'_>, want: &str, f: Field) -> PyResult<Option<Py<PyAny>>> {
+        let d = lock();
+        let n = d.need(self.key).map_err(err)?;
+        for &t in &n.tags {
+            let Some(tn) = d.node(t) else { continue };
+            let hit = match &tn.data {
+                super::Data::Tag(tag) => match f {
+                    Field::Key => tag.key.as_deref() == Some(want),
+                    _ => tag.name.as_deref() == Some(want),
+                },
+                _ => false,
+            };
+            if hit {
+                return Ok(d.handle_ref(py, t));
+            }
+        }
+        Ok(None)
     }
 }
 

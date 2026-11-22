@@ -322,6 +322,8 @@ class Scene:
     # ---- Layers --------------------------------------------------------------
     def layer_by_key(self, key: str):
         """The tag whose key is ``key`` — what entities carry."""
+        if _dm.ENABLED and isinstance(key, str):
+            return self._root._tag_by_key(key)
         for ly in self.layers:
             if ly.key == key:
                 return ly
@@ -335,6 +337,8 @@ class Scene:
         ly = self.layer_by_key(name)
         if ly is not None:
             return ly
+        if _dm.ENABLED and isinstance(name, str):
+            return self._root._tag_by_name(name)
         for ly in self.layers:
             if ly.name == name:
                 return ly
