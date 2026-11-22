@@ -700,6 +700,17 @@ class Scene:
                   c.explode_offset) for c in group.children])
 
     @staticmethod
+    def put_parts(group, record) -> None:
+        """Put back what :meth:`parts_record` copied. The list of parts is
+        not touched: the commands that changed it undo that themselves."""
+        from PySide6.QtGui import QMatrix4x4
+        axes, parts = record
+        for child, xform, offset in parts:
+            child.xform = None if xform is None else QMatrix4x4(xform)
+            child.explode_offset = offset
+        group.axes = None if axes is None else QMatrix4x4(axes)
+
+    @staticmethod
     def _unbake_container_xform(group, xform, parts=None) -> None:
         """Undo :meth:`_bake_container_xform` on leaving an assembly: its
         matrix comes back up out of the parts, which return to the frame

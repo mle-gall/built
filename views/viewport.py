@@ -19520,15 +19520,25 @@ class Viewport(QOpenGLWidget):
                                  len(self.history.undo_stack)))
             mark = min(mark, len(self.history.undo_stack))
             shared = edited.capture_state() != state0
-            if not shared:
-                # Nothing to share: an assembly's parts go back up.
+            if parts is not None and (shared
+                                      or len(self.history.undo_stack) > mark):
+                # An assembly: what ran inside was recorded with its matrix
+                # down in the parts, so it folds into the step that brings
+                # the matrix back — a part deleted or moved undoes in place.
+                from core.history import ReshareAssemblyCommand
+                inner = self.history.undo_stack[mark:]
+                del self.history.undo_stack[mark:]
+                self.history.execute(ReshareAssemblyCommand(
+                    group, proto, xform, edited, state0, parts, inner))
+            elif not shared:
+                # Nothing ran: an assembly's parts go back bit for bit.
                 self.scene.restore_sharing(group, proto, xform, parts=parts)
             else:
                 from core.history import ReshareInstanceCommand
                 inner = self.history.undo_stack[mark:]
                 del self.history.undo_stack[mark:]
                 self.history.execute(ReshareInstanceCommand(
-                    group, proto, xform, edited, inner, parts=parts))
+                    group, proto, xform, edited, inner))
             if shared:
                 copies = sum(1 for g, _m in self.scene.placements()
                              if g.mesh is proto)

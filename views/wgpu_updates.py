@@ -19,6 +19,22 @@ from views.wgpu_scene import (COMMAND, INSTANCE, _baked_paint, _placement_record
                               _placement_state, pack_scene)
 
 
+def _world_copy_edits():
+    """Commands that only change the mesh they ran on: inside a session
+    folded into a share-back, that is the world copy, drawn by no row."""
+    from core.history import (SnapshotMutation, SnapshotCompound, MoveVerticesCommand,
+                              AddEdgeCommand, AddFaceCommand, EraseSelectionCommand)
+    return (SnapshotMutation, SnapshotCompound, MoveVerticesCommand,
+            AddEdgeCommand, AddFaceCommand, EraseSelectionCommand)
+
+
+def _edits_world_copy_only(command):
+    from core.history import CompoundCommand
+    if isinstance(command, CompoundCommand):
+        return all(_edits_world_copy_only(c) for c in command.commands)
+    return isinstance(command, _world_copy_edits())
+
+
 def _resident_version(scene):
     """The content version less the edit-context bumps: entering or leaving
     a group swaps meshes without moving anything in the world (the view's
@@ -103,7 +119,8 @@ class InstanceUpdates:
                                       SetRegistryCommand, InsertGroupCommand, DeleteGroupCommand,
                                       SnapshotMutation, SnapshotCompound, MoveVerticesCommand, AddEdgeCommand,
                                       AddFaceCommand, EraseSelectionCommand, HideCommand, AssignLayerCommand,
-                                      ReshareInstanceCommand, AddGuideCommand, ChangeGuideCommand,
+                                      ReshareInstanceCommand, ReshareAssemblyCommand,
+                                      AddGuideCommand, ChangeGuideCommand,
                                       DeleteGuidesCommand, MoveGuidesCommand, RotateGuidesCommand)
             def visit(command):
                 from core.history import (SetFaceTextureCommand, SetFaceBackCommand,
@@ -154,10 +171,26 @@ class InstanceUpdates:
                     # which every copy shows (all its variants rebake).
                     if not self.queue_swap(command.group):
                         return False
-                    # A part edited inside an assembly shares back with it.
-                    if not all(visit(c) for c in command.inner
-                               if isinstance(c, ReshareInstanceCommand)):
+                    old = self.meshes.get(id(command.proto))
+                    if old is not None and old[2] >= 0:
+                        self.pending_meshes.add(id(command.proto))
+                    return True
+                if isinstance(command, ReshareAssemblyCommand):
+                    # Leaving an edited assembly: its row goes back on the
+                    # definition and its parts' matrices come back up, which
+                    # leaves every world matrix where it was. What ran inside
+                    # drew on the world copy, which no row shows any more;
+                    # a part edited inside shares back as its own swap. Any
+                    # other change to the parts (one deleted, moved,
+                    # exploded) rescans the placements.
+                    if not self.queue_swap(command.group):
                         return False
+                    for inner in command.inner:
+                        if isinstance(inner, (ReshareInstanceCommand, ReshareAssemblyCommand)):
+                            if not visit(inner):
+                                return False
+                        elif not _edits_world_copy_only(inner):
+                            return False
                     old = self.meshes.get(id(command.proto))
                     if old is not None and old[2] >= 0:
                         self.pending_meshes.add(id(command.proto))
