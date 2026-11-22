@@ -194,6 +194,34 @@ def test_scaffold_lines_are_depth_tested_and_dashed(native,aa):
     assert dict(native.line_counts())['test']==0
 
 
+@pytest.mark.parametrize('aa',[False,True])
+def test_scaffold_lines_under_scene_edges_selected_hidden_above(native,aa):
+    """GL's order where a line and a model edge share pixels: the box and
+    guides (``_draw_scaffold``) come before the scene edges, which cover
+    them; the selected group's hidden edges come after them."""
+    from views.wgpu_lines import segments
+    v,i,b,c,r=synthetic_pack(255)
+    # One hard edge: the red quad's bottom side (a lone face's border is soft).
+    i=np.concatenate([i,np.array([0,1],np.uint32)]); c['first'][1]=12; c['count'][1]=2
+    native.set_scene(tuple(x.view(np.uint8).ravel() for x in (v,i,b,c)),r.view(np.uint8).ravel())
+    native.set_antialias(aa)
+    native.set_style(dict(sky=False,edges=True,profiles=False,edge_color=[0.,0.,0.],edge_width=5.))
+    original=capture(native)
+    assert (original[55:60,32,:3]<20).all(), 'the hard edge is drawn'
+    # On that edge (y -.8: row 57), narrower than it.
+    data=segments([[[-.6,-.8,0.],[.6,-.8,0.]]],(0,255,0,255),1.).view(np.uint8).ravel()
+    green=lambda rgba: (rgba[:,:,1].astype(int)>100)&(rgba[:,:,0].astype(int)<100)
+    native.set_lines('test',data)
+    under=capture(native)
+    native.set_lines('test',data,True)
+    above=capture(native)
+    native.set_lines('test',np.zeros(0,np.uint8),True)
+    assert not green(under).any(), 'the scene edge paints over the scaffold'
+    np.testing.assert_array_equal(original,under)
+    assert green(above)[54:61].any(axis=0).sum()>30, 'selected hidden edges win over the scene edges'
+    np.testing.assert_array_equal(original,capture(native))
+
+
 def test_shadow_toggle_and_invalid_payload(native):
     upload(native,255)
     native.set_style(dict(shadows=False))

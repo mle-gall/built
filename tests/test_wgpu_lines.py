@@ -47,9 +47,13 @@ def view():
     v.packed = pack_scene(scene)
     v.uid_rows = {g.uid: [i] for i, g in enumerate(v.packed.groups) if g is not None}
     sent = []
-    v.renderer = SimpleNamespace(
-        set_lines=lambda slot, data: sent.append(
-            (slot, np.frombuffer(bytes(data), SEGMENT).copy())))
+    layers = {}
+
+    def set_lines(slot, data, above_edges=False):
+        layers[slot] = above_edges
+        sent.append((slot, np.frombuffer(bytes(data), SEGMENT).copy()))
+    v.renderer = SimpleNamespace(set_lines=set_lines)
+    v.line_layers = layers
     yield v, source, outer, inner, sent
     v.renderer = None
     v.close()
@@ -73,6 +77,7 @@ def test_edit_box_is_twelve_dashed_segments_sent_once(view):
     np.testing.assert_allclose(box['b'], expected[:, 1])
     assert (box['color'] == (90, 110, 140, 255)).all()
     assert (box['width'] == 1).all()
+    assert v.line_layers == {'edit_box': False}, 'under the scene edges, as in GL'
     # GL's _draw_scaffold dash: 0.003·h/tan(fov/2) window pixels, 3..20.
     assert 3 <= box['dash'][0] <= 20 and (box['gap'] == box['dash']).all()
     # A repaint with nothing changed sends nothing.
@@ -133,6 +138,7 @@ def test_selected_hidden_edges_dashed_only_with_hidden_geometry(view):
                            tuple(np.add(soft.b.toTuple(), (5, 0, 0)))])
     assert (hidden['color'] == (242, 115, 41, 255)).all()
     assert hidden['dash'][0] == 3 * max(1., v.devicePixelRatioF())
+    assert v.line_layers == {'selected_hidden': True}, 'after the scene edges, as in GL'
     assert sync(v) == []
     v.scene.select([])
     assert sync(v) == ['selected_hidden'] and len(last(sent, 'selected_hidden')) == 0

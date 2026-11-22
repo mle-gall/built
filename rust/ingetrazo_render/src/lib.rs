@@ -1242,9 +1242,11 @@ impl Renderer {
     }
     /// Depth-tested world-space lines in a named slot (``lines.rs``):
     /// 40-byte segments ``a, b (3 f32), RGBA8, width, dash, gap (f32
-    /// physical pixels)``. An empty array empties the slot.
-    fn set_lines(&mut self, slot: &str, segments: PyReadonlyArray1<'_, u8>) -> PyResult<()> {
-        self.lines.upload(&self.device, &self.queue, slot, segments.as_slice()?).map_err(PyValueError::new_err)
+    /// physical pixels)``. An empty array empties the slot. A slot is drawn
+    /// before the scene edges (GL's scaffold) unless ``above_edges``.
+    #[pyo3(signature = (slot, segments, above_edges=false))]
+    fn set_lines(&mut self, slot: &str, segments: PyReadonlyArray1<'_, u8>, above_edges: bool) -> PyResult<()> {
+        self.lines.upload(&self.device, &self.queue, slot, segments.as_slice()?, above_edges).map_err(PyValueError::new_err)
     }
     fn line_counts(&self) -> Vec<(String, u32)> { self.lines.counts() }
     /// Loose-face marks only; groups use group_selection_edges.
@@ -1688,6 +1690,12 @@ impl Renderer {
             if edge_only && (!msaa || self.pick_pending) {
                 self.axes.draw(&mut e, &color, &depth, None);
             }
+            // GL's scaffold (box, guides) sits between faces and edges: the
+            // scene edges paint over it. After sun and AO, which shade faces.
+            if edge_only {
+                if msaa { self.lines.draw(&mut e, &self.aa.color_view(), &self.aa.depth_view(), Some(&color), false); }
+                else { self.lines.draw(&mut e, &color, &depth, None, false); }
+            }
             if edge_only && !(self.edges || self.style == 4 || ao_active || self.axes.visible) { break; }
             if !msaa || self.pick_pending {
             let mut pass = e.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -1787,7 +1795,7 @@ impl Renderer {
             drop(pass);
             }
             if msaa && !self.pick_pending {
-                self.aa.draw(&mut e, &color, s, self.style, self.edges, self.look.data[6][0] > 0., self.multi, self.queries.as_ref(), Some(edge_only), self.sections.count > 0 || self.preview.active() || self.face_marks.active() || self.ghost_geometry.active() || self.ghost_objects.active() || self.lines.active() || (self.look.data[9][0] > 0. && self.material_transparency), &self.axes);
+                self.aa.draw(&mut e, &color, s, self.style, self.edges, self.look.data[6][0] > 0., self.multi, self.queries.as_ref(), Some(edge_only), self.sections.count > 0 || self.preview.active() || self.face_marks.active() || self.ghost_geometry.active() || self.ghost_objects.active() || self.lines.active_layer(true) || (self.look.data[9][0] > 0. && self.material_transparency), &self.axes);
             }
             if !edge_only && self.sun.enabled && self.style != 1 && self.style != 4 {
                 if msaa { self.aa.resolve_depth(&self.device, &mut e, &depth, None); }
@@ -1832,8 +1840,9 @@ impl Renderer {
                 else { ghost.draw(&mut e,&color,&depth,None); }
             }
         }
-        if msaa { self.lines.draw(&mut e, &self.aa.color_view(), &self.aa.depth_view(), Some(&color)); }
-        else { self.lines.draw(&mut e, &color, &depth, None); }
+        // GL's selected hidden edges come after the scene edges.
+        if msaa { self.lines.draw(&mut e, &self.aa.color_view(), &self.aa.depth_view(), Some(&color), true); }
+        else { self.lines.draw(&mut e, &color, &depth, None, true); }
         // Material OIT reads opaque depth and never writes it. AO has already
         // completed on opaque geometry; glass cannot generate contact darkness.
         if self.look.data[9][0] > 0. && self.material_transparency && self.style != 1 && self.style != 4 {
