@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """Write the sheet font's metrics for ingetrazo_core sheets::metrics: the
-vertical metrics, every glyph's advance and the kerning pairs of Qt's
-"Sans Serif" at a pixel size of 100, regular and bold — what the Python
-painters measured text with (views/composer.py, _text_width_mm and kin).
+vertical metrics, every glyph's advance and the kerning pairs of the
+sheet font (bundled Inter, scripts/sheet_font.py) at a pixel size of 100,
+regular and bold, as Qt measures it — what the painters lay text out with
+and the PDF writer embeds.
 
     .venv/bin/python scripts/sheet_font_metrics.py rust/ingetrazo_core/src/sheets/font_metrics.json
 """
@@ -41,6 +42,9 @@ def measure(bold: bool) -> dict:
 def main(path: str) -> None:
     from PySide6.QtWidgets import QApplication
     QApplication.instance() or QApplication([])
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from sheet_font import use_inter
+    use_inter()
     from PySide6.QtGui import QFont, QFontInfo
     data = {"family": QFontInfo(QFont("Sans Serif")).family(), "pixel_size": 100,
             "regular": measure(False), "bold": measure(True)}
