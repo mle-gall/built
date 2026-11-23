@@ -124,7 +124,7 @@ def test_a_failed_open_leaves_no_empty_tab_behind(win, tmp_path, monkeypatch):
     mine = win.active_document()
     bad = tmp_path / "bad.igz"
     bad.write_text("not a document")
-    monkeypatch.setattr(QMessageBox, "critical", lambda *a, **k: None)
+    monkeypatch.setattr("views.chrome_dialogs.critical", lambda *a, **k: None)
     assert not win.open_path(bad)
     assert win.documents() == [mine]
     assert win.active_document() is mine
@@ -461,7 +461,7 @@ def test_every_untitled_slot_is_offered_back(win, monkeypatch, tmp_path):
         _face(s, z)
         igz_format.save_scene(s, autosave.slot_for(None, untitled=n))
     try:
-        monkeypatch.setattr(QMessageBox, "question",
+        monkeypatch.setattr("views.chrome_dialogs.question",
                             lambda *a, **k: QMessageBox.Yes)
         win._offer_untitled_recovery()
         docs = win.documents()

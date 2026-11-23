@@ -13,7 +13,7 @@ Two surfaces, both drawn by ``rust/ingetrazo_render/src/ui.rs``:
   The capsule retains recent results and notice actions.
 
 Custom questions use the sheet and cancel when there is no frame.
-Standard message-box wrappers still have Qt callers.
+Standard message calls map to chrome notices and questions.
 
 Blocking answers
 ----------------
@@ -256,14 +256,16 @@ def _record(win, title, detail, tone, action_label="", action=None, toast=True):
 
 def notify(parent, title, text, *, tone="info", button="OK", action_label="", action=None):
     """Post a nonmodal toast and retain its action in the activity history."""
-    if live(parent) is None:
+    win = async_host(parent)
+    if win is None:
+        print(f"{title}: {text}", file=sys.stderr)
         return False
     if "<br" in text:
         from PySide6.QtGui import QTextDocument
         document = QTextDocument()
         document.setHtml(text)
         text = document.toPlainText()
-    _record(window_of(parent), title, text, tone, action_label, action)
+    _record(win, title, text, tone, action_label, action)
     return True
 
 
@@ -425,13 +427,14 @@ _STD = [  # (button, label, accept?) in the order they read, left to right
 
 def _standard(parent, tone, title, text, buttons, default):
     from core.i18n import tr
-    if live(parent) is None:
-        return None
+    if buttons is None:
+        buttons = QMessageBox.Yes | QMessageBox.No if tone == "question" else QMessageBox.Ok
     chosen = [(b, label, accept) for b, label, accept in _STD if buttons & b]
     if not chosen:
         chosen = [(QMessageBox.Ok, "OK", True)]
     if len(chosen) == 1 and chosen[0][0] == QMessageBox.Ok:
-        return QMessageBox.Ok if notify(parent, title, text, tone=tone) else None
+        notify(parent, title, text, tone=tone)
+        return QMessageBox.Ok
     ids = {str(int(b.value)): b for b, _, _ in chosen}
     nobutton = default is None or default == QMessageBox.NoButton
     if nobutton:
@@ -446,46 +449,23 @@ def _standard(parent, tone, title, text, buttons, default):
     key = lambda b: str(int(b.value)) if b is not None else None
     got = ask(parent, title, text, [(key(b), tr(label)) for b, label, _ in chosen],
               default=key(default), cancel=key(escape), discard=key(discard), tone=tone)
-    return None if got is None else ids.get(got)
+    return ids.get(got, QMessageBox.NoButton)
 
 
-def _box(tone, qt_name):
-    def call(parent, title, text, buttons=None, defaultButton=None):
-        std = QMessageBox.Ok if buttons is None else buttons
-        got = _standard(parent, tone, title, text, std, defaultButton)
-        if got is not None:
-            return got
-        # Looked up now, so a test (or plugin) that answers for the user
-        # by replacing QMessageBox.<name> is still obeyed.
-        qt = getattr(QMessageBox, qt_name)
-        args = [parent, title, text]
-        if buttons is not None:
-            args.append(buttons)
-            if defaultButton is not None:
-                args.append(defaultButton)
-        return qt(*args)
-    call.__name__ = qt_name
-    call.__doc__ = f"``QMessageBox.{qt_name}`` on the Built sheet when it is on screen."
-    return call
+def critical(parent, title, text, buttons=QMessageBox.Ok, defaultButton=None):
+    return _standard(parent, "error", title, text, buttons, defaultButton)
 
 
-critical = _box("error", "critical")
-warning = _box("warning", "warning")
-information = _box("info", "information")
+def warning(parent, title, text, buttons=QMessageBox.Ok, defaultButton=None):
+    return _standard(parent, "warning", title, text, buttons, defaultButton)
 
 
-def question(parent, title, text, buttons=None, defaultButton=None):
-    """``QMessageBox.question`` on the sheet (Yes | No unless told)."""
-    std = (QMessageBox.Yes | QMessageBox.No) if buttons is None else buttons
-    got = _standard(parent, "question", title, text, std, defaultButton)
-    if got is not None:
-        return got
-    args = [parent, title, text]
-    if buttons is not None:
-        args.append(buttons)
-        if defaultButton is not None:
-            args.append(defaultButton)
-    return QMessageBox.question(*args)
+def information(parent, title, text, buttons=QMessageBox.Ok, defaultButton=None):
+    return _standard(parent, "info", title, text, buttons, defaultButton)
+
+
+def question(parent, title, text, buttons=QMessageBox.Yes | QMessageBox.No, defaultButton=None):
+    return _standard(parent, "question", title, text, buttons, defaultButton)
 
 
 # ---- Modality while a sheet is up --------------------------------------------

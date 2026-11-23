@@ -158,13 +158,12 @@ def test_persistence(tmp_path):
 def test_menu_dispatch_and_report(monkeypatch, tmp_path):
     from views.main_window import MainWindow
     from views.filedialogs import file_dialogs
-    from PySide6.QtWidgets import QMessageBox
     from formats import rfa
     win = MainWindow()
     reports = []
     path = tmp_path / 'test.rfa'
     monkeypatch.setattr(rfa, 'read_rfa', lambda path: payload())
-    monkeypatch.setattr(QMessageBox, 'information', lambda parent, title, text: reports.append(text))
+    monkeypatch.setattr("views.chrome_dialogs.information", lambda parent, title, text: reports.append(text))
     monkeypatch.setattr(file_dialogs, 'getOpenFileName', lambda *a, **k: (str(path), ''))
     try:
         assert '.rfa' in win._openable_suffixes()

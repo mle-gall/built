@@ -20,7 +20,7 @@ ezdxf = pytest.importorskip("ezdxf")
 
 from PySide6.QtCore import QEventLoop, QTimer  # noqa: E402
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication, QMessageBox  # noqa: E402
+from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from core.history import AddEdgeCommand  # noqa: E402
 from formats import dwg_bridge, dxf_in  # noqa: E402
@@ -79,7 +79,7 @@ def win():
 @pytest.fixture
 def errors(monkeypatch):
     shown = []
-    monkeypatch.setattr(QMessageBox, "critical",
+    monkeypatch.setattr("views.chrome_dialogs.critical",
                         lambda _parent, title, text: shown.append((title, text)))
     # The unit dialog answered: metres, no faces from the outlines.
     from views.main_window import MainWindow

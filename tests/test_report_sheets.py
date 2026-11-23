@@ -112,18 +112,8 @@ def test_cut_list_group_copy_export(tmp_path, monkeypatch):
 
 @pytest.mark.parametrize(("sid", "handler"), [("about", "_on_about"), ("extensions", "_on_manage_extensions"),
                                                ("cutlist", "_on_cut_list")])
-def test_classic_entry_points(monkeypatch, sid, handler):
-    from views import about_dialog, extension_manager_dialog
+def test_offscreen_window_commands_open_report_sheets(sid, handler):
     from views.main_window import MainWindow
-    win = SimpleNamespace(viewport=SimpleNamespace(keys_stand_in=None), tray=SimpleNamespace(parts=Mock()))
-    about, manager = Mock(), Mock()
-    monkeypatch.setattr(about_dialog, "AboutDialog", about)
-    monkeypatch.setattr(extension_manager_dialog, "ExtensionManagerDialog", manager)
-    assert not report_sheets.show(win, sid)
+    win = SimpleNamespace()
     getattr(MainWindow, handler)(win)
-    if sid == "about":
-        about.return_value.exec.assert_called_once()
-    elif sid == "extensions":
-        manager.return_value.exec.assert_called_once()
-    else:
-        win.tray.parts._on_copy.assert_called_once()
+    assert chrome_sheet.current(win).id == sid

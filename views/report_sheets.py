@@ -263,7 +263,5 @@ class Extensions(chrome_sheet.Provider):
 
 
 def show(win, sid):
-    if not chrome_sheet.available(win):
-        return False
     provider = {"about": About, "extensions": Extensions, "cutlist": CutList}[sid]()
-    return chrome_sheet.open(win, provider)
+    return chrome_sheet.present(win, provider)

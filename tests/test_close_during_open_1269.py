@@ -151,7 +151,7 @@ def test_a_failed_open_does_not_cut_the_next_one(doc, monkeypatch):
     from views.main_window import MainWindow
 
     win = MainWindow(defer_extensions=True)
-    monkeypatch.setattr("views.main_window.QMessageBox.critical",
+    monkeypatch.setattr("views.chrome_dialogs.critical",
                         lambda *a, **k: None)
     real = igz.load_into
 

@@ -185,16 +185,11 @@ def test_message_boxes_map_standard_buttons(win):
     assert cd.critical(win, "Open failed", "No such file") == QMessageBox.Ok
 
 
-def test_message_boxes_go_to_qt_when_the_chrome_is_off(monkeypatch):
-    from views.main_window import MainWindow
-    calls = []
-    monkeypatch.setattr(QMessageBox, "warning", lambda *a: calls.append(a) or QMessageBox.Ok)
-    w = MainWindow(defer_extensions=True)
-    try:
-        assert cd.warning(w, "Linked files", "Missing") == QMessageBox.Ok
-        assert calls and calls[0][1:] == ("Linked files", "Missing")
-    finally:
-        w.close()
+def test_offscreen_warning_is_kept_in_the_chrome_history(win, monkeypatch):
+    monkeypatch.setattr(cd, "live", lambda parent: None)
+    assert cd.warning(win, "Linked files", "Missing") == QMessageBox.Ok
+    row = cd.history(win)[0]
+    assert (row.title, row.detail, row.tone) == ("Linked files", "Missing", "warning")
 
 
 @pytest.mark.parametrize("method,title", [

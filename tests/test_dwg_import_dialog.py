@@ -11,7 +11,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from pathlib import Path  # noqa: E402
 
 import pytest  # noqa: E402
-from PySide6.QtWidgets import QApplication, QMessageBox  # noqa: E402
+from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from formats import dwg_bridge  # noqa: E402
 
@@ -31,7 +31,7 @@ def window():
 @pytest.fixture
 def dialogs(monkeypatch):
     shown = []
-    monkeypatch.setattr(QMessageBox, "critical",
+    monkeypatch.setattr("views.chrome_dialogs.critical",
                         lambda parent, title, text: shown.append((title, text)))
     monkeypatch.setattr(dwg_bridge, "have_dwg_support", lambda: True)
     return shown

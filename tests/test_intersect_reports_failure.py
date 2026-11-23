@@ -32,7 +32,7 @@ def _window(monkeypatch, segs):
                         lambda text, *a, **k: said.append(text))
     warned = []
     import views.main_window as mw
-    monkeypatch.setattr(mw.QMessageBox, "warning",
+    monkeypatch.setattr("views.chrome_dialogs.warning",
                         lambda *a, **k: warned.append(a[1:]))
     return win, said, warned
 

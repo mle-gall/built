@@ -3979,13 +3979,10 @@ class MainWindow(WorksessionMixin, QMainWindow):
 
     def _on_manage_extensions(self) -> None:
         from views.report_sheets import show
-        if show(self, "extensions"):
-            return
         # An exception in a menu slot goes to stderr, and a windowed build
         # has none: the click did nothing at all (#1152).
         try:
-            from views.extension_manager_dialog import ExtensionManagerDialog
-            dialog = ExtensionManagerDialog(self)
+            show(self, "extensions")
         except Exception as exc:  # noqa: BLE001 — say so, whatever it was
             import logging
             from core.extensions import note_failure
@@ -3996,9 +3993,6 @@ class MainWindow(WorksessionMixin, QMainWindow):
                 self, tr("Extension manager"),
                 tr("Could not load extensions: {error}",
                    error=f"{type(exc).__name__}: {exc}"))
-            return
-        dialog.exec()
-        dialog.deleteLater()
 
     PLUGIN_GUIDE_URL = ("https://github.com/ingelibre/ingetrazo"
                         "/blob/main/docs/plugins.md")
@@ -4106,20 +4100,11 @@ class MainWindow(WorksessionMixin, QMainWindow):
 
     def _on_cut_list(self) -> None:
         from views.report_sheets import show
-        if not show(self, "cutlist"):
-            self.tray.parts.refresh()
-            self.tray.parts._on_copy()
+        show(self, "cutlist")
 
     def _on_about(self) -> None:
         from views.report_sheets import show
-        if show(self, "about"):
-            return
-        from views.about_dialog import AboutDialog
-        display = self.viewport.keys_stand_in
-        adapter = getattr(getattr(display, "renderer", None), "adapter", "")
-        # The people outside the project whose work is IN it turn in a
-        # carousel there; AUTHORS says what each one gave.
-        AboutDialog(self, __version__, adapter).exec()
+        show(self, "about")
 
     def _file_actions(self) -> list[QAction]:
         actions = []
@@ -9254,12 +9239,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
                           "were left out so the rest of “{name}” could open. Save "
                           "it to keep the repaired document.",
                           n=repaired, name=path.name)
-                if not _dialogs.notify(self, tr("Document repaired"), text,
-                                       tone="warning"):
-                    box = QMessageBox(QMessageBox.Warning, tr("Document repaired"),
-                                      text, QMessageBox.Ok, self)
-                    box.setAttribute(Qt.WA_DeleteOnClose)
-                    box.open()                   # not modal to the event loop
+                _dialogs.warning(self, tr("Document repaired"), text)
             # The project's other views show what came in, not what was there.
             grid = self._doc.view_grid
             if grid is not None:
