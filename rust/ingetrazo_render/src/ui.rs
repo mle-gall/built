@@ -12,6 +12,7 @@ use egui::{pos2, vec2, Color32, CornerRadius, Margin, Pos2, Rect, Sense, Stroke,
 mod widgets;
 /// The chrome's modal forms (views/chrome_forms.py).
 pub mod dialog;
+pub mod operation_form;
 /// Sheets, a workspace of the window (views/wgpu_sheets.py).
 mod sheets;
 mod activity;

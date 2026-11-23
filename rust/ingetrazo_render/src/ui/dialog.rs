@@ -260,6 +260,21 @@ pub(super) fn fields(ui: &mut egui::Ui, d: &mut Dialog, out: &mut Vec<String>) {
                     let w = (ui.available_width() - sw - 16.0).max(60.0);
                     let buf = d.bufs.entry(id.clone()).or_insert_with(|| text.clone());
                     let before = buf.clone();
+                    // Numeric fields may specify a keyboard step after their unit.
+                    if kind == "number" && enabled && ui.memory(|m| m.has_focus(tid)) {
+                        if let Some(step) = options.get(1).and_then(|s| s.parse::<f64>().ok()) {
+                            let delta = ui.input_mut(|i| {
+                                if i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowUp) { step }
+                                else if i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown) { -step }
+                                else { 0. }
+                            });
+                            if delta != 0. {
+                                if let Ok(value) = buf.trim().replace(',', ".").parse::<f64>() {
+                                    *buf = (value + delta).clamp(min, max).to_string();
+                                }
+                            }
+                        }
+                    }
                     let edit = if multiline {
                         egui::TextEdit::multiline(buf).desired_rows(4)
                     } else {
@@ -292,7 +307,11 @@ pub(super) fn fields(ui: &mut egui::Ui, d: &mut Dialog, out: &mut Vec<String>) {
                 let item = (id.clone(), label.clone(), String::new(), "check".to_owned(), if value > 0.5 { 1 } else { 0 }, enabled);
                 let resp_clicked = ui.horizontal(|ui| {
                     if !full && !text.is_empty() { label_cell(ui, text, tip, label_w, 24.0, enabled); }
-                    menu_row(ui, &item)
+                    let response = super::kit::menu_row_resp(ui, &item).0;
+                    if !tip.is_empty() {
+                        response.clone().on_hover_text(tip);
+                    }
+                    response.clicked()
                 }).inner;
                 if resp_clicked && enabled {
                     let v = if value > 0.5 { 0 } else { 1 };

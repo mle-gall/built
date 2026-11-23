@@ -1185,7 +1185,7 @@ impl FontPicker {
             let valid = rows.contains(&self.choice.font)
                 && (!self.choice.editable || !self.choice.text.trim().is_empty());
             ui.add_enabled_ui(valid, |ui| {
-                if amber_button(ui, "Apply") || valid && ui.input(|i| i.key_pressed(Key::Enter)) {
+                if sheet_button(ui, "Apply", "↩", 1) || valid && ui.input(|i| i.key_pressed(Key::Enter)) {
                     self.remember();
                     answer = Some(true);
                 }

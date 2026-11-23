@@ -6569,38 +6569,43 @@ class MainWindow(WorksessionMixin, QMainWindow):
         FlipTool().flip(self.viewport, axis)
 
     def _on_soften_edges(self) -> None:
-        """Edit ▸ Soften / Smooth Edges…: the angle dialog, then one undo
-        step over the selection (see core.soften)."""
-        from PySide6.QtWidgets import QDialog
-        from core.soften import SoftenByAngleCommand, selected_edges
-        from views.soften_dialog import SoftenDialog, remember_angle
-        scene = self.viewport.scene
+        from ingetrazo_render import OperationForm
+        from views import chrome_forms
+        view = self.viewport
+        scene = view.scene
         if not scene.selection:
-            self.viewport.flash_status(
+            view.flash_status(
                 tr("Select faces, edges or groups to soften"), 4000)
             return
-        dialog = SoftenDialog(self)
-        if dialog.exec() != QDialog.Accepted:
-            return
-        remember_angle(dialog.angle.value())
+        saved = QSettings().value("tools/soften_angle", 30.0)
+        chrome_forms.show(self, chrome_forms.OperationForm(
+            tr("Soften / Smooth Edges"), OperationForm.soften(str(saved)),
+            lambda options: self._apply_soften_edges(view, options), note=tr(
+                "Edges between faces at this angle or less become smooth; "
+                "sharper edges stay hard. Selected groups include their nested "
+                "geometry, and component copies share the change.")))
+
+    def _apply_soften_edges(self, view, options):
+        from core.soften import SoftenByAngleCommand, selected_edges
+        angle = options["angle"]
+        if angle is not None:
+            QSettings().setValue("tools/soften_angle", angle)
         command = SoftenByAngleCommand(
-            selected_edges(scene), dialog.angle.value(),
-            coplanar=dialog.coplanar.isChecked(),
-            harden=dialog.harden.isChecked(),
-            materials=dialog.materials.isChecked(),
-            smooth=dialog.smooth.isChecked())
+            selected_edges(view.scene), angle or 0.0,
+            coplanar=options["coplanar"], harden=options["harden"],
+            materials=options["materials"], smooth=options["smooth"])
         command.changes = command.prepare()
         if not command.changes:
-            self.viewport.flash_status(tr("No edges need changing"), 4000)
+            view.flash_status(tr("No edges need changing"), 4000)
             return
-        self.viewport.history.execute(command)
-        self.viewport.flash_status(
+        view.history.execute(command)
+        view.flash_status(
             tr("Smoothed {n} edge(s)", n=sum(1 for c in command.changes
                                              if c[3][0]))
-            if not dialog.harden.isChecked() else
+            if not options["harden"] else
             tr("Unsoftened {n} edge(s)", n=len(command.changes)), 3000)
-        self.viewport.update()
-        self.viewport.notify_scene_changed()
+        view.update()
+        view.notify_scene_changed()
 
     @_repeatable("Reverse Faces")
     def _on_reverse_faces(self) -> None:
@@ -11790,7 +11795,6 @@ class MainWindow(WorksessionMixin, QMainWindow):
         """Hi-res 2D export of the current view ('Export 2D
         Graphic'): pick a file and a pixel width; height follows the
         viewport's aspect so the image matches exactly what you framed."""
-        from views.export_image_dialog import ExportImageDialog
         base = (self._current_path.stem if self._current_path is not None
                 else "untitled")
         path_str, _ = file_dialogs.getSaveFileName(
@@ -11798,19 +11802,23 @@ class MainWindow(WorksessionMixin, QMainWindow):
             tr("PNG image (*.png);;JPEG image (*.jpg)"))
         if not path_str:
             return
-        path = Path(path_str)
+        self._export_image_to(Path(path_str))
+
+    def _export_image_to(self, path):
+        from ingetrazo_render import OperationForm
+        from views import chrome_forms
         if path.suffix.lower() not in (".png", ".jpg", ".jpeg"):
             path = path.with_suffix(".png")
-        options = ExportImageDialog(self, path.suffix)
-        accepted = options.exec()
-        width, transparent = options.width_box.value(), options.transparent()
-        options.deleteLater()
-        if not accepted:
-            return
+        view = self._active_view()
+        chrome_forms.show(self, chrome_forms.OperationForm(
+            tr("Export Image"), OperationForm.image(path.suffix),
+            lambda options: self._save_export_image(view, path, **options)))
+
+    def _save_export_image(self, view, path, width, transparent):
         # With a camera frame (Camera Settings ▸ Frame) the picture is
         # the framed shot, ``width`` wide, not the whole view.
         # With several views, the one worked in, as Styles and Shift+P.
-        image = self._active_view().render_image(
+        image = view.render_image(
             width, sharp_shadows=True, transparent=transparent,
             crop_to_frame=True)
         if image is None or image.isNull() or not image.save(str(path)):

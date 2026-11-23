@@ -19,7 +19,7 @@ from tests.controller_surface import live_image
 import pytest
 from PySide6.QtGui import QColor, QImage
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication, QDialog
+from PySide6.QtWidgets import QApplication
 
 _app = QApplication.instance() or QApplication([])
 V = QVector3D
@@ -202,7 +202,7 @@ def export(view, monkeypatch):
     """Export image as the menu runs it, its file dialog answered: ``run``
     ticks the box as told and returns the file read back. ``seen`` holds the
     dialog as the user found it."""
-    from views import export_image_dialog as eid
+    from views import chrome_forms
     from views.filedialogs import file_dialogs
     win, vp, folder = view
     seen = {}
@@ -210,19 +210,17 @@ def export(view, monkeypatch):
     def run(name, tick=None, width=900):
         target = folder / name
 
-        def answer(self):
-            seen["enabled"] = self.transparent_box.isEnabled()
-            seen["checked"] = self.transparent_box.isChecked()
-            seen["tip"] = self.transparent_box.toolTip()
-            self.width_box.setValue(width)
-            if tick is not None:
-                self.transparent_box.setChecked(tick)
-            return QDialog.Accepted
-
-        monkeypatch.setattr(eid.ExportImageDialog, "exec", answer)
         monkeypatch.setattr(file_dialogs, "getSaveFileName",
                             lambda *a, **k: (str(target), ""))
         win._on_export_image()
+        form = chrome_forms.current(win)
+        row = next(row for row in form.wire()[4] if row[0] == "transparent")
+        seen.update(enabled=not bool(row[8] & 1), checked=bool(row[4]), tip=row[9])
+        assert form.values()["width"] == 3840
+        form.receive("width", str(width))
+        if tick is not None:
+            form.receive("transparent", "1" if tick else "0")
+        form.press("ok")
         return QImage(str(target)).convertToFormat(QImage.Format_ARGB32)
 
     return vp, run, seen
@@ -261,11 +259,10 @@ def test_a_jpeg_does_not_offer_it(export, name):
 
 
 def test_a_disabled_box_never_counts():
-    from views.export_image_dialog import ExportImageDialog
-    dlg = ExportImageDialog(None, ".jpg")
-    dlg.transparent_box.setChecked(True)     # by no hand: it is disabled
-    assert dlg.transparent() is False
-    dlg.deleteLater()
+    from ingetrazo_render import OperationForm
+    form = OperationForm.image(".jpg")
+    form.receive("transparent", "1")
+    assert form.values()["transparent"] is False
 
 
 def test_the_new_texts_are_translated():
