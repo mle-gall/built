@@ -514,6 +514,16 @@ def geometry_steps(work):
         out.append(state())
         assert h.redo()
         out.append(state())
+    # The cap and both wall rings share the outer push/pull transaction.
+    sheet = mesh.add_face(rectangle(800, 0, 5, 5), [rectangle(801, 1, 1, 1)])
+    sheet.attrs["color"] = [0.2, 0.7, 0.4]
+    assert commands.push_pull(h, sheet.key, 1.)["ok"]
+    out.append(state())
+    face_ids = [f.key for f in mesh.faces]
+    assert h.undo()
+    out.append(state())
+    assert h.redo() and face_ids == [f.key for f in mesh.faces]
+    out.append(state())
     # Refused joins preserve the last published change and the exact mesh.
     refused = rectangle(600, 0, 2, 2)
     mesh.add_face(refused)

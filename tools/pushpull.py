@@ -110,6 +110,33 @@ def _loops_overlap_2d(a_xy, b_xy) -> bool:
         any(_point_in_polygon(p, a_xy) for p in b_xy)
 
 
+class _PushBand:
+    """The connecting edges and faces of one pushed ring, inside the push transaction."""
+
+    def __init__(self, base, top, *, rim=False, rails=False, walls=False, cap=False):
+        self.base, self.top = base, top
+        self.parts = rim, rails, walls, cap
+
+    def do(self, scene):
+        from core.store_mesh import StoreMesh
+        from ingetrazo_core import MeshStore
+        mesh = scene.mesh
+        if type(mesh) is StoreMesh:
+            dirty, steps = mesh._store.push_band([mesh._input_point(p) for p in self.base],
+                                                 [mesh._input_point(p) for p in self.top], *self.parts)
+            if dirty:
+                mesh._dirty(dirty)
+            scene.version += steps
+            return
+        edges, faces = MeshStore.object_push_band([p.toTuple() for p in self.base],
+                                                  [p.toTuple() for p in self.top], *self.parts)
+        for a, b in edges:
+            AddEdgeCommand(QVector3D(*a), QVector3D(*b)).do(scene)
+        for ring in faces:
+            mesh.add_face([QVector3D(*p) for p in ring])
+            scene.version += 1
+
+
 class _GroupScene:
     """Scene facade aiming the push/pull machinery at a Group's isolated mesh.
 
@@ -3095,7 +3122,22 @@ class PushPullTool(Tool):
         # connectivity pass collapses them. No merge — rebuild already did.
         run_stitch(mesh, seedkeys, None, coplanar_merge=False)
 
-    def _extrude_commands(self, face, base, top, base_holes, top_holes,
+    def _extrude_commands(self, face, base, top, base_holes, top_holes, count, attached):
+        from core import doc_model
+        if not doc_model.ENABLED:
+            return self._reference_extrude_commands(face, base, top, base_holes, top_holes, count, attached)
+        commands = [DeleteFaceCommand(face)] if attached else []
+        commands.append(_PushBand(base, top, rim=True, rails=True))
+        self._cap_cmd = AddFaceCommand(top, auto=not attached, holes=top_holes)
+        commands.append(self._cap_cmd)
+        for lower, upper in zip(base_holes, top_holes):
+            commands.append(_PushBand(lower, upper, rim=True, rails=True, walls=True))
+        commands.append(_PushBand(base, top, walls=True))
+        if attached:
+            commands.append(PruneOrphanEdgesCommand(base))
+        return commands
+
+    def _reference_extrude_commands(self, face, base, top, base_holes, top_holes,
                           count, attached) -> list:
         """Build the naive extrusion of ``face`` to ``top``: a consumed/kept
         base, the moved cap (carrying any holes), one wall quad per boundary
@@ -3238,7 +3280,27 @@ class PushPullTool(Tool):
             return None
         return best[1], best[2], best[3]
 
-    def _through_commands(self, face, base, through, base_holes=(),
+    def _through_commands(self, face, base, through, base_holes=(), faces=()):
+        from core import doc_model
+        if not doc_model.ENABLED:
+            return self._reference_through_commands(face, base, through, base_holes, faces)
+        far_face, back, remainder = through
+        holes = list(far_face.holes)
+        islands = []
+        if remainder is None:
+            holes.append(back)
+            if base_holes:
+                islands = self._through_islands(face, base_holes, far_face, back, faces)
+        far = AddFaceCommand(far_face.vertices if remainder is None else remainder, auto=False, holes=holes)
+        self._far_cmd = far, dict(far_face.attrs)
+        commands = [DeleteFaceCommand(face), DeleteFaceCommand(far_face), far,
+                    _PushBand(base, back, rim=remainder is None, rails=True, walls=True)]
+        for lower, upper in islands:
+            commands.append(_PushBand(lower, upper, rim=True, rails=True, walls=True, cap=True))
+        commands.append(PruneOrphanEdgesCommand(list(base) + list(back)))
+        return commands
+
+    def _reference_through_commands(self, face, base, through, base_holes=(),
                           faces=()) -> list:
         """Build the commands for a through-hole: punch the far face, join it to
         the front opening with a tunnel, and sweep the dangling base edges.

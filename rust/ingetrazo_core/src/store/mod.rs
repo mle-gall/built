@@ -29,6 +29,7 @@ pub(crate) mod drawing;
 mod commands;
 mod fold;
 mod landing;
+mod push_band;
 mod erase;
 mod drawing_face;
 mod drawing_plane;
