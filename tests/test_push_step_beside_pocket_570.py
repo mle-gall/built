@@ -16,7 +16,7 @@ from __future__ import annotations
 from collections import Counter
 
 import pytest
-from PySide6.QtGui import QVector3D as V
+from ingetrazo_core import Vec3 as V
 
 from core.history import History
 from core.orient import is_closed, signed_volume

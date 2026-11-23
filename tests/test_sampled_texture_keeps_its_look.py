@@ -8,7 +8,7 @@ map itself, as before."""
 from __future__ import annotations
 
 import pytest
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.mesh import Mesh
 from core.texture import face_uv_axes, flattened_texture, placement_of

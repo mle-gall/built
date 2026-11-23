@@ -9,7 +9,7 @@ that were not there. Two guides that really cross still read Intersection."""
 from __future__ import annotations
 
 import pytest
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.scene import Scene
 from core.snap import compute_snap

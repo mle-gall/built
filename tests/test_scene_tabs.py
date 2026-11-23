@@ -231,7 +231,7 @@ def test_an_opened_project_lists_the_scenes_it_was_saved_with(win, tmp_path):
     from core.saved_views import SavedView
     from core.scene import Scene
     from formats import igz
-    from PySide6.QtGui import QVector3D as V
+    from ingetrazo_core import Vec3 as V
     scene = Scene()
     scene.mesh.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0)])
     for name in ("Exterior", "Planta"):

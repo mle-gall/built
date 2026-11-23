@@ -128,7 +128,7 @@ def test_bridge_saved_views_and_paging():
 
 
 def test_filtered_ifc_profile_exports_only_matching_group(tmp_path):
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     from formats.ifc import save_ifc
     scene = Scene()
     for name in ('Keep', 'Omit'):
@@ -179,7 +179,7 @@ def test_filtered_placements_cannot_reach_hidden_object_ghost_pass():
 
 
 def test_filter_leaves_excluded_working_mesh_and_drops_hidden_selection():
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     from core.agent_facets import set_display
     from views.viewport import Viewport
     vp = Viewport()

@@ -14,7 +14,7 @@ import math
 
 import pytest
 from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 from PySide6.QtWidgets import QApplication
 
 from tools.base import ToolContext
@@ -365,7 +365,7 @@ def test_a_first_click_on_a_components_face_captures_its_world_plane(viewport):
     coordinates; the second corner then fell on a plane nowhere near the
     post. The captured plane must be the world one."""
     from PySide6.QtCore import QPointF, Qt
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     from core.group import Group
     from core.mesh import Mesh
     from tools.rectangle import RectangleTool
@@ -413,7 +413,7 @@ def test_a_nested_components_face_plane_comes_through_its_placement(viewport):
     video, 2026-09-14). pick_face_placement returns the placement whose
     composed matrix puts the face in the world."""
     from PySide6.QtCore import QPointF, Qt
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     from core.group import Group
     from core.mesh import Mesh
     from core.snap import face_plane_world
@@ -469,7 +469,7 @@ def test_opening_a_container_lets_the_pick_resolve_to_its_children(viewport):
     on the arch inside, kept opening nothing — the pick still answered
     "the plaza" (a stale index: the owner a hit resolves to depends on the
     open context)."""
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     from core.group import Group
     from core.mesh import Mesh
     mesh = Mesh()
@@ -564,7 +564,7 @@ def test_a_group_inserted_while_editing_a_container_becomes_its_child(viewport):
     the top level. Inside an open container, InsertGroupCommand (paste,
     place, import) appends to the container's children; undo removes it
     from there."""
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     from core.group import Group
     from core.history import InsertGroupCommand
     from core.mesh import Mesh

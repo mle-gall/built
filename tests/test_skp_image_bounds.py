@@ -4,7 +4,7 @@ from types import SimpleNamespace as NS
 
 import numpy as np
 import pytest
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from formats import skp_openskp as adapter
 

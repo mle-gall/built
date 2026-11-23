@@ -4,7 +4,8 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 from PySide6.QtCore import Qt, QPointF
-from PySide6.QtGui import QVector3D, QMatrix4x4, QMouseEvent
+from PySide6.QtGui import QMouseEvent
+from ingetrazo_core import Vec3 as QVector3D, Matrix4 as QMatrix4x4
 from PySide6.QtWidgets import QApplication
 from core.scene import Scene
 from core.mesh import Mesh

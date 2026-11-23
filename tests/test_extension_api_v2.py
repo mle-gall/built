@@ -27,7 +27,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 from PySide6.QtCore import QSettings, Qt
-from PySide6.QtGui import QCloseEvent, QColor, QImage, QPainter, QVector3D as V
+from PySide6.QtGui import QCloseEvent, QColor, QImage, QPainter
+from ingetrazo_core import Vec3 as V
 from PySide6.QtWidgets import QApplication, QLabel
 
 from core.history import History

@@ -14,7 +14,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
 import pytest
-from PySide6.QtGui import QColor, QImage, QPainter, QVector3D
+from PySide6.QtGui import QColor, QImage, QPainter
+from ingetrazo_core import Vec3 as QVector3D
 from PySide6.QtWidgets import QApplication
 
 from core.camera import OrbitCamera

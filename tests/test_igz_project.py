@@ -42,7 +42,7 @@ def test_conflict_warns_and_last_writer_wins(tmp_path):
 
 def test_export_project_guid(tmp_path):
     from core.group import Group
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     from formats.ifc import save_ifc
     a, b = Scene(), Scene()
     path = tmp_path / 'shared.igzproj'

@@ -3,7 +3,7 @@ from copy import deepcopy
 
 import numpy as np
 import pytest
-from PySide6.QtGui import QVector3D as V
+from ingetrazo_core import Vec3 as V
 
 from core.mesh import Mesh, DeferredMesh
 from core.scene import Scene

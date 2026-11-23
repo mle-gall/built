@@ -96,7 +96,7 @@ def test_round_trip_and_copy(tmp_path, component):
     scene = Scene(); group = Group(Mesh(), 'Object'); scene.groups.append(group)
     group.component = component
     if component:
-        from PySide6.QtGui import QMatrix4x4
+        from ingetrazo_core import Matrix4 as QMatrix4x4
         group.xform = QMatrix4x4()
     group.ifc = full_record(); scene.plugin_data['bim_registry'] = registry()
     copied = copy_group(group)
@@ -171,7 +171,7 @@ def test_paste_with_layers_preserves_record():
 
 
 def test_face_tags_undo_and_geometry():
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     scene = Scene()
     f = scene.mesh.add_face([QVector3D(0, 0, 0), QVector3D(1, 0, 0), QVector3D(0, 1, 0)])
     history = History(scene)
@@ -280,7 +280,7 @@ def test_live_takeoff_switches_off_above_the_face_limit(monkeypatch):
     faces, and a saved ride model froze its own opening."""
     from views import tray as tray_module
     from views.tray import BimPanel
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     app = QApplication.instance() or QApplication([])
     monkeypatch.setattr(tray_module, 'LIVE_TAKEOFF_FACE_LIMIT', 5)
     scene = Scene(); group = Group(Mesh(), 'Big')

@@ -108,7 +108,7 @@ def test_picking_a_layer_with_a_selection_moves_it_and_undoes(win):
 
 
 def test_picking_with_nothing_selected_sets_the_working_layer(win):
-    from PySide6.QtGui import QVector3D as V
+    from ingetrazo_core import Vec3 as V
     from core.history import MakeGroupCommand
     scene, ga, gb = _doc(win)
     scene.clear_selection()
@@ -288,7 +288,7 @@ def test_the_drop_down_knows_the_selections_layers(win):
 
 @pytest.mark.parametrize("seed", range(10))
 def test_selection_layers_matches_random_selections(seed):
-    from PySide6.QtGui import QVector3D as V
+    from ingetrazo_core import Vec3 as V
     rng = random.Random(seed)
     scene = Scene()
     names = [f"L{i}" for i in range(4)]

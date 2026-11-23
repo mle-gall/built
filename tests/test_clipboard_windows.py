@@ -3,7 +3,7 @@ travels through the system clipboard as a small ``.igz``-based payload."""
 from __future__ import annotations
 
 import pytest
-from PySide6.QtGui import QMatrix4x4, QVector3D as V
+from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 from PySide6.QtWidgets import QApplication
 
 from core.group import Group, copy_group

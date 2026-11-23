@@ -7,7 +7,7 @@ keeps its own state, so unlocking the group gives every row back as it
 was, a row locked on purpose still locked."""
 from __future__ import annotations
 
-from PySide6.QtGui import QMatrix4x4, QVector3D as V
+from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 from core.group import Group
 from core.i18n import tr

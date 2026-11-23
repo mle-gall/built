@@ -5,7 +5,8 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 from PySide6.QtCore import QPoint, QPointF, Qt
-from PySide6.QtGui import QVector3D, QMatrix4x4, QContextMenuEvent, QMouseEvent
+from PySide6.QtGui import QContextMenuEvent, QMouseEvent
+from ingetrazo_core import Vec3 as QVector3D, Matrix4 as QMatrix4x4
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 from core.scene import Scene

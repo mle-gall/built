@@ -7,7 +7,8 @@ and «More materials…» — and the choice paints the row, or every selected
 row when it is one of them, as one undo step."""
 from __future__ import annotations
 
-from PySide6.QtGui import QColor, QVector3D as V
+from PySide6.QtGui import QColor
+from ingetrazo_core import Vec3 as V
 from PySide6.QtWidgets import QApplication, QPushButton
 
 from core.group import Group

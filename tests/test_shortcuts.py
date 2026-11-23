@@ -245,7 +245,7 @@ def test_el_boton_de_vista_muestra_su_atajo(ventana):
         "(" + QKeySequence("Ctrl+1").toString(QKeySequence.NativeText) + ")")
 def _caja(nombre: str, x0: float):
     """Un grupo cúbico de lado 1 generado en el momento."""
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     from core.group import Group
     from core.mesh import Mesh
     malla = Mesh()

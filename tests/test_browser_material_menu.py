@@ -5,7 +5,7 @@ any material of the document, or a recent paint, without going to the
 Materials tab — colours and textures alike, one undo step."""
 from __future__ import annotations
 
-from PySide6.QtGui import QVector3D as V
+from ingetrazo_core import Vec3 as V
 
 from core import outliner
 from core.group import Group

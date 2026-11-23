@@ -18,7 +18,7 @@ import sys
 import weakref
 
 import pytest
-from PySide6.QtGui import QVector3D as V
+from ingetrazo_core import Vec3 as V
 from PySide6.QtWidgets import QApplication
 
 if QApplication.instance() is None:
@@ -71,7 +71,7 @@ def _fill(scene, n=6):
         scene.groups.append(Group(m, f"g{k}"))
     proto = Mesh()
     _box(proto, 0, 0, 0, 0.8)
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     for k in range(3):
         g = Group(proto, "inst")
         xf = QMatrix4x4()

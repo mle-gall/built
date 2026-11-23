@@ -242,7 +242,7 @@ def test_mounted_rows_and_exact_nested_members(panel):
 
 def test_drawing_preserves_structure_rows(panel):
     from core.history import AddEdgeCommand
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     dock, _, _ = panel
     row = dock.items['ride']
     history = dock.vp.history

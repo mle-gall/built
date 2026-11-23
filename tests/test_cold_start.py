@@ -103,7 +103,7 @@ def cold_start(tmp_path, page=False, recover=False, untitled_slot=False):
     if untitled_slot:
         from core.group import Group
         from core.mesh import Mesh
-        from PySide6.QtGui import QVector3D
+        from ingetrazo_core import Vec3 as QVector3D
         scene = Scene()
         mesh = Mesh()
         mesh.add_face([QVector3D(0, 0, 0), QVector3D(1, 0, 0), QVector3D(1, 1, 0)])

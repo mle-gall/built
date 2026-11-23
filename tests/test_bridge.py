@@ -7,7 +7,7 @@ from __future__ import annotations
 import math
 
 import pytest
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.bridge import (BridgeError, align_loop, bridge, plan,
                          profiles_from_selection, strips)

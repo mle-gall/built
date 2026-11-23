@@ -11,7 +11,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from PySide6.QtCore import QPointF
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 from PySide6.QtWidgets import QApplication, QWidget
 
 from core.composition import CotaItem

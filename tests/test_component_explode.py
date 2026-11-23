@@ -5,7 +5,7 @@ Components keep their parts: the menu's Explode asks for Make Unique first
 inside one, as Make Group does. The command itself, run inside an assembly
 (a component holding components), still has to undo in place: the assembly's
 matrix was down in its parts when it ran, and comes back up on leaving."""
-from PySide6.QtGui import QMatrix4x4, QVector3D as V
+from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 import pytest
 
 from core.group import Group, copy_group, iter_placements

@@ -10,7 +10,7 @@ import math
 from collections import Counter
 
 import pytest
-from PySide6.QtGui import QVector3D as V
+from ingetrazo_core import Vec3 as V
 
 from core.mesh import Mesh
 from core.sweep import orient_closed_path, sweep_profile

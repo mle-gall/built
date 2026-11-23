@@ -16,7 +16,7 @@ hecho antes de guardar o exportar.
 """
 from __future__ import annotations
 
-from PySide6.QtGui import QMatrix4x4, QVector3D
+from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core.group import Group
 from core.mesh import Mesh
@@ -536,7 +536,7 @@ def test_la_caja_del_contenedor_sigue_a_sus_hijos():
     sus hijos, pero se cacheaba en el trozo de su malla propia (vacía):
     borrar un hijo no la encogía, y entrar —que baja la matriz a los hijos—
     la deslizaba a los ejes."""
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     from core.group import oriented_box_corners
     from tests.test_pick_index import _VP, _bind
     scene, padre, h1, h2 = _plaza()

@@ -12,7 +12,7 @@ import sys
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest  # noqa: E402
-from PySide6.QtGui import QVector3D as V  # noqa: E402
+from ingetrazo_core import Vec3 as V
 from PySide6.QtWidgets import QApplication, QMenu  # noqa: E402
 
 import core.extensions as extensions  # noqa: E402

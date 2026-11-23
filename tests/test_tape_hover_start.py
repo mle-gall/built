@@ -2,7 +2,8 @@
 """T over a line starts a guide without a separate first mouse click."""
 import pytest
 from PySide6.QtCore import QPoint, QPointF, Qt
-from PySide6.QtGui import QMouseEvent, QVector3D as V
+from PySide6.QtGui import QMouseEvent
+from ingetrazo_core import Vec3 as V
 
 
 @pytest.fixture

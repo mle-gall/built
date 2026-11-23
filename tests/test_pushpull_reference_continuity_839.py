@@ -11,7 +11,7 @@ from types import SimpleNamespace
 
 import pytest
 from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QVector3D as V
+from ingetrazo_core import Vec3 as V
 
 from core.orient import is_closed
 from tools.base import ToolContext

@@ -1,5 +1,5 @@
 """Navigation feedback is temporary and absent from exports."""
-from PySide6.QtGui import QMatrix4x4
+from ingetrazo_core import Matrix4 as QMatrix4x4
 from views import viewport as viewport_module
 from tests.test_rendering_surface_regressions import viewport
 from tests.test_instanced_view_superset import _window, _close, _look, _place, _box_mesh, _drawn

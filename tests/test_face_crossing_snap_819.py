@@ -13,7 +13,7 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import Qt  # noqa: E402
-from PySide6.QtGui import QVector3D as V  # noqa: E402
+from ingetrazo_core import Vec3 as V
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 _app = QApplication.instance() or QApplication([])
@@ -114,7 +114,7 @@ def _sunk_copies_window():
     """The sunk box as component copies along the floor, in the pick
     index's lazy mode (the plant of #158)."""
     from core.group import Group
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     win, vp = _sunk_box_window()
     box = vp.scene.groups.pop()
     for k in range(6):

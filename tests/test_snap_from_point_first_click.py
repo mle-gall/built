@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import math
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.scene import Scene
 from core.snap import AXIS_COLORS, compute_snap
@@ -260,7 +260,7 @@ def test_the_viewport_offers_an_arcs_sweep_midpoint_and_a_groups_origin():
     import os
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PySide6.QtCore import QPointF, Qt
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     from PySide6.QtWidgets import QApplication
     QApplication.instance() or QApplication([])
     from views.viewport import Viewport
@@ -395,7 +395,7 @@ def _arc_mesh():
 
 
 def _placed(vp, mesh, dx, dy):
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     from core.group import Group
     g = Group(mesh, "pieza")
     xf = QMatrix4x4()

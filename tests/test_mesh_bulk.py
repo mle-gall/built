@@ -8,7 +8,7 @@ import random
 
 import numpy as np
 import pytest
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.mesh import Mesh
 from core.store_mesh import StoreMesh

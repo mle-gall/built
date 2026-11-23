@@ -6,7 +6,7 @@ anchored cota on a sheet built all 164 deferred meshes to ask their
 registries — 3.6 s on opening the composer (2026-11-12)."""
 from __future__ import annotations
 
-from PySide6.QtGui import QVector3D as V
+from ingetrazo_core import Vec3 as V
 
 from core import mesh as M
 from core.dimension import resolve_vertex_anchor
@@ -39,7 +39,7 @@ def test_an_anchor_builds_only_the_mesh_it_sits_on(binary, monkeypatch,
 
 
 def test_shared_placements_are_filtered_before_vertex_lookup(monkeypatch):
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     from core.group import Group
     from core.scene import Scene
     mesh = M.Mesh()

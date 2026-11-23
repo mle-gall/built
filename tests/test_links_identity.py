@@ -4,7 +4,7 @@ from core import links
 from core.group import Group, iter_placements
 from core.scene import Scene
 from formats import igz
-from PySide6.QtGui import QMatrix4x4
+from ingetrazo_core import Matrix4 as QMatrix4x4
 
 
 def source(tmp_path):
@@ -140,7 +140,7 @@ def test_source_only_skips_nested_file_before_selecting(tmp_path, monkeypatch):
 
 def test_bridge_source_save_updates_one_binary_mesh_in_resident_scene(tmp_path, monkeypatch):
     from types import SimpleNamespace
-    from PySide6.QtGui import QVector3D as V
+    from ingetrazo_core import Vec3 as V
     from core.history import History
     from plugins.ai_bridge import _Bridge
     from tests.test_wgpu_updates import assert_matches_fresh_pack
@@ -195,7 +195,7 @@ def test_bridge_source_save_updates_one_binary_mesh_in_resident_scene(tmp_path, 
 
 
 def test_nested_source_notification_keeps_outer_ids_tags_and_pack_policy(tmp_path):
-    from PySide6.QtGui import QVector3D as V
+    from ingetrazo_core import Vec3 as V
     leaf, path = source(tmp_path)
     for part in leaf.groups:
         part.mesh.add_face([V(), V(1, 0, 0), V(0, 1, 0)])

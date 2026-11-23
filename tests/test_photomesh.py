@@ -346,7 +346,7 @@ def test_empty_mesh_has_no_heights(tmp_path):
 def test_sampler_feeds_a_longitudinal_profile(tmp_path):
     """The bridge case: a traced line across the survey must come back as
     stations with real elevations, straight from the flight."""
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
 
     from georef.photomesh import PhotoMeshSampler
     from georef.profile import sample_profile
@@ -369,7 +369,7 @@ def test_sampler_feeds_a_longitudinal_profile(tmp_path):
 
 
 def test_sampler_reports_gaps_outside_the_flight(tmp_path):
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
 
     from georef.photomesh import PhotoMeshSampler
 
@@ -449,7 +449,7 @@ def test_vertical_origin_of_an_empty_mesh_is_none(tmp_path):
 def test_sampler_reports_absolute_altitude_not_local_metres(tmp_path):
     """A profile must read like a level, not like an offset from an unknown
     plane — and must agree with what DEMSampler returns."""
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
 
     from georef.photomesh import PhotoMeshSampler
 

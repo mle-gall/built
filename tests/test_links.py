@@ -6,7 +6,7 @@ from the source, overrides that survive the source's changes, packing."""
 from __future__ import annotations
 
 import pytest
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core import links
 from core.layers import Layer, folder_parent, layer_of

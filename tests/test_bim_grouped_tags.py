@@ -9,8 +9,8 @@ vanished from them while the Browser still showed the class."""
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QMatrix4x4
-from PySide6.QtGui import QVector3D as V
+from ingetrazo_core import Matrix4 as QMatrix4x4
+from ingetrazo_core import Vec3 as V
 
 from core import bim
 from core.bim import collect_objects, next_object_id, tag_faces, tag_group

@@ -9,7 +9,7 @@ which on a finished drawing reads as "it created a face on top" (Marco,
 """
 from __future__ import annotations
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import History
 from core.scene import Scene

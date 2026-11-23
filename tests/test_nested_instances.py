@@ -11,7 +11,7 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtGui import QMatrix4x4, QVector3D  # noqa: E402
+from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core.group import (Group, copy_group, iter_placements,  # noqa: E402
                         world_mesh)
@@ -183,7 +183,7 @@ def test_editing_into_a_nested_group_keeps_the_tree():
     down into its children, so the tools can work in world coordinates
     without anything moving.
     """
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     scene = Scene()
     top, proto = _tree()
     scene.groups.append(top)

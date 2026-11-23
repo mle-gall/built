@@ -12,7 +12,7 @@ import random
 
 import numpy as np
 import pytest
-from PySide6.QtGui import QVector3D as V
+from ingetrazo_core import Vec3 as V
 
 import core._native as _native
 from core import mesh as M

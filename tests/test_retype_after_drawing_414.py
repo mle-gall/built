@@ -18,7 +18,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest  # noqa: E402
 from PySide6.QtCore import QEvent, QPointF, Qt  # noqa: E402
-from PySide6.QtGui import QKeyEvent, QVector3D as V  # noqa: E402
+from PySide6.QtGui import QKeyEvent
+from ingetrazo_core import Vec3 as V
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from tools.base import ToolContext  # noqa: E402

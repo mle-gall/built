@@ -6,7 +6,7 @@ from PySide6.QtWidgets import QApplication
 from core.group import Group
 from core.mesh import Mesh
 from core.scene import Scene
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 _app = QApplication.instance() or QApplication([])
 

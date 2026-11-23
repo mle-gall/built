@@ -6,7 +6,8 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QColor, QImage, QPainter, QVector3D as V
+from PySide6.QtGui import QColor, QImage, QPainter
+from ingetrazo_core import Vec3 as V
 from PySide6.QtWidgets import QApplication
 from core.camera import OrbitCamera as Camera
 from core.scene import Scene

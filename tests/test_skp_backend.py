@@ -158,7 +158,7 @@ def test_a_reader_error_is_logged_with_its_traceback(tmp_path, monkeypatch,
 # ---- OpenSKP adapter (fake model) ---------------------------------------------
 
 def _V(x, y, z=0.0):
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     return QVector3D(float(x), float(y), float(z))
 
 
@@ -249,7 +249,7 @@ def test_openskp_adapter_places_instances_with_transform():
     assert min(xs) == pytest.approx(0.0, abs=1e-4)      # local: 0..10 in
     assert max(xs) == pytest.approx(0.254, abs=1e-4)
     assert len(proto["instances"]) == 1
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     placed = proto["instances"][0].map(QVector3D(0.0, 0.0, 0.0))
     assert placed.x() == pytest.approx(2.54, abs=1e-4)  # +100 in on X
 
@@ -273,7 +273,7 @@ def test_openskp_adapter_scales_an_instance_matrix_by_element_12():
     payload = skp_openskp._adapt(model, "instw")
     proto = payload["protos"][0]
     assert len(proto["instances"]) == 1
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     placed = proto["instances"][0]
     origin = placed.map(QVector3D(0.0, 0.0, 0.0))
     assert origin.x() == pytest.approx(20 * 0.0254, abs=1e-4)
@@ -984,7 +984,7 @@ def test_apply_payload_registers_layers_and_assigns_groups():
                     "instances": [None, None],
                     "instance_layers": ["Muros", None]}],
     }
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     payload["protos"][0]["instances"] = [QMatrix4x4(), QMatrix4x4()]
     skp_format.apply_payload(scene, payload)
     by_name = {ly.name: ly for ly in scene.layers}

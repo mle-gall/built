@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtGui import QMatrix4x4
+from ingetrazo_core import Matrix4 as QMatrix4x4
 
 from core.group import Group
 from core.group_scale import group_scale, scale_command
@@ -48,7 +48,7 @@ def test_unusable_or_unchanged_values_make_no_command():
 
 
 def test_a_rotated_group_made_component_scales_along_its_turned_axes():
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     from core.history import GroupToComponentCommand, RotateGroupCommand
     g = _slab()
     scene = Scene()
@@ -75,7 +75,7 @@ def test_a_rotated_group_made_component_scales_along_its_turned_axes():
 
 def test_repeated_set_and_undo_does_not_drift():
     import math
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     from core.history import GroupToComponentCommand, RotateGroupCommand
     g = _slab()
     scene = Scene()

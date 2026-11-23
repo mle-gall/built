@@ -12,7 +12,7 @@ folds and subdivisions. This is the DoD of next-session item A.3; Materials
 """
 from __future__ import annotations
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import History, MoveVerticesCommand
 from core.mesh import Mesh
@@ -170,7 +170,7 @@ def test_flip_faces_command_reverses_winding_and_undoes():
     # of the Face object is preserved throughout.
     from core.history import FlipFacesCommand, History
     from core.scene import Scene
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
 
     scene = Scene()
     hist = History(scene)

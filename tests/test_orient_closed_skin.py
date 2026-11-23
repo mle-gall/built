@@ -14,7 +14,7 @@ through the pass that asks every face, and gets the answer it always got.
 """
 from __future__ import annotations
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core import orient
 from core.history import History, translate_points

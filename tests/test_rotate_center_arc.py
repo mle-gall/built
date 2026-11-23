@@ -6,7 +6,7 @@ from __future__ import annotations
 import math
 
 from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.edits import build_add_edges
 from core.history import AddFaceCommand, History, MakeGroupCommand
@@ -398,7 +398,7 @@ def test_ctrl_copy_rotates_a_group_copy():
 
 
 def test_ctrl_copy_of_instance_shares_prototype():
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     from core.group import Group
     from core.mesh import Mesh
     scene = Scene()

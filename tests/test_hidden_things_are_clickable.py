@@ -14,7 +14,7 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtGui import QMatrix4x4, QVector3D  # noqa: E402
+from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 if QApplication.instance() is None:

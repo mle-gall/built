@@ -5,7 +5,7 @@ to select by connected, by layer, by material». The usual submenu, answered
 from the current editing context."""
 from __future__ import annotations
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.layers import assign_layer
 from core.mesh import Edge, Face

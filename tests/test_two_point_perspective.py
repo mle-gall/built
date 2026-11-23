@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import math
 
-from PySide6.QtGui import QVector3D, QVector4D
+from ingetrazo_core import Vec3 as QVector3D, Vec4 as QVector4D
 
 from core.camera import OrbitCamera
 from core.saved_views import SavedView

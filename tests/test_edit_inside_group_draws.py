@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QVector3D as V
+from ingetrazo_core import Vec3 as V
 from PySide6.QtWidgets import QApplication
 
 from core.group import Group
@@ -49,7 +49,7 @@ def _uploaded_edges(vp):
 
 @pytest.mark.parametrize("component", [False, True])
 def test_an_edge_drawn_inside_an_open_group_is_drawn_at_once(component):
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     from views.main_window import MainWindow
     win = MainWindow()
     vp, sc = win.viewport, win.viewport.scene
@@ -83,7 +83,7 @@ def test_empty_click_leaves_only_beyond_the_dotted_box(monkeypatch, component):
     irregular group can leave much more empty space there. Clicking either
     must stay inside; only a click beyond the projected frame steps out.
     """
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     from tools.base import ToolContext
     from tools.select import SelectTool
     from views.main_window import MainWindow

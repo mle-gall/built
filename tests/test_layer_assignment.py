@@ -15,7 +15,8 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtGui import QGuiApplication, QVector3D
+from PySide6.QtGui import QGuiApplication
+from ingetrazo_core import Vec3 as QVector3D
 from PySide6.QtWidgets import QApplication
 
 _app = QApplication.instance() or QApplication([])

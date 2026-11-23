@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import math
 
-from PySide6.QtGui import QMatrix4x4, QVector3D
+from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core.group import Group, copy_group, frame_axes, group_frame
 from core.history import (ExplodeGroupCommand, FlipGroupsCommand, History,
@@ -424,7 +424,7 @@ def test_a_pasted_rotated_group_keeps_its_axes():
     """Issue #78 (@pacaeiro): Copy turns a classic group into an instance
     snapshot and Paste copies that — the instance copy dropped the local
     axes, so a pasted rotated group came back with the world's axes."""
-    from PySide6.QtGui import QMatrix4x4, QVector3D as V
+    from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
     from core.group import Group, copy_group, group_frame
     from core.history import RotateGroupCommand
     from core.mesh import Mesh

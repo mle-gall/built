@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """Select does not mark the face under the cursor (#832, @GitHuhl).
 
-As in SketchUp, the Select tool shows nothing over a face until it is
+As in .skp, the Select tool shows nothing over a face until it is
 clicked; edges still light up (a thin line is hard to hit), and Delete
 over a lit edge still erases it. With no face lit, Delete with nothing
 selected never erases a face the user could not see. The other tools
@@ -10,7 +10,7 @@ that act on faces (Paint, Push/Pull, Offset...) keep their marking."""
 from __future__ import annotations
 
 from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import History
 from core.scene import Scene

@@ -13,7 +13,7 @@ from __future__ import annotations
 import math
 
 import pytest
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.fillet import apply_fillet, plan_fillet
 from core.mesh import Mesh
@@ -222,7 +222,7 @@ def test_a_turned_and_squashed_cube_rounds_all_twelve_edges():
     same-point tolerance. It must round like the straight cube, in any
     order of the edges."""
     import random
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     xf = QMatrix4x4()
     xf.translate(8.5, -3.0, 0.4)
     xf.scale(1.0, 1.0, 0.5)                  # squashed AFTER the turn

@@ -18,7 +18,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
 from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QImage, QVector3D
+from PySide6.QtGui import QImage
+from ingetrazo_core import Vec3 as QVector3D
 from PySide6.QtWidgets import QApplication
 
 _inst = QApplication.instance()
@@ -278,7 +279,7 @@ def test_los_trozos_se_distinguen_por_numero_de_construccion_no_por_id():
     dirección de memoria que el viejo (mismo ``id``, misma ``rev`` 0), y la
     instancia y la entrada GL derivadas del viejo se daban por vigentes.
     Cada construcción lleva ahora su número."""
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     from core.group import Group
     from core.mesh import Mesh
     from tests.test_pick_index import _VP, _bind
@@ -315,7 +316,7 @@ def test_el_tinte_del_reves_viaja_con_la_instancia_al_moverla():
     el nuevo ``dback``, y el pase del tinte seguía dibujando los reversos
     donde el arco estaba."""
     import numpy as np
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     from core.group import Group
     from core.mesh import Mesh
     from tests.test_pick_index import _VP, _bind
@@ -354,7 +355,7 @@ def test_una_instancia_espejada_conserva_el_frente_de_sus_caras():
     modelo industrial eran 4,2 millones de caras horneadas una a una. El
     trozo horneado (selección, siluetas) sigue con el giro corregido."""
     import numpy as np
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     from core.group import Group
     from core.mesh import Mesh
     from tests.test_pick_index import _VP, _bind

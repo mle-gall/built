@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Differential drawing through History, including exact stable-key feed records."""
 import pytest
-from PySide6.QtGui import QVector3D as V
+from ingetrazo_core import Vec3 as V
 from core import store_mesh as S, scan_index
 from core.history import History, SnapshotMutation
 from core.protocol.commands import run

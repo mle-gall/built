@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import pytest
 from PySide6.QtCore import QEvent, QPointF, Qt
-from PySide6.QtGui import QMatrix4x4, QMouseEvent, QVector3D as V
+from PySide6.QtGui import QMouseEvent
+from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 from PySide6.QtWidgets import QApplication
 
 from core.group import Group

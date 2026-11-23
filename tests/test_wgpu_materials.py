@@ -1,7 +1,8 @@
 """Material handoff tests require no window or GPU device."""
 import numpy as np
 from views.wgpu_scene import _source_arrays, _texture_array
-from PySide6.QtGui import QVector3D, QImage, QColor
+from PySide6.QtGui import QImage, QColor
+from ingetrazo_core import Vec3 as QVector3D
 from core.mesh import Mesh
 
 

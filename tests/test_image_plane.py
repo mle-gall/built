@@ -7,7 +7,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtGui import QColor, QImage, QVector3D
+from PySide6.QtGui import QColor, QImage
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import (
     AddImagePlaneCommand,

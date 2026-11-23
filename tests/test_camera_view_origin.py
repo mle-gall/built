@@ -3,7 +3,7 @@
 from types import SimpleNamespace
 from functools import partial
 import numpy as np
-from PySide6.QtGui import QVector3D as V
+from ingetrazo_core import Vec3 as V
 
 from core import scale_figure
 from tests.test_.skp_inference_gaps import view, move, click, use, refresh

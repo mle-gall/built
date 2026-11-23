@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import xml.etree.ElementTree as ET
 
-from PySide6.QtGui import QImage, QMatrix4x4, QVector3D
+from PySide6.QtGui import QImage
+from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core.group import Group
 from core.layers import Layer

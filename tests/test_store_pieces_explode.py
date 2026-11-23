@@ -11,7 +11,7 @@ store run's change-feed steps must be exactly what changed, by key."""
 from __future__ import annotations
 
 import pytest
-from PySide6.QtGui import QMatrix4x4, QVector3D as V
+from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 from core import mesh as M
 from core import store_mesh as S

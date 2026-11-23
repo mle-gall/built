@@ -4,7 +4,8 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from PySide6.QtGui import QVector3D, QImage, QMatrix4x4
+from PySide6.QtGui import QImage
+from ingetrazo_core import Vec3 as QVector3D, Matrix4 as QMatrix4x4
 from core import _native
 from core.group import Group
 from core.layers import Layer

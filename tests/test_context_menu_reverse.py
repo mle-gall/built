@@ -15,7 +15,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
 from PySide6.QtCore import QPoint
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 from PySide6.QtWidgets import QApplication, QMenu
 
 _inst = QApplication.instance()
@@ -124,7 +124,8 @@ def test_align_view_only_for_one_face(ventana, monkeypatch):
 
 def test_align_view_in_nested_transformed_component(ventana, monkeypatch):
     import views.main_window as mw
-    from PySide6.QtGui import QContextMenuEvent, QMatrix4x4
+    from PySide6.QtGui import QContextMenuEvent
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     from core.group import Group
     from core.mesh import Mesh
 

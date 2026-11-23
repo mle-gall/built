@@ -26,7 +26,7 @@ step on the ground. The message is left for what no axis plane can hold.
 """
 from __future__ import annotations
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.i18n import set_language
 from tools.rectangle import RectangleTool

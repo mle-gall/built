@@ -6,7 +6,7 @@ left alone when the document already has them — and undo takes the new
 tags away with the paste."""
 from __future__ import annotations
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.group import Group
 from core.history import History

@@ -14,7 +14,7 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QMatrix4x4, QVector3D
+from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core.group import Group, iter_placements, placement_points
 from core.history import History
@@ -241,7 +241,7 @@ def test_un_documento_importado_se_sostiene_por_su_origen():
 def test_un_face_me_colocado_por_matriz_se_dibuja_donde_esta_colocado():
     """El torito dentro del arco llega al dibujo como proxy con la matriz
     del arco; leyendo la malla cruda salía en el origen del archivo."""
-    from PySide6.QtGui import QVector3D as Q
+    from ingetrazo_core import Vec3 as Q
     from views.viewport import Viewport
 
     class _Cam:

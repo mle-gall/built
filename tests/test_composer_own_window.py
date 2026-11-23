@@ -134,7 +134,7 @@ def _settle(ms: int = 0) -> None:
 
 def _second_project(win):
     """Leave the first project with work in it, so File ▸ New opens a tab."""
-    from PySide6.QtGui import QVector3D as V
+    from ingetrazo_core import Vec3 as V
     from core.history import AddEdgeCommand
     win.viewport.history.execute(AddEdgeCommand(V(0, 0, 0), V(1, 0, 0)))
     win.viewport.notify_scene_changed()

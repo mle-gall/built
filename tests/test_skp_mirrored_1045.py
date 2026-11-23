@@ -10,7 +10,7 @@ from __future__ import annotations
 from types import SimpleNamespace as NS
 
 import pytest
-from PySide6.QtGui import QMatrix4x4
+from ingetrazo_core import Matrix4 as QMatrix4x4
 
 from formats import skp_openskp
 

@@ -13,7 +13,7 @@ from __future__ import annotations
 import math
 
 import pytest
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.fillet import _exponent, apply_fillet
 from core.mesh import Mesh

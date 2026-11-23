@@ -1,7 +1,7 @@
 """Selected occurrences tint real edges, including nested shared meshes."""
 import numpy as np
 import pytest
-from PySide6.QtGui import QVector3D as V, QMatrix4x4
+from ingetrazo_core import Vec3 as V, Matrix4 as QMatrix4x4
 from core.mesh import Mesh
 from core.group import Group
 from tests.test_rendering_surface_regressions import viewport, pixels

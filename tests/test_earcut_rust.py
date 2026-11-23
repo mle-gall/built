@@ -84,7 +84,7 @@ def test_the_degenerate_cases_recover_the_same_way():
 
 
 def test_triangulate_goes_through_the_engine_when_it_is_on(monkeypatch):
-    from PySide6.QtGui import QVector3D as V
+    from ingetrazo_core import Vec3 as V
     called = []
     real = native.earcut
 

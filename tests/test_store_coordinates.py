@@ -47,7 +47,7 @@ def test_store_coordinates_moves_weld_and_snapshots(origin, monkeypatch):
 def test_georeferenced_draw_push_weld_pack_and_endpoint(view, monkeypatch):
     from georef.datum import SceneDatum, utm_inverse
     from tests.test_.skp_inference_gaps import move, refresh
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
 
     monkeypatch.setenv("INGETRAZO_STORE", "1")
     monkeypatch.setenv("INGETRAZO_RUST", "1")
@@ -99,7 +99,7 @@ def test_format_three_rounds_only_the_saved_copy(tmp_path, monkeypatch):
     assert e.v0.position_tuple() != a
 
 def test_raw_lambert_draw_pick_snap_push_and_weld(view, monkeypatch):
-    from PySide6.QtGui import QVector3D as V
+    from ingetrazo_core import Vec3 as V
     from tests.test_.skp_inference_gaps import refresh, move
 
     mesh = view.scene.mesh
@@ -137,7 +137,7 @@ def test_raw_lambert_draw_pick_snap_push_and_weld(view, monkeypatch):
 
 def test_metal_mouse_tools_at_raw_lambert(view):
     from PySide6.QtCore import Qt
-    from PySide6.QtGui import QVector3D as V
+    from ingetrazo_core import Vec3 as V
     from PySide6.QtTest import QTest
     from tests.test_.skp_inference_gaps import click, move, refresh, use
     from tools.line import LineTool
@@ -177,7 +177,7 @@ def test_metal_mouse_tools_at_raw_lambert(view):
 
 
 def test_scene_frame_stays_put_and_composes_child_offsets_in_double():
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     from core.group import Group
     from core.mesh import Mesh
     from views.wgpu_scene import pack_scene
@@ -205,7 +205,7 @@ def test_scene_frame_stays_put_and_composes_child_offsets_in_double():
 
 def test_frame_preserves_numeric_input_and_feed_coordinates(view):
     from core.coordinate_frame import mesh_frame
-    from PySide6.QtGui import QVector3D as V
+    from ingetrazo_core import Vec3 as V
     from tests.test_.skp_inference_gaps import click, move, refresh, use
     from tools.line import LineTool
     from tools.rectangle import RectangleTool
@@ -242,7 +242,7 @@ def test_frame_preserves_numeric_input_and_feed_coordinates(view):
 
 
 def test_raw_lambert_metal_raster_and_id_buffer(native):
-    from PySide6.QtGui import QMatrix4x4, QVector3D as V
+    from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
     from views.wgpu_scene import pack_scene
 
     camera, projection = QMatrix4x4(), QMatrix4x4()
@@ -276,7 +276,7 @@ def test_bulk_weld_uses_source_precision_at_the_radius(dtype, counts):
 
 
 def test_metal_camera_tracks_document_controls_without_quantising_local_pan(view):
-    from PySide6.QtGui import QVector3D as V
+    from ingetrazo_core import Vec3 as V
     from tests.test_.skp_inference_gaps import refresh
     mesh = view.scene.mesh
     mesh.add_face([(650000.+dx, 6860000.+dy, 0.) for dx, dy in

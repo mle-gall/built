@@ -16,7 +16,7 @@ assigned — so `_perp` always fell back to world +Z:
 from __future__ import annotations
 
 from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.mesh import Mesh
 from tools.base import PLANE_LOCK_KEYS, PlaneLock, ToolContext

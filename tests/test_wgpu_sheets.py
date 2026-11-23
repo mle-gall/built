@@ -83,7 +83,7 @@ def test_offscreen_size_and_live_camera_unchanged(monkeypatch):
     view.renderer = Renderer()
     view._scene_dirty = False
     from core.section import SectionPlane
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     source.scene.section_planes = [SectionPlane(QVector3D(), QVector3D(1,0,0), active=True)]
     from views.wgpu_scene import pack_scene
     view.packed = pack_scene(source.scene)

@@ -429,7 +429,7 @@ class TestHLR:
 
 class TestHLRScene:
     def test_box_from_top_shows_four_edges(self):
-        from PySide6.QtGui import QVector3D
+        from ingetrazo_core import Vec3 as QVector3D
         from core.camera import OrbitCamera
         from core.hlr import hlr_view
         from core.scene import Scene
@@ -582,7 +582,7 @@ class TestComposerFrameSnap:
     frame's paper-mm space — the 'green point' the sheet dimension needs."""
 
     def _box_scene(self):
-        from PySide6.QtGui import QVector3D as V
+        from ingetrazo_core import Vec3 as V
         from core.scene import Scene
         sc = Scene()
         m = sc.mesh
@@ -650,7 +650,7 @@ def test_frame_render_restores_section_and_style_of_the_viewport():
     (Marco, 2026-09-02)."""
     import os
     from types import SimpleNamespace
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     from PySide6.QtWidgets import QApplication
     from core.camera import OrbitCamera
     from core.saved_views import SavedView

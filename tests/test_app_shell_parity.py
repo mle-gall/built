@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtCore import QTimer
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 from PySide6.QtWidgets import QMessageBox
 from tests.shell_isolation import restore_shell_patches  # noqa: F401  (autouse)
 

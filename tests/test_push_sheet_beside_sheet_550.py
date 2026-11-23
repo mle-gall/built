@@ -9,7 +9,7 @@ facing into it."""
 from __future__ import annotations
 
 import pytest
-from PySide6.QtGui import QVector3D as V
+from ingetrazo_core import Vec3 as V
 
 from core.edits import build_add_edges
 from core.history import History

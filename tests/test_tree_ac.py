@@ -294,7 +294,7 @@ def test_inspector_verbs_follow_the_selection_kind(ui):
     from core import links
     from core.group import Group
     from core.mesh import Mesh
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     from views import verbs
     scene, win, view, rows, act = ui
     tree = view._ui_tree["tree"]

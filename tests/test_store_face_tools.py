@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from PySide6.QtGui import QVector3D as V
+from ingetrazo_core import Vec3 as V
 
 from core import store_mesh as S
 from core.history import History
@@ -153,7 +153,7 @@ def test_tilted_plates_match_order_and_float_endpoints(monkeypatch):
 
 
 def test_transformed_group_crossings_ignore_foreign_keys(monkeypatch):
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     from core.intersect import WITH_MODEL
 
     results = []
@@ -258,7 +258,7 @@ def test_piercing_slab_partitions_both_solids(monkeypatch, placed):
     from core.mesh import Mesh
     from tests.test_core_protocol import _read
     from core.protocol.commands import run
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
 
     for scene in scenes(monkeypatch):
         hist = History(scene)

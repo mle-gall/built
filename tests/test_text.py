@@ -7,7 +7,8 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtGui import QGuiApplication, QVector3D
+from PySide6.QtGui import QGuiApplication
+from ingetrazo_core import Vec3 as QVector3D
 
 _app = QGuiApplication.instance() or QGuiApplication([])
 
@@ -79,7 +80,7 @@ def test_3d_text_curve_seams_are_soft():
 
 
 def test_place_face_frame_maps_walls_and_floors():
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     from tools.place_group import PlaceGroupTool
     # wall facing -Y: sign stands upright, reading along +X
     right, y_axis, up = PlaceGroupTool._face_frame(QVector3D(0, -1, 0))

@@ -13,7 +13,7 @@ already there is ever turned to suit the new ones."""
 from __future__ import annotations
 
 import pytest
-from PySide6.QtGui import QVector3D as Q
+from ingetrazo_core import Vec3 as Q
 
 from core.bridge import bridge, follow_neighbours, profiles_from_selection
 from core.mesh import Mesh

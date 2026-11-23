@@ -200,7 +200,7 @@ def test_keys_reach_the_form_through_the_qt_guard(win):
 def test_make_component_names_through_the_chrome(win):
     from core.group import Group
     scene = win.viewport.scene
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     face = scene.mesh.add_face([QVector3D(*p) for p in ((0, 0, 0), (1, 0, 0), (1, 1, 0), (0, 1, 0))])
     scene.select([face])
     win._on_make_component()
@@ -215,7 +215,7 @@ def test_make_component_names_through_the_chrome(win):
 def test_divide_goes_through_the_protocol_once_answered(win, monkeypatch):
     from core.protocol import commands as protocol
     scene = win.viewport.scene
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     edge = scene.mesh.add_edge(QVector3D(0, 0, 0), QVector3D(4, 0, 0))
     scene.select([edge])
     calls = []

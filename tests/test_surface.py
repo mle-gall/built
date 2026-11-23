@@ -4,7 +4,7 @@
 from a synthetic DEM. Headless."""
 from __future__ import annotations
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from georef.datum import SceneDatum
 from georef.geopath import GeoPath

@@ -3,7 +3,7 @@ a 3D model, the plane of the selected faces is rebuilt and the rest is left
 alone; with nothing selected the tool keeps its whole-flat-drawing rule."""
 from __future__ import annotations
 
-from PySide6.QtGui import QVector3D as V
+from ingetrazo_core import Vec3 as V
 from PySide6.QtWidgets import QApplication
 
 from core.mesh import Face

@@ -17,7 +17,7 @@ HAS_RENDERER = importlib.util.find_spec("ingetrazo_render") is not None
 
 
 def _camera(shift_x=0.):
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     view = QMatrix4x4()
     view.translate(shift_x, 0, -3)
     proj = QMatrix4x4()

@@ -7,7 +7,7 @@ from __future__ import annotations
 import struct
 from pathlib import Path
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import History, SetFaceColorCommand
 from core.group import Group

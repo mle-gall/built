@@ -13,7 +13,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np  # noqa: E402
 import pytest  # noqa: E402
-from PySide6.QtGui import QVector3D as V  # noqa: E402
+from ingetrazo_core import Vec3 as V
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 import core._native as _native  # noqa: E402
@@ -180,7 +180,7 @@ def test_the_box_bounds_are_those_of_the_chunk_asked_alone():
 def test_the_box_of_a_placement_nobody_baked():
     """Its selection box asks for no world bake, and is what the bake carried:
     fresh after a move, a new frame or an edit of the prototype."""
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     a, va = _window(lazy=True)
     b, vb = _window(lazy=False)
     try:

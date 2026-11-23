@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 import core.autosave as autosave
 from core.edits import build_add_edges

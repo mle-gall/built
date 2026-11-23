@@ -1,5 +1,5 @@
 """Recorded R1.3 pointer answers, including placement and filtered edge identity."""
-from PySide6.QtGui import QMatrix4x4, QVector3D as V
+from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 import pytest
 
 from core.group import Group

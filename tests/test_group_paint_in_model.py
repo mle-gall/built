@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import sys
 
-from PySide6.QtGui import QVector3D as V
+from ingetrazo_core import Vec3 as V
 from PySide6.QtWidgets import QApplication
 
 if QApplication.instance() is None:

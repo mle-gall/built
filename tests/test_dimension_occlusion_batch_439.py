@@ -18,7 +18,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
 import pytest
-from PySide6.QtGui import QVector3D as V
+from ingetrazo_core import Vec3 as V
 from PySide6.QtWidgets import QApplication
 
 _app = QApplication.instance() or QApplication([])
@@ -42,7 +42,7 @@ def vp_with_wall():
         assert ok
         # The wall is the plane y=0; its read-back depth is the NDC depth
         # of any point on it. It covers the middle band of the frame.
-        from PySide6.QtGui import QVector4D
+        from ingetrazo_core import Vec4 as QVector4D
         clip = mvp.map(QVector4D(0.0, 0.0, 1.0, 1.0))
         d_wall = (clip.z() / clip.w() + 1.0) * 0.5
         buf = np.ones((h, w), dtype=np.float32)

@@ -48,7 +48,7 @@ def test_tool_shortcut_goes_through_shortcut_override(host):
 
 def test_undo_from_the_menu(host):
     host.open(FIXTURE)
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     from core.history import AddFaceCommand
     vp = host.viewport
     before = len(vp.scene.mesh.faces)

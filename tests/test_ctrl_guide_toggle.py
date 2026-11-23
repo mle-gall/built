@@ -26,7 +26,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import History
 from core.scene import Scene
@@ -255,7 +255,7 @@ def test_the_status_bar_keeps_the_ctrl_clause_up():
         # something: the usual line carries Ctrl before the first click
         # and Alt once the measurement is under way, never both. Stacked,
         # the bar ran out of room and elided.
-        from PySide6.QtGui import QVector3D
+        from ingetrazo_core import Vec3 as QVector3D
         from views.status_hints import hint_for
         tool.start_point = QVector3D(1.0, 1.0, 0.0)
         midway = hint_for("tape", tool, None, "off")

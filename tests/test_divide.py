@@ -4,7 +4,7 @@
 pieces; and the undo cap (issue #56)."""
 from __future__ import annotations
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.edits import divide_edges
 from core.history import History, SnapshotMutation, AddEdgeCommand

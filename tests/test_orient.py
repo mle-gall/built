@@ -9,7 +9,7 @@ triangle-prism bench from the engine notes; no-op on open/flat meshes.
 """
 from __future__ import annotations
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.mesh import Mesh
 from core.orient import is_closed, orient_outward, signed_volume

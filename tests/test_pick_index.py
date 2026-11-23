@@ -7,7 +7,7 @@ face — ~1–2 s per move against an imported 17k-triangle building. These pin
 the batched replacements to the same answers headless (no GL needed)."""
 from __future__ import annotations
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import History, MakeGroupCommand
 from core.scene import Scene
@@ -153,7 +153,7 @@ def test_instance_groups_pick_through_transformed_chunks():
     """Two component instances share ONE prototype mesh; picking hits each
     at its transformed world spot, and updating one instance's transform
     moves only that copy."""
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
 
     scene = Scene()
     proto = __import__("core.mesh", fromlist=["Mesh"]).Mesh()

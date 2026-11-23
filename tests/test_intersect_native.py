@@ -84,7 +84,7 @@ def test_one_box_and_empty(monkeypatch):
 
 def _plates(rng, n):
     """Random tilted rectangles (some with a hole), as loose faces."""
-    from PySide6.QtGui import QMatrix4x4, QVector3D
+    from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
     from core.scene import Scene
     scene = Scene()

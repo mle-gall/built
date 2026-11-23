@@ -7,7 +7,7 @@ import math
 
 import numpy as np
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 
 def _fountain_like(scene):

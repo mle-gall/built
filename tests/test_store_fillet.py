@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from PySide6.QtGui import QVector3D as V
+from ingetrazo_core import Vec3 as V
 
 from core import _native, mesh as M, store_mesh as S
 from core.fillet import apply_fillet, plan_fillet

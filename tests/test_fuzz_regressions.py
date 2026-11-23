@@ -8,7 +8,7 @@ file holds the stories.
 """
 from __future__ import annotations
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import History
 from core.orient import is_closed, orient_outward, signed_volume

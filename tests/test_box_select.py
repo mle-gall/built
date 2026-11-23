@@ -12,7 +12,7 @@ maths is exercised without a GL context.
 """
 from __future__ import annotations
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.geometry import Edge, Face
 from core.scene import Scene
@@ -130,7 +130,7 @@ def test_crossing_box_catches_group_edge_straddling_it():
 def test_box_select_maps_instances_to_world():
     # The prototype lives at the origin; only the instance whose TRANSFORM
     # puts it inside the box may be selected.
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     from core.group import Group
     from core.mesh import Mesh
     scene = Scene()

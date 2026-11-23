@@ -11,7 +11,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest  # noqa: E402
 from PySide6.QtCore import Qt  # noqa: E402
-from PySide6.QtGui import QVector3D, QVector4D  # noqa: E402
+from ingetrazo_core import Vec3 as QVector3D, Vec4 as QVector4D
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 if QApplication.instance() is None:
@@ -54,7 +54,7 @@ def test_an_ordinary_lens_draws_as_it_always_did():
     """No setting touched: the very same matrix as before the lens."""
     cam = _level_camera()
     assert cam.lens_dict() == {}
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     m = QMatrix4x4()
     m.perspective(cam.fov_deg, cam.aspect, cam.near_plane(), cam.far_plane())
     assert cam.projection_matrix() == m

@@ -36,7 +36,8 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
-from PySide6.QtGui import QFontMetrics, QVector3D
+from PySide6.QtGui import QFontMetrics
+from ingetrazo_core import Vec3 as QVector3D
 from PySide6.QtWidgets import QApplication
 
 from core.i18n import set_language

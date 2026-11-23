@@ -99,7 +99,7 @@ def test_tab_strip_lists_the_projects_with_front_and_unsaved(host, tmp_path):
         assert host.open_path(p)
     win = host.window
     from core.history import AddFaceCommand
-    from PySide6.QtGui import QVector3D as V
+    from ingetrazo_core import Vec3 as V
     host.viewport.history.execute(AddFaceCommand([V(5, 0, 0), V(6, 0, 0), V(6, 1, 0)]))
     tabs = wgpu_tabs.tabs(win)
     assert [t[1] for t in tabs] == [p.name for p in paths]
@@ -184,7 +184,7 @@ def test_new_window_is_made_in_this_process(host, second):
 def test_move_to_new_window_takes_the_project_and_its_history(host, second, tmp_path):
     from views import wgpu_tabs
     from core.history import AddFaceCommand
-    from PySide6.QtGui import QVector3D as V
+    from ingetrazo_core import Vec3 as V
     a, b = _copies(tmp_path, 2)
     host.open_path(a)
     host.open_path(b)

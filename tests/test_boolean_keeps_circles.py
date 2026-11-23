@@ -7,7 +7,7 @@ from __future__ import annotations
 import math
 
 import pytest
-from PySide6.QtGui import QVector3D as V
+from ingetrazo_core import Vec3 as V
 from PySide6.QtWidgets import QApplication
 
 from core import solids
@@ -85,7 +85,7 @@ def test_a_copied_cylinder_keeps_its_circles(viewport):
     """Copying a cylinder group re-split its curves, and a rim's every
     vertex has a side seam on it: the copy's circles came out as 24 curves
     of one segment each, and a Subtract on the copy kept them broken."""
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     from core.group import Group, transformed_mesh
     cyl = _cylinder_group(viewport)
     m = QMatrix4x4()

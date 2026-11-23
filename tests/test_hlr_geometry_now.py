@@ -12,7 +12,7 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np  # noqa: E402
-from PySide6.QtGui import QVector3D as V  # noqa: E402
+from ingetrazo_core import Vec3 as V
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from core.layers import Layer  # noqa: E402
@@ -122,7 +122,7 @@ def test_copies_not_baked_yet_come_out_as_their_bakes():
     per prototype (1.2 s → a few ms on the plaza's 3 400): the very
     triangles, edges and soft edges with their normals that baking each
     copy gives — turned, mirrored and scaled ones too."""
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     from core.group import Group
     from core.mesh import Mesh
     from views.main_window import MainWindow

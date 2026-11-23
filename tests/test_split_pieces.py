@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from PySide6.QtGui import QMatrix4x4, QVector3D
+from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core.group import Group, world_mesh
 from core.history import SplitIntoPiecesCommand

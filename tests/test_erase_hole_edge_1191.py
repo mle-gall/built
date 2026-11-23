@@ -11,7 +11,7 @@ edge, but it can outlive a hole edge: the hole goes with the edge and
 the face fills in. The hole's other edges stay as free lines."""
 from __future__ import annotations
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import (AddFaceCommand, CompoundCommand, DeleteFaceCommand,
                           EraseSelectionCommand, History)

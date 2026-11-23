@@ -8,7 +8,7 @@ fused into one mesh, so the parts a user wanted to select, list or pull apart
 were gone the moment the file was opened."""
 from __future__ import annotations
 
-from PySide6.QtGui import QMatrix4x4, QVector3D
+from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core.group import world_mesh
 from core.history import ExplodeGroupCommand

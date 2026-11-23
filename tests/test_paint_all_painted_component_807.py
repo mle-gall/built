@@ -3,7 +3,7 @@
 """Painting a component whose faces all carry their own material (#807).
 
 The .skp of the report has cabinet parts as components with every face
-painted: painting one as a whole keeps those materials (the SketchUp rule,
+painted: painting one as a whole keeps those materials (the .skp rule,
 as in #408), so the click changed nothing on screen and read as «it won't
 let me paint components». The status bar now says why and what to do."""
 from __future__ import annotations
@@ -12,7 +12,7 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtGui import QMatrix4x4, QVector3D as V  # noqa: E402
+from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 _app = QApplication.instance() or QApplication([])

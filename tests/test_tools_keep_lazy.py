@@ -155,7 +155,7 @@ def test_every_face_painted_reads_the_document(big_enough, tmp_path, painted):
     from core.group import Group
     from core.scene import Scene
     from formats import igz
-    from PySide6.QtGui import QVector3D as V
+    from ingetrazo_core import Vec3 as V
     scene = Scene()
     m = M.Mesh()
     for i in range(5):
@@ -207,7 +207,7 @@ def test_a_centre_on_a_lazy_group_follows_it_unbuilt(big_enough, tmp_path):
     from formats import igz
     from views import array_bake
     from views.main_window import MainWindow
-    from PySide6.QtGui import QMatrix4x4, QVector3D as V
+    from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
     scene = Scene()
     m = M.Mesh()
     ring = [V(math.cos(i * math.pi / 12), math.sin(i * math.pi / 12), 0)
@@ -282,7 +282,7 @@ def _boxed_scene(tmp_path, closed, placed):
     from core.group import Group
     from core.scene import Scene
     from formats import igz
-    from PySide6.QtGui import QMatrix4x4, QVector3D as V
+    from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
     scene = Scene()
     m = M.Mesh()
     a, b, c, d = V(0, 0, 0), V(2, 0, 0), V(2, 3, 0), V(0, 3, 0)

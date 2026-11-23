@@ -51,7 +51,7 @@ def test_an_operation_puts_the_tool_cursor_back(window, monkeypatch):
     window._activate_tool("pushpull")
     tool = vp.active_tool
     from core.history import AddEdgeCommand
-    from PySide6.QtGui import QVector3D as V
+    from ingetrazo_core import Vec3 as V
     monkeypatch.setattr(tool, "on_click", lambda ctx: vp.history.execute(
         AddEdgeCommand(V(0, 0, 0), V(1, 0, 0))))
     calls = _spy(vp, monkeypatch)

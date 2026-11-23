@@ -16,7 +16,7 @@ that average can land outside the loop itself, so the inner face read as
 """
 from __future__ import annotations
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import History
 from core.mesh import Mesh

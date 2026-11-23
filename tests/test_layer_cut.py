@@ -14,7 +14,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
 import pytest
-from PySide6.QtGui import QColor, QImage, QPainter, QPen, QVector3D
+from PySide6.QtGui import QColor, QImage, QPainter, QPen
+from ingetrazo_core import Vec3 as QVector3D
 from PySide6.QtWidgets import QApplication, QWidget
 
 _app = QApplication.instance() or QApplication([])

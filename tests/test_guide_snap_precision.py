@@ -12,7 +12,7 @@ import math
 import random
 import sys
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 from PySide6.QtWidgets import QApplication
 
 if QApplication.instance() is None:

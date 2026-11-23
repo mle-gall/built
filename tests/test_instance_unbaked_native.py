@@ -16,7 +16,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np  # noqa: E402
 import pytest  # noqa: E402
-from PySide6.QtGui import QMatrix4x4, QVector3D  # noqa: E402
+from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 import core._native as _native  # noqa: E402
 

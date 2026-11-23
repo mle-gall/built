@@ -16,7 +16,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from types import SimpleNamespace  # noqa: E402
 
 from PySide6.QtCore import QPointF, Qt  # noqa: E402
-from PySide6.QtGui import QVector3D  # noqa: E402
+from ingetrazo_core import Vec3 as QVector3D
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 if QApplication.instance() is None:

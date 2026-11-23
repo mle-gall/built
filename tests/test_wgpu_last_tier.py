@@ -1,7 +1,7 @@
 """Shared commands must give identical geometry through native dispatch."""
 import pytest
 from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 from tools.base import ToolContext
 from tests.test_wgpu_mesh_tools import click, geometry
 from tests.test_wgpu_remaining_tools import prepare

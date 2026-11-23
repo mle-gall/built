@@ -82,7 +82,7 @@ def test_a_large_textured_container_reads_back_the_same(
 def test_the_count_includes_the_loose_mesh_and_each_prototype_once():
     from core.group import Group
     from core.mesh import Mesh
-    from PySide6.QtGui import QMatrix4x4, QVector3D as V
+    from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
     scene = Scene()
     scene.mesh.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0)])   # 1 + 3
     proto = Mesh()

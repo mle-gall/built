@@ -7,7 +7,7 @@ step. F2 on several selected rows opens it too."""
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QVector3D as V
+from ingetrazo_core import Vec3 as V
 from PySide6.QtWidgets import QApplication, QDialog
 
 from core import outliner
@@ -259,7 +259,7 @@ def test_with_nothing_selected_the_button_renames_every_row(monkeypatch):
 
 
 def test_with_a_filter_it_renames_the_rows_the_filter_matches(monkeypatch):
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     win, scene, panel, (puerta, muro, ventana) = _setup()
     try:
         # «Muro» inside a group: the group shows to hold it, not renamed

@@ -221,7 +221,7 @@ def rig():
 
 
 def _view(name, view="top", x=0.0):
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
 
     from core.camera import OrbitCamera
     from core.saved_views import SavedView

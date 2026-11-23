@@ -14,7 +14,7 @@ Compared with the plain way of cutting, to the bit; counted, not timed.
 from __future__ import annotations
 
 import numpy as np
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core import section
 from core.section import PlaneReach, cut_chords

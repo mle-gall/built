@@ -14,7 +14,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
 from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 from PySide6.QtWidgets import QApplication
 
 _app = QApplication.instance() or QApplication([])
@@ -302,7 +302,7 @@ def test_wall_feelers_ask_only_as_far_as_the_step_reaches(monkeypatch):
     huge model bakes and tests only what is within reach; the kill switch
     sends them unbounded, as before."""
     import tools.walkthrough as wt
-    from PySide6.QtGui import QVector3D as V
+    from ingetrazo_core import Vec3 as V
     asked = []
 
     class Stub:

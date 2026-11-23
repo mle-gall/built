@@ -7,7 +7,7 @@ Every model here is generated, as in tests/test_outliner.py.
 """
 from __future__ import annotations
 
-from PySide6.QtGui import QMatrix4x4, QVector3D
+from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 from PySide6.QtWidgets import QApplication
 
 from core.group import Group

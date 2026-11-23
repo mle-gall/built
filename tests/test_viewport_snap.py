@@ -2,7 +2,7 @@
 """Viewport contextual Shift-lock tests."""
 from __future__ import annotations
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.snap import COLOR_AXIS_X, SnapResult
 from views.viewport import Viewport

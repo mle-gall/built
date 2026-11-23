@@ -23,7 +23,7 @@ registry.
 """
 from __future__ import annotations
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import EraseSelectionCommand, History
 from core.scene import Scene

@@ -28,7 +28,7 @@ def test_payload_defaults_and_hidden_controls():
 
 
 def test_sun_matches_gl_and_can_be_disabled(monkeypatch):
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     from views.viewport import Viewport
     scene = Scene()
     scene.loose_mesh.add_face([QVector3D(0,0,0), QVector3D(1,0,0), QVector3D(0,1,1)])
@@ -61,7 +61,7 @@ def native():
         pytest.skip('Metal raster checks require release crate and unshown Cocoa NSView')
     from PySide6.QtCore import Qt
     from PySide6.QtWidgets import QWidget
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     from ingetrazo_render import Renderer
     host = QWidget(); host.setAttribute(Qt.WA_DontShowOnScreen); host.resize(64,64)
     renderer = Renderer(int(host.winId()),64,64,1.)
@@ -182,7 +182,7 @@ def test_scaffold_lines_are_depth_tested_and_dashed(native,aa):
     assert 8<len(runs), 'on/off runs along the line'
     assert np.all(np.diff(runs)>=2) and np.all(np.diff(runs)<=6)
     # Sheet captures never carry scaffolding.
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     view=QMatrix4x4(); view.translate(0,0,-3)
     proj=QMatrix4x4(); proj.ortho(-1,1,-1,1,.1,10)
     style=dict(sky=False,edges=False)
@@ -229,7 +229,7 @@ def test_shadow_toggle_and_invalid_payload(native):
     with pytest.raises(ValueError): native.set_style(dict(shadows=True,sun_direction=(0,0,0)))
     native.set_style(dict(shadows=False))
     np.testing.assert_array_equal(original,capture(native))
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     matrix=QMatrix4x4(); matrix.ortho(-2,2,-2,2,-2,2)
     native.set_style(dict(shadows=True,sun_direction=(1,0,0.1),shadow_matrix=list(matrix.data())))
     shaded=capture(native)
@@ -335,7 +335,8 @@ if __name__ == '__main__':
 
 
 def test_pbr_shading_changes_pixels_and_keeps_picks(native, tmp_path):
-    from PySide6.QtGui import QImage, QColor, QVector3D
+    from PySide6.QtGui import QImage, QColor
+    from ingetrazo_core import Vec3 as QVector3D
     from views.wgpu_scene import pack_scene
     scene = Scene()
     face = scene.loose_mesh.add_face([QVector3D(x, y, 0) for x, y in
@@ -392,7 +393,7 @@ def test_hidden_object_readback_survives_gpu_growth(native):
 
 def test_intersected_wall_occludes_loose_slab_edges(native, monkeypatch):
     import math
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     from core.camera import OrbitCamera
     from core.history import History
     from core.intersect import WITH_CONTEXT

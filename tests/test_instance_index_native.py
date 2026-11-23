@@ -31,7 +31,7 @@ def _proto(rng):
 
 
 def _matrix(rng):
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     m = QMatrix4x4()
     m.translate(*rng.uniform(-30, 30, 3))
     m.rotate(float(rng.uniform(0, 360)), *rng.uniform(-1, 1, 3))
@@ -96,7 +96,7 @@ def test_ray_filter_never_drops_a_hit(seed):
 
 @pytest.mark.parametrize("seed", range(4))
 def test_screen_filter_never_drops_something_near(seed):
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     rng = np.random.default_rng(100 + seed)
     protos = [_proto(rng) for _ in range(5)]
     natp = [mod.InstanceProto(*p) for p in protos]

@@ -10,7 +10,7 @@ from __future__ import annotations
 import math
 
 import pytest
-from PySide6.QtGui import QVector3D as V
+from ingetrazo_core import Vec3 as V
 from PySide6.QtWidgets import QApplication
 
 from tests import test_pushpull_ux as T

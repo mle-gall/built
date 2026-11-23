@@ -51,7 +51,7 @@ def test_at_the_top_nothing_is_compensated():
 
 
 def test_entity_info_keeps_its_height_whatever_is_selected():
-    from PySide6.QtGui import QVector3D as V
+    from ingetrazo_core import Vec3 as V
     from views.main_window import MainWindow
     win = MainWindow()
     panel = win.tray.entity_info if hasattr(win, "tray") else None

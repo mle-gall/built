@@ -7,7 +7,7 @@ protocol commands the Library edits through."""
 from __future__ import annotations
 
 import pytest
-from PySide6.QtGui import QVector3D as V
+from ingetrazo_core import Vec3 as V
 
 from core import mesh as M
 from core.group import Group
@@ -247,7 +247,7 @@ def test_delete_placements_and_rename_component():
     proto = M.Mesh()
     proto.add_face([V(9, 0, 0), V(10, 0, 0), V(10, 1, 0)])
     a, b = Group(proto, name="Chair"), Group(proto, name="Chair")
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     for g in (a, b):
         g.xform, g.component = QMatrix4x4(), True
     h.execute(InsertGroupCommand(a))
