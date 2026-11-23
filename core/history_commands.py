@@ -264,10 +264,7 @@ class RemoveGeometryCommand(MeshCommand):
     keeps_rows = True
     _before = None
 
-    def undo(self, scene):
-        if self._before is not None:
-            scene.mesh.restore_state(self._before)
-            scene.version += 1
+    undo = _reference.restore_mesh_before
 
     def doc_after(self, scene, phase):
         _discard_removed_selection(scene)
@@ -325,153 +322,8 @@ def _faces_by_segments(mesh, segments) -> list:
     return sc.faces(sorted(hit))
 
 
-def _single_coplanar_pair(faces) -> Optional[tuple]:
-    """The one pair of ``faces`` that face the same way (they share an edge,
-    so that makes them coplanar), or ``None`` when there is no such pair,
-    more than one, or another face lies in their plane too."""
-    pairs = [(a, b) for i, a in enumerate(faces) for b in faces[i + 1:]
-             if QVector3D.dotProduct(a.normal(), b.normal()) > 0.999]
-    if len(pairs) != 1:
-        return None
-    n = pairs[0][0].normal()
-    if any(abs(QVector3D.dotProduct(n, f.normal())) > 0.999
-           for f in faces if f not in pairs[0]):
-        return None
-    return pairs[0]
+class EraseSelectionCommand(RemoveGeometryCommand):
 
-
-class _LoopIndex:
-    """``{corner keys: [faces with them, in list order]}`` of the mesh as
-    it is now — what the erase used to build over every face — filled only
-    for the keys of ``loops`` (the faces being erased), from the mesh scan.
-    Without a scan (or for many loops) it is that full index."""
-
-    def __init__(self, mesh, loops) -> None:
-        self._d: dict = {}
-        from core import scan_index
-        loops = [list(lp) for lp in loops]
-        sc = scan_index.scan(mesh) if 0 < len(loops) <= 256 else None
-        if sc is None:
-            if loops:
-                for f in mesh.faces:
-                    self._d.setdefault(
-                        frozenset(_key(p) for p in f.vertices), []).append(f)
-            return
-        for loop in loops:
-            target = frozenset(_key(p) for p in loop)
-            if target in self._d:
-                continue
-            self._d[target] = [
-                f for f in _faces_keyed_like(mesh, loop, sc)
-                if frozenset(_key(p) for p in f.vertices) == target]
-
-    def get(self, target):
-        return self._d.get(target)
-
-
-class _SegmentIndex:
-    """``seg_faces.get(segment keys)`` of the erase: the faces, in list
-    order AT CONSTRUCTION, whose outer loop runs along that segment (once
-    per run), then the faces :meth:`add` filed since. Built over every face
-    without a scan; with one, only the segments asked for are looked up —
-    candidates near the erased edges' ends at construction, keyed by THAT
-    revision's positions (the scan's), as the full index was."""
-
-    def __init__(self, mesh, endpoints) -> None:
-        from core import scan_index
-        self._full: Optional[dict] = None
-        self._extra: dict = {}
-        ends = list(endpoints)
-        sc = scan_index.scan(mesh) if len(ends) <= 256 else None
-        self._sc = sc
-        if sc is None:
-            self._full = {}
-            for f in mesh.faces:
-                for ek in _loop_edges(f.vertices):
-                    self._full.setdefault(ek, []).append(f)
-            return
-        # The edge found at an end may be a weld away from the clicked
-        # point; one more key cell covers it.
-        hit: set = set()
-        for a, b in ends:
-            hit.update(sc.faces_meeting(scan_index.box_of((a, b), 2 * _KEY_REACH)))
-        self._cand = sorted(hit)
-        self._loops = dict(zip(self._cand, sc.native.face_loops(self._cand)))
-        self._faces = dict(zip(self._cand, sc.faces(self._cand)))
-        self._ends = [(QVector3D(a), QVector3D(b)) for a, b in ends]
-        self._memo: dict = {}
-
-    def add(self, f) -> None:
-        for ek in _loop_edges(f.vertices):
-            self._extra.setdefault(ek, []).append(f)
-
-    def get(self, ek, default=()):
-        if self._full is not None:
-            base = self._full.get(ek, [])
-        else:
-            base = self._memo.get(ek)
-            if base is None:
-                base = self._memo[ek] = self._lookup(ek)
-        more = self._extra.get(ek, [])
-        if not base and not more:
-            return default
-        return base + more
-
-    def _lookup(self, ek) -> list:
-        sc = self._sc
-        if self._covers(list(ek)):
-            cand, loops, faces = self._cand, self._loops, self._faces
-        else:
-            # A segment away from every erased end (the cascade only asks
-            # for erased edges): every face of the scan.
-            cand = list(range(sc.native.counts()[2]))
-            loops = dict(zip(cand, sc.native.face_loops(cand)))
-            faces = None
-        out = []
-        for i in cand:
-            loop = loops[i]
-            n = len(loop)
-            ks = [sc.tkey(v) for v in loop]
-            for j in range(n):
-                if frozenset((ks[j], ks[(j + 1) % n])) == ek:
-                    out.append(i)
-        if faces is None:
-            return sc.faces(out)
-        return [faces[i] for i in out]
-
-    def _covers(self, keys) -> bool:
-        """Whether every face with a segment of these keys is among the
-        candidates: each key lies within a cell of one erased edge's end
-        (two of the same edge for a two-key segment)."""
-        def near(k, p) -> bool:
-            return all(abs(k[i] - c) <= _KEY_REACH
-                       for i, c in enumerate((p.x(), p.y(), p.z())))
-        for a, b in self._ends:
-            if all(near(k, a) or near(k, b) for k in keys):
-                return True
-        return False
-
-
-def _soft_faceless_edges(mesh) -> list:
-    """The soft edges bounding no face, in list order (a superset from the
-    scan; every edge without it): what the erase sweeps up."""
-    from core import scan_index
-    sc = scan_index.scan(mesh)
-    if sc is None:
-        return list(mesh.edges)
-    return sc.edges(sc.native.edges_faceless(True))
-
-
-def _loop_has_segment(loop, v0, v1) -> bool:
-    """Whether the vertex loop walks the segment v0–v1 (either way)."""
-    n = len(loop)
-    return any(
-        (loop[i] == v0 and loop[(i + 1) % n] == v1)
-        or (loop[i] == v1 and loop[(i + 1) % n] == v0)
-        for i in range(n))
-
-
-class EraseSelectionCommand(MeshCommand):
     """Erase selected edges and faces, the usual way.
 
     An edge that divides two *coplanar* faces is dissolved and the faces merge
@@ -482,108 +334,41 @@ class EraseSelectionCommand(MeshCommand):
     an identity-preserving snapshot — the merge restructures
     connectivity too much for a clean per-edge inverse."""
 
+    keeps_rows = False
+
     def __init__(self, edges: Iterable, faces: Iterable = ()) -> None:
         self._edge_endpoints = [(QVector3D(e.a), QVector3D(e.b)) for e in edges]
         self._face_loops = [[QVector3D(v) for v in f.vertices] for f in faces]
-        self.snapshot: Optional[dict] = None
+        self._before = None
 
     def do(self, scene) -> None:
         m = scene.mesh
-        self.snapshot = self._reference_snapshot(m)
+        self._before = self._reference_snapshot(m)
         footprint = winding_footprint(m)
-        # Loop->face lookups through ONE index: _find_face_by_loop scans the
-        # whole mesh per call, and deleting thousands of box-selected faces
-        # froze for ~26 s on a 28k-face mesh (piscina.igz report, round 2).
-        by_loop = _LoopIndex(m, self._face_loops)
-        for loop in self._face_loops:
-            bucket = by_loop.get(frozenset(_key(p) for p in loop))
-            f = bucket.pop(0) if bucket else None
-            if f is not None:
-                m.remove_face(f)
-                scene.selection.discard(f)
-        # One segment->faces index for the cascade below: the per-edge scan
-        # over every face was O(edges x faces) — deleting a curved tiled
-        # wall (hundreds of curve segments) took 30+ s on an exploded
-        # 28k-face mesh (piscina.igz report). Kept live as faces merge/die.
-        seg_faces = _SegmentIndex(m, self._edge_endpoints)
-
-        def _index_face(f) -> None:
-            seg_faces.add(f)
-        dead_faces: set = set()
-        slit_planes: list = []
-        across: list = []
-        for a, b in self._edge_endpoints:
-            v0 = m.vertex_at(a)
-            v1 = m.vertex_at(b)
-            edge = m.find_edge(v0, v1) if (v0 is not None and v1 is not None) else None
-            if edge is None:
-                continue
-            faces = list(edge.faces)
-            merged = None
-            if len(faces) == 2 and faces[0] == faces[1]:
-                # Slit edge: ONE face walks it twice — a fence line joining an
-                # inner boundary to the outline turns the ring into a cut-open
-                # walk. Dissolving "the face with itself" deleted the face and
-                # kept the line (ss.igz report). Erasing the line must keep
-                # the face: drop only the edge and re-derive the plane's
-                # regions below (the ring comes back as outer + hole; other
-                # fence pieces survive as free edges).
-                f = faces[0]
-                slit_planes.append((QVector3D(f.vertices[0]), f.normal()))
-                m.remove_edge(edge)
-                scene.selection.discard(edge)
-                continue
-            if len(faces) == 2 and QVector3D.dotProduct(
-                faces[0].normal(), faces[1].normal()
-            ) > 0.999:
-                merged = m.dissolve_coplanar_region(faces)  # reunite the split
-                if merged is not None:
-                    dead_faces.update(f.key for f in faces)
-                    _index_face(merged)
-            elif len(faces) > 2:
-                # A wall raised against a taller neighbour leaves its inner
-                # side faces on the line too, so the front's split line had
-                # four faces and the cascade took the whole front (#356).
-                # Reunite the one coplanar pair as above; the faces across
-                # the line are re-derived on their plane below, so what
-                # still closes (the jamb above the sill) stays and the
-                # inner partitions, open now, go.
-                pair = _single_coplanar_pair(faces)
-                if pair is not None:
-                    merged = m.dissolve_coplanar_region(pair)
-                if merged is not None:
-                    dead_faces.update(f.key for f in pair)
-                    _index_face(merged)
-                    across.extend(f for f in faces if f not in pair)
-                    m.remove_edge(edge)
-            if merged is None:
-                # Cascade: the edge and every face bounding it (a face can't
-                # outlive a bounding edge) go away.
-                ekey = frozenset((_key(edge.v0.position), _key(edge.v1.position)))
-                dying = [f for f in seg_faces.get(ekey, ())
-                         if f.key not in dead_faces]
-                # A hole is not a boundary the face dies with — the face
-                # CAN outlive a hole edge, as the same face with the
-                # opening filled in. Erasing one edge of a hole (an offset
-                # ring's, #1191) used to leave the face claiming a hole
-                # whose boundary no longer exists: the segment gone, the
-                # hole still covering — and still saved. Drop the hole
-                # from every surviving face that wears this segment only
-                # as a hole edge; the hole's other edges stay as lines.
-                for f in faces:
-                    if f.key in dead_faces or f in dying:
-                        continue
-                    for hole in list(f.hole_loops):
-                        if _loop_has_segment(hole, edge.v0, edge.v1) \
-                                and not _loop_has_segment(
-                                    f.loop, edge.v0, edge.v1):
-                            m.remove_hole(f, hole)
-                for f in dying:
-                    dead_faces.add(f.key)
-                    m.remove_face(f)
-                    scene.selection.discard(f)
-                m.remove_edge(edge)
-            scene.selection.discard(edge)
+        from core.store_mesh import EdgeView, FaceView, StoreMesh, _hypot
+        result = None
+        if _doc.ENABLED and type(m) is StoreMesh and (hypot := _hypot()) is not None:
+            result = m._store.erase_selection(
+                [[p.toTuple() for p in loop] for loop in self._face_loops],
+                [(m._input_point(a), m._input_point(b)) for a,b in self._edge_endpoints], hypot)
+        if result is None:
+            slit_planes, across = _reference.erase_selected_geometry(self, scene)
+        else:
+            dirty, edges, faces, merges, slits, across_keys = result
+            if dirty:
+                m._dirty(dirty)
+            from core.mesh import _dominant_attrs
+            for target, sources, stacked in merges:
+                merged = FaceView(m, target)
+                if not stacked or not merged.attrs:
+                    candidates = sources[1:] if stacked else sources
+                    merged.attrs = dict(_dominant_attrs([FaceView(m, k) for k in candidates]))
+            for key in faces:
+                scene.selection.discard(FaceView(m, key))
+            for key in edges:
+                scene.selection.discard(EdgeView(m, key))
+            slit_planes = [(QVector3D(*o), QVector3D(*n)) for o,n in slits]
+            across = [FaceView(m, key) for key in across_keys]
         # Slit removals re-derive their plane from the arrangement while the
         # cut-ring face is still present to provide coverage (it re-emits as
         # outer + hole, attrs intact; uncovered regions stay empty).
@@ -611,9 +396,14 @@ class EraseSelectionCommand(MeshCommand):
         # left bordering no face is a dangling curve segment (a cylinder side's
         # vertical seam) — prune it so no stray vertical lines remain. Hard
         # orphan edges stay (an erased flat face keeps its outline).
-        for e in _soft_faceless_edges(m):
-            if e.soft and not e.faces:
-                m.remove_edge(e)
+        if result is not None and type(m) is StoreMesh:
+            n = m._store.erase_soft_seams()
+            if n:
+                m._dirty(n)
+        else:
+            for e in _reference._soft_faceless_edges(m):
+                if e.soft and not e.faces:
+                    m.remove_edge(e)
         # A merge can leave the big enclosing face overlapping its subdivisions;
         # drop any such redundant mother (covered by the snapshot undo above).
         for f in heal_overlapping_faces(m, footprint=footprint):
@@ -625,15 +415,6 @@ class EraseSelectionCommand(MeshCommand):
         # why zoom-to-extents could not bring him back (2026-09-18).
         m.prune_orphan_vertices()
         scene.version += 1
-
-    def doc_after(self, scene, phase):
-        _discard_removed_selection(scene)
-        scene.version += 1
-
-    def undo(self, scene) -> None:
-        if self.snapshot is not None:
-            scene.mesh.restore_state(self.snapshot)
-            scene.version += 1
 
 
 class TagCurveCommand(MeshCommand):
@@ -784,183 +565,56 @@ class AddFaceCommand(MeshCommand):
         # colour/texture); they stay on the object across undo/redo.
         self.attrs = dict(attrs) if attrs else None
         self.face: Optional[Face] = None
-        # (face_that_gained_a_hole, the vertex loop punched) for undo.
-        self._punches: list[tuple[Face, list]] = []
-        self._hole_swaps: list = []
-        self._subdiv_mother: Optional[Face] = None
-        self._subdiv_remainder: Optional[list] = None
+        self._hole_swaps = False
+        self._before = self._after = None
 
     def do(self, scene) -> None:
-        m = scene.mesh
-        if self.face is None:
-            holes = (
-                [list(loop) for loop in self.preset_holes]
-                if self.preset_holes else None
-            )
-            # What add_face is about to create besides the face — its
-            # boundary edges and corners that were not there yet — so undo
-            # takes them back with it (#355).
-            loops = [self.vertices] + (holes or [])
-            pairs = [(lp[i], lp[(i + 1) % len(lp)])
-                     for lp in loops for i in range(len(lp))]
-            had_v = {v.key for p in self.vertices + [q for h in holes or []
-                                                     for q in h]
-                     for v in [m.vertex_at(p)] if v is not None}
-            had_e = set()
-            for a, b in pairs:
-                va, vb = m.vertex_at(a), m.vertex_at(b)
-                e = m.find_edge(va, vb) if va is not None and vb is not None else None
-                if e is not None:
-                    had_e.add(e.key)
-            self.face = m.add_face(self.vertices, holes)
+        mesh = scene.mesh
+        if self._after is not None:
+            mesh.restore_state(self._after)
+        else:
+            self._before = self._reference_snapshot(mesh)
+            self.face = mesh.add_face(self.vertices, self.preset_holes)
             self.face.interior = self.interior
-            # Keep created boundary handles by key so redo restores their
-            # stable identities before relinking the face.
-            self._made_pairs = set()
-            self._made_edges = {}
-            self._made_vertices = []
-            for lp in (self.face.loop, *self.face.hole_loops):
-                for i in range(len(lp)):
-                    a, b = lp[i], lp[(i + 1) % len(lp)]
-                    e = m.find_edge(a, b)
-                    if e is not None and e.key not in had_e:
-                        self._made_pairs.add(frozenset((a.key, b.key)))
-                        self._made_edges[e.key] = e
-                for v in lp:
-                    if v.key not in had_v:
-                        self._made_vertices.append(v)
             if self.attrs:
                 self.face.attrs.update(self.attrs)
-        else:
-            m.relink_vertices(getattr(self, "_made_vertices", ()))
-            for edge in self._made_edges.values():
-                m.relink_edge(edge)
-            m.relink_face(self.face)  # redo
-
-        if not self.auto:
-            scene.version += 1
-            return
-
-        # Direction A: the new face falls inside an existing mother → the mother
-        # gains the new loop as a hole.
-        mother = find_containing_face(_faces_holding(m, self.face.vertices),
-                                      self.face.vertices, exclude=self.face)
-        if mother is not None:
-            grown = hole_merged_with_loop(mother, self.face.vertices)
-            if grown is not None:
-                idx, outline = grown
-                old_loop = mother.hole_loops[idx]
-                m.remove_hole(mother, old_loop)
-                loop = m.add_hole(mother, outline)
-                self._hole_swaps.append((mother, old_loop, loop))
-            else:
-                loop = m.add_hole(mother, self.face.vertices)
-                self._punches.append((mother, loop))
-            _inherit_paint(self.face, mother)
-
-        # Direction B: the new face encloses existing smaller faces → it gains
-        # each of them as a hole.
-        # A face with a corner off the new face's plane is not inside it
-        # (the first thing loop_inside_face checks): said here with the
-        # plane worked out once, and not once per face of the model.
-        from core.topology import _PLANAR_TOLERANCE
-        plane_n = self.face.normal()
-        nx, ny, nz = plane_n.x(), plane_n.y(), plane_n.z()
-        plane_d = (QVector3D.dotProduct(plane_n, self.face.loop[0].position)
-                   if self.face.loop else None)
-        for other in _faces_inside(m, self.face):
-            if other == self.face:
-                continue
-            if plane_d is not None:
-                off = False
-                for v in other.loop:
-                    x, y, z = v.position.toTuple()
-                    if abs(nx * x + ny * y + nz * z - plane_d) \
-                            > 2.0 * _PLANAR_TOLERANCE:
-                        off = True
-                        break
-                if off:
-                    continue
-            if loop_inside_face(self.face, other.vertices):
-                loop = m.add_hole(self.face, other.vertices)
-                self._punches.append((self.face, loop))
-
-        # Direction C: drawn against an existing face's boundary (corner / edge
-        # rectangle) → carve a connected sub-region. Only when no hole applied.
-        if not self._punches and not self._hole_swaps:
-            for other in _faces_holding(m, self.face.vertices):
-                if other == self.face:
-                    continue
-                remainder = subtract_loop_from_face(other, self.face.vertices)
-                pieces = ([remainder] if remainder is not None
-                          else carve_loop_by_chords(other, self.face.vertices))
-                if not pieces:
-                    continue
-                # Each hole of the mother goes to the piece that holds it; a
-                # hole straddling a cut leaves the mother alone.
-                piece_holes: list[list[list[QVector3D]]] = [[] for _ in pieces]
-                straddle = False
-                for hole in other.holes:
-                    for k, piece in enumerate(pieces):
-                        if loop_inside_face(Face([Vertex(v) for v in piece]), hole):
-                            piece_holes[k].append([QVector3D(v) for v in hole])
-                            break
-                    else:
-                        straddle = True
-                        break
-                if straddle:
-                    continue
-                m.remove_face(other)
-                self._subdiv_remainder = []
-                for piece, holes in zip(pieces, piece_holes):
-                    rem_face = m.add_face(piece, holes or None)
-                    rem_face.attrs = dict(other.attrs)  # carved mother continues
-                    self._subdiv_remainder.append(rem_face)
-                _inherit_paint(self.face, other)    # ...and so does the cut-out
-                self._subdiv_mother = other
-                break
-
+            if self.auto:
+                self._divide(mesh)
+            self._after = self._reference_snapshot(mesh)
         scene.version += 1
+
+    def _divide(self, mesh):
+        from core.store_mesh import FaceView, StoreMesh, _hypot
+        if (_doc.ENABLED and type(mesh) is StoreMesh and not mesh.__dict__.get("_planned_points")
+                and (hypot := _hypot()) is not None):
+            result = mesh._store.divide_drawn_face(
+                self.face.key, [f.key for f in _faces_holding(mesh, self.face.vertices)],
+                [f.key for f in _faces_inside(mesh, self.face)], hypot)
+            if result is not None:
+                dirty, source, remainder, self._hole_swaps = result
+                if dirty:
+                    mesh._dirty(dirty)
+                if source is not None:
+                    mother = FaceView(mesh, source)
+                    for key in remainder:
+                        FaceView(mesh, key).attrs = dict(mother.attrs)
+                    _inherit_paint(self.face, mother)
+                return
+        self._hole_swaps = _reference.divide_drawn_face(mesh, self.face)
 
     def doc_after(self, scene, phase):
         _discard_removed_selection(scene)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        m = scene.mesh
-        if self._subdiv_mother is not None:
-            for rem in self._subdiv_remainder or ():
-                m.remove_face(rem)
-            m.relink_face(self._subdiv_mother)
-            self._subdiv_mother = None
-            self._subdiv_remainder = None
-        for face, loop in self._punches:
-            m.remove_hole(face, loop)
-        self._punches = []
-        for face, old_loop, loop in reversed(self._hole_swaps):
-            m.remove_hole(face, loop)
-            m.relink_hole(face, old_loop)
-        self._hole_swaps = []
-        if self.face is not None:
-            m.remove_face(self.face)
-            # The edges and corners this face brought with it go too, when
-            # nothing else uses them (#355, @pacaeiro: «undo leaves edges
-            # behind»). remove_face keeps edges on purpose — they may border
-            # other faces — so only the ones this command made are candidates.
-            made = getattr(self, "_made_pairs", ())
-            for lp in (self.face.loop, *self.face.hole_loops):
-                for i in range(len(lp)):
-                    a, b = lp[i], lp[(i + 1) % len(lp)]
-                    if frozenset((a.key, b.key)) not in made:
-                        continue
-                    e = m.find_edge(a, b)
-                    if e is not None and not e.faces:
-                        m.remove_edge(e)
-                        sel = scene.selection
-                        if e in sel:
-                            sel.remove(e)
-            m.drop_orphan_vertices(getattr(self, "_made_vertices", ()))
-        scene.version += 1
+        if self._before is not None:
+            selected = [e for e in scene.selection if isinstance(e, Edge) and e in scene.mesh.edges]
+            scene.mesh.restore_state(self._before)
+            for edge in selected:
+                if edge not in scene.mesh.edges:
+                    scene.selection.discard(edge)
+            _discard_removed_selection(scene)
+            scene.version += 1
 
 
 class DeleteFaceCommand(RemoveGeometryCommand):
@@ -3349,82 +3003,26 @@ def defect_names() -> dict:
 
 
 def _weld_landed(mesh, moving: set) -> bool:
-    """Merge a moved vertex into the one it landed on.
-
-    Lowering a box's top edge onto its bottom edge turns the box into a
-    ramp — the endpoint snap puts each moved corner exactly on another
-    vertex. Left as two vertices at one point, the side face became a
-    zero-area sliver and the vertical edges zero-length; nothing showed it
-    until Make Group copied the geometry, welded on the way, and refused the
-    edge whose ends were now one vertex (#341, @pacaeiro). Only a move that
-    actually lands pays for the weld: the check is one pass over the
-    vertices, the weld runs when two of them share a point.
-
-    The weld drops a wall left with under three corners. A wall flattened
-    along a curve keeps more (#1294): push/pull merges an arc's nearly flat
-    neighbouring walls, and the end one into the side wall it meets
-    tangentially. Its loop then goes out along the curve and back: a spur,
-    or the whole loop for a wall that was all curve. Spurs reaching a
-    landed vertex are cut off (:func:`_without_spurs`); a wall left with
-    under three corners goes, the rest is rebuilt on what remains."""
-    moved_keys = _cells_of(mesh, moving)
-    if not moved_keys:
-        return False
-    if not any(v.key not in moving for v in _vertices_at(mesh, moved_keys)):
-        return False
-    mesh.weld_coincident()
-    for f in list(mesh.faces):
-        if f.hole_loops or not any(_key(v.position) in moved_keys
-                                   for v in f.loop):
-            continue
-        kept = _without_spurs(f.loop, moved_keys)
-        if len(kept) == len(f.loop):
-            continue
-        attrs = dict(f.attrs)
-        mesh.remove_face(f)
-        if len(kept) >= 3:
-            g = mesh.add_face([QVector3D(v.position) for v in kept])
-            g.attrs = attrs
-    return True
-
-
-def _without_spurs(loop, landed: set) -> list:
-    """``loop`` with every spur cut off: a run out to a landed vertex and
-    straight back (``x, tip, x``), as often as one is left. A loop that was
-    only spurs ends with under three corners: it bounded no area."""
-    out = list(loop)
-    changed = True
-    while changed and len(out) >= 3:
-        changed = False
-        n = len(out)
-        for i in range(n):
-            prev, tip, nxt = out[i - 1], out[i], out[(i + 1) % n]
-            if tip == prev:                  # a corner listed twice
-                del out[i]
-                changed = True
-                break
-            if prev == nxt and _key(tip.position) in landed:
-                for j in sorted((i, (i + 1) % n), reverse=True):
-                    del out[j]
-                changed = True
-                break
-    return out
+    from core.store_mesh import FaceView, StoreMesh
+    if _doc.ENABLED and type(mesh) is StoreMesh and not mesh.__dict__.get("_planned_points"):
+        result = mesh._store.weld_landing(list(moving))
+        if result is not None:
+            welded, bumps, copies = result
+            if welded:
+                mesh._dirty(bumps)
+            for old, new in copies:
+                FaceView(mesh, new).attrs = dict(FaceView(mesh, old).attrs)
+            return welded
+    return _reference.weld_landed(mesh, moving)
 
 
 def _carried_faces(mesh, moving: set) -> list:
-    """The textured faces a move or turn carries WHOLE — every vertex of
-    every loop among ``moving`` (vertex ids). Their texture map rides along
-    (:func:`core.group._remap_uvws`); a face the move only stretches keeps
-    the map it had."""
-    out = []
-    fast = getattr(mesh, "textured_faces", None)
-    for f in (fast() if fast is not None else mesh.faces):
-        if not (f.attrs and f.attrs.get("texture")):
-            continue
-        loops = [f.loop] + list(getattr(f, "hole_loops", []) or [])
-        if all(v.key in moving for lp in loops for v in lp):
-            out.append(f)
-    return out
+    """Textured faces whose outer and inner rings move as a unit."""
+    from core.store_mesh import FaceView, StoreMesh
+    if _doc.ENABLED and type(mesh) is StoreMesh:
+        keys = [f.key for f in mesh.textured_faces() if f.attrs.get("texture")]
+        return [FaceView(mesh, k) for k in mesh._store.carried_faces(keys, list(moving))]
+    return _reference.carried_faces(mesh, moving)
 
 
 class MoveVerticesCommand(MeshCommand):
@@ -3528,10 +3126,7 @@ class MoveVerticesCommand(MeshCommand):
                     "undone.", defect=defect_names()[worse[0]]))
         self._after = self._reference_snapshot(scene.mesh)
 
-    def undo(self, scene) -> None:
-        if self._before is not None:
-            scene.mesh.restore_state(self._before)
-            scene.version += 1
+    undo = _reference.restore_mesh_before
 
 
 def rotation_matrix(center: QVector3D, axis: QVector3D, degrees: float):
@@ -3548,9 +3143,26 @@ def rotate_points(scene, keys: set, matrix) -> None:
     """Rotate every shared vertex whose position key is in ``keys`` by the
     rigid ``matrix`` (the rotation twin of :func:`translate_points`). Shared
     by :class:`RotateVerticesCommand` and the Rotate tool's live preview."""
-    moving = [v for v in scene.mesh.vertices if _key(v.position) in keys]
-    for v in moving:
-        scene.mesh.move_vertex(v, matrix.map(v.position) - v.position)
+    _map_selected_vertices(scene, keys, matrix, carry_textures=False)
+
+
+def _map_selected_vertices(scene, keys, matrix, carry_textures):
+    from core.store_mesh import StoreMesh
+    from ingetrazo_core import Matrix4
+    mesh = scene.mesh
+    if _doc.ENABLED and type(mesh) is StoreMesh and type(matrix) is Matrix4:
+        count, ids = mesh._store.transform_vertices(list(keys), matrix.data(), carry_textures)
+        if count:
+            mesh._dirty(count)
+        carried = _carried_faces(mesh, ids) if carry_textures else []
+    else:
+        moving = [v for v in mesh.vertices if _key(v.position) in keys]
+        carried = _carried_faces(mesh, {v.key for v in moving}) if carry_textures else []
+        for v in moving:
+            mesh.move_vertex(v, matrix.map(v.position) - v.position)
+    if carried:
+        from core.group import _remap_uvws
+        _remap_uvws(mesh, matrix, carried)
     scene.version += 1
 
 
@@ -3650,7 +3262,31 @@ class FlipGroupsCommand(MeshCommand):
         self._flip(scene)
 
 
-class FlipVerticesCommand(MeshCommand):
+class VertexTransformCommand(MeshCommand):
+    """Apply a matrix to loose vertices, then fold the faces they warped."""
+    _before = _after = None
+    carry_textures = False
+
+    @abstractmethod
+    def matrix(self):
+        """Transform about the tool's chosen axes and origin."""
+
+    def do(self, scene) -> None:
+        if self._after is not None:
+            scene.mesh.restore_state(self._after)
+            scene.version += 1
+            return
+        self._before = self._reference_snapshot(scene.mesh)
+        _map_selected_vertices(scene, {_key(p) for p in self.src}, self.matrix(), self.carry_textures)
+        if faces := getattr(self, "_faces", ()):
+            _reverse_faces(f for f in faces if isinstance(f, Face) or hasattr(f, "loop"))
+        fold_nonplanar_faces(scene.mesh)
+        self._after = self._reference_snapshot(scene.mesh)
+
+    undo = _reference.restore_mesh_before
+
+
+class FlipVerticesCommand(VertexTransformCommand):
     """Mirror loose positions about an axis plane and re-reverse the fully
     selected faces' windings (their normals would flip inward otherwise).
     Snapshot undo, the exact mirror of RotateVerticesCommand."""
@@ -3661,28 +3297,12 @@ class FlipVerticesCommand(MeshCommand):
         self.centre = QVector3D(centre)
         self.axis = QVector3D(axis)
         self._faces = list(faces)
-        self._before: Optional[dict] = None
-        self._after: Optional[dict] = None
 
-    def do(self, scene) -> None:
-        if self._after is not None:  # redo
-            scene.mesh.restore_state(self._after)
-            scene.version += 1
-            return
-        self._before = self._reference_snapshot(scene.mesh)
-        m = mirror_matrix(self.centre, self.axis)
-        rotate_points(scene, {_key(p) for p in self.src}, m)
-        _reverse_faces(f for f in self._faces if isinstance(f, Face) or hasattr(f, "loop"))
-        fold_nonplanar_faces(scene.mesh)
-        self._after = self._reference_snapshot(scene.mesh)
-
-    def undo(self, scene) -> None:
-        if self._before is not None:
-            scene.mesh.restore_state(self._before)
-            scene.version += 1
+    def matrix(self):
+        return mirror_matrix(self.centre, self.axis)
 
 
-class RotateVerticesCommand(MeshCommand):
+class RotateVerticesCommand(VertexTransformCommand):
     """Rotate every shared vertex at a set of positions around ``axis``
     through ``center`` by ``degrees``, then **autofold** (a partial rotation
     can warp attached faces out of plane, same as Move). Undo/redo restore
@@ -3698,32 +3318,9 @@ class RotateVerticesCommand(MeshCommand):
         self.degrees = degrees
         #: As in MoveVerticesCommand: a face turned whole turns its image.
         self.carry_textures = carry_textures
-        self._before: Optional[dict] = None
-        self._after: Optional[dict] = None
 
-    def do(self, scene) -> None:
-        if self._after is not None:  # redo
-            scene.mesh.restore_state(self._after)
-            scene.version += 1
-            return
-        self._before = self._reference_snapshot(scene.mesh)
-        m = rotation_matrix(self.center, self.axis, self.degrees)
-        keys = {_key(p) for p in self.src}
-        carried = (_carried_faces(
-            scene.mesh, {v.key for v in scene.mesh.vertices
-                         if _key(v.position) in keys})
-            if self.carry_textures else [])
-        rotate_points(scene, keys, m)
-        if carried:
-            from core.group import _remap_uvws
-            _remap_uvws(scene.mesh, m, carried)
-        fold_nonplanar_faces(scene.mesh)
-        self._after = self._reference_snapshot(scene.mesh)
-
-    def undo(self, scene) -> None:
-        if self._before is not None:
-            scene.mesh.restore_state(self._before)
-            scene.version += 1
+    def matrix(self):
+        return rotation_matrix(self.center, self.axis, self.degrees)
 
 
 class GroupTransformCommand(MeshCommand):
@@ -3831,7 +3428,7 @@ def invert_scale_factor(factor):
     return inv(float(factor))
 
 
-class ScaleVerticesCommand(MeshCommand):
+class ScaleVerticesCommand(VertexTransformCommand):
     """Uniformly scale every shared vertex at a set of positions about
     ``center`` by ``factor``, then autofold (scaling a subset of connected
     geometry can warp attached faces). Snapshot undo/redo — the mirror of
@@ -3843,24 +3440,9 @@ class ScaleVerticesCommand(MeshCommand):
         self.center = QVector3D(center)
         self.factor = factor
         self.axes = axes
-        self._before: Optional[dict] = None
-        self._after: Optional[dict] = None
 
-    def do(self, scene) -> None:
-        if self._after is not None:  # redo
-            scene.mesh.restore_state(self._after)
-            scene.version += 1
-            return
-        self._before = self._reference_snapshot(scene.mesh)
-        m = scale_matrix(self.center, self.factor, self.axes)
-        rotate_points(scene, {_key(p) for p in self.src}, m)  # generic mapper
-        fold_nonplanar_faces(scene.mesh)
-        self._after = self._reference_snapshot(scene.mesh)
-
-    def undo(self, scene) -> None:
-        if self._before is not None:
-            scene.mesh.restore_state(self._before)
-            scene.version += 1
+    def matrix(self):
+        return scale_matrix(self.center, self.factor, self.axes)
 
 
 class ScaleGroupCommand(GroupTransformCommand):
@@ -4405,7 +3987,10 @@ def _run_snapshot_parts(parent, scene):
     covered = (AddEdgeCommand, DeleteEdgesCommand, DeleteFaceCommand, TagCurveCommand,
                ExplodeCurvesCommand, PruneOrphanEdgesCommand, MoveVerticesCommand)
     for part in parent.inner:
-        if not parent._journal_geometry or type(part) not in covered:
+        # A face's reference inverse also uses snapshots. The enclosing
+        # command already owns them in either document mode.
+        if type(part) is not AddFaceCommand and (
+                not parent._journal_geometry or type(part) not in covered):
             part.do(scene)
             continue
         previous = part._journal_geometry

@@ -4,7 +4,12 @@ use super::{edit::Change, keys::Kind, Store};
 use std::collections::HashSet;
 
 type Point = [f64; 3];
-type Cell = [u64; 3];
+pub(super) type Cell = [u64; 3];
+
+/// A position key supplied by a caller has already been rounded.
+pub(super) fn supplied_cell(p: Point) -> Cell {
+    p.map(|x| if x == 0. { 0 } else { x.to_bits() })
+}
 
 /// Bits of Python's round(x, 4), canonicalising signed zero. When the
 /// multiplication itself can change a rounding decision, round the original
@@ -34,6 +39,34 @@ fn segment(a: Cell, b: Cell) -> [Cell; 2] {
 }
 
 impl Store {
+    /// Apply an affine point transform in mesh order. The facade moves by
+    /// a delta, including its float32 rounding for older meshes.
+    pub(super) fn transform_vertices(
+        &mut self,
+        source: &[[f64; 3]],
+        matrix: [f64; 16],
+        collect: bool,
+    ) -> (usize, Vec<u128>) {
+        let source: HashSet<_> = source.iter().copied().map(supplied_cell).collect();
+        let matrix = glam::DMat4::from_cols_array(&matrix);
+        let mut count = 0;
+        let mut keys = Vec::new();
+        for v in self.live_slots(Kind::Vertex) {
+            let point = *self.state.vpos.get(v as usize);
+            if !source.contains(&cell(point)) {
+                continue;
+            }
+            let p = glam::DVec3::from_array(point);
+            let q = matrix * p.extend(1.);
+            self.move_vertex(v, (q.truncate() / q.w - p).to_array());
+            count += 1;
+            if collect {
+                keys.push(self.key(Kind::Vertex, v));
+            }
+        }
+        (count, keys)
+    }
+
     /// Move the selected position cells together. A landing needs the weld
     /// and defect checks. Detect it before writing so that path can take over.
     pub fn move_without_join(&mut self, source: &[Point], delta: Point) -> Option<usize> {
@@ -69,7 +102,7 @@ impl Store {
         Some(moving.len())
     }
 
-    fn command_remove_face(&mut self, face: u32) {
+    pub(super) fn command_remove_face(&mut self, face: u32) {
         let mut change = Change::default();
         self.remove_face(face, &mut change);
         self.finish(change);
@@ -144,5 +177,108 @@ impl Store {
             self.finish(change);
         }
         Some((edge_keys, face_keys))
+    }
+}
+
+impl Store {
+    /// Remove spurs after a landing weld. Only their tips must have been
+    /// moved. Other folds in a neighbouring wall are preserved.
+    pub(super) fn trim_landing_spurs(
+        &mut self,
+        landed: &HashSet<Cell>,
+    ) -> Result<(usize, Vec<(u128, u128)>), super::topo::OpError> {
+        let mut copies = Vec::new();
+        let mut dirty = 0;
+        for face in self.live_slots(Kind::Face) {
+            let rings = self.face_rings(face);
+            if rings.len() != 1 {
+                continue;
+            }
+            let mut ring = rings[0].clone();
+            let at_landing = |v: u32| landed.contains(&cell(*self.state.vpos.get(v as usize)));
+            if !ring.iter().any(|&v| at_landing(v)) {
+                continue;
+            }
+            while ring.len() >= 3 {
+                let n = ring.len();
+                let Some(i) = (0..n).find(|&i| {
+                    let prev = ring[(i + n - 1) % n];
+                    ring[i] == prev || (prev == ring[(i + 1) % n] && at_landing(ring[i]))
+                }) else {
+                    break;
+                };
+                if ring[i] == ring[(i + n - 1) % n] {
+                    ring.remove(i);
+                } else {
+                    let j = (i + 1) % n;
+                    ring.remove(i.max(j));
+                    ring.remove(i.min(j));
+                }
+            }
+            if ring.len() == rings[0].len() {
+                continue;
+            }
+            if self.remove_face_blocked(face) {
+                return Err(super::topo::OpError::Fallback("spur incidence"));
+            }
+            let original = self.key(Kind::Face, face);
+            self.command_remove_face(face);
+            dirty += 1;
+            if ring.len() >= 3 {
+                let points = ring
+                    .iter()
+                    .map(|&v| *self.state.vpos.get(v as usize))
+                    .collect();
+                let mut change = Change::default();
+                let new = self.add_face(&[points], &mut change)?;
+                self.finish(change);
+                copies.push((original, self.key(Kind::Face, new)));
+                dirty += 1 + ring.len();
+            }
+        }
+        Ok((dirty, copies))
+    }
+
+    /// Return None before any write if the facade has to materialise this mesh.
+    pub(super) fn weld_landing(
+        &mut self,
+        moving: &HashSet<u32>,
+    ) -> Result<Option<(bool, usize, Vec<(u128, u128)>)>, super::topo::OpError> {
+        let vertices = self.live_slots(Kind::Vertex);
+        if vertices.iter().any(|&v| {
+            self.state
+                .vpos
+                .get(v as usize)
+                .iter()
+                .any(|x| !x.is_finite() || x.abs() >= 1e11)
+        }) {
+            return Ok(None);
+        }
+        let landed = moving
+            .iter()
+            .map(|&v| cell(*self.state.vpos.get(v as usize)))
+            .collect::<HashSet<_>>();
+        if landed.is_empty()
+            || !vertices.into_iter().any(|v| {
+                !moving.contains(&v) && landed.contains(&cell(*self.state.vpos.get(v as usize)))
+            })
+        {
+            return Ok(Some((false, 0, Vec::new())));
+        }
+
+        let mut work = self.clone();
+        let mut change = Change::default();
+        let (_, dirty) = work.weld_coincident(&mut change)?;
+        let removed = change.removed[2]
+            .iter()
+            .filter_map(|&key| work.slot_any(Kind::Face, key))
+            .collect::<Vec<_>>();
+        if work.dangling(&removed) {
+            return Ok(None);
+        }
+        work.finish(change);
+        let (trim, copies) = work.trim_landing_spurs(&landed)?;
+        *self = work;
+        Ok(Some((true, dirty + trim, copies)))
     }
 }

@@ -377,15 +377,18 @@ def shared_assembly(work):
     return result
 
 
-def geometry_steps():
+def geometry_steps(work):
     """Compare the loose mesh, feed and replay at each command boundary."""
     from core.history import (MakeGroupCommand, ExplodeGroupCommand, SetFaceColorCommand,
                               AddEdgeCommand, DeleteEdgesCommand, DeleteFaceCommand,
                               ExplodeCurvesCommand, TagCurveCommand, PruneOrphanEdgesCommand,
-                              SnapshotCompound)
+                              AddFaceCommand, EraseSelectionCommand, MoveVerticesCommand, SnapshotCompound)
     from core.protocol import commands
 
     scene = Scene()
+    # Commands in the preceding scenario consume generated UIDs differently
+    # on redo. This independent document needs the same initial tag identity.
+    scene.layers[0].uid = "geometry-default-tag"
     mesh = scene.mesh
     box(mesh)
     h = History(scene)
@@ -394,6 +397,7 @@ def geometry_steps():
         return {
             "vertices": [v.position_tuple() for v in mesh.vertices],
             "faces": [[list(v.toTuple()) for v in f.vertices] for f in mesh.faces],
+            "holes": [[[v.toTuple() for v in ring] for ring in f.holes] for f in mesh.faces],
             "paint": [dict(f.attrs) for f in mesh.faces],
             "edge_flags": [(e.soft, e.curve, e.layer) for e in mesh.edges],
             "group_faces": [len(g.mesh.faces) for g in scene.groups],
@@ -441,7 +445,81 @@ def geometry_steps():
     out.append(state())
     assert h.redo()
     out.append(state())
-    return out
+    # Draw a painted panel, a hole, an adjacent opening and a corner cut.
+    def rectangle(x, y, w, height):
+        return [QVector3D(a, b, 0) for a, b in
+                ((x,y), (x+w,y), (x+w,y+height), (x,y+height))]
+    draw_revisions = []
+    for rect, paint in [((10,0,8,8), {"color":[.2,.4,.6]}),
+                        ((12,2,1,1), None), ((13,2,1,1), None), ((10,0,1,1), None)]:
+        serial = mesh._mut_serial
+        h.execute(AddFaceCommand(rectangle(*rect), attrs=paint))
+        draw_revisions.append(mesh._mut_serial - serial)
+        assert not h.last_error and not h.last_rejected
+        out.append(state())
+        assert h.undo()
+        out.append(state())
+        assert h.redo()
+        out.append(state())
+    left = mesh.add_face(rectangle(100, 0, 2, 2))
+    left.attrs["color"] = [0.1, 0.2, 0.3]
+    right = mesh.add_face(rectangle(102, 0, 1, 2))
+    edge = next(e for e in mesh.edges if left in e.faces and right in e.faces)
+    scene.selection.add(edge)
+    h.execute(EraseSelectionCommand([edge]))
+    assert not h.last_error and not h.last_rejected and edge not in scene.selection
+    out.append(state())
+    assert h.undo() and edge in mesh.edges
+    out.append(state())
+    assert h.redo() and edge not in mesh.edges
+    out.append(state())
+    # Compare welding a box into a ramp and carrying both rings of a textured panel.
+    box(mesh, x=200.)
+    outer = rectangle(300, 0, 4, 4)
+    hole = rectangle(301, 1, 1, 1)
+    panel = mesh.add_face(outer, [hole])
+    panel.attrs["texture"] = {"path": "tile.png", "sw": .3, "sh": .7, "rot": 12.}
+    for cmd in (MoveVerticesCommand([QVector3D(201, 0, 1), QVector3D(201, 1, 1)],
+                                    QVector3D(0, 0, -1)),
+                MoveVerticesCommand(outer + hole, QVector3D(.3, .7, .2), carry_textures=True)):
+        h.execute(cmd)
+        assert not h.last_error and not h.last_rejected
+        assert cmd.welded == (not cmd.carry_textures)
+        out.append(state())
+        assert h.undo()
+        out.append(state())
+        assert h.redo()
+        out.append(state())
+    outer = rectangle(400, 0, 2, 2)
+    warp = mesh.add_face(outer)
+    warp.attrs["color"] = [0.1, 0.3, 0.7]
+    h.execute(MoveVerticesCommand(outer[:1], QVector3D(0, 0, .7)))
+    assert not h.last_rejected and not h.last_error and warp not in mesh.faces
+    out.append(state())
+    assert h.undo() and warp in mesh.faces
+    out.append(state())
+    assert h.redo() and warp not in mesh.faces
+    out.append(state())
+    from core.history import FlipVerticesCommand, RotateVerticesCommand, ScaleVerticesCommand
+    panel = mesh.add_face(rectangle(500, 0, 2, 2))
+    panel.attrs["texture"] = {"path": "fabric.png", "sw": .7, "sh": .3}
+    pivot, axis = QVector3D(500, 0, 0), QVector3D(0, 0, 1)
+    for transform in (lambda pts: RotateVerticesCommand(pts, pivot, axis, 30., carry_textures=True),
+                      lambda pts: ScaleVerticesCommand(pts, pivot, (1.25, .5, 1.)),
+                      lambda pts: FlipVerticesCommand(pts, pivot, QVector3D(1, 0, 0), [panel])):
+        h.execute(transform(panel.vertices))
+        assert not h.last_error and not h.last_rejected
+        out.append(state())
+        assert h.undo()
+        out.append(state())
+        assert h.redo()
+        out.append(state())
+    archives = {}
+    for ext in ("igz", "built"):
+        path = work / f"edited-geometry.{ext}"
+        igz.save_scene(scene, path, backup=False)
+        archives[ext] = hashlib.sha256(path.read_bytes()).hexdigest()
+    return {"states": out, "archive_hashes": archives, "draw_revisions": draw_revisions}
 
 
 def anchor_steps(work):
@@ -664,7 +742,7 @@ def main(work: Path):
     import numpy as np
     np.testing.assert_allclose(sorted(positions), sorted(p.toTuple() for p in endpoints), atol=1e-6)
     shared = shared_assembly(work)
-    print(json.dumps({"geometry": geometry_steps(), "shared": shared, "rotated_edit": positions, "engine": doc_model.engine(), "states": states,
+    print(json.dumps({"geometry": geometry_steps(work), "shared": shared, "rotated_edit": positions, "engine": doc_model.engine(), "states": states,
                       "feed": steps, "initial": initial,
                       "final": saved(scene, work, "final")}))
 

@@ -15,6 +15,7 @@ from __future__ import annotations
 import copy
 import itertools
 import os
+import sys
 import uuid
 
 from core.mesh import Mesh
@@ -483,9 +484,26 @@ def _implicit_uvw(face, tex, minv):
     inverse of the transform about to be accounted for) pins that look
     into a ``uvw`` the remap below can carry. ``None`` for a degenerate
     face, whose projection is meaningless either way."""
-    from ingetrazo_core import Vec3 as QVector3D
-
+    from core import doc_model
+    from core.store_mesh import FaceView, StoreMesh, _hypot
     from core.texture import face_uv_axes
+    from ingetrazo_core import Matrix4, Vec3
+
+    if (doc_model.ENABLED and type(face) is FaceView and type(face._m) is StoreMesh
+            and type(minv) is Matrix4 and face._m._store.is_live(face.key)):
+        coordinates = face._m._store.pretransform_face_normal(face.key, minv.data(), _hypot())
+        normal = None if coordinates is None else Vec3(*coordinates)
+    else:
+        normal = _pretransform_normal(face, minv)
+    if normal is None:
+        return None
+    gu, cu, gv, cv = face_uv_axes(tex, normal)
+    return [gu.x(), gu.y(), gu.z(), float(cu),
+            gv.x(), gv.y(), gv.z(), float(cv)]
+
+
+def _pretransform_normal(face, minv):
+    from ingetrazo_core import Vec3 as QVector3D
     pts = [minv.map(p) for p in face.vertices]
     if len(pts) < 3:
         return None
@@ -503,9 +521,7 @@ def _implicit_uvw(face, tex, minv):
     length = normal.length()
     if length < 1e-9:
         return None
-    gu, cu, gv, cv = face_uv_axes(tex, normal / length)
-    return [gu.x(), gu.y(), gu.z(), float(cu),
-            gv.x(), gv.y(), gv.z(), float(cv)]
+    return normal / length
 
 
 def _remap_uvws(mesh, m, faces=None) -> None:
@@ -536,6 +552,11 @@ def _remapped_uvw(uvw, minv) -> list:
     never as ``m(row, col)``: that call is gone from some PySide6 builds
     (Qt 6.10 raises "object is not callable", #1405)."""
     # Each UV row is a homogeneous covector: row' = row @ inverse.
+    from core import doc_model
+    from ingetrazo_core import Matrix4
+    if doc_model.ENABLED and type(minv) is Matrix4 and len(uvw) == 8 and all(
+            type(x) in (float, int) for x in uvw):
+        return minv.remap_uvw(uvw, sys.version_info >= (3, 12))
     d = minv.data()
     return [sum(uvw[base + k] * d[4 * col + k] for k in range(4))
             for base in (0, 4) for col in range(4)]

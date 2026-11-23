@@ -2132,6 +2132,23 @@ def fold_nonplanar_faces(mesh, tolerance: float = _PLANAR_TOLERANCE,
     its fan are soft, so the cone reads as one smooth surface, as the
     curve's own wall did; the fold between the flat piece and the cone
     stays a line."""
+    from core import doc_model
+    from core.store_mesh import FaceView, StoreMesh, _hypot
+    if (doc_model.ENABLED and type(mesh) is StoreMesh and not mesh.__dict__.get("_planned_points")
+            and (hypot := _hypot()) is not None):
+        result = mesh._store.fold_nonplanar(list(moved or ()), tolerance, hypot)
+        if result is not None:
+            dirty, replacements = result
+            folded = []
+            if dirty:
+                mesh._dirty(dirty)
+            for source, pieces in replacements:
+                mother = FaceView(mesh, source)
+                folded.append(mother)
+                for key in pieces:
+                    FaceView(mesh, key).attrs = dict(mother.attrs)
+            return folded
+
     folded = []
     # A store-backed mesh names its warped faces itself (the same verdicts,
     # without reading every face through a view); folding one face changes

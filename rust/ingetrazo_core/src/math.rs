@@ -298,6 +298,17 @@ impl Matrix4 {
         };
         Ok(Self(DMat4::from_cols_array(&rows).transpose()))
     }
+    /// A world-to-UV map is a pair of homogeneous row vectors.
+    fn remap_uvw(&self, rows: [f64; 8], compensated: bool) -> [f64; 8] {
+        let matrix = self.0.to_cols_array();
+        std::array::from_fn(|i| {
+            crate::facegeom::py_sum(
+                (0..4).map(|k| rows[(i / 4) * 4 + k] * matrix[(i % 4) * 4 + k]),
+                compensated,
+            )
+        })
+    }
+
     fn data<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
         PyTuple::new(py, self.0.to_cols_array())
     }

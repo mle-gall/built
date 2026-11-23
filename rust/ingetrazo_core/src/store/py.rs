@@ -1303,6 +1303,131 @@ impl PyMeshStore {
         Ok(existing.is_none().then(|| self.inner.key(Kind::Edge, edge)))
     }
 
+    fn weld_landing(
+        &mut self,
+        moving: Vec<u128>,
+    ) -> PyResult<Option<(bool, usize, Vec<(u128, u128)>)>> {
+        let moving = moving
+            .into_iter()
+            .filter_map(|k| self.inner.slot(Kind::Vertex, k))
+            .collect();
+        match self.inner.weld_landing(&moving) {
+            Err(OpError::Fallback(_)) => Ok(None),
+            result => result.map_err(op_err),
+        }
+    }
+
+    /// The selected transform carries a texture only when every outer and
+    /// inner corner of its face belongs to that transform.
+    fn carried_faces(&self, candidates: Vec<u128>, moving: Vec<u128>) -> PyResult<Vec<u128>> {
+        let vertices: std::collections::HashSet<_> = moving
+            .into_iter()
+            .filter_map(|k| self.inner.slot(Kind::Vertex, k))
+            .collect();
+        let candidates = self.drawing_candidates(Kind::Face, Some(candidates))?;
+        Ok(candidates
+            .into_iter()
+            .filter(|&f| {
+                self.inner
+                    .face_rings(f)
+                    .iter()
+                    .flatten()
+                    .all(|v| vertices.contains(v))
+            })
+            .map(|f| self.inner.key(Kind::Face, f))
+            .collect())
+    }
+
+    fn pretransform_face_normal(
+        &self,
+        key: u128,
+        inverse: [f64; 16],
+        hypot: &str,
+    ) -> PyResult<Option<[f64; 3]>> {
+        let f = live_of(&self.inner, Kind::Face, key)?;
+        let ring = self.inner.outer_ring(f);
+        if ring.len() < 3 {
+            return Ok(None);
+        }
+        let matrix = glam::DMat4::from_cols_array(&inverse);
+        let points = ring
+            .iter()
+            .map(|&v| {
+                let q = matrix
+                    * glam::DVec3::from_array(*self.inner.state.vpos.get(v as usize)).extend(1.);
+                super::drawing::vector((q.truncate() / q.w).to_array())
+            })
+            .collect::<Vec<_>>();
+        let indices = (0..points.len() as u32).collect::<Vec<_>>();
+        let (normal, length) =
+            super::geometry::face_normal_length(&points, &indices, crate::hypot_of(hypot)?);
+        Ok((length >= 1e-9).then(|| normal.into()))
+    }
+
+    /// Fold all warped faces as one edit. The set of face keys preserves the
+    /// historical choice of the first merge among several legal neighbours.
+    fn fold_nonplanar(
+        &mut self,
+        py: Python<'_>,
+        moved: Vec<[f64; 3]>,
+        tolerance: f64,
+        hypot: &str,
+    ) -> PyResult<Option<(usize, Vec<(u128, Vec<u128>)>)>> {
+        use pyo3::types::PySet;
+        let h = crate::hypot_of(hypot)?;
+        let faces = self.inner.nonplanar_faces(tolerance);
+        if faces.is_empty() {
+            return Ok(Some((0, vec![])));
+        }
+        let moved = moved.into_iter().map(super::commands::supplied_cell).collect();
+        let mut work = self.inner.clone();
+        let mut copies = Vec::new();
+        let mut dirty = 0;
+        for f in faces {
+            let plan = work.plan_fold(f, &moved, tolerance, h);
+            if plan.triangles.len() < 2 {
+                continue;
+            }
+            let mut new = match work.split_fold(f, &plan) {
+                Ok(new) => new,
+                Err(OpError::Fallback(_)) => return Ok(None),
+                Err(e) => return Err(op_err(e)),
+            };
+            dirty += 1 + 4 * new.len();
+            let pieces = PySet::empty(py)?;
+            for &k in &new {
+                pieces.add(k)?;
+            }
+            loop {
+                let order = pieces
+                    .iter()
+                    .map(|x| x.extract())
+                    .collect::<PyResult<Vec<_>>>()?;
+                match work.merge_fold(&order, &plan, h) {
+                    Ok(Some((a, b, k, n))) => {
+                        pieces.discard(a)?;
+                        pieces.discard(b)?;
+                        pieces.add(k)?;
+                        new.push(k);
+                        dirty += n;
+                    }
+                    Ok(None) => break,
+                    Err(OpError::Fallback(_)) => return Ok(None),
+                    Err(e) => return Err(op_err(e)),
+                }
+            }
+            work.soften_fold(&plan);
+            copies.push((work.key(Kind::Face, f), new));
+        }
+        self.inner = work;
+        Ok(Some((dirty, copies)))
+    }
+
+    fn transform_vertices(&mut self, source: Vec<[f64; 3]>, matrix: [f64; 16], collect: bool)
+        -> (usize, Vec<u128>) {
+        self.inner.transform_vertices(&source, matrix, collect)
+    }
+
     fn move_without_join(&mut self, source: Vec<[f64; 3]>, delta: [f64; 3]) -> Option<usize> {
         self.inner.move_without_join(&source, delta)
     }
@@ -1318,6 +1443,78 @@ impl PyMeshStore {
             }
         }
         ids.len()
+    }
+
+    /// Complete the auto-division of an inserted face. Keep one store revision
+    /// per primitive, as published through the protocol before this command.
+    fn divide_drawn_face(&mut self, face: u128, holding: Vec<u128>, inside: Vec<u128>, hypot: &str)
+        -> PyResult<Option<(usize, Option<u128>, Vec<u128>, bool)>> {
+        use super::drawing_face::Division;
+        let f = live_of(&self.inner, Kind::Face, face)?;
+        let plan = self.inner.face_division(f, &self.drawing_candidates(Kind::Face, Some(holding))?,
+            &self.drawing_candidates(Kind::Face, Some(inside))?, crate::hypot_of(hypot)?);
+        let mut dirty = 0;
+        let mut remainder = Vec::new();
+        let mut swapped = false;
+        let paint_source = match plan {
+            None => return Ok(None),
+            Some(Division::Holes { mother, swap, enclosed }) => {
+                if let Some(m) = mother {
+                    let ring = if let Some((i, new)) = swap {
+                        let old = &self.inner.face_rings(m)[i+1];
+                        self.op(|s,ch| { s.remove_hole(m,old,ch); Ok(()) })?;
+                        swapped = true;
+                        new
+                    } else {
+                        self.inner.outer_ring(f).iter().map(|&v| *self.inner.state.vpos.get(v as usize)).collect()
+                    };
+                    dirty += ring.len();
+                    self.op(|s,ch| s.add_hole(m,&ring,ch))?;
+                }
+                for ring in enclosed {
+                    dirty += ring.len();
+                    self.op(|s,ch| s.add_hole(f,&ring,ch))?;
+                }
+                mother.map(|m| self.inner.key(Kind::Face,m))
+            }
+            Some(Division::Carve { mother, pieces }) => {
+                let key = self.inner.key(Kind::Face,mother);
+                self.remove_face(key)?;
+                dirty += 1;
+                for mut rings in pieces {
+                    if rings.len() > 2 {
+                        let keep = Self::maximal_holes(rings[1..].to_vec(), hypot)?;
+                        let mut mask = std::iter::once(true).chain(keep);
+                        rings.retain(|_| mask.next() == Some(true));
+                    }
+                    dirty += 1 + rings.iter().map(Vec::len).sum::<usize>();
+                    let (new,_) = self.op(|s,ch| s.add_face(&rings,ch))?;
+                    remainder.push(self.inner.key(Kind::Face,new));
+                }
+                Some(key)
+            }
+        };
+        Ok(Some((dirty,paint_source,remainder,swapped)))
+    }
+
+    fn erase_selection(&mut self, loops: Vec<Vec<[f64;3]>>, ends: Vec<[[f64;3];2]>, hypot: &str)
+        -> PyResult<Option<(usize, Vec<u128>, Vec<u128>, Vec<(u128,Vec<u128>,bool)>, Vec<super::erase::Plane>, Vec<u128>)>> {
+        let h = crate::hypot_of(hypot)?;
+        // Publish only a representable edit. The object fallback must see the
+        // original incidence, revision and key allocator.
+        let mut work = self.inner.clone();
+        match work.erase_selection(&loops,&ends,h) {
+            Ok(out) => {
+                self.inner = work;
+                Ok(Some((out.dirty,out.edges,out.faces,out.merges,out.slits,out.across)))
+            }
+            Err(OpError::Fallback(_)) => Ok(None),
+            Err(err) => Err(op_err(err)),
+        }
+    }
+
+    fn erase_soft_seams(&mut self) -> usize {
+        self.inner.erase_soft_seams()
     }
 
     fn delete_face_loop(&mut self, points: Vec<[f64; 3]>, candidates: Vec<u128>)
