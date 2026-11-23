@@ -667,7 +667,7 @@ impl Gallery {
                 ], &mut Vec::new());
                 ui.add_space(SPACE_XS);
                 let (sample, _) = ui.allocate_exact_size(vec2(44., 16.), Sense::hover());
-                hatch_sample(ui, sample, "brick");
+                hatch_sample(ui, sample, "brick", None);
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing = vec2(SPACE_XS, 0.);
                     ui.add_space(SPACE_S);

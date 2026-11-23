@@ -212,6 +212,7 @@ pub struct Node {
     /// The active column set's cells (Drawing: colour, line type, weight,
     /// print; Export: class, predefined type).
     cells: Vec<String>,
+    hatch: Option<Box<kit::PaperMarks>>,
 }
 
 pub struct Column {
@@ -421,6 +422,7 @@ impl Ui {
             depth: g(&n, 0) as usize, count: g(&n, 1) as u32, problems: g(&n, 2) as u32, active: g(&n, 3) != 0,
             row: g(&n, 4) as u8, eye: g(&n, 5) as i8, lock: g(&n, 6) as i8, expandable: g(&n, 7) != 0,
             expanded: g(&n, 8) != 0, selected: g(&n, 9) as u32, mark: g(&n, 10) as u8,
+            hatch: kit::hatch_override(t.get(5..).unwrap_or_default()).map(Box::new),
             cells: t.get(5..).map(|c| c.to_vec()).unwrap_or_default(),
         }}).collect();
         if col.highlighted.as_ref().is_some_and(|k| !k.starts_with("n:") && !k.starts_with("preview-tag:") &&
@@ -1762,7 +1764,7 @@ impl Ui {
                                             if let Some((a, b)) = slot {
                                                 let sample = Rect::from_min_max(pos2(a,cy-6.),pos2(b,cy+6.));
                                                 if index == 4 {
-                                                    kit::hatch_sample(ui, sample, &cell(4));
+                                                    kit::hatch_sample(ui, sample.expand2(vec2(0., 2.)), &cell(4), n.hatch.as_deref());
                                                 } else {
                                                     kit::line_sample(ui, sample, &cell(2), if index == 1 { cells[1].as_str() } else { "continuous" }, ink_c);
                                                 }

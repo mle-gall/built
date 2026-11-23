@@ -39,6 +39,50 @@ fn context_keys(group: &Bound<'_, PyAny>, tree: &Bound<'_, PyAny>) -> PyResult<H
     Ok(inside)
 }
 
+// Families are stored as [angle, x, y, shift, spacing, dashes] in a .built file.
+fn imported_families(scene: &Bound<'_, PyAny>, name: &str) -> Option<String> {
+    let entries = scene
+        .getattr("hatch_patterns")
+        .ok()?
+        .get_item(name)
+        .ok()?
+        .get_item("families")
+        .ok()?;
+    let families: Vec<_> = entries
+        .try_iter()
+        .ok()?
+        .take(64)
+        .filter_map(|entry| {
+            let entry = entry.ok()?;
+            let number = |i| {
+                entry
+                    .get_item(i)
+                    .ok()?
+                    .extract::<f64>()
+                    .ok()
+                    .filter(|v| v.is_finite())
+            };
+            let dashes: Vec<f64> = entry
+                .get_item(5)
+                .ok()?
+                .try_iter()
+                .ok()?
+                .take(32)
+                .map(|v| v.ok()?.extract::<f64>().ok().filter(|v| v.is_finite()))
+                .collect::<Option<_>>()?;
+            Some((
+                number(0)?,
+                number(1)?,
+                number(2)?,
+                number(3)?,
+                number(4)?,
+                dashes,
+            ))
+        })
+        .collect();
+    serde_json::to_string(&families).ok()
+}
+
 #[pyfunction]
 pub(crate) fn project_sidebar(
     scene: &Bound<'_, PyAny>,
@@ -103,6 +147,15 @@ pub(crate) fn project_sidebar(
         }
         tags.append(&mut rows);
         rows = tags;
+    }
+    // Imported PAT definitions belong to the document, while the angle and
+    // scale live on each tag. Supply the families to both kinds of Drawing row.
+    for (text, _) in &mut rows {
+        if let Some(name) = text.get(9).and_then(|hatch| hatch.strip_prefix("pat:")) {
+            if let Some(families) = imported_families(scene, name) {
+                text.push(families);
+            }
+        }
     }
     let mut path = Vec::new();
     let mut context = project_context_rows(scene, query, expanded.clone())?;

@@ -1707,23 +1707,36 @@ pub(super) fn fit(ui: &egui::Ui, text: &str, font: egui::FontId, color: Color32,
     ui.painter().layout_job(job)
 }
 
-/// Contact sheet of the model's standard paper hatch marks at four pixels/mm.
+/// Native samples of the standard cut patterns. The geometry is an 8 × 3 mm
+/// window of core.hatches.hatch_marks, clipped and rounded to 0.01 paper mm.
 pub const HATCH_KEYS: &str = include_str!("assets/hatches.txt");
 
-pub fn hatch_sample(ui: &egui::Ui, rect: Rect, key: &str) {
-    ui.painter().rect_filled(rect, R_INSET, WELL);
-    let Some(index) = HATCH_KEYS.lines().position(|k| k == key) else { return };
-    let id = egui::Id::new("paper hatch samples");
-    let texture = ui.ctx().data(|d| d.get_temp::<egui::TextureHandle>(id)).unwrap_or_else(|| {
-        let image = image::load_from_memory(include_bytes!("assets/hatches.png")).expect("bundled hatch samples").to_rgba8();
-        let texture = ui.ctx().load_texture("paper hatches", egui::ColorImage::from_rgba_unmultiplied(
-            [image.width() as usize,image.height() as usize], image.as_raw()), egui::TextureOptions::LINEAR);
-        ui.ctx().data_mut(|d| d.insert_temp(id,texture.clone()));
-        texture
-    });
-    let height = HATCH_KEYS.lines().count().div_ceil(8) as f32;
-    let uv = Rect::from_min_size(pos2((index%8) as f32/8.,(index/8) as f32/height),vec2(1./8.,1./height));
-    ui.painter().image(texture.id(), rect.shrink(1.), uv, INK_2);
+mod hatch;
+pub(super) use hatch::{hatch_override, PaperMarks};
+
+pub fn hatch_sample(ui: &egui::Ui, rect: Rect, key: &str, custom: Option<&PaperMarks>) {
+    let painter = ui.painter();
+    painter.rect_filled(rect, R_INSET, WELL);
+    let paper = rect.shrink(1.);
+    if key == "solid" {
+        painter.rect_filled(paper, R_INSET, INK_2);
+        return;
+    }
+    let Some(marks) = custom.or_else(|| hatch::standard(key)) else { return };
+    let scale = (paper.width() / 8.).max(paper.height() / 3.);
+    let origin = paper.center() - vec2(4., 1.5) * scale;
+    let pos = |x, y| origin + vec2(x, y) * scale;
+    let painter = painter.with_clip_rect(painter.clip_rect().intersect(paper));
+    let stroke = Stroke::new((0.16 * scale).max(1. / ui.ctx().pixels_per_point()), INK_2);
+    for &[x, y, u, v] in &marks.lines {
+        painter.line_segment([pos(x, y), pos(u, v)], stroke);
+    }
+    for &[x, y] in &marks.dots {
+        painter.circle_filled(pos(x, y), stroke.width * 0.9, INK_2);
+    }
+    for &[x, y, r] in &marks.circles {
+        painter.circle_stroke(pos(x, y), r * scale, stroke);
+    }
 }
 
 pub fn line_sample(ui: &egui::Ui, rect: Rect, mm: &str, pattern: &str, color: Color32) {
