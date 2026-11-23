@@ -614,7 +614,8 @@ impl Gallery {
                 caption(ui, "Line samples");
                 {
                     let (r, _) = ui.allocate_exact_size(vec2(w.min(160.), 14.), Sense::hover());
-                    line_sample(ui, r, "0.35", "dashed", INK);
+                    line_sample(ui, r.with_max_x(r.center().x), "0.35", "dashed", INK);
+                    line_type_preview(ui,r.with_min_x(r.center().x),&[4., -1.], "GAS", 2.5, INK);
                 }
                 ui.add(search(&mut self.dock_filter, "Filter nodes").desired_width(w));
                 ui.spacing_mut().item_spacing = vec2(0., 0.);

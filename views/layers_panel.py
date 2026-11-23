@@ -21,7 +21,7 @@ from PySide6.QtCore import (QItemSelectionModel, QPoint, QPointF, QRectF, Qt,
                             QTimer, Signal)
 from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtGui import QAction, QBrush
-from PySide6.QtWidgets import (QAbstractItemView, QApplication, QDialog,
+from PySide6.QtWidgets import (QAbstractItemView, QApplication,
                                QFrame,
                                QDockWidget,
                                QHBoxLayout, QHeaderView, QLineEdit, QMenu,
@@ -463,7 +463,7 @@ class _LineColourRow(QWidget):
         box.addLayout(row)
         group = QButtonGroup(self)
         self.buttons = {}
-        for value, label in LineTypeDialog.COLOURS:
+        for value, label in LINE_COLOURS:
             b = QToolButton(self)
             b.setCheckable(True)
             b.setToolTip(tr(label))
@@ -485,7 +485,7 @@ class _LineColourRow(QWidget):
         from views.hatch_paint import any_colour_chip, colour_chip
         key = self.key()
         mine = L.linetype_color(key, self._panel._scene())
-        fixed = [v for v, _t in LineTypeDialog.COLOURS
+        fixed = [v for v, _t in LINE_COLOURS
                  if isinstance(v, tuple)]
         dpr = self.devicePixelRatioF()
         for value, b in self.buttons.items():
@@ -505,7 +505,7 @@ class _LineColourRow(QWidget):
                 on = mine == value
             b.setIcon(QIcon(icon))
             b.setChecked(on)
-        name = next((t for v, t in LineTypeDialog.COLOURS if v == mine),
+        name = next((t for v, t in LINE_COLOURS if v == mine),
                     "Other colour…" if mine is not None else "By layer")
         self.title.setText(
             "<b>" + tr("Colour of the line").upper() + "</b> · "
@@ -2125,263 +2125,11 @@ class HatchGrid(QWidget):
         super().keyPressEvent(event)
 
 
-class LineTypeDialog(QDialog):
-    """Make or edit a line type, the way the hatch picker is laid out: the
-    line itself on a card at the top, drawn as it is being made — words
-    and all — then its name, its pieces in paper mm (a dash > 0, a gap
-    < 0, a dot 0) typed or added with a button, and words to write along
-    it (GAS, AGUA…) with their height."""
-
-    #: The preview card, in px, and how many px a paper mm takes in it.
-    PREVIEW = (420, 64)
-    PX_PER_MM = 4.0
-
-    #: The colours offered for a line type: by layer, then the usual ones of
-    #: services drawings — gas yellow, water blue, power red, telecoms
-    #: green — black, and any other.
-    COLOURS = ((None, "By layer"), ((0.0, 0.0, 0.0), "Black"),
-               ((0.85, 0.65, 0.0), "Yellow"), ((0.0, 0.40, 0.85), "Blue"),
-               ((0.85, 0.10, 0.10), "Red"), ((0.0, 0.55, 0.25), "Green"),
-               ("other", "Other colour…"))
-    CHIP = (26, 20)
-
-    def __init__(self, parent=None, name: str = "", pattern=None,
-                 text: str = "", text_size: float = 2.5,
-                 editing: bool = False, color=None) -> None:
-        super().__init__(parent)
-        self._colour = L.clean_line_colour(color)
-        from PySide6.QtWidgets import (QDialogButtonBox, QDoubleSpinBox,
-                                       QFrame, QGridLayout, QLabel,
-                                       QPushButton, QVBoxLayout)
-        self.setWindowTitle(tr("Edit line type") if editing
-                            else tr("New line type"))
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(12, 12, 12, 12)
-        outer.setSpacing(10)
-        # 1. The line, on a card like the hatch preview.
-        card = QFrame(self)
-        card.setObjectName("lineTypeCard")
-        card.setStyleSheet(
-            "QFrame#lineTypeCard { border: 1px solid palette(mid);"
-            " border-radius: 6px; background: palette(base); }")
-        box = QVBoxLayout(card)
-        box.setContentsMargins(8, 8, 8, 6)
-        box.setSpacing(3)
-        self.preview = QLabel(card)
-        self.preview.setFixedSize(*self.PREVIEW)
-        box.addWidget(self.preview)
-        self.problem = QLabel(card)
-        self.problem.setStyleSheet("font-size: 8pt; color: #c0392b;")
-        self.problem.setWordWrap(True)
-        box.addWidget(self.problem)
-        outer.addWidget(card)
-
-        def caption(text):
-            label = QLabel(text, self)
-            label.setStyleSheet("font-size: 8pt; font-weight: bold;")
-            return label
-        grid = QGridLayout()
-        grid.setHorizontalSpacing(8)
-        grid.setVerticalSpacing(4)
-        # 2. Name.
-        grid.addWidget(caption(tr("Name")), 0, 0)
-        self.name_edit = QLineEdit(name or tr("My line"), self)
-        grid.addWidget(self.name_edit, 0, 1, 1, 2)
-        # 3. Pieces, typed or added.
-        grid.addWidget(caption(tr("Pieces (mm)")), 1, 0)
-        self.pattern_edit = QLineEdit(
-            ", ".join(f"{v:g}" for v in (pattern or (6.0, -1.5, 0.0, -1.5))),
-            self)
-        self.pattern_edit.setToolTip(tr(
-            "Millimetres on paper, separated by commas: a dash (6), a gap "
-            "(-1.5), a dot (0)"))
-        grid.addWidget(self.pattern_edit, 1, 1, 1, 2)
-        quick = QHBoxLayout()
-        quick.setSpacing(4)
-        css = ("QPushButton { font-size: 8pt; padding: 2px 8px;"
-               " border: 1px solid palette(mid); border-radius: 10px; }"
-               "QPushButton:hover { background: palette(midlight); }")
-        for text_, value in ((tr("+ Dash"), "3"), (tr("+ Gap"), "-1.5"),
-                             (tr("+ Dot"), "0")):
-            b = QPushButton(text_, self)
-            b.setStyleSheet(css)
-            b.clicked.connect(lambda _c=False, v=value: self._append(v))
-            quick.addWidget(b)
-        clear = QPushButton(tr("Clear"), self)
-        clear.setStyleSheet(css)
-        clear.clicked.connect(lambda: self.pattern_edit.setText(""))
-        quick.addWidget(clear)
-        quick.addStretch(1)
-        grid.addLayout(quick, 2, 1, 1, 2)
-        # 4. Words along it.
-        grid.addWidget(caption(tr("Text in the line")), 3, 0)
-        self.text_edit = QLineEdit(text or "", self)
-        self.text_edit.setPlaceholderText(tr("GAS, AGUA, ELEC…"))
-        self.text_edit.setToolTip(tr(
-            "Words written along the line, in a gap of their own after the "
-            "pieces — the line of a gas pipe, a water main, a cable"))
-        self.text_edit.setMaxLength(24)
-        grid.addWidget(self.text_edit, 3, 1)
-        self.size_spin = QDoubleSpinBox(self)
-        self.size_spin.setRange(0.5, 20.0)
-        self.size_spin.setDecimals(1)
-        self.size_spin.setSingleStep(0.5)
-        self.size_spin.setSuffix(" mm")
-        self.size_spin.setValue(float(text_size or 2.5))
-        self.size_spin.setToolTip(tr("The height of the text on paper"))
-        grid.addWidget(self.size_spin, 3, 2)
-        # 5. Its colour: the layer's, or one of its own.
-        grid.addWidget(caption(tr("Colour")), 4, 0)
-        grid.addLayout(self._colour_row(), 4, 1, 1, 2)
-        grid.setColumnStretch(1, 1)
-        outer.addLayout(grid)
-        self.buttons = QDialogButtonBox(
-            QDialogButtonBox.Ok | QDialogButtonBox.Cancel, parent=self)
-        self.buttons.accepted.connect(self.accept)
-        self.buttons.rejected.connect(self.reject)
-        #: «Delete line type» pressed (editing only): the caller deletes it.
-        self.deleted = False
-        if editing:
-            gone = self.buttons.addButton(tr("Delete line type"),
-                                          QDialogButtonBox.DestructiveRole)
-            gone.clicked.connect(self._delete)
-        outer.addWidget(self.buttons)
-        for edit in (self.pattern_edit, self.name_edit, self.text_edit):
-            edit.textChanged.connect(self._refresh)
-        self.size_spin.valueChanged.connect(self._refresh)
-        self._refresh()
-
-    def _delete(self) -> None:
-        self.deleted = True
-        self.accept()
-
-    def _colour_row(self):
-        """Chips like the hatch picker's: by layer, a few usual colours,
-        any other — the one the line type has ticked."""
-        from PySide6.QtCore import QSize
-        from PySide6.QtWidgets import QButtonGroup
-        from views.hatch_paint import any_colour_chip, colour_chip
-        row = QHBoxLayout()
-        row.setSpacing(3)
-        group = QButtonGroup(self)
-        fixed = [v for v, _t in self.COLOURS if isinstance(v, tuple)]
-        self.colour_buttons = {}
-        css = HatchGrid._TILE_CSS
-        for value, label in self.COLOURS:
-            b = QToolButton(self)
-            b.setCheckable(True)
-            b.setToolTip(tr(label))
-            b.setStyleSheet(css)
-            b.setIconSize(QSize(*self.CHIP))
-            if value is None:
-                # As the hatch picker's «The layer's colour».
-                b.setIcon(QIcon(colour_chip(
-                    *self.CHIP, QColor.fromRgbF(0.55, 0.35, 0.25),
-                    dpr=self.devicePixelRatioF(), strokes=True)))
-                on = self._colour is None
-            elif value == "other":
-                on = self._colour is not None and self._colour not in fixed
-                b.setIcon(QIcon(any_colour_chip(
-                    *self.CHIP, QColor.fromRgbF(*self._colour) if on
-                    else None, dpr=self.devicePixelRatioF())))
-                b.setText(tr(label))
-                b.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
-            else:
-                b.setIcon(QIcon(colour_chip(*self.CHIP,
-                                            QColor.fromRgbF(*value),
-                                            dpr=self.devicePixelRatioF(),
-                                            strokes=True)))
-                on = self._colour == value
-            b.setChecked(on)
-            b.clicked.connect(lambda _c=False, v=value: self._pick_colour(v))
-            group.addButton(b)
-            row.addWidget(b)
-            self.colour_buttons[value] = b
-        row.addStretch(1)
-        return row
-
-    def _pick_colour(self, value) -> None:
-        if value == "other":
-            from views.color_dialog import get_color
-            start = (QColor.fromRgbF(*self._colour) if self._colour
-                     else QColor(220, 120, 0))
-            picked = get_color(start, self, tr("Other colour…"))
-            if not picked.isValid():
-                for v, b in self.colour_buttons.items():
-                    b.setChecked(v == self._colour or (
-                        v == "other" and self._colour is not None
-                        and self._colour not in self.colour_buttons))
-                return
-            value = tuple(round(c, 4) for c in picked.getRgbF()[:3])
-            from views.hatch_paint import any_colour_chip
-            self.colour_buttons["other"].setIcon(QIcon(any_colour_chip(
-                *self.CHIP, QColor.fromRgbF(*value),
-                dpr=self.devicePixelRatioF())))
-            self.colour_buttons["other"].setChecked(True)
-        self._colour = value
-        self._refresh()
-
-    def result_color(self):
-        """The line type's own colour, ``(r, g, b)``, or ``None`` (by
-        layer)."""
-        return self._colour
-
-    def _append(self, value: str) -> None:
-        text = self.pattern_edit.text().strip()
-        self.pattern_edit.setText(f"{text}, {value}" if text else value)
-
-    def name(self) -> str:
-        return self.name_edit.text().strip()
-
-    def result_pattern(self):
-        """The pieces as typed, in mm, or ``None`` if they cannot be a
-        line type."""
-        try:
-            nums = [float(v) for v in self.pattern_edit.text().replace(
-                ";", ",").split(",") if v.strip()]
-        except ValueError:
-            return None
-        return L.clean_pattern(nums)
-
-    def result_text(self) -> tuple:
-        """The words to write along the line and their height (mm); an
-        empty text for none."""
-        return self.text_edit.text().strip(), float(self.size_spin.value())
-
-    def _refresh(self) -> None:
-        from PySide6.QtWidgets import QApplication, QDialogButtonBox
-        pattern = self.result_pattern()
-        ok = pattern is not None and bool(self.name())
-        self.buttons.button(QDialogButtonBox.Ok).setEnabled(ok)
-        self.problem.setText("" if pattern is not None else tr(
-            "Use dashes and gaps: at least one piece drawn (≥ 0) and one gap "
-            "(< 0)"))
-        self.problem.setVisible(pattern is None)
-        w, h = self.PREVIEW
-        dpr = self.devicePixelRatioF()
-        px = QPixmap(int(w * dpr), int(h * dpr))
-        px.setDevicePixelRatio(dpr)
-        px.fill(QColor(255, 255, 255))
-        if pattern is not None:
-            words, size = self.result_text()
-            drawn, spec = L.with_text(pattern, words, size)
-            p = QPainter(px)
-            p.setRenderHint(QPainter.Antialiasing)
-            colour = getattr(self, "_colour", None)
-            ink = (QColor.fromRgbF(*colour) if colour
-                   else QColor(30, 36, 44))
-            k = self.PX_PER_MM
-            p.setPen(line_pen("", ink, 1.6, k, L.drawn_dashes(drawn)))
-            p.drawLine(QPointF(10, h / 2), QPointF(w - 10, h / 2))
-            if spec is not None:
-                from views.hatch_paint import paint_line_text
-                paint_line_text(p, [(10.0, h / 2, w - 10.0, h / 2)],
-                                (spec["text"], spec["text_size"],
-                                 L.text_offset(drawn, spec["text_at"]),
-                                 sum(L.drawn_dashes(drawn))), ink, k)
-            p.end()
-        self.preview.setPixmap(px)
-        _ = QApplication
+LINE_COLOURS = ((None, "By layer"), ((0.0, 0.0, 0.0), "Black"),
+           ((0.85, 0.65, 0.0), "Yellow"), ((0.0, 0.40, 0.85), "Blue"),
+           ((0.85, 0.10, 0.10), "Red"), ((0.0, 0.55, 0.25), "Green"),
+           ("other", "Other colour…"))
+LINE_CHIP = (26, 20)
 
 
 class _LineSample(QWidget):
@@ -3745,9 +3493,6 @@ class LayersPanel(QWidget):
                      self.tree.columnWidth(column), row.height())
         self._drop(menu, global_rect(self.tree.viewport(), cell))
 
-    #: The largest pattern file read, in bytes.
-    PAT_MAX_BYTES = 4 * 1024 * 1024
-
     def import_pat_file(self, path) -> int:
         """Bring the patterns of the pattern file ``path`` into the document
         (``Scene.hatch_patterns``; one of the same name is replaced).
@@ -3766,21 +3511,8 @@ class LayersPanel(QWidget):
         """Write every pattern drawn only with lines — the built-in ones
         (as ``IT-<alias>``) and the document's imported ones — to the
         pattern file ``path``. Returns how many went in."""
-        from pathlib import Path
-        from core.hatches import (HATCH_INFO, HATCH_LABELS, HATCH_ORDER,
-                                  line_families, to_pat)
-        entries = []
-        for key in HATCH_ORDER:
-            families = line_families(key)
-            if families:
-                entries.append(("IT-" + HATCH_INFO[key][0],
-                                HATCH_LABELS[key], families))
-        for name, raw in sorted((getattr(self._scene(), "hatch_patterns",
-                                         None) or {}).items()):
-            entries.append((name, raw.get("label", name),
-                            raw.get("families", [])))
-        Path(path).write_text(to_pat(entries), encoding="utf-8")
-        return sum(1 for e in entries if e[2])
+        from ingetrazo_core import export_style_file
+        return export_style_file(self._scene(), path, "pat")
 
     def _export_hatches(self) -> None:
         """«Export .pat…»: pick where, write the file, say how many."""
@@ -3810,62 +3542,26 @@ class LayersPanel(QWidget):
         being edited, renamed, its layers following — and give it to the
         layers ``names``. Returns its key, or ``None`` for a pattern that
         cannot be drawn."""
-        pattern = L.clean_pattern(pattern)
-        name = (name or "").strip()[:64]
-        if pattern is None or not name:
+        import json
+        from ingetrazo_core import edit_line_type
+        vp = self._window.viewport
+        draft = dict(name=name, pieces=pattern, original=replaces, text=text,
+                     text_size=text_size, color=color, tags=names)
+        try:
+            key = edit_line_type(vp.history, "save", json.dumps(draft))
+        except ValueError:
             return None
-        scene = self._scene()
-        own = dict(getattr(scene, "line_types", None) or {})
-        drawn, spec = L.with_text(pattern, text, text_size)
-        drawn = L.clean_pattern(drawn)
-        if drawn is None:
-            return None
-        if replaces and replaces != name:
-            own.pop(replaces, None)
-            for ly in scene.layers:
-                if ly.linetype == L.CUSTOM_LINETYPE + replaces:
-                    ly.linetype = L.CUSTOM_LINETYPE + name
-        # ``pieces``: as they were typed, for the editor to show again.
-        own[name] = dict({"label": name, "pattern": drawn,
-                          "pieces": pattern}, **(spec or {}))
-        colour = L.clean_line_colour(color)
-        if colour is not None:
-            own[name]["color"] = colour
-        scene.line_types = own
-        key = L.CUSTOM_LINETYPE + name
-        if names:
-            self.set_style(names, linetype=key)
-        else:
-            self._touch()
+        vp.notify_scene_changed()
+        self._refresh_after_change()
         return key
 
     def new_line_type(self, names) -> None:
-        """«New line type…»: the editor; on OK, the new type for ``names``."""
-        dlg = LineTypeDialog(self)
-        if dlg.exec() and dlg.result_pattern() is not None:
-            words, size = dlg.result_text()
-            self.add_line_type(dlg.name(), dlg.result_pattern(), names,
-                               words, size, color=dlg.result_color())
+        from views.wgpu_ui import open_line_type
+        open_line_type(self._window, "", names)
 
     def edit_line_type(self, name: str) -> None:
-        """«Edit…» on one of the document's line types: the editor with it
-        filled in; on OK, it changes (and its layers with it)."""
-        entry = (getattr(self._scene(), "line_types", None) or {}).get(name)
-        if not isinstance(entry, dict):
-            return
-        dlg = LineTypeDialog(self, name=name,
-                             pattern=entry.get("pieces") or entry["pattern"],
-                             text=entry.get("text", ""),
-                             text_size=entry.get("text_size", 2.5),
-                             editing=True, color=entry.get("color"))
-        if dlg.exec() and dlg.deleted:
-            self.delete_line_type(name)
-            return
-        if dlg.result() and dlg.result_pattern() is not None:
-            words, size = dlg.result_text()
-            self.add_line_type(dlg.name(), dlg.result_pattern(), (), words,
-                               size, replaces=name,
-                               color=dlg.result_color())
+        from views.wgpu_ui import open_line_type
+        open_line_type(self._window, name, ())
 
     def set_linetype_colour(self, key, rgb) -> None:
         """Line type ``key`` in colour ``rgb`` (``None``: by layer) — on the
@@ -3883,22 +3579,22 @@ class LayersPanel(QWidget):
         scene = self._scene()
         mine = L.linetype_color(key, scene)
         menu = QMenu(self)
-        fixed = [v for v, _t in LineTypeDialog.COLOURS
+        fixed = [v for v, _t in LINE_COLOURS
                  if isinstance(v, tuple)]
         dpr = self.devicePixelRatioF()
-        for value, label in LineTypeDialog.COLOURS:
+        for value, label in LINE_COLOURS:
             if value is None:
-                icon = colour_chip(*LineTypeDialog.CHIP,
+                icon = colour_chip(*LINE_CHIP,
                                    QColor.fromRgbF(0.55, 0.35, 0.25),
                                    dpr=dpr, strokes=True)
                 on = mine is None
             elif value == "other":
                 on = mine is not None and mine not in fixed
-                icon = any_colour_chip(*LineTypeDialog.CHIP,
+                icon = any_colour_chip(*LINE_CHIP,
                                        QColor.fromRgbF(*mine) if on
                                        else None, dpr=dpr)
             else:
-                icon = colour_chip(*LineTypeDialog.CHIP,
+                icon = colour_chip(*LINE_CHIP,
                                    QColor.fromRgbF(*value), dpr=dpr,
                                    strokes=True)
                 on = mine == value
@@ -3919,30 +3615,30 @@ class LayersPanel(QWidget):
         from views.hatch_paint import any_colour_chip, colour_chip
         scene = self._scene()
         mine = L.linetype_color(key, scene)
-        fixed = [v for v, _t in LineTypeDialog.COLOURS
+        fixed = [v for v, _t in LINE_COLOURS
                  if isinstance(v, tuple)]
         dpr = self.devicePixelRatioF()
 
         def chip(value, on_other=None):
             if value is None:
                 return QIcon(colour_chip(
-                    *LineTypeDialog.CHIP, QColor.fromRgbF(0.55, 0.35, 0.25),
+                    *LINE_CHIP, QColor.fromRgbF(0.55, 0.35, 0.25),
                     dpr=dpr, strokes=True))
             if value == "other":
                 return QIcon(any_colour_chip(
-                    *LineTypeDialog.CHIP,
+                    *LINE_CHIP,
                     QColor.fromRgbF(*on_other) if on_other else None,
                     dpr=dpr))
-            return QIcon(colour_chip(*LineTypeDialog.CHIP,
+            return QIcon(colour_chip(*LINE_CHIP,
                                      QColor.fromRgbF(*value), dpr=dpr,
                                      strokes=True))
-        current = next((t for v, t in LineTypeDialog.COLOURS if v == mine),
+        current = next((t for v, t in LINE_COLOURS if v == mine),
                        "Other colour…" if mine is not None else "By layer")
         sub = QMenu(tr("Colour of the line: {colour}",
                        colour=tr(current).rstrip("…")), menu)
         sub.setIcon(chip(mine if mine in fixed or mine is None else "other",
                          mine))
-        for value, label in LineTypeDialog.COLOURS:
+        for value, label in LINE_COLOURS:
             other_on = (value == "other" and mine is not None
                         and mine not in fixed)
             act = sub.addAction(chip(value, mine if other_on else None),
@@ -3970,46 +3666,34 @@ class LayersPanel(QWidget):
     def delete_line_type(self, name: str) -> None:
         """«Delete»: the line type goes; the layers that used it are inked
         continuous again."""
-        scene = self._scene()
-        own = dict(getattr(scene, "line_types", None) or {})
-        if own.pop(name, None) is None:
-            return
-        scene.line_types = own
-        for ly in scene.layers:
-            if ly.linetype == L.CUSTOM_LINETYPE + name:
-                ly.linetype = "continuous"
-        self._dirty_paint()
-        self._touch()
+        import json
+        from ingetrazo_core import edit_line_type
+        vp = self._window.viewport
+        if name in vp.scene.line_types:
+            edit_line_type(vp.history, "delete", json.dumps(dict(original=name)))
+            vp.notify_scene_changed()
+            self._refresh_after_change()
 
     def import_lin_file(self, path) -> tuple[int, list]:
         """Bring the simple line types of the line type file ``path`` into
         the document. Returns ``(how many, names left out)`` — those with
         text or shapes inside."""
-        from pathlib import Path
+        from ingetrazo_core import import_line_file
+        vp = self._window.viewport
         try:
-            data = Path(path).read_bytes()[:self.PAT_MAX_BYTES]
-        except OSError:
+            count, skipped = import_line_file(vp.history, path)
+        except (OSError, ValueError):
             return 0, []
-        try:
-            text = data.decode("utf-8")
-        except UnicodeDecodeError:
-            text = data.decode("latin-1")
-        found, skipped = L.parse_lin(text)
-        n = L.load_line_types(self._scene(), found)
-        if n:
-            self._touch()
-        return n, skipped
+        if count:
+            vp.notify_scene_changed()
+            self._refresh_after_change()
+        return count, skipped
 
     def export_lin_file(self, path) -> int:
         """Write the document's own line types to the line type file
         ``path``. Returns how many."""
-        from pathlib import Path
-        own = getattr(self._scene(), "line_types", None) or {}
-        entries = [(n, e.get("label", n), e["pattern"],
-                    L.clean_line_text(e, e["pattern"]))
-                   for n, e in sorted(own.items())]
-        Path(path).write_text(L.to_lin(entries), encoding="utf-8")
-        return len(entries)
+        from ingetrazo_core import export_style_file
+        return export_style_file(self._scene(), path, "lin")
 
     def _import_line_types(self) -> None:
         from pathlib import Path
@@ -4742,21 +4426,12 @@ class LayersPanel(QWidget):
         """The document's piece of a kind — ``(kind, size)``, ``None`` for
         the usual one: every layer of that kind is drawn with it, their own
         sizes giving way, chosen once for the whole document."""
-        from core.hatches import clean_brick, piece_kind
+        from ingetrazo_core import document_piece
         kind, size = kind_size
-        scene = self._scene()
-        bricks = dict(getattr(scene, "bricks", None) or {})
-        size = clean_brick(size) if size is not None else None
-        if size is None:
-            bricks.pop(kind, None)
-        else:
-            bricks[kind] = size
-        scene.bricks = bricks
-        for ly in scene.layers:
-            if piece_kind(ly.hatch) == kind:
-                ly.brick = None
-        self._dirty_paint()
-        self._touch()
+        vp = self._window.viewport
+        document_piece(vp.history, kind, size or [])
+        vp.notify_scene_changed()
+        self._refresh_after_change()
 
     def set_printable(self, names, on: bool) -> None:
         """Put the layers ``names`` on the sheets, or leave them out (still

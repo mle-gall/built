@@ -27,6 +27,8 @@ mod lens;
 use lens::Lens;
 mod tree_order;
 mod drawing;
+mod drawing_catalog;
+mod drawing_hatches;
 mod export;
 /// The large sheet over the dimmed model: Library, start page, Settings
 /// (views/chrome_sheet.py, docs/ui-patterns.md).
@@ -471,12 +473,28 @@ impl Ui {
         if let Some(col)=self.column.as_mut(){col.overview=lens::Overview::read(filename,tree,counts)?;}
         Ok(())
     }
-    pub fn style_catalog(&mut self, owner: usize, lines: Vec<String>, patterns: String) {
+    pub fn style_catalog(&mut self, owner: usize, lines: Vec<String>, patterns: String, scene: Option<&pyo3::Bound<'_,pyo3::PyAny>>) -> pyo3::PyResult<()> {
         if let Some(col)=self.column.as_mut() {
             if col.styles.owner != owner { col.styles = Default::default(); col.styles.owner=owner; col.proposal_dismissed=false; col.highlighted=None; col.issue_at=None; }
             col.styles.lines=lines;
             col.styles.set_patterns(patterns);
+            if let Some(scene)=scene { col.styles.catalog.sync(scene)?; col.styles.hatches.sync(scene)?; }
         }
+        Ok(())
+    }
+    pub fn open_line_type(&mut self,name:&str,tags:Vec<String>)->bool {
+        let Some(col)=self.column.as_mut() else{return false;};
+        col.lens=Lens::Drawing;
+        self.plugins.showing=false;
+        col.mode.clear();
+        col.styles.catalog.open_line(name,tags)
+    }
+    pub fn hatch_preference(&mut self,py:pyo3::Python<'_>,verb:&str,value:&str)->pyo3::PyResult<()> {
+        if let Some(col)=self.column.as_mut(){col.styles.hatches.preference(py,verb,value)?;}
+        Ok(())
+    }
+    pub fn drawing_edit_applied(&mut self,verb:&str,key:&str){
+        if let Some(col)=self.column.as_mut(){col.styles.applied(verb,key);}
     }
     pub fn set_export_focus(&mut self, node: Option<String>, placements: Vec<Vec<String>>) {
         if let Some(col) = self.column.as_mut() {
@@ -879,6 +897,7 @@ impl Ui {
             ("recent_preview", self.glass.showing_preview()),
             ("tool_rail", visible("palette") || visible("sheets_rail")), ("dock", visible("column") || visible("sheets_dock")), ("bottom_bar", visible("bottom")),
             ("view_menu", self.view_open),
+            ("drawing_line", self.column.as_ref().is_some_and(|c| c.lens==Lens::Drawing && c.styles.catalog.editing_line())),
             ("review", self.review),
             ("dialog", self.dialog.is_some()),
             ("choice", self.dialog.as_ref().is_some_and(|d| d.choice_open.is_some()) || self.lsheet.choice_open()),
@@ -1605,7 +1624,7 @@ impl Ui {
                         export::strip(ui,&self.panels.data["readiness"],&mut cmds);
                     } else if col.lens == Lens::Drawing {
                         ui.horizontal(|ui| {
-                            kit::caption_plain(ui, "Style for all views");
+                            if kit::quiet(ui, "Tag folders").clicked() { col.styles.pick_folder(""); }
                             egui::ComboBox::from_id_salt("drawing_visibility").selected_text("Visibility set").show_ui(ui, |ui| {
                                 for set in &visibility_sets {
                                     if ui.selectable_label(false, &set.1).clicked() { cmds.push(format!("tab:{}",set.0)); }
@@ -1937,6 +1956,9 @@ impl Ui {
                                         actions.push(format!("lock\u{1f}{}", n.key));
                                     } else if col.lens == Lens::Drawing && n.cells.len() >= 7 && !linked && col.filing.is_none() {
                                         col.styles.pick(n, ui.input(|i| i.modifiers.command || i.modifiers.shift));
+                                    } else if col.lens==Lens::Drawing && n.key.starts_with("preview-folder:") {
+                                        col.styles.pick_folder(&n.key["preview-folder:".len()..]);
+                                        col.highlighted=Some(n.key.clone());
                                     } else if n.row == 9 {
                                         actions.push(format!("toggle\u{1f}{}",n.key));
                                     } else if n.row == 6 {
@@ -1979,7 +2001,7 @@ impl Ui {
                         });
                         return;
                     }
-                    if col.mode.is_empty() && col.lens == Lens::Drawing && col.styles.draw(ui, &mut actions) { return; }
+                    if col.mode.is_empty() && col.lens == Lens::Drawing && (col.styles.active() || (col.inspector_title.is_empty() && selection.is_none())) && col.styles.draw(ui, &mut actions) { return; }
                     egui::ScrollArea::vertical().id_salt("inspector").auto_shrink([false, false]).show(ui, |ui| {
                         ui.spacing_mut().item_spacing = vec2(0.0, SPACE_XS);
                         if col.lens == Lens::Export {

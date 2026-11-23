@@ -1713,23 +1713,6 @@ def test_the_panel_imports_and_exports_line_type_files(win, tmp_path):
     assert found["GAS"]["text"] == "GAS"           # written, read back
 
 
-def test_the_editor_draws_as_it_is_typed_and_refuses_a_bad_pattern():
-    from PySide6.QtWidgets import QDialogButtonBox
-    from views.layers_panel import LineTypeDialog
-    dlg = LineTypeDialog(None, name="Borde", pattern=[6, -1.5])
-    ok = dlg.buttons.button(QDialogButtonBox.Ok)
-    assert ok.isEnabled() and dlg.result_pattern() == [6.0, -1.5]
-    dlg.pattern_edit.setText("5, 5")              # no gap: not a line type
-    assert not ok.isEnabled() and dlg.problem.text()
-    dlg.pattern_edit.setText("")
-    for b in dlg.findChildren(type(ok)):
-        if b.text() in ("+ Dash", "+ Gap", "+ Dot"):
-            b.click()
-    assert dlg.result_pattern() == [3.0, -1.5, 0.0]
-    assert ok.isEnabled()
-
-
-
 # ---- Bonds: brick by brick, by the wall's thickness and the brick's size -----
 
 def test_english_bond_alternates_headers_and_stretchers():
@@ -2560,20 +2543,6 @@ def test_a_pinned_pattern_comes_first_and_stays():
     QSettings().setValue(HatchGrid.FAVOURITES_KEY, [])
 
 
-def test_the_editor_writes_words_along_the_line():
-    from PySide6.QtWidgets import QDialogButtonBox
-    from views.layers_panel import LineTypeDialog
-    dlg = LineTypeDialog(None, name="Gas", pattern=[8, -2])
-    dlg.text_edit.setText("GAS")
-    dlg.size_spin.setValue(2.0)
-    assert dlg.result_text() == ("GAS", 2.0)
-    assert dlg.buttons.button(QDialogButtonBox.Ok).isEnabled()
-    assert not dlg.preview.pixmap().isNull()
-    edit = LineTypeDialog(None, name="Gas", pattern=[8, -2], text="GAS",
-                          editing=True)
-    assert edit.windowTitle() == "Edit line type"
-
-
 def test_the_panel_edits_and_deletes_its_line_types(win):
     panel = win.layers_dock.panel
     scene = win.viewport.scene
@@ -3222,19 +3191,6 @@ def test_the_line_type_colour_is_saved(tmp_path):
     assert tuple(back.line_types["Gas"]["color"]) == (0.85, 0.65, 0.0)
 
 
-def test_the_editor_picks_a_colour_for_the_line_type():
-    from views.layers_panel import LineTypeDialog
-    dlg = LineTypeDialog(None)
-    assert dlg.result_color() is None                   # by layer
-    assert dlg.colour_buttons[None].isChecked()
-    dlg.colour_buttons[(0.0, 0.40, 0.85)].click()
-    assert dlg.result_color() == (0.0, 0.40, 0.85)
-    again = LineTypeDialog(None, color=(0.85, 0.10, 0.10), editing=True)
-    assert again.colour_buttons[(0.85, 0.10, 0.10)].isChecked()
-    odd = LineTypeDialog(None, color=(0.3, 0.2, 0.1))
-    assert odd.colour_buttons["other"].isChecked()
-
-
 def test_the_panel_keeps_the_colour_it_is_given(win):
     panel = win.layers_dock.panel
     scene = win.viewport.scene
@@ -3311,14 +3267,14 @@ def test_a_built_in_line_type_takes_a_colour_of_the_document(tmp_path):
 
 
 def test_a_right_click_colours_any_line_type(win, monkeypatch):
-    from views.layers_panel import LineTypeDialog
+    from views.layers_panel import LINE_COLOURS
     panel = win.layers_dock.panel
     scene = win.viewport.scene
     picks = []
 
     def fake_popup(menu, _at):
         texts = [a.text() for a in menu.actions()]
-        assert texts == [l for _v, l in LineTypeDialog.COLOURS]
+        assert texts == [l for _v, l in LINE_COLOURS]
         next(a for a in menu.actions() if a.text() == picks[-1]).trigger()
 
     monkeypatch.setattr(panel, "_popup", fake_popup)
@@ -3414,7 +3370,7 @@ def test_enter_on_a_line_picks_it_and_keeps_it(win, monkeypatch):
 def test_the_line_panel_foot_and_the_pencil(win, monkeypatch):
     """Its foot: «New», import and export .lin, «Done»; an own line type
     has a pencil to edit it, and the editor can delete it."""
-    from views.layers_panel import LineTypeDialog, _LineSample
+    from views.layers_panel import _LineSample
     seen = {}
     panel0 = win.layers_dock.panel
     panel0.add_line_type("Borde", [6.0, -1.5], ())
@@ -3433,9 +3389,12 @@ def test_the_line_panel_foot_and_the_pencil(win, monkeypatch):
                              "Export .lin…"]
     assert seen["export"] and seen["pencil"] == ["lin:Borde"]
     assert seen["width"] < 360                        # still a narrow panel
-    monkeypatch.setattr(LineTypeDialog, "exec",
-                        lambda self: (self._delete(), True)[1])
+    from views import wgpu_ui
+    called = []
+    monkeypatch.setattr(wgpu_ui, "open_line_type", lambda win, name, tags: called.append(name))
     panel0.edit_line_type("Borde")
+    assert called == ["Borde"]
+    panel0.delete_line_type("Borde")
     assert "Borde" not in scene.line_types
 
 

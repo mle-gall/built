@@ -894,6 +894,20 @@ def _tree_model(view, scene, cv):
     return model
 
 
+def open_line_type(win, name, tags):
+    from views.chrome_dialogs import view_of
+    view = view_of(win)
+    if not getattr(view, "_ui_attached", False):
+        win.viewport.flash_status("Line type editing requires the native Drawing lens.")
+        return False
+    view._ui_lens, view._ui_mode, view._ui_tree_sig = 1, "", None
+    apply_dock_width(view)
+    _tree(view, win)
+    opened = view.renderer.ui_open_line_type(name, list(tags))
+    view.update()
+    return opened
+
+
 def _tree(view, win, *, discover=False):
     """Bind the membership index, revision and disclosure state to the native sidebar providers."""
     scene = getattr(win.viewport, "scene", None)
@@ -976,7 +990,7 @@ def _tree(view, win, *, discover=False):
         from PySide6.QtCore import QSettings
         view.renderer.ui_set_tree_sort(max(0, QSettings().value("ui/project_tree_sort", 0, type=int)))
         view._ui_sort_loaded = True
-    view.renderer.ui_set_style_catalog(id(scene), [*L.LINETYPES, *(L.CUSTOM_LINETYPE + key for key in scene.line_types)], scene.hatch_patterns)
+    view.renderer.ui_set_style_catalog(id(scene), [*L.LINETYPES, *(L.CUSTOM_LINETYPE + key for key in scene.line_types)], scene.hatch_patterns, scene if lens == 1 else None)
     view.renderer.ui_set_lens(lens)
     view.renderer.ui_set_mode({"library": "Library"}.get(mode, ""))
     view.renderer.ui_set_issues(bool(view.__dict__.get("_ui_issues", False)))
@@ -1647,6 +1661,46 @@ def _tree_action(win, view, action) -> None:
             _core(vp, "patch_record_field", **json.loads(rk))
             vp.notify_scene_changed()
             rebuild()
+        elif verb in ("exportpat", "exportlin"):
+            from ingetrazo_core import export_style_file
+            from views.filedialogs import file_dialogs
+            ext = verb[6:]
+            path, _ = file_dialogs.getSaveFileName(win, "Export drawing patterns", f"patterns.{ext}", f"Pattern files (*.{ext})")
+            if path and win.viewport.scene is scene:
+                try:
+                    count = export_style_file(scene, path, ext)
+                    vp.flash_status(f"{count} patterns written to {Path(path).name}")
+                except (OSError, ValueError) as exc:
+                    vp.flash_status(str(exc))
+        elif verb in ("editline", "tagfolder"):
+            from ingetrazo_core import edit_line_type, edit_tag_folder
+            edit = edit_line_type if verb == "editline" else edit_tag_folder
+            key = edit(vp.history, rk, extra)
+            vp.notify_scene_changed()
+            rebuild()
+            view.renderer.ui_drawing_applied("foldernew" if verb == "tagfolder" and rk == "new" else verb, key)
+        elif verb == "hatchpref":
+            view.renderer.ui_hatch_preference(rk, extra)
+        elif verb == "documentpiece":
+            import json
+            from ingetrazo_core import document_piece
+            document_piece(vp.history, rk, json.loads(extra))
+            view.renderer.ui_drawing_applied(verb, "")
+            vp.notify_scene_changed()
+            rebuild()
+        elif verb == "importlin":
+            from ingetrazo_core import import_line_file
+            from views.filedialogs import file_dialogs
+            path, _ = file_dialogs.getOpenFileName(win, "Import line types", "", "Line type files (*.lin)")
+            if path and win.viewport.scene is scene:
+                try:
+                    count, skipped = import_line_file(vp.history, path)
+                    omitted = ", ".join(skipped)
+                    vp.flash_status(f"{count} line types imported" + (f". Unsupported: {omitted}" if omitted else ""))
+                    vp.notify_scene_changed()
+                    rebuild()
+                except OSError as exc:
+                    vp.flash_status(str(exc))
         elif verb == "importpat":
             from core.i18n import tr
             from ingetrazo_core import import_hatch_file
@@ -1663,7 +1717,13 @@ def _tree_action(win, view, action) -> None:
         elif verb == "drawingpatch":
             import json
             targets, patch = json.loads(rk)
-            _core(vp, "edit_tag", tags=targets, field="style", value=json.dumps(patch))
+            result = _core(vp, "edit_tag", tags=targets, field="style", value=json.dumps(patch))
+            if result is None:
+                return
+            if result.get("rejected") or result.get("error"):
+                vp.flash_status(result["rejected"] or result["error"])
+                return
+            view.renderer.ui_drawing_applied(verb, "")
             rebuild()
             vp.notify_scene_changed()
         elif verb == "lens":

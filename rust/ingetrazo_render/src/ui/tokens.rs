@@ -150,13 +150,15 @@ pub fn title_font() -> egui::FontId {
     title()
 }
 
+pub fn document_rgb([r,g,b]: [u8; 3]) -> Color32 { Color32::from_rgb(r,g,b) }
+
 pub fn parse_hex(s: &str) -> Option<Color32> {
     let h = s.strip_prefix('#')?;
     if h.len() != 6 {
         return None;
     }
     let v = u32::from_str_radix(h, 16).ok()?;
-    Some(Color32::from_rgb((v >> 16) as u8, (v >> 8) as u8, v as u8))
+    Some(document_rgb([(v >> 16) as u8, (v >> 8) as u8, v as u8]))
 }
 
 /// Glass surfaces, lowest to highest (design pass 2026-11-23: each level

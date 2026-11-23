@@ -2390,16 +2390,22 @@ impl Renderer {
         if let Some(ui)=self.ui.as_mut() { ui.set_catalog_info(filename,tree,counts)?; }
         Ok(())
     }
-    #[pyo3(signature = (owner, lines, patterns=None))]
-    fn ui_set_style_catalog(&mut self, owner: usize, lines: Vec<String>, patterns: Option<&Bound<'_, PyAny>>) -> PyResult<()> {
+    #[pyo3(signature = (owner, lines, patterns=None, scene=None))]
+    fn ui_set_style_catalog(&mut self, owner: usize, lines: Vec<String>, patterns: Option<&Bound<'_, PyAny>>, scene: Option<&Bound<'_,PyAny>>) -> PyResult<()> {
         if let Some(ui) = self.ui.as_mut() {
             let patterns = if let Some(dict) = patterns.filter(|d| !d.is_empty().unwrap_or(true)) {
                 dict.py().import("json")?.call_method1("dumps",(dict,))?.extract()?
             } else { String::new() };
-            ui.style_catalog(owner, lines, patterns);
+            ui.style_catalog(owner, lines, patterns, scene)?;
         }
         Ok(())
     }
+    fn ui_open_line_type(&mut self,name:&str,tags:Vec<String>)->bool{self.ui.as_mut().is_some_and(|ui|ui.open_line_type(name,tags))}
+    fn ui_hatch_preference(&mut self,py:Python<'_>,verb:&str,value:&str)->PyResult<()>{
+        if let Some(ui)=self.ui.as_mut(){ui.hatch_preference(py,verb,value)?;}
+        Ok(())
+    }
+    fn ui_drawing_applied(&mut self, verb:&str, key:&str) { if let Some(ui)=self.ui.as_mut(){ui.drawing_edit_applied(verb,key);} }
     #[pyo3(signature=(name, origin, scene=None, mount=None))]
     fn ui_set_host_context(&mut self, name: String, origin: [f64; 3], scene: Option<&Bound<'_, PyAny>>, mount: Option<&Bound<'_, PyAny>>) -> PyResult<()> {
         let (edges,tags) = match (scene,mount) {
