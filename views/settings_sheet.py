@@ -10,8 +10,7 @@ matching rows of every section, each under its section's name, so nothing
 hides behind one.
 
 Every change applies at once (no OK, no Cancel), through the same
-functions the Qt dialog's OK runs (``views/preferences_dialog.py``,
-"Applying one setting"); a change that only takes effect at the next start
+host functions as the Qt Preferences dialog (``views/settings_apply.py``); a change that only takes effect at the next start
 says so at the top of the sheet.
 
 """
@@ -179,8 +178,8 @@ def _set_gkey(name, kind=str):
 
 
 def _p():
-    from views import preferences_dialog
-    return preferences_dialog
+    from views import settings_apply
+    return settings_apply
 
 
 # ---- Built · this Mac ------------------------------------------------------------
@@ -578,7 +577,7 @@ def _ndof_driver() -> str:
 
 
 def _import(env) -> list:
-    from views.preferences_dialog import _DXF_UNITS, _OBJ_UNITS
+    from views.settings_apply import _DXF_UNITS, _OBJ_UNITS
     rows = [
         Row("obj_unit", "choice", tr("Suggested unit for OBJ"), _key("import/obj_unit", "m"),
             _set_key("import/obj_unit"), options=[(k, tr(v)) for k, v in _OBJ_UNITS], default="m"),
@@ -707,7 +706,7 @@ def _units_put(env, key, value) -> None:
     """One units row changed: the document's units, at once (and those of
     new documents, when they follow)."""
     from core import units
-    from views.preferences_dialog import _UNITS_FOR_NEW_KEY
+    from views.settings_apply import _UNITS_FOR_NEW_KEY
     s = _units_now(env)
     if key == "profile":
         if value not in units.PROFILES:
@@ -737,7 +736,7 @@ def _units_put(env, key, value) -> None:
 
 def _units(env) -> list:
     from core import units
-    from views.preferences_dialog import _UNITS_FOR_NEW_KEY
+    from views.settings_apply import _UNITS_FOR_NEW_KEY
 
     def g(key):
         return lambda env: units.unit_setting(key, _units_now(env))
