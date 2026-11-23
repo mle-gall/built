@@ -2274,8 +2274,13 @@ impl Renderer {
     fn ui_pointer(&mut self, kind: &str, x: f32, y: f32, button: u8, modifiers: u8) -> bool {
         self.ui.as_mut().is_some_and(|ui| ui.pointer(kind, x, y, button, modifiers))
     }
-    fn ui_set_cursor_value(&mut self, caption: String, value: String, typing: bool, x: f32, y: f32) {
-        if let Some(ui) = self.ui.as_mut() { ui.set_cursor_value(caption, value, typing, x, y); }
+    /// The value field on the geometry: caption, live reading or what is
+    /// typed, its anchor (points), the tool's start on screen and the
+    /// document's revision (a commit is read from them, ui/value_field.rs).
+    #[pyo3(signature = (caption, value, typing, x, y, start=None, revision=0))]
+    fn ui_set_cursor_value(&mut self, caption: String, value: String, typing: bool, x: f32, y: f32,
+                           start: Option<(f32, f32)>, revision: u64) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_cursor_value(caption, value, typing, x, y, start, revision); }
     }
     fn ui_set_selection(&mut self, summary: String, actions: Vec<(String, String, String, bool, bool)>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_selection(summary, actions); }
@@ -2341,6 +2346,9 @@ impl Renderer {
     fn ui_set_projects(&mut self, left: f32, docs: Vec<(String, bool, bool)>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_projects(left, docs); }
     }
+    /// The free model area in device coordinates (`Ui::free_ndc`): what
+    /// Zoom Extents, Zoom Selection and Review frame into.
+    fn ui_free_ndc(&self) -> Option<[f64; 4]> { self.ui.as_ref().and_then(|ui| ui.free_ndc()) }
     fn ui_top_empty(&self, x: f32, y: f32) -> bool { self.ui.as_ref().is_some_and(|ui| ui.top_empty(x, y)) }
     /// The project tabs (views/wgpu_tabs.py, ui/tabs.rs): (id, name, front,
     /// unsaved, link source, tip, picture key), the projects in other
@@ -2811,6 +2819,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(commands::command_chrome, m)?)?;
     m.add_function(wrap_pyfunction!(commands::activate_view_command, m)?)?;
     m.add_function(wrap_pyfunction!(commands::rail_layout, m)?)?;
+    m.add_function(wrap_pyfunction!(ui::tokens::chrome_token, m)?)?;
     m.add_function(wrap_pyfunction!(commands::leave_navigation, m)?)?;
     m.add_function(wrap_pyfunction!(commands::view_shortcut, m)?)?;
     m.add("build_commit", env!("BUILT_COMMIT"))?;

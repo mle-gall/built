@@ -53,6 +53,35 @@ def test_the_model_fills_the_window_in_any_view(box, view, perspective, aspect):
     assert span == pytest.approx(1 / 1.1, abs=0.02)
 
 
+def _extent(cam, lo, hi):
+    mvp = cam.projection_matrix() * cam.view_matrix()
+    pts = [mvp.map(QVector4D(x, y, z, 1.0)) for x in (lo.x(), hi.x())
+           for y in (lo.y(), hi.y()) for z in (lo.z(), hi.z())]
+    xs = [p.x() / p.w() for p in pts]
+    ys = [p.y() / p.w() for p in pts]
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+@pytest.mark.parametrize("box", sorted(BOXES))
+@pytest.mark.parametrize("view", ["top", "front", "iso"])
+@pytest.mark.parametrize("perspective", [True, False])
+def test_zoom_extents_frames_into_the_free_area(box, view, perspective):
+    """With the rail on the left and the dock on the right, the model is
+    framed into the area they leave (council B8), not under the dock."""
+    lo, hi = BOXES[box]
+    free = (-0.82, -0.9, 0.45, 0.9)            # x0, y0, x1, y1 in the window
+    cam = OrbitCamera()
+    cam.aspect, cam.perspective = 1.6, perspective
+    cam.set_view(view)
+    cam.fit_box(lo, hi, free=free)
+    x0, y0, x1, y1 = _extent(cam, lo, hi)
+    assert x0 >= free[0] - 1e-3 and x1 <= free[2] + 1e-3
+    assert y0 >= free[1] - 1e-3 and y1 <= free[3] + 1e-3
+    assert (x0 + x1) / 2 == pytest.approx((free[0] + free[2]) / 2, abs=0.01)
+    fill = max((x1 - x0) / (free[2] - free[0]), (y1 - y0) / (free[3] - free[1]))
+    assert fill == pytest.approx(1 / 1.1, abs=0.02)
+
+
 def test_a_second_zoom_extents_after_an_orbit_is_not_a_no_op():
     lo, hi = BOXES["plaza"]
     cam = OrbitCamera()

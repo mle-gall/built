@@ -896,6 +896,35 @@ pub mod organisms {
         }
     }
 
+    /// The value field on the geometry (ui/value_field.rs): caption and value
+    /// on raised glass. Typing shows an accent edge and a caret; a committed
+    /// value reads back with a check until the next action.
+    pub fn value_pill(ui: &mut egui::Ui, caption: &str, value: &str, typing: bool, committed: bool) {
+        let edge = if typing { ACCENT } else { EDGE };
+        glass(Surface::Raised)
+            .stroke(Stroke::new(1.0_f32, edge))
+            .corner_radius(CornerRadius::same(R_CONTROL))
+            .inner_margin(Margin::symmetric(10, 6))
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing = vec2(SPACE_S, 0.0);
+                    if !caption.is_empty() {
+                        ui.label(egui::RichText::new(caption).font(meta()).color(FAINT));
+                    }
+                    let v = ui.label(egui::RichText::new(value).font(title_font()).color(if typing { BRIGHT } else { INK }));
+                    if typing {
+                        // A drawn caret: the "▏" glyph read as an "l" after a unit.
+                        let x = v.rect.max.x + 2.0;
+                        ui.painter().vline(x, v.rect.y_range().shrink(2.0), Stroke::new(1.5_f32, ACCENT));
+                        ui.add_space(2.0);
+                    }
+                    if committed {
+                        ui.label(egui::RichText::new("✓").font(meta()).color(OK));
+                    }
+                });
+            });
+    }
+
     /// Regions of a large glass sheet. Callers supply each region's content
     /// and keep ownership of their focus, scrolling and commands.
     pub struct SheetFrame {

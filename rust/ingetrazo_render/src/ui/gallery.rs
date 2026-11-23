@@ -6,7 +6,9 @@ use super::{kit::*, tokens::*};
 use egui::{pos2, vec2, Align2, Color32, Pos2, Rect, Sense, Stroke};
 
 /// The board, in points; the Qt host scales it to fit.
-const BOARD: egui::Vec2 = vec2(1280., 1000.);
+const BOARD: egui::Vec2 = vec2(1280., 1210.);
+/// The surfaces band at the bottom: large sheet, value field, atoms, toasts.
+const BAND_H: f32 = 206.;
 const STATES: [(&str, State); 6] = [
     ("Rest", State::Idle),
     ("Hover", State::Hover),
@@ -18,7 +20,7 @@ const STATES: [(&str, State); 6] = [
 /// Colour roles, grouped as the docs list them. Tokens not listed here still
 /// appear, under "Other", so a new token is never missing from the sheet.
 const GROUPS: [(&str, &[&str]); 6] = [
-    ("Surfaces", &["SHEET", "SIDE", "CARD", "CARD_HOVER", "WELL", "PANEL", "FIELD", "SCRIM", "SHEET_SCRIM"]),
+    ("Surfaces", &["SHEET", "SIDE", "CARD", "CARD_HOVER", "WELL", "DESK", "PANEL", "FIELD", "SCRIM", "SHEET_SCRIM"]),
     ("Text", &["INK", "INK_2", "DIM", "FAINT", "OFF", "BRIGHT", "ON_PRIMARY"]),
     (
         "Interaction",
@@ -107,6 +109,9 @@ pub(super) struct Gallery {
     font_picker: Option<FontPicker>,
     dock_filter: String,
     dock_tab: usize,
+    sheet_tab: usize,
+    swatch: Color32,
+    sheet_name: String,
 }
 
 impl Default for Gallery {
@@ -126,6 +131,9 @@ impl Default for Gallery {
             font_picker: None,
             dock_filter: String::new(),
             dock_tab: 0,
+            sheet_tab: 0,
+            swatch: SWATCH_FALLBACK,
+            sheet_name: "Oak, oiled".into(),
         }
     }
 }
@@ -187,7 +195,7 @@ impl Gallery {
                     p.text(
                         pos2(board.max.x, o.y + 4.),
                         Align2::RIGHT_TOP,
-                        "Reference sheet · tokens.rs, kit.rs · design pass 2026-11-23",
+                        "Reference sheet · tokens.rs, kit.rs · design pass and review fixes 2026-11-23",
                         meta(),
                         FAINT,
                     );
@@ -197,7 +205,8 @@ impl Gallery {
                     let x = o.x + left_w + SPACE_L + SPACE_S;
                     let w = board.max.x - x;
                     let y = self.molecules(ui, pos2(x, top), w);
-                    self.organisms(ui, pos2(x, y + SPACE_S), w, board.max.y);
+                    self.organisms(ui, pos2(x, y + SPACE_S), w, board.max.y - BAND_H - SPACE_M);
+                    self.surfaces(ui, pos2(o.x, board.max.y - BAND_H), board.max.x - o.x);
                     if let Some(picker) = &mut self.font_picker {
                         if picker.popup(ctx).is_some() { self.font_picker = None; }
                     }
@@ -494,6 +503,92 @@ impl Gallery {
         put(ui, rects[3], down(), |ui| Self::feedback(ui));
     }
 
+    /// The large sheet, the value field on the geometry, the atoms and the
+    /// toast stack (review fixes 2026-11-23).
+    fn surfaces(&mut self, ui: &mut egui::Ui, at: Pos2, w: f32) {
+        let y = section(ui, at, w, "Surfaces", "large sheet, value field, atoms, toasts");
+        let h = BAND_H - (y - at.y);
+        // The shared large sheet: header tabs, side list, catalogue cards,
+        // detail pane and footer, on the sheet glass.
+        let sheet = Rect::from_min_size(pos2(at.x, y), vec2(560., h));
+        let f = sheet_frame(ui, sheet, 112., 150., true);
+        put(ui, f.header.shrink2(vec2(SPACE_M, SPACE_M)), across(), |ui| {
+            let tabs = [("Materials".into(), "48".into(), true), ("Components".into(), String::new(), true), ("Profiles".into(), String::new(), false)];
+            if let Some(i) = inline_underline_tabs(ui, &tabs, self.sheet_tab) { self.sheet_tab = i; }
+        });
+        if let Some(side) = f.side {
+            put(ui, side.shrink(SPACE_S), down(), |ui| {
+                caption_plain(ui, "Bundled");
+                let (r, _) = list_row(ui, ROW_H, true);
+                ui.painter().text(r.left_center() + vec2(8., 0.), Align2::LEFT_CENTER, "Wood", body(), INK);
+                let (r, _) = list_row(ui, ROW_H, false);
+                ui.painter().text(r.left_center() + vec2(8., 0.), Align2::LEFT_CENTER, "Stone", body(), INK_2);
+            });
+        }
+        let (cols, card) = catalogue_grid(f.content.width() - 2. * SPACE_S, 64.);
+        for (i, (name, tone)) in [("Oak", parse_hex("#b58c60")), ("Walnut", parse_hex("#6e4e34"))].into_iter().enumerate().take(cols.max(1)) {
+            let r = Rect::from_min_size(f.content.min + vec2(SPACE_S + i as f32 * (card.x + SPACE_S), SPACE_S), card);
+            let resp = ui.interact(r, ui.id().with(("card", i)), Sense::click());
+            paint_card(ui, r, resp.hovered(), i == 1);
+            let swatch = Rect::from_min_size(r.min + vec2(4., 4.), vec2(r.width() - 8., r.height() - 24.));
+            // Material colours are document data, decoded by the token module.
+            ui.painter().rect_filled(swatch, R_INSET, tone.unwrap_or(SWATCH_FALLBACK));
+            let g = ui.painter().layout_no_wrap(name.into(), meta(), INK_2);
+            centered(ui.painter(), Rect::from_min_max(pos2(r.min.x, r.max.y - 20.), r.max), g, INK_2);
+        }
+        if let Some(detail) = f.detail {
+            put(ui, detail.shrink(SPACE_S), down(), |ui| {
+                ui.add(field(&mut self.sheet_name).desired_width(ui.available_width()));
+                catalogue_fact(ui, "Finish", "Oiled");
+                catalogue_tag(ui, "Timber", ui.available_width());
+                ui.add(progress(0.6).desired_height(3.));
+                empty_state(ui, "No texture yet");
+            });
+        }
+        if let Some(foot) = f.footer {
+            let g = ui.painter().layout_no_wrap("↑↓ choose · ↵ paint · esc close".into(), meta(), FAINT);
+            centered(ui.painter(), foot, g, FAINT);
+        }
+        // The value field on the geometry: typing, then read back after Enter.
+        let x = sheet.max.x + SPACE_L;
+        sub(ui, pos2(x, y), "Value field");
+        put(ui, Rect::from_min_size(pos2(x, y + 18.), vec2(180., 40.)), down(), |ui| value_pill(ui, "Length", "2.35 m", true, false));
+        put(ui, Rect::from_min_size(pos2(x, y + 62.), vec2(180., 40.)), down(), |ui| value_pill(ui, "Length", "2.35 m", false, true));
+        // Atoms: visibility, lock, disclosure, state dot, focus ring,
+        // selected-row marker, badge, swatch, activity ring.
+        sub(ui, pos2(x, y + 112.), "Atoms");
+        let mut ax = x;
+        let ay = y + 130.;
+        for (i, on) in [true, false].into_iter().enumerate() {
+            paint_eye(ui, Rect::from_min_size(pos2(ax + i as f32 * 20., ay), vec2(16., 16.)), on);
+            paint_lock(ui, Rect::from_min_size(pos2(ax + 40. + i as f32 * 20., ay), vec2(16., 16.)), on);
+        }
+        ax += 84.;
+        chevron(ui.painter(), pos2(ax, ay + 8.), true, FAINT);
+        chevron(ui.painter(), pos2(ax + 14., ay + 8.), false, FAINT);
+        dot(ui.painter(), pos2(ax + 30., ay + 8.), FOUND);
+        let focus = Rect::from_min_size(pos2(ax + 44., ay), vec2(40., 16.));
+        ui.painter().rect_filled(focus, R_INSET, CONTROL);
+        paint_focus(ui, focus, R_INSET);
+        let row = Rect::from_min_size(pos2(ax + 92., ay - 4.), vec2(70., ROW_H));
+        paint_selected_row(ui, row);
+        put(ui, Rect::from_min_size(pos2(x, ay + 24.), vec2(260., CONTROL_H)), across(), |ui| {
+            badge(ui, "Packed", PACKED);
+            swatch(ui, &mut self.swatch);
+            ring(ui);
+        });
+        // At most three transient results, the oldest fading.
+        let tx = x + 280.;
+        sub(ui, pos2(tx, y), "Toast stack");
+        put(ui, Rect::from_min_size(pos2(tx, y + 18.), vec2(w - (tx - at.x), h - 18.)), down(), |ui| {
+            ui.spacing_mut().item_spacing = vec2(0., SPACE_XS);
+            let rows = [("Saved", 1.0_f32), ("Drawings exported", 0.7), ("Link reloaded", 0.4), ("Hidden", 0.)];
+            toast_stack(ui, rows.iter().map(|(t, a)| (t, *a)), |ui, t| {
+                ui.label(egui::RichText::new(*t).font(body()).color(INK));
+            });
+        });
+    }
+
     /// The dock: place switch, sections, filter and the project tree.
     fn dock(&mut self, ui: &mut egui::Ui) {
         glass(Surface::Panel)
@@ -502,10 +597,12 @@ impl Gallery {
                 ui.spacing_mut().item_spacing = vec2(0., SPACE_XS);
                 let w = ui.available_width();
                 ui.set_width(w);
-                segmented(ui, &["Project", "Library"], 0, w);
+                // The dock's header as it ships: Project | Plugins (the Library
+                // is a large sheet now, not a dock place), then the lenses.
+                segmented(ui, &["Project", "Plugins"], 0, w);
                 if let Some(i) = underline_tabs(
                     ui,
-                    &[("Filing".into(), String::new(), true), ("Drawing".into(), String::new(), true), ("Deliver".into(), "2".into(), true)],
+                    &[("Filing".into(), String::new(), true), ("Drawing".into(), String::new(), true), ("Export".into(), "2".into(), true)],
                     self.dock_tab,
                 ) {
                     self.dock_tab = i;
@@ -521,7 +618,7 @@ impl Gallery {
                     ("Furniture", 1, None, false, 0, 0, "2", None, ""),
                     ("Survey.igz", 0, None, false, -1, -1, "", Some(MISSING), "via Ride"),
                 ];
-                for (name, depth, expanded, selected, eye, lock, count, state, note) in rows {
+                tree(ui, "gallery tree", |ui| for (name, depth, expanded, selected, eye, lock, count, state, note) in rows {
                     let (r, resp) = list_row(ui, ROW_H, selected);
                     let x0 = r.min.x + 6. + depth as f32 * 14.;
                     if let Some(open) = expanded {
@@ -546,7 +643,7 @@ impl Gallery {
                     }
                     tree_slots(ui, r.right() - 8., r.center().y, eye, lock, resp.hovered() || eye == 0 || lock == 1 || selected);
                     ui.painter().text(r.right_center() - vec2(8., 0.), Align2::RIGHT_CENTER, count, meta(), DIM);
-                }
+                });
             });
     }
 
@@ -647,5 +744,70 @@ impl Gallery {
             });
             ui.label(egui::RichText::new("12 pages to Deliveries/Handover").font(meta()).color(DIM));
         });
+    }
+}
+
+#[cfg(test)]
+mod coverage {
+    /// Kit functions that are not components drawn on their own: the style
+    /// installer, state helpers every molecule uses, and a variant of a
+    /// component the gallery already shows.
+    const NOT_COMPONENTS: [&str; 5] = [
+        "install_style", // style, not a component
+        "state_of",      // reads a response's state for every molecule
+        "paint_state",   // paints that state under every molecule
+        "ink_of",        // the ink for a state
+        "menu_row_resp", // menu_row, returning its response
+    ];
+
+    /// The kit's public functions at module level (not methods): every
+    /// `pub fn` whose enclosing blocks are all modules.
+    fn kit_components() -> Vec<String> {
+        let src = include_str!("kit.rs");
+        let mut stack: Vec<bool> = Vec::new(); // true: a module block
+        let mut out = Vec::new();
+        for line in src.lines() {
+            let code = line.split("//").next().unwrap_or("");
+            let t = code.trim_start();
+            if stack.iter().all(|m| *m) {
+                if let Some(rest) = t.strip_prefix("pub fn ") {
+                    let name: String = rest.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+                    if !name.is_empty() { out.push(name); }
+                }
+            }
+            let module = t.starts_with("pub mod ") || t.starts_with("mod ");
+            let mut first = true;
+            for ch in code.chars() {
+                match ch {
+                    '{' => { stack.push(module && first); first = false; }
+                    '}' => { stack.pop(); }
+                    _ => {}
+                }
+            }
+        }
+        out.sort();
+        out.dedup();
+        out
+    }
+
+    #[test]
+    fn every_public_kit_component_is_in_the_gallery() {
+        let gallery = include_str!("gallery.rs");
+        let gallery = &gallery[..gallery.find("mod coverage").unwrap()];
+        let found = kit_components();
+        assert!(found.len() > 40 && found.contains(&"sheet_frame".to_owned()) && found.contains(&"value_pill".to_owned()), "{found:?}");
+        let missing: Vec<&String> = found.iter()
+            .filter(|name| !NOT_COMPONENTS.contains(&name.as_str()))
+            .filter(|name| !gallery.contains(&format!("{name}(")))
+            .collect();
+        assert!(missing.is_empty(), "public kit components missing from the gallery (ui/gallery.rs): {missing:?}");
+    }
+
+    #[test]
+    fn methods_are_not_components() {
+        let found = kit_components();
+        for method in ["corner_radius", "stroke", "type_filter", "show", "popup"] {
+            assert!(!found.contains(&method.to_owned()), "{method}");
+        }
     }
 }

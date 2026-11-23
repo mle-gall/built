@@ -34,6 +34,9 @@ palette! {
     CARD = Color32::from_gray(36);
     CARD_HOVER = Color32::from_gray(43);
     WELL = Color32::from_gray(19);
+    // The Sheets desk around the paper: a graphite well, never slate or blue
+    // (council C8, 2026-11-23).
+    DESK = WELL;
     GLASS_BAR = SIDE;
     POPOVER = PANEL;
     SHEET_SCRIM = Color32::from_black_alpha(112);
@@ -271,5 +274,25 @@ mod sheet_contrast {
         for fill in [ACCENT, PRIMARY_HOVER, PRIMARY_PRESS] {
             assert!((luminance(fill) + 0.05) / (luminance(ON_PRIMARY) + 0.05) >= 4.5);
         }
+    }
+}
+
+/// A colour role by name as unmultiplied RGBA, for the hosts' Qt pieces
+/// that still paint (the Sheets page's desk): the palette stays here.
+#[pyo3::pyfunction]
+pub fn chrome_token(name: &str) -> Option<(u8, u8, u8, u8)> {
+    SWATCHES.iter().find(|(n, _)| *n == name).map(|(_, c)| {
+        let [r, g, b, a] = c.to_srgba_unmultiplied();
+        (r, g, b, a)
+    })
+}
+
+#[cfg(test)]
+mod chrome_token_tests {
+    #[test]
+    fn the_desk_is_graphite() {
+        let (r, g, b, a) = super::chrome_token("DESK").unwrap();
+        assert_eq!((r, g, b, a), (19, 19, 19, 255));
+        assert!(super::chrome_token("NOPE").is_none());
     }
 }

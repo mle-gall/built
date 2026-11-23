@@ -56,8 +56,10 @@ RAIL = [["select", "pan", "zoom", "zoom_ventana", "estilo"],
         ["cota", "cota_cadena", "cota_base", "cota_ang", "cota_radio"]]
 #: Tools that open a Qt dialog before anything else (no Qt window in the shell).
 _DIALOG_TOOLS = {"imagen"}
-#: The desk behind the page: the composer's slate (views/composer.py), always.
-DESK = (70, 76, 84)
+def _desk() -> QColor:
+    """The desk behind the page: the chrome's graphite DESK token (ui/tokens.rs)."""
+    from ingetrazo_render import chrome_token
+    return QColor(*chrome_token("DESK"))
 
 #: Keys that stay the window's in the workspace (save, open, new, close,
 #: quit, preferences): everything else is the page's.
@@ -132,7 +134,7 @@ def composer_class():
             return False
 
         def _apply_desk_colour(self):
-            self._view.setBackgroundBrush(QColor(*DESK))
+            self._view.setBackgroundBrush(_desk())
 
         def showMinimized(self):  # noqa: N802
             pass
@@ -267,9 +269,9 @@ class Workspace:
         self._actions = []
         self._shell = is_shell(composer._window)
         self._keys = self._shortcuts()
-        # The desk is the dark chrome's slate, whatever palette Qt has (the
+        # The desk is the chrome's graphite, whatever palette Qt has (the
         # shell's offscreen one is light).
-        cv.setBackgroundBrush(QColor(*DESK))
+        cv.setBackgroundBrush(_desk())
 
     # ---- In and out ------------------------------------------------------------
     def _front_view(self):
@@ -416,7 +418,7 @@ class Workspace:
         if self.image is None or (self.image.width(), self.image.height()) != (W, H):
             self.image = QImage(W, H, QImage.Format_RGBA8888)
             self.image.setDevicePixelRatio(dpr)
-            self.image.fill(QColor(*DESK))
+            self.image.fill(_desk())
             self.full = True
         bounds = QRect(0, 0, w, h)
         if self.full:

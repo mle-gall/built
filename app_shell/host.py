@@ -610,7 +610,8 @@ class Host:
             if kind == "view":
                 bounds = w._extents_bounds()
                 if bounds:
-                    self.viewport.camera.fit_box(*bounds)
+                    from views.wgpu_ui import free_area
+                    self.viewport.camera.fit_box(*bounds, free=free_area(w))
         elif kind == "verb" and arg in _VERBS:
             # The ported prompts (views/chrome_forms.py), by name: the
             # window's own MainWindow methods, borrowed.

@@ -35,6 +35,10 @@ pub mod kit;
 #[cfg(target_os = "macos")]
 mod system_fonts;
 mod gallery;
+/// The tool rail's deterministic layout (two columns, three, then scroll).
+mod rail;
+/// The value field on the geometry and its readback after Enter (B1).
+mod value_field;
 mod site_map;
 use tokens::*;
 use kit::*;
@@ -76,11 +80,15 @@ pub struct Ui {
     events: Vec<egui::Event>,
     modifiers: egui::Modifiers,
     groups: Vec<Vec<Tool>>,
+    /// The model rail's outer width as last laid out (points).
+    rail_w: f32,
+    /// The window as last painted (points).
+    screen: Rect,
     active: String,
     status: String,
     hint: String,
-    /// Value at the cursor: caption, value, typing, cursor (points).
-    cursor: Option<(String, String, bool, Pos2)>,
+    /// The value field on the geometry and its readback (ui/value_field.rs).
+    cursor: value_field::ValueField,
     /// Selection bar: summary and (id, label, shortcut) actions.
     selection: Option<(String, Vec<(String, String, String, bool, bool)>)>,
     sel_more: bool,
@@ -261,10 +269,12 @@ impl Ui {
             events: Vec::new(),
             modifiers: Default::default(),
             groups: Vec::new(),
+            rail_w: rail::width(2),
+            screen: Rect::NOTHING,
             active: String::new(),
             status: String::new(),
             hint: String::new(),
-            cursor: None,
+            cursor: Default::default(),
             selection: None,
             sel_more: false,
             sel_sub: None,
@@ -457,7 +467,7 @@ impl Ui {
             col.prompt = (!title.is_empty()).then_some((title, body, buttons));
         }
     }
-    pub fn show_inspector(&mut self) { self.review = false; }
+    pub fn show_inspector(&mut self) { self.set_review(false); }
     pub fn set_inspector(&mut self, title: String, sections: Vec<(String, Vec<(String, String)>)>) {
         if let Some(col) = self.column.as_mut() {
             if col.inspector_title != title || col.inspector != sections {
@@ -537,6 +547,38 @@ impl Ui {
         self.view_menu = view_menu;
     }
 
+    /// Review on or off. Python hears `review:1` / `review:0` and frames the
+    /// camera into the area the panels leave (B8, owner decision 2026-11-23).
+    pub fn set_review(&mut self, on: bool) {
+        if self.review != on {
+            self.review = on;
+            self.actions.push(format!("review:{}", u8::from(on)));
+        }
+    }
+
+    /// The part of the window the model is seen in, in device coordinates
+    /// (x0, y0, x1, y1, y up): the window minus the rail, the dock and the
+    /// bars that are showing — the target state, not the retract animation.
+    /// None before the first frame, or with a large sheet or Sheets up.
+    pub fn free_ndc(&self) -> Option<[f64; 4]> {
+        let s = self.screen;
+        if !s.is_positive() || self.lsheet.open || self.sheets.shown || self.gallery.is_some() {
+            return None;
+        }
+        let top = TOP_H;
+        let (left, right, bottom) = if self.review {
+            (0.0, s.max.x, s.max.y)
+        } else {
+            let left = if self.groups.is_empty() { 0.0 } else { GUT + self.rail_w };
+            let dock = self.dock_w.min((s.width() * 0.45).max(DOCK_MIN_W));
+            let right = if self.column.is_some() { s.max.x - GUT - dock } else { s.max.x };
+            (left, right, s.max.y - BOT_H)
+        };
+        let x = |v: f32| f64::from(2.0 * v / s.width() - 1.0);
+        let y = |v: f32| f64::from(1.0 - 2.0 * v / s.height());
+        Some([x(left), y(bottom), x(right), y(top)])
+    }
+
     /// Called only after the transient chrome and focused field declined Esc.
     pub fn model_escape(chrome: Option<&mut Self>, busy: bool, selected: bool, editing: bool) -> &'static str {
         if busy { return "tool"; }
@@ -555,7 +597,7 @@ impl Ui {
                 return "dock";
             }
         }
-        ui.review = false;
+        ui.set_review(false);
         ""
     }
 
@@ -740,13 +782,20 @@ impl Ui {
         true
     }
 
-    pub fn set_active(&mut self, id: String) { self.active = id; }
+    pub fn set_active(&mut self, id: String) {
+        // Another tool is the next action: the committed value's readback goes.
+        if id != self.active { self.cursor.end_readback(); }
+        self.active = id;
+    }
     pub fn set_status(&mut self, status: String, hint: String) {
         self.status = status;
         self.hint = hint;
     }
-    pub fn set_cursor_value(&mut self, caption: String, value: String, typing: bool, x: f32, y: f32) {
-        self.cursor = (!caption.is_empty() || typing).then(|| (caption, value, typing, pos2(x, y)));
+    /// The value field's facts for this frame (ui/value_field.rs): `start`
+    /// is the tool's start point on screen, `revision` the document's.
+    pub fn set_cursor_value(&mut self, caption: String, value: String, typing: bool, x: f32, y: f32,
+                            start: Option<(f32, f32)>, revision: u64) {
+        self.cursor.set(caption, value, typing, pos2(x, y), start.map(|(x, y)| pos2(x, y)), revision);
     }
     pub fn set_selection(&mut self, summary: String, actions: Vec<(String, String, String, bool, bool)>) {
         if summary.is_empty() { self.sel_more = false; }
@@ -802,6 +851,8 @@ impl Ui {
     /// then neither hover, pick, nor navigate).
     pub fn pointer(&mut self, kind: &str, x: f32, y: f32, button: u8, mods: u8) -> bool {
         let pos = pos2(x, y);
+        // A press is the next action: the committed value's readback goes.
+        if kind == "press" { self.cursor.end_readback(); }
         self.modifiers = mods_from(mods);
         let button = match button {
             2 => egui::PointerButton::Secondary,
@@ -878,40 +929,10 @@ impl Ui {
     }
 
     fn palette(&mut self, ctx: &egui::Context, screen: Rect, retract: f32) {
-        let mut clicked = None;
-        // Two columns while they fit above the status line; wider, never
-        // scrolled or folded, when the window is short (council 2026-11-22).
+        // Two columns, then three, then a scroll (ui/rail.rs, council B10).
         let (band_top, band_bottom) = self.band(ctx, screen);
-        let room = band_bottom - band_top;
-        let tall = |cols: usize| self.groups.iter().map(|g| g.len().div_ceil(cols) as f32 * 32.0).sum::<f32>()
-            + self.groups.len().saturating_sub(1) as f32 * 9.0 + 8.0;
-        let cols = (2..=5).find(|c| tall(*c) <= room).unwrap_or(5);
-        egui::Area::new(egui::Id::new("palette"))
-            .constrain(false)
-            .interactable(retract == 0.0)
-            .fixed_pos(pos2(GUT - retract * (cols as f32 * 36.0 + 2.0 * GUT), band_top))
-            .order(egui::Order::Foreground)
-            .show(ctx, |ui| {
-                frame().corner_radius(CornerRadius::same(12)).inner_margin(Margin::same(4)).show(ui, |ui| {
-                    ui.set_min_height(room - 8.0);
-                    ui.spacing_mut().item_spacing = vec2(SPACE_XS, SPACE_XS);
-                    for (gi, group) in self.groups.iter().enumerate() {
-                        if gi > 0 {
-                            let (r, _) = ui.allocate_exact_size(vec2(cols as f32 * 32.0 - 2.0, 7.0), Sense::hover());
-                            ui.painter().hline(r.x_range().shrink(2.0), r.center().y, Stroke::new(1.0_f32, EDGE));
-                        }
-                        for pair in group.chunks(cols) {
-                            ui.horizontal(|ui| {
-                                for tool in pair {
-                                    if tool_button(ui, tool, tool.id == self.active) {
-                                        clicked = Some(tool.id.clone());
-                                    }
-                                }
-                            });
-                        }
-                    }
-                });
-            });
+        let (clicked, width) = rail::show(ctx, "palette", &self.groups, &self.active, band_top, band_bottom - band_top, retract);
+        self.rail_w = width;
         if let Some(id) = clicked {
             self.active = id.clone();
             self.actions.push(format!("tool:{id}"));
@@ -1027,7 +1048,7 @@ impl Ui {
             }
         }
         match clicked.as_deref() {
-            Some("review") => { self.review = !self.review; self.actions.push("review".into()); }
+            Some("review") => self.set_review(!self.review),
             Some(a) => self.actions.push(if a.starts_with("act:") { a.to_owned() } else { format!("tab:{a}") }),
             None => {}
         }
@@ -1115,12 +1136,19 @@ impl Ui {
         if let Some(a) = clicked { self.actions.push(a); }
     }
 
+    /// Whether the Paint strip shows: always while Paint is active, even on
+    /// a model with no materials, so Browse all… is always one click away
+    /// (council B6).
+    fn paint_strip_shown(&self) -> bool {
+        self.active == "paint" || !self.palette_items.is_empty()
+    }
+
     /// With Paint active: the model's materials as a strip above the bottom
-    /// bar, the current one ringed; Library opens the full catalogue in the dock.
+    /// bar, the current one ringed, and Browse all… into the Library sheet.
     fn paint_strip(&mut self, ctx: &egui::Context, screen: Rect) {
-        if self.palette_items.is_empty() { return; }
+        if !self.paint_strip_shown() { return; }
         let (_, band_bottom) = self.band(ctx, screen);
-        let centre = (GUT + 72.0 + self.free_right(ctx, screen)) / 2.0;
+        let centre = (GUT + self.rail_w + self.free_right(ctx, screen)) / 2.0;
         let mut clicked: Option<String> = None;
         egui::Area::new(egui::Id::new("paint_strip"))
             .pivot(egui::Align2::CENTER_BOTTOM)
@@ -1155,7 +1183,11 @@ impl Ui {
                             }
                             if resp.on_hover_text(name).clicked() { clicked = Some(format!("pal:{id}")); }
                         }
-                        if self.palette_items.last().is_some_and(|i| i.0 != "-" && !i.0.is_empty()) { bar_divider(ui); }
+                        if self.palette_items.is_empty() {
+                            ui.add_space(SPACE_XS);
+                            ui.label(egui::RichText::new("No materials in this model yet").font(body()).color(DIM));
+                            ui.add_space(SPACE_XS);
+                        } else if self.palette_items.last().is_some_and(|i| i.0 != "-" && !i.0.is_empty()) { bar_divider(ui); }
                         if text_button(ui, "Browse all…", "Every material: the Library", true) {
                             clicked = Some("libsheet:materials".into());
                         }
@@ -1353,7 +1385,7 @@ impl Ui {
             });
         if close { self.view_open = false; }
         if toggle_review {
-            self.review = !self.review;
+            self.set_review(!self.review);
             self.view_open = false;
         }
         if let Some(id) = clicked { self.actions.push(format!("act:{id}")); }
@@ -2414,39 +2446,30 @@ impl Ui {
         if let Some(id) = clicked { self.actions.push(format!("sheet:{id}")); }
     }
 
-    /// The value field on the geometry it measures (Maxence 2026-11-22):
-    /// Python anchors it (middle of the rubber band, beside a pulled face);
-    /// it stays inside the free area. Typing lights it up; Enter applies.
+    /// The value field on the geometry it measures (Maxence 2026-11-22),
+    /// and the committed value read back on the result after Enter until
+    /// the next action (B1). Both stay inside the free area.
     fn cursor_value(&self, ctx: &egui::Context, screen: Rect) {
-        let Some((caption, value, typing, at)) = &self.cursor else { return };
-        if !screen.contains(*at) || (value.is_empty() && !*typing) {
-            return;
-        }
-        let left = if self.review { GUT } else { GUT + 72.0 + GUT };
+        let left = if self.review { GUT } else { GUT + self.rail_w + GUT };
         let right = if self.review { screen.max.x - GUT } else { self.free_right(ctx, screen) - GUT };
         let bottom = if self.review { screen.max.y - GUT } else { screen.max.y - BOT_H - GUT };
-        let size = vec2(170.0, 30.0);
-        let pos = pos2((at.x - size.x / 2.0).clamp(left, (right - size.x).max(left)),
-                       (at.y - size.y / 2.0).clamp(TOP_H + GUT, (bottom - size.y).max(TOP_H + GUT)));
-        egui::Area::new(egui::Id::new("cursor_value"))
-            .fixed_pos(pos)
-            .order(egui::Order::Tooltip)
-            .interactable(false)
-            .show(ctx, |ui| {
-                let edge = if *typing { ACCENT } else { EDGE };
-                glass(Surface::Raised).stroke(Stroke::new(1.0_f32, edge)).corner_radius(CornerRadius::same(R_CONTROL))
-                    .inner_margin(Margin::symmetric(10, 6)).show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing = vec2(SPACE_S, 0.0);
-                        if !caption.is_empty() {
-                            ui.label(egui::RichText::new(caption).font(meta()).color(FAINT));
-                        }
-                        let shown = if *typing { format!("{value}▏") } else { value.clone() };
-                        ui.label(egui::RichText::new(shown).font(title_font())
-                            .color(if *typing { BRIGHT } else { INK }));
-                    });
-                });
-            });
+        let free = Rect::from_min_max(pos2(left, TOP_H + GUT), pos2(right, bottom));
+        let (back, live) = self.cursor.place(free, vec2(170.0, 30.0));
+        let pill = |id: &str, r: Rect, caption: &str, value: &str, typing: bool, committed: bool| {
+            egui::Area::new(egui::Id::new(id))
+                .fixed_pos(r.min)
+                .order(egui::Order::Tooltip)
+                .interactable(false)
+                .show(ctx, |ui| value_pill(ui, caption, value, typing, committed));
+        };
+        if let (Some(r), Some(b)) = (back, &self.cursor.readback) {
+            pill("value_readback", r, &b.caption, &b.value, false, true);
+        }
+        if let (Some(r), Some(l)) = (live, &self.cursor.live) {
+            if screen.contains(l.at) {
+                pill("cursor_value", r, &l.caption, &l.value, l.typing, false);
+            }
+        }
     }
 
     /// Lay out, tessellate and draw the chrome over ``target`` (already
@@ -2457,6 +2480,7 @@ impl Ui {
         let sheet_up = self.lsheet.open;
         let begin = Instant::now();
         let screen = Rect::from_min_size(Pos2::ZERO, vec2(size[0] as f32 / scale, size[1] as f32 / scale));
+        self.screen = screen;
         let mut raw = egui::RawInput {
             screen_rect: Some(screen),
             time: Some(self.start.elapsed().as_secs_f64()),
@@ -2522,7 +2546,7 @@ impl Ui {
                      ("view_menu", self.view_open), ("menu", self.menu.is_some()), ("form", self.form.is_some()),
                      ("plugin_utility", work && model && self.plugins.utility_open()), ("column", work && model && self.column.is_some()), ("bottom", work),
                      ("sel_more", work && model && self.sel_more && self.selection.is_some()),
-                     ("paint_strip", work && model && !self.palette_items.is_empty()),
+                     ("paint_strip", work && model && self.paint_strip_shown()),
                      ("commands", self.cmd_open),
                      ("sel_sub", work && model && self.sel_more && self.sel_sub.is_some()),
                      ("row_menu", model && self.column.as_ref().is_some_and(|c| c.row_menu.is_some())),
@@ -2869,6 +2893,58 @@ fn native_input_owners_unwind_in_order() {
     Ui::model_escape(Some(&mut ui), false, false, false);
     assert!(!ui.review);
 
+}
+
+#[test]
+fn paint_always_offers_browse_all_even_without_materials() {
+    let Some(mut ui) = test_chrome() else { return };
+    let screen = Rect::from_min_size(Pos2::ZERO, vec2(1280., 800.));
+    let strip = |ui: &mut Ui, events: Vec<egui::Event>| {
+        let ctx = ui.ctx.clone();
+        let raw = egui::RawInput { screen_rect: Some(screen), events, ..Default::default() };
+        let _ = ctx.run(raw, |c| ui.paint_strip(c, screen));
+        ctx.memory(|m| m.area_rect(egui::Id::new("paint_strip")))
+    };
+    assert!(ui.palette_items.is_empty());
+    ui.set_active("select".into());
+    assert!(!ui.paint_strip_shown());
+    ui.set_active("paint".into());
+    for _ in 0..3 { let _ = strip(&mut ui, vec![]); }
+    let r = strip(&mut ui, vec![]).expect("the strip shows with Paint active and no materials");
+    assert!(r.max.y < 800. - BOT_H, "{r:?}");
+    // Clicking Browse all…, the strip's last control, opens the Library's
+    // materials. (Tests have no fonts: the button is its 24 pt padding.)
+    let at = pos2(r.max.x - 16., r.center().y);
+    let button = |pressed| egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() };
+    let _ = strip(&mut ui, vec![egui::Event::PointerMoved(at)]);
+    let _ = strip(&mut ui, vec![button(true)]);
+    let _ = strip(&mut ui, vec![button(false)]);
+    assert!(ui.take_actions().contains(&"libsheet:materials".to_owned()));
+}
+
+#[test]
+fn the_free_area_leaves_out_the_panels_and_review_frees_them() {
+    let Some(mut ui) = test_chrome() else { return };
+    assert_eq!(ui.free_ndc(), None);                          // before a frame
+    ui.screen = Rect::from_min_size(Pos2::ZERO, vec2(1280., 800.));
+    ui.groups = vec![vec![Tool { enabled: true, id: "select".into(), label: String::new(), key: String::new(), icon: None }]];
+    ui.rail_w = rail::width(3);
+    ui.set_tree(vec![], 0);
+    ui.set_dock_width(320.);
+    let [x0, y0, x1, y1] = ui.free_ndc().unwrap();
+    let px = |v: f64| (v + 1.) / 2. * 1280.;
+    let py = |v: f64| (1. - v) / 2. * 800.;
+    assert!((px(x0) - f64::from(GUT + rail::width(3))).abs() < 0.01);
+    assert!((px(x1) - f64::from(1280. - GUT - 320.)).abs() < 0.01);
+    assert!((py(y1) - f64::from(TOP_H)).abs() < 0.01 && (py(y0) - f64::from(800. - BOT_H)).abs() < 0.01);
+    // Review retracts the rail, dock and bottom bar: the free area grows at
+    // once (not with the animation) and Python hears it to reframe.
+    ui.set_review(true);
+    assert_eq!(ui.take_actions(), ["review:1"]);
+    let [x0, y0, x1, _] = ui.free_ndc().unwrap();
+    assert_eq!((x0, y0, x1), (-1., -1., 1.));
+    assert_eq!(Ui::model_escape(Some(&mut ui), false, false, false), "");
+    assert_eq!(ui.take_actions(), ["review:0"]);
 }
 
 #[test]

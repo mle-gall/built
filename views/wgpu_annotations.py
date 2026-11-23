@@ -71,6 +71,7 @@ class AnnotationLayout:
     _draw_inference_marker = DocumentInteraction._draw_inference_marker
     _draw_scale_box = DocumentInteraction._draw_scale_box
     _draw_length_label = DocumentInteraction._draw_length_label
+    _length_label_at = DocumentInteraction._length_label_at
     _draw_route_marker = DocumentInteraction._draw_route_marker
     _OCCLUSION_STEP_PX = DocumentInteraction._OCCLUSION_STEP_PX
     _OCCLUSION_MAX_SAMPLES = DocumentInteraction._OCCLUSION_MAX_SAMPLES
@@ -222,6 +223,9 @@ def draw_tool_feedback(painter, tools, layout):
     layout.active_tool = tool
     layout.last_snap = getattr(tools, "last_snap", None)
     layout._value_buffer = getattr(tools, "value_buffer", "") or ""
+    # With the chrome on, the value field on the geometry is the chrome's
+    # (ui/value_field.rs): the bold label is not painted under it.
+    layout._chrome_owns_labels = bool(getattr(getattr(tools, "view", None), "_ui_attached", False))
     layout._route_marker = getattr(tools, "_route_marker", None)
     painter.save()
     try:
