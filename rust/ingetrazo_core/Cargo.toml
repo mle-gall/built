@@ -31,3 +31,6 @@ features = ["arbitrary_precision", "raw_value"]
 
 [dependencies.serde]
 version = "1"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSProcessInfo"] }

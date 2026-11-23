@@ -855,13 +855,19 @@ def _tree_model(view, scene, cv):
     """The tree's nodes and memberships (core/link_structure.py), kept
     until the model changes: a click that only changes the selection
     rebuilds the rows from it without walking every placement again."""
-    from collections import Counter, defaultdict
-    from core import bim_registry, link_structure, structure
-    from ingetrazo_core import source_direct_count
     cached = view.__dict__.get("_ui_tree_model")
     key = (id(scene), cv)
     if cached is not None and cached[0] == key:
         return cached[1]
+    model = prepare_tree_model(scene)
+    view._ui_tree_model = (key, model)
+    return model
+
+
+def prepare_tree_model(scene):
+    from collections import Counter, defaultdict
+    from core import bim_registry, link_structure, structure
+    from ingetrazo_core import source_direct_count
     registry = bim_registry.get(scene)
     tree = link_structure.Tree(scene, registry)
     recipes = {k: n["recipe"] for k, n in tree.nodes.items()}
@@ -888,10 +894,8 @@ def _tree_model(view, scene, cv):
     for k, copies in tree.links.items():
         if not counts[k]:
             counts[k] = source_direct_count(copies)
-    model = dict(tree=tree, registry=registry, recipes=recipes, counts=counts, problems=problems,
+    return dict(tree=tree, registry=registry, recipes=recipes, counts=counts, problems=problems,
                  to_fix=to_fix, node_layers=node_layers, order=order)
-    view._ui_tree_model = (key, model)
-    return model
 
 
 def _tree(view, win, *, discover=False):

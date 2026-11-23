@@ -323,16 +323,20 @@ def open_link_source(win, path, mount=None) -> bool:
     project it is linked into (a ⛓ tab), or its tab brought to the front."""
     host = getattr(win, "_doc", None)
     ok = win.open_path(Path(path))
-    doc = getattr(win, "_doc", None)
-    if ok and doc is not None and doc is not host and host is not None:
+
+    def bind(doc):
+        if doc is host or host not in _docs(win):
+            return
         from core import links
         scene = host.viewport.scene
-        if mount is None:
-            mount = next(iter(links.linked_groups(scene, path)), None)
+        source = mount or next(iter(links.linked_groups(scene, path)), None)
         doc.link_host = host
-        doc.link_mount = scene.occurrence_path(mount) if mount is not None else None
+        doc.link_mount = scene.occurrence_path(source) if source is not None else None
         if getattr(win, "view", None) is not None:
             win.view._ui_host_sig = None
+    if ok:
+        from views.document_open import after_open
+        after_open(win, Path(path), bind)
     return bool(ok)
 
 

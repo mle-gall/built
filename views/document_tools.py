@@ -220,10 +220,14 @@ class DocumentTools:
         self.inference.reset()
         self.reset_document_caches()
         seen = max(getattr(self, "_versions_seen", 0), self.scene.version, scene.version)
+        cached = getattr(scene, "_bounds_cache", None)
+        same_bounds = cached is not None and cached[0] == scene.version
         scene.version = self._versions_seen = seen + 1
         # A view preference, not document content: it follows the viewport.
         scene.hide_similar_components = bool(
             getattr(self.scene, "hide_similar_components", False))
+        if same_bounds and cached[2][1:] == scene._bounds_key()[1:]:
+            scene._bounds_cache = (scene.version, cached[1], scene._bounds_key())
         self.scene = scene
         self.history = history
         self._bind_bake_store()        # the incoming document's shared bakes

@@ -1284,7 +1284,7 @@ def resolve(scene, host_path=None, *, progress=None) -> dict:
     paths = [path for path in sources(scene) if not is_packed(scene, path)]
     for index, path in enumerate(paths):
         def report(fraction, phase):
-            progress((index + fraction) / len(paths), f"{Path(path).name} · {phase}")
+            progress((index + fraction) / len(paths), f"{Path(path).name} ({index + 1}/{len(paths)}) · {phase}")
 
         if progress:
             report(0.0, "Reading linked document…")

@@ -278,6 +278,16 @@ def open_path(win, path: Path) -> bool:
         from views import chrome_dialogs as cd
         cd.warning(win, tr("Open"), tr("{name} is no longer there.", name=path.name))
         return False
+    if suffix not in IMPORTS and host.ns_view:
+        from views.document_open import start
+        from functools import partial
+        from views.wgpu_ui import free_area
+        # A Finder/CLI open can arrive before the first frame. Its camera
+        # fit uses the initial aperture, before the dock and tool rail appear.
+        initial_frame = None
+        if free_area(win) is None and not host._picture_seen:
+            initial_frame = (win.viewport.camera.aspect, win.view.width(), win.view.height())
+        return start(win, path, partial(_install_open, initial_frame=initial_frame))
     previous, created = win._doc, None
     if not win._doc_is_blank():
         created = win.new_document()
@@ -349,61 +359,100 @@ def open_document(win, path: Path) -> bool:
             host._error("open")
             cd.critical(win, tr("Open failed"), str(exc))
             return False
-        import gc
-        gc.set_threshold(win.GC_THRESHOLD0, 10, 10)
-        if chrome:
-            bar.set_cancellable(False)          # it is in: packing cannot stop
-        vp.history.clear()
-        try:
-            vp.reset_texture_cache()
-        except Exception:  # noqa: BLE001
-            host._error("reset_texture_cache")
-        win._forget_coordinate()
-        vp.inference.reset()
-        win._apply_camera_dict(getattr(vp.scene, "camera_home", None))
-        if not isinstance(getattr(vp.scene, "camera_home", None), dict):
-            win._on_zoom_extents()
-        win._current_path = path
-        win._remember_recent(path)
-        host.recent_changed()
-        win._import_name = None
-        win._autosaved_version = None
-        # A recovered drawing is not the file on disk yet: dirty until saved.
-        win._saved_version = -1 if recovered else vp.scene.version
-        repaired = getattr(vp.scene, "load_repairs", 0)
-        if repaired:
-            win._saved_version = -1
-            cd.notify(win, tr("Document repaired"), tr(
-                "{n} damaged pieces (a coordinate that is not a number) were left out so "
-                "the rest of “{name}” could open. Save it to keep the repaired document.",
-                n=repaired, name=path.name), tone="warning")
-        vp.notify_scene_changed()
-        clean = not win._is_dirty()
-        # The pack and upload, under the same capsule (23 s on the ride
-        # with nothing saying so, when the bar closed before it).
-        version = vp.scene.version
-        view.set_scene(vp.scene, progress=lambda f, t: cb(0.6 + 0.38 * f, t), opening=True)
-        view._shell_resident_version = version
-        if clean:
-            win._saved_version = vp.scene.version
-        host.after_picture(win._after_links_loaded)
-        for job in list(getattr(view, "after_open", ()) or ()):
-            host.after_picture(job)
-        view.after_open = []
-        host.after_picture(win.settle_heap)
-        win._refresh_scene_tabs()
-        win._update_title()
-        vp._pick_warm_due = True
-        cb(1.0, "Document loaded")
-        cd.opened(bar, win, path)
-        if defer_recovery:
-            cd.offer_recovery(win, path, slot)
-        return True
+        return _finish_open(win, path, recovered, slot if defer_recovery else None, bar, cb)
     finally:
         win._opening_document = False
         win._open_in_progress = False
         bar.close()
         host.request_frame()
+
+
+def _install_open(win, path, bar, result, *, initial_frame=None):
+    from core import autosave
+    scene, packed, tracker, tree = result
+    history = win.viewport.history
+    history.scene = scene
+    win.viewport.set_document(scene, history)
+    initial_aspect = initial_frame[0] if initial_frame and initial_frame[1:] == (win.view.width(), win.view.height()) else None
+    return _finish_open(win, path, False, autosave.pending(path), bar, bar.job.update,
+                        (packed, tracker, tree), initial_aspect)
+
+
+def _finish_open(win, path, recovered, slot, bar, cb, prepared=None, initial_aspect=None):
+    from views import chrome_dialogs as cd
+    host, vp, view = win._host, win.viewport, win.view
+    import gc
+    gc.set_threshold(win.GC_THRESHOLD0, 10, 10)
+    vp.history.clear()
+    try:
+        vp.reset_texture_cache()
+    except Exception:  # noqa: BLE001
+        host._error("reset_texture_cache")
+    win._forget_coordinate()
+    vp.inference.reset()
+    win._apply_camera_dict(getattr(vp.scene, "camera_home", None))
+    if not isinstance(getattr(vp.scene, "camera_home", None), dict):
+        if initial_aspect is None:
+            win._on_zoom_extents()
+        else:
+            from views.wgpu_ui import free_area
+            bounds = win._extents_bounds()
+            area = free_area(win)
+            if bounds is not None:
+                camera = vp.camera
+                aspect, camera.aspect = camera.aspect, initial_aspect
+                try:
+                    camera.fit_box(*bounds, free=(-1., area[1], 1., area[3]) if area else None)
+                finally:
+                    camera.aspect = aspect
+    win._current_path = path
+    if prepared is None:
+        win._remember_recent(path)
+        host.recent_changed()
+    else:
+        doc = win._doc
+        def remember():
+            if doc in win.documents() and doc.path == path:
+                win._remember_recent(path, doc=doc)
+                host.recent_changed()
+        host.after_picture(remember)
+    win._import_name = None
+    win._autosaved_version = None
+    # A recovered drawing is not the file on disk yet: dirty until saved.
+    win._saved_version = -1 if recovered else vp.scene.version
+    repaired = getattr(vp.scene, "load_repairs", 0)
+    if repaired:
+        win._saved_version = -1
+        cd.notify(win, tr("Document repaired"), tr(
+            "{n} damaged pieces (a coordinate that is not a number) were left out so "
+            "the rest of “{name}” could open. Save it to keep the repaired document.",
+            n=repaired, name=path.name), tone="warning")
+    vp.notify_scene_changed()
+    clean = not win._is_dirty()
+    # The pack and upload, under the same capsule (23 s on the ride
+    # with nothing saying so, when the bar closed before it).
+    version = vp.scene.version
+    if prepared is None:
+        view.set_scene(vp.scene, progress=lambda f, t: cb(0.6 + 0.38 * f, t), opening=True)
+    else:
+        view.set_scene(vp.scene, opening=True, prepared=prepared)
+    view._shell_resident_version = version
+    if clean:
+        win._saved_version = vp.scene.version
+    host.after_picture(win._after_links_loaded)
+    for job in list(getattr(view, "after_open", ()) or ()):
+        host.after_picture(job)
+    view.after_open = []
+    if prepared is None:
+        host.after_picture(win.settle_heap)
+    win._refresh_scene_tabs()
+    win._update_title()
+    vp._pick_warm_due = True
+    cb(1.0, "Document loaded")
+    cd.opened(bar, win, path)
+    if slot is not None:
+        cd.offer_recovery(win, path, slot)
+    return True
 
 
 # ---- the progress capsule ------------------------------------------------------

@@ -181,6 +181,7 @@ struct Win {
     window: Window,
     host: python::Host,
     ns_view: usize,
+    open_frame: Option<(Instant, Instant)>,
     cursor: (f64, f64),
     held: u32,
     last_press: Option<(Instant, u32, (f64, f64))>,
@@ -196,7 +197,7 @@ mod perf {
     use std::time::Instant;
     static SAMPLES: Mutex<Vec<(&'static str, f64)>> = Mutex::new(Vec::new());
 
-    fn on() -> bool {
+    pub fn on() -> bool {
         static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
         *ON.get_or_init(|| std::env::var_os("BUILT_PERF").is_some())
     }
@@ -213,7 +214,7 @@ mod perf {
         }
         let samples = std::mem::take(&mut *SAMPLES.lock().unwrap());
         let mut parts = Vec::new();
-        for what in ["move_ms", "frame_ms"] {
+        for what in ["move_ms", "frame_ms", "open_stall_ms", "open_total_ms", "open_handover_ms"] {
             let mut v: Vec<f64> = samples.iter().filter(|(w, _)| *w == what).map(|(_, x)| *x).collect();
             if v.is_empty() {
                 continue;
@@ -415,9 +416,13 @@ impl App {
         if let Some(w) = self.win(id) {
             w.host.call("open_path", (path.to_string_lossy().to_string(),));
         }
+        let pending = self.win(id).is_some_and(|w| w.host.opening());
+        if pending {
+            self.win_mut(id).unwrap().open_frame = Some((t, t));
+        }
         let ms = t.elapsed().as_secs_f64() * 1000.0;
-        eprintln!("[built] opened {} in {ms:.0} ms", path.display());
-        self.timings.opened.get_or_insert(self.timings.process.elapsed());
+        eprintln!("[built] dispatched {} in {ms:.0} ms", path.display());
+        if !pending { self.timings.opened.get_or_insert(self.timings.process.elapsed()); }
         if let Some(w) = self.win(id) {
             w.window.focus_window();
         }
@@ -473,7 +478,23 @@ impl App {
         let Some(step) = self.steps.pop_front() else { return };
         let Some(id) = self.front() else { return };
         match step {
-            Step::Open(p) => self.open(&absolute(Path::new(&p))),
+            Step::Open(p) => {
+                self.open(&absolute(Path::new(&p)));
+                self.steps.push_front(Step::WaitOpen);
+            }
+            Step::OpenAsync(p) => self.open(&absolute(Path::new(&p))),
+            Step::WaitOpen => {
+                if self.win(id).is_some_and(|w| w.open_frame.is_some() || w.host.opening()) {
+                    self.steps.push_front(Step::WaitOpen);
+                    self.resume_at = Some(Instant::now() + Duration::from_millis(16));
+                }
+            }
+            Step::WaitProgress(fraction) => {
+                if self.win(id).and_then(|w| w.host.open_fraction()).is_some_and(|f| f < fraction) {
+                    self.steps.push_front(Step::WaitProgress(fraction));
+                    self.resume_at = Some(Instant::now() + Duration::from_millis(16));
+                }
+            }
             Step::Wait(ms) => self.resume_at = Some(Instant::now() + Duration::from_millis(ms)),
             Step::Button(down, x, y, button, mods) =>
                 self.pointer(id, if down { "press" } else { "release" }, x, y, button, mods),
@@ -534,7 +555,13 @@ impl App {
                     self.key(id, false, keys::qt_char(c), &s, false, 0);
                 }
             }
-            Step::Menu(cmd) => self.command(event_loop, &cmd),
+            Step::Menu(cmd) => {
+                let loading = self.win(id).is_some_and(|w| w.host.opening());
+                self.command(event_loop, &cmd);
+                if !loading && self.win(id).is_some_and(|w| w.host.opening()) {
+                    self.steps.push_front(Step::WaitOpen);
+                }
+            }
             Step::Preedit(text) => {
                 if let Some(h) = self.host(id) {
                     let n = text.chars().count();
@@ -672,7 +699,7 @@ impl App {
         let id = window.id();
         self.wins.push((id, Win {
             window, host, ns_view, cursor: (0.0, 0.0), held: 0, last_press: None, last_key_text: None,
-            contact: None, second_contact: None,
+            contact: None, second_contact: None, open_frame: None,
         }));
         self.focused = Some(id);
         Ok(id)
@@ -709,6 +736,9 @@ impl App {
             if let Some(w) = self.win(id) {
                 w.host.call0("cold_start");
             }
+        }
+        if !files.is_empty() && !self.steps.is_empty() {
+            self.steps.push_front(Step::WaitOpen);
         }
         for file in files {
             self.open(&file);
@@ -750,8 +780,20 @@ impl App {
     /// One window's turn: Python's idle, cursor, title, drag, and what else
     /// it asks for (a new window, to come to the front).
     fn turn(&mut self, event_loop: &ActiveEventLoop, id: WindowId) -> Option<f64> {
-        let Some(w) = self.win(id) else { return None };
+        let Some(w) = self.win_mut(id) else { return None };
+        let measuring = perf::on() && w.host.opening();
+        if measuring && w.open_frame.is_none() {
+            let start = Instant::now();
+            w.open_frame = Some((start, start));
+        }
+        let w = self.win(id)?;
+        let handover = measuring.then(Instant::now);
         let (wanted, wake_ms, cursor, title, drag) = w.host.idle();
+        if let Some(start) = handover {
+            if !w.host.opening() {
+                perf::note("open_handover_ms", start);
+            }
+        }
         let extra = w.host.extras();
         if extra.exit {
             event_loop.exit();
@@ -919,16 +961,22 @@ impl ApplicationHandler<UserEvent> for App {
 
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
-        if !self.steps.is_empty() || self.resume_at.is_some() {
-            self.run_script(event_loop);
-        }
-        let mut wake: Option<f64> = None;
-        let ids: Vec<WindowId> = self.wins.iter().map(|(id, _)| *id).collect();
-        for id in ids {
-            if let Some(ms) = self.turn(event_loop, id) {
-                wake = Some(wake.map_or(ms, |w: f64| w.min(ms)));
+        // Keep one interpreter turn together. Releasing/reacquiring the
+        // GIL for each idle, title, cursor and script query can cost a full
+        // worker timeslice at every boundary while packing a large model.
+        let wake = pyo3::Python::attach(|_| {
+            if !self.steps.is_empty() || self.resume_at.is_some() {
+                self.run_script(event_loop);
             }
-        }
+            let mut wake: Option<f64> = None;
+            let ids: Vec<WindowId> = self.wins.iter().map(|(id, _)| *id).collect();
+            for id in ids {
+                if let Some(ms) = self.turn(event_loop, id) {
+                    wake = Some(wake.map_or(ms, |w| w.min(ms)));
+                }
+            }
+            wake
+        });
         let scripted = !self.steps.is_empty() && self.resume_at.is_none();
         let flow = if scripted {
             ControlFlow::Poll
@@ -1025,7 +1073,9 @@ fn main() {
             args.file.get_or_insert_with(|| layout.root.join("examples/slab-and-cube.igz"));
             args
         };
-        std::process::exit(check(&args));
+        let result = check(&args);
+        python::shutdown_workers();
+        std::process::exit(result);
     }
     let event_loop = match EventLoop::<UserEvent>::with_user_event().build() {
         Ok(l) => l,
@@ -1099,6 +1149,7 @@ fn main() {
     for (_, w) in app.wins.drain(..) {
         w.host.call0("close");
     }
+    python::shutdown_workers();
     std::process::exit(app.exit_code);
 }
 
@@ -1144,16 +1195,33 @@ impl App {
                     w.host.frame();
                 }
             }
-            WindowEvent::RedrawRequested => {
+            WindowEvent::RedrawRequested => pyo3::Python::attach(|_| {
                 let t0 = Instant::now();
                 let drew = self.win(id).is_some_and(|w| w.host.frame().is_some());
                 if drew {
                     perf::note("frame_ms", t0);
                 }
                 if drew {
+                    let win = self.win_mut(id).unwrap();
+                    if let Some((start, previous)) = win.open_frame {
+                        perf::note("open_stall_ms", previous);
+                        if perf::on() && previous.elapsed() >= Duration::from_millis(100) {
+                            eprintln!("[built] open gap {:.1} ms · {:.1}% · {}",
+                                previous.elapsed().as_secs_f64() * 1000.,
+                                win.host.open_fraction().unwrap_or(1.) * 100.,
+                                win.host.open_phase().as_deref().unwrap_or("First model frame"));
+                        }
+                        if win.host.opening() {
+                            win.open_frame = Some((start, Instant::now()));
+                        } else {
+                            perf::note("open_total_ms", start);
+                            win.open_frame = None;
+                            self.timings.opened.get_or_insert(self.timings.process.elapsed());
+                        }
+                    }
                     self.frames += 1;
                     if self.timings.first_frame.is_none()
-                        && (self.args.file.is_none() || self.timings.opened.is_some())
+                        && (self.args.file.is_none() || (self.timings.opened.is_some() && !self.win(id).unwrap().host.opening()))
                     {
                         self.timings.first_frame = Some(self.timings.process.elapsed());
                         if self.args.measure {
@@ -1162,7 +1230,7 @@ impl App {
                         }
                     }
                 }
-            }
+            }),
             WindowEvent::ModifiersChanged(m) => self.modifiers = m.state(),
             WindowEvent::CursorMoved { position, .. } => {
                 let (x, y) = self.logical(id, position);

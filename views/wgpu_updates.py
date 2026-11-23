@@ -74,7 +74,11 @@ class InstanceUpdates:
         for mesh in all_meshes:
             self.meshes.setdefault(id(mesh), (mesh, mesh._mut_serial, -1))
         self.mesh_revisions = {key: mesh.revision for key, (mesh, _, _) in self.meshes.items()}
-        self.rows = {uid: i for i, uid in enumerate(packed.uids)}
+        self.uid_rows = {}
+        self.rows = {}
+        for row, uid in enumerate(packed.uids):
+            self.uid_rows.setdefault(uid, []).append(row)
+            self.rows[uid] = row
         self.active = set(self.rows)
         self.changed = []
         self.removed = []

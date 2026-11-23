@@ -48,6 +48,22 @@ class WorksessionMixin:
                 self._active_file = next((str(d.path.resolve()) for d in self.documents() if d.path), None)
             project.save_worksession(self._session_path, rows, self._active_file)
 
+    def _open_session_file(self, path):
+        """Worksession ordering and saved cameras need a committed project tab."""
+        if not self.open_path(path):
+            return False
+        if not self.__dict__.get("_pending_open"):
+            return True
+        from PySide6.QtCore import QEventLoop
+        while (bar := self.__dict__.get("_pending_open")) and (bar.path == path or path in bar.queue):
+            loop = QEventLoop()
+            bar.destroyed.connect(loop.quit)
+            loop.exec()
+        doc = next((doc for doc in self.documents() if doc.same_file(path)), None)
+        if doc is not None:
+            self.activate_document(doc)
+        return doc is not None
+
     def open_project(self, path):
         path = Path(path).resolve()
         state = project.worksession(path)
@@ -60,7 +76,7 @@ class WorksessionMixin:
         self._opening_session = True
         try:
             for row in state['files']:
-                if not self.open_path(Path(row['path'])):
+                if not self._open_session_file(Path(row['path'])):
                     raise ValueError('Could not open ' + row['path'])
                 self._apply_camera_dict(row.get('camera'))
             # Restore order even when some of these documents were already open.
@@ -89,7 +105,7 @@ class WorksessionMixin:
         allowed.update(d.path.resolve() for d in self.documents() if d.path)
         if path not in allowed or path.suffix.lower() not in built.DOCUMENT_SUFFIXES:
             raise ValueError('Active file must be a project document')
-        if not self.open_path(path):
+        if not self._open_session_file(path):
             raise ValueError('Could not open active file')
         self._active_file = str(path)
         self._session_unsaved_doc = None

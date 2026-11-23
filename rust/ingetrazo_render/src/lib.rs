@@ -26,6 +26,8 @@ mod depth;
 mod backend;
 mod edges;
 mod faces;
+mod scene_upload;
+use scene_upload::{SceneUpload, PrototypeArrays};
 mod xray;
 mod ao;
 mod resident_readback;
@@ -744,36 +746,32 @@ impl Renderer {
             .sum::<u64>().saturating_add(live) * per_pixel
     }
     /// Packed little-endian arrays; reject malformed uploads before reaching wgpu.
-    fn set_scene(
-        &mut self,
-        prototypes: (
-            PyReadonlyArray1<'_, u8>,
-            PyReadonlyArray1<'_, u8>,
-            PyReadonlyArray1<'_, u8>,
-            PyReadonlyArray1<'_, u8>,
-        ),
-        instances: PyReadonlyArray1<'_, u8>,
-    ) -> PyResult<()> {
-        self.sun.invalidate();
-        let (v, ix, p, cmd) = (&prototypes.0, &prototypes.1, &prototypes.2, &prototypes.3);
-        let (v, ix, p, cmd) = (
-            v.as_slice()?,
-            ix.as_slice()?,
-            p.as_slice()?,
-            cmd.as_slice()?,
-        );
-        let instances = instances.as_slice()?;
-        if v.len() % 28 != 0
-            || ix.len() % 4 != 0
-            || p.is_empty()
-            || p.len() % 32 != 0
-            || cmd.len() != p.len() / 32 * 40
-            || instances.is_empty()
-            || instances.len() % 80 != 0
-        {
-            return Err(PyValueError::new_err("invalid scene array layout"));
+    fn set_scene(&mut self, prototypes: PrototypeArrays<'_>, instances: PyReadonlyArray1<'_, u8>) -> PyResult<()> {
+        let raw = instances.as_slice()?;
+        let limit = self.device.limits().max_storage_buffer_binding_size as usize;
+        if raw.len() > limit || prototypes.2.as_slice()?.len() > limit {
+            return Err(PyValueError::new_err("scene exceeds storage binding limit"));
         }
-        let n = instances.len() / 80;
+        let geometry = scene_upload::Geometry::prepare(prototypes.0.as_slice()?, prototypes.1.as_slice()?,
+            prototypes.2.as_slice()?, prototypes.3.as_slice()?, raw)?;
+        self.set_prepared_scene(&mut SceneUpload(Some(geometry)), instances)
+    }
+
+    fn set_prepared_scene(&mut self, upload: &mut SceneUpload, instances: PyReadonlyArray1<'_, u8>) -> PyResult<()> {
+        let raw = instances.as_slice()?;
+        let geometry = upload.0.as_ref().ok_or_else(|| PyValueError::new_err("scene was already installed"))?;
+        // Camera rebasing can change translations between preparation and upload.
+        // Prototype identity and row order must still match the validated commands.
+        if raw.len() != geometry.codes.len() * 80 || raw.chunks_exact(80).zip(&geometry.codes)
+            .any(|(row, code)| row[64..68] != code.to_le_bytes()) {
+            return Err(PyValueError::new_err("instance rows changed after preparation"));
+        }
+        let geometry = upload.0.take().unwrap();
+        let instances = raw;
+        let scene_upload::Geometry { edges: expanded_v, vertices: face_v, indices: face_ix,
+            commands: expanded_cmd, shifts: material_shifts, bounds, codes } = geometry;
+        let p = bounds.as_slice();
+        let n = codes.len();
         let count = p.len() / 32;
         let capacity = grown_capacity(0, n);
         let prototype_capacity = grown_capacity(0, count);
@@ -781,44 +779,7 @@ impl Renderer {
         if capacity * 80 > limit || prototype_capacity * 40 > limit {
             return Err(PyValueError::new_err("scene capacity exceeds storage binding limit"));
         }
-        let mut counts = vec![0u32; count];
-        for row in instances.chunks_exact(80) {
-            let id = u32::from_le_bytes(row[64..68].try_into().unwrap()) as usize;
-            if id >= count {
-                return Err(PyValueError::new_err("prototype id out of range"));
-            }
-            counts[id] += 1;
-        }
-        let mut start = 0;
-        for (j, (row, capacity)) in cmd.chunks_exact(20).zip(counts.iter().cycle()).enumerate() {
-            if j == count {
-                start = 0;
-            }
-            let c: Command = bytemuck::pod_read_unaligned(row);
-            if c.instances != 0
-                || c.start != start
-                || (c.first as u64 + c.count as u64) * 4 > ix.len() as u64
-            {
-                return Err(PyValueError::new_err("invalid command range"));
-            }
-            for index in ix[c.first as usize * 4..(c.first + c.count) as usize * 4].chunks_exact(4)
-            {
-                let j = u32::from_le_bytes(index.try_into().unwrap()) as i64 + c.base as i64;
-                if j < 0 || j >= v.len() as i64 / 28 {
-                    return Err(PyValueError::new_err("vertex index out of range"));
-                }
-            }
-            start += capacity;
-        }
-        for bytes in [p, instances] {
-            if bytes.len() as u64 > self.device.limits().max_storage_buffer_binding_size as u64 {
-                return Err(PyValueError::new_err("scene exceeds storage binding limit"));
-            }
-        }
-        // Preserve the scene ABI; pack unique edges separately from face vertices.
-        let (expanded_v, expanded_ix, mut expanded_cmd) = edges::expand(v, ix, cmd, count)
-            .map_err(PyValueError::new_err)?;
-        let (face_v, face_ix, material_shifts) = faces::compact(v, &expanded_ix, &mut expanded_cmd, count);
+        self.sun.invalidate();
         let (v, ix, cmd) = (face_v.as_slice(), face_ix.as_slice(), expanded_cmd.as_slice());
         if expanded_v.len() as u64 > self.device.limits().max_storage_buffer_binding_size as u64 {
             return Err(PyValueError::new_err("edge records exceed storage binding limit"));
@@ -904,12 +865,12 @@ impl Renderer {
             rows: instances.to_vec(),
             part_preview: Vec::new(),
             protos,
-            prototype_data: p.to_vec(),
+            prototype_data: bounds,
             survivors,
-            template_data: cmd.to_vec(),
+            template_data: expanded_cmd,
             capacity,
             vertex_bytes: v.len(),
-            index_data: ix.to_vec(),
+            index_data: face_ix,
             flags: instances
                 .chunks_exact(80)
                 .map(|r| u32::from_le_bytes(r[72..76].try_into().unwrap()))
@@ -937,7 +898,8 @@ impl Renderer {
             t.ids_dirty = true;
         }
         self.ghost_objects.upload(&self.device,&[],&[]).map_err(PyValueError::new_err)?;
-        self.device.poll(wgpu::Maintain::Wait);
+        // Queue submission orders the first draw after initialization.
+        self.device.poll(wgpu::Maintain::Poll);
         Ok(())
     }
     /// Append compact replacement ranges while preserving placement identities.
@@ -1750,7 +1712,10 @@ impl Renderer {
             .as_ref()
             .ok_or_else(|| PyValueError::new_err("set_scene first"))?;
         let polled = Instant::now();
-        let frame = if present { Some(self.surface.get_current_texture()
+        // Metal can wait for the compositor here. The document adapter can
+        // continue populating the private scene during that wait.
+        let surface = &self.surface;
+        let frame = if present { Some(Python::attach(|py| py.detach(|| surface.get_current_texture()))
             .map_err(|e| PyValueError::new_err(e.to_string()))?) } else { None };
         let target = frame.as_ref().map(|f| &f.texture).unwrap_or(&self.offscreen);
         let acquired = Instant::now();
@@ -2001,7 +1966,8 @@ impl Renderer {
         });
         let command = e.finish();
         let encoded = Instant::now();
-        self.queue.submit([command]);
+        let queue = &self.queue;
+        Python::attach(|py| py.detach(|| queue.submit([command])));
         let submitted = Instant::now();
         if let Some(read) = capture {
             let (tx, rx) = std::sync::mpsc::channel();
@@ -2945,6 +2911,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(commands::command_description, m)?)?;
     m.add_function(wrap_pyfunction!(commands::shortcut_conflicts, m)?)?;
     m.add_function(wrap_pyfunction!(commands::shortcut_reserved, m)?)?;
+    m.add_class::<SceneUpload>()?;
     m.add_class::<Renderer>()
 }
 #[cfg(test)]

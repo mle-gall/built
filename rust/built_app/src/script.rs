@@ -5,6 +5,9 @@
 //!
 //! ```text
 //! open tests/fixtures/x.igz     # a document (relative to the cwd)
+//! open-async file.built          # keep dispatching script input during the open
+//! wait-progress 0.6              # wait for this fraction, or completion
+//! wait-open                      # wait for the published frame
 //! wait 300                      # milliseconds of normal event-loop time
 //! resize 1280 800               # window content size in logical pixels
 //! move 400 300                  # pointer moves (hover)
@@ -34,6 +37,9 @@
 #[derive(Clone, Debug, PartialEq)]
 pub enum Step {
     Open(String),
+    OpenAsync(String),
+    WaitOpen,
+    WaitProgress(f64),
     Wait(u64),
     Resize(u32, u32),
     Move(f64, f64),
@@ -101,6 +107,15 @@ pub fn parse(text: &str) -> Result<Vec<Step>, String> {
             (b, s, m)
         };
         let step = match w[0] {
+            "open-async" => Step::OpenAsync(rest(1)),
+            "wait-open" => Step::WaitOpen,
+            "wait-progress" => {
+                let fraction = num(w.get(1), line)?;
+                if !(0.0..=1.0).contains(&fraction) {
+                    return Err(format!("line {line}: expected a fraction from zero to one"));
+                }
+                Step::WaitProgress(fraction)
+            }
             "open" => Step::Open(rest(1)),
             "wait" => Step::Wait(num(w.get(1), line)? as u64),
             "resize" => {

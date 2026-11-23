@@ -318,7 +318,7 @@ class StartSheet(_sheet_class()):
     # -- what is on it ------------------------------------------------------
     def signature(self, ctx):
         # A document opened behind the page changes Continue and Esc.
-        return (can_return(self.page.win),)
+        return (can_return(self.page.win), self.page.win.__dict__.get("_pending_open"))
 
     def items(self, back: bool) -> dict:
         """The list's sections: {"cont", "pinned", "recent", "projects",
@@ -374,7 +374,8 @@ class StartSheet(_sheet_class()):
         if self.focus not in order:
             self.focus = order[0] if order else None
         empty = ("Nothing matches “%s”." % self.filter) if self.filter else "No recent files yet."
-        c = s.content(empty=empty)
+        pending = win.__dict__.get("_pending_open")
+        c = s.content(title=pending.job.label if pending else "", empty=empty)
         captions = {"cont": "Continue", "pinned": "Pinned", "recent": "Recent", "projects": "Projects",
                     "templates": "Templates"}
         for key in ("cont", "pinned", "recent", "projects", "templates"):
@@ -1043,6 +1044,10 @@ def open_recent(win, path) -> bool:
         path = Path(located)
     if not win.open_path(path):
         return False
+    if win.__dict__.get("_pending_open"):
+        from views.document_open import after_open
+        after_open(win, path, lambda doc: recent.remember(path, replace=original))
+        return True
     recent.remember(path, replace=original)
     hide(win)
     return True

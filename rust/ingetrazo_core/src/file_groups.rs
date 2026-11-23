@@ -3,15 +3,17 @@
 //! mesh handles (including shared linked definitions) and legacy identities.
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyFloat, PyInt, PyIterator, PyList, PyTuple};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 #[pyclass(frozen)]
 pub struct FileGroups {
+    cancelled: AtomicBool,
     done: AtomicUsize,
     count: usize,
 }
 
 struct Builder<'py> {
+    cancelled: &'py AtomicBool,
     group: Bound<'py, PyAny>,
     meshes: Bound<'py, PyAny>,
     read_mesh: Bound<'py, PyAny>,
@@ -19,6 +21,9 @@ struct Builder<'py> {
 }
 impl<'py> Builder<'py> {
     fn record(&self, raw: &Bound<'py, PyDict>) -> PyResult<Bound<'py, PyAny>> {
+        if self.cancelled.load(Ordering::Relaxed) {
+            return Err(pyo3::exceptions::PyInterruptedError::new_err("Opening cancelled"));
+        }
         let py = raw.py();
         let kwargs = PyDict::new(py);
         if let Some(v) = raw.get_item("name")? {
@@ -175,6 +180,7 @@ impl FileGroups {
     fn new(count: usize) -> Self {
         Self {
             done: 0.into(),
+            cancelled: false.into(),
             count,
         }
     }
@@ -208,11 +214,14 @@ impl FileGroups {
         Ok(records)
     }
 
+    fn cancel(&self) {
+        self.cancelled.store(true, Ordering::Relaxed);
+    }
     fn fraction(&self) -> f64 {
         self.done.load(Ordering::Relaxed) as f64 / self.count.max(1) as f64
     }
     fn build<'py>(
-        &self,
+        &'py self,
         py: Python<'py>,
         raw: &Bound<'py, PyAny>,
         kept: &Bound<'py, PyAny>,
@@ -221,6 +230,7 @@ impl FileGroups {
         built: bool,
     ) -> PyResult<(Bound<'py, PyList>, Bound<'py, PyList>)> {
         let builder = Builder {
+            cancelled: &self.cancelled,
             group: py.import("core.group")?.getattr("Group")?,
             meshes,
             read_mesh,

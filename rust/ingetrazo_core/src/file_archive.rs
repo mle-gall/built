@@ -506,6 +506,7 @@ pub fn igz_read_member<'py>(
 
 #[pyclass(frozen)]
 pub struct DocumentReader {
+    cancelled: std::sync::atomic::AtomicBool,
     consumed: std::sync::atomic::AtomicU64,
     size: u64,
 }
@@ -520,6 +521,9 @@ struct JsonInput<'a> {
 impl Read for JsonInput<'_> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         use std::sync::atomic::Ordering::Relaxed;
+        if self.meter.cancelled.load(Relaxed) {
+            return Err(io::Error::other("document read cancelled"));
+        }
         let n = self.source.read(buf)?;
         let bytes = &buf[..n];
         let pos = self.meter.consumed.fetch_add(n as u64, Relaxed) + n as u64;
@@ -555,7 +559,11 @@ impl DocumentReader {
         Self {
             size,
             consumed: 0.into(),
+            cancelled: false.into(),
         }
+    }
+    fn cancel(&self) {
+        self.cancelled.store(true, std::sync::atomic::Ordering::Relaxed);
     }
     fn fraction(&self) -> f64 {
         (self.consumed.load(std::sync::atomic::Ordering::Relaxed) as f64 / self.size.max(1) as f64)

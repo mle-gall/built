@@ -103,10 +103,21 @@ class PackedScene:
         self.material_updates = {}
         return self.materials
 
+    def _upload_arrays(self):
+        prototypes = (self.vertices, self.indices, self.bounds, np.concatenate((self.commands, self.edge_commands)))
+        return tuple(a.view(np.uint8).reshape(-1) for a in prototypes), self.instances.view(np.uint8).reshape(-1)
+
+    def prepare_upload(self):
+        from ingetrazo_render import SceneUpload
+        if len(self.instances):
+            self._prepared_upload = SceneUpload(*self._upload_arrays())
+
     def upload(self, renderer):
-        renderer.set_scene(tuple(a.view(np.uint8).reshape(-1) for a in
-                                 (self.vertices, self.indices, self.bounds, np.concatenate((self.commands, self.edge_commands)))),
-                           self.instances.view(np.uint8).reshape(-1))
+        prepared = self.__dict__.pop("_prepared_upload", None)
+        if prepared is None:
+            renderer.set_scene(*self._upload_arrays())
+        else:
+            renderer.set_prepared_scene(prepared, self.instances.view(np.uint8).reshape(-1))
         renderer.set_materials(self.material_stream())
         renderer.set_textures(*self.textures)
         if hasattr(renderer, "set_profile_exclusions"):
@@ -365,6 +376,9 @@ def _placement_records(scene, roots, vp, state):
     world, defined = _doc_worlds(local, has, parent)
     par = parent.tolist()
     proxies = DocumentInteraction._bind_placement_rows(vp, handles, par, [])
+    # This adapter is local to one walk. Release each temporary editor proxy
+    # with its row instead of tearing down the whole table under the GIL.
+    vp._placement_proxies.clear()
     allowed = getattr(scene, '_navigator_allowed', None)
     own_hidden = own_hidden.tolist()
     defined = defined.tolist()
@@ -376,6 +390,7 @@ def _placement_records(scene, roots, vp, state):
     similar_hidden = scene.similar_hidden
     for i in range(n):
         g, proxy, p = handles[i], proxies[i], par[i]
+        proxies[i] = None
         hidden = not state(proxy)[0]
         obj = own_hidden[i]
         nav = allowed is not None and scene.navigator_key(g) not in allowed
@@ -398,6 +413,14 @@ def _profile_endpoints(mesh):
     result = array('f')
     result.frombytes(np.asarray(points, np.float32).tobytes())
     return result
+
+
+def open_focus(scene):
+    home = scene.camera_home
+    if isinstance(home, dict) and home.get("target") is not None:
+        return home["target"]
+    lo, hi = scene.bounds()
+    return tuple((a + b) / 2 for a, b in zip(lo.toTuple(), hi.toTuple())) if lo is not None else (0., 0., 0.)
 
 
 def pack_scene(scene, view_tint=None, *, face_overrides=None, texture_images=True,
@@ -433,10 +456,10 @@ def pack_scene(scene, view_tint=None, *, face_overrides=None, texture_images=Tru
     total = 0
     if progress is not None:
         total = max(1, sum(1 for _ in iter_groups(scene.groups)))
-        progress(0.0, "Preparing the view…")
+        progress(0.0, "Packing geometry for the GPU…")
     for index, (group, matrix, paint_group, flags) in enumerate(placements):
-        if progress is not None and index % 2048 == 2047:
-            progress(0.9 * index / total, "Preparing the view…")
+        if progress is not None and index % 64 == 63:
+            progress(0.9 * index / total, "Packing geometry for the GPU…")
         mesh = scene.loose_mesh if group is None else group.mesh
         paint_attrs = _paint_of(vp, paint_group)
         if paint_attrs and paint_attrs.get('front_only'):
@@ -504,7 +527,7 @@ def pack_scene(scene, view_tint=None, *, face_overrides=None, texture_images=Tru
     # before decoding textures. Deferred source arrays remain owned by meshes.
     del meshes
     if progress is not None:
-        progress(0.9, "Preparing the view…")
+        progress(0.9, "Packing geometry for the GPU…")
     handoff = perf_counter()
     raw, indices, bounds, table, materials = _native.available().bake_scene(
         *arrays[:4], arrays[6], arrays[7], arrays[4], arrays[5], offsets, attributes, _native.qt_hypot(),
@@ -527,7 +550,10 @@ def pack_scene(scene, view_tint=None, *, face_overrides=None, texture_images=Tru
     if rows:
         from core.coordinate_frame import choose_origin
         codes = np.asarray([r[0] for r in rows])
-        matrices = np.asarray([r[1] for r in rows])
+        matrices = np.empty((len(rows), 4, 4), dtype=np.float64)
+        for begin_row in range(0, len(rows), 2048):
+            block = rows[begin_row:begin_row + 2048]
+            matrices[begin_row:begin_row + len(block)] = [r[1] for r in block]
         linear = matrices[:, :3, :3]
         matrices[:, 3, :3] += np.einsum('ni,nij->nj', np.asarray(origins)[codes], linear)
         boxes = np.array([c[1] for c in coordinates])[codes]
