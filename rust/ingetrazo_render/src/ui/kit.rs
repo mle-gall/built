@@ -922,3 +922,312 @@ pub mod organisms {
     }
 }
 pub use organisms::*;
+
+/// Shared picker input. Sizes are in the caller's display unit.
+#[derive(Clone, serde::Deserialize, serde::Serialize)]
+pub struct FontChoice {
+    pub text: String,
+    pub font: String,
+    pub bold: bool,
+    pub italic: bool,
+    pub height: f64,
+    pub thickness: Option<f64>,
+    pub unit: String,
+    pub minimum: f64,
+    pub maximum: f64,
+    pub title: String,
+    pub editable: bool,
+    pub recent: Vec<String>,
+    pub favourites: Vec<String>,
+}
+
+pub struct FontPicker {
+    pub choice: FontChoice,
+    families: Vec<String>,
+    filter: String,
+    focus: bool,
+    previews: std::collections::HashMap<String, egui::TextureHandle>,
+    sample_key: Option<(String, bool, bool, u32, u32)>,
+}
+
+impl FontPicker {
+    pub fn new(mut choice: FontChoice) -> Self {
+        #[cfg(target_os = "macos")]
+        let families = super::system_fonts::families();
+        #[cfg(not(target_os = "macos"))]
+        let families = Vec::new();
+        if choice.font.is_empty() {
+            choice.font = families
+                .iter()
+                .find(|s| s.as_str() == "Helvetica")
+                .or(families.first())
+                .cloned()
+                .unwrap_or_default();
+        }
+        Self {
+            choice,
+            families,
+            filter: String::new(),
+            focus: true,
+            previews: Default::default(),
+            sample_key: None,
+        }
+    }
+
+    fn matches(&self) -> Vec<String> {
+        let query = self.filter.trim().to_lowercase();
+        let mut rows: Vec<_> = self
+            .families
+            .iter()
+            .filter(|s| s.to_lowercase().contains(&query))
+            .cloned()
+            .collect();
+        rows.sort_by_key(|s| {
+            (
+                self.choice
+                    .recent
+                    .iter()
+                    .position(|r| r == s)
+                    .unwrap_or(usize::MAX),
+                !self.choice.favourites.contains(s),
+            )
+        });
+        rows
+    }
+
+    pub fn type_filter(&mut self, text: &str) {
+        self.filter.push_str(text);
+        let rows = self.matches();
+        if !rows.contains(&self.choice.font) {
+            self.choice.font = rows.first().cloned().unwrap_or_default();
+        }
+        self.focus = true;
+    }
+
+    fn toggle_star(&mut self, name: &str) {
+        if self.choice.favourites.iter().any(|s| s == name) {
+            self.choice.favourites.retain(|s| s != name);
+        } else {
+            self.choice.favourites.push(name.into());
+        }
+    }
+
+    fn remember(&mut self) {
+        self.choice.recent.retain(|s| s != &self.choice.font);
+        self.choice.recent.insert(0, self.choice.font.clone());
+        self.choice.recent.truncate(10);
+    }
+
+    fn step(&mut self, rows: &[String], down: bool) -> Option<usize> {
+        if rows.is_empty() {
+            return None;
+        }
+        let at = rows.iter().position(|r| r == &self.choice.font);
+        let next = at.map_or(0, |i| {
+            if down {
+                (i + 1).min(rows.len() - 1)
+            } else {
+                i.saturating_sub(1)
+            }
+        });
+        self.choice.font = rows[next].clone();
+        Some(next)
+    }
+
+    pub fn popup(&mut self, ctx: &egui::Context) -> Option<bool> {
+        let id = egui::Id::new("font_picker");
+        let area = egui::Modal::default_area(id).anchor(
+            egui::Align2::CENTER_BOTTOM,
+            vec2(0., -super::BOT_H - SPACE_S),
+        );
+        let modal = egui::Modal::new(id)
+            .area(area)
+            .frame(egui::Frame::NONE)
+            .backdrop_color(CLEAR)
+            .show(ctx, |ui| {
+                let mut answer = None;
+                glass(Surface::Raised)
+                    .inner_margin(egui::Margin::same(SPACE_S as i8))
+                    .show(ui, |ui| {
+                        ui.set_width(320.);
+                        answer = self.show(ui);
+                    });
+                answer
+            });
+        modal
+            .inner
+            .or_else(|| modal.backdrop_response.clicked().then_some(false))
+    }
+
+    /// Some(true) applies and Some(false) cancels the draft.
+    pub fn show(&mut self, ui: &mut egui::Ui) -> Option<bool> {
+        use egui::{Key, Modifiers};
+        ui.label(egui::RichText::new(&self.choice.title).font(title_font()));
+        if self.choice.editable {
+            ui.horizontal(|ui| {
+                ui.label("Text");
+                ui.add(field(&mut self.choice.text).desired_width(ui.available_width()));
+            });
+        }
+        let search =
+            ui.add(search(&mut self.filter, "Search fonts").desired_width(ui.available_width()));
+        if self.focus {
+            search.request_focus();
+            self.focus = false;
+        }
+        let rows = self.matches();
+        if search.changed() && !rows.contains(&self.choice.font) {
+            self.choice.font = rows.first().cloned().unwrap_or_default();
+        }
+        let mut offset = None;
+        let row_height = CONTROL_H + ui.spacing().item_spacing.y;
+        for (key, down) in [(Key::ArrowUp, false), (Key::ArrowDown, true)] {
+            if ui.input_mut(|i| i.consume_key(Modifiers::NONE, key)) {
+                offset = self.step(&rows, down).map(|idx| row_height * idx as f32);
+            }
+        }
+        let mut list = egui::ScrollArea::vertical().max_height(row_height * 5.);
+        if let Some(y) = offset {
+            list = list.vertical_scroll_offset(y);
+        }
+        if rows.is_empty() {
+            ui.label("No matching families");
+        }
+        let scale = ui.ctx().pixels_per_point();
+        let key = (
+            self.choice.text.clone(),
+            self.choice.bold,
+            self.choice.italic,
+            scale.to_bits(),
+            ui.available_width().to_bits(),
+        );
+        if self.sample_key.as_ref() != Some(&key) {
+            self.previews.clear();
+            self.sample_key = Some(key);
+        }
+        list.show_rows(ui, CONTROL_H, rows.len(), |ui, range| {
+            self.previews
+                .retain(|name, _| rows[range.clone()].contains(name));
+            for name in &rows[range] {
+                ui.horizontal(|ui| {
+                    let star = if self.choice.favourites.contains(name) {
+                        "★"
+                    } else {
+                        "☆"
+                    };
+                    if quiet(ui, star).on_hover_text("Favourite font").clicked() {
+                        self.toggle_star(name);
+                    }
+                    let selected = name == &self.choice.font;
+                    let (rect, response) = list_row(ui, CONTROL_H, selected);
+                    let left = rect.left_center() + vec2(SPACE_S, 0.);
+                    let mid = left + vec2(rect.width() * 0.48, 0.);
+                    ui.painter()
+                        .with_clip_rect(rect.with_max_x(mid.x - SPACE_XS))
+                        .text(left, egui::Align2::LEFT_CENTER, name, body(), INK);
+                    let sample = if self.choice.text.is_empty() {
+                        name
+                    } else {
+                        &self.choice.text
+                    };
+                    let bounds = Rect::from_min_max(pos2(mid.x, rect.top()), rect.max);
+                    #[cfg(target_os = "macos")]
+                    if !self.previews.contains_key(name) {
+                        if let Some(image) = super::system_fonts::sample(
+                            name,
+                            sample,
+                            self.choice.bold,
+                            self.choice.italic,
+                            TYPE_BODY,
+                            scale,
+                            bounds.size(),
+                        ) {
+                            let texture =
+                                ui.ctx()
+                                    .load_texture(name, image, egui::TextureOptions::LINEAR);
+                            self.previews.insert(name.clone(), texture);
+                        }
+                    }
+                    if let Some(texture) = self.previews.get(name) {
+                        ui.painter().image(
+                            texture.id(),
+                            bounds,
+                            Rect::from_min_max(Pos2::ZERO, pos2(1., 1.)),
+                            INK_2,
+                        );
+                    }
+                    if response.clicked() {
+                        self.choice.font = name.clone();
+                    }
+                });
+            }
+        });
+        ui.horizontal(|ui| {
+            toggle(ui, &mut self.choice.bold, "Bold");
+            toggle(ui, &mut self.choice.italic, "Italic");
+            ui.label("Size");
+            ui.add(
+                number(&mut self.choice.height, &self.choice.unit)
+                    .range(self.choice.minimum..=self.choice.maximum),
+            );
+        });
+        if let Some(depth) = &mut self.choice.thickness {
+            ui.horizontal(|ui| {
+                ui.label("Extrusion");
+                ui.add(number(depth, &self.choice.unit).range(0.0..=self.choice.maximum));
+            });
+        }
+        let mut answer = None;
+        ui.horizontal(|ui| {
+            if quiet(ui, "Cancel").clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
+                answer = Some(false);
+            }
+            let valid = rows.contains(&self.choice.font)
+                && (!self.choice.editable || !self.choice.text.trim().is_empty());
+            ui.add_enabled_ui(valid, |ui| {
+                if amber_button(ui, "Apply") || valid && ui.input(|i| i.key_pressed(Key::Enter)) {
+                    self.remember();
+                    answer = Some(true);
+                }
+            });
+        });
+        answer
+    }
+}
+
+#[cfg(test)]
+mod font_picker_tests {
+    use super::*;
+    #[test]
+    fn filter_navigation_favourites_and_recent_order() {
+        let mut picker = FontPicker::new(FontChoice {
+            title: "Font".into(),
+            text: "A".into(),
+            font: "C".into(),
+            bold: false,
+            italic: false,
+            height: 9.,
+            minimum: 6.,
+            maximum: 28.,
+            thickness: None,
+            unit: " pt".into(),
+            editable: false,
+            recent: vec!["C".into()],
+            favourites: vec!["B".into()],
+        });
+        picker.families = ["A", "B", "C"].map(str::to_owned).into();
+        assert_eq!(picker.matches(), ["C", "B", "A"]);
+        picker.step(&picker.matches(), true);
+        assert_eq!(picker.choice.font, "B");
+        picker.remember();
+        assert_eq!(picker.matches(), ["B", "C", "A"]);
+        picker.step(&picker.matches(), false);
+        assert_eq!(picker.choice.font, "B");
+        picker.toggle_star("B");
+        assert!(picker.choice.favourites.is_empty());
+        picker.filter = " a ".into();
+        assert_eq!(picker.matches(), ["A"]);
+        picker.filter = "unknown".into();
+        assert_eq!(picker.step(&picker.matches(), true), None);
+    }
+}

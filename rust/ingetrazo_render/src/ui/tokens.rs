@@ -231,3 +231,6 @@ pub const MOTION_FADE: f32 = 0.20;
 pub fn heading() -> egui::FontId {
     egui::FontId::new(TYPE_HEADING, egui::FontFamily::Name("semibold".into()))
 }
+
+/// Invisible input backdrop for a compact modal popover.
+pub const CLEAR: Color32 = Color32::TRANSPARENT;
