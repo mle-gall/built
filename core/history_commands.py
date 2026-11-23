@@ -13,6 +13,7 @@ from ingetrazo_core import Vec3 as QVector3D
 
 from core.group import Group
 from core import doc_model as _doc
+from core import history_command_reference as _reference
 from core.materials import has_own_material
 from core.mesh import (PAINT_KEYS, Edge, Face, Mesh, Vertex, edge_flags,
                        edge_is_plain, stamp_edge_flags)
@@ -227,14 +228,7 @@ class AddEdgeCommand(MeshCommand):
         self.edge: Optional[Edge] = None
         self._owned = False
 
-    def _stamp(self, edge) -> None:
-        if self.soft is not None:
-            edge.soft = self.soft
-        if self.curve is not None:
-            edge.curve = self.curve
-        if self.layer is not None:
-            from core.layers import assign_layer
-            assign_layer(edge, self.layer)
+    _stamp = _reference.stamp_edge
 
     def do(self, scene) -> None:
         m = scene.mesh
@@ -254,45 +248,14 @@ class AddEdgeCommand(MeshCommand):
                     m.mark_modified()
                 scene.version += 1
                 return
-        if self._owned and self.edge is not None:
-            if getattr(self, "_made_vertices", ()):
-                m.relink_vertices(self._made_vertices)
-            m.relink_edge(self.edge)  # redo of an edge this command owns
-            self._stamp(self.edge)
-            scene.version += 1
-            return
-        v0 = m.vertex_at(self.a)
-        v1 = m.vertex_at(self.b)
-        pre = m.find_edge(v0, v1) if (v0 is not None and v1 is not None) else None
-        if pre is not None:
-            # The mesh already has this edge — merged no-op. Own nothing, so
-            # ``self.edge`` stays None and undo leaves the pre-existing edge.
-            self._stamp(pre)
-            if self.soft is not None or self.curve is not None or self.layer is not None:
-                m.mark_modified()
-            scene.version += 1
-            return
-        self.edge = m.add_edge(self.a, self.b)
-        self._owned = True
-        if not self._journal_geometry:
-            self._made_vertices = [v for prior, v in ((v0, self.edge.v0), (v1, self.edge.v1))
-                                   if prior is None]
-        self._stamp(self.edge)
-        scene.version += 1
+        _reference.draw_edge(self, scene)
 
     def doc_after(self, scene, phase):
         if phase == "undo" and self._owned:
             scene.selection.discard(self.edge)
         scene.version += 1
 
-    def undo(self, scene) -> None:
-        if not self._owned or self.edge is None:
-            return
-        scene.mesh.remove_edge(self.edge)
-        if getattr(self, "_made_vertices", ()):
-            scene.mesh.drop_orphan_vertices(self._made_vertices)
-        scene.selection.discard(self.edge)
-        scene.version += 1
+    undo = _reference.undo_draw_edge
 
 
 class RemoveGeometryCommand(MeshCommand):
@@ -324,7 +287,6 @@ class DeleteEdgesCommand(RemoveGeometryCommand):
         self.removed_faces: list[Face] = []
 
     def do(self, scene) -> None:
-        self._before = self._reference_snapshot(scene.mesh)
         m = scene.mesh
         from core.store_mesh import StoreMesh, EdgeView, FaceView
         if self._journal_geometry and type(m) is StoreMesh and not m.__dict__.get("_planned_points"):
@@ -343,28 +305,7 @@ class DeleteEdgesCommand(RemoveGeometryCommand):
                     scene.selection.discard(edge)
                 scene.version += 1
                 return
-        self.removed_edges = []
-        for a, b in self._endpoints:
-            v0 = m.vertex_at(a)
-            v1 = m.vertex_at(b)
-            edge = m.find_edge(v0, v1) if (v0 is not None and v1 is not None) else None
-            if edge is not None:
-                self.removed_edges.append(edge)
-
-        if self.cascade_faces:
-            gone = {frozenset((_key(a), _key(b))) for a, b in self._endpoints}
-            self.removed_faces = [
-                f for f in _faces_by_segments(m, self._endpoints)
-                if set(_loop_edges(f.vertices)) & gone
-            ]
-            for f in self.removed_faces:
-                m.remove_face(f)
-                scene.selection.discard(f)
-
-        for edge in self.removed_edges:
-            m.remove_edge(edge)
-            scene.selection.discard(edge)
-        scene.version += 1
+        _reference.delete_edges(self, scene)
 
 
 def _faces_by_segments(mesh, segments) -> list:
@@ -1021,7 +962,6 @@ class DeleteFaceCommand(RemoveGeometryCommand):
         self.face: Optional[Face] = None
 
     def do(self, scene) -> None:
-        self._before = self._reference_snapshot(scene.mesh)
         from core.store_mesh import StoreMesh, FaceView
         mesh = scene.mesh
         if self._journal_geometry and type(mesh) is StoreMesh:
@@ -1035,11 +975,7 @@ class DeleteFaceCommand(RemoveGeometryCommand):
                     scene.selection.discard(self.face)
                 scene.version += 1
                 return
-        self.face = _find_face_by_loop(scene.mesh, self._loop)
-        if self.face is not None:
-            scene.mesh.remove_face(self.face)
-            scene.selection.discard(self.face)
-        scene.version += 1
+        _reference.delete_face(self, scene)
 
 
 def _dirty_group_chunks(scene) -> None:
@@ -2591,30 +2527,19 @@ class ExplodeCurvesCommand(MeshCommand):
         self.curves = 0
 
     def do(self, scene) -> None:
-        ids = {e.curve for e in self.edges
-               if getattr(e, "curve", None) is not None}
         from core.store_mesh import StoreMesh
-        if self._journal_geometry and type(scene.mesh) is StoreMesh and all(type(i) is int and 0 <= i < 2**63 for i in ids):
+        if self._journal_geometry and type(scene.mesh) is StoreMesh:
+            ids = {e.curve for e in self.edges if getattr(e, "curve", None) is not None}
+            if not all(type(i) is int and 0 <= i < 2**63 for i in ids):
+                return _reference.explode_curves(self, scene)
             self.curves = scene.mesh._store.explode_curves(ids)
             scene.mesh._chunk_dirty = True
             scene.mesh._mut_serial += 1
             scene.version += 1
             return
-        self.curves = len(ids)
-        self._ids = [(e, e.curve) for e in scene.mesh.edges
-                     if e.curve in ids]
-        for e, _cid in self._ids:
-            e.curve = None
-        scene.mesh._chunk_dirty = True
-        scene.mesh._mut_serial += 1
-        scene.version += 1
+        _reference.explode_curves(self, scene)
 
-    def undo(self, scene) -> None:
-        for e, cid in self._ids:
-            e.curve = cid
-        scene.mesh._chunk_dirty = True
-        scene.mesh._mut_serial += 1
-        scene.version += 1
+    undo = _reference.undo_explode_curves
 
 
 class AddSceneCommand(Command):
