@@ -87,24 +87,18 @@ def to_world(v: QVector3D) -> QVector3D:
     return AXES["x"] * v.x() + AXES["y"] * v.y() + AXES["z"] * v.z()
 
 
+def frame() -> tuple:
+    """``(origin, x, y, z)``: the drawing axes as the Rust plane code takes
+    them."""
+    return ORIGIN, AXES["x"], AXES["y"], AXES["z"]
+
+
 def plane_axes(normal: QVector3D) -> tuple[QVector3D, QVector3D]:
-    """``core.triangulate.plane_axes`` for DRAWING: the in-plane ``u`` is
-    the drawing red projected (green when the plane faces red), so a
-    rectangle or a circle inside a turned group lines up with the group.
-    At the top level it IS the original — texture, topology and hidden-line
-    code keep calling that one directly, in world terms."""
-    from core.triangulate import plane_axes as world_plane_axes
-    if is_world():
-        return world_plane_axes(normal)
-    n = normal.normalized()
-    ref = QVector3D(AXES["x"])
-    u = ref - n * QVector3D.dotProduct(ref, n)
-    if u.length() < 0.1:
-        ref = QVector3D(AXES["y"])
-        u = ref - n * QVector3D.dotProduct(ref, n)
-    u = u.normalized()
-    v = QVector3D.crossProduct(n, u).normalized()
-    return u, v
+    """In-plane axes for DRAWING: ``u`` is the drawing red projected (green
+    when the plane faces red), so a rectangle or a circle inside a turned
+    group lines up with the group (``ingetrazo_core.drawing_plane_axes``)."""
+    from ingetrazo_core import drawing_plane_axes
+    return drawing_plane_axes(normal, None if is_world() else frame())
 
 
 def frame_matrix(o: QVector3D, x: QVector3D, y: QVector3D,

@@ -136,27 +136,54 @@ class PlaneLock:
     _capture_shift_lock``). A plane an arrow or Down is already holding is
     not Shift's to release. See ``mark_plane``."""
 
-    plane_lock: str | None = None
-    #: Down-arrow reference lock: ``(normal, kind)``, kind ``"edge"`` (the
-    #: plane perpendicular to the hovered edge), ``"face"`` (parallel to the
-    #: hovered face) or ``"plane"`` (the plane the shape is drawing on,
-    #: marked by a held Shift — not locked: the viewport lets it go on the
-    #: release). Exclusive with ``plane_lock``: the last key wins.
-    plane_ref: tuple[QVector3D, str] | None = None
+    # The lock's state is Rust's (``ingetrazo_core.PlaneLock``, rust/
+    # ingetrazo_core/src/tools/plane.rs): ``plane_lock`` — the arrow-key
+    # axis, ``"x"``/``"y"``/``"z"`` or None; ``plane_ref`` — the Down-arrow
+    # / held-Shift reference ``(normal, kind)``, kind ``"edge"`` (the plane
+    # perpendicular to the hovered edge), ``"face"`` (parallel to the
+    # hovered face) or ``"plane"`` (the plane a held Shift marks; the
+    # viewport lets it go on the release), exclusive with ``plane_lock``;
+    # ``hover_plane`` — the plane the viewport used for the last cursor
+    # hit: a shape started on a free point is laid out on it, so it
+    # follows the view (Rafael's review, 2026-09-10).
+
     #: Whether the arrow lock goes on answering once the first point is
     #: down. The rotated rectangle says no: with the base edge down the
     #: arrows are the viewport's linear axis lock, which its width magnet
     #: reads (``RotatedRectangleTool._width_dir``).
     plane_lock_after_the_first_point: bool = True
-    #: The plane the viewport used for the last cursor hit (`_last_work_plane`).
-    #: A shape started on a free point (no face, no lock) has no captured
-    #: ``work_plane``; its geometry is laid out on THIS plane instead, which
-    #: the viewport picks from the camera — horizontal at working tilts,
-    #: vertical facing the camera near the horizon — so the shape follows
-    #: the view the classic way (Rafael's review, 2026-09-10: a rectangle
-    #: at eye level read «5.74 × 0.00 m», its second point on a vertical
-    #: plane while the sides were measured along X/Y).
-    hover_plane: tuple | None = None
+
+    @property
+    def _plane_state(self):
+        state = self.__dict__.get("_plane_state_rs")
+        if state is None:
+            from ingetrazo_core import PlaneLock as _State
+            state = self.__dict__["_plane_state_rs"] = _State()
+        return state
+
+    @property
+    def plane_lock(self):
+        return self._plane_state.plane_lock
+
+    @plane_lock.setter
+    def plane_lock(self, axis):
+        self._plane_state.plane_lock = axis
+
+    @property
+    def plane_ref(self):
+        return self._plane_state.plane_ref
+
+    @plane_ref.setter
+    def plane_ref(self, ref):
+        self._plane_state.plane_ref = ref
+
+    @property
+    def hover_plane(self):
+        return self._plane_state.hover_plane
+
+    @hover_plane.setter
+    def hover_plane(self, plane):
+        self._plane_state.hover_plane = plane
 
     def note_plane(self, viewport) -> None:
         """Remember the plane the viewport just hit — call on every hover
@@ -175,12 +202,9 @@ class PlaneLock:
         return snapped if snapped is not None else plane
 
     def _own_plane(self):
-        if self.work_plane is not None:
-            return self.work_plane
-        if self.hover_plane is not None:
-            return self.hover_plane
+        """The captured plane, else the last hit's, else the context's ground."""
         from core import axes
-        return axes.origin(), axes.axis("z")      # the context's ground
+        return self._plane_state.own_plane(self.work_plane, axes.frame())
 
     #: How far off the drawing plane a point must be to count as pointing
     #: ELSEWHERE. The free cursor lies on the plane by construction, so
@@ -208,50 +232,14 @@ class PlaneLock:
           does (the span has no component along its normal);
         - three points not in a line: the plane through them.
 
-        An arrow-key lock was asked for explicitly and never yields."""
-        if self.plane_lock is not None or self.plane_ref is not None:
-            return None
-        if self.snap_kind is not None and self.snap_kind not in POINT_SNAP_KINDS:
-            # The cursor does not name a point of the model: it is standing
-            # on a FACE — or on an inference the engine keeps on that face
-            # (``"aligned"``, ``"from_point"``, ``"extension"``) — and that
-            # face IS the plane the shape is drawn on. The points do not get
-            # to bend it away: the plane they would ask for is derived from
-            # this same cursor, and it is the derivation that lost (#545 —
-            # a rectangle started on a cube's top vertex and drawn over its
-            # front face jumped onto the horizontal plane through the
-            # vertex). A snap that DOES name a point — a vertex, a midpoint,
-            # a crossing (``core.snap.POINT_SNAP_KINDS``) — stays the
-            # shape's business: that point may lie on no face at all, and
-            # the shape re-plans onto it (#37 — a window opening filled from
-            # jamb to jamb). ``Tool.snap_kind`` is the viewport's.
-            #
-            # ``None`` is «no kind known» — a tool driven by hand, a click
-            # whose hover never landed, the shape being built and measured
-            # directly — and keeps the rule this method had before the kind
-            # existed: the points decide. Only a kind that POSITIVELY names
-            # the face withholds the re-plan.
-            return None
-        pts = [p for p in self.plane_points() if p is not None]
-        if len(pts) < 2:
-            return None
-        origin, normal = plane
-        n = QVector3D(normal).normalized()
-        tol = self.OFF_PLANE_TOL
-        if all(abs(QVector3D.dotProduct(p - origin, n)) < tol for p in pts):
-            return None
-        a = QVector3D(pts[0])
-        if len(pts) >= 3:
-            through = QVector3D.crossProduct(pts[1] - a, pts[2] - a)
-            if through.length() > tol * tol:
-                return a, through.normalized()
+        An arrow-key lock was asked for explicitly and never yields. A
+        cursor whose snap kind positively names a face (not a point of the
+        model, ``core.snap.POINT_SNAP_KINDS``) keeps that face's plane
+        (#545); no kind known keeps the older rule: the points decide.
+        The rule is Rust's (``PlaneLock.snapped``)."""
         from core import axes
-        span = pts[-1] - a
-        flat = [axes.axis(k) for k in ("x", "y", "z")
-                if abs(QVector3D.dotProduct(span, axes.axis(k))) < tol]
-        if len(flat) != 1:
-            return None     # a true 3D diagonal, or a line along an axis
-        return a, flat[0]
+        names_point = None if self.snap_kind is None else self.snap_kind in POINT_SNAP_KINDS
+        return self._plane_state.snapped(plane, self.plane_points(), names_point, axes.frame())
 
     def adopt_snapped_plane(self) -> None:
         """Make the snapped plane the captured one — call when a point that
@@ -342,8 +330,7 @@ class PlaneLock:
         axis = PLANE_LOCK_KEYS.get(int(key))
         if axis is None:
             return False
-        self.plane_ref = None
-        self.plane_lock = None if self.plane_lock == axis else axis
+        self._plane_state.toggle(axis)
         self._anchor_lock()
         flash = getattr(viewport, "flash_status", None)
         if flash is not None:
@@ -456,26 +443,20 @@ class PlaneLock:
         """Both locks off — the shape spent them, or Esc / deactivation. A
         held Shift's mark (``plane_ref``) goes with them; its own release
         then has nothing left to do."""
-        self.plane_lock = None
-        self.plane_ref = None
+        self._plane_state.clear()
 
     def locked_work_plane(self, point: QVector3D):
         """``(point, normal)`` of the locked plane through *point* — the
         arrow-key axis plane or the Down-arrow reference — or ``None``
         without a lock."""
-        if self.plane_lock is not None:
-            return QVector3D(point), PLANE_LOCK_AXES[self.plane_lock]
-        if self.plane_ref is not None:
-            return QVector3D(point), QVector3D(self.plane_ref[0])
-        return None
+        from core import axes
+        return self._plane_state.locked(point, axes.frame())
 
 
 def loop_normal(corners) -> QVector3D:
-    """Newell normal of a closed loop of points."""
-    n = QVector3D(0.0, 0.0, 0.0)
-    for i in range(len(corners)):
-        n += QVector3D.crossProduct(corners[i], corners[(i + 1) % len(corners)])
-    return n
+    """Newell normal of a closed loop of points (``ingetrazo_core``)."""
+    from ingetrazo_core import loop_normal as native
+    return native(list(corners))
 
 
 def ctrl_clause(active: bool, on: str, off: str) -> str:
@@ -494,26 +475,12 @@ def face_the_plane(corners, plane_normal):
     """Wind ``corners`` so the face looks the way its plane does.
 
     A shape built by walking «along u, then along v» inherits the SIGN of
-    that walk: drag the other diagonal and the face comes out backwards.
-    Marco saw it as a rectangle landing blue instead of white and read it
-    as random, which is what it looks like when it depends on a diagonal
-    nobody thinks about (2026-09-18). Measured across the four drags, two
-    gave −Z and two +Z; the Rotated Rectangle did the same going
-    anticlockwise. Circle and Polygon are safe — they sweep an angle, so
-    their winding never changes sign.
-
-    Not cosmetic: the back side travels into the .skp and into the BIM
-    tagging, so a wall can arrive inside-out somewhere else.
-
-    A loop lying square to the plane (a rotated rectangle stood upright on
-    its base edge) has no side facing it, and is left exactly as it came.
-    """
-    if plane_normal is None or len(corners) < 3:
-        return list(corners)
-    dot = QVector3D.dotProduct(loop_normal(corners), plane_normal)
-    if dot < -1e-12:
-        return [corners[0]] + list(corners)[:0:-1]
-    return list(corners)
+    that walk: drag the other diagonal and the face came out backwards
+    (Marco, 2026-09-18), and the back side travels into the .skp and the
+    BIM tagging. A loop lying square to the plane is left as it came
+    (``ingetrazo_core.face_the_plane``)."""
+    from ingetrazo_core import face_the_plane as native
+    return native(list(corners), plane_normal)
 
 
 def retype_open(viewport, cmd) -> bool:

@@ -201,6 +201,10 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(tools::py::select_pick, m)?)?;
     m.add_function(wrap_pyfunction!(pick::ray_triangles, m)?)?;
     m.add_function(wrap_pyfunction!(units::units_table, m)?)?;
+    m.add_function(wrap_pyfunction!(tools::plane::drawing_plane_axes, m)?)?;
+    m.add_function(wrap_pyfunction!(tools::plane::py_loop_normal, m)?)?;
+    m.add_function(wrap_pyfunction!(tools::plane::py_face_the_plane, m)?)?;
+    m.add_class::<tools::plane::PyPlaneLock>()?;
     m.add_function(wrap_pyfunction!(units::vulgar_fractions, m)?)?;
     m.add_function(wrap_pyfunction!(units::py_number, m)?)?;
     m.add_function(wrap_pyfunction!(units::py_plain_marks, m)?)?;
