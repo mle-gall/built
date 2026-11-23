@@ -326,6 +326,23 @@ class DeleteEdgesCommand(RemoveGeometryCommand):
     def do(self, scene) -> None:
         self._before = self._reference_snapshot(scene.mesh)
         m = scene.mesh
+        from core.store_mesh import StoreMesh, EdgeView, FaceView
+        if self._journal_geometry and type(m) is StoreMesh and not m.__dict__.get("_planned_points"):
+            candidates = _faces_by_segments(m, self._endpoints) if self.cascade_faces else ()
+            removed = m._store.delete_edge_segments(
+                [(a.toTuple(), b.toTuple()) for a, b in self._endpoints],
+                [f.key for f in candidates])
+            if removed is not None:
+                edges, faces = removed
+                self.removed_edges = [EdgeView(m, key) for key in edges]
+                self.removed_faces = [FaceView(m, key) for key in faces]
+                m._dirty(len(edges) + len(faces))
+                for face in self.removed_faces:
+                    scene.selection.discard(face)
+                for edge in self.removed_edges:
+                    scene.selection.discard(edge)
+                scene.version += 1
+                return
         self.removed_edges = []
         for a, b in self._endpoints:
             v0 = m.vertex_at(a)
@@ -1005,6 +1022,19 @@ class DeleteFaceCommand(RemoveGeometryCommand):
 
     def do(self, scene) -> None:
         self._before = self._reference_snapshot(scene.mesh)
+        from core.store_mesh import StoreMesh, FaceView
+        mesh = scene.mesh
+        if self._journal_geometry and type(mesh) is StoreMesh:
+            handled, key = mesh._store.delete_face_loop(
+                [p.toTuple() for p in self._loop],
+                [f.key for f in _faces_keyed_like(mesh, self._loop)])
+            if handled:
+                self.face = FaceView(mesh, key) if key is not None else None
+                if self.face is not None:
+                    mesh._dirty()
+                    scene.selection.discard(self.face)
+                scene.version += 1
+                return
         self.face = _find_face_by_loop(scene.mesh, self._loop)
         if self.face is not None:
             scene.mesh.remove_face(self.face)

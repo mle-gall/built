@@ -843,7 +843,6 @@ impl PyMeshStore {
         Ok(self.inner.set_face_flags(f, flags))
     }
 
-    /// Vertex positions (V, 3) float64, list order.
     /// Candidate rows for position-key lookup in mesh order. Python applies
     /// its exact decimal-rounding predicate only to this short list.
     fn vertices_in_floor_cells(&self, near: std::collections::HashSet<[i64; 3]>)
@@ -859,6 +858,7 @@ impl PyMeshStore {
         }).collect()
     }
 
+    /// Vertex positions (V, 3) float64, list order.
     fn positions<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<f64>> {
         let st = &self.inner.state;
         let rows: Vec<[f64; 3]> = st.order[0].live(&st.slots[0]).into_iter().map(|v| *st.vpos.get(v as usize)).collect();
@@ -1301,6 +1301,19 @@ impl PyMeshStore {
             }
         }
         ids.len()
+    }
+
+    fn delete_face_loop(&mut self, points: Vec<[f64; 3]>, candidates: Vec<u128>)
+        -> PyResult<(bool, Option<u128>)> {
+        let candidates = self.drawing_candidates(Kind::Face, Some(candidates))?;
+        let deleted = self.inner.delete_command_face(&points, &candidates);
+        Ok((deleted.is_some(), deleted.flatten()))
+    }
+
+    fn delete_edge_segments(&mut self, endpoints: Vec<[[f64; 3]; 2]>, candidates: Vec<u128>)
+        -> PyResult<Option<(Vec<u128>, Vec<u128>)>> {
+        let faces = self.drawing_candidates(Kind::Face, Some(candidates))?;
+        Ok(self.inner.delete_command_edges(&endpoints, &faces))
     }
 
     /// `Mesh.add_edge(a, b)`: `(key, change)`.
