@@ -11,14 +11,16 @@ pub(super) enum Sort {
     Name,
     Visible,
     Locked,
+    NameDescending,
 }
 
 impl Sort {
-    pub(super) const OPTIONS: [(Self, &'static str); 4] = [
+    pub(super) const OPTIONS: [(Self, &'static str); 5] = [
         (Self::Project, "Project order"),
         (Self::Name, "Name"),
         (Self::Visible, "Visible first"),
         (Self::Locked, "Locked first"),
+        (Self::NameDescending, "Name (Z–A)"),
     ];
 
     pub(super) fn order(self, rows: &[Node]) -> Vec<usize> {
@@ -48,7 +50,13 @@ impl Sort {
                     Self::Locked => y.lock.cmp(&x.lock),
                     _ => Ordering::Equal,
                 };
-                state.then_with(|| natural(&names[a], &names[b]))
+                state.then_with(|| {
+                    if self == Self::NameDescending {
+                        natural(&names[b], &names[a])
+                    } else {
+                        natural(&names[a], &names[b])
+                    }
+                })
             });
         }
         let mut result = Vec::with_capacity(root);
@@ -76,16 +84,18 @@ pub(super) fn reveal_offset(
 }
 
 fn category(row: &Node) -> u8 {
-    if row.icon.starts_with("file:") {
-        3
-    } else if row.key == "n:" || row.row == 4 {
-        4
-    } else if row.icon == "folder" || row.key.starts_with("n:folder:") {
+    if row.key == "geometry:loose" {
         0
-    } else if matches!(row.row, 0 | 6) {
+    } else if row.icon == "folder" || row.key.starts_with("n:folder:") {
         1
-    } else {
+    } else if row.icon.starts_with("file:") {
+        4
+    } else if row.key == "n:" || row.row == 4 {
+        5
+    } else if matches!(row.row, 0 | 6) {
         2
+    } else {
+        3
     }
 }
 
@@ -130,6 +140,72 @@ mod tests {
             lock,
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn sorting_keeps_the_default_geometry_first() {
+        let rows = [
+            node("preview-tag:Z", "zeta", 0, 1, 0),
+            node("preview-tag:A", "alfa", 0, 1, 0),
+            node("geometry:loose", "Loose geometry", 0, 1, 0),
+        ];
+        assert_eq!(Sort::Name.order(&rows), [2, 1, 0]);
+        assert_eq!(Sort::NameDescending.order(&rows), [2, 0, 1]);
+    }
+
+    #[test]
+    fn names_sort_with_their_numbers_read_as_numbers() {
+        let rows =
+            ["Capa 10", "capa 2", "Capa 1", "Alzado"].map(|label| node(label, label, 0, 1, 0));
+        assert_eq!(Sort::Name.order(&rows), [3, 2, 1, 0]);
+    }
+
+    #[test]
+    fn sort_by_order_created_keeps_new_siblings_at_the_end() {
+        let mut rows =
+            Vec::from(["Zeta", "Alfa", "Media"].map(|label| node(label, label, 0, 1, 0)));
+        assert_eq!(Sort::Name.order(&rows), [1, 2, 0]);
+        rows.push(node("new", "Layer 1", 0, 1, 0));
+        assert_eq!(Sort::Project.order(&rows), [0, 1, 2, 3]);
+    }
+
+    #[test]
+    fn sort_by_visible_or_locked_uses_natural_names_for_ties() {
+        let rows = [
+            node("w", "Capa 10", 0, 1, 0),
+            node("x", "Capa 2", 0, 0, 1),
+            node("y", "Capa 1", 0, 1, 0),
+            node("z", "Alzado", 0, 0, 1),
+        ];
+        assert_eq!(Sort::Visible.order(&rows), [2, 0, 3, 1]);
+        assert_eq!(Sort::Locked.order(&rows), [3, 1, 2, 0]);
+    }
+
+    #[test]
+    fn sort_by_visible_moves_a_row_when_its_eye_changes() {
+        let mut rows = ["A", "B", "C"].map(|label| node(label, label, 0, 1, 0));
+        rows[0].eye = 0;
+        assert_eq!(Sort::Visible.order(&rows), [1, 2, 0]);
+        rows[0].eye = 1;
+        assert_eq!(Sort::Visible.order(&rows), [0, 1, 2]);
+        rows[2].lock = 1;
+        assert_eq!(Sort::Locked.order(&rows), [2, 0, 1]);
+    }
+
+    #[test]
+    fn sort_by_visible_keeps_folders_first_and_sorts_inside_them() {
+        let mut rows = [
+            node("preview-folder:H", "Apagada", 0, 0, -1),
+            node("preview-folder:S", "Zona", 0, 1, -1),
+            node("preview-tag:L", "Losa", 1, 0, 0),
+            node("preview-tag:P", "Pilar", 1, 1, 0),
+            node("preview-tag:A", "Suelta", 0, 0, 0),
+            node("preview-tag:V", "Viga", 0, 1, 0),
+        ];
+        rows[0].icon = "folder".into();
+        rows[1].icon = "folder".into();
+        assert_eq!(Sort::Visible.order(&rows), [1, 3, 2, 0, 5, 4]);
+        assert_eq!(Sort::Name.order(&rows), [0, 1, 2, 3, 4, 5]);
     }
 
     #[test]
