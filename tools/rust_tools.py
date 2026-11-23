@@ -61,7 +61,7 @@ class _Host:
     def run(self, name, args):
         from core.protocol.commands import run
         args = json.loads(args)
-        for key in ("a", "b", "eye"):
+        for key in ("a", "b", "eye", "anchor"):
             if key in args:
                 args[key] = self._model(args[key])
         history = self.vp.history
@@ -167,6 +167,12 @@ class _Host:
 
     def close_placement(self):
         self.vp.end_one_group_edit()
+
+    def message(self, template, args):
+        flash = getattr(self.vp, "flash_status", None)
+        if callable(flash):
+            from core.i18n import tr
+            flash(tr(template, **args) if args else tr(template))
 
     def host_verb(self, verb, ident):
         from tools import select
@@ -421,3 +427,274 @@ class SelectTool(RustTool):
         if name is None:
             return False
         return self._send(viewport, {"type": "key", "key": name, "mods": _mods(modifiers)})["consumed"]
+
+
+class _MachinePlaneLock:
+    """``tools.base.PlaneLock``'s state on a planar machine: the machine
+    owns it (``Tool::plane_lock``), the mixin's glue reads it here."""
+
+    def __init__(self, machine):
+        self._m = machine
+
+    def __getattr__(self, name):
+        if name in ("plane_lock", "plane_ref", "hover_plane"):
+            return self._m.lock_get(name)
+        raise AttributeError(name)
+
+    def __setattr__(self, name, value):
+        if name in ("plane_lock", "plane_ref", "hover_plane"):
+            self._m.lock_set(name, value)
+        else:
+            object.__setattr__(self, name, value)
+
+    def toggle(self, axis):
+        self._m.lock_toggle(axis)
+
+    def clear(self):
+        self._m.lock_clear()
+
+    def locked(self, point, axes=None):
+        return self._m.lock_locked(point, axes)
+
+    def own_plane(self, work_plane, axes=None):
+        return self._m.lock_own_plane(work_plane, axes)
+
+    def snapped(self, plane, points, names_point, axes=None):
+        return self._m.lock_snapped(plane, points, names_point, axes)
+
+
+def _planar_tool():
+    from tools.base import PlaneLock
+    return PlaneLock
+
+
+class RectangleTool(_planar_tool(), RustTool):
+    """Rectangle (``rust/ingetrazo_core/src/tools/rectangle.rs``). The
+    plane lock is the machine's; ``PlaneLock`` keeps the viewport glue
+    (status, redraws, what is under the cursor, the cursor preview)."""
+
+    kind = "rectangle"
+    # The second click is the opposite corner: the span to the cursor is
+    # the diagonal, never a line to infer along (#389).
+    diagonal_span = True
+    # "200,100" is two values here (the list comma, #152).
+    vcb_comma_lists = True
+    wireframe_color = None
+
+    _KEYS = None
+
+    def __init__(self):
+        RustTool.__init__(self)
+        self._viewport = None
+
+    @property
+    def _plane_state(self):
+        state = self.__dict__.get("_plane_proxy")
+        if state is None:
+            state = self.__dict__["_plane_proxy"] = _MachinePlaneLock(self._machine)
+        return state
+
+    start_point = _point_property("start_point")
+    hover_point = _point_property("hover_point")
+
+    @property
+    def chain_first_point(self):
+        return None             # no close-polygon snap onto the first corner
+
+    @chain_first_point.setter
+    def chain_first_point(self, _value):
+        pass
+
+    @property
+    def work_plane(self):
+        plane = self._state("work_plane")
+        return None if plane is None else (Vec3(*plane[0]), Vec3(*plane[1]))
+
+    @work_plane.setter
+    def work_plane(self, plane):
+        self._machine.set("work_plane", None if plane is None else (_tuple(plane[0]), _tuple(plane[1])))
+
+    @property
+    def _from_center(self):
+        return bool(self._state("from_center"))
+
+    @_from_center.setter
+    def _from_center(self, on):
+        self._machine.set("from_center", bool(on))
+
+    @property
+    def icon(self):
+        return "rectangle_center" if self._from_center else "rectangle"
+
+    @icon.setter
+    def icon(self, _value):
+        pass
+
+    @property
+    def _last(self):
+        return True if self._state("retype") else None
+
+    def _set_from_center(self, viewport, on):
+        self._from_center = on
+        apply = getattr(viewport, "_apply_tool_cursor", None)
+        if callable(apply):
+            apply()
+
+    def plane_points(self):
+        if self.start_point is None:
+            return []
+        return [self.start_point, self.hover_point]
+
+    def _frame(self, viewport):
+        from core import axes
+        from core.snap import POINT_SNAP_KINDS
+        kind = getattr(self, "snap_kind", None)
+        self._send(viewport, {"type": "frame", "axes": axes.frame(),
+                              "names_point": None if kind is None else kind in POINT_SNAP_KINDS})
+
+    def _send_framed(self, viewport, event):
+        self._frame(viewport)
+        return self._send(viewport, event)
+
+    def on_activate(self, viewport) -> None:
+        self._send_framed(viewport, {"type": "activate"})
+        self.wireframe_color = None
+        self._set_from_center(viewport, False)    # a pick-up starts corner-wise
+
+    def on_deactivate(self, viewport) -> None:
+        self._send_framed(viewport, {"type": "deactivate"})
+        self.wireframe_color = None
+
+    def on_cancel(self, viewport) -> None:
+        self._send_framed(viewport, {"type": "cancel"})
+        self.wireframe_color = None
+        viewport.update()
+
+    def on_click(self, ctx) -> None:
+        self.note_plane(ctx.viewport)
+        reply = self._send_framed(ctx.viewport, self._pointer("click", ctx))
+        if self.start_point is None:
+            self.wireframe_color = None
+        ctx.viewport.update()
+        return reply
+
+    def on_hover(self, ctx) -> None:
+        self.note_plane(ctx.viewport)
+        self._viewport = ctx.viewport
+        self._send_framed(ctx.viewport, self._pointer("hover", ctx))
+        self.wireframe_color = self.lock_color()
+        ctx.viewport.update()
+
+    def on_value(self, viewport, value) -> bool:
+        consumed = self._send_framed(viewport, {"type": "value", "value": value})["consumed"]
+        if consumed and self.start_point is None:
+            self.wireframe_color = None
+        return consumed
+
+    def on_key(self, viewport, key, modifiers) -> bool:
+        from PySide6.QtCore import Qt
+        name = {Qt.Key_Control: "Control", Qt.Key_Down: "ArrowDown", Qt.Key_Right: "ArrowRight",
+                Qt.Key_Left: "ArrowLeft", Qt.Key_Up: "ArrowUp"}.get(key)
+        if name is not None and self._send_framed(
+                viewport, {"type": "key", "key": name, "mods": _mods(modifiers)})["consumed"]:
+            if name == "Control":
+                self._set_from_center(viewport, self._from_center)
+                self.refresh_hint(viewport)
+            update = getattr(viewport, "update", None)
+            if callable(update):
+                update()
+            return True
+        return self.plane_lock_key(viewport, key)
+
+    def on_key_release(self, viewport, key) -> bool:
+        from PySide6.QtCore import Qt
+        if key != Qt.Key_Control:
+            return False
+        tapped = getattr(viewport, "ctrl_tapped", None)
+        reply = self._send_framed(viewport, {"type": "key_release", "key": "Control",
+                                             "tapped": not callable(tapped) or bool(tapped())})
+        if reply["consumed"]:
+            self._set_from_center(viewport, self._from_center)
+        return reply["consumed"]
+
+    def rubber_band_lines(self):
+        if self.hover_point is None:
+            return []
+        if self.start_point is None:
+            return self._cursor_preview()
+        return RustTool.rubber_band_lines(self)
+
+    def value_label(self):
+        """``(text, point)``: the floating ``width × height`` readout, with
+        "(Cuadrado)" when the sides are equal."""
+        label = self._state("label")
+        if label is None:
+            return None
+        from core.units import fmt_pair
+        du, dv, square, mid = label
+        text = fmt_pair(du, dv) + ("  (Cuadrado)" if square else "")
+        return text, Vec3(*mid)
+
+    def _cursor_preview(self):
+        """The little square on the cursor before the first corner, on the
+        plane the rectangle would take (view glue: it needs the pixel scale)."""
+        vp = self._viewport
+        if vp is None:
+            return []
+        from core.axes import plane_axes
+        point, normal = self.preview_plane(vp, self.hover_point)
+        u, v = plane_axes(normal)
+        scale = self.plane_preview_scale(vp, self.hover_point, u, v)
+        if scale is None:
+            return []
+        h = 0.5 * self.PREVIEW_PX * scale
+        c = self.hover_point
+        if self._from_center:
+            pts = [c + u * h + v * h, c - u * h + v * h, c - u * h - v * h, c + u * h - v * h]
+        else:
+            pts = [c, c + u * (2 * h), c + (u + v) * (2 * h), c + v * (2 * h)]
+        return [(pts[i], pts[(i + 1) % 4]) for i in range(4)]
+
+    def _flag(name):
+        def get(self):
+            return self._state(name)
+
+        def put(self, value):
+            self._machine.set(name, value)
+        return property(get, put)
+
+    _live_side = _flag("live_side")
+    _arrow_square_lock = _flag("arrow_square")
+    _shift_square_lock = _flag("shift_square")
+
+    def _reset(self):
+        self._machine.set("reset", True)
+        self.wireframe_color = None
+
+    def _query(self, what, arg):
+        self._frame(self._viewport)
+        return self._machine.query(what, arg)
+
+    def _span(self, cursor):
+        a, b = self._query("span", _tuple(cursor))
+        return Vec3(*a), Vec3(*b)
+
+    def _dimensions(self, a, b):
+        return tuple(self._query("dimensions", (_tuple(a), _tuple(b))))
+
+    def _square_locked(self):
+        return bool(self._state("square"))
+
+    def _square_corner(self, a, b):
+        far, square = self._query("square_corner", (_tuple(a), _tuple(b)))
+        return Vec3(*far), bool(square)
+
+    def _corners(self, a, b):
+        """The four corners of the rectangle spanning ``a``–``b`` on the
+        drawing plane."""
+        return [Vec3(*p) for p in self._query("corners", (_tuple(a), _tuple(b)))]
+
+    def _degenerate_reason(self, world) -> str:
+        from core.i18n import tr
+        template, args = self._query("degenerate", _tuple(world))
+        return tr(template, **args) if args else tr(template)

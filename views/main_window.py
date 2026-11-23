@@ -90,7 +90,7 @@ from tools.flip import FlipTool
 from tools.freehand import FreehandTool
 from tools.section import SectionPlaneTool
 from tools.pushpull import PushPullTool
-from tools.rectangle import RectangleTool
+from tools.rust_tools import RectangleTool
 from tools.rust_tools import SelectTool
 from views.tray import BimTray, GeorefTray, Tray, style_slider
 from views.icons import tool_icon

@@ -20,7 +20,7 @@ from core.history import History, _point_in_tri
 from core.scene import Scene
 from core.topology import _point_in_face_solid
 from tools.circle import CircleTool
-from tools.rectangle import RectangleTool
+from tools.rust_tools import RectangleTool
 
 
 class _Viewport:
@@ -69,7 +69,7 @@ def _nonmanifold(sc):
 
 def test_a_rectangle_around_the_hole_leaves_it_open():
     sc, h, c = _holed_box(1, 0.5, 0.1)
-    RectangleTool()._commit_rect(_Viewport(sc, h), [
+    _add_face(h, [
         V(.3, .3, .5), V(.7, .3, .5), V(.7, .7, .5), V(.3, .7, .5)])
     assert not _capped(sc, c, 0.5)
     assert _nonmanifold(sc) == 0
@@ -105,6 +105,12 @@ def test_a_sliver_triangle_contains_nothing():
 
 def test_redrawing_the_whole_top_fills_the_hole_as_in_538():
     sc, h, c = _holed_box(1, 0.5, 0.1)
-    RectangleTool()._commit_rect(_Viewport(sc, h), [
+    _add_face(h, [
         V(0, 0, .5), V(1, 0, .5), V(1, 1, .5), V(0, 1, .5)])
     assert _capped(sc, c, 0.5)
+
+
+def _add_face(history, corners):
+    """The Rectangle's commit: the protocol's add_face over the ring."""
+    from core.protocol.commands import run
+    run(history, "add_face", outer=[c.toTuple() for c in corners])

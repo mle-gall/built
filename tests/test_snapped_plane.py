@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from ingetrazo_core import Vec3 as QVector3D
 
-from tools.rectangle import RectangleTool
+from tools.rust_tools import RectangleTool
 
 
 def V(x, y, z=0.0):

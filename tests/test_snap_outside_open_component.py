@@ -254,7 +254,7 @@ def test_a_shape_started_on_the_rest_keeps_the_rests_plane():
         sc.version += 1
         vp.begin_group_edit(a)
         from PySide6.QtCore import QPointF
-        from tools.rectangle import RectangleTool
+        from tools.rust_tools import RectangleTool
 
         tool = RectangleTool()
         vp.set_active_tool(tool)

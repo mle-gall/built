@@ -17,7 +17,7 @@ from tools.circle import CircleTool, PolygonTool
 from tools.dimension import DimensionTool
 from tools.freehand import FreehandTool
 from tools.rust_tools import LineTool
-from tools.rectangle import RectangleTool
+from tools.rust_tools import RectangleTool
 from tools.rotated_rectangle import RotatedRectangleTool
 from tools.text import TextTool
 

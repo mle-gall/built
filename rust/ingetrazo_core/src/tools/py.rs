@@ -128,6 +128,20 @@ fn event(d: &Bound<'_, PyDict>) -> PyResult<ToolEvent> {
             key: d.get_item("key")?.ok_or_else(|| PyValueError::new_err("key without key"))?.extract()?,
             mods: mods()?,
         },
+        "key_release" => ToolEvent::KeyRelease {
+            key: d.get_item("key")?.ok_or_else(|| PyValueError::new_err("key_release without key"))?.extract()?,
+            tapped: opt(d, "tapped")?.map(|v| v.extract()).transpose()?.unwrap_or(true),
+        },
+        "frame" => {
+            let axes: [(f64, f64, f64); 4] = d.get_item("axes")?.ok_or_else(|| PyValueError::new_err("frame without axes"))?
+                .extract::<Vec<Bound<PyAny>>>()?
+                .iter().map(|v| p3(v).map(|p| (p[0], p[1], p[2]))).collect::<PyResult<Vec<_>>>()?
+                .try_into().map_err(|_| PyValueError::new_err("axes are origin, x, y, z"))?;
+            ToolEvent::Frame {
+                axes: axes.map(|(x, y, z)| [x, y, z]),
+                names_point: opt(d, "names_point")?.map(|v| v.extract()).transpose()?,
+            }
+        }
         "value" => ToolEvent::Value(value(&d.get_item("value")?.ok_or_else(|| PyValueError::new_err("value without value"))?)?),
         "work_plane" => ToolEvent::WorkPlane(match opt(d, "plane")? {
             None => None,
@@ -295,6 +309,16 @@ impl ToolHost for PyHost<'_, '_> {
         self.call("open_placement", args);
     }
     fn close_placement(&mut self) { self.call("close_placement", vec![]); }
+    fn message(&mut self, template: &str, args: &[(&str, String)]) {
+        let d = PyDict::new(self.py());
+        for (k, v) in args {
+            if let Err(e) = d.set_item(*k, v) {
+                self.err.get_or_insert(e);
+            }
+        }
+        let args = vec![self.s(template), d.into_any()];
+        self.call("message", args);
+    }
     fn host_verb(&mut self, verb: &str, id: u64) {
         let args = vec![self.s(verb), self.u(id)];
         self.call("host_verb", args);
@@ -315,6 +339,12 @@ pub struct ToolMachine {
     /// Moves on every event and set: what the adapter caches state by.
     #[pyo3(get)]
     serial: u64,
+}
+
+impl ToolMachine {
+    fn lock(&mut self) -> PyResult<&mut super::plane::PlaneLock> {
+        self.tool.plane_lock().ok_or_else(|| PyValueError::new_err("this tool has no plane lock"))
+    }
 }
 
 #[pymethods]
@@ -358,6 +388,95 @@ impl ToolMachine {
     }
 
     fn busy(&self) -> bool { self.tool.busy() }
+
+    // ---- The plane lock of a planar machine (tools.base.PlaneLock's
+    // state, one owner): the same calls as `ingetrazo_core.PlaneLock`.
+
+    fn lock_get<'py>(&mut self, py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyAny>> {
+        use super::plane::{vec, AXIS};
+        let l = self.lock()?;
+        Ok(match name {
+            "plane_lock" => l.lock.map(|k| AXIS[k]).into_pyobject(py)?.into_any(),
+            "plane_ref" => match l.reference.clone() {
+                None => py.None().into_bound(py),
+                Some((n, k)) => (vec(n), k).into_pyobject(py)?.into_any(),
+            },
+            "hover_plane" => match l.hover {
+                None => py.None().into_bound(py),
+                Some((p, n)) => (vec(p), vec(n)).into_pyobject(py)?.into_any(),
+            },
+            _ => return Err(PyValueError::new_err(format!("no plane lock field {name:?}"))),
+        })
+    }
+
+    fn lock_set(&mut self, name: &str, value: &Bound<'_, PyAny>) -> PyResult<()> {
+        use super::plane::{plane_of, AXIS};
+        use crate::math::xyz;
+        self.serial += 1;
+        let l = self.lock()?;
+        match name {
+            "plane_lock" => {
+                l.lock = if value.is_none() { None } else {
+                    let a: String = value.extract()?;
+                    Some(AXIS.iter().position(|x| *x == a).ok_or_else(|| PyValueError::new_err("x, y or z"))?)
+                }
+            }
+            "plane_ref" => {
+                l.reference = if value.is_none() { None } else {
+                    let (n, k): (Bound<PyAny>, String) = value.extract()?;
+                    Some((xyz(&n)?, k))
+                }
+            }
+            "hover_plane" => l.hover = plane_of(value)?,
+            _ => return Err(PyValueError::new_err(format!("no plane lock field {name:?}"))),
+        }
+        Ok(())
+    }
+
+    fn lock_toggle(&mut self, axis: &str) -> PyResult<()> {
+        self.serial += 1;
+        let k = super::plane::AXIS.iter().position(|x| *x == axis).ok_or_else(|| PyValueError::new_err("x, y or z"))?;
+        self.lock()?.toggle(k);
+        Ok(())
+    }
+
+    fn lock_clear(&mut self) -> PyResult<()> {
+        self.serial += 1;
+        self.lock()?.clear();
+        Ok(())
+    }
+
+    #[pyo3(signature = (point, axes=None))]
+    fn lock_locked(&mut self, point: &Bound<'_, PyAny>, axes: Option<&Bound<'_, PyAny>>)
+        -> PyResult<Option<(crate::math::Vec3, crate::math::Vec3)>> {
+        use super::plane::{axes_of, vec};
+        let (p, a) = (crate::math::xyz(point)?, axes_of(axes)?);
+        Ok(self.lock()?.locked(p, &a).map(|(p, n)| (vec(p), vec(n))))
+    }
+
+    #[pyo3(signature = (work_plane, axes=None))]
+    fn lock_own_plane(&mut self, work_plane: &Bound<'_, PyAny>, axes: Option<&Bound<'_, PyAny>>)
+        -> PyResult<(crate::math::Vec3, crate::math::Vec3)> {
+        use super::plane::{axes_of, plane_of, vec};
+        let (w, a) = (plane_of(work_plane)?, axes_of(axes)?);
+        let (p, n) = self.lock()?.own_plane(w, &a);
+        Ok((vec(p), vec(n)))
+    }
+
+    #[pyo3(signature = (plane, points, names_point, axes=None))]
+    fn lock_snapped(&mut self, plane: &Bound<'_, PyAny>, points: Vec<Bound<'_, PyAny>>, names_point: Option<bool>,
+                    axes: Option<&Bound<'_, PyAny>>) -> PyResult<Option<(crate::math::Vec3, crate::math::Vec3)>> {
+        use super::plane::{axes_of, plane_of, vec};
+        let Some(plane) = plane_of(plane)? else { return Ok(None) };
+        let pts = points.iter().filter(|p| !p.is_none()).map(crate::math::xyz).collect::<PyResult<Vec<_>>>()?;
+        let a = axes_of(axes)?;
+        Ok(self.lock()?.snapped(plane, &pts, names_point, &a).map(|(p, n)| (vec(p), vec(n))))
+    }
+
+    /// A read-only question about the tool's geometry (`Tool::query`).
+    fn query<'py>(&self, py: Python<'py>, what: &str, arg: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+        json_to_py(py, &self.tool.query(what, &py_to_json(arg)?))
+    }
 
     /// Set a `state()` field; False when the tool has no such field.
     fn set(&mut self, key: &str, value: &Bound<'_, PyAny>) -> PyResult<bool> {

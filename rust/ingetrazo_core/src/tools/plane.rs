@@ -132,13 +132,13 @@ impl PlaneLock {
 
 // ---- Python -------------------------------------------------------------
 
-fn axes_of(v: Option<&Bound<'_, PyAny>>) -> PyResult<Axes> {
+pub(crate) fn axes_of(v: Option<&Bound<'_, PyAny>>) -> PyResult<Axes> {
     let Some(v) = v.filter(|v| !v.is_none()) else { return Ok(Axes::world()) };
     let (o, x, y, z): (Bound<PyAny>, Bound<PyAny>, Bound<PyAny>, Bound<PyAny>) = v.extract()?;
     Ok(Axes { o: xyz(&o)?, x: xyz(&x)?, y: xyz(&y)?, z: xyz(&z)? })
 }
 
-fn plane_of(v: &Bound<'_, PyAny>) -> PyResult<Option<Plane>> {
+pub(crate) fn plane_of(v: &Bound<'_, PyAny>) -> PyResult<Option<Plane>> {
     if v.is_none() {
         return Ok(None);
     }
@@ -146,9 +146,9 @@ fn plane_of(v: &Bound<'_, PyAny>) -> PyResult<Option<Plane>> {
     Ok(Some((xyz(&p)?, xyz(&n)?)))
 }
 
-fn vec(v: DVec3) -> Vec3 { v.into() }
+pub(crate) fn vec(v: DVec3) -> Vec3 { v.into() }
 
-const AXIS: [&str; 3] = ["x", "y", "z"];
+pub(crate) const AXIS: [&str; 3] = ["x", "y", "z"];
 
 /// `core.axes.plane_axes` / `core.triangulate.plane_axes`: `(u, v)` of a
 /// plane normal against the drawing axes `(o, x, y, z)` (the world's when

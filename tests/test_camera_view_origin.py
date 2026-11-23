@@ -37,7 +37,7 @@ def test_draw_and_orbit_beside_distant_scale_figure(view):
     from PySide6.QtCore import Qt
     from PySide6.QtTest import QTest
     from tools.rust_tools import LineTool
-    from tools.rectangle import RectangleTool
+    from tools.rust_tools import RectangleTool
     from tools.pushpull import PushPullTool
     window = _document(view)
     mesh = view.scene.mesh

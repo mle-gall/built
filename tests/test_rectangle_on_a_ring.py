@@ -17,7 +17,7 @@ from core.history import History
 from core.scene import Scene
 from core.topology import offset_loop
 from tests import test_pushpull_ux as T
-from tools.rectangle import RectangleTool
+from tools.rust_tools import RectangleTool
 
 
 class _Vp:
@@ -31,7 +31,7 @@ class _Vp:
 
 def _rect(scene, hist, x0, y0, x1, y1, z):
     corners = [V(x0, y0, z), V(x1, y0, z), V(x1, y1, z), V(x0, y1, z)]
-    RectangleTool()._commit_rect(_Vp(scene, hist), corners)
+    _add_face(hist, corners)
 
 
 def _on(scene, z):
@@ -105,3 +105,9 @@ def test_a_loose_rectangle_off_the_model_is_just_a_face():
     _rect(scene, hist, 10, 10, 12, 13, 0.0)
     loose = [f for f in scene.faces if min(v.x() for v in f.vertices) >= 10]
     assert len(loose) == 1 and abs(loose[0].area() - 6.0) < 1e-9
+
+
+def _add_face(history, corners):
+    """The Rectangle's commit: the protocol's add_face over the ring."""
+    from core.protocol.commands import run
+    run(history, "add_face", outer=[c.toTuple() for c in corners])

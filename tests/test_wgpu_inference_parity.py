@@ -37,7 +37,7 @@ from core.mesh import Mesh
 from core.snap import SnapResult
 from tests.test_.skp_inference_gaps import (  # noqa: F401
     click, move, refresh, use, view)
-from tools.rectangle import RectangleTool
+from tools.rust_tools import RectangleTool
 from tools.tape import TapeMeasureTool
 
 

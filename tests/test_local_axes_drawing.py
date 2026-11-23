@@ -72,7 +72,7 @@ def test_axis_alignment_is_measured_on_the_local_axes():
 
 
 def test_plane_lock_and_default_ground_follow_the_context():
-    from tools.rectangle import RectangleTool
+    from tools.rust_tools import RectangleTool
     frame = QMatrix4x4()
     frame.rotate(90.0, 1, 0, 0)                 # the group stands up
     axes.sync(frame)

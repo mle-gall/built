@@ -25,7 +25,7 @@ from PySide6.QtWidgets import QApplication  # noqa: E402
 from tools.base import ToolContext  # noqa: E402
 from tools.circle import CircleTool, PolygonTool  # noqa: E402
 from tools.rust_tools import LineTool  # noqa: E402
-from tools.rectangle import RectangleTool  # noqa: E402
+from tools.rust_tools import RectangleTool  # noqa: E402
 
 _app = QApplication.instance() or QApplication([])
 

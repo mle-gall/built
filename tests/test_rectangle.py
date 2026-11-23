@@ -14,7 +14,7 @@ from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import History
 from core.scene import Scene
-from tools.rectangle import RectangleTool
+from tools.rust_tools import RectangleTool
 
 
 def V(x: float, y: float, z: float = 0.0) -> QVector3D:

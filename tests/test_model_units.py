@@ -77,7 +77,7 @@ def test_units_travel_in_the_igz_and_default_to_metres(tmp_path):
 
 
 def test_a_tool_label_reads_in_the_models_units(bound):
-    from tools.rectangle import RectangleTool
+    from tools.rust_tools import RectangleTool
     t = RectangleTool()
     t.start_point = QVector3D(0, 0, 0)
     t.hover_point = QVector3D(5, 4, 0)
