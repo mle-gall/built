@@ -265,6 +265,9 @@ fn read_raw(file: &mut File, e: &Entry, file_len: u64) -> Option<Vec<u8>> {
 
 /// Inflate (or copy) `raw` into `out`, which is exactly the member's size;
 /// true when it filled `out` exactly and the CRC matches.
+// The inflater has a large stack frame. Keep it in the leaf call: inlining
+// into Rayon's recursive splitter reserves that frame at every level.
+#[inline(never)]
 fn inflate_into(raw: &[u8], method: u32, crc: u32, out: &mut [u8]) -> bool {
     match method {
         0 => {
@@ -301,6 +304,7 @@ fn inflate_into(raw: &[u8], method: u32, crc: u32, out: &mut [u8]) -> bool {
 
 /// Bound positional reads to the compressed range approved by ZipFile.open.
 #[cfg(unix)]
+#[inline(never)]
 fn read_member_at(file: &File, offset: u64, entry: &Entry, out: &mut [u8]) -> bool {
     use std::os::unix::fs::FileExt;
 
