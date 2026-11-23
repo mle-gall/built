@@ -51,7 +51,7 @@ rm -rf "$BUILD_APP" "$WORK/pyi"
 echo "==> the bundle finds its own data"
 # Before wrapping it in a .dmg, ask the bundle itself. A missing shader or
 # texture starts fine and only fails when the user needs it.
-"$BUILD_APP/Contents/MacOS/ingetrazo" --check
+"$PYTHON" scripts/isolated_launch.py "$BUILD_APP/Contents/MacOS/ingetrazo" --check
 
 echo "==> .app"
 mkdir -p "$OUT"

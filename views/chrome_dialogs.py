@@ -12,11 +12,8 @@ Two surfaces, both drawn by ``rust/ingetrazo_render/src/ui.rs``:
   progress and Cancel when the work can stop. Notices fade below it.
   The capsule retains recent results and notice actions.
 
-Everything here falls back to Qt (returns ``None``, or a real
-``QProgressDialog``) when the chrome is not on screen to answer: the UI
-off (``BUILT_UI=0``), headless and test runs (offscreen platform, window
-never shown), a Qt modal dialog already up, a parent that is not the main
-window, or no frame drawn within :data:`WATCHDOG_MS` of posting.
+Custom questions use the sheet and cancel when there is no frame.
+Standard message calls map to chrome notices and questions.
 
 Blocking answers
 ----------------
@@ -41,8 +38,7 @@ blocking call works there too. Forms (``views/chrome_forms.py``) and
 :func:`ask_later` never block at all: they take a continuation
 (``done(answer)``) that the chrome's click calls on a later turn, so the
 window's ordinary input (typing into a field) keeps flowing through the
-host while they are up. With no chrome on screen they fall back to a Qt
-dialog run inline (``done`` has run when they return).
+host while they are up.
 """
 from __future__ import annotations
 
@@ -55,9 +51,9 @@ from PySide6.QtCore import QEvent, QEventLoop, QObject, QTimer, Signal
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QApplication, QMessageBox, QWidget
 
-#: A sheet nobody has seen drawn this long after posting goes to Qt instead.
+#: Cancel if the sheet has still not been drawn after this interval.
 WATCHDOG_MS = 1500
-_FALLBACK = object()
+_UNDRAWN = object()
 _ids = itertools.count(1)
 
 
@@ -89,10 +85,7 @@ def view_of(win):
 
 def live(parent):
     """The Metal view whose chrome can show a sheet for ``parent`` now,
-    or ``None`` (then the caller uses Qt)."""
-    from views import wgpu_ui
-    if not wgpu_ui.ENABLED:
-        return None
+    or ``None`` if a blocking question cannot be drawn."""
     if QGuiApplication.platformName() in ("offscreen", "minimal"):
         return None
     win = window_of(parent)
@@ -114,6 +107,15 @@ def live(parent):
     if getattr(view, "_drawing_frame", False):
         return None     # asked from inside a frame: none could draw the sheet
     return view
+
+
+def async_host(parent):
+    """Resolve an unanswered model's host, including an offscreen Qt window."""
+    win = window_of(parent)
+    if live(parent) is not None or (not in_shell() and
+            QGuiApplication.platformName() in ("offscreen", "minimal")):
+        return win
+    return None
 
 
 def _inside_view_area(widget, win) -> bool:
@@ -170,15 +172,15 @@ def _roles(buttons, default, cancel, discard):
 def ask(parent, title: str, text: str, buttons, *, default=None, cancel=None,
         discard=None, tone: str = "question", checklist=None):
     """Show a sheet and wait for its answer: the id of the button chosen,
-    or ``cancel``'s id on Esc. ``None`` when the chrome cannot show it, and
-    the caller then asks with Qt.
+    or ``cancel``'s id on Esc or a missing frame.
 
     ``buttons``: [(id, label)] in reading order. ``default`` answers Enter,
     ``cancel`` answers Esc, ``discard`` answers ⌘D and sits apart on the
     left (macOS's «Don't Save»). ``tone``: question, info, warning, error."""
     view = live(parent)
     if view is None:
-        return None
+        print(f"Built could not show the question: {title}", file=sys.stderr)
+        return cancel
     win = window_of(parent)
     sheet = _Sheet(title, text, tone, _roles(buttons, default, cancel, discard),
                    default, cancel, discard, True)
@@ -190,10 +192,10 @@ def ask(parent, title: str, text: str, buttons, *, default=None, cancel=None,
 
     def watchdog():
         # Nothing drew the sheet (no frame came: the window was covered,
-        # the surface lost): Qt asks instead, so the caller is never stuck.
+        # the surface lost): release the caller.
         if not sheet.shown and getattr(view, "_ui_frames", 0) == frames \
                 and sheet.answer is None:
-            sheet.answer = _FALLBACK
+            sheet.answer = _UNDRAWN
             loop.quit()
 
     dog = QTimer(singleShot=True)
@@ -205,8 +207,9 @@ def ask(parent, title: str, text: str, buttons, *, default=None, cancel=None,
     finally:
         dog.stop()
         _pop(win, sheet)
-    if sheet.answer is _FALLBACK:
-        return None
+    if sheet.answer is _UNDRAWN:
+        win.viewport.flash_status(f"Built could not draw the question: {title}")
+        return cancel
     if sheet.answer is None:
         return sheet.cancel     # the loop was ended from outside (the app quit)
     return sheet.answer
@@ -214,41 +217,16 @@ def ask(parent, title: str, text: str, buttons, *, default=None, cancel=None,
 
 def ask_later(parent, title: str, text: str, buttons, done, *, default=None,
               cancel=None, discard=None, tone: str = "question") -> None:
-    """:func:`ask` without blocking: ``done(answer)`` runs once the sheet
-    is answered (a later turn of the loop), or at once with the answer of
-    a Qt question box when the chrome is not on screen."""
-    view = live(parent)
-    if view is None:
-        if in_shell():
-            done(cancel)                # no Qt box can show in the shell
-            return
-        done(_qt_ask(parent, title, text, buttons, default, cancel, discard, tone))
+    """Post a question and deliver its answer to the continuation."""
+    win = async_host(parent)
+    if win is None:
+        print(f"Built could not show the question: {title}", file=sys.stderr)
+        done(cancel)
         return
-    win = window_of(parent)
     sheet = _Sheet(title, text, tone, _roles(buttons, default, cancel, discard),
                    default, cancel, discard, False)
     sheet.done = done
     _push(win, sheet)
-
-
-def _qt_ask(parent, title, text, buttons, default, cancel, discard, tone):
-    """The Qt box :func:`ask_later` falls back to: same buttons, same ids."""
-    icon = {"question": QMessageBox.Question, "warning": QMessageBox.Warning,
-            "error": QMessageBox.Critical}.get(tone, QMessageBox.Information)
-    box = QMessageBox(icon, title, text, QMessageBox.NoButton, parent)
-    box.setOption(QMessageBox.Option.DontUseNativeDialog, True)
-    made = {}
-    for bid, label in buttons:
-        role = (QMessageBox.RejectRole if bid == cancel else
-                QMessageBox.DestructiveRole if bid == discard else QMessageBox.AcceptRole)
-        made[bid] = box.addButton(label, role)
-    if default in made:
-        box.setDefaultButton(made[default])
-    if cancel in made:
-        box.setEscapeButton(made[cancel])
-    box.exec()
-    clicked = box.clickedButton()
-    return next((bid for bid, b in made.items() if b is clicked), cancel)
 
 
 @dataclass
@@ -278,14 +256,16 @@ def _record(win, title, detail, tone, action_label="", action=None, toast=True):
 
 def notify(parent, title, text, *, tone="info", button="OK", action_label="", action=None):
     """Post a nonmodal toast and retain its action in the activity history."""
-    if live(parent) is None:
+    win = async_host(parent)
+    if win is None:
+        print(f"{title}: {text}", file=sys.stderr)
         return False
     if "<br" in text:
         from PySide6.QtGui import QTextDocument
         document = QTextDocument()
         document.setHtml(text)
         text = document.toPlainText()
-    _record(window_of(parent), title, text, tone, action_label, action)
+    _record(win, title, text, tone, action_label, action)
     return True
 
 
@@ -447,11 +427,14 @@ _STD = [  # (button, label, accept?) in the order they read, left to right
 
 def _standard(parent, tone, title, text, buttons, default):
     from core.i18n import tr
+    if buttons is None:
+        buttons = QMessageBox.Yes | QMessageBox.No if tone == "question" else QMessageBox.Ok
     chosen = [(b, label, accept) for b, label, accept in _STD if buttons & b]
     if not chosen:
         chosen = [(QMessageBox.Ok, "OK", True)]
     if len(chosen) == 1 and chosen[0][0] == QMessageBox.Ok:
-        return QMessageBox.Ok if notify(parent, title, text, tone=tone) else None
+        notify(parent, title, text, tone=tone)
+        return QMessageBox.Ok
     ids = {str(int(b.value)): b for b, _, _ in chosen}
     nobutton = default is None or default == QMessageBox.NoButton
     if nobutton:
@@ -466,46 +449,23 @@ def _standard(parent, tone, title, text, buttons, default):
     key = lambda b: str(int(b.value)) if b is not None else None
     got = ask(parent, title, text, [(key(b), tr(label)) for b, label, _ in chosen],
               default=key(default), cancel=key(escape), discard=key(discard), tone=tone)
-    return None if got is None else ids.get(got)
+    return ids.get(got, QMessageBox.NoButton)
 
 
-def _box(tone, qt_name):
-    def call(parent, title, text, buttons=None, defaultButton=None):
-        std = QMessageBox.Ok if buttons is None else buttons
-        got = _standard(parent, tone, title, text, std, defaultButton)
-        if got is not None:
-            return got
-        # Looked up now, so a test (or plugin) that answers for the user
-        # by replacing QMessageBox.<name> is still obeyed.
-        qt = getattr(QMessageBox, qt_name)
-        args = [parent, title, text]
-        if buttons is not None:
-            args.append(buttons)
-            if defaultButton is not None:
-                args.append(defaultButton)
-        return qt(*args)
-    call.__name__ = qt_name
-    call.__doc__ = f"``QMessageBox.{qt_name}`` on the Built sheet when it is on screen."
-    return call
+def critical(parent, title, text, buttons=QMessageBox.Ok, defaultButton=None):
+    return _standard(parent, "error", title, text, buttons, defaultButton)
 
 
-critical = _box("error", "critical")
-warning = _box("warning", "warning")
-information = _box("info", "information")
+def warning(parent, title, text, buttons=QMessageBox.Ok, defaultButton=None):
+    return _standard(parent, "warning", title, text, buttons, defaultButton)
 
 
-def question(parent, title, text, buttons=None, defaultButton=None):
-    """``QMessageBox.question`` on the sheet (Yes | No unless told)."""
-    std = (QMessageBox.Yes | QMessageBox.No) if buttons is None else buttons
-    got = _standard(parent, "question", title, text, std, defaultButton)
-    if got is not None:
-        return got
-    args = [parent, title, text]
-    if buttons is not None:
-        args.append(buttons)
-        if defaultButton is not None:
-            args.append(defaultButton)
-    return QMessageBox.question(*args)
+def information(parent, title, text, buttons=QMessageBox.Ok, defaultButton=None):
+    return _standard(parent, "info", title, text, buttons, defaultButton)
+
+
+def question(parent, title, text, buttons=QMessageBox.Yes | QMessageBox.No, defaultButton=None):
+    return _standard(parent, "question", title, text, buttons, defaultButton)
 
 
 # ---- Modality while a sheet is up --------------------------------------------

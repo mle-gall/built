@@ -11,7 +11,6 @@ from __future__ import annotations
 import faulthandler
 import os
 import sys
-from formats import built
 from pathlib import Path
 
 # Frozen subprocess entry: no settings, logs, engine guard or application window.
@@ -19,6 +18,13 @@ if __name__ == '__main__' and '--probe-gpu' in sys.argv:
     from core.renderer_settings import probe_main
     probe_main()
     sys.exit(0)
+
+# Several host modules read preferences at import time.
+if profile := os.environ.get("BUILT_SETTINGS_DIR"):
+    from app_shell.qt_host import configure_settings
+    configure_settings(profile)
+
+from formats import built
 
 # Before any thread allocates (see core.malloc_arenas).
 from core import malloc_arenas
@@ -607,7 +613,7 @@ def main() -> int:
     # HTTPS from Python (the AI assistant) must find a CA bundle: the macOS
     # package asked for one where only the build machine had it (#198).
     if "--gallery" in sys.argv[1:]:
-        os.environ.update(BUILT_GALLERY="1", BUILT_UI="1")
+        os.environ["BUILT_GALLERY"] = "1"
         sys.argv[sys.argv.index("--gallery")] = "--new-window"
     from core.tls import ensure_once
     ensure_once()
@@ -721,7 +727,7 @@ def main() -> int:
     # File ▸ New Window starts a second IngeTrazo with --new-window: it must
     # NOT hand over to the running one like a double-click does, or the
     # new window never appears (issue #76).
-    new_window = "--new-window" in sys.argv[1:]
+    new_window = "--new-window" in sys.argv[1:] or bool(os.environ.get("BUILT_SETTINGS_DIR"))
     args = [a for a in sys.argv[1:]
             if a not in ("--new-window", _native.FLAG)]
     arg = args[0] if args else ""
@@ -788,10 +794,7 @@ def main() -> int:
         # the next launch.
         app.aboutToQuit.connect(lambda: QLocalServer.removeServer(_SOCKET))
 
-    # No file: the window opens on the start page, drawn by the Built
-    # chrome from its first frame (views/wgpu_start.py). Where the chrome
-    # cannot draw it, the Qt Home dialog comes after the first frame
-    # instead (show_home below).
+    # Publish the Start sheet before the first frame.
     from views import wgpu_start
     if wgpu_start.wants_at_start(bool(arg)):
         wgpu_start.show(window)
@@ -825,14 +828,6 @@ def main() -> int:
             # Closed while the document was coming in: no units question
             # or update check on a window that is going away (#1269).
             return
-        # Which units to work in, once the window is up and the document in
-        # (off for good with «Don't show this at startup»; Preferences ▸
-        # Units turns it back on). Offered after the opening, not beside
-        # it: the load lets events through to move its bar, the question
-        # came up in the middle of it, and the document stayed frozen at
-        # 5 % behind it, the view blank, until it was answered.
-        if not arg and window._current_path is None:
-            QTimer.singleShot(0, window.show_home)
         QTimer.singleShot(4000, window.check_updates_quietly)
 
     QTimer.singleShot(0, _after_first_frame)

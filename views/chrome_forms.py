@@ -11,11 +11,8 @@ widgets and no Qt event loop of its own (see ``views/chrome_dialogs.py``,
   reports every edit (Python always holds what is on screen) and the
   button pressed; ``on_done(answer, values)`` then runs, on a later turn
   of whichever loop drives the window. No nested ``exec()`` anywhere.
-* When the chrome is not on screen (``BUILT_UI=0``, the classic app,
-  headless tests, a parent that is a Qt dialog) the same form runs as a
-  Qt dialog built from its fields (:func:`_qt_exec`), inline: ``on_done``
-  has run when :func:`show` returns. Callers that keep a richer Qt
-  dialog (Preferences) ask :func:`available` first and open that.
+* Offscreen Qt hosts expose the same form model. A missing host or a
+  failed frame cancels the form and reports the failure.
 
 So a caller writes its continuation once::
 
@@ -170,7 +167,7 @@ class Form:
             _repaint(self.win)
 
     def receive(self, fid, raw: str) -> None:
-        """An edit from the chrome (or the Qt fallback): typed into its value."""
+        """An edit from the chrome: typed into its value."""
         f = self.field(fid)
         if f is None:
             return
@@ -294,12 +291,6 @@ class Form:
 
 
 # ---- On the window -------------------------------------------------------------
-def available(parent) -> bool:
-    """The chrome can show a form for ``parent`` now."""
-    from views import chrome_dialogs
-    return chrome_dialogs.live(parent) is not None
-
-
 def forms(win) -> list:
     return win.__dict__.setdefault("_chrome_forms", [])
 
@@ -310,18 +301,13 @@ def current(win):
 
 
 def show(parent, form: Form) -> str:
-    """Put ``form`` on the chrome ("chrome"), or run it as a Qt dialog now
-    ("qt"); in the shell with no chrome up, cancel it ("none")."""
+    """Post a form model, or cancel the operation if its host is unavailable."""
     from views import chrome_dialogs
-    view = chrome_dialogs.live(parent)
-    if view is None:
-        if chrome_dialogs.in_shell():
-            print(f"[built] form «{form.title}» with no chrome to show it", file=sys.stderr, flush=True)
-            form.finish(form.cancel)
-            return "none"
-        _qt_exec(parent, form)
-        return "qt"
-    win = chrome_dialogs.window_of(parent)
+    win = chrome_dialogs.async_host(parent)
+    if win is None:
+        print(f"Built could not show the form: {form.title}", file=sys.stderr)
+        form.finish(form.cancel)
+        return "none"
     if form.key is not None:
         old = next((f for f in forms(win) if f.key == form.key), None)
         if old is not None:
@@ -332,7 +318,9 @@ def show(parent, form: Form) -> str:
     form.win = win
     forms(win).append(form)
     chrome_dialogs.engage(win)
-    _watch(view, win, form)
+    view = chrome_dialogs.live(parent)
+    if view is not None:
+        _watch(view, win, form)
     _repaint(win)
     return "chrome"
 
@@ -355,9 +343,7 @@ def _repaint(win) -> None:
 
 
 def _watch(view, win, form) -> None:
-    """The sheet's watchdog: no frame drew the form in time (the window
-    covered, the surface lost) → it runs as a Qt dialog instead. Never in
-    the shell, which has no Qt dialog to fall back to."""
+    """Cancel a form that was never drawn."""
     from views import chrome_dialogs
     if chrome_dialogs.in_shell():
         return
@@ -367,9 +353,8 @@ def _watch(view, win, form) -> None:
     def check():
         if form.closed or form.shown or getattr(view, "_ui_frames", 0) != frames:
             return
-        _remove(win, form)
-        form.win = None
-        _qt_exec(win, form)
+        win.viewport.flash_status(f"Built could not draw the {form.title} form.")
+        form.close()
     QTimer.singleShot(chrome_dialogs.WATCHDOG_MS, check)
 
 
@@ -429,29 +414,8 @@ def _pick_path(form, f) -> None:
 
 
 # ---- Prompts -------------------------------------------------------------------
-def _no_window(done) -> bool:
-    """In the shell with no chrome up, no Qt prompt can show: cancel."""
-    from views import chrome_dialogs
-    if not chrome_dialogs.in_shell():
-        return False
-    if done is not None:
-        done(None)
-    return True
-
-
 def ask_text(parent, title, label, text="", done=None, *, multiline=False, ok=None, note=""):
     """A name prompt: ``done(text)`` or ``done(None)`` on Cancel."""
-    if not available(parent):
-        if _no_window(done):
-            return
-        from views import prompts
-        if multiline:
-            value, accepted = prompts.get_multiline_text(parent, title, label, text)
-        else:
-            value, accepted = prompts.get_text(parent, title, label, text=text)
-        if done is not None:
-            done(value if accepted else None)
-        return
     form = Form(title, [Field("text", "edit", label, text, focus=True, multiline=multiline,
                               full=multiline)],
                 note=note, buttons=[("cancel", tr("Cancel")), ("ok", ok or tr("OK"))],
@@ -463,19 +427,6 @@ def ask_text(parent, title, label, text="", done=None, *, multiline=False, ok=No
 def ask_number(parent, title, label, value, lo, hi, decimals=0, done=None, *, suffix="", step=1, note=""):
     """``QInputDialog.getInt`` (decimals 0) / ``getDouble``: ``done(value)``
     or ``done(None)``."""
-    if not available(parent):
-        if _no_window(done):
-            return
-        from PySide6.QtWidgets import QInputDialog
-        if decimals <= 0:
-            got, accepted = QInputDialog.getInt(parent, title, label, int(value), int(lo), int(hi), int(step))
-        else:
-            got, accepted = QInputDialog.getDouble(parent, title, label, float(value), float(lo),
-                                                   float(hi), int(decimals))
-        if done is not None:
-            done(got if accepted else None)
-        return
-
     def check(form, _answer):
         raw = form._texts.get("value")
         if raw is not None:
@@ -497,14 +448,6 @@ def ask_number(parent, title, label, value, lo, hi, decimals=0, done=None, *, su
 def ask_choice(parent, title, label, items, current=0, done=None, *, note=""):
     """``QInputDialog.getItem`` (not editable): ``done(item)`` or ``done(None)``."""
     items = [str(i) for i in items]
-    if not available(parent):
-        if _no_window(done):
-            return
-        from PySide6.QtWidgets import QInputDialog
-        got, accepted = QInputDialog.getItem(parent, title, label, items, int(current), False)
-        if done is not None:
-            done(got if accepted else None)
-        return
     start = items[current] if 0 <= current < len(items) else (items[0] if items else None)
     form = Form(title, [Field("item", "choice", label, start, options=items)], note=note, width=420,
                 on_done=lambda a, v: done(v["item"] if a == "ok" else None) if done else None)
@@ -525,7 +468,7 @@ class request:  # noqa: N801 — reads like a call at the yield
 
 def flow(gen) -> None:
     """Run a generator of :class:`request`: each answer is sent back in,
-    on whichever turn it comes (at once with Qt, later on the chrome)."""
+    on the turn the chrome delivers it."""
     def step(value=None, first=False):
         try:
             req = next(gen) if first else gen.send(value)
@@ -533,167 +476,3 @@ def flow(gen) -> None:
             return
         req.start(step)
     step(first=True)
-
-
-# ---- The Qt fallback ------------------------------------------------------------
-def _qt_exec(parent, form: Form) -> None:
-    """``form`` as a modal QDialog, now: same fields, same buttons, same
-    callbacks (``on_change`` on every edit, ``on_done`` on close)."""
-    from PySide6.QtCore import Qt
-    from PySide6.QtGui import QColor
-    from views.color_dialog import get_color
-    from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox,
-                                   QDoubleSpinBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit,
-                                   QPlainTextEdit, QPushButton, QSlider, QSpinBox, QTabWidget,
-                                   QVBoxLayout, QWidget)
-    if parent is not None and not hasattr(parent, "isWindow"):
-        parent = None                   # not a QWidget (a shell object)
-    dlg = QDialog(parent)
-    dlg.setWindowTitle(form.title)
-    dlg.setMinimumWidth(int(min(form.width, 560)))
-    outer = QVBoxLayout(dlg)
-    note = QLabel(form.note)
-    note.setWordWrap(True)
-    note.setVisible(bool(form.note))
-    outer.addWidget(note)
-    tabs = None
-    if any(f.kind == "page" for f in form.fields):
-        tabs = QTabWidget()
-        outer.addWidget(tabs)
-    page_form = None
-    if tabs is None:
-        page_form = QFormLayout()
-        outer.addLayout(page_form)
-    widgets = {}
-    syncs = []
-
-    def changed(fid, raw):
-        form.receive(fid, raw)
-        for s in syncs:
-            s()
-
-    for f in form.fields:
-        if f.kind == "page":
-            page = QWidget()
-            page_form = QFormLayout(page)
-            tabs.addTab(page, f.label)
-            continue
-        if page_form is None:
-            continue
-        w = None
-        label = f.label
-        if f.kind == "caption":
-            cap = QLabel(f"<b>{f.label}</b>")
-            page_form.addRow(cap)
-            continue
-        if f.kind == "text":
-            t = QLabel(str(f.value or f.label))
-            t.setWordWrap(True)
-            page_form.addRow(t)
-            continue
-        if f.kind == "edit":
-            if f.multiline:
-                w = QPlainTextEdit(str(f.value or ""))
-                w.textChanged.connect(lambda fid=f.id, w=w: changed(fid, w.toPlainText()))
-            else:
-                w = QLineEdit(str(f.value or ""))
-                if f.password:
-                    w.setEchoMode(QLineEdit.Password)
-                w.textEdited.connect(lambda t, fid=f.id: changed(fid, t))
-        elif f.kind == "number":
-            if f.decimals <= 0:
-                w = QSpinBox()
-                w.setRange(int(f.lo), int(f.hi) if f.hi > f.lo else 2**31 - 1)
-                w.setValue(int(f.value or 0))
-                w.valueChanged.connect(lambda v, fid=f.id: changed(fid, str(v)))
-            else:
-                w = QDoubleSpinBox()
-                w.setDecimals(f.decimals)
-                w.setRange(f.lo, f.hi if f.hi > f.lo else 1e12)
-                w.setValue(float(f.value or 0))
-                w.valueChanged.connect(lambda v, fid=f.id: changed(fid, repr(v)))
-            if f.suffix:
-                w.setSuffix(" " + f.suffix)
-        elif f.kind == "check":
-            w = QCheckBox(f.label)
-            w.setChecked(bool(f.value))
-            w.toggled.connect(lambda on, fid=f.id: changed(fid, "1" if on else "0"))
-            label = f.row_label
-        elif f.kind == "choice":
-            w = QComboBox()
-            for k, text in f.options:
-                w.addItem(text, k)
-            keys = f.keys()
-            w.setCurrentIndex(keys.index(f.value) if f.value in keys else 0)
-            w.currentIndexChanged.connect(lambda i, fid=f.id: changed(fid, str(i)))
-        elif f.kind == "slider":
-            w = QSlider(Qt.Horizontal)
-            w.setRange(int(f.lo), int(f.hi))
-            w.setValue(int(f.value or 0))
-            w.valueChanged.connect(lambda v, fid=f.id: changed(fid, str(v)))
-        elif f.kind == "color":
-            w = QPushButton(str(f.value or ""))
-
-            def pick_color(_=False, fid=f.id, button=w):
-                c = get_color(QColor(form.value(fid) or "#808080"), dlg)
-                if c.isValid():
-                    button.setText(c.name())
-                    changed(fid, c.name())
-            w.clicked.connect(pick_color)
-        elif f.kind == "path":
-            w = QWidget()
-            row = QHBoxLayout(w)
-            row.setContentsMargins(0, 0, 0, 0)
-            line = QLineEdit(str(f.value or ""))
-            line.textEdited.connect(lambda t, fid=f.id: changed(fid, t))
-            more = QPushButton(tr("Choose…"))
-
-            def choose(_=False, fid=f.id, line=line):
-                form.press(fid)
-                line.setText(str(form.value(fid) or ""))
-            more.clicked.connect(choose)
-            row.addWidget(line, 1)
-            row.addWidget(more)
-        elif f.kind == "button":
-            w = QPushButton(f.label)
-            w.clicked.connect(lambda _=False, fid=f.id: (form.press(fid), [s() for s in syncs]))
-            label = ""
-        if w is None:
-            continue
-        if f.tip:
-            w.setToolTip(f.tip)
-        widgets[f.id] = w
-        page_form.addRow(label, w)
-
-        def sync(f=f, w=w):
-            w.setEnabled(_truth(f.enabled, form))
-            w.setVisible(_truth(f.visible, form))
-        syncs.append(sync)
-    for s in syncs:
-        s()
-    box = QDialogButtonBox()
-    made = {}
-    for bid, text in form.buttons:
-        role = (QDialogButtonBox.RejectRole if bid == form.cancel else
-                QDialogButtonBox.DestructiveRole if bid == form.discard else
-                QDialogButtonBox.AcceptRole)
-        b = box.addButton(text, role)
-        made[b] = bid
-        if bid == form.default:
-            b.setDefault(True)
-    outer.addWidget(box)
-    answer = {"id": form.cancel}
-
-    def clicked(b):
-        bid = made.get(b, form.cancel)
-        if bid != form.cancel and form.validate is not None:
-            err = form.validate(form, bid)
-            if err:
-                note.setText(err)
-                note.setVisible(True)
-                return
-        answer["id"] = bid
-        dlg.done(1 if bid != form.cancel else 0)
-    box.clicked.connect(clicked)
-    dlg.exec()
-    form.finish(answer["id"])

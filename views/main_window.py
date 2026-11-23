@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from views import chrome_dialogs as _dialogs
 from views import chrome_forms as _forms
-from views import prompts as _prompts
 
 import sys
 import os
@@ -1238,12 +1237,6 @@ class MainWindow(WorksessionMixin, QMainWindow):
             panels_tb.addWidget(btn)
             self._icon_actions.append((btn, key))
 
-        # Terrain profile dock (Track G, G4) — hidden until requested.
-        from views.profile_panel import ProfileDock
-        self.profile_dock = ProfileDock(self)
-        self.addDockWidget(Qt.BottomDockWidgetArea, self.profile_dock)
-        self.profile_dock.hide()
-
     def _new_toolbar(self, title: str, object_name: str) -> QToolBar:
         """A separate, independently draggable/floatable icons-only toolbar
         (Draw, Modify, View… each move on their own)."""
@@ -2250,12 +2243,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         self._act_customize_toolbars.setVisible(
             self.testAttribute(Qt.WA_TranslucentBackground))
 
-        toggle_profile = self.profile_dock.toggleViewAction()
-        toggle_profile.setText(tr("Terrain profile"))
-        toggle_profile.setStatusTip(tr(
-            "Show or hide the panel with the terrain profile along a path."))
-        window_menu.addAction(toggle_profile)
-
+        window_menu.addAction(tr("Terrain profile"), self._on_terrain_profile)
 
         # AutoCAD's Ctrl+0 clean screen: nothing but the model, for
         # presenting. Added to the WINDOW too, so the shortcut keeps
@@ -3710,28 +3698,9 @@ class MainWindow(WorksessionMixin, QMainWindow):
         offer_at_start(self)
 
     def open_preferences(self, shortcut_of=None, page=None) -> None:
-        """Settings; on the Keyboard section with that action picked when
-        ``shortcut_of`` is given (right click in F3), or on ``page``
-        (``"units"``). The large sheet of the Built chrome where it can
-        draw (views/settings_sheet.py), else the Qt dialog."""
+        """Open Settings, optionally focused on a section or shortcut."""
         from views import settings_sheet
-        if settings_sheet.show(self, page=page, shortcut_of=shortcut_of):
-            return
-        self._open_preferences_dialog(shortcut_of=shortcut_of, page=page)
-
-    def _open_preferences_dialog(self, shortcut_of=None, page=None) -> None:
-        """The Qt Preferences dialog (``BUILT_UI=0``, the GL view, or no
-        frame drew the sheet)."""
-        from views.preferences_dialog import PreferencesDialog
-        dlg = PreferencesDialog(self)
-        if shortcut_of is not None:
-            dlg.show_shortcut_of(shortcut_of)
-        elif page == "units":
-            dlg.show_units_page()
-        dlg.exec()
-        # Freed now, not when the window goes: each opening used to leave
-        # a hidden dialog hanging from the window until the app closed.
-        dlg.deleteLater()
+        settings_sheet.show(self, page=page, shortcut_of=shortcut_of)
 
     def _on_set_language(self, code: str) -> None:
         """Persist the chosen UI language (applied on next start).
@@ -4010,13 +3979,10 @@ class MainWindow(WorksessionMixin, QMainWindow):
 
     def _on_manage_extensions(self) -> None:
         from views.report_sheets import show
-        if show(self, "extensions"):
-            return
         # An exception in a menu slot goes to stderr, and a windowed build
         # has none: the click did nothing at all (#1152).
         try:
-            from views.extension_manager_dialog import ExtensionManagerDialog
-            dialog = ExtensionManagerDialog(self)
+            show(self, "extensions")
         except Exception as exc:  # noqa: BLE001 — say so, whatever it was
             import logging
             from core.extensions import note_failure
@@ -4027,9 +3993,6 @@ class MainWindow(WorksessionMixin, QMainWindow):
                 self, tr("Extension manager"),
                 tr("Could not load extensions: {error}",
                    error=f"{type(exc).__name__}: {exc}"))
-            return
-        dialog.exec()
-        dialog.deleteLater()
 
     PLUGIN_GUIDE_URL = ("https://github.com/ingelibre/ingetrazo"
                         "/blob/main/docs/plugins.md")
@@ -4137,20 +4100,11 @@ class MainWindow(WorksessionMixin, QMainWindow):
 
     def _on_cut_list(self) -> None:
         from views.report_sheets import show
-        if not show(self, "cutlist"):
-            self.tray.parts.refresh()
-            self.tray.parts._on_copy()
+        show(self, "cutlist")
 
     def _on_about(self) -> None:
         from views.report_sheets import show
-        if show(self, "about"):
-            return
-        from views.about_dialog import AboutDialog
-        display = self.viewport.keys_stand_in
-        adapter = getattr(getattr(display, "renderer", None), "adapter", "")
-        # The people outside the project whose work is IN it turn in a
-        # carousel there; AUTHORS says what each one gave.
-        AboutDialog(self, __version__, adapter).exec()
+        show(self, "about")
 
     def _file_actions(self) -> list[QAction]:
         actions = []
@@ -4306,12 +4260,10 @@ class MainWindow(WorksessionMixin, QMainWindow):
         actions.append(import_menu)
 
 
-        from views import wgpu_ui
-        if wgpu_ui.ENABLED:
-            from views.wgpu_deliveries import export_form
-            delivery_export = QAction(tr("Export…"), self)
-            delivery_export.triggered.connect(lambda: export_form(self, one_off=True))
-            actions.append(delivery_export)
+        from views.wgpu_deliveries import export_form
+        delivery_export = QAction(tr("Export…"), self)
+        delivery_export.triggered.connect(lambda: export_form(self, one_off=True))
+        actions.append(delivery_export)
         export_menu = QMenu(tr("Export"), self)
         for label, tip, handler in (
             (tr("IFC (BIM)…"),
@@ -4999,25 +4951,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             [("drop", tr("Let It Go")), ("cancel", tr("Cancel")),
              ("keep", tr("Keep in File"))],
             default="keep", cancel="cancel")
-        if answer is not None:
-            return {"keep": True, "drop": False}.get(answer)
-        box = QMessageBox(self)
-        box.setIcon(QMessageBox.Question)
-        box.setWindowTitle(tr("Replace Component"))
-        box.setText(tr("No copy of {names} will be left in the model.",
-                       names=names))
-        box.setInformativeText(tr(
-            "Keep it in the file, to place it or swap back to it later?"))
-        keep = box.addButton(tr("Keep in File"), QMessageBox.AcceptRole)
-        drop = box.addButton(tr("Let It Go"), QMessageBox.DestructiveRole)
-        box.addButton(QMessageBox.Cancel)
-        box.setDefaultButton(keep)
-        box.exec()
-        if box.clickedButton() is keep:
-            return True
-        if box.clickedButton() is drop:
-            return False
-        return None
+        return {"keep": True, "drop": False}.get(answer)
 
     def keep_selected_components(self, keep: bool = True) -> None:
         """Keep in File, on or off, for every component definition the
@@ -7164,21 +7098,13 @@ class MainWindow(WorksessionMixin, QMainWindow):
         self.viewport.update()
 
     def _on_terrain_profile(self) -> None:
-        """Show the profile dock and profile the current selection (Track G)."""
+        """Open the terrain chart in the chrome's bottom bar."""
+        from views.inspector_bridge import action
         view = getattr(self._doc, "stand_in", None)
-        if getattr(view, "_ui_attached", False):
-            from views.inspector_bridge import action
-            action(self, view, '["terrain.open",null]')
+        if getattr(view, "renderer", None) is None:
+            self.statusBar().showMessage(tr("The terrain profile needs an active renderer."))
             return
-        self.profile_dock.show()
-        self.profile_dock.raise_()
-        self.profile_dock.compute_from_selection()
-
-    def on_viewport_hover(self, screen_x: float, screen_y: float) -> None:
-        """Plan→profile link: mark the station of the route point under the
-        cursor in the open profile (Track G)."""
-        if self.profile_dock.isVisible():
-            self.profile_dock.indicate_at_screen(screen_x, screen_y)
+        action(self, view, '["terrain.open",null]')
 
     # ---- Terrain-surface fill (Track G) -------------------------------------
     def _surface_dem(self, datum):
@@ -7807,7 +7733,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         vp.smartZoomRequested.connect(live(self._on_smart_zoom))
         for name in ("tray", "bim_tray", "georef_tray", "project_browser",
                      "layers_dock", "scenes_dock", "layers_toolbar",
-                     "profile_dock", "structure_dock"):
+                     "structure_dock",):
             panel = getattr(self, name, None)
             if panel is not None:
                 vp.sceneVersionChanged.connect(
@@ -9212,24 +9138,11 @@ class MainWindow(WorksessionMixin, QMainWindow):
             recovered = answer == QMessageBox.Yes
             if not recovered:
                 autosave.clear(path)
-        # A bar while it loads (issue #59, @pacaeiro): a big document took
-        # seconds with nothing on screen, «feeling of freeze». Small ones
-        # never show it (the dialog waits 400 ms before appearing).
         dlg, cb = self._import_progress(
             tr("Opening {name}…", name=path.name), monotonic=True)
-        chrome = isinstance(dlg, _dialogs.ChromeBar)
         self._open_cancelled = False
-        if chrome:
-            # The top bar's Cancel (or Esc) stops the load and keeps the
-            # window: the tab it was opening into goes.
-            dlg.canceled.connect(self._on_open_cancelled)
-            dlg.set_cancellable(True)
-        else:
-            # The bar is window-modal: while it shows, Qt drops a close of
-            # the main window before closeEvent ever hears it (a blocked
-            # window takes no close), so the X there did nothing (Windows
-            # round 0.6.2). Closing the bar itself is the user's close, then.
-            dlg.canceled.connect(self._on_open_bar_closed)
+        dlg.canceled.connect(self._on_open_cancelled)
+        dlg.set_cancellable(True)
 
         def guarded_cb(frac, text):
             # A close that landed while the file was still coming in
@@ -9274,8 +9187,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             # resident pack allocates. Only the full heap walk is deferred.
             import gc
             gc.set_threshold(self.GC_THRESHOLD0, 10, 10)
-            if chrome:
-                dlg.set_cancellable(False)  # it is in: packing cannot stop
+            dlg.set_cancellable(False)  # it is in: packing cannot stop
             self.viewport.history.clear()
             self.viewport.reset_texture_cache()
             self._forget_coordinate()
@@ -9327,12 +9239,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
                           "were left out so the rest of “{name}” could open. Save "
                           "it to keep the repaired document.",
                           n=repaired, name=path.name)
-                if not _dialogs.notify(self, tr("Document repaired"), text,
-                                       tone="warning"):
-                    box = QMessageBox(QMessageBox.Warning, tr("Document repaired"),
-                                      text, QMessageBox.Ok, self)
-                    box.setAttribute(Qt.WA_DeleteOnClose)
-                    box.open()                   # not modal to the event loop
+                _dialogs.warning(self, tr("Document repaired"), text)
             # The project's other views show what came in, not what was there.
             grid = self._doc.view_grid
             if grid is not None:
@@ -9386,14 +9293,6 @@ class MainWindow(WorksessionMixin, QMainWindow):
             self._open_in_progress = False
             self.viewport.update()
             dlg.close()
-
-    def _on_open_bar_closed(self) -> None:
-        """The progress bar of an .igz open was closed (its X, Esc) while
-        the file was coming in: the same as closing the window then (#1269)
-        — the load unwinds and the window closes. Once the load is over,
-        the bar closing on its own means nothing."""
-        if getattr(self, "_open_in_progress", False):
-            self._open_aborted = True
 
     def _on_open_cancelled(self) -> None:
         """Cancel in the top bar while an .igz is coming in: the load
@@ -10028,55 +9927,15 @@ class MainWindow(WorksessionMixin, QMainWindow):
 
 
     def _import_progress(self, title, *, monotonic=False):
-        """A modal progress dialog + the callback the loaders call at
-        milestones (big imports take ~20 s; a bar is the usual answer)."""
-        from PySide6.QtWidgets import QApplication, QProgressDialog
-        # Closed is not deleted: each open or import left its dialog behind
-        # as a child of the window for the whole session (the release check,
-        # 25-09). The previous one is surely done by the time a new one is
-        # asked for, so it goes now — never more than one alive.
+        """Publish an import job and return its loader progress callback."""
+        from PySide6.QtWidgets import QApplication
         old = getattr(self, "_progress_dlg", None)
         if old is not None:
             try:
                 old.deleteLater()
             except RuntimeError:
                 pass
-        if _dialogs.live(self) is not None:
-            # The Built UI: the work shows in the top bar (file, phase,
-            # share, Cancel where the loader can stop), never a dialog.
-            bar = _dialogs.ChromeBar(self, title)
-            self._progress_dlg = bar
-            last_chrome = 0
-
-            def chrome_cb(frac, text):
-                nonlocal last_chrome
-                value = max(0, min(100, int(frac * 100)))
-                last_chrome = max(last_chrome, value) if monotonic else value
-                bar.setValue(last_chrome)
-                bar.setLabelText(tr(text))
-                QApplication.processEvents()
-
-            return bar, chrome_cb
-
-        class _Bar(QProgressDialog):
-            def close(self):
-                # reset() stops the timer that shows the bar after
-                # minimumDuration. Without it a bar closed before it ever
-                # showed could still pop up later, window-modal, where a
-                # close of a never-shown dialog does not take (a native
-                # child in the window, offscreen platform): the update
-                # dialog then waited behind it forever.
-                self.reset()
-                self.hide()
-                return super().close()
-
-        dlg = _Bar(title, "", 0, 100, self)
-        self._progress_dlg = dlg
-        dlg.setCancelButton(None)
-        dlg.setWindowModality(Qt.WindowModal)
-        dlg.setMinimumDuration(400)
-        dlg.setAutoClose(False)
-        dlg.setAutoReset(False)
+        dlg = self._progress_dlg = _dialogs.ChromeBar(self, title)
         last = 0
 
         def cb(frac, text):
@@ -11713,24 +11572,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             [("cancel", tr("Cancel")), ("whole", tr("Whole model")),
              ("part", tr("Only the selection"))],
             default="part", cancel="cancel")
-        if answer is not None:
-            return {"part": sel, "whole": None}.get(answer, False)
-        box = QMessageBox(
-            QMessageBox.Question, tr("Export"),
-            tr("Export the whole model, or only what is selected?"),
-            QMessageBox.NoButton, self)
-        box.setOption(QMessageBox.Option.DontUseNativeDialog, True)
-        whole = box.addButton(tr("Whole model"), QMessageBox.AcceptRole)
-        part = box.addButton(tr("Only the selection"), QMessageBox.AcceptRole)
-        box.addButton(QMessageBox.Cancel).setText(tr("Cancel"))
-        box.setDefaultButton(part)
-        box.exec()
-        clicked = box.clickedButton()
-        if clicked is part:
-            return sel
-        if clicked is whole:
-            return None
-        return False
+        return {"part": sel, "whole": None}.get(answer, False)
 
     def _on_export_dae(self) -> None:
         """COLLADA export — the 'open it back in the original program' bridge. Copies the
@@ -12013,43 +11855,16 @@ class MainWindow(WorksessionMixin, QMainWindow):
         if not self._is_dirty():
             return True
         # The Built UI asks on its own sheet (Enter saves, Esc stays, ⌘D
-        # lets the changes go); Qt asks when the chrome is not on screen.
+        # lets the changes go).
         answer = _dialogs.ask(
             self, prompt, tr("Unsaved changes will be lost."),
             [("discard", tr("Don't Save")), ("cancel", tr("Cancel")),
              ("save", tr("Save"))],
             default="save", cancel="cancel", discard="discard")
-        if answer is not None:
-            if answer == "save":
-                self._on_save()
-                return not self._is_dirty()
-            return answer == "discard"
-        # Built by hand rather than with QMessageBox.question: on macOS
-        # that is a NATIVE alert, which draws «Don't Save» as a red
-        # destructive button — and under the dark scheme main.py forces,
-        # red text on a black button, barely readable. Qt's own dialog
-        # wears the app's palette, like every other window here.
-        box = QMessageBox(
-            QMessageBox.Question, tr("Unsaved changes"),
-            tr("{prompt}\n\nUnsaved changes will be lost.", prompt=prompt),
-            QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel,
-            self)
-        box.setOption(QMessageBox.Option.DontUseNativeDialog, True)
-        # main.py installs a Qt translator that already names the standard
-        # buttons in the app language, but only when the qtbase_<lang>.qm
-        # file is found, and «Don't Save» is worded differently per
-        # platform: name all three through our own catalog so they read
-        # the same everywhere.
-        for button, text in ((QMessageBox.Save, "Save"),
-                             (QMessageBox.Discard, "Don't Save"),
-                             (QMessageBox.Cancel, "Cancel")):
-            box.button(button).setText(tr(text))
-        box.setDefaultButton(QMessageBox.Save)
-        answer = box.exec()
-        if answer == QMessageBox.Save:
+        if answer == "save":
             self._on_save()
             return not self._is_dirty()
-        return answer == QMessageBox.Discard
+        return answer == "discard"
 
     # "Saved" is recorded as the scene version at that moment (as every
     # caller and test has always written it) and kept as the CONTENT version:
@@ -12172,7 +11987,6 @@ class MainWindow(WorksessionMixin, QMainWindow):
             if dirty[0] is not self._doc:
                 self.activate_document(dirty[0])
             return self._confirm_discard(tr("Quit Built?"))
-        names = "\n".join("• " + d.display_name() for d in dirty)
         checklist = [(d.display_name(), True) for d in dirty]
         answer = _dialogs.ask(
             self, tr("Which projects should be saved?"),
@@ -12180,25 +11994,8 @@ class MainWindow(WorksessionMixin, QMainWindow):
             [("discard", tr("Don't Save")), ("cancel", tr("Cancel")),
              ("save", tr("Save Selected"))],
             default="save", cancel="cancel", discard="discard", checklist=checklist)
-        if answer is not None:
-            selected = [d for d, (_, checked) in zip(dirty, checklist) if checked]
-            return self._save_all_or_stay(selected, answer)
-        box = QMessageBox(
-            QMessageBox.Question, tr("Unsaved changes"),
-            tr("{n} projects have unsaved changes:\n\n{names}\n\n"
-               "Save them before quitting?", n=len(dirty), names=names),
-            QMessageBox.SaveAll | QMessageBox.Discard | QMessageBox.Cancel,
-            self)
-        box.setOption(QMessageBox.Option.DontUseNativeDialog, True)
-        for button, text in ((QMessageBox.SaveAll, "Save All"),
-                             (QMessageBox.Discard, "Don't Save"),
-                             (QMessageBox.Cancel, "Cancel")):
-            box.button(button).setText(tr(text))
-        box.setDefaultButton(QMessageBox.SaveAll)
-        answer = box.exec()
-        return self._save_all_or_stay(
-            dirty, {QMessageBox.Discard: "discard",
-                    QMessageBox.SaveAll: "save"}.get(answer, "cancel"))
+        selected = [d for d, (_, checked) in zip(dirty, checklist) if checked]
+        return self._save_all_or_stay(selected, answer)
 
     def _save_all_or_stay(self, dirty, answer: str) -> bool:
         if answer == "discard":

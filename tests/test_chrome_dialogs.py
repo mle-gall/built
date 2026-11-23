@@ -1,8 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """The Built chrome's sheet and jobs (views/chrome_dialogs.py) stand in for
-Qt's message boxes and progress dialogs when the egui UI is on screen, and
-answer synchronously as QMessageBox.exec() did; with the UI off, headless,
-or no frame to draw them, Qt asks as before.
+Qt's message boxes and progress dialogs. Blocking questions cancel on a
+missing frame. Notices and progress can be read from the offscreen model.
 
 Offscreen there is no Metal frame: ``live`` is replaced by a stand-in view
 and the test plays the chrome (marks the sheet drawn, clicks or types)."""
@@ -65,15 +64,14 @@ def dirty(win):
     assert win._is_dirty()
 
 
-def test_live_is_off_headless_and_with_the_ui_off(monkeypatch):
+def test_blocking_questions_require_a_visible_view(monkeypatch):
     from views.main_window import MainWindow
     from views import wgpu_ui
     w = MainWindow(defer_extensions=True)
     try:
         assert cd.live(w) is None            # offscreen: Qt asks
         monkeypatch.setattr(cd.QGuiApplication, "platformName", staticmethod(lambda: "cocoa"))
-        monkeypatch.setattr(wgpu_ui, "ENABLED", False)
-        assert cd.live(w) is None            # BUILT_UI=0
+        assert cd.live(w) is None            # window has never been shown
         assert cd.live(None) is None
     finally:
         w.close()
@@ -122,18 +120,13 @@ def test_a_click_on_the_sheet_answers_through_the_chrome_actions(win):
     assert (default, cancel, discard) == ("save", "cancel", "discard")
 
 
-def test_no_frame_drawn_falls_back_to_qt(win, monkeypatch):
-    """The watchdog: a sheet nobody saw drawn goes to Qt, never a hang."""
+def test_no_frame_drawn_cancels_close_and_reports_failure(win, monkeypatch):
     monkeypatch.setattr(cd, "WATCHDOG_MS", 50)
-    asked = []
-
-    def fake_exec(box):
-        asked.append(box.text())
-        return QMessageBox.Cancel
-    monkeypatch.setattr(QMessageBox, "exec", fake_exec)
+    flashed = []
+    monkeypatch.setattr(win.viewport, "flash_status", flashed.append)
     dirty(win)
     assert win._confirm_discard("Close “plan”?") is False
-    assert asked and "Close “plan”?" in asked[0]
+    assert flashed == ["Built could not draw the question: Close “plan”?"]
     assert cd.current_sheet(win) is None and not cd.modal(win)
 
 
@@ -191,16 +184,11 @@ def test_message_boxes_map_standard_buttons(win):
     assert cd.critical(win, "Open failed", "No such file") == QMessageBox.Ok
 
 
-def test_message_boxes_go_to_qt_when_the_chrome_is_off(monkeypatch):
-    from views.main_window import MainWindow
-    calls = []
-    monkeypatch.setattr(QMessageBox, "warning", lambda *a: calls.append(a) or QMessageBox.Ok)
-    w = MainWindow(defer_extensions=True)
-    try:
-        assert cd.warning(w, "Linked files", "Missing") == QMessageBox.Ok
-        assert calls and calls[0][1:] == ("Linked files", "Missing")
-    finally:
-        w.close()
+def test_offscreen_warning_is_kept_in_the_chrome_history(win, monkeypatch):
+    monkeypatch.setattr(cd, "live", lambda parent: None)
+    assert cd.warning(win, "Linked files", "Missing") == QMessageBox.Ok
+    row = cd.history(win)[0]
+    assert (row.title, row.detail, row.tone) == ("Linked files", "Missing", "warning")
 
 
 @pytest.mark.parametrize("method,title", [

@@ -13080,33 +13080,13 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
                "shows here."),
             [("cancel", tr("Cancel")), ("open", tr("Open {name}", name=path.name))],
             default="open", cancel="cancel")
-        if answer is not None and answer != "open":
-            return
-        if answer is None and not self._ask_open_link_qt(path):
+        if answer != "open":
             return
         window = getattr(self, "window", None)
         window = window() if callable(window) else None
         opener_fn = getattr(window, "open_path", None)
         if callable(opener_fn):
             opener_fn(path)
-
-    def _ask_open_link_qt(self, path) -> bool:
-        from PySide6.QtWidgets import QMessageBox
-        box = QMessageBox(self.keys_stand_in or self)
-        box.setIcon(QMessageBox.Question)
-        box.setWindowTitle(tr("Linked document"))
-        box.setText(tr("“{name}” is linked from another file.",
-                       name=path.name))
-        box.setInformativeText(tr(
-            "It is edited in its own document; every change saved there "
-            "shows here. Open it now?"))
-        opener = box.addButton(tr("Open {name}", name=path.name),
-                               QMessageBox.AcceptRole)
-        box.addButton(QMessageBox.Cancel)
-        box.setDefaultButton(opener)
-        box.exec()
-        return box.clickedButton() is opener
-
 
     # ---- Rest-of-model context while editing a group -------------------------
     @property
@@ -13903,11 +13883,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         self._last_mouse_pos = ev.position()
         self._emit_coordinate(ev)
         _hmark("coord")
-        # Plan↔profile link (Track G): let an open profile mark the station of
-        # the route point under the cursor.
-        win = self.window()
-        if hasattr(win, "on_viewport_hover"):
-            win.on_viewport_hover(ev.position().x(), ev.position().y())
         # What the snap reads of a face under the cursor builds no lazy mesh
         # (#1092); a tool's on_hover below may keep what it picks, and a click
         # gets the real faces.

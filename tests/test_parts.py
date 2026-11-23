@@ -196,9 +196,12 @@ def test_a_plain_group_offers_to_split():
 
 def test_copy_cut_list_fills_the_clipboard():
     win, scene = _window_with(_stool())
-    panel = win.tray.parts
-    panel.refresh()
-    panel._on_copy()
+    from views import chrome_sheet
+    ctx = chrome_sheet.Ctx(win, win._doc.stand_in)
+    win._on_cut_list()
+    sheet = chrome_sheet.current(win)
+    sheet.build(ctx)
+    sheet.act(ctx, "verb", ["copy"])
     lines = QApplication.clipboard().text().splitlines()
     assert len(lines) == 3 and lines[1].startswith("2\t")
     assert len(lines[0].split("\t")) == 6

@@ -4,7 +4,7 @@ or set something bigger than a menu — the Library, the start page,
 Settings; later the one-off Export, the Extension Manager, About.
 
 ``rust/ingetrazo_render/src/ui/large_sheet.rs`` draws it in the Metal
-frame (the Qt app with ``BUILT_UI=1`` and the native ``built`` shell
+frame (the Qt app and the native ``built`` shell
 alike): a sheet hung under the top bar over the dimmed, blurred model, with
 a header (title, tabs, verbs, menus, search, close), a side list, a content
 pane, an optional detail pane and an optional footer. The pattern and its
@@ -55,8 +55,8 @@ key but the window's ⌘ shortcuts (⌘K, ⌘O, ⌘W, ⌘Q…). Esc closes the
 innermost thing (a menu, a field, the search text), then the sheet; the
 model's view gets the keyboard back.
 
-Where the chrome cannot draw (``BUILT_UI=0``, the GL view, offscreen test
-runs) :func:`open` returns False and the caller shows its Qt fallback.
+The host can install a provider offscreen with :func:`open`. Interactive
+hosts release an undrawn sheet and report the missing frame.
 """
 from __future__ import annotations
 
@@ -64,7 +64,7 @@ import json
 import sys
 
 SEP = "\x1f"
-#: Asked for and not drawn this long after: the provider's fallback runs.
+#: Asked for and not drawn this long after: close the sheet.
 WATCHDOG_MS = 2000
 
 
@@ -251,7 +251,7 @@ class Sheet:
 class Provider:
     """One surface on the sheet. Override :meth:`build` and :meth:`act`."""
     id = ""
-    #: Run :meth:`fallback` when no frame drew the sheet in time.
+    #: Close the sheet if no frame draws it in time.
     watchdog = True
 
     def build(self, ctx) -> Sheet:
@@ -268,11 +268,6 @@ class Provider:
     def closed(self, ctx) -> None:
         """The sheet went: Esc, ×, :func:`close`, or another sheet opened
         over it (``ctx.replaced``)."""
-
-    def fallback(self, win) -> None:
-        """No frame drew the sheet in time (Qt app only): show the Qt
-        equivalent, if there is one."""
-
 
 class Ctx:
     """What a provider reads: the window and the view in front."""
@@ -320,21 +315,6 @@ def in_shell() -> bool:
     return "built_shell" in sys.builtin_module_names
 
 
-def available(win) -> bool:
-    """The chrome can draw a sheet on ``win``: the egui chrome is on and a
-    Metal view will draw it (always in the ``built`` shell)."""
-    from views import chrome_dialogs, wgpu_ui
-    if in_shell() or getattr(chrome_dialogs, "_shell_installed", False):
-        # The native shell (or its host under test): its chrome always draws.
-        return _view(win) is not None
-    if not wgpu_ui.ENABLED:
-        return False
-    from PySide6.QtGui import QGuiApplication
-    if QGuiApplication.platformName() in ("offscreen", "minimal"):
-        return False
-    return True
-
-
 def shown(win) -> bool:
     st = _state(win)
     return st is not None and not st.closing
@@ -346,12 +326,8 @@ def current(win):
     return st.provider if st is not None and not st.closing else None
 
 
-def open(win, provider, *, search=None, focus=None) -> bool:  # noqa: A001 — reads as chrome_sheet.open
-    """Put ``provider``'s sheet up (replacing another). ``search``: text
-    typed into the search field at once; ``focus``: the item focused.
-    False when the chrome cannot draw it: the caller shows its fallback."""
-    if not available(win):
-        return False
+def open(win, provider, *, search=None, focus=None):  # noqa: A001
+    """Install the sheet model for the next frame, including offscreen hosts."""
     old = _state(win)
     if old is not None and old.provider is provider and not old.closing:
         if search is not None:
@@ -426,16 +402,17 @@ def _repaint(win) -> None:
 def _arm_watchdog(win, st) -> None:
     if in_shell() or not getattr(st.provider, "watchdog", True):
         return
-    try:
-        from PySide6.QtCore import QTimer
-    except ImportError:
+    from PySide6.QtCore import QTimer
+    from PySide6.QtGui import QGuiApplication
+    if QGuiApplication.platformName() in ("offscreen", "minimal"):
         return
 
     def check():
         if _state(win) is not st or st.drawn or st.closing:
             return
         win.__dict__.pop("_chrome_sheet", None)
-        st.provider.fallback(win)
+        _closed(win, st)
+        win.viewport.flash_status(f"Built could not draw the {st.provider.id} sheet.")
     QTimer.singleShot(WATCHDOG_MS, check)
 
 

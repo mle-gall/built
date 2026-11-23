@@ -3,11 +3,7 @@
 option C of the 2026-11-23 review), in the Qt app with the Built chrome and
 in the native ``built`` shell.
 
-It replaces the Qt Home dialog (``views/home.py``) for a cold start
-without a file and for File ▸ New Window, and it comes back from File ▸
-Home, the document menu of the top bar and ⌘K. The Qt dialog stays when
-the chrome cannot draw it: ``BUILT_UI=0``, the GL renderer, headless and
-test runs, or no frame drawn within :data:`WATCHDOG_MS` of asking.
+The Start sheet opens on a cold start without a file and from File ▸ Home.
 
 What it shows (Python owns the data and the filter, the sheet the layout
 and the focus):
@@ -47,7 +43,7 @@ from PySide6.QtGui import QGuiApplication, QImage
 from core import recent
 
 SEP = "\x1f"
-#: Asked for and not drawn this long after: the Qt dialog instead.
+#: Asked for and not drawn this long after: report the failed frame.
 WATCHDOG_MS = 2000
 #: Thumbnails wider than this are scaled down before upload (points × 2).
 THUMB_PX = 512
@@ -107,18 +103,6 @@ TEMPLATES = [
 ]
 
 
-# ---- Can the chrome draw it? -------------------------------------------------
-def available() -> bool:
-    """The Built chrome will draw the page: the UI on, a real screen and
-    the Metal renderer wanted (the GL view has no chrome)."""
-    from views import wgpu_ui
-    if not wgpu_ui.ENABLED:
-        return False
-    if QGuiApplication.platformName() in ("offscreen", "minimal"):
-        return False
-    return True
-
-
 def _view(win):
     doc = getattr(win, "_doc", None)
     return getattr(doc, "stand_in", None) if doc is not None else None
@@ -138,10 +122,7 @@ def shown(win) -> bool:
 
 # ---- Showing and hiding ------------------------------------------------------
 def show(win) -> bool:
-    """Put the page up. False when the chrome cannot (the caller then
-    shows the Qt Home dialog)."""
-    if not available():
-        return False
+    """Open the Start sheet in this window."""
     return page(win).open()
 
 
@@ -196,8 +177,7 @@ class Page:
             self.load()
             chrome_sheet.refresh(win)
             return True
-        if not chrome_sheet.open(win, self.sheet):
-            return False
+        chrome_sheet.open(win, self.sheet)
         self.wanted = True
         self.drawn = False
         self.focused = False
@@ -211,6 +191,8 @@ class Page:
                 view.setFocus(Qt.OtherFocusReason)
             except RuntimeError:
                 pass
+        if QGuiApplication.platformName() in ("offscreen", "minimal") and not chrome_sheet.in_shell():
+            return True
         if self.dog is None:
             self.dog = QTimer(win, singleShot=True)
             self.dog.timeout.connect(self._watchdog)
@@ -227,9 +209,6 @@ class Page:
         self.repaint()
 
     def _watchdog(self) -> None:
-        # Nothing drew the page (no Metal view after all, the surface lost):
-        # the Qt Home dialog, so the window never sits on an Untitled model
-        # with nothing to choose from.
         if not self.wanted or self.drawn:
             return
         win = self.win
@@ -245,7 +224,7 @@ class Page:
         from views import chrome_sheet
         if chrome_sheet.current(win) is self.sheet:
             win.__dict__.pop("_chrome_sheet", None)
-        _qt_home(win)
+        win.statusBar().showMessage("Built could not draw the Start sheet.")
 
     def repaint(self) -> None:
         view = _view(self.win)
@@ -1104,14 +1083,6 @@ def apply_structure(scene, nodes, active=None) -> bool:
     return True
 
 
-# ---- The Qt dialog, where the chrome cannot draw ------------------------------
-def _qt_home(win) -> None:
-    from views.home import Home
-    win._home = Home(win)
-    win._home.show()
-    win._home.raise_()
-
-
 def wants_at_start(argv_has_file: bool) -> bool:
     """main.py: the window opens on the page when no file is given."""
-    return not argv_has_file and available() and os.environ.get("BUILT_START", "1") != "0"
+    return not argv_has_file and os.environ.get("BUILT_START", "1") != "0"

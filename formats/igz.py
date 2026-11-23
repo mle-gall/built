@@ -725,14 +725,11 @@ def _backup_previous(path: Path) -> bool:
     missed the ride-model agent's backup on 2026-11-09."""
     import shutil
     from tempfile import TemporaryDirectory
-    from PySide6.QtCore import QCoreApplication, QSettings
     from core import general_settings
 
     if not path.is_file():
         return True
-    settings = None if QCoreApplication.organizationName() else QSettings(
-        QSettings.defaultFormat(), QSettings.UserScope, "IngeTrazo", "IngeTrazo")
-    if str(general_settings.value("backup", "1", settings)) == "0":
+    if str(general_settings.value("backup", "1")) == "0":
         return True
     try:
         with TemporaryDirectory(dir=path.parent) as tmp:

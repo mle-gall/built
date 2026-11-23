@@ -1251,8 +1251,7 @@ def draw_lights(app, panel, viewport, painter) -> None:
 
 def setup(app) -> None:
     from core.plugin_panels import open_panel
-    from views import wgpu_ui
-    if wgpu_ui.ENABLED and getattr(app.window._doc, "_renderer_wgpu", False):
+    if getattr(app.window._doc, "_renderer_wgpu", False):
         app.add_menu_action(tr("Render with Blender…"), lambda: open_panel(app.window, app.key))
         return
     panel = RenderPanel(app)

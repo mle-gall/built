@@ -43,8 +43,8 @@ install_name_tool -change "$LIB" '@executable_path/../Frameworks/Python' "$EXE"
 codesign -f -s - "$APP/Contents/MacOS/ingetrazo"
 codesign -f -s - "$APP"
 codesign --verify --deep --strict "$APP"
-isolated "$EXE" --check
-isolated "$EXE" --qt --check
+"$PYTHON" scripts/isolated_launch.py "$EXE" --check
+"$PYTHON" scripts/isolated_launch.py "$EXE" --qt --check
 codesign --verify --deep --strict "$APP"
 if [[ -e "$OUT/Built.app" ]]; then mv "$OUT/Built.app" "$STAGE/previous.app"; fi
 mv "$APP" "$OUT/Built.app" || {

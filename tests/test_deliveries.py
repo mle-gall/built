@@ -132,7 +132,7 @@ def test_scenes_cancel_keeps_previous_files(tmp_path):
     assert all((tmp_path / f"plan-{i:02}.dxf").read_text().endswith("EOF\n") for i in (1, 2))
 
 
-def test_checks_and_classic_export(tmp_path, monkeypatch):
+def test_checks_and_one_off_export(tmp_path, monkeypatch):
     from tests.test_outliner import _window_with
     from views import wgpu_ui
     win, scene, _ = _window_with(Group(name="Loose"))
@@ -150,9 +150,8 @@ def test_checks_and_classic_export(tmp_path, monkeypatch):
     view = SimpleNamespace(renderer=Renderer())
     dock.dock(view, scene, wgpu_ui._tree_model(view, scene, scene.content_version))
     assert ("unfiled object", "1") in got["Pre-run checks"]
-    monkeypatch.setattr(wgpu_ui, "ENABLED", False)
     actions = win._file_actions()
-    assert not any(a.text() == "Export…" for a in actions if hasattr(a, "text"))
+    assert any(a.text() == "Export…" for a in actions if hasattr(a, "text"))
     assert any(a.title() == "Export" for a in actions if hasattr(a, "title"))
 
 

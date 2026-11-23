@@ -1280,13 +1280,6 @@ class LibrarySheet(_chrome_sheet().Provider):
             if self._pending_item is not None:
                 self._apply(ctx, self._pending_item)
 
-    def fallback(self, win):
-        """No chrome: the Materials tray (Qt) is the Library."""
-        tray = getattr(win, "tray", None)
-        if tray is not None and hasattr(tray, "show_materials"):
-            tray.show_materials()
-
-
 def refresh(win) -> None:
     _chrome_sheet().refresh(win)
 
@@ -1323,10 +1316,9 @@ def _active_tool(win) -> str:
 
 def open_library(win, type_id=None, search=None, scope=None) -> bool:
     """Window › Library › <type>, ⌘K, the rail, the Paint strip's Browse
-    all…: the Library sheet on that type. False when the chrome cannot
-    draw it (``BUILT_UI=0``)."""
+    all…: the Library sheet on that type. Requires an active document view."""
     view = getattr(getattr(win, "_doc", None), "stand_in", None)
-    if view is None or not getattr(view, "_ui_attached", False):
+    if view is None:
         return False
     st = _state(view)
     _land(view, win)

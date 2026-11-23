@@ -11,8 +11,8 @@ example **Intersect: Model | Selection | Context**). No kind has more than
 14 rows under its header.
 
 This menu is drawn by the chrome in both apps: the native `built` shell
-(egui) and the Qt app with `BUILT_UI=1`. The classic app (`BUILT_UI=0`)
-keeps its QMenu (`MainWindow.show_viewport_context_menu`).
+(egui) and the Qt app. Some Qt-host callers still use
+`MainWindow.show_viewport_context_menu`.
 
 ## How it works
 

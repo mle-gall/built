@@ -93,7 +93,6 @@ class Fruit(cs.Provider):
 @pytest.fixture
 def win(monkeypatch):
     w = Win()
-    monkeypatch.setattr(cs, "available", lambda _w: True)
     monkeypatch.setattr(cs, "_view", lambda _w: w.view)
     monkeypatch.setattr("views.wgpu_ui._window", lambda v: w)
     return w
@@ -206,26 +205,24 @@ def test_it_owns_the_keys_but_the_windows_shortcuts(win):
         assert cs.claims_key(view, key(k, "", Qt.ControlModifier)) is False
 
 
-def test_where_the_chrome_cannot_draw_open_says_so(monkeypatch):
-    w = Win()
-    monkeypatch.setattr("views.wgpu_ui.ENABLED", False)
-    assert not cs.available(w)
-    assert not cs.open(w, Fruit())
-    assert not cs.shown(w)
+def test_offscreen_open_exposes_the_sheet_model():
+    win = Win()
+    provider = Fruit()
+    assert cs.open(win, provider)
+    assert cs.shown(win) and cs.current(win) is provider
 
 
-def test_no_frame_drawn_runs_the_fallback(win, monkeypatch):
+def test_missing_frame_reports_failure_and_closes_the_provider(win, monkeypatch):
     shots = []
     monkeypatch.setattr("PySide6.QtCore.QTimer.singleShot", staticmethod(lambda ms, fn: shots.append(fn)))
 
-    class Fallback(Fruit):
-        def fallback(self, w):
-            self.seen.append("qt")
-    p = Fallback()
+    monkeypatch.setattr("PySide6.QtGui.QGuiApplication.platformName", staticmethod(lambda: "cocoa"))
+    p = Fruit()
     cs.open(win, p)
     shots[-1]()                                          # the watchdog, no frame drawn
-    assert p.seen == ["qt"] and not cs.shown(win)
-    q = Fallback()
+    assert p.closed_n == 1 and not cs.shown(win)
+    assert win.flashed == ["Built could not draw the fruit sheet."]
+    q = Fruit()
     cs.open(win, q)
     frame(win)                                           # drawn: the watchdog does nothing
     shots[-1]()

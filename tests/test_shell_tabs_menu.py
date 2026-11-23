@@ -408,7 +408,10 @@ def test_right_click_selects_what_it_hit_first(host, kinds, monkeypatch):
     box = kinds["group"][0]
     face = kinds["faces"][0]
     scene = host.viewport.scene
+    monkeypatch.setattr(host.view, "renderer", StubRenderer())
+    monkeypatch.setattr(host.view, "_ui_attached", True, raising=False)
     tools = host.view.tools
+    monkeypatch.setattr(tools, "pick_locked_group", lambda x, y: None)
     monkeypatch.setattr(tools, "pick_group", lambda x, y: box)
     monkeypatch.setattr(tools, "pick_edge", lambda x, y: None)
     monkeypatch.setattr(tools, "pick_face", lambda x, y: None)
@@ -422,7 +425,10 @@ def test_right_click_selects_what_it_hit_first(host, kinds, monkeypatch):
 def test_right_click_inside_the_selection_keeps_it(host, kinds, monkeypatch):
     a, b = kinds["groups"]
     scene = host.viewport.scene
+    monkeypatch.setattr(host.view, "renderer", StubRenderer())
+    monkeypatch.setattr(host.view, "_ui_attached", True, raising=False)
     tools = host.view.tools
+    monkeypatch.setattr(tools, "pick_locked_group", lambda x, y: None)
     monkeypatch.setattr(tools, "pick_group", lambda x, y: a)
     monkeypatch.setattr(tools, "pick_edge", lambda x, y: None)
     monkeypatch.setattr(tools, "pick_face", lambda x, y: None)
@@ -433,7 +439,7 @@ def test_right_click_inside_the_selection_keeps_it(host, kinds, monkeypatch):
 
 
 def test_with_the_chrome_the_menu_goes_to_it(host, kinds, monkeypatch):
-    """The chrome's path (native app, BUILT_UI=1): WgpuView's right-click
+    """The chrome's path (native and Qt hosts): WgpuView's right-click
     hands the rows to the renderer, and ctx:<id> runs the verb."""
     from views import wgpu_ui
     box = kinds["group"][0]
@@ -442,7 +448,6 @@ def test_with_the_chrome_the_menu_goes_to_it(host, kinds, monkeypatch):
     monkeypatch.setattr(tools, "pick_group", lambda x, y: box)
     monkeypatch.setattr(tools, "pick_edge", lambda x, y: None)
     monkeypatch.setattr(tools, "pick_face", lambda x, y: None)
-    monkeypatch.setattr(wgpu_ui, "ENABLED", True)
     stub = StubRenderer()
     view.renderer = stub
     view._ui_attached = True

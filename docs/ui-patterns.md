@@ -134,14 +134,13 @@ class OneOffExport(chrome_sheet.Provider):
         elif verb == "verb" and args[0] == "run":
             ...                                # a job in the activity capsule
 
-chrome_sheet.open(win, OneOffExport())        # False: no chrome, use the Qt fallback
+chrome_sheet.open(win, OneOffExport())
 ```
 
 `build` runs again after every action and whenever `signature(ctx)`
 changes; only a changed sheet is sent. `closed(ctx)` runs when it goes
 (`ctx.replaced` when another sheet took its place: the start page comes
-back after Settings). `fallback(win)` runs when no frame drew it in time
-(Qt app only). Tests check every sheet they send against the Rust schema
+back after Settings). The Qt host closes an undrawn sheet and reports a missing frame. Tests check every sheet they send against the Rust schema
 with `chrome_sheet.check_wire`.
 
 By the port rule of 2026-11-23 (`docs/rust-port-plan.md`), a **new**

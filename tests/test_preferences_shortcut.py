@@ -8,7 +8,7 @@ import sys
 
 import pytest
 from PySide6.QtGui import QAction, QKeySequence
-from PySide6.QtWidgets import QApplication, QDialog
+from PySide6.QtWidgets import QApplication
 
 if QApplication.instance() is None:
     QApplication(sys.argv[:1])
@@ -38,16 +38,9 @@ def test_nobody_else_has_ctrl_comma(win):
 
 
 def test_ctrl_comma_opens_preferences_on_its_first_page(win, monkeypatch):
-    from views import preferences_dialog as prefs
-    opened = {}
-
-    def fake_exec(dlg):
-        opened["page"] = dlg._tabs.currentIndex()
-        return QDialog.Rejected
-
-    monkeypatch.setattr(prefs.PreferencesDialog, "exec", fake_exec)
+    from views import chrome_sheet
     win._act_preferences.trigger()
-    assert opened == {"page": 0}            # opened, not on Units or Keys
+    assert chrome_sheet.current(win).section == "general"
 
 
 def test_opening_preferences_flashes_no_loose_window(win):
@@ -56,7 +49,6 @@ def test_opening_preferences_flashes_no_loose_window(win):
     parent): a flicker over the panels on every opening."""
     from PySide6.QtCore import QEvent, QObject
     from PySide6.QtWidgets import QDialog as _Dialog
-    from views.preferences_dialog import PreferencesDialog
 
     shown = []
 
@@ -72,8 +64,7 @@ def test_opening_preferences_flashes_no_loose_window(win):
     app = QApplication.instance()
     app.installEventFilter(spy)
     try:
-        dlg = PreferencesDialog(win)
+        win.open_preferences()
     finally:
         app.removeEventFilter(spy)
-    dlg.deleteLater()
     assert shown == []

@@ -147,7 +147,7 @@ jobs:
           # que se añadan después, sin que haya que acordarse de listarlos
           # aquí. Va antes que Qt, así que no abre ventana; devuelve 1 si
           # falta algo.
-          ./dist/ingetrazo/ingetrazo.exe --check
+          python scripts/isolated_launch.py ./dist/ingetrazo/ingetrazo.exe --check
           echo "bundle OK"
 
       # ── Firma (SignPath Foundation, org «IngeTrazo [OSS]») ─────────────

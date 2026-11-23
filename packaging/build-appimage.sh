@@ -42,7 +42,7 @@ rm -rf "$APPDIR" "$WORK/pyi"
 echo "==> the bundle finds its own data"
 # Before wrapping it in an AppImage, ask the bundle itself. A missing shader
 # or texture starts fine and only fails when the user needs it.
-"$WORK/pyi/ingetrazo/ingetrazo" --check
+"$PYTHON" scripts/isolated_launch.py "$WORK/pyi/ingetrazo/ingetrazo" --check
 
 echo "==> tarball"
 # The same bundle, without the AppImage wrapper: extract and run. For users
@@ -118,6 +118,6 @@ rm -f "$APPIMAGE"
 ARCH="$ARCH" "$TOOL" --appimage-extract-and-run "$APPDIR" "$APPIMAGE"
 
 echo "==> the AppImage answers --check"
-"$APPIMAGE" --check
+"$PYTHON" scripts/isolated_launch.py "$APPIMAGE" --check
 
 printf '\n%s  (%s)\n' "$APPIMAGE" "$(du -h "$APPIMAGE" | cut -f1)"

@@ -132,8 +132,8 @@ def test_the_drawing_comes_in_a_tab_and_the_unsaved_one_stays(
     win = _dirty_window()
     try:
         asked = []
-        monkeypatch.setattr(QMessageBox, "exec",
-                            lambda box: asked.append(box))
+        monkeypatch.setattr("views.chrome_dialogs.ask",
+                            lambda *a, **kw: asked.append(a))
         mine = win.active_document()
         _open_document_in(win, doc)
         _app.processEvents()
@@ -160,8 +160,8 @@ def test_a_clean_window_is_never_asked(tmp_path, monkeypatch):
     win = MainWindow()                            # untouched: nothing to lose
     try:
         asked = []
-        monkeypatch.setattr(QMessageBox, "exec",
-                            lambda box: asked.append(box))
+        monkeypatch.setattr("views.chrome_dialogs.ask",
+                            lambda *a, **kw: asked.append(a))
         _open_document_in(win, doc)
         _app.processEvents()
         assert asked == []

@@ -1,10 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""The start page (views/wgpu_start.py): a large sheet (views/chrome_sheet.py)
-drawn by the Built chrome when it can, the Qt Home dialog when it cannot;
-what it sends the sheet; what its actions do. Offscreen there is no Metal
-frame: ``available`` is forced and a stand-in renderer records the sheet's
-JSON (the layout, Esc and the arrow keys are tested in Rust,
-ui/large_sheet.rs)."""
+"""Exercise the Start provider and its actions with an offscreen chrome renderer."""
 from __future__ import annotations
 
 import json
@@ -80,15 +75,7 @@ def win(monkeypatch, tmp_path):
     p = w.__dict__.get("_start_page")
     if p is not None and p.dog is not None:
         p.dog.stop()
-    home = getattr(w, "_home", None)
-    if home is not None:
-        home.close()
     w.close()
-
-
-def on(monkeypatch):
-    monkeypatch.setattr(ws, "available", lambda: True)
-    monkeypatch.setattr(cs, "available", lambda w: True)
 
 
 def thumb_png(w=40, h=24):
@@ -147,30 +134,19 @@ def act(win, verb, *args):
 
 
 # ---- Shown or not ------------------------------------------------------------
-def test_headless_and_ui_off_keep_the_qt_dialog(win, monkeypatch):
-    # Offscreen (this run): the chrome cannot draw it.
-    assert not ws.available()
+def test_offscreen_opens_start_sheet(win):
     win.show_home()
-    assert not ws.shown(win)
-    assert win._home.isVisible()
-    win._home.close()
-    # BUILT_UI=0 on a real screen: the same, and the sheet cannot open either.
-    monkeypatch.setattr("views.wgpu_ui.ENABLED", False)
-    monkeypatch.setattr("PySide6.QtGui.QGuiApplication.platformName", staticmethod(lambda: "cocoa"))
-    assert not ws.available()
-    assert not cs.available(win)
+    assert frame(win).sheet()["id"] == "start"
 
 
 def test_the_window_opens_on_it_only_without_a_file(monkeypatch):
-    on(monkeypatch)
     assert ws.wants_at_start(False)
     assert not ws.wants_at_start(True)
-    monkeypatch.setattr(ws, "available", lambda: False)
+    monkeypatch.setenv("BUILT_START", "0")
     assert not ws.wants_at_start(False)
 
 
 def test_show_home_puts_the_page_on_the_sheet(win, monkeypatch, tmp_path):
-    on(monkeypatch)
     a, b = doc(tmp_path, "alpha.built"), doc(tmp_path, "beta.built", picture=False)
     recent.remember(a)
     recent.remember(b)
@@ -205,7 +181,6 @@ def test_show_home_puts_the_page_on_the_sheet(win, monkeypatch, tmp_path):
 
 
 def test_the_preview_shows_project_problems_unfiled_and_where_it_was_left(win, monkeypatch, tmp_path):
-    on(monkeypatch)
     a = doc(tmp_path, "job.built")
     recent.remember(a)
     recent.note(a, {"project": "Park", "problems": 13, "workspace": "Model › North", "unfiled": 50})
@@ -236,7 +211,6 @@ def test_the_preview_lists_links_and_their_state(win, monkeypatch, tmp_path):
     """The synthetic composite: Host links A (which links C and D) and B.
     Before opening, the preview says which links are found, changed on
     disk or missing."""
-    on(monkeypatch)
     from tests import composite_fixture as cf
     files = cf.build(tmp_path / "comp", big=40)
     host = files["host"]
@@ -259,7 +233,6 @@ def test_the_preview_lists_links_and_their_state(win, monkeypatch, tmp_path):
 
 
 def test_first_frame_never_waits_for_pictures(win, monkeypatch, tmp_path):
-    on(monkeypatch)
     a = doc(tmp_path, "alpha.built")
     recent.remember(a)
     gate = __import__("threading").Event()
@@ -274,7 +247,6 @@ def test_first_frame_never_waits_for_pictures(win, monkeypatch, tmp_path):
 
 
 def test_typing_filters_the_list(win, monkeypatch, tmp_path):
-    on(monkeypatch)
     for n in ("ride.built", "site.built", "kiosk.built"):
         recent.remember(doc(tmp_path, n))
     ws.show(win)
@@ -295,7 +267,6 @@ def key_event(key, text="", mods=Qt.NoModifier):
 
 
 def test_keys_go_to_the_sheet_but_command_keys_stay_the_windows(win, monkeypatch):
-    on(monkeypatch)
     view = win._fake_view
     assert cs.claims_key(view, key_event(Qt.Key_Escape)) is None    # not shown
     ws.show(win)
@@ -309,7 +280,6 @@ def test_keys_go_to_the_sheet_but_command_keys_stay_the_windows(win, monkeypatch
 
 
 def test_escape_returns_only_to_an_open_document(win, monkeypatch, tmp_path):
-    on(monkeypatch)
     ws.show(win)
     assert sheet(win)["closable"] is False      # only the blank untitled behind: Esc stays
     ws.action(win, "close")
@@ -330,7 +300,6 @@ def test_escape_returns_only_to_an_open_document(win, monkeypatch, tmp_path):
 
 # ---- Actions -----------------------------------------------------------------
 def test_enter_on_a_row_opens_it_through_the_window(win, monkeypatch, tmp_path):
-    on(monkeypatch)
     a, b = doc(tmp_path, "tile.built"), doc(tmp_path, "other.built")
     recent.remember(a)
     recent.remember(b)
@@ -348,7 +317,6 @@ def test_enter_on_a_row_opens_it_through_the_window(win, monkeypatch, tmp_path):
 
 
 def test_a_moved_file_is_located(win, monkeypatch, tmp_path):
-    on(monkeypatch)
     from views.filedialogs import file_dialogs
     moved = doc(tmp_path, "moved.built")
     old = tmp_path / "gone.built"
@@ -362,7 +330,6 @@ def test_a_moved_file_is_located(win, monkeypatch, tmp_path):
 
 
 def test_pin_toggles_and_pinned_come_first(win, monkeypatch, tmp_path):
-    on(monkeypatch)
     a, b, c = doc(tmp_path, "a.built"), doc(tmp_path, "b.built"), doc(tmp_path, "c.built")
     for p in (a, b, c):
         recent.remember(p)
@@ -381,7 +348,6 @@ def test_pin_toggles_and_pinned_come_first(win, monkeypatch, tmp_path):
 
 
 def test_new_model_and_templates(win, monkeypatch):
-    on(monkeypatch)
     monkeypatch.setattr("views.units_start_dialog.offer_at_start", lambda w: None)
     ws.show(win)
     sheet(win)
@@ -418,7 +384,6 @@ def test_every_template_structure_is_valid(tid):
 
 
 def test_a_document_coming_in_closes_the_page(win, monkeypatch, tmp_path):
-    on(monkeypatch)
     ws.show(win)
     frame(win)
     a = doc(tmp_path, "dropped.built")
@@ -428,7 +393,6 @@ def test_a_document_coming_in_closes_the_page(win, monkeypatch, tmp_path):
 
 
 def test_settings_from_the_footer_goes_over_it_and_the_page_comes_back(win, monkeypatch):
-    on(monkeypatch)
     ws.show(win)
     sheet(win)
     other = type("Other", (cs.Provider,), {"id": "other", "build": lambda self, ctx: cs.Sheet("other", "Other")})()
@@ -440,13 +404,12 @@ def test_settings_from_the_footer_goes_over_it_and_the_page_comes_back(win, monk
     assert sheet(win)["id"] == "start"                  # …and the page is back under it
 
 
-def test_no_frame_drawn_falls_back_to_the_qt_dialog(win, monkeypatch):
-    on(monkeypatch)
+def test_missing_frame_closes_start_with_a_message(win, monkeypatch):
     monkeypatch.setattr(ws, "_view", lambda _w: None)
     ws.show(win)
     ws.page(win)._watchdog()
     assert not ws.shown(win)
-    assert win._home is not None
+    assert "could not draw" in win.statusBar().currentMessage()
 
 
 def test_note_remembers_what_the_window_knows(win, tmp_path):
@@ -496,7 +459,6 @@ def test_blank_pictures_are_told_apart():
 
 
 def test_a_black_thumbnail_shows_the_placeholder(win, monkeypatch, tmp_path):
-    on(monkeypatch)
     black = QImage(280, 175, QImage.Format_RGB32)
     black.fill(Qt.black)
     dark = tmp_path / "dark.built"
@@ -604,7 +566,6 @@ def test_the_gl_view_still_gives_its_frame(win, monkeypatch, tmp_path):
 
 # ---- Removing recents ----------------------------------------------------------
 def test_remove_from_recents_leaves_the_file(win, monkeypatch, tmp_path):
-    on(monkeypatch)
     a, b = doc(tmp_path, "a.built"), doc(tmp_path, "b.built")
     recent.remember(a)
     recent.remember(b)                                  # Continue: b
@@ -624,7 +585,6 @@ def test_remove_from_recents_leaves_the_file(win, monkeypatch, tmp_path):
 
 
 def test_a_moved_file_hides_its_dead_duplicate(win, monkeypatch, tmp_path):
-    on(monkeypatch)
     (tmp_path / "Project").mkdir()
     ride = doc(tmp_path / "Project", "ride.igz")
     other = doc(tmp_path, "other.igz")
@@ -656,7 +616,6 @@ def test_a_moved_file_hides_its_dead_duplicate(win, monkeypatch, tmp_path):
 
 
 def test_a_missing_row_still_offers_to_locate(win, monkeypatch, tmp_path):
-    on(monkeypatch)
     from views.filedialogs import file_dialogs
     found = doc(tmp_path, "found.built")
     gone = tmp_path / "away" / "lost.built"

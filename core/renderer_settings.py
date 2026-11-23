@@ -35,6 +35,7 @@ def _probe_local():
         from views.wgpu_surface import window_handles
         window, handles = window_handles(view)
         renderer = ingetrazo_render.Renderer(window, 16, 16, 1.0, **handles)
+        renderer.ui_enable(None)
         del renderer
         view.close()
         return Capability(True)

@@ -76,13 +76,10 @@ def test_going_into_a_linked_copy_offers_its_file(win, tmp_path, monkeypatch):
     (g,) = links.linked_groups(win.viewport.scene)
     asked = {}
 
-    def fake_exec(box):
-        asked["text"] = box.text()
-        box._picked = box.buttons()[0]          # «Open Site.igz»
-        return 0
-    monkeypatch.setattr(QMessageBox, "exec", fake_exec)
-    monkeypatch.setattr(QMessageBox, "clickedButton",
-                        lambda box: getattr(box, "_picked", None))
+    def answer(parent, title, text, buttons, **kw):
+        asked["text"] = title
+        return "open"
+    monkeypatch.setattr("views.chrome_dialogs.ask", answer)
     win.viewport.begin_group_edit(g)
     assert "Site.igz" in asked["text"]
     assert win.viewport.scene.edit_group is None        # never entered

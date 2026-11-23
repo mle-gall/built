@@ -1,7 +1,7 @@
 """UI spike (branch ``ui/egui-spike``): the viewport chrome drawn by egui
 inside the Metal renderer, in the same frame as the model.
 
-Enabled unless ``BUILT_UI=0``. By default the Metal view draws a floating tool
+The Metal view draws a floating tool
 palette and a status line itself, and the Qt tool bars are hidden. Qt
 still owns the window, the docks and every tool: the palette only shows
 what the window says is active and asks it to switch.
@@ -12,8 +12,6 @@ import os
 
 from PySide6.QtCore import Qt, QTimer, QSize
 from PySide6.QtGui import QImage, QKeySequence
-
-ENABLED = os.environ.get("BUILT_UI") != "0"
 
 # What gets a button (Maxence 2026-11-22): the work itself and the states
 # you need to see. Commands every app shares a shortcut for (Save, Undo,
@@ -156,7 +154,7 @@ def _window(view):
 def attach(view) -> None:
     """Called once the view has its renderer."""
     renderer = view.renderer
-    if not ENABLED or getattr(view, "_ui_attached", False) or not hasattr(renderer, "ui_enable"):
+    if getattr(view, "_ui_attached", False):
         return
     win = _window(view)
     if win is None:

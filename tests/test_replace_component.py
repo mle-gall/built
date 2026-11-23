@@ -714,7 +714,7 @@ def test_keep_in_file_from_the_viewport_menu(monkeypatch):
 
 
 def test_rename_reaches_every_copy_and_the_kept_template(monkeypatch):
-    from PySide6.QtWidgets import QInputDialog
+    from views import chrome_forms
     from core.history import KeepComponentCommand
     win, scene, sillas, mesas = _window_with_model()
     try:
@@ -724,9 +724,10 @@ def test_rename_reaches_every_copy_and_the_kept_template(monkeypatch):
         box.component = False
         scene.groups.append(box)
         win.viewport.history.execute(KeepComponentCommand(sillas[0]))
-        monkeypatch.setattr(QInputDialog, "getText",
-                            lambda *a, **k: ("Silla Bistró", True))
         win.rename_component(sillas[1])
+        form = chrome_forms.current(win)
+        form.receive("text", "Silla Bistró")
+        form.press("ok")
         assert {g.name for g in sillas} == {"Silla Bistró"}
         assert nested.name == "Silla Bistró"
         assert scene.kept_components[0].name == "Silla Bistró"

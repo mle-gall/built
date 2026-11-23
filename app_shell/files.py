@@ -86,12 +86,6 @@ def install(win) -> None:
         renderer_settings.capability = lambda: renderer_settings.Capability(True)
         renderer_settings.status_text = lambda: "wgpu (native app)"
         renderer_settings._shell_installed = True
-    from views import wgpu_start
-    if not getattr(wgpu_start, "_shell_installed", False):
-        wgpu_start.available = lambda: True
-        wgpu_start._qt_home = lambda w: w.statusBar().showMessage(
-            "The start page could not be drawn", 4000)
-        wgpu_start._shell_installed = True
 
 
 # ---- commands ------------------------------------------------------------------
@@ -179,13 +173,8 @@ def open_library(win) -> bool:
 
 
 def open_settings(win) -> bool:
-    """Settings on the large sheet (views/settings_sheet.py); the shell has
-    no Qt dialog to fall back to."""
     from views import settings_sheet
-    if settings_sheet.show(win):
-        return True
-    win._host.not_here("Settings")
-    return False
+    return settings_sheet.show(win)
 
 
 def step_document(win, step):

@@ -2,7 +2,7 @@
 import os
 from pathlib import Path
 import plistlib
-import subprocess
+from scripts import isolated_launch
 import sys
 import textwrap
 
@@ -19,15 +19,16 @@ def test_pytest_requires_isolation(monkeypatch):
 @pytest.mark.parametrize("mode", ["directory", "environment", "temporary"])
 def test_isolated_profiles(tmp_path, mode):
     env = dict(os.environ, HOME=str(tmp_path), CFFIXED_USER_HOME=str(tmp_path))
-    env.pop("BUILT_SETTINGS_DIR", None)
-    if mode == "environment":
-        env["BUILT_SETTINGS_DIR"] = str(tmp_path / "env")
     script = """
         import sys
         from pathlib import Path
         from PySide6.QtCore import QSettings, QStandardPaths
         from app_shell import qt_host
         mode, root = sys.argv[1], Path(sys.argv[2])
+        if mode == "temporary":
+            # Exercise the offscreen host's automatic temporary profile in isolation.
+            import os
+            os.environ.pop("BUILT_SETTINGS_DIR")
         folder = qt_host.start(str(root / "explicit") if mode == "directory" else None,
                                temporary=mode != "directory")
         assert QStandardPaths.isTestModeEnabled()
@@ -39,72 +40,103 @@ def test_isolated_profiles(tmp_path, mode):
             assert Path(folder) == root / "env"
     """
     env["TMPDIR"] = str(tmp_path)
-    subprocess.run([sys.executable, "-c", textwrap.dedent(script), mode, str(tmp_path)],
-                   env=env, check=True, timeout=45)
+    isolated_launch.run([sys.executable, "-c", textwrap.dedent(script), mode, str(tmp_path)],
+                   env=env, home=tmp_path, settings=tmp_path / "env", check=True, timeout=45)
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="macOS native preference domain")
-def test_native_and_classic_share_normal_profile(tmp_path):
-    prefs = tmp_path / "Library/Preferences"
-    prefs.mkdir(parents=True)
-    plist = prefs / "com.ingetrazo.IngeTrazo.plist"
-    plist.write_bytes(plistlib.dumps({"recent_files": ["seed.built"]}))
-    # Verify interposition with a separate domain before either app starts.
-    (prefs / "com.builtprofileprobe.Probe.plist").write_bytes(plistlib.dumps({"home": str(tmp_path)}))
-    dylib = tmp_path / "preferences.dylib"
-    source = Path(__file__).parent / "fixtures/shell/fake_preferences.c"
-    subprocess.run(["clang", "-dynamiclib", source, "-framework", "CoreFoundation", "-o", dylib], check=True)
+def test_qt_launcher_respects_isolated_profile(tmp_path):
+    profile = tmp_path / "settings"
     env = dict(os.environ, HOME=str(tmp_path), CFFIXED_USER_HOME=str(tmp_path),
-               DYLD_INSERT_LIBRARIES=str(dylib), QT_QPA_PLATFORM="offscreen")
-    for key in ("BUILT_SETTINGS_DIR", "PYTEST_CURRENT_TEST", "XDG_DATA_HOME", "INGETRAZO_WGPU"):
-        env.pop(key, None)
+               BUILT_SETTINGS_DIR=str(profile))
     script = """
         import sys
         from pathlib import Path
-        from PySide6.QtCore import QCoreApplication, QSettings, QStandardPaths
-        QCoreApplication.setOrganizationName("BuiltProfileProbe")
-        QCoreApplication.setApplicationName("Probe")
-        assert QSettings().value("home") == str(Path.home())
+        from PySide6.QtCore import QSettings
+        import main
+        def check():
+            assert QSettings.defaultFormat() == QSettings.IniFormat
+            assert Path(QSettings().fileName()).is_relative_to(sys.argv[2])
+            return 0
+        main._self_check = check
+        sys.exit(main.main())
+    """
+    isolated_launch.run([sys.executable, "-c", textwrap.dedent(script), "--check", str(profile)],
+                   env=env, home=tmp_path, settings=profile, check=True, timeout=45)
+
+
+def test_launchers_share_an_isolated_profile(tmp_path):
+    profile = tmp_path / "shared"
+    script = """
+        import sys
+        from pathlib import Path
+        from PySide6.QtCore import QSettings
         def exchange():
-            from core import recent, general_settings
+            from core import general_settings
             st = QSettings()
-            assert st.format() == QSettings.NativeFormat
-            assert Path(st.fileName()) == Path.home() / "Library/Preferences/com.ingetrazo.IngeTrazo.plist"
-            assert not QStandardPaths.isTestModeEnabled()
-            for loc in (QStandardPaths.AppDataLocation, QStandardPaths.CacheLocation):
-                path = Path(QStandardPaths.writableLocation(loc)).resolve()
-                assert path.is_relative_to(Path.home().resolve() / "Library"), path
-            assert recent.entries()[0]["path"] == sys.argv[2]
-            assert general_settings.value("test_profile", "opengl") == sys.argv[4]
-            general_settings.set_value("test_profile", sys.argv[5])
+            assert st.format() == QSettings.IniFormat
+            assert Path(st.fileName()).is_relative_to(sys.argv[4])
+            assert st.value("recent_files", [], type=list) == ([sys.argv[2]] if sys.argv[2] else [])
+            assert general_settings.value("test_profile", "initial") == (sys.argv[2] or "initial")
+            general_settings.set_value("test_profile", sys.argv[3])
             st.setValue("recent_files", [sys.argv[3]])
             st.sync()
             assert st.status() == QSettings.NoError
         if sys.argv[1] == "native":
             from app_shell.host import Host
             host = Host(0, 1280, 800, 2)
-            assert host.settings_dir is None
+            assert Path(host.settings_dir) == Path(sys.argv[4])
             exchange()
             host.close()
         else:
-            # Stop classic startup immediately after it sets its application identity.
             import main
             set_org = main._App.setOrganizationName
-            def profile_ready(self, name):
+            def ready(self, name):
                 set_org(name)
                 exchange()
                 raise SystemExit(0)
-            main._App.setOrganizationName = profile_ready
+            main._App.setOrganizationName = ready
             main.main()
-            raise AssertionError("classic startup did not initialize the profile")
+            raise AssertionError("Qt startup did not initialize its profile")
     """
-    renderer = "opengl"
-    for mode, old, new in (("native", "seed.built", "native.built"),
-                           ("classic", "native.built", "classic.built"),
-                           ("native", "classic.built", "last.built")):
-        choice = "opengl" if renderer == "wgpu" else "wgpu"
-        subprocess.run([sys.executable, "-c", textwrap.dedent(script), mode, old, new,
-                        renderer, choice],
-                       env=env, check=True, timeout=45)
-        renderer = choice
-        assert plistlib.loads(plist.read_bytes())["recent_files"] == [new]
+    env = dict(os.environ, QT_QPA_PLATFORM="offscreen")
+    for mode, old, new in (("native", "", "native.built"), ("qt", "native.built", "qt.built"),
+                           ("native", "qt.built", "last.built")):
+        isolated_launch.run([sys.executable, "-c", textwrap.dedent(script), mode, old, new,
+                             str(profile)], env=env, home=tmp_path, settings=profile,
+                            check=True, timeout=45)
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="macOS native preference domain")
+def test_native_defaults_read_and_write_the_product_domain(tmp_path):
+    # Test the production CFPreferences backend alone, without booting a launcher.
+    prefs = tmp_path / "Library/Preferences"
+    prefs.mkdir(parents=True)
+    plist = prefs / "com.ingetrazo.IngeTrazo.plist"
+    plist.write_bytes(plistlib.dumps({"recent_files": ["seed.built"]}))
+    (prefs / "com.builtprofileprobe.Probe.plist").write_bytes(plistlib.dumps({"home": str(tmp_path)}))
+    dylib = tmp_path / "preferences.dylib"
+    source = Path(__file__).parent / "fixtures/shell/fake_preferences.c"
+    import subprocess
+    subprocess.run(["clang", "-dynamiclib", source, "-framework", "CoreFoundation", "-o", dylib], check=True)
+    script = """
+        from pathlib import Path
+        from PySide6.QtCore import QCoreApplication, QSettings, QStandardPaths
+        QCoreApplication.setOrganizationName("BuiltProfileProbe")
+        QCoreApplication.setApplicationName("Probe")
+        assert QSettings().value("home") == str(Path.home())
+        QCoreApplication.setOrganizationName("IngeTrazo")
+        QCoreApplication.setApplicationName("IngeTrazo")
+        st = QSettings()
+        assert st.format() == QSettings.NativeFormat
+        assert Path(st.fileName()) == Path.home() / "Library/Preferences/com.ingetrazo.IngeTrazo.plist"
+        assert not QStandardPaths.isTestModeEnabled()
+        for loc in (QStandardPaths.AppDataLocation, QStandardPaths.CacheLocation):
+            assert Path(QStandardPaths.writableLocation(loc)).resolve().is_relative_to(Path.home() / "Library")
+        assert st.value("recent_files") == ["seed.built"]
+        st.setValue("recent_files", ["last.built"])
+        st.sync()
+        assert st.status() == QSettings.NoError
+    """
+    isolated_launch.run([sys.executable, "-c", textwrap.dedent(script)], home=tmp_path,
+                        env=dict(os.environ, DYLD_INSERT_LIBRARIES=str(dylib)), check=True, timeout=45)
+    assert plistlib.loads(plist.read_bytes())["recent_files"] == ["last.built"]

@@ -85,6 +85,7 @@ import tempfile  # noqa: E402
 from PySide6.QtCore import QSettings  # noqa: E402
 
 _settings_dir = tempfile.mkdtemp(prefix="ingetrazo-tests-settings-")
+os.environ["BUILT_SETTINGS_DIR"] = _settings_dir
 QSettings.setDefaultFormat(QSettings.IniFormat)
 _system_settings_dir = os.path.join(_settings_dir, "system")
 

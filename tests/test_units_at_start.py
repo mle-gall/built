@@ -168,22 +168,14 @@ def test_a_document_already_open_is_not_asked_about(win, monkeypatch, tmp_path):
 # ---- Ctrl+U -------------------------------------------------------------------------
 
 def test_ctrl_u_opens_the_units_page(win, monkeypatch):
-    from views import preferences_dialog as prefs
+    from views import chrome_sheet
     act = win._act_units
     assert act.shortcut() == QKeySequence("Ctrl+U")
     others = [a for a in win.findChildren(type(act))
               if a is not act and QKeySequence("Ctrl+U") in a.shortcuts()]
     assert others == []                                 # nobody else has it
-    opened = {}
-
-    def fake_exec(dlg):
-        opened["page"] = dlg._tabs.currentWidget()
-        opened["units"] = dlg._units_page
-        return QDialog.Rejected
-
-    monkeypatch.setattr(prefs.PreferencesDialog, "exec", fake_exec)
     act.trigger()
-    assert opened["page"] is opened["units"]
+    assert chrome_sheet.current(win).section == "units"
 
 
 def test_custom_leads_to_the_units_panel(win, monkeypatch):

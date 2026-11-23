@@ -4,7 +4,7 @@ import json
 import os
 import sys
 from pathlib import Path
-import tempfile
+from isolated_launch import isolate_script
 import time
 
 from PySide6.QtCore import QSettings, QTimer, Qt
@@ -208,11 +208,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
     dest = Path(__file__).resolve().parents[1] / args.dest
     dest.mkdir(parents=True, exist_ok=True)
-    plist = Path.home() / "Library/Preferences/com.ingetrazo.IngeTrazo.plist"
-    stamp = plist.stat().st_mtime_ns if plist.exists() else None
-    with tempfile.TemporaryDirectory() as settings:
-        os.environ.update(HOME=settings, CFFIXED_USER_HOME=settings, BUILT_SETTINGS_DIR=settings,
-                          XDG_CONFIG_HOME=settings)
-        os.environ.pop("BUILT_GALLERY", None)
-        capture(args.prefix, dest)
-    assert stamp == (plist.stat().st_mtime_ns if plist.exists() else None)
+    isolate_script()
+    os.environ.pop("BUILT_GALLERY", None)
+    capture(args.prefix, dest)

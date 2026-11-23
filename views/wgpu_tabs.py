@@ -4,7 +4,7 @@
 The tab strip sits beside the window buttons, as in Figma. Python sends the
 tabs, and ``rust/ingetrazo_render/src/ui/tabs.rs`` draws them and reports
 clicks. The same code runs in the native `built` shell and in the Qt app
-with ``BUILT_UI=1``. Both expose ``window._project_tabs`` and
+with the chrome. Both expose ``window._project_tabs`` and
 ``window._documents``, which the document ▾ already read (S1.1), so
 switching, closing and New reuse that machinery.
 

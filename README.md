@@ -34,7 +34,7 @@ The interface is drawn by the renderer itself, inside the 3D view, on four fixed
 - **Project dock** on the right. It holds the tree (Filing, Drawing and Export column sets, filters, Problems mode) and an inspector for the selection that you edit in place.
 - **Bottom bar.** Units, the active tool's options and hint, and the value you type.
 
-The command palette is ⌘K or F3. The classic Qt layout is still there with `BUILT_UI=0` while the last panels are ported.
+The command palette is ⌘K or F3. Both the native and Qt hosts use the chrome.
 
 ## Where it stands on Rust
 

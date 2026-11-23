@@ -26,7 +26,7 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtCore import QEventLoop, QTimer
-from PySide6.QtWidgets import QApplication, QLabel, QMessageBox, QPushButton
+from PySide6.QtWidgets import QApplication, QLabel, QPushButton
 
 _app = QApplication.instance() or QApplication([])
 
@@ -306,17 +306,15 @@ def window():
 
 
 def test_a_manager_that_fails_to_open_says_so(window, monkeypatch):
-    from views import extension_manager_dialog as module
-    shown = []
-    monkeypatch.setattr(QMessageBox, "warning",
-                        lambda _parent, _title, text: shown.append(text))
+    from views import chrome_dialogs, report_sheets
 
-    def explode(_parent):
+    def explode():
         raise PermissionError(13, "denied")
 
-    monkeypatch.setattr(module, "ExtensionManagerDialog", explode)
+    monkeypatch.setattr(report_sheets, "Extensions", explode)
     window._on_manage_extensions()
-    assert len(shown) == 1 and "denied" in shown[0]
+    notice = chrome_dialogs.history(window)[0]
+    assert notice.tone == "warning" and "denied" in notice.detail
 
 
 def test_sys_exit_in_setup_costs_only_that_extension(

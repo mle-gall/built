@@ -24,9 +24,9 @@ def test_an_unreadable_skp_is_reported_and_nothing_else_runs(monkeypatch, tmp_pa
                  "_extract_skp_dlls", "_on_export_skp"):
         assert not hasattr(MainWindow, name), name
     said = []
-    monkeypatch.setattr(QMessageBox, "warning",
+    monkeypatch.setattr("views.chrome_dialogs.warning",
                         staticmethod(lambda *a, **k: said.append(a[2]) or QMessageBox.Ok))
-    monkeypatch.setattr(QMessageBox, "question",
+    monkeypatch.setattr("views.chrome_dialogs.question",
                         staticmethod(lambda *a, **k: pytest.fail("asked to install something")))
     # The Render tab looks for Blender when the window opens (one
     # `flatpak info` where Flatpak exists): that is not the .skp import.

@@ -229,8 +229,8 @@ def win(monkeypatch):
     from views.main_window import MainWindow
     w = MainWindow()
     asked = []
-    monkeypatch.setattr(QMessageBox, "exec",
-                        lambda box: asked.append(box.text()) or 0)
+    monkeypatch.setattr("views.chrome_dialogs.ask",
+                        lambda parent, title, *a, **kw: asked.append(title) or "cancel")
     w._asked = asked
     yield w
     for d in w.documents():

@@ -103,7 +103,8 @@ def test_entity_info_shows_the_layer_and_changes_it():
 
 
 def test_right_click_layer_submenu_and_new_layer():
-    from PySide6.QtWidgets import QInputDialog, QMenu
+    from PySide6.QtWidgets import QMenu
+    from views import chrome_forms
     win = _window()
     vp = win.viewport
     try:
@@ -125,8 +126,10 @@ def test_right_click_layer_submenu_and_new_layer():
         [a for a in sub.actions() if a.text() == "Muros"][0].trigger()
         assert layer_of(g) == "Muros"
 
-        QInputDialog.getText = staticmethod(lambda *a, **k: ("Jardín", True))
         win._assign_new_layer()
+        form = chrome_forms.current(win)
+        form.receive("text", "Jardín")
+        form.press("ok")
         assert layer_of(g) == "Jardín" and scene.layer("Jardín") is not None
         vp.history.undo()
         assert layer_of(g) == "Muros" and scene.layer("Jardín") is None
