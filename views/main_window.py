@@ -3707,9 +3707,18 @@ class MainWindow(WorksessionMixin, QMainWindow):
         offer_at_start(self)
 
     def open_preferences(self, shortcut_of=None, page=None) -> None:
-        """Preferences; on the Keyboard shortcuts page with that action
-        picked when ``shortcut_of`` is given (right click in F3), or on
-        ``page`` (``"units"``)."""
+        """Settings; on the Keyboard section with that action picked when
+        ``shortcut_of`` is given (right click in F3), or on ``page``
+        (``"units"``). The large sheet of the Built chrome where it can
+        draw (views/settings_sheet.py), else the Qt dialog."""
+        from views import settings_sheet
+        if settings_sheet.show(self, page=page, shortcut_of=shortcut_of):
+            return
+        self._open_preferences_dialog(shortcut_of=shortcut_of, page=page)
+
+    def _open_preferences_dialog(self, shortcut_of=None, page=None) -> None:
+        """The Qt Preferences dialog (``BUILT_UI=0``, the GL view, or no
+        frame drew the sheet)."""
         from views.preferences_dialog import PreferencesDialog
         dlg = PreferencesDialog(self)
         if shortcut_of is not None:

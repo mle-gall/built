@@ -102,7 +102,6 @@ def command(win, name, *args):
     if name == "delivery_export":
         from views.wgpu_deliveries import export_form
         return export_form(win, one_off=True)
-    host = win._host
     kind, _, arg = name.partition(":")
     table = {
         "new": lambda: new_model(win),
@@ -118,7 +117,7 @@ def command(win, name, *args):
         "link": lambda: link_document(win),
         "reload_links": lambda: win._reload_all_links(),
         "classic": lambda: open_in_classic(win),
-        "prefs": lambda: host.not_here("Settings"),
+        "prefs": lambda: open_settings(win),
         "cut": lambda: clipboard_cut(win),
         "copy": lambda: clipboard_copy(win),
         "paste": lambda: clipboard_paste(win, in_place=False),
@@ -168,6 +167,16 @@ def command(win, name, *args):
     if fn is None:
         return None
     return fn()
+
+
+def open_settings(win) -> bool:
+    """Settings on the large sheet (views/settings_sheet.py); the shell has
+    no Qt dialog to fall back to."""
+    from views import settings_sheet
+    if settings_sheet.show(win):
+        return True
+    win._host.not_here("Settings")
+    return False
 
 
 def step_document(win, step):
