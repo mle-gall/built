@@ -2,7 +2,7 @@
 //! Project tree rows for loose geometry, section planes and the open occurrence.
 use pyo3::prelude::*;
 use std::collections::HashSet;
-type Row = (Vec<String>, Vec<i64>);
+pub(crate) type Row = (Vec<String>, Vec<i64>);
 
 /// Plain text matches anywhere. A wildcard pattern matches the whole field,
 /// and a question mark consumes one Unicode character.
@@ -111,7 +111,7 @@ pub(crate) fn project_item_matches(
     Ok(true)
 }
 
-fn row(
+pub(crate) fn row(
     key: String,
     name: String,
     kind: &str,
@@ -248,26 +248,11 @@ pub(crate) fn project_context_rows(
     let selection = scene.getattr("selection")?;
     if group.is_none() {
         rows.extend(loose(scene, 0, query)?);
-        for plane in scene.getattr("section_planes")?.try_iter()? {
-            let plane = plane?;
-            if project_item_matches(scene, &plane, "section", query, false)? {
-                let uid = plane.getattr("uid")?.str()?.to_string();
-                let name = plane
-                    .getattr("name")?
-                    .extract::<Option<String>>()?
-                    .unwrap_or_else(|| "Section".into());
-                rows.push(row(
-                    format!("section:{uid}"),
-                    name,
-                    "Section",
-                    "section",
-                    0,
-                    7,
-                    0,
-                    usize::from(selection.contains(plane)?),
-                ));
-            }
-        }
+        rows.extend(crate::project_sections::rows(
+            scene,
+            query,
+            expanded.contains("sections:all"),
+        )?);
         return Ok(rows);
     }
 

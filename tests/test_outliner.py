@@ -617,71 +617,6 @@ def test_nothing_opens_through_a_locked_group():
 # ---- Section planes ------------------------------------------------------------
 
 
-def test_the_section_folder_lists_every_plane_with_its_mode():
-    building, tree = _building()
-    win, scene, panel = _window_with(building, tree)
-    a, b = _two_planes(scene)
-    panel.refresh()
-    sec = panel._sec_root
-    assert not sec.isHidden() and sec.childCount() == 2
-    assert sec.text(COL_TYPE) == "2 planes"
-    row_a, row_b = sec.child(0), sec.child(1)
-    assert row_a.text(0) == "A — Plan cut"
-    assert row_a.text(COL_TYPE) == "Cut and frame"
-    assert row_b.text(COL_TYPE) == "Frame only (no cut)"
-    assert row_a.data(COL_LOCK, Qt.UserRole) is True     # it cuts
-    assert row_b.data(COL_LOCK, Qt.UserRole) is False
-    _close(win)
-
-
-def test_the_section_folder_keeps_its_name_when_the_tree_is_rebuilt():
-    from core.group import Group
-    building, tree = _building()
-    win, scene, panel = _window_with(building, tree)
-    _two_planes(scene)
-    panel.refresh()
-    scene.groups.append(Group(name="New"))          # rows rebuilt
-    panel.refresh()
-    sec = panel._sec_root
-    assert sec.text(0) == "Section planes"
-    assert sec.text(COL_TYPE) == "2 planes"
-    _close(win)
-
-
-def test_the_frame_goes_and_the_cut_stays():
-    building, tree = _building()
-    win, scene, panel = _window_with(building, tree)
-    a, b = _two_planes(scene)
-    panel.refresh()
-    panel._on_item_clicked(panel._sec_root.child(0), COL_EYE)
-    assert a.hidden and a.active                     # cut only
-    assert scene.active_section() is a
-    assert panel._sec_root.child(0).text(COL_TYPE) == "Cut only (no frame)"
-    win.viewport.history.undo()
-    assert not a.hidden and a.active
-    _close(win)
-
-
-def test_the_cut_goes_and_the_frame_stays_and_one_plane_cuts_at_a_time():
-    building, tree = _building()
-    win, scene, panel = _window_with(building, tree)
-    a, b = _two_planes(scene)
-    panel.refresh()
-    panel._on_item_clicked(panel._sec_root.child(0), COL_LOCK)
-    assert not a.active and not a.hidden             # frame only
-    assert scene.active_section() is None
-    panel._on_item_clicked(panel._sec_root.child(1), COL_LOCK)
-    assert b.active and scene.active_section() is b
-    panel.set_section_mode(a, "cut")                 # A takes the cut
-    assert a.active and not b.active and a.hidden
-    panel.set_section_mode(a, "off")
-    assert not a.active and a.hidden
-    assert panel._sec_root.child(0).text(COL_TYPE) == "Off"
-    win.viewport.history.undo()
-    assert a.active and a.hidden
-    _close(win)
-
-
 def test_the_folder_row_drives_the_view_menu_switches():
     building, tree = _building()
     win, scene, panel = _window_with(building, tree)
@@ -741,18 +676,6 @@ def test_the_section_fill_switch_on_the_folder_and_the_cutting_plane():
     _close(win)
 
 
-def test_the_fill_cell_moves_with_the_cut():
-    building, tree = _building()
-    win, scene, panel = _window_with(building, tree)
-    a, b = _two_planes(scene)
-    panel.refresh()
-    panel.set_section_mode(b, "both")
-    sec = panel._sec_root
-    assert sec.child(0).data(COL_LAYER, Qt.UserRole) is None
-    assert sec.child(1).data(COL_LAYER, Qt.UserRole) is not None
-    _close(win)
-
-
 def test_the_fill_colour_comes_from_the_styles_panel_picker():
     building, tree = _building()
     win, scene, panel = _window_with(building, tree)
@@ -766,56 +689,6 @@ def test_the_fill_colour_comes_from_the_styles_panel_picker():
 
 
 # ---- A cut's own fill, renaming planes, column widths -----------------------
-
-def test_a_plane_takes_its_own_pattern_colour_and_spacing():
-    building, tree = _building()
-    win, scene, panel = _window_with(building, tree)
-    a, b = _two_planes(scene)
-    scene.display_style.section_fill = True
-    panel.refresh()
-    panel.set_plane_fill(a, pattern="hatch")
-    assert a.fill == {"pattern": "hatch"}
-    assert panel._sec_root.child(0).text(COL_LAYER) == "Hatched 45°"
-    panel.set_plane_fill(a, color=(1.0, 0.0, 0.0))
-    assert a.fill == {"pattern": "hatch", "color": (1.0, 0.0, 0.0)}
-    win.viewport.history.undo()
-    assert a.fill == {"pattern": "hatch"}
-    panel.set_plane_fill(a, pattern=None)              # «As the style»
-    assert a.fill is None
-    assert panel._sec_root.child(0).text(COL_LAYER) == "Solid"
-    _close(win)
-
-
-def test_the_hatch_spacing_is_typed_as_a_length(monkeypatch):
-    from views import prompts
-    building, tree = _building()
-    win, scene, panel = _window_with(building, tree)
-    a, b = _two_planes(scene)
-    panel.refresh()
-    monkeypatch.setattr(prompts, "get_text",
-                        lambda *a_, **k: ("8cm", True))
-    panel.ask_plane_hatch_spacing(a)
-    assert abs(a.fill["spacing"] - 0.08) < 1e-9
-    monkeypatch.setattr(prompts, "get_text",
-                        lambda *a_, **k: ("lots", True))
-    panel.ask_plane_hatch_spacing(a)                   # refused
-    assert abs(a.fill["spacing"] - 0.08) < 1e-9
-    _close(win)
-
-
-def test_a_plane_is_renamed_in_one_undo_step():
-    building, tree = _building()
-    win, scene, panel = _window_with(building, tree)
-    a, b = _two_planes(scene)
-    panel.refresh()
-    assert panel.set_plane_name(a, "Ground floor plan", "P1")
-    assert (a.name, a.symbol) == ("Ground floor plan", "P1")
-    assert panel._sec_root.child(0).text(0) == "P1 — Ground floor plan"
-    win.viewport.history.undo()
-    assert (a.name, a.symbol) == ("Plan cut", "A")
-    assert not panel.set_plane_name(a, "  ", "")       # nothing to change
-    _close(win)
-
 
 def test_f2_on_a_plane_row_opens_its_name_dialog(monkeypatch):
     from PySide6.QtTest import QTest

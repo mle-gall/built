@@ -1750,6 +1750,13 @@ def _tree_action(win, view, action) -> None:
         groups = [e for e in sel if isinstance(e, Group)]
         if verb == "insp" and key.startswith("delivery:"):
             _run(win, ["deliver:" + key[9:]])
+        elif verb == "insp" and key.startswith("sectionview:"):
+            from views import view_commands
+            view_commands.run(win, key.partition(":")[2])
+            view._ui_tree_sig = view._ui_insp_sig = None
+        elif verb == "insp" and key.startswith("section:"):
+            _, uid, field, *value = key.split(":")
+            _tree_action(win, view, SEP.join(("edit", f"section:{uid}:{field}", value[0] if value else "")))
         elif verb == "insp" and key.startswith("status:"):
             _set_status(win, groups, key.partition(":")[2])
         elif verb == "insp" and key == "file" and groups:
@@ -1933,8 +1940,18 @@ def _tree_action(win, view, action) -> None:
         elif verb == "item" and rk == "geometry:loose":
             from itertools import chain
             _select(win, chain(scene.mesh.faces, scene.mesh.edges))
-        elif verb == "item" and kind == "section":
+        elif verb == "eye" and rk == "sections:all":
+            from views import view_commands
+            view_commands.run(win, "section_planes")
+            rebuild()
+        elif verb == "eye" and kind == "section":
+            _core(vp, "edit_section_plane", uid=ident, field="eye")
+            vp.notify_scene_changed()
+            rebuild()
+        elif verb == "item" and kind in ("section", "sections"):
             _select(win, [p for p in scene.section_planes if str(p.uid) == ident])
+            sel = list(scene.selection)
+            view._ui_insp_node = (rk, (len(sel), id(sel[0]) if sel else 0, id(sel[-1]) if sel else 0))
         elif verb == "toggle":
             if rk.startswith(("r:", "c:inmodel", "c:compmodel")):
                 # Rules start open when short: remember a collapse explicitly.
@@ -2210,7 +2227,12 @@ def _tree_action(win, view, action) -> None:
                         panel.delete_views([arg])
         elif verb == "edit":
             what, _, arg = rk.partition(":")
-            if what == "nodename":
+            if what == "section":
+                uid, _, field = arg.partition(":")
+                _core(vp, "edit_section_plane", uid=uid, field=field, value=extra)
+                vp.notify_scene_changed()
+                rebuild()
+            elif what == "nodename":
                 _core(vp, "edit_structure_node", node=arg, field="name", value=extra)
                 vp.notify_scene_changed()
                 rebuild()
@@ -2327,6 +2349,14 @@ def _inspector(view, win) -> None:
         got = wgpu_library.inspector(view, win)
         if got is not None:
             view.renderer.ui_set_inspector(*got)
+            return
+    from core.section import SectionPlane
+    from ingetrazo_core import section_inspector
+    section_key = node_focus or (f"section:{sel[0].uid}" if len(sel) == 1 and isinstance(sel[0], SectionPlane) else "")
+    if section_key.startswith(("section:", "sections:")):
+        section = section_inspector(scene, section_key)
+        if section is not None:
+            view.renderer.ui_set_inspector(*section)
             return
     if node_focus is not None and node_focus in (data.get("nodes") or {}) \
             and data["nodes"][node_focus].get("kind") != "host":

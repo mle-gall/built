@@ -34,6 +34,7 @@ mod file_groups;
 mod group_geometry;
 mod structure;
 mod project_tree;
+mod project_sections;
 mod link_subset;
 mod presentation;
 mod object_replay;
@@ -230,6 +231,8 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(project_tree::source_state, m)?)?;
     m.add_function(wrap_pyfunction!(project_tree::source_direct_count, m)?)?;
     m.add_function(wrap_pyfunction!(project_tree::source_placement_rows, m)?)?;
+    m.add_function(wrap_pyfunction!(project_sections::section_inspector, m)?)?;
+    m.add_function(wrap_pyfunction!(project_sections::section_edit, m)?)?;
     m.add_class::<link_subset::LinkSubset>()?;
     m.add_function(wrap_pyfunction!(link_subset::link_subset_rows, m)?)?;
     m.add_function(wrap_pyfunction!(link_subset::link_selection_sources, m)?)?;
