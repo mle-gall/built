@@ -36,11 +36,23 @@ nothing. Otherwise shrink it.
 Under xdist many files run one after another in the same process, so a test
 must leave process-wide state as it found it.
 
-- `os.environ` is restored after every test (`_process_environment` in
-  `tests/conftest.py`). The app writes it on purpose (`--python-engine` sets
-  `INGETRAZO_RUST=0`).
-- Settings, drawing axes, SKP parse tables and `core._native.native` have
-  their own autouse fixtures there.
+`tests/conftest.py` puts back, after every test:
+
+- `os.environ` (`_process_environment`). The app writes it on purpose
+  (`--python-engine` sets `INGETRAZO_RUST=0`), which turned the engine off
+  for every later test on a worker;
+- the Paint tool's chosen material (`PaintTool.current_*`, class state);
+- the scene `core.units` formats with (`bind_scene`), and the Qt application
+  and organization names, which name the settings file;
+- the drawing axes, the SKP parse tables and `core._native.native`.
+
+Each test file also gets an empty settings store of its own
+(`_settings_per_module`): windows save their geometry and docks when they
+close, and the next file on the worker restored them.
+
+To find a new leak, compare a fingerprint of process state before and
+after each test across an xdist run and look at what changed just before
+the failing test on its worker.
 - Use `monkeypatch` for module globals. A `monkeypatch.delenv` or `setattr`
   done after the code under test has written the value records that value
   and puts it back at teardown.
