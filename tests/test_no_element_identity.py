@@ -55,7 +55,7 @@ _ALLOWED = {
         "_is_ear", "_cure_local_intersections", "_split_earcut",
         "_get_leftmost", "_middle_inside", "_intersects_polygon")},
     ("core/topology.py", "__call__"): "id()-keyed memo of a QVector3D",
-    ("core/history.py", "_sync"): "tag-state dict values against a sentinel, not elements",
+    ("core/history_commands.py", "_sync"): "tag-state dict values against a sentinel, not elements",
     ("views/tray.py", "delete_row"): "saved views (scenes), not mesh elements",
     ("core/ai.py", "_tidy_groups"): "groups",
     ("core/intersect.py", "intersect"): "polygons of two meshes",

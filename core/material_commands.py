@@ -7,7 +7,7 @@ default material). Rename and edit reuse ``RestampMaterialCommand`` /
 ``EditTexturedMaterialCommand``; these sit beside them, one step each."""
 from __future__ import annotations
 
-from core.history import Command, RestampMaterialCommand, _dirty_group_chunks
+from core.history import Command, MeshCommand, RestampMaterialCommand, _dirty_group_chunks
 
 
 class AddMaterialCommand(Command):
@@ -40,12 +40,11 @@ class DeleteMaterialCommand(RestampMaterialCommand):
         super().__init__(name, Material(name))
 
     def do(self, scene) -> None:
-        if self._old_faces is None:
+        if self._old_groups is None:
             self._old_material = scene.materials.get(self._name)
             if self._old_material is None:
                 raise KeyError(f"no material called {self._name!r}")
-            self._old_faces = [(f, {k: f.attrs.get(k) for k in self._KEYS})
-                               for f in self._targets(scene, capture_backs=True)]
+            self._affected_faces(scene)
             self._old_groups = [(g, g.material) for g in self._painted_groups(scene)]
         scene.materials.pop(self._name, None)
         for face, _ in self._old_faces:
@@ -170,7 +169,7 @@ def unnamed_colours(scene) -> dict:
     return out
 
 
-class NameColoursCommand(Command):
+class NameColoursCommand(MeshCommand):
     """"Name these": each distinct unnamed colour becomes a registry
     material (reusing one with the same recipe) and every face side and
     container that carried it takes its name. Nothing else changes; undo
@@ -192,6 +191,10 @@ class NameColoursCommand(Command):
                 mat = Material(found, color=entry["color"], opacity=entry["opacity"])
                 materials[found] = mat
             self._plan.append((found, mat, entry["faces"], entry["groups"]))
+
+    def geometry_meshes(self, scene):
+        from core.purge import iter_meshes
+        return list(iter_meshes(scene))
 
     def count(self, scene) -> int:
         if self._plan is None:

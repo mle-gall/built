@@ -1939,8 +1939,9 @@ class ComposerHistory:
     retype", not letter by letter."""
 
     def __init__(self, on_change=None) -> None:
-        self._undo: list[ComposerCommand] = []
-        self._redo: list[ComposerCommand] = []
+        self._native = doc_model.NATIVE.DocumentHistory() if doc_model.ENABLED else None
+        self._undo = self._native.undo if self._native is not None else []
+        self._redo = self._native.redo if self._native is not None else []
         self._on_change = on_change
 
     def execute(self, cmd: ComposerCommand, notify: bool = True,
@@ -1962,7 +1963,9 @@ class ComposerHistory:
             cmd.do()
         cmd._txn = txn
         top = self._undo[-1] if self._undo else None
-        if (coalesce and top is not None
+        if self._native is not None:
+            self._native.push_sheet(cmd, coalesce)
+        elif (coalesce and top is not None
                 and _edit_signature(top) is not None
                 and _edit_signature(top) == _edit_signature(cmd)):
             top._txn = (txn.compose([top._txn, txn])
@@ -1979,13 +1982,12 @@ class ComposerHistory:
     def undo(self) -> bool:
         if not self._undo:
             return False
-        cmd = self._undo.pop()
-        if cmd._txn is None:
-            cmd.undo()
+        if self._native is not None:
+            self._native.replay(self, True, True)
         else:
-            doc_model.flush()
-            cmd._txn.undo()
-        self._redo.append(cmd)
+            cmd = self._undo.pop()
+            cmd.undo()
+            self._redo.append(cmd)
         if self._on_change:
             self._on_change()
         return True
@@ -1993,13 +1995,12 @@ class ComposerHistory:
     def redo(self) -> bool:
         if not self._redo:
             return False
-        cmd = self._redo.pop()
-        if cmd._txn is None:
-            cmd.do()
+        if self._native is not None:
+            self._native.replay(self, False, True)
         else:
-            doc_model.flush()
-            cmd._txn.redo()
-        self._undo.append(cmd)
+            cmd = self._redo.pop()
+            cmd.do()
+            self._undo.append(cmd)
         if self._on_change:
             self._on_change()
         return True

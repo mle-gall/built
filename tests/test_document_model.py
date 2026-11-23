@@ -625,3 +625,121 @@ def test_edge_anchor_follows_rewired_endpoint_and_undo():
     assert anchor.position(rewired) == [2., 0., 0.]
     assert anchor.indexed_weights([103, 101]) == [(1, .75), (0, .25)]
     assert anchor.position(original) == [1., 0., 0.]
+
+
+def test_occurrence_group_survives_retention_and_replays_one_record():
+    from core.history import OccurrenceCommands
+
+    scene = Scene()
+    group = Group(name="before")
+    scene.groups.append(group)
+    h = History(scene)
+    h.max_steps = 1
+    session = object()
+    for name in ("middle", "after"):
+        cmd = RenameGroupCommand(group, name)
+        cmd._occurrences = (session,)
+        h.execute(cmd)
+    OccurrenceCommands.fold(h, session)
+    assert len(h.undo_stack) == 1 and h.undo_stack[0]._doc_txn is not None
+    assert h.undo() and group.name == "before"
+    assert h.feed.last.placements["modified"] == [group.uid]
+    assert h.redo() and group.name == "after"
+
+
+def test_record_field_change_visible_to_reentrant_subscriber():
+    from core.history import EditTextLabelCommand
+    from core.textlabel import TextLabel
+
+    scene = Scene()
+    label = TextLabel(QVector3D(), QVector3D(0, 1, 0), "A")
+    scene.text_labels.append(label)
+    h = History(scene)
+    events = []
+
+    def observe(step):
+        events.append((h.feed.last is step, h.revision, step.records))
+        if step.phase == "execute":
+            h.undo()
+
+    h.feed.subscribe(observe)
+    h.execute(EditTextLabelCommand(label, "B"))
+    assert [event[:2] for event in events] == [(True, 1), (True, 2)]
+    assert len(events[0][2]["annotations"]) == 1
+    assert events[1][2] == events[0][2]
+
+
+def test_track_hook_survives_an_unrelated_document_write():
+    # Creating a tracked Python view can run finalizers that advance the
+    # global serial. The returned view must stay bound to its own field.
+    scene = Scene()
+    other = Group()
+    scene.plugin_data = {}
+
+    def track(*args):
+        other.name = "written during view construction"
+        return doc_model._track(*args)
+
+    N.doc_set_track_hook(track)
+    try:
+        scene.plugin_data["saved"] = 1
+    finally:
+        N.doc_set_track_hook(doc_model._track)
+    doc_model.flush()
+    assert scene.plugin_data == {"saved": 1}
+
+
+def test_mixed_compound_replays_native_child_without_its_inverse(monkeypatch):
+    scene = Scene()
+    group = Group(name="before")
+    scene.groups.append(group)
+    host_state = []
+
+    class Extension(Command):
+        def do(self, scene):
+            host_state.append(group.name)
+
+        def undo(self, scene):
+            assert host_state.pop() == group.name
+
+    rename = RenameGroupCommand(group, "after")
+    history = History(scene)
+    history.execute(CompoundCommand([rename, Extension()]))
+    assert not history.last_error and host_state == ["after"]
+    fail = lambda *_: pytest.fail("replayed a document command through its reference inverse")
+    monkeypatch.setattr(rename, "do", fail)
+    monkeypatch.setattr(rename, "undo", fail)
+    assert history.undo() and group.name == "before" and not host_state
+    assert history.redo() and group.name == "after" and host_state == ["after"]
+    assert [s.placements["modified"] for s in history.feed.since()["steps"]] == [[group.uid]] * 3
+
+
+def test_nested_execute_advances_only_the_outer_revision():
+    scene = Scene()
+    group = Group(name="before")
+    scene.groups.append(group)
+    history = History(scene)
+
+    class Outer(Command):
+        doc_undo = True
+
+        def do(self, scene):
+            history.execute(RenameGroupCommand(group, "after"))
+
+        def undo(self, scene):
+            pytest.fail("expected document replay")
+
+    history.execute(Outer())
+    assert len(history.undo_stack) == history.revision == 1
+    assert [s.command for s in history.feed.since()["steps"]] == ["Outer"]
+    assert history.undo() and group.name == "before"
+
+
+def test_reader_rescans_after_an_unversioned_plugin_write():
+    scene = Scene()
+    group = Group(name="before")
+    scene.groups.append(group)
+    history = History(scene)
+    history.feed.readers.mark("rows", scene.content_version)
+    group.name = "direct edit"
+    assert not history.feed.current("rows", scene.content_version)

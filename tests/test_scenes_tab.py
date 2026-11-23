@@ -798,7 +798,9 @@ def test_one_command_of_each_kind_for_scenes():
     RenameSceneCommand: no second class of the same name beside them."""
     import core.history as H
     import core.saved_views as S
-    src = open(H.__file__, encoding="utf8").read()
+    import core.history_commands as commands
+    assert H.AddSceneCommand is commands.AddSceneCommand
+    src = open(commands.__file__, encoding="utf8").read()
     assert src.count("class AddSceneCommand(") == 1
     assert "class RenameSceneCommand(" not in src
     assert hasattr(S, "RenameSceneCommand") and hasattr(S, "MoveSceneCommand")

@@ -21,7 +21,7 @@ from dataclasses import dataclass
 
 from ingetrazo_core import Vec3 as QVector3D
 
-from core.history import Command, CommandRejected, SnapshotMutation
+from core.history import MeshCommand, CommandRejected, SnapshotMutation
 
 #: The fewest segments a closed curve (a triangle) and an arc can have.
 MIN_CLOSED = 3
@@ -253,7 +253,7 @@ def resegment(mesh, shape: CurveShape, n: int) -> bool:
     return True
 
 
-class ResegmentCurveCommand(Command):
+class ResegmentCurveCommand(MeshCommand):
     """Entity Info's segment count: rebuild one curve, one undo step. The
     curve stays selected either way, so the field keeps showing it."""
 
@@ -277,6 +277,10 @@ class ResegmentCurveCommand(Command):
     def do(self, scene) -> None:
         self._inner.do(scene)
         self._select(scene)
+
+    def doc_after(self, scene, phase):
+        self._select(scene)
+        scene.version += 1
 
     def undo(self, scene) -> None:
         self._inner.undo(scene)

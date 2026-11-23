@@ -95,10 +95,12 @@ class Step:
     """One History step as the feed reports it."""
 
     __slots__ = ("revision", "phase", "command", "meshes", "placements",
-                 "tags", "materials", "complete", "copies")
+                 "tags", "materials", "complete", "copies", "scene_fields", "records", "_reader_context")
 
     def __init__(self, revision, phase, command):
         self.revision = revision
+        self.scene_fields = []
+        self.records = {}
         self.phase = phase              # "execute" | "undo" | "redo"
         self.command = command          # the command's class name
         self.meshes: list[MeshChange] = []
@@ -140,7 +142,7 @@ def _command_meshes(cmd, scene, phase) -> list:
     command was executed against (undo / redo go back to it) or the open
     one, a snapshot mutation's own target, a soften's meshes; a compound's
     parts' too."""
-    from core.history import CompoundCommand, SnapshotMutation
+    from core.history import CompoundCommand, MeshCommand
     out = []
     if phase == "execute":
         out.append(scene.mesh)
@@ -153,8 +155,8 @@ def _command_meshes(cmd, scene, phase) -> list:
             out.append(getattr(c, "_history_mesh", None))
         if isinstance(c, CompoundCommand):
             stack.extend(c.commands)
-        elif isinstance(c, SnapshotMutation):
-            out.append(c._target(scene))
+        elif isinstance(c, MeshCommand):
+            out.extend(c.geometry_meshes(scene))
         if getattr(c, "reference_instance", False) or getattr(c, "reference_assembly", False):
             out.append(c.proto)
         meshes = getattr(c, "meshes", None)
@@ -245,12 +247,12 @@ def _mesh_change(mesh, token, painted=()) -> MeshChange:
                       revision=st.revision if st is not None else None)
 
 
-def _painted(cmd) -> list:
+def _painted(cmd, default) -> dict:
     """Face keys a paint command (``SetFace*Command``) wrote attrs on:
     attrs are Python dicts beside the store (design decision 6), so the
     store's record does not see them."""
     from core.history import CompoundCommand
-    out, stack = [], [cmd]
+    out, stack = {}, [cmd]
     while stack:
         c = stack.pop()
         if isinstance(c, CompoundCommand):
@@ -258,7 +260,11 @@ def _painted(cmd) -> list:
         elif type(c).__name__.startswith("SetFace"):
             faces = getattr(c, "_faces", None)
             if isinstance(faces, list):
-                out.extend(f.key for f in faces if hasattr(f, "key"))
+                for face in faces:
+                    if hasattr(face, "key"):
+                        mesh = getattr(face, "_m", None) or default
+                        owner = mesh.__dict__.get("_instance_definition", mesh)
+                        out.setdefault(owner, []).append(face.key)
     return out
 
 
@@ -413,8 +419,13 @@ class ChangeFeed:
 
     def __init__(self, history):
         self._history = weakref.ref(history)
-        self._steps: deque[Step] = deque(maxlen=self.maxlen)
+        self._native = history._native
+        if self._native is None:
+            self._steps: deque[Step] = deque(maxlen=self.maxlen)
         self._subscribers = history._native.subscribers if history._native is not None else []
+        from ingetrazo_core import FeedReaders
+        self.readers = FeedReaders(getattr(getattr(history.scene, "_root", None), "_doc_key", None))
+        self.subscribe(self.readers)
         self._pending = None
         self._depth = 0
         self.unsubscribe = history.add_listener(before=self._before,
@@ -426,11 +437,18 @@ class ChangeFeed:
         h = self._history()
         return h.revision if h is not None else 0
 
+    def current(self, reader, version):
+        return self.readers.revision == self.revision and self.readers.current(reader, version)
+
     @property
     def last(self) -> Step | None:
+        if self._native is not None:
+            return self._native.feed_step(None)
         return self._steps[-1] if self._steps else None
 
     def step(self, revision) -> Step | None:
+        if self._native is not None:
+            return self._native.feed_step(revision) if 0 <= revision <= self.revision else None
         for s in reversed(self._steps):
             if s.revision == revision:
                 return s
@@ -445,6 +463,8 @@ class ChangeFeed:
         now = self.revision
         if type(revision) is not int or revision < 0 or revision > now:
             raise ValueError("revision must be between zero and the current revision")
+        if self._native is not None:
+            return self._native.feed_since(revision)
         floor = self._steps[0].revision - 1 if self._steps else now
         return {"revision": now, "complete": revision >= floor,
                 "steps": [s for s in self._steps if s.revision > revision]}
@@ -471,8 +491,9 @@ class ChangeFeed:
             self._pending = None
             return
         meshes = _command_meshes(cmd, scene, phase)
+        serial = self.readers.stamp()
         self._pending = (cmd, phase, [(m, _token(m)) for m in meshes],
-                         _doc_state(scene))
+                         _doc_state(scene), getattr(scene, "content_version", None), serial)
 
     def _after(self, cmd, phase, ran):
         self._depth = max(0, self._depth - 1)
@@ -484,7 +505,14 @@ class ChangeFeed:
         h = self._history()
         if h is None:
             return
-        step = self._build(h, cmd, phase, pending)
+        step = (self._native.build_step(h, cmd, phase, pending[2])
+                if self._native is not None and pending[3][0] is None
+                else self._build(h, cmd, phase, pending))
+        step._reader_context = (pending[4], getattr(h.scene, "content_version", None), pending[5],
+                                getattr(cmd, "keeps_paint", False), getattr(cmd, "keeps_rows", False),
+                                getattr(cmd, "keeps_groups", False))
+        if self._native is not None:
+            return self._native.publish(step)
         self._steps.append(step)
         for entry in list(self._subscribers):
             try:
@@ -493,59 +521,25 @@ class ChangeFeed:
                 _log.exception("Change feed subscriber failed")
 
     def _build(self, h, cmd, phase, pending) -> Step:
-        _cmd, _phase, tokens, (roots0, tags0, mats0) = pending
+        _cmd, _phase, tokens, (roots0, tags0, mats0), _, _ = pending
         scene = h.scene
         step = Step(h.revision, phase, getattr(cmd, "history_name", type(cmd).__name__))
-        painted = _painted(cmd)
-        for i, (mesh, token) in enumerate(tokens):
-            change = _mesh_change(mesh, token, painted if i == 0 else ())
+        paints = _painted(cmd, tokens[0][0])
+        for mesh, token in tokens:
+            painted = paints.get(mesh, ())
+            change = _mesh_change(mesh, token, painted)
+            if painted:
+                mod = change.modified["face"]
+                mod.extend(dict.fromkeys(k for k in painted if k not in set(mod)))
             if not change.empty():
                 step.meshes.append(change)
-        if painted:
-            mesh = tokens[0][0] if tokens else scene.mesh
-            change = step.mesh_change(mesh)
-            if change is None:
-                change = MeshChange(mesh, "store" if store_of(mesh) is not None
-                                    else "python")
-                step.meshes.append(change)
-            mod = change.modified["face"]
-            mod.extend(k for k in painted if k not in set(mod))
         if phase != "undo":
             step.copies = _copies(cmd)
         # Document level: roots by identity, tags and materials by value.
         roots1, tags1, mats1 = _doc_state(scene)
-        changes = None
-        if roots0 is None:
-            # Rust document: what the step's transaction wrote.
-            rec = getattr(h, "last_txn", None)
-            root = getattr(scene, "_root", None)
-            if rec is not None and rec[0] is not None and root is not None:
-                changes = rec[0].changes(inverse=rec[1], root=root._doc_key)
-            if changes is not None:
-                p, t = changes["placements"], changes["tags"]
-                step.placements["created"].extend(p["created"])
-                step.placements["removed"].extend(p["removed"])
-                step.placements["modified"].extend(p["modified"])
-                step.tags["created"].extend(t["created"])
-                step.tags["removed"].extend(t["removed"])
-                step.tags["modified"].extend(t["modified"])
-                m = changes["materials"]
-                came, went = set(m["created"]), set(m["removed"])
-                registry = scene.materials
-                step.materials["created"].extend(m["created"])
-                step.materials["removed"].extend(m["removed"])
-                # Another material under the same name: modified, as the
-                # identity comparison said; a registered material's fields
-                # written: modified.
-                step.materials["modified"].extend(m["replaced"])
-                step.materials["modified"].extend(
-                    k for k in m["modified"]
-                    if k not in came and k not in went and k in registry)
-        else:
-            step.placements["created"].extend(u for i, u in roots1.items() if i not in roots0)
-            step.placements["removed"].extend(u for i, u in roots0.items() if i not in roots1)
-        step.complete = _known_placements(
-            cmd, phase, step, scene, changes is not None) and step.complete
+        step.placements["created"].extend(u for i, u in roots1.items() if i not in roots0)
+        step.placements["removed"].extend(u for i, u in roots0.items() if i not in roots1)
+        step.complete = _known_placements(cmd, phase, step, scene) and step.complete
         step.placements["modified"].extend(h._moved_signs)
         _dedupe(step.placements)
         if tags0 is not None:

@@ -2489,8 +2489,13 @@ class MaterialsPanel(QWidget):
         # (~0.4 s on the plant of #158).
         worn = getattr(self, "_worn_by_mesh", None)
         if (worn is None or hist is None
-                or hist.groups_cv.get("paint") != version):
+                or not hist.feed.current("mesh_paint", version)):
             worn = {}
+        else:
+            from core.protocol.keys import known_mesh
+            dirty = {id(known_mesh(key)) for key in hist.feed.readers.dirty_paint_meshes()}
+            if dirty:
+                worn = {key: value for key, value in worn.items() if key not in dirty}
         # Keep the tray where the user left it. The old swatches only went
         # away at the next event-loop turn (deleteLater), so for a moment
         # the grid held both sets, grew, and the scroll area jumped — the
@@ -2585,10 +2590,9 @@ class MaterialsPanel(QWidget):
                     if mat:
                         names.setdefault(("c", key), mat)
         self._worn_by_mesh = live
-        self._in_model_cv = version
         if hist is not None:
-            hist.paint_cv = version
-            hist.groups_cv["paint"] = version
+            hist.feed.readers.mark("paint", version)
+            hist.feed.readers.mark("mesh_paint", version)
         # The same swatches as on screen (a Delete, a Paste that brought no
         # new paint): they stay — laying out a hundred buttons again took
         # ~0.2 s on the plant of #158.
@@ -6129,7 +6133,9 @@ class BimPanel(QWidget):
         # view-only change (a click, a box selection) keeps the last one.
         # Re-measuring 238 rebar bars on every selection took 25 s (#857).
         scene = self._scene()
-        key = (id(scene), scene.content_version)
+        hist = getattr(self._window.viewport, "history", None)
+        key = (id(scene), scene.content_version,
+               (hist.revision, hist.feed.readers.stamp()) if hist is not None else None)
         if key == getattr(self, "_takeoff_key", None):
             return
         self._takeoff_key = key
@@ -6139,7 +6145,7 @@ class BimPanel(QWidget):
         hist = getattr(self._window.viewport, "history", None)
         if (hist is not None and not self._objects
                 and getattr(self, "_untagged_scene", None) == id(scene)
-                and hist.tags_cv == scene.content_version):
+                and hist.feed.current("bim", scene.content_version)):
             return
         from time import perf_counter
         size_started = perf_counter()
@@ -6172,7 +6178,7 @@ class BimPanel(QWidget):
         self._objects = collect_objects(scene, memo)
         self._untagged_scene = None if self._objects else id(scene)
         if hist is not None:
-            hist.tags_cv = scene.content_version
+            hist.feed.readers.mark("bim", scene.content_version)
         self.tree.clear()
         self._containers = []
         if not self._objects:
@@ -6302,13 +6308,11 @@ class Tray(QDockWidget):
         # leaves every material where it was, and on the plant of #158 the
         # scan of 32 million face paints after each click froze the window
         # for over a second.
-        # Nor after a Move: a command that keeps paint (History.paint_cv)
+        # Nor after a Move: a command that keeps paint
         # leaves the swatches as they were (~0.4 s a drop on the plant).
         vp = self.materials._window.viewport
         cv = vp.scene.content_version
-        if (cv != getattr(self.materials, "_in_model_cv", None)
-                and cv != getattr(getattr(vp, "history", None),
-                                  "paint_cv", None)):
+        if not vp.history.feed.current("paint", cv):
             if (self.materials._window.isVisible()
                     and not self.materials.isVisible()):
                 # Its tab not shown: refreshed on showing, as the

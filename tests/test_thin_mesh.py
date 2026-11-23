@@ -193,3 +193,15 @@ def test_compatibility_write_logs_and_releases_store(monkeypatch):
     assert type(mesh) is StoreMesh and not mesh.edges
     mesh.restore_state(snapshot)
     assert type(mesh) is StoreMesh and edge.layer is None
+
+
+def test_paint_record_keeps_faces_on_their_own_mesh(resident):
+    scene = Scene()
+    group = Group()
+    scene.groups.append(group)
+    faces = [_cube(owner)[0] for owner in (scene.mesh, group.mesh)]
+    history = History(scene)
+    history.execute(SetFaceColorCommand(faces, (0.1, 0.2, 0.3)))
+    for step in (history.feed.last, run(history, "undo")["step"]):
+        assert {change.mesh: change.modified["face"] for change in step.meshes} == {
+            scene.mesh: [faces[0].key], group.mesh: [faces[1].key]}
