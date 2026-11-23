@@ -43,6 +43,7 @@ mod host_fonts;
 #[cfg(not(target_os = "macos"))]
 use host_fonts as system_fonts;
 mod gallery;
+mod scene_folders;
 pub mod command_palette;
 /// The tool rail's deterministic layout (two columns, three, then scroll).
 mod rail;
@@ -126,6 +127,7 @@ pub struct Ui {
     delivery: Option<(String, u32, u32)>,
     /// Bottom centre: workspaces (Model, sheet) then scenes, as groups.
     tabs: Vec<Vec<Item>>,
+    scene_browser: scene_folders::Browser,
     /// Project tabs at the top left, after the window buttons' room:
     /// (left edge, [(name, active, unsaved)]).
     projects: Option<(f32, Vec<(String, bool, bool)>)>,
@@ -310,6 +312,7 @@ impl Ui {
             column: None,
             delivery: None,
             tabs: Vec::new(),
+            scene_browser: Default::default(),
             projects: None,
             review: false,
             palette_items: Vec::new(),
@@ -1313,7 +1316,11 @@ impl Ui {
                         "work" | "scenes" => {
                             let group = if kind == "work" { 0 } else { 1 };
                             let mut current = None;
-                            if let Some(items) = self.tabs.get(group) {
+                            if kind=="scenes" && self.tabs.get(3).is_some_and(|rows|!rows.is_empty()) {
+                                let scenes=&self.tabs[1];
+                                current=scenes.iter().find(|r|r.4==1).map(|r|r.1.clone());
+                                self.scene_browser.show(ui,scenes,&self.tabs[3],&mut clicked);
+                            } else if let Some(items) = self.tabs.get(group) {
                                 for item in items {
                                     if item.4 == 1 { current = Some(item.1.clone()); }
                                     let row = (item.0.clone(), item.1.clone(), String::new(), "check".into(), check(item.4 == 1), true);

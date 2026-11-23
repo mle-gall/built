@@ -385,14 +385,17 @@ def _tabs(view, win) -> None:
         sheet = "Sheets"
     work = [("model", "Model", "The model", "", 0 if on_sheets else 1, True),
             ("sheet", sheet, "Sheets (⌃Tab)", "", 1 if on_sheets else 0, True)]
-    scenes = [] if on_sheets else [(f"scene:{i}", v.name, "Scene", "", 1 if v is marked else 0, True)
-                                   for i, v in enumerate(views)]
-    from ingetrazo_core import visibility_set_rows
+    from ingetrazo_core import scene_tree, visibility_set_rows
     version = getattr(scene, "content_version", 0)
     cached = getattr(view, "_ui_visibility_cache", None)
     if cached is None or cached[0] is not scene or cached[1] != version:
         view._ui_visibility_cache = (scene, version, visibility_set_rows(scene))
-    tabs = [work, scenes, view._ui_visibility_cache[2] if not on_sheets else []]
+    catalog_key = (id(scene), getattr(scene, "version", 0), id(marked))
+    if not on_sheets and catalog_key != getattr(view, "_ui_scene_catalog_key", None):
+        view._ui_scene_menu = scene_tree.menu_rows(scene, marked)
+        view._ui_scene_catalog_key = catalog_key
+    scenes, folders = ([], []) if on_sheets else view._ui_scene_menu
+    tabs = [work, scenes, view._ui_visibility_cache[2] if not on_sheets else [], folders]
     if tabs != getattr(view, "_ui_tabs", None):
         view._ui_tabs = tabs
         view.renderer.ui_set_tabs(tabs)
@@ -2686,6 +2689,16 @@ def _run(win, actions, source_view=None) -> None:
                 elif _core(vp, "edit_visibility_set", verb=operation, key=key)["ok"]:
                     vp.notify_scene_changed()
                     view.update()
+            elif arg.startswith("scenefolders:"):
+                from ingetrazo_core import scene_tree
+                vp = win.viewport
+                try:
+                    scene_tree.edit_menu_folder(vp.history, arg.partition(":")[2])
+                    vp.notify_scene_changed()
+                    view._ui_tabs = None
+                    view.update()
+                except ValueError as exc:
+                    vp.flash_status(str(exc))
             elif arg in ("scene:add", "scene:update", "scene:up", "scene:down", "scene:delete", "scene:rename", "scene:duplicate"):
                 panel = getattr(getattr(win, "scenes_dock", None), "panel", None) or getattr(win.tray, "scenes", None)
                 row = getattr(getattr(win, "_scene_tabs", None), "tabs", None)

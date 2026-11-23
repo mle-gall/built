@@ -661,3 +661,81 @@ quit
     assert "42" in console["console"] and preview["utility"], log
     assert marker.read_text() == "False", log
     assert all(not s["errors"] and not s["blocked_widgets"] for s in states), log
+
+
+@pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
+                    reason="requires a built window and BUILT_WINDOW_TESTS=1")
+def test_drawing_catalog_and_scene_folders_in_native_window(tmp_path):
+    from tests.composite_fixture import _file
+
+    model = _file(tmp_path / "drawing.igz", {"Site": None}, {"Paths": "Site"}, 2)
+    output = tmp_path / "drawing.pat"
+    venv = fixture_venv(tmp_path, f"""
+import json
+from app_shell.host import Host
+from views import wgpu_ui
+from views.filedialogs import file_dialogs
+menu, state = Host.menu, Host.state
+def dispatch(self, command):
+    if not command.startswith("fixture-"):
+        return menu(self, command)
+    scene = self.viewport.scene
+    def act(verb, op, data):
+        wgpu_ui._tree_action(self.window,self.view,wgpu_ui.SEP.join((verb,op,json.dumps(data))))
+    if command=="fixture-open":
+        wgpu_ui.open_line_type(self.window,"",["Paths"])
+    elif command=="fixture-line":
+        act("editline","save",dict(name="Boundary",pieces=[8,-2],tags=["Paths"]))
+    elif command=="fixture-hatch":
+        wgpu_ui._tree_action(self.window,self.view,"drawingpatch"+wgpu_ui.SEP+json.dumps([["Paths"],dict(hatch="brick",mortar="1",hatch_ground="layer")]))
+        act("documentpiece","brick",[250,115,60,8])
+        self.view.renderer.ui_hatch_preference("pin","brick")
+        file_dialogs.getSaveFileName=lambda *args: ({str(output)!r},"")
+        wgpu_ui._tree_action(self.window,self.view,"exportpat"+wgpu_ui.SEP)
+    elif command=="fixture-folder":
+        act("tagfolder","new",dict(name="Survey",parent="Site"))
+        folder=next(key for key in scene.layer_folders if scene.layer_folder_names.get(key,key)=="Survey")
+        act("tagfolder","file",dict(parent=folder,tags=["Paths"]))
+    elif command=="fixture-scenes":
+        wgpu_ui._run(self.window,["tab:scene:add","tab:scenefolders:"+json.dumps(["add",str(id(scene)),"","","Field views"])])
+        saved=self.window._scene_tabs.marked_view()
+        wgpu_ui._run(self.window,["tab:scenefolders:"+json.dumps(["file",str(id(scene)),"","Field views",saved.name])])
+    self.request_frame()
+def facts(self):
+    scene=self.viewport.scene
+    paths=scene.layer("Paths")
+    row=self.window._scene_tabs.marked_view()
+    return dict(state(self), editor=self.renderer.ui_input_state()["drawing_line"],
+        line=paths.linetype, hatch=paths.hatch, mortar=paths.mortar, size=scene.bricks.get("brick"),
+        folder=scene.layer_folder_names.get(paths.folder,paths.folder),scene_folder=getattr(row,"folder",None))
+Host.menu,Host.state=dispatch,facts
+""")
+    steps = tmp_path / "commands.txt"
+    steps.write_text("""wait 850
+key escape
+menu fixture-open
+wait 300
+state
+menu fixture-line
+wait 250
+state
+menu fixture-hatch
+menu fixture-folder
+menu fixture-scenes
+wait 500
+state
+quit
+""")
+    result = run([str(BIN), "--root", str(ROOT), "--venv", str(venv), "--new-instance",
+                  "--size", "1280x800", "--script", str(steps), str(model)],
+                 env=dict(os.environ, BUILT_ANSWERS="cmd-d"), capture_output=True, text=True, timeout=60)
+    log = result.stdout + result.stderr
+    assert result.returncode == 0 and "Traceback" not in log, log
+    states = [json.loads(line.removeprefix("[built] state ")) for line in log.splitlines()
+              if line.startswith("[built] state ")]
+    opened, saved, edited = states[:3]
+    assert opened["editor"] and not saved["editor"] and saved["line"] == "lin:Boundary", log
+    assert edited["hatch"] == "brick" and edited["mortar"] and edited["size"] == [250, 115, 60, 8], log
+    assert edited["folder"] == "Survey" and edited["scene_folder"] == "Field views", log
+    assert output.is_file() and "*" in output.read_text(), log
+    assert all(not s["errors"] and not s["blocked_widgets"] for s in states), log
