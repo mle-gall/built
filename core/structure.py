@@ -16,16 +16,8 @@ def _nodes(registry):
 
 
 def _lineage(registry, key):
-    nodes = _nodes(registry)
-    if not isinstance(key, str) or key not in nodes:
-        raise ValueError(f'Unknown structure node: {key}')
-    result = []
-    while key is not None:
-        if key in result or key not in nodes:
-            raise ValueError(f'Unknown or cyclic structure node: {key}')
-        result.append(key)
-        key = nodes[key]['parent']
-    return result[::-1]
+    from ingetrazo_core import structure_lineage
+    return structure_lineage(_nodes(registry), key)
 
 
 def tree(registry):
@@ -71,50 +63,13 @@ def node_of(group):
 
 
 def _placements(scene):
-    # Use traversal ancestry: detached or just-loaded children may lack owner pointers.
-    seen = set()
-    stack = [(g, None, True) for g in reversed(scene.groups)]
-    while stack:
-        group, source, root = stack.pop()
-        if id(group) in seen:
-            continue
-        seen.add(id(group))
-        link = links.link_of(group)
-        if link:
-            source = link['path']
-        yield group, source, root
-        stack.extend((child, source, False) for child in reversed(group.children or []))
+    from ingetrazo_core import StructurePlacements
+    return StructurePlacements(scene)
 
 
 def _targets(scene, uids):
-    if not isinstance(uids, (list, tuple)) or not uids:
-        raise ValueError('uids must be a nonempty list of strings or UID paths')
-    addresses = []
-    paths = {}
-    for uid in uids:
-        if isinstance(uid, (tuple, list)) and uid and all(isinstance(k, str) for k in uid):
-            uid = tuple(uid)
-            target = scene.resolve_occurrence(uid)
-            if target is None:
-                raise ValueError(f'Unknown occurrence path {uid!r}')
-            paths.setdefault(target, []).append(uid)
-        elif not isinstance(uid, str):
-            raise ValueError('uids must be a nonempty list of strings or UID paths')
-        addresses.append(uid)
-    wanted = set(addresses)
-    targets = {}
-    for group, source, _ in _placements(scene):
-        keys = paths.get(group, ())
-        if group.uid in wanted or keys:
-            if source:
-                raise ValueError(f'Linked placement is read-only: {group.uid} ({source})')
-            if group.uid in wanted:
-                targets[group.uid] = group
-            targets.update((key, group) for key in keys)
-    missing = wanted - targets.keys()
-    if missing:
-        raise ValueError('Unknown uids: ' + ', '.join(sorted(map(str, missing))))
-    return list(dict.fromkeys(targets[uid] for uid in addresses))
+    from ingetrazo_core import structure_targets
+    return structure_targets(scene, uids)
 
 
 def _patch(group, recipe, registry):
@@ -155,26 +110,16 @@ def _patch(group, recipe, registry):
 
 class _EnsureStructureLayers(EnsureLayersCommand):
     def do(self, scene):
-        # Layer import materializes identities for older folders as a side effect.
-        self.previous_parents = dict(scene.folder_parents)
-        self.previous_ids = dict(scene.layer_folder_uids)
-        self.previous_folders = list(scene.layer_folders)
-        self.previous_active = scene.active_layer
+        from ingetrazo_core import structure_folder_state, apply_folder_parents
+        self._folders = structure_folder_state(scene)
         super().do(scene)
-        for folder, parent in self._template['folder_parents'].items():
-            if parent is None:
-                scene.folder_parents.pop(folder, None)
-            else:
-                scene.folder_parents[folder] = parent
+        apply_folder_parents(scene, self._template)
         scene.version += 1
 
     def undo(self, scene):
+        from ingetrazo_core import restore_structure_folders
         super().undo(scene)
-        scene.folder_parents = self.previous_parents
-        scene.version += 1
-        scene.layer_folder_uids = self.previous_ids
-        scene.layer_folders = self.previous_folders
-        scene.active_layer = self.previous_active
+        restore_structure_folders(scene, self._folders)
 
 
 class _MoveTag(Command):
@@ -184,8 +129,8 @@ class _MoveTag(Command):
         self.layer, self.folder = layer, folder
 
     def do(self, scene):
-        self.before = self.layer.folder
-        self.layer.folder = self.folder
+        from ingetrazo_core import definition_edits
+        self.before = definition_edits.set_placement_field(self.layer, "folder", self.folder)
         scene.version += 1
 
     def undo(self, scene):
@@ -194,66 +139,13 @@ class _MoveTag(Command):
 
 
 def _filing(scene, groups, registry, key, changes):
-    recipe = resolve(registry, key)
-    if any('source' in _nodes(registry)[k] for k in _lineage(registry, key)):
-        raise ValueError('Linked structure is read-only')
-    tag, folders = recipe['tag'], recipe['folder']
-    folder = folders[-1] if folders else None
-    layer = scene.layer(tag)
-    parents = dict(zip(folders, [None, *folders]))
-    if len(parents) != len(folders):
-        raise ValueError('Folder names must identify a single path: ' + '/'.join(folders))
-    if tag == DEFAULT_LAYER and folder:
-        raise ValueError('The default layer cannot be moved into a folder')
-    commands, moved, filed = [], [], []
-    path_changed = any(f not in scene.layer_folders or scene.folder_parents.get(f) != parent
-                       for f, parent in parents.items())
-    if groups and (not layer or layer.folder != folder or path_changed):
-        template = {'layers': [{'name': tag, 'folder': folder, 'uid': new_uid()}],
-                    'folders': folders, 'folder_parents': parents,
-                    'folder_uids': {f: new_uid() for f in folders if f not in scene.layer_folders}}
-        commands.append(_EnsureStructureLayers(template))
-        if layer and layer.folder != folder:
-            commands.append(_MoveTag(layer, folder))
-    for group in groups:
-        fields = []
-        if node_of(group) != key:
-            filed.append(group)
-            fields.append('node')
-        if layer_of(group) != tag:
-            moved.append(group)
-            fields.append('tag')
-        if not layer or layer.folder != folder or path_changed:
-            fields.append('folder')
-        patch = _patch(group, recipe, registry)
-        if patch:
-            commands.append(SetRecordCommand([group], patch, normalize_values=False))
-            fields.extend(patch)
-        if fields:
-            changes[group.uid] = fields
-    if moved:
-        commands.append(AssignLayerCommand(moved, tag))
-    if filed:
-        commands.append(SetStructureNodeCommand(filed, key))
-    return commands
+    from ingetrazo_core import plan_filing
+    return plan_filing(scene, groups, registry, key, changes)
 
 
 def _check_paths(scene, registry, batches):
-    # Tags and folder names are document-wide. Two occupied nodes cannot
-    # project the same name into different folders in the same transaction.
-    pending = {g.uid for groups in batches.values() for g in groups}
-    occupied = {k for k, groups in batches.items() if groups}
-    occupied.update(node_of(g) for g, src, _ in _placements(scene)
-                    if not src and g.uid not in pending and node_of(g) in _nodes(registry))
-    tags, parents = {}, {}
-    for key in occupied:
-        recipe = resolve(registry, key)
-        folders = recipe['folder']
-        if tags.setdefault(recipe['tag'], folders) != folders:
-            raise ValueError('Conflicting folder paths for tag: ' + recipe['tag'])
-        for name, parent in zip(folders, [None, *folders]):
-            if parents.setdefault(name, parent) != parent:
-                raise ValueError('Conflicting parents for folder: ' + name)
+    from ingetrazo_core import check_filing_paths
+    return check_filing_paths(scene, registry, batches)
 
 
 def file(scene, uids, key):
@@ -325,19 +217,8 @@ def resync(scene, keys=None):
 
 
 def _resync(scene, registry, keys):
-    chosen = set(_nodes(registry) if keys is None else keys)
-    if chosen - _nodes(registry).keys():
-        raise ValueError('Unknown resync node')
-    groups = defaultdict(list)
-    for g, src, _, k in _memberships(scene, registry):
-        if not src and k in _nodes(registry):
-            groups[k].append(g)
-    _check_paths(scene, registry, groups)
-    report, commands = {}, []
-    for k, targets in groups.items():
-        if chosen.intersection(_lineage(registry, k)):
-            commands.extend(_filing(scene, targets, registry, k, report))
-    return CompoundCommand(commands), report
+    from ingetrazo_core import resync_filing
+    return resync_filing(scene, registry, keys)
 
 
 def unsorted(scene):
@@ -521,19 +402,5 @@ def bootstrap(scene, registry):
 
 def apply_bootstrap(scene, proposal):
     """Preflight the complete proposal; the registry and placements share one undo step."""
-    registry = bim_registry.get(scene)
-    registry['structure'] = deepcopy(proposal['structure'])
-    filing = proposal['filing']
-    uids = [uid for targets in filing.values() for uid in targets]
-    commands = [SetRegistryCommand(registry, refiled_uids=uids)]
-    if len(uids) != len(set(uids)):
-        raise ValueError('A placement can only be filed once')
-    groups = {g.uid: g for g in _targets(scene, uids)} if uids else {}
-    for g, src, _ in _placements(scene):
-        if not src and node_of(g) and node_of(g) not in _nodes(registry) and g.uid not in groups:
-            raise ValueError('Cannot delete occupied node: ' + node_of(g))
-    batches = {k: [groups[u] for u in targets] for k, targets in filing.items()}
-    _check_paths(scene, registry, batches)
-    for key, targets in batches.items():
-        commands.extend(_filing(scene, targets, registry, key, {}))
-    return CompoundCommand(commands)
+    from ingetrazo_core import apply_structure_bootstrap
+    return apply_structure_bootstrap(scene, proposal)

@@ -178,6 +178,21 @@ class TestComposerHistory:
         assert h.undo() and c.frames == []
         assert h.redo() and c.frames == [f]
 
+    def test_item_command_keeps_an_extension_container(self):
+        extra_items = []
+
+        class ExtraItemCommand(AddItemCommand):
+            def _list(self):
+                return extra_items
+
+        sheet = Composicion()
+        item = MarcoVista()
+        cmd = ExtraItemCommand(sheet, item)
+        cmd.do()
+        assert extra_items == [item] and not sheet.frames
+        cmd.undo()
+        assert not extra_items
+
     def test_cajetin_add_and_remove(self):
         c = Composicion()
         h = ComposerHistory()

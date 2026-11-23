@@ -19,31 +19,16 @@ keeps that move, because only the explosion's own share is ever undone.
 """
 from __future__ import annotations
 
+from ingetrazo_core import placement_transform as _transform
+
 MODES = ("outward", "x", "y", "z")
-
-
-def _offset_of(part):
-    from ingetrazo_core import Vec3 as QVector3D
-    o = getattr(part, "explode_offset", None)
-    return QVector3D(*o) if o else QVector3D()
 
 
 def assembled_centres(container) -> list:
     """Each part's centre (the middle of its box, in the container's frame)
     where it sits assembled — its current centre minus the explosion's
     offset."""
-    from ingetrazo_core import Vec3 as QVector3D
-    from core.parts import part_points
-    out = []
-    for kid in container.children:
-        pts = part_points(kid)
-        if len(pts) == 0:
-            c = QVector3D()
-        else:
-            lo, hi = pts.min(axis=0), pts.max(axis=0)
-            c = QVector3D(*((lo + hi) / 2.0).tolist())
-        out.append(c - _offset_of(kid))
-    return out
+    return _transform.assembled_centres(container)
 
 
 def explode_offsets(centres, factor: float, mode: str = "outward") -> list:
@@ -51,22 +36,7 @@ def explode_offsets(centres, factor: float, mode: str = "outward") -> list:
     every part twice as far from the centre as it was). The centre is the
     middle of the parts' centres' box, so a symmetric model explodes
     symmetrically."""
-    from ingetrazo_core import Vec3 as QVector3D
-    if not centres:
-        return []
-    xs = [c.x() for c in centres]
-    ys = [c.y() for c in centres]
-    zs = [c.z() for c in centres]
-    mid = QVector3D((min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2,
-                    (min(zs) + max(zs)) / 2)
-    keep = {"outward": (1, 1, 1), "x": (1, 0, 0), "y": (0, 1, 0),
-            "z": (0, 0, 1)}.get(mode, (1, 1, 1))
-    out = []
-    for c in centres:
-        d = (c - mid) * float(factor)
-        out.append(QVector3D(d.x() * keep[0], d.y() * keep[1],
-                             d.z() * keep[2]))
-    return out
+    return _transform.explode_offsets(centres, factor, mode)
 
 
 def apply_explode(container, factor: float, mode: str = "outward",
@@ -75,32 +45,7 @@ def apply_explode(container, factor: float, mode: str = "outward",
     in place. ``centres`` (from :func:`assembled_centres`) lets a slider drag
     measure once and apply many times. The command is
     :class:`ExplodeViewCommand`; this is its body."""
-    from ingetrazo_core import Matrix4 as QMatrix4x4
-    kids = list(getattr(container, "children", None) or ())
-    if not kids:
-        return
-    if centres is None:
-        centres = assembled_centres(container)
-    factor = max(0.0, float(factor))
-    new = (explode_offsets(centres, factor, mode) if factor > 0
-           else [None] * len(kids))
-    for kid, target in zip(kids, new):
-        old = _offset_of(kid)
-        step = QMatrix4x4()
-        step.translate(target - old if target is not None else old * -1.0)
-        if kid.xform is None:
-            # A plain group moves by a matrix of its own from now on, and a
-            # group with a matrix reads as a component unless it says it is
-            # not: every wall of an exploded building came back a component,
-            # whose parts can no longer be grouped or exploded (#1375).
-            kid.component = False
-        kid.xform = step * (kid.xform if kid.xform is not None
-                            else QMatrix4x4())
-        kid.explode_offset = ((target.x(), target.y(), target.z())
-                              if target is not None and not target.isNull()
-                              else None)
-    container.exploded = ({"factor": factor, "mode": mode} if factor > 0
-                          else None)
+    return _transform.apply_explode(container, factor, mode, centres)
 
 
 def rotate_offsets(container, xform) -> None:
@@ -120,16 +65,8 @@ def rotate_offsets(container, xform) -> None:
 def snapshot(container) -> tuple:
     """Everything an explosion changes, to put back exactly (undo, and the
     slider's live preview)."""
-    from ingetrazo_core import Matrix4 as QMatrix4x4
-    kids = list(container.children)
-    return (dict(container.exploded) if container.exploded else None,
-            [(k, QMatrix4x4(k.xform) if k.xform is not None else None,
-              k.explode_offset) for k in kids])
+    return _transform.exploded_snapshot(container)
 
 
 def restore(container, snap) -> None:
-    state, kids = snap
-    container.exploded = dict(state) if state else None
-    for kid, xform, offset in kids:
-        kid.xform = xform
-        kid.explode_offset = offset
+    return _transform.restore_exploded(container, snap)

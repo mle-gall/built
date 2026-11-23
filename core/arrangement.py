@@ -26,16 +26,13 @@ the room/notch/hole geometry a floor plan is made of.
 from __future__ import annotations
 
 import math
-from typing import Optional
 
-from ingetrazo_core import Vec3 as QVector3D
+from ingetrazo_core import (Vec3 as QVector3D, plane_intersections as _intersections,
+                            plane_segment_parameter as _on_seg)
 
 # Position quantisation (~0.1 mm at metre scale) — coincident points within this
 # collapse to one vertex, matching the rest of the engine's welding tolerance.
 _TOL = 1e-4
-_EPS = 1e-7
-# Perpendicular slack for "point lies on segment".
-_ON_SEG = 1e-4
 
 
 def _key(x: float, y: float) -> tuple[int, int]:
@@ -70,45 +67,6 @@ def plane_basis(normal: QVector3D) -> tuple[QVector3D, QVector3D]:
 
 # ---- 2D geometry helpers ---------------------------------------------------
 
-def _on_seg(p, a, b) -> Optional[float]:
-    """Parameter ``t`` of ``p`` on segment ``a``–``b`` (clamped to [0,1]) if it
-    lies on it within ``_ON_SEG``, else ``None``."""
-    abx, aby = b[0] - a[0], b[1] - a[1]
-    l2 = abx * abx + aby * aby
-    if l2 < 1e-12:
-        return None
-    t = ((p[0] - a[0]) * abx + (p[1] - a[1]) * aby) / l2
-    px, py = a[0] + t * abx, a[1] + t * aby
-    if (p[0] - px) ** 2 + (p[1] - py) ** 2 > _ON_SEG * _ON_SEG:
-        return None
-    if t < -_EPS or t > 1.0 + _EPS:
-        return None
-    return min(1.0, max(0.0, t))
-
-
-def _intersections(a, b, c, d) -> list:
-    """All meeting points of segments ``a``–``b`` and ``c``–``d``: the proper
-    crossing, or the overlap endpoints when collinear."""
-    rx, ry = b[0] - a[0], b[1] - a[1]
-    sx, sy = d[0] - c[0], d[1] - c[1]
-    rxs = rx * sy - ry * sx
-    qpx, qpy = c[0] - a[0], c[1] - a[1]
-    pts = []
-    if abs(rxs) > 1e-9:
-        t = (qpx * sy - qpy * sx) / rxs
-        u = (qpx * ry - qpy * rx) / rxs
-        if -_EPS <= t <= 1.0 + _EPS and -_EPS <= u <= 1.0 + _EPS:
-            pts.append((a[0] + t * rx, a[1] + t * ry))
-    elif abs(qpx * ry - qpy * rx) < 1e-9:  # collinear
-        for p in (c, d):
-            if _on_seg(p, a, b) is not None:
-                pts.append(p)
-        for p in (a, b):
-            if _on_seg(p, c, d) is not None:
-                pts.append(p)
-    return pts
-
-
 def _signed_area(loop: list) -> float:
     s = 0.0
     n = len(loop)
@@ -138,255 +96,36 @@ def _point_in_polygon(p, poly: list) -> bool:
 
 # ---- Arrangement -----------------------------------------------------------
 
-def _box_neighbours(segments_2d) -> list:
-    """For each segment, the ascending indices of the others whose bounding
-    boxes come within reach of it -- the only ones that can meet it.
-
-    Testing every pair was O(n²): an exploded DWG plan of 16 848 edges spent
-    70 s per Line click here (#491). A meeting point lies within ``_ON_SEG``
-    plus ``_EPS`` of a length of BOTH segments, so boxes padded by that never
-    miss a pair; ascending order keeps the split points in the order the full
-    scan appended them, and so the graph identical."""
-    n = len(segments_2d)
-    boxes = []
-    longest = 0.0
-    for a, b in segments_2d:
-        x0, x1 = (a[0], b[0]) if a[0] <= b[0] else (b[0], a[0])
-        y0, y1 = (a[1], b[1]) if a[1] <= b[1] else (b[1], a[1])
-        longest = max(longest, x1 - x0, y1 - y0)
-        boxes.append((x0, x1, y0, y1))
-    # Twice the pad each box needs, on both: a generous reach only adds
-    # candidates, it never changes an answer.
-    reach = 4.0 * (_ON_SEG + 2.0 * _EPS * longest) + 1e-9
-    order = sorted(range(n), key=lambda k: boxes[k][0])
-    near: list = [[] for _ in range(n)]
-    for pos, i in enumerate(order):
-        _, x1, y0, y1 = boxes[i]
-        for q in range(pos + 1, n):
-            j = order[q]
-            bx0, _, by0, by1 = boxes[j]
-            if bx0 > x1 + reach:
-                break
-            if by0 <= y1 + reach and y0 <= by1 + reach:
-                near[i].append(j)
-                near[j].append(i)
-    for lst in near:
-        lst.sort()
-    return near
-
-
 def _build_graph(segments_2d):
     """Split all segments at intersections and return ``(coords, adjacency)``:
     ``coords`` maps a vertex key to its (x, y); ``adjacency`` maps a key to the
     set of neighbour keys (undirected, deduplicated, no self-loops)."""
-    n = len(segments_2d)
-    split_pts = [list(seg) for seg in segments_2d]  # seed with endpoints
-    for i, near in enumerate(_box_neighbours(segments_2d)):
-        a, b = segments_2d[i]
-        for j in near:
-            c, d = segments_2d[j]
-            for p in _intersections(a, b, c, d):
-                if _on_seg(p, a, b) is not None:
-                    split_pts[i].append(p)
-
-    coords: dict = {}
-    adj: dict = {}
-
-    def vert(p):
-        k = _key(p[0], p[1])
-        if k not in coords:
-            coords[k] = (p[0], p[1])
-            adj[k] = set()
-        return k
-
-    for i in range(n):
-        a, b = segments_2d[i]
-        pts = split_pts[i]
-        pts.sort(key=lambda p: _on_seg(p, a, b) or 0.0)
-        for k in range(len(pts) - 1):
-            ka, kb = vert(pts[k]), vert(pts[k + 1])
-            if ka != kb:
-                adj[ka].add(kb)
-                adj[kb].add(ka)
-    return coords, adj
-
-
-def _prune_dangling(adj):
-    """Iteratively drop degree-1 vertices (and their edges): a dangling chain
-    borders no face, so it must not appear in a traced loop."""
-    changed = True
-    while changed:
-        changed = False
-        for k in list(adj.keys()):
-            if len(adj[k]) == 1:
-                (other,) = tuple(adj[k])
-                adj[other].discard(k)
-                del adj[k]
-                changed = True
-            elif len(adj[k]) == 0:
-                del adj[k]
-                changed = True
-
-
-def _trace_faces(coords, adj) -> list:
-    """Trace every face as a vertex-key loop via the next-edge-clockwise rule.
-    Bounded faces come out CCW; the unbounded face comes out CW."""
-    # Sort each vertex's neighbours by angle (ascending).
-    order: dict = {}
-    for k, nbrs in adj.items():
-        kx, ky = coords[k]
-        order[k] = sorted(
-            nbrs, key=lambda m: math.atan2(coords[m][1] - ky, coords[m][0] - kx)
-        )
-
-    def next_he(u, v):
-        # Arriving at v from u: take the neighbour of v just clockwise from u.
-        ring = order[v]
-        idx = ring.index(u)
-        return ring[idx - 1]  # previous in CCW-sorted == clockwise next
-
-    visited: set = set()
-    loops = []
-    for u in adj:
-        for v in adj[u]:
-            if (u, v) in visited:
-                continue
-            loop = []
-            cu, cv = u, v
-            while (cu, cv) not in visited:
-                visited.add((cu, cv))
-                loop.append(cu)
-                cu, cv = cv, next_he(cu, cv)
-                if len(loop) > 100000:  # pathological guard
-                    break
-            if len(loop) >= 3:
-                loops.append(loop)
-    return loops
-
-
-def _arrange(segments_3d, origin, normal):
-    """Shared core: project, split, and trace. Returns
-    ``(coords, full_adj, faces_xy, to3d)`` where ``full_adj`` is the split edge
-    graph *before* dangling pruning and ``faces_xy`` is ``[(outer, [holes])]`` in
-    plane coords. ``coords``/``faces_xy`` are empty when there's nothing to do."""
-    u, v = plane_basis(normal)
-
-    def to2d(p):
-        d = p - origin
-        return (QVector3D.dotProduct(d, u), QVector3D.dotProduct(d, v))
-
-    def to3d(xy):
-        return origin + u * xy[0] + v * xy[1]
-
-    segs = []
-    for a, b in segments_3d:
-        pa, pb = to2d(a), to2d(b)
-        if (pa[0] - pb[0]) ** 2 + (pa[1] - pb[1]) ** 2 > _TOL * _TOL:
-            segs.append((pa, pb))
-    if not segs:
-        return {}, {}, [], to3d
-
-    coords, full_adj = _build_graph(segs)
-    adj = {k: set(ns) for k, ns in full_adj.items()}  # copy; prune the copy
-    _prune_dangling(adj)
-    loops = _trace_faces(coords, adj)
-    faces_xy = _classify(loops, coords)
-    return coords, full_adj, faces_xy, to3d
+    from ingetrazo_core import plane_split_graph
+    return plane_split_graph(segments_2d)
 
 
 def _classify(loops, coords) -> list:
 
-    # Split into CCW faces and CW cycles (holes / the unbounded outer).
-    faces = []   # (loop_xy, area)
-    holes = []   # (loop_xy, area)
-    for loop in loops:
-        xy = [coords[k] for k in loop]
-        area = _signed_area(xy)
-        floor = _area_floor(xy)
-        if area > floor:
-            faces.append((xy, area))
-        elif area < -floor:
-            holes.append((xy, -area))
-
-    if not faces:
-        return []
-
-    # The unbounded outer face is the CW cycle that encloses everything — the
-    # one with the largest magnitude. Drop it; the rest are real holes.
-    if holes:
-        holes.sort(key=lambda h: h[1], reverse=True)
-        holes = holes[1:]  # discard the all-enclosing outer
-
-    # Nest each hole inside the smallest face that *strictly* contains it. The
-    # area guard skips the face the hole coincides with (the inner square that
-    # fills the opening) so the hole lands on the surrounding ring instead.
-    faces.sort(key=lambda f: f[1])  # smallest first
-    face_holes: list = [[] for _ in faces]
-    # Each hole used to be tried against every face in turn, with its own
-    # area floor worked out again for each: thousands of separate outlines
-    # (the columns of a plan, text exploded to lines) made that the whole
-    # cost — 85 s for 8000 squares. The faces a hole can sit in are the
-    # larger ones whose box holds its inside point; only those are asked,
-    # in the same smallest-first order.
-    import numpy as np
-    areas = np.array([a for _xy, a in faces], dtype=np.float64)
-    ys = [[p[1] for p in fxy] for fxy, _a in faces]
-    y_lo = np.array([min(v) for v in ys], dtype=np.float64)
-    y_hi = np.array([max(v) for v in ys], dtype=np.float64)
-    x_hi = np.array([max(p[0] for p in fxy) for fxy, _a in faces],
-                    dtype=np.float64)
-    # The ray test below can only say "inside" for a point within the
-    # polygon's span in y (it compares the same numbers) and left of its
-    # rightmost corner (give or take the rounding of one division).
-    x_pad = 1e-9 * np.maximum(1.0, np.abs(x_hi))
-    for hxy, harea in holes:
-        hp = _interior_point(hxy)
-        first = int(np.searchsorted(areas, harea + _area_floor(hxy),
-                                    side="right"))
-        if first >= len(faces):
-            continue
-        hx, hy = hp
-        near = np.flatnonzero((y_lo[first:] <= hy) & (y_hi[first:] >= hy)
-                              & (x_hi[first:] + x_pad[first:] >= hx))
-        for fi in near:
-            fi = first + int(fi)
-            if _point_in_polygon(hp, faces[fi][0]):
-                face_holes[fi].append(hxy)
-                break
-
-    return [(fxy, hls) for (fxy, _a), hls in zip(faces, face_holes)]
+    from ingetrazo_core import plane_nesting
+    rings = [[coords[k] for k in loop] for loop in loops]
+    return [(rings[i], [rings[j] for j in holes])
+            for i, holes in plane_nesting(rings, True)]
 
 
 def planar_arrangement(segments_3d, origin: QVector3D, normal: QVector3D) -> list:
     """Rebuild minimal faces from coplanar ``segments_3d`` (list of
     ``(QVector3D, QVector3D)``). Returns ``[(outer_loop, [hole_loops]), …]`` with
     every loop a list of ``QVector3D`` on the plane."""
-    _coords, _adj, faces_xy, to3d = _arrange(segments_3d, origin, normal)
-    return [
-        ([to3d(p) for p in outer], [[to3d(p) for p in h] for h in holes])
-        for outer, holes in faces_xy
-    ]
+    from ingetrazo_core import arrange_plane
+    return arrange_plane(segments_3d, origin, plane_basis(normal), False)[1]
 
 
 def planar_rebuild(segments_3d, origin: QVector3D, normal: QVector3D):
     """Full planar rebuild: returns ``(edges_3d, faces_3d)`` where ``edges_3d`` is
     the complete split edge set (so nothing is lost, including spurs) and
     ``faces_3d`` is ``[(outer, [holes])]`` — exactly what the command re-adds."""
-    coords, full_adj, faces_xy, to3d = _arrange(segments_3d, origin, normal)
-    edges = []
-    seen = set()
-    for k, nbrs in full_adj.items():
-        for m in nbrs:
-            key = frozenset((k, m))
-            if key in seen:
-                continue
-            seen.add(key)
-            edges.append((to3d(coords[k]), to3d(coords[m])))
-    faces = [
-        ([to3d(p) for p in outer], [[to3d(p) for p in h] for h in holes])
-        for outer, holes in faces_xy
-    ]
-    return edges, faces
+    from ingetrazo_core import arrange_plane
+    return arrange_plane(segments_3d, origin, plane_basis(normal), True)
 
 
 def coplanar_plane(points, tol: float = 1e-4):
@@ -422,23 +161,8 @@ def coplanar_plane(points, tol: float = 1e-4):
 def _interior_point(loop: list):
     """A point safely inside the polygon ``loop`` (average of a triangle fan
     vertex that tests inside), good enough for containment nesting."""
-    n = len(loop)
-    cx = sum(p[0] for p in loop) / n
-    cy = sum(p[1] for p in loop) / n
-    if _point_in_polygon((cx, cy), loop):
-        return (cx, cy)
-    # Centroid outside (non-convex) — nudge from the first edge's midpoint inward.
-    ax, ay = loop[0]
-    bx, by = loop[1]
-    mx, my = (ax + bx) / 2, (ay + by) / 2
-    p = (mx * 0.999 + cx * 0.001, my * 0.999 + cy * 0.001)
-    if _point_in_polygon(p, loop):
-        return p
-    # That nudge goes toward the vertex average, which for a C or an L can
-    # be across the void: the "interior" point landed in the notch (issue
-    # found through Rafael's door, revision 4). Scan for a real one.
-    q = scan_interior_point(loop)
-    return q if q is not None else p
+    from ingetrazo_core import plane_interior_point
+    return plane_interior_point(loop)
 
 
 def scan_interior_point(outer: list, holes=()):
@@ -448,23 +172,5 @@ def scan_interior_point(outer: list, holes=()):
     the region in spans; the middle of the widest span (measured against
     the band's height too) is as far from every boundary as such a simple
     probe gets, whatever the shape — a C, an L, a ring."""
-    loops = [outer, *holes]
-    ys = sorted({p[1] for lp in loops for p in lp})
-    best = None
-    for y0, y1 in zip(ys, ys[1:]):
-        if y1 - y0 < 1e-9:
-            continue
-        y = (y0 + y1) / 2
-        xs = []
-        for lp in loops:
-            n = len(lp)
-            for i in range(n):
-                (ax, ay), (bx, by) = lp[i], lp[(i + 1) % n]
-                if (ay > y) != (by > y):
-                    xs.append(ax + (y - ay) * (bx - ax) / (by - ay))
-        xs.sort()
-        for a, b in zip(xs[0::2], xs[1::2]):
-            w = min(b - a, y1 - y0)
-            if best is None or w > best[0]:
-                best = (w, ((a + b) / 2, y))
-    return best[1] if best else None
+    from ingetrazo_core import plane_scan_point
+    return plane_scan_point(outer, holes)

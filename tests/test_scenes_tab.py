@@ -954,3 +954,16 @@ def test_a_scene_with_no_picture_to_be_had_is_not_asked_for_ever(
     _wait()
     QTest.qWait(400)
     assert len(tries) == ScenesPanel.RETRIES + 1
+
+
+def test_insert_scene_clamps_large_integer_positions():
+    from core.history import AddSceneCommand
+    from core.saved_views import SavedView
+    from core.scene import Scene
+
+    scene = Scene()
+    centre, first, last = [SavedView(name) for name in ("Centre", "First", "Last")]
+    scene.saved_views.append(centre)
+    AddSceneCommand(first, -(2**100)).do(scene)
+    AddSceneCommand(last, 2**100).do(scene)
+    assert list(scene.saved_views) == [first, centre, last]

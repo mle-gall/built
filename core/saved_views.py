@@ -14,6 +14,8 @@ that carry eye/target/up cameras (e.g. .skp) convert once at import time.
 """
 from __future__ import annotations
 
+from ingetrazo_core import presentation as _presentation
+
 from core.doc_model import Record, record_fields
 
 from core.history import Command, CommandRejected
@@ -407,18 +409,14 @@ class RenameSceneCommand(Command):
         self._frames: list = []
 
     def do(self, scene) -> None:
-        from core.outliner import frames_showing, rename_scene
-        prev = self.view.name
-        frames = [frame for _comp, frame in frames_showing(scene, prev)]
-        if not rename_scene(scene, self.view, self.name):
+        renamed = _presentation.rename_view(scene, self.view, self.name)
+        if renamed is None:
             raise CommandRejected(self.name)
-        self._prev, self._frames = prev, frames
+        self._prev, self._frames = renamed
         scene.version += 1
 
     def undo(self, scene) -> None:
-        self.view.name = self._prev
-        for frame in self._frames:
-            frame.view_key = f"scene:{self._prev}"
+        _presentation.restore_view_name(self.view, self._prev, self._frames)
         scene.version += 1
 
 
@@ -436,15 +434,11 @@ class MoveSceneCommand(Command):
         self._from = None
 
     def do(self, scene) -> None:
-        views = scene.saved_views
-        if self.view not in views or self.index == views.index(self.view):
+        self._from = _presentation.move_item(scene.saved_views, self.view, self.index, False, True)
+        if self._from is None:
             raise CommandRejected(self.view.name)
-        self._from = views.index(self.view)
-        views.remove(self.view)
-        views.insert(self.index, self.view)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        scene.saved_views.remove(self.view)
-        scene.saved_views.insert(self._from, self.view)
+        _presentation.move_item(scene.saved_views, self.view, self._from, False, False)
         scene.version += 1

@@ -316,22 +316,8 @@ class _GroupMethods:
         A copied GROUP (the copy entering a group makes unique on the way
         in) bakes into a classic group without nested placements
         (``materialize``), or keeps its tree, privately, with them."""
-        if _is_link(self):
-            # A linked file is its source's: nothing of it is this copy's to
-            # make its own (it is edited in its own document).
-            return
-        if self.is_component():
-            self.mesh = _copy_definition_mesh(self.mesh)
-            self.children = [_independent_copy(c)
-                             for c in (self.children or ())]
-            return
-        if not self.children:
-            self.materialize()
-            return
-        self.mesh = _copy_definition_mesh(self.mesh)
-        self.children = [_independent_copy(c) for c in self.children]
-        # Nothing shared any more: what is left is a group of groups.
-        self.component = False
+        from ingetrazo_core import unique_placement
+        return unique_placement(self)
 
     def __repr__(self) -> str:  # pragma: no cover - debug aid
         kind = " instance" if self.xform is not None else ""
@@ -1053,23 +1039,6 @@ def _copy_definition_mesh(mesh):
         return deepcopy(mesh)
     from ingetrazo_core import Matrix4 as QMatrix4x4
     return transformed_mesh(mesh, QMatrix4x4())
-
-
-def _independent_copy(group):
-    """``copy_group`` without the sharing: every mesh in the subtree is a
-    copy of its own, so editing it never reaches the original's copies.
-    The copy keeps the uid — it REPLACES the original in its parent."""
-    g = copy_group(group)
-    g.uid = group.uid
-    if _is_link(group):
-        # A linked file stays the file: still its geometry, still read-only.
-        from core.links import copy_parts
-        g.children = copy_parts(group, g)
-        return g
-    if group.xform is not None:
-        g.mesh = _copy_definition_mesh(group.mesh)
-    g.children = [_independent_copy(c) for c in (group.children or ())]
-    return g
 
 
 def _hull_2d(pts):

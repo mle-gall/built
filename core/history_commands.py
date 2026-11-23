@@ -3,6 +3,10 @@
 """Model editing commands and their Python reference inverses."""
 from __future__ import annotations
 
+from ingetrazo_core import (definition_edits as _definitions, placement_edits as _placements,
+                            presentation as _presentation, placement_transform as _transform,
+                            reference_layers as _references)
+
 from abc import ABC, abstractmethod
 from collections import Counter
 from typing import Iterable, Optional
@@ -842,10 +846,8 @@ class EnsureLayersCommand(Command):
             scene.version += 1
 
     def do(self, scene) -> None:
-        from core.layers import add_missing
-        layers, folders = add_missing(scene, self._template)
-        self._added = ([scene.layer_by_key(n).uid for n in layers],
-                       [scene.layer_folder_uids[n] for n in folders])
+        from ingetrazo_core import add_template_layers
+        self._added = add_template_layers(scene, self._template)
         if any(self._added):
             scene.version += 1
 
@@ -1381,12 +1383,11 @@ class AddDimensionCommand(Command):
     def do(self, scene) -> None:
         if hasattr(self.dimension, "bind"):
             self.dimension.bind(scene)
-        scene.dimensions.append(self.dimension)
+        _presentation.add_item(scene.dimensions, self.dimension)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        if self.dimension in scene.dimensions:
-            scene.dimensions.remove(self.dimension)
+        _presentation.remove_item(scene.dimensions, self.dimension)
         scene.version += 1
 
 
@@ -1405,17 +1406,11 @@ class DeleteDimensionsCommand(Command):
         self._restore: list[tuple[int, object]] = []
 
     def do(self, scene) -> None:
-        self._restore = [(scene.dimensions.index(d), d)
-                         for d in self._dims if d in scene.dimensions]
-        for d in self._dims:
-            if d in scene.dimensions:
-                scene.dimensions.remove(d)
-            scene.selection.discard(d)
+        self._restore = _presentation.delete_items(scene.dimensions, self._dims, scene.selection.discard)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        for i, d in sorted(self._restore):
-            scene.dimensions.insert(i, d)
+        _presentation.restore_items(scene.dimensions, self._restore)
         scene.version += 1
 
 
@@ -1435,12 +1430,11 @@ class AddTextLabelCommand(Command):
         self.label = label
 
     def do(self, scene) -> None:
-        scene.text_labels.append(self.label)
+        _presentation.add_item(scene.text_labels, self.label)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        if self.label in scene.text_labels:
-            scene.text_labels.remove(self.label)
+        _presentation.remove_item(scene.text_labels, self.label)
         scene.selection.discard(self.label)
         scene.version += 1
 
@@ -1459,13 +1453,11 @@ class MoveTextLabelsCommand(Command):
         self._delta = QVector3D(delta)
 
     def do(self, scene) -> None:
-        for t in self._labels:
-            t.offset = t.offset + self._delta
+        _presentation.translate_items(self._labels, "offset", self._delta)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        for t in self._labels:
-            t.offset = t.offset - self._delta
+        _presentation.translate_items(self._labels, "offset", -self._delta)
         scene.version += 1
 
 
@@ -1486,9 +1478,7 @@ class MoveGuidesCommand(Command):
     @staticmethod
     def shift(guide, step: QVector3D) -> None:
         """Apply one step — the tool's live preview uses it too."""
-        guide.point = guide.point + step
-        if guide.origin is not None:
-            guide.origin = guide.origin + step
+        return _presentation.shift_guide(guide, step)
 
     def do(self, scene) -> None:
         for g in self._guides:
@@ -1523,21 +1513,12 @@ class RotateGuidesCommand(Command):
     @staticmethod
     def state(guide) -> tuple:
         """What a rotation changes, copied — the tool's preview keeps it."""
-        return (guide, QVector3D(guide.point),
-                None if guide.direction is None else QVector3D(guide.direction),
-                None if guide.origin is None else QVector3D(guide.origin))
+        return _presentation.guide_state(guide)
 
     @staticmethod
     def place(state, m) -> None:
         """Put a guide at ``m`` applied to its ``state`` (``None``: as it was)."""
-        guide, point, direction, origin = state
-        guide.point = m.map(point) if m is not None else QVector3D(point)
-        if direction is not None:
-            d = m.mapVector(direction) if m is not None else direction
-            guide.direction = (d.normalized() if d.length() > 1e-12
-                               else QVector3D(direction))
-        if origin is not None:
-            guide.origin = m.map(origin) if m is not None else QVector3D(origin)
+        return _presentation.place_guide(state, m)
 
     def do(self, scene) -> None:
         self._before = [self.state(g) for g in self._guides]
@@ -1573,18 +1554,11 @@ class MoveDimensionsCommand(Command):
     @staticmethod
     def shift(dim, mode: str, step: QVector3D) -> None:
         """Apply one step — the tool's live preview uses it too."""
-        if mode == "line":
-            ab = dim.b - dim.a
-            length = ab.length()
-            if length > 1e-9:
-                d = ab / length
-                step = step - d * QVector3D.dotProduct(step, d)
-            dim.offset = dim.offset + step
-        else:
-            if dim.anchor_a is None and dim.attachment_a is None:
-                dim.a = dim.a + step
-            if dim.anchor_b is None and dim.attachment_b is None:
-                dim.b = dim.b + step
+        line = mode == "line"
+        return _presentation.shift_dimension(
+            dim, line, step,
+            not line and dim.anchor_a is None and dim.attachment_a is None,
+            not line and dim.anchor_b is None and dim.attachment_b is None)
 
     def do(self, scene) -> None:
         for dim, mode in self._modes.items():
@@ -1608,11 +1582,11 @@ class EditTextLabelCommand(Command):
         self._old = label.text
 
     def do(self, scene) -> None:
-        self.label.text = self._new
+        _presentation.set_text(self.label, self._new)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        self.label.text = self._old
+        _presentation.set_text(self.label, self._old)
         scene.version += 1
 
 
@@ -1628,11 +1602,11 @@ class EditDimensionTextCommand(Command):
         self._old = getattr(dim, "text", None)
 
     def do(self, scene) -> None:
-        self.dim.text = self._new
+        _presentation.set_text(self.dim, self._new)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        self.dim.text = self._old
+        _presentation.set_text(self.dim, self._old)
         scene.version += 1
 
 
@@ -1651,17 +1625,11 @@ class DeleteTextLabelsCommand(Command):
         self._restore: list[tuple[int, object]] = []
 
     def do(self, scene) -> None:
-        self._restore = [(scene.text_labels.index(t), t)
-                         for t in self._labels if t in scene.text_labels]
-        for t in self._labels:
-            if t in scene.text_labels:
-                scene.text_labels.remove(t)
-            scene.selection.discard(t)
+        self._restore = _presentation.delete_items(scene.text_labels, self._labels, scene.selection.discard)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        for i, t in sorted(self._restore):
-            scene.text_labels.insert(i, t)
+        _presentation.restore_items(scene.text_labels, self._restore)
         scene.version += 1
 
 
@@ -1682,12 +1650,11 @@ class AddGuideCommand(Command):
         self.guide = guide
 
     def do(self, scene) -> None:
-        scene.guides.append(self.guide)
+        _presentation.add_item(scene.guides, self.guide)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        if self.guide in scene.guides:
-            scene.guides.remove(self.guide)
+        _presentation.remove_item(scene.guides, self.guide)
         scene.version += 1
 
 
@@ -1710,20 +1677,15 @@ class PlaceSectionPlaneCommand(Command):
         self._prev_active = None
 
     def do(self, scene) -> None:
-        self._prev_active = scene.active_section()
-        scene.section_planes.append(self.plane)
-        scene.set_active_section(self.plane)
+        self._prev_active = _presentation.activate_section(scene, self.plane, True)
         scene.selection.clear()
         scene.selection.add(self.plane)
         scene.bump_sections()
 
     def undo(self, scene) -> None:
-        if self.plane in scene.section_planes:
-            scene.section_planes.remove(self.plane)
+        _presentation.remove_item(scene.section_planes, self.plane)
         scene.selection.discard(self.plane)
-        prev = self._prev_active
-        scene.set_active_section(
-            prev if prev in scene.section_planes else None)
+        _presentation.restore_active(scene, self._prev_active)
         scene.bump_sections()
 
 
@@ -1743,17 +1705,11 @@ class DeleteSectionPlanesCommand(Command):
         self._restore: list[tuple[int, object]] = []
 
     def do(self, scene) -> None:
-        self._restore = [(scene.section_planes.index(p), p)
-                         for p in self._planes if p in scene.section_planes]
-        for p in self._planes:
-            if p in scene.section_planes:
-                scene.section_planes.remove(p)
-            scene.selection.discard(p)
+        self._restore = _presentation.delete_items(scene.section_planes, self._planes, scene.selection.discard)
         scene.bump_sections()
 
     def undo(self, scene) -> None:
-        for i, p in sorted(self._restore):
-            scene.section_planes.insert(i, p)
+        _presentation.restore_items(scene.section_planes, self._restore)
         scene.bump_sections()
 
 
@@ -1791,14 +1747,11 @@ class SetActiveSectionCommand(Command):
         self._prev = None
 
     def do(self, scene) -> None:
-        self._prev = scene.active_section()
-        scene.set_active_section(self.plane)
+        self._prev = _presentation.activate_section(scene, self.plane, False)
         scene.bump_sections()
 
     def undo(self, scene) -> None:
-        prev = self._prev
-        scene.set_active_section(
-            prev if prev in scene.section_planes else None)
+        _presentation.restore_active(scene, self._prev)
         scene.bump_sections()
 
 
@@ -1821,22 +1774,15 @@ class SetSectionModeCommand(Command):
         self._prev = None
 
     def do(self, scene) -> None:
-        self._prev = (scene.active_section(),
-                      bool(getattr(self.plane, "hidden", False)))
-        if self.cut:
-            scene.set_active_section(self.plane)
-        elif self.plane.active:
-            scene.set_active_section(None)
-        self.plane.hidden = not self.frame
+        self._prev = _presentation.section_mode(scene, self.plane, self.cut, self.frame)
         if self.plane.hidden:
             scene.selection.discard(self.plane)
         scene.bump_sections()
 
     def undo(self, scene) -> None:
-        active, hidden = self._prev
-        scene.set_active_section(
-            active if active in scene.section_planes else None)
-        self.plane.hidden = hidden
+        active, self_hidden = self._prev
+        _presentation.restore_active(scene, active)
+        self.plane.hidden = self_hidden
         scene.bump_sections()
 
 
@@ -1855,13 +1801,11 @@ class SetSectionFillCommand(Command):
         self._prev = None
 
     def do(self, scene) -> None:
-        prev = getattr(self.plane, "fill", None)
-        self._prev = dict(prev) if prev else None
-        self.plane.fill = dict(self.fill) if self.fill else None
+        self._prev = _presentation.set_section_fill(self.plane, self.fill)
         scene.bump_sections()
 
     def undo(self, scene) -> None:
-        self.plane.fill = dict(self._prev) if self._prev else None
+        _presentation.set_section_fill(self.plane, self._prev)
         scene.bump_sections()
 
 
@@ -1881,12 +1825,11 @@ class RenameSectionPlaneCommand(Command):
         self._prev = None
 
     def do(self, scene) -> None:
-        self._prev = (self.plane.name, self.plane.symbol)
-        self.plane.name, self.plane.symbol = self.name, self.symbol
+        self._prev = _presentation.set_section_label(self.plane, self.name, self.symbol)
         scene.bump_sections()
 
     def undo(self, scene) -> None:
-        self.plane.name, self.plane.symbol = self._prev
+        _presentation.set_section_label(self.plane, *self._prev)
         scene.bump_sections()
 
 
@@ -1899,12 +1842,11 @@ class AddSheetCommand(Command):
         self.sheet = sheet
 
     def do(self, scene) -> None:
-        scene.compositions.append(self.sheet)
+        _presentation.add_item(scene.compositions, self.sheet)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        if self.sheet in scene.compositions:
-            scene.compositions.remove(self.sheet)
+        _presentation.remove_item(scene.compositions, self.sheet)
         scene.version += 1
 
 
@@ -1919,12 +1861,11 @@ class PlaceViewCommand(Command):
         self.frame = frame
 
     def do(self, scene) -> None:
-        self.sheet.frames.append(self.frame)
+        _presentation.add_item(self.sheet.frames, self.frame)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        if self.frame in self.sheet.frames:
-            self.sheet.frames.remove(self.frame)
+        _presentation.remove_item(self.sheet.frames, self.frame)
         scene.version += 1
 
 
@@ -1940,16 +1881,11 @@ class MoveSheetCommand(Command):
         self._old = None
 
     def do(self, scene) -> None:
-        comps = scene.compositions
-        self._old = comps.index(self.sheet)
-        comps.remove(self.sheet)
-        comps.insert(max(0, min(self.index, len(comps))), self.sheet)
+        self._old = _presentation.move_item(scene.compositions, self.sheet, self.index, True, False)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        comps = scene.compositions
-        comps.remove(self.sheet)
-        comps.insert(self._old, self.sheet)
+        _presentation.move_item(scene.compositions, self.sheet, self._old, False, False)
         scene.version += 1
 
 
@@ -1977,25 +1913,11 @@ class CreatePlanCommand(Command):
         self._prev_active = None
 
     def do(self, scene) -> None:
-        self._prev_active = scene.active_section()
-        if self.add_plane:
-            scene.section_planes.append(self.plane)
-        scene.set_active_section(self.plane)
-        scene.saved_views.append(self.view)
-        if self.sheet is not None:
-            scene.compositions.append(self.sheet)
+        self._prev_active = _presentation.make_plan(scene, self.plane, self.view, self.sheet, self.add_plane)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        if self.sheet is not None and self.sheet in scene.compositions:
-            scene.compositions.remove(self.sheet)
-        if self.view in scene.saved_views:
-            scene.saved_views.remove(self.view)
-        if self.add_plane and self.plane in scene.section_planes:
-            scene.section_planes.remove(self.plane)
-        prev = self._prev_active
-        scene.set_active_section(
-            prev if prev in scene.section_planes else None)
+        _presentation.remove_plan(scene, self.plane, self.view, self.sheet, self.add_plane, self._prev_active)
         scene.selection.discard(self.plane)
         scene.version += 1
 
@@ -2040,17 +1962,11 @@ class AddSceneCommand(Command):
         self.index = index
 
     def do(self, scene) -> None:
-        views = scene.saved_views
-        at = len(views) if self.index is None else self.index
-        views.insert(max(0, min(at, len(views))), self.view)
-        # Filed in a folder, it goes with the rest of that folder.
-        from core.scene_folders import sync_order
-        sync_order(scene)
+        _presentation.insert_scene(scene, self.view, self.index)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        if self.view in scene.saved_views:
-            scene.saved_views.remove(self.view)
+        _presentation.remove_item(scene.saved_views, self.view)
         scene.version += 1
 
 
@@ -2065,15 +1981,11 @@ class DeleteScenesCommand(Command):
         self._at: list = []
 
     def do(self, scene) -> None:
-        self._at = [(scene.saved_views.index(v), v) for v in self.views
-                    if v in scene.saved_views]
-        for _i, v in self._at:
-            scene.saved_views.remove(v)
+        self._at = _presentation.delete_items(scene.saved_views, self.views, None)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        for i, v in sorted(self._at, key=lambda t: t[0]):
-            scene.saved_views.insert(i, v)
+        _presentation.restore_items(scene.saved_views, self._at)
         scene.version += 1
 
 
@@ -2093,18 +2005,12 @@ class UpdateSceneCommand(Command):
         self._after: Optional[dict] = None
 
     def do(self, scene) -> None:
-        self._before = {k: getattr(self.view, k) for k in self.view._record_fields}
-        if self._after is None:          # redo puts back the same capture
-            self.view.recapture(scene, self.camera, self.style)
-            self._after = {k: getattr(self.view, k) for k in self.view._record_fields}
-        else:
-            for k, value in self._after.items():
-                setattr(self.view, k, value)
+        self._before, self._after = _presentation.update_scene(
+            scene, self.view, self.camera, self.style, self._after)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        for k, value in self._before.items():
-            setattr(self.view, k, value)
+        _presentation.restore_fields(self.view, self._before)
         scene.version += 1
 
 
@@ -2124,15 +2030,10 @@ class SceneTreeCommand(Command):
         self._after: Optional[tuple] = None
 
     def do(self, scene) -> None:
-        from core import scene_folders as SF
-        if self._after is not None:
-            SF.restore(scene, self._after)
-        else:
-            self._before = SF.state(scene)
-            if not self.change(scene):
-                SF.restore(scene, self._before)
-                raise CommandRejected("Nothing to change")
-            self._after = SF.state(scene)
+        state = _presentation.edit_view_tree(scene, self.change, self._before, self._after)
+        if state is None:
+            raise CommandRejected("Nothing to change")
+        self._before, self._after = state
         scene.version += 1
 
     def undo(self, scene) -> None:
@@ -2156,13 +2057,11 @@ class MoveSectionPlanesCommand(Command):
         self.delta = QVector3D(delta)
 
     def do(self, scene) -> None:
-        for p in self._planes:
-            p.point = p.point + self.delta
+        _presentation.translate_items(self._planes, "point", self.delta)
         scene.bump_sections()
 
     def undo(self, scene) -> None:
-        for p in self._planes:
-            p.point = p.point - self.delta
+        _presentation.translate_items(self._planes, "point", -self.delta)
         scene.bump_sections()
 
 
@@ -2184,11 +2083,7 @@ class RotateSectionPlanesCommand(Command):
 
     def _apply(self, scene, deg: float) -> None:
         m = rotation_matrix(self.centre, self.axis, deg)
-        for p in self._planes:
-            p.point = m.map(p.point)
-            n = m.mapVector(p.normal)
-            if n.length() > 1e-12:
-                p.normal = n.normalized()
+        _presentation.rotate_sections(self._planes, m)
         scene.bump_sections()
 
     def do(self, scene) -> None:
@@ -2213,8 +2108,7 @@ class ChangeGuideCommand(Command):
         self.old: Optional[QVector3D] = None
 
     def do(self, scene) -> None:
-        self.old = self.guide.direction
-        self.guide.direction = QVector3D(self.new)
+        self.old = _presentation.set_direction(self.guide, self.new)
         scene.version += 1
 
     def undo(self, scene) -> None:
@@ -2240,17 +2134,11 @@ class DeleteGuidesCommand(Command):
         self._restore: list[tuple[int, object]] = []
 
     def do(self, scene) -> None:
-        self._restore = [(scene.guides.index(g), g)
-                         for g in self._guides if g in scene.guides]
-        for g in self._guides:
-            if g in scene.guides:
-                scene.guides.remove(g)
-            scene.selection.discard(g)
+        self._restore = _presentation.delete_items(scene.guides, self._guides, scene.selection.discard)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        for i, g in sorted(self._restore):
-            scene.guides.insert(i, g)
+        _presentation.restore_items(scene.guides, self._restore)
         scene.version += 1
 
 
@@ -2278,26 +2166,16 @@ class AddImagePlaneCommand(Command):
         self._made_layer = False
 
     def do(self, scene) -> None:
-        from core.layers import Layer
-        name = getattr(self.image, "layer", None)
-        self._made_layer = False
-        if name and scene.layer(name) is None:
-            scene.layers.append(Layer(name))
-            self._made_layer = True
-        scene.image_planes.append(self.image)
+        self._made_layer = _references.add_image(scene, self.image)
         scene.selection.clear()
         scene.selection.add(self.image)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        if self.image in scene.image_planes:
-            scene.image_planes.remove(self.image)
+        _presentation.remove_item(scene.image_planes, self.image)
         scene.selection.discard(self.image)
         if self._made_layer:
-            name = getattr(self.image, "layer", None)
-            ly = scene.layer(name) if name else None
-            if ly is not None:
-                scene.layers.remove(ly)
+            _references.remove_image_layer(scene, self.image)
             self._made_layer = False
         scene.version += 1
 
@@ -2318,17 +2196,11 @@ class DeleteImagePlanesCommand(Command):
         self._restore: list[tuple[int, object]] = []
 
     def do(self, scene) -> None:
-        self._restore = [(scene.image_planes.index(im), im)
-                         for im in self._images if im in scene.image_planes]
-        for im in self._images:
-            if im in scene.image_planes:
-                scene.image_planes.remove(im)
-            scene.selection.discard(im)
+        self._restore = _presentation.delete_items(scene.image_planes, self._images, scene.selection.discard)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        for i, im in sorted(self._restore, key=lambda t: t[0]):
-            scene.image_planes.insert(i, im)
+        _presentation.restore_items(scene.image_planes, self._restore)
         scene.version += 1
 
 
@@ -2351,26 +2223,13 @@ class TransformImagePlaneCommand(Command):
         self._old: tuple | None = None
 
     def do(self, scene) -> None:
-        from ingetrazo_core import Vec3 as QVector3D
-        im = self.image
-        self._old = (QVector3D(im.origin), QVector3D(im.u), QVector3D(im.v))
-        origin, u, v = self._new
-        if origin is not None:
-            im.origin = QVector3D(origin)
-        if u is not None:
-            im.u = QVector3D(u)
-        if v is not None:
-            im.v = QVector3D(v)
+        self._old = _references.set_image_frame(self.image, self._new)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        from ingetrazo_core import Vec3 as QVector3D
         if self._old is None:
             return
-        origin, u, v = self._old
-        self.image.origin = QVector3D(origin)
-        self.image.u = QVector3D(u)
-        self.image.v = QVector3D(v)
+        _references.set_image_frame(self.image, self._old)
         scene.version += 1
 
 
@@ -2408,8 +2267,7 @@ class MoveImagePlanesCommand(Command):
         self.delta = QVector3D(delta)
 
     def _apply(self, scene, delta: QVector3D) -> None:
-        for im in self._images:
-            im.origin = im.origin + delta
+        _presentation.translate_items(self._images, "origin", delta)
         scene.version += 1
 
     def do(self, scene) -> None:
@@ -2436,11 +2294,7 @@ class RotateImagePlanesCommand(Command):
         self.deg = float(deg)
 
     def _apply(self, scene, deg: float) -> None:
-        m = rotation_matrix(self.centre, self.axis, deg)
-        for im in self._images:
-            im.origin = m.map(im.origin)
-            im.u = m.mapVector(im.u)
-            im.v = m.mapVector(im.v)
+        _references.transform_images(self._images, rotation_matrix(self.centre, self.axis, deg))
         scene.version += 1
 
     def do(self, scene) -> None:
@@ -2470,11 +2324,7 @@ class ScaleImagePlanesCommand(Command):
                        if isinstance(factor, (tuple, list)) else float(factor))
 
     def _apply(self, scene, factor: float) -> None:
-        m = scale_matrix(self.anchor, factor, self.axes)
-        for im in self._images:
-            im.origin = m.map(im.origin)
-            im.u = m.mapVector(im.u)
-            im.v = m.mapVector(im.v)
+        _references.transform_images(self._images, scale_matrix(self.anchor, factor, self.axes))
         scene.version += 1
 
     def do(self, scene) -> None:
@@ -2498,12 +2348,11 @@ class AddGeoPathCommand(Command):
         self.path = path
 
     def do(self, scene) -> None:
-        scene.geo_paths.append(self.path)
+        _presentation.add_item(scene.geo_paths, self.path)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        if self.path in scene.geo_paths:
-            scene.geo_paths.remove(self.path)
+        _presentation.remove_item(scene.geo_paths, self.path)
         scene.selection.discard(self.path)
         scene.version += 1
 
@@ -2566,13 +2415,11 @@ class AddGeoPointsCommand(Command):
         if self._datum is not None:
             self._prev_datum = scene.georef
             scene.georef = self._datum
-        scene.geo_points.extend(self._points)
+        _definitions.append_members(scene.geo_points, self._points)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        for p in self._points:
-            if p in scene.geo_points:
-                scene.geo_points.remove(p)
+        _definitions.remove_members(scene.geo_points, self._points)
         if self._datum is not None:
             scene.georef = self._prev_datum
         scene.version += 1
@@ -2588,16 +2435,11 @@ class DeleteGeoPointsCommand(Command):
         self._restore: list[tuple[int, object]] = []
 
     def do(self, scene) -> None:
-        self._restore = [(scene.geo_points.index(p), p)
-                         for p in self._points if p in scene.geo_points]
-        for p in self._points:
-            if p in scene.geo_points:
-                scene.geo_points.remove(p)
+        self._restore = _presentation.delete_items(scene.geo_points, self._points, None, False)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        for i, p in sorted(self._restore):
-            scene.geo_points.insert(i, p)
+        _presentation.restore_items(scene.geo_points, self._restore)
         scene.version += 1
 
 
@@ -2616,17 +2458,11 @@ class DeleteGeoPathsCommand(Command):
         self._restore: list[tuple[int, object]] = []
 
     def do(self, scene) -> None:
-        self._restore = [(scene.geo_paths.index(p), p)
-                         for p in self._paths if p in scene.geo_paths]
-        for p in self._paths:
-            if p in scene.geo_paths:
-                scene.geo_paths.remove(p)
-            scene.selection.discard(p)
+        self._restore = _presentation.delete_items(scene.geo_paths, self._paths, scene.selection.discard)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        for i, p in sorted(self._restore):
-            scene.geo_paths.insert(i, p)
+        _presentation.restore_items(scene.geo_paths, self._restore)
         scene.version += 1
 
 
@@ -2639,8 +2475,7 @@ class ToggleGeoPathClosedCommand(Command):
         self._paths = list(paths)
 
     def _flip(self, scene) -> None:
-        for p in self._paths:
-            p.closed = not p.closed
+        _references.toggle_paths(self._paths)
         scene.version += 1
 
     do = _flip
@@ -2668,19 +2503,11 @@ class SetGeoPathSurfaceCommand(Command):
         self._prev: list = []
 
     def do(self, scene) -> None:
-        self._prev = [(p, p.surface, p.closed) for p in self._paths]
-        for p in self._paths:
-            p.surface = self.mode
-            if self.mode:
-                p.closed = True
-            p._surface_tris = None
+        self._prev = _references.path_surfaces(self._paths, self.mode)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        for p, surface, closed in self._prev:
-            p.surface = surface
-            p.closed = closed
-            p._surface_tris = None
+        _references.restore_surfaces(self._prev)
         scene.version += 1
 
 
@@ -2697,14 +2524,11 @@ class MoveGeoPathNodeCommand(Command):
         self._old = None
 
     def do(self, scene) -> None:
-        from ingetrazo_core import Vec3 as QVector3D
-        self._old = QVector3D(self.path.points[self.index])
-        self.path.points[self.index] = QVector3D(self._new)
+        self._old = _references.move_node(self.path, self.index, self._new)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        from ingetrazo_core import Vec3 as QVector3D
-        self.path.points[self.index] = QVector3D(self._old)
+        _references.move_node(self.path, self.index, self._old)
         scene.version += 1
 
 
@@ -3023,21 +2847,7 @@ class FlipGroupsCommand(MeshCommand):
         return self.meshes()
 
     def _flip(self, scene) -> None:
-        m = mirror_matrix(self.centre, self.axis)
-        for g in self._groups:
-            pose = _member_placement(scene, g)
-            if pose is not None:
-                g.xform = _edit_local_transform(scene, g, m) * pose
-                continue
-            for v in list(g.mesh.vertices):
-                g.mesh.move_vertex(v, m.map(v.position) - v.position)
-            from core.group import carry_axes
-            carry_axes(g, m)                  # an involution, like the rest
-            from core.store_mesh import StoreMesh
-            if isinstance(g.mesh, StoreMesh):
-                g.mesh._store.reverse_faces(g.mesh._store.keys("face"))
-            else:
-                _reverse_faces(g.mesh.faces)
+        _transform.flip_groups(scene, self._groups, mirror_matrix(self.centre, self.axis))
         if _doc.ENABLED and self.doc_undo(scene):
             _dirty_placements(self._groups)
         else:
@@ -3126,43 +2936,17 @@ class RotateGroupCommand(GroupTransformCommand):
         self.center = QVector3D(center)
         self.axis = QVector3D(axis)
         self.degrees = degrees
-        self._before: Optional[dict] = None
-        self._after: Optional[dict] = None
+        self._transform = _transform.GroupTransform()
+
+    def _matrix(self, reverse):
+        return rotation_matrix(self.center, self.axis, -self.degrees if reverse else self.degrees)
 
     def do(self, scene) -> None:
-        pose = _member_placement(scene, self.group)
-        if pose is not None:
-            m = rotation_matrix(self.center, self.axis, self.degrees)
-            self.group.xform = _edit_local_transform(scene, self.group, m) * pose
+        if self._transform.apply(scene, self.group, self._matrix, False, self._journal_geometry):
             scene.version += 1
-            return
-        gmesh = self.group.mesh
-        if self._after is not None:  # redo
-            gmesh.restore_state(self._after)
-            self.group.axes = self._axes_after
-            scene.version += 1
-            return
-        self._before = self._reference_snapshot(gmesh)
-        self._axes_before = self.group.axes
-        m = rotation_matrix(self.center, self.axis, self.degrees)
-        for v in list(gmesh.vertices):
-            gmesh.move_vertex(v, m.map(v.position) - v.position)
-        from core.group import _remap_uvws, carry_axes
-        _remap_uvws(gmesh, m)                 # the texture turns with it
-        carry_axes(self.group, m)             # and so do its axes (#44)
-        self._axes_after = self.group.axes
-        self._after = self._reference_snapshot(gmesh)
-        scene.version += 1
 
     def undo(self, scene) -> None:
-        if getattr(self.group, "xform", None) is not None:
-            m = rotation_matrix(self.center, self.axis, -self.degrees)
-            self.group.xform = _edit_local_transform(scene, self.group, m) * self.group.xform
-            scene.version += 1
-            return
-        if self._before is not None:
-            self.group.mesh.restore_state(self._before)
-            self.group.axes = self._axes_before
+        if self._transform.apply(scene, self.group, self._matrix, True, self._journal_geometry):
             scene.version += 1
 
 
@@ -3240,43 +3024,18 @@ class ScaleGroupCommand(GroupTransformCommand):
         self.center = QVector3D(center)
         self.factor = factor
         self.axes = axes
-        self._before: Optional[dict] = None
-        self._after: Optional[dict] = None
+        self._transform = _transform.GroupTransform()
+
+    def _matrix(self, reverse):
+        factor = invert_scale_factor(self.factor) if reverse else self.factor
+        return scale_matrix(self.center, factor, self.axes)
 
     def do(self, scene) -> None:
-        pose = _member_placement(scene, self.group)
-        if pose is not None:
-            m = scale_matrix(self.center, self.factor, self.axes)
-            self.group.xform = _edit_local_transform(scene, self.group, m) * pose
+        if self._transform.apply(scene, self.group, self._matrix, False, self._journal_geometry):
             scene.version += 1
-            return
-        gmesh = self.group.mesh
-        if self._after is not None:  # redo
-            gmesh.restore_state(self._after)
-            self.group.axes = self._axes_after
-            scene.version += 1
-            return
-        self._before = self._reference_snapshot(gmesh)
-        self._axes_before = self.group.axes
-        m = scale_matrix(self.center, self.factor, self.axes)
-        for v in list(gmesh.vertices):
-            gmesh.move_vertex(v, m.map(v.position) - v.position)
-        from core.group import _remap_uvws, carry_axes
-        _remap_uvws(gmesh, m)                 # the texture scales with it
-        carry_axes(self.group, m)             # the origin moves with it (#44)
-        self._axes_after = self.group.axes
-        self._after = self._reference_snapshot(gmesh)
-        scene.version += 1
 
     def undo(self, scene) -> None:
-        if getattr(self.group, "xform", None) is not None:
-            m = scale_matrix(self.center, invert_scale_factor(self.factor), self.axes)
-            self.group.xform = _edit_local_transform(scene, self.group, m) * self.group.xform
-            scene.version += 1
-            return
-        if self._before is not None:
-            self.group.mesh.restore_state(self._before)
-            self.group.axes = self._axes_before
+        if self._transform.apply(scene, self.group, self._matrix, True, self._journal_geometry):
             scene.version += 1
 
 
@@ -3809,41 +3568,9 @@ class MakeGroupCommand(MeshCommand):
         # share the definition through the existing prototype machinery.
         self._component = component
         self._name = name
-        faces = list(faces)
-        # Attrs (colour, texture, layer, IFC tag) must travel into the group's
-        # fresh mesh with each face — grouping a painted set used to strip it.
-        self._face_loops = [
-            ([QVector3D(v) for v in f.vertices],
-             [[QVector3D(v) for v in h] for h in f.holes],
-             dict(f.attrs))
-            for f in faces
-        ]
-        self._edge_ends = [(QVector3D(e.a), QVector3D(e.b)) for e in edges]
-        # Edge flags must travel into the group's fresh mesh: without them,
-        # grouping a smooth cylinder suddenly shows every facet seam (soft
-        # edges hidden in the loose mesh, visible in the group), its rims stop
-        # selecting as whole curves, and a HIDDEN edge comes back from the
-        # dead — «oculté una arista, agrupo el dibujo y la arista vuelve a
-        # aparecer» (Marco, 2026-09-10). They travel as one tuple now, so the
-        # next flag added to an edge cannot be forgotten here.
-        self._flagged: list = []
-
-        def note(e):
-            if e is not None and not edge_is_plain(e):
-                self._flagged.append(
-                    (QVector3D(e.a), QVector3D(e.b), edge_flags(e)))
-
-        for f in faces:
-            for lp in (f.loop, *f.hole_loops):
-                n = len(lp)
-                for i in range(n):
-                    va, vb = lp[i], lp[(i + 1) % n]
-                    note(next((k for k in va.edges if k.other(va) == vb),
-                              None))
-        for e in edges:
-            note(e)
-        self.snapshot: Optional[dict] = None
-        self.group: Optional[Group] = None
+        from ingetrazo_core import GroupGeometry
+        self._geometry = GroupGeometry(faces, edges)
+        self.snapshot = self.group = None
 
     def do(self, scene) -> None:
         m = scene.mesh
@@ -3863,111 +3590,11 @@ class MakeGroupCommand(MeshCommand):
         scene.version += 1
 
     def _build(self, scene) -> Group:
-        # The group is a fresh copy built from the captured positions. A
-        # COMPONENT shifts them into local coordinates around the origin.
-        origin = QVector3D(0.0, 0.0, 0.0)
-        # Made inside a turned group, the new one lines up with THAT
-        # context's axes (issue #44): its origin is the lowest
-        # corner measured along them, not along the world's.
-        frame = getattr(scene, "drawing_frame", None)
-        pts = [p for loop, holes, _a in self._face_loops
-               for lst in (loop, *holes) for p in lst]
-        pts += [p for pair in self._edge_ends for p in pair]
-        rot = None
-        if frame is not None and pts:
-            from core.group import frame_axes
-            fo, fx, fy, fz = frame_axes(frame)
-
-            def loc(p):
-                d = QVector3D(p) - fo
-                return (QVector3D.dotProduct(d, fx), QVector3D.dotProduct(d, fy),
-                        QVector3D.dotProduct(d, fz))
-            ls = [loc(p) for p in pts]
-            lo = (min(q[0] for q in ls), min(q[1] for q in ls),
-                  min(q[2] for q in ls))
-            corner = fo + fx * lo[0] + fy * lo[1] + fz * lo[2]
-            rot = (fx, fy, fz)
-        if self._component and pts:
-            if rot is not None:
-                origin = corner
-            else:
-                origin = QVector3D(min(p.x() for p in pts),
-                                   min(p.y() for p in pts),
-                                   min(p.z() for p in pts))
-
-        def L(p):
-            if self._component and rot is not None:
-                d = QVector3D(p) - origin       # into the context's axes
-                return QVector3D(QVector3D.dotProduct(d, rot[0]),
-                                 QVector3D.dotProduct(d, rot[1]),
-                                 QVector3D.dotProduct(d, rot[2]))
-            return QVector3D(p) - origin
-
-        gmesh = Mesh()
-        for loop, holes, attrs in self._face_loops:
-            gf = gmesh.add_face([L(p) for p in loop],
-                                [[L(p) for p in h] for h in holes] or None)
-            if attrs:
-                gf.attrs.update(attrs)
-        for a, b in self._edge_ends:
-            la, lb = L(a), L(b)
-            if _key(la) == _key(lb):
-                continue        # a zero-length edge is no edge (#341)
-            gmesh.add_edge(la, lb)
-        for a, b, flags in self._flagged:
-            va, vb = gmesh.vertex_at(L(a)), gmesh.vertex_at(L(b))
-            e = (gmesh.find_edge(va, vb)
-                 if va is not None and vb is not None else None)
-            if e is not None:
-                stamp_edge_flags(e, flags)
-        group = Group(gmesh, name=self._name)
-        if self._component:
-            from ingetrazo_core import Matrix4 as QMatrix4x4
-            if rot is not None:
-                from core.axes import frame_matrix
-                group.xform = frame_matrix(origin, *rot)
-            else:
-                t = QMatrix4x4()
-                t.translate(origin)
-                group.xform = t
-        elif rot is not None:
-            from core.axes import frame_matrix
-            group.axes = frame_matrix(corner, *rot)
-        if scene.__dict__.get("_groups_owner") is not None and getattr(scene.mesh, "_instance_definition", None) is not None:
-            inverse, _ = scene.mesh._store.tool_placement().inverted()
-            if group.xform is None:
-                from core.group import carry_axes, transformed_mesh
-                group.mesh = transformed_mesh(group.mesh, inverse)
-                carry_axes(group, inverse)
-            else:
-                group.xform = inverse * group.xform
-        return group
+        return self._geometry.build(scene, self._component, self._name)
 
     def _take_off_loose(self, scene) -> None:
         m = scene.mesh
-        # Remove the grouped geometry from the loose mesh.
-        face_keysets = [frozenset(_key(p) for p in loop)
-                        for loop, _h, _a in self._face_loops]
-        for f in list(m.faces):
-            if frozenset(_key(p) for p in f.vertices) in face_keysets:
-                m.remove_face(f)
-                scene.selection.discard(f)
-        grouped = {_key(p) for loop, holes, _a in self._face_loops
-                   for lst in (loop, *holes) for p in lst}
-        sel_edges = {frozenset((_key(a), _key(b))) for a, b in self._edge_ends}
-        for e in list(m.edges):
-            ek = frozenset((_key(e.a), _key(e.b)))
-            if not e.faces and (ek in sel_edges or
-                                (_key(e.a) in grouped and _key(e.b) in grouped)):
-                m.remove_edge(e)
-                scene.selection.discard(e)
-        # The corners only the grouped geometry used are left behind by the
-        # removals above — they do not cascade on purpose — so a box handed
-        # to a component left eight invisible vertices in the loose mesh,
-        # still in the position registry, ready to catch the next thing
-        # drawn there. Sweep them in the same step: the snapshot below takes
-        # them back on undo.
-        m.purge_debris()
+        return self._geometry.take_off(m, scene.selection.discard)
 
     def undo(self, scene) -> None:
         if self.group in scene.groups:
@@ -3991,40 +3618,23 @@ class MakeUniqueCommand(Command):
     def __init__(self, group, rename: bool = False) -> None:
         self.group = group
         self._rename = rename
-        self._name = None
-        self._proto = None
-        self._xform = None
-        self._children = None
-        self._axes = None
-        self._component = True
+        self._prior = None
 
     def do(self, scene) -> None:
-        if self.group.ext and self.group.ext.get("link"):
-            return          # a linked file stays its source's (make_unique)
-        self._proto = self.group.mesh
-        self._xform = self.group.xform
-        self._children = self.group.children
-        self._axes = self.group.axes
-        self._component = self.group.component
-        self._name = self.group.name
-        if self._rename and self.group.name:
-            from core.kept_components import names_in_use, numbered_name
-            taken = names_in_use(scene, skip=self.group)
-            if self.group.name in taken:
-                self.group.name = numbered_name(self.group.name, taken)
-        self.group.make_unique()
-        scene.version += 1
+        from ingetrazo_core import make_placement_unique
+        self._prior = make_placement_unique(scene, self.group, self._rename, True)
+        if self._prior is not None:
+            scene.version += 1
+
+    def bind_transaction(self, txn):
+        super().bind_transaction(txn)
+        self._prior = None
 
     def undo(self, scene) -> None:
-        if self._proto is None:
-            return
-        self.group.mesh = self._proto
-        self.group.xform = self._xform
-        self.group.children = self._children or []
-        self.group.axes = self._axes
-        self.group.component = self._component
-        self.group.name = self._name
-        scene.version += 1
+        from ingetrazo_core import restore_unique_placement
+        if self._prior is not None:
+            restore_unique_placement(self.group, self._prior)
+            scene.version += 1
 
 
 def _move_holds(scene, placements, moved) -> None:
@@ -4205,26 +3815,8 @@ class UnlinkCommand(Command):
     def _first(self, scene) -> None:
         """The first run: copy, then fill the files linked inside."""
         from core import links
-        from core.kept_components import names_in_use, numbered_name
-        self._before = [{k: getattr(g, k) for k in self._FIELDS}
-                        for g in self.groups]
-        self._after = []
-        nested = []
-        for g in self.groups:
-            inner: list = []
-            mesh, children, ext = links.unlinked_copy(g, self._pairs, inner)
-            nested.append((links.link_of(g)["path"], inner))
-            name = g.name
-            if name:
-                taken = names_in_use(scene, skip=g)
-                taken.update(a["name"] for a in self._after)
-                if name in taken:
-                    name = numbered_name(name, taken)
-            self._after.append(dict(mesh=mesh, children=children,
-                                    ext=ext, name=name, component=True))
-        for g, after in zip(self.groups, self._after):
-            for k, v in after.items():
-                setattr(g, k, v)
+        self._before, self._after, nested = _definitions.unlink_placements(
+            scene, self.groups, self._FIELDS, self._pairs)
         host = getattr(scene, "_project_host_path", None)
         for outer, inner in nested:
             for old, new, part_pairs in inner:
@@ -4281,9 +3873,7 @@ class UnlinkCommand(Command):
             self._tags_before = _TagState(scene)
             self._first(scene)
         else:
-            for g, after in zip(self.groups, self._after):
-                for k, v in after.items():
-                    setattr(g, k, v)
+            _definitions.restore_definitions(self.groups, self._after)
             self._tags_before.go(scene, self._tags_after)
         _move_holds(scene, self.groups, {id(a): b for a, b in self._pairs})
         gone = live - set(links.sources(scene))
@@ -4305,9 +3895,7 @@ class UnlinkCommand(Command):
     def undo(self, scene) -> None:
         if self._before is None:
             return
-        for g, before in zip(self.groups, self._before):
-            for k, v in before.items():
-                setattr(g, k, v)
+        _definitions.restore_definitions(self.groups, self._before)
         _move_holds(scene, self.groups, {id(b): a for a, b in self._pairs})
         self._tags_after.go(scene, self._tags_before)
         if self._errors and isinstance(getattr(scene, "link_errors", None), dict):
@@ -4367,46 +3955,15 @@ class ReplaceComponentCommand(Command):
 
     def __init__(self, targets, source) -> None:
         self.source = source
-        self.targets = [g for g in targets
-                        if g is not source and g.is_component()
-                        and g.mesh is not source.mesh]
+        self.targets = _definitions.replacement_targets(targets, source)
         self._before: list = []
 
     def do(self, scene) -> None:
-        import copy
-        from core.group import copy_group
-        from ingetrazo_core import Matrix4 as QMatrix4x4
-        src = self.source
-        self._before = [{k: getattr(g, k) for k in self._SHARED}
-                        for g in self.targets]
-        for g in self.targets:
-            if _doc.ENABLED:
-                g.definition = src.definition
-            else:
-                g.mesh = src.mesh
-            # Shared like a copy's subgroups are (copy_group): an edit
-            # inside any instance reaches all of them.
-            if src.ext and src.ext.get("link"):
-                # A linked file: the parts stay its own, read-only.
-                from core.links import copy_parts
-                g.children = copy_parts(src, g)
-            else:
-                g.children = [copy_group(c, _in_definition=True)
-                              for c in (src.children or ())]
-            g.name = src.name
-            g.axes = QMatrix4x4(src.axes) if src.axes is not None else None
-            g.component = True
-            g.text3d = dict(src.text3d) if src.text3d else None
-            g.ifc = copy.deepcopy({k: v for k, v in src.ifc.items() if k != "guid"}) if src.ifc else None
-            g.ext = copy.deepcopy(src.ext) if src.ext else None
-            g.billboard = src.billboard
-            g.exploded = dict(src.exploded) if src.exploded else None
+        self._before = _definitions.replace_definitions(self.targets, self.source, self._SHARED, _doc.ENABLED)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        for g, before in zip(self.targets, self._before):
-            for k, v in before.items():
-                setattr(g, k, v)
+        _definitions.restore_definitions(self.targets, self._before)
         scene.version += 1
 
 
@@ -4426,26 +3983,11 @@ class KeepComponentCommand(Command):
         self._index = None
 
     def do(self, scene) -> None:
-        from core.kept_components import kept_template, make_template
-        current = kept_template(scene, self.instance.mesh)
-        if self.keep and current is None:
-            self._template = self._template or make_template(self.instance)
-            scene.kept_components.append(self._template)
-            self._index = None
-        elif not self.keep and current is not None:
-            self._template = current
-            self._index = scene.kept_components.index(current)
-            scene.kept_components.remove(current)
-        else:
-            self._template = None           # already as asked: a no-op
+        self._template, self._index = _definitions.keep_template(scene, self.instance, self.keep, self._template)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        if self._template is not None:
-            if self.keep:
-                scene.kept_components.remove(self._template)
-            else:
-                scene.kept_components.insert(self._index, self._template)
+        _definitions.restore_template(scene.kept_components, self._template, self.keep, self._index)
         scene.version += 1
 
 
@@ -4459,13 +4001,11 @@ class AddKeptComponentsCommand(Command):
         self.templates = list(templates)
 
     def do(self, scene) -> None:
-        scene.kept_components.extend(self.templates)
+        _definitions.append_members(scene.kept_components, self.templates)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        for t in self.templates:
-            if t in scene.kept_components:
-                scene.kept_components.remove(t)
+        _definitions.remove_members(scene.kept_components, self.templates)
         scene.version += 1
 
 
@@ -4483,26 +4023,13 @@ class GroupToComponentCommand(Command):
     def __init__(self, group, name=None) -> None:
         self.group = group
         self._name = name
-        self._old_name = None
 
     def do(self, scene) -> None:
-        from ingetrazo_core import Matrix4 as QMatrix4x4
-        self._old_name = self.group.name
-        self._old_xform = self.group.xform
-        self._old_component = self.group.component
-        if self.group.xform is None:
-            self.group.xform = QMatrix4x4()
-        # A group of groups already carries a matrix: it only changes what
-        # it IS — a component from now on (issue #90).
-        self.group.component = True
-        if self._name:
-            self.group.name = self._name
+        self._previous = _placements.convert_component(self.group, self._name)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        self.group.xform = self._old_xform
-        self.group.component = self._old_component
-        self.group.name = self._old_name
+        _placements.restore_component(self.group, self._previous)
         scene.version += 1
 
 
@@ -4547,29 +4074,8 @@ class InsertGroupCommand(Command):
 
     def do(self, scene) -> None:
         ctx = self._target(scene)
-        if ctx is not None:
-            owner = ctx.children
-            frame = ctx.xform
-            if getattr(scene.mesh, "_instance_definition", None) is not None:
-                frame = scene.mesh._store.tool_placement()
-            if frame is not None:
-                inv, ok = frame.inverted()
-                if ok:
-                    from core.group import transformed_mesh
-                    if self.group.xform is not None:
-                        self.group.xform = inv * self.group.xform
-                    elif getattr(scene.mesh, "_instance_definition", None) is not None:
-                        self.group.component = False
-                        self.group.xform = inv
-                    else:
-                        self.group.mesh = transformed_mesh(self.group.mesh, inv)
-                        self._baked = True
-                        from core.group import carry_axes
-                        carry_axes(self.group, inv)
-        else:
-            owner = scene.groups
-        owner.append(self.group)
-        self._owner = owner
+        self._owner, baked = _placements.insert_placement(scene.groups, ctx, scene.mesh, self.group)
+        self._baked |= baked
         if self.attachment is not None:
             from core.annotation_anchor import TextPlacementAnchor
             self._sign_anchor = TextPlacementAnchor.create(
@@ -4606,18 +4112,11 @@ class EditText3DCommand(Command):
         self._old: Optional[tuple] = None
 
     def do(self, scene) -> None:
-        from core.text3d import rebuild_text_group, text_state
-        g = self.group
-        if self._old is None:
-            self._old = (g.children, g.text3d, g.name)
-        g.children = rebuild_text_group(g, self.params)
-        g.text3d = text_state(self.params, g.children)
-        g.name = self.params["text"].strip()[:24] or g.name
+        self._old = _definitions.rebuild_letter_placement(self.group, self.params, self._old)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        g = self.group
-        g.children, g.text3d, g.name = self._old
+        _definitions.restore_letter_placement(self.group, self._old)
         scene.version += 1
 
 
@@ -4663,30 +4162,14 @@ class MakeNestedGroupCommand(Command):
             self.container = self._inner.group
         elif self.container is None:
             self.container = Group(Mesh(), name=self.name)
-        if self.container not in scene.groups:
-            scene.groups.append(self.container)
-        self._xform0 = getattr(self.container, "xform", None)
-        self._indices = sorted(
-            ((scene.groups.index(g), g) for g in self.groups),
-            key=lambda pair: pair[0])
-        for _i, g in self._indices:
-            scene.groups.remove(g)
-            scene.selection.discard(g)
-        # In document order, not selection order: a selection is a set, and
-        # the children of a group are a list somebody will read.
-        self.container.adopt([g for _i, g in self._indices])
-        # A GROUP of groups: ``adopt`` gives it a matrix, which does not
-        # make it a component (issue #90, @fafecm).
-        self.container.component = False
+        self._xform0, self._indices = _placements.nest(
+            scene.groups, self.container, self.groups, scene.selection.discard)
         scene.selection.clear()
         scene.selection.add(self.container)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        self.container.children = []
-        self.container.xform = self._xform0
-        for idx, g in self._indices:
-            scene.groups.insert(min(idx, len(scene.groups)), g)
+        _placements.unnest(scene.groups, self.container, self._xform0, self._indices)
         if self._inner is not None:
             self._inner.undo(scene)        # loose geometry back, group gone
         elif self.container in scene.groups:
@@ -4807,37 +4290,8 @@ class ReparentGroupsCommand(Command):
         scene.version += 1
 
     def do(self, scene) -> None:
-        from ingetrazo_core import Matrix4 as QMatrix4x4
-        from core import outliner
-        from core.group import transformed_mesh
-        up = outliner.parents(scene.groups)
-        moving = outliner.topmost(scene.groups, self.groups)
-        target = self.target
-        self._target_state = None
-        if target is not None:
-            self._target_state = (target.xform, target.component)
-            if target.xform is None:
-                target.xform = QMatrix4x4()     # same place: identity
-                target.component = False
-        to_new = outliner.world_matrix(scene.groups, target)
-        inv_new = to_new.inverted()[0] if to_new is not None else None
-        self._moves = []
-        for g in moving:
-            old = up.get(id(g))
-            siblings = old.children if old is not None else scene.groups
-            index = siblings.index(g)
-            from_old = outliner.world_matrix(scene.groups, old)
-            self._moves.append((g, old, index, g.xform, g.mesh))
-            delta = outliner.compose(inv_new, from_old)
-            if delta is not None and not delta.isIdentity():
-                if g.xform is not None:
-                    g.xform = delta * g.xform
-                else:
-                    g.mesh = transformed_mesh(g.mesh, delta)
-            siblings.remove(g)
-            (target.children if target is not None
-             else scene.groups).append(g)
-            scene.selection.discard(g)
+        self._target_state, self._moves = _placements.reparent(
+            scene.groups, self.groups, self.target, scene.selection.discard)
         if _doc.ENABLED:
             _dirty_placements([m[0] for m in self._moves])
         else:
@@ -4845,15 +4299,7 @@ class ReparentGroupsCommand(Command):
         scene.version += 1
 
     def undo(self, scene) -> None:
-        target = self.target
-        for g, old, index, xform, mesh in reversed(self._moves):
-            (target.children if target is not None
-             else scene.groups).remove(g)
-            g.xform, g.mesh = xform, mesh
-            (old.children if old is not None
-             else scene.groups).insert(index, g)
-        if target is not None and self._target_state is not None:
-            target.xform, target.component = self._target_state
+        _placements.restore_parent(scene.groups, self.target, self._target_state, self._moves)
         scene.selection.clear()
         _dirty_group_chunks(scene)
         scene.version += 1
@@ -4877,20 +4323,13 @@ class LockCommand(Command):
         scene.version += 1
 
     def do(self, scene) -> None:
-        prev = _bulk_set(self._groups, "locked", self._locked)
-        if prev is not None:
-            self._prev = prev
-        else:
-            self._prev = [bool(getattr(g, "locked", False)) for g in self._groups]
-            for g in self._groups:
-                g.locked = self._locked
+        self._prev = _definitions.lock_placements(self._groups, self._locked)
         if self._locked:
             _unselect(scene, self._groups)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        for g, prev in zip(self._groups, self._prev):
-            g.locked = prev
+        _definitions.restore_locks(self._groups, self._prev)
         scene.version += 1
 
 
@@ -4946,58 +4385,9 @@ class MergeGroupsCommand(Command):
         self._merged = None
 
     def do(self, scene) -> None:
-        import numpy as np
-        from core.group import Group, world_mesh
-        from core.mesh import Mesh
         if self._merged is None:
-            flat: list = []
-            e_flat: list = []
-            e_flags: list = []
-            ring_sizes: list = []
-            ring_counts: list = []
-            attrs_list: list = []
-            for g in self._groups:
-                src = world_mesh(g)      # instances: transformed, UVs refit
-                for f in src.faces:
-                    holes = f.holes or []
-                    ring_counts.append(1 + len(holes))
-                    ring_sizes.append(len(f.vertices))
-                    flat.extend((v.x(), v.y(), v.z()) for v in f.vertices)
-                    for h in holes:
-                        ring_sizes.append(len(h))
-                        flat.extend((v.x(), v.y(), v.z()) for v in h)
-                    attrs_list.append(dict(f.attrs) if f.attrs else None)
-                for e in src.edges:
-                    e_flat.append((e.a.x(), e.a.y(), e.a.z()))
-                    e_flat.append((e.b.x(), e.b.y(), e.b.z()))
-                    e_flags.append((bool(getattr(e, "soft", False)),
-                                    getattr(e, "curve", None),
-                                    getattr(e, "layer", None),
-                                    bool(getattr(e, "hidden", False))))
-            mesh = Mesh()
-            n_edge_pts = len(e_flat)
-            if e_flat or flat:
-                vobjs, inverse = mesh.bulk_weld(
-                    np.array(e_flat + flat, dtype=np.float64))
-                emap = None
-                if e_flat:
-                    emap = mesh.add_edges_welded(
-                        vobjs, inverse[0:n_edge_pts:2],
-                        inverse[1:n_edge_pts:2], e_flags)
-                if ring_counts:
-                    mesh.add_faces_welded(
-                        vobjs, inverse[n_edge_pts:],
-                        np.asarray(ring_sizes, dtype=np.int64),
-                        np.asarray(ring_counts, dtype=np.int64),
-                        attrs_list, edge_map=emap)
-            merged = Group(mesh, name=self._groups[0].name)
-            merged.layer = getattr(self._groups[0], "layer", None)
-            self._merged = merged
-        self._indices = [scene.groups.index(g) for g in self._groups]
-        for g in self._groups:
-            scene.groups.remove(g)
-            scene.selection.discard(g)
-        scene.groups.append(self._merged)
+            self._merged = _definitions.merge_group_geometry(self._groups)
+        self._indices = _definitions.replace_roots(scene.groups, self._groups, self._merged, scene.selection.discard)
         scene.selection.clear()
         scene.selection.add(self._merged)
         scene.version += 1
@@ -5025,12 +4415,11 @@ class SetGroupMaterialCommand(Command):
         self._old = None
 
     def do(self, scene) -> None:
-        self._old = getattr(self.group, "material", None)
-        self.group.material = self.material
+        self._old = _definitions.set_placement_field(self.group, "material", self.material)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        self.group.material = self._old
+        _definitions.set_placement_field(self.group, "material", self._old)
         scene.version += 1
 
 
@@ -5096,28 +4485,9 @@ class ExplodeGroupCommand(MeshCommand):
         # composes with the parent's (a shared prototype is never touched),
         # and an unpainted child takes the parent's paint, as its default
         # faces were already drawn with it.
-        kids = list(getattr(g, "children", None) or [])
-        self._lifted = [(c, c.xform, c.mesh, c.material, c.axes,
-                         c.explode_offset) for c in kids]
-        for c in kids:
-            # Free of its component, a part keeps where an exploded view put
-            # it; there is no longer anything to reassemble it into.
-            c.explode_offset = None
-            if P is not None:
-                if c.xform is not None:
-                    c.xform = P * c.xform
-                else:
-                    from core.group import carry_axes, transformed_mesh
-                    c.mesh = transformed_mesh(c.mesh, P)
-                    carry_axes(c, P)          # its axes come out with it
-            if c.material is None and paint:
-                c.material = {k: (dict(v) if isinstance(v, dict) else v)
-                              for k, v in paint.items()}
-        scene.groups.remove(g)
-        # One parent per placement: what comes out leaves the group (undo
-        # gives it back).
-        g.children = []
-        scene.groups[self.index:self.index] = kids
+        from ingetrazo_core import lift_placements
+        self._lifted = lift_placements(scene.groups, g, self.index)
+        kids = [row[0] for row in self._lifted]
         scene.selection.discard(g)
         if kids:
             scene.selection = set(kids)   # select what came out
@@ -5136,8 +4506,6 @@ class ExplodeGroupCommand(MeshCommand):
         return True
 
     def _geometry(self, scene, m, g, P, paint) -> None:
-        from core.group import placed_face_paint
-        from core.materials import effective_attrs
         from core.store_mesh import StoreState
         from core import store_parts
         inverse, invertible = P.inverted() if P is not None else (None, False)
@@ -5154,39 +4522,9 @@ class ExplodeGroupCommand(MeshCommand):
                 self._after = m.capture_state()
             return
 
-        def W(p):
-            # Instance prototypes hold LOCAL coords — explode in world.
-            return P.map(p) if P is not None else QVector3D(p)
-
-        before = list(m.faces) if m.faces else []
-        added: list = []
-        for f in g.mesh.faces:
-            nf = m.add_face([W(v) for v in f.vertices],
-                            [[W(v) for v in h] for h in f.holes] or None)
-            added.append(nf)
-            # What the face showed inside is what it keeps outside: its own
-            # paint, or — a default face — the group's on BOTH sides
-            # (issue #47: the back used to fall back to default).
-            drawn = effective_attrs(dict(f.attrs or {}), paint)
-            if invertible:
-                drawn = placed_face_paint(drawn, f, inverse)
-            for key, val in drawn.items():
-                nf.attrs[key] = dict(val) if isinstance(val, dict) else val
-        for e in g.mesh.edges:
-            v0, v1 = m.vertex_at(W(e.a)), m.vertex_at(W(e.b))
-            if v0 is None or v1 is None or m.find_edge(v0, v1) is None:
-                m.add_edge(W(e.a), W(e.b))
-        # Edge flags travel back out of the group (the mirror of
-        # MakeGroupCommand): an exploded cylinder must stay smooth, its rims
-        # keep selecting as whole curves, and a hidden edge stay hidden.
-        for e in g.mesh.edges:
-            if edge_is_plain(e):
-                continue
-            v0, v1 = m.vertex_at(W(e.a)), m.vertex_at(W(e.b))
-            k = (m.find_edge(v0, v1)
-                 if v0 is not None and v1 is not None else None)
-            if k is not None:
-                stamp_edge_flags(k, edge_flags(e))
+        from ingetrazo_core import explode_object_geometry
+        before = list(m.faces)
+        added = explode_object_geometry(m, g.mesh, P, paint, inverse, invertible)
         m.resplit_curves()
         # A face that lands on faces already there merges with them, as a
         # pasted one does (#73): two boxes that touch share ONE wall instead
@@ -5195,11 +4533,8 @@ class ExplodeGroupCommand(MeshCommand):
         self.copies = []
 
     def undo(self, scene) -> None:
-        for c, xform, mesh, material, axes, offset in self._lifted:
-            if c in scene.groups:
-                scene.groups.remove(c)
-            c.xform, c.mesh, c.material, c.axes = xform, mesh, material, axes
-            c.explode_offset = offset
+        from ingetrazo_core import lower_placements
+        lower_placements(scene.groups, self._lifted)
         scene.mesh.restore_state(self.snapshot)
         self.group.children = [c for c, *_rest in self._lifted]
         scene.groups.insert(self.index, self.group)
@@ -5385,12 +4720,11 @@ class RenameGroupCommand(Command):
         self.old: Optional[str] = None
 
     def do(self, scene) -> None:
-        self.old = self.group.name
-        self.group.name = self.name
+        self.old = _definitions.set_placement_field(self.group, "name", self.name)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        self.group.name = self.old
+        _definitions.set_placement_field(self.group, "name", self.old)
         scene.version += 1
 
 
@@ -5443,23 +4777,11 @@ class SplitIntoPiecesCommand(Command):
                        for src, keys in [origin_of(p.mesh)] if src is not None]
 
     def do(self, scene) -> None:
-        g = self.group
-        self.before = (g.mesh, list(g.children), g.xform, g.exploded)
-        if self._emptied is None:
-            # The group keeps no geometry of its own: an empty mesh (in the
-            # store when the engine is on, like every Mesh()), made once so
-            # a redo shows the same mesh and mesh key.
-            self._emptied = Mesh()
-        g.mesh = self._emptied
-        g.adopt(self.pieces)
-        # The pieces are cut from the geometry as it stands, so they ARE
-        # assembled in their new arrangement: nothing left to take back.
-        g.exploded = None
+        self.before, self._emptied = _placements.split_placement(self.group, self.pieces, self._emptied)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        g = self.group
-        g.mesh, g.children, g.xform, g.exploded = self.before
+        _placements.restore_split(self.group, self.before)
         scene.version += 1
 
 
@@ -5480,24 +4802,7 @@ class MoveGroupCommand(GroupTransformCommand):
         return getattr(self.group, "xform", None) is not None
 
     def _shift(self, scene, delta) -> None:
-        pose = _member_placement(scene, self.group)
-        if pose is not None:
-            # Component instance: compose into the transform — O(1), and the
-            # shared prototype mesh (siblings!) is never touched.
-            from ingetrazo_core import Matrix4 as QMatrix4x4
-            t = QMatrix4x4()
-            t.translate(delta)
-            self.group.xform = _edit_local_transform(scene, self.group, t) * pose
-        else:
-            from core.group import _remap_uvws
-            from ingetrazo_core import Matrix4 as QMatrix4x4
-            for v in list(self.group.mesh.vertices):
-                self.group.mesh.move_vertex(v, delta)
-            t = QMatrix4x4()
-            t.translate(delta)
-            _remap_uvws(self.group.mesh, t)   # the texture travels along
-            from core.group import carry_axes
-            carry_axes(self.group, t)         # and its axes (#44)
+        _transform.shift_group(scene, self.group, delta)
         scene.version += 1
 
     def do(self, scene) -> None:
@@ -5602,90 +4907,16 @@ class StraightenModelCommand(Command):
     def _apply(self, scene, m, turn_deg: float, redo: bool) -> None:
         """Move everything by the rigid ``m`` (``turn_deg`` is its turn about
         Z, for the cameras)."""
-        import math
-
-        def pt(v):
-            return m.map(QVector3D(*v) if isinstance(v, (list, tuple))
-                         else QVector3D(v))
-
-        def vec(v):
-            return m.mapVector(QVector3D(v))
-
-        for g in scene.groups:
-            if g.xform is not None:          # instances compose — O(1)
-                g.xform = m * g.xform
-            else:
-                self._transform_mesh(g.mesh, m, redo)
-        self._transform_mesh(scene.mesh, m, redo)
-        for d in scene.dimensions:
-            d.a, d.b, d.offset = pt(d.a), pt(d.b), vec(d.offset)
-        for t in scene.text_labels:
-            t.anchor, t.offset = pt(t.anchor), vec(t.offset)
-        for gd in scene.guides:
-            gd.point = pt(gd.point)
-            if getattr(gd, "direction", None) is not None:
-                gd.direction = vec(gd.direction)
-        for sp in scene.section_planes:
-            sp.point, sp.normal = pt(sp.point), vec(sp.normal)
-        for im in scene.image_planes:
-            im.origin, im.u, im.v = pt(im.origin), vec(im.u), vec(im.v)
-        for gp in scene.geo_paths:
-            gp.points = [pt(q) for q in gp.points]
-            if getattr(gp, "_surface_tris", None) is not None:
-                gp._surface_tris = None
-        for gpt in scene.geo_points:
-            gpt.position = pt(gpt.position)
-        turn = math.radians(turn_deg)
-        for sv in scene.saved_views:
-            q = pt(sv.target)
-            sv.target = (q.x(), q.y(), q.z())
-            sv.yaw = sv.yaw + turn
-        for comp in scene.compositions:
-            for it in comp.all_items():
-                for attr in ("a_world", "b_world"):
-                    w = getattr(it, attr, None)
-                    if w:
-                        q = pt(w)
-                        setattr(it, attr, [q.x(), q.y(), q.z()])
-                ct = getattr(it, "cam_target", None)
-                if ct:
-                    q = pt(ct)
-                    it.cam_target = [q.x(), q.y(), q.z()]
-                    if getattr(it, "cam_yaw", None) is not None:
-                        it.cam_yaw = it.cam_yaw + turn
+        _transform.reframe_world(scene, m, turn_deg, redo, self._snaps)
         scene.version += 1
 
-    def _transform_mesh(self, mesh, m, redo: bool) -> None:
-        """Classic (world-coordinate) meshes: move the vertices the first
-        time, snapshot both states, and replay the snapshots after that so
-        undo/redo are exact."""
-        from core.group import _remap_uvws
-        if not mesh.vertices:
-            return
-        snap = self._snaps.get(id(mesh))
-        if snap is not None:
-            mesh.restore_state(snap[1] if redo else snap[0])
-            return
-        before = mesh.capture_state()
-        for v in list(mesh.vertices):
-            mesh.move_vertex(v, m.map(v.position) - v.position)
-        _remap_uvws(mesh, m)
-        self._snaps[id(mesh)] = (before, mesh.capture_state())
 
 
 def group_owner_list(scene, group):
     """The list ``group`` lives in: ``scene.groups`` at the root, or the
     ``children`` of the container that owns it, however deep. ``None`` when
     the group is not in the scene at all."""
-    if group in scene.groups:
-        return scene.groups
-    from core.group import iter_placements
-    for top in scene.groups:
-        for pg, _m in iter_placements(top):
-            kids = getattr(pg, "children", None)
-            if kids and group in kids:
-                return kids
-    return None
+    return _definitions.group_owner(scene, group)
 
 
 class DeleteGroupCommand(Command):
@@ -5713,27 +4944,13 @@ class DeleteGroupCommand(Command):
         scene.version += 1
 
     def do(self, scene) -> None:
-        owner = group_owner_list(scene, self.group)
-        if owner is None:
-            raise ValueError("group is not in the scene")
-        self._owner = owner
-        self.index = owner.index(self.group)
-        owner.remove(self.group)
+        self._owner, self.index = _definitions.delete_placement(scene, self.group)
         scene.selection.discard(self.group)
-        # Deleting a group is the moment the user expects the loose mesh to
-        # be the loose mesh again: whatever left a vertex with nothing on it
-        # — a grouping, an operation that removed geometry without sweeping —
-        # no edge draws it, no face holds it, and the position registry still
-        # hands it to whatever is drawn there next. It is not part of the
-        # group being removed (its own mesh travels with it, undo restores it
-        # whole), so sweeping it here cannot lose anything the user can see
-        # or undo back to.
         scene.mesh.purge_debris()
         scene.version += 1
 
     def undo(self, scene) -> None:
-        owner = self._owner if self._owner is not None else scene.groups
-        owner.insert(min(self.index or 0, len(owner)), self.group)
+        _definitions.restore_placement(scene.groups, self._owner, self.index, self.group)
         scene.version += 1
 
 
@@ -6349,96 +5566,24 @@ class ChangeAxesCommand(MeshCommand):
     def doc_undo(self, scene) -> bool:
         # A classic group swaps its axes (a document field); an instance
         # re-expresses its definition's mesh: its own undo.
-        return self._d is None
+        return self._axes_edit.fields_only()
 
     def __init__(self, group, frame) -> None:
         from ingetrazo_core import Matrix4 as QMatrix4x4
         self.group = group
         self.frame = QMatrix4x4(frame)
-        self._old_axes = None
-        self._d = None
-        self._instances: list = []
-        self._inst_axes: list = []
-        self._inst_xforms: list = []
+        self._axes_edit = _transform.AxesEdit()
 
     def geometry_meshes(self, scene):
         return (self.group.mesh,) if self.group.xform is not None else ()
 
-    def _siblings(self, scene) -> list:
-        from core.group import iter_placements
-        proto = self.group.mesh
-        out, seen = [], set()
-        for top in scene.groups:
-            for g, _m in iter_placements(top):
-                if (g.mesh is proto and getattr(g, "xform", None) is not None
-                        and id(g) not in seen):
-                    seen.add(id(g))
-                    out.append(g)
-        if id(self.group) not in seen:
-            out.append(self.group)
-        return out
-
-    @staticmethod
-    def _reexpress(group, d) -> None:
-        """Map the definition's geometry (and nested placements) by ``d``."""
-        from core.group import transformed_mesh
-        proto = group.mesh
-        moved = transformed_mesh(proto, d)
-        proto.restore_state(moved.capture_state())
-        for child in getattr(group, "children", None) or []:
-            if child.xform is not None:
-                child.xform = d * child.xform
-
     def do(self, scene) -> None:
-        g = self.group
-        if getattr(g, "xform", None) is None:
-            self._old_axes = g.axes
-            g.axes = self._copy(self.frame)
+        if self._axes_edit.apply(scene, self.group, self.frame):
             scene.version += 1
-            return
-        inv, ok = self.frame.inverted()
-        if not ok:
-            return
-        self._d = inv * g.xform
-        d_inv, ok2 = self._d.inverted()
-        if not ok2:
-            self._d = None
-            return
-        self._instances = self._siblings(scene)
-        self._reexpress(g, self._d)
-        # An instance's frame is ``xform · axes``: axes it carried from its
-        # classic-group days would turn the new frame again (#484), so the
-        # re-expressed definition's own axes are the instances' now.
-        self._inst_axes = [inst.axes for inst in self._instances]
-        self._inst_xforms = [self._copy(inst.xform) for inst in self._instances]
-        for inst in self._instances:
-            inst.xform = inst.xform * d_inv
-            inst.axes = None
-        scene.version += 1
 
     def undo(self, scene) -> None:
-        g = self.group
-        if getattr(g, "xform", None) is None and self._d is None:
-            g.axes = self._old_axes
+        if self._axes_edit.undo(self.group):
             scene.version += 1
-            return
-        if self._d is None:
-            return
-        d_inv, _ok = self._d.inverted()
-        self._reexpress(g, d_inv)
-        # The placements as they were, not ``xform · d`` again: that product
-        # came back 6e-8 off, and undo should leave exactly what was there.
-        for inst, axes, xform in zip(self._instances, self._inst_axes,
-                                     self._inst_xforms):
-            inst.xform = self._copy(xform)
-            inst.axes = axes
-        scene.version += 1
-
-    @staticmethod
-    def _copy(m):
-        from ingetrazo_core import Matrix4 as QMatrix4x4
-        return QMatrix4x4(m)
-
 
 class SetStructureNodeCommand(Command):
     """Membership belongs to a placement, including ones without an IFC record."""
@@ -6449,27 +5594,17 @@ class SetStructureNodeCommand(Command):
         self.key = key
 
     def do(self, scene):
-        from copy import deepcopy
-        self.before = []
-        for group in self.targets:
-            ext = dict(group.ext or {})
-            self.before.append((group.ext is None, 'structure' in ext, deepcopy(ext.get('structure'))))
-            if self.key is None:
-                ext.pop('structure', None)
-            else:
-                ext['structure'] = {'node': self.key}
-            group.ext = ext or None
+        from ingetrazo_core import set_structure_nodes
+        self.before = set_structure_nodes(self.targets, self.key)
         scene.version += 1
 
+    def bind_transaction(self, txn):
+        super().bind_transaction(txn)
+        self.before = None
+
     def undo(self, scene):
-        from copy import deepcopy
-        for group, (was_none, had_key, value) in zip(self.targets, self.before):
-            ext = dict(group.ext or {})
-            if had_key:
-                ext['structure'] = deepcopy(value)
-            else:
-                ext.pop('structure', None)
-            group.ext = None if was_none and not ext else ext
+        from ingetrazo_core import restore_structure_nodes
+        restore_structure_nodes(self.targets, self.before)
         scene.version += 1
 
 

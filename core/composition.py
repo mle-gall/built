@@ -14,6 +14,7 @@ Model units are METRES; composer units are MILLIMETRES of paper.
 """
 from __future__ import annotations
 
+from ingetrazo_core import presentation as _presentation
 from core import doc_model
 from core.doc_model import Record, record_fields
 
@@ -1777,53 +1778,16 @@ class AddItemCommand(ComposerCommand):
         self.item = item
 
     def _list(self):
-        if isinstance(self.item, MarcoVista):
-            return self.comp.frames
-        if isinstance(self.item, TextoItem):
-            return self.comp.texts
-        if isinstance(self.item, ImagenItem):
-            return self.comp.images
-        if isinstance(self.item, BarraEscala):
-            return self.comp.scalebars
-        if isinstance(self.item, FlechaNorte):
-            return self.comp.nortes
-        if isinstance(self.item, Leyenda):
-            return self.comp.leyendas
-        if isinstance(self.item, FormaItem):
-            return self.comp.shapes
-        if isinstance(self.item, CotaItem):
-            return self.comp.cotas
-        if isinstance(self.item, CotaAngularItem):
-            return self.comp.cotas_ang
-        if isinstance(self.item, CotaRadialItem):
-            return self.comp.cotas_rad
-        if isinstance(self.item, EtiquetaItem):
-            return self.comp.etiquetas
-        if isinstance(self.item, PerfilTerreno):
-            return self.comp.perfiles
-        if isinstance(self.item, NivelItem):
-            return self.comp.niveles
-        if isinstance(self.item, LlamadaItem):
-            return self.comp.llamadas
-        return None
+        return _presentation.sheet_container(self.comp, self.item)
 
     def journalled(self):
         return isinstance(self.comp, Record)
 
     def do(self) -> None:
-        lst = self._list()
-        if lst is None:
-            self._prev = self.comp.cajetin
-            self.comp.cajetin = self.item
-        else:
-            lst.append(self.item)
+        self._prev = _presentation.append_sheet_item(self.comp, self.item, self._list())
 
     def undo(self) -> None:
-        lst = self._list()
-        if lst is None:
-            self.comp.cajetin = self._prev
-        else:
-            lst.remove(self.item)
+        _presentation.remove_sheet_item(self.comp, self.item, self._list(), getattr(self, "_prev", None))
 
 
 class RemoveItemCommand(ComposerCommand):
@@ -1832,52 +1796,16 @@ class RemoveItemCommand(ComposerCommand):
         self.item = item
 
     def _list(self):
-        if isinstance(self.item, MarcoVista):
-            return self.comp.frames
-        if isinstance(self.item, TextoItem):
-            return self.comp.texts
-        if isinstance(self.item, ImagenItem):
-            return self.comp.images
-        if isinstance(self.item, BarraEscala):
-            return self.comp.scalebars
-        if isinstance(self.item, FlechaNorte):
-            return self.comp.nortes
-        if isinstance(self.item, Leyenda):
-            return self.comp.leyendas
-        if isinstance(self.item, FormaItem):
-            return self.comp.shapes
-        if isinstance(self.item, CotaItem):
-            return self.comp.cotas
-        if isinstance(self.item, CotaAngularItem):
-            return self.comp.cotas_ang
-        if isinstance(self.item, CotaRadialItem):
-            return self.comp.cotas_rad
-        if isinstance(self.item, EtiquetaItem):
-            return self.comp.etiquetas
-        if isinstance(self.item, PerfilTerreno):
-            return self.comp.perfiles
-        if isinstance(self.item, NivelItem):
-            return self.comp.niveles
-        if isinstance(self.item, LlamadaItem):
-            return self.comp.llamadas
-        return None
+        return _presentation.sheet_container(self.comp, self.item)
 
     def journalled(self):
         return isinstance(self.comp, Record)
 
     def do(self) -> None:
-        lst = self._list()
-        if lst is None:
-            self.comp.cajetin = None
-        else:
-            lst.remove(self.item)
+        _presentation.remove_sheet_item(self.comp, self.item, self._list(), None)
 
     def undo(self) -> None:
-        lst = self._list()
-        if lst is None:
-            self.comp.cajetin = self.item
-        else:
-            lst.append(self.item)
+        _presentation.append_sheet_item(self.comp, self.item, self._list())
 
 
 class EditItemCommand(ComposerCommand):
@@ -1890,8 +1818,7 @@ class EditItemCommand(ComposerCommand):
         self.after = dict(changes)
         # An interactive drag has already mutated the item by release time;
         # the caller passes the state it captured at press.
-        self.before = dict(before) if before is not None else \
-            {k: getattr(item, k) for k in changes}
+        self.before = _presentation.capture_sheet_fields(item, changes, before)
 
     def journalled(self):
         return isinstance(self.item, Record) and self.after.keys() <= set(self.item._record_fields)
@@ -1901,12 +1828,10 @@ class EditItemCommand(ComposerCommand):
             self.undo()
 
     def do(self) -> None:
-        for k, v in self.after.items():
-            setattr(self.item, k, v)
+        _presentation.restore_fields(self.item, self.after)
 
     def undo(self) -> None:
-        for k, v in self.before.items():
-            setattr(self.item, k, v)
+        _presentation.restore_fields(self.item, self.before)
 
 
 def _edits_of(cmd) -> list:

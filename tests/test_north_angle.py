@@ -235,3 +235,39 @@ def test_placement_is_identity_spots_a_group_that_was_never_turned():
     moved = QMatrix4x4()
     moved.translate(0.0, 0.0, -3182.0)
     assert not placement_is_identity(moved)
+
+
+def test_straighten_reframes_sheet_anchors_camera_and_survey_path():
+    from core.composition import Composicion, CotaItem, MarcoVista
+    from georef.geopath import GeoPath
+
+    scene, group, _ = _placed_scene()
+    a, b = QVector3D(8, 2, 1), QVector3D(4, -7, 11)
+    path = GeoPath([a, b])
+    scene.geo_paths.append(path)
+    sheet = Composicion()
+    dim, frame = CotaItem(), MarcoVista()
+    dim.a_world, dim.b_world = list(a.toTuple()), list(b.toTuple())
+    frame.cam_target, frame.cam_yaw = list(b.toTuple()), .37
+    sheet.cotas.append(dim)
+    sheet.frames.append(frame)
+    scene.compositions.append(sheet)
+    world, ok = group.xform.inverted()
+    assert ok
+    hist = History(scene)
+    hist.execute(StraightenModelCommand(group))
+    assert hist.last_error is None
+
+    def check(undo):
+        want_a, want_b = (a, b) if undo else (world.map(a), world.map(b))
+        assert _close(path.points[0], want_a) and _close(path.points[1], want_b)
+        assert _close(QVector3D(*dim.a_world), want_a)
+        assert _close(QVector3D(*dim.b_world), want_b)
+        assert _close(QVector3D(*frame.cam_target), want_b)
+        assert abs(frame.cam_yaw - (.37 if undo else .37 - math.radians(33.47))) < 1e-12
+
+    check(False)
+    assert hist.undo()
+    check(True)
+    assert hist.redo()
+    check(False)

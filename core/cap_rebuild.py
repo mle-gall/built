@@ -32,17 +32,12 @@ from __future__ import annotations
 import math
 import random
 import sys
-from collections import defaultdict
 from typing import Optional
 
 from ingetrazo_core import Vec3 as QVector3D, plane_cycle as _canon_loop
 
 from core.arrangement import (
     _TOL,
-    _area_floor,
-    _interior_point,
-    _point_in_polygon,
-    _signed_area,
     planar_arrangement,
     plane_basis,
 )
@@ -202,10 +197,6 @@ class RebuildCache:
         return val
 
 
-def _key2(p) -> tuple[int, int]:
-    return (round(p[0] / _TOL), round(p[1] / _TOL))
-
-
 def _on_plane(pos: QVector3D, origin: QVector3D, normal: QVector3D) -> bool:
     return abs(QVector3D.dotProduct(pos - origin, normal)) < _ON_PLANE
 
@@ -220,45 +211,8 @@ def _region_test_point(outer_xy, holes_xy):
     samples the region's *material*, not a void. The plain centroid of an annular
     region (a cap with a skylight) falls in the hole, which would misread it as
     outside the solid; this nudges in from an outer edge instead when needed."""
-    p = _interior_point(outer_xy)
-    # Verified, not assumed: for a C-shaped region (a door cut through the
-    # bottom ring of a wall) the old point could fall in the notch, the
-    # region read as outside the solid and the whole bottom face was
-    # dropped — the push was then refused as breaking the solid, and the
-    # door would not go through (Rafael, revision 4).
-    if _point_in_polygon(p, outer_xy) and not any(
-            _point_in_polygon(p, h) for h in holes_xy):
-        return p
-    n = len(outer_xy)
-    for i in range(n):
-        ax, ay = outer_xy[i]
-        bx, by = outer_xy[(i + 1) % n]
-        mx, my = (ax + bx) / 2, (ay + by) / 2
-        dx, dy = bx - ax, by - ay
-        ln = math.hypot(dx, dy)
-        if ln < _TOL:
-            continue
-        # Interior of a CCW loop is to the left of a→b: nudge along (-dy, dx).
-        q = (mx - dy / ln * 1e-3, my + dx / ln * 1e-3)
-        if _point_in_polygon(q, outer_xy) and not any(
-            _point_in_polygon(q, h) for h in holes_xy
-        ):
-            return q
-    from core.arrangement import scan_interior_point
-    q = scan_interior_point(outer_xy, holes_xy)
-    return q if q is not None else p
-
-
-def _on_seg2(p, a, b, tol: float = _TOL / 2) -> bool:
-    """Whether 2D point ``p`` lies on segment ``a``–``b``. Tolerance is tied
-    to the arrangement's (its split points and float32-projected mesh
-    coordinates can deviate well past 1e-6 on slanted planes)."""
-    abx, aby = b[0] - a[0], b[1] - a[1]
-    apx, apy = p[0] - a[0], p[1] - a[1]
-    if abs(abx * apy - aby * apx) > tol * max(1.0, abs(abx) + abs(aby)):
-        return False
-    dot = apx * abx + apy * aby
-    return -tol <= dot <= abx * abx + aby * aby + tol
+    from ingetrazo_core import plane_region_point
+    return plane_region_point(outer_xy, holes_xy)
 
 
 def _union_outline(solid_regions_xy, keep_segs=None) -> list:
@@ -273,135 +227,14 @@ def _union_outline(solid_regions_xy, keep_segs=None) -> list:
     with a visible ridge, as users expect. The test is geometric (midpoint on
     segment): the arrangement splits edges at crossings, so an endpoint-pair
     match would lose the crease on the split-off pieces."""
-    dir_count: dict = defaultdict(int)
-    coords: dict = {}
-    for outer, holes in solid_regions_xy:
-        for loop in (outer, *holes):
-            n = len(loop)
-            for i in range(n):
-                a, b = loop[i], loop[(i + 1) % n]
-                ka, kb = _key2(a), _key2(b)
-                coords[ka] = a
-                coords[kb] = b
-                dir_count[(ka, kb)] += 1
-
-    def _is_crease(ka, kb) -> bool:
-        if not keep_segs:
-            return False
-        pa, pb = coords[ka], coords[kb]
-        mid = ((pa[0] + pb[0]) / 2.0, (pa[1] + pb[1]) / 2.0)
-        return any(_on_seg2(mid, a, b) and _on_seg2(pa, a, b)
-                   and _on_seg2(pb, a, b) for a, b in keep_segs)
-
-    # Net direction per undirected edge: interior edges cancel (a→b and b→a),
-    # boundary edges survive in the direction that keeps the solid on the left.
-    # Crease edges skip the cancellation — both directed copies survive, so the
-    # trace closes one loop on each side of the crease.
-    survivors: dict = defaultdict(int)
-    for (ka, kb), c in dir_count.items():
-        if _is_crease(ka, kb):
-            survivors[(ka, kb)] += c
-            continue
-        net = c - dir_count.get((kb, ka), 0)
-        if net > 0:
-            survivors[(ka, kb)] += net
-
-    # A crease that ends inside the union bounds nothing: the trace would run
-    # out along it and back, a spur that splits no face and triangulates into
-    # slivers facing the wrong way. It happens where a perpendicular face only
-    # touches the plane along a dead-end line — a pocket corner meeting the
-    # outer wall of a step pushed up beside it (#570). The edge stays in the
-    # mesh for the faces that stand on it; it just isn't part of this outline.
-    links: dict = defaultdict(set)
-    for (ka, kb), c in survivors.items():
-        if c > 0:
-            links[ka].add(kb)
-            links[kb].add(ka)
-    stack = [k for k, ns in links.items() if len(ns) == 1]
-    while stack:
-        k = stack.pop()
-        if len(links[k]) != 1:
-            continue
-        other = next(iter(links[k]))
-        if not _is_crease(k, other):
-            continue
-        survivors[(k, other)] = 0
-        survivors[(other, k)] = 0
-        links[k].discard(other)
-        links[other].discard(k)
-        if len(links[other]) == 1:
-            stack.append(other)
-
-    # Trace the surviving directed edges into closed loops, choosing at each
-    # junction the next edge *clockwise* from the arrival direction — the same
-    # DCEL rule as ``core.arrangement._trace_faces``. An arbitrary choice can
-    # thread straight through a crease junction and pinch the two faces it
-    # should separate into one self-touching outline (the Ctrl-stack belt bug).
-    nbrs: dict = defaultdict(set)
-    for (ka, kb), c in survivors.items():
-        if c > 0:
-            nbrs[ka].add(kb)
-            nbrs[kb].add(ka)
-    order: dict = {}
-    for k, ns in nbrs.items():
-        kx, ky = coords[k]
-        order[k] = sorted(ns, key=lambda m2: math.atan2(coords[m2][1] - ky,
-                                                        coords[m2][0] - kx))
-
-    loops: list = []
-    for start in sorted(survivors):
-        while survivors[start] > 0:
-            u, v = start
-            survivors[start] -= 1
-            loop = []
-            cu, cv = u, v
-            ok = True
-            while True:
-                loop.append(cu)
-                ring = order[cv]
-                idx = ring.index(cu)
-                m = len(ring)
-                w = None
-                for s in range(1, m + 1):
-                    cand = ring[(idx - s) % m]
-                    if (survivors.get((cv, cand), 0) > 0
-                            or (cv, cand) == start):
-                        w = cand
-                        break
-                if w is None or len(loop) > 100000:
-                    ok = False
-                    break
-                cu, cv = cv, w
-                if (cu, cv) == start:
-                    break
-                survivors[(cu, cv)] -= 1
-            if ok and len(loop) >= 3:
-                loops.append([coords[k] for k in loop])
-
-    return _nest_outlines(loops)
+    from ingetrazo_core import trace_plane_outline
+    return _nest_outlines(trace_plane_outline(solid_regions_xy, keep_segs or ()))
 
 
 def _nest_outlines(loops):
-    # Classify: CCW loops are outer faces, CW loops are holes; nest each hole in
-    # the smallest outer that contains it.
-    outers = [lp for lp in loops if _signed_area(lp) > _area_floor(lp)]
-    holes = [lp for lp in loops if _signed_area(lp) < -_area_floor(lp)]
-    outers.sort(key=lambda lp: _signed_area(lp))  # smallest first
-    result = [(o, []) for o in outers]
-    for h in holes:
-        hp = _interior_point(h)
-        hkeys = frozenset(_key2(p) for p in h)
-        for outer, hl in result:
-            if (len(outer) == len(h)
-                    and frozenset(_key2(p) for p in outer) == hkeys):
-                # The hole is this outer's *own* outline — a region kept as
-                # its own face (a crease/user-edge split). The hole belongs to
-                # the enclosing face, not to the face it would annihilate.
-                continue
-            if _point_in_polygon(hp, outer):
-                hl.append(h)
-                break
-    return result
+    from ingetrazo_core import plane_nesting
+    return [(loops[i], [loops[j] for j in holes])
+            for i, holes in plane_nesting(loops, False)]
 
 
 def rebuild_plane(mesh, origin: QVector3D, normal: QVector3D,

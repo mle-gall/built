@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Trace the boundary of adjacent arrangement regions, keeping creases.
+use super::planar::Cell;
+use pyo3::{prelude::*, types::PySet};
 use std::collections::{BTreeMap, BTreeSet};
 
 type Point = [f64; 2];
-type Cell = [i64; 2];
 pub type Region = (Vec<Point>, Vec<Vec<Point>>);
 
 pub(super) fn on_segment(p: Point, [a, b]: [Point; 2], tol: f64) -> bool {
@@ -15,9 +16,18 @@ pub(super) fn on_segment(p: Point, [a, b]: [Point; 2], tol: f64) -> bool {
         && dot <= x * x + y * y + tol
 }
 
-/// Equal-angle ties in a degenerate graph depend on Python set iteration.
-/// Let the reference tracer resolve those, and coordinates outside i64 cells.
+/// Store-only callers can decline ties when no interpreter is attached.
 pub fn trace(regions: Vec<Region>, keep: &[[Point; 2]], tol: f64) -> Option<Vec<Vec<Point>>> {
+    trace_ordered(regions, keep, tol, None).ok().flatten()
+}
+
+pub(super) fn trace_ordered(
+    regions: Vec<Region>,
+    keep: &[[Point; 2]],
+    tol: f64,
+    py: Option<Python<'_>>,
+) -> PyResult<Option<Vec<Vec<Point>>>> {
+    let mut encounter = Vec::new();
     let mut coords = BTreeMap::new();
     let mut counts = BTreeMap::new();
     for (outer, holes) in regions {
@@ -25,19 +35,21 @@ pub fn trace(regions: Vec<Region>, keep: &[[Point; 2]], tol: f64) -> Option<Vec<
             let mut cells = Vec::with_capacity(ring.len());
             let first = ring.first().copied();
             for p in ring {
-                let scaled = p.map(|v| (v / tol).round_ties_even());
-                if scaled
-                    .iter()
-                    .any(|v| !v.is_finite() || v.abs() >= i64::MAX as f64)
-                {
-                    return None;
+                let Some(cell) = Cell::at(p, tol) else {
+                    return Ok(None);
+                };
+                if py.is_none() && cell.point().iter().any(|v| v.abs() >= i64::MAX as f64) {
+                    return Ok(None);
                 }
-                let cell = scaled.map(|x| x as i64);
                 coords.insert(cell, p);
                 cells.push(cell);
             }
             for (&a, &b) in cells.iter().zip(cells.iter().cycle().skip(1)) {
-                *counts.entry((a, b)).or_insert(0usize) += 1;
+                let count = counts.entry((a, b)).or_insert(0usize);
+                if *count == 0 && py.is_some() {
+                    encounter.push((a, b));
+                }
+                *count += 1;
             }
             // The reference loop writes both ends per edge, so the last write
             // in the ring is its first vertex.
@@ -75,12 +87,12 @@ pub fn trace(regions: Vec<Region>, keep: &[[Point; 2]], tol: f64) -> Option<Vec<
         if links[&k].len() != 1 {
             continue;
         }
-        let next = *links[&k].first()?;
+        let next = *links[&k].first().unwrap();
         if crease(k, next) {
             net.remove(&(k, next));
             net.remove(&(next, k));
-            links.get_mut(&k)?.remove(&next);
-            links.get_mut(&next)?.remove(&k);
+            links.get_mut(&k).unwrap().remove(&next);
+            links.get_mut(&next).unwrap().remove(&k);
             if links[&next].len() == 1 {
                 leaves.push(next);
             }
@@ -96,9 +108,24 @@ pub fn trace(regions: Vec<Region>, keep: &[[Point; 2]], tol: f64) -> Option<Vec<
                 ((q[1] - p[1]).atan2(q[0] - p[0]), n)
             })
             .collect();
-        angles.sort_by(|a, b| a.0.total_cmp(&b.0));
+        angles.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
         if angles.windows(2).any(|p| p[0].0 == p[1].0) {
-            return None;
+            let Some(py) = py else { return Ok(None) };
+            // The old tracer inserts surviving neighbours into a Python set
+            // in directed-edge encounter order, then stable-sorts by angle.
+            let set = PySet::empty(py)?;
+            for &(a, b) in &encounter {
+                if net.contains_key(&(a, b)) && (a == k || b == k) {
+                    set.add(if a == k { b } else { a }.tuple(py)?)?;
+                }
+            }
+            angles.clear();
+            for cell in set.iter() {
+                let key = Cell::at(cell.extract()?, 1.).unwrap();
+                let q = coords[&key];
+                angles.push(((q[1] - p[1]).atan2(q[0] - p[0]), key));
+            }
+            angles.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
         }
         order.insert(k, angles.into_iter().map(|(_, n)| n).collect::<Vec<_>>());
     }
@@ -109,14 +136,16 @@ pub fn trace(regions: Vec<Region>, keep: &[[Point; 2]], tol: f64) -> Option<Vec<
             let mut edge = start;
             let mut ring = Vec::new();
             loop {
-                *net.get_mut(&edge)? -= 1;
+                *net.get_mut(&edge).unwrap() -= 1;
                 let (a, b) = edge;
                 ring.push(coords[&a]);
                 if ring.len() > 100000 {
                     break;
                 }
                 let ns = &order[&b];
-                let i = ns.iter().position(|&n| n == a)?;
+                let Some(i) = ns.iter().position(|&n| n == a) else {
+                    return Ok(None);
+                };
                 let Some(next) = (1..=ns.len())
                     .map(|s| (b, ns[(i + ns.len() - s) % ns.len()]))
                     .find(|step| *step == start || net.get(step).copied().unwrap_or(0) > 0)
@@ -133,5 +162,5 @@ pub fn trace(regions: Vec<Region>, keep: &[[Point; 2]], tol: f64) -> Option<Vec<
             }
         }
     }
-    Some(loops)
+    Ok(Some(loops))
 }
