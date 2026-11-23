@@ -414,7 +414,7 @@ class ChangeFeed:
     def __init__(self, history):
         self._history = weakref.ref(history)
         self._steps: deque[Step] = deque(maxlen=self.maxlen)
-        self._subscribers = []
+        self._subscribers = history._native.subscribers if history._native is not None else []
         self._pending = None
         self._depth = 0
         self.unsubscribe = history.add_listener(before=self._before,
@@ -546,6 +546,7 @@ class ChangeFeed:
             step.placements["removed"].extend(u for i, u in roots0.items() if i not in roots1)
         step.complete = _known_placements(
             cmd, phase, step, scene, changes is not None) and step.complete
+        step.placements["modified"].extend(h._moved_signs)
         _dedupe(step.placements)
         if tags0 is not None:
             for k in tags1.keys() - tags0.keys():

@@ -198,7 +198,7 @@ class MeshToolAccess:
         direction = inverse.mapVector(direction)
         faces, owner, v0, e1, e2 = self._face_triangles(mesh)
         if not len(v0):
-            return None, (SimpleNamespace(xform=matrix) if group is not None else None)
+            return None, (SimpleNamespace(xform=matrix, source_occurrence=group) if group is not None else None)
         t, hit = _moller_trumbore(np.array(origin.toTuple()),
                                   np.array(direction.toTuple()), v0, e1, e2)
         excluded = getattr(self.tool, 'moving_face_ids', lambda: set())()
@@ -208,7 +208,7 @@ class MeshToolAccess:
         best = None
         if hit.any():
             best = faces[int(owner[int(np.argmin(np.where(hit, t, np.inf)))])]
-        return best, (SimpleNamespace(xform=matrix) if group is not None else None)
+        return best, (SimpleNamespace(xform=matrix, source_occurrence=group) if group is not None else None)
 
     #: Meshes whose triangles :meth:`_face_triangles` keeps at once (the
     #: cursor goes back and forth between a few).

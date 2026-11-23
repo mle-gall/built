@@ -12,12 +12,19 @@ use pyo3::{
 #[derive(Clone)]
 pub struct Vec3 {
     v: DVec3,
-    hash: Option<isize>,
+    state: VectorState,
+}
+
+#[derive(Clone)]
+enum VectorState {
+    Plain,
+    Hashed(isize),
+    Document(Box<(u64, u16, usize)>),
 }
 
 impl From<DVec3> for Vec3 {
     fn from(v: DVec3) -> Self {
-        Self { v, hash: None }
+        Self { v, state: VectorState::Plain }
     }
 }
 
@@ -35,8 +42,22 @@ fn xyz(obj: &Bound<'_, PyAny>) -> PyResult<DVec3> {
 }
 
 impl Vec3 {
+    pub(crate) fn coords(&self) -> [f64; 3] {
+        self.v.to_array()
+    }
+
+    pub(crate) fn bind(&mut self, key: u64, attr: u16, address: usize) {
+        self.state = VectorState::Document(Box::new((key, attr, address)));
+    }
+
     fn update(&mut self, v: DVec3) -> PyResult<()> {
-        if self.hash.is_some() {
+        if let VectorState::Document(binding) = &self.state {
+            let (key, attr, address) = **binding;
+            if !crate::doc::py::vector_changed(key, attr, address, v.to_array())? {
+                self.state = VectorState::Plain;
+            }
+        }
+        if matches!(self.state, VectorState::Hashed(_)) {
             return Err(PyTypeError::new_err("cannot modify a hashed vector"));
         }
         self.v = v;
@@ -124,11 +145,11 @@ impl Vec3 {
         r.hasattr("toTuple").unwrap_or(false) && xyz(r).is_ok_and(|v| v == self.v)
     }
     fn __hash__(&mut self, py: Python<'_>) -> PyResult<isize> {
-        if let Some(hash) = self.hash {
+        if let VectorState::Hashed(hash) = self.state {
             return Ok(hash);
         }
         let hash = self.toTuple().into_pyobject(py)?.hash()?;
-        self.hash = Some(hash);
+        self.state = VectorState::Hashed(hash);
         Ok(hash)
     }
     fn __reduce__<'py>(

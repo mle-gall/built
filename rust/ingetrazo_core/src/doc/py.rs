@@ -137,11 +137,15 @@ fn read_attr<'py>(py: Python<'py>, me: &Bound<'py, PyAny>, k: Key, a: u16, track
     let Some(v) = v else { return Ok(py.None().into_bound(py)) };
     let container = matches!(v, Value::Dict(_) | Value::List(_));
     let out = v.to_py(py)?;
-    if !(track && container) {
+    let view = if matches!(v, Value::Vector(_)) {
+        out.cast::<crate::math::Vec3>()?.borrow_mut().bind(k, a, out.as_ptr() as usize);
+        out
+    } else if track && container {
+        let Some(hook) = track_hook(py) else { return Ok(out) };
+        hook.bind(py).call1((k, a, out))?
+    } else {
         return Ok(out);
-    }
-    let Some(hook) = track_hook(py) else { return Ok(out) };
-    let view = hook.bind(py).call1((k, a, out))?;
+    };
     let keep = view.clone().unbind();
     let stale = {
         let mut d = lock();
@@ -173,7 +177,13 @@ fn write_attr(py: Python<'_>, me: &Bound<'_, PyAny>, k: Key, a: u16, value: &Bou
             }
         }
     }
-    let v = if value.is_none() { None } else { Some(Value::from_py(value)?) };
+    let v = if value.is_none() {
+        None
+    } else if let Ok(vector) = value.cast::<crate::math::Vec3>() {
+        Some(Value::Vector(vector.borrow().coords()))
+    } else {
+        Some(Value::from_py(value)?)
+    };
     let mut trash = Trash::default();
     let r = {
         let mut d = lock();
@@ -187,7 +197,27 @@ fn write_attr(py: Python<'_>, me: &Bound<'_, PyAny>, k: Key, a: u16, value: &Bou
     super::assembly::finish_result(py, r.map(|_| ()).map_err(err))
 }
 
+/// An editor changed a vector in place. An assignment, undo, or node
+/// deletion detaches the old view by removing it from the node cache.
+pub(crate) fn vector_changed(key: Key, attr: u16, address: usize, xyz: [f64; 3]) -> PyResult<bool> {
+    Python::attach(|py| {
+        let mut trash = Trash::default();
+        let mut doc = lock();
+        let current = doc.node(key).and_then(|node| node.attr_view(attr));
+        if !current.is_some_and(|view| view.as_ptr() as usize == address) {
+            return Ok(false);
+        }
+        let result = doc.write_keep_view(py, key, Field::Attr(attr), FVal::Val(Some(Value::Vector(xyz))), &mut trash);
+        drop(doc);
+        drop(trash);
+        result.map(|_| true).map_err(err)
+    })
+}
+
 fn handle_key(obj: &Bound<'_, PyAny>) -> PyResult<Key> {
+    if let Ok(r) = obj.cast::<DocRecord>() {
+        return Ok(r.get().key);
+    }
     if let Ok(p) = obj.cast::<PyPlacement>() {
         return Ok(p.get().key);
     }
@@ -198,6 +228,37 @@ fn handle_key(obj: &Bound<'_, PyAny>) -> PyResult<Key> {
         return Ok(m.get().key);
     }
     Err(PyTypeError::new_err(format!("{} is not a document handle", obj.get_type().name()?)))
+}
+
+/// Identity for an annotation, saved view, sheet or sheet item. Its
+/// named fields use the same value storage and journal as scene tables.
+#[pyclass(module = "ingetrazo_core", subclass, frozen)]
+pub struct DocRecord {
+    key: Key,
+}
+
+impl Drop for DocRecord {
+    fn drop(&mut self) {
+        handle_dropped(self.key);
+    }
+}
+
+#[pymethods]
+impl DocRecord {
+    #[new]
+    #[pyo3(signature = (*_args, **_kwargs))]
+    fn new(_args: &Bound<'_, PyTuple>, _kwargs: Option<&Bound<'_, PyDict>>) -> Self {
+        drain_pending();
+        Self { key: lock().alloc(Kind::Record) }
+    }
+
+    fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
+        traverse_node(self.key, &visit)
+    }
+
+    fn __clear__(&self) {
+        clear_node(self.key);
+    }
 }
 
 /// A class attribute that keeps an instance's value in the document
@@ -922,6 +983,24 @@ impl PyPlacement {
         }
         uids.sort_unstable();
         Ok(uids)
+    }
+
+    /// Compose the placement's parent chain without walking unrelated
+    /// occurrences when an annotation is drawn or reprojected.
+    fn _anchor_matrix(&self, placement: &PyPlacement) -> Option<crate::math::Matrix4> {
+        let doc = lock();
+        let mut k = placement.key;
+        let mut matrix = None;
+        while k != self.key {
+            let node = doc.node(k)?;
+            let super::Data::Placement(p) = &node.data else { return None };
+            if let Some(xform) = &p.xform {
+                let parent = glam::DMat4::from_cols_array(&xform.doubles());
+                matrix = Some(matrix.map_or(parent, |child| parent * child));
+            }
+            k = *node.owners.first()?;
+        }
+        matrix.map(crate::math::Matrix4::from)
     }
 
     fn _edit_matrix(&self, child: &PyPlacement) -> PyResult<[f64; 16]> {
@@ -2403,6 +2482,7 @@ fn doc_stats(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
     out.set_item("roots", live[Kind::Root as usize])?;
     out.set_item("placements", live[Kind::Placement as usize])?;
     out.set_item("tags", live[Kind::Tag as usize])?;
+    out.set_item("records", live[Kind::Record as usize])?;
     out.set_item("materials", live[Kind::Material as usize])?;
     out.set_item("slots", slots)?;
     out.set_item("free", free)?;
@@ -2440,6 +2520,9 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(doc_set_track_hook, m)?)?;
     m.add_function(wrap_pyfunction!(doc_set_refill_hook, m)?)?;
     m.add_function(wrap_pyfunction!(doc_attr_changed, m)?)?;
+    m.add_class::<super::anchor::ElementAnchor>()?;
+    m.add_class::<super::history::DocumentHistory>()?;
+    m.add_class::<DocRecord>()?;
     m.add_class::<DocAttr>()?;
     m.add_function(wrap_pyfunction!(doc_walk, m)?)?;
     m.add_function(wrap_pyfunction!(doc_tree, m)?)?;

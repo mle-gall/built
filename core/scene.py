@@ -97,6 +97,7 @@ class Scene:
     dimensions: list = field(default_factory=list)
     # Leader-text annotations (the Text tool) — same overlay treatment.
     text_labels: list = field(default_factory=list)
+    text_placement_anchors: list = field(default_factory=list)
     # Georef traced paths (roads / boundaries / alignments) — first-class georef
     # entities, kept out of the topology mesh entirely (Track G).
     geo_paths: list = field(default_factory=list)
@@ -602,6 +603,7 @@ class Scene:
                 for parent in path_to(self.groups, group) or ():
                     self.begin_group_edit(parent)
         self._refresh_dimension_holds()
+        attachments = ()
         entry_mesh = group.mesh
         anterior = self.mesh
         # The context's own axes (issue #44), read BEFORE anything below
@@ -627,6 +629,7 @@ class Scene:
                     frame = frame * group.axes
         share = entry_transaction = None
         if active_mesh is None and (group.children or group.xform is not None):
+            attachments = self._attachment_swap()
             from core.reference_edit import enter
             from core.store_mesh import StoreMesh
             # A singular placement needs the compatibility world copy. Keep
@@ -653,9 +656,38 @@ class Scene:
         self._placement_context_bumps += 1
         self.mesh = active_mesh if active_mesh is not None else group.mesh
         self.edit_group = group
+        self._restore_attachments(attachments)
         self._refresh_dimension_holds()
         self.selection.clear()
         self.version += 1
+
+    def _attachment_swap(self):
+        refs = [(label, "attachment") for label in self.text_labels]
+        from core.composition import sheet_holds
+        for sheet in self.compositions:
+            for item in (*sheet.cotas, *sheet.etiquetas, *sheet.niveles):
+                for name, (_point, ref) in sheet_holds(item):
+                    if not isinstance(ref, dict):
+                        refs.append((item, "hold_" + name))
+        refs.extend((sign, "attachment") for sign in self.text_placement_anchors)
+        refs.extend((dim, name) for dim in self.dimensions
+                    for name in ("attachment_a", "attachment_b"))
+        result = []
+        for obj, name in refs:
+            value = getattr(obj, name, None)
+            if value is not None:
+                ref = value[1] if name.startswith("hold_") else value
+                result.append((obj, name, ref, ref.before_mesh_swap()))
+        return result
+
+    @staticmethod
+    def _restore_attachments(refs):
+        for obj, name, ref, saved in refs:
+            replacement = ref.after_mesh_swap(saved)
+            if replacement is not ref:
+                if name.startswith("hold_"):
+                    replacement = (getattr(obj, name)[0], replacement)
+                setattr(obj, name, replacement)
 
     def _refresh_dimension_holds(self) -> None:
         """Read every dimension's endpoints once, either side of an edit
@@ -682,6 +714,7 @@ class Scene:
         if not self._edit_stack:
             return
         self._refresh_dimension_holds()
+        attachments = self._attachment_swap() if self._edit_stack[-1].get("share") else ()
         nivel = self._root._leave_edit() if _dm.ENABLED else self._edit_stack.pop()
         unchanged = True
         share = nivel.pop("share", None)
@@ -695,6 +728,7 @@ class Scene:
                            else None)
         if not self._edit_stack:
             self._loose_mesh = None
+        self._restore_attachments(attachments)
         self._refresh_dimension_holds()
         self.selection.clear()
         self.version += 1
@@ -912,6 +946,7 @@ class Scene:
             self.groups.clear()
             self.dimensions.clear()
             self.text_labels.clear()
+            self.text_placement_anchors.clear()
             self.geo_paths.clear()
             self.geo_points.clear()
             self.guides.clear()
@@ -1198,7 +1233,12 @@ if _dm.ENABLED:
     #: defaults still apply: ``__init__`` assigns them through these).
     ROOT_TABLES = ("active_layer", "layer_folders", "folder_parents",
                    "folder_visibility", "layer_folder_uids",
-                   "layer_folder_names", "plugin_data")
+                   "layer_folder_names", "plugin_data",
+                   "dimensions", "text_labels", "text_placement_anchors", "dimension_style", "saved_views",
+                   "scene_folders", "scene_folder_parents", "compositions",
+                   "guides", "image_planes", "geo_points", "geo_paths",
+                   "custom_scales", "section_planes", "show_section_planes",
+                   "show_section_cuts")
     for _name in ROOT_TABLES:
         setattr(Scene, _name, _root_table(_name, _name != "active_layer"))
     del _name

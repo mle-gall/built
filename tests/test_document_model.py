@@ -583,3 +583,45 @@ def test_geometry_commit_failure_rolls_back_all_targets_and_fields(monkeypatch):
     assert not history.undo_stack and N.doc_depth() == 0
     assert part.name == "before"
     assert [m.capture_state() for m in (left, right)] == original
+
+
+def test_annotation_vector_edits_and_detached_views():
+    from core.textlabel import TextLabel
+
+    label = TextLabel(QVector3D(), QVector3D(1, 2, 3), "Note")
+    held = label.offset
+    doc_model.begin()
+    held.setY(7)
+    label.offset += QVector3D(3, 0, 0)
+    txn = doc_model.commit()
+    assert label.offset.toTuple() == (4, 7, 3)
+    txn.undo()
+    assert label.offset.toTuple() == (1, 2, 3)
+    held.setZ(8)
+    assert label.offset.z() == 3
+    txn.redo()
+    assert label.offset.toTuple() == (4, 7, 3)
+
+
+def test_sheet_record_edit_rollback_keeps_the_editor_item():
+    from core.composition import Composicion, MarcoVista
+
+    scene = Scene()
+    frame = MarcoVista(view_key="scene:Plan")
+    sheet = Composicion(frames=[frame])
+    scene.compositions.append(sheet)
+    doc_model.begin()
+    frame.view_key = "scene:Other"
+    sheet.frames.clear()
+    doc_model.rollback()
+    assert sheet.frames[0] is frame
+    assert frame.view_key == "scene:Plan"
+
+
+def test_edge_anchor_follows_rewired_endpoint_and_undo():
+    original = [(101, (0., 0., 0.)), (102, (4., 0., 0.))]
+    anchor = N.ElementAnchor.capture("edge", 90, ["part"], original, (1., 0., 0.))
+    rewired = [(103, (8., 0., 0.)), original[0]]
+    assert anchor.position(rewired) == [2., 0., 0.]
+    assert anchor.indexed_weights([103, 101]) == [(1, .75), (0, .25)]
+    assert anchor.position(original) == [1., 0., 0.]

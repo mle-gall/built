@@ -4947,6 +4947,7 @@ class Viewport(QOpenGLWidget):
                     seen.add(id(child))
                 tops[id(proxy)] = id(group)
                 proxy.mesh = child.mesh
+                proxy.source_occurrence = child
                 proxy.uid = self.scene.navigator_key(child)
                 # A nested entity with no tag of its own inherits the
                 # nearest tag above it (the .skp convention); and when a tag

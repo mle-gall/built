@@ -21,10 +21,12 @@ from __future__ import annotations
 import csv
 import io
 
+from core.doc_model import Record, record_fields
 from ingetrazo_core import Vec3 as QVector3D
 
 
-class GeoPoint:
+@record_fields("position", "name", "desc")
+class GeoPoint(Record):
     """One surveyed control point, in local scene metres."""
 
     def __init__(self, position, name: str = "", desc: str = "") -> None:

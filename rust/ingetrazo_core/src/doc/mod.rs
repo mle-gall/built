@@ -25,6 +25,8 @@ mod definition;
 mod geometry;
 use definition::DefinitionRef;
 use std::sync::Arc;
+mod anchor;
+mod history;
 pub mod py;
 pub mod value;
 
@@ -137,6 +139,7 @@ pub enum Kind {
     Placement,
     Tag,
     Material,
+    Record,
 }
 
 impl Kind {
@@ -146,6 +149,7 @@ impl Kind {
             Kind::Placement => "placement",
             Kind::Tag => "tag",
             Kind::Material => "material",
+            Kind::Record => "record",
         }
     }
 }
@@ -336,6 +340,7 @@ pub struct MaterialData {
 }
 
 pub enum Data {
+    Record,
     Root { edit_path: Vec<(Key, Py<PyAny>)> },
     Placement(Box<PlacementData>),
     Tag(Box<TagData>),
@@ -403,6 +408,7 @@ impl Node {
             Kind::Root => Data::Root { edit_path: Vec::new() },
             Kind::Placement => Data::Placement(Box::new(PlacementData { component: true, ..Default::default() })),
             Kind::Tag => Data::Tag(Box::new(TagData { visible: true, ..Default::default() })),
+            Kind::Record => Data::Record,
             Kind::Material => Data::Material(Box::default()),
         };
         Node {
@@ -615,7 +621,7 @@ impl Trash {
 pub struct Doc {
     pub slots: Vec<Slot>,
     pub free: Vec<u32>,
-    pub live: [usize; 4],
+    pub live: [usize; 5],
     pub open: Option<Open>,
     /// Every write (journalled or not) bumps this: a cheap "anything
     /// changed?" for caches keyed on the document.
@@ -1505,7 +1511,7 @@ impl Node {
             Data::Placement(p) => p.uid.as_deref().map(|u| (u, VIEW_STR0 + 1)),
             Data::Tag(t) => t.key.as_deref().map(|k| (k, VIEW_STR0 + 2)),
             Data::Material(m) => m.name.as_deref().map(|n| (n, VIEW_STR0)),
-            Data::Root { .. } => None,
+            Data::Root { .. } | Data::Record => None,
         }
     }
 }

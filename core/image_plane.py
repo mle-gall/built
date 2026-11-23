@@ -24,6 +24,7 @@ keep the picture undistorted while the user drags.
 """
 from __future__ import annotations
 
+from core.doc_model import Record, record_fields
 from ingetrazo_core import Vec3 as QVector3D
 
 # Imported images land here rather than on the default layer, for the same
@@ -34,7 +35,8 @@ from ingetrazo_core import Vec3 as QVector3D
 IMAGE_LAYER = "Images"
 
 
-class ImagePlane:
+@record_fields("path", "origin", "u", "v", "aspect", "name", "opacity", "layer", "locked")
+class ImagePlane(Record):
     """A rectangular reference image placed in the model."""
 
     __slots__ = ("path", "origin", "u", "v", "aspect", "name",

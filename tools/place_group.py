@@ -197,11 +197,15 @@ class PlaceGroupTool(Tool):
         if not self._align:
             return
         try:
-            hit = ctx.viewport.pick_face_any(ctx.screen.x(), ctx.screen.y())
+            pick = getattr(ctx.viewport, "pick_face_placement", None) or ctx.viewport.pick_face_any
+            hit = pick(ctx.screen.x(), ctx.screen.y())
         except Exception:
             hit = None
-        face = hit[0] if isinstance(hit, tuple) else hit
-        self._face_normal = face.normal() if face is not None else None
+        face, owner = hit if isinstance(hit, tuple) else (hit, None)
+        self._face_normal = None
+        if face is not None:
+            from core.snap import face_plane_world
+            _, self._face_normal = face_plane_world(face, getattr(owner, "xform", None))
 
     # ---- Spatial input ------------------------------------------------------
     def on_hover(self, ctx: ToolContext) -> None:
@@ -215,9 +219,13 @@ class PlaceGroupTool(Tool):
         if self._group is None:
             return
         self._update_alignment(ctx)
-        self.place_at(ctx.viewport, ctx.world)
+        attachment = None
+        if self._align and self._group.text3d:
+            from core.annotation_anchor import picked_attachment
+            attachment = picked_attachment(ctx)
+        self.place_at(ctx.viewport, ctx.world, attachment=attachment)
 
-    def place_at(self, viewport, world: QVector3D) -> None:
+    def place_at(self, viewport, world: QVector3D, *, attachment=None) -> None:
         """Drop the component with its anchor at ``world``, in one undo
         step — what a click does, for a script that already knows the
         point (``MainWindow.import_igz_path(path, at=…)``, issue #179)."""
@@ -246,7 +254,7 @@ class PlaceGroupTool(Tool):
             carry_axes(self._group, self._pose_matrix(shift))   # #44
         group = self._group
         self._group = None
-        viewport.history.execute(InsertGroupCommand(group))
+        viewport.history.execute(InsertGroupCommand(group, attachment=attachment))
         viewport.flash_status(self._placed_message())
         window = viewport.window()
         if hasattr(window, "_activate_tool"):

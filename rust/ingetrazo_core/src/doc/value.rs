@@ -34,6 +34,8 @@ pub enum Value {
     None,
     Bool(bool),
     Int(i64),
+    ElementKey(u128),
+    Vector([f64; 3]),
     Float(f64),
     Str(String),
     List(Vec<Value>),
@@ -61,7 +63,10 @@ impl Value {
             return Ok(Value::Bool(b.is_true()));
         }
         if obj.is_instance_of::<PyInt>() {
-            return Ok(Value::Int(obj.extract::<i64>()?));
+            return match obj.extract::<i64>() {
+                Ok(i) => Ok(Value::Int(i)),
+                Err(_) => Ok(Value::ElementKey(obj.extract()?)),
+            };
         }
         if let Ok(f) = obj.cast::<PyFloat>() {
             return Ok(Value::Float(f.value()));
@@ -115,6 +120,8 @@ impl Value {
             Value::None => py.None().into_bound(py),
             Value::Bool(b) => PyBool::new(py, *b).to_owned().into_any(),
             Value::Int(i) => i.into_pyobject(py)?.into_any(),
+            Value::Vector(v) => Py::new(py, crate::math::Vec3::from(glam::DVec3::from(*v)))?.into_bound(py).into_any(),
+            Value::ElementKey(k) => k.into_pyobject(py)?.into_any(),
             Value::Float(f) => PyFloat::new(py, *f).into_any(),
             Value::Str(s) => PyString::new(py, s).into_any(),
             Value::List(items) => {

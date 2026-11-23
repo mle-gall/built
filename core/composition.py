@@ -14,6 +14,9 @@ Model units are METRES; composer units are MILLIMETRES of paper.
 """
 from __future__ import annotations
 
+from core import doc_model
+from core.doc_model import Record, record_fields
+
 import math
 from dataclasses import dataclass, field
 from typing import Optional
@@ -190,8 +193,9 @@ def frame_page_projector(frame: "MarcoVista", camera):
 NEW_FRAME_STYLE = "style:Architectural"
 
 
+@record_fields()
 @dataclass
-class MarcoVista:
+class MarcoVista(Record):
     """A model-view frame on the page.
 
     ``view_key`` names what fills it: ``"__current__"`` (the live camera),
@@ -360,8 +364,9 @@ class MarcoVista:
         return mm_to_px(self.w_mm, dpi), mm_to_px(self.h_mm, dpi)
 
 
+@record_fields()
 @dataclass
-class TextoItem:
+class TextoItem(Record):
     """A free text block on the sheet. ``size_pt`` is the printed size in
     points (1 pt = 0.3528 mm on paper), like any DTP tool."""
 
@@ -393,8 +398,9 @@ class TextoItem:
     hidden: bool = False
 
 
+@record_fields()
 @dataclass
-class ImagenItem:
+class ImagenItem(Record):
     """An image (logo, photo) on the sheet. The file is referenced by path;
     the .igz stores the path, not the pixels (same policy as textures)."""
 
@@ -427,8 +433,9 @@ class ImagenItem:
     hidden: bool = False
 
 
+@record_fields()
 @dataclass
-class Cajetin:
+class Cajetin(Record):
     """The title block — for the trade, THE item of a sheet. A classic
     bordered grid of labelled fields, anchored wherever the user drops it."""
 
@@ -517,7 +524,7 @@ class Cajetin:
         for k in ("x_mm", "y_mm", "z", "locked", "group_id",
                   "proyecto", "autor", "fecha", "escala", "lamina"):
             d.pop(k, None)
-        return d
+        return doc_model.plain(d)
 
 
 def _same(a, b) -> bool:
@@ -553,8 +560,9 @@ CAJETIN_DESIGNS = (
 )
 
 
+@record_fields()
 @dataclass
-class BarraEscala:
+class BarraEscala(Record):
     """A graphic scale bar: alternating black/white segments with metre
     labels — the reader can measure even from a bad photocopy."""
 
@@ -597,8 +605,9 @@ class BarraEscala:
         return 8.0
 
 
+@record_fields()
 @dataclass
-class FlechaNorte:
+class FlechaNorte(Record):
     """A north arrow: circle, needle and N, rotatable to the project north.
 
     The N rides the needle's tip, outside the circle, and turns with the
@@ -634,8 +643,9 @@ class FlechaNorte:
         return self.size_mm
 
 
+@record_fields()
 @dataclass
-class PerfilTerreno:
+class PerfilTerreno(Record):
     """A longitudinal terrain profile on the sheet: the ground elevation
     under a traced path (``Scene.geo_paths``) against chainage, the way a
     road or canal plan shows it — a horizontal scale, a vertical
@@ -668,8 +678,9 @@ class PerfilTerreno:
     hidden: bool = False
 
 
+@record_fields()
 @dataclass
-class Leyenda:
+class Leyenda(Record):
     """A legend box: title + one row per model layer (snapshotted when
     added / refreshed, so the sheet stays stable if layers change)."""
 
@@ -697,8 +708,9 @@ class Leyenda:
         return 7.5 + 5.5 * max(len(self.rows), 1)
 
 
+@record_fields()
 @dataclass
-class FormaItem:
+class FormaItem(Record):
     """A drawing shape: line, arrow, rectangle or ellipse. Lines/arrows run
     corner to corner of the box (``invert`` flips which diagonal)."""
 
@@ -735,8 +747,9 @@ class FormaItem:
     band_mm: float = 6.0         # band depth (hatch / band)
 
 
+@record_fields(extra=("hold_a",))
 @dataclass(eq=False)
-class EtiquetaItem:
+class EtiquetaItem(Record):
     """A label with a leader (the classic sheet label / leader text): a
     text block on the page and a leader line to the point it names, with
     an arrow head there. The point may anchor to model geometry of a
@@ -805,8 +818,9 @@ class EtiquetaItem:
         return ld
 
 
+@record_fields(extra=("hold_a",))
 @dataclass(eq=False)
-class NivelItem:
+class NivelItem(Record):
     """A level mark (cota de nivel): the elevation of a point of the model
     written as «N.P.T. +0.15» beside the symbol — an open triangle on its
     apex for sections and elevations, a quartered circle for plans — with
@@ -871,8 +885,9 @@ class NivelItem:
         return max(1.5, self.size_mm * 1.2)
 
 
+@record_fields()
 @dataclass(eq=False)
-class LlamadaItem:
+class LlamadaItem(Record):
     """A detail callout: a dashed box (or circle) around the part of a
     view that another drawing enlarges, a leader, and the bubble that
     names that drawing — «3» over «L-05». Bound to the frame it sits on,
@@ -908,8 +923,9 @@ class LlamadaItem:
         return max(3.0, self.size_mm * 2.4)
 
 
+@record_fields()
 @dataclass(eq=False)
-class CotaAngularItem:
+class CotaAngularItem(Record):
     """A sheet angular dimension (the usual angular dimension tool): a vertex
     on the page, two rays to the measured points, and an arc of
     ``radius_mm`` between them carrying the angle label."""
@@ -1006,8 +1022,9 @@ def readable_deg(dx_mm: float, dy_mm: float) -> float:
     return (deg + 90.0) % 180.0 - 90.0
 
 
+@record_fields(extra=("hold_a", "hold_b"))
 @dataclass
-class CotaItem:
+class CotaItem(Record):
     """A sheet dimension between two measured points; the label is the REAL
     model distance implied by the paper length at 1:N («3.45 m»).
 
@@ -1195,8 +1212,9 @@ class CotaItem:
         return self.auto_label()
 
 
+@record_fields()
 @dataclass
-class CotaRadialItem:
+class CotaRadialItem(Record):
     """A radius or diameter dimension (AutoCAD's DIMRADIUS / DIMDIAMETER).
 
     Rafael asked for the radius after we shipped Fillet — «ya que pusisteis
@@ -1345,8 +1363,9 @@ class CotaRadialItem:
         return self.auto_label()
 
 
+@record_fields()
 @dataclass
-class Composicion:
+class Composicion(Record):
     """One sheet: a page plus its items."""
 
     name: str = "Lámina 1"
@@ -1440,13 +1459,22 @@ class Composicion:
                          ("niveles", self.niveles),
                          ("llamadas", self.llamadas)):
             if lst:
-                d[key] = [asdict(it) for it in lst]
+                d[key] = []
+                for item in lst:
+                    entry = asdict(item)
+                    for name, (_last, hold) in sheet_holds(item):
+                        raw = hold if isinstance(hold, dict) else hold.archive()
+                        if raw is not None:
+                            entry.setdefault("geometry_anchors", {})[name] = raw
+                            if not isinstance(hold, dict) and (point := hold.position()) is not None:
+                                entry[name + "_world"] = list(point.toTuple())
+                    d[key].append(entry)
         if self.cajetin is not None:
             d["cajetin"] = asdict(self.cajetin)
         if self.guides_v or self.guides_h:
             d["guides"] = {"v": [float(x) for x in self.guides_v],
                            "h": [float(y) for y in self.guides_h]}
-        return d
+        return doc_model.plain(d)
 
     @classmethod
     def from_dict(cls, d: dict) -> "Composicion":
@@ -1493,7 +1521,38 @@ def _build(kind, raw):
     from a newer version loads with its extra keys ignored."""
     from dataclasses import fields
     known = {f.name for f in fields(kind)}
-    return kind(**{k: v for k, v in raw.items() if k in known})
+    item = kind(**{k: v for k, v in raw.items() if k in known})
+    anchors = raw.get("geometry_anchors")
+    if not isinstance(anchors, dict):
+        return item
+    for name, source in anchors.items():
+        if name in ("a", "b") and "hold_" + name in item._record_fields:
+            point = getattr(item, name + "_world", None)
+            if point and isinstance(source, dict):
+                setattr(item, "hold_" + name, (tuple(point), source))
+    return item
+
+
+def sheet_holds(item):
+    """Only holds belonging to the current snapped point survive a manual drag."""
+    if not getattr(item, "anchor_uid", None):
+        return
+    for name in ("a", "b"):
+        hold = getattr(item, "hold_" + name, None)
+        point = getattr(item, name + "_world", None)
+        if hold is not None and point and tuple(point) == tuple(hold[0]):
+            yield name, hold
+
+
+def bind_sheet_anchors(scene):
+    from core.annotation_anchor import Attachment
+    from ingetrazo_core import Vec3
+    for sheet in scene.compositions:
+        for item in (*sheet.cotas, *sheet.etiquetas, *sheet.niveles):
+            for name, (point, raw) in sheet_holds(item):
+                if isinstance(raw, dict):
+                    ref = Attachment.restore(scene, raw, Vec3(*point))
+                    setattr(item, "hold_" + name, (point, ref) if ref is not None else None)
 
 
 def _items(kind, raw_list) -> list:
@@ -1674,6 +1733,13 @@ def expand_fields(text, frame_uid: str = "") -> str:
 class ComposerCommand:
     """Reversible operation against a Composicion."""
 
+    def journalled(self):
+        """Extension commands can opt in once all of their edits are records."""
+        return False
+
+    def restore_preview(self):
+        pass
+
     def do(self) -> None:  # pragma: no cover - interface
         raise NotImplementedError
 
@@ -1686,6 +1752,13 @@ class CompoundCommand(ComposerCommand):
 
     def __init__(self, commands) -> None:
         self.commands = list(commands)
+
+    def journalled(self):
+        return all(c.journalled() for c in self.commands)
+
+    def restore_preview(self):
+        for cmd in reversed(self.commands):
+            cmd.restore_preview()
 
     def do(self) -> None:
         for c in self.commands:
@@ -1733,6 +1806,9 @@ class AddItemCommand(ComposerCommand):
         if isinstance(self.item, LlamadaItem):
             return self.comp.llamadas
         return None
+
+    def journalled(self):
+        return isinstance(self.comp, Record)
 
     def do(self) -> None:
         lst = self._list()
@@ -1786,6 +1862,9 @@ class RemoveItemCommand(ComposerCommand):
             return self.comp.llamadas
         return None
 
+    def journalled(self):
+        return isinstance(self.comp, Record)
+
     def do(self) -> None:
         lst = self._list()
         if lst is None:
@@ -1807,11 +1886,19 @@ class EditItemCommand(ComposerCommand):
 
     def __init__(self, item, changes: dict, before: Optional[dict] = None) -> None:
         self.item = item
+        self.previewed = before is not None
         self.after = dict(changes)
         # An interactive drag has already mutated the item by release time;
         # the caller passes the state it captured at press.
         self.before = dict(before) if before is not None else \
             {k: getattr(item, k) for k in changes}
+
+    def journalled(self):
+        return isinstance(self.item, Record) and self.after.keys() <= set(self.item._record_fields)
+
+    def restore_preview(self):
+        if self.previewed:
+            self.undo()
 
     def do(self) -> None:
         for k, v in self.after.items():
@@ -1858,11 +1945,28 @@ class ComposerHistory:
 
     def execute(self, cmd: ComposerCommand, notify: bool = True,
                 coalesce: bool = False) -> None:
-        cmd.do()
+        txn = None
+        if doc_model.ENABLED and cmd.journalled():
+            # A drag has already written its preview to the item. Start the
+            # transaction at the press position for those explicit fields.
+            cmd.restore_preview()
+            depth = doc_model.begin()
+            try:
+                cmd.do()
+                txn = doc_model.commit() if depth else None
+            except Exception:
+                if depth:
+                    doc_model.rollback()
+                raise
+        else:
+            cmd.do()
+        cmd._txn = txn
         top = self._undo[-1] if self._undo else None
         if (coalesce and top is not None
                 and _edit_signature(top) is not None
                 and _edit_signature(top) == _edit_signature(cmd)):
+            top._txn = (txn.compose([top._txn, txn])
+                        if txn is not None and top._txn is not None else None)
             # keep top's `before`
             for t, c in zip(_edits_of(top), _edits_of(cmd)):
                 t.after = dict(c.after)
@@ -1876,7 +1980,11 @@ class ComposerHistory:
         if not self._undo:
             return False
         cmd = self._undo.pop()
-        cmd.undo()
+        if cmd._txn is None:
+            cmd.undo()
+        else:
+            doc_model.flush()
+            cmd._txn.undo()
         self._redo.append(cmd)
         if self._on_change:
             self._on_change()
@@ -1886,7 +1994,11 @@ class ComposerHistory:
         if not self._redo:
             return False
         cmd = self._redo.pop()
-        cmd.do()
+        if cmd._txn is None:
+            cmd.do()
+        else:
+            doc_model.flush()
+            cmd._txn.redo()
         self._undo.append(cmd)
         if self._on_change:
             self._on_change()

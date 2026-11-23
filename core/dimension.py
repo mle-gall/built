@@ -32,6 +32,10 @@ tool should be able to measure aligned (as it does now), but also linear»).
 """
 from __future__ import annotations
 
+import weakref
+
+from core.doc_model import Record, record_fields
+
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core.mesh import DeferredMesh
@@ -41,18 +45,21 @@ from core.mesh import DeferredMesh
 _MAX_HOLDS = 8
 
 
-class VertexAnchor:
+@record_fields('vertex', 'mesh', 'chain', 'element_key', 'occurrence_path')
+class VertexAnchor(Record):
     """A hold on one mesh vertex: the vertex, the mesh that registers it
     (to notice when it is gone) and the chain of groups whose transforms
     place it in the world — empty for loose geometry, ``[group]`` for a
     classic group, ``[component, child, …]`` down a nested placement."""
 
-    __slots__ = ("vertex", "mesh", "chain")
+    __slots__ = ("vertex", "mesh", "chain", "element_key", "occurrence_path")
 
     def __init__(self, vertex, mesh, chain=()) -> None:
         self.vertex = vertex
         self.mesh = mesh
         self.chain = tuple(chain)
+        self.element_key = vertex.key
+        self.occurrence_path = tuple(g.uid for g in self.chain)
 
     def matrix(self):
         """The composed placement transform, or ``None`` when every group
@@ -91,6 +98,8 @@ class VertexAnchor:
             # cleared), leaving swaps it back. Read through the chain, the
             # old mesh would land a placement off (#621).
             return False
+        if hasattr(scene, "resolve_occurrence"):
+            return scene.resolve_occurrence(self.occurrence_path) is self.chain[-1]
         return self.chain[0] in (getattr(scene, "groups", None) or ())
 
     def last_position(self):
@@ -322,7 +331,9 @@ def _linear_frame(a: QVector3D, b: QVector3D, axis: str | None):
     return u, e / e.length()
 
 
-class Dimension:
+@record_fields('_a', '_b', 'offset', 'axis', 'layer', 'text', 'anchor_a', 'anchor_b', '_holds',
+               'attachment_a', 'attachment_b')
+class Dimension(Record):
     """See the module docstring. ``a`` and ``b`` read live through their
     anchors; assigning them sets the frozen position (what a rigid
     transform of the whole model does) and keeps the anchor."""
@@ -330,6 +341,7 @@ class Dimension:
     def __init__(self, a: QVector3D, b: QVector3D, offset: QVector3D,
                  layer: str | None = None, text: str | None = None,
                  axis: str | None = None) -> None:
+        self.attachment_a = self.attachment_b = None
         self._a = QVector3D(a)
         self._b = QVector3D(b)
         #: displacement from the a–b segment to the dimension line
@@ -363,6 +375,12 @@ class Dimension:
             holds.append(anchor)
             del holds[:-_MAX_HOLDS]
 
+    def __deepcopy__(self, memo):
+        out = super().__deepcopy__(memo)
+        if self._scene is not None and (scene := self._scene()) is not None:
+            out._scene = weakref.ref(memo.get(id(scene), scene))
+        return out
+
     def _holds_of(self, which: str) -> list:
         holds = getattr(self, "_holds", None)
         if holds is None:
@@ -370,11 +388,17 @@ class Dimension:
         return holds[which]
 
     def _live(self, which: str) -> QVector3D:
+        attachment = getattr(self, "attachment_" + which)
+        if attachment is not None:
+            point = attachment.position()
+            if point is not None:
+                setattr(self, "_" + which, point)
+            return getattr(self, "_" + which)
         holds = self._holds_of(which)
         anchor = getattr(self, "anchor_" + which)
         if anchor is None and not holds:
             return getattr(self, "_" + which)
-        scene = self._scene
+        scene = self._scene() if self._scene is not None else None
         # The OLDEST hold still alive wins. A push collapsing the measured
         # edge welds its vertex into the one below, and the endpoint takes
         # that one; undo — or the next preview frame of the same drag —
@@ -449,7 +473,7 @@ class Dimension:
         at placement, and again when a document is opened (the .igz keeps
         positions, and the vertex at that very position is the one the
         drafter snapped to)."""
-        self._scene = scene
+        self._scene = weakref.ref(scene)
         self._holds = {"a": [], "b": []}
         self._hold("a", resolve_vertex_anchor(scene, self._a))
         self._hold("b", resolve_vertex_anchor(scene, self._b))
@@ -459,7 +483,7 @@ class Dimension:
         vertex now standing at the endpoint; the history calls this after
         every command, so a group made and scaled in one breath still
         carries its dimension. An endpoint never anchored stays static."""
-        self._scene = scene
+        self._scene = weakref.ref(scene)
         for which in ("a", "b"):
             anchor = getattr(self, "anchor_" + which)
             if anchor is None and not self._holds_of(which):
@@ -473,12 +497,14 @@ class Dimension:
     @property
     def anchored(self) -> bool:
         """Both endpoints held by vertices."""
-        return self.anchor_a is not None and self.anchor_b is not None
+        return ((self.anchor_a is not None or self.attachment_a is not None)
+                and (self.anchor_b is not None or self.attachment_b is not None))
 
     def anchor_points(self) -> list:
         """The world positions of the anchored endpoints (0, 1 or 2)."""
-        return [p for p, an in ((self.a, self.anchor_a), (self.b, self.anchor_b))
-                if an is not None]
+        return [getattr(self, end) for end in ("a", "b")
+                if getattr(self, "anchor_" + end) is not None
+                or getattr(self, "attachment_" + end) is not None]
 
     # ---- geometry -----------------------------------------------------------
     def display_text(self, measured: str) -> str:
@@ -566,6 +592,7 @@ class Dimension:
         c._a = m.map(a) if "a" in ends else QVector3D(a)
         c._b = m.map(b) if "b" in ends else QVector3D(b)
         c.offset = QVector3D(self.offset)
+        c.attachment_a = c.attachment_b = None
         c.anchor_a = c.anchor_b = None
         c._holds = {"a": [], "b": []}
         c._scene = None

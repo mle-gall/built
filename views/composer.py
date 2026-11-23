@@ -6274,6 +6274,17 @@ def bring_to_front(window) -> None:
     window.activateWindow()
 
 
+class _SheetEdgePoint(tuple):
+    """A picked world point with the segment the sheet renderer showed."""
+    def __new__(cls, xyz, segment):
+        point = super().__new__(cls, xyz)
+        point.segment = segment
+        return point
+
+    def __getnewargs__(self):
+        return tuple(self), self.segment
+
+
 class _EdgeSnapHit(tuple):
     """A snap hit along an edge: the ``(x, y, world_xyz, frame)`` of any hit,
     which tells the marker apart."""
@@ -6321,7 +6332,7 @@ def _closest_on_snap_edges(edges, frame, x_mm, y_mm):
         s = s * z0 / ((1.0 - s) * z1 + s * z0)
     w = world[i, 0] + s * (world[i, 1] - world[i, 0])
     return (float(d2[i]), float(fx[i]), float(fy[i]),
-            (float(w[0]), float(w[1]), float(w[2])))
+            _SheetEdgePoint(tuple(map(float, w)), world[i]))
 
 
 #: A point this close to an edge in metres (the registry's weld resolution)
@@ -6872,7 +6883,8 @@ class ComposerWindow(QMainWindow):
                     frame.uid = uuid.uuid4().hex
                 item.anchor_uid = frame.uid
                 item.a_world = list(hit_a[2])
-                self._follow_anchor(item, "a_world")
+                self._follow_anchor(item, "a_world", capture=True,
+                                    segment=getattr(hit_a[2], "segment", None))
         elif mode == "nivel":
             style = dict(getattr(self, "_last_nivel_style", None) or {})
             # Born in the document's units. A remembered look may carry a
@@ -6896,7 +6908,8 @@ class ComposerWindow(QMainWindow):
                     frame.uid = uuid.uuid4().hex
                 item.anchor_uid = frame.uid
                 item.a_world = [float(v) for v in hit_a[2]]
-                self._follow_anchor(item, "a_world")
+                self._follow_anchor(item, "a_world", capture=True,
+                                    segment=getattr(hit_a[2], "segment", None))
                 item.x_mm, item.y_mm = float(hit_a[0]), float(hit_a[1])
                 # a plan (looking down) wants the plan symbol
                 if frame.view_key == "std:top":
@@ -7013,8 +7026,8 @@ class ComposerWindow(QMainWindow):
             item.b_world = list(b_world)
             item.scale_n = frame.scale_n
             # Take the hold now, while both points sit on their vertices.
-            self._follow_anchor(item, "a_world")
-            self._follow_anchor(item, "b_world")
+            self._follow_anchor(item, "a_world", capture=True, segment=getattr(a_world, "segment", None))
+            self._follow_anchor(item, "b_world", capture=True, segment=getattr(b_world, "segment", None))
         return item
 
     def place_chain_cota(self, a, b, sep_mm: float, anchors=None,
@@ -11488,29 +11501,25 @@ class ComposerWindow(QMainWindow):
     def _on_page_changed(self, *_a) -> None:
         if self._updating:
             return
-        self.comp.paper = self.paper_combo.currentText()
-        self.comp.landscape = self.landscape_check.isChecked()
-        self._mark_dirty()
-        self._rebuild_canvas()
+        self.history.execute(EditItemCommand(self.comp, {
+            "paper": self.paper_combo.currentText(),
+            "landscape": self.landscape_check.isChecked(),
+        }))
 
     def _on_border_changed(self, *_a) -> None:
         if self._updating:
             return
-        self.comp.border = self.border_check.isChecked()
-        self.comp.border_mm = self.border_mm.value()
-        self.comp.border_radius_mm = self.border_radius.value()
-        self.comp.border_style = self.border_style.currentData() or "single"
-        self._mark_dirty()
-        self._rebuild_canvas()
+        self.history.execute(EditItemCommand(self.comp, {
+            "border": self.border_check.isChecked(),
+            "border_mm": self.border_mm.value(),
+            "border_radius_mm": self.border_radius.value(),
+            "border_style": self.border_style.currentData() or "single",
+        }))
 
     def _on_pick_border_color(self) -> None:
-        col = get_color(QColor(self.comp.border_color), self,
-                                    tr("Border colour"))
+        col = get_color(QColor(self.comp.border_color), self, tr("Border colour"))
         if col.isValid():
-            self.comp.border_color = col.name()
-            self.border_color_btn.setStyleSheet(f"QAbstractButton {{ background: {col.name()}; }}")
-            self._mark_dirty()
-            self._rebuild_canvas()
+            self.history.execute(EditItemCommand(self.comp, {"border_color": col.name()}))
 
     def _sync_border_panel(self) -> None:
         self._updating = True
@@ -13507,13 +13516,14 @@ class ComposerWindow(QMainWindow):
 
         return self._with_frame_camera(frame, run)
 
-    def _follow_anchor(self, item, attr: str) -> bool:
+    def _follow_anchor(self, item, attr: str, capture=False, segment=None) -> bool:
         """Carry ``item.<attr>`` (a world point) along with the model vertex
         it was placed on, however far that vertex moved — the re-snap below
         only reaches 2.5 paper mm (#854, @cescmari: a face pushed further
         left the cota behind). The hold is the model dimensions' own
         :class:`VertexAnchor`, taken while the point still sits on the
-        vertex and kept for the session; vertex identity survives move,
+        vertex. A new snapped point keeps its hold on the document item;
+        older coordinate-only items can acquire a session hold. Identity survives move,
         scale and undo. True when the hold answered (moved or not), so the
         nearest-point re-snap is not needed; False leaves it to that."""
         from ingetrazo_core import Vec3 as QVector3D
@@ -13522,10 +13532,40 @@ class ComposerWindow(QMainWindow):
             scene = self._scene()
         except Exception:  # noqa: BLE001 — no model behind the composer
             return False
-        holds = self.__dict__.setdefault("_anchor_holds", {})
         cur = getattr(item, attr, None)
         if not cur:
             return False
+        from core.annotation_anchor import Attachment
+        slot = "hold_" + attr[0]
+        saved = getattr(item, slot, None)
+        if saved is not None and tuple(saved[0]) == tuple(cur):
+            ref = saved[1]
+            if isinstance(ref, dict):
+                ref = Attachment.restore(scene, ref, QVector3D(*cur))
+            point = ref.position() if ref is not None else None
+            if point is not None:
+                now = point.toTuple()
+                if tuple(cur) != now:
+                    setattr(item, attr, list(now))
+                if tuple(cur) != now or ref is not saved[1]:
+                    setattr(item, slot, (now, ref))
+                return True
+        if capture and segment is not None:
+            from core.annotation_anchor import edge_by_endpoints
+            hit, owner = edge_by_endpoints(scene, *(QVector3D(*p) for p in segment))
+            ref = Attachment.capture(scene, hit, owner, QVector3D(*cur)) if hit is not None else None
+            if ref is not None:
+                setattr(item, slot, (tuple(cur), ref))
+                return True
+        if capture:
+            hold = resolve_vertex_anchor(scene, QVector3D(*cur))
+            if hold is not None:
+                owner = hold.chain[-1] if hold.chain else None
+                ref = Attachment.capture(scene, hold.vertex, owner, QVector3D(*cur))
+                if ref is not None:
+                    setattr(item, slot, (tuple(cur), ref))
+                    return True
+        holds = self.__dict__.setdefault("_anchor_holds", {})
         key = (id(item), attr)
         held = holds.get(key)
         if held is None or held[0] is not item or held[1] != list(cur):

@@ -365,7 +365,7 @@ if _dm.ENABLED:
         own (they shadow the document's descriptors) and the handle names
         no node (``_detached``), so building 18,000 of them per pack writes
         nothing into the document and reads at slot speed."""
-        __slots__ = DOC_FIELDS
+        __slots__ = (*DOC_FIELDS, "source_occurrence")
 
         def __new__(cls, *_args, **_kwargs):
             return _dm.NATIVE.Placement.__new__(cls, _detached=True)
@@ -397,7 +397,7 @@ else:
         """A placement the viewport makes for a nested part (see the Rust
         document's version above); the Python document's is a plain
         ``Group``."""
-        __slots__ = ()
+        __slots__ = ("source_occurrence",)
 
 
 # ---- Local axes (issue #44) ---------------------------------------------------
