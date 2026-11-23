@@ -20,7 +20,7 @@ import math
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 
 # ---- Slippy-map math (Web Mercator, EPSG:3857) --------------------------------

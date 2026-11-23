@@ -21,7 +21,7 @@ from __future__ import annotations
 import csv
 import io
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 
 class GeoPoint:

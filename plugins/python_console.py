@@ -83,7 +83,7 @@ class _ConsoleExecution:
     def _refresh_scope(self) -> None:
         """Re-bind the live objects: always the CURRENT document, not the one
         open when the console appeared (documents change under New/Open)."""
-        from PySide6.QtGui import QVector3D
+        from ingetrazo_core import Vec3 as QVector3D
         from PySide6.QtWidgets import QApplication
         from core import bim
         from core.group import Group

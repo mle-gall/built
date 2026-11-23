@@ -27,7 +27,8 @@ from dataclasses import dataclass
 
 import numpy as np
 from PySide6.QtCore import QObject, Signal
-from PySide6.QtGui import QImage, QVector3D
+from PySide6.QtGui import QImage
+from ingetrazo_core import Vec3 as QVector3D
 
 from georef.tiles import TileCache, deg2num
 
