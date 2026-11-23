@@ -6,6 +6,7 @@ going into the linked copy offers to open its file."""
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -211,3 +212,45 @@ def test_project_edits_only_the_addressed_link_subset_and_undoes_without_source(
     with pytest.raises(ValueError):
         commands.run(history, "edit_link_subset", placement=scene.occurrence_path(second), text='{"bad": true}')
     assert history.revision == before and second.children[0] is updated
+
+
+@pytest.mark.parametrize("nested", [True, False, None])
+def test_link_selection_header_preserves_occurrence_and_nested_choice(win, tmp_path, monkeypatch, nested):
+    from types import SimpleNamespace
+    from core.group import Group
+    from core.scene import Scene
+    from tests.test_tree_links import _View
+    from views import chrome_forms, wgpu_ui
+
+    source = Scene()
+    g = Group(name="Panel")
+    source.groups.append(g)
+    source.select([g])
+    source_path = tmp_path / "Parts.igz"
+    igz.save_scene(source, source_path)
+    source_doc = SimpleNamespace(path=source_path, viewport=SimpleNamespace(scene=source))
+    docs = win.documents()
+    monkeypatch.setattr(win, "documents", lambda: [*docs, source_doc])
+    opened = []
+    def choose(parent, title, label, items, done):
+        if items == [str(source_path)]:
+            done(items[0])
+        else:
+            done(None if nested is None else items[0 if nested else 1])
+    monkeypatch.setattr(chrome_forms, "ask_choice", choose)
+    monkeypatch.setattr(win, "link_igz_path", lambda path, **kw: opened.append((path, kw)))
+    wgpu_ui._tree_action(win, _View(), "linkselection" + wgpu_ui.SEP)
+    assert opened == ([] if nested is None else [
+        (str(source_path), {"select": {"uids": [source.occurrence_path(g)]}, "include_nested": nested})])
+
+
+def test_project_header_moves_the_registry_next_to_the_host(win, tmp_path, monkeypatch):
+    from core import bim_registry, project
+    from tests.test_tree_links import _View
+    from views import filedialogs, wgpu_ui
+
+    path = tmp_path / "Design.igzproj"
+    monkeypatch.setattr(filedialogs.file_dialogs, "getSaveFileName", lambda *args: (str(path), ""))
+    wgpu_ui._tree_action(win, _View(), "linkregistry" + wgpu_ui.SEP)
+    assert path.is_file() and Path(project.path_for(win.viewport.scene)) == path
+    assert project.storage.load(path)["bim_registry"] == bim_registry.get(win.viewport.scene)

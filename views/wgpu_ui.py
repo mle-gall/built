@@ -1911,7 +1911,7 @@ def _tree_action(win, view, action) -> None:
             if sources:
                 def choose(path):
                     if path in sources and win.viewport.scene is scene:
-                        win.link_igz_path(path, select={"uids": sources[path]})
+                        win._choose_link_contents(path, select={"uids": sources[path]})
                 ask_choice(win, "Link selection", "Open source document", list(sources), done=choose)
             else:
                 vp.flash_status("Select groups in another saved, open document first")

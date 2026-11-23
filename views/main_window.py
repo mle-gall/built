@@ -10334,13 +10334,16 @@ class MainWindow(WorksessionMixin, QMainWindow):
                                 str(exc))
 
     def _choose_link_contents(self, path, select=None):
-        from PySide6.QtWidgets import QInputDialog
+        from views.chrome_forms import ask_choice
+        scene = self.viewport.scene
         options = [tr("Include nested linked files"), tr("Source geometry only")]
-        value, ok = QInputDialog.getItem(self, tr("Link IngeTrazo document"),
-                                         tr("Contents of {name}", name=Path(path).name),
-                                         options, 0, False)
-        if ok:
-            self.link_igz_path(path, select=select, include_nested=value == options[0])
+
+        def accept(value):
+            if value in options and self.viewport.scene is scene:
+                self.link_igz_path(path, select=select, include_nested=value == options[0])
+
+        ask_choice(self, tr("Link IngeTrazo document"), tr("Contents of {name}", name=Path(path).name),
+                   options, done=accept)
 
     def link_igz_path(self, path, at=None, select=None, *, include_nested=True):
         """Place the document at ``path`` as a linked copy — following the
