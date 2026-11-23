@@ -647,7 +647,7 @@ def edit_text(win, view, entity) -> None:
     """Edit text… : what a double-click on the text or dimension does (the
     Select tool's own handler), at the point the menu was opened on."""
     from PySide6.QtCore import QPointF, Qt
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     from tools.base import ToolContext
     from tools.select import SelectTool
     vp = win.viewport

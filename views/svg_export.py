@@ -134,7 +134,7 @@ def fitted(camera, bounds):
     the whole model or the selection — as Zoom Extents does, looking the
     way it looks now; the camera is as it was on the way out. ``(None,
     None)`` leaves it alone."""
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     keep = (QVector3D(camera.target), camera.distance, camera.fov_deg)
     try:
         lo, hi = bounds
@@ -160,7 +160,7 @@ def framed(camera, frame):
     way out."""
     import math
 
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
 
     from core.hlr import camera_basis
     from core.vista_caras import view_rect

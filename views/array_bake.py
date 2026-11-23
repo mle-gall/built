@@ -18,7 +18,7 @@ import weakref
 from array import array
 
 import numpy as np
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 import core._native as _native
 from core import lazy_mesh

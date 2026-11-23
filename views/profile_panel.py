@@ -387,7 +387,7 @@ class ProfileDock(QDockWidget):
         if station is None or self._geopath is None:
             vp._route_marker = None
         else:
-            from PySide6.QtGui import QVector3D
+            from ingetrazo_core import Vec3 as QVector3D
             x, y = point_at_station(self._geopath.profile_points(), station)
             vp._route_marker = QVector3D(x, y, 0.0)
         vp.update()

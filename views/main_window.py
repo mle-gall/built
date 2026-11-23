@@ -18,7 +18,8 @@ from typing import Optional
 
 from PySide6.QtCore import (Qt, QSettings, QEvent, QCoreApplication, QPoint,
                             QRect, QSize, QTimer, Signal)
-from PySide6.QtGui import QAction, QActionGroup, QIcon, QKeySequence, QVector3D
+from PySide6.QtGui import QAction, QActionGroup, QIcon, QKeySequence
+from ingetrazo_core import Vec3 as QVector3D
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -6787,7 +6788,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
     @staticmethod
     def _common_plane(faces):
         """(origin, unit normal) of the plane every face lies on, or None."""
-        from PySide6.QtGui import QVector3D
+        from ingetrazo_core import Vec3 as QVector3D
         n = faces[0].normal()
         length = n.length()
         if length < 1e-9:
@@ -6980,7 +6981,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
 
     def _image_bounds(self):
         """World box of the visible reference images, or None."""
-        from PySide6.QtGui import QVector3D
+        from ingetrazo_core import Vec3 as QVector3D
         scene = self.viewport.scene
         pts = [c for im in getattr(scene, "image_planes", None) or []
                if scene.entity_visible(im) for c in im.corners()]
@@ -7254,7 +7255,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
 
     @staticmethod
     def _local_to_ll(datum, x, y):
-        from PySide6.QtGui import QVector3D
+        from ingetrazo_core import Vec3 as QVector3D
         lat, lon, _ = datum.local_to_geodetic(QVector3D(x, y, 0.0))
         return lat, lon
 
@@ -9672,7 +9673,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             return
         # The classic placement, measured by the user: 60-70 cm to the left
         # and 60 cm forward (toward the viewer) of the origin.
-        from PySide6.QtGui import QVector3D
+        from ingetrazo_core import Vec3 as QVector3D
         at = QVector3D(-0.65, -0.60, 0.0)
         # The Engineer by default since 26-09 (Marco: «el personaje Sumari no
         # me gusta mucho, ¿ponemos el del ingeniero?»); Preferences choose
@@ -9825,7 +9826,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         them all, Make Unique parts one off — so the next pick is instant
         and the model does not swell. ``build`` reads the file; it is called
         only when no copy of ``source`` is left in the model."""
-        from PySide6.QtGui import QMatrix4x4
+        from ingetrazo_core import Matrix4 as QMatrix4x4
         from core.group import copy_group
         shared = self.__dict__.setdefault("_shared_components", {})
         known = shared.get(source)
@@ -10588,7 +10589,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         """Place the document at ``path`` as a linked copy — following the
         cursor (``at=None``) or at once at ``at``. Raises LinkError."""
         from PySide6.QtCore import Qt as _Qt
-        from PySide6.QtGui import QVector3D
+        from ingetrazo_core import Vec3 as QVector3D
         from PySide6.QtWidgets import QApplication
         from core import links
         self.viewport.end_group_edit()
@@ -10758,7 +10759,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         origin there at once, in one undo step. Returns the component, or
         ``None`` when the file has no geometry; a file that cannot be read
         raises (``OSError``, ``ValueError``…), and nothing is changed."""
-        from PySide6.QtGui import QVector3D
+        from ingetrazo_core import Vec3 as QVector3D
         from core.insert import import_document_as_component
         from core.scene import Scene as _Scene
         from formats import igz as _igz
@@ -11652,7 +11653,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
                 n=len(feats), name=Path(path_str).name), 4000)
 
     def _frame_geo_paths(self, paths) -> None:
-        from PySide6.QtGui import QVector3D
+        from ingetrazo_core import Vec3 as QVector3D
         pts = [p for gp in paths for p in gp.points]
         if not pts:
             return

@@ -4,7 +4,8 @@ import math
 import time
 import numpy as np
 from PySide6.QtCore import Qt, Signal, QTimer, QEvent, QCoreApplication
-from PySide6.QtGui import QColor, QVector3D
+from PySide6.QtGui import QColor
+from ingetrazo_core import Vec3 as QVector3D
 from PySide6.QtWidgets import QApplication, QWidget
 from core.camera import OrbitCamera
 from views.wgpu_scene import pack_scene

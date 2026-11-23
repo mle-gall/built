@@ -36,7 +36,7 @@ from types import SimpleNamespace
 import math
 
 import numpy as np
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 from core import _native
 from core.snap import SurfacePatch, compute_snap, face_crossing_near_ray
 

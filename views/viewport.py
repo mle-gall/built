@@ -101,21 +101,9 @@ def _plog(tag: str, ms: float, extra: str = "", floor: float = 50.0) -> None:
 
 from PySide6.QtCore import (QEvent, QObject, Qt, QPointF, QRectF, QTimer,
                             Signal)
-from PySide6.QtGui import (
-    QColor,
-    QFont,
-    QFontMetrics,
-    QImage,
-    QMatrix4x4,
-    QOpenGLFunctions,
-    QPainter,
-    QPen,
-    QPolygonF,
-    QSurfaceFormat,
-    QVector2D,
-    QVector3D,
-    QVector4D,
-)
+from PySide6.QtGui import QColor, QFont, QFontMetrics, QImage, QOpenGLFunctions, QPainter, QPen, QPolygonF, QSurfaceFormat, QVector2D
+from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D, Vec4 as QVector4D
+from views.gl_uniforms import ShaderProgram
 from PySide6.QtOpenGL import (
     QOpenGLBuffer,
     QOpenGLFramebufferObject,
@@ -311,7 +299,7 @@ GL_LINES = 0x0001
 
 def _shifted_mvp(mvp, dx_ndc: float, dy_ndc: float):
     """``mvp`` nudged by a clip-space offset (sub-pixel line thickening)."""
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     m = QMatrix4x4()
     m.translate(dx_ndc, dy_ndc, 0.0)
     return m * mvp
@@ -4401,7 +4389,7 @@ class Viewport(QOpenGLWidget):
 
     # ---- Setup helpers ------------------------------------------------------
     def _compile_program(self) -> QOpenGLShaderProgram:
-        prog = QOpenGLShaderProgram(self)
+        prog = ShaderProgram(self)
         ok_v = prog.addShaderFromSourceFile(
             QOpenGLShader.Vertex, str(SHADER_DIR / "basic.vert")
         )
@@ -4413,7 +4401,7 @@ class Viewport(QOpenGLWidget):
         return prog
 
     def _compile_depth_program(self) -> QOpenGLShaderProgram:
-        prog = QOpenGLShaderProgram(self)
+        prog = ShaderProgram(self)
         ok_v = prog.addShaderFromSourceFile(
             QOpenGLShader.Vertex, str(SHADER_DIR / "depth.vert")
         )

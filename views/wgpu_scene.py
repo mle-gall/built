@@ -615,7 +615,7 @@ def pack_scene(scene, view_tint=None, *, face_overrides=None, texture_images=Tru
 
 def _material_columns(pos, corners, sizes, counts, table, attributes, texture_ids, origin=(0., 0., 0.)):
     """Use the GL mapping and side resolution, before triangulation splits corners."""
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     from core.materials import back_is_default
     from core.texture import face_uv_axes
     maps = np.broadcast_to(np.zeros(16, np.float32), (len(counts), 16))

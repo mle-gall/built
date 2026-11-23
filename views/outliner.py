@@ -3785,7 +3785,7 @@ class OutlinerPanel(QWidget):
         that scene at 1:``scale``. One undo step. Returns the scene, or
         ``None`` when the group holds no geometry."""
         import math
-        from PySide6.QtGui import QVector3D
+        from ingetrazo_core import Vec3 as QVector3D
         from core.camera import OrbitCamera
         from core.section import SectionPlane as _Plane
         from core.section import next_symbol
@@ -3869,7 +3869,7 @@ class OutlinerPanel(QWidget):
         a vertical plane, a plan for a horizontal one. With ``sheet``, on a
         new sheet at 1:``scale``. One undo step; returns the scene."""
         import math
-        from PySide6.QtGui import QVector3D
+        from ingetrazo_core import Vec3 as QVector3D
         from core.camera import OrbitCamera
         scene = self._scene()
         lo, hi = scene.bounds()
