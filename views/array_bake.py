@@ -398,7 +398,7 @@ def _smooth_stream(vp, plan, normal, unit, tfa, tva, col_a, f_rgb,
     if not len(tfa) or not np.any(smooth & (np.diff(plan.ef_start) > 1)):
         return None
     normals, mask = _native.native.smooth_corner_normals(
-        np.ascontiguousarray(plan.pos, dtype=np.float32), normal.astype(np.float32), unit.astype(np.float32),
+        np.ascontiguousarray(plan.pos, dtype=np.float64), normal, unit,
         plan.corners, plan.ring_sizes, plan.ring_counts, plan.edges,
         smooth, plan.ef_start, plan.ef_face, tva, tfa, _native.qt_hypot())
     normals = normals.reshape(-1, 3, 3)
@@ -527,9 +527,9 @@ def _bake(vp, mesh, paint, msig):
     # and by the unit normal (textures, back sides).
     tfa = tri_face.astype(np.int64)
     tva = tris_v.astype(np.int64)
-    tpa = pos32[tva]
+    tpa = plan.pos[tva]
     tfb = tri_face_u.astype(np.int64)
-    tpb = pos32[tris_u.astype(np.int64)]
+    tpb = plan.pos[tris_u.astype(np.int64)]
     has_tris = np.bincount(tfa, minlength=nf) > 0 if nf else \
         np.zeros(0, dtype=bool)
 
@@ -705,7 +705,7 @@ def _bake(vp, mesh, paint, msig):
     corner_normals = _smooth_stream(vp, plan, normal, unit, tfa, tva,
                                     col_a, f_rgb, bases if len(pf) else [],
                                     fk, plain)
-    smooth_vcol = (corner_normals[ct_code == 0].tobytes()
+    smooth_vcol = (corner_normals[ct_code == 0].astype(np.float32).tobytes()
                    if corner_normals is not None else b"")
     vcol = _rows(col_a, ct_code, 0)
     fcull_vcol = _rows(col_a, ct_code, 1)

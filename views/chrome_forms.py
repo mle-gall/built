@@ -541,7 +541,8 @@ def _qt_exec(parent, form: Form) -> None:
     callbacks (``on_change`` on every edit, ``on_done`` on close)."""
     from PySide6.QtCore import Qt
     from PySide6.QtGui import QColor
-    from PySide6.QtWidgets import (QCheckBox, QColorDialog, QComboBox, QDialog, QDialogButtonBox,
+    from views.color_dialog import get_color
+    from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox,
                                    QDoubleSpinBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit,
                                    QPlainTextEdit, QPushButton, QSlider, QSpinBox, QTabWidget,
                                    QVBoxLayout, QWidget)
@@ -634,7 +635,7 @@ def _qt_exec(parent, form: Form) -> None:
             w = QPushButton(str(f.value or ""))
 
             def pick_color(_=False, fid=f.id, button=w):
-                c = QColorDialog.getColor(QColor(form.value(fid) or "#808080"), dlg)
+                c = get_color(QColor(form.value(fid) or "#808080"), dlg)
                 if c.isValid():
                     button.setText(c.name())
                     changed(fid, c.name())

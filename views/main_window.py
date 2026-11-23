@@ -7699,8 +7699,11 @@ class MainWindow(WorksessionMixin, QMainWindow):
             self._renderer_label = QLabel(self)
             self.statusBar().addPermanentWidget(self._renderer_label)
         from core import renderer_settings
-        self._renderer_label.setText(renderer_settings.status_text(
-            getattr(doc, "_renderer_wgpu", False)))
+        metal = getattr(doc, "_renderer_wgpu", False)
+        # Only a requested Metal renderer needs a fallback diagnostic.
+        label = (renderer_settings.status_text(metal)
+                 if metal or renderer_settings.requested() == "wgpu" else "OpenGL")
+        self._renderer_label.setText(label)
 
     def _document_first_frame(self, doc):
         """Release optional work only after the renderer reports presentation.

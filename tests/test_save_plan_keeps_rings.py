@@ -45,6 +45,7 @@ def _doc(tmp_path, monkeypatch, curve=False, layer=False):
     # On file with the nested hole still there: an older save could leave it.
     with monkeypatch.context() as ctx:
         ctx.setattr(topology, "_maximal_holes", lambda h: h)
+        ctx.setattr(M, "_store_on", lambda: False)
         scene = Scene()
         m = scene.mesh
         m.add_face(_square(0, 0, 10), [_square(1, 1, 4), _square(2, 2, 1),

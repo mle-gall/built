@@ -86,11 +86,26 @@ from PySide6.QtCore import QSettings  # noqa: E402
 
 _settings_dir = tempfile.mkdtemp(prefix="ingetrazo-tests-settings-")
 QSettings.setDefaultFormat(QSettings.IniFormat)
-for scope in (QSettings.UserScope, QSettings.SystemScope):
-    QSettings.setPath(QSettings.IniFormat, scope, _settings_dir)
+_system_settings_dir = os.path.join(_settings_dir, "system")
+
+
+def _session_settings_paths():
+    QSettings.setPath(QSettings.IniFormat, QSettings.UserScope, _settings_dir)
+    QSettings.setPath(QSettings.IniFormat, QSettings.SystemScope, _system_settings_dir)
+
+
+_session_settings_paths()
 
 
 import pytest  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _restore_settings_paths():
+    # setPath changes process-wide defaults. A private user profile must
+    # never inherit another test's saved window state via SystemScope.
+    yield
+    _session_settings_paths()
 
 
 @pytest.fixture(autouse=True)

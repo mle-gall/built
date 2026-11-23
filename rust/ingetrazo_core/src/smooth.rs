@@ -2,7 +2,7 @@
 // Copyright (C) 2026 IngeTrazo contributors.
 //! Corner-angle-weighted soft-edge fans without Python mesh objects.
 use std::collections::HashMap;
-use crate::facegeom::{self, Hypot, V3};
+use crate::store::geometry::{length, Hypot, V3};
 
 fn root(parent: &mut [usize], mut i: usize) -> usize {
     while parent[i] != i {
@@ -38,8 +38,8 @@ pub fn corners(pos: &[V3], normals: &[V3], corners: &[i64], sizes: &[i64],
                     let a = pos[ring[(i+n-1)%n] as usize].sub(pos[v]);
                     let b = pos[ring[(i+1)%n] as usize].sub(pos[v]);
                     let cross = a.cross(b, h);
-                    let mut angle = (facegeom::length(cross, h) as f64)
-                        .atan2(a.dot(b, h) as f64);
+                    let mut angle = (length(cross, h))
+                        .atan2(a.dot(b, h));
                     if cross.dot(normals[f], h) > 0.0 {
                         angle = 2.0 * std::f64::consts::PI - angle;
                     }
@@ -80,10 +80,10 @@ pub fn corners(pos: &[V3], normals: &[V3], corners: &[i64], sizes: &[i64],
             for &f in fs {
                 let n = normals[f];
                 let weight = *angles.get(&(v, f)).unwrap_or(&0.0);
-                let (x, y, z) = (n.0 as f64 * weight, n.1 as f64 * weight,
-                                  n.2 as f64 * weight);
-                let sign = if x * reference.0 as f64 + y * reference.1 as f64
-                              + z * reference.2 as f64 >= 0.0 { 1.0 } else { -1.0 };
+                let (x, y, z) = (n.0 * weight, n.1 * weight,
+                                  n.2 * weight);
+                let sign = if x * reference.0 + y * reference.1
+                              + z * reference.2 >= 0.0 { 1.0 } else { -1.0 };
                 sum[0] += sign*x; sum[1] += sign*y; sum[2] += sign*z;
             }
             let len = (sum[0]*sum[0] + sum[1]*sum[1] + sum[2]*sum[2]).sqrt();
@@ -91,9 +91,9 @@ pub fn corners(pos: &[V3], normals: &[V3], corners: &[i64], sizes: &[i64],
             let (x, y, z) = (sum[0]/len, sum[1]/len, sum[2]/len);
             for &f in fs {
                 let n = normals[f];
-                let sign = if n.0 as f64*x + n.1 as f64*y + n.2 as f64*z >= 0.0
+                let sign = if n.0*x + n.1*y + n.2*z >= 0.0
                            { 1.0 } else { -1.0 };
-                output.insert((v, f), V3((sign*x) as f32, (sign*y) as f32, (sign*z) as f32));
+                output.insert((v, f), V3(sign*x, sign*y, sign*z));
             }
         }
     }

@@ -24,6 +24,7 @@ What lives here:
 from __future__ import annotations
 
 import os
+import weakref
 
 from ingetrazo_core import Matrix4 as QMatrix4x4
 
@@ -272,7 +273,6 @@ def _wrap(value, anchor):
     else:
         return value
     if anchor is None:
-        import weakref
         anchor = _Anchor()
         anchor.root = weakref.ref(out)
     out._doc_root = anchor

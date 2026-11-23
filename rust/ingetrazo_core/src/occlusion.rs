@@ -17,6 +17,8 @@ use rayon::prelude::*;
 
 
 
+// Match the viewport's shared-edge allowance; within it defer to NumPy.
+const BARY_EPS: f64 = 1e-14;
 const DET_MIN: f64 = 1e-6;
 const T_MIN: f64 = 1e-6;
 const EPS_M: f64 = f64::EPSILON;
@@ -65,8 +67,8 @@ fn one_ray(o: [f64; 3], d: [f64; 3], best: f64, limit: f64,
         let u = su * inv;
         let v = sv * inv;
         let t = uq * inv;
-        let u_err = dot_err(s, p) * inv.abs() + u.abs() * 2.0 * rel;
-        let v_err = dot_err(d, q) * inv.abs() + v.abs() * 2.0 * rel;
+        let u_err = BARY_EPS + dot_err(s, p) * inv.abs() + u.abs() * 2.0 * rel;
+        let v_err = BARY_EPS + dot_err(d, q) * inv.abs() + v.abs() * 2.0 * rel;
         let t_err = dot_err(e2[i], q) * inv.abs() + t.abs() * 2.0 * rel;
         if u.abs() <= u_err || (u - 1.0).abs() <= u_err || v.abs() <= v_err
             || (u + v - 1.0).abs() <= u_err + v_err || (t - T_MIN).abs() <= t_err
@@ -137,8 +139,8 @@ pub fn tri_occludes(o: [f64; 3], d: [f64; 3], limit: f64,
     let u = dot(s, p) * inv;
     let v = dot(d, q) * inv;
     let t = uq * inv;
-    let u_err = dot_err(s, p) * inv.abs() + u.abs() * 2.0 * rel;
-    let v_err = dot_err(d, q) * inv.abs() + v.abs() * 2.0 * rel;
+    let u_err = BARY_EPS + dot_err(s, p) * inv.abs() + u.abs() * 2.0 * rel;
+    let v_err = BARY_EPS + dot_err(d, q) * inv.abs() + v.abs() * 2.0 * rel;
     let t_err = dot_err(e2, q) * inv.abs() + t.abs() * 2.0 * rel;
     if !(u.is_finite() && v.is_finite() && t.is_finite()) {
         return None;

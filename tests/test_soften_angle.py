@@ -430,7 +430,7 @@ def test_soft_only_edges_survive_save_and_reopen(tmp_path, monkeypatch,
     group = Group(_half_soft_only_cylinder(), name="c")
     group.xform = QMatrix4x4()
     scene = Scene(groups=[group])
-    reference = _stub(Scene(groups=[group]))._group_chunk(group)["vcol"]
+    reference = _stub(scene)._group_chunk(group)["vcol"]
     path = tmp_path / "c.igz"
     igz.save_scene(scene, path)
     back = Scene()
@@ -476,9 +476,9 @@ def test_a_store_backed_edge_keeps_its_soft_only_mark(tmp_path, monkeypatch):
     back = Scene()
     igz.load_into(back, path)
     (g,) = back.groups
-    scene = _scene_with(g)
-    hist = History(scene)
-    hist.execute(SoftenByAngleCommand(selected_edges(scene), 40, smooth=False))
+    back.selection = {g}
+    hist = History(back)
+    hist.execute(SoftenByAngleCommand(selected_edges(back), 40, smooth=False))
     assert _soft(g.mesh) == SEAMS and _flat(g.mesh) == SEAMS
     hist.undo()
     assert _soft(g.mesh) == 0 and _flat(g.mesh) == 0

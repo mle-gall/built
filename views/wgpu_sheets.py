@@ -572,13 +572,13 @@ class Workspace:
         comps = list(self.composer._scene().compositions)
         cur = self.composer.comp
         rows = []
-        for c in comps:
-            paper = f"{c.paper} {'▭' if c.landscape else '▯'}"
-            n = sum(len(getattr(c, k, []) or []) for k in (
+        for composition in comps:
+            paper = f"{composition.paper} {'▭' if composition.landscape else '▯'}"
+            n = sum(len(getattr(composition, k, []) or []) for k in (
                 "frames", "texts", "images", "scalebars", "nortes", "leyendas", "shapes",
                 "cotas", "cotas_ang", "cotas_rad", "etiquetas", "perfiles", "niveles", "llamadas"))
-            n += 1 if getattr(c, "cajetin", None) is not None else 0
-            rows.append((c.name, f"{paper} · {n}", c is cur))
+            n += 1 if getattr(composition, "cajetin", None) is not None else 0
+            rows.append((composition.name, f"{paper} · {n}", composition is cur))
         return tuple(rows)
 
     def _selected(self):

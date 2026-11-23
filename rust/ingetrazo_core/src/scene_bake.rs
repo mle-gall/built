@@ -108,9 +108,11 @@ fn prepare(
     // Soft edges shade smooth, unless flat (soft only: «Smooth normals» off).
     let soft: Vec<_> = edge_flags.iter().map(|f| f & 1 != 0 && f & 4 == 0).collect();
     let corners: Vec<_> = c.iter().map(|&v| v as i64).collect();
+    let model_vectors = |vs: &[V3]| vs.iter().map(|v|
+        crate::store::geometry::V3(v.0 as f64, v.1 as f64, v.2 as f64)).collect::<Vec<_>>();
     let fans = crate::smooth::corners(
-        p,
-        &normals,
+        &model_vectors(p),
+        &model_vectors(&normals),
         &corners,
         sizes,
         counts,
@@ -128,7 +130,7 @@ fn prepare(
     let triangles = triangles
         .into_iter()
         .map(|(t, f, color)| {
-            let ns = t.map(|v| fans.get(&(v as usize, f)).copied().unwrap_or(normals[f]));
+            let ns = t.map(|v| fans.get(&(v as usize, f)).map(|n| V3(n.0 as f32, n.1 as f32, n.2 as f32)).unwrap_or(normals[f]));
             (t, ns, color)
         })
         .collect();
