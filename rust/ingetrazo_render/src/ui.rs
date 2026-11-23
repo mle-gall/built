@@ -193,6 +193,7 @@ pub struct Node {
     expandable: bool,
     expanded: bool,
     selected: u32,
+    dim: bool,
     local_placement: bool,
     /// The selection, marked once (tree A): 1 this row holds it (lit), 2 a
     /// row above the one holding it (a quiet dot), 0 neither.
@@ -207,6 +208,7 @@ pub struct Node {
 
 pub struct Column {
     nodes: Vec<Node>,
+    path: Vec<(String, String)>,
     proposal_available: bool,
     reveal: Option<String>,
     sort: tree_order::Sort,
@@ -381,7 +383,7 @@ impl Ui {
     /// row, eye, lock, expandable, expanded, selected]).
     pub fn set_tree(&mut self, rows: Vec<(Vec<String>, Vec<i64>)>, unfiled: u32) {
         let col = self.column.get_or_insert_with(|| Column {
-            nodes: Vec::new(), reveal: None, proposal_available: false, sort: Default::default(), ordered: Vec::new(), unfiled: 0, expanded: Default::default(), filter: String::new(),
+            nodes: Vec::new(), path: Vec::new(), reveal: None, proposal_available: false, sort: Default::default(), ordered: Vec::new(), unfiled: 0, expanded: Default::default(), filter: String::new(),
             filing: None, focus_filter: false, row_menu: None, renaming: None, focus_rename: false, head_menu: None,
             kind_menu: None, kinds: Vec::new(), prompt: None, colset: 0, color_pick: None, edits: Default::default(), mode: String::new(), issues: false,
             identity: Vec::new(),
@@ -402,6 +404,7 @@ impl Ui {
             let linked = linked_ancestors.last().copied().unwrap_or(false) || key.starts_with("n:link:") || s(&t, 4) == "link";
             linked_ancestors.push(linked);
             Node {
+            dim: g(&n, 11) != 0,
             local_placement: !linked && matches!(g(&n, 4), 1 | 2) && (key.starts_with("i:") || key.starts_with("c:")),
             key, name: s(&t, 1), kind, tip, badge: s(&t, 3), icon: s(&t, 4),
             depth: g(&n, 0) as usize, count: g(&n, 1) as u32, problems: g(&n, 2) as u32, active: g(&n, 3) != 0,
@@ -436,6 +439,9 @@ impl Ui {
             col.filing = None;
             col.reveal = Some(key);
         }
+    }
+    pub fn set_edit_path(&mut self, path: Vec<(String, String)>) {
+        if let Some(col) = self.column.as_mut() { col.path = path; }
     }
     pub fn set_proposal_available(&mut self, available: bool) {
         if let Some(col) = self.column.as_mut() { col.proposal_available = available; }
@@ -1644,7 +1650,7 @@ impl Ui {
                     ui.add_space(SPACE_S);
                     if col.mode.is_empty() {
                         // Column sets: second-level tabs over the same rows.
-                        let sets: Vec<(String, String, bool)> = ["Filing", "Drawing", "Export"].iter()
+                        let sets: Vec<(String, String, bool)> = [if col.proposal_available { "Tags" } else { "Filing" }, "Drawing", "Export"].iter()
                             .map(|l| (l.to_string(), String::new(), true)).collect();
                         if let Some(i) = widgets::underline_tabs(ui, &sets, col.colset as usize) {
                             if col.colset != i as u8 {
@@ -1686,6 +1692,7 @@ impl Ui {
                             });
                         break 'tree;
                     }
+                    kit::path_bar(ui, &col.path, &mut actions);
                     if let Some(what) = &col.filing {
                         // Two short lines, never cut off at the dock's edge.
                         let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 36.0), Sense::hover());
@@ -1777,7 +1784,7 @@ impl Ui {
                                     ui.painter().rect_filled(rect, CornerRadius::same(R_ROW), if filing { ACTIVE } else { HOVER });
                                 }
                                 let cy = rect.center().y;
-                                let x0 = rect.min.x + 4.0 + n.depth as f32 * 14.0;
+                                let x0 = rect.min.x + 22.0 + n.depth as f32 * 14.0;
                                 let tri = Rect::from_min_size(pos2(x0, rect.min.y), vec2(14.0, ROW_H));
                                 if n.expandable {
                                     ui.painter().text(tri.center(), egui::Align2::CENTER_CENTER, if n.expanded { "▾" } else { "▸" },
@@ -1852,12 +1859,14 @@ impl Ui {
                                 }
                                 let show_ctl = resp.hovered() || n.eye == 0 || n.lock == 1;
                                 let control_edge = cols.flags.map_or(count_col, |(a, _)| a + 74.0);
-                                let (eye_r, lock_r) = tree_slots(ui, control_edge, cy, n.eye, n.lock, show_ctl || col.colset == 1);
+                                let (_, lock_r) = tree_slots(ui, control_edge, cy, -1, n.lock, show_ctl || col.colset == 1);
+                                let eye_r = Rect::from_center_size(pos2(rect.min.x + 10., cy), vec2(16., ROW_H));
+                                if n.eye >= 0 { kit::paint_eye(ui, eye_r, n.eye != 0); }
                                 // A row with no eye or lock (problems, library) keeps its width for the name.
                                 let bare = n.eye < 0 && n.lock < 0 && n.problems == 0;
                                 let right = if col.colset == 1 { cols.name_right } else if col.colset == 2 { cells_left.min(cols.name_right) - 8.0 }
                                     else if (bare || !show_ctl) && (n.count > 0 || n.row == 0) { count_col - 34.0 }
-                                    else if bare { rect.max.x - 8.0 } else { eye_r.min.x - 6.0 };
+                                    else if bare { rect.max.x - 8.0 } else { lock_r.min.x - 6.0 };
                                 // Item icon (a material row shows its swatch).
                                 let mut tx = x0 + 16.0;
                                 if n.row == 5 {
@@ -1913,6 +1922,7 @@ impl Ui {
                                     3 | 4 => (FAINT, meta()),
                                     _ => (if lit { BRIGHT } else { INK_2 }, body()),
                                 };
+                                let ink = if n.dim && !lit { OFF } else { ink };
                                 // The selection is marked once (tree A): lit where it
                                 // is held, a quiet dot on the rows above (after the name).
                                 let marks_w = if file_state.is_some() { 10.0 } else { 0.0 } + if n.mark == 2 { 10.0 } else { 0.0 };
@@ -1936,6 +1946,14 @@ impl Ui {
                                     ui.interact(Rect::from_center_size(c, vec2(10.0, 10.0)), ui.id().with(("file_dot", i)), Sense::hover())
                                         .on_hover_text(tip);
                                     kx += 10.0;
+                                    let label = match state { "resolved" => "found", "modified" => "changed", "missing" => "missing · Locate…", _ => "packed" };
+                                    let galley = ui.painter().layout_job(one_line(label.into(), meta(), if state == "missing" { ACCENT } else { FAINT }, right - kx));
+                                    let text_width = galley.size().x;
+                                    ui.painter().galley(pos2(kx, cy - galley.size().y/2.), galley, DIM);
+                                    if state == "missing" && ui.interact(Rect::from_min_size(pos2(kx,rect.top()),vec2(text_width,ROW_H)),ui.id().with(("locate",&n.key)),Sense::click()).clicked() {
+                                        actions.push(format!("linkrelink\u{1f}{}", n.key));
+                                    }
+                                    kx += text_width + SPACE_XS;
                                 }
                                 if n.mark == 2 {
                                     tree_cols::paint_partial(ui.painter(), pos2(kx + 2.0, cy));

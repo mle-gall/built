@@ -820,6 +820,19 @@ pub use molecules::*;
 pub mod organisms {
     use super::*;
     use egui::{Margin, Shadow};
+    pub fn path_bar(ui: &mut egui::Ui, path: &[(String, String)], actions: &mut Vec<String>) {
+        if path.len() < 2 { return; }
+        ui.horizontal_wrapped(|ui| {
+            if quiet(ui, "↑").on_hover_text("Up one level").clicked() {
+                actions.push(path[path.len()-2].1.clone());
+            }
+            for (index, (label, action)) in path.iter().enumerate() {
+                if index > 0 { ui.label(egui::RichText::new("›").color(FAINT)); }
+                if ui.link(label).clicked() { actions.push(action.clone()); }
+            }
+        });
+    }
+
     /// Selection addresses share a fixed label column; the full path remains
     /// available on hover even in the narrow Filing lens.
     pub fn identity_card(ui: &mut egui::Ui, rows: &[(String, String, String, Option<bool>)], actions: &mut Vec<String>) {

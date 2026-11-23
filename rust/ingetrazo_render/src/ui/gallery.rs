@@ -510,6 +510,7 @@ impl Gallery {
                 ) {
                     self.dock_tab = i;
                 }
+                path_bar(ui, &[("Plaza.built".into(), String::new()), ("Core block".into(), String::new())], &mut Vec::new());
                 ui.add(search(&mut self.dock_filter, "Filter nodes").desired_width(w));
                 ui.spacing_mut().item_spacing = vec2(0., 0.);
                 // (name, depth, expanded, selected, eye, lock, count, state dot, note)

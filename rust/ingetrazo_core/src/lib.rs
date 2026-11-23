@@ -37,6 +37,7 @@ mod group_geometry;
 mod structure;
 mod project_tree;
 mod selection_identity;
+mod sidebar;
 mod project_sections;
 mod project_sheets;
 mod link_subset;
@@ -255,6 +256,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<link_subset::LinkSubset>()?;
     m.add_function(wrap_pyfunction!(link_subset::link_subset_rows, m)?)?;
     m.add_function(wrap_pyfunction!(link_subset::link_selection_sources, m)?)?;
+    m.add_function(wrap_pyfunction!(sidebar::project_sidebar, m)?)?;
     m.add_function(wrap_pyfunction!(selection_identity::selection_identity, m)?)?;
     m.add_function(wrap_pyfunction!(project_tree::project_name_matches, m)?)?;
     m.add_function(wrap_pyfunction!(project_tree::project_item_matches, m)?)?;

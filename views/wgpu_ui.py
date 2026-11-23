@@ -922,7 +922,7 @@ def _tree(view, win, *, discover=False):
     from collections import Counter, defaultdict
     from core import links, structure
     from core import layers as L
-    from ingetrazo_core import project_context_rows, project_item_matches, project_name_matches, source_placement_rows
+    from ingetrazo_core import project_sidebar, project_item_matches, project_name_matches, source_placement_rows
     model = _tree_model(view, scene, cv)
     if mode == "deliveries":
         from views import wgpu_deliveries
@@ -996,7 +996,7 @@ def _tree(view, win, *, discover=False):
             ts = node_tags(key)
             return int(L.folder_visible(scene, n["folder"])), \
                 int(bool(ts) and bool(getattr(scene.layer(ts[0]), "locked", False)))
-        layer = main_layer(key)
+        layer = main_layer(key) or next((scene.layer(t) for t in node_tags(key)), None)
         if layer is None:
             return -1, -1
         visible = L.effective_visible(scene, layer) if n["kind"] != "host" else bool(getattr(layer, "visible", True))
@@ -1200,14 +1200,8 @@ def _tree(view, win, *, discover=False):
         rows = _problem_rows(view, scene, registry, host, {k: recipes[k] for k in host if k in recipes},
                              unfiled, host_of, exp, sel_ids)
     if mode != "problems":
-        context = project_context_rows(scene, flt, exp)
-        if scene.edit_group is not None:
-            rows = context
-        else:
-            if tree._host_roots < 0:
-                rows[:0] = scene._root._drawing_preview(exp, flt, bool(tree.links))
-            rows.extend(context)
-            rows.extend(catalog.rows(flt, exp))
+        rows, path_bar = project_sidebar(scene, tree, rows, flt, exp, str(getattr(win, "_current_path", "") or ""))
+        rows.extend(catalog.rows(flt, exp))
         if discover:
             from ingetrazo_core import reveal_selection
             return reveal_selection(rows)
@@ -1220,8 +1214,9 @@ def _tree(view, win, *, discover=False):
                          active=active, node_of=node_of, nodes=nodes, tree=tree, counts=counts,
                          node_layers={k: list(c) for k, c in node_layers.items()})
     view.renderer.ui_set_tree(rows, len(unfiled))
+    view.renderer.ui_set_edit_path(path_bar if mode != "problems" else [])
     if hasattr(view.renderer, "ui_set_proposal_available"):
-        view.renderer.ui_set_proposal_available(not mode and tree._host_roots < 0 and scene.edit_group is None)
+        view.renderer.ui_set_proposal_available(not mode and tree._host_roots < 0)
     if not view.__dict__.get("_ui_sort_loaded") and hasattr(view.renderer, "ui_set_tree_sort"):
         from PySide6.QtCore import QSettings
         view.renderer.ui_set_tree_sort(max(0, QSettings().value("ui/project_tree_sort", 0, type=int)))

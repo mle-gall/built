@@ -437,11 +437,11 @@ def test_unstructured_host_shows_read_only_drawing_rows_without_writing():
 
     assert ("preview-folder:site", "Site works", "", 0) in preview()
     assert ("preview-folder:empty", "empty", "", 0) in preview()
-    assert ("preview-tag:Grid", "Grid", "Drawing only", 0) in preview()
+    assert ("preview-tag:Grid", "Grid", "", 0) in preview()
     assert not any(row[1] == "Paths" for row in preview())
     wu._tree_action(win, view, wu.SEP.join(("filter", "paths")))
     assert preview() == [("preview-folder:site", "Site works", "", 0),
-                         ("preview-tag:Paths", "Paths", "Drawing only", 1)]
+                         ("preview-tag:Paths", "Paths", "", 1)]
     assert (scene.version, bim_registry.get(scene), dict(scene.layer_folder_uids)) == before
     assert not win.viewport.history.undo_stack
 
@@ -627,8 +627,13 @@ def test_open_occurrence_scopes_tree_and_exports_keep_the_inspector(ui):
     assert "Node" in dict(view.renderer.calls["ui_set_inspector"][1])
     scene.begin_group_edit(g)
     scoped = rows()
-    assert scoped[0]["key"] == "context:open" and g.name in scoped[0]["name"]
-    assert [r["key"] for r in scoped[1:]] == ["geometry:loose"]
+    assert scoped[0]["key"] == "context:fold" and g.name in scoped[0]["name"]
+    assert [r["key"] for r in scoped[1:]] == ["geometry:loose", *filing]
+    assert view.renderer.calls["ui_set_edit_path"][0][-1][0] == g.name
+    assert [r["key"] for r in act("toggle", "context:fold")] == ["context:fold", *filing]
+    ride = next(n for t, n in view.renderer.calls["ui_set_tree"][0] if t[0] == "n:link:Ride")
+    assert ride[11] == 1
+    assert scene.edit_group is g
     scene.end_group_edit()
     assert [r["key"] for r in rows()] == filing
     assert "Ride.igz" in [r["name"] for r in act("filter", "is:link")]

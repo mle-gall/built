@@ -256,26 +256,12 @@ pub(crate) fn project_context_rows(
         return Ok(rows);
     }
 
-    let path = scene.getattr("_edit_stack")?;
-    let names = path
-        .try_iter()?
-        .map(|level| {
-            level?
-                .get_item("group")?
-                .getattr("name")?
-                .extract::<String>()
-        })
-        .collect::<PyResult<Vec<_>>>()?;
-    rows.push(row(
-        "context:open".into(),
-        names.join(" › "),
-        "Editing",
-        "",
-        0,
-        7,
-        0,
-        0,
-    ));
+    let open = !expanded.contains("context:fold") || !query.is_empty();
+    let mut fold = row("context:fold".into(), format!("In {}", group.getattr("name")?.extract::<String>()?), "", "", 0, 7, 0, 0);
+    fold.1[7] = 1;
+    fold.1[8] = i64::from(open);
+    rows.push(fold);
+    if !open { return Ok(rows); }
     rows.extend(loose(scene, 1, query)?);
     let mut stack = vec![(group, 0usize)];
     while let Some((g, depth)) = stack.pop() {

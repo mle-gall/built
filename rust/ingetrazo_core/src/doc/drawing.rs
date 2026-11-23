@@ -116,9 +116,7 @@ pub(super) fn preview(
         let Some(key) = tag.key.as_deref() else {
             continue;
         };
-        if key == "Layer 0" {
-            continue;
-        }
+
         let folder = tag.folder.as_deref().unwrap_or("");
         if !folder.is_empty() {
             folders.push(folder);
@@ -126,7 +124,7 @@ pub(super) fn preview(
         leaves
             .entry(folder)
             .or_default()
-            .push((key, tag.name.as_deref().unwrap_or(key), id));
+            .push((key, if key == "Layer 0" { "Untagged" } else { tag.name.as_deref().unwrap_or(key) }, id));
     }
     let mut known = HashSet::new();
     folders.retain(|f| known.insert(*f));
@@ -217,7 +215,7 @@ pub(super) fn preview(
                             _ => {
                                 inherited
                                     || text_matches(&name.to_lowercase(), token)
-                                    || text_matches("drawing only", token)
+                                    || text_matches("tag", token)
                             }
                         };
                         hit != neg
@@ -226,7 +224,7 @@ pub(super) fn preview(
                         let mut text = vec![
                             format!("preview-tag:{key}"),
                             name.into(),
-                            "Drawing only".into(),
+                            String::new(),
                             String::new(),
                             String::new(),
                         ];
