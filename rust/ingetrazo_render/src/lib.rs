@@ -2267,8 +2267,8 @@ impl Renderer {
     fn ui_set_tree(&mut self, rows: Vec<(Vec<String>, Vec<i64>)>, unfiled: u32) {
         if let Some(ui) = self.ui.as_mut() { ui.set_tree(rows, unfiled); }
     }
-    fn ui_set_tags(&mut self, rows: Vec<(String, String, bool, bool)>) {
-        if let Some(ui) = self.ui.as_mut() { ui.set_tags(rows); }
+    fn ui_set_tags(&mut self, rows: Vec<(String, String, bool, bool, String, String)>, folders: Vec<(String, String)>, active: String) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_tags(rows, folders, active); }
     }
     fn ui_profile_png(&mut self) -> PyResult<Vec<u8>> {
         let frame = self.read_pixels()?;

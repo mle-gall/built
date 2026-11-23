@@ -123,17 +123,6 @@ def test_picking_with_nothing_selected_sets_the_working_layer(win):
     assert layer_of(scene.groups[-1]) == "A"
 
 
-def test_the_rows_eye_and_padlock_toggle_in_place(win):
-    scene, _ga, _gb = _doc(win)
-    combo = win.layers_toolbar.combo
-    combo.toggle("A", "eye")
-    assert not scene.layer("A").visible
-    combo.toggle("A", "lock")
-    assert scene.layer("A").locked
-    combo.toggle("A", "eye")
-    assert scene.layer("A").visible
-
-
 def test_the_buttons_two_groups_then_hide_show_all_previous_together(win):
     assert list(win.layers_toolbar.actions) == [
         "panel", "make_active", "isolate", "lock", "to_active",

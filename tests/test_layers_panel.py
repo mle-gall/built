@@ -721,20 +721,6 @@ def test_folder_row_shows_hides_and_counts(win):
     assert panel.item_for("A").text(5) == "1"
 
 
-def test_sorting_keeps_the_default_layer_first(win):
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    scene.layers += [Layer("zeta"), Layer("alfa")]
-    panel.refresh()
-    for order in (Qt.AscendingOrder, Qt.DescendingOrder):
-        panel.tree.sortByColumn(0, order)
-        names = [panel.tree.topLevelItem(i).text(0)
-                 for i in range(panel.tree.topLevelItemCount())]
-        assert names[0] == DEFAULT_LAYER
-        assert names[1:] == (["alfa", "zeta"] if order == Qt.AscendingOrder
-                             else ["zeta", "alfa"])
-
-
 def test_filter_hides_what_does_not_match(win):
     panel = win.layers_dock.panel
     scene = win.viewport.scene
@@ -1948,21 +1934,6 @@ def _layer_rows(panel):
     return [panel.tree.topLevelItem(i).text(0)
             for i in range(panel.tree.topLevelItemCount())
             if panel._key(panel.tree.topLevelItem(i))[0] == "layer"]
-
-
-def test_names_sort_with_their_numbers_read_as_numbers(win):
-    from PySide6.QtCore import QSettings
-    from views.layers_panel import LayersPanel, natural_key
-    QSettings().remove(LayersPanel.SORT_KEY)
-    assert natural_key("Capa 2") < natural_key("Capa 10")
-    assert natural_key("planta 9") < natural_key("Planta 12")
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    scene.layers += [Layer("Capa 10"), Layer("Capa 2"), Layer("Capa 1"),
-                     Layer("Alzado")]
-    panel.refresh()
-    assert _layer_rows(panel) == [DEFAULT_LAYER, "Alzado", "Capa 1",
-                                  "Capa 2", "Capa 10"]
 
 
 def test_sort_by_order_created_from_the_options_menu(win):

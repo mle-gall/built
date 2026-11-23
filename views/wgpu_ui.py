@@ -987,7 +987,7 @@ def _tree(view, win) -> None:
     from core import layers as L
     if colset == 3 and not mode:
         view.renderer.ui_set_tree([], 0)
-        view.renderer.ui_set_tags(scene._root._tag_browser_rows())
+        view.renderer.ui_set_tags(*scene._root._tag_browser())
         view.renderer.ui_set_colset(colset)
         view.renderer.ui_set_mode("")
         return
@@ -2001,7 +2001,7 @@ def _tree_action(win, view, action) -> None:
         elif verb in ("print", "color", "linetype", "weight") and node:
             ts = tags(node)
             if ts:
-                _core(vp, "set_tag_drawing", tags=ts, field=verb, value=extra)
+                _core(vp, "edit_tag", tags=ts, field=verb, value=extra)
                 rebuild()
                 vp.notify_scene_changed()
         elif verb == "measure":
@@ -2800,6 +2800,11 @@ def _run(win, actions, source_view=None) -> None:
             if run is not None:
                 run()
                 view.update()
+        elif kind == "tag-edit":
+            import json
+            field, key, value = json.loads(arg)
+            _core(win.viewport, "edit_tag", tags=[key], field=field, value=value)
+            win.viewport.notify_scene_changed()
         elif kind in ("tag-visible", "tag-locked"):
             flag, _, key = arg.partition(":")
             _core(win.viewport, "set_tag_state", tags=[key],

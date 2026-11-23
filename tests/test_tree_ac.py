@@ -369,8 +369,8 @@ def test_tag_browser_updates_linked_placement_visibility_and_lock(ui):
 
     def state():
         wu._tree(view, win)
-        rows, = view.renderer.calls["ui_set_tags"]
-        return next(row[2:] for row in rows if row[0] == tag.key)
+        rows, _, _ = view.renderer.calls["ui_set_tags"]
+        return next(row[2:4] for row in rows if row[0] == tag.key)
 
     assert state() == (True, False)
     wu._run(win, ["tag-visible:0:" + tag.key])
@@ -383,6 +383,9 @@ def test_tag_browser_updates_linked_placement_visibility_and_lock(ui):
     win.viewport.history.undo()
     assert state() == (True, False)
     assert tag.key not in record["overrides"]
+    wu._run(win, ["tag-visible:0:" + tag.key, "tag-locked:1:" + tag.key,
+                  "tag-visible:1:" + tag.key])
+    assert state() == (True, True)
 
 
 def test_tag_browser_identifies_same_label_tags_by_key():
@@ -391,9 +394,10 @@ def test_tag_browser_identifies_same_label_tags_by_key():
     scene = Scene()
     scene.layers.extend([Layer("Deck", folder="part", key="a:b"),
                          Layer("Deck", folder="other", key="a:c")])
+    scene.layer_folders = ["host", "part", "other"]
     scene.folder_parents = {"part": "host"}
     scene.layer_folder_names = {"host": "Site", "part": "Building"}
-    rows = scene._root._tag_browser_rows()
+    rows = [row[:4] for row in scene._root._tag_browser()[0]]
     assert ("a:b", "Site / Building / Deck", True, False) in rows
     assert ("a:c", "other / Deck", True, False) in rows
     wu._run(_Win(scene), ["tag-visible:0:a:b"])
@@ -424,6 +428,38 @@ def test_drawing_cell_edits_run_without_a_layer_panel_and_undo(ui):
     assert tag.color is None and tag.lineweight is None
     rev = win.viewport.history.revision
     with pytest.raises(KeyError):
-        commands.run(win.viewport.history, "set_tag_drawing", tags=[tag.key, "gone"],
+        commands.run(win.viewport.history, "edit_tag", tags=[tag.key, "gone"],
                      field="weight", value="0.5")
     assert tag.lineweight is None and win.viewport.history.revision == rev
+
+
+
+def test_tag_name_filing_and_active_edits_use_stable_keys():
+    from core import layers
+    from core.layers import Layer
+    from core.protocol import commands
+    from core.scene import Scene
+    scene = Scene()
+    win = _Win(scene)
+    tag = Layer("Lots", key="site:lots", folder="before", visible=False, locked=True)
+    scene.layers.append(tag)
+    scene.layer_folders = ["before", "empty"]
+    def change(field, value, key=tag.key):
+        return commands.run(win.viewport.history, "edit_tag", tags=[key], field=field, value=value)
+    change("active", "")
+    assert tag.visible and not tag.locked and layers.active_layer(scene) == tag.key
+    win.viewport.history.undo()
+    assert not tag.visible and tag.locked and layers.active_layer(scene) == layers.DEFAULT_LAYER
+    change("name", "Blocks")
+    assert scene.layer_by_key("site:lots").name == "Blocks"
+    change("folder", "empty")
+    assert tag.folder == "empty"
+    change("folder", "")
+    assert tag.folder is None
+    win.viewport.history.undo()
+    assert tag.folder == "empty"
+    with pytest.raises(KeyError):
+        change("folder", "gone")
+    with pytest.raises(ValueError):
+        change("folder", "empty", layers.DEFAULT_LAYER)
+    assert tag.folder == "empty" and scene.layer(layers.DEFAULT_LAYER).folder is None

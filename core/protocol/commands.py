@@ -329,7 +329,7 @@ def set_tag(history, placements, tag):
     return _answer(history, before)
 
 
-class SetTagDrawingCommand(Command):
+class EditTagCommand(Command):
     doc_undo = True
     keeps_rows = True
 
@@ -350,10 +350,11 @@ class SetTagDrawingCommand(Command):
         super().doc_after(scene, phase)
 
 
-def set_tag_drawing(history, tags, field, value):
-    edit = history.scene._root._tag_drawing_edit(tags, field, value)
+def edit_tag(history, tags, field, value):
+    edit = history.scene._root._tag_edit(tags, field, value)
     before = history.revision
-    history.execute(SetTagDrawingCommand(edit))
+    if edit is not None:
+        history.execute(EditTagCommand(edit))
     return _answer(history, before)
 
 
@@ -787,7 +788,7 @@ COMMANDS = {"patch_record_field": patch_record_field, "set_filing_rule": set_fil
             "explode_view": explode_view, "purge_unused": purge_unused,
             "purge_debris": purge_debris, "undo": undo, "redo": redo,
             "hide": hide, "unhide": unhide, "lock": lock, "rename_placement": rename_placement,
-            "set_tag_drawing": set_tag_drawing, "set_tag": set_tag, "set_tag_state": set_tag_state, "resegment_curve": resegment_curve, "repair_solid": repair_solid,
+            "edit_tag": edit_tag, "set_tag": set_tag, "set_tag_state": set_tag_state, "resegment_curve": resegment_curve, "repair_solid": repair_solid,
             "rename_material": rename_material, "edit_material": edit_material,
             "duplicate_material": duplicate_material, "delete_material": delete_material,
             "delete_placements": delete_placements, "rename_component": rename_component,

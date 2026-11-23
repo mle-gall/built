@@ -404,8 +404,8 @@ impl Ui {
     pub fn set_issues(&mut self, on: bool) {
         if let Some(col) = self.column.as_mut() { col.issues = on; }
     }
-    pub fn set_tags(&mut self, rows: Vec<tag_browser::Row>) {
-        if let Some(col) = self.column.as_mut() { col.tags.replace(rows); }
+    pub fn set_tags(&mut self, rows: Vec<tag_browser::Row>, folders: Vec<(String, String)>, active: String) {
+        if let Some(col) = self.column.as_mut() { col.tags.replace(rows, folders, active); }
     }
     pub fn set_colset(&mut self, colset: u8) {
         if let Some(col) = self.column.as_mut() { col.colset = colset.min(3); }
