@@ -297,7 +297,7 @@ pub mod molecules {
         let ink = if off {
             OFF
         } else if primary {
-            BRIGHT
+            ON_PRIMARY
         } else if role == 2 {
             ERROR
         } else {
@@ -321,7 +321,7 @@ pub mod molecules {
         let x0 = (rect.center().x - (g.size().x + kw) / 2.0).round();
         leading(ui.painter(), rect, x0, g.clone(), ink);
         if let Some(k) = k {
-            let hint_ink = if off { OFF } else if primary { ON_PRIMARY_HINT } else { FAINT };
+            let hint_ink = if off { OFF } else if primary { ON_PRIMARY_HINT } else { INK_2 };
             leading(ui.painter(), rect, x0 + g.size().x + 8.0, k, hint_ink);
         }
         resp.clicked()
@@ -858,7 +858,7 @@ pub mod organisms {
         let radius = glass.radius();
         let p = ui.painter();
         p.add(glass.shadow().as_shape(rect, CornerRadius::same(radius)));
-        p.add(crate::glass::pane(rect, radius as f32, glass.look()));
+        p.add(crate::glass::pane(rect, radius as f32, sheet_glass()));
         let rule = Stroke::new(1.0_f32, DIVIDER);
         let header = Rect::from_min_size(rect.min, vec2(rect.width(), BUTTON_H + 2.0 * SPACE_M));
         p.hline(rect.x_range(), header.bottom() - 0.5, rule);

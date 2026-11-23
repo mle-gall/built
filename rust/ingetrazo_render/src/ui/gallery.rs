@@ -18,8 +18,8 @@ const STATES: [(&str, State); 6] = [
 /// Colour roles, grouped as the docs list them. Tokens not listed here still
 /// appear, under "Other", so a new token is never missing from the sheet.
 const GROUPS: [(&str, &[&str]); 6] = [
-    ("Surfaces", &["SHEET", "SIDE", "CARD", "CARD_HOVER", "WELL", "PANEL", "FIELD", "SCRIM"]),
-    ("Text", &["INK", "INK_2", "DIM", "FAINT", "OFF", "BRIGHT"]),
+    ("Surfaces", &["SHEET", "SIDE", "CARD", "CARD_HOVER", "WELL", "PANEL", "FIELD", "SCRIM", "SHEET_SCRIM"]),
+    ("Text", &["INK", "INK_2", "DIM", "FAINT", "OFF", "BRIGHT", "ON_PRIMARY"]),
     (
         "Interaction",
         &[
@@ -275,7 +275,7 @@ impl Gallery {
         }
         y += 50.;
         // Glass levels, lowest to highest.
-        sub(ui, pos2(at.x, y), "Glass, lowest to highest");
+        sub(ui, pos2(at.x, y), &format!("Glass · sheet blur {SHEET_BLUR}× · scrim {:.0}% · vignette {:.0}%", SHEET_SCRIM.a() as f32 / 2.55, SHEET_VIGNETTE * 100.0));
         y += 20.;
         let tile_w = (w - 3. * SPACE_S) / 4.;
         for (i, surface) in Surface::ALL.into_iter().enumerate() {

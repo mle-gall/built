@@ -11,9 +11,8 @@ Maxence, not a new one-off.
 
 Chosen on 2026-11-23 for three surfaces at once ("I see a pattern
 emerging here"): the **Library** (option B with C's palette), the **start
-page** (option C) and **Settings** (option B's content). Next in line: the
-one-off **Export** sheet (beside Deliveries in the dock), the **Extension
-Manager**, **About**.
+page** (option C) and **Settings** (option B's content). One-off **Export**, **Extension
+Manager**, **About** and report sheets also use this component.
 
 ### When to use it
 
@@ -32,7 +31,7 @@ Manager**, **About**.
 ### Anatomy
 
 ```
- top bar (stays live: tabs, menus, ⌘K)
+ top bar (traffic lights and project tabs)
 ┌──────────────────────────────────────────────────────────────────────┐
 │ title · tabs · verbs ……………………………………… menus · [⌕ search ⌘F] · ×  │ 52 pt
 ├──────────────┬────────────────────────────────────┬──────────────────┤
@@ -46,25 +45,25 @@ Manager**, **About**.
 ├──────────────┴────────────────────────────────────┴──────────────────┤
 │ links · links ……………………………………………………………… key hints              │ 32 pt
 └──────────────────────────────────────────────────────────────────────┘
- bottom bar (dimmed)
+ model controls retracted
 ```
 
-- **Geometry.** Under the top bar (+16 pt), down to 12 pt above the bottom
-  bar. With 960 pt or more between the rail and the dock it sits there,
-  centred, at most `width` (1240 pt by default; the start page uses 1180,
-  Settings 1100): the frame stays in view beside it, undimmed, as in the
-  review's mockups. Narrower (1280 × 800 with the dock open) it covers the
-  rail and the dock, 24 pt from the window's sides: 1232 × 688 pt. Side
-  list 216 pt, detail 340 pt by default (at most half of what is left),
-  content in between.
-- **Behind it.** The model is blurred as it is (no tint), then dimmed by
-  the neutral `SCRIM`. The real frame — rail, dock, bottom bar — stays
-  drawn: the sheet is a state of the window, not a new window.
-- **Surface.** The dock's own glass (`Surface::Panel`: its tint, rim,
-  radius and shadow), panes set apart by `DIVIDER` hairlines, pictures in
-  `WELL`, link and check dots in `FOUND` / `CHANGED` / `MISSING`. Every
-  colour is a `ui/tokens.rs` role (the colour lint enforces it); buttons
-  are the kit's sheet buttons, dots its `dot` atom, and fields the forms'
+- **Geometry.** Centre the card in the space below the project tabs. It takes
+  84% of that height up to 760 pt. Horizontal margins are 6% of window width,
+  clamped to 24–80 pt, with the provider's maximum width respected.
+- **Chrome.** The rail, dock and bottom bar use the shared 160 ms Review
+  retraction. The top bar retains the traffic lights and project tabs. On
+  dismissal the window restores its previous Review or editing state.
+  Paint's palette strip belongs to the model and returns with its controls.
+- **Backdrop.** Sample the model across the full window. On a blank Start,
+  use the last opened or saved file's cached preview when available, then
+  other recent file previews, then the empty scene. Use a centred cover crop.
+  The shared Kawase blur uses 1.75× tap offsets. A neutral 44% scrim and
+  a soft vignette that attenuates edge light by up to 42% sit behind the card.
+- **Surface.** The card and header sample the same blur through a 55% graphite
+  tint. Lists and fields use the denser `FIELD` fill. Panes use `DIVIDER`
+  hairlines, pictures use `WELL`, and link dots use feedback tokens.
+  Buttons use the kit's sheet buttons and fields use the forms'
   widgets (`ui/dialog.rs`), so a setting looks the same in a form and a
   sheet. Blue only as the accent: the focused tile, the selected row, the
   primary button, links. No navy surfaces or washes.

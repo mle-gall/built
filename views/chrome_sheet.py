@@ -171,6 +171,8 @@ class Sheet:
         self.closable = closable
         self.width = float(width)
         self.tabs: list = []
+        self.backdrop_icon = ""
+        self.default_verb = ""
         self.verbs: list = []
         self.menus: list = []
         self.side: list = []
@@ -235,6 +237,7 @@ class Sheet:
 
     def wire(self, search_text=None, search_force=False) -> dict:
         out = {"id": self.id, "title": self.title, "closable": self.closable, "width": self.width,
+               "backdrop_icon": self.backdrop_icon, "default_verb": self.default_verb,
                "tabs": self.tabs, "verbs": self.verbs, "menus": self.menus, "side": self.side,
                "side_width": self.side_width, "content": self._content.wire(),
                "detail": self._detail.wire() if self._detail is not None else None,
