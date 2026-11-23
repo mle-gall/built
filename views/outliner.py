@@ -2088,7 +2088,7 @@ class OutlinerPanel(QWidget):
             return {}
         from collections import Counter
         from core import layers as L
-        from views.layers_panel import layer_swatch
+        from views.tree_icons import layer_swatch
         on_layer = Counter(outliner.layer_name(g) for g in scene.groups)
         heads: dict = {}
         tip = tr("Double-click to select its objects in the model")

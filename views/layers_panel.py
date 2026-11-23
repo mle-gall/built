@@ -57,6 +57,9 @@ ROLE_ORDER = Qt.UserRole + 4
 
 
 
+from views.tree_icons import layer_swatch, none_swatch, swatch_icon
+
+
 def _submenu(menu, title):
     """A submenu parented to ``menu``. ``menu.addMenu(title)`` makes one
     Python holds no reference to, and inside a helper it can be deleted
@@ -134,23 +137,6 @@ def printer_icon(on: bool) -> QIcon:
     return QIcon(pm)
 
 
-def swatch_icon(rgb) -> QIcon:
-    pm = QPixmap(18, 18)
-    pm.fill(Qt.transparent)
-    p = QPainter(pm)
-    p.setRenderHint(QPainter.Antialiasing)
-    from PySide6.QtWidgets import QApplication
-    p.setPen(QPen(QApplication.palette().text().color(), 1.0))
-    p.setBrush(QColor.fromRgbF(*rgb[:3]))
-    p.drawRoundedRect(QRectF(2.5, 3.5, 13, 11), 2, 2)
-    p.end()
-    return QIcon(pm)
-
-
-#: The «no colour» slash of the default layer's swatch.
-NO_COLOUR_SLASH = QColor(214, 48, 49)
-
-
 def layers_signature(scene) -> tuple:
     """Everything the Layers rows are drawn from — each layer's own state,
     the folders, the active layer and «colour by layer». The same value
@@ -165,45 +151,6 @@ def layers_signature(scene) -> tuple:
             tuple(sorted(scene.folder_visibility.items())),
             L.active_layer(scene),
             bool(getattr(style, "color_by_layer", False)))
-
-
-def layer_swatch(ly) -> QIcon:
-    """A layer's swatch. The default layer with no colour picked has none
-    of its own, and must not pass for one: an empty (base-coloured) swatch
-    crossed by a red slash from the top-left corner to the bottom-right —
-    the usual «none» mark."""
-    if ly is None or ly.color is not None or ly.key != L.DEFAULT_LAYER:
-        return swatch_icon(L.layer_color(ly))
-    return none_swatch()
-
-
-def none_swatch() -> QIcon:
-    """The «none» swatch: empty (base-coloured), crossed by a red slash —
-    a layer with no colour of its own, a layer with no hatch."""
-    from PySide6.QtGui import QPainterPath
-    from PySide6.QtWidgets import QApplication
-    pal = QApplication.palette()
-    pm = QPixmap(18, 18)
-    pm.fill(Qt.transparent)
-    p = QPainter(pm)
-    p.setRenderHint(QPainter.Antialiasing)
-    box = QRectF(2.5, 3.5, 13, 11)
-    path = QPainterPath()
-    path.addRoundedRect(box, 2, 2)
-    p.setPen(Qt.NoPen)
-    p.setBrush(pal.base().color())
-    p.drawPath(path)
-    p.setClipPath(path)
-    slash = QPen(NO_COLOUR_SLASH, 1.8)
-    slash.setCapStyle(Qt.FlatCap)
-    p.setPen(slash)
-    p.drawLine(box.topLeft(), box.bottomRight())
-    p.setClipping(False)
-    p.setPen(QPen(pal.text().color(), 1.0))
-    p.setBrush(Qt.NoBrush)
-    p.drawRoundedRect(box, 2, 2)
-    p.end()
-    return QIcon(pm)
 
 
 #: The orders of the panel's rows: by name, as they were made, the visible
