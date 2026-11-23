@@ -328,6 +328,69 @@ def copy_placements(history, placements, delta, count=1, mode="x"):
     return answer
 
 
+def move_selection(history, delta, placements=None, vertices=None, edges=None,
+                   faces=None, copy=False, count=1, mode="x"):
+    """Move (or copy) what is named — placements by uid, loose vertices,
+    edges and faces by key — or, with none named, the scene's selection
+    (placements, loose geometry, guides, labels, section planes,
+    reference images): the Move tool's commit (``core.move_ops``). A copy
+    lays ``count`` copies at multiples of ``delta`` (``mode`` ``"x"``) or
+    dividing it (``"/"``) and selects them. One step."""
+    from ingetrazo_core import Vec3
+    from core.dimension import Dimension  # noqa: F401  (follows its anchors in the tool only)
+    from core.group import Group
+    from core.guide import is_guide
+    from core.history import CompoundCommand
+    from core.mesh import Edge, Face
+    from core.move_ops import copy_builder, move_commands
+    from core.section import SectionPlane
+    from core.textlabel import TextLabel
+    mesh = history.scene.mesh
+    named = any(x is not None for x in (placements, vertices, edges, faces))
+    if named:
+        groups = _placements(history, placements or [])
+        vs = _need(mesh, "vertex", vertices or [])
+        es = _need(mesh, "edge", edges or [])
+        fs = _need(mesh, "face", faces or [])
+        rest = []
+    else:
+        sel = list(history.scene.selection)
+        groups = [e for e in sel if isinstance(e, Group)]
+        vs = []
+        es = [e for e in sel if isinstance(e, Edge)]
+        fs = [e for e in sel if isinstance(e, Face)]
+        rest = sel
+    labels = [e for e in rest if isinstance(e, TextLabel)]
+    guides = [e for e in rest if is_guide(e)]
+    splanes = [e for e in rest if isinstance(e, SectionPlane)]
+    images = [e for e in rest if type(e).__name__ == "ImagePlane"]
+    d = Vec3(*map(float, delta))
+    before = history.revision
+    if copy:
+        count = int(count)
+        if count < 1 or mode not in ("x", "/"):
+            raise ValueError("count is at least 1 and mode is 'x' or '/'")
+        steps = ([d * (k / float(count)) for k in range(1, count + 1)] if mode == "/"
+                 else [d * float(k) for k in range(1, count + 1)])
+        cmd = copy_builder(history.scene, groups, fs, es, guides)(steps)
+        if cmd is not None:
+            history.execute(cmd)
+        return _answer(history, before)
+    from core.topology import _key
+    seen, positions = set(), []
+    for p in [v.position for v in vs] + [p for e in es for p in (e.a, e.b)] + \
+            [p for f in fs for p in f.vertices]:
+        key = _key(p)
+        if key not in seen:
+            seen.add(key)
+            positions.append(Vec3(p))
+    cmds = move_commands(d, groups=groups, positions=positions, labels=labels,
+                         guides=guides, splanes=splanes, images=images)
+    if cmds:
+        history.execute(cmds[0] if len(cmds) == 1 else CompoundCommand(cmds))
+    return _answer(history, before)
+
+
 def _edge_edit(history, edges, edit, *args):
     from core.history import SnapshotMutation
     selected = _need(history.scene.mesh, "edge", edges)
@@ -1047,6 +1110,7 @@ COMMANDS = {"set_location": set_location, "set_model_units": set_model_units, "s
             "delete_delivery": delete_delivery, "run_delivery": run_delivery, "follow_me": follow_me, "intersect_faces": intersect_faces,
             "add_edge": add_edge, "add_edges": add_edges, "add_face": add_face,
             "move_placements": move_placements, "copy_placements": copy_placements,
+            "move_selection": move_selection,
             "divide_edges": divide_edges, "join_edges": join_edges,
             "move_vertices": move_vertices, "erase": erase,
             "reverse_faces": reverse_faces, "push_pull": push_pull, "orient_faces": orient_faces,

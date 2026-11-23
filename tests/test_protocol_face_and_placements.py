@@ -79,3 +79,27 @@ def test_copy_placements_lays_an_array_in_one_step(mode, xs):
     assert len({c.uid for c in scene.groups}) == 4
     history.undo()
     assert scene.groups == [g]
+
+
+def test_move_selection_moves_the_selection_in_one_step():
+    scene, history, g = _scene_with_box()
+    face = scene.mesh.add_face([(5., 0., 0.), (6., 0., 0.), (6., 1., 0.), (5., 1., 0.)])
+    scene.select([g, face])
+    assert run(history, "move_selection", delta=[0, 0, 2])["ok"]
+    assert g.xform.map(Vec3(0, 0, 0)).toTuple() == (0.0, 0.0, 2.0)
+    assert all(abs(v.z() - 2.0) < 1e-12 for v in scene.mesh.faces[0].vertices)
+    assert len(history.undo_stack) == 1
+    history.undo()
+    assert all(abs(v.z()) < 1e-12 for v in scene.mesh.faces[0].vertices)
+
+
+def test_move_selection_by_keys_and_as_an_array_of_copies():
+    scene, history, g = _scene_with_box()
+    scene.mesh.add_face([(5., 0., 0.), (6., 0., 0.), (6., 1., 0.), (5., 1., 0.)])
+    (face,) = scene.mesh.faces
+    assert run(history, "move_selection", delta=[1, 0, 0], faces=[face.key])["ok"]
+    assert min(v.x() for v in scene.mesh.faces[0].vertices) == pytest.approx(6.0)
+    answer = run(history, "move_selection", delta=[0, 3, 0], placements=["box"],
+                 faces=[scene.mesh.faces[0].key], copy=True, count=2)
+    assert answer["ok"] and len(history.undo_stack) == 2
+    assert len(scene.groups) == 3 and len(scene.mesh.faces) == 3
