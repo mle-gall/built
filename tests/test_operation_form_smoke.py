@@ -594,7 +594,9 @@ def fixture_state(self):
                   if b.key == "python_console"), [])
     cam = getattr(self.view, "_camera_inspector", None)
     saved = self.window._scene_tabs.marked_view()
-    return dict(state(self), bound=bool(cam and cam.observe(self.viewport.camera, self.viewport.scene, saved)),
+    group = getattr(self.viewport.active_tool, "_group", None)
+    selected_font = (getattr(group, "text3d", None) or {{}}).get("font")
+    return dict(state(self), selected_font=selected_font, bound=bool(cam and cam.observe(self.viewport.camera, self.viewport.scene, saved)),
                 camera_open=bool(cam), saved_shift=None if saved is None else saved.lens.get("shift_y"),
                 namespace="survey" in bim_registry.get(self.viewport.scene)["classification_systems"],
                 font=bool(getattr(self.view, "_font_done", None)), console=lines,
@@ -655,6 +657,7 @@ quit
     assert draft["large_sheet"] == "library" and not draft["namespace"], log
     assert applied["namespace"] and not applied["large_sheet"], log
     assert picker["font"] and not placed["font"] and placed["tool"] == "PlaceGroupTool", log
+    assert placed["selected_font"], log
     assert "42" in console["console"] and preview["utility"], log
     assert marker.read_text() == "False", log
     assert all(not s["errors"] and not s["blocked_widgets"] for s in states), log
