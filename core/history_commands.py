@@ -6491,6 +6491,11 @@ class SetStructureNodeCommand(Command):
         self.key = key
 
     def do(self, scene):
+        if _doc.ENABLED:
+            from ingetrazo_core import set_structure_nodes
+            self.before = set_structure_nodes(self.targets, self.key)
+            scene.version += 1
+            return
         from copy import deepcopy
         self.before = []
         for group in self.targets:
@@ -6503,7 +6508,16 @@ class SetStructureNodeCommand(Command):
             group.ext = ext or None
         scene.version += 1
 
+    def bind_transaction(self, txn):
+        super().bind_transaction(txn)
+        self.before = None
+
     def undo(self, scene):
+        if _doc.ENABLED:
+            from ingetrazo_core import restore_structure_nodes
+            restore_structure_nodes(self.targets, self.before)
+            scene.version += 1
+            return
         from copy import deepcopy
         for group, (was_none, had_key, value) in zip(self.targets, self.before):
             ext = dict(group.ext or {})

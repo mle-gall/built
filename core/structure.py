@@ -3,7 +3,7 @@
 from collections import Counter, defaultdict
 from copy import deepcopy
 
-from core import bim_registry, links
+from core import bim_registry, links, doc_model
 from core.history import (AssignLayerCommand, Command, CompoundCommand, EnsureLayersCommand,
                           SetRecordCommand, SetRegistryCommand, SetStructureNodeCommand)
 from core.layers import DEFAULT_LAYER, layer_of
@@ -16,6 +16,9 @@ def _nodes(registry):
 
 
 def _lineage(registry, key):
+    if doc_model.ENABLED:
+        from ingetrazo_core import structure_lineage
+        return structure_lineage(_nodes(registry), key)
     nodes = _nodes(registry)
     if not isinstance(key, str) or key not in nodes:
         raise ValueError(f'Unknown structure node: {key}')
@@ -71,6 +74,10 @@ def node_of(group):
 
 
 def _placements(scene):
+    if doc_model.ENABLED:
+        from ingetrazo_core import StructurePlacements
+        yield from StructurePlacements(scene)
+        return
     # Use traversal ancestry: detached or just-loaded children may lack owner pointers.
     seen = set()
     stack = [(g, None, True) for g in reversed(scene.groups)]
@@ -87,6 +94,9 @@ def _placements(scene):
 
 
 def _targets(scene, uids):
+    if doc_model.ENABLED:
+        from ingetrazo_core import structure_targets
+        return structure_targets(scene, uids)
     if not isinstance(uids, (list, tuple)) or not uids:
         raise ValueError('uids must be a nonempty list of strings or UID paths')
     addresses = []
@@ -194,6 +204,9 @@ class _MoveTag(Command):
 
 
 def _filing(scene, groups, registry, key, changes):
+    if doc_model.ENABLED:
+        from ingetrazo_core import plan_filing
+        return plan_filing(scene, groups, registry, key, changes)
     recipe = resolve(registry, key)
     if any('source' in _nodes(registry)[k] for k in _lineage(registry, key)):
         raise ValueError('Linked structure is read-only')
@@ -239,6 +252,9 @@ def _filing(scene, groups, registry, key, changes):
 
 
 def _check_paths(scene, registry, batches):
+    if doc_model.ENABLED:
+        from ingetrazo_core import check_filing_paths
+        return check_filing_paths(scene, registry, batches)
     # Tags and folder names are document-wide. Two occupied nodes cannot
     # project the same name into different folders in the same transaction.
     pending = {g.uid for groups in batches.values() for g in groups}
@@ -325,6 +341,9 @@ def resync(scene, keys=None):
 
 
 def _resync(scene, registry, keys):
+    if doc_model.ENABLED:
+        from ingetrazo_core import resync_filing
+        return resync_filing(scene, registry, keys)
     chosen = set(_nodes(registry) if keys is None else keys)
     if chosen - _nodes(registry).keys():
         raise ValueError('Unknown resync node')
@@ -521,6 +540,9 @@ def bootstrap(scene, registry):
 
 def apply_bootstrap(scene, proposal):
     """Preflight the complete proposal; the registry and placements share one undo step."""
+    if doc_model.ENABLED:
+        from ingetrazo_core import apply_structure_bootstrap
+        return apply_structure_bootstrap(scene, proposal)
     registry = bim_registry.get(scene)
     registry['structure'] = deepcopy(proposal['structure'])
     filing = proposal['filing']
