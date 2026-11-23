@@ -19,6 +19,8 @@ Two halves:
 """
 from __future__ import annotations
 
+from collections import UserList
+
 import io
 import json
 import math
@@ -392,6 +394,24 @@ def _recipe_helpers(scene) -> dict:
             "prism": prism, "wall": wall, "house": house, "sheet": sheet}
 
 
+class _RecipeGroups(UserList):
+    """Live recipe alias. Helpers already attach their groups to the scene."""
+
+    def __init__(self, groups):
+        self.data = groups
+
+    def append(self, item):
+        if isinstance(item, (list, tuple)):
+            for group in item:
+                self.append(group)
+        elif item not in self.data:
+            self.data.append(item)
+
+    def extend(self, items):
+        for item in list(items):
+            self.append(item)
+
+
 def _tidy_groups(scene) -> None:
     """The helpers already add their groups, yet models append them again
     (qwen3.5 wrote ``groups.append(house(...))`` testing #461): a group
@@ -426,6 +446,8 @@ def run_transactional(viewport, code: str, scope: dict) -> dict:
 
     def mutate(_scene) -> None:
         old_out, old_err = sys.stdout, sys.stderr
+        groups = scope["groups"]
+        scope["groups"] = _RecipeGroups(groups)
         sys.stdout, sys.stderr = out_buf, err_buf
         try:
             try:
@@ -445,6 +467,7 @@ def run_transactional(viewport, code: str, scope: dict) -> dict:
             traceback.print_exc(file=err_buf)
             raise
         finally:
+            scope["groups"] = groups
             sys.stdout, sys.stderr = old_out, old_err
 
     # The nested group tree too: a script that adopted parts into a nested
