@@ -1468,6 +1468,10 @@ class Mesh:
         once per use, as :meth:`add_face` lists it — the first use alone
         left the others a segment with no edge.
         """
+        from core import doc_model
+        if doc_model.ENABLED:
+            from ingetrazo_core import split_object_at_position
+            return split_object_at_position(self, edge, position)
         v0, v1 = edge.v0, edge.v1
         mid = self.vertex(position)
         if mid is v0 or mid is v1:
@@ -1548,6 +1552,10 @@ class Mesh:
         edges follow _weld_into; surviving faces keep their keys."""
         self._chunk_dirty = True
         self._mut_serial += 1
+        from core import doc_model
+        if doc_model.ENABLED:
+            from ingetrazo_core import weld_object_mesh
+            return weld_object_mesh(self, _key, 10.0 ** -_KEY_DECIMALS)
         groups: dict = {}
         for v in self.vertices:
             groups.setdefault(_key(v.position), []).append(v)
@@ -1643,6 +1651,10 @@ class Mesh:
         An existing destination edge keeps its key; otherwise the redirected
         edge keeps its old key. Zero-length edges and sliver faces retire.
         """
+        from core import doc_model
+        if doc_model.ENABLED:
+            from ingetrazo_core import weld_object_vertex
+            return weld_object_vertex(self, keep, dup, _key)
         affected = {f for e in dup.edges for f in e.faces}
         for e in self._weld_order(dup):
             other = e.other(dup)
@@ -1726,6 +1738,10 @@ class Mesh:
         which case :meth:`_link_edge` reuses it. The record tracks which sub-edges
         this split *created* so undo removes only those and merely detaches the
         face from the reused ones (never deleting a neighbour's edge)."""
+        from core import doc_model
+        if doc_model.ENABLED:
+            from ingetrazo_core import split_object_edge
+            return split_object_edge(self, edge, mid)
         v0, v1 = edge.v0, edge.v1
         incident = list(edge.faces)
         self.remove_edge(edge)
@@ -1971,6 +1987,10 @@ class Mesh:
         """Undo a single stitch primitive recorded by the methods above."""
         kind = rec["kind"]
         if kind == "split":
+            from core import doc_model
+            if doc_model.ENABLED:
+                from ingetrazo_core import revert_object_split
+                return revert_object_split(self, rec)
             for face in rec["faces"]:
                 for loop in (face.loop, *face.hole_loops):
                     if rec["mid"] in loop:

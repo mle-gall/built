@@ -53,12 +53,18 @@ mod orient;
 mod pushscan;
 mod push_command;
 mod push_guard;
+mod object_weld;
 mod panic_log;
 
 #[pymodule]
 fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(push_command::rebuild_push_planes, m)?)?;
     m.add_function(wrap_pyfunction!(store::intersection_edit::partition_intersections, m)?)?;
+    m.add_function(wrap_pyfunction!(object_weld::weld_object_mesh, m)?)?;
+    m.add_function(wrap_pyfunction!(object_weld::weld_object_vertex, m)?)?;
+    m.add_function(wrap_pyfunction!(object_weld::split_object_at_position, m)?)?;
+    m.add_function(wrap_pyfunction!(object_weld::split_object_edge, m)?)?;
+    m.add_function(wrap_pyfunction!(object_weld::revert_object_split, m)?)?;
     m.add_function(wrap_pyfunction!(push_guard::guarded_push, m)?)?;
     m.add_function(wrap_pyfunction!(push_guard::translate_prism_cap, m)?)?;
     m.add_function(wrap_pyfunction!(push_guard::push_region, m)?)?;
