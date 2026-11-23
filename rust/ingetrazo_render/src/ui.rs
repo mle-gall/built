@@ -563,7 +563,7 @@ impl Ui {
         // window's ⌘ shortcuts, views/chrome_sheet.py).
         if self.lsheet.open { return true; }
         if self.sheets.shown { return self.sheets_claims_key(name); }
-        let filing = self.column.as_ref().is_some_and(|c| c.filing.is_some() || c.row_menu.is_some() || c.pick.is_some() || c.color_pick.is_some()
+        let filing = self.column.as_ref().is_some_and(|c| c.filing.is_some() || c.row_menu.is_some() || c.color_pick.is_some()
             || c.kind_menu.is_some() || c.head_menu.is_some() || c.prompt.is_some() || c.edits.contains_key("\u{1d}pick"));
         self.sheet.is_some() || self.dialog.is_some() || self.cmd_open || (name == "Escape" && (self.view_open || self.sel_more || self.menu.is_some() || self.form.is_some() || filing
             || self.ctx_menu.is_some() || self.strip.menus_open()))
@@ -632,10 +632,10 @@ impl Ui {
                     if pressed { col.edits.remove("\u{1d}pick"); }
                     return true;
                 }
-                if col.pick.is_some() || col.color_pick.is_some() || col.kind_menu.is_some()
+                if col.color_pick.is_some() || col.kind_menu.is_some()
                     || col.head_menu.is_some() || col.prompt.is_some() || col.row_menu.is_some() {
                     if pressed {
-                        let _ = col.pick.take().is_some() || col.color_pick.take().is_some()
+                        let _ = col.color_pick.take().is_some()
                             || col.kind_menu.take().is_some() || col.head_menu.take().is_some()
                             || col.prompt.take().is_some() || col.row_menu.take().is_some();
                     }
@@ -764,7 +764,7 @@ impl Ui {
             || self.form.as_ref().is_some_and(|f| f.choice_open.is_some())
             || self.ctx_menu.is_some() || self.strip.menus_open() || (self.sheets.shown && self.sheets.dismissible_menu_open())
             || self.column.as_ref().is_some_and(|c| c.row_menu.is_some() || c.head_menu.is_some()
-                || c.kind_menu.is_some() || c.pick.is_some() || c.color_pick.is_some()
+                || c.kind_menu.is_some() || c.color_pick.is_some()
                 || c.edits.contains_key("\u{1d}pick"))
     }
 
