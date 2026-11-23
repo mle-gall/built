@@ -307,3 +307,30 @@ def test_rebuild_order_independent_on_overhang():
             assert seams == [], f"seam left with order {perm}"
     finally:
         pp.seam_planes = orig
+
+
+def test_plane_cycle_keeps_the_first_minimum_and_unbounded_grid_coordinates():
+    from core.cap_rebuild import _canon_loop
+
+    # The slit returns to the smallest point twice. Reversing its winding
+    # changes the shape fingerprint and choosing the second visit changes its start.
+    ring = [V(2, 0), V(-0.00005, 0), V(2e16, 0), V(-0.00005, 0), V(1, 2)]
+    cells = [tuple(round(x / 1e-4) for x in p.toTuple()) for p in ring]
+    assert _canon_loop(ring) == tuple(cells[1:] + cells[:1])
+    assert _canon_loop(ring[::-1]) != _canon_loop(ring)
+
+
+def test_cap_coverage_counts_a_fresh_face_outside_the_seeded_scope():
+    from core.arrangement import plane_basis
+    from ingetrazo_core import object_cap_coverage
+
+    mesh = Mesh()
+    ring = [V(0, 0), V(4, 0), V(4, 4), V(0, 4)]
+    hole = [V(1, 1), V(1, 3), V(3, 3), V(3, 1)]
+    old = mesh.add_face(ring, [hole])
+    fresh = mesh.add_face(ring[::-1])
+    origin, normal = V(0, 0), V(0, 0, 1)
+    probes = [(0.5, 0.5), (2.0, 2.0), (10.0, 10.0)]
+    assert object_cap_coverage([old], {fresh}, None, origin, normal,
+                               plane_basis(normal), probes, 1e-4) == [
+        (True, 1, 2), (False, 0, 2), (False, 0, 0)]

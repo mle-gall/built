@@ -76,20 +76,10 @@ pub(crate) fn coplanar(
     cache: &Obj<'_>,
     tol: f64,
 ) -> PyResult<bool> {
-    let normal = if cache.is_none() {
-        xyz(&face.call_method0("normal")?)?.normalize_or_zero()
-    } else {
-        xyz(&cache.call_method1("normal", (face,))?)?
-    };
-    if normal.dot(n).abs() <= 0.999 {
+    if normal_of(face, cache)?.dot(n).abs() <= 0.999 {
         return Ok(false);
     }
-    let centre = if cache.is_none() {
-        face.call_method0("centroid")?
-    } else {
-        cache.call_method1("centroid", (face,))?
-    };
-    Ok((xyz(&centre)? - o).dot(n).abs() < tol)
+    Ok((center_of(face, cache)? - o).dot(n).abs() < tol)
 }
 
 struct Plane {
@@ -205,8 +195,8 @@ pub(crate) fn install_rebuilt_plane(
         if !donors.is_empty() {
             let (rim, openings) = plane.project_face(&outer, &holes)?;
             let p = probe.call1((rim, openings))?.extract::<(f64, f64)>()?;
-            for ((outside, inside), attrs) in &donors {
-                if contains(outside, p) && !inside.iter().any(|hole| contains(hole, p)) {
+            for (poly, attrs) in &donors {
+                if covers(poly, p) {
                     f.setattr("attrs", dict.call1((attrs,))?)?;
                     break;
                 }
@@ -257,4 +247,128 @@ pub(crate) fn prune_object_plane(
         mesh.call_method1("drop_orphan_vertices", (orphans,))?;
     }
     Ok(())
+}
+
+fn normal_of(face: &Obj<'_>, cache: &Obj<'_>) -> PyResult<DVec3> {
+    if cache.is_none() {
+        Ok(xyz(&face.call_method0("normal")?)?.normalize_or_zero())
+    } else {
+        xyz(&cache.call_method1("normal", (face,))?)
+    }
+}
+fn center_of(face: &Obj<'_>, cache: &Obj<'_>) -> PyResult<DVec3> {
+    xyz(&if cache.is_none() {
+        face.call_method0("centroid")?
+    } else {
+        cache.call_method1("centroid", (face,))?
+    })
+}
+fn covers((rim, holes): &(Ring, Vec<Ring>), pt: (f64, f64)) -> bool {
+    contains(rim, pt) && !holes.iter().any(|h| contains(h, pt))
+}
+
+#[pyfunction]
+pub(crate) fn shadowed_push_faces<'py>(
+    fresh: &Bound<'py, PySet>,
+    scope: &Obj<'py>,
+    cache: &Obj<'py>,
+    basis: &Obj<'py>,
+    tolerance: f64,
+) -> PyResult<Bound<'py, PySet>> {
+    let shadow = PySet::empty(fresh.py())?;
+    for f in fresh.iter() {
+        if f.getattr("interior")?.is_truthy()? {
+            continue;
+        }
+        let n = normal_of(&f, cache)?;
+        let o = center_of(&f, cache)?;
+        let axes = basis.call1((crate::math::Vec3::from(n),))?;
+        let plane = Plane {
+            origin: o,
+            u: xyz(&axes.get_item(0)?)?,
+            v: xyz(&axes.get_item(1)?)?,
+        };
+        for g in scope.try_iter()? {
+            let g = g?;
+            if fresh.contains(&g)?
+                || normal_of(&g, cache)?.dot(n).abs() < 0.999
+                || (center_of(&g, cache)? - o).dot(n).abs() > tolerance
+            {
+                continue;
+            }
+            if covers(
+                &plane.project_face(&g.getattr("vertices")?, &g.getattr("holes")?)?,
+                (0., 0.),
+            ) {
+                shadow.add(&f)?;
+                break;
+            }
+        }
+    }
+    Ok(shadow)
+}
+
+#[pyfunction]
+pub(crate) fn object_cap_coverage(
+    scope: &Obj<'_>,
+    fresh: &Bound<'_, PySet>,
+    cache: &Obj<'_>,
+    origin: &Obj<'_>,
+    normal: &Obj<'_>,
+    axes: (Obj<'_>, Obj<'_>),
+    probes: Vec<(f64, f64)>,
+    tolerance: f64,
+) -> PyResult<Vec<(bool, u8, u8)>> {
+    let o = xyz(origin)?;
+    let n = xyz(normal)?;
+    let plane = Plane {
+        origin: o,
+        u: xyz(&axes.0)?,
+        v: xyz(&axes.1)?,
+    };
+    // The fresh set can contain faces just outside this cache's scope.
+    let mut polys = Vec::new();
+    let mut add = |f: &Obj<'_>, is_fresh: bool, skin: bool| -> PyResult<()> {
+        let dot = normal_of(f, cache)?.dot(n);
+        if dot.abs() > 0.999 && (center_of(f, cache)? - o).dot(n).abs() < tolerance {
+            polys.push((
+                plane.project_face(&f.getattr("vertices")?, &f.getattr("holes")?)?,
+                is_fresh,
+                skin,
+                if dot > 0. { 1 } else { 2 },
+            ));
+        }
+        Ok(())
+    };
+    for f in fresh.iter() {
+        if !f.getattr("interior")?.is_truthy()? {
+            add(&f, true, false)?;
+        }
+    }
+    for f in scope.try_iter()? {
+        let f = f?;
+        let interior = f.getattr("interior")?.is_truthy()?;
+        if interior || !fresh.contains(&f)? {
+            add(&f, false, !interior)?;
+        }
+    }
+    Ok(probes
+        .into_iter()
+        .map(|pt| {
+            let (mut old, mut skin, mut new) = (false, 0, 0);
+            for (poly, is_fresh, is_skin, bit) in &polys {
+                if covers(poly, pt) {
+                    if *is_fresh {
+                        new |= bit;
+                    } else {
+                        old = true;
+                        if *is_skin {
+                            skin |= bit;
+                        }
+                    }
+                }
+            }
+            (old, skin, new)
+        })
+        .collect())
 }

@@ -482,33 +482,39 @@ def rebuild_plane(mesh, origin: QVector3D, normal: QVector3D,
     #   "cancel in pairs" doctrine — while a quad over an interior partner is
     #   the only crossing left there and must count.
     fresh_set = {f for f in fresh if f in mesh.faces}
-    shadowed: set = set()
-    for f in (fresh_set if keep_mode else ()):
-        if f.interior:
-            continue
-        fn = f.normal().normalized() if cache is None else cache.normal(f)
-        fc = f.centroid() if cache is None else cache.centroid(f)
-        fu, fv = plane_basis(fn)
+    from core import doc_model
+    if doc_model.ENABLED:
+        from ingetrazo_core import shadowed_push_faces
+        shadowed = (shadowed_push_faces(fresh_set, scope_faces, cache, plane_basis, _ON_PLANE)
+                    if keep_mode else set())
+    else:
+        shadowed: set = set()
+        for f in (fresh_set if keep_mode else ()):
+            if f.interior:
+                continue
+            fn = f.normal().normalized() if cache is None else cache.normal(f)
+            fc = f.centroid() if cache is None else cache.centroid(f)
+            fu, fv = plane_basis(fn)
 
-        def fto2d(p, fc=fc, fu=fu, fv=fv):
-            d = p - fc
-            return (QVector3D.dotProduct(d, fu), QVector3D.dotProduct(d, fv))
+            def fto2d(p, fc=fc, fu=fu, fv=fv):
+                d = p - fc
+                return (QVector3D.dotProduct(d, fu), QVector3D.dotProduct(d, fv))
 
-        for g in scope_faces:
-            if g == f or g in fresh_set:
-                continue
-            gn = g.normal().normalized() if cache is None else cache.normal(g)
-            if abs(QVector3D.dotProduct(gn, fn)) < 0.999:
-                continue
-            gc = g.centroid() if cache is None else cache.centroid(g)
-            if abs(QVector3D.dotProduct(gc - fc, fn)) > _ON_PLANE:
-                continue
-            if _point_in_polygon((0.0, 0.0), [fto2d(p) for p in g.vertices]) \
-                    and not any(_point_in_polygon((0.0, 0.0),
-                                                  [fto2d(p) for p in h])
-                                for h in g.holes):
-                shadowed.add(f)
-                break
+            for g in scope_faces:
+                if g == f or g in fresh_set:
+                    continue
+                gn = g.normal().normalized() if cache is None else cache.normal(g)
+                if abs(QVector3D.dotProduct(gn, fn)) < 0.999:
+                    continue
+                gc = g.centroid() if cache is None else cache.centroid(g)
+                if abs(QVector3D.dotProduct(gc - fc, fn)) > _ON_PLANE:
+                    continue
+                if _point_in_polygon((0.0, 0.0), [fto2d(p) for p in g.vertices]) \
+                        and not any(_point_in_polygon((0.0, 0.0),
+                                                      [fto2d(p) for p in h])
+                                    for h in g.holes):
+                    shadowed.add(f)
+                    break
     # Pack the counted triangles ONCE per plane. Each region's two parity
     # queries used to hand ``ray_parity_outside`` the raw triangle lists,
     # which re-packed the whole mesh per call — on an imported 3k-face
@@ -574,6 +580,10 @@ def rebuild_plane(mesh, origin: QVector3D, normal: QVector3D,
             origin.toTuple(), normal.toTuple(), [p for _, _, p in samples],
             [f.key for f in fresh_set], _ON_PLANE, qt_hypot(), sys.version_info >= (3, 12),
             None if scope is None else [f.key for f in scope_faces])
+    elif doc_model.ENABLED:
+        from ingetrazo_core import object_cap_coverage
+        coverage = object_cap_coverage(scope_faces, fresh_set, cache, origin, normal, (u, v),
+                                       [p for _, _, p in samples], _ON_PLANE)
     else:
         fresh_polys = _proj_polys(f for f in fresh_set if not f.interior)
         old_polys = _proj_polys(f for f in scope_faces if f not in fresh_set or f.interior)
