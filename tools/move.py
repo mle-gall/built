@@ -121,18 +121,8 @@ def gather_dimensions(ctx: ToolContext, groups, verts) -> dict:
         d = pick(ctx.screen.x(), ctx.screen.y()) if pick else None
         if d is not None:
             dims = [d]
-    moving_verts = {v.key for v in verts}
-    moving_groups = {id(g) for g in groups}
-    out: dict = {}
-    for d in dims:
-        anchors = [an for an in (d.anchor_a, d.anchor_b) if an is not None]
-        riding = [an for an in anchors
-                  if an.vertex.key in moving_verts
-                  or any(id(g) in moving_groups for g in an.chain)]
-        if len(anchors) == 2 and len(riding) == 2:
-            continue                          # follows its vertices
-        out[d] = "line" if len(anchors) == 2 else "rigid"
-    return out
+    from core.move_ops import dimension_modes
+    return dimension_modes(dims, groups, verts)
 
 
 def gather_labels(ctx: ToolContext) -> list[TextLabel]:

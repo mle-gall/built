@@ -103,3 +103,36 @@ def test_move_selection_by_keys_and_as_an_array_of_copies():
                  faces=[scene.mesh.faces[0].key], copy=True, count=2)
     assert answer["ok"] and len(history.undo_stack) == 2
     assert len(scene.groups) == 3 and len(scene.mesh.faces) == 3
+
+
+def _dimensioned_square():
+    from core.history import AddDimensionCommand
+    from core.dimension import Dimension
+    scene = Scene()
+    history = History(scene)
+    run(history, "add_face", outer=[[0, 0, 0], [4, 0, 0], [4, 4, 0], [0, 4, 0]])
+    d = Dimension(Vec3(0, 0, 0), Vec3(4, 0, 0), Vec3(0, -1, 0))
+    history.execute(AddDimensionCommand(d))
+    assert d.anchored
+    return scene, history, d
+
+
+def test_move_selection_carries_a_dimension_anchored_to_the_moved_face():
+    scene, history, d = _dimensioned_square()
+    scene.selection.clear()
+    scene.selection.add(scene.mesh.faces[0])
+    assert run(history, "move_selection", delta=[0, 0, 3])["ok"]
+    assert d.a.toTuple() == (0.0, 0.0, 3.0) and d.b.toTuple() == (4.0, 0.0, 3.0)
+    history.undo()
+    assert d.a.toTuple() == (0.0, 0.0, 0.0)
+
+
+def test_move_selection_slides_a_selected_anchored_dimension_line():
+    scene, history, d = _dimensioned_square()
+    scene.selection.clear()
+    scene.selection.add(d)
+    before = d.value()
+    assert run(history, "move_selection", delta=[0, -2, 0])["ok"]
+    assert d.a.toTuple() == (0.0, 0.0, 0.0)          # still on its vertices
+    assert d.value() == pytest.approx(before)
+    assert len(history.undo_stack) == 3              # face, dimension, the move

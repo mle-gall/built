@@ -332,12 +332,13 @@ def move_selection(history, delta, placements=None, vertices=None, edges=None,
                    faces=None, copy=False, count=1, mode="x"):
     """Move (or copy) what is named — placements by uid, loose vertices,
     edges and faces by key — or, with none named, the scene's selection
-    (placements, loose geometry, guides, labels, section planes,
-    reference images): the Move tool's commit (``core.move_ops``). A copy
+    (placements, loose geometry, guides, labels, dimensions, section
+    planes, reference images; a dimension anchored to what moves rides
+    along): the Move tool's commit (``core.move_ops``). A copy
     lays ``count`` copies at multiples of ``delta`` (``mode`` ``"x"``) or
     dividing it (``"/"``) and selects them. One step."""
     from ingetrazo_core import Vec3
-    from core.dimension import Dimension  # noqa: F401  (follows its anchors in the tool only)
+    from core.dimension import Dimension
     from core.group import Group
     from core.guide import is_guide
     from core.history import CompoundCommand
@@ -384,8 +385,13 @@ def move_selection(history, delta, placements=None, vertices=None, edges=None,
         if key not in seen:
             seen.add(key)
             positions.append(Vec3(p))
+    # Selected dimensions slide or move rigidly; those anchored to what
+    # moves ride along with their vertices (core.move_ops.dimension_modes).
+    from core.move_ops import dimension_modes
+    verts = [v for v in (mesh.vertex_at(p) for p in positions) if v is not None]
+    dims = dimension_modes([e for e in rest if isinstance(e, Dimension)], groups, verts)
     cmds = move_commands(d, groups=groups, positions=positions, labels=labels,
-                         guides=guides, splanes=splanes, images=images)
+                         guides=guides, dims=dims, splanes=splanes, images=images)
     if cmds:
         history.execute(cmds[0] if len(cmds) == 1 else CompoundCommand(cmds))
     return _answer(history, before)

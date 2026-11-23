@@ -33,6 +33,27 @@ def copied_guide(guide, m: QMatrix4x4):
 
 
 
+def dimension_modes(dims, groups, verts) -> dict:
+    """How each of ``dims`` moves with a selection: ``"line"`` — both ends
+    anchored to geometry: the dimension line slides and the extension
+    lines stretch from their vertices; ``"rigid"`` — a free end travels
+    with the delta. A dimension whose two anchors are themselves moving
+    (their vertices, or a group holding them) is left out: it rides along
+    with its vertices, and shifting its line too would move it twice."""
+    moving_verts = {v.key for v in verts}
+    moving_groups = {id(g) for g in groups}
+    out: dict = {}
+    for d in dims:
+        anchors = [an for an in (d.anchor_a, d.anchor_b) if an is not None]
+        riding = [an for an in anchors
+                  if an.vertex.key in moving_verts
+                  or any(id(g) in moving_groups for g in an.chain)]
+        if len(anchors) == 2 and len(riding) == 2:
+            continue                          # follows its vertices
+        out[d] = "line" if len(anchors) == 2 else "rigid"
+    return out
+
+
 def move_commands(delta, *, groups=(), positions=(), labels=(), guides=(),
                   dims=None, splanes=(), images=()) -> list:
     """The commands that move these things by ``delta``: each group as a
