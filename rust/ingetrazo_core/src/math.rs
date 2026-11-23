@@ -286,16 +286,19 @@ impl Matrix4 {
     fn __mul__(&self, r: &Bound<'_, PyAny>) -> PyResult<Self> {
         Ok(Self(self.0 * mat(r)?))
     }
-    fn __imul__(&mut self, r: &Bound<'_, PyAny>) -> PyResult<()> {
-        self.0 *= mat(r)?;
+    fn __imul__(slf: &Bound<'_, Self>, r: &Bound<'_, PyAny>) -> PyResult<()> {
+        let rhs = mat(r)?;
+        slf.borrow_mut().0 *= rhs;
         Ok(())
     }
-    fn __iadd__(&mut self, r: &Bound<'_, PyAny>) -> PyResult<()> {
-        self.0 += mat(r)?;
+    fn __iadd__(slf: &Bound<'_, Self>, r: &Bound<'_, PyAny>) -> PyResult<()> {
+        let rhs = mat(r)?;
+        slf.borrow_mut().0 += rhs;
         Ok(())
     }
-    fn __isub__(&mut self, r: &Bound<'_, PyAny>) -> PyResult<()> {
-        self.0 -= mat(r)?;
+    fn __isub__(slf: &Bound<'_, Self>, r: &Bound<'_, PyAny>) -> PyResult<()> {
+        let rhs = mat(r)?;
+        slf.borrow_mut().0 -= rhs;
         Ok(())
     }
     fn __itruediv__(&mut self, s: f64) {
