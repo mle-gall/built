@@ -319,10 +319,15 @@ pub mod molecules {
             paint_state(ui, rect, state, R_CONTROL);
         }
         let x0 = (rect.center().x - (g.size().x + kw) / 2.0).round();
-        leading(ui.painter(), rect, x0, g.clone(), ink);
+        let mut text = ui.painter().clone();
+        if off && ui.is_visible() {
+            // OFF already carries the disabled contrast.
+            text.set_fade_to_color(None);
+        }
+        leading(&text, rect, x0, g.clone(), ink);
         if let Some(k) = k {
             let hint_ink = if off { OFF } else if primary { ON_PRIMARY_HINT } else { INK_2 };
-            leading(ui.painter(), rect, x0 + g.size().x + 8.0, k, hint_ink);
+            leading(&text, rect, x0 + g.size().x + 8.0, k, hint_ink);
         }
         resp.clicked()
     }
@@ -758,6 +763,23 @@ pub mod molecules {
         let x = r.max.x - 8.0 - v.size().x;
         leading(ui.painter(), r, x, v, if off { OFF } else { INK });
     }
+    /// One editable property, with a shared leading label and control baseline.
+    pub fn property_control(
+        ui: &mut egui::Ui, label: &str, control: impl FnOnce(&mut egui::Ui),
+    ) {
+        let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), CONTROL_H), Sense::hover());
+        let column = (r.width() * 0.44).min(160.);
+        let label_left = r.left() + SPACE_S;
+        let text = super::fit(ui, label, meta(), DIM, column - SPACE_S * 2., 1);
+        leading(ui.painter(), r, label_left, text, DIM);
+        let controls = Rect::from_min_max(pos2(r.left() + column, r.top()), r.max);
+        ui.scope_builder(egui::UiBuilder::new().max_rect(controls)
+            .layout(egui::Layout::left_to_right(egui::Align::Center)), |ui| {
+            ui.spacing_mut().item_spacing.x = SPACE_S;
+            control(ui);
+        });
+    }
+
     /// A collapsible section: the caption with a chevron; its open state is
     /// kept per id. Returns the body's value when open.
     pub fn disclosure<R>(

@@ -2,7 +2,6 @@
 //! Drawing controls for the focused Project node.
 use super::{kit, parse_hex, Node, SWATCH_FALLBACK};
 
-
 pub(super) enum DraggedRow {
     Node(String),
     Placement { key: String, selected: bool },
@@ -89,6 +88,21 @@ impl StyleEditor {
         if self.selected.is_empty() {
             return false;
         }
+        let fields_height =
+            (ui.available_height() - super::BUTTON_H - super::SPACE_S).max(super::CONTROL_H);
+        egui::ScrollArea::vertical()
+            .id_salt("drawing fields")
+            .max_height(fields_height)
+            .auto_shrink([false, true])
+            .show(ui, |ui| {
+                ui.spacing_mut().item_spacing.y = super::SPACE_XS;
+                self.fields(ui);
+            });
+        self.apply_row(ui, actions);
+        true
+    }
+
+    fn fields(&mut self, ui: &mut egui::Ui) {
         ui.strong(format!(
             "Drawing style · {} {}",
             self.selected.len(),
@@ -127,14 +141,16 @@ impl StyleEditor {
                 .map(|(_, cells)| cells.get(index).map_or("", String::as_str));
             let first = values.next().unwrap_or("");
             let mixed = values.any(|v| v != first);
+            if !mixed && self.patch.get(field).is_some_and(|value| value == first) {
+                self.patch.remove(field);
+            }
             let current = self
                 .patch
                 .get(field)
                 .map(String::as_str)
                 .or((!mixed).then_some(first))
                 .map(str::to_owned);
-            ui.horizontal(|ui| {
-                ui.label(name);
+            kit::property_control(ui, name, |ui| {
                 if field == "color" {
                     let mut color = current
                         .as_deref()
@@ -157,6 +173,7 @@ impl StyleEditor {
                         _ => s.replace('_', " "),
                     };
                     egui::ComboBox::from_id_salt(("style", field))
+                        .width(ui.available_width().min(168.))
                         .selected_text(current.as_deref().map(label).unwrap_or("Mixed".into()))
                         .show_ui(ui, |ui| {
                             for value in choices {
@@ -174,8 +191,20 @@ impl StyleEditor {
                 }
             });
         }
-        ui.add_enabled_ui(!self.patch.is_empty(), |ui| {
-            if kit::quiet(ui, &format!("Apply to {} tags", self.selected.len())).clicked() {
+    }
+
+    fn apply_row(&mut self, ui: &mut egui::Ui, actions: &mut Vec<String>) {
+        ui.add_space(super::SPACE_XS);
+        let pending = !self.patch.is_empty();
+        let count = self.selected.len();
+        let label = format!(
+            "Apply to {count} {}",
+            if count == 1 { "tag" } else { "tags" }
+        );
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing.x = super::SPACE_S;
+            let apply = ui.add_enabled_ui(pending, |ui| kit::sheet_button(ui, &label, "", 1));
+            if apply.inner {
                 let tags: Vec<_> = self.selected.keys().collect();
                 actions.push(format!(
                     "drawingpatch\u{1f}{}",
@@ -183,7 +212,9 @@ impl StyleEditor {
                 ));
                 self.patch.clear();
             }
+            if !pending {
+                kit::caption_plain(ui, "Change a field to apply.");
+            }
         });
-        true
     }
 }

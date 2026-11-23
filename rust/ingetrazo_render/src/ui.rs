@@ -1685,7 +1685,17 @@ impl Ui {
                         }
                     }
                     // A dock mode with nothing to inspect gives the whole dock to its list.
-                    let room = if !col.mode.is_empty() && col.inspector.is_empty() { ui.available_height() - 44.0 } else { ui.available_height() * 0.6 };
+                    let available = ui.available_height();
+                    let room = if !col.mode.is_empty() && col.inspector.is_empty() {
+                        available - 44.0
+                    } else if col.lens == Lens::Drawing {
+                        available * 0.5
+                    } else if col.lens == Lens::Filing && !col.identity.is_empty() {
+                        // Keep the identity fields and their actions together in short windows.
+                        (available * 0.6).min(available - ROW_H * 12.)
+                    } else {
+                        available * 0.6
+                    };
                     if col.proposal_available && !col.proposal_dismissed && col.lens == Lens::Filing {
                         ui.horizontal(|ui| {
                             if kit::quiet(ui, "Propose kinds…").on_hover_text("Preview a filing structure from these tags").clicked() {
@@ -1707,7 +1717,8 @@ impl Ui {
                         drawing::drop_on(ui, &header, "", &mut actions);
                         room - ROW_H
                     } else { room };
-                    let tree_h = (nodes_len as f32 * ROW_H + SPACE_XS).min(row_room).max(3.0 * ROW_H);
+                    let visible_rows = (row_room / ROW_H).floor().max(3.0);
+                    let tree_h = (nodes_len.max(3) as f32).min(visible_rows) * ROW_H;
                     let mut scroll = egui::ScrollArea::vertical().id_salt("tree").max_height(tree_h).auto_shrink([false, false]);
                     if let Some(key) = col.reveal.take() {
                         let pitch = ROW_H + ui.spacing().item_spacing.y;
@@ -1976,9 +1987,9 @@ impl Ui {
                     let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 1.0), Sense::hover());
                     ui.painter().hline(r.x_range(), r.center().y, Stroke::new(1.0_f32, EDGE));
                     ui.add_space(SPACE_S);
+                    if col.mode.is_empty() && col.lens == Lens::Drawing && col.styles.draw(ui, &mut actions) { return; }
                     egui::ScrollArea::vertical().id_salt("inspector").auto_shrink([false, false]).show(ui, |ui| {
                         ui.spacing_mut().item_spacing = vec2(0.0, SPACE_XS);
-                        if col.mode.is_empty() && col.lens == Lens::Drawing && col.styles.draw(ui, &mut actions) { return; }
                         if col.lens == Lens::Export {
                             if !col.inspector_title.is_empty() { ui.strong(&col.inspector_title); }
                             kit::identity_card(ui, &col.identity, &mut actions);
