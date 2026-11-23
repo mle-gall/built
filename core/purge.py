@@ -20,6 +20,7 @@ flat list would delete a layer out from under a component's insides.
 """
 from __future__ import annotations
 
+from core import doc_model as _dm
 from core.layers import DEFAULT_LAYER, layer_of
 
 
@@ -28,7 +29,17 @@ def iter_groups(groups):
 
     Only identity and membership matter here. A shared subtree need only be
     visited once, and composing every placement's world matrix is unnecessary.
+
+    With the Rust document the walk is one call (``doc_walk``): the tree as
+    it is when the walk starts.
     """
+    if _dm.ENABLED and groups and (_dm.is_list(groups)
+                                   or isinstance(groups, tuple)):
+        try:
+            yield from _dm.NATIVE.doc_walk(groups)
+            return
+        except TypeError:
+            pass                     # not all document placements
     stack = list(groups or ())
     stack.reverse()
     seen = set()

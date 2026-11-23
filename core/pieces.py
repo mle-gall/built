@@ -394,12 +394,13 @@ def split_into_pieces(group) -> list:
     itself is never touched; the caller swaps the result in through a
     command, which is what makes the split undoable."""
     from PySide6.QtGui import QMatrix4x4
-    from core.group import Group, world_mesh
+    from core.group import Group, PlacementProxy, world_mesh
     from core.i18n import tr
 
     # Read the contents in the group's frame, not the world's: the pieces
-    # live inside it, and its own matrix keeps placing them.
-    frame = Group(group.mesh)
+    # live inside it, and its own matrix keeps placing them. (A proxy: the
+    # children stay the group's, one parent per placement.)
+    frame = PlacementProxy(group.mesh)
     frame.children = list(group.children)
     local = world_mesh(frame)
     parts = solid_parts(local)

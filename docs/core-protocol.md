@@ -263,11 +263,23 @@ placements created / removed are the net edits of the scene root's list
 `modified` adds every placement whose fields or child list the step wrote
 (so it can name more than the command knowledge above, never fewer); tags
 created / removed / modified come from the scene's tag list and the tags'
-fields; materials created / removed from the registry (a dict, by
-identity), modified from the material fields written. Nothing else in the
+fields (sheet styles included since slice 2); materials created / removed
+from the registry, which is a document list since slice 2 (`Registry`: a
+name given another `Material` is modified, as the identity comparison
+said), modified from the fields written of a registered material. Records
+(`Group.ifc`), extension data (`Group.ext`), 3D text and exploded views
+are placement values too: a step that writes one names that placement as
+`modified` (a record is no longer outside the feed's view). The scene's
+own tables (tag folders, the active tag, `plugin_data`) are document
+values as well but, as before, not part of the record (the journal has
+them: `Transaction.changes()["scene"]`). For the commands that
+only write placement fields (Lock, Hide and Tag of placements, Rename,
+Move of an instance) the command knowledge above is not read again: the
+journal already names every placement they wrote. Nothing else in the
 record changes: same keys, same `complete`, same `copies`. Undo by
 transaction publishes the inverse of the same journal. Cost: a few
-microseconds instead of the 2 × 1.2 ms of §4.3.
+microseconds instead of the 2 × 1.2 ms of §4.3; Lock of 20,000 placements
+builds its record in ~1 ms.
 
 **Copies.** Explode on store-backed meshes reports `copies` = one entry,
 `source` the group's mesh (read, never changed: it is not in `meshes`),

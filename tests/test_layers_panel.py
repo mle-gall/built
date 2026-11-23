@@ -1901,7 +1901,7 @@ def test_a_sheet_view_leaves_out_the_layers_not_printed(monkeypatch):
         scene = win.viewport.scene
         src = _two_boxes_scene()
         scene.layers[:] = src.layers
-        scene.groups[:] = src.groups
+        scene.groups[:] = _moved(src)
         win.viewport.notify_scene_changed()
         frame = MarcoVista(view_key="std:top", scale_n=100.0, w_mm=100.0,
                            h_mm=100.0)
@@ -2164,7 +2164,7 @@ def test_the_sheet_dxf_colours_every_layer_without_colour_by_layer(
         scene = win.viewport.scene
         src = _two_boxes_scene()
         scene.layers[:] = [Layer(DEFAULT_LAYER), Layer("A"), Layer("B")]
-        scene.groups[:] = src.groups
+        scene.groups[:] = _moved(src)
         scene.layer("B").color = (1.0, 0.0, 0.0)
         win.viewport.notify_scene_changed()
         assert not getattr(scene.display_style, "color_by_layer", False)
@@ -2203,7 +2203,7 @@ def test_the_view_dxf_writes_each_layer_with_its_colour(tmp_path,
         vp.camera.set_aspect(800, 600)
         src = _two_boxes_scene()
         vp.scene.layers[:] = src.layers
-        vp.scene.groups[:] = src.groups
+        vp.scene.groups[:] = _moved(src)
         vp.scene.layer("B").color = (1.0, 0.0, 0.0)
         vp.notify_scene_changed()
         lo, hi = vp.scene.bounds()
@@ -2258,7 +2258,7 @@ def test_a_frame_can_ink_its_lines_in_their_layer_colours(monkeypatch):
         scene = win.viewport.scene
         src = _two_boxes_scene()
         scene.layers[:] = [Layer(DEFAULT_LAYER), Layer("A"), Layer("B")]
-        scene.groups[:] = src.groups
+        scene.groups[:] = _moved(src)
         scene.layer("B").color = (1.0, 0.0, 0.0)
         win.viewport.notify_scene_changed()
         frame = MarcoVista(view_key="std:top", scale_n=100.0, w_mm=100.0,
@@ -2520,3 +2520,11 @@ def test_first_construction_tag_keeps_existing_folder_rows(win):
     rows = {panel._key(item): item for item in panel._all_items()}
     assert all(rows[k] is item for k, item in old.items())
     assert any(k[1] == guide.key for k in rows)
+
+
+def _moved(src):
+    """``src``'s top level, taken out of it to go into another scene (a
+    placement has one parent)."""
+    groups = list(src.groups)
+    src.groups.clear()
+    return groups

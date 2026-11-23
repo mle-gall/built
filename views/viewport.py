@@ -129,7 +129,8 @@ from PySide6.QtOpenGLWidgets import QOpenGLWidget
 
 from core.camera import OrbitCamera
 from core.i18n import tr
-from core.group import Group, copy_group, effective_material, world_mesh
+from core.group import (Group, PlacementProxy, copy_group, effective_material,
+                        world_mesh)
 from core import layers as _layers
 from core.mesh import Edge, Face, smooths
 from core.history import EraseSelectionCommand, History
@@ -4968,9 +4969,8 @@ class Viewport(QOpenGLWidget):
                            else world))
                 proxy = cache.get(id(child))
                 if proxy is None:
-                    proxy = cache[id(child)] = Group(child.mesh,
-                                                     name=child.name,
-                                                     uid=child.uid)
+                    proxy = cache[id(child)] = PlacementProxy(
+                        child.mesh, name=child.name, uid=child.uid)
                 if seen is not None:
                     seen.add(id(child))
                 tops[id(proxy)] = id(group)

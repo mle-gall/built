@@ -215,21 +215,365 @@ if ENABLED:
     NATIVE.doc_set_hooks(_make, _bind)
 
 
+#: The tree invariant (one parent per placement, docs/rust-document-model.md
+#: §2): ``raise`` refuses a second list with ``ValueError`` (the default),
+#: ``warn`` reports it as a ``UserWarning`` and lets it be, ``off`` does not
+#: look. ``INGETRAZO_DOC_PARENT`` chooses.
+PARENT_MODES = {"off": 0, "warn": 1, "raise": 2}
+
+
+def parent_mode(mode: str) -> str:
+    """Set the tree invariant's mode; returns the previous one."""
+    if not ENABLED:
+        return "off"
+    old = NATIVE.doc_parent_mode(PARENT_MODES[mode])
+    return {v: k for k, v in PARENT_MODES.items()}[old]
+
+
+if ENABLED:
+    parent_mode(os.environ.get("INGETRAZO_DOC_PARENT", "raise")
+                if os.environ.get("INGETRAZO_DOC_PARENT") in PARENT_MODES
+                else "raise")
+
+
+# ---------------------------------------------------- tracked containers
+#
+# A custom attribute (``g.ifc``, ``g.ext``, ``g.text3d``), a scene table
+# (``scene.folder_parents``, ``scene.plugin_data``…) is a document value. Read,
+# a dict or a list comes out as a tracked container: a real ``dict`` /
+# ``list`` (json, ``isinstance``, ``==`` and C code see one) whose in-place
+# edits — at any depth — are written back to the document, so
+# ``g.ext["link"]["x"] = 1`` is journalled and undoable as the assignment
+# is. Once the attribute is assigned another value (or an undo puts back an
+# old one) the container is a plain one: editing it no longer writes.
+#
+# Edits are written back at the next transaction boundary (:func:`flush`,
+# run by :func:`begin` and :func:`commit`, so by every History step), not
+# one by one: filling a table of 1,000 folders is one write. Python reads
+# the container itself meanwhile. A plain dict or list stored INTO one
+# (``reg = data["links"] = {}``) is kept as that very object, as Python
+# would, and its root re-read at every boundary from then on (``suspect``):
+# edits made through the plain reference are written back too.
+
+_DIRTY: dict = {}       # id(anchor) -> anchor: edited since the last flush
+_SUSPECT: dict = {}     # id(anchor) -> anchor: holds containers it does not track
+
+
+class _Anchor:
+    """What every container of one tracked value points at: the binding
+    (``(key, attr)``, or None once replaced) and a weak reference to the
+    top container. Weak, so a tracked value is no reference cycle: a
+    record's dicts go with their node by reference counting, not by the
+    collector (a model's links registry is tens of thousands of them)."""
+
+    __slots__ = ("bind", "root")
+
+    def __init__(self):
+        self.bind = None
+        self.root = None
+
+
+def _wrap(value, anchor):
+    t = type(value)
+    if t is dict or t is TrackedDict:
+        out = TrackedDict.__new__(TrackedDict)
+    elif t is list or t is TrackedList:
+        out = TrackedList.__new__(TrackedList)
+    else:
+        return value
+    if anchor is None:
+        import weakref
+        anchor = _Anchor()
+        anchor.root = weakref.ref(out)
+    out._doc_root = anchor
+    if t is dict or t is TrackedDict:
+        dict.__init__(out, ((k, _wrap(v, anchor)) for k, v in dict.items(value)))
+    else:
+        list.__init__(out, [_wrap(v, anchor) for v in list.__iter__(value)])
+    return out
+
+
+def _plain(value):
+    t = type(value)
+    if t is TrackedDict or t is dict:
+        return {k: _plain(v) for k, v in dict.items(value)}
+    if t is TrackedList or t is list:
+        return [_plain(v) for v in list.__iter__(value)]
+    return value
+
+
+def _edited(node) -> None:
+    anchor = node._doc_root
+    if anchor.bind is not None:
+        _DIRTY[id(anchor)] = anchor
+
+
+def _stored(node, value):
+    """``value`` going into ``node``: a container this root does not track
+    makes the root suspect (see above)."""
+    if isinstance(value, (dict, list)) and getattr(value, "_doc_root", None) is not node._doc_root:
+        anchor = node._doc_root
+        if anchor.bind is not None:
+            _SUSPECT[id(anchor)] = anchor
+    return value
+
+
+def flush() -> None:
+    """(Python document: nothing to do.) Write back every tracked container edited in place since the last
+    call (and every suspect one); a container whose attribute was replaced
+    meanwhile becomes a plain one."""
+    if not ENABLED or not (_DIRTY or _SUSPECT):
+        return
+    anchors = dict(_SUSPECT)
+    anchors.update(_DIRTY)
+    _DIRTY.clear()
+    for anchor in anchors.values():
+        root = anchor.root() if anchor.root is not None else None
+        bind = anchor.bind
+        if root is None or bind is None or not NATIVE.doc_attr_changed(bind[0], bind[1], root):
+            anchor.bind = None           # replaced: a plain container now
+            _SUSPECT.pop(id(anchor), None)
+
+
+class TrackedDict(dict):
+    """A document attribute's dict (see above)."""
+
+    __slots__ = ("_doc_root", "__weakref__")
+
+    @property
+    def _doc_bind(self):
+        return self._doc_root.bind
+
+    def __setitem__(self, k, v):
+        dict.__setitem__(self, k, _stored(self, v))
+        _edited(self)
+
+    def __delitem__(self, k):
+        dict.__delitem__(self, k)
+        _edited(self)
+
+    def clear(self):
+        dict.clear(self)
+        _edited(self)
+
+    def pop(self, *a):
+        out = dict.pop(self, *a)
+        _edited(self)
+        return out
+
+    def popitem(self):
+        out = dict.popitem(self)
+        _edited(self)
+        return out
+
+    def setdefault(self, k, default=None):
+        if k in self:
+            return dict.__getitem__(self, k)
+        dict.__setitem__(self, k, _stored(self, default))
+        _edited(self)
+        return default
+
+    def update(self, *a, **kw):
+        for k, v in dict(*a, **kw).items():
+            dict.__setitem__(self, k, _stored(self, v))
+        _edited(self)
+
+    def __ior__(self, other):
+        self.update(other)
+        return self
+
+    def copy(self):
+        return dict(self)
+
+    def __copy__(self):
+        return dict(self)
+
+    def __deepcopy__(self, memo):
+        from copy import deepcopy
+        return deepcopy(_plain(self), memo)
+
+    def __reduce__(self):
+        return (dict, (_plain(self),))
+
+
+class TrackedList(list):
+    """A document attribute's list (see above)."""
+
+    __slots__ = ("_doc_root", "__weakref__")
+
+    @property
+    def _doc_bind(self):
+        return self._doc_root.bind
+
+    def append(self, v):
+        list.append(self, _stored(self, v))
+        _edited(self)
+
+    def extend(self, items):
+        list.extend(self, [_stored(self, v) for v in items])
+        _edited(self)
+
+    def insert(self, i, v):
+        list.insert(self, i, _stored(self, v))
+        _edited(self)
+
+    def remove(self, v):
+        list.remove(self, v)
+        _edited(self)
+
+    def pop(self, *a):
+        out = list.pop(self, *a)
+        _edited(self)
+        return out
+
+    def clear(self):
+        list.clear(self)
+        _edited(self)
+
+    def sort(self, *a, **kw):
+        list.sort(self, *a, **kw)
+        _edited(self)
+
+    def reverse(self):
+        list.reverse(self)
+        _edited(self)
+
+    def __setitem__(self, i, v):
+        if isinstance(i, slice):
+            v = [_stored(self, x) for x in v]
+        else:
+            v = _stored(self, v)
+        list.__setitem__(self, i, v)
+        _edited(self)
+
+    def __delitem__(self, i):
+        list.__delitem__(self, i)
+        _edited(self)
+
+    def __iadd__(self, items):
+        self.extend(items)
+        return self
+
+    def __imul__(self, n):
+        list.__imul__(self, n)
+        _edited(self)
+        return self
+
+    def copy(self):
+        return list(self)
+
+    def __copy__(self):
+        return list(self)
+
+    def __deepcopy__(self, memo):
+        from copy import deepcopy
+        return deepcopy(_plain(self), memo)
+
+    def __reduce__(self):
+        return (list, (_plain(self),))
+
+
+#: The exact types a JSON-safe check accepts for an object and an array:
+#: plain ones and the document's tracked ones.
+JSON_DICTS = (dict, TrackedDict)
+JSON_LISTS = (list, TrackedList)
+
+
+def _track(key, attr, value):
+    """Rust → the tracked container attribute ``attr`` of node ``key`` is
+    handed out as."""
+    out = _wrap(value, None)
+    out._doc_root.bind = (key, attr)
+    return out
+
+
+def _patch(old, new, root):
+    """``old`` (a container in a tracked attribute, tracked or plain) made
+    equal to ``new`` (plain) in place, keeping the containers it holds
+    where they still are containers of the same kind: a reference held to
+    one of them sees the value too. Order follows ``new``."""
+    if isinstance(old, dict):
+        items = []
+        for k, v in new.items():
+            cur = dict.get(old, k, _patch)
+            if isinstance(cur, dict) and type(v) is dict or (
+                    isinstance(cur, list) and type(v) is list):
+                _patch(cur, v, root)
+                items.append((k, cur))
+            else:
+                items.append((k, _wrap(v, root)))
+        dict.clear(old)
+        for k, v in items:
+            dict.__setitem__(old, k, v)
+        return
+    out = []
+    for i, v in enumerate(new):
+        cur = list.__getitem__(old, i) if i < list.__len__(old) else None
+        if isinstance(cur, dict) and type(v) is dict or (
+                isinstance(cur, list) and type(v) is list):
+            _patch(cur, v, root)
+            out.append(cur)
+        else:
+            out.append(_wrap(v, root))
+    list.__setitem__(old, slice(None), out)
+
+
+def _refill(view, value) -> bool:
+    """Rust → an undo, redo or rollback put ``value`` back into the
+    attribute ``view`` is the tracked container of: refill it in place (a
+    held reference sees the value, as a command's own undo editing the
+    dict in place showed it). False when it cannot (another kind)."""
+    if isinstance(view, TrackedDict) and type(value) is dict or (
+            isinstance(view, TrackedList) and type(value) is list):
+        _patch(view, value, view._doc_root)
+        _DIRTY.pop(id(view._doc_root), None)
+        return True
+    return False
+
+
+def plain(value):
+    """``value`` with every tracked container made a plain one."""
+    return _plain(value)
+
+
+if ENABLED:
+    NATIVE.doc_set_track_hook(_track)
+    NATIVE.doc_set_refill_hook(_refill)
+
+
+def attribute(name: str, track: bool = True):
+    """The class attribute that keeps ``name`` in the document."""
+    return NATIVE.DocAttr(name, track=track)
+
+
 # ----------------------------------------------------------- transactions
 
 def begin() -> int:
-    """Open the step's transaction (or a savepoint in the open one)."""
-    return NATIVE.doc_begin() if ENABLED else 0
+    """Open the step's transaction (or a savepoint in the open one). In-place
+    edits of tracked containers made before it are written back first, so
+    they are not this step's."""
+    if not ENABLED:
+        return 0
+    if NATIVE.doc_depth() == 0:
+        flush()
+    return NATIVE.doc_begin()
 
 
 def commit():
-    """Close it: the outermost level returns its ``Transaction``."""
-    return NATIVE.doc_commit() if ENABLED else None
+    """Close it: the outermost level returns its ``Transaction`` (with the
+    step's in-place edits of tracked containers written back into it)."""
+    if not ENABLED:
+        return None
+    if NATIVE.doc_depth() == 1:
+        flush()
+    return NATIVE.doc_commit()
 
 
 def rollback() -> None:
-    """Put back what the innermost level wrote, and close it."""
+    """Put back what the innermost level wrote (in-place edits of tracked
+    containers included), and close it."""
     if ENABLED:
+        flush()
         NATIVE.doc_rollback()
 
 

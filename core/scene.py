@@ -306,6 +306,10 @@ class Scene:
             object.__setattr__(out, "_root", _dm.NATIVE.doc_new_root())
             out.groups = copy.deepcopy(list(self.groups), memo)
             out.layers = copy.deepcopy(list(self.layers), memo)
+            for name in ROOT_TABLES:
+                setattr(out, name, copy.deepcopy(getattr(self, name), memo))
+            out.materials = copy.deepcopy(dict(self.materials), memo)
+            out.kept_components = copy.deepcopy(list(self.kept_components), memo)
             return out
 
     # ---- Geometry views (read-only over the *loose* mesh) -------------------
@@ -1301,5 +1305,45 @@ if _dm.ENABLED:
 
     Scene.groups = property(_groups, _set_groups, doc="The root placements.")
     Scene.layers = property(_tags, _set_tags, doc="The tags, in panel order.")
+
+    def _root_table(name, track):
+        """A scene table kept on the scene's root node as a document
+        attribute (slice 2): the tag folders and their tables, the active
+        tag, plugin data. A dict or a list reads as a tracked container
+        that writes back when edited in place (core/doc_model.py)."""
+        def get(self):
+            return self._root._attr(name, track)
+
+        def put(self, value):
+            self._root._set_attr(name, value)
+        return property(get, put, doc=f"``{name}``, kept in the document.")
+
+    #: The scene fields that live on the root node (their dataclass
+    #: defaults still apply: ``__init__`` assigns them through these).
+    ROOT_TABLES = ("active_layer", "layer_folders", "folder_parents",
+                   "folder_visibility", "layer_folder_uids",
+                   "layer_folder_names", "plugin_data")
+    for _name in ROOT_TABLES:
+        setattr(Scene, _name, _root_table(_name, _name != "active_layer"))
+    del _name
+
+    def _materials(self):
+        return self._root._materials
+
+    def _set_materials(self, value):
+        self._root._materials = value
+
+    def _kept(self):
+        return self._root._kept
+
+    def _set_kept(self, value):
+        self._root._kept = value
+
+    Scene.materials = property(_materials, _set_materials,
+                               doc="The materials registry, by name.")
+    Scene.kept_components = property(_kept, _set_kept,
+                                     doc="Kept component definitions.")
+else:
+    ROOT_TABLES = ()
 
 

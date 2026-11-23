@@ -21,11 +21,20 @@ from PySide6.QtGui import QMatrix4x4, QVector3D  # noqa: E402
 
 from core import doc_model  # noqa: E402
 from core.group import Group  # noqa: E402
-from core.history import (AssignLayerCommand, DeleteGroupCommand,  # noqa: E402
-                          HideCommand, History, InsertGroupCommand,
+from core.history import (AddKeptComponentsCommand,  # noqa: E402
+                          AssignLayerCommand, ChangeAxesCommand,
+                          DeleteGroupCommand, DeleteLayerCommand,
+                          ExplodeViewCommand,
+                          FlipGroupsCommand, HideCommand, History,
+                          InsertGroupCommand, KeepComponentCommand,
                           LockCommand, MakeNestedGroupCommand, MoveGroupCommand,
-                          RenameGroupCommand, SetGroupMaterialCommand,
-                          SetLayerVisibilityCommand, SetMaterialFinishCommand)
+                          PurgeUnusedCommand, RenameGroupCommand,
+                          ReparentGroupsCommand, RotateGroupCommand,
+                          ScaleGroupCommand, SetGroupMaterialCommand,
+                          SetLayerVisibilityCommand, SetMaterialFinishCommand,
+                          SetPluginDataCommand, SetRecordCommand,
+                          SetStructureNodeCommand, TagGroupsCommand)
+from core.material_commands import AddMaterialCommand  # noqa: E402
 from core.layers import TAG_FIELDS, Layer  # noqa: E402
 from core.materials import Material  # noqa: E402
 from core.mesh import Mesh  # noqa: E402
@@ -35,9 +44,12 @@ import core.group as _group  # noqa: E402
 import core.layers as _layers  # noqa: E402
 import itertools  # noqa: E402
 
-# Uids the two runs agree on.
+# Uids (and IFC guids) the two runs agree on.
 _uids = itertools.count(1)
 _group.new_uid = _layers.new_uid = lambda: f"uid-{next(_uids):05d}"
+import uuid as _uuid  # noqa: E402
+_guids = itertools.count(1)
+_uuid.uuid4 = lambda: _uuid.UUID(int=next(_guids))
 
 
 def box(mesh, s=1.0, x=0.0):
@@ -64,6 +76,10 @@ def group_dump(g):
         "built": (built.placement_values(g.xform)
                   if g.xform is not None else None),
         "faces": len(g.mesh.faces),
+        "ifc": g.ifc, "ext": g.ext, "text3d": g.text3d,
+        "exploded": g.exploded,
+        "explode_offset": (None if g.explode_offset is None
+                           else [float(v) for v in g.explode_offset]),
         "children": [group_dump(c) for c in g.children],
     }
 
@@ -76,7 +92,14 @@ def dump(scene):
         "materials": {k: m.to_dict() for k, m in sorted(scene.materials.items())},
         "loose_faces": len(scene.mesh.faces),
         "active_layer": scene.active_layer,
-    }))
+        "folders": {"list": list(scene.layer_folders),
+                    "parents": dict(scene.folder_parents),
+                    "visibility": dict(scene.folder_visibility),
+                    "uids": dict(scene.layer_folder_uids),
+                    "names": dict(scene.layer_folder_names)},
+        "plugin_data": scene.plugin_data,
+        "kept": [group_dump(g) for g in scene.kept_components],
+    }, default=lambda o: sorted(o) if isinstance(o, set) else repr(o)))
 
 
 def build():
@@ -84,6 +107,18 @@ def build():
     for i in range(3):
         scene.layers.append(Layer(f"Tag {i}", uid=f"tag-uid-{i}",
                                   color=(i / 3, 0.5, 0.25)))
+    # Slice 2: tag folders and their tables, sheet styles, the active tag.
+    scene.layer_folders = ["Site", "Site/Walls"]
+    scene.folder_parents["Site/Walls"] = "Site"
+    scene.layer_folder_uids.update({"Site": "folder-1", "Site/Walls": "folder-2"})
+    scene.layer_folder_names["Site/Walls"] = "Walls"
+    scene.folder_visibility["Site"] = True
+    styled = Layer("Styled", uid="tag-uid-styled", folder="Site/Walls",
+                   linetype="dashed", lineweight=0.35, hatch="brick",
+                   hatch_angle=30.0, opacity=0.5, printable=False)
+    scene.layers.append(styled)
+    scene.active_layer = "Tag 2"
+    scene.plugin_data["windowizer"] = {"version": 2, "panes": [1, 2]}
     for i in range(2):
         scene.materials[f"Mat {i}"] = Material(f"Mat {i}", color=(0.1 * i, 0.2, 0.3))
     defs = []
@@ -112,6 +147,12 @@ def build():
     classic = Mesh()
     box(classic, 1.0, x=10.0)
     scene.groups.append(Group(classic, name="Classic", uid="classic"))
+    kids[0].ifc = {"class": "IfcBeam", "name": "B1", "guid": "guid-b1",
+                   "classifications": [{"system": "uniclass", "code": "Ss_20"}]}
+    kids[1].ext = {"windowizer": {"panes": 3}}
+    kept = Group(defs[1], name="Kept def", uid="kept")
+    kept.xform = QMatrix4x4()
+    scene.kept_components.append(kept)
     return scene
 
 
@@ -145,6 +186,64 @@ def saved(scene, work: Path, tag: str) -> dict:
         igz.save_scene(back, again, backup=False)
         files[name]["again"] = members(again)
     return files
+
+
+def template():
+    m = Mesh()
+    box(m, 0.3)
+    g = Group(m, name="Template", uid="tpl")
+    g.xform = QMatrix4x4()
+    return g
+
+
+def slice_two(scene, h):
+    """The commands slice 2 makes transactions (records, structure, plugin
+    data, folders, kept components, the registry, placements' structure
+    and matrices), each run, all undone, all redone."""
+    from core.purge import iter_groups
+    out = []
+    by_uid = {g.uid: g for g in iter_groups(scene.groups)}
+    assembly, site, classic = by_uid["assembly"], by_uid["site"], by_uid["classic"]
+    parts = list(assembly.children)
+    frame = QMatrix4x4()
+    frame.translate(QVector3D(10.0, 0.0, 0.0))
+    frame.rotate(30.0, QVector3D(0, 0, 1))
+    cmds = [
+        SetRecordCommand([parts[0], parts[2]], {"name": "Beam", "fire": "R60"}),
+        TagGroupsCommand([parts[3]], "IfcColumn", "C1"),
+        SetStructureNodeCommand([parts[1], parts[2]], "level-1"),
+        SetPluginDataCommand("windowizer", {"version": 3}),
+        SetPluginDataCommand("other", {"a": [1, 2, {"b": None}]}),
+        SetLayerVisibilityCommand(["Tag 0"], False, folders=["Site"]),
+        KeepComponentCommand(scene.kept_components[0], False),
+        AddKeptComponentsCommand([template()]),
+        AddMaterialCommand(Material("Fresh", color=(0.9, 0.8, 0.1))),
+        PurgeUnusedCommand(layers=False, materials=True),
+        ExplodeViewCommand(assembly, 1.5, "outward"),
+        RotateGroupCommand(parts[0], QVector3D(0, 0, 0), QVector3D(0, 0, 1), 33.0),
+        ScaleGroupCommand(parts[1], QVector3D(1, 1, 0), 1.25),
+        FlipGroupsCommand([parts[2]], QVector3D(0, 0, 0), QVector3D(1, 0, 0)),
+        ChangeAxesCommand(classic, frame),
+        ReparentGroupsCommand([parts[3]], None),
+        DeleteLayerCommand("Tag 1"),
+    ]
+    for c in cmds:
+        h.execute(c)
+        assert not h.last_error, (type(c).__name__, h.last_error)
+        out.append(dump(scene))
+    for _ in cmds:
+        assert h.undo()
+        out.append(dump(scene))
+    for _ in cmds:
+        assert h.redo()
+        out.append(dump(scene))
+    # An in-place edit of a record, outside any command, then a step.
+    parts[0].ifc["name"] = "Edited in place"
+    h.execute(RenameGroupCommand(parts[0], "After the edit"))
+    out.append(dump(scene))
+    h.undo()
+    out.append(dump(scene))
+    return out
 
 
 def main(work: Path):
@@ -191,6 +290,7 @@ def main(work: Path):
     states.append(dump(scene))
     h.redo()
     states.append(dump(scene))
+    states.extend(slice_two(scene, h))
     print(json.dumps({"engine": doc_model.engine(), "states": states,
                       "feed": steps, "initial": initial,
                       "final": saved(scene, work, "final")}))

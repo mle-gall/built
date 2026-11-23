@@ -84,6 +84,9 @@ BUILTIN_TOOLS = [
 ]
 
 
+from core.doc_model import JSON_DICTS as _JSON_DICTS, JSON_LISTS as _JSON_LISTS
+
+
 def json_value(value):
     """Reject Python objects and non-finite numbers before committing edits."""
     def check(v, depth=0):
@@ -91,11 +94,11 @@ def json_value(value):
             raise ValueError("agent tool result must be JSON-safe (nesting too deep)")
         if type(v) in (str, int, float, bool, type(None)):
             return
-        if type(v) is list:
+        if type(v) in _JSON_LISTS:
             for item in v:
                 check(item, depth + 1)
             return
-        if type(v) is dict and all(type(k) is str for k in v):
+        if type(v) in _JSON_DICTS and all(type(k) is str for k in v):
             for item in v.values():
                 check(item, depth + 1)
             return

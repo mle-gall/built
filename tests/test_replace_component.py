@@ -47,9 +47,11 @@ def _points(group):
                   for v in world_mesh(group).vertices)
 
 
-def _model():
+def _model(moved=False):
     """Three copies of «Silla», two of «Mesa», a classic group and a group
-    of groups (a matrix, but not a component)."""
+    of groups (a matrix, but not a component). ``moved``: the caller puts
+    them in another scene, so this one lets go of them (a placement has one
+    parent)."""
     scene = Scene()
     silla = _component(_quad(1.0), "Silla", dx=0.0)
     sillas = [silla, copy_group(silla, V(5, 0, 0)),
@@ -59,7 +61,8 @@ def _model():
     classic = Group(_quad(3.0), name="Muro")
     holder = _component(_quad(0.5), "Caja", dx=-5.0)
     holder.component = False
-    scene.groups.extend(sillas + mesas + [classic, holder])
+    if not moved:
+        scene.groups.extend(sillas + mesas + [classic, holder])
     return scene, History(scene), sillas, mesas, classic, holder
 
 
@@ -235,7 +238,7 @@ def test_the_menu_offers_both_and_replace_swaps_the_selection(monkeypatch):
     win = MainWindow()
     try:
         scene = win.viewport.scene
-        _s, _h, sillas, mesas, classic, holder = _model()
+        _s, _h, sillas, mesas, classic, holder = _model(moved=True)
         scene.groups.extend(sillas + mesas + [classic, holder])
         scene.selection.clear()
         scene.selection.update(sillas)
@@ -304,7 +307,7 @@ def test_the_in_model_list_selects_and_replaces_from_its_menu():
     win = MainWindow()
     try:
         scene = win.viewport.scene
-        _s, _h, sillas, mesas, classic, holder = _model()
+        _s, _h, sillas, mesas, classic, holder = _model(moved=True)
         scene.groups.extend(sillas + mesas + [classic, holder])
         scene.selection.clear()
 
@@ -335,7 +338,7 @@ def test_its_own_row_does_not_offer_to_replace_the_selection():
     win = MainWindow()
     try:
         scene = win.viewport.scene
-        _s, _h, sillas, mesas, _c, _holder = _model()
+        _s, _h, sillas, mesas, _c, _holder = _model(moved=True)
         scene.groups.extend(sillas + mesas)
         scene.selection.clear()
         scene.selection.update(sillas)
@@ -445,7 +448,7 @@ def test_the_list_shows_a_kept_definition_with_no_copy(monkeypatch):
     win = MainWindow()
     try:
         scene = win.viewport.scene
-        _s, _h, sillas, mesas, _c, _holder = _model()
+        _s, _h, sillas, mesas, _c, _holder = _model(moved=True)
         scene.groups.extend(sillas + mesas)
         win.viewport.history.execute(KeepComponentCommand(mesas[0]))
         for g in mesas:
@@ -528,7 +531,7 @@ def test_the_list_rows_carry_a_thumbnail():
     win = MainWindow()
     try:
         scene = win.viewport.scene
-        _s, _h, sillas, mesas, _c, _holder = _model()
+        _s, _h, sillas, mesas, _c, _holder = _model(moved=True)
         scene.groups.extend(sillas + mesas)
         panel = win.tray.components
         panel.refresh_in_model()
@@ -578,7 +581,7 @@ def test_a_short_list_has_no_filter():
     from views.main_window import MainWindow
     win = MainWindow()
     try:
-        _s, _h, sillas, mesas, _c, _holder = _model()
+        _s, _h, sillas, mesas, _c, _holder = _model(moved=True)
         win.viewport.scene.groups.extend(sillas + mesas)
         panel = win.tray.components
         panel.refresh_in_model()
@@ -610,7 +613,7 @@ def _window_with_model():
     from views.main_window import MainWindow
     win = MainWindow()
     scene = win.viewport.scene
-    _s, _h, sillas, mesas, classic, holder = _model()
+    _s, _h, sillas, mesas, classic, holder = _model(moved=True)
     scene.groups.extend(sillas + mesas + [classic, holder])
     return win, scene, sillas, mesas
 
@@ -800,7 +803,7 @@ def test_clipped_component_list_does_not_build_thumbnails(monkeypatch):
     from views import component_thumbs
     win = MainWindow()
     try:
-        _, _, chairs, _, _, _ = _model()
+        _, _, chairs, _, _, _ = _model(moved=True)
         win.viewport.scene.groups.extend(chairs)
         panel = win.tray.components
         panel.refresh_in_model()

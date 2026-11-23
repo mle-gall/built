@@ -368,9 +368,10 @@ class _Bridge(QObject, InspectionTools, RecordTools, FacetTools, StructureTools,
                 raise ValueError("status is too deeply nested")
             if type(value) in (str, int, float, bool, type(None)):
                 return value
-            if type(value) is list:
+            from core.doc_model import JSON_DICTS, JSON_LISTS
+            if type(value) in JSON_LISTS:
                 return [copy(v, depth + 1) for v in value]
-            if type(value) is dict and all(type(k) is str for k in value):
+            if type(value) in JSON_DICTS and all(type(k) is str for k in value):
                 return {k: copy(v, depth + 1) for k, v in value.items()}
             raise ValueError("status must contain only JSON values")
         return {"found": True, "value": copy(self._scope[name])}

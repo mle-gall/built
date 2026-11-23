@@ -126,7 +126,7 @@ def test_edit_command_relays_the_letters_where_the_text_stands():
     assert abs(min(p.y() for p in pts) - 5.0) < 0.05
 
     history.undo()
-    assert g.children is old_children
+    assert g.children == old_children        # the very letters, back
     assert g.text3d["text"] == "Ab" and g.name == "Ab"
     history.redo()
     assert [k.name for k in g.children] == list("Hola")

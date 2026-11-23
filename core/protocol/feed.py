@@ -286,11 +286,10 @@ def _copies(cmd) -> list:
 
 def _doc_state(scene):
     from core import doc_model
-    if doc_model.ENABLED:
-        # Placements, tags and material fields come from the step's
-        # transaction (_build); the registry (a dict) by identity.
-        mats = {k: id(m) for k, m in (getattr(scene, "materials", {}) or {}).items()}
-        return None, None, mats
+    if doc_model.ENABLED and getattr(scene, "_root", None) is not None:
+        # Placements, tags, materials and the registry all come from the
+        # step's transaction (_build).
+        return None, None, None
     roots = {id(g): g.uid for g in scene.groups}
     # By value: tags and materials are edited in place too.
     # (A tag's fields are plain values: a shallow copy sees their change.)
@@ -310,12 +309,31 @@ def _geometry_only():
             H.DeleteEdgesCommand, H.DeleteFaceCommand)
 
 
-def _known_placements(cmd, phase, step, scene=None) -> bool:
+def _journal_covers(cmd) -> bool:
+    """Commands that change placement FIELDS only: with the Rust document
+    the step's journal names every placement they wrote, so listing them
+    again (20,000 uids for Lock all) is only cost."""
+    from core import history as H
+    if isinstance(cmd, (H.LockCommand, H.RenameGroupCommand)):
+        return True
+    if isinstance(cmd, H.MoveGroupCommand):
+        return getattr(cmd.group, "xform", None) is not None
+    if isinstance(cmd, (H.HideCommand, H.AssignLayerCommand)):
+        from core.group import Group
+        return all(isinstance(e, Group) for e in cmd._entities)
+    return False
+
+
+def _known_placements(cmd, phase, step, scene=None, journalled=False) -> bool:
     """Name the placements a known command changed; False when the
-    command may change placements the feed cannot name."""
+    command may change placements the feed cannot name. ``journalled``:
+    the step's record already holds what its document transaction wrote."""
     from core import history as H
     if isinstance(cmd, H.CompoundCommand):
-        return all(_known_placements(c, phase, step, scene) for c in cmd.commands)
+        return all(_known_placements(c, phase, step, scene, journalled)
+                   for c in cmd.commands)
+    if journalled and _journal_covers(cmd):
+        return True
     if getattr(cmd, "keeps_rows", False) or isinstance(cmd, _geometry_only()):
         return True
     from core.solids import SolidOperationCommand
@@ -495,10 +513,10 @@ class ChangeFeed:
             step.copies = _copies(cmd)
         # Document level: roots by identity, tags and materials by value.
         roots1, tags1, mats1 = _doc_state(scene)
+        changes = None
         if roots0 is None:
             # Rust document: what the step's transaction wrote.
             rec = getattr(h, "last_txn", None)
-            changes = None
             root = getattr(scene, "_root", None)
             if rec is not None and rec[0] is not None and root is not None:
                 changes = rec[0].changes(inverse=rec[1], root=root._doc_key)
@@ -510,13 +528,23 @@ class ChangeFeed:
                 step.tags["created"].extend(t["created"])
                 step.tags["removed"].extend(t["removed"])
                 step.tags["modified"].extend(t["modified"])
+                m = changes["materials"]
+                came, went = set(m["created"]), set(m["removed"])
+                registry = scene.materials
+                step.materials["created"].extend(m["created"])
+                step.materials["removed"].extend(m["removed"])
+                # Another material under the same name: modified, as the
+                # identity comparison said; a registered material's fields
+                # written: modified.
+                step.materials["modified"].extend(m["replaced"])
                 step.materials["modified"].extend(
-                    k for k in changes["materials"]["modified"]
-                    if k in mats0 and k in mats1)
+                    k for k in m["modified"]
+                    if k not in came and k not in went and k in registry)
         else:
             step.placements["created"].extend(u for i, u in roots1.items() if i not in roots0)
             step.placements["removed"].extend(u for i, u in roots0.items() if i not in roots1)
-        step.complete = _known_placements(cmd, phase, step, scene) and step.complete
+        step.complete = _known_placements(
+            cmd, phase, step, scene, changes is not None) and step.complete
         _dedupe(step.placements)
         if tags0 is not None:
             for k in tags1.keys() - tags0.keys():
@@ -525,12 +553,13 @@ class ChangeFeed:
                 step.tags["removed"].append(k)
             step.tags["modified"].extend(k for k in tags1.keys() & tags0.keys()
                                          if tags1[k] != tags0[k])
-        for k in mats1.keys() - mats0.keys():
-            step.materials["created"].append(k)
-        for k in mats0.keys() - mats1.keys():
-            step.materials["removed"].append(k)
-        step.materials["modified"].extend(k for k in mats1.keys() & mats0.keys()
-                                          if mats1[k] != mats0[k])
+        if mats0 is not None:
+            for k in mats1.keys() - mats0.keys():
+                step.materials["created"].append(k)
+            for k in mats0.keys() - mats1.keys():
+                step.materials["removed"].append(k)
+            step.materials["modified"].extend(k for k in mats1.keys() & mats0.keys()
+                                              if mats1[k] != mats0[k])
         for d in (step.tags, step.materials):
             for k in d:
                 d[k] = sorted(set(d[k]))

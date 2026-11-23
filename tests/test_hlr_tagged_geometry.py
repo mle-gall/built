@@ -192,7 +192,9 @@ def test_the_exports_hand_the_arrays_over(tmp_path, monkeypatch):
     try:
         scene = _scene(tmp_path, False)
         win.viewport.scene.layers[:] = scene.layers
-        win.viewport.scene.groups[:] = scene.groups
+        groups = list(scene.groups)
+        scene.groups.clear()                 # one parent per placement
+        win.viewport.scene.groups[:] = groups
         for f in list(scene.loose_mesh.faces):
             win.viewport.scene.loose_mesh.add_face(
                 [V(v) for v in f.vertices]).attrs.update(f.attrs)

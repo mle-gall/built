@@ -144,6 +144,7 @@ def test_a_moved_copy_reads_to_the_index_as_a_fresh_bake():
         shifted = vp._instance_chunk(g)
         assert shifted["ikey"][1] != old
         fresh_vp = viewport.Viewport(None)
+        vp.scene.groups.remove(g)             # one parent per placement
         fresh_vp.scene.groups.append(g)
         fresh = fresh_vp._instance_chunk(g)
         assert shifted["edges"] == fresh["edges"], g.name
