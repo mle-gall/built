@@ -3,20 +3,181 @@
 //! ordered document list is updated in place so existing scene tabs see it.
 use pyo3::{
     prelude::*,
-    types::{PyDict, PySlice},
+    types::{PyDict, PyList, PySlice, PyTuple},
 };
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 type Obj<'py> = Bound<'py, PyAny>;
 
-fn folders(scene: &Obj<'_>) -> PyResult<Vec<String>> {
-    api(scene)?.call_method1("folders_of", (scene,))?.extract()
+/// One snapshot of the folder hierarchy. A broken link or cycle puts that
+/// folder at the root, preserving the order in the explicit document list.
+struct Tree {
+    names: Vec<String>,
+    known: HashSet<String>,
+    parents: HashMap<String, String>,
 }
-fn api<'py>(scene: &Obj<'py>) -> PyResult<Bound<'py, PyModule>> {
-    scene.py().import("core.scene_folders")
+impl Tree {
+    fn read(scene: &Obj<'_>) -> PyResult<Self> {
+        let mut names = Vec::new();
+        let mut known = HashSet::new();
+        if let Some(explicit) = scene.getattr_opt("scene_folders")?.filter(|v| !v.is_none()) {
+            for name in explicit.try_iter()? {
+                if let Ok(name) = name?.extract::<String>() {
+                    if !name.is_empty() && known.insert(name.clone()) {
+                        names.push(name);
+                    }
+                }
+            }
+        }
+        if let Some(saved) = scene.getattr_opt("saved_views")?.filter(|v| !v.is_none()) {
+            for v in saved.try_iter()? {
+                let folder = v?.getattr("folder")?;
+                if folder.is_truthy()? {
+                    let name: String = folder.extract()?;
+                    if known.insert(name.clone()) {
+                        names.push(name);
+                    }
+                }
+            }
+        }
+        let table = parents(scene)?;
+        let mut links = HashMap::new();
+        for (key, value) in table {
+            if let (Ok(key), Ok(parent)) = (key.extract::<String>(), value.extract::<String>()) {
+                if known.contains(&parent) {
+                    links.insert(key, parent);
+                }
+            }
+        }
+        Ok(Self {
+            names,
+            known,
+            parents: links,
+        })
+    }
+
+    fn parent(&self, name: &str) -> Option<&str> {
+        let direct = self.parents.get(name)?;
+        let mut current = direct.as_str();
+        let mut seen = HashSet::from([name]);
+        loop {
+            if !seen.insert(current) {
+                return None;
+            }
+            match self.parents.get(current) {
+                Some(next) => current = next,
+                None => return Some(direct),
+            }
+        }
+    }
+
+    fn children(&self, name: Option<&str>) -> Vec<String> {
+        self.names
+            .iter()
+            .filter(|f| self.parent(f) == name)
+            .cloned()
+            .collect()
+    }
+
+    fn view_folder(&self, view: &Obj<'_>) -> PyResult<Option<String>> {
+        Ok(view
+            .getattr("folder")?
+            .extract::<Option<String>>()?
+            .filter(|f| self.known.contains(f)))
+    }
+}
+#[pyfunction]
+fn folders_of(scene: &Obj<'_>) -> PyResult<Vec<String>> {
+    Ok(Tree::read(scene)?.names)
+}
+
+#[pyfunction]
+fn folder_parent(scene: &Obj<'_>, name: &str) -> PyResult<Option<String>> {
+    Ok(Tree::read(scene)?.parent(name).map(str::to_owned))
+}
+
+#[pyfunction]
+fn folder_of(scene: &Obj<'_>, view: &Obj<'_>) -> PyResult<Option<String>> {
+    Tree::read(scene)?.view_folder(view)
+}
+
+#[pyfunction(signature=(scene,name,deep=false))]
+fn subfolders(scene: &Obj<'_>, name: Option<&str>, deep: bool) -> PyResult<Vec<String>> {
+    let tree = Tree::read(scene)?;
+    let mut found = tree.children(name);
+    if deep {
+        let mut todo: Vec<_> = found.iter().rev().cloned().collect();
+        while let Some(parent) = todo.pop() {
+            let children = tree.children(Some(&parent));
+            todo.extend(children.iter().rev().cloned());
+            found.extend(children);
+        }
+    }
+    Ok(found)
+}
+
+#[pyfunction]
+fn scenes_in<'py>(scene: &Obj<'py>, name: Option<&str>) -> PyResult<Vec<Obj<'py>>> {
+    let tree = Tree::read(scene)?;
+    let mut found = Vec::new();
+    for view in views(scene)? {
+        if tree.view_folder(&view)?.as_deref() == name {
+            found.push(view);
+        }
+    }
+    Ok(found)
+}
+
+#[pyfunction]
+fn tree_order<'py>(scene: &Obj<'py>) -> PyResult<Vec<Obj<'py>>> {
+    let tree = Tree::read(scene)?;
+    let mut buckets: HashMap<Option<String>, Vec<Obj>> = HashMap::new();
+    for view in views(scene)? {
+        buckets
+            .entry(tree.view_folder(&view)?)
+            .or_default()
+            .push(view);
+    }
+    let mut children: HashMap<Option<&str>, Vec<&str>> = HashMap::new();
+    for folder in &tree.names {
+        children
+            .entry(tree.parent(folder))
+            .or_default()
+            .push(folder);
+    }
+    let mut out = Vec::new();
+    let mut todo = vec![(None, false)];
+    while let Some((folder, visited)) = todo.pop() {
+        if visited {
+            if let Some(group) = buckets.remove(&folder.map(str::to_owned)) {
+                out.extend(group);
+            }
+        } else {
+            todo.push((folder, true));
+            if let Some(direct) = children.get(&folder) {
+                todo.extend(direct.iter().rev().map(|f| (Some(*f), false)));
+            }
+        }
+    }
+    Ok(out)
+}
+
+#[pyfunction]
+fn sync_order(scene: &Obj<'_>) -> PyResult<()> {
+    let order = tree_order(scene)?;
+    if !order
+        .iter()
+        .map(|v| v.as_ptr())
+        .eq(views(scene)?.iter().map(|v| v.as_ptr()))
+    {
+        set_views(scene, order)?;
+    }
+    Ok(())
 }
 fn parents<'py>(scene: &Obj<'py>) -> PyResult<Bound<'py, PyDict>> {
     let table = PyDict::new(scene.py());
-    let original = scene.getattr("scene_folder_parents")?;
+    let original = scene
+        .getattr_opt("scene_folder_parents")?
+        .unwrap_or_else(|| scene.py().None().into_bound(scene.py()));
     if !original.is_none() {
         table.call_method1("update", (original,))?;
     }
@@ -26,12 +187,12 @@ fn views<'py>(scene: &Obj<'py>) -> PyResult<Vec<Obj<'py>>> {
     scene.getattr("saved_views")?.try_iter()?.collect()
 }
 fn set_views(scene: &Obj<'_>, ordered: Vec<Obj<'_>>) -> PyResult<()> {
-    let all = PySlice::new(scene.py(), 0, isize::MAX, 1);
+    let all = PySlice::full(scene.py());
     scene.getattr("saved_views")?.set_item(all, ordered)
 }
 #[pyfunction(signature=(scene,base,parent=None))]
 fn add_folder(scene: &Obj<'_>, base: &str, parent: Option<&str>) -> PyResult<String> {
-    let mut names = folders(scene)?;
+    let mut names = folders_of(scene)?;
     let mut name = base.to_owned();
     let mut i = 2;
     while names.contains(&name) {
@@ -49,8 +210,13 @@ fn add_folder(scene: &Obj<'_>, base: &str, parent: Option<&str>) -> PyResult<Str
 }
 #[pyfunction]
 fn rename_folder(scene: &Obj<'_>, old: &str, new: Option<&str>) -> PyResult<bool> {
-    let new = new.unwrap_or("").trim();
-    let mut names = folders(scene)?;
+    let stripped = new
+        .unwrap_or("")
+        .into_pyobject(scene.py())?
+        .call_method0("strip")?;
+    let new: String = stripped.extract()?;
+    let new = new.as_str();
+    let mut names = folders_of(scene)?;
     if new.is_empty() || new == old || names.iter().any(|n| n == new) {
         return Ok(false);
     }
@@ -77,22 +243,23 @@ fn rename_folder(scene: &Obj<'_>, old: &str, new: Option<&str>) -> PyResult<bool
 }
 #[pyfunction]
 fn delete_folder(scene: &Obj<'_>, name: &str) -> PyResult<bool> {
-    let mut names = folders(scene)?;
+    let mut names = folders_of(scene)?;
     if !names.iter().any(|f| f == name) {
         return Ok(false);
     }
-    let api = api(scene)?;
-    let up = api.call_method1("folder_parent", (scene, name))?;
+    let up = folder_parent(scene, name)?;
     let table = parents(scene)?;
     for f in &names {
         if table
             .get_item(f)?
-            .is_some_and(|v| v.extract::<String>().is_ok_and(|p| p == name))
+            .map(|v| v.eq(name))
+            .transpose()?
+            .unwrap_or(false)
         {
             if up.is_none() {
                 table.del_item(f)?;
             } else {
-                table.set_item(f, &up)?;
+                table.set_item(f, up.as_deref())?;
             }
         }
     }
@@ -101,28 +268,25 @@ fn delete_folder(scene: &Obj<'_>, name: &str) -> PyResult<bool> {
     }
     for v in views(scene)? {
         if v.getattr("folder")?.eq(name)? {
-            v.setattr("folder", &up)?;
+            v.setattr("folder", up.as_deref())?;
         }
     }
     names.retain(|f| f != name);
     scene.setattr("scene_folders", names)?;
     scene.setattr("scene_folder_parents", table)?;
-    api.call_method1("sync_order", (scene,))?;
+    sync_order(scene)?;
     Ok(true)
 }
 #[pyfunction]
 fn move_folder(scene: &Obj<'_>, name: &str, parent: Option<&str>) -> PyResult<bool> {
-    let names = folders(scene)?;
+    let names = folders_of(scene)?;
     if !names.iter().any(|f| f == name)
         || parent.is_some_and(|p| p == name || !names.iter().any(|f| f == p))
     {
         return Ok(false);
     }
     if let Some(p) = parent {
-        if api(scene)?
-            .call_method1("subfolders", (scene, name, true))?
-            .contains(p)?
-        {
+        if subfolders(scene, Some(name), true)?.iter().any(|f| f == p) {
             return Ok(false);
         }
     }
@@ -154,14 +318,14 @@ fn move_rows(
     for v in &moving {
         v.setattr("folder", folder)?;
     }
-    let api = api(scene)?;
     if !moving.is_empty() {
         let at = if let Some(i) = before.and_then(|v| rest.iter().position(|r| r.is(v))) {
             i
         } else {
+            let tree = Tree::read(scene)?;
             let mut at = rest.len();
             for (i, v) in rest.iter().enumerate() {
-                if api.call_method1("folder_of", (scene, v))?.eq(folder)? {
+                if tree.view_folder(v)?.as_deref() == folder {
                     at = i + 1;
                 }
             }
@@ -170,8 +334,70 @@ fn move_rows(
         rest.splice(at..at, moving);
         set_views(scene, rest)?;
     }
-    api.call_method1("sync_order", (scene,))?;
+    sync_order(scene)?;
     Ok(())
+}
+
+fn explicit_folders<'py>(scene: &Obj<'py>) -> PyResult<Obj<'py>> {
+    Ok(scene
+        .getattr_opt("scene_folders")?
+        .filter(|v| !v.is_none())
+        .unwrap_or_else(|| PyList::empty(scene.py()).into_any()))
+}
+
+#[pyfunction]
+pub(crate) fn state<'py>(scene: &Obj<'py>) -> PyResult<Obj<'py>> {
+    let py = scene.py();
+    let views = views(scene)?;
+    let links = views
+        .iter()
+        .map(|v| Ok((v.clone(), v.getattr("folder")?)))
+        .collect::<PyResult<Vec<_>>>()?;
+    let saved = py.get_type::<PyList>().call1((explicit_folders(scene)?,))?;
+    Ok((views, links, saved, parents(scene)?)
+        .into_pyobject(py)?
+        .into_any())
+}
+
+#[pyfunction]
+fn signature<'py>(scene: &Obj<'py>) -> PyResult<Obj<'py>> {
+    let py = scene.py();
+    let links = views(scene)?
+        .iter()
+        .map(|v| Ok((v.as_ptr() as usize, v.getattr("folder")?)))
+        .collect::<PyResult<Vec<_>>>()?;
+    let names = py
+        .get_type::<PyTuple>()
+        .call1((explicit_folders(scene)?,))?;
+    let pairs = parents(scene)?.items();
+    pairs.call_method0("sort")?;
+    Ok((
+        PyTuple::new(py, links)?,
+        names,
+        py.get_type::<PyTuple>().call1((pairs,))?,
+    )
+        .into_pyobject(py)?
+        .into_any())
+}
+
+#[pyfunction]
+pub(crate) fn restore(scene: &Obj<'_>, saved: &Obj<'_>) -> PyResult<()> {
+    let py = scene.py();
+    scene
+        .getattr("saved_views")?
+        .set_item(PySlice::full(py), saved.get_item(0)?)?;
+    for item in saved.get_item(1)?.try_iter()? {
+        let pair = item?;
+        pair.get_item(0)?.setattr("folder", pair.get_item(1)?)?;
+    }
+    scene.setattr(
+        "scene_folders",
+        py.get_type::<PyList>().call1((saved.get_item(2)?,))?,
+    )?;
+    scene.setattr(
+        "scene_folder_parents",
+        py.get_type::<PyDict>().call1((saved.get_item(3)?,))?,
+    )
 }
 
 enum Operation {
@@ -227,8 +453,7 @@ impl FolderEdit {
         }
     }
     fn __call__(&mut self, scene: &Obj<'_>) -> PyResult<bool> {
-        let api = api(scene)?;
-        let before = api.call_method1("signature", (scene,))?;
+        let before = signature(scene)?;
         let py = scene.py();
         match &self.operation {
             Operation::Add(base, parent) => {
@@ -258,11 +483,21 @@ impl FolderEdit {
                 )?;
             }
         }
-        before.ne(api.call_method1("signature", (scene,))?)
+        before.ne(signature(scene)?)
     }
 }
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let sub = PyModule::new(m.py(), "scene_tree")?;
+    sub.add_function(wrap_pyfunction!(folders_of, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(folder_parent, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(folder_of, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(subfolders, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(scenes_in, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(tree_order, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(sync_order, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(state, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(signature, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(restore, &sub)?)?;
     sub.add_class::<FolderEdit>()?;
     sub.add_function(wrap_pyfunction!(add_folder, &sub)?)?;
     sub.add_function(wrap_pyfunction!(rename_folder, &sub)?)?;
