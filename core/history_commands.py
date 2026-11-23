@@ -3,7 +3,7 @@
 """Model editing commands and their Python reference inverses."""
 from __future__ import annotations
 
-from ingetrazo_core import object_replay as _replay
+from ingetrazo_core import object_replay as _replay, object_drawing as _drawing
 from ingetrazo_core import (definition_edits as _definitions, placement_edits as _placements,
                             presentation as _presentation, placement_transform as _transform,
                             reference_layers as _references)
@@ -316,7 +316,12 @@ class DeleteEdgesCommand(RemoveGeometryCommand):
                     scene.selection.discard(edge)
                 scene.version += 1
                 return
-        _reference.delete_edges(self, scene)
+        if _doc.ENABLED:
+            self._before = self._reference_snapshot(m)
+            self.removed_edges, self.removed_faces = _drawing.delete_edges(m, self._endpoints, self.cascade_faces, scene.selection)
+            scene.version += 1
+        else:
+            _reference.delete_edges(self, scene)
 
 
 def _faces_by_segments(mesh, segments) -> list:
@@ -366,7 +371,10 @@ class EraseSelectionCommand(RemoveGeometryCommand):
                 [[p.toTuple() for p in loop] for loop in self._face_loops],
                 [(m._input_point(a), m._input_point(b)) for a,b in self._edge_endpoints], hypot)
         if result is None:
-            slit_planes, across = _reference.erase_selected_geometry(self, scene)
+            if _doc.ENABLED:
+                slit_planes, across = _drawing.erase_selection(m, self._face_loops, self._edge_endpoints, scene.selection)
+            else:
+                slit_planes, across = _reference.erase_selected_geometry(self, scene)
         else:
             dirty, edges, faces, merges, slits, across_keys = result
             if dirty:
@@ -415,9 +423,12 @@ class EraseSelectionCommand(RemoveGeometryCommand):
             if n:
                 m._dirty(n)
         else:
-            for e in _reference._soft_faceless_edges(m):
-                if e.soft and not e.faces:
-                    m.remove_edge(e)
+            if _doc.ENABLED:
+                _drawing.prune_soft_edges(m)
+            else:
+                for e in _reference._soft_faceless_edges(m):
+                    if e.soft and not e.faces:
+                        m.remove_edge(e)
         # A merge can leave the big enclosing face overlapping its subdivisions;
         # drop any such redundant mother (covered by the snapshot undo above).
         for f in heal_overlapping_faces(m, footprint=footprint):
@@ -614,7 +625,10 @@ class AddFaceCommand(MeshCommand):
                         FaceView(mesh, key).attrs = dict(mother.attrs)
                     _inherit_paint(self.face, mother)
                 return
-        self._hole_swaps = _reference.divide_drawn_face(mesh, self.face)
+        if _doc.ENABLED:
+            self._hole_swaps = _drawing.divide_face(mesh, self.face)
+        else:
+            self._hole_swaps = _reference.divide_drawn_face(mesh, self.face)
 
     def doc_after(self, scene, phase):
         _discard_removed_selection(scene)
@@ -653,7 +667,12 @@ class DeleteFaceCommand(RemoveGeometryCommand):
                     scene.selection.discard(self.face)
                 scene.version += 1
                 return
-        _reference.delete_face(self, scene)
+        if _doc.ENABLED:
+            self._before = self._reference_snapshot(mesh)
+            self.face = _drawing.delete_face(mesh, self._loop, scene.selection)
+            scene.version += 1
+        else:
+            _reference.delete_face(self, scene)
 
 
 def _dirty_group_chunks(scene) -> None:
