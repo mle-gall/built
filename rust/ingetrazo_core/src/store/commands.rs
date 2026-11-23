@@ -4,7 +4,7 @@ use super::{edit::Change, keys::Kind, Store};
 use std::collections::HashSet;
 
 type Point = [f64; 3];
-type Cell = [u64; 3];
+pub(super) type Cell = [u64; 3];
 
 /// Bits of Python's round(x, 4), canonicalising signed zero. When the
 /// multiplication itself can change a rounding decision, round the original
@@ -69,7 +69,7 @@ impl Store {
         Some(moving.len())
     }
 
-    fn command_remove_face(&mut self, face: u32) {
+    pub(super) fn command_remove_face(&mut self, face: u32) {
         let mut change = Change::default();
         self.remove_face(face, &mut change);
         self.finish(change);

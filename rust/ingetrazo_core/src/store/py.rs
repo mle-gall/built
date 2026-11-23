@@ -1364,6 +1364,65 @@ impl PyMeshStore {
         Ok((length >= 1e-9).then(|| normal.into()))
     }
 
+    /// Fold all warped faces as one edit. The set of face keys preserves the
+    /// historical choice of the first merge among several legal neighbours.
+    fn fold_nonplanar(
+        &mut self,
+        py: Python<'_>,
+        moved: Vec<[f64; 3]>,
+        tolerance: f64,
+        hypot: &str,
+    ) -> PyResult<Option<(usize, Vec<(u128, Vec<u128>)>)>> {
+        use pyo3::types::PySet;
+        let h = crate::hypot_of(hypot)?;
+        let faces = self.inner.nonplanar_faces(tolerance);
+        if faces.is_empty() {
+            return Ok(Some((0, vec![])));
+        }
+        let moved = moved.into_iter().map(super::commands::cell).collect();
+        let mut work = self.inner.clone();
+        let mut copies = Vec::new();
+        let mut dirty = 0;
+        for f in faces {
+            let plan = work.plan_fold(f, &moved, tolerance, h);
+            if plan.triangles.len() < 2 {
+                continue;
+            }
+            let mut new = match work.split_fold(f, &plan) {
+                Ok(new) => new,
+                Err(OpError::Fallback(_)) => return Ok(None),
+                Err(e) => return Err(op_err(e)),
+            };
+            dirty += 1 + 4 * new.len();
+            let pieces = PySet::empty(py)?;
+            for &k in &new {
+                pieces.add(k)?;
+            }
+            loop {
+                let order = pieces
+                    .iter()
+                    .map(|x| x.extract())
+                    .collect::<PyResult<Vec<_>>>()?;
+                match work.merge_fold(&order, &plan, h) {
+                    Ok(Some((a, b, k, n))) => {
+                        pieces.discard(a)?;
+                        pieces.discard(b)?;
+                        pieces.add(k)?;
+                        new.push(k);
+                        dirty += n;
+                    }
+                    Ok(None) => break,
+                    Err(OpError::Fallback(_)) => return Ok(None),
+                    Err(e) => return Err(op_err(e)),
+                }
+            }
+            work.soften_fold(&plan);
+            copies.push((work.key(Kind::Face, f), new));
+        }
+        self.inner = work;
+        Ok(Some((dirty, copies)))
+    }
+
     fn move_without_join(&mut self, source: Vec<[f64; 3]>, delta: [f64; 3]) -> Option<usize> {
         self.inner.move_without_join(&source, delta)
     }

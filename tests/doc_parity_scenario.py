@@ -484,6 +484,16 @@ def geometry_steps():
         out.append(state())
         assert h.redo()
         out.append(state())
+    outer = rectangle(400, 0, 2, 2)
+    warp = mesh.add_face(outer)
+    warp.attrs["color"] = [0.1, 0.3, 0.7]
+    h.execute(MoveVerticesCommand(outer[:1], QVector3D(0, 0, .7)))
+    assert not h.last_rejected and not h.last_error and warp not in mesh.faces
+    out.append(state())
+    assert h.undo() and warp in mesh.faces
+    out.append(state())
+    assert h.redo() and warp not in mesh.faces
+    out.append(state())
     return out
 
 
