@@ -15,9 +15,13 @@ pub fn setting(py: Python<'_>, key: &str, default: &str) -> PyResult<String> {
 
 #[pyfunction]
 fn load_slide_mode(py: Python<'_>) -> PyResult<String> {
-    Ok(match setting(py, "nav/trackpad_slide", "orbit")?.as_str() {
+    Ok(match setting(py, "nav/trackpad_slide", "zoom")?
+        .to_ascii_lowercase()
+        .as_str()
+    {
         "pan" => "pan",
-        _ => "orbit",
+        "orbit" => "orbit",
+        _ => "zoom",
     }
     .into())
 }
@@ -34,27 +38,23 @@ fn enum_name(ev: &Obj, method: &str) -> PyResult<String> {
 }
 
 #[pyfunction]
+fn is_finger_device(ev: &Obj) -> PyResult<bool> {
+    Ok(matches!(
+        enum_name(&ev.call_method0("device")?, "type")?.as_str(),
+        "TouchPad" | "TouchScreen"
+    ))
+}
+
+#[pyfunction]
 fn is_slide(ev: &Obj) -> PyResult<bool> {
-    Ok(enum_name(ev, "phase")? != "NoScrollPhase"
-        || matches!(
-            enum_name(&ev.call_method0("device")?, "type")?.as_str(),
-            "TouchPad" | "TouchScreen"
-        ))
+    Ok(enum_name(ev, "phase")? != "NoScrollPhase" || is_finger_device(ev)?)
 }
 
 #[pyfunction]
 fn is_touch_screen(ev: &Obj) -> PyResult<bool> {
-    let device = ev.call_method0("device")?;
-    let kind = enum_name(&device, "type")?;
-    Ok(kind == "TouchScreen"
-        || (kind == "TouchPad"
-            && ev
-                .py()
-                .import("ingetrazo_render")?
-                .getattr("trackpad_nav")?
-                .getattr("TOUCH_EMULATION")?
-                .is_truthy()?
-            && device.call_method0("systemId")?.extract::<i64>()? == 1))
+    // The shell tags verified Cocoa emulation and raw contacts as TouchScreen.
+    // Qt's primary pointer ID alone cannot establish where a scroll originated.
+    Ok(enum_name(&ev.call_method0("device")?, "type")? == "TouchScreen")
 }
 
 fn xy(p: &Obj) -> PyResult<(f64, f64)> {
@@ -297,13 +297,13 @@ fn native_gesture(view: &Obj, ev: &Obj) -> PyResult<bool> {
 
 pub fn register(parent: &Bound<'_, PyModule>) -> PyResult<()> {
     let m = PyModule::new(parent.py(), "trackpad_nav")?;
-    m.add("TOUCH_EMULATION", cfg!(target_os = "macos"))?;
     macro_rules! export { ($($name:ident),*) => { $(m.add_function(wrap_pyfunction!($name,&m)?)?;)* }; }
     export!(
         gesture,
         slide,
         native_gesture,
         is_touch_screen,
+        is_finger_device,
         is_slide,
         slide_mode,
         slide_pixels,
