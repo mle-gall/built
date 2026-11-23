@@ -43,6 +43,7 @@ mod object_drawing;
 mod planar_edits;
 mod visibility_sets;
 mod scene_commands;
+mod material_library;
 mod scene_tree;
 mod structure_bootstrap;
 mod placement_edits;
@@ -244,6 +245,8 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(visibility_sets::visibility_set_rows, m)?)?;
     m.add_function(wrap_pyfunction!(visibility_sets::visibility_set_command, m)?)?;
     m.add_function(wrap_pyfunction!(scene_commands::plan_scene_command, m)?)?;
+    m.add_function(wrap_pyfunction!(material_library::bundled_materials, m)?)?;
+    m.add_function(wrap_pyfunction!(material_library::pick_library_paint, m)?)?;
     m.add_class::<project_sheets::ProjectSheets>()?;
     m.add_function(wrap_pyfunction!(project_tree::project_context_rows, m)?)?;
     m.add_function(wrap_pyfunction!(structure::file_created_placement, m)?)?;

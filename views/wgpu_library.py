@@ -24,6 +24,7 @@ where Project was; the switch or Esc goes back there."""
 from __future__ import annotations
 
 import json
+from functools import lru_cache
 import re
 from collections import Counter
 
@@ -60,12 +61,6 @@ def _parse_hex(text):
         raise ValueError("A colour is six hex digits, like #a0703c")
     v = int(t, 16)
     return ((v >> 16 & 255) / 255.0, (v >> 8 & 255) / 255.0, (v & 255) / 255.0)
-
-
-def _pretty(stem: str) -> str:
-    """A bundled file's name for people: ``brick_red`` → ``Brick red``."""
-    text = str(stem).replace("_", " ").replace("-", " ").strip()
-    return text[:1].upper() + text[1:]
 
 
 def _settings_json(key, default):
@@ -292,27 +287,7 @@ class MaterialsProvider(Provider):
         return out
 
     def _bundled(self, ctx):
-        from views import tray
-        out = []
-        manifest = tray._TEX_DIR / "library.json"
-        if manifest.exists():
-            data = json.loads(manifest.read_text(encoding="utf-8"))
-            for cat in data.get("categories", []):
-                title = tray.MaterialsPanel.CATEGORY_NAMES.get(cat["id"], cat["id"])
-                for i, it in enumerate(cat.get("items", [])):
-                    out.append({"key": f"lib:{cat['id']}:{i}", "name": it["name"], "label": _pretty(it["name"]),
-                                "source": "bundled", "category": title, "base": "image", "uses": 0, "hex": "",
-                                "thumb": str(tray._TEX_DIR / "library" / it["file"]), "verbs": ("apply",)})
-        if tray._RAL_FILE.exists():
-            data = json.loads(tray._RAL_FILE.read_text(encoding="utf-8"))
-            for fam in data.get("families", []):
-                for c in fam.get("colors", []):
-                    rgb = [v / 255.0 if max(c["rgb"]) > 1 else v for v in c["rgb"]]
-                    out.append({"key": f"ral:{c['code']}", "name": "%s %s" % (c["code"], tray._ral_name(c)),
-                                "short": c["code"],
-                                "source": "bundled", "category": "Colours (RAL)", "base": "colour", "uses": 0,
-                                "hex": _hex(rgb), "thumb": None, "verbs": ("apply",)})
-        return out
+        return list(_catalogue().values())
 
     def _linked_items(self, ctx, model):
         """The linked files' materials, read-only, under each file: the
@@ -377,9 +352,7 @@ class MaterialsProvider(Provider):
             if entry is None:
                 return
             if verb == "apply":
-                panel = _materials_panel(ctx.win)
-                if panel is not None:
-                    panel._apply_color(entry["color"])   # paints as a named material
+                _pick_paint(ctx.win, recipe=entry)
             elif verb == "select":
                 loose = set(map(id, ctx.scene.mesh.faces))
                 faces = [f for f, side in entry["faces"] if side == "front" and id(f) in loose]
@@ -388,15 +361,7 @@ class MaterialsProvider(Provider):
         elif verb == "apply":
             if kind == "my":
                 e = self._mine_entry(item)
-                panel = _materials_panel(ctx.win)
-                if panel is None:
-                    return
-                tex = e.get("texture")
-                if tex and tex.get("path"):
-                    panel._apply_texture(tex["path"], sw=tex.get("sw"), sh=tex.get("sh"), name=name,
-                                         opacity=e.get("opacity"))
-                else:
-                    panel._apply_color(tuple(e.get("color") or (1, 1, 1)), name=name)
+                _pick_paint(ctx.win, recipe=e)
             else:
                 from views.wgpu_ui import _paint_with
                 _paint_with(ctx.win, f"m:{name}" if kind == "lk" else key)
@@ -703,8 +668,23 @@ def _is_linked(g) -> bool:
         return False
 
 
-def _materials_panel(win):
-    return getattr(getattr(win, "tray", None), "materials", None)
+def _catalogue():
+    from core.i18n import current_language
+    from core.paths import app_root
+    return _bundled_by_key(app_root() / "resources", current_language())
+
+
+@lru_cache(maxsize=4)
+def _bundled_by_key(resources, language):
+    from ingetrazo_core import bundled_materials
+    return {item["key"]: item for item in json.loads(bundled_materials(resources, language))}
+
+
+def _pick_paint(win, *, name="", recipe=None):
+    from ingetrazo_core import pick_library_paint
+    from tools.paint import PaintTool
+    if pick_library_paint(win.viewport.scene, PaintTool, name=name, recipe=recipe):
+        win._activate_tool("paint")
 
 
 def _rename_paint(old, new) -> None:
@@ -1441,23 +1421,12 @@ def palette_items(view, win) -> list:
 
 def _recent_look(key):
     """(hex, image path, name) of a bundled or kept material, from its key."""
-    from views import tray
     kind, _, rest = key.partition(":")
     try:
-        if kind == "ral" and tray._RAL_FILE.exists():
-            data = json.loads(tray._RAL_FILE.read_text(encoding="utf-8"))
-            for fam in data.get("families", []):
-                for c in fam.get("colors", []):
-                    if c["code"] == rest:
-                        rgb = [v / 255.0 if max(c["rgb"]) > 1 else v for v in c["rgb"]]
-                        return _hex(rgb), None, "%s %s" % (c["code"], tray._ral_name(c))
-        elif kind == "lib":
-            cid, _, idx = rest.rpartition(":")
-            data = json.loads((tray._TEX_DIR / "library.json").read_text(encoding="utf-8"))
-            for cat in data.get("categories", []):
-                if cat["id"] == cid:
-                    it = cat["items"][int(idx)]
-                    return "", str(tray._TEX_DIR / "library" / it["file"]), it["name"]
+        if kind in ("ral", "lib"):
+            item = _catalogue().get(key)
+            if item:
+                return item["hex"], item["thumb"], item["name"]
         elif kind == "my":
             e = _settings_json(_MINE_KEY, [])[int(rest)]
             tex = (e.get("texture") or {}).get("path")

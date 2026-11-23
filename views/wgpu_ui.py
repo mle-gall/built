@@ -1569,37 +1569,12 @@ def _component_verb(win, view, verb, key) -> None:
 
 def _paint_with(win, key) -> None:
     """Apply a material from the strip or the Library: Paint becomes active."""
-    import json
-    from views import tray
-    panel = getattr(getattr(win, "tray", None), "materials", None)
-    if panel is None:
-        return
+    from views.wgpu_library import _catalogue, _pick_paint
     kind, _, rest = key.partition(":")
     if kind == "m":
-        mat = (getattr(win.viewport.scene, "materials", None) or {}).get(rest)
-        if mat is None:
-            return
-        tex = getattr(mat, "texture", None)
-        if tex and tex.get("path"):
-            panel._apply_texture(tex["path"], sw=tex.get("sw"), sh=tex.get("sh"), name=mat.name, opacity=mat.opacity)
-        elif mat.color:
-            panel._apply_color(tuple(mat.color), name=mat.name)
-    elif kind == "ral" and tray._RAL_FILE.exists():
-        data = json.loads(tray._RAL_FILE.read_text(encoding="utf-8"))
-        for fam in data.get("families", []):
-            for c in fam.get("colors", []):
-                if c["code"] == rest:
-                    panel._apply_color(c["rgb"], "%s %s" % (c["code"], tray._ral_name(c)))
-                    return
-    elif kind == "lib":
-        cid, _, idx = rest.rpartition(":")
-        data = json.loads((tray._TEX_DIR / "library.json").read_text(encoding="utf-8"))
-        for cat in data.get("categories", []):
-            if cat["id"] == cid:
-                it = cat["items"][int(idx)]
-                panel._apply_texture(str(tray._TEX_DIR / "library" / it["file"]), sw=it.get("sw"), sh=it.get("sh"),
-                                     name=it["name"], opacity=it.get("opacity"))
-                return
+        _pick_paint(win, name=rest)
+    elif item := _catalogue().get(key):
+        _pick_paint(win, recipe=item["recipe"])
 
 
 UNIT_TEXT = {"m2": "m²", "m3": "m³", "m": "m", "und": "u", "kg": "kg"}
