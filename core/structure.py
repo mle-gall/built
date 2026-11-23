@@ -321,6 +321,10 @@ def bootstrap(scene, registry):
     both kinds of residue. Null-class filing never edits existing records.
     Linked placements get virtual membership and are never filed by the host.
     """
+    from core import doc_model
+    if doc_model.ENABLED:
+        from ingetrazo_core import structure_proposal
+        return structure_proposal(scene, registry)
     nodes, conflicts, filing = {}, [], {}
     by_tag = defaultdict(list)
     source_paths = {}
