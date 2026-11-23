@@ -185,6 +185,7 @@ def draw_annotations(painter, scene, camera, logical_size, *, annotations_only=F
             layout._draw_geo_surfaces(painter)
             layout._draw_geo_paths(painter)
             layout._draw_geo_points(painter)
+            DocumentInteraction._draw_image_outlines(layout, painter)
         layout._draw_dimensions(painter)
         layout._draw_text_labels(painter)
     finally:

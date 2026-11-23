@@ -24,6 +24,28 @@ class DocumentController(DocumentInteraction, WidgetShim):
     def mapFromGlobal(self, point):
         return self.keys_stand_in.mapFromGlobal(point)
 
+    def upload_terrain(self, terrain):
+        self._reference_revision = getattr(self, '_reference_revision', 0) + 1
+        self.update()
+
+    def upload_photo_mesh(self, mesh, images=None):
+        if mesh is not None and images is not None:
+            mesh.images = images
+        self._reference_revision = getattr(self, '_reference_revision', 0) + 1
+        self.update()
+
+    def release_photo_textures(self):
+        self._reference_revision = getattr(self, '_reference_revision', 0) + 1
+        self.update()
+
+    def max_texture_size(self):
+        renderer = getattr(self.keys_stand_in, 'renderer', None)
+        return renderer.max_texture_size() if renderer is not None else 4096
+
+    def _photo_showing(self):
+        mesh = getattr(self.scene, 'photo_mesh', None)
+        return bool(mesh and mesh.visible and mesh.triangle_count and self.scene.entity_visible(mesh))
+
     def render_image(self, width_px, height_px=None, overlays=True, annotations_only=False,
                      sharp_shadows=False, transparent=False, crop_to_frame=False):
         if crop_to_frame and height_px is None:

@@ -511,3 +511,76 @@ def test_export_shadow_map_resolves_the_ground_shadow_edge(native):
         return np.count_nonzero((r == g) & (g == b) & (r > 65) & (r < 245))
     assert 0 < transition(sharp) < transition(normal)
     np.testing.assert_array_equal(normal, frame(False))
+
+
+@pytest.mark.parametrize('layer', ['image', 'map', 'terrain', 'photo'])
+@pytest.mark.parametrize('aa', [False, True])
+def test_reference_imagery_in_live_and_export_frames(native, layer, aa, tmp_path):
+    from types import SimpleNamespace
+    from PySide6.QtGui import QColor, QImage
+    from ingetrazo_core import Vec3, Matrix4
+    from core.image_plane import ImagePlane
+    from georef.datum import SceneDatum
+    from georef.tiles import TileLayer, PRESETS
+    from georef.terrain import TerrainObject
+    from georef.photomesh import PhotoMesh, PhotoMaterial
+    from views.wgpu_references import sync
+
+    v, i, b, c, rows = synthetic_pack()
+    rows['info'][:, 2] = 1
+    native.set_scene(tuple(a.view(np.uint8).ravel() for a in (v, i, b, c)),
+                     rows.view(np.uint8).ravel())
+    style = dict(sky=False, edges=False, profiles=False)
+    native.set_style(style)
+    native.set_antialias(aa)
+    baseline = capture(native)
+    scene = Scene()
+    adapter = SimpleNamespace(scene=scene, renderer=native, source_viewport=None,
+                              packed=SimpleNamespace(origin=(0., 0., 0.)))
+    adapter._shared = adapter
+    image = QImage(8, 8, QImage.Format_RGBA8888)
+    image.fill(QColor(20, 225, 60))
+    positions = [(-.8, -.8, 0.), (.8, -.8, 0.), (.8, .8, .1), (-.8, .8, .1)]
+    uvs = [(0, 1), (1, 1), (1, 0), (0, 0)]
+    triangles = [(0, 1, 2), (0, 2, 3)]
+    if layer == 'image':
+        for y in range(4):
+            for x in range(8):
+                image.setPixelColor(x, y, QColor(230, 55, 10))
+        path = tmp_path / 'plan.png'
+        assert image.save(str(path))
+        scene.image_planes.append(ImagePlane(str(path), Vec3(-.8, -.8, 0.),
+                                             Vec3(1.6, 0, 0), Vec3(0, 1.6, 0)))
+    elif layer == 'map':
+        scene.georef = SceneDatum(-12.1, -77.05)
+        tiles = scene.tile_layer = TileLayer(next(iter(PRESETS.values())), radius_m=4)
+        for x, y in tiles.flat_tiles(scene.georef):
+            tiles.images[(x, y, tiles.zoom)] = image
+    elif layer == 'terrain':
+        terrain = scene.terrain = TerrainObject([Vec3(*p) for p in positions],
+                                                uvs, triangles, (0, 0, 1, 1, 16))
+        terrain.texture_image = image
+    else:
+        survey = scene.photo_mesh = PhotoMesh(np.array(positions), np.array(uvs),
+                                              np.array(triangles), [PhotoMaterial('scan', None, 0, 2)])
+        survey.images[0] = image
+    sync(adapter, style)
+    live = capture(native)
+    view = Matrix4()
+    view.translate(0, 0, -3)
+    projection = Matrix4()
+    projection.ortho(-1, 1, -1, 1, .1, 10)
+    pixels = native.render_image(64, 64, view.data(), projection.data(), style)
+    export = np.frombuffer(bytes(pixels), np.uint8).reshape(64, 64, 4)
+    for frame in (live, export):
+        green = frame[46, 32, :3].astype(int)
+        assert green[1] > 180 and green[0] < 40, green
+        if layer == 'image':
+            assert frame[18, 32, 0] > 200
+    if layer == 'image':
+        scene.image_planes.clear()
+    else:
+        {'terrain': scene.terrain, 'map': scene.tile_layer,
+         'photo': scene.photo_mesh}[layer].visible = False
+    sync(adapter, style)
+    np.testing.assert_array_equal(capture(native), baseline)

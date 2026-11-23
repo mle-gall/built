@@ -718,6 +718,8 @@ class MetalView(ViewNavigation):
                 if len(colors) == getattr(self, '_resident_count', None):
                     self.renderer.set_overrides(colors)
                     self._tint_signature = signature
+        from views.wgpu_references import sync as sync_references
+        sync_references(self, getattr(self, '_frame_style', None) or {})
         future = getattr(self, '_inference_future', None)
         if future is not None and future.done():
             self.inference_index = future.result()
@@ -869,16 +871,8 @@ class MetalView(ViewNavigation):
                                      focus=source.camera.target.toTuple())
         if self.packed.model_translations is not None:
             self._sync_scene_camera()
-        if self.renderer is None:
-            import ingetrazo_render
-            from core import black_box
-            black_box.install_panic_log(ingetrazo_render)
-            self.renderer = ingetrazo_render.Renderer(
-                int(self.winId()), max(1, self.width()), max(1, self.height()), 1.)
-            self.packed.upload(self.renderer)
-            self._scene_dirty = False
-        elif self._scene_dirty:
-            self._upload()
+        if self.renderer is None or self._scene_dirty:
+            self._upload(force=True)
         camera = copy(self.camera if self.packed.model_translations is not None else source.camera)
         camera.aspect = width_px / height_px
         view, projection = camera.view_matrix(), camera.projection_matrix()
@@ -887,6 +881,8 @@ class MetalView(ViewNavigation):
                                 edit_rest_fade=getattr(source, 'edit_rest_fade', .75),
                                 soft_shadows=getattr(source, '_soft_shadows', 0),
                                 camera=camera)
+        from views.wgpu_references import sync as sync_references
+        sync_references(self, payload)
         payload['transparent_background'] = transparent
         payload['edge_width'] = float(getattr(source, '_export_edge_px', 1))
         payload['profile_width'] = float(getattr(source, '_export_profile_px', 1))
@@ -920,7 +916,7 @@ class MetalView(ViewNavigation):
             self.renderer.set_section_geometry(data)
             pixels = bytes(self.renderer.render_image(
                 width_px, height_px, tuple(view.data()), tuple(projection.data()), payload,
-                rows.view(np.uint8).reshape(-1),
+                rows.view(np.uint8).reshape(-1) if len(rows) else None,
                 **({'sharp_shadows': True} if sharp_shadows and payload['shadows'] else {}),
                 # A far clip set by hand; otherwise reverse-Z reaches to
                 # infinity (stand-in renderers need not know the flag).

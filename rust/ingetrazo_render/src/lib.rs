@@ -9,6 +9,7 @@ mod axes;
 mod sections;
 mod preview;
 mod lines;
+mod references;
 mod sun;
 mod textures;
 // R-look: isolated style and background passes.
@@ -148,6 +149,7 @@ struct Renderer {
     lines: lines::Lines,
     face_marks: preview::Preview,
     sun: sun::Sun,
+    references: references::References,
     ghost_geometry: preview::Preview,
     ghost_objects: preview::Preview,
     surface: wgpu::Surface<'static>,
@@ -571,6 +573,7 @@ impl Renderer {
             face_marks,
             ghost_geometry,
             ghost_objects,
+            references: references::References::new(&device, format),
             sun,
             capture_next: false,
             captured: None,
@@ -1258,6 +1261,12 @@ impl Renderer {
     }
     /// Pack classification avoids OIT and depth resolves for opaque scenes.
     fn set_material_transparency(&mut self, enabled: bool) { self.material_transparency = enabled; }
+    fn set_reference_layers(&mut self, order: Vec<String>, updates: Vec<references::Upload<'_>>) -> PyResult<()> {
+        self.references.replace(&self.device, &self.queue, &self.camera, order, updates)
+    }
+
+    fn max_texture_size(&self) -> u32 { self.device.limits().max_texture_dimension_2d }
+
     /// World-space tool feedback, cleared on commit/cancel.
     fn set_preview_mesh(&mut self, triangles: PyReadonlyArray1<'_, u8>, edges: PyReadonlyArray1<'_, u8>) -> PyResult<()> {
         self.preview.upload(&self.device, triangles.as_slice()?, edges.as_slice()?).map_err(PyValueError::new_err)
@@ -1830,7 +1839,14 @@ impl Renderer {
             drop(pass);
             }
             if msaa && !self.pick_pending {
-                self.aa.draw(&mut e, &color, s, self.style, self.edges, self.look.data[6][0] > 0., self.multi, self.queries.as_ref(), Some(edge_only), self.sections.count > 0 || self.preview.active() || self.face_marks.active() || self.ghost_geometry.active() || self.ghost_objects.active() || self.lines.active_layer(true) || (self.look.data[9][0] > 0. && self.material_transparency), &self.axes);
+                self.aa.draw(&mut e, &color, s, self.style, self.edges, self.look.data[6][0] > 0., self.multi, self.queries.as_ref(), Some(edge_only), self.references.active() || self.sections.count > 0 || self.preview.active() || self.face_marks.active() || self.ghost_geometry.active() || self.ghost_objects.active() || self.lines.active_layer(true) || (self.look.data[9][0] > 0. && self.material_transparency), &self.axes);
+            }
+            if !edge_only {
+                if msaa {
+                    self.references.draw(&mut e, &self.aa.color_view(), &self.aa.depth_view(), Some(&color));
+                } else {
+                    self.references.draw(&mut e, &color, &depth, None);
+                }
             }
             if !edge_only && self.sun.enabled && self.style != 1 && self.style != 4 {
                 if msaa { self.aa.resolve_depth(&self.device, &mut e, &depth, None); }
