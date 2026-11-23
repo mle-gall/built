@@ -388,7 +388,6 @@ mod tests {
         let half_h = c.distance * (c.fov_deg.to_radians() / 2.0).tan();
         assert!((half_h - 10.0).abs() < 1e-9);
         assert_eq!(c.up, DVec3::Y);
-        let _ = PI;
     }
 }
 
