@@ -12,6 +12,7 @@
 //! ```
 
 mod keys;
+#[cfg(target_os = "macos")]
 mod menu;
 mod native;
 mod python;
@@ -181,6 +182,7 @@ struct App {
     wins: Vec<(WindowId, Win)>,
     /// The window in front (menu commands, opened files, script steps).
     focused: Option<WindowId>,
+    #[cfg(target_os = "macos")]
     _menus: Option<menu::Menus>,
     modifiers: ModifiersState,
     steps: VecDeque<Step>,
@@ -194,6 +196,7 @@ struct App {
     /// launch from Finder: the odoc event comes before `resumed`).
     pending_opens: Vec<PathBuf>,
     /// The recent files the File menu shows, as last sent.
+    #[cfg(target_os = "macos")]
     recent_sig: Option<Vec<String>>,
     /// Files given on the command line: AppKit hands them to the Open
     /// With hook too (as odoc), which must not open them a second time.
@@ -533,6 +536,7 @@ impl App {
         let window_handle = window.window_handle().map_err(|e| e.to_string())?.as_raw();
         let display_handle = window.display_handle().map_err(|e| e.to_string())?.as_raw();
         let (window_id, display, platform) = match (window_handle, display_handle) {
+            #[cfg(target_os = "macos")]
             (RawWindowHandle::AppKit(w), RawDisplayHandle::AppKit(_)) => (w.ns_view.as_ptr() as usize, 0, "cocoa"),
             (RawWindowHandle::Win32(w), RawDisplayHandle::Windows(_)) => (w.hwnd.get() as usize, 0, "windows"),
             (RawWindowHandle::Wayland(w), RawDisplayHandle::Wayland(d)) => (w.surface.as_ptr() as usize, d.display.as_ptr() as usize, "wayland"),
@@ -575,6 +579,7 @@ impl App {
             event_loop.set_allows_automatic_window_tabbing(false);
         }
         let id = self.make_window(event_loop)?;
+        #[cfg(target_os = "macos")]
         match menu::build() {
             Ok(m) => self._menus = Some(m),
             Err(e) => eprintln!("[built] menu bar: {e}"),
@@ -670,6 +675,7 @@ impl App {
                 let _ = w.window.drag_window();
             }
         }
+        #[cfg(target_os = "macos")]
         if let Some(recent) = extra.recent {
             if self.recent_sig.as_ref() != Some(&recent) {
                 if let Some(m) = &self._menus {
@@ -1054,12 +1060,14 @@ fn main() {
         }
     };
     let proxy = event_loop.create_proxy();
+    #[cfg(target_os = "macos")]
     {
         let proxy = proxy.clone();
         muda::MenuEvent::set_event_handler(Some(move |e: muda::MenuEvent| {
             let _ = proxy.send_event(UserEvent::Menu(e.id().0.clone()));
         }));
     }
+    #[cfg(target_os = "macos")]
     {
         // Finder's Open With / double-click / Dock drop, and Quit from the
         // Dock: AppKit asks winit's delegate, which hands them on here.
@@ -1086,6 +1094,7 @@ fn main() {
         args,
         wins: Vec::new(),
         focused: None,
+        #[cfg(target_os = "macos")]
         _menus: None,
         modifiers: ModifiersState::empty(),
         steps: steps.into(),
@@ -1095,6 +1104,7 @@ fn main() {
         exit_code: 0,
         cursors: HashMap::new(),
         pending_opens: Vec::new(),
+        #[cfg(target_os = "macos")]
         recent_sig: None,
         cli_files: Vec::new(),
         started: false,
