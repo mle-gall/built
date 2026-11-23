@@ -103,13 +103,12 @@ def test_pick_callback_only_for_original_revision(window):
 
 
 def test_classic_plugin_entry_points(window, monkeypatch):
-    from views import wgpu_ui
-    monkeypatch.setattr(wgpu_ui, "ENABLED", False)
     python_console.PythonConsoleTool().on_activate(window.viewport)
     assert isinstance(window._python_console, python_console.PythonConsoleDialog)
     window._python_console.close()
 
     app = ExtensionApp(window, "render_blender")
+    monkeypatch.setattr(window._doc, "_renderer_wgpu", False)
     panels = []
     monkeypatch.setattr(app, "add_panel", lambda title, panel, **kw: panels.append(panel))
     monkeypatch.setattr(app, "add_menu_action", lambda *a, **kw: None)

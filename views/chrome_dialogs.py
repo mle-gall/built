@@ -90,9 +90,6 @@ def view_of(win):
 def live(parent):
     """The Metal view whose chrome can show a sheet for ``parent`` now,
     or ``None`` (then the caller uses Qt)."""
-    from views import wgpu_ui
-    if not wgpu_ui.ENABLED:
-        return None
     if QGuiApplication.platformName() in ("offscreen", "minimal"):
         return None
     win = window_of(parent)
@@ -187,7 +184,8 @@ def ask(parent, title: str, text: str, buttons, *, default=None, cancel=None,
     left (macOS's «Don't Save»). ``tone``: question, info, warning, error."""
     view = live(parent)
     if view is None:
-        return None
+        print(f"Built could not show the question: {title}", file=sys.stderr)
+        return cancel
     win = window_of(parent)
     sheet = _Sheet(title, text, tone, _roles(buttons, default, cancel, discard),
                    default, cancel, discard, True)
@@ -215,7 +213,8 @@ def ask(parent, title: str, text: str, buttons, *, default=None, cancel=None,
         dog.stop()
         _pop(win, sheet)
     if sheet.answer is _FALLBACK:
-        return None
+        win.viewport.flash_status(f"Built could not draw the question: {title}")
+        return cancel
     if sheet.answer is None:
         return sheet.cancel     # the loop was ended from outside (the app quit)
     return sheet.answer
@@ -431,6 +430,8 @@ _STD = [  # (button, label, accept?) in the order they read, left to right
 
 def _standard(parent, tone, title, text, buttons, default):
     from core.i18n import tr
+    if live(parent) is None:
+        return None
     chosen = [(b, label, accept) for b, label, accept in _STD if buttons & b]
     if not chosen:
         chosen = [(QMessageBox.Ok, "OK", True)]

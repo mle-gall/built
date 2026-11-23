@@ -165,7 +165,7 @@ def test_closing_its_tab_saves_the_project(win, tmp_path, monkeypatch):
     a = _new_tab(win, 3, path)
     win.viewport = _pane(win)
     _new_tab(win, 2, tmp_path / "b.built")
-    monkeypatch.setattr(QMessageBox, "exec", lambda box: QMessageBox.Save)
+    monkeypatch.setattr("views.chrome_dialogs.ask", lambda *a, **kw: "save")
     assert win.close_document(a)
     assert _edges_in_file(path) == 3
     assert a not in win.documents()
@@ -177,7 +177,7 @@ def test_quitting_saves_each_project_with_a_view_in_front_of_one(
     _new_tab(win, 3, a_path)
     win.viewport = _pane(win)
     _new_tab(win, 2, b_path)
-    monkeypatch.setattr(QMessageBox, "exec", lambda box: QMessageBox.SaveAll)
+    monkeypatch.setattr("views.chrome_dialogs.ask", lambda *a, **kw: "save")
     assert win._confirm_quit()
     assert _edges_in_file(a_path) == 3
     assert _edges_in_file(b_path) == 2
@@ -283,7 +283,7 @@ def test_a_workspace_is_not_asked_about_another_tab(win, tmp_path,
             return True
 
     assert win.enter_workspace(Workspace())
-    monkeypatch.setattr(QMessageBox, "exec", lambda box: QMessageBox.Save)
+    monkeypatch.setattr("views.chrome_dialogs.ask", lambda *a, **kw: "save")
     assert not win.close_document(a)
     assert a in win.documents()
     assert win.leave_workspace()
@@ -355,7 +355,7 @@ def test_each_tab_saves_its_own_file(win, tmp_path):
 def test_closing_a_tab_behind_saves_that_tab(win, tmp_path, monkeypatch):
     a = _new_tab(win, 3, tmp_path / "a.built")
     b = _new_tab(win, 2, tmp_path / "b.built")
-    monkeypatch.setattr(QMessageBox, "exec", lambda box: QMessageBox.Save)
+    monkeypatch.setattr("views.chrome_dialogs.ask", lambda *a, **kw: "save")
     assert win.close_document(a)
     assert _edges_in_file(a.path) == 3
     assert not b.path.exists()
@@ -369,7 +369,7 @@ def test_quitting_with_one_changed_tab_behind_saves_that_tab(win, tmp_path,
     win._on_save()
     assert not win._doc_is_dirty(b)
     assert win._doc_is_dirty(a)
-    monkeypatch.setattr(QMessageBox, "exec", lambda box: QMessageBox.Save)
+    monkeypatch.setattr("views.chrome_dialogs.ask", lambda *a, **kw: "save")
     assert win._confirm_quit()
     assert _edges_in_file(a.path) == 3
     assert _edges_in_file(b.path) == 2
@@ -380,7 +380,7 @@ def test_quitting_saves_all_each_to_its_own_file(win, tmp_path, monkeypatch):
     b = _new_tab(win, 2, tmp_path / "b.built")
     c = _new_tab(win, 5, tmp_path / "c.built")
     win.activate_document(b)
-    monkeypatch.setattr(QMessageBox, "exec", lambda box: QMessageBox.SaveAll)
+    monkeypatch.setattr("views.chrome_dialogs.ask", lambda *a, **kw: "save")
     assert win._confirm_quit()
     assert [_edges_in_file(d.path) for d in (a, b, c)] == [3, 2, 5]
 
@@ -390,7 +390,7 @@ def test_cancelling_a_save_as_on_quit_stays_and_writes_nothing_wrong(
     from views import main_window as mw
     a = _new_tab(win, 3, tmp_path / "a.built")
     _new_tab(win, 2)                                # untitled: Save As
-    monkeypatch.setattr(QMessageBox, "exec", lambda box: QMessageBox.SaveAll)
+    monkeypatch.setattr("views.chrome_dialogs.ask", lambda *a, **kw: "save")
     monkeypatch.setattr(mw.file_dialogs, "getSaveFileName",
                         lambda *a, **k: ("", ""))
     assert not win._confirm_quit()
@@ -407,7 +407,7 @@ def test_a_failed_save_on_quit_stays(win, tmp_path, monkeypatch):
         raise OSError("disk full")
     monkeypatch.setattr(mw.igz_format, "save_scene", fail)
     monkeypatch.setattr(QMessageBox, "critical", lambda *a, **k: None)
-    monkeypatch.setattr(QMessageBox, "exec", lambda box: QMessageBox.SaveAll)
+    monkeypatch.setattr("views.chrome_dialogs.ask", lambda *a, **kw: "save")
     assert not win._confirm_quit()
     assert win._doc_is_dirty(a)
     assert not path.exists()

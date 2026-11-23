@@ -66,9 +66,7 @@ def test_a_metre_model_is_as_before(monkeypatch):
 
 def test_classic_insert_uses_qt_font_control(monkeypatch):
     from PySide6.QtWidgets import QFontComboBox
-    from views import wgpu_ui
     from views.main_window import MainWindow
-    monkeypatch.setattr(wgpu_ui, "ENABLED", False)
     win = MainWindow()
     seen = []
 

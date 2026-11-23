@@ -83,9 +83,6 @@ def embeds(win) -> bool:
     """Whether ``win``'s sheets open as the workspace (else the Qt window)."""
     if FORCE is not None:
         return FORCE
-    from views import wgpu_ui
-    if not wgpu_ui.ENABLED:
-        return False
     if is_shell(win):
         return True
     from PySide6.QtGui import QGuiApplication

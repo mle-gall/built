@@ -4276,12 +4276,10 @@ class MainWindow(WorksessionMixin, QMainWindow):
         actions.append(import_menu)
 
 
-        from views import wgpu_ui
-        if wgpu_ui.ENABLED:
-            from views.wgpu_deliveries import export_form
-            delivery_export = QAction(tr("Export…"), self)
-            delivery_export.triggered.connect(lambda: export_form(self, one_off=True))
-            actions.append(delivery_export)
+        from views.wgpu_deliveries import export_form
+        delivery_export = QAction(tr("Export…"), self)
+        delivery_export.triggered.connect(lambda: export_form(self, one_off=True))
+        actions.append(delivery_export)
         export_menu = QMenu(tr("Export"), self)
         for label, tip, handler in (
             (tr("IFC (BIM)…"),
@@ -4969,25 +4967,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             [("drop", tr("Let It Go")), ("cancel", tr("Cancel")),
              ("keep", tr("Keep in File"))],
             default="keep", cancel="cancel")
-        if answer is not None:
-            return {"keep": True, "drop": False}.get(answer)
-        box = QMessageBox(self)
-        box.setIcon(QMessageBox.Question)
-        box.setWindowTitle(tr("Replace Component"))
-        box.setText(tr("No copy of {names} will be left in the model.",
-                       names=names))
-        box.setInformativeText(tr(
-            "Keep it in the file, to place it or swap back to it later?"))
-        keep = box.addButton(tr("Keep in File"), QMessageBox.AcceptRole)
-        drop = box.addButton(tr("Let It Go"), QMessageBox.DestructiveRole)
-        box.addButton(QMessageBox.Cancel)
-        box.setDefaultButton(keep)
-        box.exec()
-        if box.clickedButton() is keep:
-            return True
-        if box.clickedButton() is drop:
-            return False
-        return None
+        return {"keep": True, "drop": False}.get(answer)
 
     def keep_selected_components(self, keep: bool = True) -> None:
         """Keep in File, on or off, for every component definition the
@@ -11613,24 +11593,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             [("cancel", tr("Cancel")), ("whole", tr("Whole model")),
              ("part", tr("Only the selection"))],
             default="part", cancel="cancel")
-        if answer is not None:
-            return {"part": sel, "whole": None}.get(answer, False)
-        box = QMessageBox(
-            QMessageBox.Question, tr("Export"),
-            tr("Export the whole model, or only what is selected?"),
-            QMessageBox.NoButton, self)
-        box.setOption(QMessageBox.Option.DontUseNativeDialog, True)
-        whole = box.addButton(tr("Whole model"), QMessageBox.AcceptRole)
-        part = box.addButton(tr("Only the selection"), QMessageBox.AcceptRole)
-        box.addButton(QMessageBox.Cancel).setText(tr("Cancel"))
-        box.setDefaultButton(part)
-        box.exec()
-        clicked = box.clickedButton()
-        if clicked is part:
-            return sel
-        if clicked is whole:
-            return None
-        return False
+        return {"part": sel, "whole": None}.get(answer, False)
 
     def _on_export_dae(self) -> None:
         """COLLADA export — the 'open it back in the original program' bridge. Copies the
@@ -11913,43 +11876,16 @@ class MainWindow(WorksessionMixin, QMainWindow):
         if not self._is_dirty():
             return True
         # The Built UI asks on its own sheet (Enter saves, Esc stays, ⌘D
-        # lets the changes go); Qt asks when the chrome is not on screen.
+        # lets the changes go).
         answer = _dialogs.ask(
             self, prompt, tr("Unsaved changes will be lost."),
             [("discard", tr("Don't Save")), ("cancel", tr("Cancel")),
              ("save", tr("Save"))],
             default="save", cancel="cancel", discard="discard")
-        if answer is not None:
-            if answer == "save":
-                self._on_save()
-                return not self._is_dirty()
-            return answer == "discard"
-        # Built by hand rather than with QMessageBox.question: on macOS
-        # that is a NATIVE alert, which draws «Don't Save» as a red
-        # destructive button — and under the dark scheme main.py forces,
-        # red text on a black button, barely readable. Qt's own dialog
-        # wears the app's palette, like every other window here.
-        box = QMessageBox(
-            QMessageBox.Question, tr("Unsaved changes"),
-            tr("{prompt}\n\nUnsaved changes will be lost.", prompt=prompt),
-            QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel,
-            self)
-        box.setOption(QMessageBox.Option.DontUseNativeDialog, True)
-        # main.py installs a Qt translator that already names the standard
-        # buttons in the app language, but only when the qtbase_<lang>.qm
-        # file is found, and «Don't Save» is worded differently per
-        # platform: name all three through our own catalog so they read
-        # the same everywhere.
-        for button, text in ((QMessageBox.Save, "Save"),
-                             (QMessageBox.Discard, "Don't Save"),
-                             (QMessageBox.Cancel, "Cancel")):
-            box.button(button).setText(tr(text))
-        box.setDefaultButton(QMessageBox.Save)
-        answer = box.exec()
-        if answer == QMessageBox.Save:
+        if answer == "save":
             self._on_save()
             return not self._is_dirty()
-        return answer == QMessageBox.Discard
+        return answer == "discard"
 
     # "Saved" is recorded as the scene version at that moment (as every
     # caller and test has always written it) and kept as the CONTENT version:
@@ -12072,7 +12008,6 @@ class MainWindow(WorksessionMixin, QMainWindow):
             if dirty[0] is not self._doc:
                 self.activate_document(dirty[0])
             return self._confirm_discard(tr("Quit Built?"))
-        names = "\n".join("• " + d.display_name() for d in dirty)
         checklist = [(d.display_name(), True) for d in dirty]
         answer = _dialogs.ask(
             self, tr("Which projects should be saved?"),
@@ -12080,25 +12015,8 @@ class MainWindow(WorksessionMixin, QMainWindow):
             [("discard", tr("Don't Save")), ("cancel", tr("Cancel")),
              ("save", tr("Save Selected"))],
             default="save", cancel="cancel", discard="discard", checklist=checklist)
-        if answer is not None:
-            selected = [d for d, (_, checked) in zip(dirty, checklist) if checked]
-            return self._save_all_or_stay(selected, answer)
-        box = QMessageBox(
-            QMessageBox.Question, tr("Unsaved changes"),
-            tr("{n} projects have unsaved changes:\n\n{names}\n\n"
-               "Save them before quitting?", n=len(dirty), names=names),
-            QMessageBox.SaveAll | QMessageBox.Discard | QMessageBox.Cancel,
-            self)
-        box.setOption(QMessageBox.Option.DontUseNativeDialog, True)
-        for button, text in ((QMessageBox.SaveAll, "Save All"),
-                             (QMessageBox.Discard, "Don't Save"),
-                             (QMessageBox.Cancel, "Cancel")):
-            box.button(button).setText(tr(text))
-        box.setDefaultButton(QMessageBox.SaveAll)
-        answer = box.exec()
-        return self._save_all_or_stay(
-            dirty, {QMessageBox.Discard: "discard",
-                    QMessageBox.SaveAll: "save"}.get(answer, "cancel"))
+        selected = [d for d, (_, checked) in zip(dirty, checklist) if checked]
+        return self._save_all_or_stay(selected, answer)
 
     def _save_all_or_stay(self, dirty, answer: str) -> bool:
         if answer == "discard":

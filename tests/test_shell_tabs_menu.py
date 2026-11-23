@@ -442,7 +442,6 @@ def test_with_the_chrome_the_menu_goes_to_it(host, kinds, monkeypatch):
     monkeypatch.setattr(tools, "pick_group", lambda x, y: box)
     monkeypatch.setattr(tools, "pick_edge", lambda x, y: None)
     monkeypatch.setattr(tools, "pick_face", lambda x, y: None)
-    monkeypatch.setattr(wgpu_ui, "ENABLED", True)
     stub = StubRenderer()
     view.renderer = stub
     view._ui_attached = True

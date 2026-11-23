@@ -13,8 +13,6 @@ import os
 from PySide6.QtCore import Qt, QTimer, QSize
 from PySide6.QtGui import QImage, QKeySequence
 
-ENABLED = True
-
 # What gets a button (Maxence 2026-11-22): the work itself and the states
 # you need to see. Commands every app shares a shortcut for (Save, Undo,
 # Redo, Cut/Copy/Paste, Select all, New/Open, Print, Preferences) get none:

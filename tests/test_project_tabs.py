@@ -344,15 +344,14 @@ def test_quitting_asks_once_for_every_modified_project(win, monkeypatch):
     win._on_new()                                  # a clean third one
     boxes = []
 
-    def answer(box):
-        boxes.append(box.text())
-        return QMessageBox.Cancel
-    monkeypatch.setattr(QMessageBox, "exec", answer)
+    def answer(*args, checklist, **kw):
+        boxes.append(checklist)
+        return "cancel"
+    monkeypatch.setattr("views.chrome_dialogs.ask", answer)
     assert not win._confirm_quit()
     assert len(boxes) == 1
-    assert boxes[0].count("Untitled") == 2
-    monkeypatch.setattr(QMessageBox, "exec",
-                        lambda box: QMessageBox.Discard)
+    assert len(boxes[0]) == 2 and all("Untitled" in label and checked for label, checked in boxes[0])
+    monkeypatch.setattr("views.chrome_dialogs.ask", lambda *a, **kw: "discard")
     assert win._confirm_quit()
 
 

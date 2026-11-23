@@ -208,7 +208,6 @@ def test_it_owns_the_keys_but_the_windows_shortcuts(win):
 
 def test_where_the_chrome_cannot_draw_open_says_so(monkeypatch):
     w = Win()
-    monkeypatch.setattr("views.wgpu_ui.ENABLED", False)
     assert not cs.available(w)
     assert not cs.open(w, Fruit())
     assert not cs.shown(w)

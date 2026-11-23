@@ -2,12 +2,12 @@
 import json
 
 from PySide6.QtCore import QSettings
-from views import chrome_dialogs, wgpu_ui
+from views import chrome_dialogs
 
 
 def show(win, title, text, family, bold, italic, size, unit, done, *, depth=None, editable=False, bounds=(4, 96)):
     view = chrome_dialogs.view_of(win)
-    if not wgpu_ui.ENABLED or not getattr(view, "_ui_attached", False):
+    if not getattr(view, "_ui_attached", False):
         return False
     settings = QSettings()
     draft = dict(title=title, text=text, font=family, bold=bold, italic=italic,

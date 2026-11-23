@@ -373,9 +373,8 @@ class PythonConsoleTool(Tool):
 
     def on_activate(self, viewport) -> None:
         window = viewport.window()
-        from views import wgpu_ui
         from core.plugin_panels import open_panel
-        if wgpu_ui.ENABLED and open_panel(window, "python_console"):
+        if open_panel(window, "python_console"):
             return
         dialog = getattr(window, "_python_console", None)
         if dialog is None or not dialog.isVisible():

@@ -318,12 +318,10 @@ def in_shell() -> bool:
 def available(win) -> bool:
     """The chrome can draw a sheet on ``win``: the egui chrome is on and a
     Metal view will draw it (always in the ``built`` shell)."""
-    from views import chrome_dialogs, wgpu_ui
+    from views import chrome_dialogs
     if in_shell() or getattr(chrome_dialogs, "_shell_installed", False):
         # The native shell (or its host under test): its chrome always draws.
         return _view(win) is not None
-    if not wgpu_ui.ENABLED:
-        return False
     from PySide6.QtGui import QGuiApplication
     if QGuiApplication.platformName() in ("offscreen", "minimal"):
         return False

@@ -714,7 +714,6 @@ def action(win, view, vid) -> bool:
 def chrome_menu_available(view) -> bool:
     """Whether this view's chrome draws the right-click menu (the native
     shell, or the Qt app with BUILT_UI=1 on Metal)."""
-    from views import wgpu_ui
     renderer = getattr(view, "renderer", None)
-    return (wgpu_ui.ENABLED and getattr(view, "_ui_attached", False)
+    return (getattr(view, "_ui_attached", False)
             and hasattr(renderer, "ui_set_context_menu") and hasattr(renderer, "ui_over_chrome"))
