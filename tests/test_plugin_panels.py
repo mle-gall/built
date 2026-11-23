@@ -103,9 +103,10 @@ def test_pick_callback_only_for_original_revision(window):
 
 
 def test_classic_plugin_entry_points(window, monkeypatch):
+    flash = MagicMock()
+    monkeypatch.setattr(window.viewport, "flash_status", flash)
     python_console.PythonConsoleTool().on_activate(window.viewport)
-    assert isinstance(window._python_console, python_console.PythonConsoleDialog)
-    window._python_console.close()
+    flash.assert_called_once()
 
     app = ExtensionApp(window, "render_blender")
     monkeypatch.setattr(window._doc, "_renderer_wgpu", False)

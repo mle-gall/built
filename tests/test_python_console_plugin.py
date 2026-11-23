@@ -23,7 +23,7 @@ elif not isinstance(_inst, QApplication):
                 allow_module_level=True)
 
 from plugins.python_console import (                              # noqa: E402
-    PythonConsoleDialog, PythonConsoleTool)
+    ConsolePanel, PythonConsoleTool)
 
 
 @pytest.fixture
@@ -40,9 +40,8 @@ def win():
 
 @pytest.fixture
 def console(win):
-    dlg = PythonConsoleDialog(win.viewport, parent=win)
-    yield dlg
-    dlg.close()
+    from views.extension_api import ExtensionApp
+    return ConsolePanel(ExtensionApp(win, "python_console"), lambda: None)
 
 
 ADD_FACE = ("mesh.add_face([QVector3D(0,0,0), QVector3D(1,0,0), "
@@ -84,7 +83,7 @@ def test_inspection_leaves_no_undo_entry(console, win):
     console._run_code("print(len(mesh.faces))", "<test>")
 
     assert len(history.undo_stack) == depth         # no phantom entry
-    assert "1" in console._output.toPlainText()
+    assert "1" in "\n".join(console.lines)
 
     # ... and it must not have eaten the redo stack either.
     history.undo()
@@ -123,7 +122,7 @@ def test_failing_script_rolls_back_whole(console, win):
 
     assert len(scene.mesh.faces) == faces0          # nothing half-applied
     assert len(win.viewport.history.undo_stack) == depth0
-    out = console._output.toPlainText()
+    out = "\n".join(console.lines)
     assert "RuntimeError" in out and "a medio camino" in out
     # The internal compile-as-expression probe must not leak into the
     # traceback as a chained SyntaxError ("During handling of...").
@@ -149,17 +148,24 @@ def test_scope_rebinds_to_the_current_mesh(console, win):
 
 def test_expression_result_shown_and_kept(console):
     console._run_code("2 + 40", "<test>")
-    assert "42" in console._output.toPlainText()
+    assert "42" in "\n".join(console.lines)
     assert console._scope["_"] == 42
 
 
-def test_one_console_per_window(win):
+def test_one_console_per_document(win, monkeypatch):
+    from unittest.mock import Mock
+    from types import SimpleNamespace
+    from core import plugin_panels
+    view = SimpleNamespace(_ui_attached=True, renderer=Mock(), update=lambda: None)
+    monkeypatch.setattr(win._doc, "stand_in", view)
+    plugin_panels.install(win, [SimpleNamespace(stem="python_console", panel=ConsolePanel)])
     tool = PythonConsoleTool()
     tool.on_activate(win.viewport)
-    first = win._python_console
+    (first,) = view._plugin_bindings.values()
+    first.model.event("prompt", "console_submit", "21 * 2")
     tool.on_activate(win.viewport)
-    assert win._python_console is first
-    first.close()
+    assert list(view._plugin_bindings.values()) == [first] and first.model.lines[-1] == "42"
+    assert view.renderer.ui_plugin_open.call_count == 2
 
 
 def test_showcase_script_produces_real_bim(console, win):
