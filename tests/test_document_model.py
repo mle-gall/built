@@ -616,3 +616,12 @@ def test_sheet_record_edit_rollback_keeps_the_editor_item():
     doc_model.rollback()
     assert sheet.frames[0] is frame
     assert frame.view_key == "scene:Plan"
+
+
+def test_edge_anchor_follows_rewired_endpoint_and_undo():
+    original = [(101, (0., 0., 0.)), (102, (4., 0., 0.))]
+    anchor = N.ElementAnchor.capture("edge", 90, ["part"], original, (1., 0., 0.))
+    rewired = [(103, (8., 0., 0.)), original[0]]
+    assert anchor.position(rewired) == [2., 0., 0.]
+    assert anchor.indexed_weights([103, 101]) == [(1, .75), (0, .25)]
+    assert anchor.position(original) == [1., 0., 0.]

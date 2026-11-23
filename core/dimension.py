@@ -375,6 +375,12 @@ class Dimension(Record):
             holds.append(anchor)
             del holds[:-_MAX_HOLDS]
 
+    def __deepcopy__(self, memo):
+        out = super().__deepcopy__(memo)
+        if self._scene is not None and (scene := self._scene()) is not None:
+            out._scene = weakref.ref(memo.get(id(scene), scene))
+        return out
+
     def _holds_of(self, which: str) -> list:
         holds = getattr(self, "_holds", None)
         if holds is None:

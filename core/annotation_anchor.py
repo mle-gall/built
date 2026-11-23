@@ -271,7 +271,12 @@ def _picked_face(ctx):
             or getattr(viewport, "pick_face_any", None))
     if pick is None or getattr(ctx, "screen", None) is None:
         return None, None
-    hit = pick(ctx.screen.x(), ctx.screen.y())
+    try:
+        hit = pick(ctx.screen.x(), ctx.screen.y())
+    except (AttributeError, RuntimeError):
+        # Scripted tool hosts and a renderer between frames can supply the
+        # snap point before a face pick index is available.
+        return None, None
     face, owner = hit if isinstance(hit, tuple) else (hit, None)
     owner = getattr(owner, "source_occurrence", owner)
     if face is not None and owner is None:
@@ -287,7 +292,8 @@ def picked_attachment(ctx):
         return None
     kind = getattr(getattr(ctx, "snap", None), "kind", None)
     if kind == "endpoint":
-        face, owner = _picked_face(ctx)
+        context = getattr(ctx.snap, "context", None)
+        face, owner = _picked_face(ctx) if context else (None, None)
         if face is not None:
             mesh = scene.loose_mesh if owner is None else owner.mesh
             face = element(mesh, "face", face.key)
