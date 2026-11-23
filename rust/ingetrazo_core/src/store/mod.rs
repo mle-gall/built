@@ -27,6 +27,7 @@ pub mod cow;
 pub mod diff;
 pub(crate) mod drawing;
 mod commands;
+mod erase;
 mod drawing_face;
 mod drawing_plane;
 mod drawing_edges;

@@ -382,7 +382,7 @@ def geometry_steps():
     from core.history import (MakeGroupCommand, ExplodeGroupCommand, SetFaceColorCommand,
                               AddEdgeCommand, DeleteEdgesCommand, DeleteFaceCommand,
                               ExplodeCurvesCommand, TagCurveCommand, PruneOrphanEdgesCommand,
-                              AddFaceCommand, SnapshotCompound)
+                              AddFaceCommand, EraseSelectionCommand, SnapshotCompound)
     from core.protocol import commands
 
     scene = Scene()
@@ -455,6 +455,18 @@ def geometry_steps():
         out.append(state())
         assert h.redo()
         out.append(state())
+    left = mesh.add_face(rectangle(100, 0, 2, 2))
+    left.attrs["color"] = [0.1, 0.2, 0.3]
+    right = mesh.add_face(rectangle(102, 0, 1, 2))
+    edge = next(e for e in mesh.edges if left in e.faces and right in e.faces)
+    scene.selection.add(edge)
+    h.execute(EraseSelectionCommand([edge]))
+    assert not h.last_error and not h.last_rejected and edge not in scene.selection
+    out.append(state())
+    assert h.undo() and edge in mesh.edges
+    out.append(state())
+    assert h.redo() and edge not in mesh.edges
+    out.append(state())
     return out
 
 

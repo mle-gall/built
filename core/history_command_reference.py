@@ -4,6 +4,9 @@
 
 The object mesh, Python document and mixed transactions use these inverses.
 """
+from typing import Optional
+from ingetrazo_core import Vec3 as QVector3D
+
 from core.topology import _key, _loop_edges
 
 
@@ -199,3 +202,250 @@ def divide_drawn_face(m, face):
             break
 
     return swapped
+
+
+def _single_coplanar_pair(faces) -> Optional[tuple]:
+    """The one pair of ``faces`` that face the same way (they share an edge,
+    so that makes them coplanar), or ``None`` when there is no such pair,
+    more than one, or another face lies in their plane too."""
+    pairs = [(a, b) for i, a in enumerate(faces) for b in faces[i + 1:]
+             if QVector3D.dotProduct(a.normal(), b.normal()) > 0.999]
+    if len(pairs) != 1:
+        return None
+    n = pairs[0][0].normal()
+    if any(abs(QVector3D.dotProduct(n, f.normal())) > 0.999
+           for f in faces if f not in pairs[0]):
+        return None
+    return pairs[0]
+
+
+class _LoopIndex:
+    """``{corner keys: [faces with them, in list order]}`` of the mesh as
+    it is now — what the erase used to build over every face — filled only
+    for the keys of ``loops`` (the faces being erased), from the mesh scan.
+    Without a scan (or for many loops) it is that full index."""
+
+    def __init__(self, mesh, loops) -> None:
+        self._d: dict = {}
+        from core import scan_index
+        from core.history_commands import _faces_keyed_like
+        loops = [list(lp) for lp in loops]
+        sc = scan_index.scan(mesh) if 0 < len(loops) <= 256 else None
+        if sc is None:
+            if loops:
+                for f in mesh.faces:
+                    self._d.setdefault(
+                        frozenset(_key(p) for p in f.vertices), []).append(f)
+            return
+        for loop in loops:
+            target = frozenset(_key(p) for p in loop)
+            if target in self._d:
+                continue
+            self._d[target] = [
+                f for f in _faces_keyed_like(mesh, loop, sc)
+                if frozenset(_key(p) for p in f.vertices) == target]
+
+    def get(self, target):
+        return self._d.get(target)
+
+
+class _SegmentIndex:
+    """``seg_faces.get(segment keys)`` of the erase: the faces, in list
+    order AT CONSTRUCTION, whose outer loop runs along that segment (once
+    per run), then the faces :meth:`add` filed since. Built over every face
+    without a scan; with one, only the segments asked for are looked up —
+    candidates near the erased edges' ends at construction, keyed by THAT
+    revision's positions (the scan's), as the full index was."""
+
+    def __init__(self, mesh, endpoints) -> None:
+        from core import scan_index
+        self._full: Optional[dict] = None
+        self._extra: dict = {}
+        from core.history_commands import _KEY_REACH
+        ends = list(endpoints)
+        sc = scan_index.scan(mesh) if len(ends) <= 256 else None
+        self._sc = sc
+        if sc is None:
+            self._full = {}
+            for f in mesh.faces:
+                for ek in _loop_edges(f.vertices):
+                    self._full.setdefault(ek, []).append(f)
+            return
+        # The edge found at an end may be a weld away from the clicked
+        # point; one more key cell covers it.
+        hit: set = set()
+        for a, b in ends:
+            hit.update(sc.faces_meeting(scan_index.box_of((a, b), 2 * _KEY_REACH)))
+        self._cand = sorted(hit)
+        self._loops = dict(zip(self._cand, sc.native.face_loops(self._cand)))
+        self._faces = dict(zip(self._cand, sc.faces(self._cand)))
+        self._ends = [(QVector3D(a), QVector3D(b)) for a, b in ends]
+        self._memo: dict = {}
+
+    def add(self, f) -> None:
+        for ek in _loop_edges(f.vertices):
+            self._extra.setdefault(ek, []).append(f)
+
+    def get(self, ek, default=()):
+        if self._full is not None:
+            base = self._full.get(ek, [])
+        else:
+            base = self._memo.get(ek)
+            if base is None:
+                base = self._memo[ek] = self._lookup(ek)
+        more = self._extra.get(ek, [])
+        if not base and not more:
+            return default
+        return base + more
+
+    def _lookup(self, ek) -> list:
+        sc = self._sc
+        if self._covers(list(ek)):
+            cand, loops, faces = self._cand, self._loops, self._faces
+        else:
+            # A segment away from every erased end (the cascade only asks
+            # for erased edges): every face of the scan.
+            cand = list(range(sc.native.counts()[2]))
+            loops = dict(zip(cand, sc.native.face_loops(cand)))
+            faces = None
+        out = []
+        for i in cand:
+            loop = loops[i]
+            n = len(loop)
+            ks = [sc.tkey(v) for v in loop]
+            for j in range(n):
+                if frozenset((ks[j], ks[(j + 1) % n])) == ek:
+                    out.append(i)
+        if faces is None:
+            return sc.faces(out)
+        return [faces[i] for i in out]
+
+    def _covers(self, keys) -> bool:
+        """Whether every face with a segment of these keys is among the
+        candidates: each key lies within a cell of one erased edge's end
+        (two of the same edge for a two-key segment)."""
+        from core.history_commands import _KEY_REACH
+        def near(k, p) -> bool:
+            return all(abs(k[i] - c) <= _KEY_REACH
+                       for i, c in enumerate((p.x(), p.y(), p.z())))
+        for a, b in self._ends:
+            if all(near(k, a) or near(k, b) for k in keys):
+                return True
+        return False
+
+
+def _soft_faceless_edges(mesh) -> list:
+    """The soft edges bounding no face, in list order (a superset from the
+    scan; every edge without it): what the erase sweeps up."""
+    from core import scan_index
+    sc = scan_index.scan(mesh)
+    if sc is None:
+        return list(mesh.edges)
+    return sc.edges(sc.native.edges_faceless(True))
+
+
+def _loop_has_segment(loop, v0, v1) -> bool:
+    """Whether the vertex loop walks the segment v0–v1 (either way)."""
+    n = len(loop)
+    return any(
+        (loop[i] == v0 and loop[(i + 1) % n] == v1)
+        or (loop[i] == v1 and loop[(i + 1) % n] == v0)
+        for i in range(n))
+
+
+def erase_selected_geometry(cmd, scene):
+    m = scene.mesh
+    # Loop->face lookups through ONE index: _find_face_by_loop scans the
+    # whole mesh per call, and deleting thousands of box-selected faces
+    # froze for ~26 s on a 28k-face mesh (piscina.igz report, round 2).
+    by_loop = _LoopIndex(m, cmd._face_loops)
+    for loop in cmd._face_loops:
+        bucket = by_loop.get(frozenset(_key(p) for p in loop))
+        f = bucket.pop(0) if bucket else None
+        if f is not None:
+            m.remove_face(f)
+            scene.selection.discard(f)
+    # One segment->faces index for the cascade below: the per-edge scan
+    # over every face was O(edges x faces) — deleting a curved tiled
+    # wall (hundreds of curve segments) took 30+ s on an exploded
+    # 28k-face mesh (piscina.igz report). Kept live as faces merge/die.
+    seg_faces = _SegmentIndex(m, cmd._edge_endpoints)
+
+    def _index_face(f) -> None:
+        seg_faces.add(f)
+    dead_faces: set = set()
+    slit_planes: list = []
+    across: list = []
+    for a, b in cmd._edge_endpoints:
+        v0 = m.vertex_at(a)
+        v1 = m.vertex_at(b)
+        edge = m.find_edge(v0, v1) if (v0 is not None and v1 is not None) else None
+        if edge is None:
+            continue
+        faces = list(edge.faces)
+        merged = None
+        if len(faces) == 2 and faces[0] == faces[1]:
+            # Slit edge: ONE face walks it twice — a fence line joining an
+            # inner boundary to the outline turns the ring into a cut-open
+            # walk. Dissolving "the face with itself" deleted the face and
+            # kept the line (ss.igz report). Erasing the line must keep
+            # the face: drop only the edge and re-derive the plane's
+            # regions below (the ring comes back as outer + hole; other
+            # fence pieces survive as free edges).
+            f = faces[0]
+            slit_planes.append((QVector3D(f.vertices[0]), f.normal()))
+            m.remove_edge(edge)
+            scene.selection.discard(edge)
+            continue
+        if len(faces) == 2 and QVector3D.dotProduct(
+            faces[0].normal(), faces[1].normal()
+        ) > 0.999:
+            merged = m.dissolve_coplanar_region(faces)  # reunite the split
+            if merged is not None:
+                dead_faces.update(f.key for f in faces)
+                _index_face(merged)
+        elif len(faces) > 2:
+            # A wall raised against a taller neighbour leaves its inner
+            # side faces on the line too, so the front's split line had
+            # four faces and the cascade took the whole front (#356).
+            # Reunite the one coplanar pair as above; the faces across
+            # the line are re-derived on their plane below, so what
+            # still closes (the jamb above the sill) stays and the
+            # inner partitions, open now, go.
+            pair = _single_coplanar_pair(faces)
+            if pair is not None:
+                merged = m.dissolve_coplanar_region(pair)
+            if merged is not None:
+                dead_faces.update(f.key for f in pair)
+                _index_face(merged)
+                across.extend(f for f in faces if f not in pair)
+                m.remove_edge(edge)
+        if merged is None:
+            # Cascade: the edge and every face bounding it (a face can't
+            # outlive a bounding edge) go away.
+            ekey = frozenset((_key(edge.v0.position), _key(edge.v1.position)))
+            dying = [f for f in seg_faces.get(ekey, ())
+                     if f.key not in dead_faces]
+            # A hole is not a boundary the face dies with — the face
+            # CAN outlive a hole edge, as the same face with the
+            # opening filled in. Erasing one edge of a hole (an offset
+            # ring's, #1191) used to leave the face claiming a hole
+            # whose boundary no longer exists: the segment gone, the
+            # hole still covering — and still saved. Drop the hole
+            # from every surviving face that wears this segment only
+            # as a hole edge; the hole's other edges stay as lines.
+            for f in faces:
+                if f.key in dead_faces or f in dying:
+                    continue
+                for hole in list(f.hole_loops):
+                    if _loop_has_segment(hole, edge.v0, edge.v1) \
+                            and not _loop_has_segment(
+                                f.loop, edge.v0, edge.v1):
+                        m.remove_hole(f, hole)
+            for f in dying:
+                dead_faces.add(f.key)
+                m.remove_face(f)
+                scene.selection.discard(f)
+            m.remove_edge(edge)
+        scene.selection.discard(edge)
+    return slit_planes, across
