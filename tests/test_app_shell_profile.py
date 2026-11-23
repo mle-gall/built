@@ -43,6 +43,26 @@ def test_isolated_profiles(tmp_path, mode):
                    env=env, check=True, timeout=45)
 
 
+def test_qt_launcher_respects_isolated_profile(tmp_path):
+    profile = tmp_path / "settings"
+    env = dict(os.environ, HOME=str(tmp_path), CFFIXED_USER_HOME=str(tmp_path),
+               BUILT_SETTINGS_DIR=str(profile))
+    script = """
+        import sys
+        from pathlib import Path
+        from PySide6.QtCore import QSettings
+        import main
+        def check():
+            assert QSettings.defaultFormat() == QSettings.IniFormat
+            assert Path(QSettings().fileName()).is_relative_to(sys.argv[2])
+            return 0
+        main._self_check = check
+        sys.exit(main.main())
+    """
+    subprocess.run([sys.executable, "-c", textwrap.dedent(script), "--check", str(profile)],
+                   env=env, check=True, timeout=45)
+
+
 @pytest.mark.skipif(sys.platform != "darwin", reason="macOS native preference domain")
 def test_native_and_classic_share_normal_profile(tmp_path):
     prefs = tmp_path / "Library/Preferences"

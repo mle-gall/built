@@ -31,6 +31,19 @@ def settings_dir() -> str | None:
     return _SETTINGS_DIR
 
 
+def configure_settings(profile: str | None) -> None:
+    """Select an isolated settings backend before either host reads preferences."""
+    from PySide6.QtCore import QSettings, QStandardPaths
+    if profile:
+        data = os.path.join(profile, "data")
+        os.makedirs(data, exist_ok=True)
+        os.environ["XDG_DATA_HOME"] = data
+        QSettings.setDefaultFormat(QSettings.IniFormat)
+        for scope in (QSettings.UserScope, QSettings.SystemScope):
+            QSettings.setPath(QSettings.IniFormat, scope, profile)
+    QStandardPaths.setTestModeEnabled(bool(profile))
+
+
 def start(settings: str | None = None, *, temporary: bool = False) -> str | None:
     """Create the offscreen QApplication once; return the settings dir."""
     global _APP, _SETTINGS_DIR
@@ -41,19 +54,12 @@ def start(settings: str | None = None, *, temporary: bool = False) -> str | None
         return _SETTINGS_DIR
     # Offscreen: Qt opens no window and never talks to AppKit; winit does.
     os.environ["QT_QPA_PLATFORM"] = "offscreen"
-    from PySide6.QtCore import QCoreApplication, QSettings, QStandardPaths
+    from PySide6.QtCore import QCoreApplication
     from PySide6.QtWidgets import QApplication
     if temporary and not profile:
         profile = tempfile.mkdtemp(prefix="built-shell-settings-")
     _SETTINGS_DIR = profile
-    if profile:
-        data = os.path.join(profile, "data")
-        os.makedirs(data, exist_ok=True)
-        os.environ["XDG_DATA_HOME"] = data
-        QSettings.setDefaultFormat(QSettings.IniFormat)
-        for scope in (QSettings.UserScope, QSettings.SystemScope):
-            QSettings.setPath(QSettings.IniFormat, scope, profile)
-    QStandardPaths.setTestModeEnabled(bool(profile))
+    configure_settings(profile)
     QCoreApplication.setOrganizationName("IngeTrazo")
     QCoreApplication.setApplicationName("IngeTrazo")
     _APP = QApplication.instance() or QApplication([sys.argv[0] if sys.argv else "built"])

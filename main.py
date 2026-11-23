@@ -604,6 +604,9 @@ def _run_cli(argv: list[str]) -> int:
 
 
 def main() -> int:
+    if profile := os.environ.get("BUILT_SETTINGS_DIR"):
+        from app_shell.qt_host import configure_settings
+        configure_settings(profile)
     # HTTPS from Python (the AI assistant) must find a CA bundle: the macOS
     # package asked for one where only the build machine had it (#198).
     if "--gallery" in sys.argv[1:]:
