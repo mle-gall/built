@@ -1233,6 +1233,10 @@ impl PyPlacement {
         Ok(edit_path.iter().map(|(_, level)| level.clone_ref(py)).collect())
     }
 
+    fn _tag_browser_rows(&self) -> PyResult<Vec<(String, String, bool, bool)>> {
+        super::tag_browser::rows(&lock(), self.key).map_err(err)
+    }
+
     /// A root's tag list (`scene.layers`).
     #[getter]
     fn _tags<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {

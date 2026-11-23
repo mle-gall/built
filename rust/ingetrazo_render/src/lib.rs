@@ -2267,6 +2267,9 @@ impl Renderer {
     fn ui_set_tree(&mut self, rows: Vec<(Vec<String>, Vec<i64>)>, unfiled: u32) {
         if let Some(ui) = self.ui.as_mut() { ui.set_tree(rows, unfiled); }
     }
+    fn ui_set_tags(&mut self, rows: Vec<(String, String, bool, bool)>) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_tags(rows); }
+    }
     fn ui_profile_png(&mut self) -> PyResult<Vec<u8>> {
         let frame = self.read_pixels()?;
         let panels = &self.ui.as_ref().ok_or_else(|| PyValueError::new_err("No inspector"))?.panels;

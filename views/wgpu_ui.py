@@ -985,6 +985,12 @@ def _tree(view, win) -> None:
     from collections import Counter, defaultdict
     from core import links, structure
     from core import layers as L
+    if colset == 3 and not mode:
+        view.renderer.ui_set_tree([], 0)
+        view.renderer.ui_set_tags(scene._root._tag_browser_rows())
+        view.renderer.ui_set_colset(colset)
+        view.renderer.ui_set_mode("")
+        return
     model = _tree_model(view, scene, cv)
     if colset == 2 and not mode:
         from views import wgpu_deliveries
@@ -2808,6 +2814,11 @@ def _run(win, actions, source_view=None) -> None:
             if run is not None:
                 run()
                 view.update()
+        elif kind in ("tag-visible", "tag-locked"):
+            flag, _, key = arg.partition(":")
+            _core(win.viewport, "set_tag_state", tags=[key],
+                  **{kind[4:]: flag == "1"})
+            win.viewport.notify_scene_changed()
         elif kind == "tree":
             view = getattr(getattr(win, "_doc", None), "stand_in", None)
             _tree_action(win, view, arg)

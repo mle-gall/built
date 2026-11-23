@@ -32,6 +32,7 @@ mod restamp;
 mod feed;
 mod execute;
 mod file_view;
+mod tag_browser;
 pub mod py;
 pub mod value;
 

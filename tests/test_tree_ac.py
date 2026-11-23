@@ -357,3 +357,45 @@ def test_rows_stay_fast_on_the_bigger_fixture(ui):
         view._ui_tree_sig = None
         rows()
     assert (time.perf_counter() - t) / 5 < 0.25
+
+
+def test_tag_browser_updates_linked_placement_visibility_and_lock(ui):
+    from core import links
+    scene, win, view, _, _ = ui
+    view._ui_colset = 3
+    tag = scene.layer("Ride / Rails")
+    registry = links.registry(scene)
+    record = next(entry for path, entry in registry.items() if path.endswith("Ride.igz"))
+
+    def state():
+        wu._tree(view, win)
+        rows, = view.renderer.calls["ui_set_tags"]
+        return next(row[2:] for row in rows if row[0] == tag.key)
+
+    assert state() == (True, False)
+    wu._run(win, ["tag-visible:0:" + tag.key])
+    assert state() == (False, False)
+    assert record["overrides"][tag.key] is False
+    wu._run(win, ["tag-locked:1:" + tag.key])
+    assert state() == (False, True)
+    win.viewport.history.undo()
+    assert state() == (False, False)
+    win.viewport.history.undo()
+    assert state() == (True, False)
+    assert tag.key not in record["overrides"]
+
+
+def test_tag_browser_identifies_same_label_tags_by_key():
+    from core.layers import Layer
+    from core.scene import Scene
+    scene = Scene()
+    scene.layers.extend([Layer("Deck", folder="part", key="a:b"),
+                         Layer("Deck", folder="other", key="a:c")])
+    scene.folder_parents = {"part": "host"}
+    scene.layer_folder_names = {"host": "Site", "part": "Building"}
+    rows = scene._root._tag_browser_rows()
+    assert ("a:b", "Site / Building / Deck", True, False) in rows
+    assert ("a:c", "other / Deck", True, False) in rows
+    wu._run(_Win(scene), ["tag-visible:0:a:b"])
+    assert not scene.layer_by_key("a:b").visible
+    assert scene.layer_by_key("a:c").visible

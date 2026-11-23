@@ -23,6 +23,7 @@ mod tabs;
 mod context_menu;
 
 mod tree_cols;
+mod tag_browser;
 /// The large sheet over the dimmed model: Library, start page, Settings
 /// (views/chrome_sheet.py, docs/ui-patterns.md).
 pub mod large_sheet;
@@ -216,6 +217,7 @@ pub struct Column {
     prompt: Option<(String, String, Vec<(String, String)>)>,
     /// 0 Filing, 1 Drawing, 2 Export.
     colset: u8,
+    tags: tag_browser::Browser,
     /// A choice menu over a cell: verb, row key, options, where.
     pick: Option<(String, String, Vec<String>, Pos2)>,
     /// The colour being picked for a row, and where.
@@ -369,7 +371,7 @@ impl Ui {
         let col = self.column.get_or_insert_with(|| Column {
             nodes: Vec::new(), unfiled: 0, expanded: Default::default(), filter: String::new(),
             filing: None, focus_filter: false, row_menu: None, renaming: None, head_menu: None,
-            kind_menu: None, kinds: Vec::new(), prompt: None, colset: 0, pick: None, color_pick: None, edits: Default::default(), mode: String::new(), issues: false,
+            kind_menu: None, kinds: Vec::new(), prompt: None, colset: 0, tags: Default::default(), pick: None, color_pick: None, edits: Default::default(), mode: String::new(), issues: false,
             inspector_title: String::new(),
             inspector: Vec::new(), highlighted: None,
         });
@@ -402,8 +404,11 @@ impl Ui {
     pub fn set_issues(&mut self, on: bool) {
         if let Some(col) = self.column.as_mut() { col.issues = on; }
     }
+    pub fn set_tags(&mut self, rows: Vec<tag_browser::Row>) {
+        if let Some(col) = self.column.as_mut() { col.tags.replace(rows); }
+    }
     pub fn set_colset(&mut self, colset: u8) {
-        if let Some(col) = self.column.as_mut() { col.colset = colset.min(2); }
+        if let Some(col) = self.column.as_mut() { col.colset = colset.min(3); }
     }
     pub fn set_kinds(&mut self, kinds: Vec<String>) {
         if let Some(col) = self.column.as_mut() { col.kinds = kinds; }
@@ -1459,7 +1464,7 @@ impl Ui {
                     ui.add_space(SPACE_S);
                     if col.mode.is_empty() {
                         // Column sets: second-level tabs over the same rows.
-                        let sets: Vec<(String, String, bool)> = ["Filing", "Drawing", "Deliver"].iter()
+                        let sets: Vec<(String, String, bool)> = ["Filing", "Drawing", "Deliver", "Tags"].iter()
                             .map(|l| (l.to_string(), String::new(), true)).collect();
                         if let Some(i) = widgets::underline_tabs(ui, &sets, col.colset as usize) {
                             if col.colset != i as u8 {
@@ -1472,6 +1477,10 @@ impl Ui {
                     // The Library takes the tree's place (the tree code below
                     // stays as it was, in a block it can leave).
                     'tree: {
+                    if col.mode.is_empty() && col.colset == 3 {
+                        col.tags.show(ui, &mut cmds);
+                        return;
+                    }
                     if col.mode.is_empty() && col.colset == 2 {
                         ui.horizontal(|ui| {
                             caption(ui, "Deliveries");
