@@ -292,7 +292,11 @@ pub(super) fn fields(ui: &mut egui::Ui, d: &mut Dialog, out: &mut Vec<String>) {
                 let item = (id.clone(), label.clone(), String::new(), "check".to_owned(), if value > 0.5 { 1 } else { 0 }, enabled);
                 let resp_clicked = ui.horizontal(|ui| {
                     if !full && !text.is_empty() { label_cell(ui, text, tip, label_w, 24.0, enabled); }
-                    menu_row(ui, &item)
+                    let response = super::kit::menu_row_resp(ui, &item).0;
+                    if !tip.is_empty() {
+                        response.clone().on_hover_text(tip);
+                    }
+                    response.clicked()
                 }).inner;
                 if resp_clicked && enabled {
                     let v = if value > 0.5 { 0 } else { 1 };

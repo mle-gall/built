@@ -109,6 +109,8 @@ def command(win, name, *args):
         "save": lambda: save(win),
         "save_as": lambda: save_as(win),
         "save_copy": lambda: save_copy(win),
+        "export_image": lambda: win._on_export_image(),
+        "soften": lambda: win._on_soften_edges(),
         "export_igz": lambda: export_igz(win),
         "link": lambda: link_document(win),
         "reload_links": lambda: win._reload_all_links(),
@@ -138,6 +140,8 @@ def command(win, name, *args):
         return do_save(win, Path(arg))
     if kind == "save_copy_to":
         return do_save(win, Path(arg), copy=True)
+    if kind == "export_image_to":
+        return win._export_image_to(Path(arg))
     if kind == "export_igz_to":
         return export_igz(win, Path(arg))
     if kind == "sheet_export_to":           # sheet_export_to:pdf:/path/file.pdf

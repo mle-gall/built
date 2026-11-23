@@ -209,26 +209,24 @@ def test_metal_rebakes_the_smoothed_definition_without_a_repack(monkeypatch):
     settle()
 
 
-def test_dialog_cancel_and_accept_use_one_undo_step(monkeypatch):
-    from PySide6.QtWidgets import QDialog
+def test_dialog_cancel_and_accept_use_one_undo_step():
     from views.main_window import MainWindow
-    from views.soften_dialog import SoftenDialog
+    from views import chrome_forms
     win = MainWindow()
     try:
         scene = win.viewport.scene
         group = Group(_cylinder(Mesh(), soft=False))
         scene.groups = [group]
         scene.selection = {group}
-        monkeypatch.setattr(SoftenDialog, "exec", lambda self: QDialog.Rejected)
         win._on_soften_edges()
+        chrome_forms.current(win).press("cancel")
         assert _soft(group.mesh) == 0
         assert not win.viewport.history.undo_stack
 
-        def accept(dialog):
-            dialog.angle.setValue(40)
-            return QDialog.Accepted
-        monkeypatch.setattr(SoftenDialog, "exec", accept)
         win._on_soften_edges()
+        form = chrome_forms.current(win)
+        form.receive("angle", "40")
+        form.press("ok")
         assert _soft(group.mesh) == SEAMS
         assert len(win.viewport.history.undo_stack) == 1
         win.viewport.history.undo()
@@ -238,12 +236,11 @@ def test_dialog_cancel_and_accept_use_one_undo_step(monkeypatch):
         win.close()
 
 
-def test_smoothing_inside_a_component_reaches_its_copies(monkeypatch):
+def test_smoothing_inside_a_component_reaches_its_copies():
     """Inside an open component the command runs on its world copy; the
     share-back carries the soft flags to every copy, one undo step."""
-    from PySide6.QtWidgets import QDialog
     from views.main_window import MainWindow
-    from views.soften_dialog import SoftenDialog
+    from views import chrome_forms
     mesh = _cylinder(Mesh(), soft=False)
     a, b = Group(mesh, name="a"), Group(mesh, name="b")
     a.xform, b.xform = QMatrix4x4(), QMatrix4x4()
@@ -257,11 +254,10 @@ def test_smoothing_inside_a_component_reaches_its_copies(monkeypatch):
         vp.begin_group_edit(a)
         vp.scene.selection = set(vp.scene.mesh.faces)
 
-        def accept(dialog):
-            dialog.angle.setValue(40)
-            return QDialog.Accepted
-        monkeypatch.setattr(SoftenDialog, "exec", accept)
         win._on_soften_edges()
+        form = chrome_forms.current(win)
+        form.receive("angle", "40")
+        form.press("ok")
         vp.end_group_edit()
         assert a.mesh is b.mesh is mesh
         assert _soft(mesh) == SEAMS
@@ -276,13 +272,9 @@ def test_smoothing_inside_a_component_reaches_its_copies(monkeypatch):
 def test_the_dialog_softens_across_materials_by_default_as_.skp():
     """the modeller's Soften Edges has no material rule: the dialog starts
     with «Soften between different materials» ticked."""
-    from PySide6.QtWidgets import QApplication
-    QApplication.instance() or QApplication([])
-    from views.soften_dialog import SoftenDialog
-    dialog = SoftenDialog()
-    assert dialog.materials.isChecked()
-    assert dialog.coplanar.isChecked()
-    dialog.deleteLater()
+    from ingetrazo_render import OperationForm
+    options = OperationForm.soften("30").values()
+    assert options["materials"] and options["coplanar"]
 
 
 # ---- «Smooth normals» (the modeller's Soften Edges): soft, and smooth or not ----
@@ -369,24 +361,21 @@ def test_metal_shades_a_soft_only_edge_flat_without_its_line():
 
 
 def test_the_dialog_has_smooth_normals_ticked_as_.skp():
-    from PySide6.QtWidgets import QApplication
-    QApplication.instance() or QApplication([])
-    from views.soften_dialog import SoftenDialog
-    dialog = SoftenDialog()
-    assert dialog.smooth.isChecked()
-    assert dialog.materials.isChecked() and dialog.coplanar.isChecked()
-    dialog.harden.setChecked(True)
-    assert not dialog.smooth.isEnabled()
-    dialog.deleteLater()
+    from ingetrazo_render import OperationForm
+    form = OperationForm.soften("30")
+    assert form.values()["smooth"]
+    form.receive("harden", "1")
+    assert all(row[8] & 1 for row in form.rows() if row[0] != "harden")
+    form.receive("smooth", "0")
+    assert form.values()["smooth"]
 
 
 def test_the_dialog_passes_smooth_normals_to_the_command(monkeypatch, tmp_path):
     from PySide6.QtCore import QSettings
-    from PySide6.QtWidgets import QDialog
     QSettings.setPath(QSettings.IniFormat, QSettings.UserScope, str(tmp_path / "qs"))
     monkeypatch.setenv("INGETRAZO_AUTOSAVE_DIR", str(tmp_path / "autosave"))
     from views.main_window import MainWindow
-    from views.soften_dialog import SoftenDialog
+    from views import chrome_forms
     win = MainWindow()
     try:
         scene = win.viewport.scene
@@ -394,12 +383,11 @@ def test_the_dialog_passes_smooth_normals_to_the_command(monkeypatch, tmp_path):
         scene.groups = [group]
         scene.selection = {group}
 
-        def accept(dialog):
-            dialog.angle.setValue(40)
-            dialog.smooth.setChecked(False)
-            return QDialog.Accepted
-        monkeypatch.setattr(SoftenDialog, "exec", accept)
         win._on_soften_edges()
+        form = chrome_forms.current(win)
+        form.receive("angle", "40")
+        form.receive("smooth", "0")
+        form.press("ok")
         assert _soft(group.mesh) == SEAMS and _flat(group.mesh) == SEAMS
     finally:
         win._saved_version = win.viewport.scene.version

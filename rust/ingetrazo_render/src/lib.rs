@@ -2708,6 +2708,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(large_sheet_check, m)?)?;
     m.add_function(wrap_pyfunction!(panic_log::install_panic_log, m)?)?;
     m.add_function(wrap_pyfunction!(panic_log::_panic_for_test, m)?)?;
+    m.add_class::<ui::operation_form::OperationForm>()?;
     m.add_class::<Renderer>()
 }
 #[cfg(test)]

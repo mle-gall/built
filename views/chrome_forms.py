@@ -290,6 +290,35 @@ class Form:
         return self.seq, self.title, note, float(self.width), rows, buttons
 
 
+class OperationForm(Form):
+    """Adapt a Rust operation model to the shared chrome form transport."""
+
+    def __init__(self, title, model, done, *, note=""):
+        super().__init__(title, [], note=note, width=480,
+                         validate=self._range_error,
+                         on_done=lambda answer, values: done(values) if answer == "ok" else None)
+        self.model = model
+
+    def _range_error(self, *_):
+        bounds = self.model.invalid_range()
+        if bounds is not None:
+            return tr("Between {lo} and {hi}.", lo=bounds[0], hi=bounds[1])
+
+    def receive(self, fid, raw):
+        self.model.receive(fid, raw)
+        self.changed()
+
+    def values(self):
+        return self.model.values()
+
+    def wire(self):
+        seq, title, note, width, _, buttons = super().wire()
+        rows = [(fid, kind, tr(label), text, value, lo, hi, options, flags, tr(tip))
+                for fid, kind, label, text, value, lo, hi, options, flags, tip
+                in self.model.rows()]
+        return seq, title, note, width, rows, buttons
+
+
 # ---- On the window -------------------------------------------------------------
 def forms(win) -> list:
     return win.__dict__.setdefault("_chrome_forms", [])

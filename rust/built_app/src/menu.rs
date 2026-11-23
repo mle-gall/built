@@ -79,6 +79,7 @@ pub fn build() -> muda::Result<Menus> {
           &item("save", "Save", Some("super+KeyS")),
           &item("save_as", "Save As…", Some("super+shift+KeyS")),
           &item("save_copy", "Save a Copy…", Some("super+alt+KeyS")),
+          &item("export_image", "Export Image…", None),
           &item("delivery_export", "Export…", None),
           &item("export_igz", "Save a Copy as IngeTrazo (.igz)…", None),
           &PredefinedMenuItem::separator(),
@@ -99,6 +100,7 @@ pub fn build() -> muda::Result<Menus> {
           &item("paste", "Paste", Some("super+KeyV")),
           &item("paste_in_place", "Paste in Place", Some("super+alt+KeyV")),
           &PredefinedMenuItem::separator(),
+          &item("soften", "Soften / Smooth Edges…", None),
           &item("select_all", "Select All", Some("super+KeyA")),
           &item("select_none", "Select None", Some("super+KeyT"))],
     )?;

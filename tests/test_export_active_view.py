@@ -58,30 +58,13 @@ def _spy(win, monkeypatch, name, result):
 
 
 def test_export_image_renders_the_active_view(win, monkeypatch, tmp_path):
-    import views.export_image_dialog as eid
+    from views import chrome_forms
     from views.filedialogs import file_dialogs
     top = _top(win)
-
-    class _Options:
-        def __init__(self, *a, **k):
-            from PySide6.QtWidgets import QSpinBox
-            self.width_box = QSpinBox()
-            self.width_box.setRange(1, 10000)
-            self.width_box.setValue(64)
-
-        def exec(self):
-            return 1
-
-        def transparent(self):
-            return False
-
-        def deleteLater(self):
-            pass
 
     out = tmp_path / "view.png"
     monkeypatch.setattr(file_dialogs, "getSaveFileName",
                         lambda *a, **k: (str(out), ""))
-    monkeypatch.setattr(eid, "ExportImageDialog", _Options)
 
     def picture():
         img = QImage(64, 40, QImage.Format_RGB32)
@@ -89,6 +72,7 @@ def test_export_image_renders_the_active_view(win, monkeypatch, tmp_path):
         return img
     called = _spy(win, monkeypatch, "render_image", picture)
     win._on_export_image()
+    chrome_forms.current(win).press("ok")
     assert called == [top]
     assert out.exists()
 
