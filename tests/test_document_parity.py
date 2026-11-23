@@ -29,7 +29,8 @@ def run(tmp_path):
             if not name.startswith("python/") or name.endswith(".json"):
                 continue
             filename = name.split("/", 1)[1]
-            # The historical redo generated fresh tag UIDs in these saves.
+            # The base engines differed in tag UIDs after redo and in the
+            # placement frame used to serialize the nested anchor scenario.
             native = "rust/" + filename
             expected = native if native in archive.namelist() else name
             assert (work / filename).read_bytes() == archive.read(expected), filename

@@ -1,6 +1,10 @@
 """Direct and mixed command replay must preserve materialised element handles."""
-from ingetrazo_core import Vec3
-from core.history import (AddEdgeCommand, AddFaceCommand, CompoundCommand,
+import pytest
+
+from ingetrazo_core import Matrix4, Vec3
+from core.group import Group
+from core.mesh import Mesh
+from core.history import (AddEdgeCommand, AddFaceCommand, Command, CommandRejected, CompoundCommand,
                           DeleteEdgesCommand, DeleteFaceCommand, EraseSelectionCommand,
                           ExplodeCurvesCommand, History, SetNorthCommand)
 from core.scene import Scene
@@ -66,3 +70,47 @@ def test_mixed_curve_and_host_replay_keeps_direct_edge_identity():
     assert scene.north_deg == 31
     assert history.undo() and first.curve == edge.curve == token and scene.north_deg == 0
     assert history.redo() and first.curve is None and edge.curve is None
+
+
+@pytest.mark.parametrize("occurrence", [False, True])
+@pytest.mark.parametrize("materialise", [False, True])
+def test_rejected_mixed_edit_restores_each_geometry_owner(occurrence, materialise):
+    scene = Scene()
+    loose = scene.mesh
+    if occurrence:
+        group = Group(Mesh())
+        group.xform = Matrix4()
+        group.xform.translate(8, 2, 0)
+        if materialise and isinstance(group.mesh, StoreMesh):
+            group.mesh._materialise()
+        scene.groups.append(group)
+        scene.begin_group_edit(group)
+
+    mesh = scene.mesh
+    if materialise and isinstance(mesh, StoreMesh):
+        mesh._materialise()
+    existing = mesh.add_edge(Vec3(), Vec3(1, 0, 0))
+    existing.curve = 17
+    history = History(scene)
+    old_north = scene.north_deg
+
+    class Reject(Command):
+        def do(self, scene):
+            assert existing.curve is None and scene.north_deg == 37
+            raise CommandRejected("declined")
+
+        def undo(self, scene):
+            pytest.fail("attempted to replay a rejected child")
+
+    history.execute(CompoundCommand([ExplodeCurvesCommand([existing]),
+                                     SetNorthCommand(37), Reject()]))
+    assert history.last_rejected == "declined"
+    assert history.revision == 0 and not history.undo_stack
+    assert scene.north_deg == old_north and existing.curve == 17
+    assert [e.key for e in mesh.edges] == [existing.key]
+    if materialise:
+        assert mesh.edges[0] is existing
+    if occurrence:
+        scene.end_group_edit()
+        assert scene.mesh is loose and not loose.edges
+        assert [edge.curve for edge in group.mesh.edges] == [17]
