@@ -128,6 +128,29 @@ fn shape(i: &Item) -> Json {
     })
 }
 
+/// A document value as JSON (plain data only; handles are left out).
+pub fn value_json(v: &Value) -> Json {
+    match v {
+        Value::None | Value::Opaque(_) => Json::Null,
+        Value::Bool(b) => json!(b),
+        Value::Int(i) => json!(i),
+        Value::ElementKey(k) => json!(k.to_string()),
+        Value::Vector(v) => json!(v),
+        Value::Float(f) => json!(f),
+        Value::Str(s) => json!(s),
+        Value::List(l) | Value::Tuple(l) => Json::Array(l.iter().map(value_json).collect()),
+        Value::Dict(d) => Json::Object(d.iter().filter_map(|(k, v)| match k {
+            Value::Str(k) => Some((k.clone(), value_json(v))),
+            _ => None,
+        }).collect()),
+    }
+}
+
+fn fields_json(f: &super::model::Fields) -> Json {
+    Json::Object(f.0.iter().filter(|(_, v)| !matches!(v, Value::Opaque(_)))
+        .map(|(k, v)| (k.clone(), value_json(v))).collect())
+}
+
 /// The sheet as the renderer's page snapshot.
 pub fn page_json(s: &Sheet) -> Json {
     let f = &s.fields;
@@ -137,6 +160,7 @@ pub fn page_json(s: &Sheet) -> Json {
         .map(|i| {
             let mut o = json!({
                 "key": i.key,
+                "fields": fields_json(&i.fields),
                 "kind": i.kind.name(),
                 "rect": rect(i),
                 "z": i.z,
@@ -186,6 +210,7 @@ pub fn page_json(s: &Sheet) -> Json {
             "style": f.text("border_style", "single"),
         },
         "guides": {"v": num_list("guides_v"), "h": num_list("guides_h")},
+        "fields": fields_json(f),
         "items": items,
     })
 }
@@ -195,10 +220,18 @@ pub fn page_json(s: &Sheet) -> Json {
 /// z, locked, hidden, and the fields its painter needs).
 /// ``profiles``: ``{item key: (profile, path_name, message)}`` for its
 /// terrain profiles (``ComposerWindow.profile_for``).
+/// ``choices``: the lists the inspector offers, as plain data (``views``
+/// and ``styles`` as ``[key, label]`` pairs, ``scales`` as numbers),
+/// passed through to the renderer.
 #[pyfunction]
-#[pyo3(signature = (comp, profiles=None))]
-fn sheet_page_json(comp: &Bound<'_, PyAny>, profiles: Option<Bound<'_, PyAny>>) -> PyResult<String> {
-    Ok(page_json(&Sheet::read(comp, profiles.as_ref())?).to_string())
+#[pyo3(signature = (comp, profiles=None, choices=None))]
+fn sheet_page_json(comp: &Bound<'_, PyAny>, profiles: Option<Bound<'_, PyAny>>,
+                   choices: Option<Bound<'_, PyAny>>) -> PyResult<String> {
+    let mut page = page_json(&Sheet::read(comp, profiles.as_ref())?);
+    if let Some(c) = choices.filter(|c| !c.is_none()) {
+        page["choices"] = value_json(&Value::from_py(&c)?);
+    }
+    Ok(page.to_string())
 }
 
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {

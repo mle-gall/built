@@ -321,10 +321,25 @@ class Workspace:
         comp = self.composer
         # Terrain profiles: the composer samples the ground under their path.
         profiles = {m._doc_key: comp.profile_for(m) for m in comp.comp.perfiles} or None
-        page = NATIVE.sheet_page_json(comp.comp, profiles)
+        page = NATIVE.sheet_page_json(comp.comp, profiles, self._choices())
         if page != self._page:
             self._page = page
             renderer.page_set(page)
+
+    def _choices(self) -> dict:
+        """The lists the inspector offers (ingetrazo_render sheet_inspector.rs)."""
+        from core.style import BUILTIN_STYLES, user_styles
+        from views.composer import _STD_VIEWS
+        from core.i18n import tr
+        scene = self.composer._scene()
+        views = [["__current__", tr("Current view")]]
+        views += [[f"std:{key}", tr(label)] for label, key in _STD_VIEWS]
+        views += [[f"scene:{v.name}", tr("Scene: {name}", name=v.name)] for v in scene.saved_views]
+        styles = [["sombreado", tr("Model style")]]
+        styles += [[f"style:{p.name}", tr(p.name)] for p in BUILTIN_STYLES]
+        styles += [[f"style:{p.name}", p.name] for p in user_styles()]
+        styles += [["vectorial", tr("Vector (hidden lines removed)")]]
+        return {"views": views, "styles": styles}
 
     def _send_contents(self, renderer) -> None:
         """Each frame's content as the composer has it: the vector pass's
@@ -370,51 +385,105 @@ class Workspace:
                                        count=rgba.bytesPerLine() * h).reshape(h, -1)[:, :w * 4]
                 renderer.page_frame_image(key, w, h, pixels.copy().reshape(-1))
 
-    def _sync_selection(self, renderer) -> None:
-        """The composer's selection (what the dock shows) and the page's."""
-        keys = [it.model._doc_key for it in self._selected()]
-        if keys != self._selection:
-            self._selection = keys
-            renderer.page_select(keys)
-
-    def _select(self, keys) -> None:
-        from views.composer import _SheetItem
-        comp = self.composer
-        want = set(keys)
-        for it in comp.canvas.items():
-            if isinstance(it, _SheetItem):
-                it.setSelected(it.model._doc_key in want)
-        self._selection = [it.model._doc_key for it in self._selected()]
-        comp.on_selection_changed()
-
     def _models(self) -> dict:
-        return {m._doc_key: m for m in self.composer.comp.all_items()}
+        comp = self.composer.comp
+        out = {m._doc_key: m for m in comp.all_items()}
+        out[comp._doc_key] = comp
+        return out
+
+    def _selected_models(self) -> list:
+        renderer = getattr(self.view, "renderer", None)
+        keys = renderer.page_selection() if renderer is not None else []
+        models = self._models()
+        return [models[k] for k in keys if k in models]
+
+    def _run(self, inner) -> None:
+        """A sheet edit as one step of the document's history."""
+        from core.history import SheetCommand
+        self.composer._window.viewport.history.execute(SheetCommand(inner))
+
+    def _forget_render(self, model) -> None:
+        """A frame whose window on the model changed: worked out again."""
+        from core.composition import MarcoVista
+        if isinstance(model, MarcoVista):
+            comp = self.composer
+            comp._stale.add(id(model))
+            comp.hlr_cache.pop(id(model), None)
+            comp.render_cache.pop(id(model), None)
+
+    def _edit(self, edits) -> None:
+        """``[(model, {field: value})]`` from the page or the inspector."""
+        from core.composition import CompoundCommand, EditItemCommand
+        commands = []
+        for model, changes in edits:
+            changes = {k: (tuple(v) if k == "cam_target" and v is not None else v)
+                       for k, v in changes.items() if k in model._record_fields}
+            if changes:
+                commands.append(EditItemCommand(model, changes))
+                self._forget_render(model)
+        if commands:
+            self._run(commands[0] if len(commands) == 1 else CompoundCommand(commands))
 
     def _move(self, arg: str) -> None:
-        """``key:x:y:w:h;…`` from a gesture on the page: one step of the
-        sheet's history."""
-        from core.composition import CompoundCommand, EditItemCommand, MarcoVista
-        comp = self.composer
+        """``key:x:y:w:h;…`` from a gesture on the page."""
         models = self._models()
-        commands = []
+        edits = []
         for part in filter(None, arg.split(";")):
             key, x, y, w, h = part.split(":")
             model = models.get(int(key))
             if model is None or getattr(model, "locked", False):
                 continue
             new = {"x_mm": float(x), "y_mm": float(y), "w_mm": float(w), "h_mm": float(h)}
-            changes = {k: v for k, v in new.items()
-                       if k in model._record_fields and abs(getattr(model, k) - v) > 1e-9}
-            if not changes:
-                continue
-            commands.append(EditItemCommand(model, changes))
-            if isinstance(model, MarcoVista) and ("w_mm" in changes or "h_mm" in changes):
-                # Another window on the model: the view is worked out again.
-                comp._stale.add(id(model))
-                comp.hlr_cache.pop(id(model), None)
-                comp.render_cache.pop(id(model), None)
-        if commands:
-            comp.history.execute(commands[0] if len(commands) == 1 else CompoundCommand(commands))
+            edits.append((model, {k: v for k, v in new.items()
+                                  if k in model._record_fields and abs(getattr(model, k) - v) > 1e-9}))
+        self._edit(edits)
+
+    def _delete(self) -> None:
+        from core.composition import CompoundCommand, RemoveItemCommand
+        comp = self.composer.comp
+        doomed = [m for m in self._selected_models() if m is not comp and not getattr(m, "locked", False)]
+        if doomed:
+            self._run(CompoundCommand([RemoveItemCommand(comp, m) for m in doomed]))
+
+    def _duplicate(self) -> None:
+        import ingetrazo_core as NATIVE
+        from core.composition import AddItemCommand, CompoundCommand
+        comp = self.composer.comp
+        copies = NATIVE.sheet_duplicates(comp, [m for m in self._selected_models() if m is not comp])
+        if copies:
+            self._run(CompoundCommand([AddItemCommand(comp, m) for m in copies]))
+            self._page = None
+            self.view.renderer.page_select([m._doc_key for m in copies])
+
+    def _place(self, x0, y0, x1, y1) -> None:
+        """The View tool's rectangle: a model view there (60 × 50 mm at least)."""
+        import ingetrazo_core as NATIVE
+        from core.composition import NEW_FRAME_STYLE, AddItemCommand, MarcoVista
+        comp = self.composer.comp
+        frame = MarcoVista(x_mm=min(x0, x1), y_mm=min(y0, y1), w_mm=max(abs(x1 - x0), 60.0),
+                           h_mm=max(abs(y1 - y0), 50.0), style=NEW_FRAME_STYLE)
+        frame.z = NATIVE.sheet_next_z(comp)
+        self._run(AddItemCommand(comp, frame))
+        self._page = None
+        self.view.renderer.page_select([frame._doc_key])
+
+    def _font(self, model) -> None:
+        """The font picker for a sheet text; the choice is one history step."""
+        if model is None:
+            return
+        from views.font_picker import show
+
+        def apply(p):
+            self._edit([(model, dict(family=p["font"], bold=p["bold"], italic=p["italic"],
+                                     size_pt=p["height"]))])
+            self._touch()
+        show(self.view.window(), "Sheet text", model.text, model.family, model.bold, model.italic,
+             model.size_pt, " pt", apply)
+
+    def _undo(self, redo: bool = False) -> None:
+        win = self.composer._window
+        win = getattr(win, "_host_window", win)
+        (win._on_redo if redo else win._on_undo)()
 
     # ---- Fit and zoom ----------------------------------------------------------------
     def fit(self, width_only: bool = False) -> None:
@@ -432,7 +501,6 @@ class Workspace:
     def before_frame(self, view) -> None:
         renderer = view.renderer
         self._send_page(renderer)
-        self._sync_selection(renderer)
         self._send_contents(renderer)
         self._send(renderer, view)
 
@@ -449,8 +517,6 @@ class Workspace:
         mode = comp.tool_mode if comp.tool_mode in NATIVE_TOOLS else "select"
         renderer.ui_set_sheet_active(mode)
         self._once("list", self.sheet_rows(), renderer.ui_set_sheet_list)
-        title, sections = self.inspector()
-        self._once("insp", (title, sections), lambda v: renderer.ui_set_sheet_inspector(*v))
         self._once("exports", self.exports(), renderer.ui_set_sheet_exports)
         self._once("status", self.status(), lambda v: renderer.ui_set_sheet_status(*v))
         prompt, self._prompt = self._prompt, None
@@ -495,164 +561,11 @@ class Workspace:
             rows.append((composition.name, f"{paper} · {n}", composition is cur))
         return tuple(rows)
 
-    def _selected(self):
-        from views.composer import _SheetItem
-        items = [it for it in self.composer.canvas.selectedItems() if isinstance(it, _SheetItem)]
-        return items
-
     def _frame(self):
-        from views.composer import FrameItem
-        item = self.composer._selected_item()
-        return item.model if isinstance(item, FrameItem) else None
-
-    #: Mirrored panel fields per item kind: (kind, widget attribute, label).
-    #: The composer keeps those widgets in step with the selection, and
-    #: their signals carry the edit to the panel's own slot.
-    FRAME = (("pick", "view_combo", "View"), ("pick", "scale_combo", "Scale"),
-             ("pick", "style_combo", "Style"), ("pick", "shadow_combo", "Shadows"),
-             ("spin", "fw_spin", "Width"), ("spin", "fh_spin", "Height"),
-             ("spin", "rot_spin", "Rotation"), ("check", "persp_check", "Perspective"),
-             ("check", "title_check", "View title"), ("check", "paper_bg_check", "Paper background"),
-             ("button", "_on_refresh_selected_frame", "Update view"))
-    TEXT = (("plain", "text_edit", "Text"), ("spin", "text_size", "Size"),
-            ("check", "text_bold", "Bold"), ("check", "text_italic", "Italic"),
-            ("check", "text_underline", "Underline"), ("pick", "text_align", "Alignment"),
-            ("font", "text_family", "Font…"))
-    CAJETIN = (("table", "caj_table", "Fields"), ("pick", "caj_design", "Design"),
-               ("spin", "caj_w", "Width"), ("spin", "caj_h", "Height"),
-               ("pick", "caj_layout", "Layout"))
-    PAGE = (("name", None, "Name"), ("pick", "paper_combo", "Paper"),
-            ("check", "landscape_check", "Landscape"), ("check", "border_check", "Sheet border"),
-            ("check", "auto_check", "Auto-render views"),
-            ("button", "refresh_all_frames", "Update all views"))
-
-    def _spec(self):
-        from views.composer import CajetinItem, FrameItem, TextItem
-        items = self._selected()
-        if not items:
-            return "Sheet", self.PAGE
-        if len(items) > 1:
-            return f"{len(items)} items", ()
-        item = self.composer._selected_item() or items[0]
-        if isinstance(item, FrameItem):
-            return "Model view", self.FRAME
-        if isinstance(item, TextItem):
-            return "Text", self.TEXT
-        if isinstance(item, CajetinItem):
-            return "Title block", self.CAJETIN
-        return self.composer._item_label(item.model), ()
-
-    @staticmethod
-    def _clean(text) -> str:
-        return str(text).replace(ED, " ").replace(SEP, " ").replace("|", "¦")
-
-    def inspector(self):
-        title, spec = self._spec()
-        comp = self.composer
-        rows = []
-        for i, (kind, attr, label) in enumerate(spec):
-            fid = f"{i}"
-            if kind == "name":
-                rows.append((label, f"{ED}edit{ED}{fid}{ED}{self._clean(comp.comp.name)}"))
-                continue
-            if kind in ("button", "font"):
-                rows.append((label, f"{ED}button{ED}{fid}"))
-                continue
-            w = getattr(comp, attr, None)
-            if w is None or w.isHidden() or not w.isEnabled():
-                continue
-            if kind == "pick":
-                options = [self._clean(w.itemText(j)) for j in range(w.count())]
-                at = w.currentIndex()
-                current = self._clean(w.currentText())
-                if w.isEditable() and current:
-                    # An editable list (the scale) says what is typed, not
-                    # what is highlighted.
-                    if current in options:
-                        at = options.index(current)
-                    else:
-                        options.append(current)
-                        at = len(options) - 1
-                if not options:
-                    continue
-                rows.append((label, f"{ED}pick{ED}{fid}{ED}{'|'.join(options)}{ED}{max(at, 0)}"))
-            elif kind == "spin":
-                text = f"{w.value():g}{w.suffix()}"
-                rows.append((label, f"{ED}edit{ED}{fid}{ED}{self._clean(text)}"))
-            elif kind == "check":
-                rows.append((label, f"{ED}check{ED}{fid}{ED}{int(w.isChecked())}"))
-            elif kind == "plain":
-                rows.append((label, f"{ED}text{ED}{fid}{ED}{w.toPlainText().replace(ED, ' ').replace(SEP, ' ')}"))
-            elif kind == "table":
-                for r in range(w.rowCount()):
-                    name = w.item(r, 0)
-                    value = w.item(r, 1)
-                    rows.append((self._clean(name.text() if name else f"Row {r + 1}"),
-                                 f"{ED}edit{ED}{fid}.{r}{ED}{self._clean(value.text() if value else '')}"))
-        if not spec and title.endswith("items"):
-            rows.append(("", "Several items: their fields one at a time."))
-        elif not spec:
-            rows.append(("", "Its fields are in the classic sheet editor for now."))
-        if spec is not self.FRAME and spec is not self.TEXT:
-            rows.append(("Open in classic sheet editor", f"{ED}button{ED}classic"))
-        return title, ((("", tuple(rows)),) if rows else ())
-
-    def apply(self, fid: str, value: str) -> None:
-        """An edit from the dock, through the panel widget it mirrors."""
-        from PySide6.QtWidgets import QTableWidgetItem
-        _title, spec = self._spec()
-        comp = self.composer
-        head, _, row = fid.partition(".")
-        try:
-            kind, attr, _label = spec[int(head)]
-        except (ValueError, IndexError):
-            return
-        if kind == "name":
-            comps = comp._scene().compositions
-            if comp.comp in comps:
-                comp.rename_sheet(comps.index(comp.comp), value)
-            return
-        if kind == "font":
-            from views.font_picker import show
-            item = comp._selected_item()
-            model = item.model
-            def apply(p):
-                comp._panel_edit(item, dict(family=p["font"], bold=p["bold"], italic=p["italic"],
-                                            size_pt=p["height"]))
-                comp.on_selection_changed()
-                self._touch()
-            show(self.view.window(), "Sheet text", model.text, model.family, model.bold, model.italic,
-                 model.size_pt, " pt", apply)
-            return
-        if kind == "button":
-            getattr(comp, attr)()
-            return
-        w = getattr(comp, attr, None)
-        if w is None:
-            return
-        if kind == "pick":
-            i = int(value)
-            if i < w.count():
-                w.setCurrentIndex(i)
-                w.activated.emit(i)
-            if attr == "scale_combo":
-                comp._on_scale_committed()
-        elif kind == "spin":
-            m = re.search(r"[-+]?\d+(?:[.,]\d+)?", value)
-            if m:
-                w.setValue(float(m.group(0).replace(",", ".")))
-        elif kind == "check":
-            w.setChecked(value == "1")
-        elif kind == "plain":
-            w.setPlainText(value)
-        elif kind == "table":
-            r = int(row or 0)
-            cell = w.item(r, 1)
-            if cell is None:
-                w.setItem(r, 1, QTableWidgetItem(value))
-            else:
-                cell.setText(value)
-        self._touch()
+        """The one selected frame, or None."""
+        from core.composition import MarcoVista
+        sel = self._selected_models()
+        return sel[0] if len(sel) == 1 and isinstance(sel[0], MarcoVista) else None
 
     def exports(self):
         frame = self._frame() is not None
@@ -709,13 +622,27 @@ class Workspace:
             elif act is not None:
                 act.trigger()
         elif verb == "select":
-            self._select(int(k) for k in rest.split(",") if k)
+            pass                         # the page keeps its selection; the dock reads it
         elif verb == "rects":
             self._move(rest)
         elif verb == "place":
-            x0, y0, x1, y1 = (float(v) for v in rest.split(SEP))
             if comp.tool_mode == "vista":
-                comp.place_tool(x0, y0, x1, y1)
+                self._place(*(float(v) for v in rest.split(SEP)))
+        elif verb in ("set", "sheet", "set_many"):
+            import json
+            models = self._models()
+            if verb == "sheet":
+                self._edit([(comp.comp, json.loads(rest))])
+            else:
+                parts = rest.split(SEP)
+                self._edit([(models[int(k)], json.loads(v)) for k, v in zip(parts[::2], parts[1::2])
+                            if int(k) in models])
+        elif verb == "font":
+            self._font(self._models().get(int(rest)))
+        elif verb == "refresh":
+            model = self._models().get(int(rest))
+            if model is not None:
+                self._forget_render(model)
         elif verb == "open":
             comp.show_sheet(int(rest))
         elif verb == "add":
@@ -741,13 +668,8 @@ class Workspace:
                                 None, [("del", "Delete"), ("cancel", "Cancel")])
         elif verb == "answer":
             self._answer(*rest.split(SEP, 1)) if SEP in rest else self._answer(rest, "")
-        elif verb == "edit":
-            fid, _, value = rest.partition(SEP)
-            self.apply(fid, value)
         elif verb == "button" and rest == "classic" or verb == "classic":
             self.open_classic()
-        elif verb == "button":
-            self.apply(rest, "")
         elif verb == "export":
             self.export(rest)
         elif verb == "zoom":
@@ -937,12 +859,16 @@ class Workspace:
             view = self.view
             if comp.comp in comps and view is not None and getattr(view, "renderer", None) is not None:
                 view.renderer.ui_rename_sheet(comps.index(comp.comp))
-        return [(seqs(QKeySequence.Undo), comp._on_undo),
-                (seqs(QKeySequence.Redo, "Ctrl+Shift+Z"), comp._on_redo),
-                (seqs(QKeySequence.Delete, Qt.Key_Backspace, Qt.Key_Delete), comp._on_delete_item),
-                (seqs("Ctrl+D"), comp.duplicate_selected), (seqs("Ctrl+G"), comp.group_selected),
-                (seqs("Ctrl+Shift+G"), comp.ungroup_selected), (seqs("Ctrl+L"), comp.lock_selected),
-                (seqs("Ctrl+Shift+C"), comp.copy_style), (seqs("Ctrl+Shift+V"), comp.paste_style),
+        def lock():
+            sel = self._selected_models()
+            on = not all(getattr(m, "locked", False) for m in sel)
+            self._edit([(m, {"locked": on}) for m in sel if m is not comp.comp])
+        # The document's history: what the page and the dock change, undone
+        # in the order it was done, with the model's edits.
+        return [(seqs(QKeySequence.Undo), self._undo),
+                (seqs(QKeySequence.Redo, "Ctrl+Shift+Z"), lambda: self._undo(redo=True)),
+                (seqs(QKeySequence.Delete, Qt.Key_Backspace, Qt.Key_Delete), self._delete),
+                (seqs("Ctrl+D"), self._duplicate), (seqs("Ctrl+L"), lock),
                 (seqs("Ctrl+PgUp"), lambda: comp.step_sheet(-1)),
                 (seqs("Ctrl+PgDown"), lambda: comp.step_sheet(1)),
                 (seqs("Ctrl+Tab", "Meta+Tab", "Ctrl+Shift+Tab"), model),

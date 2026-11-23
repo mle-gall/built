@@ -65,6 +65,13 @@ class Recorder:
         self.calls.append(("page_key", (name, mods)))
         return False
 
+    def page_select(self, keys):
+        self.calls.append(("page_select", (list(keys),)))
+        self.selected = list(keys)
+
+    def page_selection(self):
+        return list(self.__dict__.get("selected", []))
+
     def page(self):
         """The last page snapshot, parsed."""
         return json.loads(self.last("page_set")[0])
@@ -193,7 +200,6 @@ def test_repeated_switches_never_break(host):
 
 
 def test_the_page_follows_the_document_and_only_then(host):
-    from views.composer import TextItem
     ws = _sheets(host)
     rec = host.view.renderer
     from PySide6.QtWidgets import QApplication
@@ -202,16 +208,13 @@ def test_the_page_follows_the_document_and_only_then(host):
     rec.calls.clear()
     host.view.draw_frame()
     assert "page_set" not in rec.names()                             # nothing changed
-    item = next(it for it in ws.composer.canvas.items() if isinstance(it, TextItem))
-    x0 = item.model.x_mm
-    item.setSelected(True)
-    ws.composer.on_selection_changed()
-    ws.composer.nudge_selected(5.0, 0.0)
-    QApplication.processEvents()
+    text = ws.composer.comp.texts[0]
+    x0 = text.x_mm
+    _run_actions(host, f"sheets:set\x1f{text._doc_key}\x1f" + '{"x_mm": %r}' % (x0 + 5.0))
     host.view.draw_frame()
-    text = next(i for i in rec.page()["items"] if i["kind"] == "text")
-    assert text["rect"][0] == pytest.approx(x0 + 5.0)
-    assert rec.last("page_select")[0] == [item.model._doc_key]       # the dock's selection, on the page
+    item = next(i for i in rec.page()["items"] if i["kind"] == "text")
+    assert item["rect"][0] == pytest.approx(x0 + 5.0)
+    assert item["fields"]["text"] == text.text                      # the inspector reads the record
 
 
 def test_frames_show_the_vector_pass_and_the_renders(host, monkeypatch):
@@ -271,66 +274,68 @@ def test_sheet_list_add_duplicate_rename_reorder_delete(host):
     assert rows[0][0] == first and rows[0][2] is True
 
 
-# ---- the inspector --------------------------------------------------------------------
-def _select(ws, kind):
-    from views import composer as c
-    item = next(it for it in ws.composer.canvas.items() if isinstance(it, kind))
-    ws.composer.canvas.clearSelection()
-    item.setSelected(True)
-    ws.composer.on_selection_changed()
-    return item
+# ---- the inspector (ingetrazo_render sheet_inspector.rs) --------------------------------
+def _set(host, model, **changes):
+    import json
+    _run_actions(host, f"sheets:set\x1f{model._doc_key}\x1f{json.dumps(changes)}")
 
 
-def _row(ws, label):
-    title, sections = ws.inspector()
-    return next((v for s in sections for lab, v in s[1] if lab == label), None)
-
-
-def test_a_viewport_s_scale_and_style_edit_through_the_dock(host):
-    from views.composer import FrameItem
+def test_inspector_edits_are_steps_of_the_document_history(host):
     ws = _sheets(host)
-    item = _select(ws, FrameItem)
-    title, _ = ws.inspector()
-    assert title == "Model view"
-    scale = _row(ws, "Scale").split("\x1d")
-    options = scale[3].split("|")
-    want = next(i for i, o in enumerate(options) if o.strip() == "1:20")
-    fid = scale[2]
-    _act(host, f"edit\x1f{fid}\x1f{want}")
-    assert item.model.scale_n == pytest.approx(20.0)
-    assert ws.composer.history.can_undo() if hasattr(ws.composer.history, "can_undo") else True
-    width = _row(ws, "Width").split("\x1d")
-    _act(host, f"edit\x1f{width[2]}\x1f123,5 mm")
-    assert item.model.w_mm == pytest.approx(123.5)
-    status = host.view.renderer.last("ui_set_sheet_status")
-    assert status[1] == "1:20"
+    plan = ws.composer.comp.frames[0]
+    host.view.draw_frame()
+    page = host.view.renderer.page()
+    assert [v[0] for v in page["choices"]["views"]][:2] == ["__current__", "std:top"]
+    assert "scene:Iso" in [v[0] for v in page["choices"]["views"]]
+    _set(host, plan, scale_n=20.0)
+    assert plan.scale_n == pytest.approx(20.0)
+    _set(host, plan, view_key="scene:Iso", cam_yaw=None, cam_target=None)
+    assert plan.view_key == "scene:Iso"
+    ws._undo()
+    assert plan.view_key == "std:top"
+    ws._undo()
+    assert plan.scale_n == pytest.approx(100.0)
+    ws._undo(redo=True)
+    assert plan.scale_n == pytest.approx(20.0)
+    assert host.errors == []
 
 
-def test_a_text_edits_through_the_dock(host):
-    from core.composition import TextoItem
-    from views.composer import TextItem
+def test_the_sheet_and_several_items_through_the_inspector(host):
+    import json
     ws = _sheets(host)
-    ws.composer.comp.texts.append(TextoItem(x_mm=30, y_mm=30, w_mm=60, text="Hola"))
-    ws.composer._rebuild_canvas()
-    item = _select(ws, TextItem)
-    assert ws.inspector()[0] == "Text"
-    text = _row(ws, "Text").split("\x1d")
-    _act(host, f"edit\x1f{text[2]}\x1fMuro norte\nlevantado 2026")
-    assert item.model.text == "Muro norte\nlevantado 2026"
-    bold = _row(ws, "Bold").split("\x1d")
-    _act(host, f"edit\x1f{bold[2]}\x1f1")
-    assert item.model.bold is True
+    comp = ws.composer.comp
+    _run_actions(host, "sheets:sheet\x1f" + json.dumps({"name": "Planta general", "paper": "A2"}))
+    assert (comp.name, comp.paper) == ("Planta general", "A2")
+    plan, iso = comp.frames
+    _run_actions(host, f"sheets:set_many\x1f{plan._doc_key}\x1f" + '{"locked": true}'
+                 + f"\x1f{iso._doc_key}\x1f" + '{"locked": true}')
+    assert plan.locked and iso.locked
+    ws._undo()
+    assert not plan.locked and not iso.locked
+    ws._undo()
+    assert comp.name == "Plans"
 
 
-def test_the_sheet_itself_when_nothing_is_selected(host):
+def test_delete_duplicate_and_lock_on_the_selection(host):
     ws = _sheets(host)
-    ws.composer.canvas.clearSelection()
-    ws.composer.on_selection_changed()
-    title, _ = ws.inspector()
-    assert title == "Sheet"
-    name = _row(ws, "Name").split("\x1d")
-    _act(host, f"edit\x1f{name[2]}\x1fPlanta general")
-    assert ws.composer.comp.name == "Planta general"
+    comp = ws.composer.comp
+    text = comp.texts[0]
+    host.view.renderer.page_select([text._doc_key])
+    host.key(True, Qt.Key_D.value, Qt.ControlModifier.value, "d")
+    assert len(comp.texts) == 2
+    copy = comp.texts[1]
+    assert (copy.x_mm, copy.y_mm, copy.text) == (text.x_mm + 5.0, text.y_mm + 5.0, text.text)
+    assert host.view.renderer.page_selection() == [copy._doc_key]   # the copy is the selection
+    host.key(True, Qt.Key_L.value, Qt.ControlModifier.value, "l")
+    assert copy.locked
+    host.key(True, Qt.Key_Backspace.value, 0)
+    assert len(comp.texts) == 2                                       # a locked item stays
+    host.key(True, Qt.Key_L.value, Qt.ControlModifier.value, "l")
+    host.key(True, Qt.Key_Backspace.value, 0)
+    assert len(comp.texts) == 1
+    host.key(True, Qt.Key_Z.value, Qt.ControlModifier.value, "z")
+    assert len(comp.texts) == 2
+    assert host.errors == []
 
 
 # ---- keys, pointer, pan and zoom --------------------------------------------------------
@@ -349,12 +354,11 @@ def test_keys_go_to_the_page_and_window_keys_stay_the_window_s(host):
     comp = ws.composer
     item = _texts(host, ws)
     before = len(comp.comp.texts)
-    item.setSelected(True)
-    comp.on_selection_changed()
+    host.view.renderer.page_select([item.model._doc_key])
     host.key(True, Qt.Key_Backspace.value, 0)
     host.key(False, Qt.Key_Backspace.value, 0)
     assert len(comp.comp.texts) == before - 1
-    host.key(True, Qt.Key_Z.value, Qt.ControlModifier.value, "z")     # the composer's undo
+    host.key(True, Qt.Key_Z.value, Qt.ControlModifier.value, "z")     # the document's undo
     assert len(comp.comp.texts) == before
     # A tool letter is not the model's tool any more.
     tool = type(host.viewport.active_tool).__name__
@@ -377,18 +381,15 @@ def test_a_drag_on_the_page_is_one_step_of_the_sheet_s_history(host):
     host.pointer("move", 400, 300, 0, 0, 0)
     assert host.view.renderer.last("page_pointer")[0] == "move"     # the chrome left it to the page
     # What ui/page.rs sends for a click on the plan, then a drag that resized it.
-    _run_actions(host, f"sheets:select\x1f{key}")
-    assert [it.model for it in comp.canvas.selectedItems()] == [plan]
-    assert ws.inspector()[0] == "Model view"
     _run_actions(host, f"sheets:rects\x1f{key}:30:25:150:120")
     assert (plan.x_mm, plan.y_mm, plan.w_mm, plan.h_mm) == (30, 25, 150, 120)
-    comp._on_undo()
+    ws._undo()
     assert (plan.x_mm, plan.y_mm, plan.w_mm, plan.h_mm) == (20, 20, 190, 150)
     # Two items moved together: one step.
     text = comp.comp.texts[0]
     _run_actions(host, f"sheets:rects\x1f{key}:22:20:190:150;{text._doc_key}:22:190:180:9")
     assert plan.x_mm == 22 and text.x_mm == 22 and text.y_mm == 190
-    comp._on_undo()
+    ws._undo()
     assert plan.x_mm == 20 and text.x_mm == 20
     # A locked item stays where it is.
     plan.locked = True
@@ -409,7 +410,8 @@ def test_the_view_tool_places_a_frame(host):
     assert len(comp.comp.frames) == before + 1
     f = comp.comp.frames[-1]
     assert (f.x_mm, f.y_mm, f.w_mm, f.h_mm) == (230, 190, 100, 70)
-    comp._on_undo()
+    assert host.view.renderer.page_selection() == [f._doc_key]
+    ws._undo()
     assert len(comp.comp.frames) == before
 
 

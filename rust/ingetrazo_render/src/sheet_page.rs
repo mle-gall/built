@@ -53,6 +53,10 @@ pub struct Snapshot {
     pub guides_v: Vec<f64>,
     pub guides_h: Vec<f64>,
     pub items: Vec<Item>,
+    /// The sheet record's own fields (the inspector's "Sheet").
+    pub fields: J,
+    /// The lists the inspector offers (views, styles), from the document.
+    pub choices: J,
 }
 
 impl Snapshot {
@@ -81,6 +85,8 @@ impl Snapshot {
             border: v["border"].clone(),
             guides_v: nums(&v["guides"]["v"]),
             guides_h: nums(&v["guides"]["h"]),
+            fields: v["fields"].clone(),
+            choices: v["choices"].clone(),
             items,
         })
     }

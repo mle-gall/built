@@ -2876,6 +2876,8 @@ pub mod sheet_page;
 mod svg_options;
 /// Sheet items' display lists on the page.
 pub mod sheet_display;
+/// The Sheets dock's inspector, from the page snapshot.
+pub mod sheet_inspector;
 
 /// Start an orthographic ray on the plane through the camera, aligned with the point.
 #[pyfunction]
