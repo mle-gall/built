@@ -2766,6 +2766,31 @@ def after_frame(view) -> None:
         view._ui_timer.start(max(0, int(delay)))
 
 
+def free_area(win):
+    """Where the model is seen, in device coordinates (ui.rs ``free_ndc``):
+    the window minus the rail, dock and bars showing. None without the chrome."""
+    view = getattr(getattr(win, "_doc", None), "stand_in", None)
+    if view is None or not getattr(view, "_ui_attached", False):
+        return None
+    return view.renderer.ui_free_ndc()
+
+
+def _review_camera(win, on: bool) -> None:
+    """Review frames the model into the window the panels left (B8); leaving
+    it, the camera goes back to where it was if Review's framing is untouched."""
+    if on:
+        before = win._camera_pose()
+        win._on_zoom_extents()
+        win.__dict__["_review_back"] = (before, win._camera_pose())
+        return
+    back = win.__dict__.pop("_review_back", None)
+    if back is not None and back[1] == win._camera_pose():
+        cam = win.viewport.camera
+        x, y, z, cam.distance, cam.yaw, cam.pitch = back[0]
+        cam.target = (x, y, z)
+        win.viewport.update()
+
+
 def _run(win, actions, source_view=None) -> None:
     if win is None:
         return
@@ -2777,6 +2802,7 @@ def _run(win, actions, source_view=None) -> None:
             answer(win, arg, source_view)
             continue
         if kind == "review":
+            _review_camera(win, arg == "1")
             continue
         if kind == "sheet":
             chrome_dialogs.answer(win, arg)

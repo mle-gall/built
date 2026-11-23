@@ -2346,6 +2346,9 @@ impl Renderer {
     fn ui_set_projects(&mut self, left: f32, docs: Vec<(String, bool, bool)>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_projects(left, docs); }
     }
+    /// The free model area in device coordinates (`Ui::free_ndc`): what
+    /// Zoom Extents, Zoom Selection and Review frame into.
+    fn ui_free_ndc(&self) -> Option<[f64; 4]> { self.ui.as_ref().and_then(|ui| ui.free_ndc()) }
     fn ui_top_empty(&self, x: f32, y: f32) -> bool { self.ui.as_ref().is_some_and(|ui| ui.top_empty(x, y)) }
     /// The project tabs (views/wgpu_tabs.py, ui/tabs.rs): (id, name, front,
     /// unsaved, link source, tip, picture key), the projects in other

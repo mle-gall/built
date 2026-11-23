@@ -82,6 +82,8 @@ pub struct Ui {
     groups: Vec<Vec<Tool>>,
     /// The model rail's outer width as last laid out (points).
     rail_w: f32,
+    /// The window as last painted (points).
+    screen: Rect,
     active: String,
     status: String,
     hint: String,
@@ -268,6 +270,7 @@ impl Ui {
             modifiers: Default::default(),
             groups: Vec::new(),
             rail_w: rail::width(2),
+            screen: Rect::NOTHING,
             active: String::new(),
             status: String::new(),
             hint: String::new(),
@@ -464,7 +467,7 @@ impl Ui {
             col.prompt = (!title.is_empty()).then_some((title, body, buttons));
         }
     }
-    pub fn show_inspector(&mut self) { self.review = false; }
+    pub fn show_inspector(&mut self) { self.set_review(false); }
     pub fn set_inspector(&mut self, title: String, sections: Vec<(String, Vec<(String, String)>)>) {
         if let Some(col) = self.column.as_mut() {
             if col.inspector_title != title || col.inspector != sections {
@@ -544,6 +547,38 @@ impl Ui {
         self.view_menu = view_menu;
     }
 
+    /// Review on or off. Python hears `review:1` / `review:0` and frames the
+    /// camera into the area the panels leave (B8, owner decision 2026-11-23).
+    pub fn set_review(&mut self, on: bool) {
+        if self.review != on {
+            self.review = on;
+            self.actions.push(format!("review:{}", u8::from(on)));
+        }
+    }
+
+    /// The part of the window the model is seen in, in device coordinates
+    /// (x0, y0, x1, y1, y up): the window minus the rail, the dock and the
+    /// bars that are showing — the target state, not the retract animation.
+    /// None before the first frame, or with a large sheet or Sheets up.
+    pub fn free_ndc(&self) -> Option<[f64; 4]> {
+        let s = self.screen;
+        if !s.is_positive() || self.lsheet.open || self.sheets.shown || self.gallery.is_some() {
+            return None;
+        }
+        let top = TOP_H;
+        let (left, right, bottom) = if self.review {
+            (0.0, s.max.x, s.max.y)
+        } else {
+            let left = if self.groups.is_empty() { 0.0 } else { GUT + self.rail_w };
+            let dock = self.dock_w.min((s.width() * 0.45).max(DOCK_MIN_W));
+            let right = if self.column.is_some() { s.max.x - GUT - dock } else { s.max.x };
+            (left, right, s.max.y - BOT_H)
+        };
+        let x = |v: f32| f64::from(2.0 * v / s.width() - 1.0);
+        let y = |v: f32| f64::from(1.0 - 2.0 * v / s.height());
+        Some([x(left), y(bottom), x(right), y(top)])
+    }
+
     /// Called only after the transient chrome and focused field declined Esc.
     pub fn model_escape(chrome: Option<&mut Self>, busy: bool, selected: bool, editing: bool) -> &'static str {
         if busy { return "tool"; }
@@ -562,7 +597,7 @@ impl Ui {
                 return "dock";
             }
         }
-        ui.review = false;
+        ui.set_review(false);
         ""
     }
 
@@ -1013,7 +1048,7 @@ impl Ui {
             }
         }
         match clicked.as_deref() {
-            Some("review") => { self.review = !self.review; self.actions.push("review".into()); }
+            Some("review") => self.set_review(!self.review),
             Some(a) => self.actions.push(if a.starts_with("act:") { a.to_owned() } else { format!("tab:{a}") }),
             None => {}
         }
@@ -1113,7 +1148,7 @@ impl Ui {
     fn paint_strip(&mut self, ctx: &egui::Context, screen: Rect) {
         if !self.paint_strip_shown() { return; }
         let (_, band_bottom) = self.band(ctx, screen);
-        let centre = (GUT + 72.0 + self.free_right(ctx, screen)) / 2.0;
+        let centre = (GUT + self.rail_w + self.free_right(ctx, screen)) / 2.0;
         let mut clicked: Option<String> = None;
         egui::Area::new(egui::Id::new("paint_strip"))
             .pivot(egui::Align2::CENTER_BOTTOM)
@@ -1350,7 +1385,7 @@ impl Ui {
             });
         if close { self.view_open = false; }
         if toggle_review {
-            self.review = !self.review;
+            self.set_review(!self.review);
             self.view_open = false;
         }
         if let Some(id) = clicked { self.actions.push(format!("act:{id}")); }
@@ -2445,6 +2480,7 @@ impl Ui {
         let sheet_up = self.lsheet.open;
         let begin = Instant::now();
         let screen = Rect::from_min_size(Pos2::ZERO, vec2(size[0] as f32 / scale, size[1] as f32 / scale));
+        self.screen = screen;
         let mut raw = egui::RawInput {
             screen_rect: Some(screen),
             time: Some(self.start.elapsed().as_secs_f64()),
@@ -2884,6 +2920,31 @@ fn paint_always_offers_browse_all_even_without_materials() {
     let _ = strip(&mut ui, vec![button(true)]);
     let _ = strip(&mut ui, vec![button(false)]);
     assert!(ui.take_actions().contains(&"libsheet:materials".to_owned()));
+}
+
+#[test]
+fn the_free_area_leaves_out_the_panels_and_review_frees_them() {
+    let Some(mut ui) = test_chrome() else { return };
+    assert_eq!(ui.free_ndc(), None);                          // before a frame
+    ui.screen = Rect::from_min_size(Pos2::ZERO, vec2(1280., 800.));
+    ui.groups = vec![vec![Tool { enabled: true, id: "select".into(), label: String::new(), key: String::new(), icon: None }]];
+    ui.rail_w = rail::width(3);
+    ui.set_tree(vec![], 0);
+    ui.set_dock_width(320.);
+    let [x0, y0, x1, y1] = ui.free_ndc().unwrap();
+    let px = |v: f64| (v + 1.) / 2. * 1280.;
+    let py = |v: f64| (1. - v) / 2. * 800.;
+    assert!((px(x0) - f64::from(GUT + rail::width(3))).abs() < 0.01);
+    assert!((px(x1) - f64::from(1280. - GUT - 320.)).abs() < 0.01);
+    assert!((py(y1) - f64::from(TOP_H)).abs() < 0.01 && (py(y0) - f64::from(800. - BOT_H)).abs() < 0.01);
+    // Review retracts the rail, dock and bottom bar: the free area grows at
+    // once (not with the animation) and Python hears it to reframe.
+    ui.set_review(true);
+    assert_eq!(ui.take_actions(), ["review:1"]);
+    let [x0, y0, x1, _] = ui.free_ndc().unwrap();
+    assert_eq!((x0, y0, x1), (-1., -1., 1.));
+    assert_eq!(Ui::model_escape(Some(&mut ui), false, false, false), "");
+    assert_eq!(ui.take_actions(), ["review:0"]);
 }
 
 #[test]
