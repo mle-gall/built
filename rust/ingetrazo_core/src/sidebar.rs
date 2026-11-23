@@ -153,7 +153,7 @@ pub(crate) fn project_sidebar(
     for (text, _) in &mut rows {
         if let Some(name) = text.get(9).and_then(|hatch| hatch.strip_prefix("pat:")) {
             if let Some(families) = imported_families(scene, name) {
-                text.push(families);
+                if text.len() > 15 { text[15] = families; } else { text.push(families); }
             }
         }
     }

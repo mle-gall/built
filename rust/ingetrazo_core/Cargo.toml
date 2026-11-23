@@ -32,3 +32,4 @@ features = ["arbitrary_precision", "raw_value"]
 
 [dependencies.serde]
 version = "1"
+features = ["derive"]

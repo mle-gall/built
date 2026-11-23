@@ -35,8 +35,7 @@ impl ImportPatterns {
     }
 }
 
-#[pyfunction]
-pub fn import_hatch_file(history: &Bound<'_, PyAny>, path: PathBuf) -> PyResult<usize> {
+pub(super) fn read_pattern(path: PathBuf) -> PyResult<String> {
     let mut bytes = Vec::new();
     File::open(path)?
         .take(4 * 1024 * 1024 + 1)
@@ -46,10 +45,16 @@ pub fn import_hatch_file(history: &Bound<'_, PyAny>, path: PathBuf) -> PyResult<
     }
     let text = String::from_utf8(bytes)
         .unwrap_or_else(|e| e.into_bytes().into_iter().map(char::from).collect());
+    Ok(text.trim_start_matches('\u{feff}').to_owned())
+}
+
+#[pyfunction]
+pub fn import_hatch_file(history: &Bound<'_, PyAny>, path: PathBuf) -> PyResult<usize> {
+    let text = read_pattern(path)?;
     let py = history.py();
     let found = py
         .import("core.hatches")?
-        .call_method1("parse_pat", (text.trim_start_matches('\u{feff}'),))?
+        .call_method1("parse_pat", (text,))?
         .cast_into::<PyDict>()?;
     let count = found.len();
     if count == 0 {
