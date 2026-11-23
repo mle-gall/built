@@ -12,9 +12,8 @@ import json
 import os
 import re
 import resource
-import subprocess
+from isolated_launch import run as isolated_run
 import sys
-import tempfile
 import time
 
 
@@ -25,7 +24,7 @@ def one(path):
     from PySide6.QtCore import QCoreApplication, QSettings, QTimer
     from PySide6.QtWidgets import QApplication
     app = QApplication([])
-    settings = tempfile.mkdtemp(prefix="built-qt-measure-")
+    settings = os.environ["BUILT_SETTINGS_DIR"]
     os.environ["XDG_DATA_HOME"] = settings
     QSettings.setDefaultFormat(QSettings.IniFormat)
     for scope in (QSettings.UserScope, QSettings.SystemScope):
@@ -71,7 +70,7 @@ def one(path):
 
 def run(cmd, tag):
     start = time.perf_counter()
-    p = subprocess.run(["/usr/bin/time", "-l", *cmd], capture_output=True, text=True, timeout=120)
+    p = isolated_run(["/usr/bin/time", "-l", *cmd], capture_output=True, text=True, timeout=120)
     wall = (time.perf_counter() - start) * 1000
     rss = re.search(r"(\d+)\s+maximum resident set size", p.stderr)
     line = next((l for l in p.stdout.splitlines() if l.startswith(tag)), "")
@@ -86,12 +85,10 @@ def main():
         one(sys.argv[2])
     path = sys.argv[1]
     runs = int(sys.argv[2]) if len(sys.argv) > 2 else 3
-    settings = tempfile.mkdtemp(prefix="built-shell-measure-")
     results = {"qt": [], "shell": []}
     for _ in range(runs):
         results["qt"].append(run([sys.executable, __file__, "--one", path], "QT "))
-        results["shell"].append(run(["rust/built_app/target/release/built", path, "--measure",
-                                     "--settings", settings], "[built] measure "))
+        results["shell"].append(run(["rust/built_app/target/release/built", path, "--measure", "--new-instance"], "[built] measure "))
     print(json.dumps(results, indent=1))
 
 

@@ -22,7 +22,7 @@ wait 1500
 capture gallery-built
 quit
 EOF
-"${BUILT_BIN:-$root/rust/built_app/target/release/built}" --gallery --new-instance \
+.venv/bin/python scripts/isolated_launch.py "${BUILT_BIN:-$root/rust/built_app/target/release/built}" --gallery --new-instance \
     --settings "$run/settings" --root "$root" --venv "$root/.venv" --size 1280x800 \
     --script "$run/steps" --shots "$run"
 mv "$run/gallery-built.png" "$out/${DS_PREFIX:-}gallery-built.png"

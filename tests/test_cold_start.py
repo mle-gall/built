@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
+from scripts import isolated_launch
 import sys
 import textwrap
 from pathlib import Path
@@ -111,9 +111,9 @@ def cold_start(tmp_path, page=False, recover=False, untitled_slot=False):
     script.write_text(SCRIPT)
     env = dict(os.environ, QT_QPA_PLATFORM="offscreen", HOME=str(work / "home"),
                XDG_DATA_HOME=str(work / "home"), COLD_MS="3000", BUILT_START="1" if page else "0")
-    run = subprocess.run([sys.executable, str(script), str(REPO), str(work),
+    run = isolated_launch.run([sys.executable, str(script), str(REPO), str(work),
                           "1" if page else "0", "1" if recover else "0"],
-                         cwd=str(tmp_path), env=env, capture_output=True, text=True, timeout=120)
+                         cwd=str(tmp_path), home=work / "home", settings=work / "settings", env=env, capture_output=True, text=True, timeout=120)
     report = work / "report.json"
     assert report.is_file(), run.stdout[-3000:] + run.stderr[-3000:]
     return json.loads(report.read_text())

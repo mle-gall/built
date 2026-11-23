@@ -695,16 +695,12 @@ def main(argv=None) -> int:
         os.environ["INGETRAZO_PERF"] = "1"
         os.environ["INGETRAZO_PERF_LOG"] = str(args.out.with_suffix(".perf.log"))
     sys.path.insert(0, str(REPO))
+    from scripts.isolated_launch import isolate_script
+    isolate_script()
     os.chdir(REPO)
-    # Never the user's settings: a throwaway folder (recent files, start
-    # guards and window state land there).
-    from PySide6.QtCore import QSettings
-    folder = tempfile.mkdtemp(prefix="ingetrazo-probe-settings-")
-    QSettings.setDefaultFormat(QSettings.IniFormat)
-    for scope in (QSettings.UserScope, QSettings.SystemScope):
-        QSettings.setPath(QSettings.IniFormat, scope, folder)
+    from app_shell.qt_host import configure_settings
+    configure_settings(os.environ["BUILT_SETTINGS_DIR"])
     probe = Probe(path, args.out.resolve(), options)
-    probe.temp_folders.append(Path(folder))
     probe.result["core_file"] = __import__("core").__file__
     probe.install()
     probe.watchdog(args.timeout)

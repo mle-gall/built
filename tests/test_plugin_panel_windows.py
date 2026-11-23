@@ -1,7 +1,7 @@
 """Windowed checks. Enable with BUILT_WINDOW_TESTS=1 on a Metal-capable Mac."""
 import json
 import os
-import subprocess
+from scripts import isolated_launch
 from pathlib import Path
 
 import pytest
@@ -44,10 +44,10 @@ quit
                XDG_DATA_HOME=str(tmp_path / "data"), XDG_CONFIG_HOME=str(tmp_path / "config"),
                BUILT_ANSWERS="escape", BUILT_PASTEBOARD="built-plugin-smoke")
     binary = ROOT / "rust/built_app/target/release/built"
-    result = subprocess.run([str(binary), "--settings", str(tmp_path / "settings"),
+    result = isolated_launch.run([str(binary), "--settings", str(tmp_path / "settings"),
                              "--new-instance", "--size", "1280x800", "--shots", str(tmp_path),
                              "--script", str(script), str(ROOT / "examples/arco-yanque.igz")],
-                            env=env, text=True, capture_output=True, timeout=60, check=True)
+                            env=env, home=tmp_path, settings=tmp_path / "settings", text=True, capture_output=True, timeout=60, check=True)
     assert marker.read_text().splitlines() == ["run", "run"]
     state = next(json.loads(line.removeprefix("[built] state ")) for line in result.stdout.splitlines()
                  if line.startswith("[built] state "))

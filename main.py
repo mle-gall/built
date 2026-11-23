@@ -11,7 +11,6 @@ from __future__ import annotations
 import faulthandler
 import os
 import sys
-from formats import built
 from pathlib import Path
 
 # Frozen subprocess entry: no settings, logs, engine guard or application window.
@@ -19,6 +18,13 @@ if __name__ == '__main__' and '--probe-gpu' in sys.argv:
     from core.renderer_settings import probe_main
     probe_main()
     sys.exit(0)
+
+# Several host modules read preferences at import time.
+if profile := os.environ.get("BUILT_SETTINGS_DIR"):
+    from app_shell.qt_host import configure_settings
+    configure_settings(profile)
+
+from formats import built
 
 # Before any thread allocates (see core.malloc_arenas).
 from core import malloc_arenas
@@ -604,9 +610,6 @@ def _run_cli(argv: list[str]) -> int:
 
 
 def main() -> int:
-    if profile := os.environ.get("BUILT_SETTINGS_DIR"):
-        from app_shell.qt_host import configure_settings
-        configure_settings(profile)
     # HTTPS from Python (the AI assistant) must find a CA bundle: the macOS
     # package asked for one where only the build machine had it (#198).
     if "--gallery" in sys.argv[1:]:

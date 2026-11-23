@@ -7,6 +7,8 @@ The main entry always launches with --new-window and exits after its captures.
 import os, sys, subprocess, traceback
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from scripts.isolated_launch import isolate_script
+isolate_script()
 from PySide6.QtCore import QTimer, QPointF, Qt
 from PySide6.QtGui import QImage
 from ingetrazo_core import Vec3 as QVector3D
