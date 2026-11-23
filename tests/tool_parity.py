@@ -417,7 +417,120 @@ def rect_cases():
         yield name, steps, name == "typed_far_from_the_origin"
 
 
-def record(which=("line", "select", "rectangle")):
+# ---- Move -----------------------------------------------------------------
+
+class MoveView(RectView):
+    """A view with a loose square and a box group; picks scripted by the
+    scenario (the face, the group, or nothing)."""
+
+    def __init__(self):
+        super().__init__()
+        from ingetrazo_core import Matrix4
+        from core.group import Group
+        from core.mesh import Mesh
+        self.scene.mesh.add_face([(0., 0., 0.), (1., 0., 0.), (1., 1., 0.), (0., 1., 0.)])
+        box = Mesh()
+        box.add_face([(0., 0., 0.), (1., 0., 0.), (1., 1., 0.), (0., 1., 0.)])
+        self.group = Group(box)
+        self.group.uid = "box"
+        self.group.xform = Matrix4()
+        self.group.xform.translate(5.0, 0.0, 0.0)
+        self.scene.groups.append(self.group)
+        self.under = None
+
+    def pick_group(self, x, y):
+        return self.group if self.under == "group" else None
+
+    def pick_face(self, x, y):
+        return self.scene.mesh.faces[0] if self.under == "face" else None
+
+    def pick_edge(self, x, y):
+        return None
+
+    def pick_dimension(self, x, y):
+        return None
+
+
+def _move_snapshot(view, tool):
+    mesh = view.scene.mesh
+    faces = sorted(sorted(_pt(v) for v in f.vertices) for f in mesh.faces)
+    label = tool.value_label()
+    return {"faces": faces, "groups": sorted(_pt(g.xform.map(__import__("ingetrazo_core").Vec3())) for g in view.scene.groups),
+            "undo": len(view.history.undo_stack), "start": _pt(tool.start_point),
+            "copy": bool(tool._copy), "array": bool(tool.array_pending(view)),
+            "lines": len(tool.rubber_band_lines()),
+            "label": None if label is None else [label[0], _pt(label[1])],
+            "selection": len(view.scene.selection), "flashed": list(view.flashed)}
+
+
+MOVE_SCENARIOS = {
+    "move_the_face_under_the_cursor": [
+        ("under", "face"), ("click", (0.5, 0.5, 0)), ("hover", (0.5, 2.5, 0)), ("click", (0.5, 2.5, 0))],
+    "move_the_group_by_a_typed_distance": [
+        ("under", "group"), ("click", (5.5, 0.5, 0)), ("hover", (7.5, 0.5, 0)), ("value", 3.0)],
+    "typed_delta": [
+        ("under", "face"), ("click", (0.5, 0.5, 0)), ("value", (0.0, 0.0, 2.0)), ("value", 1.0)],
+    "ctrl_copy_then_an_array": [
+        ("under", "group"), ("key", "ctrl"), ("key_release", "ctrl", True), ("click", (5.5, 0.5, 0)),
+        ("hover", (5.5, 2.5, 0)), ("click", (5.5, 2.5, 0)), ("array", 3, "x", None),
+        ("array", 4, "/", None), ("array", 2, "x", 5.0)],
+    "ctrl_in_a_chord_takes_itself_back": [
+        ("under", "group"), ("key", "ctrl"), ("key_release", "ctrl", False), ("click", (5.5, 0.5, 0)),
+        ("hover", (6.5, 0.5, 0)), ("click", (6.5, 0.5, 0))],
+    "copy_during_the_drag_with_spacing": [
+        ("under", "face"), ("click", (0.5, 0.5, 0)), ("key", "ctrl"), ("key_release", "ctrl", True),
+        ("hover", (2.5, 0.5, 0)), ("array", 3, "x", 1.5)],
+    "cancel_puts_it_back": [
+        ("under", "face"), ("click", (0.5, 0.5, 0)), ("hover", (3, 3, 0)), ("cancel",),
+        ("hover", (4, 4, 0)), ("click", (4, 4, 0))],
+    "nothing_under_the_cursor": [("under", None), ("click", (9, 9, 0)), ("value", 2.0)],
+    "the_array_window_closes_after_an_undo": [
+        ("under", "group"), ("key", "ctrl"), ("key_release", "ctrl", True), ("click", (5.5, 0.5, 0)),
+        ("hover", (5.5, 1.5, 0)), ("click", (5.5, 1.5, 0)), ("undo_history",), ("array", 3, "x", None)],
+}
+
+
+def run_move(steps):
+    from ingetrazo_core import Vec3
+    from PySide6.QtCore import QPointF, Qt
+    from tools.base import ToolContext
+    from tools.move import MoveTool
+    view = MoveView()
+    tool = MoveTool()
+    tool.on_activate(view)
+    out = []
+    for step in steps:
+        kind = step[0]
+        result = None
+        if kind == "under":
+            view.under = step[1]
+            continue
+        if kind in ("click", "hover"):
+            ctx = ToolContext(view, Vec3(*map(float, step[1])), QPointF(0, 0), Qt.NoModifier, _Snap("on_face"))
+            (tool.on_click if kind == "click" else tool.on_hover)(ctx)
+        elif kind == "value":
+            v = step[1]
+            result = bool(tool.on_value(view, tuple(map(float, v)) if isinstance(v, (list, tuple)) else float(v)))
+        elif kind == "array":
+            result = bool(tool.on_array_value(view, step[1], step[2], step[3]))
+        elif kind == "key":
+            result = bool(tool.on_key(view, getattr(Qt, _KEYS[step[1]]), Qt.NoModifier))
+        elif kind == "key_release":
+            tapped = step[2]
+            view.ctrl_tapped = lambda: tapped
+            result = bool(tool.on_key_release(view, getattr(Qt, _KEYS[step[1]])))
+        elif kind == "cancel":
+            tool.on_cancel(view)
+        elif kind == "undo_history":
+            view.history.undo()
+        snap = _move_snapshot(view, tool)
+        view.flashed.clear()
+        snap["result"] = result
+        out.append(snap)
+    return out
+
+
+def record(which=("line", "select", "rectangle", "move")):
     FIXTURES.mkdir(parents=True, exist_ok=True)
     if "line" in which:
         line = {name: run_line(steps, far) for name, steps, far in line_cases()}
@@ -425,6 +538,9 @@ def record(which=("line", "select", "rectangle")):
     if "select" in which:
         select = {name: run_select(steps) for name, steps in SELECT_SCENARIOS.items()}
         (FIXTURES / "select.json").write_text(json.dumps(select, indent=1) + "\n")
+    if "move" in which:
+        move = {name: run_move(steps) for name, steps in MOVE_SCENARIOS.items()}
+        (FIXTURES / "move.json").write_text(json.dumps(move, indent=1) + "\n")
     if "rectangle" in which:
         rect = {name: run_rect(steps, far) for name, steps, far in rect_cases()}
         (FIXTURES / "rectangle.json").write_text(json.dumps(rect, indent=1) + "\n")
@@ -438,4 +554,4 @@ if __name__ == "__main__":
     if sys.argv[1:2] == ["record"]:
         os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
         sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-        record(tuple(sys.argv[2:]) or ("line", "select", "rectangle"))
+        record(tuple(sys.argv[2:]) or ("line", "select", "rectangle", "move"))
