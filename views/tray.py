@@ -5507,13 +5507,8 @@ class BimPanel(QWidget):
             self.refresh()
 
     def _edit_registry(self):
-        from core import bim_registry
-        from core.history import SetRegistryCommand
-        from views.object_record import RegistryDialog
-        dialog = RegistryDialog(self, bim_registry.get(self._scene()))
-        if dialog.exec():
-            self._window.viewport.history.execute(SetRegistryCommand(dialog.value))
-            self.refresh()
+        from views.wgpu_library import open_library
+        open_library(self._window, "registry")
 
     def _create_type(self):
         from copy import deepcopy

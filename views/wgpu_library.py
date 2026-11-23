@@ -681,7 +681,7 @@ def _state(view) -> dict:
         if st["sort"] not in dict(SORTS):
             st["sort"] = "name"
         st["facet"] = saved.get("facet", "all")
-        if st["type"] not in [p.id for p in PROVIDERS if p.ready]:
+        if st["type"] != "registry" and st["type"] not in [p.id for p in PROVIDERS if p.ready]:
             st["type"] = "materials"      # "colours" was a type of its own before 2026-11-22
         view._ui_lib = st
     return st
@@ -849,7 +849,7 @@ class LibrarySheet(_chrome_sheet().Provider):
 
     def __init__(self, view):
         self.view = view
-        self.catalogue = None
+        self.catalogue = self.registry = None
 
     def signature(self, ctx):
         win = ctx.win
@@ -881,7 +881,14 @@ class LibrarySheet(_chrome_sheet().Provider):
         current = _current_material_name() if prov.id == "materials" else None
         s = cs.Sheet(self.id, "", width=1240)
         for p in PROVIDERS:
-            s.tab(p.id, p.label, counts.get(p.id, "") if p.ready else "soon", on=p.id == prov.id, enabled=p.ready)
+            s.tab(p.id, p.label, counts.get(p.id, "") if p.ready else "soon", on=p.id == st["type"], enabled=p.ready)
+        s.tab("registry", "Project registry", on=st["type"] == "registry")
+        if st["type"] == "registry":
+            from ingetrazo_render import RegistryEditor
+            if self.registry is None:
+                self.registry = RegistryEditor(ctx.win.viewport.scene)
+            self.registry.build(s)
+            return s
         s.search("Search all " + prov.label.lower())
         sorts = list(SORTS) + ([("-", "")] + list(prov.facets) if getattr(prov, "facets", None) else [])
         label = "Sort: " + dict(SORTS).get(st["sort"], "Name")
@@ -1075,10 +1082,18 @@ class LibrarySheet(_chrome_sheet().Provider):
                 return
             elif self.catalogue.act(verb, args):
                 return
+        if verb == "verb" and self.registry is not None and st["type"] == "registry":
+            path = ""
+            if arg == "registry_csv":
+                from views.filedialogs import file_dialogs
+                path, _ = file_dialogs.getOpenFileName(win, "Codes CSV", "", "CSV (*.csv)")
+            if self.registry.act(win, arg, path) and arg == "registry_apply":
+                _chrome_sheet().close(win)
+            return
         if verb == "search":
             st["filter"] = arg
         elif verb == "tab":
-            if any(p.id == arg and p.ready for p in PROVIDERS):
+            if arg == "registry" or any(p.id == arg and p.ready for p in PROVIDERS):
                 st["type"], st["scope"], st["cursor"] = arg, "s:model", None
                 _save_state(st)
         elif verb == "side":
@@ -1138,6 +1153,7 @@ class LibrarySheet(_chrome_sheet().Provider):
             self.catalogue = None
 
     def closed(self, ctx):
+        self.registry = None
         self.close_catalogue()
 
 def refresh(win) -> None:

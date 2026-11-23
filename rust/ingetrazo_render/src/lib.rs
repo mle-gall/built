@@ -2874,6 +2874,7 @@ mod sheet_host;
 /// The Sheets workspace's page, native (docs/rust-sheets.md).
 pub mod sheet_page;
 mod camera_inspector;
+mod registry_editor;
 mod svg_options;
 /// Sheet items' display lists on the page.
 pub mod sheet_display;
@@ -2942,6 +2943,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<release::ReleaseReview>()?;
     m.add_class::<ui::command_palette::CommandCanvas>()?;
     m.add_class::<camera_inspector::CameraInspector>()?;
+    m.add_class::<registry_editor::RegistryEditor>()?;
     m.add_class::<svg_options::SvgOptions>()?;
     m.add_function(wrap_pyfunction!(commands::command_registry, m)?)?;
     m.add_function(wrap_pyfunction!(commands::command_description, m)?)?;
