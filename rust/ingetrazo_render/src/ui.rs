@@ -37,6 +37,8 @@ mod system_fonts;
 mod gallery;
 /// The tool rail's deterministic layout (two columns, three, then scroll).
 mod rail;
+/// The value field on the geometry and its readback after Enter (B1).
+mod value_field;
 mod site_map;
 use tokens::*;
 use kit::*;
@@ -83,8 +85,8 @@ pub struct Ui {
     active: String,
     status: String,
     hint: String,
-    /// Value at the cursor: caption, value, typing, cursor (points).
-    cursor: Option<(String, String, bool, Pos2)>,
+    /// The value field on the geometry and its readback (ui/value_field.rs).
+    cursor: value_field::ValueField,
     /// Selection bar: summary and (id, label, shortcut) actions.
     selection: Option<(String, Vec<(String, String, String, bool, bool)>)>,
     sel_more: bool,
@@ -269,7 +271,7 @@ impl Ui {
             active: String::new(),
             status: String::new(),
             hint: String::new(),
-            cursor: None,
+            cursor: Default::default(),
             selection: None,
             sel_more: false,
             sel_sub: None,
@@ -745,13 +747,20 @@ impl Ui {
         true
     }
 
-    pub fn set_active(&mut self, id: String) { self.active = id; }
+    pub fn set_active(&mut self, id: String) {
+        // Another tool is the next action: the committed value's readback goes.
+        if id != self.active { self.cursor.end_readback(); }
+        self.active = id;
+    }
     pub fn set_status(&mut self, status: String, hint: String) {
         self.status = status;
         self.hint = hint;
     }
-    pub fn set_cursor_value(&mut self, caption: String, value: String, typing: bool, x: f32, y: f32) {
-        self.cursor = (!caption.is_empty() || typing).then(|| (caption, value, typing, pos2(x, y)));
+    /// The value field's facts for this frame (ui/value_field.rs): `start`
+    /// is the tool's start point on screen, `revision` the document's.
+    pub fn set_cursor_value(&mut self, caption: String, value: String, typing: bool, x: f32, y: f32,
+                            start: Option<(f32, f32)>, revision: u64) {
+        self.cursor.set(caption, value, typing, pos2(x, y), start.map(|(x, y)| pos2(x, y)), revision);
     }
     pub fn set_selection(&mut self, summary: String, actions: Vec<(String, String, String, bool, bool)>) {
         if summary.is_empty() { self.sel_more = false; }
@@ -807,6 +816,8 @@ impl Ui {
     /// then neither hover, pick, nor navigate).
     pub fn pointer(&mut self, kind: &str, x: f32, y: f32, button: u8, mods: u8) -> bool {
         let pos = pos2(x, y);
+        // A press is the next action: the committed value's readback goes.
+        if kind == "press" { self.cursor.end_readback(); }
         self.modifiers = mods_from(mods);
         let button = match button {
             2 => egui::PointerButton::Secondary,
@@ -2400,39 +2411,30 @@ impl Ui {
         if let Some(id) = clicked { self.actions.push(format!("sheet:{id}")); }
     }
 
-    /// The value field on the geometry it measures (Maxence 2026-11-22):
-    /// Python anchors it (middle of the rubber band, beside a pulled face);
-    /// it stays inside the free area. Typing lights it up; Enter applies.
+    /// The value field on the geometry it measures (Maxence 2026-11-22),
+    /// and the committed value read back on the result after Enter until
+    /// the next action (B1). Both stay inside the free area.
     fn cursor_value(&self, ctx: &egui::Context, screen: Rect) {
-        let Some((caption, value, typing, at)) = &self.cursor else { return };
-        if !screen.contains(*at) || (value.is_empty() && !*typing) {
-            return;
-        }
-        let left = if self.review { GUT } else { GUT + 72.0 + GUT };
+        let left = if self.review { GUT } else { GUT + self.rail_w + GUT };
         let right = if self.review { screen.max.x - GUT } else { self.free_right(ctx, screen) - GUT };
         let bottom = if self.review { screen.max.y - GUT } else { screen.max.y - BOT_H - GUT };
-        let size = vec2(170.0, 30.0);
-        let pos = pos2((at.x - size.x / 2.0).clamp(left, (right - size.x).max(left)),
-                       (at.y - size.y / 2.0).clamp(TOP_H + GUT, (bottom - size.y).max(TOP_H + GUT)));
-        egui::Area::new(egui::Id::new("cursor_value"))
-            .fixed_pos(pos)
-            .order(egui::Order::Tooltip)
-            .interactable(false)
-            .show(ctx, |ui| {
-                let edge = if *typing { ACCENT } else { EDGE };
-                glass(Surface::Raised).stroke(Stroke::new(1.0_f32, edge)).corner_radius(CornerRadius::same(R_CONTROL))
-                    .inner_margin(Margin::symmetric(10, 6)).show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing = vec2(SPACE_S, 0.0);
-                        if !caption.is_empty() {
-                            ui.label(egui::RichText::new(caption).font(meta()).color(FAINT));
-                        }
-                        let shown = if *typing { format!("{value}▏") } else { value.clone() };
-                        ui.label(egui::RichText::new(shown).font(title_font())
-                            .color(if *typing { BRIGHT } else { INK }));
-                    });
-                });
-            });
+        let free = Rect::from_min_max(pos2(left, TOP_H + GUT), pos2(right, bottom));
+        let (back, live) = self.cursor.place(free, vec2(170.0, 30.0));
+        let pill = |id: &str, r: Rect, caption: &str, value: &str, typing: bool, committed: bool| {
+            egui::Area::new(egui::Id::new(id))
+                .fixed_pos(r.min)
+                .order(egui::Order::Tooltip)
+                .interactable(false)
+                .show(ctx, |ui| value_pill(ui, caption, value, typing, committed));
+        };
+        if let (Some(r), Some(b)) = (back, &self.cursor.readback) {
+            pill("value_readback", r, &b.caption, &b.value, false, true);
+        }
+        if let (Some(r), Some(l)) = (live, &self.cursor.live) {
+            if screen.contains(l.at) {
+                pill("cursor_value", r, &l.caption, &l.value, l.typing, false);
+            }
+        }
     }
 
     /// Lay out, tessellate and draw the chrome over ``target`` (already

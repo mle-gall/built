@@ -2274,8 +2274,13 @@ impl Renderer {
     fn ui_pointer(&mut self, kind: &str, x: f32, y: f32, button: u8, modifiers: u8) -> bool {
         self.ui.as_mut().is_some_and(|ui| ui.pointer(kind, x, y, button, modifiers))
     }
-    fn ui_set_cursor_value(&mut self, caption: String, value: String, typing: bool, x: f32, y: f32) {
-        if let Some(ui) = self.ui.as_mut() { ui.set_cursor_value(caption, value, typing, x, y); }
+    /// The value field on the geometry: caption, live reading or what is
+    /// typed, its anchor (points), the tool's start on screen and the
+    /// document's revision (a commit is read from them, ui/value_field.rs).
+    #[pyo3(signature = (caption, value, typing, x, y, start=None, revision=0))]
+    fn ui_set_cursor_value(&mut self, caption: String, value: String, typing: bool, x: f32, y: f32,
+                           start: Option<(f32, f32)>, revision: u64) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_cursor_value(caption, value, typing, x, y, start, revision); }
     }
     fn ui_set_selection(&mut self, summary: String, actions: Vec<(String, String, String, bool, bool)>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_selection(summary, actions); }

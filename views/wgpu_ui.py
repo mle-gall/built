@@ -609,37 +609,30 @@ def _cluster(view, win) -> None:
 
 
 def _cursor_value(view, win) -> None:
-    """The value field on the geometry it measures (Maxence 2026-11-22):
-    between the operation's first point and the cursor, a little above
-    the rubber band; near the cursor while typing before the first point.
-    Hidden when the tool takes no value or nothing is under way."""
-    label = getattr(win, "_vcb_name", None)
-    value = getattr(win, "_vcb_value", None)
-    off = ("", "", False, 0.0, 0.0)
-    if label is None or value is None or label.isHidden():
-        view.renderer.ui_set_cursor_value(*off)
+    """The value field on the geometry (Maxence 2026-11-22), drawn and kept
+    by the chrome (ui/value_field.rs): the tool's caption, the value where the
+    tool shows it (``_length_label_at``), the tool's start on screen and the
+    document revision, from which Rust reads a commit and its readback.
+    The same in both hosts: it reads the tool, not a status bar."""
+    from core.i18n import tr
+    from views.document_interaction import DocumentInteraction
+    tools = getattr(view, "tools", None)
+    tool = getattr(tools, "active_tool", None)
+    caption = getattr(tool, "vcb_caption", None)
+    caption = caption() if callable(caption) else getattr(tool, "vcb_label", None)
+    label = DocumentInteraction._length_label_at(tools) if caption is not None else None
+    at = view._world_to_pixel(label[1]) if label is not None else None
+    history = getattr(getattr(win, "viewport", None), "history", None)
+    revision = int(getattr(history, "revision", 0) or 0)
+    if at is None:
+        view.renderer.ui_set_cursor_value("", "", False, 0.0, 0.0, None, revision)
         return
-    buffer = str(getattr(win, "_vcb_buffer", "") or "")
-    pos = getattr(view, "_cursor_pos", None)
-    tool = getattr(view.source_viewport, "active_tool", None)
-    start = (getattr(view.tools, "start_point", None) or getattr(tool, "start_point", None)
-             or getattr(tool, "grab", None))
-    anchor = None
-    if start is not None and pos is not None:
-        try:
-            q = view._world_to_pixel(start)
-        except Exception:
-            q = None
-        if q is not None:
-            qx, qy = (q.x(), q.y()) if hasattr(q, "x") else (q[0], q[1])
-            anchor = ((qx + pos.x()) / 2.0, (qy + pos.y()) / 2.0 - 26.0)
-    if anchor is None and buffer and pos is not None:
-        anchor = (pos.x(), pos.y() - 40.0)
-    if anchor is None:
-        view.renderer.ui_set_cursor_value(*off)
-        return
-    view.renderer.ui_set_cursor_value(label.text(), buffer or value.text(), bool(buffer),
-                                      float(anchor[0]), float(anchor[1]))
+    start = getattr(tool, "start_point", None)
+    start = view._world_to_pixel(start) if start is not None else None
+    xy = lambda p: (float(p.x()), float(p.y())) if hasattr(p, "x") else (float(p[0]), float(p[1]))  # noqa: E731
+    x, y = xy(at)
+    view.renderer.ui_set_cursor_value(tr(caption), label[0], label[2], x, y - 22.0,
+                                      xy(start) if start is not None else None, revision)
 
 
 def _summary(sel) -> str:

@@ -6015,12 +6015,14 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
             painter.setPen(QPen(color))
             painter.drawText(QPointF(px + 10, py + 16), text)
 
-    def _draw_length_label(self, painter: QPainter) -> None:
-        if getattr(self, '_chrome_owns_labels', False):
-            return  # the value field on the geometry shows it (views/wgpu_ui.py)
+    def _length_label_at(self):
+        """``(text, world point, typing)`` of the value the tool shows on the
+        geometry — its ``value_label`` or a single segment's length, what is
+        typed instead while typing — or None. The bold label below and the
+        chrome's value field (views/wgpu_ui.py) both read it."""
         tool = self.active_tool
         if tool is None:
-            return
+            return None
 
         # Tool-provided label takes priority (e.g. PushPullTool's signed
         # extrusion distance). Otherwise fall back to the single-segment
@@ -6029,18 +6031,18 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         if callable(label_provider):
             result = label_provider()
             if result is None:
-                return
+                return None
             # Extension tools are outside the viewport's control. A malformed
             # value_label() must not break the OpenGL paint loop repeatedly.
             if not isinstance(result, (tuple, list)) or len(result) != 2:
-                return
+                return None
             text, mid_world = result
             if mid_world is None:        # VCB-only value (Walkthrough eye height)
-                return
+                return None
         else:
             segments = tool.rubber_band_lines()
             if len(segments) != 1:
-                return
+                return None
             start, hover = segments[0]
             text = _fmt_len((hover - start).length())
             mid_world = QVector3D(
@@ -6048,15 +6050,25 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
                 (start.y() + hover.y()) * 0.5,
                 (start.z() + hover.z()) * 0.5,
             )
-        pixel = self._world_to_pixel(mid_world)
-        if pixel is None:
-            return
         if self._value_buffer:
             unitless = getattr(tool, "value_is_unitless", None)
             if callable(unitless) and unitless():
                 text = self._value_buffer   # an angle or a count: no unit mark
             else:
                 text = _typed_value_text(self._value_buffer)
+        return text, mid_world, bool(self._value_buffer)
+
+    def _draw_length_label(self, painter: QPainter) -> None:
+        if getattr(self, '_chrome_owns_labels', False):
+            return  # the value field on the geometry shows it (views/wgpu_ui.py)
+        label = self._length_label_at()
+        if label is None:
+            return
+        text, mid_world, typing = label
+        pixel = self._world_to_pixel(mid_world)
+        if pixel is None:
+            return
+        if typing:
             fg = QColor("#0F141B")
             shadow = QColor(255, 220, 130, 235)  # warm tint while typing
         else:
