@@ -434,11 +434,15 @@ def test_instance_edit_flows_make_unique():
     g2.xform = m
     scene.groups.extend([g1, g2])
 
-    # enter-to-edit materializes only that copy
+    # The active mesh exposes world coordinates in both engines.
     scene.begin_group_edit(g2)
-    assert g2.xform is None and g2.mesh is not proto
-    assert scene.mesh is g2.mesh
-    xs = {round(v.position.x(), 3) for v in g2.mesh.vertices}
+    if scene._edit_stack[-1].get("affine"):
+        assert g2.mesh is proto and g2.xform == m
+        assert scene.mesh._instance_definition is proto
+    else:
+        assert g2.xform is None and g2.mesh is not proto
+        assert scene.mesh is g2.mesh
+    xs = {round(v.position.x(), 3) for v in scene.mesh.vertices}
     assert xs == {10.0, 11.0}
     scene.end_group_edit()
     assert g1.mesh is proto and g1.xform is not None   # sibling untouched

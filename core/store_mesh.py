@@ -1727,6 +1727,13 @@ class StoreMesh(Mesh):
         attrs["_attr_table"] = []
         self._dirty()
 
+    def _journal_state(self, snapshot):
+        """Attach Python face paint to a canonical document store snapshot."""
+        from copy import deepcopy
+        d = _attribute_owner(self)
+        own = {k: deepcopy(v) if v else {} for k, v in d["_attr_own"].items()}
+        return StoreState(snapshot, own, d["_attr_table"], self)
+
     def capture_state(self):
         d = _attribute_owner(self)
         return StoreState(self._store.snapshot(),
@@ -2026,6 +2033,7 @@ def _restore_store_state(m, snap: StoreState) -> None:
     afterwards. Same lineage: the store goes back to it, keys kept. Another
     store's snapshot is adopted under a fresh
     namespace: new keys (design decision 3)."""
+    from copy import deepcopy
     d = m.__dict__
     st = snap.owner if snap.mesh is m else d.get("_store")
     current = d.get("_store")
@@ -2040,12 +2048,12 @@ def _restore_store_state(m, snap: StoreState) -> None:
     if foreign:
         ns = next(_mesh._KEY_NAMESPACES)
         st.restore(snap.snap, namespace=ns)
-        own = {(ns << 40) | (k & LOCAL_MASK): dict(v)
+        own = {(ns << 40) | (k & LOCAL_MASK): deepcopy(v) if v else {}
                for k, v in snap.own.items()}
     else:
         held = _attribute_owner(m).get("_attr_own") or {}
         st.restore(snap.snap)
-        own = {k: dict(v) for k, v in snap.own.items()}
+        own = {k: deepcopy(v) if v else {} for k, v in snap.own.items()}
         # The restore kept the newer elements as tombstones (restore_tail
         # .rs); their own attrs come along for a relink.
         for k, v in held.items():

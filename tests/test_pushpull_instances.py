@@ -142,7 +142,11 @@ def test_dentro_del_componente_el_push_llega_a_todas_las_copias():
         scene = vp.scene
         proto, _top, a, b = _instances(scene)
         vp.begin_group_edit(b)                       # el doble clic del usuario
-        assert scene.edit_group is b and b.xform is None
+        assert scene.edit_group is b
+        if scene._edit_stack[-1].get("affine"):
+            assert b.xform is not None and scene.mesh._instance_definition is proto
+        else:
+            assert b.xform is None and scene.mesh is b.mesh
         cara = next(f for f in scene.mesh.faces
                     if all(abs(v.z() - 1.0) < 1e-9 for v in f.vertices))
         assert abs(cara.centroid().x() - 3.5) < 1e-6, "es la copia en el mundo"

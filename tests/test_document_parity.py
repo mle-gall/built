@@ -23,12 +23,12 @@ from pathlib import Path
 
 import pytest
 
-from core import doc_model
+native = pytest.importorskip("ingetrazo_core")
 
 ROOT = Path(__file__).resolve().parent.parent
 SCENARIO = ROOT / "tests" / "doc_parity_scenario.py"
 
-pytestmark = pytest.mark.skipif(not doc_model.ENABLED,
+pytestmark = pytest.mark.skipif(not hasattr(native, "doc_begin"),
                                 reason="the Rust document is not built")
 
 
@@ -139,3 +139,8 @@ def test_a_tag_made_by_a_command_keeps_its_uid(runs):
 
     assert len(set(uids(rs))) == 1
     assert len(set(uids(py))) > 1
+
+
+def test_geometry_history_agrees(runs):
+    python, rust = runs
+    assert norm(rust["geometry"]) == norm(python["geometry"])

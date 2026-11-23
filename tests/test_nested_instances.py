@@ -191,11 +191,15 @@ def test_editing_into_a_nested_group_keeps_the_tree():
              for v in g.mesh.vertices
              for p in [m.map(v.position) if m is not None else v.position]]
     scene.begin_group_edit(top)
-    assert scene.mesh is top.mesh
+    if scene._edit_stack[-1].get("affine"):
+        assert scene.mesh._instance_definition is top.mesh
+    else:
+        assert scene.mesh is top.mesh
     assert len(top.children) == 1, "el árbol se horneó al entrar"
     assert top.children[0].name == "mid"
     assert top.children[0].children[0].mesh is proto, "y sigue compartiendo malla"
-    assert top.xform == QMatrix4x4()
+    if not scene._edit_stack[-1].get("affine"):
+        assert top.xform == QMatrix4x4()
     despues = [p.toTuple() for g, m in iter_placements(top)
                for v in g.mesh.vertices
                for p in [m.map(v.position) if m is not None else v.position]]

@@ -1902,6 +1902,7 @@ impl Registry {
 /// touched (kept alive while the step can still be undone or redone).
 #[pyclass(module = "ingetrazo_core", name = "Transaction")]
 pub struct PyTransaction {
+    geometry: Vec<super::geometry::Edit>,
     ops: Vec<Op>,
     pins: Vec<Py<PyAny>>,
 }
@@ -1978,7 +1979,27 @@ fn changes_dict<'py>(py: Python<'py>, ops: &[Op], inverse: bool, root: Option<Ke
 #[pymethods]
 impl PyTransaction {
     fn __len__(&self) -> usize {
-        self.ops.len()
+        self.ops.len() + self.geometry.len()
+    }
+
+    /// Fold committed entry, edit and exit steps into one occurrence edit.
+    #[staticmethod]
+    fn compose(py: Python<'_>, steps: Vec<Py<PyTransaction>>) -> PyResult<Self> {
+        let mut result = Self { ops: Vec::new(), pins: Vec::new(), geometry: Vec::new() };
+        for step in steps {
+            let step = step.bind(py).try_borrow()?;
+            result.ops.extend_from_slice(&step.ops);
+            result.pins.extend(step.pins.iter().map(|p| p.clone_ref(py)));
+            for edit in &step.geometry {
+                edit.append_to(py, &mut result.geometry);
+            }
+        }
+        Ok(result)
+    }
+
+    /// Store face tools expose the same snapshots as their public change record.
+    fn geometry_states(&self, py: Python<'_>, mesh: &Bound<'_, PyAny>) -> Option<(Py<PyAny>, Py<PyAny>)> {
+        self.geometry.iter().find_map(|edit| edit.states(py, mesh))
     }
 
     /// Put back what the step wrote (newest first).
@@ -2031,10 +2052,16 @@ impl PyTransaction {
             };
             out.append(t)?;
         }
+        for edit in &self.geometry {
+            out.append(("geometry", edit.lineage()))?;
+        }
         Ok(out)
     }
 
     fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
+        for edit in &self.geometry {
+            edit.traverse(&visit)?;
+        }
         for p in &self.pins {
             visit.call(p)?;
         }
@@ -2042,12 +2069,22 @@ impl PyTransaction {
     }
 
     fn __clear__(&mut self) {
+        self.geometry.clear();
         self.pins.clear();
     }
 }
 
 impl PyTransaction {
     fn run(&self, py: Python<'_>, backwards: bool) -> PyResult<()> {
+        if backwards {
+            for edit in self.geometry.iter().rev() {
+                edit.apply(py, true)?;
+            }
+        } else {
+            for edit in &self.geometry {
+                edit.apply(py, false)?;
+            }
+        }
         let mut trash = Trash::default();
         let r = {
             let mut d = lock();
@@ -2076,7 +2113,17 @@ fn doc_new_root(py: Python<'_>) -> PyResult<Py<PyPlacement>> {
 /// depth; 0 when another thread's transaction is open (not journalled).
 #[pyfunction]
 fn doc_begin() -> usize {
-    lock().begin()
+    let depth = lock().begin();
+    if depth > 0 {
+        super::geometry::begin();
+    }
+    depth
+}
+
+#[pyfunction]
+#[pyo3(signature=(mesh, before=None))]
+fn doc_touch_mesh(mesh: &Bound<'_, PyAny>, before: Option<&Bound<'_, PyAny>>) -> PyResult<()> {
+    super::geometry::touch(mesh, before)
 }
 
 #[pyfunction]
@@ -2088,16 +2135,18 @@ fn doc_depth() -> usize {
 #[pyfunction]
 fn doc_commit(py: Python<'_>) -> PyResult<Option<Py<PyTransaction>>> {
     super::assembly::drain(py)?;
+    let geometry = super::geometry::commit(py)?;
     let got = { lock().commit() };
     match got {
         None => Ok(None),
-        Some((ops, pins)) => Ok(Some(Py::new(py, PyTransaction { ops, pins })?)),
+        Some((ops, pins)) => Ok(Some(Py::new(py, PyTransaction { ops, pins, geometry })?)),
     }
 }
 
 /// Undo what the innermost level wrote and close it.
 #[pyfunction]
 fn doc_rollback(py: Python<'_>) -> PyResult<()> {
+    let geometry = super::geometry::rollback(py);
     let mut trash = Trash::default();
     let r = {
         let mut d = lock();
@@ -2107,6 +2156,7 @@ fn doc_rollback(py: Python<'_>) -> PyResult<()> {
     drain_pending();
     let refilled = run_refills(py);
     r.map_err(PyRuntimeError::new_err)?;
+    geometry?;
     refilled
 }
 
@@ -2378,6 +2428,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyTransaction>()?;
     m.add_function(wrap_pyfunction!(doc_new_root, m)?)?;
     m.add_function(wrap_pyfunction!(doc_begin, m)?)?;
+    m.add_function(wrap_pyfunction!(doc_touch_mesh, m)?)?;
     m.add_function(wrap_pyfunction!(doc_depth, m)?)?;
     m.add_function(wrap_pyfunction!(doc_commit, m)?)?;
     m.add_function(wrap_pyfunction!(doc_rollback, m)?)?;

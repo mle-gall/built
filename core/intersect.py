@@ -426,6 +426,8 @@ def build_intersection_edit(scene, segments):
 
 
 class _PlacementCuts(CompoundCommand):
+    journal_parts = True
+
     # History protects the open mesh. Each child snapshot protects its
     # own prototype, including a child that fails halfway through.
     def do(self, scene):
@@ -433,8 +435,9 @@ class _PlacementCuts(CompoundCommand):
             try:
                 command.do(scene)
             except Exception:
-                for attempted in reversed(self.commands[:i + 1]):
-                    attempted.undo(scene)
+                if not self._journal_geometry:
+                    for attempted in reversed(self.commands[:i + 1]):
+                        attempted.undo(scene)
                 raise
 
 

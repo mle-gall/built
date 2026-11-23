@@ -444,3 +444,142 @@ def test_scoped_delivery_copies_kept_placements_and_material_mapping():
     assert projected is not kept and projected.definition is kept.definition
     assert projected.children[0] is not kept.children[0]
     assert kept._parent is scene._root
+
+
+def test_geometry_savepoints_across_occurrences_and_placement_fields():
+    from core.history import SnapshotMutation
+    from core.mesh import Mesh
+    from core.store_mesh import instance_view
+
+    scene = Scene()
+    group = Group(Mesh(), name="before")
+    scene.groups.append(group)
+    mesh = group.mesh
+    transform = QMatrix4x4()
+    transform.translate(10, 0, 0)
+    a = instance_view(mesh, transform.data())
+    b = instance_view(mesh, QMatrix4x4().data())
+    if a is None:
+        pytest.skip("requires the Rust geometry store")
+    history = History(scene)
+    original = mesh.capture_state()
+    N.doc_begin()
+    try:
+        group.name = "outer"
+        history.execute(SnapshotMutation(lambda _: a.add_edge(QVector3D(10, 0, 0),
+                                                              QVector3D(11, 0, 0)), mesh=a))
+        assert history.last_error is None
+        edge = mesh.edges[0].key
+        N.doc_begin()
+        group.name = "discard"
+        history.execute(SnapshotMutation(lambda _: b.remove_edge(b.edges[0]), mesh=b))
+        assert history.last_error is None and not mesh.edges
+        N.doc_rollback()
+        assert group.name == "outer" and b.edges[0].key == edge
+        history.execute(SnapshotMutation(lambda _: b.add_edge(QVector3D(1, 0, 0),
+                                                              QVector3D(2, 0, 0)), mesh=b))
+        assert history.last_error is None
+        txn = N.doc_commit()
+    finally:
+        while N.doc_depth():
+            N.doc_rollback()
+    after = mesh.capture_state()
+    assert len(txn) == 2  # one name and one canonical mesh
+    txn.undo()
+    assert mesh.capture_state() == original and group.name == "before"
+    txn.redo()
+    assert mesh.capture_state() == after and group.name == "outer"
+    assert a.edges[0].key == edge
+
+
+def test_singular_store_session_keeps_shared_keys_on_replay():
+    from core.history import AddEdgeCommand
+    from core.reference_edit import record_leave
+
+    scene = Scene()
+    a = Group()
+    a.mesh.add_edge(QVector3D(0, 0, 0), QVector3D(1, 0, 0))
+    definition = a.mesh
+    b = Group(definition)
+    matrix = QMatrix4x4()
+    matrix.scale(1, 1, 0)
+    a.xform, b.xform = matrix, QMatrix4x4()
+    scene.groups.extend((a, b))
+    h = History(scene)
+    before = definition.capture_state()
+    scene.begin_group_edit(a)
+    level = scene._edit_stack[-1]
+    level["undo_mark"] = 0
+    assert level["entry_transaction"] is not None
+    h.execute(AddEdgeCommand(QVector3D(0, 1, 0), QVector3D(1, 1, 0)))
+    share = level.pop("share")
+    scene.end_group_edit()
+    assert record_leave(h, level, share) and not h.last_error
+    after = definition.capture_state()
+    keys = [e.key for e in definition.edges]
+    assert len(keys) == 2 and a.mesh is b.mesh is definition
+    assert h.feed.last.command == "ReshareInstanceCommand"
+    for _ in range(2):
+        assert h.undo() and a.mesh is b.mesh and definition.capture_state() == before
+        assert h.redo() and a.mesh is b.mesh and definition.capture_state() == after
+        assert [e.key for e in definition.edges] == keys
+
+
+def test_staged_occurrence_undo_after_leaving_keeps_canonical_coordinates():
+    from core.history import SnapshotMutation
+
+    scene = Scene()
+    a = Group()
+    transform = QMatrix4x4()
+    transform.translate(17000, 3, 5)
+    transform.rotate(37, 0, 0, 1)
+    transform.scale(-2, 3, 1)
+    a.xform = transform
+    scene.groups.append(a)
+    scene.begin_group_edit(a)
+    mesh = scene.mesh
+    if not scene._edit_stack[-1].get("affine"):
+        pytest.skip("requires the native occurrence store")
+    h = History(scene)
+    original = a.mesh.capture_state()
+    before = mesh.capture_state()
+    edge = mesh.add_edge(QVector3D(17000, 6, 9), QVector3D(17001, 4, 8))
+    after = a.mesh.capture_state()
+    h.execute(SnapshotMutation.from_states(before, mesh.capture_state()))
+    assert h.last_error is None
+    scene.end_group_edit()
+    assert h.undo() and a.mesh.capture_state() == original
+    assert h.redo() and a.mesh.capture_state() == after
+    assert a.mesh.edges[0].key == edge.key
+
+
+def test_geometry_commit_failure_rolls_back_all_targets_and_fields(monkeypatch):
+    from core.history import SnapshotMutation
+    from core.store_mesh import StoreMesh
+
+    scene = Scene()
+    part = Group(name="before")
+    scene.groups.append(part)
+    left, right = scene.mesh, part.mesh
+    if not isinstance(left, StoreMesh):
+        pytest.skip("requires the native geometry store")
+    original = [m.capture_state() for m in (left, right)]
+    snapshot = StoreMesh._journal_state
+
+    def capture(mesh, state):
+        if mesh is right and mesh.edges:
+            raise ValueError("after snapshot failed")
+        return snapshot(mesh, state)
+
+    monkeypatch.setattr(StoreMesh, "_journal_state", capture)
+    command = CompoundCommand([
+        RenameGroupCommand(part, "after"),
+        *(SnapshotMutation(lambda _, m=m: m.add_edge(QVector3D(), QVector3D(1, 0, 0)), mesh=m)
+          for m in (left, right)),
+    ])
+    history = History(scene)
+    history.execute(command)
+    assert "after snapshot failed" in history.last_error
+    assert not history.undo_stack and N.doc_depth() == 0
+    assert part.name == "before"
+    assert [m.capture_state() for m in (left, right)] == original

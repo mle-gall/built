@@ -5,7 +5,7 @@ The native occurrence store and its history never enter these sessions.
 """
 from ingetrazo_core import Matrix4, Vec3
 
-from core.history import Command
+from core.history import Command, MeshCommand, CompoundCommand, OccurrenceCommands
 
 
 def enter(scene, group, frame):
@@ -330,6 +330,53 @@ class ReshareAssemblyCommand(Command):
         scene.version += 1
 
 
+class _StoreSession(MeshCommand):
+    """Close a singular placement's world copy. History journals the writes
+    to the canonical store and placements. Replay uses the entry and exit
+    transactions around the commands that actually ran inside."""
+    def __init__(self, share, parts, inner, shared, entry):
+        self.entry = entry
+        self.group, self.proto, self.xform = share[:3]
+        self.edited = self.group.mesh
+        self.parts = parts
+        self.inner = inner
+        self.shared = shared
+        self.reference_assembly = parts is not None
+        self.reference_instance = parts is None
+        self.history_name = ("ReshareAssemblyCommand" if self.reference_assembly
+                             else "ReshareInstanceCommand")
+        self.replay = None
+
+    def geometry_meshes(self, scene):
+        return (self.proto,)
+
+    def do(self, scene):
+        if self.replay is not None:
+            self.replay.do(scene)
+        elif self.shared:
+            share_back(self.group, self.proto, self.xform, self.edited, self.parts)
+        else:
+            restore_sharing(self.group, self.proto, self.xform, self.parts)
+        scene.version += 1
+
+    def undo(self, scene):
+        self.replay.undo(scene)
+        scene.version += 1
+
+    def bind_transaction(self, txn):
+        edits = [getattr(c, "_doc_txn", None) for c in self.inner]
+        if all(edit is not None for edit in edits):
+            self._doc_txn = txn.compose([self.entry, *edits, txn])
+            return
+        # A compatibility tool changed Python-owned state, e.g. annotations.
+        # Keep its own inverse between the native entry and exit transactions.
+        opening, closing = CompoundCommand([]), CompoundCommand([])
+        opening._doc_txn = self.entry
+        closing._doc_txn = txn
+        self.replay = OccurrenceCommands([opening, *self.inner, closing])
+        self._doc_txn = None
+
+
 def record_leave(history, level, share):
     """Close the compatibility session as one undoable step."""
     parts = level.get("parts")
@@ -338,6 +385,17 @@ def record_leave(history, level, share):
     mark = level.get("undo_mark", len(history.undo_stack))
     mark = min(mark, len(history.undo_stack))
     shared = edited.capture_state() != state0
+    entry = level.get("entry_transaction")
+    from core import doc_model
+    changed_parts = parts is not None and len(history.undo_stack) > mark
+    if entry is not None and not doc_model.NATIVE.doc_depth() and (shared or changed_parts):
+        inner = history.undo_stack[mark:]
+        step = _StoreSession(share, parts, inner, shared, entry)
+        del history.undo_stack[mark:]
+        history.execute(step)
+        if history.last_error or history.last_rejected:
+            history.undo_stack.extend(inner)
+        return shared
     if parts is not None and (shared
                               or len(history.undo_stack) > mark):
         # An assembly: what ran inside was recorded with its matrix

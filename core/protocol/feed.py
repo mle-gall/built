@@ -495,7 +495,7 @@ class ChangeFeed:
     def _build(self, h, cmd, phase, pending) -> Step:
         _cmd, _phase, tokens, (roots0, tags0, mats0) = pending
         scene = h.scene
-        step = Step(h.revision, phase, type(cmd).__name__)
+        step = Step(h.revision, phase, getattr(cmd, "history_name", type(cmd).__name__))
         painted = _painted(cmd)
         for i, (mesh, token) in enumerate(tokens):
             change = _mesh_change(mesh, token, painted if i == 0 else ())
