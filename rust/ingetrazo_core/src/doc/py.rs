@@ -1233,6 +1233,10 @@ impl PyPlacement {
         Ok(edit_path.iter().map(|(_, level)| level.clone_ref(py)).collect())
     }
 
+    fn _tag_drawing_edit(slf: &Bound<'_, Self>, tags: Vec<String>, field: &str, value: &str) -> PyResult<super::tag_browser::DrawingEdit> {
+        super::tag_browser::drawing_edit(slf.py(), slf.as_any(), tags, field, value)
+    }
+
     fn _tag_browser_rows(&self) -> PyResult<Vec<(String, String, bool, bool)>> {
         super::tag_browser::rows(&lock(), self.key).map_err(err)
     }

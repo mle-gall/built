@@ -1999,25 +1999,11 @@ def _tree_action(win, view, action) -> None:
             apply_dock_width(view)
             rebuild()
         elif verb in ("print", "color", "linetype", "weight") and node:
-            panel = getattr(getattr(win, "layers_dock", None), "panel", None)
             ts = tags(node)
-            if panel is not None and ts:
-                if verb == "print":
-                    layer = scene.layer(ts[0])
-                    panel.set_printable(ts, not bool(getattr(layer, "printable", True)))
-                elif verb == "color":
-                    rgb = None
-                    if extra.startswith("#") and len(extra) == 7:
-                        v = int(extra[1:], 16)
-                        rgb = ((v >> 16 & 255) / 255.0, (v >> 8 & 255) / 255.0, (v & 255) / 255.0)
-                    panel.set_color(ts, rgb)
-                elif verb == "linetype":
-                    panel.set_style(ts, linetype=extra)
-                else:
-                    panel.set_style(ts, lineweight=None if extra == "auto" else float(extra))
-                view._ui_layer_rev = getattr(view, "_ui_layer_rev", 0) + 1
+            if ts:
+                _core(vp, "set_tag_drawing", tags=ts, field=verb, value=extra)
                 rebuild()
-                vp.update()
+                vp.notify_scene_changed()
         elif verb == "measure":
             _measure(view, win)
             rebuild()

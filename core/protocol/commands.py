@@ -329,6 +329,34 @@ def set_tag(history, placements, tag):
     return _answer(history, before)
 
 
+class SetTagDrawingCommand(Command):
+    doc_undo = True
+    keeps_rows = True
+
+    def __init__(self, edit):
+        self.edit = edit
+
+    def do(self, scene):
+        self.edit.apply(True)
+        self.doc_after(scene, "execute")
+
+    def undo(self, scene):
+        self.edit.apply(False)
+        self.doc_after(scene, "undo")
+
+    def doc_after(self, scene, phase):
+        from core.history import _dirty_group_chunks
+        _dirty_group_chunks(scene)
+        super().doc_after(scene, phase)
+
+
+def set_tag_drawing(history, tags, field, value):
+    edit = history.scene._root._tag_drawing_edit(tags, field, value)
+    before = history.revision
+    history.execute(SetTagDrawingCommand(edit))
+    return _answer(history, before)
+
+
 class SetTagStateCommand(Command):
     """Show / hide and lock / unlock tags and tag folders as one step. A
     linked file's tag switched here is the host's *override* of it
@@ -759,7 +787,7 @@ COMMANDS = {"patch_record_field": patch_record_field, "set_filing_rule": set_fil
             "explode_view": explode_view, "purge_unused": purge_unused,
             "purge_debris": purge_debris, "undo": undo, "redo": redo,
             "hide": hide, "unhide": unhide, "lock": lock, "rename_placement": rename_placement,
-            "set_tag": set_tag, "set_tag_state": set_tag_state, "resegment_curve": resegment_curve, "repair_solid": repair_solid,
+            "set_tag_drawing": set_tag_drawing, "set_tag": set_tag, "set_tag_state": set_tag_state, "resegment_curve": resegment_curve, "repair_solid": repair_solid,
             "rename_material": rename_material, "edit_material": edit_material,
             "duplicate_material": duplicate_material, "delete_material": delete_material,
             "delete_placements": delete_placements, "rename_component": rename_component,

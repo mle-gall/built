@@ -1786,7 +1786,7 @@ impl Ui {
                                     let p = resp.interact_pointer_pos().unwrap_or(rect.center());
                                     if let Some((r, what)) = cell_hits.iter().find(|(r, _)| r.contains(p)) {
                                         match *what {
-                                            "print" => actions.push(format!("print\u{1f}{}", n.key)),
+                                            "print" => actions.push(format!("print\u{1f}{}\u{1f}{}", n.key, u8::from(n.cells.get(3).is_none_or(|v| v != "1")))),
                                             "color" => {
                                                 let c = parse_hex(&n.cells.first().cloned().unwrap_or_default()).unwrap_or(SWATCH_FALLBACK);
                                                 col.color_pick = Some((n.key.clone(), c, pos2(r.min.x - 210.0, r.max.y + 4.0)));

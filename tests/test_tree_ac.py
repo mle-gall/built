@@ -399,3 +399,31 @@ def test_tag_browser_identifies_same_label_tags_by_key():
     wu._run(_Win(scene), ["tag-visible:0:a:b"])
     assert not scene.layer_by_key("a:b").visible
     assert scene.layer_by_key("a:c").visible
+
+
+def test_drawing_cell_edits_run_without_a_layer_panel_and_undo(ui):
+    from core.protocol import commands
+    scene, win, view, _, act = ui
+    view._ui_colset = 1
+    node = "n:" + _key(view, "Paths")
+    tag = scene.layer("Paths")
+    for verb, value, attr, expected in [
+            ("color", "#ff8000", "color", (1.0, 128 / 255, 0.0)),
+            ("linetype", "dashed", "linetype", "dashed"),
+            ("weight", "0.35", "lineweight", 0.35),
+            ("print", "0", "printable", False)]:
+        before = getattr(tag, attr)
+        act(verb, node, value)
+        assert getattr(tag, attr) == expected
+        assert win.viewport.history.undo()
+        assert getattr(tag, attr) == before
+        assert win.viewport.history.redo()
+        assert getattr(tag, attr) == expected
+    act("color", node, "")
+    act("weight", node, "auto")
+    assert tag.color is None and tag.lineweight is None
+    rev = win.viewport.history.revision
+    with pytest.raises(KeyError):
+        commands.run(win.viewport.history, "set_tag_drawing", tags=[tag.key, "gone"],
+                     field="weight", value="0.5")
+    assert tag.lineweight is None and win.viewport.history.revision == rev
