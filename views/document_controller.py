@@ -23,6 +23,17 @@ class DocumentController(DocumentInteraction, WidgetShim):
     def resize(self, *size):
         self.keys_stand_in.resize(*size)
 
+    def setUpdatesEnabled(self, enabled):
+        if isinstance(self._host, QtViewHost):
+            self._host.display.setUpdatesEnabled(enabled)
+        else:
+            self._updates_enabled = enabled
+
+    def updatesEnabled(self):
+        if isinstance(self._host, QtViewHost):
+            return self._host.display.updatesEnabled()
+        return getattr(self, '_updates_enabled', True)
+
     def setFocus(self, *args):
         display = getattr(self, 'keys_stand_in', None)
         if isinstance(self._host, QtViewHost) and display is not None:

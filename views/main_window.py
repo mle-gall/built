@@ -4619,7 +4619,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         self.viewport.set_active_tool(tool)
         display = getattr(self.viewport, "keys_stand_in", None)
         if display is not None:
-            display.tools.sync()
+            display.tools.pick_up()
             display.set_scene(self.viewport.scene)
             display.update()
         grid = self._doc.view_grid if self.__dict__.get("_doc") else None

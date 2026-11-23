@@ -18,6 +18,7 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from tests.controller_surface import live_image
 import pytest
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 from PySide6.QtWidgets import QApplication
@@ -37,8 +38,8 @@ def test_a_mirrored_placement_draws_instanced_with_its_front_colour():
         for _ in range(10):
             _app.processEvents()
         vp = win.viewport
-        if getattr(vp, "_gl", None) is None or not vp.isValid():
-            pytest.skip("no OpenGL context on this platform")
+        if not vp.keys_stand_in._can_create_surface():
+            pytest.skip("the Qt platform has no native GPU surface")
         sc = vp.scene
         sc.guides.clear()
         proto = Mesh()
@@ -60,11 +61,11 @@ def test_a_mirrored_placement_draws_instanced_with_its_front_colour():
         vp.camera.fit_to(V(-4, -2, 0), V(4, 2, 0))
         for _ in range(5):
             _app.processEvents()
-        img = vp.grabFramebuffer()
-        lotes = getattr(vp, "_frame_instanced", {}) or {}
-        assert any(k[2] for k in lotes), "the mirrored placement is instanced"
-        assert not any(id(g) in getattr(vp, "_inst_chunks", {}) for g in sc.groups), \
-            "and no placement was baked to world coordinates"
+        img = live_image(vp)
+        packed = vp.keys_stand_in.packed
+        placements = [i for i, group in enumerate(packed.groups) if group is not None and group.mesh is proto]
+        assert len(placements) == 2
+        assert len(set(packed.instances['info'][placements, 0])) == 1
         dpr = img.width() / max(vp.width(), 1)
         for x in (-2.0, 2.0):
             px = vp._world_to_pixel(V(x, 0.5, 0))     # off the red axis

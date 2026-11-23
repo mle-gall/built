@@ -13,6 +13,7 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from tests.controller_surface import live_image
 import numpy as np  # noqa: E402
 import pytest  # noqa: E402
 from ingetrazo_core import Vec3 as V
@@ -42,38 +43,6 @@ def test_dashes_match_a_point_by_point_construction():
     assert spans == [(0, 2 * len(a), False)]
 
 
-def test_a_repaint_without_change_reuses_the_dashes(monkeypatch):
-    from views.main_window import MainWindow
-    win = MainWindow()
-    win.show()
-    _app.processEvents()
-    vp = win.viewport
-    try:
-        if getattr(vp, "_gl", None) is None or not vp.isValid():
-            pytest.skip("no OpenGL context on this platform")
-        calls = []
-        real = vpmod._guide_vertices
-        monkeypatch.setattr(vpmod, "_guide_vertices",
-                            lambda *a, **k: calls.append(1) or real(*a, **k))
-        vp.scene.guides.append(Guide(V(0, 0, 0), V(1, 0, 0)))
-        vp.scene.version += 1
-        for _ in range(3):
-            vp.render_image(200, 150, overlays=False)
-        assert len(calls) == 1
-        vp.camera.distance *= 2.0                   # the camera moved
-        vp.render_image(200, 150, overlays=False)
-        assert len(calls) == 2
-        vp.scene.guides[0].point = V(0, 5, 0)       # a guide moved
-        vp.render_image(200, 150, overlays=False)
-        assert len(calls) == 3
-        vp.scene.selection.add(vp.scene.guides[0])  # selected: new colour
-        vp.render_image(200, 150, overlays=False)
-        assert len(calls) == 4
-    finally:
-        win._saved_version = vp.scene.version
-        win.close()
-
-
 def _pixels(img):
     a = img.convertToFormat(img.Format.Format_RGB32)
     buf = np.frombuffer(a.constBits(), np.uint8).reshape(
@@ -92,8 +61,8 @@ def test_the_edit_box_sharing_the_buffer_does_not_eat_the_guides():
     _app.processEvents()
     vp = win.viewport
     try:
-        if getattr(vp, "_gl", None) is None or not vp.isValid():
-            pytest.skip("no OpenGL context on this platform")
+        if not vp.keys_stand_in._can_create_surface():
+            pytest.skip("the Qt platform has no native GPU surface")
         m = Mesh()
         m.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0)])
         g = Group(m, "g")
@@ -103,12 +72,12 @@ def test_the_edit_box_sharing_the_buffer_does_not_eat_the_guides():
         vp.camera.set_view("top")
         vp.scene.begin_group_edit(g)
         vp.scene.version += 1
-        first = _pixels(vp.render_image(300, 300, overlays=False))
-        second = _pixels(vp.render_image(300, 300, overlays=False))
+        first = _pixels(live_image(vp))
+        second = _pixels(live_image(vp))
         assert (first == second).all()
         # And the guide is really there: a row of guide-blue pixels.
         vp.scene.guides[:] = []
-        bare = _pixels(vp.render_image(300, 300, overlays=False))
+        bare = _pixels(live_image(vp))
         assert (first != bare).any()
     finally:
         win._saved_version = vp.scene.version

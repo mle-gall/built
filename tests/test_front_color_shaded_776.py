@@ -53,8 +53,8 @@ def win():
         w.show()
         _app.processEvents()
         vp = w.viewport
-        if getattr(vp, "_gl", None) is None or not vp.isValid():
-            pytest.skip("no OpenGL context on this platform")
+        if not vp.keys_stand_in._can_create_surface():
+            pytest.skip("the Qt platform has no native GPU surface")
         yield w
     finally:
         w._saved_version = w.viewport.scene.version

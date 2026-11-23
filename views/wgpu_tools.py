@@ -139,6 +139,20 @@ class NativeTools(MeshToolAccess):
             source.flash_status('Unsupported document tool')
         return self.mode
 
+    def pick_up(self):
+        """Synchronize an explicitly chosen tool and adopt a hovered Tape origin."""
+        if self.sync() != 'tape':
+            return
+        from PySide6.QtWidgets import QWidget
+        source = self.view.source_viewport
+        if isinstance(self.view, QWidget):
+            started = self.tool.start_from_hover(source)
+        else:
+            pos = getattr(self.view, '_cursor_pos', None)
+            started = pos is not None and self.tool.start_from_hover(source, pos.toPoint())
+        if started:
+            self.start_point = self.tool.start_point
+
     #: What a camera mode parks of the tool it suspends (GL's
     #: ``DocumentInteraction.suspended_tool``) and gives back when that tool resumes:
     #: the first point, a Move's preview rows, the typed value.

@@ -39,8 +39,8 @@ def open_box():
         win.show()
         _app.processEvents()
         vp = win.viewport
-        if getattr(vp, "_gl", None) is None or not vp.isValid():
-            pytest.skip("no OpenGL context on this platform")
+        if not vp.keys_stand_in._can_create_surface():
+            pytest.skip("the Qt platform has no native GPU surface")
         m = vp.scene.mesh
         p = [V(0, 0, 0), V(4, 0, 0), V(4, 4, 0), V(0, 4, 0),
              V(0, 0, 4), V(4, 0, 4), V(4, 4, 4), V(0, 4, 4)]

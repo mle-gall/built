@@ -12,6 +12,7 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from tests.controller_surface import live_image
 import pytest
 from ingetrazo_core import Vec3 as V
 from PySide6.QtWidgets import QApplication
@@ -41,9 +42,9 @@ def win():
     for _ in range(10):
         _app.processEvents()
     vp = w.viewport
-    if getattr(vp, "_gl", None) is None or not vp.isValid():
+    if not vp.keys_stand_in._can_create_surface():
         w.close()
-        pytest.skip("no OpenGL context on this platform")
+        pytest.skip("the Qt platform has no native GPU surface")
     sc = vp.scene
     sc.guides.clear()
     _box(sc, -1, -1, 0, 1, 0, 2)                          # the wall, in front
@@ -66,7 +67,7 @@ def _row(win, pts):
     over two rows, and searching along it would bridge the gaps."""
     import math
     vp = win.viewport
-    img = vp.grabFramebuffer()
+    img = live_image(vp)
     dpr = img.width() / max(vp.width(), 1)
     a, b = vp._world_to_pixel(pts[0]), vp._world_to_pixel(pts[-1])
     dx, dy = b[0] - a[0], b[1] - a[1]

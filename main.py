@@ -541,10 +541,9 @@ def _run_cli(argv: list[str]) -> int:
     run Export all sheets (PDF) on it — every sheet, one PDF, each page
     at its own paper size — with no window on screen.
 
-    The sheets' views are GL renders, so the main window is still built
-    and "shown" (that is what gives the viewport its GL context), but with
-    ``WA_DontShowOnScreen``: nothing reaches the desktop. No single
-    instance either: a running IngeTrazo is neither asked nor disturbed."""
+    A native wgpu surface renders the sheet views. WA_DontShowOnScreen
+    keeps the export window off the desktop. A running Built instance
+    is independent of this export."""
     _attach_console()
     args = _parse_cli(argv)
     src = args.input_file.resolve()
@@ -564,10 +563,6 @@ def _run_cli(argv: list[str]) -> int:
     window.setAttribute(Qt.WA_DontShowOnScreen, True)
     window.show()
     app.processEvents()
-    if getattr(window.viewport, "_gl", None) is None:
-        print("ingetrazo: no OpenGL context — the sheets' views will come "
-              "out empty", file=sys.stderr)
-
     # Opening must not stop to ask: no progress bar on screen, and an
     # auto-saved copy of the document is left alone (open_path would ask
     # whether to recover it, and «no» deletes it) — the file on disk is

@@ -12,6 +12,7 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from tests.controller_surface import live_image
 import pytest
 from ingetrazo_core import Vec3 as V
 from PySide6.QtWidgets import QApplication
@@ -36,8 +37,8 @@ def test_a_point_behind_a_wall_is_hidden_and_one_in_front_is_not():
         for _ in range(10):
             _app.processEvents()
         vp = win.viewport
-        if getattr(vp, "_gl", None) is None or not vp.isValid():
-            pytest.skip("no OpenGL context on this platform")
+        if not vp.keys_stand_in._can_create_surface():
+            pytest.skip("the Qt platform has no native GPU surface")
         sc = vp.scene
         _box(sc, -2, -0.1, 0, 2, 0.1, 3)                 # a wall across Y=0
         sc.dimensions.append(Dimension(V(-1, 2, 1), V(1, 2, 1), V(0, 0, 0.5)))
@@ -47,9 +48,9 @@ def test_a_point_behind_a_wall_is_hidden_and_one_in_front_is_not():
         vp.camera.fit_to(V(-3, -1, 0), V(3, 3, 3))
         for _ in range(5):
             _app.processEvents()
-        vp.grabFramebuffer()       # a real frame, painted the way Qt does
+        live_image(vp)       # a real frame, painted the way Qt does
         if getattr(vp, "_depth_snap", None) is None:
-            pytest.skip("this GL context gives no depth read-back")
+            pytest.skip("no depth readback from this surface")
         behind = V(0, 2, 1)                              # the wall hides it
         front = V(0, -2, 1)                              # nothing in front
         on_face = V(0, -0.1, 1)                          # ON the wall's face

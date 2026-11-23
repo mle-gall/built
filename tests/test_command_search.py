@@ -360,8 +360,8 @@ def test_the_real_box_is_fitted_to_the_modelling_area(ventana,
 # ---- the sheet composer ----------------------------------------------------------
 def _composer(win):
     vp = win.viewport
-    if getattr(vp, "_gl", None) is None or not vp.isValid():
-        pytest.skip("no OpenGL here: the composer renders its views")
+    if not vp.keys_stand_in._can_create_surface():
+        pytest.skip("the composer requires a native GPU surface")
     comp = win._ensure_composer()
     comp.show()
     QApplication.processEvents()

@@ -12,6 +12,7 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from tests.controller_surface import live_image
 import pytest
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 from PySide6.QtWidgets import QApplication
@@ -51,8 +52,8 @@ def test_the_rest_reads_grey_and_the_group_keeps_its_colour(comp):
         _app.processEvents()
     vp = w.viewport
     try:
-        if getattr(vp, "_gl", None) is None or not vp.isValid():
-            pytest.skip("no OpenGL context on this platform")
+        if not vp.keys_stand_in._can_create_surface():
+            pytest.skip("the Qt platform has no native GPU surface")
         sc = vp.scene
         sc.groups.clear()
         a, b = _square(0, comp), _square(4, comp)
@@ -66,7 +67,7 @@ def test_the_rest_reads_grey_and_the_group_keeps_its_colour(comp):
         def colour(p):
             vp.update()
             _app.processEvents()
-            img = vp.grabFramebuffer()
+            img = live_image(vp)
             x, y = vp._world_to_pixel(p)
             r = img.devicePixelRatio()
             return img.pixelColor(int(x * r), int(y * r))
@@ -104,8 +105,8 @@ def test_people_and_images_go_grey_with_the_rest(tmp_path, mode):
         _app.processEvents()
     vp = w.viewport
     try:
-        if getattr(vp, "_gl", None) is None or not vp.isValid():
-            pytest.skip("no OpenGL context on this platform")
+        if not vp.keys_stand_in._can_create_surface():
+            pytest.skip("the Qt platform has no native GPU surface")
         sc = vp.scene
         sc.groups.clear()
         a = _square(0, False)
@@ -123,7 +124,7 @@ def test_people_and_images_go_grey_with_the_rest(tmp_path, mode):
         def colour(p):
             vp.update()
             _app.processEvents()
-            img = vp.grabFramebuffer()
+            img = live_image(vp)
             x, y = vp._world_to_pixel(p)
             r = img.devicePixelRatio()
             return img.pixelColor(int(x * r), int(y * r))

@@ -211,9 +211,9 @@ def test_the_window_opens_another_file_without_the_old_planes(tmp_path):
             if ol._sec_root is not None:
                 assert ol._sec_root.childCount() == 0
         vp = win.viewport
-        if getattr(vp, "_gl", None) is None or not vp.isValid():
+        if not vp.keys_stand_in._can_create_surface():
             return                       # no GL here: the data checks stand
-        vp.setFixedSize(400, 300)       # same frame as the reference
+        vp.keys_stand_in.setFixedSize(400, 300)       # same frame as the reference
         QApplication.processEvents()
         reused = vp.render_image(320, 240)
     finally:
@@ -224,7 +224,7 @@ def test_the_window_opens_another_file_without_the_old_planes(tmp_path):
     try:
         assert ref.open_path(plain)
         QApplication.processEvents()
-        ref.viewport.setFixedSize(400, 300)
+        ref.viewport.keys_stand_in.setFixedSize(400, 300)
         QApplication.processEvents()
         expected = ref.viewport.render_image(320, 240)
     finally:

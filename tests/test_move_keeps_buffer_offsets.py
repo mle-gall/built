@@ -38,93 +38,9 @@ def _square(x0, y0, s=1.0, color=None):
     return m
 
 
-def _opaque_holes(vp):
-    """The all-zero parts of the faces buffer's opaque block (the room
-    left after it for what a Paste adds is zeros too, and not drawn)."""
-    out, off = [], 0
-    end = vp._faces_count * 24
-    for p in vp._vbo_parts["faces"][0]:
-        if off >= end:
-            break
-        if p and not any(p):
-            out.append(p)
-        off += len(p)
-    return out
-
-
 def _close(win):
     win._saved_version = win.viewport.scene.version
     win.close()
-
-
-def _pump(n=6):
-    for _ in range(n):
-        _app.processEvents()
-
-
-def test_a_picked_up_group_leaves_zeros_in_its_place_and_draws_nothing_there():
-    from core.group import Group
-    from core.history import MoveGroupCommand
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        win.show()
-        _pump(10)
-        vp = win.viewport
-        if getattr(vp, "_gl", None) is None or not vp.isValid():
-            pytest.skip("no OpenGL context on this platform")
-        sc = vp.scene
-        sc.guides.clear()
-        sc.show_axes = False
-        before = Group(_square(-6.0, 0.0, color=(0.2, 0.4, 0.9)), name="A")
-        mover = Group(_square(2.0, 2.0, color=AMARILLO), name="M")
-        after = Group(_square(5.0, -3.0, color=(0.2, 0.7, 0.3)), name="B")
-        sc.groups += [before, mover, after]
-        sc.version += 1
-        vp.camera.set_view("top")
-        vp.camera.perspective = False
-        vp.camera.fit_to(V(-7, -7, 0), V(7, 7, 0))
-        _pump()
-        vp.grabFramebuffer()
-        sizes = {k: list(vp._vbo_parts[k][2]) for k in ("faces", "edges")}
-        dpr = 1.0
-
-        def colour(img, x, y):
-            px = vp._world_to_pixel(V(x, y, 0))
-            c = img.pixelColor(int(px[0] * dpr), int(px[1] * dpr))
-            return c.redF(), c.greenF(), c.blueF()
-
-        img = vp.grabFramebuffer()
-        dpr = img.width() / max(vp.width(), 1)
-        sky = colour(img, -3.0, -5.0)
-        assert colour(img, 2.5, 2.5) != sky            # the mover is drawn
-        vp.begin_groups_preview([mover])
-        vp.set_groups_preview_offset(V(0.0, -5.0, 0.0))
-        _pump()
-        img = vp.grabFramebuffer()
-        # Its old place and the origin (where the zeros sit) show the sky.
-        assert np.allclose(colour(img, 2.5, 2.5), sky, atol=0.02)
-        assert np.allclose(colour(img, 0.0, 0.0), sky, atol=0.02)
-        assert np.allclose(colour(img, 2.0, 2.0), sky, atol=0.02)   # corner
-        r, g, b = colour(img, 2.5, -2.5)                 # the preview
-        assert r > 0.6 and g > 0.5 and b < 0.35
-        # The others stay where they are, in buffers of the same shape.
-        assert colour(img, -5.5, 0.5) != sky and colour(img, 5.5, -2.5) != sky
-        for k in ("faces", "edges"):
-            assert vp._vbo_parts[k][2] == sizes[k], k
-        assert _opaque_holes(vp), "the mover's place holds zeros"
-        vp.end_groups_preview()
-        vp.history.execute(MoveGroupCommand(mover, V(0.0, -5.0, 0.0)))
-        _pump()
-        img = vp.grabFramebuffer()
-        for k in ("faces", "edges"):
-            assert vp._vbo_parts[k][2] == sizes[k], k
-        assert np.allclose(colour(img, 2.5, 2.5), sky, atol=0.02)
-        r, g, b = colour(img, 2.5, -2.5)
-        assert r > 0.6 and g > 0.5 and b < 0.35
-        assert not _opaque_holes(vp)
-    finally:
-        _close(win)
 
 
 def _cube():

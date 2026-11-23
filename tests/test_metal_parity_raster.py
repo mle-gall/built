@@ -1,11 +1,9 @@
-"""P2 style contract and optional unshown-host Metal raster acceptance.
+"""wgpu frame checks on an unshown native window.
 
-Default pytest uses Qt offscreen and skips native NSView tests. Run this file
-with QT_QPA_PLATFORM=cocoa on macOS to execute GPU checks; no widget is shown.
+Use a native Qt platform (for example QT_QPA_PLATFORM=cocoa on macOS).
 """
 import importlib.util
 import os
-import sys
 import numpy as np
 import pytest
 from core.scene import Scene
@@ -57,14 +55,17 @@ def test_native_api_available():
 
 @pytest.fixture
 def native():
-    if not HAS_RENDERER or sys.platform != 'darwin' or os.environ.get('QT_QPA_PLATFORM') != 'cocoa':
-        pytest.skip('Metal raster checks require release crate and unshown Cocoa NSView')
+    from PySide6.QtWidgets import QApplication
+    if not HAS_RENDERER or QApplication.platformName() in ('offscreen', 'minimal'):
+        pytest.skip('requires the render crate and a native Qt surface')
     from PySide6.QtCore import Qt
     from PySide6.QtWidgets import QWidget
     from ingetrazo_core import Matrix4 as QMatrix4x4
     from ingetrazo_render import Renderer
     host = QWidget(); host.setAttribute(Qt.WA_DontShowOnScreen); host.resize(64,64)
-    renderer = Renderer(int(host.winId()),64,64,1.)
+    from views.wgpu_surface import window_handles
+    window, handles = window_handles(host)
+    renderer = Renderer(window, 64, 64, 1., **handles)
     view=QMatrix4x4(); view.translate(0,0,-3)
     proj=QMatrix4x4(); proj.ortho(-1,1,-1,1,.1,10)
     renderer.set_camera(list(view.data()),list(proj.data()))
@@ -283,6 +284,7 @@ def audit_handoff():
     """
     from pathlib import Path
     import runpy
+    import sys
     import views.wgpu_view as module
     from views.wgpu_scene import PackedScene
     original_pack = module.pack_scene

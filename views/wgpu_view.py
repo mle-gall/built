@@ -56,6 +56,8 @@ def _tool_frame(method):
     from functools import wraps
     @wraps(method)
     def handle(view, *args, **kwargs):
+        if getattr(view, '_closed', False):
+            return None
         if args and _ui_claims(view, method.__name__, args[0]):
             return None
         remote = getattr(getattr(view, 'packed', None), 'model_translations', None) is not None
@@ -930,7 +932,8 @@ class MetalView(ViewNavigation):
         billboards = getattr(self, '_billboards', None)
         if billboards is not None:
             rows['world'][billboards.ids] = billboards.base
-        Billboards(capture).update(camera)
+        if billboards is not None:
+            Billboards(capture, billboards.ids).update(camera)
         # Capture rows may change tint/visibility only. Install the camera-facing
         # matrices through the resident API, restoring them even on failure.
         billboard_ids = [] if billboards is None else billboards.ids.tolist()
@@ -1730,7 +1733,7 @@ class MetalView(ViewNavigation):
         super().closeEvent(event)
         self._instance_updates = self._inference_future = self.inference_index = None
         self.source_viewport = self._tool_source = self.scene = self.packed = None
-        self._billboards = None
+        self._billboards = self._reference_cache = None
 
 
 class WgpuView(MetalView, QWidget):

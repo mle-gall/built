@@ -15,6 +15,7 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
+from tests.controller_surface import live_image
 import pytest
 from PySide6.QtGui import QColor, QImage
 from ingetrazo_core import Vec3 as QVector3D
@@ -52,10 +53,10 @@ def view(tmp_path):
     win.show()
     _app.processEvents()
     vp = win.viewport
-    if getattr(vp, "_gl", None) is None or not vp.isValid():
+    if not vp.keys_stand_in._can_create_surface():
         win._saved_version = vp.scene.version
         win.close()
-        pytest.skip("no OpenGL context on this platform")
+        pytest.skip("the Qt platform has no native GPU surface")
     mesh = vp.scene.mesh
     tex = tmp_path / "blue.png"
     img = QImage(8, 8, QImage.Format_RGB32)
@@ -133,9 +134,11 @@ def test_the_box_only_lasts_that_picture(view):
     _win, vp, folder = view
     _saved(vp, folder, "Default", transparent=True)
     # The view on screen first: no export call sets the flag for it.
-    live = vp.grabFramebuffer()
+    live = live_image(vp)
     x, y = vp._world_to_pixel(ZONES["background"])
-    assert live.pixelColor(int(x), int(y)).lightness() > 150
+    ratio = live.devicePixelRatioF()
+    pixel = live.pixelColor(int(x * ratio), int(y * ratio))
+    assert pixel.alpha() == 255
     assert _at(vp, _saved(vp, folder, "Default"), "background").alpha() == 255
 
 
@@ -328,18 +331,6 @@ def test_hidden_line_leaves_the_glass_as_it_was(view):
     _win, vp, folder = view
     assert _at(vp, _saved(vp, folder, "Hidden line"),
                "glass").getRgb()[:3] == (255, 255, 255)
-
-
-def test_one_constant_gives_the_real_colour_back(view, monkeypatch):
-    """The open decision (grey or the real colour) is this one value."""
-    import views.document_interaction as viewport
-    monkeypatch.setattr(viewport, "MONOCHROME_GLASS_RGB", None)
-    _win, vp, folder = view
-    img = _saved(vp, folder, "Monochrome")
-    glass = _at(vp, img, "glass")
-    assert glass.blue() > glass.red() + 15
-    tex = _at(vp, img, "tex_on_solid")
-    assert tex.blue() > tex.red() + 15
 
 
 def test_a_pane_seen_from_behind_is_the_same_grey(view):

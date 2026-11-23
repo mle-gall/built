@@ -21,6 +21,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
 import pytest
+from tests.controller_surface import live_image
 from PySide6.QtGui import QImage
 from ingetrazo_core import Vec3 as QVector3D
 from PySide6.QtWidgets import QApplication
@@ -131,13 +132,13 @@ def _viewport():
     win.show()
     _app.processEvents()
     vp = win.viewport
-    if getattr(vp, "_gl", None) is None or not vp.isValid():
+    if not vp.keys_stand_in._can_create_surface():
         # Closed before skipping: a shown window left behind took the
         # keyboard from the next test's own (CI's batch 5, no OpenGL:
         # Join Segments' Esc never reached its viewport).
         win._saved_version = vp.scene.version
         win.close()
-        pytest.skip("no OpenGL context on this platform")
+        pytest.skip("the Qt platform has no native GPU surface")
     return win, vp
 
 
@@ -180,15 +181,15 @@ def test_a_wall_hides_the_guide_behind_it():
     win, vp = _scene_looking_down_minus_y()
     try:
         assert vp.camera.eye().y() > 0          # the eye really is on +Y
-        bare = _pixels(vp.render_image(300, 300, overlays=False))
+        bare = _pixels(live_image(vp))
 
         vp.scene.guides[:] = [Guide(V(0, 4, 0), V(1, 0, 0))]     # in front
         shown = _changed(bare, _pixels(
-            vp.render_image(300, 300, overlays=False)))
+            live_image(vp)))
 
         vp.scene.guides[:] = [Guide(V(0, -4, 0), V(1, 0, 0))]    # behind
         hidden = _changed(bare, _pixels(
-            vp.render_image(300, 300, overlays=False)))
+            live_image(vp)))
 
         assert shown > 50, "a guide in front of the wall must be drawn"
         assert hidden == 0, (

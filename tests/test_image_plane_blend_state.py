@@ -39,8 +39,8 @@ def test_a_translucent_image_leaves_blending_on_for_the_shadow_catcher(tmp_path)
         win.show()
         _app.processEvents()
         vp = win.viewport
-        if getattr(vp, "_gl", None) is None or not vp.isValid():
-            pytest.skip("no OpenGL context on this platform")
+        if not vp.keys_stand_in._can_create_surface():
+            pytest.skip("the Qt platform has no native GPU surface")
         scene = vp.scene
         V = QVector3D
         scene.mesh.add_face([V(0, 0, 0), V(4, 0, 0), V(4, 4, 0), V(0, 4, 0)])

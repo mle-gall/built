@@ -14,6 +14,7 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from tests.controller_surface import live_image
 import pytest
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 from PySide6.QtWidgets import QApplication
@@ -97,9 +98,9 @@ def win():
     for _ in range(10):
         _app.processEvents()
     vp = w.viewport
-    if getattr(vp, "_gl", None) is None or not vp.isValid():
+    if not vp.keys_stand_in._can_create_surface():
         w.close()
-        pytest.skip("no OpenGL context")
+        pytest.skip("no native GPU surface")
     vp.scene.guides.clear()
     yield w
     w._saved_version = vp.scene.version
@@ -107,7 +108,7 @@ def win():
 
 
 def _pixel(vp):
-    img = vp.grabFramebuffer()
+    img = live_image(vp)
     c = img.pixelColor(img.width() // 2 + 15, img.height() // 2 + 15)
     return (c.red(), c.green(), c.blue())
 
@@ -192,7 +193,7 @@ def test_a_paint_stays_on_screen_after_leaving_the_groups(win, layout):
     old material (the letters of the plaza, 04-11)."""
     vp = win.viewport
     _open(vp, layout)
-    img = vp.grabFramebuffer()
+    img = live_image(vp)
     x = (img.width() // 2 + 15) * vp.width() // img.width()
     y = (img.height() // 2 + 15) * vp.height() // img.height()
     face = vp.pick_face_any(x, y)[0]

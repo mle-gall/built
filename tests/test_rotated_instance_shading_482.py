@@ -83,8 +83,8 @@ def test_the_gpu_pass_lights_a_turned_copy_like_the_plain_group():
     _app.processEvents()
     vp = win.viewport
     try:
-        if getattr(vp, "_gl", None) is None or not vp.isValid():
-            pytest.skip("no OpenGL context on this platform")
+        if not vp.keys_stand_in._can_create_surface():
+            pytest.skip("the Qt platform has no native GPU surface")
         scene = vp.scene
         scene.groups[:] = []
         cam = vp.camera

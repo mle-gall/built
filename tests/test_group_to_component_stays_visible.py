@@ -13,6 +13,7 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from tests.controller_surface import live_image
 import pytest
 from ingetrazo_core import Vec3 as V
 from PySide6.QtWidgets import QApplication
@@ -80,10 +81,9 @@ def test_moving_a_component_is_still_a_move(win):
 
 
 def test_the_box_stays_on_screen(win):
-    from views import prompts
     vp = win.viewport
-    if getattr(vp, "_gl", None) is None or not vp.isValid():
-        pytest.skip("no OpenGL context on this platform")
+    if not vp.keys_stand_in._can_create_surface():
+        pytest.skip("the Qt platform has no native GPU surface")
     sc = vp.scene
     sc.display_style.sky = False
     vp.camera.set_view("front")                           # looking toward +Y
@@ -91,14 +91,14 @@ def test_the_box_stays_on_screen(win):
     vp.camera.fit_to(V(-3, -1, -1), V(3, 1, 3))
 
     def on_face():
-        img = vp.grabFramebuffer()
+        img = live_image(vp)
         dpr = img.width() / max(vp.width(), 1)
         # Off the face's centre, clear of any edge or axis.
         x, y = vp._world_to_pixel(V(0.37, -1, 0.73))[:2]
         return img.pixelColor(int(x * dpr), int(y * dpr)).name()
 
     def on_background():
-        img = vp.grabFramebuffer()
+        img = live_image(vp)
         dpr = img.width() / max(vp.width(), 1)
         x, y = vp._world_to_pixel(V(2.7, -1, 2.7))[:2]
         return img.pixelColor(int(x * dpr), int(y * dpr)).name()
@@ -109,12 +109,10 @@ def test_the_box_stays_on_screen(win):
 
     sc.selection.clear()
     sc.selection.add(g)
-    orig = prompts.get_text
-    prompts.get_text = lambda *a, text="", **k: ("Caja", True)
-    try:
+    from views import chrome_forms
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(chrome_forms, "ask_text", lambda *a, done, **kw: done("Caja"))
         win._on_make_component()
-    finally:
-        prompts.get_text = orig
     assert g.is_component()
     assert on_face() == face                              # the report
 

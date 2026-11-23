@@ -145,6 +145,8 @@ def _window(tmp_path):
     win.resize(900, 640)
     assert win.open_path(path) is not False
     vp = win.viewport
+    vp.resize(900, 640)
+    vp.camera.set_aspect(900, 640)
     vp.camera.set_view("top")
     vp.camera.fit_to(*vp.scene.bounds())
     return win, vp
