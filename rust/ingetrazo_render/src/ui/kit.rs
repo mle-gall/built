@@ -1358,3 +1358,98 @@ mod font_picker_tests {
         assert_eq!(picker.step(&picker.matches(), true), None);
     }
 }
+
+/// A responsive strip of 16:10 catalogue pictures. The last incomplete row
+/// keeps the same card width as the full rows above it.
+pub fn catalogue_grid(width: f32, ideal: f32) -> (usize, egui::Vec2) {
+    let columns = (((width + SPACE_M) / (ideal + SPACE_M)).floor() as usize).max(1);
+    let card = ((width - (columns - 1) as f32 * SPACE_M) / columns as f32).max(1.);
+    (columns, vec2(card, card * 10. / 16.))
+}
+
+/// A catalogue fact may contain an entire licence or a long local path.
+pub fn catalogue_fact(ui: &mut egui::Ui, label: &str, value: &str) -> Rect {
+    let w = ui.available_width();
+    let key_width = (w * 0.34).max(1.);
+    let key = ui.painter().layout(label.to_owned(), meta(), DIM, key_width);
+    let val = ui.painter().layout(value.to_owned(), body(), INK, (w - key_width - SPACE_S).max(1.));
+    let height = key.size().y.max(val.size().y).max(PROP_H);
+    let (r, _) = ui.allocate_exact_size(vec2(w, height), Sense::hover());
+    ui.painter().galley(r.min, key, DIM);
+    ui.painter().galley(r.min + vec2(key_width + SPACE_S, 0.), val, INK);
+    r
+}
+
+/// Lay out a tag against the full pane before putting it into a wrapping row.
+/// A short tag therefore moves intact to the next line.
+pub fn catalogue_tag(ui: &mut egui::Ui, label: &str, pane_width: f32) -> Rect {
+    let galley = ui.painter().layout(label.to_owned(), meta(), INK_2, (pane_width - 2. * SPACE_S).max(1.));
+    let (r, _) = ui.allocate_exact_size(galley.size() + vec2(2. * SPACE_S, SPACE_XS), Sense::hover());
+    ui.painter().rect_filled(r, R_ROW, CONTROL);
+    ui.painter().galley(r.min + vec2(SPACE_S, SPACE_XS / 2.), galley, INK_2);
+    r
+}
+
+#[cfg(test)]
+mod catalogue_tests {
+    use super::*;
+    fn draw(f: impl Fn(&mut egui::Ui)) {
+        let ctx = egui::Context::default();
+        let mut fonts = egui::FontDefinitions::default();
+        let data = include_bytes!("../../../../resources/fonts/inter/Inter-Regular.ttf");
+        fonts.font_data.insert("inter".into(), std::sync::Arc::new(egui::FontData::from_static(data)));
+        fonts.families.entry(egui::FontFamily::Proportional).or_default().insert(0,"inter".into());
+        ctx.set_fonts(fonts);
+        ctx.style_mut(install_style);
+        let _ = ctx.run(Default::default(), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                let area=Rect::from_min_size(ui.cursor().min,vec2(200.,600.));
+                ui.scope_builder(egui::UiBuilder::new().max_rect(area).layout(egui::Layout::top_down(egui::Align::Min)),|ui| f(ui));
+            });
+        });
+    }
+
+    #[test]
+    fn catalogue_grid_tracks_pane_width() {
+        for (w, n) in [(160.,1),(380.,2),(580.,3)] {
+            let (cols, tile)=catalogue_grid(w,176.);
+            assert_eq!(cols,n);
+            assert!((tile.x*n as f32 + SPACE_M*(n-1) as f32 - w).abs()<0.001);
+        }
+    }
+    #[test]
+    fn two_catalogue_columns_have_sixteen_by_ten_previews() {
+        let (cols,tile)=catalogue_grid(480.,176.);
+        assert_eq!(cols,2);
+        assert_eq!(tile.x*10.,tile.y*16.);
+    }
+    #[test]
+    fn long_authors_and_licences_wrap_inside_the_detail_pane() {
+        draw(|ui| {
+            let short = catalogue_fact(ui,"Licence","MIT");
+            for label in ["Author","License"] {
+                let rect = catalogue_fact(ui,label,&"Long catalogue metadata ".repeat(8));
+                assert!(rect.height()>short.height() && rect.width()<=201., "{short:?} {rect:?}");
+            }
+        });
+    }
+    #[test]
+    fn only_tags_wider_than_the_pane_wrap() {
+        draw(|ui| {
+            let short=catalogue_tag(ui,"data import export",200.);
+            let long=catalogue_tag(ui,&"very long tag ".repeat(10),200.);
+            assert!(short.height()<CONTROL_H && long.height()>short.height()*2.);
+            assert!(long.width()<=201.);
+        });
+    }
+    #[test]
+    fn catalogue_cards_follow_the_dark_chrome_palette() {
+        draw(|ui| {
+            assert!(ui.visuals().dark_mode);
+            assert_eq!(ui.visuals().panel_fill,PANEL);
+            let rect=catalogue_tag(ui,"Drawing",200.);
+            let shapes=ui.ctx().graphics(|g|g.get(ui.layer_id()).unwrap().all_entries().cloned().collect::<Vec<_>>());
+            assert!(shapes.iter().any(|s| matches!(&s.shape, egui::Shape::Rect(r) if r.rect==rect && r.fill==CONTROL)));
+        });
+    }
+}

@@ -12,12 +12,11 @@ and a catalog one can be replaced by the catalog version.
 from __future__ import annotations
 
 import pytest
-from PySide6.QtWidgets import QApplication, QLabel, QMessageBox, QPushButton
 
 from core import extension_manager as manager
 from core.extensions import discover_plugins
-from tests.test_extension_manager import (
-    TOOL_SOURCE, _extension, _stub_catalog, _wait_for_catalog)
+from tests.test_extension_manager import TOOL_SOURCE, _extension
+from tests.extensions_chrome import Browser
 
 
 def _hand_package(root, name, source=TOOL_SOURCE):
@@ -100,140 +99,52 @@ def test_a_failed_replacement_puts_the_hand_copy_back(tmp_path, monkeypatch):
     assert [p.name for p in tmp_path.iterdir()] == ["sample"]
 
 
-def _dialog(monkeypatch, tmp_path, extensions):
-    app = QApplication.instance() or QApplication([])
-    from views import extension_manager_dialog as dialog_module
-    _stub_catalog(monkeypatch, dialog_module, extensions)
-    monkeypatch.setattr(manager, "user_plugins_dir", lambda: tmp_path)
-    dialog = dialog_module.ExtensionManagerDialog()
-    _wait_for_catalog(dialog, app)
-    dialog._tabs.setCurrentIndex(1)                  # Installed
-    dialog._render_page("installed")
-    return app, dialog
+def test_a_catalog_extension_installed_by_hand_offers_replace_and_uninstall(tmp_path, monkeypatch):
+    path = tmp_path / "sample.py"
+    path.write_text("# the 0.5.7 copy")
+    ext = _extension(TOOL_SOURCE.encode())
+    browser = Browser(monkeypatch, tmp_path, [ext])
+    assert browser.ids == [ext.id]
+    assert browser.buttons["replace"] == "Replace with the catalog version"
+    assert {"remove", "folder"} <= browser.buttons.keys() and "install" not in browser.buttons
+    assert browser.facts["Source"] == "Installed by hand"
+    questions = browser.confirm(monkeypatch)
+    monkeypatch.setattr(manager, "_get", lambda *_: b"corrupt")
+    browser.act("verb", "replace")
+    assert "Checksum mismatch" in browser.spec["footer"]["hint"]
+    assert path.read_text() == "# the 0.5.7 copy"
+    monkeypatch.setattr(manager, "_get", lambda *_: TOOL_SOURCE.encode())
+    browser.act("verb", "replace")
+    assert manager.installed_info(ext.id)["sha256"] == ext.sha256
+    assert [q[0] for q in questions] == ["Install an unreviewed extension?", "Replace extension"] * 2
+    assert next(tmp_path.glob(".sample.py.manual-*")).read_text() == "# the 0.5.7 copy"
 
 
-def _rows(dialog):
-    grid = dialog._pages["installed"]["grid"]
-    return [grid.itemAt(i).widget() for i in range(grid.count())]
-
-
-def _texts(row, kind):
-    return [w.text() for w in row.findChildren(kind)]
-
-
-def test_a_catalog_extension_installed_by_hand_offers_replace_and_uninstall(
-        tmp_path, monkeypatch):
-    (tmp_path / "sample.py").write_text("# the 0.5.7 copy\n")
-    app, dialog = _dialog(monkeypatch, tmp_path, [_extension(b"catalog")])
-    try:
-        rows = _rows(dialog)
-        assert len(rows) == 1                        # in the Installed tab
-        buttons = _texts(rows[0], QPushButton)
-        assert "Replace with the catalog version" in buttons
-        assert "Uninstall" in buttons
-        assert "Download" not in buttons
-        assert any("Installed by hand" in text
-                   for text in _texts(rows[0], QLabel))
-    finally:
-        dialog.close()
-        dialog.deleteLater()
-        app.processEvents()
-
-
-def test_a_hand_plugin_the_catalog_does_not_know_can_be_uninstalled(
-        tmp_path, monkeypatch):
+def test_a_hand_plugin_the_catalog_does_not_know_can_be_uninstalled(tmp_path, monkeypatch):
     folder = _hand_package(tmp_path, "aberturas")
-    app, dialog = _dialog(monkeypatch, tmp_path, [_extension(b"catalog")])
-    monkeypatch.setattr(QMessageBox, "question",
-                        staticmethod(lambda *a, **k: QMessageBox.Yes))
-    monkeypatch.setattr(QMessageBox, "information",
-                        staticmethod(lambda *a, **k: QMessageBox.Ok))
-    try:
-        rows = _rows(dialog)
-        assert len(rows) == 1
-        assert "aberturas" in _texts(rows[0], QLabel)
-        uninstall = next(b for b in rows[0].findChildren(QPushButton)
-                         if b.text() == "Uninstall")
-        uninstall.click()
-        app.processEvents()
-        assert not folder.exists()
-        assert any(p.name.startswith(".aberturas.manual-")
-                   for p in tmp_path.iterdir())
-        assert _rows(dialog) == []                   # gone from the list
-    finally:
-        dialog.close()
-        dialog.deleteLater()
-        app.processEvents()
+    browser = Browser(monkeypatch, tmp_path, [_extension(b"catalog")])
+    assert browser.ids == ["aberturas"] and browser.facts["Path"] == str(folder)
+    browser.confirm(monkeypatch)
+    browser.act("verb", "remove")
+    assert not folder.exists() and browser.ids == []
+    assert next(tmp_path.glob(".aberturas.manual-*")).joinpath("__init__.py").read_text() == TOOL_SOURCE
 
 
-def test_an_extension_shipped_with_the_app_installs_from_the_manager(
-        tmp_path, monkeypatch):
-    # Windowizer ships inside IngeTrazo and is not in the catalog: its card
-    # says «Included with IngeTrazo», installs from the local copy (nothing
-    # downloaded) and is managed from then on. A bundled one the catalog
-    # also lists (Levels) shows once, as the catalog's.
-    bundled = manager.Extension(**{
-        **_extension(b"x", "windowizer").__dict__,
-        "name": {"en": "Windowizer"}, "license": "", "repository": "",
-        "download": "", "bundled": str(tmp_path / "src.py")})
-    (tmp_path / "src.py").write_text(TOOL_SOURCE)
-    twin = manager.Extension(**{**_extension(b"x", "niveles").__dict__,
-                                "bundled": str(tmp_path / "src.py")})
-    app = QApplication.instance() or QApplication([])
-    from views import extension_manager_dialog as dialog_module
+def test_an_extension_shipped_with_the_app_installs_from_the_manager(tmp_path, monkeypatch):
+    from dataclasses import replace
+    source = tmp_path / "source.py"
+    source.write_text(TOOL_SOURCE)
+    bundled = replace(_extension(source.read_bytes(), "windowizer"), bundled=str(source))
+    twin = replace(bundled, id="niveles")
     catalog = [_extension(b"catalog", "niveles")]
-    _stub_catalog(monkeypatch, dialog_module, catalog)
-    monkeypatch.setattr(dialog_module, "bundled_extensions",
-                        lambda: [bundled, twin])
-    plugins = tmp_path / "plugins"
-    monkeypatch.setattr(manager, "user_plugins_dir", lambda: plugins)
-    monkeypatch.setattr(manager, "_get", lambda *_a: (_ for _ in ()).throw(
-        AssertionError("a bundled extension must not download")))
-    dialog = dialog_module.ExtensionManagerDialog()
-    try:
-        _wait_for_catalog(dialog, app)
-        assert [e.id for e in dialog._extensions] == ["niveles", "windowizer"]
-        grid = dialog._pages["browse"]["grid"]
-        row = grid.itemAt(1).widget()
-        labels = _texts(row, QLabel)
-        assert "Included with Built" in labels
-        assert "INCLUDED" in labels
-        assert not any("Community extension" in text for text in labels)
-        assert "Install" in _texts(row, QPushButton)
-    finally:
-        dialog.close()
-        dialog.deleteLater()
-        app.processEvents()
-    manager.install_extension(bundled)
-    assert (plugins / "windowizer" / "__init__.py").read_text() == TOOL_SOURCE
-    assert manager.installed_info("windowizer") is not None
-
-
-def test_the_cards_take_as_many_columns_as_the_width_fits(
-        tmp_path, monkeypatch):
-    # Marco, 09-10: maximised, two fixed columns left an empty band at the
-    # right. One column when narrow, two at the usual size, three on a
-    # maximised Full HD window — moved, not rebuilt, on resize.
-    extensions = [_extension(f"s{i}".encode(), f"ext_{i}") for i in range(7)]
-    app = QApplication.instance() or QApplication([])
-    from views import extension_manager_dialog as dialog_module
-    _stub_catalog(monkeypatch, dialog_module, extensions)
-    monkeypatch.setattr(manager, "user_plugins_dir", lambda: tmp_path)
-    dialog = dialog_module.ExtensionManagerDialog()
-    try:
-        _wait_for_catalog(dialog, app)
-        dialog.show()
-        grid = dialog._pages["browse"]["grid"]
-        for width, columns in ((700, 1), (1180, 2), (1920, 3)):
-            dialog.resize(width, 800)
-            app.processEvents()
-            used = {grid.getItemPosition(i)[1] for i in range(grid.count())}
-            assert used == set(range(columns)), (width, used)
-            assert grid.count() == len(extensions)
-    finally:
-        dialog.close()
-        dialog.deleteLater()
-        app.processEvents()
+    browser = Browser(monkeypatch, tmp_path / "plugins", catalog, bundled=[bundled, twin])
+    browser.act("tab", "Browse").act("focus", "windowizer")
+    assert sorted(browser.ids) == ["niveles", "windowizer"]
+    assert browser.facts["Source"] == "Included with Built"
+    assert browser.facts["Review"] == "Reviewed" and "install" in browser.buttons
+    browser.act("verb", "install")
+    assert manager.installed_info("windowizer")["version"] == bundled.version
+    assert (tmp_path / "plugins/windowizer/__init__.py").read_text() == TOOL_SOURCE
 
 
 def test_an_included_extension_shows_its_own_preview_and_a_translated_line(

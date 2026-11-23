@@ -212,3 +212,28 @@ def test_native_section_name_question(tmp_path):
               if line.startswith("[built] state ")]
     assert result.returncode == 0 and [s["form_open"] for s in states[:2]] == [True, False], log
     assert not any(s["errors"] or s["blocked_widgets"] for s in states), log
+
+
+@pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
+                    reason="requires a built window and BUILT_WINDOW_TESTS=1")
+def test_native_extensions_open_painted_and_apply(tmp_path):
+    home = tmp_path / "home"
+    home.mkdir()
+    plugins = tmp_path / "plugins"
+    venv = fixture_venv(tmp_path,
+        "from pathlib import Path\nfrom core import extension_manager as em\n"
+        f"em.user_plugins_dir = lambda: Path({str(plugins)!r})\n"
+        "em.load_cached_catalog = lambda: None\n"
+        "em.refresh_catalog = lambda: em.CatalogSnapshot([], {}, '', False)\n")
+    steps = tmp_path / "commands"
+    steps.write_text("wait 600\nmenu extensions\nwait 450\nstate\nclick 96 648\nwait 300\n"
+                     "key escape\nwait 300\nstate\nquit\n")
+    result = run([str(BIN), "--root", str(ROOT), "--venv", str(venv), "--new-instance",
+                  "--size", "1000x720", "--script", str(steps)],
+                 home=home, settings=tmp_path / "profile", capture_output=True, text=True, timeout=90)
+    log = result.stdout + result.stderr
+    states = [json.loads(line.removeprefix("[built] state ")) for line in log.splitlines()
+              if line.startswith("[built] state ")]
+    assert result.returncode == 0 and [s["large_sheet"] for s in states[:2]] == ["extensions", "start"], log
+    assert all(not s["errors"] and not s["blocked_widgets"] for s in states), log
+    assert (plugins / ".safe-mode").is_file(), log

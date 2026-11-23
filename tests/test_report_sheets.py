@@ -43,6 +43,7 @@ def test_extensions_install_update_toggle_safe_reset_remove(tmp_path, monkeypatc
     monkeypatch.setattr(em, "user_plugins_dir", lambda: root)
     monkeypatch.setattr(extensions, "plugin_dirs", lambda: [tmp_path, root])
     monkeypatch.setattr(em, "load_cached_catalog", lambda: None)
+    monkeypatch.setattr(em, "refresh_catalog", lambda: em.CatalogSnapshot([], {}, "", True))
     example = em.bundled_extensions()[0]
     monkeypatch.setattr(em, "bundled_extensions", lambda: [example])
     sheet = Extensions()
@@ -53,7 +54,7 @@ def test_extensions_install_update_toggle_safe_reset_remove(tmp_path, monkeypatc
     sheet.act(ctx, "verb", ["install"])
     assert em.installed_info(example.id)
     sheet.act(ctx, "tab", ["Installed"])
-    sheet.focus = example.id
+    sheet.act(ctx, "focus", [example.id])
     spec = build(sheet, ctx)
     assert spec["detail"]["title"] == em.display_name(example, "en")
     for enabled in (False, True):

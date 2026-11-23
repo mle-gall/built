@@ -25,8 +25,7 @@ import textwrap
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QEventLoop, QTimer
-from PySide6.QtWidgets import QApplication, QLabel, QPushButton
+from PySide6.QtWidgets import QApplication
 
 _app = QApplication.instance() or QApplication([])
 
@@ -225,69 +224,24 @@ def test_an_installed_folder_keeps_the_folders_normal_permissions(
     assert stat.S_IMODE((plugins / "sample").stat().st_mode) == 0o755
 
 
-# ---- the dialog -----------------------------------------------------------
-
-def _stub_catalog(monkeypatch, module, catalog):
-    snapshot = manager.CatalogSnapshot(
-        catalog, {}, "2026-11-03T10:00:00+00:00", False)
-    monkeypatch.setattr(module, "load_cached_catalog", lambda: snapshot)
-    monkeypatch.setattr(module, "refresh_catalog", lambda: snapshot)
-    monkeypatch.setattr(module, "bundled_extensions", lambda: [])
-
-
-def _settle(dialog):
-    loop = QEventLoop()
-    timer = QTimer()
-    timer.setInterval(10)
-    timer.timeout.connect(
-        lambda: loop.quit() if dialog._catalog_worker is None else None)
-    timer.start()
-    QTimer.singleShot(15000, loop.quit)
-    loop.exec()
-    timer.stop()
-
-
 @needs_permissions
-def test_the_manager_opens_with_an_unreadable_extension(
-        plugins, py312_paths, monkeypatch):
-    from views import extension_manager_dialog as module
-    _stub_catalog(monkeypatch, module,
-                  [_extension("locked"), _extension("other")])
+def test_the_manager_opens_with_an_unreadable_extension(plugins, py312_paths, monkeypatch):
+    from tests.extensions_chrome import Browser
     _package(plugins, "locked", managed=True).chmod(0)
-    dialog = module.ExtensionManagerDialog()
-    try:
-        _settle(dialog)
-        cards = dialog._pages["browse"]["cards"]
-        texts = {label.text() for label in cards.findChildren(QLabel)}
-        assert {"locked", "other"} <= texts
-        buttons = {b.text() for b in cards.findChildren(QPushButton)}
-        assert "Replace with the catalog version" in buttons
-    finally:
-        dialog.close()
-        dialog.deleteLater()
+    browser = Browser(monkeypatch, plugins, [_extension("locked"), _extension("other")])
+    assert set(browser.act("tab", "Browse").ids) == {"locked", "other"}
+    assert browser.act("focus", "locked").buttons["replace"] == "Replace with the catalog version"
 
 
 def test_a_card_that_cannot_be_built_costs_only_itself(plugins, monkeypatch):
-    from views import extension_manager_dialog as module
-    _stub_catalog(monkeypatch, module, [_extension("bad"), _extension("good")])
-    real = module.ExtensionManagerDialog._make_row
-
-    def make_row(self, extension, *args):
-        if extension.id == "bad":
-            raise ValueError("this card")
-        return real(self, extension, *args)
-
-    monkeypatch.setattr(module.ExtensionManagerDialog, "_make_row", make_row)
-    dialog = module.ExtensionManagerDialog()
-    try:
-        _settle(dialog)
-        cards = dialog._pages["browse"]["cards"]
-        assert "good" in {label.text() for label in cards.findChildren(QLabel)}
-        assert "bad" not in {label.text()
-                             for label in cards.findChildren(QLabel)}
-    finally:
-        dialog.close()
-        dialog.deleteLater()
+    from dataclasses import replace
+    from tests.extensions_chrome import Browser
+    bad = replace(_extension("bad"), name={"en": []}, screenshot="../escape.png")
+    browser = Browser(monkeypatch, plugins, [bad, _extension("good")]).act("tab", "Browse")
+    assert browser.act("focus", "good").spec["detail"]["title"] == "good"
+    # A malformed display name falls back to its ID and an invalid image is omitted.
+    bad_tile = next(item for item in browser.items if item["id"] == "bad")
+    assert bad_tile["label"] == "bad" and not bad_tile["icon"]
 
 
 # ---- the window -----------------------------------------------------------

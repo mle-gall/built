@@ -474,10 +474,12 @@ class ShellWindow(QObject):
         self._host = host
         from core.extensions import discover_plugins
         from core.plugin_panels import install
+        from core.extension_manager import extension_startup_state
+        self._extension_startup_state = extension_startup_state()
         plugins, errors = discover_plugins(panels_only=True)
         install(self, plugins)
         self._running_extensions = {p.stem for p in plugins}
-        self._extension_load_errors = {e.stem: {"error": e.error} for e in errors}
+        self._extension_load_errors = {e.stem: {"error": e.error, "path": str(e.path)} for e in errors}
         from PySide6.QtGui import QAction
         self._ui_commands = []
         for sid, label in (("about", "About Built"), ("extensions", "Extension Manager"), ("cutlist", "Cut list")):

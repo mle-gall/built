@@ -374,7 +374,17 @@ impl Gallery {
             credits_roll(ui, "gallery", &[CreditRow { name: "Marco Sumari Tellez".into(),
                 role: "Civil Engineer — Arequipa, Peru".into(), ..Default::default() }], height);
         });
-        y + height + SPACE_S
+        y += height + SPACE_S;
+        let (_, preview) = catalogue_grid(CONTROL_H * 2., CONTROL_H * 2.);
+        ui.painter().text(pos2(at.x, y + CONTROL_H / 2.), Align2::LEFT_CENTER, "Catalogue preview", meta(), INK_2);
+        let rect = Rect::from_min_size(pos2(at.x + name_w, y), preview);
+        paint_tile(ui, rect, State::Idle);
+        let r = Rect::from_min_size(rect.right_top() + vec2(SPACE_M, 0.), vec2(w - name_w - preview.x - SPACE_M, preview.y));
+        put(ui, r, egui::Layout::top_down(egui::Align::Min), |ui| {
+            catalogue_fact(ui, "Licence", "MIT");
+            catalogue_tag(ui, "Architecture", ui.available_width());
+        });
+        y + preview.y + SPACE_S
     }
 
     fn molecule(ui: &mut egui::Ui, row: Row, st: State, cell: &mut Cell) {
