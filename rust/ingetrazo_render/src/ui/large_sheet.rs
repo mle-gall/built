@@ -139,6 +139,7 @@ pub struct Block {
     pub fields: Vec<dialog::Field>,
     pub spans: Vec<kit::ProseSpan>,
     pub credits: Vec<kit::CreditRow>,
+    pub map: Option<super::site_map::MapSpec>,
     pub buttons: Vec<Verb>,
     /// tiles: the picture's side; picture: its height.
     pub size: f32,
@@ -191,6 +192,7 @@ pub struct LargeSheet {
     pub open: bool,
     pub search: String,
     visible_previews: Vec<String>,
+    map: super::site_map::MapState,
     search_reported: String,
     pub focused: Option<String>,
     /// Focusable items as last laid out (content pane, reading order).
@@ -224,6 +226,9 @@ impl LargeSheet {
             self.head_menu = None;
             return false;
         };
+        if !spec.content.blocks.iter().any(|block| block.map.is_some()) {
+            self.map = Default::default();
+        }
         if spec.id == "start" {
             let template = spec.focus.as_deref().is_some_and(|id| id.starts_with("tpl:"));
             if let Some(new) = spec.verbs.iter_mut().find(|verb| verb.id == "new") {
@@ -240,6 +245,7 @@ impl LargeSheet {
         let opening = !self.open || self.spec.as_ref().is_none_or(|s| s.id != spec.id);
         if opening {
             self.visible_previews.clear();
+            self.map = Default::default();
             self.search.clear();
             self.focused = None;
             self.menu = None;
@@ -569,6 +575,7 @@ impl Draw<'_> {
                         });
                     });
                 }
+                "map" => { if let Some(spec) = &b.map { self.st.map.show(ui,spec,self.out); } }
                 "facts" => {
                     for (label, value, _) in &b.rows { kit::catalogue_fact(ui, label, value); }
                 }

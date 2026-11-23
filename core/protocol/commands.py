@@ -350,7 +350,7 @@ class EditTagCommand(Command):
         super().doc_after(scene, phase)
 
 
-class LinkSubsetCommand(Command):
+class _ReversibleSceneEdit(Command):
     def __init__(self, edit):
         self.edit = edit
 
@@ -361,6 +361,22 @@ class LinkSubsetCommand(Command):
     def undo(self, scene):
         self.edit.apply(scene, False)
         scene.version += 1
+
+
+class LinkSubsetCommand(_ReversibleSceneEdit):
+    pass
+
+
+class SetLocationCommand(_ReversibleSceneEdit):
+    history_name = "Set project location"
+    keeps_rows = True
+
+
+def set_location(history, lat, lon):
+    from ingetrazo_core import LocationEdit
+    before = history.revision
+    history.execute(SetLocationCommand(LocationEdit(history.scene, lat, lon)))
+    return _answer(history, before)
 
 
 def edit_link_subset(history, placement, text):
@@ -885,7 +901,7 @@ def set_annotation_font(history, family, bold, italic, size):
                               DocumentSettings.annotation_font(family, bold, italic, size))
 
 
-COMMANDS = {"set_model_units": set_model_units, "set_annotation_font": set_annotation_font,
+COMMANDS = {"set_location": set_location, "set_model_units": set_model_units, "set_annotation_font": set_annotation_font,
             "set_dimension_style": set_dimension_style, "patch_record_field": patch_record_field, "set_filing_rule": set_filing_rule,
             "create_delivery": create_delivery, "edit_delivery": edit_delivery,
             "delete_delivery": delete_delivery, "run_delivery": run_delivery, "follow_me": follow_me, "intersect_faces": intersect_faces,

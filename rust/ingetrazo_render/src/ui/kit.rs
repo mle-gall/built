@@ -1453,3 +1453,14 @@ mod catalogue_tests {
         });
     }
 }
+
+pub fn site_pin(painter:&egui::Painter, center:Pos2, label:&str) {
+    for (width,ink) in [(4.,FIELD),(MARKER_W,ACCENT)] {
+        painter.line_segment([center-vec2(SPACE_M,0.),center+vec2(SPACE_M,0.)],Stroke::new(width,ink));
+        painter.line_segment([center-vec2(0.,SPACE_M),center+vec2(0.,SPACE_M)],Stroke::new(width,ink));
+    }
+    let text=painter.layout_no_wrap(label.to_owned(),meta(),INK);
+    let pos=center+vec2(SPACE_M,SPACE_XS);
+    painter.rect_filled(Rect::from_min_size(pos,text.size()).expand(SPACE_XS),R_INSET,PANEL);
+    painter.galley(pos,text,INK);
+}

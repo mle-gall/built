@@ -379,6 +379,7 @@ impl Gallery {
         ui.painter().text(pos2(at.x, y + CONTROL_H / 2.), Align2::LEFT_CENTER, "Catalogue preview", meta(), INK_2);
         let rect = Rect::from_min_size(pos2(at.x + name_w, y), preview);
         paint_tile(ui, rect, State::Idle);
+        site_pin(ui.painter(), rect.center(), "(0,0)");
         let r = Rect::from_min_size(rect.right_top() + vec2(SPACE_M, 0.), vec2(w - name_w - preview.x - SPACE_M, preview.y));
         put(ui, r, egui::Layout::top_down(egui::Align::Min), |ui| {
             catalogue_fact(ui, "Licence", "MIT");

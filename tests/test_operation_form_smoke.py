@@ -237,3 +237,46 @@ def test_native_extensions_open_painted_and_apply(tmp_path):
     assert result.returncode == 0 and [s["large_sheet"] for s in states[:2]] == ["extensions", "start"], log
     assert all(not s["errors"] and not s["blocked_widgets"] for s in states), log
     assert (plugins / ".safe-mode").is_file(), log
+
+
+@pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
+                    reason="requires a built window and BUILT_WINDOW_TESTS=1")
+def test_native_location_coordinates_map_apply_and_cancel(tmp_path):
+    from core.scene import Scene
+    from formats.igz import save_scene, load_into
+    from georef.datum import SceneDatum
+
+    model = tmp_path / "site.igz"
+    saved = tmp_path / "edited.built"
+    scene = Scene()
+    scene.north_deg = 31
+    save_scene(scene, model)
+    home = tmp_path / "home"
+    home.mkdir()
+    requested = tmp_path / "tile"
+    venv = fixture_venv(tmp_path,
+        "from georef.tile_fetcher import TileFetcher\nfrom pathlib import Path\n"
+        f"TileFetcher.request = lambda self, src, x, y, z: Path({str(requested)!r}).touch()\n")
+    steps = tmp_path / "commands"
+    steps.write_text("wait 600\nkey escape\nmenu prefs\nwait 350\nclick 116 460\nwait 150\n"
+                     "click 552 328\nwait 200\nclick 550 282\nkey a cmd\ntype 48.85\n"
+                     "click 550 311\nkey a cmd\ntype 2.35\nclick 340 351\nwait 450\n"
+                     "drag 590 585 625 585 left 7\nwait 250\nstate\nclick 492 747\nwait 250\n"
+                     "click 552 328\nwait 200\nclick 550 282\nkey a cmd\ntype 33\n"
+                     f"click 431 351\nwait 200\nkey escape\nwait 200\nmenu save_to:{saved}\nwait 500\nstate\nquit\n")
+    result = run([str(BIN), "--root", str(ROOT), "--venv", str(venv), "--new-instance",
+                  "--size", "1000x920", "--script", str(steps), str(model)],
+                 env=dict(os.environ, BUILT_ANSWERS="escape,cmd-d,cmd-d"), home=home, settings=tmp_path / "profile",
+                 capture_output=True, text=True, timeout=90)
+    log = result.stdout + result.stderr
+    states = [json.loads(line.removeprefix("[built] state ")) for line in log.splitlines()
+              if line.startswith("[built] state ")]
+    assert result.returncode == 0 and [s["large_sheet"] for s in states[:2]] == ["settings", ""], log
+    assert all(not s["errors"] and not s["blocked_widgets"] for s in states), log
+    assert requested.is_file(), log
+    loaded = Scene()
+    load_into(loaded, saved)
+    assert isinstance(loaded.georef, SceneDatum), log
+    assert loaded.georef.lat == pytest.approx(48.85, abs=1e-5)
+    assert loaded.georef.lon == pytest.approx(2.35 - 35 * 360 / (256 * 2**12), abs=.0004)
+    assert loaded.georef.north == 31

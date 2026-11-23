@@ -35,6 +35,7 @@ pub mod kit;
 #[cfg(target_os = "macos")]
 mod system_fonts;
 mod gallery;
+mod site_map;
 use tokens::*;
 use kit::*;
 

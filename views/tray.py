@@ -851,18 +851,18 @@ class BaseMapPanel(QWidget):
 
     def _open_locator(self) -> None:
         """Open the map locator; on accept, drop the chosen lat/lon and go."""
-        from views.location_dialog import pick_location
+        from views.settings_sheet import edit_location
         src = self._current_source() or PRESETS[DEFAULT_SOURCE_ID]
-        result = pick_location(src, self._lat.value(), self._lon.value(), self)
-        if result is not None:
-            lat, lon, width_m, length_m = result
+
+        def use_site(lat, lon, width_m, length_m):
             self._lat.setValue(lat)
             self._lon.setValue(lon)
             self._sync_utm_from_ll()
-            if width_m and length_m:      # a capture rectangle was drawn
-                self._capture_w = width_m
-                self._capture_l = length_m
+            if width_m and length_m:
+                self._capture_w, self._capture_l = width_m, length_m
             self._go_to()
+
+        edit_location(_dialog_parent(self), source=src, center=(self._lat.value(), self._lon.value()), done=use_site)
 
     def _go_to(self) -> None:
         src = self._current_source()
@@ -4040,25 +4040,8 @@ class ShadowsPanel(QWidget):
         """Add Location, scoped to the sun: pick the site on the
         map and it becomes the model's geographic datum (which is also what
         the Terrain workspace reads — one location, one truth)."""
-        from georef.tiles import DEFAULT_SOURCE_ID, PRESETS
-        from views.location_dialog import pick_location
-        datum = getattr(self._window.viewport.scene, "georef", None)
-        from core.sun import DEFAULT_LAT, DEFAULT_LON
-        lat0 = datum.lat if datum is not None else DEFAULT_LAT
-        lon0 = datum.lon if datum is not None else DEFAULT_LON
-        result = pick_location(PRESETS[DEFAULT_SOURCE_ID], lat0, lon0,
-                               _dialog_parent(self))
-        if result is None:
-            return
-        lat, lon, _w, _l = result
-        from core.sun import scene_north_deg
-        from georef.datum import SceneDatum
-        scene = self._window.viewport.scene
-        # Tools ▸ North set before the location carries over.
-        scene.georef = SceneDatum(lat, lon, north=scene_north_deg(scene))
-        self._window.viewport.scene.version += 1
-        self.refresh()
-        self._window.viewport.update()
+        from views.settings_sheet import edit_location
+        edit_location(_dialog_parent(self))
 
     def _apply(self, *_a) -> None:
         sh = self._shadows()
