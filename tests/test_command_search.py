@@ -35,6 +35,13 @@ def ventana(tmp_path, monkeypatch):
     win.close()
 
 
+@pytest.fixture
+def classic_canvas(monkeypatch):
+    """Exercise the child canvas even on machines with a live Metal viewport."""
+    from views.wgpu_view import WgpuView
+    monkeypatch.setattr(WgpuView, "_can_create_surface", lambda self: False)
+
+
 def _names(win, query):
     return [c.name for c in cs.search(win, query)]
 
@@ -177,6 +184,7 @@ def test_a_hidden_action_is_not_offered(ventana):
 
 
 # ---- the box ----------------------------------------------------------------------
+@pytest.mark.usefixtures("classic_canvas")
 def test_f3_opens_the_box(ventana):
     QTest.keyClick(ventana.viewport.keys_stand_in, Qt.Key_F1)      # the warm-up keystroke
     QApplication.processEvents()
@@ -187,6 +195,7 @@ def test_f3_opens_the_box(ventana):
     box.close()
 
 
+@pytest.mark.usefixtures("classic_canvas")
 def test_enter_runs_the_first_match_and_remembers_it(ventana):
     fired = []
     act = QAction("Frobnicate the walls", ventana)
@@ -201,6 +210,7 @@ def test_enter_runs_the_first_match_and_remembers_it(ventana):
     assert _names(ventana, "")[0] == "Frobnicate the walls"   # recent first
 
 
+@pytest.mark.usefixtures("classic_canvas")
 def test_arrows_move_and_skip_disabled_commands(ventana):
     fired = []
     for text, enabled in (("Zyx alpha", True), ("Zyx beta", False),
@@ -217,6 +227,7 @@ def test_arrows_move_and_skip_disabled_commands(ventana):
     assert fired == ["Zyx gamma"]
 
 
+@pytest.mark.usefixtures("classic_canvas")
 def test_esc_closes_without_running_anything(ventana):
     fired = []
     act = QAction("Frobnicate the walls", ventana)
@@ -229,6 +240,7 @@ def test_esc_closes_without_running_anything(ventana):
     assert fired == [] and not box.isVisible()
 
 
+@pytest.mark.usefixtures("classic_canvas")
 def test_no_results_says_so(ventana):
     box = _box(ventana)
     _type(box, "xqzwv")
@@ -236,6 +248,7 @@ def test_no_results_says_so(ventana):
     box.close()
 
 
+@pytest.mark.usefixtures("classic_canvas")
 def test_one_line_per_command_path_first(ventana):
     """Blender's layout: faded path, then the name; ten rows at a time."""
     box = _box(ventana)
@@ -246,6 +259,7 @@ def test_one_line_per_command_path_first(ventana):
     box.close()
 
 
+@pytest.mark.usefixtures("classic_canvas")
 def test_a_menu_scope_searches_only_that_menu(ventana):
     box = _box(ventana, "a", "Edit ▸ Unhide")
     assert set(_shown(box)) <= {"All", "Selected", "Last"}
@@ -259,6 +273,7 @@ def test_a_menu_scope_searches_only_that_menu(ventana):
     box.close()
 
 
+@pytest.mark.usefixtures("classic_canvas")
 def test_a_letter_typed_in_an_open_menu_searches_it(ventana):
     edit = next(a.menu() for a in ventana.menuBar().actions()
                 if a.menu() is not None and a.menu().title() == "Edit")
@@ -273,6 +288,7 @@ def test_a_letter_typed_in_an_open_menu_searches_it(ventana):
     box.close()
 
 
+@pytest.mark.usefixtures("classic_canvas")
 def test_change_shortcut_opens_preferences_on_that_command(ventana,
                                                            monkeypatch):
     opened = []
@@ -353,6 +369,7 @@ def test_smaller_only_when_the_screen_cannot_hold_it():
     assert _inside(r, tiny_screen)
 
 
+@pytest.mark.usefixtures("classic_canvas")
 def test_the_real_box_is_fitted_to_the_modelling_area(ventana,
                                                       monkeypatch):
     """The area handed to fit_box is the viewport's, not the window's."""
@@ -496,6 +513,7 @@ def test_the_tooltip_is_name_description_and_keys_wrapped(ventana):
     comp.close()
 
 
+@pytest.mark.usefixtures("classic_canvas")
 def test_a_command_run_from_f3_is_the_one_shift_r_repeats(ventana):
     """F3 and Repeat last command (#145) work together: what F3 ran is
     what Shift+R runs again."""
