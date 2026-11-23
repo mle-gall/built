@@ -141,6 +141,11 @@ def test_sheet_view_annotation_and_style_records(tmp_path, monkeypatch):
     from core.textlabel import TextLabel
 
     scene = Scene()
+    extension = {"records": [{"class": "IfcWall", "name": "Mûr"}],
+                 "deliveries": [{"sheet": "Elevation", "revision": 2}],
+                 "structure": {"groups": [{"xform": list(range(16)),
+                                            "faces": [{"extension_field": [1, 2]}]}]}}
+    scene.plugin_data["example_extension"] = extension
     scene.layers.append(Layer("Draft", color=(0.123456, 1, 0), lineweight=0.2345,
                               hatch_scale=1.234567, hatch_ground="layer", mortar=True))
     scene.materials["Paint"] = Material("Paint", color=(0.2, 0.4, 1), opacity=0.8)
@@ -178,6 +183,7 @@ def test_sheet_view_annotation_and_style_records(tmp_path, monkeypatch):
         igz.load_into(reopened, source)
         assert reopened.compositions[0].texts[0].text == "Façade"
         assert reopened.text_labels[0].text == "Note"
+        assert reopened.plugin_data["example_extension"] == extension
         target = tmp_path / "copy.built"
         igz.save_scene(reopened, target, backup=False)
         if expected is None:
