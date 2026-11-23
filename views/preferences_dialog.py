@@ -73,6 +73,307 @@ def graphics_server_applies(platform: str | None = None) -> bool:
     return (platform or sys.platform).startswith("linux")
 
 
+# ---- Applying one setting ---------------------------------------------------
+# What OK does for each setting, one function each: the dialog calls them on
+# OK, the Settings sheet (views/settings_sheet.py) the moment a value changes.
+# ``st`` defaults to a fresh ``QSettings()``.
+
+def viewports_of(window) -> list:
+    """Every project's viewport (one per tab, #1066): a view setting
+    reaches the tabs in the back too."""
+    every = getattr(window, "all_viewports", None)
+    if callable(every):
+        return every()
+    vp = getattr(window, "viewport", None)
+    return [vp] if vp is not None else []
+
+
+def native_views_of(window) -> list:
+    """Every project's Metal view (``doc.stand_in``), if any."""
+    docs = getattr(window, "_documents", None) or ()
+    return [v for v in (getattr(d, "stand_in", None) for d in docs)
+            if v is not None]
+
+
+def _update(obj) -> None:
+    update = getattr(obj, "update", None)
+    if callable(update):
+        update()
+
+
+def apply_language(code, st=None) -> bool:
+    """Language: same contract as the menu (persists; applies on restart).
+    True when Built must restart to show it. Reverting a still-pending
+    change back to the running language just rewrites the stored value —
+    no restart note for a no-op (nor for "Same as the system" when the
+    system's is the running language)."""
+    st = st if st is not None else QSettings()
+    saved = str(st.value("language") or SYSTEM_LANGUAGE)
+    if code == saved:
+        return False
+    st.setValue("language", code)
+    lang = resolve_language(code)
+    if lang != current_language():
+        from core.i18n import set_language
+        set_language(lang)
+        return True
+    return False
+
+
+def apply_theme_choice(theme) -> None:
+    """Theme: applies at once (a no-op re-apply is cheap)."""
+    from views.theme import apply_theme, save_theme, saved_theme
+    if theme != saved_theme():
+        save_theme(theme)
+        from PySide6.QtWidgets import QApplication
+        apply_theme(QApplication.instance(), theme)
+
+
+def apply_accent_choice(accent) -> None:
+    from views.theme import apply_accent, save_accent, saved_accent
+    if accent != saved_accent():
+        save_accent(accent)
+        from PySide6.QtWidgets import QApplication
+        apply_accent(QApplication.instance())
+
+
+def apply_window_glass(on: bool) -> bool:
+    """The Liquid Glass chrome (macOS 26+). True when it changed: it
+    applies after a restart."""
+    from views import mac_glass
+    if not mac_glass.supported() or bool(on) == mac_glass.enabled():
+        return False
+    mac_glass.set_enabled(bool(on))
+    return True
+
+
+def apply_rest_mode(window, mode, fade: float) -> None:
+    """Rest-of-model mode and fade: through each viewport (it persists the
+    setting), then the Camera menu checkmark follows. Every project's
+    viewport, so a tab in the back follows too (#1066)."""
+    vp = getattr(window, "viewport", None)
+    mode_changed = vp is not None and mode != vp.edit_rest_mode
+    for v in viewports_of(window):
+        set_fade = getattr(v, "set_edit_rest_fade", None)
+        if callable(set_fade):
+            set_fade(fade)
+        if mode != v.edit_rest_mode:
+            v.set_edit_rest_mode(mode)
+    if mode_changed:
+        act = getattr(window, "_rest_actions", {}).get(mode)
+        if act is not None:
+            act.setChecked(True)
+
+
+def apply_autosave(window, on: bool, minutes: int, backup: bool | None = None,
+                   st=None) -> None:
+    """Auto-save and its pace (and the .bak), the timer re-armed."""
+    st = st if st is not None else QSettings()
+    _gs.set_value("autosave", "1" if on else "0", st)
+    _gs.set_value("autosave_min", int(minutes), st)
+    if backup is not None:
+        _gs.set_value("backup", "1" if backup else "0", st)
+    setup = getattr(window, "_setup_autosave", None)
+    if callable(setup):
+        setup()                     # re-arm the timer with the new pace
+
+
+def apply_undo_steps(window, steps: int, st=None) -> None:
+    st = st if st is not None else QSettings()
+    _gs.set_value("undo_steps", int(steps), st)
+    history = getattr(getattr(window, "viewport", None), "history", None)
+    if history is not None:
+        history.max_steps = int(steps)
+
+
+def apply_rust_engine(on: bool, st=None) -> bool:
+    """The Rust engine, read once at start. True when the choice changed
+    (Built must restart to switch)."""
+    st = st if st is not None else QSettings()
+    rust = "1" if on else "0"
+    if _native.available() is None or rust == str(
+            _gs.value(_native.SETTING, _native.DEFAULT, st)):
+        return False
+    _gs.set_value(_native.SETTING, rust, st)
+    _native.chosen_by_user(st)
+    return True
+
+
+def apply_invert_wheel(window, on: bool, st=None) -> None:
+    st = st if st is not None else QSettings()
+    st.setValue("nav/invert_wheel", "1" if on else "0")
+    for v in viewports_of(window):
+        v._invert_wheel = bool(on)
+
+
+def apply_invert_orbit(window, on: bool, st=None) -> None:
+    st = st if st is not None else QSettings()
+    st.setValue("nav/invert_orbit_y", "1" if on else "0")
+    for v in viewports_of(window):
+        v._invert_orbit_y = bool(on)
+
+
+def apply_slides(window, trackpad: str, touch: str, inertia: bool,
+                 st=None) -> None:
+    """The trackpad's two-finger slide, the touch screen's one-finger
+    slide and the inertia after the fingers lift."""
+    st = st if st is not None else QSettings()
+    st.setValue("nav/trackpad_slide", trackpad)
+    st.setValue("nav/touch_slide", touch)
+    st.setValue("nav/trackpad_inertia", "1" if inertia else "0")
+    for v in viewports_of(window):
+        v._trackpad_slide = trackpad
+        v._touch_slide = touch
+        v._trackpad_inertia = bool(inertia)
+
+
+def apply_cursor_style(window, style: str, st=None) -> None:
+    st = st if st is not None else QSettings()
+    _gs.set_value("cursor_style", style, st)
+    reapply = getattr(getattr(window, "viewport", None),
+                      "_apply_tool_cursor", None)
+    if callable(reapply):
+        reapply()                  # the active tool's pointer at once
+
+
+def apply_msaa(window, msaa: int, st=None) -> None:
+    st = st if st is not None else QSettings()
+    st.setValue("display/msaa", msaa)
+    for vp in viewports_of(window):
+        if getattr(vp, "_msaa", None) != msaa:
+            vp._msaa = msaa
+            # Void the FBO size so the next paint rebuilds it at the new
+            # sample count (the rebuild happens with the context current).
+            vp._fbo_size = None
+            _update(vp)
+
+
+def apply_soft_shadows(window, on: bool, level: int, st=None) -> None:
+    st = st if st is not None else QSettings()
+    level = int(level)
+    soft = level if on else 0
+    st.setValue("display/soft_shadows", soft)
+    st.setValue("display/soft_shadows_level", level)
+    for vp in viewports_of(window):
+        if getattr(vp, "_soft_shadows", None) != soft:
+            vp._soft_shadows = soft
+            _update(vp)
+    # The Metal view over each project (its stand-in) reads the level
+    # from its viewport on its next frame: ask for that frame now, so a
+    # still view shows the new level without waiting for its repaint
+    # tick or a camera move.
+    for view in native_views_of(window):
+        _update(view)
+
+
+def apply_toolbar_icon_px(window, px: int) -> None:
+    from views.icons import toolbar_icon_px
+    px = int(px)
+    if px != toolbar_icon_px():
+        apply_px = getattr(window, "set_toolbar_icon_size", None)
+        if callable(apply_px):
+            apply_px(px)             # persists and resizes every toolbar
+        else:
+            from views.icons import save_toolbar_icon_px
+            save_toolbar_icon_px(px)
+
+
+def apply_document_units(window, chosen: dict) -> bool:
+    """Units of the open document (issue #33): saved with it, the
+    dimension style following. True when they changed (the document is
+    edited)."""
+    from core import units as _units
+    vp = getattr(window, "viewport", None)
+    scene = getattr(vp, "scene", None)
+    if scene is None or chosen == _units.model_units_of(scene):
+        return False
+    _units.apply_units(scene, chosen)
+    scene.version += 1
+    notify = getattr(vp, "notify_scene_changed", None)
+    if callable(notify):
+        notify()
+    else:
+        vp.update()
+    return True
+
+
+def read_named_ndof_profiles() -> dict:
+    """The saved, named SpaceMouse profiles: {name: NdofSettings}."""
+    import json
+    from core.ndof_profiles import profile_from_dict
+    raw = QSettings().value("ndof/named_profiles", "{}")
+    try:
+        parsed = json.loads(str(raw))
+        if not isinstance(parsed, dict):
+            return {}
+        return {name: profile_from_dict(data) for name, data in parsed.items()
+                if isinstance(name, str) and 0 < len(name) <= 80}
+    except (ValueError, TypeError):
+        return {}
+
+
+def ndof_preset_values(choice, named: dict):
+    """``(mapping, inversion, speeds, global_speed)`` of a preset
+    ("original", "freecad", "named:<name>"), or None ("custom", unknown)."""
+    from core.ndof import (AXES, DEFAULT_MAPPING, FREECAD_INVERSION,
+                           FREECAD_MAPPING)
+    if choice == "original":
+        return (DEFAULT_MAPPING, {axis: False for axis in AXES},
+                {axis: 1.0 for axis in AXES}, 1.0)
+    if choice == "freecad":
+        return (FREECAD_MAPPING, FREECAD_INVERSION,
+                {axis: 1.0 for axis in AXES}, 1.0)
+    if isinstance(choice, str) and choice.startswith("named:"):
+        profile = named.get(choice[6:])
+        if profile is None:
+            return None
+        return (profile.axis_mapping, profile.axis_inversion,
+                profile.axis_sensitivity, profile.sensitivity)
+    return None
+
+
+def legacy_ndof_inversion(nd) -> dict:
+    """The per-axis inversion an Original configuration of the first
+    settings meant (its pair switches folded into each axis)."""
+    return {
+        "right": nd.invert_pan != nd.invert_pan_x,
+        "up": nd.invert_pan != nd.invert_pan_y,
+        "forward": nd.invert_zoom,
+        "tilt": nd.invert_rotate != nd.invert_tilt,
+        "spin": nd.invert_rotate != nd.invert_spin,
+        "roll": False,
+    }
+
+
+def save_ndof(nd, named: dict, selected, st=None) -> None:
+    """Store the 3D mouse settings ``nd`` (its axes filled in), the named
+    profiles and the preset picked (``selected``); every window reads
+    them live."""
+    import json
+    from core.ndof_profiles import profile_to_dict
+    from views.ndof_input import save_settings
+    st = st if st is not None else QSettings()
+    # Named presets are materialised into Custom at runtime. Their name
+    # is stored separately so the dropdown restores on the next launch.
+    nd.mapping_preset = selected if selected in ("original", "freecad") else "custom"
+    # Original's legacy inversion is migrated into the new per-axis
+    # representation. Old QSettings inversion keys are cleared on save.
+    if selected == "original":
+        nd.mapping_preset = "custom"
+    st.setValue("ndof/named_profiles", json.dumps({
+        name: profile_to_dict(profile) for name, profile in named.items()}))
+    st.setValue("ndof/selected_profile", selected[6:]
+                if isinstance(selected, str) and selected.startswith("named:")
+                else "")
+    save_settings(nd)                # every window reads it live
+
+
+def reload_ai_panel(window) -> None:
+    panel = getattr(window, "_ai_assistant", None)
+    if panel is not None:          # the AI tab lives on: show the change
+        panel._load_settings()
+
+
 class _ScrollingPage(QScrollArea):
     """A Preferences page that scrolls when the dialog is shorter than it
     (#1336). It still ASKS for its whole size, so on a screen with room
@@ -539,30 +840,11 @@ class PreferencesDialog(QDialog):
         # Do not lock axis widgets for any preset. Editing creates Custom.
         # Block change handlers while loading a preset to prevent recursion.
         def _preset_changed(_index):
-            from core.ndof import FREECAD_MAPPING, FREECAD_INVERSION
-            choice = self._ndof_preset.currentData()
-            if choice == "custom":
+            values = ndof_preset_values(self._ndof_preset.currentData(),
+                                        self._ndof_named)
+            if values is None:
                 return
-            if choice == "original":
-                mapping = DEFAULT_MAPPING
-                inversion = {axis: False for axis in AXES}
-                speeds = {axis: 1.0 for axis in AXES}
-                global_speed = 1.0
-            elif choice == "freecad":
-                mapping = FREECAD_MAPPING
-                inversion = FREECAD_INVERSION
-                speeds = {axis: 1.0 for axis in AXES}
-                global_speed = 1.0
-            elif isinstance(choice, str) and choice.startswith("named:"):
-                profile = self._ndof_named.get(choice[6:])
-                if profile is None:
-                    return
-                mapping, inversion, speeds = (profile.axis_mapping,
-                                               profile.axis_inversion,
-                                               profile.axis_sensitivity)
-                global_speed = profile.sensitivity
-            else:
-                return
+            mapping, inversion, speeds, global_speed = values
             self._ndof_loading = True
             try:
                 self._ndof_speed.setValue(round(global_speed * 100))
@@ -591,14 +873,7 @@ class PreferencesDialog(QDialog):
         # Respect saved values when opening the dialog; do not reapply the
         # preset here, which could overwrite previously customised settings.
         if nd.mapping_preset == "original":
-            legacy = {
-                "right": nd.invert_pan != nd.invert_pan_x,
-                "up": nd.invert_pan != nd.invert_pan_y,
-                "forward": nd.invert_zoom,
-                "tilt": nd.invert_rotate != nd.invert_tilt,
-                "spin": nd.invert_rotate != nd.invert_spin,
-                "roll": False,
-            }
+            legacy = legacy_ndof_inversion(nd)
             self._ndof_loading = True
             for axis, (_, invert, _) in self._ndof_axes.items():
                 invert.setChecked(legacy[axis])
@@ -818,17 +1093,7 @@ class PreferencesDialog(QDialog):
 
     @staticmethod
     def _read_named_ndof_profiles():
-        import json
-        from core.ndof_profiles import profile_from_dict
-        raw = QSettings().value("ndof/named_profiles", "{}")
-        try:
-            parsed = json.loads(str(raw))
-            if not isinstance(parsed, dict):
-                return {}
-            return {name: profile_from_dict(data) for name, data in parsed.items()
-                    if isinstance(name, str) and 0 < len(name) <= 80}
-        except (ValueError, TypeError):
-            return {}
+        return read_named_ndof_profiles()
 
     def _add_ndof_named_profile(self, name, profile):
         self._ndof_named[name] = profile
@@ -1023,18 +1288,10 @@ class PreferencesDialog(QDialog):
         self._rest_fade.setEnabled(self._rest.currentData() == "fade")
 
     def _viewports(self) -> list:
-        """Every project's viewport (one per tab, #1066): a view setting
-        reaches the tabs in the back too."""
-        every = getattr(self._window, "all_viewports", None)
-        if callable(every):
-            return every()
-        return [self._window.viewport]
+        return viewports_of(self._window)
 
     def _native_views(self) -> list:
-        """Every project's Metal view (``doc.stand_in``), if any."""
-        docs = getattr(self._window, "_documents", None) or ()
-        return [v for v in (getattr(d, "stand_in", None) for d in docs)
-                if v is not None]
+        return native_views_of(self._window)
 
     # ---- Restore defaults -------------------------------------------------
 
@@ -1117,16 +1374,8 @@ class PreferencesDialog(QDialog):
 
         # Units of the open document (issue #33).
         from core import units as _units
-        scene = getattr(getattr(self._window, "viewport", None), "scene", None)
         chosen = self._units_panel.settings()
-        if scene is not None and chosen != _units.model_units_of(scene):
-            _units.apply_units(scene, chosen)
-            scene.version += 1
-            notify = getattr(self._window.viewport, "notify_scene_changed", None)
-            if callable(notify):
-                notify()
-            else:
-                self._window.viewport.update()
+        apply_document_units(self._window, chosen)
         for_new = self._units_for_new.isChecked()
         # The checkbox is a remembered preference, independent of the model.
         # An unrelated edit must not copy this model's units over a newer
@@ -1138,61 +1387,23 @@ class PreferencesDialog(QDialog):
         from views.units_start_dialog import set_ask_at_start
         set_ask_at_start(self._units_at_start.isChecked())
 
-        # Language: same contract as the menu (persists; applies on restart).
-        # Reverting a still-pending change back to the running language just
-        # rewrites the stored value — no restart note for a no-op (nor for
-        # "Same as the system" when the system's is the running language).
-        code = self._lang.currentData()
-        saved = str(st.value("language") or SYSTEM_LANGUAGE)
-        if code != saved:
-            st.setValue("language", code)
-            lang = resolve_language(code)
-            if lang != current_language():
-                from core.i18n import set_language
-                set_language(lang)
-                QMessageBox.information(
-                    self, tr("Language changed"),
-                    tr("Restart Built to apply the new language."))
+        if apply_language(self._lang.currentData(), st):
+            QMessageBox.information(
+                self, tr("Language changed"),
+                tr("Restart Built to apply the new language."))
 
-        # Theme: applies at once (a no-op re-apply is cheap).
-        from views.theme import apply_theme, save_theme, saved_theme
-        theme = self._theme.currentData()
-        if theme != saved_theme():
-            save_theme(theme)
-            from PySide6.QtWidgets import QApplication
-            apply_theme(QApplication.instance(), theme)
+        apply_theme_choice(self._theme.currentData())
 
-        from views import mac_glass
-        if self._glass is not None \
-                and self._glass.isChecked() != mac_glass.enabled():
-            mac_glass.set_enabled(self._glass.isChecked())
+        if self._glass is not None and apply_window_glass(
+                self._glass.isChecked()):
             QMessageBox.information(
                 self, tr("Window chrome changed"),
                 tr("Restart Built to apply the new window chrome."))
 
-        from views.theme import apply_accent, save_accent, saved_accent
-        accent = self._accent.currentData()
-        if accent != saved_accent():
-            save_accent(accent)
-            from PySide6.QtWidgets import QApplication
-            apply_accent(QApplication.instance())
+        apply_accent_choice(self._accent.currentData())
 
-        # Rest-of-model mode: through the viewport (it persists the setting),
-        # then the Camera menu checkmark follows.
-        # Every project's viewport, so a tab in the back follows too (#1066).
-        fade = self._rest_fade.value() / 100.0
-        mode = self._rest.currentData()
-        mode_changed = mode != self._window.viewport.edit_rest_mode
-        for v in self._viewports():
-            set_fade = getattr(v, "set_edit_rest_fade", None)
-            if callable(set_fade):
-                set_fade(fade)
-            if mode != v.edit_rest_mode:
-                v.set_edit_rest_mode(mode)
-        if mode_changed:
-            act = getattr(self._window, "_rest_actions", {}).get(mode)
-            if act is not None:
-                act.setChecked(True)
+        apply_rest_mode(self._window, self._rest.currentData(),
+                        self._rest_fade.value() / 100.0)
 
         _gs.set_value("autosave", "1" if self._autosave.isChecked() else "0",
                       st)
@@ -1207,18 +1418,12 @@ class PreferencesDialog(QDialog):
         st.setValue("new_document/scale_figure",
                     "1" if self._scale_figure.isChecked() else "0")
         self._save_figure(st)
-        _gs.set_value("undo_steps", int(self._undo_steps.value()), st)
-        history = getattr(getattr(self._window, "viewport", None), "history", None)
-        if history is not None:
-            history.max_steps = int(self._undo_steps.value())
+        apply_undo_steps(self._window, self._undo_steps.value(), st)
         _gs.set_value("platform", self._platform.currentData(), st)
         from core import renderer_settings
         _gs.set_value(renderer_settings.SETTING, self._renderer.currentData(), st)
-        rust = "1" if self._rust.isChecked() else "0"
-        if self._rust.isEnabled() and rust != str(
-                _gs.value(_native.SETTING, _native.DEFAULT, st)):
-            _gs.set_value(_native.SETTING, rust, st)
-            _native.chosen_by_user(st)
+        if self._rust.isEnabled() and apply_rust_engine(
+                self._rust.isChecked(), st):
             QMessageBox.information(
                 self, tr("Rust engine"),
                 tr("Restart Built to switch the engine."))
@@ -1227,101 +1432,29 @@ class PreferencesDialog(QDialog):
             setup()                     # re-arm the timer with the new pace
 
         from core.ndof import NdofSettings
-        from views.ndof_input import save_settings
         nd = NdofSettings(enabled=self._ndof_on.isChecked(),
                           sensitivity=self._ndof_speed.value() / 100.0,
                           lock_rotation=self._ndof_lock.isChecked())
-        selected = self._ndof_preset.currentData()
-        # Named presets are materialised into Custom at runtime. Their name
-        # is stored separately so the dropdown restores on the next launch.
-        nd.mapping_preset = selected if selected in ("original", "freecad") else "custom"
-        # Original's legacy inversion is migrated into the new per-axis
-        # representation. Old QSettings inversion keys are cleared on save.
-        if selected == "original":
-            nd.mapping_preset = "custom"
         for axis, (action, invert, speed) in self._ndof_axes.items():
             nd.axis_mapping[axis] = action.currentData()
             nd.axis_inversion[axis] = invert.isChecked()
             nd.axis_sensitivity[axis] = speed.value() / 100.0
-        from core.ndof_profiles import profile_to_dict
-        import json
-        st.setValue("ndof/named_profiles", json.dumps({
-            name: profile_to_dict(profile)
-            for name, profile in self._ndof_named.items()}))
-        st.setValue("ndof/selected_profile", selected[6:]
-                    if isinstance(selected, str) and selected.startswith("named:")
-                    else "")
-        save_settings(nd)                # every window reads it live
+        save_ndof(nd, self._ndof_named, self._ndof_preset.currentData(), st)
 
-        st.setValue("nav/invert_wheel",
-                    "1" if self._invert.isChecked() else "0")
-        viewports = self._viewports()
-        for v in viewports:
-            v._invert_wheel = self._invert.isChecked()
-        _gs.set_value("cursor_style", self._cursor_style.currentData(), st)
-        reapply = getattr(self._window.viewport, "_apply_tool_cursor", None)
-        if callable(reapply):
-            reapply()                  # the active tool's pointer at once
-
-        st.setValue("nav/invert_orbit_y",
-                    "1" if self._invert_orbit.isChecked() else "0")
-        for v in viewports:
-            v._invert_orbit_y = self._invert_orbit.isChecked()
-
-        slide = self._trackpad_slide.currentData()
-        touch = self._touch_slide.currentData()
-        st.setValue("nav/trackpad_slide", slide)
-        st.setValue("nav/touch_slide", touch)
-        st.setValue("nav/trackpad_inertia",
-                    "1" if self._trackpad_inertia.isChecked() else "0")
-        for v in viewports:
-            v._trackpad_slide = slide
-            v._touch_slide = touch
-            v._trackpad_inertia = self._trackpad_inertia.isChecked()
+        apply_invert_wheel(self._window, self._invert.isChecked(), st)
+        apply_cursor_style(self._window, self._cursor_style.currentData(), st)
+        apply_invert_orbit(self._window, self._invert_orbit.isChecked(), st)
+        apply_slides(self._window, self._trackpad_slide.currentData(),
+                     self._touch_slide.currentData(),
+                     self._trackpad_inertia.isChecked(), st)
 
         # First Person reads it on every look move: nothing to push.
         st.setValue("walk/look_sensitivity", int(self._look_sens.value()))
 
-        msaa = self._msaa.currentData()
-        st.setValue("display/msaa", msaa)
-        for vp in viewports:
-            if getattr(vp, "_msaa", None) != msaa:
-                vp._msaa = msaa
-                # Void the FBO size so the next paint rebuilds it at the new
-                # sample count (the rebuild happens with the context current).
-                vp._fbo_size = None
-                update = getattr(vp, "update", None)
-                if callable(update):
-                    update()
-
-        level = int(self._soft_level.currentData())
-        soft = level if self._soft_shadows.isChecked() else 0
-        st.setValue("display/soft_shadows", soft)
-        st.setValue("display/soft_shadows_level", level)
-        for vp in viewports:
-            if getattr(vp, "_soft_shadows", None) != soft:
-                vp._soft_shadows = soft
-                update = getattr(vp, "update", None)
-                if callable(update):
-                    update()
-        # The Metal view over each project (its stand-in) reads the level
-        # from its viewport on its next frame: ask for that frame now, so a
-        # still view shows the new level without waiting for its repaint
-        # tick or a camera move.
-        for view in self._native_views():
-            update = getattr(view, "update", None)
-            if callable(update):
-                update()
-
-        px = int(self._icon_px.currentData())
-        from views.icons import toolbar_icon_px
-        if px != toolbar_icon_px():
-            apply_px = getattr(self._window, "set_toolbar_icon_size", None)
-            if callable(apply_px):
-                apply_px(px)             # persists and resizes every toolbar
-            else:
-                from views.icons import save_toolbar_icon_px
-                save_toolbar_icon_px(px)
+        apply_msaa(self._window, self._msaa.currentData(), st)
+        apply_soft_shadows(self._window, self._soft_shadows.isChecked(),
+                           int(self._soft_level.currentData()), st)
+        apply_toolbar_icon_px(self._window, int(self._icon_px.currentData()))
 
         _gs.set_value("ext_menus", self._ext_menus.currentData(), st)
 
@@ -1335,7 +1468,5 @@ class PreferencesDialog(QDialog):
         st.setValue("ia/ollama_url", self._ollama.text().strip())
         st.setValue("ia/capturas", "1" if self._shots.isChecked() else "0")
         st.sync()
-        panel = getattr(self._window, "_ai_assistant", None)
-        if panel is not None:          # the AI tab lives on: show the change
-            panel._load_settings()
+        reload_ai_panel(self._window)
         super().accept()
