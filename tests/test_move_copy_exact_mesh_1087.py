@@ -83,6 +83,7 @@ def test_array_preserves_each_mesh_and_undo_redo():
     _assert_exact(_two_storeys(), [V(10, 0), V(20, 0), V(30, 0)])
 
 
+@pytest.mark.slow          # thousands of faces are the point (9 s alone)
 def test_thousands_of_faces_do_not_gain_internal_floors():
     scene = _two_storeys(512)
     assert len(scene.mesh.faces) == 2050

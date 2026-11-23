@@ -13,25 +13,57 @@ ROOT = Path(__file__).resolve().parents[1]
 CORPUS = sorted((ROOT / "examples").glob("*.igz")) + sorted((ROOT / "tests/fixtures").rglob("*.igz"))
 
 
-@pytest.fixture(scope="module")
-def composite(tmp_path_factory):
-    from tests.composite_fixture import build
+#: The composite at its real size (A holds 20 000 placements) is built only
+#: for the ``slow`` cases; the default run uses it scaled down, with the
+#: large-document threshold lowered to match, so the same format-3 paths run.
+SCALED = 600
+SCALED_THRESHOLD = 200
 
+
+def _composite(tmp_path_factory, name, **build_args):
+    from tests.composite_fixture import build
     with pytest.MonkeyPatch.context() as env:
         env.setenv("INGETRAZO_RUST_IO", "0")
-        paths = make(tmp_path_factory.mktemp("file-io-composite"))
-        large = build(tmp_path_factory.mktemp("large-file-io-composite"))
-    paths.update({"large-" + key: value for key, value in large.items()})
-    return paths
+        return build(tmp_path_factory.mktemp(name), **build_args)
 
 
-@pytest.mark.parametrize("source", CORPUS + ["leaf", "mid", "host", "large-host", "large-a", "large-b", "large-c", "large-d"], ids=lambda p: Path(p).stem)
+@pytest.fixture(scope="module")
+def composite(tmp_path_factory):
+    with pytest.MonkeyPatch.context() as env:
+        env.setenv("INGETRAZO_RUST_IO", "0")
+        return make(tmp_path_factory.mktemp("file-io-composite"))
+
+
+@pytest.fixture(scope="module")
+def scaled_composite(tmp_path_factory):
+    return _composite(tmp_path_factory, "scaled-file-io-composite", big=SCALED, scale=0.1)
+
+
+@pytest.fixture(scope="module")
+def large_composite(tmp_path_factory):
+    return _composite(tmp_path_factory, "large-file-io-composite")
+
+
+_PARTS = ["host", "a", "b", "c", "d"]
+SOURCES = (CORPUS + ["leaf", "mid", "host"] + ["scaled-" + k for k in _PARTS]
+           + [pytest.param("large-" + k, marks=pytest.mark.slow, id="large-" + k) for k in _PARTS])
+
+
+@pytest.mark.parametrize("source", SOURCES, ids=lambda p: Path(p).stem)
 @pytest.mark.parametrize("suffix", [".igz", ".built"])
-def test_saved_bytes(source, suffix, tmp_path, composite, monkeypatch):
+def test_saved_bytes(source, suffix, tmp_path, request, monkeypatch):
     monkeypatch.setenv("INGETRAZO_RUST_IO", "1")
     if igz.native_io() is None:
         pytest.skip("native document I/O unavailable")
-    src = source if isinstance(source, Path) else composite[source]
+    if isinstance(source, Path):
+        src = source
+    elif source.startswith("scaled-"):
+        src = request.getfixturevalue("scaled_composite")[source.removeprefix("scaled-")]
+        monkeypatch.setattr(igz, "_LARGE_DOCUMENT", SCALED_THRESHOLD)
+    elif source.startswith("large-"):
+        src = request.getfixturevalue("large_composite")[source.removeprefix("large-")]
+    else:
+        src = request.getfixturevalue("composite")[source]
     dest = tmp_path / ("saved" + suffix)
     from core import group, layers
     expected = None
@@ -50,6 +82,8 @@ def test_saved_bytes(source, suffix, tmp_path, composite, monkeypatch):
         igz.load_into(scene, src)
         if isinstance(source, str):
             assert not scene.link_errors
+        if source in ("scaled-host", "scaled-a", "large-host", "large-a"):
+            assert igz._large_document(scene)       # the format-3 path runs
         igz.save_scene(scene, dest, backup=False)
         if expected is None:
             expected = dest.read_bytes()

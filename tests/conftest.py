@@ -170,6 +170,21 @@ def _native_per_test(_session_native):
     native_mod.__dict__["native"] = _session_native
 
 
+def pytest_configure(config):
+    """With pytest-xdist (``-n 8``): file-level scheduling, so a file's
+    module fixtures are built once and its tests share a worker, and a
+    crashed worker is replaced, unless ``--dist`` / ``--max-worker-restart``
+    are given. Here rather than in pytest.ini so a venv without xdist still
+    runs, and ``pytest tests/x.py::test`` stays serial (docs/testing.md)."""
+    if not config.pluginmanager.hasplugin("xdist"):
+        return
+    given = " ".join(map(str, config.invocation_params.args))
+    if getattr(config.option, "numprocesses", None) and "--dist" not in given:
+        config.option.dist = "loadfile"
+    if getattr(config.option, "maxworkerrestart", None) is None and "--max-worker-restart" not in given:
+        config.option.maxworkerrestart = 8
+
+
 _exit_status = [0]
 
 

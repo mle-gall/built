@@ -15,13 +15,24 @@ from pathlib import Path
 
 import pytest
 
+#: A's placements. The tests of what the tree shows use SMALL; the three
+#: that bound the cost of a link row, paging and Isolate use BIG, so the
+#: work they bound is real (``ui`` takes the size as an indirect parameter).
+SMALL = 2000
 BIG = 20000
+at_scale = pytest.mark.parametrize("ui", [BIG], indirect=True)
 
 
 @pytest.fixture(scope="module")
-def files(tmp_path_factory):
+def small_files(tmp_path_factory):
     from tests.composite_fixture import build
-    return build(tmp_path_factory.mktemp("composite"), BIG)
+    return build(tmp_path_factory.mktemp("composite"), SMALL)
+
+
+@pytest.fixture(scope="module")
+def big_files(tmp_path_factory):
+    from tests.composite_fixture import build
+    return build(tmp_path_factory.mktemp("composite-big"), BIG)
 
 
 class _Renderer:
@@ -67,7 +78,8 @@ class _View:
 
 
 @pytest.fixture
-def ui(files):
+def ui(request):
+    files = request.getfixturevalue("big_files" if getattr(request, "param", SMALL) == BIG else "small_files")
     from core.scene import Scene
     from formats import igz
     import views.wgpu_ui as wu
@@ -107,10 +119,10 @@ def test_linked_files_are_roots_with_their_structures_and_counts(ui):
     assert tree.nodes["link:A"]["merged"] == "Ride"
     assert tree.nodes["link:A/link:C"]["merged"] == "Stairs"
     # Items are counted where they belong; the link placements are the rows.
-    assert counts["link:A"] == BIG
+    assert counts["link:A"] == SMALL
     assert counts["link:A/link:C"] == 600 and counts["link:A/link:D"] == 900
     assert counts["link:B"] == 3000
-    assert counts[_key(view, "Rails")] == BIG // 5
+    assert counts[_key(view, "Rails")] == SMALL // 5
     assert counts[_key(view, "Flights")] == 300 and counts[_key(view, "Toilets")] == 300
     assert counts[_key(view, "Site works")] == 50
     assert not view._ui_tree["unfiled"]
@@ -134,13 +146,16 @@ def test_bootstrap_mounts_only_the_hosts_own_links(ui):
     assert nodes["link:A/link:C"]["parent"].startswith("link:A/")
 
 
+@at_scale
 def test_a_link_row_selects_its_placement_and_inspects_the_file(ui):
     from core import links
     scene, win, view, rows, act = ui
     import views.wgpu_ui as wu
-    t = time.perf_counter()
+    # This process's CPU time, not wall time: other work on the machine
+    # does not count against it.
+    t = time.process_time()
     act("node", "n:link:A")
-    took = time.perf_counter() - t
+    took = time.process_time() - t
     (g,) = scene.selection
     assert links.is_linked(g) and g.name == "A"
     assert took < 0.5, took
@@ -164,13 +179,14 @@ def test_a_link_row_selects_its_placement_and_inspects_the_file(ui):
     assert len(scene.selection) == BIG // 5
 
 
+@at_scale
 def test_expanding_is_paged_and_cheap(ui):
     scene, win, view, rows, act = ui
     import views.wgpu_ui as wu
-    t = time.perf_counter()
+    t = time.process_time()
     for name in (None, "Track", "Rails"):
         got = act("toggle", "n:link:A" if name is None else "n:" + _key(view, name))
-    took = time.perf_counter() - t
+    took = time.process_time() - t
     assert took < 1.0, took
     rails = _key(view, "Rails")
     items = [r for r in got if r["row"] == 1]
@@ -248,6 +264,7 @@ def _visible(scene, g):
     return False
 
 
+@at_scale
 def test_isolate_link_row_mounted_node_host_group_and_mixed_then_show_all(ui, monkeypatch):
     from core import facets
     from core.agent_facets import set_display
