@@ -1468,59 +1468,8 @@ class Mesh:
         once per use, as :meth:`add_face` lists it — the first use alone
         left the others a segment with no edge.
         """
-        from core import doc_model
-        if doc_model.ENABLED:
-            from ingetrazo_core import split_object_at_position
-            return split_object_at_position(self, edge, position)
-        v0, v1 = edge.v0, edge.v1
-        mid = self.vertex(position)
-        if mid is v0 or mid is v1:
-            # position coincides with an endpoint → nothing to split
-            return edge, edge
-        incident = list({f.key: f for f in edge.faces}.values())
-        self.remove_edge(edge)
-        e0_new = self.find_edge(v0, mid) is None
-        e0 = self._link_edge(v0, mid)
-        if e0_new:
-            e0.key = edge.key
-        e1 = self._link_edge(mid, v1)
-        for face in incident:
-            self._insert_at_every_use(face, v0, v1, mid)
-            for sub in (e0, e1):
-                missing = (self._uses(face, sub.v0, sub.v1)
-                           - sum(1 for f in sub.faces if f is face))
-                sub.faces.extend([face] * max(0, missing))
-        return e0, e1
-
-    @staticmethod
-    def _insert_at_every_use(
-        face: Face, v0: Vertex, v1: Vertex, mid: Vertex
-    ) -> None:
-        """Insert ``mid`` into every ``v0``/``v1`` segment of the face: in the
-        outer loop and every hole, as many times as a loop walks it."""
-        for loop in (face.loop, *face.hole_loops):
-            i = 0
-            while i < len(loop):
-                j = (i + 1) % len(loop)
-                if (loop[i] is v0 and loop[j] is v1) or (
-                    loop[i] is v1 and loop[j] is v0
-                ):
-                    loop.insert(i + 1, mid)  # i+1 == len wraps to an append
-                    i += 2
-                else:
-                    i += 1
-
-    @staticmethod
-    def _uses(face: Face, a: Vertex, b: Vertex) -> int:
-        """How many segments of the face's loops run between ``a`` and ``b``."""
-        n = 0
-        for loop in (face.loop, *face.hole_loops):
-            m = len(loop)
-            for i in range(m):
-                p, q = loop[i], loop[(i + 1) % m]
-                if (p is a and q is b) or (p is b and q is a):
-                    n += 1
-        return n
+        from ingetrazo_core import split_object_at_position
+        return split_object_at_position(self, edge, position)
 
     @staticmethod
     def _insert_into_face_loops(
@@ -1552,66 +1501,8 @@ class Mesh:
         edges follow _weld_into; surviving faces keep their keys."""
         self._chunk_dirty = True
         self._mut_serial += 1
-        from core import doc_model
-        if doc_model.ENABLED:
-            from ingetrazo_core import weld_object_mesh
-            return weld_object_mesh(self, _key, 10.0 ** -_KEY_DECIMALS)
-        groups: dict = {}
-        for v in self.vertices:
-            groups.setdefault(_key(v.position), []).append(v)
-        changed = False
-        for vs in groups.values():
-            if len(vs) < 2:
-                continue
-            keep = vs[0]
-            for dup in vs[1:]:
-                self._weld_into(keep, dup)
-            changed = True
-        # Cross-cell pass: two coincident points can straddle a rounding
-        # boundary into *different* cells (a slanted corner computed via two
-        # float paths, 2e-6 apart across a 0.5e-4 edge). Probe neighbouring
-        # cells and weld into the lexicographically smaller key — a
-        # deterministic survivor.
-        step = 10.0 ** -_KEY_DECIMALS
-        tol2 = step * step
-        # A cell a cross weld handed to the survivor still names it after
-        # the survivor is welded away in turn (a ghost entry): the pass must
-        # not take it for a partner, or it "welds" the dead vertex again,
-        # changes nothing and restarts forever. The store drops such
-        # entries with the vertex (design decision 4); here they are only
-        # skipped, the registry is not swept.
-        listed = {v.key for v in self.vertices}
-        merged = True
-        while merged:
-            merged = False
-            for v in list(self.vertices):
-                k = _key(v.position)
-                if self._registry.get(k) is not v:
-                    continue
-                for dx in (-1, 0, 1):
-                    for dy in (-1, 0, 1):
-                        for dz in (-1, 0, 1):
-                            nk = (k[0] + dx, k[1] + dy, k[2] + dz)
-                            if nk == k:
-                                continue
-                            w = self._registry.get(nk)
-                            if (w is None or w is v or w.key not in listed
-                                    or (w.position - v.position)
-                                    .lengthSquared() >= tol2):
-                                continue
-                            kp, dp = (v, w) if k < nk else (w, v)
-                            self._weld_into(kp, dp)
-                            listed.discard(dp.key)
-                            changed = True
-                            merged = True
-                            break
-                        if merged:
-                            break
-                    if merged:
-                        break
-                if merged:
-                    break
-        return changed
+        from ingetrazo_core import weld_object_mesh
+        return weld_object_mesh(self, _key, 10.0 ** -_KEY_DECIMALS)
 
     def dedupe_faces(self) -> int:
         """Drop faces occupying the same *outer* edge cycle as another — a box
@@ -1651,61 +1542,8 @@ class Mesh:
         An existing destination edge keeps its key; otherwise the redirected
         edge keeps its old key. Zero-length edges and sliver faces retire.
         """
-        from core import doc_model
-        if doc_model.ENABLED:
-            from ingetrazo_core import weld_object_vertex
-            return weld_object_vertex(self, keep, dup, _key)
-        affected = {f for e in dup.edges for f in e.faces}
-        for e in self._weld_order(dup):
-            other = e.other(dup)
-            incident = list(e.faces)
-            self.remove_edge(e)
-            if other is keep:
-                continue  # zero-length edge vanishes
-            existed = self.find_edge(keep, other) is not None
-            kept_edge = self._link_edge(keep, other)
-            if not existed:
-                kept_edge.key = e.key
-            for f in incident:
-                if f not in kept_edge.faces:
-                    kept_edge.faces.append(f)
-        for f in affected:
-            for loop in (f.loop, *f.hole_loops):
-                for i, lv in enumerate(loop):
-                    if lv is dup:
-                        loop[i] = keep
-                i = 0
-                while len(loop) > 1 and i < len(loop):
-                    if loop[i] is loop[(i + 1) % len(loop)]:
-                        loop.pop(i if i + 1 < len(loop) else i + 1 - len(loop))
-                    else:
-                        i += 1
-            if len({x.key for x in f.loop}) < 3:
-                self.remove_face(f)  # collapsed to a sliver
-        if dup in self.vertices:
-            self.vertices.remove(dup)
-        if self._registry.get(_key(dup.position)) is dup:
-            self._registry[_key(dup.position)] = keep
-
-    def _weld_order(self, dup: Vertex) -> list:
-        """``dup``'s edges in the order :meth:`_weld_into` redirects them:
-        by the other end's position, ties (two ends on one point, not
-        welded yet) in list order. The order decides the redirected edges'
-        list order; it was ``dup.edges``' set order, i.e. object addresses,
-        which no two runs (and no store) share (design decision 5)."""
-        edges = list(dup.edges)
-        if len(edges) < 2:
-            return edges
-
-        def end(e):
-            return e.other(dup).position.toTuple()
-
-        edges.sort(key=end)
-        ends = [end(e) for e in edges]
-        if len(set(ends)) < len(ends):
-            at = {e.key: i for i, e in enumerate(self.edges)}
-            edges.sort(key=lambda e: (end(e), at.get(e.key, -1)))
-        return edges
+        from ingetrazo_core import weld_object_vertex
+        return weld_object_vertex(self, keep, dup, _key)
 
     def interior_vertex_on(self, edge: Edge) -> Optional[Vertex]:
         """An existing vertex lying strictly on ``edge``'s interior (a
@@ -1738,34 +1576,8 @@ class Mesh:
         which case :meth:`_link_edge` reuses it. The record tracks which sub-edges
         this split *created* so undo removes only those and merely detaches the
         face from the reused ones (never deleting a neighbour's edge)."""
-        from core import doc_model
-        if doc_model.ENABLED:
-            from ingetrazo_core import split_object_edge
-            return split_object_edge(self, edge, mid)
-        v0, v1 = edge.v0, edge.v1
-        incident = list(edge.faces)
-        self.remove_edge(edge)
-        e0_new = self.find_edge(v0, mid) is None
-        e0 = self._link_edge(v0, mid)
-        if e0_new:
-            e0.key = edge.key
-        e1_new = self.find_edge(mid, v1) is None
-        e1 = self._link_edge(mid, v1)
-        # Sub-edges continue the split edge's curve/soft/layer identity.
-        for sub, was_new in ((e0, e0_new), (e1, e1_new)):
-            if was_new:
-                sub.soft = edge.soft
-                sub.flat = edge.flat
-                sub.layer = edge.layer
-                sub.curve = edge.curve
-        for face in incident:
-            self._insert_into_face_loops(face, v0, v1, mid)
-            if face not in e0.faces:
-                e0.faces.append(face)
-            if face not in e1.faces:
-                e1.faces.append(face)
-        return {"kind": "split", "edge": edge, "e0": e0, "e1": e1,
-                "e0_new": e0_new, "e1_new": e1_new, "mid": mid, "faces": incident}
+        from ingetrazo_core import split_object_edge
+        return split_object_edge(self, edge, mid)
 
     def collapsible_vertex(self, v: Vertex) -> bool:
         """Whether ``v`` is a redundant valence-2 collinear vertex: its two edges
@@ -2001,28 +1813,8 @@ class Mesh:
         """Undo a single stitch primitive recorded by the methods above."""
         kind = rec["kind"]
         if kind == "split":
-            from core import doc_model
-            if doc_model.ENABLED:
-                from ingetrazo_core import revert_object_split
-                return revert_object_split(self, rec)
-            for face in rec["faces"]:
-                for loop in (face.loop, *face.hole_loops):
-                    if rec["mid"] in loop:
-                        loop.remove(rec["mid"])
-            # New sub-edges are deleted; reused ones (a neighbour's edge) only
-            # lose the faces this split added to them.
-            for ekey, enew in (("e0", "e0_new"), ("e1", "e1_new")):
-                sub = rec[ekey]
-                if rec[enew]:
-                    self.remove_edge(sub)
-                else:
-                    for face in rec["faces"]:
-                        if face in sub.faces:
-                            sub.faces.remove(face)
-            self.relink_edge(rec["edge"])
-            for face in rec["faces"]:
-                if face not in rec["edge"].faces:
-                    rec["edge"].faces.append(face)
+            from ingetrazo_core import revert_object_split
+            revert_object_split(self, rec)
         elif kind == "collapse":
             v = rec["v"]
             if v not in self.vertices:
