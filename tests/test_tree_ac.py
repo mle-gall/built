@@ -675,3 +675,54 @@ def test_unlink_from_a_file_row_runs_as_one_undoable_protocol_step(site):
     assert win.viewport.history.revision == before + 1 and not links.is_linked(group)
     assert key not in view._ui_tree["nodes"]
     assert win.viewport.history.undo() and links.is_linked(group)
+
+
+def test_locate_repairs_the_source_and_its_problem_entry(tmp_path, monkeypatch):
+    from core import links
+    from core.scene import Scene
+    from tests.composite_fixture import _file
+    from views.filedialogs import file_dialogs
+    source = _file(tmp_path / "Source.built", {}, {"Steel": None}, 2)
+    scene = Scene()
+    host = tmp_path / "Host.built"
+    copies = [links.make_link(scene, source, host_path=host) for _ in range(2)]
+    scene.groups.extend(copies)
+    moved = source.rename(tmp_path / "Relocated.built")
+    win, view = _Win(scene), _View()
+    win._current_path = host
+    win._relink_done = lambda _: None
+    wu._tree(view, win)
+    key, = view._ui_tree["tree"].links
+    assert links.link_state(scene, source) == "missing"
+    wu._tree_action(win, view, wu.SEP.join(("filter", "has:problem")))
+    wu._tree(view, win)
+    assert any(t[1] == source.name for t, _ in view.renderer.calls["ui_set_tree"][0])
+    monkeypatch.setattr(file_dialogs, "getOpenFileName", lambda *a: (str(moved), ""))
+    wu._tree_action(win, view, wu.SEP.join(("linkrelink", "n:" + key)))
+    assert [links.link_of(group)["path"] for group in copies] == [str(moved)] * 2
+    assert links.link_state(scene, moved) == "resolved"
+    wu._tree(view, win)
+    assert not any(t[1] == moved.name for t, _ in view.renderer.calls["ui_set_tree"][0])
+    wu._tree_action(win, view, wu.SEP.join(("mode", "problems")))
+    wu._tree(view, win)
+    assert not any(t[0] == "r:links" for t, _ in view.renderer.calls["ui_set_tree"][0])
+
+
+def test_source_visibility_restored_from_the_file_inspector_undoes(ui):
+    from core import links
+    scene, win, view, rows, act = ui
+    tree = view._ui_tree["tree"]
+    key = _key(view, "Rails")
+    tag = tree.nodes[key]["tag"]
+    source = tree.nodes["link:Ride"]["path"]
+    assert scene.layer(tag).visible
+    act("eye", "n:" + key)
+    assert links.registry(scene)[source]["overrides"][tag] is False
+    act("node", "n:link:Ride")
+    wu._inspector(view, win)
+    actions = dict(view.renderer.calls["ui_set_inspector"][1])["Actions"]
+    assert ("lnk:linkresettags:link:Ride", "Show tags as the source has them") in actions
+    wu._tree_action(win, view, "insp:lnk:linkresettags:link:Ride")
+    assert scene.layer(tag).visible and not links.registry(scene)[source]["overrides"]
+    assert win.viewport.history.undo() and not scene.layer(tag).visible
+    assert links.registry(scene)[source]["overrides"][tag] is False

@@ -2072,14 +2072,17 @@ def _tree_action(win, view, action) -> None:
             from core.desktop_open import reveal
             if tnode.get("path"):
                 reveal(tnode["path"])
-        elif verb in ("linkopen", "linkreload", "linkunlink", "linkrelink") and linked:
+        elif verb in ("linkopen", "linkreload", "linkunlink", "linkrelink", "linkresettags") and linked:
             gs = placements()
             if not gs:
                 return
             if verb != "linkopen" and tnode.get("via"):
                 vp.flash_status(f"{tnode.get('name')} comes inside {tnode['via']}: reload or unlink {tnode['via']}")
                 return
-            if verb == "linkunlink":
+            if verb == "linkresettags":
+                _core(vp, "reset_link_tags", path=tnode["path"])
+                vp.notify_scene_changed()
+            elif verb == "linkunlink":
                 _core(vp, "unlink_placements", placements=[tree.address(g) for g in gs])
                 vp.notify_scene_changed()
             else:
@@ -2584,9 +2587,13 @@ def _linked_inspector(view, win, data, key):
         # The file verbs first (views/verbs.py), then what any row offers.
         from views import verbs
         labels = {"linkopen": "Open source", "linkreload": "Reload" if state != "modified" else "Reload changes",
-                  "linkunlink": "Unlink", "linkfinder": "Show in Finder"}
-        acts = [("lnk:" + v + ":" + key, labels[v]) for v in verbs.file_verbs(not top)]
-        acts.append(("lnk:contents:" + key, "Select contents"))
+                  "linkunlink": "Unlink", "linkfinder": "Show in Finder", "linkrelink": "Locate…"}
+        acts = [("lnk:" + v + ":" + key, labels[v]) for v in verbs.file_verbs(not top)
+                if state != "missing" or v in ("linkunlink", "linkrelink")]
+        if overrides and top:
+            acts.append(("lnk:linkresettags:" + key, "Show tags as the source has them"))
+        if state != "missing":
+            acts.append(("lnk:contents:" + key, "Select contents"))
         if not copies:
             acts += [("isolate:" + key, "Isolate"), ("lnk:eye:" + key, "Hide" if visible else "Show")]
         return Path(path).name or node["name"], [("Linked file", rows), ("Actions", acts)]

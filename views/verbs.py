@@ -60,7 +60,7 @@ MORE = frozenset(_FACE_FIXES + _GROUP_FIXES + _EDGE_FIXES + ("guides",))
 #: A linked file's row in the tree: the file verbs, by whether the host
 #: places it itself (top) or it comes inside another file (nested, "via").
 FILE_VERBS = {
-    "top": ("linkopen", "linkreload", "linkunlink", "linkfinder"),
+    "top": ("linkopen", "linkreload", "linkunlink", "linkfinder", "linkrelink"),
     "nested": ("linkopen", "linkfinder"),
 }
 

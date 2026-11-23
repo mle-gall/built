@@ -224,6 +224,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(project_tree::reveal_branches, m)?)?;
     m.add_function(wrap_pyfunction!(project_tree::reveal_selection, m)?)?;
     m.add_function(wrap_pyfunction!(project_tree::loose_edit, m)?)?;
+    m.add_function(wrap_pyfunction!(project_tree::reset_source_tags, m)?)?;
     m.add_function(wrap_pyfunction!(project_tree::source_state, m)?)?;
     m.add_function(wrap_pyfunction!(project_tree::source_direct_count, m)?)?;
     m.add_function(wrap_pyfunction!(project_tree::source_placement_rows, m)?)?;

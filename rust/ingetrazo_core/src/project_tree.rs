@@ -304,6 +304,57 @@ pub(crate) fn source_state(path: &str, packed: bool, loaded_ns: Option<u128>) ->
     "resolved"
 }
 
+/// Restore the source visibility recorded by the last load. Clear only this
+/// source's overrides in the same history transaction as its tag changes.
+#[pyfunction]
+pub(crate) fn reset_source_tags<'py>(
+    scene: &Bound<'py, PyAny>,
+    path: &str,
+) -> PyResult<Option<Bound<'py, PyAny>>> {
+    use pyo3::types::{PyDict, PyList};
+    let py = scene.py();
+    let links = py.import("core.links")?;
+    let registry_key = links.getattr("REGISTRY_KEY")?;
+    let data = scene
+        .getattr("plugin_data")?
+        .call_method1("get", (&registry_key,))?;
+    if data.is_none() {
+        return Ok(None);
+    }
+    let saved = py.import("copy")?.call_method1("deepcopy", (data,))?;
+    let key = links.call_method1("_norm", (path,))?;
+    let entry = saved.call_method1("get", (key,))?;
+    if entry.is_none() {
+        return Ok(None);
+    }
+    let overrides = entry.call_method1("get", ("overrides",))?;
+    if !overrides.is_truthy()? {
+        return Ok(None);
+    }
+    let original = entry.call_method1("get", ("source_visible", PyDict::new(py)))?;
+    let mut tags = [Vec::<String>::new(), Vec::<String>::new()];
+    for name in overrides.try_iter()? {
+        let name = name?;
+        let state = original.call_method1("get", (&name,))?;
+        if !state.is_none() && !scene.call_method1("layer_by_key", (&name,))?.is_none() {
+            tags[usize::from(state.is_truthy()?)].push(name.extract()?);
+        }
+    }
+    entry.set_item("overrides", PyDict::new(py))?;
+    let commands = PyList::empty(py);
+    let flags = py
+        .import("core.protocol.commands")?
+        .getattr("SetTagStateCommand")?;
+    for (index, keys) in tags.iter().enumerate() {
+        if !keys.is_empty() {
+            commands.append(flags.call1((keys, PyList::empty(py), index == 1, py.None()))?)?;
+        }
+    }
+    let history = py.import("core.history")?;
+    commands.append(history.call_method1("SetPluginDataCommand", (registry_key, saved))?)?;
+    Ok(Some(history.call_method1("CompoundCommand", (commands,))?))
+}
+
 /// A source containing just loose geometry or nested references has no filed
 /// children to count. Each placed copy contributes its own source contents.
 #[pyfunction]

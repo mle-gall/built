@@ -350,6 +350,15 @@ class EditTagCommand(Command):
         super().doc_after(scene, phase)
 
 
+def reset_link_tags(history, path):
+    from ingetrazo_core import reset_source_tags
+    command = reset_source_tags(history.scene, path)
+    before = history.revision
+    if command is not None:
+        history.execute(command)
+    return _answer(history, before)
+
+
 def unlink_placements(history, placements):
     from core.history import UnlinkCommand
     command = UnlinkCommand(_placements(history, placements))
@@ -818,7 +827,7 @@ COMMANDS = {"patch_record_field": patch_record_field, "set_filing_rule": set_fil
             "explode_view": explode_view, "purge_unused": purge_unused,
             "purge_debris": purge_debris, "undo": undo, "redo": redo,
             "hide": hide, "unhide": unhide, "lock": lock, "rename_placement": rename_placement,
-            "unlink_placements": unlink_placements, "edit_loose_geometry": edit_loose_geometry, "file_placements": file_placements, "edit_structure_node": edit_structure_node, "edit_tag": edit_tag, "set_tag": set_tag, "set_tag_state": set_tag_state, "resegment_curve": resegment_curve, "repair_solid": repair_solid,
+            "reset_link_tags": reset_link_tags, "unlink_placements": unlink_placements, "edit_loose_geometry": edit_loose_geometry, "file_placements": file_placements, "edit_structure_node": edit_structure_node, "edit_tag": edit_tag, "set_tag": set_tag, "set_tag_state": set_tag_state, "resegment_curve": resegment_curve, "repair_solid": repair_solid,
             "rename_material": rename_material, "edit_material": edit_material,
             "duplicate_material": duplicate_material, "delete_material": delete_material,
             "delete_placements": delete_placements, "rename_component": rename_component,
