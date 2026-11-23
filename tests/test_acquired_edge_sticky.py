@@ -44,7 +44,7 @@ def _viewport():
 
 def test_the_hovered_edge_survives_the_cursor_leaving_it():
     from tools.base import ToolContext
-    from tools.line import LineTool
+    from tools.rust_tools import LineTool
     vp = _viewport()
     # An off-axis wall (27°): the axis inference never claims it, so the
     # parallel lock is the only way to draw along it.
@@ -71,7 +71,7 @@ def test_the_hovered_edge_survives_the_cursor_leaving_it():
 
 def test_the_reference_is_dropped_once_nothing_is_being_drawn():
     from tools.base import ToolContext
-    from tools.line import LineTool
+    from tools.rust_tools import LineTool
     vp = _viewport()
     vp.scene.mesh.add_edge(V(0, 0, 0), V(4, 2, 0))
     vp.scene.version += 1

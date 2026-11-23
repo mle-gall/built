@@ -77,7 +77,7 @@ def test_work_plane_over_an_instance_face_is_the_placed_copy():
         assert px is not None
         face, grp = vp.pick_face_any(px[0], px[1])
         assert grp == b and face == top
-        from tools.select import SelectTool
+        from tools.rust_tools import SelectTool
         vp.active_tool = SelectTool()
         point, normal = vp._current_work_plane(cursor=(px[0], px[1]))
         assert (point - V(3.5, 0.5, 1.0)).length() < 1e-6

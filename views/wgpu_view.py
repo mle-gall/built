@@ -9,7 +9,7 @@ from ingetrazo_core import Vec3 as QVector3D
 from PySide6.QtWidgets import QApplication, QWidget
 from core.camera import OrbitCamera
 from views.wgpu_scene import pack_scene
-from tools.select import selection_mode
+from tools.rust_tools import selection_mode
 
 
 def _paint_key(scene):
@@ -132,9 +132,6 @@ class MetalView(ViewNavigation):
         self.overlay_primitives = []
         self.overlay_ms = 0.
         self.last = None
-        #: The last select double click, ``(timestamp, position)``: a
-        #: press in place right after it is a triple click.
-        self._last_double = None
         self.build_seconds = self.upload_seconds = 0.
         from views.wgpu_tools import NativeTools
         self.tools = NativeTools(self)
@@ -1036,15 +1033,10 @@ class MetalView(ViewNavigation):
         self.overlay_primitives = []
         source = self.source_viewport
         if selecting:
-            from tools.select import SelectTool
-            from core.mesh import Face
-            tool = self.tools.tool
-            if isinstance(tool, SelectTool):
-                tool.note_pointer(x, y)     # leaving the spot ends a click cycle
+            if source is not None:
+                self.tools.select_tool().hover_at(self.tools, x, y, modifiers)
             else:
-                tool = SelectTool()
-            entity = tool._pick(self.tools, x, y) if source is not None else None
-            self.tools.set_hover(None if isinstance(entity, Face) else entity)
+                self.tools.set_hover(None)
             self.hover_ms = (time.perf_counter()-start)*1000
             self.update()
             return None
@@ -1375,23 +1367,19 @@ class MetalView(ViewNavigation):
         self._drag_nav = event.button() == Qt.MiddleButton or bool(
             getattr(self.source_viewport, 'nav_mode', None))
         mode = self.tools.sync()
-        if (not self._drag_nav and mode == 'select' and event.button() == Qt.LeftButton
-                and self._is_triple_click(event)):
-            # GL's: a press right after a double click, in place, is a
-            # triple click (Qt has none): everything connected. The
-            # release that follows is no click (``last`` is cleared).
-            self._last_double = None
-            self.last = None
-            from tools.select import SelectTool
-            from tools.base import ToolContext
-            (self.tools.tool or SelectTool()).on_triple_click(ToolContext(
-                self.tools, QVector3D(), event.position(), event.modifiers(), None))
-            if self.source_viewport is not None:
-                self.source_viewport.notify_scene_changed()
-            self.sync_selection()
-            self.update()
-            return
-        self._last_double = None
+        if not self._drag_nav and mode == 'select' and event.button() == Qt.LeftButton:
+            # The Select machine owns the gesture: a press in place right
+            # after a double click is the triple click, taken at once.
+            tool = self.tools.select_tool()
+            tool.press(self.tools, self.press.x(), self.press.y(), event.modifiers(),
+                       float(event.timestamp()))
+            if not tool.pressed():
+                self.last = None        # the release that follows is no click
+                if self.source_viewport is not None:
+                    self.source_viewport.notify_scene_changed()
+                self.sync_selection()
+                self.update()
+                return
         if (not self._drag_nav and callable(getattr(self.tools.tool, 'on_look', None))
                 and event.button() in (Qt.LeftButton, Qt.RightButton)):
             self._begin_look(event)
@@ -1433,19 +1421,18 @@ class MetalView(ViewNavigation):
         elif self.tools.sync() in ('tape', 'move', 'mesh'):
             self.hover(event.position().x(), event.position().y(), event.modifiers())
             self.tools.hover(event)
-        elif event.buttons() & Qt.LeftButton and (self.tools.mode == 'select' or mode == 'zoom_window'):
+        elif event.buttons() & Qt.LeftButton and mode == 'zoom_window':
             from views import wgpu_overlay
-            from views.document_interaction import DocumentInteraction
-            zoom = mode == 'zoom_window'
-            # GL shows a selection box only past the drag threshold (a
-            # click that jitters a pixel is no box); Zoom Window at once.
-            moved = self.last - self.press
-            if zoom or math.hypot(moved.x(), moved.y()) >= DocumentInteraction.BOX_DRAG_THRESHOLD_PX:
-                primitive = wgpu_overlay.selection_rectangle((self.press.x(), self.press.y()),
-                    (self.last.x(), self.last.y()), zoom=zoom)
-                self.overlay_primitives = [primitive]
-            else:
-                self.overlay_primitives = []
+            self.overlay_primitives = [wgpu_overlay.selection_rectangle(
+                (self.press.x(), self.press.y()), (self.last.x(), self.last.y()), zoom=True)]
+        elif event.buttons() & Qt.LeftButton and self.tools.mode == 'select':
+            from views import wgpu_overlay
+            # The machine shows a box only past its drag threshold (a click
+            # that jitters a pixel is no box).
+            box = self.tools.select_tool().drag(self.tools, self.last.x(), self.last.y(),
+                                                event.modifiers())
+            self.overlay_primitives = [] if box is None else [wgpu_overlay.selection_rectangle(
+                box[0][:2], box[0][2:], zoom=False)]
         self.update()
 
     @property
@@ -1487,17 +1474,10 @@ class MetalView(ViewNavigation):
             if mode == 'zoom_window':
                 self._zoom_to_box(self.press, event.position())
         elif event.button() == Qt.LeftButton and self.tools.sync() == 'select':
-            from tools.select import SelectTool
-            from tools.base import ToolContext
-            tool = self.tools.tool or SelectTool()
+            # A release in place is a click, else the box (crossing when
+            # dragged right to left): the machine decides.
             end = event.position()
-            if (end-self.press).manhattanLength() < 3:
-                tool.on_click(ToolContext(self.tools, QVector3D(), end, event.modifiers(), None))
-            else:
-                rect = (min(self.press.x(), end.x()), min(self.press.y(), end.y()),
-                        max(self.press.x(), end.x()), max(self.press.y(), end.y()))
-                tool.on_box_select(self.tools, rect, end.x() < self.press.x(),
-                                   mode=selection_mode(event.modifiers()))
+            self.tools.select_tool().release(self.tools, end.x(), end.y(), event.modifiers())
             if self.source_viewport is not None:
                 self.source_viewport.notify_scene_changed()
             self.sync_selection()
@@ -1564,16 +1544,9 @@ class MetalView(ViewNavigation):
             return
         if mode != 'select':
             return
-        from tools.select import SelectTool
-        from tools.base import ToolContext
-        self._last_double = (event.timestamp(), event.position())
-        (self.tools.tool or SelectTool()).on_double_click(ToolContext(
-            self.tools, QVector3D(), event.position(), event.modifiers(), None))
+        self.tools.select_tool().double(self.tools, event.position().x(), event.position().y(),
+                                        event.modifiers(), float(event.timestamp()))
         self.update()
-
-    def _is_triple_click(self, event):
-        from views.document_interaction import DocumentInteraction
-        return DocumentInteraction._is_triple_click(self, event)
 
     def event(self, event):
         if event.type() == QEvent.NativeGesture:

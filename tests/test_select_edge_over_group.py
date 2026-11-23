@@ -13,7 +13,8 @@ from ingetrazo_core import Vec3 as QVector3D
 
 from core.group import Group
 from core.mesh import Edge, Mesh
-from tools.select import SelectTool
+from tools.rust_tools import SelectTool
+from tools import select as _select_queries
 
 
 def V(x, y, z=0.0):
@@ -57,9 +58,9 @@ def test_a_line_on_a_group_face_is_picked_before_the_group():
         px = vp._world_to_pixel(V(0.5, 0.5, 1.0))          # on the line
         assert px is not None
         assert vp.pick_group(px[0], px[1]) is box            # the group IS there
-        assert tool._pick(vp, px[0], px[1]) == on_top        # …but the line wins
+        assert _select_queries.pick(vp, px[0], px[1]) == on_top        # …but the line wins
         px2 = vp._world_to_pixel(V(0.5, 0.15, 1.0))         # face, away from it
-        assert tool._pick(vp, px2[0], px2[1]) is box
+        assert _select_queries.pick(vp, px2[0], px2[1]) is box
     finally:
         win._saved_version = vp.scene.version
         win.close()
@@ -73,7 +74,7 @@ def test_a_line_hidden_behind_the_group_does_not_steal_the_click():
         vp.scene.mesh.remove_edge(on_top)
         vp.scene.version += 1
         px = vp._world_to_pixel(V(0.5, 0.5, -0.3))          # over the hidden line
-        pick = SelectTool()._pick(vp, px[0], px[1])
+        pick = _select_queries.pick(vp, px[0], px[1])
         assert pick is box or not isinstance(pick, Edge)
         p = vp.edge_point_under_cursor(below, px[0], px[1])
         assert p is not None and vp._is_occluded(p)

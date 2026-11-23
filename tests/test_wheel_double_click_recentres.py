@@ -235,7 +235,7 @@ def test_the_tool_in_use_does_not_hear_of_it(win, monkeypatch):
 
 
 def test_a_line_half_drawn_stays_half_drawn(win):
-    from tools.line import LineTool
+    from tools.rust_tools import LineTool
     vp = win.viewport
     _wall(vp)
     _view(vp)

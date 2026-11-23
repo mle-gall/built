@@ -42,7 +42,7 @@ Built (`core.protocol.commands.run(history, name, **args)`):
 
 | Command | Arguments | Runs |
 |---|---|---|
-| `add_edge` | `a, b: [x,y,z]`, optional `soft` and `tag` key | Line, including splits and face detection |
+| `add_edge` | `a, b: [x,y,z]` (or `a` and `offset`: the end is the stored position at `a` plus `offset` exactly, a typed length), optional `soft`, `tag` key and `eye` (camera position: which way a new vertical face looks) | Line, including splits and face detection; the Line tool's commit |
 | `add_edges` | `segments: [[a,b], ...]` | Batch drawing as one step |
 | `divide_edges` | `edges: [edge key], n: integer` | Divide each line or curve into n pieces |
 | `join_edges` | `edges: [edge key]` | Join straight segments |

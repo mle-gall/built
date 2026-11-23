@@ -175,7 +175,7 @@ def test_the_value_box_reads_a_profile_suffix():
 
 
 def test_p_stays_push_pull_for_other_tools(viewport):
-    from tools.line import LineTool
+    from tools.rust_tools import LineTool
     viewport.set_active_tool(LineTool())
     viewport._set_value_buffer("")
     assert viewport._handle_value_key(QKeyEvent(QEvent.KeyPress, 0, Qt.NoModifier, "2"))
@@ -190,7 +190,7 @@ def _panel(vp):
 
 
 def test_the_panel_shows_with_the_tool_and_goes_with_it(viewport):
-    from tools.line import LineTool
+    from tools.rust_tools import LineTool
     _box_scene(viewport)
     viewport.set_active_tool(FilletTool())
     panel = _panel(viewport)

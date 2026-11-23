@@ -1,0 +1,165 @@
+{
+ "click_replace_and_modifiers": [
+  {
+   "selection": [
+    "face"
+   ],
+   "calls": []
+  },
+  {
+   "selection": [
+    "face",
+    "group"
+   ],
+   "calls": []
+  },
+  {
+   "selection": [
+    "group"
+   ],
+   "calls": []
+  },
+  {
+   "selection": [],
+   "calls": []
+  },
+  {
+   "selection": [],
+   "calls": []
+  },
+  {
+   "selection": [],
+   "calls": []
+  }
+ ],
+ "edge_over_group_takes_the_edge": [
+  {
+   "selection": [
+    "edge"
+   ],
+   "calls": [
+    "flash:1 of 2: Edge \u2014 click again for the next"
+   ]
+  }
+ ],
+ "repeated_click_cycles": [
+  {
+   "selection": [
+    "group"
+   ],
+   "calls": [
+    "flash:1 of 2: Group \u00abPost\u00bb \u2014 click again for the next"
+   ]
+  },
+  {
+   "selection": [
+    "face"
+   ],
+   "calls": [
+    "flash:2 of 2: Face \u2014 click again for the next"
+   ]
+  },
+  {
+   "selection": [
+    "group"
+   ],
+   "calls": [
+    "flash:1 of 2: Group \u00abPost\u00bb \u2014 click again for the next"
+   ]
+  },
+  {
+   "selection": [
+    "group"
+   ],
+   "calls": [
+    "hover:"
+   ]
+  },
+  {
+   "selection": [
+    "group"
+   ],
+   "calls": [
+    "flash:1 of 2: Group \u00abPost\u00bb \u2014 click again for the next"
+   ]
+  }
+ ],
+ "double_click_face_takes_its_edges_then_group_opens": [
+  {
+   "selection": [
+    "EdgeView",
+    "EdgeView",
+    "EdgeView",
+    "EdgeView",
+    "face"
+   ],
+   "calls": []
+  },
+  {
+   "selection": [
+    "EdgeView",
+    "EdgeView",
+    "EdgeView",
+    "EdgeView",
+    "face"
+   ],
+   "calls": [
+    "begin_group_edit"
+   ]
+  }
+ ],
+ "triple_click_takes_the_connected": [
+  {
+   "selection": [
+    "EdgeView",
+    "EdgeView",
+    "EdgeView",
+    "EdgeView",
+    "FaceView"
+   ],
+   "calls": []
+  }
+ ],
+ "empty_click_in_an_edit_context": [
+  {
+   "selection": [],
+   "calls": [
+    "end_one_group_edit"
+   ]
+  },
+  {
+   "selection": [
+    "face"
+   ],
+   "calls": []
+  },
+  {
+   "selection": [],
+   "calls": []
+  },
+  {
+   "selection": [],
+   "calls": []
+  }
+ ],
+ "hover_marks_edges_and_groups_never_faces": [
+  {
+   "selection": [],
+   "calls": [
+    "hover:"
+   ]
+  },
+  {
+   "selection": [],
+   "calls": [
+    "hover:group"
+   ]
+  },
+  {
+   "selection": [],
+   "calls": [
+    "hover:"
+   ]
+  }
+ ]
+}

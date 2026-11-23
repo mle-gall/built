@@ -13,7 +13,7 @@ from core.scene import Scene
 from core.mesh import Mesh
 from core.group import Group
 from core.history import History
-from tools.select import SelectTool
+from tools.rust_tools import SelectTool
 from tests.controller_surface import ControllerSurface as Viewport
 from views.wgpu_view import WgpuView
 from views.wgpu_inference import prepare

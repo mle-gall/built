@@ -403,7 +403,7 @@ def test_a_rectangle_replans_onto_the_face_under_the_cursor(view):
 
 def test_a_line_keeps_its_plane(view):
     """Only a planar shape re-plans: a Line keeps its chain where it was."""
-    from tools.line import LineTool
+    from tools.rust_tools import LineTool
     _box(view.scene.mesh, (0, 0, 0), (2, 2, 2))
     _look(view, V(1, 1, 1), distance=9.0, pitch=30.0, yaw=-70.0)
     refresh(view)

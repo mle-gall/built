@@ -71,10 +71,10 @@ def test_same_layer_takes_faces_edges_and_groups_on_it():
     assert all(isinstance(e, Face) for e in got)   # edges stay on the default
 
 
-def test_the_triple_click_still_selects_the_whole_piece():
+def test_the_triple_click_still_selects_the_whole_piece(monkeypatch):
     from PySide6.QtCore import QPointF, Qt
     from tools.base import ToolContext
-    from tools.select import SelectTool
+    from tools.rust_tools import SelectTool
     scene = Scene()
     a, b, c = _two_squares_and_one_apart(scene)
 
@@ -87,7 +87,8 @@ def test_the_triple_click_still_selects_the_whole_piece():
 
     vp = _Vp()
     tool = SelectTool()
-    tool._pick = lambda viewport, x, y: a
+    from tools import select
+    monkeypatch.setattr(select, "pick", lambda viewport, x, y, **_kw: a)
     tool.on_triple_click(ToolContext(viewport=vp, world=V(0, 0),
                                      screen=QPointF(0, 0),
                                      modifiers=Qt.NoModifier, snap=None))

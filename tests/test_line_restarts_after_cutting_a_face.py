@@ -13,7 +13,7 @@ from ingetrazo_core import Vec3 as V
 from core.edits import build_add_edges
 from core.history import AddFaceCommand, History
 from core.scene import Scene
-from tools.line import LineTool
+from tools.rust_tools import LineTool
 
 
 class _Vp:

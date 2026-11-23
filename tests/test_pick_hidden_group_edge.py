@@ -20,7 +20,8 @@ if QApplication.instance() is None:
 
 from core.group import Group  # noqa: E402
 from core.mesh import Face, Mesh  # noqa: E402
-from tools.select import SelectTool  # noqa: E402
+from tools.rust_tools import SelectTool  # noqa: E402
+from tools import select as _select_queries
 from tests.controller_surface import ControllerSurface as Viewport
 
 
@@ -72,7 +73,7 @@ def test_a_click_on_a_loose_box_never_selects_the_slab_behind_it():
             if face is None or owner is not None:
                 continue                    # not over a loose face
             checked += 1
-            assert tool._pick(vp, sx, sy) is not slab, \
+            assert _select_queries.pick(vp, sx, sy) is not slab, \
                 f"({sx}, {sy}) is on a loose box but picked the slab"
     assert checked > 100
 
@@ -85,7 +86,7 @@ def test_the_slab_s_visible_outline_still_picks_the_slab():
     y += 3
     assert vp.pick_face_any(x, y) == (None, None)
     assert vp.pick_group(x, y) is slab
-    assert SelectTool()._pick(vp, x, y) is slab
+    assert _select_queries.pick(vp, x, y) is slab
 
 
 def _lines_group_under_lid(vp):
@@ -111,7 +112,7 @@ def test_a_lines_only_group_under_a_loose_face_is_not_picked_through_it():
     lines, lid = _lines_group_under_lid(vp)
     covered = vp._world_to_pixel(V(0, 3, 0))      # under the lid
     assert vp.pick_group(*covered) is None
-    picked = SelectTool()._pick(vp, *covered)
+    picked = _select_queries.pick(vp, *covered)
     assert isinstance(picked, Face) and picked == lid
     open_ = vp._world_to_pixel(V(6, 3, 0))        # beyond the lid
     assert vp.pick_group(*open_) is lines

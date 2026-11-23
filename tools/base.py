@@ -635,7 +635,7 @@ class Tool(ABC):
         left-to-right drag (select only what's fully enclosed). ``mode`` is how
         the catch joins the selection — "replace" / "add" / "toggle" /
         "remove", from the keyboard modifiers (see
-        ``tools.select.selection_mode``); ``additive`` is the older two-state
+        ``tools.rust_tools.selection_mode``); ``additive`` is the older two-state
         spelling, kept for tools that only know it. Only tools with
         ``box_select = True`` receive this."""
 

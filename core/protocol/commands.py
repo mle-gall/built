@@ -199,10 +199,19 @@ def solid_operation(history, operation, placements):
     return _answer(history, before)
 
 
-def add_edge(history, a, b, soft=None, tag=None):
+def add_edge(history, a, b=None, soft=None, tag=None, eye=None, offset=None):
+    """One drawn segment, ``a`` to ``b``. ``offset`` instead of (or with) ``b``:
+    the end is the stored position at ``a`` plus ``offset`` exactly (a typed
+    length). ``eye`` (the camera position, as the Line tool passes it)
+    decides which way a new vertical face looks."""
     if tag is not None and history.scene.layer_by_key(tag) is None:
         raise KeyError(f"no tag with key {tag!r}")
-    return _draw_segments(history, [(a, b)], single=True, soft=soft, tag=tag)
+    if b is None:
+        if offset is None:
+            raise ValueError("add_edge needs b or offset")
+        b = [float(x) + float(d) for x, d in zip(a, offset)]
+    return _draw_segments(history, [(a, b)], single=True, soft=soft, tag=tag, eye=eye,
+                          offset=offset)
 
 
 def add_edges(history, segments):
@@ -212,11 +221,14 @@ def add_edges(history, segments):
 def _draw_segments(history, segments, single=False, **options):
     from core.coordinate_frame import ZERO, choose_origin, mesh_frame, point_in_frame
     from core.edits import build_add_edge, build_add_edges
-    from core.coordinate_frame import planned_points
+    from core.coordinate_frame import drawing_point, planned_points
+    offset = options.pop("offset", None)
     mesh = history.scene.mesh
     st = store_of(mesh)
     origin = choose_origin(segments[0][0]) if st is not None and segments else ZERO
     local = [(point_in_frame(a, origin), point_in_frame(b, origin)) for a, b in segments]
+    if options.get("eye") is not None:
+        options["eye"] = point_in_frame(options["eye"], origin)
     before = history.revision
     with mesh_frame(mesh, origin):
         cmd = (build_add_edge(history.scene, *local[0], **options) if single else
@@ -224,6 +236,10 @@ def _draw_segments(history, segments, single=False, **options):
         exact = {p.toTuple(): tuple(v-o for v, o in zip(raw, origin))
                  for pair, args in zip(local, segments) for p, raw in zip(pair, args)
                  } if st is not None else {}
+        if offset is not None and st is not None:
+            start = drawing_point(mesh, local[0][0])
+            exact = {local[0][0].toTuple(): tuple(start),
+                     local[0][1].toTuple(): tuple(start + [float(d) for d in offset])}
         with planned_points(mesh, exact):
             history.execute(cmd)
     return _answer(history, before)

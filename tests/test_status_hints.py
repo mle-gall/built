@@ -8,7 +8,7 @@ from ingetrazo_core import Vec3 as QVector3D
 
 from tools.arc import ArcTool
 from tools.fillet import FilletTool
-from tools.line import LineTool
+from tools.rust_tools import LineTool
 from views.status_hints import HINTS, NAV_HINTS, hint_for, phase_of
 
 

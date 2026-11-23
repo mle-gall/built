@@ -102,7 +102,7 @@ def test_the_lock_goes_when_the_line_is_finished():
         tool = vp.active_tool
         tool.start_point = QVector3D(1.0, 0.0, 0.0)
         vp.axis_lock = "x"
-        tool._reset()                              # the chain closed
+        tool.start_point = None                    # the chain closed
         vp._release_axis_lock_after_operation()
         assert vp.axis_lock is None
     finally:

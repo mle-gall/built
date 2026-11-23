@@ -146,7 +146,7 @@ def test_select_double_click_on_a_text_enters_it_like_any_group():
     children are the letters (Marco, 2026-09-18: «no hay opción de editar
     texto»). Re-editing the text is the right-click's job."""
     from types import SimpleNamespace
-    from tools.select import SelectTool
+    from tools.rust_tools import SelectTool
 
     scene = Scene()
     text = make_text_group(text_params("Ab", "Sans"))

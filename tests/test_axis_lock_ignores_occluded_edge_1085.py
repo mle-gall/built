@@ -48,7 +48,7 @@ def _box(vp):
 
 
 def test_dragging_up_from_the_top_corner_goes_up(viewport):
-    from tools.line import LineTool
+    from tools.rust_tools import LineTool
     vp = viewport
     _box(vp)
     vp.camera.target = V(1, 1, 1)

@@ -17,7 +17,8 @@ from ingetrazo_core import Vec3 as QVector3D
 from core.geometry import Edge, Face
 from core.scene import Scene
 from tools.base import ToolContext
-from tools.select import SelectTool, selection_mode
+from tools.rust_tools import SelectTool
+from ingetrazo_core import select_mode as _select_mode
 
 
 def V(x: float, y: float, z: float = 0.0) -> QVector3D:
@@ -70,10 +71,10 @@ def _click(vp, entity, modifiers=Qt.NoModifier):
 
 
 def test_the_modifiers_map_to_the_four_modes():
-    assert selection_mode(Qt.NoModifier) == "replace"
-    assert selection_mode(Qt.ShiftModifier) == "toggle"
-    assert selection_mode(Qt.ControlModifier) == "add"
-    assert selection_mode(Qt.ShiftModifier | Qt.ControlModifier) == "remove"
+    assert _select_mode(int(Qt.NoModifier.value)) == "replace"
+    assert _select_mode(int(Qt.ShiftModifier.value)) == "toggle"
+    assert _select_mode(int(Qt.ControlModifier.value)) == "add"
+    assert _select_mode(int((Qt.ShiftModifier | Qt.ControlModifier).value)) == "remove"
 
 
 def test_shift_click_takes_a_selected_edge_out_and_puts_an_unselected_one_in():

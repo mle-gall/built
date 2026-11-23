@@ -437,7 +437,7 @@ def test_la_caja_de_seleccion_dentro_del_contenedor_toma_a_sus_hijos():
     """«Quiero seleccionar toda esa pileta, no selecciona»: la caja se
     saltaba TODOS los grupos dentro de un contexto. Dentro de un grupo lo
     seleccionable son sus hijos (y su geometría suelta), nunca el resto."""
-    from tools.select import SelectTool
+    from tools.rust_tools import SelectTool
 
     class _VP:
         def __init__(self, scene):

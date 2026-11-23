@@ -661,7 +661,7 @@ def edit_text(win, view, entity) -> None:
     from PySide6.QtCore import QPointF, Qt
     from ingetrazo_core import Vec3 as QVector3D
     from tools.base import ToolContext
-    from tools.select import SelectTool
+    from tools.rust_tools import SelectTool
     vp = win.viewport
     px = getattr(vp, "_context_pixel", None)
     if px is None:

@@ -19,7 +19,7 @@ from core.scene import Scene
 from tools.arc import CenterArcTool
 from tools.base import ToolContext
 from tools.circle import CircleTool, PolygonTool
-from tools.line import LineTool
+from tools.rust_tools import LineTool
 from tools.rectangle import RectangleTool
 from tools.rotated_rectangle import RotatedRectangleTool
 from tests.controller_surface import ControllerSurface as Viewport

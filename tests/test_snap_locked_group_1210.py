@@ -10,7 +10,7 @@ from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 from core.group import Group
 from core.history import History, LockCommand
 from core.mesh import Mesh
-from tools.line import LineTool
+from tools.rust_tools import LineTool
 from tests.controller_surface import ControllerSurface as Viewport
 
 

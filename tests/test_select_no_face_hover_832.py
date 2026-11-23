@@ -16,7 +16,8 @@ from core.history import History
 from core.scene import Scene
 from tests.test_fuzz_engine import V, _draw_rect
 from tools.base import ToolContext
-from tools.select import SelectTool, delete_selection_or_hover
+from tools.rust_tools import SelectTool
+from tools.select import delete_selection_or_hover
 
 
 class _StubViewport:
@@ -32,28 +33,29 @@ class _StubViewport:
         pass
 
 
-def _hover_over(entity):
+def _hover_over(entity, monkeypatch):
     scene = Scene()
     vp = _StubViewport(scene)
     _draw_rect(scene, vp.history, [V(0, 0), V(4, 0), V(4, 4), V(0, 4)], [])
     target = entity(scene)
     tool = SelectTool()
-    tool._pick = lambda _vp, _x, _y: target
+    from tools import select
+    monkeypatch.setattr(select, "pick", lambda _vp, _x, _y, **_kw: target)
     tool.on_hover(ToolContext(viewport=vp, world=QVector3D(),
                               screen=QPointF(10, 10),
                               modifiers=Qt.NoModifier, snap=None))
     return scene, vp, target
 
 
-def test_a_face_under_the_cursor_is_not_marked():
-    scene, vp, face = _hover_over(lambda s: s.mesh.faces[0])
+def test_a_face_under_the_cursor_is_not_marked(monkeypatch):
+    scene, vp, face = _hover_over(lambda s: s.mesh.faces[0], monkeypatch)
     assert vp._hover_entity is None
     assert delete_selection_or_hover(vp) is False      # nothing unseen goes
     assert face in scene.mesh.faces
 
 
-def test_an_edge_under_the_cursor_still_lights_and_deletes():
-    scene, vp, edge = _hover_over(lambda s: s.mesh.edges[0])
+def test_an_edge_under_the_cursor_still_lights_and_deletes(monkeypatch):
+    scene, vp, edge = _hover_over(lambda s: s.mesh.edges[0], monkeypatch)
     assert vp._hover_entity is edge
     assert delete_selection_or_hover(vp) is True
     assert edge not in scene.mesh.edges

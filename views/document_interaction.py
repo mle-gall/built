@@ -89,7 +89,7 @@ from core.texture import face_uv_axes
 from core.layers import is_link_untagged
 from core.triangulate import plane_axes
 from tools.base import Tool, ToolContext
-from tools.select import selection_mode
+from tools.rust_tools import selection_mode
 from core.inference import InferenceEngine
 
 

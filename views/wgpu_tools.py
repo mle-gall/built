@@ -185,6 +185,17 @@ class NativeTools(MeshToolAccess):
             self._apply_tool_cursor()
         return self.mode
 
+    def select_tool(self):
+        """The Select machine: the active tool, or the one this view keeps
+        for the gestures made while no tool is active."""
+        from tools.rust_tools import SelectTool
+        if isinstance(self.tool, SelectTool):
+            return self.tool
+        idle = self.__dict__.get('_idle_select')
+        if idle is None:
+            idle = self.__dict__['_idle_select'] = SelectTool()
+        return idle
+
     def claim(self):
         """The pointer came into this view (one of several, sharing the
         window's tool): the tool's viewport is this one again, so what it

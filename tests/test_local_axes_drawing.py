@@ -126,7 +126,7 @@ def test_the_viewport_syncs_the_axes_as_it_enters_and_leaves():
 
 
 def test_an_arrow_lock_inside_the_group_runs_along_its_red():
-    from tools.line import LineTool
+    from tools.rust_tools import LineTool
     vp, _g = _vp_in_turned_group()
     tool = LineTool()
     vp.active_tool = tool
