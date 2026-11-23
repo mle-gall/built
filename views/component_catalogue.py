@@ -23,6 +23,7 @@ class CatalogueSession:
         self.timer.setInterval(80)
         self.timer.timeout.connect(self.poll)
         self.entry = None
+        self.artwork = []
         self.index(False)
 
     def index(self, refresh):
@@ -39,8 +40,9 @@ class CatalogueSession:
     def build(self, base, query):
         sheet = NativeSheet("library", spec=self.model.sheet(
             json.dumps(base.wire()), current_language(), query, tr))
-        for icon in self.model.previews(str(library.library_cache())):
+        for icon in self.artwork:
             sheet.icon(*icon)
+        self.artwork.clear()
         return sheet
 
     def act(self, verb, args):
@@ -65,7 +67,8 @@ class CatalogueSession:
         return True
 
     def poll(self):
-        if self.job is not None and self.job.done():
+        completed = self.job is not None and self.job.done()
+        if completed:
             result = self.job.result() if self.job.exception() is None else None
             self.job = None
             if self.entry is None:
@@ -77,6 +80,8 @@ class CatalogueSession:
                     chrome_sheet.close(self.ctx.win)
                     self.ctx.win.insert_library_component(entry, result)
                     return
-        self.ctx.refresh()
+        self.artwork.extend(self.model.previews(str(library.library_cache())))
+        if completed or self.artwork:
+            self.ctx.refresh()
         if self.job is None and not library.thumbnails_pending():
             self.timer.stop()

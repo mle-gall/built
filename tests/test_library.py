@@ -66,7 +66,7 @@ def test_an_unreachable_library_answers_empty_instead_of_raising(tmp_path,
                                                                  monkeypatch):
     # Working offline is one of this program's promises: a server that is not
     # there costs the catalogue, never the app.
-    monkeypatch.setenv("INGETRAZO_LIBRARY", "https://0.0.0.0/nada")
+    monkeypatch.setenv("INGETRAZO_LIBRARY", str(tmp_path / "offline"))
     monkeypatch.setenv("INGETRAZO_TEXTURE_CACHE", str(tmp_path / "tex"))
     assert library.index() == []
     assert library.thumbnail("silla") is None
@@ -229,7 +229,7 @@ def test_asking_for_the_same_preview_again_costs_nothing(served):
 def test_a_preview_that_cannot_be_had_never_raises(tmp_path, monkeypatch):
     # A blank square is the right answer to an unreachable server; an
     # exception on a worker thread is not.
-    monkeypatch.setenv("INGETRAZO_LIBRARY", "https://0.0.0.0/nada")
+    monkeypatch.setenv("INGETRAZO_LIBRARY", str(tmp_path / "offline"))
     monkeypatch.setenv("INGETRAZO_TEXTURE_CACHE", str(tmp_path / "tex"))
     library.prefetch_thumbnails(["no-existe"])
     import time
