@@ -488,6 +488,7 @@ dependencies = [
  "raw-window-handle",
  "serde",
  "serde_json",
+ "syn 2.0.119",
  "wgpu",
 ]
 

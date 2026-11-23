@@ -70,7 +70,7 @@ def capture(prefix, directory):
     tabs = [rect for rect in r.ui_project_tab_rects() if rect]
     tx, ty, _, th = tabs[0]
     tab_end = max(left + width for left, _, width, _ in tabs)
-    for name, rect in [("dock", (x, y, w, h)), ("tree", (x, y, w, min(h, 260))),
+    for name, rect in [("dock", (x, y, w, h)), ("tree", (x, y, w, min(h, 280))),
                        ("tabs", (round(tx), round(ty), round(tab_end - tx), round(th)))]:
         if not image.copy(*rect).save(str(directory / f"{prefix}-{name}.png")):
             raise OSError(name)
@@ -93,6 +93,11 @@ def capture(prefix, directory):
     full.copy(x, y, w, h).save(str(directory / f"{prefix}-inspector.png"))
     r.ui_set_large_sheet(json.dumps(library_sheet()))
     shot(f"{prefix}-library")
+    from types import SimpleNamespace
+    from views.settings_sheet import SettingsSheet
+    settings = SettingsSheet("navigation").build(SimpleNamespace(win=None))
+    r.ui_set_large_sheet(json.dumps(settings.wire()))
+    shot(f"{prefix}-settings")
     r.ui_set_large_sheet("")
     r.ui_set_jobs([("export", "Export drawings", "Pages", .45, True)])
     shot(f"{prefix}-activity")
@@ -140,7 +145,7 @@ def library_sheet():
     sh = Sheet("library", "Library")
     sh.tab("materials", "Materials", count=3, on=True)
     sh.tab("components", "Components", count=12)
-    sh.tab("styles", "Styles")
+    sh.tab("profiles", "Profiles", count="soon", enabled=False)
     sh.verb("new", "New material", primary=True)
     sh.search("Filter materials")
     sh.side_caption("Collections")

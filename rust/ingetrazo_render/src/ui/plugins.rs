@@ -269,9 +269,9 @@ impl Panels {
         let Some(p) = self.models.iter().find(|p| p.instance == id) else {
             return;
         };
-        ui.spacing_mut().item_spacing = vec2(6., 5.);
+        ui.spacing_mut().item_spacing = vec2(SPACE_S, 5.);
         ui.horizontal(|ui| {
-            ui.label(egui::RichText::new(&p.title).font(strong(15.)));
+            ui.label(egui::RichText::new(&p.title).font(heading()));
             if p.slot == Slot::Utility {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui.small_button("Close").clicked() {
@@ -283,7 +283,7 @@ impl Panels {
         egui::ScrollArea::vertical().id_salt(id).show(ui, |ui| {
             for section in &p.sections {
                 if !section.title.is_empty() {
-                    ui.add_space(3.);
+                    ui.add_space(SPACE_XS);
                     ui.separator();
                     ui.strong(&section.title);
                 }

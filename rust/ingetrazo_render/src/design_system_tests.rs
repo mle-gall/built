@@ -47,21 +47,20 @@ fn recognises_qualified_and_aliased_colour_constructors() {
     assert!(!declares_colour(r#"let help = "Color32::RED";"#));
 }
 
-fn check_source(path: &Path, exempt: &Path, failures: &mut Vec<String>) {
+fn check_source(path: &Path, exempt: &Path, violates: fn(&str) -> bool, failures: &mut Vec<String>) {
     if path.is_dir() {
         for entry in fs::read_dir(path).unwrap() {
-            check_source(&entry.unwrap().path(), exempt, failures);
+            check_source(&entry.unwrap().path(), exempt, violates, failures);
         }
     } else if path.extension().is_some_and(|ext| ext == "rs") && path != exempt {
         let file = fs::read_to_string(path).unwrap();
-        if declares_colour(&file) {
+        if violates(&file) {
             failures.push(path.display().to_string());
         }
     }
 }
 
-#[test]
-fn chrome_colors_come_from_tokens() {
+fn check_chrome(violates: fn(&str) -> bool, policy: &str) {
     let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
     let mut failures = Vec::new();
     for entry in fs::read_dir(&src).unwrap() {
@@ -73,13 +72,75 @@ fn chrome_colors_come_from_tokens() {
             .starts_with("ui")
             || path.ends_with("inspector")
         {
-            check_source(&path, &src.join("ui/tokens.rs"), &mut failures);
+            check_source(&path, &src.join("ui/tokens.rs"), violates, &mut failures);
         }
     }
     assert!(
         failures.is_empty(),
-        "Use ui::tokens for chrome colours in {failures:?}"
+        "{policy} in {failures:?}"
     );
+}
+
+#[test]
+fn chrome_colors_come_from_tokens() {
+    check_chrome(declares_colour, "Use ui::tokens for chrome colours");
+}
+
+fn literal_font_size(source: &str) -> bool {
+    use syn::{visit::{self, Visit}, Expr, Lit};
+    fn numeric(expr: &Expr) -> bool {
+        matches!(expr, Expr::Lit(v) if matches!(v.lit, Lit::Int(_) | Lit::Float(_)))
+    }
+    #[derive(Default)]
+    struct Scan(bool);
+    impl<'a> Visit<'a> for Scan {
+        fn visit_expr_call(&mut self, call: &'a syn::ExprCall) {
+            if let Expr::Path(path) = &*call.func {
+                let mut names = path.path.segments.iter().rev();
+                let name = names.next().unwrap().ident.to_string();
+                let font = name == "strong" || names.next().is_some_and(|s| s.ident == "FontId")
+                    && matches!(name.as_str(), "new" | "proportional" | "monospace");
+                self.0 |= font && call.args.first().is_some_and(numeric);
+            }
+            visit::visit_expr_call(self, call);
+        }
+        fn visit_expr_struct(&mut self, expr: &'a syn::ExprStruct) {
+            if expr.path.segments.last().is_some_and(|s| s.ident == "FontId") {
+                self.0 |= expr.fields.iter().any(|f| matches!(&f.member, syn::Member::Named(n) if n == "size") && numeric(&f.expr));
+            }
+            visit::visit_expr_struct(self, expr);
+        }
+        fn visit_expr_method_call(&mut self, call: &'a syn::ExprMethodCall) {
+            // size() is also a geometry setter on egui widgets. Follow the
+            // receiver chain to distinguish inline RichText construction.
+            let mut receiver = &*call.receiver;
+            while let Expr::MethodCall(method) = receiver {
+                receiver = &method.receiver;
+            }
+            let rich_text = matches!(receiver, Expr::Call(c) if matches!(&*c.func, Expr::Path(p)
+                if p.path.segments.iter().any(|s| s.ident == "RichText")));
+            self.0 |= (call.method == "font_size" || call.method == "size" && rich_text)
+                && call.args.first().is_some_and(numeric);
+            visit::visit_expr_method_call(self, call);
+        }
+    }
+    let mut scan = Scan::default();
+    scan.visit_file(&syn::parse_file(source).unwrap());
+    scan.0
+}
+
+#[test]
+fn chrome_font_sizes_come_from_tokens() {
+    check_chrome(literal_font_size, "Use ui::tokens for chrome type");
+}
+
+#[test]
+fn recognises_literal_font_sizes() {
+    for expr in ["egui::FontId::new(12., family)", "strong(12.5)",
+                 "egui::RichText::new(text).color(ink).size(9.0)", "FontId { size: 15., family }"] {
+        assert!(literal_font_size(&format!("fn example() {{ {expr}; }}")), "{expr}");
+    }
+    assert!(!literal_font_size("fn example() { strong(TYPE_BODY); Spinner::new().size(14.0); }"));
 }
 
 #[test]

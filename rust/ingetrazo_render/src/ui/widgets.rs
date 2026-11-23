@@ -10,7 +10,7 @@ pub use super::kit::{segmented, underline_tabs};
 /// Under Project, its mode (Problems) with a way back. Used by
 /// `Ui::right_column`.
 pub fn caption_mode(ui: &mut egui::Ui, mode: &str) -> bool {
-    ui.add_space(8.0);
+    ui.add_space(SPACE_S);
     caption_plain(ui, mode);
     let (r, resp) = ui.allocate_exact_size(vec2(20.0, 20.0), Sense::click());
     paint_state(ui, r, state_of(&resp, false, true), R_ROW);

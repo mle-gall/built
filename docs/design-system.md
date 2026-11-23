@@ -74,6 +74,10 @@ Token names are unchanged, so other branches rebase cleanly. The following value
 | Focus | Shows the 1-pt `FOCUS_RING` outside the control and nothing else. Focus marks where keys go and stays visibly separate from selection. |
 | Disabled | Uses `OFF` ink and drops the wash. A disabled primary button loses its accent. |
 
+### Large sheets
+
+Start, Library and Settings share the kit’s glass `sheet_frame`. It lays out the header, optional side list, content, optional detail pane and optional footer. Each sheet supplies the contents and handles its own commands. Header tabs use the kit’s underline treatment because they navigate sections of the sheet, such as Materials, Components and Profiles in Library. Start uses its header for file actions and Settings uses its side list for section navigation.
+
 ## Adding a component
 
 A surface may introduce a custom atom, molecule or organism when it serves the interaction better. Keep it dense, dark and viewport-first.
@@ -88,7 +92,7 @@ A surface may introduce a custom atom, molecule or organism when it serves the i
 ## Verification
 
 Run `cargo test --manifest-path rust/ingetrazo_render/Cargo.toml --lib` for these tests:
-- the colour policy;
+- the colour and literal font-size policies;
 - the neutral-surface tests;
 - the glass-elevation order;
 - the four-size type scale.
