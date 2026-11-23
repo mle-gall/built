@@ -1849,7 +1849,7 @@ pub(super) fn fit(ui: &egui::Ui, text: &str, font: egui::FontId, color: Color32,
 pub const HATCH_KEYS: &str = include_str!("assets/hatches.txt");
 
 mod hatch;
-pub(super) use hatch::{hatch_override, PaperMarks};
+pub(super) use hatch::{hatch_override, imported_hatch, PaperMarks};
 
 pub fn hatch_sample(ui: &egui::Ui, rect: Rect, key: &str, custom: Option<&PaperMarks>) {
     let painter = ui.painter();

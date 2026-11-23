@@ -51,6 +51,16 @@ pub(in crate::ui) fn hatch_override(cells: &[String]) -> Option<PaperMarks> {
     Some(out)
 }
 
+pub(in crate::ui) fn imported_hatch(value: &serde_json::Value) -> Option<PaperMarks> {
+    let mut output = PaperMarks::default();
+    for raw in value.as_array()?.iter().take(64) {
+        if let Ok(family) = serde_json::from_value::<Family>(raw.clone()) {
+            family.sample(Rot2::IDENTITY, 1., &mut output);
+        }
+    }
+    Some(output)
+}
+
 fn extent(along: Vec2, origin: Vec2) -> (f32, f32) {
     let ts = CORNERS.map(|p| (p - origin).dot(along));
     (

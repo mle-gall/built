@@ -471,10 +471,11 @@ impl Ui {
         if let Some(col)=self.column.as_mut(){col.overview=lens::Overview::read(filename,tree,counts)?;}
         Ok(())
     }
-    pub fn style_catalog(&mut self, owner: usize, lines: Vec<String>) {
+    pub fn style_catalog(&mut self, owner: usize, lines: Vec<String>, patterns: String) {
         if let Some(col)=self.column.as_mut() {
             if col.styles.owner != owner { col.styles = Default::default(); col.styles.owner=owner; col.proposal_dismissed=false; col.highlighted=None; col.issue_at=None; }
             col.styles.lines=lines;
+            col.styles.set_patterns(patterns);
         }
     }
     pub fn set_export_focus(&mut self, node: Option<String>, placements: Vec<Vec<String>>) {

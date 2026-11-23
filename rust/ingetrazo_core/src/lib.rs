@@ -38,6 +38,7 @@ mod structure;
 mod project_tree;
 mod selection_identity;
 mod sidebar;
+mod hatch_file;
 mod filing_rows;
 mod readiness;
 mod project_sections;
@@ -273,6 +274,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(link_subset::link_selection_sources, m)?)?;
     m.add_function(wrap_pyfunction!(readiness::export_readiness, m)?)?;
     m.add_function(wrap_pyfunction!(sidebar::project_sidebar, m)?)?;
+    m.add_function(wrap_pyfunction!(hatch_file::import_hatch_file, m)?)?;
     m.add_function(wrap_pyfunction!(sidebar::promote_tag, m)?)?;
     m.add_function(wrap_pyfunction!(filing_rows::filing_rows, m)?)?;
     m.add_function(wrap_pyfunction!(filing_rows::mark_filing_selection, m)?)?;
