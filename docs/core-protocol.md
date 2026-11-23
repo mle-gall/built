@@ -44,6 +44,9 @@ Built (`core.protocol.commands.run(history, name, **args)`):
 |---|---|---|
 | `add_edge` | `a, b: [x,y,z]` (or `a` and `offset`: the end is the stored position at `a` plus `offset` exactly, a typed length), optional `soft`, `tag` key and `eye` (camera position: which way a new vertical face looks) | Line, including splits and face detection; the Line tool's commit |
 | `add_edges` | `segments: [[a,b], ...]` | Batch drawing as one step |
+| `add_face` | `outer: [[x,y,z]]` (or `anchor` and `offsets`: the stored position at `anchor` plus each offset exactly), optional `holes: [[[x,y,z]]]` | The face with its edges, the plane it lands on rebuilt (#538): the Rectangle's commit, one step |
+| `move_placements` | `placements: [uid]`, `delta: [x,y,z]` | `MoveGroupCommand` each, one step |
+| `copy_placements` | `placements: [uid]`, `delta`, `count = 1`, `mode: "x" \| "/"` | `count` copies at multiples of `delta` (`x`) or dividing it (`/`), one step; the answer adds `placements`, the copies' uids |
 | `divide_edges` | `edges: [edge key], n: integer` | Divide each line or curve into n pieces |
 | `join_edges` | `edges: [edge key]` | Join straight segments |
 | `follow_me` | `face` key, `path` of local [x,y,z] points, optional `closed` boolean | Sweep the painted profile, consuming its key and creating outward walls and caps. |
@@ -101,10 +104,8 @@ lists are the contract to build to):
 
 | Command | Arguments | History command |
 |---|---|---|
-| `add_face` | `outer: [[x, y, z]]`, `holes?: [[[x, y, z]]]` | `AddFaceCommand` |
 | `paint_faces` | `faces: [face key]`, `material: name \| null`, `side: "front" \| "back"` | `SetFaceColorCommand` family |
 | `soften_edges` | `edges: [edge key]`, `soft: bool` | `SoftenByAngleCommand` |
-| `move_placements` | `placements: [uid]`, `delta: [x, y, z]` | `MoveGroupCommand` |
 | `open_placement` / `close_placement` | `placement: uid` | `begin_group_edit` / `end_group_edit` (not History steps today) |
 
 ## 2. Stable keys

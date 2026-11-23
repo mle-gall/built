@@ -245,6 +245,89 @@ def _draw_segments(history, segments, single=False, **options):
     return _answer(history, before)
 
 
+def add_face(history, outer=None, holes=(), anchor=None, offsets=None):
+    """A face over a ring of points, with its edges: the Rectangle's commit.
+    ``outer`` the ring (open mesh coordinates), or ``anchor`` plus
+    ``offsets``: the ring is the stored position at ``anchor`` plus each
+    offset exactly (typed sizes). ``holes`` are inner rings. The plane it
+    lands on is rebuilt, so a ring drawn over a face fills its hole (#538).
+    One step."""
+    from core.coordinate_frame import (ZERO, choose_origin, drawing_point, mesh_frame,
+                                       planned_points, point_in_frame)
+    from core.edits import build_add_edges
+    from core.history import AddFaceCommand
+    if outer is None:
+        if anchor is None or offsets is None:
+            raise ValueError("add_face needs outer, or anchor and offsets")
+        outer = [[float(a) + float(d) for a, d in zip(anchor, off)] for off in offsets]
+    outer = [list(map(float, p)) for p in outer]
+    if len(outer) < 3:
+        raise ValueError("a face needs three points")
+    holes = [[list(map(float, p)) for p in ring] for ring in (holes or ())]
+    mesh = history.scene.mesh
+    st = store_of(mesh)
+    origin = choose_origin(outer[0]) if st is not None else ZERO
+    ring = [point_in_frame(p, origin) for p in outer]
+    inner = [[point_in_frame(p, origin) for p in h] for h in holes]
+    segments = [(r[i], r[(i + 1) % len(r)]) for r in [ring, *inner] for i in range(len(r))]
+    before = history.revision
+    with mesh_frame(mesh, origin):
+        exact = {}
+        if st is not None:
+            if offsets is not None:
+                start = drawing_point(mesh, point_in_frame(anchor, origin))
+                exact = {p.toTuple(): tuple(start + [float(d) for d in off])
+                         for p, off in zip(ring, offsets)}
+            else:
+                exact = {p.toTuple(): tuple(v - o for v, o in zip(raw, origin))
+                         for p, raw in zip(ring, outer)}
+        cmd = build_add_edges(history.scene, segments, detect_faces=False,
+                              extra=[AddFaceCommand(list(ring), holes=inner or None)],
+                              plane_rebuild=True)
+        with planned_points(mesh, exact):
+            history.execute(cmd)
+    return _answer(history, before)
+
+
+def move_placements(history, placements, delta):
+    """Move placements (uids, nested included) by ``delta`` ``[x, y, z]``:
+    one ``MoveGroupCommand`` each, one step."""
+    from ingetrazo_core import Vec3
+    from core.history import CompoundCommand, MoveGroupCommand
+    groups = _placements(history, placements)
+    d = Vec3(*map(float, delta))
+    before = history.revision
+    cmds = [MoveGroupCommand(g, d) for g in groups]
+    if cmds:
+        history.execute(cmds[0] if len(cmds) == 1 else CompoundCommand(cmds))
+    return _answer(history, before)
+
+
+def copy_placements(history, placements, delta, count=1, mode="x"):
+    """Copies of placements (uids, nested included): ``count`` copies at
+    multiples of ``delta`` (``mode`` ``"x"``, an external array) or
+    dividing it (``"/"``, internal), one step. The answer adds
+    ``placements``: the copies' uids, copy by copy."""
+    from ingetrazo_core import Vec3
+    from core.group import copy_group
+    from core.history import CompoundCommand, InsertGroupCommand
+    groups = _placements(history, placements)
+    count = int(count)
+    if count < 1 or mode not in ("x", "/"):
+        raise ValueError("count is at least 1 and mode is 'x' or '/'")
+    d = Vec3(*map(float, delta))
+    steps = ([d * (k / float(count)) for k in range(1, count + 1)] if mode == "/"
+             else [d * float(k) for k in range(1, count + 1)])
+    clones = [copy_group(g, step) for step in steps for g in groups]
+    before = history.revision
+    cmds = [InsertGroupCommand(c) for c in clones]
+    if cmds:
+        history.execute(cmds[0] if len(cmds) == 1 else CompoundCommand(cmds))
+    answer = _answer(history, before)
+    answer["placements"] = [c.uid for c in clones] if answer["ok"] else []
+    return answer
+
+
 def _edge_edit(history, edges, edit, *args):
     from core.history import SnapshotMutation
     selected = _need(history.scene.mesh, "edge", edges)
@@ -962,7 +1045,8 @@ COMMANDS = {"set_location": set_location, "set_model_units": set_model_units, "s
             "set_dimension_style": set_dimension_style, "patch_record_field": patch_record_field, "set_filing_rule": set_filing_rule,
             "create_delivery": create_delivery, "edit_delivery": edit_delivery,
             "delete_delivery": delete_delivery, "run_delivery": run_delivery, "follow_me": follow_me, "intersect_faces": intersect_faces,
-            "add_edge": add_edge, "add_edges": add_edges,
+            "add_edge": add_edge, "add_edges": add_edges, "add_face": add_face,
+            "move_placements": move_placements, "copy_placements": copy_placements,
             "divide_edges": divide_edges, "join_edges": join_edges,
             "move_vertices": move_vertices, "erase": erase,
             "reverse_faces": reverse_faces, "push_pull": push_pull, "orient_faces": orient_faces,
