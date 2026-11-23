@@ -128,6 +128,7 @@ pub struct Ui {
     view_anchor: Rect,
     sel_more_anchor: Rect,
     top_groups: Vec<Rect>,
+    pub cluster_buttons: Vec<(String, (f32, f32))>,
     top_right_w: f32,
     units: String,
     glass: crate::glass::Glass,
@@ -293,6 +294,7 @@ impl Ui {
             view_anchor: Rect::NOTHING,
             sel_more_anchor: Rect::NOTHING,
             top_groups: Vec::new(),
+            cluster_buttons: Vec::new(),
             top_right_w: 0.0,
             units: "mm".into(),
             sheet: None,
@@ -530,17 +532,39 @@ impl Ui {
         self.view_menu = view_menu;
     }
 
+    /// Called only after the transient chrome and focused field declined Esc.
+    pub fn model_escape(chrome: Option<&mut Self>, busy: bool, selected: bool, editing: bool) -> &'static str {
+        if busy { return "tool"; }
+        if selected { return "selection"; }
+        if editing { return "edit"; }
+        let Some(ui) = chrome else { return "" };
+        if let Some(col) = ui.column.as_mut() {
+            if !col.mode.is_empty() {
+                col.mode.clear();
+                ui.actions.push("tree:mode\u{1f}".into());
+                return "dock";
+            }
+            if col.colset == 2 {
+                col.colset = 0;
+                ui.actions.push("tree:colset\u{1f}0".into());
+                return "dock";
+            }
+        }
+        ui.review = false;
+        ""
+    }
+
     /// Keyboard ownership: the chrome takes a key only while one of its
     /// fields has focus, or Escape while one of its popups is open.
     pub fn claims_key(&self, name: &str) -> bool {
         if self.gallery.is_some() || self.font_picker.is_some() { return true; }
-        if name == "Escape" && (self.strip.menus_open() || self.plugin_popup_open() || self.panels.data["terrain"].is_object()) { return true; }
+        if name == "Escape" && (self.strip.menus_open() || self.egui_popup_open() || self.panels.data["terrain"].is_object()) { return true; }
         // The large sheet owns every key while it is up (Python keeps the
         // window's ⌘ shortcuts, views/chrome_sheet.py).
         if self.lsheet.open { return true; }
         if self.sheets.shown { return self.sheets_claims_key(name); }
-        let filing = self.column.as_ref().is_some_and(|c| c.filing.is_some() || c.row_menu.is_some() || !c.mode.is_empty()
-            || c.kind_menu.is_some() || c.head_menu.is_some() || c.prompt.is_some());
+        let filing = self.column.as_ref().is_some_and(|c| c.filing.is_some() || c.row_menu.is_some() || c.color_pick.is_some()
+            || c.kind_menu.is_some() || c.head_menu.is_some() || c.prompt.is_some() || c.edits.contains_key("\u{1d}pick"));
         self.sheet.is_some() || self.dialog.is_some() || self.cmd_open || (name == "Escape" && (self.view_open || self.sel_more || self.menu.is_some() || self.form.is_some() || filing
             || self.ctx_menu.is_some() || self.strip.menus_open()))
             || self.ctx.wants_keyboard_input()
@@ -555,11 +579,11 @@ impl Ui {
         // The sheet's keys are answered in Python (Enter, Esc, ⌘D); none
         // reaches what is under it.
         if self.sheet.is_some() { return true; }
-        if self.dialog.is_some() { return self.dialog_key(name, pressed, mods); }
-        if name == "Escape" && self.plugin_popup_open() {
+        if name == "Escape" && self.egui_popup_open() {
             if pressed { self.ctx.memory_mut(|m| m.close_popup()); }
             return true;
         }
+        if self.dialog.is_some() { return self.dialog_key(name, pressed, mods); }
         if self.cmd_open && pressed {
             match name {
                 "Escape" => { self.cmd_open = false; self.ctx.memory_mut(|m| m.stop_text_input()); return true; }
@@ -577,7 +601,11 @@ impl Ui {
             }
         }
         if name == "Escape" && (self.ctx_menu.is_some() || self.strip.menus_open()) {
-            if pressed { self.ctx_menu = None; self.strip.close_menus(); }
+            if pressed && self.ctx_menu.take().is_none() { self.strip.close_menus(); }
+            return true;
+        }
+        if name == "Escape" && self.form.as_ref().is_some_and(|f| f.choice_open.is_some()) {
+            if pressed { self.form.as_mut().unwrap().choice_open = None; }
             return true;
         }
         if self.lsheet.open && !self.cmd_open { return self.lsheet_key(name, pressed, mods); }
@@ -588,28 +616,64 @@ impl Ui {
         }
         if name == "Escape" && (self.view_open || self.sel_more || self.menu.is_some() || self.form.is_some()) {
             if pressed {
-                if self.form.take().is_some() { self.actions.push("form:close".into()); }
-                self.view_open = false; self.sel_more = false; self.menu = None;
+                if self.sel_more {
+                    if self.sel_sub.take().is_none() { self.sel_more = false; }
+                } else if self.view_open {
+                    self.view_open = false;
+                } else if self.menu.take().is_none() && self.form.take().is_some() {
+                    self.actions.push("form:close".into());
+                }
             }
             return true;
         }
         if name == "Escape" {
             if let Some(col) = self.column.as_mut() {
-                if col.row_menu.is_some() || col.filing.is_some() || col.kind_menu.is_some() || col.head_menu.is_some()
-                    || col.prompt.is_some() || !col.mode.is_empty() {
+                if col.edits.contains_key("\u{1d}pick") {
+                    if pressed { col.edits.remove("\u{1d}pick"); }
+                    return true;
+                }
+                if col.color_pick.is_some() || col.kind_menu.is_some()
+                    || col.head_menu.is_some() || col.prompt.is_some() || col.row_menu.is_some() {
                     if pressed {
-                        if col.kind_menu.take().is_none() && col.head_menu.take().is_none()
-                            && col.prompt.take().is_none() && col.row_menu.take().is_none() {
-                            if col.filing.is_some() {
-                                col.filing = None;
-                                col.filter.clear();
-                            } else if !col.mode.is_empty() {
-                                col.mode.clear();
-                                self.actions.push("tree:mode\u{1f}".into());
+                        let _ = col.color_pick.take().is_some()
+                            || col.kind_menu.take().is_some() || col.head_menu.take().is_some()
+                            || col.prompt.take().is_some() || col.row_menu.take().is_some();
+                    }
+                    return true;
+                }
+                if self.ctx.memory(|m| m.has_focus(egui::Id::new("dock_filter"))) {
+                    if pressed {
+                        if col.filter.is_empty() {
+                            self.ctx.memory_mut(|m| m.stop_text_input());
+                        } else {
+                            col.filter.clear();
+                            self.actions.push("tree:filter\u{1f}".into());
+                        }
+                    }
+                    return true;
+                }
+                if let Some(focus) = self.ctx.memory(|m| m.focused()) {
+                    if let Some((_, buf)) = col.renaming.as_mut() {
+                        if pressed {
+                            if buf.is_empty() {
+                                col.renaming = None;
+                                self.ctx.memory_mut(|m| m.surrender_focus(focus));
+                            } else {
+                                buf.clear();
                             }
                         }
-                        self.ctx.memory_mut(|m| m.stop_text_input());
+                        return true;
                     }
+                    if let Some((_, buf)) = col.edits.iter_mut().find(|(id, _)| egui::Id::new(("inspector_edit", id)) == focus) {
+                        if pressed {
+                            if buf.is_empty() { self.ctx.memory_mut(|m| m.surrender_focus(focus)); }
+                            else { buf.clear(); }
+                        }
+                        return true;
+                    }
+                }
+                if col.filing.is_some() {
+                    if pressed { col.filing = None; }
                     return true;
                 }
             }
@@ -681,19 +745,42 @@ impl Ui {
     pub fn repaint_after_ms(&self) -> Option<f64> { self.repaint_ms }
 
     /// Only the interactive chrome takes the pointer; labels pass it through.
-    fn plugin_popup_open(&self) -> bool {
-        (self.plugins.showing || self.plugins.utility_open()) && self.ctx.memory(|m| m.any_popup_open())
+    fn egui_popup_open(&self) -> bool {
+        self.ctx.memory(|m| m.any_popup_open())
+    }
+
+    pub fn input_state(&self) -> std::collections::HashMap<&'static str, bool> {
+        let visible = |name| self.ctx.memory(|m| m.areas().visible_last_frame(
+            &egui::LayerId::new(egui::Order::Foreground, egui::Id::new(name))));
+        [
+            ("recent_preview", self.glass.showing_preview()),
+            ("tool_rail", visible("palette") || visible("sheets_rail")), ("dock", visible("column") || visible("sheets_dock")), ("bottom_bar", visible("bottom")),
+            ("view_menu", self.view_open),
+            ("review", self.review),
+            ("dialog", self.dialog.is_some()),
+            ("choice", self.dialog.as_ref().is_some_and(|d| d.choice_open.is_some()) || self.lsheet.choice_open()),
+            ("filter_focus", self.ctx.memory(|m| m.has_focus(egui::Id::new("dock_filter")))),
+        ].into()
+    }
+
+    fn dismissible_menu_open(&self) -> bool {
+        self.view_open || self.sel_more || self.menu.is_some() || self.cmd_open
+            || self.form.as_ref().is_some_and(|f| f.choice_open.is_some())
+            || self.ctx_menu.is_some() || self.strip.menus_open() || (self.sheets.shown && self.sheets.dismissible_menu_open())
+            || self.column.as_ref().is_some_and(|c| c.row_menu.is_some() || c.head_menu.is_some()
+                || c.kind_menu.is_some() || c.color_pick.is_some()
+                || c.edits.contains_key("\u{1d}pick"))
     }
 
     fn over_chrome(&self, pos: Pos2) -> bool {
         // A choice or colour picker can extend beyond its parent panel.
         // Its next outside click dismisses it before the model takes input.
-        self.font_picker.is_some() || self.plugin_popup_open() || self.hit.iter().any(|r| r.contains(pos))
+        self.font_picker.is_some() || self.egui_popup_open() || self.hit.iter().any(|r| r.contains(pos))
             || self.ctx.layer_id_at(pos).is_some_and(|layer| self.panels.popup_layers.contains(&layer.id))
     }
     /// Is (x, y) on the interactive chrome (a right-click there is the
     /// chrome's, not the model's)?
-    pub fn over_chrome_at(&self, x: f32, y: f32) -> bool { self.over_chrome(pos2(x, y)) }
+    pub fn over_chrome_at(&self, x: f32, y: f32) -> bool { self.captured || self.over_chrome(pos2(x, y)) }
 
     /// kind: "move" | "press" | "release" | "leave". Coordinates in logical
     /// points. Returns whether the chrome takes the event (the view must
@@ -713,9 +800,9 @@ impl Ui {
             }
             "press" => {
                 self.captured = self.over_chrome(pos);
-                // A press anywhere else closes the menus, ends typing in a
-                // field, and is the model's.
                 if !self.captured {
+                    self.captured = self.dismissible_menu_open();
+                    if let Some(form) = self.form.as_mut() { form.choice_open = None; }
                     self.view_open = false;
                     self.sel_more = false;
                     self.menu = None;
@@ -775,7 +862,7 @@ impl Ui {
         true
     }
 
-    fn palette(&mut self, ctx: &egui::Context, screen: Rect) {
+    fn palette(&mut self, ctx: &egui::Context, screen: Rect, retract: f32) {
         let mut clicked = None;
         // Two columns while they fit above the status line; wider, never
         // scrolled or folded, when the window is short (council 2026-11-22).
@@ -785,7 +872,9 @@ impl Ui {
             + self.groups.len().saturating_sub(1) as f32 * 9.0 + 8.0;
         let cols = (2..=5).find(|c| tall(*c) <= room).unwrap_or(5);
         egui::Area::new(egui::Id::new("palette"))
-            .fixed_pos(pos2(GUT, band_top))
+            .constrain(false)
+            .interactable(retract == 0.0)
+            .fixed_pos(pos2(GUT - retract * (cols as f32 * 36.0 + 2.0 * GUT), band_top))
             .order(egui::Order::Foreground)
             .show(ctx, |ui| {
                 frame().corner_radius(CornerRadius::same(12)).inner_margin(Margin::same(4)).show(ui, |ui| {
@@ -825,6 +914,8 @@ impl Ui {
         let mut clicked: Option<String> = None;
         let mut open: Option<(&'static str, Rect)> = None;
         let mut groups = Vec::new();
+        self.cluster_buttons.clear();
+        let sheet_up = self.lsheet.open;
         let lights = self.projects.as_ref().map_or(86.0, |p| p.0);
         egui::Area::new(egui::Id::new("top"))
             .fixed_pos(Pos2::ZERO)
@@ -841,10 +932,10 @@ impl Ui {
                             if !self.strip.tabs.is_empty() {
                                 // The project tabs (option B): room is left for
                                 // the scene control and at least 60 pt to drag.
-                                let max_w = (screen.width() - lights - 8.0 - self.top_right_w - 300.0 - 60.0).max(160.0);
+                                let max_w = if sheet_up { screen.width() - lights - 68.0 } else { (screen.width() - lights - 8.0 - self.top_right_w - 300.0 - 60.0).max(160.0) };
                                 let acts = self.strip.show(ui, max_w);
                                 self.actions.extend(acts);
-                                bar_divider(ui);
+                                if !sheet_up { bar_divider(ui); }
                             } else if let Some((_, docs)) = &self.projects {
                                 let cur = docs.iter().find(|d| d.1).or(docs.first());
                                 let label = cur.map_or("Untitled".to_owned(), |d| if d.2 { format!("{} •", d.0) } else { d.0.clone() });
@@ -854,6 +945,7 @@ impl Ui {
                                 }
                                 bar_divider(ui);
                             }
+                            if sheet_up { return; }
                             if self.review {
                                 if text_button(ui, "Exit review", "Show the panels again", true) { clicked = Some("review".into()); }
                                 bar_divider(ui);
@@ -875,6 +967,7 @@ impl Ui {
                             }
                         });
                         groups.push(left.response.rect);
+                        if sheet_up { return; }
                         // The right group, laid out left to right and pushed to
                         // the right edge by its width from the last frame.
                         ui.add_space((ui.available_width() - self.top_right_w).max(0.0));
@@ -884,7 +977,9 @@ impl Ui {
                                 for (gi, group) in self.cluster.iter().enumerate() {
                                     if gi > 0 { bar_divider(ui); }
                                     for item in group {
-                                        if item_button(ui, item, self.icons.get(&item.3)) {
+                                        let response = item_response(ui, item, self.icons.get(&item.3));
+                                        self.cluster_buttons.push((item.0.clone(), response.rect.center().into()));
+                                        if response.clicked() {
                                             clicked = Some(format!("act:{}", item.0));
                                         }
                                     }
@@ -927,17 +1022,19 @@ impl Ui {
     /// the window, as a title bar does)?
     pub fn top_empty(&self, x: f32, y: f32) -> bool {
         let p = pos2(x, y);
-        self.gallery.is_none() && y <= TOP_H && !self.top_groups.iter().any(|r| r.contains(p))
-            && !self.ctx.memory(|m| m.area_rect(egui::Id::new("jobs"))).is_some_and(|r| (!self.jobs.is_empty() || !self.history.is_empty()) && r.contains(p))
+        !self.dismissible_menu_open() && self.gallery.is_none() && y <= TOP_H && !self.top_groups.iter().any(|r| r.contains(p))
+            && !(!self.lsheet.open && self.ctx.memory(|m| m.area_rect(egui::Id::new("jobs"))).is_some_and(|r| (!self.jobs.is_empty() || !self.history.is_empty()) && r.contains(p)))
             && !(self.projects.is_none() && x < 86.0)
     }
 
     /// The bottom bar: units | tool, its options, hint or message | where
     /// new geometry goes.
-    fn bottom_bar(&mut self, ctx: &egui::Context, screen: Rect) {
+    fn bottom_bar(&mut self, ctx: &egui::Context, screen: Rect, retract: f32) {
         let mut clicked: Option<String> = None;
         egui::Area::new(egui::Id::new("bottom"))
-            .fixed_pos(pos2(0.0, screen.max.y - BOT_H))
+            .constrain(false)
+            .interactable(retract == 0.0)
+            .fixed_pos(pos2(0.0, screen.max.y - BOT_H * (1.0 - retract)))
             .order(egui::Order::Foreground)
             .show(ctx, |ui| {
                 glass(Surface::Bar).inner_margin(Margin::symmetric(8, 4)).show(ui, |ui| {
@@ -1412,7 +1509,7 @@ impl Ui {
         ctx.memory(|m| m.area_rect(egui::Id::new("column"))).map_or(screen.max.x, |r| r.min.x)
     }
 
-    fn right_column(&mut self, ctx: &egui::Context, screen: Rect) {
+    fn right_column(&mut self, ctx: &egui::Context, screen: Rect, retract: f32) {
         let delivery = self.delivery.clone();
         let selection = self.selection.clone();
         let sel_more = self.sel_more;
@@ -1426,7 +1523,9 @@ impl Ui {
         let height = (bottom - top).max(200.0);
         let mut actions: Vec<String> = Vec::new();
         egui::Area::new(egui::Id::new("column"))
-            .fixed_pos(pos2(screen.max.x - GUT - W, top))
+            .constrain(false)
+            .interactable(retract == 0.0)
+            .fixed_pos(pos2(screen.max.x - GUT - W + retract * (W + GUT), top))
             .order(egui::Order::Foreground)
             .show(ctx, |ui| {
                 glass(Surface::Panel).inner_margin(Margin::same(10)).show(ui, |ui| {
@@ -1550,7 +1649,7 @@ impl Ui {
                             "Click a node, or type a name and Enter", meta(), INK_2);
                         ui.add_space(SPACE_XS);
                     }
-                    let edit = kit::field(&mut col.filter)
+                    let edit = kit::field(&mut col.filter).id(egui::Id::new("dock_filter"))
                         .hint_text(egui::RichText::new(if col.filing.is_some() { "Node name or kind" }
                             else if col.mode == "Problems" { "Filter problems" } else { "Filter nodes" }).color(FAINT))
                         .margin(Margin::symmetric(8, 5))
@@ -2169,6 +2268,8 @@ impl Ui {
         if let Some(r) = ctx.memory(|m| m.area_rect(egui::Id::new("column"))) {
             let dock_w = &mut self.dock_w;
             egui::Area::new(egui::Id::new("dock_grip"))
+                .constrain(false)
+                .interactable(retract == 0.0)
                 .fixed_pos(pos2(r.min.x - 6.0, r.min.y + 14.0))
                 .order(egui::Order::Foreground)
                 .show(ctx, |ui| {
@@ -2310,9 +2411,7 @@ impl Ui {
     pub fn paint(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, e: &mut wgpu::CommandEncoder,
                  frame: &wgpu::Texture, target: &wgpu::TextureView, size: [u32; 2], scale: f32) {
         // The glass behind the chrome: blur the finished model image first.
-        if let Some(res) = self.painter.callback_resources.get_mut::<crate::glass::Resources>() {
-            self.glass.prepare(device, e, frame, res);
-        }
+        let sheet_up = self.lsheet.open;
         let begin = Instant::now();
         let screen = Rect::from_min_size(Pos2::ZERO, vec2(size[0] as f32 / scale, size[1] as f32 / scale));
         let mut raw = egui::RawInput {
@@ -2328,43 +2427,40 @@ impl Ui {
         let ctx = self.ctx.clone();
         let out = ctx.run(raw, |ctx| {
             if let Some(page) = &mut self.gallery { page.show(ctx); return; }
-            if self.sheets.shown {
-                // The Sheets workspace: the window's top bar, the sheet's chrome under it.
-                self.top_bar(ctx, screen);
-                self.sheets_frame(ctx, screen);
-                self.bar_menu(ctx);
-                self.view_popup(ctx);
-                self.form_popup(ctx);
-                let acts = self.strip.popups(ctx, &self.icons);
-                self.actions.extend(acts);
-            } else {
             self.panels.popup_layers.clear();
             self.top_bar(ctx, screen);
-            if !self.review {
-                self.palette(ctx, screen);
-                self.right_column(ctx, screen);
-                self.plugins.utility(ctx, screen, self.dock_w, &mut self.actions);
-                self.bottom_bar(ctx, screen);
-                self.paint_strip(ctx, screen);
-                if self.panels.data["terrain"].is_object() {
-                    let bounds = Rect::from_min_max(pos2(12.,0.),pos2(self.free_right(ctx,screen)-8.,screen.bottom()-BOT_H-4.));
-                    self.panels.terrain.draw(ctx,bounds,&self.panels.data["terrain"],&self.panels.data["projected"],&mut self.actions);
+            let retract = ctx.animate_bool_with_time(egui::Id::new("retract_model_chrome"),
+                                                      self.review || sheet_up, large_sheet::ANIM_S);
+            if self.sheets.shown {
+                self.sheets_frame(ctx, screen, retract);
+            } else {
+                if retract < 1.0 {
+                    self.palette(ctx, screen, retract);
+                    self.right_column(ctx, screen, retract);
+                    self.bottom_bar(ctx, screen, retract);
                 }
-                self.panels.frame_guide(ctx, screen);
+                if !self.review && !sheet_up {
+                    self.plugins.utility(ctx, screen, self.dock_w, &mut self.actions);
+                    self.paint_strip(ctx, screen);
+                    if self.panels.data["terrain"].is_object() {
+                        let bounds = Rect::from_min_max(pos2(12.,0.),pos2(self.free_right(ctx,screen)-8.,screen.bottom()-BOT_H-4.));
+                        self.panels.terrain.draw(ctx,bounds,&self.panels.data["terrain"],&self.panels.data["projected"],&mut self.actions);
+                    }
+                    self.panels.frame_guide(ctx, screen);
+                }
+                if !sheet_up { self.cursor_value(ctx, screen); }
             }
-            self.cursor_value(ctx, screen);
             self.bar_menu(ctx);
             self.view_popup(ctx);
             self.form_popup(ctx);
             let acts = self.strip.popups(ctx, &self.icons);
             self.actions.extend(acts);
-            self.context_menu(ctx, screen);
-            }
+            if !self.sheets.shown && !sheet_up { self.context_menu(ctx, screen); }
             self.large_sheet(ctx, screen);
             self.command_palette(ctx, screen);
             if !self.review && !self.sheets.shown && !self.lsheet.open { self.selection_more(ctx); }
             self.dialog_popup(ctx, screen);
-            self.jobs_chip(ctx, screen);
+            if !sheet_up { self.jobs_chip(ctx, screen); }
             self.sheet_popup(ctx, screen);
             if let Some(picker) = &mut self.font_picker {
                 if let Some(apply) = picker.popup(ctx) {
@@ -2375,10 +2471,10 @@ impl Ui {
                 }
             }
         });
-        let work = !self.review;
+        let work = !self.review && !sheet_up;
         // The model's own areas are not drawn in the Sheets workspace: their
         // last rects must not take the pointer there.
-        let model = !self.sheets.shown;
+        let model = !self.sheets.shown && !sheet_up;
         let shown = [("top", true), ("palette", work && model && !self.groups.is_empty()),
                      ("view_menu", self.view_open), ("menu", self.menu.is_some()), ("form", self.form.is_some()),
                      ("plugin_utility", work && model && self.plugins.utility_open()), ("column", work && model && self.column.is_some()), ("bottom", work),
@@ -2392,7 +2488,7 @@ impl Ui {
                      ("prompt", model && self.column.as_ref().is_some_and(|c| c.prompt.is_some())),
                      ("color_pick", model && self.column.as_ref().is_some_and(|c| c.color_pick.is_some())),
                      ("terrain_profile", work && model && self.panels.data["terrain"].is_object()),
-                     ("jobs", !self.jobs.is_empty() || !self.history.is_empty()),
+                     ("jobs", !sheet_up && (!self.jobs.is_empty() || !self.history.is_empty())),
                      ("dialog", self.dialog.is_some()),
                      ("tab_menu", self.strip.menu_open()),
                      ("tab_overflow", self.strip.overflow_open()),
@@ -2420,6 +2516,12 @@ impl Ui {
         let jobs = ctx.tessellate(out.shapes, out.pixels_per_point);
         for (id, delta) in &out.textures_delta.set {
             self.painter.update_texture(device, queue, *id, delta);
+        }
+        let preview = self.lsheet.spec.as_ref().filter(|s| s.id == "start" && !s.closable)
+            .and_then(|spec| self.icons.get(&spec.backdrop_icon))
+            .and_then(|handle| self.painter.texture(&handle.id())?.texture.clone().map(|tex| (handle.id(), tex)));
+        if let Some(res) = self.painter.callback_resources.get_mut::<crate::glass::Resources>() {
+            self.glass.prepare(device, queue, e, frame, res, if self.lsheet.spec.is_some() { SHEET_BLUR } else { 1.0 }, preview);
         }
         let screen_desc = egui_wgpu::ScreenDescriptor { size_in_pixels: size, pixels_per_point: out.pixels_per_point };
         let extra = self.painter.update_buffers(device, queue, e, &jobs, &screen_desc);
@@ -2466,6 +2568,10 @@ fn mods_from(mods: u8) -> egui::Modifiers {
 /// A bar control (top row, options strip): icon 28 × 28 or text, 28 high.
 /// Checked items stay lit (latched toggles), the same way as a current tool.
 fn item_button(ui: &mut egui::Ui, item: &Item, icon: Option<&egui::TextureHandle>) -> bool {
+    item_response(ui, item, icon).clicked()
+}
+
+fn item_response(ui: &mut egui::Ui, item: &Item, icon: Option<&egui::TextureHandle>) -> egui::Response {
     let (_, label, tip, _, checked, enabled) = item;
     let width = match icon {
         Some(_) => 28.0,
@@ -2484,7 +2590,7 @@ fn item_button(ui: &mut egui::Ui, item: &Item, icon: Option<&egui::TextureHandle
         }
     }
     let tip = if tip.is_empty() { label.clone() } else { tip.clone() };
-    resp.on_hover_text(tip).clicked()
+    resp.on_hover_text(tip)
 }
 
 /// A project tab: capsule, name (and • while unsaved), × on the right when
@@ -2597,7 +2703,7 @@ fn inspector_rows(ui: &mut egui::Ui, rows: &[(String, String)], edits: &mut std:
                 // desired_width is the text's width: leave room for the field's
                 // own margins, or the panel grows a little every frame.
                 let w = (ui.available_width() - 8.0 - 12.0 - 4.0).max(40.0);
-                let r = ui.add(kit::field(buf).font(body()).margin(Margin::symmetric(6, 3))
+                let r = ui.add(kit::field(buf).id(egui::Id::new(("inspector_edit", id))).font(body()).margin(Margin::symmetric(6, 3))
                     .desired_width(w).clip_text(true));
                 if r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) && buf.as_str() != text {
                     actions.push(format!("edit\u{1f}{id}\u{1f}{buf}"));
@@ -2668,4 +2774,52 @@ fn tool_button(ui: &mut egui::Ui, tool: &Tool, active: bool) -> bool {
     }
     let tip = if !tool.enabled { format!("{} — Open in classic app", tool.label) } else if tool.key.is_empty() { tool.label.clone() } else { format!("{}    {}", tool.label, tool.key) };
     resp.on_hover_text(tip).clicked()
+}
+
+#[cfg(test)]
+fn test_chrome() -> Option<Ui> {
+    let instance = crate::backend::instance();
+    let adapter = pollster::block_on(instance.request_adapter(&Default::default()))?;
+    let (device, _) = pollster::block_on(adapter.request_device(&Default::default(), None)).unwrap();
+    Some(Ui::new(&device, wgpu::TextureFormat::Bgra8UnormSrgb))
+}
+
+#[test]
+fn native_input_owners_unwind_in_order() {
+    let Some(mut ui) = test_chrome() else { return };
+    ui.set_tree(vec![], 0);
+    ui.set_mode("Problems".into());
+    ui.review = true;
+    ui.view_open = true;
+    assert!(ui.key("Escape", true, 0));
+    assert!(!ui.view_open);
+    let filter = egui::Id::new("dock_filter");
+    ui.ctx.memory_mut(|m| m.request_focus(filter));
+    ui.column.as_mut().unwrap().filter = "Box".into();
+    assert!(ui.key("Escape", true, 0));
+    assert_eq!(ui.take_actions(), ["tree:filter\u{1f}"]);
+    assert!(ui.ctx.memory(|m| m.has_focus(filter)));
+    assert!(ui.key("Escape", true, 0));
+    assert!(!ui.ctx.memory(|m| m.has_focus(filter)));
+    assert_eq!(Ui::model_escape(Some(&mut ui), true, true, true), "tool");
+    assert_eq!(Ui::model_escape(Some(&mut ui), false, true, true), "selection");
+    assert_eq!(Ui::model_escape(Some(&mut ui), false, false, true), "edit");
+    assert_eq!(Ui::model_escape(Some(&mut ui), false, false, false), "dock");
+    assert_eq!(ui.take_actions(), ["tree:mode\u{1f}"]);
+    assert!(ui.review);
+    Ui::model_escape(Some(&mut ui), false, false, false);
+    assert!(!ui.review);
+
+}
+
+#[test]
+fn dismissal_consumes_press_drag_and_release() {
+    let Some(mut ui) = test_chrome() else { return };
+    ui.view_open = true;
+    assert!(ui.pointer("press", 300., 400., 1, 0));
+    assert!(!ui.view_open);
+    assert!(ui.pointer("move", 320., 420., 1, 0));
+    assert!(ui.pointer("release", 320., 420., 1, 0));
+    assert!(!ui.pointer("press", 300., 400., 1, 0));
+    assert!(!ui.pointer("release", 300., 400., 1, 0));
 }

@@ -51,8 +51,8 @@ from core.i18n import available_languages, tr
 
 
 from views.settings_apply import (
-    _DXF_UNITS, _OBJ_UNITS, _UNITS_FOR_NEW_KEY, apply_accent_choice,
-    apply_autosave, apply_cursor_style, apply_document_units, apply_invert_orbit,
+    _DXF_UNITS, _OBJ_UNITS, apply_accent_choice,
+    apply_autosave, apply_cursor_style, apply_invert_orbit,
     apply_invert_wheel, apply_language, apply_msaa, apply_rest_mode,
     apply_rust_engine, apply_slides, apply_soft_shadows, apply_theme_choice,
     apply_toolbar_icon_px, apply_undo_steps, apply_window_glass,
@@ -644,51 +644,6 @@ class PreferencesDialog(QDialog):
         form.addRow("", self._shots)
         tabs.addTab(_ScrollingPage(ia), tr("AI Assistant"))
 
-        # ---- Units (of THIS document) ---------------------------------------
-        # Issue #33 (@pacaeiro): «when doing architecture I work in meters
-        # and with mechanical pieces all the work is in millimeters». The
-        # unit a bare number is typed in and every readout shows. It is a
-        # property of the document (it travels in the .igz), shown here
-        # because this is where people look for it (Marco, 2026-09-21).
-        from core import units as _units
-        from views.units_panel import UnitsPanel
-        scene = getattr(getattr(self._window, "viewport", None), "scene", None)
-        current = _units.model_units_of(scene)
-        # The units panel (profile, length, area, volume, angle, decimal
-        # separator, preview): everything a readout is shown with. Its rows
-        # and the ones below share one form, like the other pages.
-        self._units_panel = UnitsPanel(current)
-        self._initial_units = self._units_panel.settings()
-        form = self._units_panel.form
-        # Issue #121: the choice used to live only in the open document, so
-        # every new file went back to metres.
-        self._units_for_new = QCheckBox(tr("Also use for new documents"))
-        self._units_for_new.setChecked(
-            str(st.value(_UNITS_FOR_NEW_KEY, "1")).lower() not in ("0", "false"))
-        self._units_for_new_explicit = False
-        self._units_for_new.toggled.connect(self._units_for_new_toggled)
-        form.addRow("", self._units_for_new)
-        from views.units_start_dialog import ask_at_start
-        self._units_at_start = QCheckBox(tr("Ask which units to use at startup"))
-        self._units_at_start.setChecked(ask_at_start())
-        form.addRow("", self._units_at_start)
-        note = QLabel(tr(
-            "These are the units of the document you have open — they are "
-            "saved with it. A number typed without a unit is in this unit "
-            "(«2» is 2 mm in a millimetre document; «2m» is always 2 m), and "
-            "every length and area on screen is shown in it. The dimension "
-            "style follows it; its own panel can still set it apart."))
-        note.setWordWrap(True)
-        from views.theme import style as theme_style
-        theme_style(note, "color:{muted}; font-size:11px;")
-        form.addRow("", note)
-        un = QWidget()
-        page = QVBoxLayout(un)
-        page.addWidget(self._units_panel)
-        page.addStretch(1)
-        self._units_page = _ScrollingPage(un)
-        tabs.addTab(self._units_page, tr("Units"))
-
         # ---- Keyboard shortcuts (issue #138) -------------------------------
         # (Not wrapped: its list already scrolls on its own.)
         from views.shortcuts import ShortcutsPanel
@@ -759,10 +714,6 @@ class PreferencesDialog(QDialog):
             "Built: right {r:+.2f}  up {u:+.2f}  forward {f:+.2f}  "
             "tilt {t:+.2f}  twist {s:+.2f}", r=sample.right, u=sample.up,
             f=sample.forward, t=sample.tilt, s=sample.spin))
-
-    def show_units_page(self) -> None:
-        """Open on the Units page (Window ▸ Units…, Ctrl+U)."""
-        self._tabs.setCurrentWidget(self._units_page)
 
     def show_shortcut_of(self, action) -> None:
         """Open on the Keyboard shortcuts page with ``action`` picked."""
@@ -968,9 +919,6 @@ class PreferencesDialog(QDialog):
             st.setValue(sf.KEY_HEIGHT, round(self._figure_height.value(), 3))
             st.setValue(sf.KEY_NAME, self._figure_name.text().strip())
 
-    def _units_for_new_toggled(self, _checked: bool) -> None:
-        self._units_for_new_explicit = True
-
     def _sync_rest_fade_controls(self, _value=None) -> None:
         """Keep the percentage legible and disable it outside Fade mode."""
         self._rest_fade_value.setText(f"{self._rest_fade.value()} %")
@@ -1049,30 +997,8 @@ class PreferencesDialog(QDialog):
         pick(self._dxf_unit, "mm")
         pick(self._coord, "geo")
 
-        # Quietly: an explicit tick would copy this document's units over
-        # the ones new documents start with.
-        self._units_for_new.blockSignals(True)
-        self._units_for_new.setChecked(True)
-        self._units_for_new.blockSignals(False)
-        self._units_at_start.setChecked(True)
-
     def accept(self) -> None:  # noqa: D102 — QDialog override
         st = QSettings()
-
-        # Units of the open document (issue #33).
-        from core import units as _units
-        chosen = self._units_panel.settings()
-        apply_document_units(self._window, chosen)
-        for_new = self._units_for_new.isChecked()
-        # The checkbox is a remembered preference, independent of the model.
-        # An unrelated edit must not copy this model's units over a newer
-        # default chosen in another window. Explicit opt-in copies them too.
-        if chosen != self._initial_units or self._units_for_new_explicit:
-            st.setValue(_UNITS_FOR_NEW_KEY, "1" if for_new else "0")
-            if for_new:
-                _units.remember_new_document_units(chosen)
-        from views.units_start_dialog import set_ask_at_start
-        set_ask_at_start(self._units_at_start.isChecked())
 
         if apply_language(self._lang.currentData(), st):
             QMessageBox.information(

@@ -12,7 +12,7 @@ The public Rust module `ui::tokens` owns colour values. Its palette declaration 
 |---|---|
 | Surface | `SHEET` #1A1A1A, `SIDE` / `GLASS_BAR` #1F1F1F, `CARD` #242424, `CARD_HOVER` #2B2B2B, `WELL` #131313 |
 | Depth | `PANEL` / `POPOVER` premultiplied grey 31 at alpha 245, `FIELD` black at 28%, `SCRIM` black at 28%. `Surface::{Bar,Panel,Pill,Raised}` supply glass, radius and shadow together. |
-| Text | `INK` #EEF1F4, `INK_2` #C9CFD6, `DIM` #A2A9B1, `FAINT` #858C94, `OFF` #5C636A, `BRIGHT` white on the accent |
+| Text | `INK` #EEF1F4, `INK_2` #C9CFD6, `DIM` #A2A9B1, `FAINT` #858C94, `OFF` #5C636A, `ON_PRIMARY` graphite on the primary accent, `BRIGHT` white on dark surfaces |
 | Boundary | `EDGE` / `DIVIDER` white at 8%, `HOVER_EDGE` white at 18%, `FOCUS_RING` #6AA5FF |
 | Controls | `CONTROL` white at 7% (rest fill of buttons and chips), `TRACK` white at 11% (progress, switch), `THUMB` white at 16% (segmented thumb) |
 | Interaction | `HOVER` white at 7%, `PRESS` white at 12%, `ACTIVE` accent at 14% (selection wash), `ACCENT_LINE` accent at 55%, `ACCENT` #6AA5FF, `PRIMARY_HOVER`, `PRIMARY_PRESS` |
@@ -60,6 +60,7 @@ Token names are unchanged, so other branches rebase cleanly. The following value
 | Molecules: buttons | Primary, secondary and destructive `sheet_button`, `quiet`, `icon_button`, `chip_button` and `amber_button` | Use one primary commit action in a question. Give destructive commands the error ink. Use quiet buttons for subordinate actions and label icon buttons for discovery. |
 | Molecules: switches | `segmented`, `underline_tabs`, `choice`, `toggle` | Use `segmented` to switch a mode or place: an inset track with a raised neutral thumb. Use `underline_tabs` to navigate the sections of one panel: text with an accent underline and no box. Use `choice` to pick one of many values and `toggle` (a switch) for a Boolean. |
 | Molecules: fields | `field`, `search`, `number` with unit, `swatch` | Edit a name, a measurement, a local filter or a document colour. Preserve identity across frames and keep IME text in the focused editor. |
+| Molecules: formatted prose | `kit::prose` | Render formatted release-note paragraphs with heading, emphasis, code and actionable link spans. |
 | Molecules: data | `list_row`, `tree_slots`, `paint_tile` / `paint_card`, `prop_row`, `caption`, `disclosure`, `status_chip` / `badge`, `empty_state`, `progress_bar` | Reuse the row hit area and reserve slots for counts and eye/lock controls. Show label and value pairs, collapse a section such as Export details, report a state and explain an empty result in context. |
 | Organisms | `Glass` (`glass`, `popover`, `activity_capsule`), `menu` with `menu_row` and `menu_separator`, `sheet_frame`, `tree`, `toast` / `toast_stack` | Assemble a workspace, browse a hierarchy or show choices anchored to a control. Keep data and action dispatch in the owning surface. Show active work in the capsule, using a ring for unknown duration and `progress_bar` for measured progress. Stack at most three transient results. |
 

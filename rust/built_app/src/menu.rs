@@ -134,6 +134,7 @@ pub fn build() -> muda::Result<Menus> {
           &PredefinedMenuItem::separator(),
           &item("move_to_window", "Move Project to New Window", None),
           &PredefinedMenuItem::separator(),
+          &item("units", "Units…", Some("super+KeyU")),
           &item("extensions", "Extension Manager…", None),
           &item("cutlist", "Cut list…", None),
           &item("library", "Library", Some("super+shift+KeyL"))],
@@ -142,7 +143,8 @@ pub fn build() -> muda::Result<Menus> {
         &item("panel:python_console", "Python Console", Some("CmdOrCtrl+Shift+P")),
         &item("panel:render_blender", "Blender Render", None),
     ])?;
-    bar.append_items(&[&app, &file, &edit, &view, &tools, &plugins, &window])?;
+    let help = Submenu::with_items("Help", true, &[&item("check_updates", "Check for Updates…", None)])?;
+    bar.append_items(&[&app, &file, &edit, &view, &tools, &plugins, &window, &help])?;
     #[cfg(target_os = "macos")]
     {
         bar.init_for_nsapp();

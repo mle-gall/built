@@ -837,7 +837,47 @@ def redo(history):
 from core.deliveries import create_delivery, edit_delivery, delete_delivery, run_delivery
 
 
-COMMANDS = {"patch_record_field": patch_record_field, "set_filing_rule": set_filing_rule,
+class _DocumentSettingsCommand(Command):
+    doc_undo = True
+    keeps_rows = True
+
+    def __init__(self, name, edit):
+        self.history_name = name
+        self.edit = edit
+
+    def do(self, scene):
+        self.edit.apply(scene)
+        self.doc_after(scene, "execute")
+
+    def undo(self, scene):
+        self._doc_txn.undo()
+        self.doc_after(scene, "undo")
+
+
+def _document_settings(history, name, edit):
+    before = history.revision
+    history.execute(_DocumentSettingsCommand(name, edit))
+    return _answer(history, before)
+
+
+def set_model_units(history, units):
+    from ingetrazo_core import DocumentSettings
+    return _document_settings(history, "Set model units", DocumentSettings.model_units(units))
+
+
+def set_dimension_style(history, key, value):
+    from ingetrazo_core import DocumentSettings
+    return _document_settings(history, "Set dimension style", DocumentSettings.dimension_style(key, value))
+
+
+def set_annotation_font(history, family, bold, italic, size):
+    from ingetrazo_core import DocumentSettings
+    return _document_settings(history, "Set annotation font",
+                              DocumentSettings.annotation_font(family, bold, italic, size))
+
+
+COMMANDS = {"set_model_units": set_model_units, "set_annotation_font": set_annotation_font,
+            "set_dimension_style": set_dimension_style, "patch_record_field": patch_record_field, "set_filing_rule": set_filing_rule,
             "create_delivery": create_delivery, "edit_delivery": edit_delivery,
             "delete_delivery": delete_delivery, "run_delivery": run_delivery, "follow_me": follow_me, "intersect_faces": intersect_faces,
             "add_edge": add_edge, "add_edges": add_edges,

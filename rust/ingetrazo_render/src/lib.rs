@@ -2,6 +2,7 @@
 mod timing;
 mod panic_log;
 mod overlay;
+mod commands;
 pub mod ui;
 mod inspector;
 mod glass;
@@ -1733,6 +1734,7 @@ impl Renderer {
         let mut e = self.device.create_command_encoder(&Default::default());
         let tq = self.queries.as_ref().filter(|_| self.detailed_timestamps);
         self.sun.prepare(&self.device, &self.queue, &mut e, s, &self.textures, &self.look.buffer);
+        self.axes.welcome_grid = self.ui.as_ref().is_some_and(ui::Ui::empty_start_shown);
         self.background.draw(&mut e, &color, tq);
         e.clear_buffer(&s.counters, 0, None);
         e.copy_buffer_to_buffer(if self.look.data[6][0] > 0. { &s.template } else { &s.hard_template }, 0, &s.commands, 0, s.p as u64 * 40);
@@ -1773,7 +1775,7 @@ impl Renderer {
                 if msaa { self.lines.draw(&mut e, &self.aa.color_view(), &self.aa.depth_view(), Some(&color), false); }
                 else { self.lines.draw(&mut e, &color, &depth, None, false); }
             }
-            if edge_only && !(self.edges || self.style == 4 || ao_active || self.axes.visible) { break; }
+            if edge_only && !(self.edges || self.style == 4 || ao_active || self.axes.visible || self.axes.welcome_grid) { break; }
             if !msaa || self.pick_pending {
             let mut pass = e.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: None,
@@ -2085,6 +2087,12 @@ impl Renderer {
     /// over it. No scene pass runs; the resident scene stays as it is.
     #[pyo3(signature = (present=true))]
     fn render_page(&mut self, present: bool) -> PyResult<(f64, Option<f64>)> {
+        // Large sheets use the resident model even when opened from the
+        // page workspace. Offscreen page exports still draw the page.
+        if present && self.ui_target == self.active && self.scene.is_some()
+            && self.ui.as_ref().is_some_and(ui::Ui::large_sheet_shown) {
+            return self.render(true);
+        }
         let start = Instant::now();
         self.device.poll(wgpu::Maintain::Poll);
         let polled = Instant::now();
@@ -2251,6 +2259,9 @@ impl Renderer {
     fn ui_set_cluster(&mut self, cluster: Vec<Vec<ui::Item>>, view_menu: Vec<(String, Vec<ui::Item>)>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_cluster(cluster, view_menu); }
     }
+    fn ui_input_state(&self) -> std::collections::HashMap<&'static str, bool> {
+        self.ui.as_ref().map(ui::Ui::input_state).unwrap_or_default()
+    }
     fn ui_claims_key(&self, name: &str) -> bool { self.ui.as_ref().is_some_and(|ui| ui.claims_key(name)) }
     fn ui_key(&mut self, name: &str, pressed: bool, modifiers: u8) -> bool {
         self.ui.as_mut().is_some_and(|ui| ui.key(name, pressed, modifiers))
@@ -2307,6 +2318,9 @@ impl Renderer {
     fn ui_set_project_tabs(&mut self, tabs: Vec<(String, String, bool, bool, bool, String, String)>,
                            elsewhere: Vec<(String, String, String)>, can_move: bool, pictures: bool) {
         if let Some(ui) = self.ui.as_mut() { ui.set_project_tabs(tabs, elsewhere, can_move, pictures); }
+    }
+    fn ui_cluster_buttons(&self) -> Vec<(String, (f32, f32))> {
+        self.ui.as_ref().map_or_else(Vec::new, |ui| ui.cluster_buttons.clone())
     }
     fn ui_project_tab_rects(&self) -> Vec<Option<(f32, f32, f32, f32)>> {
         self.ui.as_ref().map_or_else(Vec::new, |ui| ui.project_tab_rects())
@@ -2697,6 +2711,9 @@ fn large_sheet_check(spec: &str) -> String {
 }
 
 mod surfaces;
+mod release;
+mod units_start;
+mod sheet_host;
 
 /// Start an orthographic ray on the plane through the camera, aligned with the point.
 #[pyfunction]
@@ -2708,9 +2725,31 @@ fn parallel_annotation_ray(eye: [f64; 3], forward: [f64; 3], point: [f64; 3]) ->
     (depth > 1e-3).then(|| ((point - forward * depth).to_array(), depth - 1e-3))
 }
 
+/// Document state comes from the controller. Headless views have no dock to unwind.
+#[pyfunction(signature = (busy, selected, editing, renderer=None))]
+fn model_escape(busy: bool, selected: bool, editing: bool, mut renderer: Option<PyRefMut<'_, Renderer>>) -> &'static str {
+    ui::Ui::model_escape(renderer.as_mut().and_then(|r| r.ui.as_mut()), busy, selected, editing)
+}
+
+/// A context click on a selected item addresses its selection. A miss addresses the background.
+#[pyfunction]
+fn context_targets(hit: bool, selection: &Bound<'_, PyAny>) -> PyResult<Vec<Py<PyAny>>> {
+    if !hit { return Ok(Vec::new()); }
+    selection.try_iter()?.map(|item| item.map(Bound::unbind)).collect()
+}
+
 #[pymodule]
 pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(commands::view_commands, m)?)?;
+    m.add_function(wrap_pyfunction!(commands::run_view_command, m)?)?;
+    m.add_function(wrap_pyfunction!(commands::command_chrome, m)?)?;
+    m.add_function(wrap_pyfunction!(commands::activate_view_command, m)?)?;
+    m.add_function(wrap_pyfunction!(commands::rail_layout, m)?)?;
+    m.add_function(wrap_pyfunction!(commands::leave_navigation, m)?)?;
+    m.add_function(wrap_pyfunction!(commands::view_shortcut, m)?)?;
     m.add("build_commit", env!("BUILT_COMMIT"))?;
+    m.add_function(wrap_pyfunction!(model_escape, m)?)?;
+    m.add_function(wrap_pyfunction!(context_targets, m)?)?;
     m.add_function(wrap_pyfunction!(parallel_annotation_ray, m)?)?;
     m.add_function(wrap_pyfunction!(preview_texture::preview_materials, m)?)?;
     m.add_function(wrap_pyfunction!(surfaces::surface_spec, m)?)?;
@@ -2718,6 +2757,10 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(panic_log::install_panic_log, m)?)?;
     m.add_function(wrap_pyfunction!(panic_log::_panic_for_test, m)?)?;
     m.add_class::<ui::operation_form::OperationForm>()?;
+    m.add_function(wrap_pyfunction!(sheet_host::start_backdrop, m)?)?;
+    m.add_function(wrap_pyfunction!(sheet_host::show_delivery_form, m)?)?;
+    m.add_class::<units_start::UnitsDraft>()?;
+    m.add_class::<release::ReleaseReview>()?;
     m.add_class::<Renderer>()
 }
 #[cfg(test)]

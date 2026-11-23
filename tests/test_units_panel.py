@@ -18,7 +18,9 @@ if QApplication.instance() is None:
 from core import units  # noqa: E402
 from core.scene import Scene  # noqa: E402
 from formats import igz  # noqa: E402
-from views.units_panel import UnitsPanel  # noqa: E402
+from views import units_question  # noqa: E402
+from types import SimpleNamespace
+import json
 
 FT = 0.3048
 IN = 0.0254
@@ -147,93 +149,81 @@ def test_the_geometry_never_moves_when_the_units_change(tmp_path):
 
 # ---- the panel -------------------------------------------------------------------
 
+def editor(settings):
+    model = units_question.draft(SimpleNamespace(units=settings))
+    model.edit_document(True, True)
+    return model
+
+
+def rows(model):
+    return {row[0]: row for row in units_question.model_rows(model)}
+
+
 def test_panel_shows_and_returns_the_settings():
     s = {"length": "cm", "precision": 1, "area": "m2", "area_precision": 2,
          "angle": "rad", "angle_precision": 3, "decimal": ","}
-    panel = UnitsPanel(s)
-    assert panel.settings() == s
-    assert panel.profile.currentData() == "custom"
+    model = editor(s)
+    assert json.loads(model.settings()) == s
+    assert rows(model)["profile"][4] == 4
 
 
 def test_picking_a_profile_fills_the_blocks():
-    panel = UnitsPanel({"length": "cm", "precision": 1, "area": "ha",
-                        "decimal": ","})
-    panel.profile.setCurrentIndex(panel.profile.findData("imperial"))
-    assert panel.settings() == {"length": "ft-in-frac", "precision": 2,
-                                "decimal": ","}
-    assert panel.length.currentData() == "ft-in-frac"
-    assert panel.area.currentData() == "auto"
-    assert panel.fraction.currentText() == '1/16"'
+    model = editor({"length": "cm", "precision": 1, "area": "ha", "decimal": ","})
+    model.receive("profile", "3")
+    assert json.loads(model.settings()) == {"length": "ft-in-frac", "precision": 2, "decimal": ","}
+    fields = rows(model)
+    assert fields["length"][4] == units.UNIT_CHOICES.index("ft-in-frac")
+    assert fields["area"][4] == 0
+    assert fields["precision"][7][int(fields["precision"][4])] == '1/16"'
 
 
 def test_editing_a_block_makes_it_custom():
-    panel = UnitsPanel({"length": "m", "precision": 2})
-    assert panel.profile.currentData() == "metric"
-    panel.area.setCurrentIndex(panel.area.findData("ha"))
-    assert panel.profile.currentData() == "custom"
-    panel.area.setCurrentIndex(panel.area.findData("auto"))
-    assert panel.profile.currentData() == "metric"
+    model = editor({"length": "m", "precision": 2})
+    assert rows(model)["profile"][4] == 0
+    model.receive("area", str(units.AREA_CHOICES.index("ha") + 1))
+    assert rows(model)["profile"][4] == 4
+    model.receive("area", "0")
+    assert rows(model)["profile"][4] == 0
 
 
 def test_fractional_lengths_pick_a_fraction():
-    panel = UnitsPanel({"length": "m", "precision": 2})
-    panel.length.setCurrentIndex(panel.length.findData("in-frac"))
-    assert panel._precision.currentWidget() is panel.fraction
-    panel.fraction.setCurrentIndex(4)
-    assert panel.settings()["precision"] == 4          # 1/64"
-    panel.length.setCurrentIndex(panel.length.findData("mm"))
-    assert panel._precision.currentWidget() is panel.decimals
+    model = editor({"length": "m", "precision": 2})
+    model.receive("length", str(units.UNIT_CHOICES.index("in-frac")))
+    assert rows(model)["precision"][7] == list(units.FRACTION_LABELS)
+    model.receive("precision", "4")
+    assert json.loads(model.settings())["precision"] == 4
+    model.receive("length", str(units.UNIT_CHOICES.index("mm")))
+    assert rows(model)["precision"][7][4] == "4 decimals"
 
 
 def test_follow_the_length_disables_its_precision():
-    panel = UnitsPanel({"length": "m", "precision": 3})
-    assert not panel.area_decimals.isEnabled()
-    assert panel.area_decimals.value() == 3
-    panel.area.setCurrentIndex(panel.area.findData("m2"))
-    assert panel.area_decimals.isEnabled()
+    model = editor({"length": "m", "precision": 3})
+    row = rows(model)["area_precision"]
+    assert row[8] & 1 and row[4] == 3
+    model.receive("area", str(units.AREA_CHOICES.index("m2") + 1))
+    assert not rows(model)["area_precision"][8] & 1
 
 
 def test_live_preview():
-    panel = UnitsPanel({"length": "cm", "precision": 1})
-    assert "1.2345 m → 123.5 cm" in panel.preview.text()
-    panel.decimal.setCurrentIndex(panel.decimal.findData(","))
-    assert "1,2345 m → 123,5 cm" in panel.preview.text()
-    panel.length.setCurrentIndex(panel.length.findData("ft-in-frac"))
-    assert panel.fraction.currentText() == '1/4"'     # precision 1 carried
-    panel.fraction.setCurrentIndex(2)                 # 1/16"
-    # 48.602": 0.602 × 16 = 9.6 sixteenths, the nearest is 10/16 = 5/8
-    assert '→ 4\'5/8"' in panel.preview.text()
-    panel.angle.setCurrentIndex(panel.angle.findData("deg"))
-    assert "rad → 70,7°" in panel.preview.text()
+    model = editor({"length": "cm", "precision": 1})
+    assert "1.2345 m → 123.5 cm" in rows(model)["preview"][3]
+    model.receive("decimal", "1")
+    assert "1,2345 m → 123,5 cm" in rows(model)["preview"][3]
+    model.receive("length", str(units.UNIT_CHOICES.index("ft-in-frac")))
+    assert rows(model)["precision"][4] == 1
+    model.receive("precision", "2")
+    assert '→ 4\'5/8"' in rows(model)["preview"][3]
+    assert "rad → 70,7°" in rows(model)["preview"][3]
 
 
-def test_preferences_dialog_applies_the_panel(scene, monkeypatch, tmp_path):
+def test_preferences_dialog_applies_the_panel(scene, tmp_path):
     from PySide6.QtCore import QSettings
-    from PySide6.QtWidgets import QWidget
-
-    import views.preferences_dialog as prefs_mod
-    path = tmp_path / "prefs.ini"
-    monkeypatch.setattr(prefs_mod, "QSettings",
-                        lambda: QSettings(str(path), QSettings.IniFormat))
-
-    class _Vp:
-        def __init__(self, s):
-            self.scene = s
-
-        def update(self):
-            pass
-
-        def __getattr__(self, name):          # anything else: harmless
-            return lambda *a, **k: None
-
-    win = QWidget()
-    win.viewport = _Vp(scene)
-    dlg = prefs_mod.PreferencesDialog(win)
-    panel = dlg._units_panel
-    panel.profile.setCurrentIndex(panel.profile.findData("millimetric"))
-    panel.volume.setCurrentIndex(panel.volume.findData("cm3"))
-    dlg._units_for_new.setChecked(False)
-    dlg.accept()
+    QSettings.setPath(QSettings.IniFormat, QSettings.UserScope, str(tmp_path))
+    from tests.units_chrome import edit_unit
+    win = SimpleNamespace(viewport=SimpleNamespace(scene=scene, update=lambda: None))
+    edit_unit(win, "for_new", 0)
+    edit_unit(win, "profile", 2)
+    edit_unit(win, "volume", 1 + units.VOLUME_CHOICES.index("cm3"))
     assert scene.units == {"length": "mm", "precision": 0, "volume": "cm3"}
     assert units.fmt_len(0.25) == "250 mm"
     assert scene.dimension_style["units"] == "mm"
@@ -241,18 +231,18 @@ def test_preferences_dialog_applies_the_panel(scene, monkeypatch, tmp_path):
 
 
 def test_by_the_length_says_the_unit_it_gives():
-    panel = UnitsPanel({"length": "m", "precision": 2})
-    assert panel.area.itemText(0) == "By the length (m²)"
-    assert panel.volume.itemText(0) == "By the length (m³)"
-    panel.length.setCurrentIndex(panel.length.findData("mm"))
-    assert panel.area.itemText(0) == "By the length (mm²)"
-    assert panel.volume.itemText(0) == "By the length (cm³)"
-    panel.length.setCurrentIndex(panel.length.findData("ft-in"))
-    assert panel.area.itemText(0) == "By the length (ft²)"
+    model = editor({"length": "m", "precision": 2})
+    assert rows(model)["area"][7][0] == "By the length (m²)"
+    assert rows(model)["volume"][7][0] == "By the length (m³)"
+    model.receive("length", str(units.UNIT_CHOICES.index("mm")))
+    assert rows(model)["area"][7][0] == "By the length (mm²)"
+    assert rows(model)["volume"][7][0] == "By the length (cm³)"
+    model.receive("length", str(units.UNIT_CHOICES.index("ft-in")))
+    assert rows(model)["area"][7][0] == "By the length (ft²)"
 
 
 def test_decimals_read_as_words():
-    panel = UnitsPanel({"length": "m", "precision": 2})
-    assert panel.decimals.text() == "2 decimals"
-    panel.angle_decimals.setValue(1)
-    assert panel.angle_decimals.text() == "1 decimal"
+    model = editor({"length": "m", "precision": 2})
+    assert rows(model)["precision"][7][2] == "2 decimals"
+    model.receive("angle_precision", "1")
+    assert rows(model)["angle_precision"][7][1] == "1 decimal"

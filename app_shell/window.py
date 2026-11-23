@@ -495,7 +495,7 @@ class ShellWindow(QObject):
         self._act_3dtext.triggered.connect(self._on_insert_3d_text)
 
         self._tool_actions = {}
-        self._nav_actions = {}
+        self._style_before_xray = (None, None)
         self._status = ShellStatusBar(host)
         self._tool_filter = None
         self._doc = None
@@ -717,6 +717,13 @@ class ShellWindow(QObject):
 
     def active_style(self):
         return getattr(self.viewport.scene, "display_style", None)
+
+    def _activate_nav(self, key):
+        self.viewport.set_nav_mode(key)
+        self._update_status_hint()
+        self.view.tools.sync()
+        self.view.tools._apply_tool_cursor()
+        self.view.update()
 
     def _activate_tool(self, key: str) -> None:
         """MainWindow._activate_tool's Metal path."""

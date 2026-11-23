@@ -142,7 +142,7 @@ class Host:
         # What the chrome was last sent for this view is no longer what the
         # renderer shows: the signatures go (the defaults come back), the
         # view's own state (expanded rows, filters, mode) stays.
-        resend = ("_ui_docs", "_ui_tabs", "_ui_opts", "_ui_palette", "_ui_colset",
+        resend = ("_ui_ptabs", "_ui_docs", "_ui_tabs", "_ui_opts", "_ui_palette", "_ui_colset",
                   "_ui_issues", "_ui_cursor_shape", "_ui_was_over")
         for key in [k for k in view.__dict__ if k.startswith("_ui_")]:
             if key.endswith(("_sig", "_sent", "_cv")) or key in resend:
@@ -420,7 +420,7 @@ class Host:
         from views import chrome_dialogs as cd
         return cd.modal(self.window)
 
-    def pointer(self, kind, x, y, button=0, held=0, modifiers=0):
+    def pointer(self, kind, x, y, button=0, held=0, modifiers=0, timestamp=0):
         from app_shell.events import ContextMenuEvent, MouseEvent
         qt_host.INPUT.update(modifiers=int(modifiers), buttons=int(held), pos=(x, y))
         if kind == "press":
@@ -428,7 +428,7 @@ class Host:
         view = self.view
         if kind == "leave":
             return self._guard("leave", view.leaveEvent, None)
-        ev = MouseEvent(kind, x, y, button, held, modifiers)
+        ev = MouseEvent(kind, x, y, button, held, modifiers, timestamp=timestamp)
         handler = {"press": view.mousePressEvent, "release": view.mouseReleaseEvent,
                    "move": view.mouseMoveEvent, "double": view.mouseDoubleClickEvent}[kind]
         self._guard(f"pointer {kind}", handler, ev)
@@ -500,6 +500,11 @@ class Host:
             combo = QKeySequence(int(modifiers) | int(key))
         except Exception:
             return False
+        from ingetrazo_render import view_shortcut
+        from views.view_commands import run
+        command = view_shortcut(combo.toString(QKeySequence.PortableText))
+        if command:
+            return run(self.window, command)
         for action in list(self.window._tool_actions.values()):
             seq = action.shortcut()
             if not seq.isEmpty() and seq.matches(combo) == QKeySequence.ExactMatch:
@@ -588,15 +593,17 @@ class Host:
             self._guard("undo", w._on_undo)
         elif action == "redo":
             self._guard("redo", w._on_redo)
-        elif action == "zoom_extents":
-            self._guard("zoom extents", w._on_zoom_extents)
+        elif action == "zoom_extents" or kind == "view":
+            from views.view_commands import run
+            self._guard("camera command", run, w, "view_" + arg if kind == "view" else action)
+            if kind == "view":
+                bounds = w._extents_bounds()
+                if bounds:
+                    self.viewport.camera.fit_box(*bounds)
         elif kind == "verb" and arg in _VERBS:
             # The ported prompts (views/chrome_forms.py), by name: the
             # window's own MainWindow methods, borrowed.
             self._guard(f"verb {arg}", getattr(w, _VERBS[arg]))
-        elif kind == "view":
-            self.viewport.camera.set_view(arg)
-            self.viewport.camera.fit_box(*w._extents_bounds()) if w._extents_bounds() else None
         else:
             out = self._guard(f"menu {action}", w.run_command, action)
         view = self.view
@@ -607,6 +614,9 @@ class Host:
 
     def close(self):
         from app_shell import windows
+        from views import chrome_forms
+        chrome_forms.close_all(self.window)
+        self.window._release_check = None
         windows.unregister(self)
         for doc in list(self.window._documents):
             view = doc.stand_in
@@ -630,7 +640,17 @@ class Host:
             "faces": len(getattr(mesh, "faces", ()) or ()),
             "edges": len(getattr(mesh, "edges", ()) or ()),
             "groups": len(getattr(scene, "groups", ()) or ()),
+            "input": self.view.renderer.ui_input_state() if hasattr(self.view.renderer, "ui_input_state") else {},
+            "filter": self.view.__dict__.get("_ui_filter", ""),
+            "dock_columns": self.view.__dict__.get("_ui_colset", 0),
+            "dock_mode": self.view.__dict__.get("_ui_mode", ""),
+            "tool_busy": self.viewport._tool_busy_for_delete(tool),
+            "edit_group": getattr(scene.edit_group, "name", None),
             "selection": len(getattr(scene, "selection", ()) or ()),
+            "cluster": [key for key, _ in getattr(self.renderer, "ui_cluster_buttons", lambda: [])()],
+            "nav_mode": self.viewport.nav_mode,
+            "camera_forward": self.viewport.camera.forward().toTuple(),
+            "camera_eye": self.viewport.camera.eye().toTuple(),
             "tool": type(tool).__name__ if tool is not None else None,
             "status": win.statusBar().currentMessage(),
             "documents": [d.display_name() for d in win._documents],
@@ -641,6 +661,8 @@ class Host:
             "context_menu": self._context_rows(),
             "active": win._documents.index(win._doc) if win._doc in win._documents else -1,
             "dirty": bool(win._is_dirty()),
+            "large_sheet": self.renderer.ui_large_sheet_state()[0] if self.renderer is not None else "",
+            "form_open": self.renderer.ui_dialog_open() if self.renderer is not None else False,
             "start_page": bool(getattr(win.__dict__.get("_start_page"), "wanted", False)),
             "errors": len(self.errors),
             "widget_gaps": self.missing(),

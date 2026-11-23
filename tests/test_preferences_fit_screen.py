@@ -99,15 +99,14 @@ def test_with_room_to_spare_it_opens_at_its_natural_size():
 def test_the_pages_are_all_there_and_units_still_opens_on_its_page():
     dlg = PreferencesDialog(_Win())
     names = [dlg._tabs.tabText(i) for i in range(dlg._tabs.count())]
-    assert len(names) == 6
+    assert len(names) == 5
     for i in range(dlg._tabs.count()):
         page = dlg._tabs.widget(i)
         if page is dlg._shortcuts:          # its list scrolls on its own
             continue
         assert isinstance(page, QScrollArea), names[i]
         assert page.widget() is not None
-    dlg.show_units_page()
-    current = dlg._tabs.currentWidget()
-    assert current is dlg._units_page
-    assert dlg._units_panel in current.widget().findChildren(
-        type(dlg._units_panel))
+    from views import chrome_sheet, settings_sheet
+    win = dlg._window
+    settings_sheet.show(win, page="units")
+    assert chrome_sheet.current(win).section == "units"

@@ -68,8 +68,9 @@ impl Sheets {
         self.row_menu = None;
         self.pick = None;
     }
+    pub(super) fn dismissible_menu_open(&self) -> bool { self.row_menu.is_some() || self.pick.is_some() }
     fn popup_open(&self) -> bool {
-        self.row_menu.is_some() || self.pick.is_some() || self.renaming.is_some() || self.prompt.is_some()
+        self.dismissible_menu_open() || self.renaming.is_some() || self.prompt.is_some()
     }
 }
 
@@ -304,23 +305,24 @@ impl Ui {
 
     /// Areas that take the pointer while the workspace is on.
     pub(super) fn sheets_areas(&self) -> [(&'static str, bool); 4] {
-        let on = self.sheets.shown && !self.review;
+        let on = self.sheets.shown && !self.review && !self.lsheet.open;
         [("sheets_rail", on && !self.sheets.tools.is_empty()), ("sheets_dock", on),
          ("sheets_menu", on && self.sheets.row_menu.is_some()), ("sheets_pick", on && self.sheets.pick.is_some())]
     }
 
     /// The workspace's chrome under the top bar (which the caller draws).
-    pub(super) fn sheets_frame(&mut self, ctx: &egui::Context, screen: Rect) {
-        if self.review { return; }
-        self.sheets_rail(ctx, screen);
-        self.sheets_dock(ctx, screen);
-        self.sheets_bottom(ctx, screen);
+    pub(super) fn sheets_frame(&mut self, ctx: &egui::Context, screen: Rect, retract: f32) {
+        if retract == 1.0 { return; }
+        self.sheets_rail(ctx, screen, retract);
+        self.sheets_dock(ctx, screen, retract);
+        self.sheets_bottom(ctx, screen, retract);
+        if retract > 0.0 { return; }
         self.sheets_row_menu(ctx);
         self.sheets_pick(ctx);
     }
 
     // ---- The tool rail -----------------------------------------------------------
-    fn sheets_rail(&mut self, ctx: &egui::Context, screen: Rect) {
+    fn sheets_rail(&mut self, ctx: &egui::Context, screen: Rect, retract: f32) {
         if self.sheets.tools.is_empty() { return; }
         let mut clicked = None;
         let (band_top, band_bottom) = self.band(ctx, screen);
@@ -331,7 +333,9 @@ impl Ui {
         let cols = (2..=5).find(|c| tall(*c) <= room).unwrap_or(5);
         let active = self.sheets.active.clone();
         egui::Area::new(egui::Id::new("sheets_rail"))
-            .fixed_pos(pos2(GUT, band_top))
+            .constrain(false)
+            .interactable(retract == 0.0)
+            .fixed_pos(pos2(GUT - retract * (cols as f32 * 36.0 + 2.0 * GUT), band_top))
             .order(egui::Order::Foreground)
             .show(ctx, |ui| {
                 frame().corner_radius(CornerRadius::same(12)).inner_margin(Margin::same(4)).show(ui, |ui| {
@@ -362,7 +366,7 @@ impl Ui {
     /// The dock. Today one column: the sheet list over the selected item;
     /// each part is a place of its own (`Sheets::*_place`), so a later dock
     /// with Sheets | Views | Item tabs shows one place per tab.
-    fn sheets_dock(&mut self, ctx: &egui::Context, screen: Rect) {
+    fn sheets_dock(&mut self, ctx: &egui::Context, screen: Rect, retract: f32) {
         let (top, bottom) = self.band(ctx, screen);
         #[allow(non_snake_case)]
         let W: f32 = self.dock_w.min((screen.width() * 0.45).max(DOCK_MIN_W));
@@ -370,7 +374,9 @@ impl Ui {
         let mut out: Vec<String> = Vec::new();
         let s = &mut self.sheets;
         egui::Area::new(egui::Id::new("sheets_dock"))
-            .fixed_pos(pos2(screen.max.x - GUT - W, top))
+            .constrain(false)
+            .interactable(retract == 0.0)
+            .fixed_pos(pos2(screen.max.x - GUT - W + retract * (W + GUT), top))
             .order(egui::Order::Foreground)
             .show(ctx, |ui| {
                 glass(Surface::Panel).inner_margin(Margin::same(10)).show(ui, |ui| {
@@ -453,13 +459,15 @@ impl Ui {
     }
 
     // ---- The bottom bar: paper · scale | tool and hint | where, zoom -------------
-    fn sheets_bottom(&mut self, ctx: &egui::Context, screen: Rect) {
+    fn sheets_bottom(&mut self, ctx: &egui::Context, screen: Rect, retract: f32) {
         let mut out: Vec<String> = Vec::new();
         let tool_icon = self.sheets.tools.iter().flatten().find(|t| t.id == self.sheets.active).and_then(|t| t.icon.clone());
         let s = &mut self.sheets;
         // Same place and id as the model's bar: the band above it is the same.
         egui::Area::new(egui::Id::new("bottom"))
-            .fixed_pos(pos2(0.0, screen.max.y - BOT_H))
+            .constrain(false)
+            .interactable(retract == 0.0)
+            .fixed_pos(pos2(0.0, screen.max.y - BOT_H * (1.0 - retract)))
             .order(egui::Order::Foreground)
             .show(ctx, |ui| {
                 glass(Surface::Bar).inner_margin(Margin::symmetric(8, 4)).show(ui, |ui| {

@@ -18,8 +18,8 @@ const STATES: [(&str, State); 6] = [
 /// Colour roles, grouped as the docs list them. Tokens not listed here still
 /// appear, under "Other", so a new token is never missing from the sheet.
 const GROUPS: [(&str, &[&str]); 6] = [
-    ("Surfaces", &["SHEET", "SIDE", "CARD", "CARD_HOVER", "WELL", "PANEL", "FIELD", "SCRIM"]),
-    ("Text", &["INK", "INK_2", "DIM", "FAINT", "OFF", "BRIGHT"]),
+    ("Surfaces", &["SHEET", "SIDE", "CARD", "CARD_HOVER", "WELL", "PANEL", "FIELD", "SCRIM", "SHEET_SCRIM"]),
+    ("Text", &["INK", "INK_2", "DIM", "FAINT", "OFF", "BRIGHT", "ON_PRIMARY"]),
     (
         "Interaction",
         &[
@@ -275,7 +275,7 @@ impl Gallery {
         }
         y += 50.;
         // Glass levels, lowest to highest.
-        sub(ui, pos2(at.x, y), "Glass, lowest to highest");
+        sub(ui, pos2(at.x, y), &format!("Glass · sheet blur {SHEET_BLUR}× · scrim {:.0}% · vignette {:.0}%", SHEET_SCRIM.a() as f32 / 2.55, SHEET_VIGNETTE * 100.0));
         y += 20.;
         let tile_w = (w - 3. * SPACE_S) / 4.;
         for (i, surface) in Surface::ALL.into_iter().enumerate() {
@@ -355,6 +355,16 @@ impl Gallery {
             ] {
                 status_chip(ui, label, tone);
             }
+        });
+        y += CONTROL_H + SPACE_S;
+        let r = Rect::from_min_size(pos2(at.x + name_w, y), vec2(w - name_w, CONTROL_H));
+        ui.painter().text(pos2(at.x, y + CONTROL_H / 2.), Align2::LEFT_CENTER, "Formatted prose", meta(), INK_2);
+        put(ui, r, across(), |ui| {
+            prose(ui, &[
+                ProseSpan { text: "Fixed ".into(), bold: true, ..Default::default() },
+                ProseSpan { text: "face selection. ".into(), ..Default::default() },
+                ProseSpan { text: "Release notes".into(), link: "notes".into(), ..Default::default() },
+            ]);
         });
         y + CONTROL_H + SPACE_S
     }

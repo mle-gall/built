@@ -1190,7 +1190,7 @@ def _root_table(name, track):
 
 #: The scene fields that live on the root node (their dataclass
 #: defaults still apply: ``__init__`` assigns them through these).
-ROOT_TABLES = ("active_layer", "layer_folders", "folder_parents",
+ROOT_TABLES = ("units", "active_layer", "layer_folders", "folder_parents",
                "folder_visibility", "layer_folder_uids",
                "layer_folder_names", "plugin_data",
                "dimensions", "text_labels", "text_placement_anchors", "dimension_style", "saved_views",

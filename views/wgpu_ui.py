@@ -1,10 +1,8 @@
 """UI spike (branch ``ui/egui-spike``): the viewport chrome drawn by egui
 inside the Metal renderer, in the same frame as the model.
 
-The Metal view draws a floating tool
-palette and a status line itself, and the Qt tool bars are hidden. Qt
-still owns the window, the docks and every tool: the palette only shows
-what the window says is active and asks it to switch.
+The Metal view draws the tool palette, command cluster and status line.
+Both hosts bind the Rust view registry to their document controller.
 """
 from __future__ import annotations
 
@@ -13,27 +11,6 @@ import os
 from PySide6.QtCore import Qt, QTimer, QSize
 from PySide6.QtGui import QImage, QKeySequence
 
-# What gets a button (Maxence 2026-11-22): the work itself and the states
-# you need to see. Commands every app shares a shortcut for (Save, Undo,
-# Redo, Cut/Copy/Paste, Select all, New/Open, Print, Preferences) get none:
-# menus, keys and F3 cover them. Modelling palette, by task:
-GROUPS = [
-    ["select", "eraser", "paint", "eyedropper", "components"],
-    ["line", "freehand", "rectangle", "rotated_rect", "circle", "polygon",
-     "arc", "arc3", "center_arc", "pie"],
-    ["pushpull", "move", "rotate", "scale", "flip", "followme", "offset", "fillet",
-     "bridge", "make_faces"],
-    ["tape", "protractor", "north", "dimension", "text", "text3d", "geopath", "section"],
-    ["outer_shell", "solid_union", "solid_subtract", "solid_trim", "solid_intersect",
-     "solid_split"],
-]
-#: Palette entries that are window commands rather than tools.
-PALETTE_ACTIONS = {"eyedropper": "_act_eyedropper", "bridge": "_act_bridge",
-                   "components": "_act_library_components",
-                   "make_faces": "_act_make_faces", "text3d": "_act_3dtext"}
-# Navigation acts on the camera, not the model: a top row of its own.
-NAV = [["orbit", "pan", "zoom", "zoom_window", "zoom_extents", "zoom_selection"],
-       ["look_around", "walk", "position_camera"]]
 # Inter 400/500/600 (SIL OFL, resources/fonts/inter); the system font if missing.
 FONT = str(__import__("pathlib").Path(__file__).resolve().parents[1] / "resources" / "fonts" / "inter")
 if not os.path.isdir(FONT):
@@ -229,11 +206,12 @@ def _send_tools(view, win) -> None:
     groups = []
     disabled = []
     view._ui_palette_runs = {}
-    for keys in GROUPS:
+    from ingetrazo_render import rail_layout
+    for keys in rail_layout():
         row = []
-        for key in keys:
-            if key in PALETTE_ACTIONS:
-                action = getattr(win, PALETTE_ACTIONS[key], None)
+        for key, binding in keys:
+            if binding:
+                action = getattr(win, binding, None)
                 if action is not None:
                     view._ui_palette_runs[key] = action.trigger
             else:
@@ -274,10 +252,13 @@ def _send_tools(view, win) -> None:
         if w is not None:
             w.setMaximumWidth(0)
     icons = []
-    for key in [*(k for row in NAV for k in row), "four_views", "view_iso", "view_top", "view_front",
-                "view_right", "view_left", "view_back", "view_bottom"]:
+    from views.view_commands import entries
+    for group, _, _, _, key in entries():
+        if group not in ("nav", "walkthrough", "Views", "Projection") or not key:
+            continue
         w, h, rgba = _icon_rgba(key)
         icons.append((key, w, h, rgba))
+    icons.append(("four_views", *_icon_rgba("four_views")))
     for key in ("xray", "back_edges", "hidden_geometry", "section_cut", "shadows"):
         icons.append((key, *_drawn_icon(key)))
     view.renderer.ui_set_icons(icons)
@@ -493,6 +474,15 @@ def chrome_frame(view):
     return cpu, gpu, 0.0
 
 
+def _sync_units(view, history):
+    revision = (history, history._native.units_revision)
+    if getattr(view, "_ui_units_sent", None) != revision:
+        from core import units
+        unit = units.model_units_of(history.scene)["length"]
+        view.renderer.ui_set_units(units.length_suffix(unit).strip() or unit)
+        view._ui_units_sent = revision
+
+
 def before_frame(view) -> None:
     """Mirror the window's state into the chrome (cheap: a few dict reads)."""
     if not getattr(view, "_ui_attached", False):
@@ -511,7 +501,7 @@ def before_frame(view) -> None:
     if not view._ui_tools_sent and win._tool_actions:
         _send_tools(view, win)
     eyedropper = getattr(win, "_act_eyedropper", None)
-    active = next((k for k, a in getattr(win, "_nav_actions", {}).items() if a.isChecked()), "") \
+    active = getattr(view.source_viewport, "nav_mode", None) \
         or ("eyedropper" if eyedropper is not None and eyedropper.isChecked() else "") \
         or next((k for k, a in win._tool_actions.items() if a.isChecked()), "")
     view.renderer.ui_set_active(active)
@@ -522,10 +512,7 @@ def before_frame(view) -> None:
     if timer is not None and timer.isActive():
         hint = getattr(bar, "_msg", None).text() if getattr(bar, "_msg", None) is not None else hint
     view.renderer.ui_set_status(name, hint)
-    if not getattr(view, "_ui_units_sent", False):
-        from core import units
-        view.renderer.ui_set_units(units.length_suffix(units.model_unit()).strip() or units.model_unit())
-        view._ui_units_sent = True
+    _sync_units(view, win.viewport.history)
     _cursor_value(view, win)
     _selection(view, win, active)
     _cluster(view, win)
@@ -611,73 +598,9 @@ def _options(view):
     return out
 
 
-def _shortcut(action) -> str:
-    return action.shortcut().toString(QKeySequence.NativeText)
-
-
 def _cluster(view, win) -> None:
-    """Top-right: Undo, Redo, Save · X-ray, Section cut · View ▾ (council
-    2026-11-22). Everything is the window's own QAction, so shortcuts,
-    enabled and checked states stay the window's."""
-    from PySide6.QtWidgets import QMenu
-    actions: list = []
-
-    def item(action, label=None, icon="", checked=None):
-        if action is None:
-            return None
-        actions.append(action)
-        state = (-1 if not action.isCheckable() else int(action.isChecked())) if checked is None else int(checked)
-        text = (label or action.text()).replace("&", "")
-        key = _shortcut(action)
-        return (str(len(actions) - 1), text, key, icon, state, action.isEnabled())
-
-    def tipped(it, name):
-        # Cluster buttons say what they are in the tooltip.
-        if it is None:
-            return None
-        return (it[0], it[1], f"{name}    {it[2]}".strip(), it[3], it[4], it[5])
-
-    style = win.active_style() if hasattr(win, "active_style") else None
-    xray = style is not None and getattr(style, "face_mode", None) == "xray"
-    # No Save, Undo or Redo buttons: ⌘S, ⌘Z, ⇧⌘Z (Maxence 2026-11-22).
-    toggles = [tipped(item(getattr(win, "_act_xray_toggle", None), label="X-ray", icon="xray", checked=xray), "X-ray"),
-               tipped(item(getattr(win, "_act_style_back_edges", None), label="Back edges", icon="back_edges"), "Back edges"),
-               tipped(item(getattr(win, "_act_hidden_geometry", None), label="Hidden geometry", icon="hidden_geometry"), "Hidden geometry"),
-               tipped(item(getattr(win, "_act_shadows", None), icon="shadows"), "Shadows"),
-               tipped(item(getattr(win, "_act_show_scuts", None), label="Cut", icon="section_cut"), "Section cuts")]
-    nav = []
-    for row in NAV:
-        items = []
-        for key in row:
-            action = (getattr(win, "_nav_actions", {}).get(key) or getattr(win, "_act_" + key, None)
-                      or win._tool_actions.get(key))
-            it = item(action, icon=key)
-            if it is not None:
-                items.append(tipped(it, it[1]))
-        nav.append(items)
-    cluster = [*[r for r in nav if r], [i for i in toggles if i]]
-    menu = []
-    views = [item(a, icon=f"view_{k}") for k, a in getattr(win, "_view_actions", {}).items()]
-    menu.append(("Views", [*[i for i in views if i], ("camera", "Camera inspector…", "", "", -1, True)]))
-    menu.append(("Projection", [item(a) for a in getattr(win, "_projection_actions", {}).values()]))
-    if not hasattr(view, "_ui_style_menu"):
-        view._ui_style_menu = next((m for m in win.findChildren(QMenu)
-                                    if m.title().replace("&", "") == "Style"), None)
-    style_menu = view._ui_style_menu
-    if style_menu is not None:
-        rows = [item(a) for a in style_menu.actions()
-                if not a.isSeparator() and a.text() and a is not getattr(win, "_act_xray_toggle", None)]
-        menu.append(("Style", rows))
-    menu.append(("Sections", [i for i in (item(getattr(win, "_act_show_splanes", None)),
-                                           item(getattr(win, "_act_section_fill", None))) if i]))
-    menu.append(("Settings", [("form-style", "Edit style…", "", "", -1, True),
-                              ("form-shadows", "Shadows and sun…", "", "", -1, True)]))
-    menu = [(t, rows) for t, rows in menu if rows]
-    view._ui_actions = actions
-    sig = (tuple(map(tuple, cluster)), tuple((t, tuple(r)) for t, r in menu))
-    if sig != getattr(view, "_ui_cluster_sig", None):
-        view._ui_cluster_sig = sig
-        view.renderer.ui_set_cluster(cluster, menu)
+    from views.view_commands import sync
+    sync(view, win)
 
 
 def _cursor_value(view, win) -> None:
@@ -3013,8 +2936,15 @@ def _run(win, actions, source_view=None) -> None:
             view = getattr(getattr(win, "_doc", None), "stand_in", None)
             if view is not None:
                 _form_apply(win, view, arg)
+        elif kind == "act" and arg.isdecimal():
+            # The Sheets workspace retains its composer actions.
+            from views.wgpu_sheets import workspace_of
+            ws = workspace_of(source_view or getattr(win._doc, "stand_in", None))
+            if ws is not None and int(arg) < len(ws._actions):
+                ws._actions[int(arg)].trigger()
         elif kind == "act":
-            _trigger(win, int(arg))
+            from views.view_commands import run
+            run(win, arg)
         elif kind == "cmd":
             sel = list(win.viewport.scene.selection)
             run = next((r for k, _, _, r, ok, _ in _commands(win, sel) if k == arg and ok), None)
@@ -3194,13 +3124,6 @@ def _form_apply(win, view, arg) -> None:
     view.update()
 
 
-def _trigger(win, index: int) -> None:
-    view = getattr(getattr(win, "_doc", None), "stand_in", None)
-    actions = getattr(view, "_ui_actions", [])
-    if 0 <= index < len(actions):
-        actions[index].trigger()
-
-
 _KEYS = {Qt.Key_Escape: "Escape", Qt.Key_Return: "Enter", Qt.Key_Enter: "Enter",
          Qt.Key_Backspace: "Backspace", Qt.Key_Delete: "Delete", Qt.Key_Tab: "Tab",
          Qt.Key_Up: "ArrowUp", Qt.Key_Down: "ArrowDown", Qt.Key_Left: "ArrowLeft",
@@ -3273,6 +3196,8 @@ def claims_key(view, event) -> bool:
     if large is not None:
         # The large sheet owns every key but the window's ⌘ shortcuts.
         return large or _opens_commands(event)
+    if event.key() == Qt.Key_Escape:
+        return True  # Reserve it for the chrome and viewport Escape router.
     if _reveal_shortcut(event) or _problem_key(view, event):
         return True
     if _opens_commands(event):

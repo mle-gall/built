@@ -1274,7 +1274,11 @@ class MainWindow(WorksessionMixin, QMainWindow):
             action.setStatusTip(tr(tool.description))
         from views.shortcuts import set_tooltip
         set_tooltip(action, name)
-        action.triggered.connect(lambda _c, k=key: self._activate_tool(k))
+        from views.view_commands import bind, entries
+        if any(row[1] == key and row[0] == "walkthrough" for row in entries()):
+            bind(self, action, key)
+        else:
+            action.triggered.connect(lambda _c, k=key: self._activate_tool(k))
         self._tool_group.addAction(action)
         tb.addAction(action)
         self._tool_actions[key] = action
@@ -1376,13 +1380,15 @@ class MainWindow(WorksessionMixin, QMainWindow):
         sec_tb = self.toolbars["sections"]
         sec_tb.addSeparator()
 
-        def _sec_toggle(key: str, text: str, tip: str, slot):
+        from views.view_commands import bind, entries
+
+        def _sec_toggle(key: str, text: str, tip: str):
             act = QAction(tool_icon(key), text, self)
             act.setCheckable(True)
             act.setChecked(True)
             act.setToolTip(text)
             act.setStatusTip(tip)
-            act.toggled.connect(slot)
+            bind(self, act, key, toggle=True)
             self._icon_actions.append((act, key))
             sec_tb.addAction(act)
             return act
@@ -1390,17 +1396,14 @@ class MainWindow(WorksessionMixin, QMainWindow):
         self._act_show_splanes = _sec_toggle(
             "section_planes", tr("Section Planes"),
             tr("Show the section planes themselves; the cut they make "
-               "stays either way."),
-            lambda on: self._set_section_visibility("show_section_planes", on))
+               "stays either way."))
         self._act_show_scuts = _sec_toggle(
             "section_cuts", tr("Section Cuts"),
             tr("Cut the model open at its active section planes; off, the "
-               "model shows whole."),
-            lambda on: self._set_section_visibility("show_section_cuts", on))
+               "model shows whole."))
         self._act_section_fill = _sec_toggle(
             "section_fill", tr("Section Fill"),
-            tr("Fill the cut faces of a section with a solid colour."),
-            lambda on: self._set_style_field("section_fill", on))
+            tr("Fill the cut faces of a section with a solid colour."))
 
         # 3D Text opens a dialog (it's a one-shot action, not a checkable tool),
         # so it gets its own button on the Annotate bar next to the 2D Text tool.
@@ -1420,20 +1423,17 @@ class MainWindow(WorksessionMixin, QMainWindow):
         view_tb = self._new_toolbar(tr("View"), "view")
         self.toolbars["view"] = view_tb
         self._nav_actions: dict[str, QAction] = {}
-        for key, label, short, tip in [
-            ("orbit", "Orbit", "O", "Left-drag to rotate the view."),
-            ("pan", "Pan", "H", "Left-drag to slide the view."),
-            ("zoom", "Zoom", "Z", "Drag up or down to zoom in or out."),
-            ("zoom_window", "Zoom Window", "",
-             "Drag a box to zoom to that region."),
-        ]:
+        nav_tips = dict(orbit="Left-drag to rotate the view.", pan="Left-drag to slide the view.",
+                        zoom="Drag up or down to zoom in or out.", zoom_window="Drag a box to zoom to that region.")
+        for group, key, label, _, _ in entries():
+            if key not in nav_tips:
+                continue
+            tip = nav_tips[key]
             action = QAction(tool_icon(key), tr(label), self)
             action.setCheckable(True)
-            if short:
-                action.setShortcut(QKeySequence(short))
+            bind(self, action, key)
             action.setStatusTip(tr(tip))
             set_tooltip(action, tr(label))  # names the keys, as tools do
-            action.triggered.connect(lambda _c, k=key: self._activate_nav(k))
             self._tool_group.addAction(action)
             view_tb.addAction(action)
             self._nav_actions[key] = action
@@ -1446,11 +1446,10 @@ class MainWindow(WorksessionMixin, QMainWindow):
         # an alternate because it is the one that was documented here.
         act_ze = QAction(tool_icon("zoom_extents"), tr("Zoom Extents"), self)
         self._icon_actions.append((act_ze, "zoom_extents"))
-        act_ze.setShortcuts([QKeySequence("Shift+Z"), QKeySequence("F2")])
+        bind(self, act_ze, "zoom_extents")
         act_ze.setStatusTip(tr("Frame the whole model in the view."))
         from views.shortcuts import set_tooltip
         set_tooltip(act_ze, tr("Zoom Extents"))
-        act_ze.triggered.connect(self._on_zoom_extents)
         view_tb.addAction(act_ze)
         self._act_zoom_extents = act_ze
 
@@ -1458,10 +1457,9 @@ class MainWindow(WorksessionMixin, QMainWindow):
         # nothing selected it does nothing (Zoom Extents is one key away).
         act_zs = QAction(tool_icon("zoom_selection"), tr("Zoom Selection"), self)
         self._icon_actions.append((act_zs, "zoom_selection"))
-        act_zs.setShortcut(QKeySequence("Ctrl+Alt+Z"))
+        bind(self, act_zs, "zoom_selection")
         act_zs.setStatusTip(tr("Frame the selection in the view."))
         set_tooltip(act_zs, tr("Zoom Selection"))
-        act_zs.triggered.connect(self._on_zoom_selection)
         view_tb.addAction(act_zs)
         self._act_zoom_selection = act_zs
 
@@ -1476,20 +1474,14 @@ class MainWindow(WorksessionMixin, QMainWindow):
         # them and the rare ones sit further away. The digits alone type a
         # measure in the value box (views/shortcuts.py, reserved_reason).
         self._view_actions = {}
-        for key, label, icon, keys in [
-            ("iso", "Isometric", "view_iso", "Ctrl+4"),
-            ("top", "Top", "view_top", "Ctrl+1"),
-            ("front", "Front", "view_front", "Ctrl+2"),
-            ("right", "Right", "view_right", "Ctrl+3"),
-            ("left", "Left", "view_left", "Ctrl+6"),
-            ("back", "Back", "view_back", "Ctrl+5"),
-            ("bottom", "Bottom", "view_bottom", "Ctrl+7"),
-        ]:
+        for group, command, label, _, icon in entries():
+            if group != "Views" or not command.startswith("view_"):
+                continue
+            key = command.removeprefix("view_")
             act = QAction(tool_icon(icon), tr(label), self)
-            act.setShortcut(QKeySequence(keys))
+            bind(self, act, command)
             act.setStatusTip(tr(_VIEW_TIPS[key]))
             set_tooltip(act, tr(label))
-            act.triggered.connect(lambda _c, k=key: self._on_standard_view(k))
             views_tb.addAction(act)
             self._icon_actions.append((act, icon))
             self._view_actions[key] = act
@@ -1519,8 +1511,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             act.setCheckable(True)
             act.setStatusTip(tr(tip))
             set_tooltip(act, tr(label))     # names the keys, if given any
-            act.triggered.connect(
-                lambda _c, m=mode: self._set_projection(m))
+            bind(self, act, "projection_" + mode)
             self._projection_group.addAction(act)
             views_tb.addAction(act)
             self._icon_actions.append((act, icon))
@@ -1961,28 +1952,28 @@ class MainWindow(WorksessionMixin, QMainWindow):
         # Styles: the model's display look — face mode, edges,
         # background. Scenes remember the style; the composer's live-look
         # frames inherit it.
-        from core.style import BUILTIN_STYLES
+        from views.view_commands import bind, entries
         camera_menu.addSeparator()
         style_menu = camera_menu.addMenu(tr("Style"))
         self._style_group = QActionGroup(self)
         self._style_actions: dict[str, QAction] = {}
-        for preset in BUILTIN_STYLES:
-            act = QAction(tr(preset.name), self)
-            act.setStatusTip(tr(_STYLE_TIPS.get(preset.name, "")))
+        for group, command, label, _, _ in entries():
+            if group != "Style":
+                continue
+            act = QAction(tr(label), self)
+            act.setStatusTip(tr(_STYLE_TIPS.get(label, "")))
             act.setCheckable(True)
             self._style_group.addAction(act)
-            act.triggered.connect(
-                lambda _c=False, p=preset: self._apply_display_style(p))
+            bind(self, act, command)
             style_menu.addAction(act)
-            self._style_actions[preset.name] = act
+            self._style_actions[label] = act
         # X-ray on and off with one key: a glance at what hides behind a
         # face, then back to the style you were in.
         self._style_before_xray = (None, None)
         self._act_xray_toggle = QAction(tr("Toggle X-ray"), self)
-        self._act_xray_toggle.setShortcut(QKeySequence("Alt+X"))
+        bind(self, self._act_xray_toggle, "xray")
         self._act_xray_toggle.setStatusTip(tr(
             "Switch to X-ray, or back to the style you were in."))
-        self._act_xray_toggle.triggered.connect(self._toggle_xray)
         style_menu.addSeparator()
         style_menu.addAction(self._act_xray_toggle)
         edge_menu = camera_menu.addMenu(tr("Edge Style"))
@@ -1999,12 +1990,10 @@ class MainWindow(WorksessionMixin, QMainWindow):
         self._act_style_profiles.toggled.connect(
             lambda on: self._set_style_field("profiles", on))
         self._act_style_back_edges = QAction(tr("Back edges"), self)
-        self._act_style_back_edges.setShortcut(QKeySequence("K"))
         self._act_style_back_edges.setStatusTip(tr(
             "Draw the edges hidden behind faces as dashed lines."))
         self._act_style_back_edges.setCheckable(True)
-        self._act_style_back_edges.toggled.connect(
-            lambda on: self._set_style_field("back_edges", on))
+        bind(self, self._act_style_back_edges, "back_edges", toggle=True)
         edge_menu.addAction(self._act_style_back_edges)
         edge_menu.addAction(self._act_style_profiles)
         self._sync_style_menu()
@@ -2086,7 +2075,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             "Cast the sun's shadows; the Shadows panel sets the date, the "
             "time and how dark they are."))
         self._act_shadows.setCheckable(True)
-        self._act_shadows.toggled.connect(self._on_toggle_shadows)
+        bind(self, self._act_shadows, "shadows", toggle=True)
         camera_menu.addAction(self._act_shadows)
 
         # View ▸ Section Planes / Cuts / Fill — the same actions
@@ -2113,8 +2102,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             "Show softened and hidden edges as dashed lines, and hidden "
             "faces as a see-through grid."))
         self._act_hidden_geometry.setCheckable(True)
-        self._act_hidden_geometry.toggled.connect(
-            lambda on: self._set_hidden_view("show_hidden_geometry", on))
+        bind(self, self._act_hidden_geometry, "hidden_geometry", toggle=True)
         edge_menu.addSeparator()
         edge_menu.addAction(self._act_hidden_geometry)
         # Camera ▸ Axes (Alt+A): the world's drawing axes on or off.
@@ -3668,7 +3656,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         if (self._current_path is not None
                 or self.viewport.scene.version != self._saved_version):
             return
-        from views.units_start_dialog import offer_at_start
+        from views.units_question import offer_at_start
         offer_at_start(self)
 
     def open_preferences(self, shortcut_of=None, page=None) -> None:
@@ -4064,12 +4052,12 @@ class MainWindow(WorksessionMixin, QMainWindow):
         open_search(self)
 
     def _on_check_updates(self) -> None:
-        from views.update_dialog import start_check
+        from views.release_check import start_check
         start_check(self, quiet=False)
 
     def check_updates_quietly(self) -> None:
-        """Once a day at start: see views/update_dialog.py."""
-        from views.update_dialog import start_check
+        """Once a day at start: see views/release_check.py."""
+        from views.release_check import start_check
         start_check(self, quiet=True)
 
     def _on_cut_list(self) -> None:
@@ -11918,6 +11906,8 @@ class MainWindow(WorksessionMixin, QMainWindow):
         if not self._confirm_quit():
             event.ignore()
             return
+        _forms.close_all(self)
+        self._release_check = None
         self.persist_worksession()
         # A clean goodbye: whatever the user decided (save or discard), this
         # session's recovery slots no longer speak for anyone.

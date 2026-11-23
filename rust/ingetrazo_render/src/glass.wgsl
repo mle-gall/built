@@ -38,7 +38,9 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     let scene = textureSample(blurred, smp, pos.xy / pane.params.yz).rgb;
     let y = dot(scene, vec3<f32>(0.2126, 0.7152, 0.0722));
     let muted = mix(vec3<f32>(y), scene, pane.params.w);
-    let shoulder = pane.detail.x * 1.5 / (y + 0.5);
+    // Sheet glass preserves the scene's luminance differences. Compact
+    // chrome uses a shoulder to keep its small controls visually quiet.
+    let shoulder = select(pane.detail.x * 1.5 / (y + 0.5), pane.detail.x, pane.detail.w > 0.0);
     var c = mix(muted * shoulder, pane.tint.rgb, pane.tint.a);
 
     let ppp = pane.detail.y;
@@ -53,6 +55,9 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     let x = clamp((pos.x - pane.rect.x) / max(pane.rect.z - pane.rect.x, 1.0), 0.0, 1.0);
     let top = pane.edge.w * (1.0 - smoothstep(0.0, 5.0 * ppp, pos.y - pane.rect.y)) * mix(1.0, 0.65, x);
     c = mix(c, vec3<f32>(0.38643, 0.48515, 0.63076), clamp(rim + top, 0.0, 1.0));
+
+    let radial = length((pos.xy / pane.params.yz - 0.5) * 1.414214);
+    c *= 1.0 - pane.detail.w * smoothstep(0.25, 1.0, radial);
 
     // ±0.5/255 dither so the flat graphite does not band.
     let n = fract(sin(dot(floor(pos.xy), vec2<f32>(12.9898, 78.233))) * 43758.5453) - 0.5;

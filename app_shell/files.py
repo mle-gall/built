@@ -109,6 +109,9 @@ def command(win, name, *args):
         "save": lambda: save(win),
         "save_as": lambda: save_as(win),
         "save_copy": lambda: save_copy(win),
+        "units": lambda: win._on_units(),
+        "check_updates": lambda: win._on_check_updates(),
+        "check_updates_quiet": lambda: win.check_updates_quietly(),
         "export_image": lambda: win._on_export_image(),
         "soften": lambda: win._on_soften_edges(),
         "export_igz": lambda: export_igz(win),
@@ -190,6 +193,9 @@ def step_document(win, step):
 def new_model(win) -> None:
     """File ▸ New (MainWindow._on_new: an untouched untitled one starts
     over, else a new project), and the start page goes."""
+    from views import wgpu_start
+    if wgpu_start.shown(win):
+        return wgpu_start.new_model(win)
     win._on_new()
     win._dismiss_home()
 

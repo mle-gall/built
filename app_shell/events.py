@@ -52,14 +52,18 @@ class MouseEvent(_Event):
     _TYPES = {"press": QEvent.MouseButtonPress, "release": QEvent.MouseButtonRelease,
               "move": QEvent.MouseMove, "double": QEvent.MouseButtonDblClick}
 
-    def __init__(self, kind, x, y, button=0, held=0, modifiers=0, gx=None, gy=None):
+    def __init__(self, kind, x, y, button=0, held=0, modifiers=0, gx=None, gy=None, timestamp=0):
         super().__init__()
+        self._timestamp = timestamp
         self._type = self._TYPES[kind]
         self._pos = QPointF(float(x), float(y))
         self._global = QPointF(float(x if gx is None else gx), float(y if gy is None else gy))
         self._button = buttons(button)
         self._buttons = buttons(held)
         self._mods = mods(modifiers)
+
+    def timestamp(self):
+        return self._timestamp
 
     def position(self):
         return QPointF(self._pos)

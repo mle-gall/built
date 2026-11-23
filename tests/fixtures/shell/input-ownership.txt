@@ -1,0 +1,77 @@
+# Box A and Door use the same native double-click path.
+wait 550
+double 649 545
+state # component
+key escape
+state # left_component
+double 490 466
+wait 650
+state # opened
+click 492 462
+state # inside
+key escape
+state # cleared
+key escape
+state # closed
+wait 650
+click 490 466
+state # selected
+click 730 600 right
+state # empty_menu
+key escape
+state # dismissed_context
+key escape
+tool line
+click 1230 20
+wait 180
+state # view_menu
+click 560 380
+state # dismissed
+click 545 420
+state # started
+key escape
+state # cancelled
+tool select
+click 1230 20
+wait 200
+click 1060 62
+wait 150
+state # review
+key escape
+wait 150
+state # model
+click 1197 72
+wait 200
+click 1197 72
+wait 200
+click 1070 114
+type Oak
+wait 180
+state # filtered
+key escape
+wait 150
+state # cleared_filter
+key escape
+wait 150
+state # blurred
+key escape
+wait 150
+state # tree
+click 1120 106
+wait 200
+state # deliveries
+key escape
+wait 180
+state # filing
+menu delivery_export
+wait 180
+click 630 208
+wait 150
+state # formats
+key escape
+wait 150
+state # export
+key escape
+wait 350
+state # model_again
+quit
