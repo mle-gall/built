@@ -664,6 +664,7 @@ class Host:
             "selection": len(getattr(scene, "selection", ()) or ()),
             "cluster": [key for key, _ in getattr(self.renderer, "ui_cluster_buttons", lambda: [])()],
             "nav_mode": self.viewport.nav_mode,
+            "camera_distance": self.viewport.camera.distance,
             "camera_forward": self.viewport.camera.forward().toTuple(),
             "camera_eye": self.viewport.camera.eye().toTuple(),
             "tool": type(tool).__name__ if tool is not None else None,
