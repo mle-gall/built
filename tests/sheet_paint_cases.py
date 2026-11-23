@@ -16,6 +16,8 @@ def cases(group: str = "a"):
     """``(name, factory)``: a fresh record per call."""
     if group == "b":
         return cases_b()
+    if group == "c":
+        return cases_c()
     out = []
     for n, segs in ((100.0, 4), (50.0, 5), (250.0, 3), (1000.0, 4), (20.0, 6)):
         out.append((f"scalebar-{n:g}-{segs}", lambda n=n, s=segs: BarraEscala(scale_n=n, segments=s)))
@@ -48,6 +50,48 @@ def cases(group: str = "a"):
             out.append((f"level-{symbol}-{k}", lambda s=symbol, m=mirror, ax=ax, ay=ay, z=z, k=k: NivelItem(
                 symbol=s, mirror=m, ax_mm=ax, ay_mm=ay, z_m=z, size_mm=2.5 + k * 0.5)))
     out.append(("image-missing", lambda: ImagenItem(w_mm=60.0, h_mm=40.0, path="")))
+    return out
+
+
+def cases_c():
+    """Text blocks, title blocks and the sheet's border (the kinds the page
+    drew its own way until rust/sheets-6)."""
+    from core.composition import Cajetin, Composicion, TextoItem
+    out = []
+    texts = [
+        dict(text="Planta baja"),
+        dict(text="Nota: las cotas en metros salvo indicación contraria, verificar en obra.",
+             w_mm=50.0, size_pt=9.0),
+        dict(text="Centro\ndos líneas", align="center", bold=True, size_pt=18.0),
+        dict(text="Derecha subrayada", align="right", underline=True, italic=True, color="#a03020"),
+        dict(text="Con fondo y un texto que se parte en varias líneas", w_mm=40.0,
+             bg_color="#fff3c4", bg_opacity=0.6),
+        dict(text="", bg_color="#ffffff"),
+    ]
+    for i, kw in enumerate(texts):
+        out.append((f"text-{i}", lambda kw=kw: TextoItem(**kw)))
+    blocks = [
+        dict(proyecto="Vivienda", autor="M. S.", fecha="2026-11-24", lamina="L-01"),
+        dict(proyecto="Ampliación de la vivienda unifamiliar en la calle Mercaderes, Arequipa, "
+                      "segunda etapa", autor="", lamina="A-102"),
+        dict(campos=[["PROYECTO", "Canal de riego"], ["CLIENTE", "Junta de usuarios"],
+                     ["FECHA", "nov 2026"], ["ESCALA", "1:500"], ["LÁMINA", "P-03"]],
+             columns=2, fill_color="#eef1f4"),
+        dict(layout="banded", fill_color="#dfe6ee", proyecto="Plaza mayor", lamina="U-01",
+             corner="rounded", radius_mm=4.0),
+        dict(layout="minimal", proyecto="Detalle de escalera", autor="R. P.", fecha="",
+             corner="chamfer", radius_mm=3.0, double_border=True),
+        dict(label_mm=40.0, border_mm=0.7, line_mm=0.25, line_color="#203040",
+             label_color="#406080", text_color="#102030", w_mm=150.0, h_mm=45.0,
+             campos=[["Nº", 7], ["VACÍO", None], ["REVISIÓN", "B"]]),
+    ]
+    for i, kw in enumerate(blocks):
+        out.append((f"titleblock-{i}", lambda kw=kw: Cajetin(**kw)))
+    borders = [dict(border=True), dict(border=True, border_style="dashed", border_mm=0.35),
+               dict(border=True, border_style="double", border_radius_mm=5.0, border_color="#3a6ea5",
+                    paper="A3", landscape=False, margin_mm=15.0)]
+    for i, kw in enumerate(borders):
+        out.append((f"sheet-border-{i}", lambda kw=kw: Composicion(**kw)))
     return out
 
 
@@ -169,6 +213,12 @@ def python_ops(item, name: str = ""):
         c.paint_cota_radial_mm(p, item)
     elif kind == "EtiquetaItem":
         c.paint_etiqueta_mm(p, item)
+    elif kind == "TextoItem":
+        c.paint_text_mm(p, item)
+    elif kind == "Cajetin":
+        c.paint_cajetin_mm(p, item)
+    elif kind == "Composicion":
+        c.paint_sheet_border_mm(p, item)
     elif kind == "PerfilTerreno":
         profile, path_name, message = profile_of(name)
         c.paint_perfil_mm(p, item, profile, path_name, message)

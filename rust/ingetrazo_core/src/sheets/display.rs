@@ -115,6 +115,42 @@ pub fn extra(py: Python<'_>, handle: &Bound<'_, PyAny>, kind: ItemKind, f: &Fiel
         ItemKind::Profile => {
             profile_extra(py, f, profile, &mut x)?;
         }
+        ItemKind::Text => {
+            let expand = py.import("core.composition")?.getattr("expand_fields")?;
+            let s: String = expand.call1((f.text("text", ""), f.text("frame_uid", "")))?.extract()?;
+            put("text".into(), Value::Str(s));
+        }
+        ItemKind::TitleBlock => {
+            // The rows (its own, else the class's labelled fields), expanded;
+            // an empty scale row reads the sheet's main frame.
+            let expand = py.import("core.composition")?.getattr("expand_fields")?;
+            // `str(value or "")`, as Python reads them.
+            let as_str = |v: Bound<'_, PyAny>| -> PyResult<String> {
+                Ok(if v.is_truthy()? { v.str()?.to_string() } else { String::new() })
+            };
+            let mut rows: Vec<(String, String)> = Vec::new();
+            let campos = handle.getattr("campos")?;
+            if campos.is_truthy()? {
+                for row in campos.try_iter()? {
+                    let row = row?;
+                    rows.push((row.get_item(0)?.str()?.to_string(), as_str(row.get_item(1)?)?));
+                }
+            } else {
+                for pair in handle.getattr("FIELDS")?.try_iter()? {
+                    let (label, attr): (String, String) = pair?.extract()?;
+                    rows.push((label, as_str(handle.getattr(attr.as_str())?)?));
+                }
+            }
+            let mut out = Vec::new();
+            for (label, value) in rows {
+                let mut v: String = expand.call1((value,))?.extract()?;
+                if v.is_empty() && matches!(label.trim().to_lowercase().as_str(), "escala" | "scale") {
+                    v = expand.call1(("{escala}",))?.extract()?;
+                }
+                out.push(Value::List(vec![Value::Str(label), Value::Str(v)]));
+            }
+            put("rows".into(), Value::List(out));
+        }
         ItemKind::Callout => {
             let expand = py.import("core.composition")?.getattr("expand_fields")?;
             let uid = f.text("frame_uid", "");
@@ -144,6 +180,8 @@ pub fn paint(kind: ItemKind, f: &Fields, x: &Extra) -> Option<Vec<Op>> {
         ItemKind::RadialDimension => items_b::paint_radial(&mut p, f, x),
         ItemKind::Label => items_b::paint_label(&mut p, f, x),
         ItemKind::Profile => items_b::paint_profile(&mut p, f, x),
+        ItemKind::Text => super::items_c::paint_text(&mut p, f, x),
+        ItemKind::TitleBlock => super::items_c::paint_titleblock(&mut p, f, x),
         ItemKind::Image => {
             let path = f.text("path", "");
             items::paint_image(&mut p, f, !path.is_empty() && std::path::Path::new(&path).is_file());
@@ -188,6 +226,14 @@ pub fn size(kind: ItemKind, f: &Fields) -> (f64, f64) {
 pub fn sheet_item_display(py: Python<'_>, item: &Bound<'_, PyAny>, profile: Option<Bound<'_, PyAny>>) -> PyResult<String> {
     py.import("core.doc_model")?.call_method0("flush")?;
     let class = item.get_type().name()?.to_string();
+    if class == "Composicion" {
+        // The sheet itself: its border on the margin rectangle.
+        let (pw, ph): (f64, f64) = item.call_method0("page_size_mm")?.extract()?;
+        let f = super::model::read_fields(crate::doc::py::handle_key(item)?)?;
+        let mut p = super::paint::Painter::default();
+        super::items_c::paint_sheet_border(&mut p, &f, pw, ph);
+        return Ok(ops_json(&p.ops).to_string());
+    }
     let kind = ItemKind::of_class(&class)
         .ok_or_else(|| pyo3::exceptions::PyValueError::new_err(format!("not a sheet item: {class}")))?;
     let key = crate::doc::py::handle_key(item)?;

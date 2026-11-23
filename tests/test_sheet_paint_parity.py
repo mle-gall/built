@@ -27,7 +27,7 @@ from tests.sheet_paint_cases import cases, profile_of  # noqa: E402
 _app = QApplication.instance() or QApplication([])
 FIXTURES = Path(__file__).parent / "fixtures" / "sheet_paint"
 GROUPS = {g: json.loads(gzip.decompress((FIXTURES / f"goldens_{g}.json.gz").read_bytes()))
-          for g in ("a", "b") if (FIXTURES / f"goldens_{g}.json.gz").exists()}
+          for g in ("a", "b", "c") if (FIXTURES / f"goldens_{g}.json.gz").exists()}
 CASES = [(g, name, make) for g in GROUPS for name, make in cases(g)]
 
 

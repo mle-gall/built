@@ -112,18 +112,13 @@ mod tests {
     }
 }
 
-/// Lines `text` takes word-wrapped in `width_mm` at `size_mm`, as Qt's
-/// `TextWordWrap` lays it out: typed breaks, then breaks after spaces and
-/// hyphens wherever the next word would pass the width (a longer word
-/// overflows on its own line). `_line_count` in views/composer.py.
-pub fn line_count(text: &str, width_mm: f64, size_mm: f64, bold: bool) -> usize {
-    if text.is_empty() {
-        return 0;
-    }
-    let face = face_for(bold);
-    let s = size_mm / 100.0 * 0.75;
-    let limit = width_mm.max(0.5) / s;
-    let mut lines = 0;
+/// The lines `text` takes word-wrapped at `limit` (pixel-size-100 units),
+/// as Qt's `TextWordWrap` lays it out: typed breaks, then breaks after
+/// spaces and hyphens wherever the next word would pass the width (a
+/// longer word overflows on its own line). Each line comes with whether a
+/// wrap ended it (its trailing spaces then take no room).
+pub fn wrap_lines(text: &str, limit: f64, face: &Face) -> Vec<(String, bool)> {
+    let mut out = Vec::new();
     for para in text.split('\n') {
         // Break opportunities: after a run of spaces, after a hyphen.
         let mut tokens: Vec<String> = Vec::new();
@@ -141,20 +136,68 @@ pub fn line_count(text: &str, width_mm: f64, size_mm: f64, bold: bool) -> usize 
         if !cur.is_empty() {
             tokens.push(cur);
         }
-        let mut n = 1;
         let mut line = String::new();
         for t in tokens {
             let candidate = format!("{line}{t}");
             if !line.is_empty() && face.advance(candidate.trim_end_matches(' ')) > limit {
-                n += 1;
+                out.push((std::mem::take(&mut line), true));
                 line = t;
             } else {
                 line = candidate;
             }
         }
-        lines += n;
+        out.push((line, false));
     }
-    lines
+    out
+}
+
+/// Lines `text` takes word-wrapped in `width_mm` at `size_mm`.
+/// `_line_count` in views/composer.py.
+pub fn line_count(text: &str, width_mm: f64, size_mm: f64, bold: bool) -> usize {
+    if text.is_empty() {
+        return 0;
+    }
+    let s = size_mm / 100.0 * 0.75;
+    wrap_lines(text, width_mm.max(0.5) / s, face_for(bold)).len()
+}
+
+/// `QFontMetricsF.boundingRect(box, AlignLeft | TextWordWrap, text)`'s
+/// size at pixel size 100 for a box `width` wide: the widest line (a
+/// wrapped line without its trailing spaces), and the lines' height (Qt
+/// steps each further line by the height and 1/64).
+pub fn bounding_units(text: &str, width: f64, bold: bool) -> (f64, f64) {
+    let face = face_for(bold);
+    let lines = wrap_lines(text, width, face);
+    let w = lines.iter().map(|(l, wrapped)| face.advance(if *wrapped { l.trim_end_matches(' ') } else { l }))
+        .fold(0.0, f64::max);
+    let line_h = face.ascent + face.descent;
+    (w, line_h + (lines.len() - 1) as f64 * (line_h + 1.0 / 64.0))
+}
+
+/// views/composer.py `_fit_text_size_mm`: the largest size ≤ `base` (by
+/// steps of 0.88) at which `text`, word-wrapped, fits a `w` × `h` box.
+pub fn fit_text_size_mm(text: &str, w: f64, h: f64, base: f64, bold: bool) -> f64 {
+    let mut size = base;
+    while size > 1.0 {
+        let s = size / 100.0 * 0.75;
+        let (bw, bh) = (w / s, h / s);
+        let (nw, nh) = bounding_units(text, bw, bold);
+        if nh <= bh && nw <= bw {
+            return size;
+        }
+        size *= 0.88;
+    }
+    1.0
+}
+
+/// views/composer.py `_text_height_mm`: the height `text` wants word-wrapped
+/// in a column `width_mm` wide at `size_mm`.
+pub fn text_height_mm(text: &str, width_mm: f64, size_mm: f64, bold: bool) -> f64 {
+    if text.is_empty() {
+        return 0.0;
+    }
+    let s = size_mm / 100.0 * 0.75;
+    bounding_units(text, width_mm.max(0.5) / s, bold).1 * s
 }
 
 /// `_laid_out_height_mm`: the first line's ascent + descent, then the

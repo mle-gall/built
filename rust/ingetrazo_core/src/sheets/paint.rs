@@ -62,17 +62,26 @@ pub struct Pen {
     pub dash: Vec<f64>,
     pub cap: Cap,
     pub none: bool,
+    /// Qt's named style for a dashed pen (`Qt.DashLine`: "dash"); empty
+    /// for a pattern set by hand ("custom").
+    pub style: &'static str,
 }
 
 impl Pen {
     pub fn new(color: Rgba, width: f64) -> Pen {
-        Pen { color, width, dash: Vec::new(), cap: Cap::Square, none: false }
+        Pen { color, width, dash: Vec::new(), cap: Cap::Square, none: false, style: "" }
     }
     pub fn none() -> Pen {
         Pen { none: true, ..Pen::new(Rgba(0, 0, 0, 255), 1.0) }
     }
     pub fn cap(mut self, cap: Cap) -> Pen {
         self.cap = cap;
+        self
+    }
+    /// `Qt.DashLine`: 4 on, 2 off, in pen widths.
+    pub fn dash_line(mut self) -> Pen {
+        self.dash = vec![4.0, 2.0];
+        self.style = "dash";
         self
     }
     pub fn dashed(mut self, pattern: &[f64]) -> Pen {
@@ -370,7 +379,7 @@ fn pen_json(p: &Option<Pen>) -> Value {
         None => Value::Null,
         Some(p) => json!({
             "color": p.color.hex(), "width": p.width,
-            "style": if p.dash.is_empty() { "solid" } else { "custom" },
+            "style": if p.dash.is_empty() { "solid" } else if p.style.is_empty() { "custom" } else { p.style },
             "dash": p.dash,
             "cap": match p.cap { Cap::Flat => "flat", Cap::Square => "square", Cap::Round => "round" },
         }),
