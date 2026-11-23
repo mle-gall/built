@@ -73,3 +73,17 @@ def test_invalid_or_stale_drafts_do_not_overwrite(library):
     assert json.loads(reopened.field("registry_json")[3]) == bim_registry.get(vp.scene)
     ctx.win.viewport.scene = Scene()
     assert not reopened.act(ctx.win, "registry_apply") and "model changed" in reopened.error
+
+
+def test_read_only_model_preserves_the_draft(library):
+    lib, ctx, form = library
+    vp = ctx.win.viewport
+    original = bim_registry.get(vp.scene)
+    form.receive("registry_name", "Survey")
+    form.receive("registry_key", "survey")
+    lib.act(ctx, "verb", ["registry_add"])
+    vp.scene.worksession_read_only = True
+    lib.act(ctx, "verb", ["registry_apply"])
+    assert form.error and "survey" in form.field("registry_json")[3]
+    assert bim_registry.get(vp.scene) == original and not vp.history.undo_stack
+    chrome_sheet.close.assert_not_called()

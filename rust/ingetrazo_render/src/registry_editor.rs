@@ -157,7 +157,13 @@ impl RegistryEditor {
                         .import("core.history")?
                         .getattr("SetRegistryCommand")?
                         .call1((parsed,))?;
-                    vp.getattr("history")?.call_method1("execute", (command,))?;
+                    let history = vp.getattr("history")?;
+                    history.call_method1("execute", (command,))?;
+                    for attr in ["last_error", "last_rejected"] {
+                        if let Some(error) = history.getattr(attr)?.extract::<Option<String>>()? {
+                            return Err(PyValueError::new_err(error));
+                        }
+                    }
                     self.original = value.clone();
                 }
             }
