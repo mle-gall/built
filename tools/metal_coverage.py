@@ -7,15 +7,16 @@ import re
 def registry(root):
     tree = ast.parse((root / 'views/main_window.py').read_text())
     result = {}
-    for node in ast.walk(tree):
+    factory = next(f for f in tree.body if isinstance(f, ast.FunctionDef) and f.name == "build_tools")
+    for node in ast.walk(factory):
         if not isinstance(node, ast.Assign):
             continue
         for target in node.targets:
-            if isinstance(target, ast.Attribute) and target.attr == '_tools' and isinstance(node.value, ast.Dict):
+            if isinstance(target, ast.Name) and target.id == 'tools' and isinstance(node.value, ast.Dict):
                 result.update((key.value, value.func.id)
                               for key, value in zip(node.value.keys, node.value.values))
-            if (isinstance(target, ast.Subscript) and isinstance(target.value, ast.Attribute)
-                    and target.value.attr == '_tools' and isinstance(target.slice, ast.Constant)
+            if (isinstance(target, ast.Subscript) and isinstance(target.value, ast.Name)
+                    and target.value.id == 'tools' and isinstance(target.slice, ast.Constant)
                     and isinstance(node.value, ast.Call)):
                 result[target.slice.value] = node.value.func.id
     # Tools handed straight to set_active_tool (component placement after
