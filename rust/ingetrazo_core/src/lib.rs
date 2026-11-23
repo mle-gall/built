@@ -24,7 +24,7 @@ mod facesview;
 mod gltape;
 mod hlr;
 mod igz;
-#[cfg(target_os = "macos")]
+#[cfg(unix)]
 mod file_archive;
 mod file_json;
 mod file_geometry;
@@ -122,13 +122,13 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(snap_engine::resolve_snap, m)?)?;
     m.add_function(wrap_pyfunction!(snap::lock_crossing, m)?)?;
     m.add_function(wrap_pyfunction!(snap_build::build_snap_index, m)?)?;
-    #[cfg(target_os = "macos")]
+    #[cfg(unix)]
     m.add_function(wrap_pyfunction!(file_archive::igz_write_zip, m)?)?;
-    #[cfg(target_os = "macos")]
+    #[cfg(unix)]
     m.add_function(wrap_pyfunction!(file_archive::igz_read_member, m)?)?;
-    #[cfg(target_os = "macos")]
+    #[cfg(unix)]
     m.add_class::<file_archive::DocumentReader>()?;
-    #[cfg(target_os = "macos")]
+    #[cfg(unix)]
     m.add_class::<file_archive::ArchiveProgress>()?;
     m.add_function(wrap_pyfunction!(file_annotations::igz_load_annotations, m)?)?;
     m.add_function(wrap_pyfunction!(file_annotations::igz_archive_annotations, m)?)?;

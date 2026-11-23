@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Deterministic, seekable ZIP output as produced by Python's ZipInfo.
-//! The host's zlib is the codec used by the reference writer on macOS.
+//! The reference writer on Unix uses the host zlib.
 use pyo3::prelude::*;
 use pyo3::pybacked::PyBackedBytes;
 use std::ffi::{c_char, c_int, c_uint, c_ulong, c_void};
