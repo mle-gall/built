@@ -144,9 +144,6 @@ struct Renderer {
     capture_next: bool,
     captured: Option<Vec<u8>>,
     overlay: overlay::Overlay,
-    /// The Sheets workspace's page (views/wgpu_sheets.py): drawn by
-    /// ``render_page`` instead of the scene.
-    page: overlay::Overlay,
     axes: axes::Axes,
     sections: sections::Sections,
     preview: preview::Preview,
@@ -572,7 +569,6 @@ impl Renderer {
             capture_next: false,
             captured: None,
             overlay: overlay::Overlay::new(&device, config.format),
-            page: overlay::Overlay::new(&device, config.format),
             axes: axes::Axes::new(samples.clone(), &device, format, &camera),
             sections: sections::Sections::new(samples.clone(), &device, format, &camera),
             lines: lines::Lines::new(samples.clone(), &device, format, &camera),
@@ -2092,24 +2088,78 @@ impl Renderer {
             .upload(&self.device, &self.queue, width, height, bytes);
         Ok(())
     }
-    /// The Sheets page layer: the ``w`` × ``h`` rectangle at ``x``, ``y`` of
-    /// a ``width`` × ``height`` image (physical pixels, straight RGBA). The
-    /// image is (re)made at that size first; False when the rectangle does
-    /// not fit it.
-    #[allow(clippy::too_many_arguments)]
-    fn page_upload(&mut self, width: u32, height: u32, x: u32, y: u32, w: u32, h: u32,
-                   rgba: PyReadonlyArray1<'_, u8>) -> PyResult<bool> {
-        let bytes = rgba.as_slice()?;
-        if width == 0 || height == 0 {
-            return Err(PyValueError::new_err("page must have a size"));
-        }
-        self.page.ensure(&self.device, width, height);
-        Ok(self.page.upload_region(&self.queue, x, y, w, h, bytes))
+    // ---- The Sheets page (ui/page.rs, docs/rust-sheets.md) -------------------
+    /// The sheet as ``ingetrazo_core.sheet_page_json`` writes it.
+    fn page_set(&mut self, snapshot: String) {
+        if let Some(ui) = self.ui.as_mut() { ui.page.set(snapshot); }
     }
-    /// The page layer's image size, or None.
-    fn page_size(&self) -> Option<(u32, u32)> { self.page.size() }
-    /// Let the page layer go (leaving the workspace).
-    fn page_clear(&mut self) { self.page.clear(); }
+    /// Let the page go (leaving the workspace).
+    fn page_clear(&mut self) {
+        if let Some(ui) = self.ui.as_mut() { ui.page.clear(); }
+    }
+    /// A frame's line drawing: ``segs`` (N,4) paper mm in the frame,
+    /// ``kinds`` (N,) 0 edge, 1 profile, 2 cut, 3 hidden.
+    fn page_frame_lines(&mut self, key: u64, segs: numpy::PyReadonlyArray2<'_, f32>,
+                        kinds: PyReadonlyArray1<'_, u8>) -> PyResult<()> {
+        let a = segs.as_array();
+        let kinds = kinds.as_slice()?.to_vec();
+        if a.nrows() != kinds.len() || (a.nrows() > 0 && a.ncols() != 4) {
+            return Err(PyValueError::new_err("segs (N,4) and kinds (N,) must agree"));
+        }
+        let segs = (0..a.nrows()).map(|i| [a[[i, 0]], a[[i, 1]], a[[i, 2]], a[[i, 3]]]).collect();
+        if let Some(ui) = self.ui.as_mut() { ui.page.set_lines(key, segs, kinds); }
+        Ok(())
+    }
+    /// A frame's picture, straight RGBA ``width`` × ``height``.
+    fn page_frame_image(&mut self, key: u64, width: usize, height: usize,
+                        rgba: PyReadonlyArray1<'_, u8>) -> PyResult<()> {
+        let bytes = rgba.as_slice()?;
+        if let Some(ui) = self.ui.as_mut() { ui.page_image(key, width, height, bytes); }
+        Ok(())
+    }
+    fn page_frame_forget(&mut self, key: u64) {
+        if let Some(ui) = self.ui.as_mut() { ui.page.forget_content(key); }
+    }
+    fn page_has_content(&self, key: u64) -> bool {
+        self.ui.as_ref().is_some_and(|ui| ui.page.has_content(key))
+    }
+    /// A pointer event the chrome left to the page (``ui_pointer`` said
+    /// False). Returns the cursor the page wants ("", "move", "grab",
+    /// "grabbing", "crosshair", "zoom", "resize_h", "resize_v",
+    /// "resize_nwse", "resize_nesw").
+    fn page_pointer(&mut self, kind: &str, x: f32, y: f32, button: u8, modifiers: u8) -> String {
+        self.ui.as_mut().map(|ui| ui.page_pointer(kind, x, y, button, modifiers).to_string()).unwrap_or_default()
+    }
+    /// A key the chrome left to the page (arrows nudge, Escape clears).
+    fn page_key(&mut self, name: &str, modifiers: u8) -> bool {
+        self.ui.as_mut().is_some_and(|ui| ui.page_key(name, modifiers))
+    }
+    /// Scroll pans; with ``zoom`` it zooms about (x, y) instead.
+    fn page_wheel(&mut self, x: f32, y: f32, dx: f32, dy: f32, zoom: bool) {
+        if let Some(ui) = self.ui.as_mut() {
+            if zoom { ui.page.zoom_about(egui::pos2(x, y), (dy * 0.0025).exp()); } else { ui.page.pan_by(dx, dy); }
+        }
+    }
+    /// Zoom by ``factor`` about (x, y) (a pinch).
+    fn page_zoom_by(&mut self, x: f32, y: f32, factor: f32) {
+        if let Some(ui) = self.ui.as_mut() { ui.page.zoom_about(egui::pos2(x, y), factor.max(0.05)); }
+    }
+    fn page_fit(&mut self, width_only: bool) {
+        if let Some(ui) = self.ui.as_mut() { ui.page.request_fit(width_only); }
+    }
+    fn page_zoom_to(&mut self, percent: f32) {
+        if let Some(ui) = self.ui.as_mut() { ui.page.request_zoom(percent); }
+    }
+    /// The zoom in percent of true paper size.
+    fn page_zoom(&self) -> f32 { self.ui.as_ref().map_or(100.0, |ui| ui.page.zoom_percent()) }
+    /// Where the pointer is on the paper (mm), or None.
+    fn page_pointer_mm(&self) -> Option<(f64, f64)> {
+        self.ui.as_ref().and_then(|ui| ui.page.pointer_mm).map(|p| (p[0], p[1]))
+    }
+    fn page_select(&mut self, keys: Vec<u64>) {
+        if let Some(ui) = self.ui.as_mut() { ui.page.set_selection(keys); }
+    }
+    fn page_selection(&self) -> Vec<u64> { self.ui.as_ref().map(|ui| ui.page.selection.clone()).unwrap_or_default() }
     /// A frame of the Sheets workspace: the desk, the page layer, the chrome
     /// over it. No scene pass runs; the resident scene stays as it is.
     #[pyo3(signature = (present=true))]
@@ -2131,7 +2181,7 @@ impl Renderer {
         let color = target.create_view(&Default::default());
         let mut e = self.device.create_command_encoder(&Default::default());
         {
-            // The composer's desk (slate, 70 76 84) where the page has no pixels yet.
+            // The desk under the page (ui/page.rs paints the paper over it).
             let _pass = e.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("page desk"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -2147,7 +2197,6 @@ impl Renderer {
                 occlusion_query_set: None,
             });
         }
-        self.page.draw(&mut e, &color, self.config.width, self.config.height, None);
         if present && self.ui_target == self.active {
             if let Some(ui) = self.ui.as_mut() {
                 ui.paint(&self.device, &self.queue, &mut e, target, &color, [self.config.width, self.config.height], self.ui_scale);

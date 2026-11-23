@@ -2,18 +2,21 @@
 
 The native shell's host (app_shell/) runs the same view, chrome and input
 code as the Qt app's Metal view; here it has no surface, so a recording
-renderer stands in for the Metal one (the egui side is tested in Rust,
-ui/sheets.rs). The page is still rendered by the composer, offscreen, and
-input goes through the view's handlers exactly as the shell delivers it.
-Settings go to tmp_path; the model is a repository example.
+renderer stands in for the Metal one. The page itself is native: its
+snapshot comes from the document (ingetrazo_core sheet_page_json), and
+picking, moving, resizing and placing are tested in Rust (ui/page.rs);
+here, that the adapter sends the page and runs the page's actions through
+the sheet's history. Settings go to tmp_path; the model is synthetic
+(scripts/sheets_fixture.py).
 """
+import json
 from pathlib import Path
 
 import pytest
 from PySide6.QtCore import QPointF, Qt
 from tests.shell_isolation import restore_shell_patches  # noqa: F401  (autouse)
 
-EXAMPLE = Path(__file__).resolve().parents[1] / "examples" / "arco-yanque.igz"
+ROOT = Path(__file__).resolve().parents[1]
 
 
 class Recorder:
@@ -48,10 +51,23 @@ class Recorder:
         self.calls.append(("render", ()))
         return 1.0, None
 
-    def page_upload(self, width, height, x, y, w, h, pixels):
-        assert len(pixels) == w * h * 4
-        self.uploads.append((width, height, x, y, w, h))
-        return True
+    def page_zoom(self):
+        return 100.0
+
+    def page_pointer_mm(self):
+        return None
+
+    def page_pointer(self, *a):
+        self.calls.append(("page_pointer", a))
+        return ""
+
+    def page_key(self, name, mods):
+        self.calls.append(("page_key", (name, mods)))
+        return False
+
+    def page(self):
+        """The last page snapshot, parsed."""
+        return json.loads(self.last("page_set")[0])
 
     def ui_take_actions(self):
         out, self.actions = self.actions, []
@@ -90,8 +106,13 @@ def host(tmp_path, monkeypatch):
     # Model views would render through the Metal view, absent headless.
     monkeypatch.setattr(ComposerWindow, "render_frame", lambda self, f: None)
     monkeypatch.setattr(wgpu_sheets, "FORCE", True)
+    import sys
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import sheets_fixture
+    doc = tmp_path / "sheet.igz"
+    sheets_fixture.build(doc)
     h = Host(0, 1280, 800, 2.0, settings=str(tmp_path / "settings"))
-    assert h.open(EXAMPLE)
+    assert h.open(doc)
     from PySide6.QtCore import QTimer
     view = h.view
     view.renderer = Recorder()
@@ -141,7 +162,10 @@ def test_the_workspace_switch_swaps_the_frame_not_the_window(host):
     rec.calls.clear()
     host.view.draw_frame()
     assert "render_page" in rec.names() and "render" not in rec.names()
-    assert rec.uploads and rec.uploads[0][:2] == (2560, 1600)       # the whole page, at 2x
+    page = rec.page()                                                # the native page
+    assert page["size"] == [420.0, 297.0] and page["name"] == "Plans"
+    kinds = sorted(i["kind"] for i in page["items"])
+    assert kinds == ["frame", "frame", "text", "titleblock"]
     tabs = rec.last("ui_set_tabs")[0]
     assert [t[1] for t in tabs[0]] == ["Model", "Sheets"] and tabs[0][1][4] == 1
     assert tabs[1] == []                                            # no scene stepper on sheets
@@ -168,26 +192,57 @@ def test_repeated_switches_never_break(host):
     assert host.errors == []
 
 
-def test_only_what_changed_is_rendered_again(host):
-    from views.composer import _SheetItem
+def test_the_page_follows_the_document_and_only_then(host):
+    from views.composer import TextItem
     ws = _sheets(host)
     rec = host.view.renderer
     from PySide6.QtWidgets import QApplication
     QApplication.processEvents()                 # the composer's deferred rebuilds
     host.view.draw_frame()
-    rec.uploads.clear()
+    rec.calls.clear()
     host.view.draw_frame()
-    assert rec.uploads == []                                         # nothing changed
-    item = next(it for it in ws.composer.canvas.items() if isinstance(it, _SheetItem) and not it.model.locked)
+    assert "page_set" not in rec.names()                             # nothing changed
+    item = next(it for it in ws.composer.canvas.items() if isinstance(it, TextItem))
+    x0 = item.model.x_mm
     item.setSelected(True)
     ws.composer.on_selection_changed()
     ws.composer.nudge_selected(5.0, 0.0)
-    from PySide6.QtWidgets import QApplication
     QApplication.processEvents()
     host.view.draw_frame()
-    assert rec.uploads
-    x, y, w, h = rec.uploads[-1][2:]
-    assert w * h < 2560 * 1600 / 4                                   # a part, not the page
+    text = next(i for i in rec.page()["items"] if i["kind"] == "text")
+    assert text["rect"][0] == pytest.approx(x0 + 5.0)
+    assert rec.last("page_select")[0] == [item.model._doc_key]       # the dock's selection, on the page
+
+
+def test_frames_show_the_vector_pass_and_the_renders(host, monkeypatch):
+    import numpy as np
+    from PySide6.QtGui import QImage
+    from views.composer import ComposerWindow
+
+    def render(self, frame):
+        if frame.style == "vectorial":
+            self.hlr_cache[id(frame)] = np.array([[0, 0, 10, 0], [0, 0, 0, 5]], float)
+            self.hlr_kinds[id(frame)] = np.array([0, 1], np.int8)
+            return None
+        image = QImage(40, 30, QImage.Format_RGB32)
+        image.fill(0xff336699)
+        self.render_cache[id(frame)] = image
+        return image
+    monkeypatch.setattr(ComposerWindow, "render_frame", render)
+    ws = _sheets(host)
+    rec = host.view.renderer
+    for _ in range(3):
+        host.view.draw_frame()                                       # one frame rendered per turn
+    plan, iso = ws.composer.comp.frames
+    lines = rec.last("page_frame_lines")
+    assert lines[0] == plan._doc_key
+    assert lines[1].tolist() == [[0, 0, 10, 0], [0, 0, 0, 5]] and lines[2].tolist() == [0, 1]
+    image = rec.last("page_frame_image")
+    assert image[:3] == (iso._doc_key, 40, 30) and len(image[3]) == 40 * 30 * 4
+    assert image[3][:4].tolist() == [0x33, 0x66, 0x99, 0xff]
+    rec.calls.clear()
+    host.view.draw_frame()
+    assert "page_frame_lines" not in rec.names() and "page_frame_image" not in rec.names()
 
 
 # ---- the sheet list ------------------------------------------------------------------
@@ -314,38 +369,76 @@ def test_keys_go_to_the_page_and_window_keys_stay_the_window_s(host):
     assert host.errors == []
 
 
-def test_a_drag_on_the_page_moves_the_item_under_it(host):
+def test_a_drag_on_the_page_is_one_step_of_the_sheet_s_history(host):
     ws = _sheets(host)
-    cv = ws.cv
-    item = _texts(host, ws)
-    centre = cv.mapFromScene(item.sceneBoundingRect().center())
-    x0 = item.model.x_mm
-    host.pointer("move", centre.x(), centre.y(), 0, 0, 0)
-    host.pointer("press", centre.x(), centre.y(), Qt.LeftButton.value, Qt.LeftButton.value, 0)
-    for k in range(1, 6):
-        host.pointer("move", centre.x() + 8 * k, centre.y(), 0, Qt.LeftButton.value, 0)
-    host.pointer("release", centre.x() + 40, centre.y(), Qt.LeftButton.value, 0, 0)
-    assert item.isSelected()
-    assert item.model.x_mm > x0
+    comp = ws.composer
+    plan = comp.comp.frames[0]
+    key = plan._doc_key
+    host.pointer("move", 400, 300, 0, 0, 0)
+    assert host.view.renderer.last("page_pointer")[0] == "move"     # the chrome left it to the page
+    # What ui/page.rs sends for a click on the plan, then a drag that resized it.
+    _run_actions(host, f"sheets:select\x1f{key}")
+    assert [it.model for it in comp.canvas.selectedItems()] == [plan]
+    assert ws.inspector()[0] == "Model view"
+    _run_actions(host, f"sheets:rects\x1f{key}:30:25:150:120")
+    assert (plan.x_mm, plan.y_mm, plan.w_mm, plan.h_mm) == (30, 25, 150, 120)
+    comp._on_undo()
+    assert (plan.x_mm, plan.y_mm, plan.w_mm, plan.h_mm) == (20, 20, 190, 150)
+    # Two items moved together: one step.
+    text = comp.comp.texts[0]
+    _run_actions(host, f"sheets:rects\x1f{key}:22:20:190:150;{text._doc_key}:22:190:180:9")
+    assert plan.x_mm == 22 and text.x_mm == 22 and text.y_mm == 190
+    comp._on_undo()
+    assert plan.x_mm == 20 and text.x_mm == 20
+    # A locked item stays where it is.
+    plan.locked = True
+    _run_actions(host, f"sheets:rects\x1f{key}:60:60:190:150")
+    assert plan.x_mm == 20
     assert host.errors == []
 
 
-def test_pan_and_zoom(host):
+def test_the_view_tool_places_a_frame(host):
     ws = _sheets(host)
     comp = ws.composer
+    _run_actions(host, "sheets:tool\x1fvista")
+    assert comp.tool_mode == "vista"
+    host.view.draw_frame()
+    assert host.view.renderer.last("ui_set_sheet_active") == ("vista",)
+    before = len(comp.comp.frames)
+    _run_actions(host, "sheets:place\x1f230\x1f190\x1f330\x1f260")
+    assert len(comp.comp.frames) == before + 1
+    f = comp.comp.frames[-1]
+    assert (f.x_mm, f.y_mm, f.w_mm, f.h_mm) == (230, 190, 100, 70)
+    comp._on_undo()
+    assert len(comp.comp.frames) == before
+
+
+def test_tools_not_native_yet_open_the_classic_editor(host, monkeypatch):
+    ws = _sheets(host)
+    opened = []
+    monkeypatch.setattr(type(ws), "open_classic", lambda self, tool="": opened.append(tool))
+    _run_actions(host, "sheets:tool\x1fcota")
+    assert opened == ["cota"] and ws.composer.tool_mode != "cota"
+    groups = host.view.renderer.last("ui_set_sheet_tools")[0]
+    names = {t[0]: t[1] for g in groups for t in g}
+    assert "classic" in names["cota"] and "classic" not in names["vista"]
+
+
+def test_pan_and_zoom(host):
+    from PySide6.QtCore import QPointF
+    ws = _sheets(host)
+    rec = host.view.renderer
     _act(host, "zoom\x1f200 %")
-    assert comp.zoom_percent() == pytest.approx(200.0, rel=0.02)
-    centre = ws.cv.mapToScene(ws.cv.viewport().rect().center())
+    assert rec.last("page_zoom_to") == (200.0,)
     host.wheel(640, 400, 0, -120, 0, -120)                          # scroll pans
-    moved = ws.cv.mapToScene(ws.cv.viewport().rect().center())
-    assert (moved - centre).manhattanLength() > 1
-    z = comp.zoom_percent()
+    assert rec.last("page_wheel") == (640.0, 400.0, 0.0, -120.0, False)
     host.wheel(640, 400, 0, 0, 0, 120, modifiers=Qt.ControlModifier.value)
-    assert comp.zoom_percent() > z                                   # ⌘-wheel zooms
+    assert rec.last("page_wheel")[4] is True                         # ⌘-wheel zooms
     host.gesture("zoom", 0.5, 640, 400)
-    assert comp.zoom_percent() > z * 1.3
+    assert rec.last("page_zoom_by") == (640.0, 400.0, 1.5)
     _act(host, "fit")
-    assert comp.zoom_percent() < z
+    assert rec.last("page_fit") == (False,)
+    assert ws.status()[-1] == "100%"
 
 
 # ---- export ----------------------------------------------------------------------------
@@ -362,5 +455,5 @@ def test_export_pdf_from_the_workspace(host, tmp_path, monkeypatch):
     _act(host, "export\x1fpdf")
     assert out.read_bytes()[:4] == b"%PDF"
     assert asked and asked[0][1].endswith(".pdf")                    # next to the document
-    assert Path(asked[0][1]).parent == EXAMPLE.parent
+    assert Path(asked[0][1]).parent == Path(host.window._current_path).parent
     assert ws.last_export == str(out)

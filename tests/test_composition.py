@@ -385,10 +385,12 @@ class TestHLR:
 
     def _spans(self, a2, b2, az, bz, tris2, trisz, eps=1e-6):
         import numpy as np
-        from core.hlr import visible_spans
-        return visible_spans(np.array(a2, float), np.array(b2, float),
-                             az, bz, np.array(tris2, float),
-                             np.array(trisz, float), eps)
+        from ingetrazo_core import HlrOccluders
+        tris = np.concatenate([np.array(tris2, float),
+                               np.array(trisz, float)[..., None]], axis=2)
+        off, spans = HlrOccluders(tris).visible_spans(
+            np.array([[*a2, az]], float), np.array([[*b2, bz]], float), eps)
+        return [(float(s0), float(s1)) for s0, s1 in spans[off[0]:off[1]]]
 
     def test_unoccluded_edge_is_whole(self):
         spans = self._spans((-1, 0), (1, 0), 0.0, 0.0,

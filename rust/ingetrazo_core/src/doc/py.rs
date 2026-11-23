@@ -252,6 +252,12 @@ impl DocRecord {
         Self { key: lock().alloc(Kind::Record) }
     }
 
+    /// The record's document key (what the native sheet page names items by).
+    #[getter]
+    fn _doc_key(&self) -> Key {
+        self.key
+    }
+
     fn _load_file_view(slf: &Bound<'_, Self>, raw: &Bound<'_, PyDict>) -> PyResult<bool> {
         super::file_view::load(raw, |name, value| {
             let attr = attr_id(name).map_err(err)?;

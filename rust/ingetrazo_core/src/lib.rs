@@ -79,6 +79,7 @@ mod push_guard;
 mod object_weld;
 mod object_merge;
 mod panic_log;
+mod sheets;
 
 #[pymodule]
 fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -141,6 +142,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pack_materials::pack_materials, m)?)?;
     m.add_function(wrap_pyfunction!(pack::pack_weld, m)?)?;
     m.add_class::<HlrOccluders>()?;
+    sheets::py::register(m)?;
     m.add_function(wrap_pyfunction!(touching_boxes, m)?)?;
     m.add_class::<ParityTris>()?;
     m.add_function(wrap_pyfunction!(orient::orient_decision, m)?)?;

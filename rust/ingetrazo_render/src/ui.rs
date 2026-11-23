@@ -15,6 +15,8 @@ pub mod dialog;
 pub mod operation_form;
 /// Sheets, a workspace of the window (views/wgpu_sheets.py).
 mod sheets;
+/// The sheet page itself, native (docs/rust-sheets.md).
+pub mod page;
 mod activity;
 mod plugins;
 pub use activity::ActivityRow;
@@ -151,6 +153,8 @@ pub struct Ui {
     cursor_shape: &'static str,
     /// The Sheets workspace: while on, the page replaces the model (ui/sheets.rs).
     sheets: sheets::Sheets,
+    /// The page of the Sheets workspace (ui/page.rs).
+    pub page: page::Page,
     /// The project tabs (ui/tabs.rs): drawn instead of the document ▾
     /// once Python sends them.
     strip: tabs::Strip,
@@ -312,6 +316,7 @@ impl Ui {
             background_plugins: Default::default(),
             cursor_shape: "",
             sheets: Default::default(),
+            page: Default::default(),
             strip: Default::default(),
             ctx_menu: None,
             lsheet: Default::default(),
@@ -2475,6 +2480,9 @@ impl Ui {
             let retract = ctx.animate_bool_with_time(egui::Id::new("retract_model_chrome"),
                                                       self.review || sheet_up, large_sheet::ANIM_S);
             if self.sheets.shown {
+                let free = self.page_free(ctx, screen);
+                self.page.tool = self.sheets.active.clone();
+                self.page.paint(ctx, screen, free);
                 self.sheets_frame(ctx, screen, retract);
             } else {
                 if retract < 1.0 {

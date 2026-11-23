@@ -18,7 +18,7 @@ pub type SheetRow = (String, String, bool);
 pub struct Sheets {
     pub shown: bool,
     tools: Vec<Vec<Tool>>,
-    active: String,
+    pub(super) active: String,
     list: Vec<SheetRow>,
     /// Inline rename: the row and the text being typed.
     renaming: Option<(usize, String)>,

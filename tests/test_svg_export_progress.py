@@ -125,7 +125,9 @@ def test_every_stretch_of_the_work_is_heard(monkeypatch):
     heard.clear()
     with P.reporting(lambda done: None):
         hlr_drawing(scene, cam)
-    assert {"eat_mesh", "_merge_collinear"} <= set(heard)
+    # The walk is heard; the classification runs in Rust in one call
+    # (ingetrazo_core sheets::drawing).
+    assert "eat_mesh" in heard
 
 
 # ---- The bar ----------------------------------------------------------------

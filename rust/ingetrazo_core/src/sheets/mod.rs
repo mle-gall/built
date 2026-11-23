@@ -1,0 +1,15 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
+//! Sheets: the document side of the sheet composer (docs/rust-sheets.md).
+//!
+//! - `drawing`: a frame's line drawing (the classification pass of HLR);
+//! - `svg`: the SVG writer of a frame's line groups;
+//! - `model`: typed views of the sheet records in the document;
+//! - `page`: the page display list the renderer paints.
+
+pub mod drawing;
+pub mod model;
+pub mod page;
+pub mod py;
+pub mod pymath;
+pub mod svg;
