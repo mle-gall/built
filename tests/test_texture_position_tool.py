@@ -33,11 +33,13 @@ def viewport():
     elif not isinstance(app, QApplication):
         pytest.skip("another Qt application flavour is already running")
     from tests.controller_surface import ControllerSurface as Viewport
+    from tests.qt_window_lifetime import close_window
     vp = Viewport(None)
     vp.resize(1000, 700)
     vp.camera.set_aspect(1000, 700)
     vp.flash_status = lambda *a, **k: None
-    return vp
+    yield vp
+    close_window(vp)
 
 
 TEX = {"path": "brick.png", "sw": 0.5, "sh": 0.5}
