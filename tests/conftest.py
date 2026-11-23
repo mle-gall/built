@@ -105,6 +105,25 @@ def _restore_settings_paths():
 
 
 @pytest.fixture(autouse=True)
+def _process_environment():
+    """Each test leaves ``os.environ`` as it found it. The app writes it on
+    purpose (``core._native.start_guard`` sets INGETRAZO_RUST=0 for
+    ``--python-engine``), so a test that runs such code without a
+    monkeypatch, or with one that records the written value, changed every
+    later test in the process: under pytest-xdist the bake tests then ran
+    with the engine off. Autouse, so it is set up before and torn down
+    after the test's own monkeypatch."""
+    before = dict(os.environ)
+    yield
+    if dict(os.environ) != before:
+        for key in set(os.environ) - set(before):
+            del os.environ[key]
+        for key, value in before.items():
+            if os.environ.get(key) != value:
+                os.environ[key] = value
+
+
+@pytest.fixture(autouse=True)
 def _world_drawing_axes():
     """The drawing axes are process-wide (core.axes, issue #44): a test that
     leaves a turned group open must not tilt the next one's inferences."""
