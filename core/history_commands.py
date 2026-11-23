@@ -846,16 +846,8 @@ class EnsureLayersCommand(Command):
             scene.version += 1
 
     def do(self, scene) -> None:
-        if _doc.ENABLED:
-            from ingetrazo_core import add_template_layers
-            self._added = add_template_layers(scene, self._template)
-            if any(self._added):
-                scene.version += 1
-            return
-        from core.layers import add_missing
-        layers, folders = add_missing(scene, self._template)
-        self._added = ([scene.layer_by_key(n).uid for n in layers],
-                       [scene.layer_folder_uids[n] for n in folders])
+        from ingetrazo_core import add_template_layers
+        self._added = add_template_layers(scene, self._template)
         if any(self._added):
             scene.version += 1
 

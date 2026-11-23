@@ -3,7 +3,7 @@
 from collections import Counter, defaultdict
 from copy import deepcopy
 
-from core import bim_registry, links, doc_model
+from core import bim_registry, links
 from core.history import (AssignLayerCommand, Command, CompoundCommand, EnsureLayersCommand,
                           SetRecordCommand, SetRegistryCommand, SetStructureNodeCommand)
 from core.layers import DEFAULT_LAYER, layer_of
@@ -110,38 +110,16 @@ def _patch(group, recipe, registry):
 
 class _EnsureStructureLayers(EnsureLayersCommand):
     def do(self, scene):
-        if doc_model.ENABLED:
-            from ingetrazo_core import structure_folder_state, apply_folder_parents
-            self._folders = structure_folder_state(scene)
-            super().do(scene)
-            apply_folder_parents(scene, self._template)
-            scene.version += 1
-            return
-        # Layer import materializes identities for older folders as a side effect.
-        self.previous_parents = dict(scene.folder_parents)
-        self.previous_ids = dict(scene.layer_folder_uids)
-        self.previous_folders = list(scene.layer_folders)
-        self.previous_active = scene.active_layer
+        from ingetrazo_core import structure_folder_state, apply_folder_parents
+        self._folders = structure_folder_state(scene)
         super().do(scene)
-        for folder, parent in self._template['folder_parents'].items():
-            if parent is None:
-                scene.folder_parents.pop(folder, None)
-            else:
-                scene.folder_parents[folder] = parent
+        apply_folder_parents(scene, self._template)
         scene.version += 1
 
     def undo(self, scene):
-        if doc_model.ENABLED:
-            from ingetrazo_core import restore_structure_folders
-            super().undo(scene)
-            restore_structure_folders(scene, self._folders)
-            return
+        from ingetrazo_core import restore_structure_folders
         super().undo(scene)
-        scene.folder_parents = self.previous_parents
-        scene.version += 1
-        scene.layer_folder_uids = self.previous_ids
-        scene.layer_folders = self.previous_folders
-        scene.active_layer = self.previous_active
+        restore_structure_folders(scene, self._folders)
 
 
 class _MoveTag(Command):
@@ -151,13 +129,8 @@ class _MoveTag(Command):
         self.layer, self.folder = layer, folder
 
     def do(self, scene):
-        if doc_model.ENABLED:
-            from ingetrazo_core import definition_edits
-            self.before = definition_edits.set_placement_field(self.layer, "folder", self.folder)
-            scene.version += 1
-            return
-        self.before = self.layer.folder
-        self.layer.folder = self.folder
+        from ingetrazo_core import definition_edits
+        self.before = definition_edits.set_placement_field(self.layer, "folder", self.folder)
         scene.version += 1
 
     def undo(self, scene):
