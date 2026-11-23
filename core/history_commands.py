@@ -1877,6 +1877,25 @@ class PlaceViewCommand(Command):
         scene.version += 1
 
 
+class SheetCommand(Command):
+    """A sheet edit (core.composition's item commands: edit, add, remove,
+    several at once) as one step of the document's history: the native
+    Sheets page's gestures and inspector (docs/rust-sheets.md step 3)."""
+
+    doc_undo = True
+
+    def __init__(self, inner) -> None:
+        self.inner = inner
+
+    def do(self, scene) -> None:
+        self.inner.do()
+        scene.version += 1
+
+    def undo(self, scene) -> None:
+        self.inner.undo()
+        scene.version += 1
+
+
 class MoveSheetCommand(Command):
     """A sheet to another place in the set: the order the strip shows,
     the atlas prints and {hoja} counts."""

@@ -313,12 +313,39 @@ impl Ui {
     /// The workspace's chrome under the top bar (which the caller draws).
     pub(super) fn sheets_frame(&mut self, ctx: &egui::Context, screen: Rect, retract: f32) {
         if retract == 1.0 { return; }
+        // The inspector is the page's: the selected item's record, or the sheet's.
+        if let Some(doc) = self.page.doc.as_ref() {
+            let (title, sections) = crate::sheet_inspector::sections(doc, &self.page.selection);
+            self.sheets.set_inspector(title, sections);
+        }
+        let first = self.actions.len();
         self.sheets_rail(ctx, screen, retract);
         self.sheets_dock(ctx, screen, retract);
         self.sheets_bottom(ctx, screen, retract);
-        if retract > 0.0 { return; }
-        self.sheets_row_menu(ctx);
-        self.sheets_pick(ctx);
+        if retract == 0.0 {
+            self.sheets_row_menu(ctx);
+            self.sheets_pick(ctx);
+        }
+        self.sheets_typed_edits(first);
+    }
+
+    /// The inspector's row edits (``edit␟owner:field␟raw``) as the field
+    /// changes they make (sheet_inspector.rs); other actions pass.
+    fn sheets_typed_edits(&mut self, first: usize) {
+        let Some(doc) = self.page.doc.as_ref() else { return };
+        let fresh: Vec<String> = self.actions.drain(first..).collect();
+        for a in fresh {
+            let body = a.strip_prefix("sheets:").unwrap_or("");
+            let mut parts = body.splitn(3, SEP);
+            let (verb, fid, raw) = (parts.next().unwrap_or(""), parts.next().unwrap_or(""), parts.next().unwrap_or(""));
+            if (verb == "edit" || verb == "button") && fid.contains(':') {
+                if let Some(typed) = crate::sheet_inspector::edit(doc, fid, raw) {
+                    self.actions.push(format!("sheets:{typed}"));
+                }
+            } else {
+                self.actions.push(a);
+            }
+        }
     }
 
     // ---- The tool rail -----------------------------------------------------------

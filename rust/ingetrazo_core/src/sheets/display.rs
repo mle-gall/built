@@ -213,5 +213,75 @@ pub fn sheet_item_size(py: Python<'_>, item: &Bound<'_, PyAny>) -> PyResult<(f64
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(sheet_item_display, m)?)?;
     m.add_function(wrap_pyfunction!(sheet_item_size, m)?)?;
+    m.add_function(wrap_pyfunction!(sheet_duplicates, m)?)?;
+    m.add_function(wrap_pyfunction!(sheet_next_z, m)?)?;
     Ok(())
+}
+
+/// Copies of sheet items for Duplicate (views/composer.py
+/// `duplicate_selected`): 5 mm down and right, unlocked, on top of the
+/// sheet in their order, grouped again under fresh group ids, a frame with
+/// a fresh uid, anchors let go. The title block is not copied. Returns the
+/// new records; adding them to the sheet is the caller's history step.
+#[pyfunction]
+pub fn sheet_duplicates<'py>(py: Python<'py>, sheet: &Bound<'py, PyAny>, items: Vec<Bound<'py, PyAny>>)
+    -> PyResult<Vec<Bound<'py, PyAny>>> {
+    let s = super::model::Sheet::read(sheet, None)?;
+    let next_z = s.items.iter().map(|i| i.z).fold(0.0f64, f64::max) + 1.0;
+    let uuid = py.import("uuid")?;
+    let fresh = || -> PyResult<String> { uuid.call_method0("uuid4")?.getattr("hex")?.extract() };
+    let mut groups: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    let mut out = Vec::new();
+    for item in items {
+        let class = item.get_type();
+        if class.name()?.to_string() == "Cajetin" {
+            continue;
+        }
+        let copy = class.call0()?;
+        let names: Vec<String> = item.getattr("_record_fields")?.extract()?;
+        let deep = py.import("copy")?.getattr("deepcopy")?;
+        for n in &names {
+            if let Ok(v) = item.getattr(n.as_str()) {
+                copy.setattr(n.as_str(), deep.call1((v,))?)?;
+            }
+        }
+        for k in ["x_mm", "y_mm"] {
+            let v: f64 = copy.getattr(k)?.extract()?;
+            copy.setattr(k, v + 5.0)?;
+        }
+        copy.setattr("locked", false)?;
+        let gid: String = copy.getattr("group_id").and_then(|g| g.extract()).unwrap_or_default();
+        if !gid.is_empty() {
+            let new = match groups.get(&gid) {
+                Some(g) => g.clone(),
+                None => {
+                    let g = fresh()?;
+                    groups.insert(gid, g.clone());
+                    g
+                }
+            };
+            copy.setattr("group_id", new)?;
+        }
+        if names.iter().any(|n| n == "uid") {
+            copy.setattr("uid", if class.name()?.to_string() == "MarcoVista" { fresh()? } else { String::new() })?;
+        }
+        if names.iter().any(|n| n == "anchor_uid") {
+            copy.setattr("anchor_uid", "")?;
+            copy.setattr("a_world", py.None())?;
+            if names.iter().any(|n| n == "b_world") {
+                copy.setattr("b_world", py.None())?;
+            }
+        }
+        copy.setattr("z", next_z + out.len() as f64)?;
+        out.push(copy);
+    }
+    Ok(out)
+}
+
+/// The z an item put on top of sheet ``sheet`` takes (the composer's
+/// ``_next_z``): above every item on it.
+#[pyfunction]
+pub fn sheet_next_z(sheet: &Bound<'_, PyAny>) -> PyResult<f64> {
+    let s = super::model::Sheet::read(sheet, None)?;
+    Ok(s.items.iter().map(|i| i.z).fold(0.0f64, f64::max) + 1.0)
 }
