@@ -10,10 +10,10 @@ from views import chrome_sheet
 
 class NativeSheet(chrome_sheet.Sheet):
     """Use a Spec already assembled by the renderer crate."""
-    def __init__(self, sid, snapshot):
+    def __init__(self, sid, snapshot=None, *, spec=None):
         from ingetrazo_render import surface_spec
         super().__init__(sid)
-        self.spec = json.loads(surface_spec(sid, json.dumps(snapshot)))
+        self.spec = json.loads(spec if spec is not None else surface_spec(sid, json.dumps(snapshot)))
         self.focused = self.spec.get("focus")
 
     def wire(self, search_text=None, search_force=False):

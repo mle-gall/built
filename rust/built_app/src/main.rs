@@ -584,6 +584,12 @@ impl App {
             Ok(m) => self._menus = Some(m),
             Err(e) => eprintln!("[built] menu bar: {e}"),
         }
+        #[cfg(built_bundle)]
+        if !self.args.temporary_profile() {
+            if let Some(w) = self.win(id) {
+                w.host.call("menu", ("check_updates_quiet",));
+            }
+        }
         let mut files: Vec<PathBuf> = self.args.file.clone().into_iter().collect();
         files.append(&mut self.pending_opens);
         if files.is_empty() {
@@ -1109,7 +1115,7 @@ fn main() {
         cli_files: Vec::new(),
         started: false,
     };
-    app.cli_files = app.args.file.clone().into_iter().collect();
+    app.cli_files = app.args.file.iter().chain(&app.args.script).cloned().collect();
     if let Err(e) = event_loop.run_app(&mut app) {
         eprintln!("built: {e}");
         app.exit_code = 1;

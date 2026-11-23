@@ -4090,12 +4090,12 @@ class MainWindow(WorksessionMixin, QMainWindow):
         open_search(self)
 
     def _on_check_updates(self) -> None:
-        from views.update_dialog import start_check
+        from views.release_check import start_check
         start_check(self, quiet=False)
 
     def check_updates_quietly(self) -> None:
-        """Once a day at start: see views/update_dialog.py."""
-        from views.update_dialog import start_check
+        """Once a day at start: see views/release_check.py."""
+        from views.release_check import start_check
         start_check(self, quiet=True)
 
     def _on_cut_list(self) -> None:

@@ -109,6 +109,8 @@ def command(win, name, *args):
         "save": lambda: save(win),
         "save_as": lambda: save_as(win),
         "save_copy": lambda: save_copy(win),
+        "check_updates": lambda: win._on_check_updates(),
+        "check_updates_quiet": lambda: win.check_updates_quietly(),
         "export_image": lambda: win._on_export_image(),
         "soften": lambda: win._on_soften_edges(),
         "export_igz": lambda: export_igz(win),

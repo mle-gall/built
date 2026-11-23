@@ -66,6 +66,7 @@ pub struct Spec {
     pub id: String,
     pub title: String,
     pub tabs: Vec<Tab>,
+    pub default_verb: String,
     pub verbs: Vec<Verb>,
     pub search: Option<Search>,
     pub menus: Vec<HeadMenu>,
@@ -138,6 +139,7 @@ pub struct Block {
     pub rows: Vec<(String, String, String)>,
     pub cells: Vec<Vec<String>>,
     pub fields: Vec<dialog::Field>,
+    pub spans: Vec<kit::ProseSpan>,
     pub buttons: Vec<Verb>,
     /// tiles: the picture's side; picture: its height.
     pub size: f32,
@@ -507,6 +509,10 @@ impl Draw<'_> {
                     ui.add(egui::Label::new(egui::RichText::new(&b.text).font(body()).color(color)).wrap());
                     ui.add_space(SPACE_XS);
                 }
+                "prose" => {
+                    if let Some(id) = kit::prose(ui, &b.spans) { self.out.push(format!("verb{SEP}{id}")); }
+                    ui.add_space(SPACE_XS);
+                }
                 "separator" => {
                     ui.add_space(SPACE_S);
                     let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 1.0), Sense::hover());
@@ -866,6 +872,10 @@ impl Ui {
                 if let Some(id) = id {
                     let a = self.lsheet.act("open", &[&id]);
                     self.actions.push(a);
+                } else if let Some(spec) = &self.lsheet.spec {
+                    if let Some(verb) = spec.verbs.iter().find(|v| v.enabled && v.id == spec.default_verb) {
+                        self.actions.push(self.lsheet.act("verb", &[&verb.id]));
+                    }
                 }
                 true
             }

@@ -356,6 +356,16 @@ impl Gallery {
                 status_chip(ui, label, tone);
             }
         });
+        y += CONTROL_H + SPACE_S;
+        let r = Rect::from_min_size(pos2(at.x + name_w, y), vec2(w - name_w, CONTROL_H));
+        ui.painter().text(pos2(at.x, y + CONTROL_H / 2.), Align2::LEFT_CENTER, "Formatted prose", meta(), INK_2);
+        put(ui, r, across(), |ui| {
+            prose(ui, &[
+                ProseSpan { text: "Fixed ".into(), bold: true, ..Default::default() },
+                ProseSpan { text: "face selection. ".into(), ..Default::default() },
+                ProseSpan { text: "Release notes".into(), link: "notes".into(), ..Default::default() },
+            ]);
+        });
         y + CONTROL_H + SPACE_S
     }
 

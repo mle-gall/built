@@ -1195,6 +1195,38 @@ impl FontPicker {
     }
 }
 
+/// One run of formatted prose. Link ids are verbs owned by the sheet.
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub struct ProseSpan {
+    pub text: String,
+    pub bold: bool,
+    pub italic: bool,
+    pub heading: bool,
+    pub code: bool,
+    pub link: String,
+}
+
+pub fn prose(ui: &mut egui::Ui, spans: &[ProseSpan]) -> Option<String> {
+    let mut clicked = None;
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing.x = 0.;
+        for span in spans {
+            let font = if span.heading { heading() } else if span.bold { strong(TYPE_BODY) }
+                else if span.code { egui::FontId::monospace(TYPE_BODY) } else { body() };
+            let mut text = egui::RichText::new(&span.text).font(font).color(INK_2);
+            if span.italic { text = text.italics(); }
+            if span.link.is_empty() {
+                ui.add(egui::Label::new(text).wrap());
+            } else if ui.add(egui::Label::new(text.underline().color(ACCENT)).wrap()
+                .sense(egui::Sense::click())).on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
+                clicked = Some(span.link.clone());
+            }
+        }
+    });
+    clicked
+}
+
 #[cfg(test)]
 mod font_picker_tests {
     use super::*;
