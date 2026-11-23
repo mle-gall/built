@@ -13073,7 +13073,8 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         window = window() if callable(window) else None
         opener_fn = getattr(window, "open_path", None)
         if callable(opener_fn):
-            opener_fn(path)
+            from views.wgpu_tabs import open_link_source
+            open_link_source(window, path, group)
 
     # ---- Rest-of-model context while editing a group -------------------------
     @property

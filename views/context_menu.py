@@ -550,7 +550,7 @@ def _link(win, view, scene, sel, one):
     # The placement's padlock is the host's, not the linked file's.
     one(_lock_verb(win, view, list(sel)))
     one(_zoom(win))
-    one(Verb("linkopen", "Open source", lambda: wgpu_ui._link_action(win, view, g, "linkopen")))
+    one(Verb("linkopen", "Edit source", lambda: wgpu_ui._link_action(win, view, g, "linkopen")))
     one(Verb("linkreload", "Reload", lambda: wgpu_ui._link_action(win, view, g, "linkreload")))
     if len(sel) == 1:
         nested = bool((links.link_of(g) or {}).get("include_nested", True))
@@ -569,7 +569,7 @@ def _linked_part(win, view, scene, sel, one):
     one(_isolate(win, sel))
     one(_zoom(win))
     if host is not None:
-        one(Verb("linkopen", "Open source", lambda: wgpu_ui._link_action(win, view, host, "linkopen")))
+        one(Verb("linkopen", "Edit source", lambda: wgpu_ui._link_action(win, view, host, "linkopen")))
         one(Verb("linkreload", "Reload", lambda: wgpu_ui._link_action(win, view, host, "linkreload")))
 
 

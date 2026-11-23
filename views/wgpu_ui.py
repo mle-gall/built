@@ -533,6 +533,7 @@ def before_frame(view) -> None:
     _tabs(view, win)
     _projects(view, win)
     from views import wgpu_tabs
+    wgpu_tabs.sync_host_context(view, win)
     wgpu_tabs.before_frame(view, win)
     opts = [(i, label, k, state) for i, label, k, state, _ in _options(view)]
     if opts != getattr(view, "_ui_opts", None):
@@ -1844,7 +1845,14 @@ def _tree_action(win, view, action) -> None:
         view.update()
 
     try:
-        if verb == "documentroot":
+        if verb == "hosteye":
+            from views import wgpu_tabs
+            host, mount = wgpu_tabs.source_context(win)
+            if mount is not None:
+                _core(host.viewport, "set_tag_state", tags=[rk], visible=extra == "1")
+                host.viewport.notify_scene_changed()
+                view.update()
+        elif verb == "documentroot":
             from views.tree_navigation import open_to
             open_to(vp, [])
         elif verb in ("revealselection", "revealnode"):
@@ -2448,7 +2456,7 @@ def _inspector(view, win) -> None:
         if rec.get("class") and verbs.offers(sel_kind, "status"):
             sections.append(("Actions", [("status:" + v, v.capitalize()) for v in STATUS_CHOICES]))
         if sel_kind == "linked_part":
-            sections.append(("Actions", [("linkfile", "Select its linked file"), ("linkopen", "Open source")]))
+            sections.append(("Actions", [("linkfile", "Select its linked file"), ("linkopen", "Edit source")]))
         kids = list(getattr(g, "children", None) or [])
         if kids:
             parts = Counter(c.name or "Part" for c in kids)
@@ -2472,7 +2480,7 @@ def _inspector(view, win) -> None:
             sections.append(("Linked file", [("Source", str(link.get("path", "")).rsplit("/", 1)[-1]),
                                              ("Status", LINK_STATES.get(state, state)), *link_subset_rows(g),
                                              ("Nested links", "included" if nested else "source only")]))
-            acts = [("linkopen", "Open source"), ("linkreload", "Reload" if state != "modified" else "Reload changes"),
+            acts = [("linkopen", "Edit source"), ("linkreload", "Reload" if state != "modified" else "Reload changes"),
                     ("linkunlink", "Unlink"), ("linkfinder", "Show in Finder")]
             sections.append(("Actions", acts))
             sections.append(("Actions", [("linkrelink", "Relink…"),
@@ -2571,7 +2579,7 @@ def _linked_inspector(view, win, data, key):
             rows.append(("Top node", node["merged"]))
         # The file verbs first (views/verbs.py), then what any row offers.
         from views import verbs
-        labels = {"linkopen": "Open source", "linkreload": "Reload" if state != "modified" else "Reload changes",
+        labels = {"linkopen": "Edit source", "linkreload": "Reload" if state != "modified" else "Reload changes",
                   "linkunlink": "Unlink", "linkfinder": "Show in Finder", "linkrelink": "Locate…"}
         acts = [("lnk:" + v + ":" + key, labels[v]) for v in verbs.file_verbs(not top)
                 if state != "missing" or v in ("linkunlink", "linkrelink")]
@@ -2659,7 +2667,7 @@ def _link_action(win, view, g, key) -> None:
         elif key == "linkopen":
             # A ⛓ tab right of this project (views/wgpu_tabs.py).
             from views import wgpu_tabs
-            wgpu_tabs.open_link_source(win, Path(rec["path"]))
+            wgpu_tabs.open_link_source(win, Path(rec["path"]), g)
             return
         elif key == "linkpack":
             packed = not links.is_packed(scene, rec["path"])

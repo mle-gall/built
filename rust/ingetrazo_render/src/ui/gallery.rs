@@ -510,6 +510,7 @@ impl Gallery {
                 ) {
                     self.dock_tab = i;
                 }
+                host_visibility(ui,"Plaza.built",&[("Survey".into(),"Survey".into(),true)], &mut Vec::new());
                 path_bar(ui, &[("Plaza.built".into(), String::new()), ("Core block".into(), String::new())], &mut Vec::new());
                 ui.add(search(&mut self.dock_filter, "Filter nodes").desired_width(w));
                 ui.spacing_mut().item_spacing = vec2(0., 0.);

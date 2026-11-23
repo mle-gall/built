@@ -210,6 +210,7 @@ pub struct Node {
 pub struct Column {
     nodes: Vec<Node>,
     path: Vec<(String, String)>,
+    host: (String, Vec<crate::host_context::Tag>),
     styles: drawing::StyleEditor,
     proposal_available: bool,
     reveal: Option<String>,
@@ -385,7 +386,7 @@ impl Ui {
     /// row, eye, lock, expandable, expanded, selected]).
     pub fn set_tree(&mut self, rows: Vec<(Vec<String>, Vec<i64>)>, unfiled: u32) {
         let col = self.column.get_or_insert_with(|| Column {
-            nodes: Vec::new(), path: Vec::new(), styles: Default::default(), reveal: None, proposal_available: false, sort: Default::default(), ordered: Vec::new(), unfiled: 0, expanded: Default::default(), filter: String::new(),
+            nodes: Vec::new(), path: Vec::new(), host: Default::default(), styles: Default::default(), reveal: None, proposal_available: false, sort: Default::default(), ordered: Vec::new(), unfiled: 0, expanded: Default::default(), filter: String::new(),
             filing: None, focus_filter: false, row_menu: None, renaming: None, focus_rename: false, head_menu: None,
             kind_menu: None, kinds: Vec::new(), prompt: None, colset: 0, color_pick: None, edits: Default::default(), mode: String::new(), issues: false,
             identity: Vec::new(),
@@ -448,6 +449,9 @@ impl Ui {
             if col.styles.owner != owner { col.styles = Default::default(); col.styles.owner=owner; }
             col.styles.lines=lines;
         }
+    }
+    pub fn set_host_context(&mut self, name: String, tags: Vec<crate::host_context::Tag>) {
+        if let Some(col) = self.column.as_mut() { col.host = (name, tags); }
     }
     pub fn set_edit_path(&mut self, path: Vec<(String, String)>) {
         if let Some(col) = self.column.as_mut() { col.path = path; }
@@ -1723,6 +1727,7 @@ impl Ui {
                         }
                     }
                     kit::path_bar(ui, &col.path, &mut actions);
+                    kit::host_visibility(ui, &col.host.0, &col.host.1, &mut actions);
                     if let Some(what) = &col.filing {
                         // Two short lines, never cut off at the dock's edge.
                         let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 36.0), Sense::hover());
@@ -2177,7 +2182,7 @@ impl Ui {
             // A linked file's rows are read-only here: no filing, kind or rename.
             let link_menu: &[(&str, &str)] = &[("node", "Select"), ("contents", "Select contents"),
                 ("isolate", "Isolate"), ("zoom", "Zoom to"), ("-", ""), ("eye", "Show / hide"), ("lock", "Lock / unlock"),
-                ("-", ""), ("linkopen", "Open source"), ("linkfinder", "Show in Finder"),
+                ("-", ""), ("linkopen", "Edit source"), ("linkfinder", "Show in Finder"),
                 ("linkreload", "Reload"), ("linkrelink", "Locate…"), ("linkunlink", "Unlink")];
             let menu = if row == 0 && key.starts_with("n:link") { link_menu } else if row == 0 { node_menu }
                 else if row == 5 { comp_menu } else { item_menu };

@@ -1713,3 +1713,28 @@ pub fn line_sample(ui: &egui::Ui, rect: Rect, mm: &str, pattern: &str, color: Co
         if x>=rect.right() { break; }
     }
 }
+
+/// Host tag overrides belong to the host tab, including while its source is edited.
+pub fn host_visibility(ui: &mut egui::Ui, host: &str, tags: &[(String, String, bool)], actions: &mut Vec<String>) {
+    if host.is_empty() { return; }
+    egui::ComboBox::from_id_salt(("host visibility",host)).selected_text("Host visibility").show_ui(ui, |ui| {
+        ui.set_min_width(204.);
+        caption(ui, host);
+        let id = ui.make_persistent_id(("host tag search", host));
+        let mut filter = ui.data(|d| d.get_temp::<String>(id)).unwrap_or_default();
+        ui.add(search(&mut filter, "Filter host tags"));
+        ui.data_mut(|d| d.insert_temp(id, filter.clone()));
+        let word = filter.to_lowercase();
+        egui::ScrollArea::vertical().max_height(280.).show(ui, |ui| {
+            for (key,label,visible) in tags {
+                if !label.to_lowercase().contains(&word) { continue; }
+                let (rect,resp) = ui.allocate_exact_size(vec2(ui.available_width(),ROW_H), Sense::click());
+                paint_state(ui,rect,state_of(&resp,false,true),R_ROW);
+                paint_eye(ui,Rect::from_center_size(pos2(rect.left()+12.,rect.center().y),vec2(16.,16.)),*visible);
+                ui.painter().text(rect.left_center()+vec2(26.,0.),egui::Align2::LEFT_CENTER,label,body(),INK);
+                if resp.clicked() { actions.push(format!("hosteye\u{1f}{key}\u{1f}{}",u8::from(!visible))); }
+            }
+        });
+        if quiet(ui,"Done").clicked() { ui.memory_mut(|m| m.close_popup()); }
+    });
+}
