@@ -1382,24 +1382,13 @@ class AddDimensionCommand(Command):
         self.dimension = dimension
 
     def do(self, scene) -> None:
-        if _doc.ENABLED:
-            if hasattr(self.dimension, "bind"):
-                self.dimension.bind(scene)
-            _presentation.add_item(scene.dimensions, self.dimension)
-            scene.version += 1
-            return
         if hasattr(self.dimension, "bind"):
             self.dimension.bind(scene)
-        scene.dimensions.append(self.dimension)
+        _presentation.add_item(scene.dimensions, self.dimension)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        if _doc.ENABLED:
-            _presentation.remove_item(scene.dimensions, self.dimension)
-            scene.version += 1
-            return
-        if self.dimension in scene.dimensions:
-            scene.dimensions.remove(self.dimension)
+        _presentation.remove_item(scene.dimensions, self.dimension)
         scene.version += 1
 
 
@@ -1418,25 +1407,11 @@ class DeleteDimensionsCommand(Command):
         self._restore: list[tuple[int, object]] = []
 
     def do(self, scene) -> None:
-        if _doc.ENABLED:
-            self._restore = _presentation.delete_items(scene.dimensions, self._dims, scene.selection.discard)
-            scene.version += 1
-            return
-        self._restore = [(scene.dimensions.index(d), d)
-                         for d in self._dims if d in scene.dimensions]
-        for d in self._dims:
-            if d in scene.dimensions:
-                scene.dimensions.remove(d)
-            scene.selection.discard(d)
+        self._restore = _presentation.delete_items(scene.dimensions, self._dims, scene.selection.discard)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        if _doc.ENABLED:
-            _presentation.restore_items(scene.dimensions, self._restore)
-            scene.version += 1
-            return
-        for i, d in sorted(self._restore):
-            scene.dimensions.insert(i, d)
+        _presentation.restore_items(scene.dimensions, self._restore)
         scene.version += 1
 
 
@@ -1456,21 +1431,11 @@ class AddTextLabelCommand(Command):
         self.label = label
 
     def do(self, scene) -> None:
-        if _doc.ENABLED:
-            _presentation.add_item(scene.text_labels, self.label)
-            scene.version += 1
-            return
-        scene.text_labels.append(self.label)
+        _presentation.add_item(scene.text_labels, self.label)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        if _doc.ENABLED:
-            _presentation.remove_item(scene.text_labels, self.label)
-            scene.selection.discard(self.label)
-            scene.version += 1
-            return
-        if self.label in scene.text_labels:
-            scene.text_labels.remove(self.label)
+        _presentation.remove_item(scene.text_labels, self.label)
         scene.selection.discard(self.label)
         scene.version += 1
 
@@ -1489,21 +1454,11 @@ class MoveTextLabelsCommand(Command):
         self._delta = QVector3D(delta)
 
     def do(self, scene) -> None:
-        if _doc.ENABLED:
-            _presentation.translate_items(self._labels, "offset", self._delta)
-            scene.version += 1
-            return
-        for t in self._labels:
-            t.offset = t.offset + self._delta
+        _presentation.translate_items(self._labels, "offset", self._delta)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        if _doc.ENABLED:
-            _presentation.translate_items(self._labels, "offset", -self._delta)
-            scene.version += 1
-            return
-        for t in self._labels:
-            t.offset = t.offset - self._delta
+        _presentation.translate_items(self._labels, "offset", -self._delta)
         scene.version += 1
 
 
@@ -1524,11 +1479,7 @@ class MoveGuidesCommand(Command):
     @staticmethod
     def shift(guide, step: QVector3D) -> None:
         """Apply one step — the tool's live preview uses it too."""
-        if _doc.ENABLED:
-            return _presentation.shift_guide(guide, step)
-        guide.point = guide.point + step
-        if guide.origin is not None:
-            guide.origin = guide.origin + step
+        return _presentation.shift_guide(guide, step)
 
     def do(self, scene) -> None:
         for g in self._guides:
@@ -1563,25 +1514,12 @@ class RotateGuidesCommand(Command):
     @staticmethod
     def state(guide) -> tuple:
         """What a rotation changes, copied — the tool's preview keeps it."""
-        if _doc.ENABLED:
-            return _presentation.guide_state(guide)
-        return (guide, QVector3D(guide.point),
-                None if guide.direction is None else QVector3D(guide.direction),
-                None if guide.origin is None else QVector3D(guide.origin))
+        return _presentation.guide_state(guide)
 
     @staticmethod
     def place(state, m) -> None:
         """Put a guide at ``m`` applied to its ``state`` (``None``: as it was)."""
-        if _doc.ENABLED:
-            return _presentation.place_guide(state, m)
-        guide, point, direction, origin = state
-        guide.point = m.map(point) if m is not None else QVector3D(point)
-        if direction is not None:
-            d = m.mapVector(direction) if m is not None else direction
-            guide.direction = (d.normalized() if d.length() > 1e-12
-                               else QVector3D(direction))
-        if origin is not None:
-            guide.origin = m.map(origin) if m is not None else QVector3D(origin)
+        return _presentation.place_guide(state, m)
 
     def do(self, scene) -> None:
         self._before = [self.state(g) for g in self._guides]
@@ -1617,25 +1555,11 @@ class MoveDimensionsCommand(Command):
     @staticmethod
     def shift(dim, mode: str, step: QVector3D) -> None:
         """Apply one step — the tool's live preview uses it too."""
-        if _doc.ENABLED:
-            line = mode == "line"
-            return _presentation.shift_dimension(
-                dim, line, step,
-                not line and dim.anchor_a is None and dim.attachment_a is None,
-                not line and dim.anchor_b is None and dim.attachment_b is None)
-            return
-        if mode == "line":
-            ab = dim.b - dim.a
-            length = ab.length()
-            if length > 1e-9:
-                d = ab / length
-                step = step - d * QVector3D.dotProduct(step, d)
-            dim.offset = dim.offset + step
-        else:
-            if dim.anchor_a is None and dim.attachment_a is None:
-                dim.a = dim.a + step
-            if dim.anchor_b is None and dim.attachment_b is None:
-                dim.b = dim.b + step
+        line = mode == "line"
+        return _presentation.shift_dimension(
+            dim, line, step,
+            not line and dim.anchor_a is None and dim.attachment_a is None,
+            not line and dim.anchor_b is None and dim.attachment_b is None)
 
     def do(self, scene) -> None:
         for dim, mode in self._modes.items():
@@ -1659,19 +1583,11 @@ class EditTextLabelCommand(Command):
         self._old = label.text
 
     def do(self, scene) -> None:
-        if _doc.ENABLED:
-            _presentation.set_text(self.label, self._new)
-            scene.version += 1
-            return
-        self.label.text = self._new
+        _presentation.set_text(self.label, self._new)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        if _doc.ENABLED:
-            _presentation.set_text(self.label, self._old)
-            scene.version += 1
-            return
-        self.label.text = self._old
+        _presentation.set_text(self.label, self._old)
         scene.version += 1
 
 
@@ -1687,19 +1603,11 @@ class EditDimensionTextCommand(Command):
         self._old = getattr(dim, "text", None)
 
     def do(self, scene) -> None:
-        if _doc.ENABLED:
-            _presentation.set_text(self.dim, self._new)
-            scene.version += 1
-            return
-        self.dim.text = self._new
+        _presentation.set_text(self.dim, self._new)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        if _doc.ENABLED:
-            _presentation.set_text(self.dim, self._old)
-            scene.version += 1
-            return
-        self.dim.text = self._old
+        _presentation.set_text(self.dim, self._old)
         scene.version += 1
 
 
@@ -1718,25 +1626,11 @@ class DeleteTextLabelsCommand(Command):
         self._restore: list[tuple[int, object]] = []
 
     def do(self, scene) -> None:
-        if _doc.ENABLED:
-            self._restore = _presentation.delete_items(scene.text_labels, self._labels, scene.selection.discard)
-            scene.version += 1
-            return
-        self._restore = [(scene.text_labels.index(t), t)
-                         for t in self._labels if t in scene.text_labels]
-        for t in self._labels:
-            if t in scene.text_labels:
-                scene.text_labels.remove(t)
-            scene.selection.discard(t)
+        self._restore = _presentation.delete_items(scene.text_labels, self._labels, scene.selection.discard)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        if _doc.ENABLED:
-            _presentation.restore_items(scene.text_labels, self._restore)
-            scene.version += 1
-            return
-        for i, t in sorted(self._restore):
-            scene.text_labels.insert(i, t)
+        _presentation.restore_items(scene.text_labels, self._restore)
         scene.version += 1
 
 
@@ -1757,20 +1651,11 @@ class AddGuideCommand(Command):
         self.guide = guide
 
     def do(self, scene) -> None:
-        if _doc.ENABLED:
-            _presentation.add_item(scene.guides, self.guide)
-            scene.version += 1
-            return
-        scene.guides.append(self.guide)
+        _presentation.add_item(scene.guides, self.guide)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        if _doc.ENABLED:
-            _presentation.remove_item(scene.guides, self.guide)
-            scene.version += 1
-            return
-        if self.guide in scene.guides:
-            scene.guides.remove(self.guide)
+        _presentation.remove_item(scene.guides, self.guide)
         scene.version += 1
 
 
@@ -1793,32 +1678,15 @@ class PlaceSectionPlaneCommand(Command):
         self._prev_active = None
 
     def do(self, scene) -> None:
-        if _doc.ENABLED:
-            self._prev_active = _presentation.activate_section(scene, self.plane, True)
-            scene.selection.clear()
-            scene.selection.add(self.plane)
-            scene.bump_sections()
-            return
-        self._prev_active = scene.active_section()
-        scene.section_planes.append(self.plane)
-        scene.set_active_section(self.plane)
+        self._prev_active = _presentation.activate_section(scene, self.plane, True)
         scene.selection.clear()
         scene.selection.add(self.plane)
         scene.bump_sections()
 
     def undo(self, scene) -> None:
-        if _doc.ENABLED:
-            _presentation.remove_item(scene.section_planes, self.plane)
-            scene.selection.discard(self.plane)
-            _presentation.restore_active(scene, self._prev_active)
-            scene.bump_sections()
-            return
-        if self.plane in scene.section_planes:
-            scene.section_planes.remove(self.plane)
+        _presentation.remove_item(scene.section_planes, self.plane)
         scene.selection.discard(self.plane)
-        prev = self._prev_active
-        scene.set_active_section(
-            prev if prev in scene.section_planes else None)
+        _presentation.restore_active(scene, self._prev_active)
         scene.bump_sections()
 
 
@@ -1838,25 +1706,11 @@ class DeleteSectionPlanesCommand(Command):
         self._restore: list[tuple[int, object]] = []
 
     def do(self, scene) -> None:
-        if _doc.ENABLED:
-            self._restore = _presentation.delete_items(scene.section_planes, self._planes, scene.selection.discard)
-            scene.bump_sections()
-            return
-        self._restore = [(scene.section_planes.index(p), p)
-                         for p in self._planes if p in scene.section_planes]
-        for p in self._planes:
-            if p in scene.section_planes:
-                scene.section_planes.remove(p)
-            scene.selection.discard(p)
+        self._restore = _presentation.delete_items(scene.section_planes, self._planes, scene.selection.discard)
         scene.bump_sections()
 
     def undo(self, scene) -> None:
-        if _doc.ENABLED:
-            _presentation.restore_items(scene.section_planes, self._restore)
-            scene.bump_sections()
-            return
-        for i, p in sorted(self._restore):
-            scene.section_planes.insert(i, p)
+        _presentation.restore_items(scene.section_planes, self._restore)
         scene.bump_sections()
 
 
@@ -1894,22 +1748,11 @@ class SetActiveSectionCommand(Command):
         self._prev = None
 
     def do(self, scene) -> None:
-        if _doc.ENABLED:
-            self._prev = _presentation.activate_section(scene, self.plane, False)
-            scene.bump_sections()
-            return
-        self._prev = scene.active_section()
-        scene.set_active_section(self.plane)
+        self._prev = _presentation.activate_section(scene, self.plane, False)
         scene.bump_sections()
 
     def undo(self, scene) -> None:
-        if _doc.ENABLED:
-            _presentation.restore_active(scene, self._prev)
-            scene.bump_sections()
-            return
-        prev = self._prev
-        scene.set_active_section(
-            prev if prev in scene.section_planes else None)
+        _presentation.restore_active(scene, self._prev)
         scene.bump_sections()
 
 
@@ -1932,34 +1775,15 @@ class SetSectionModeCommand(Command):
         self._prev = None
 
     def do(self, scene) -> None:
-        if _doc.ENABLED:
-            self._prev = _presentation.section_mode(scene, self.plane, self.cut, self.frame)
-            if self.plane.hidden:
-                scene.selection.discard(self.plane)
-            scene.bump_sections()
-            return
-        self._prev = (scene.active_section(),
-                      bool(getattr(self.plane, "hidden", False)))
-        if self.cut:
-            scene.set_active_section(self.plane)
-        elif self.plane.active:
-            scene.set_active_section(None)
-        self.plane.hidden = not self.frame
+        self._prev = _presentation.section_mode(scene, self.plane, self.cut, self.frame)
         if self.plane.hidden:
             scene.selection.discard(self.plane)
         scene.bump_sections()
 
     def undo(self, scene) -> None:
-        if _doc.ENABLED:
-            active, self_hidden = self._prev
-            _presentation.restore_active(scene, active)
-            self.plane.hidden = self_hidden
-            scene.bump_sections()
-            return
-        active, hidden = self._prev
-        scene.set_active_section(
-            active if active in scene.section_planes else None)
-        self.plane.hidden = hidden
+        active, self_hidden = self._prev
+        _presentation.restore_active(scene, active)
+        self.plane.hidden = self_hidden
         scene.bump_sections()
 
 
@@ -1978,21 +1802,11 @@ class SetSectionFillCommand(Command):
         self._prev = None
 
     def do(self, scene) -> None:
-        if _doc.ENABLED:
-            self._prev = _presentation.set_section_fill(self.plane, self.fill)
-            scene.bump_sections()
-            return
-        prev = getattr(self.plane, "fill", None)
-        self._prev = dict(prev) if prev else None
-        self.plane.fill = dict(self.fill) if self.fill else None
+        self._prev = _presentation.set_section_fill(self.plane, self.fill)
         scene.bump_sections()
 
     def undo(self, scene) -> None:
-        if _doc.ENABLED:
-            _presentation.set_section_fill(self.plane, self._prev)
-            scene.bump_sections()
-            return
-        self.plane.fill = dict(self._prev) if self._prev else None
+        _presentation.set_section_fill(self.plane, self._prev)
         scene.bump_sections()
 
 
@@ -2012,20 +1826,11 @@ class RenameSectionPlaneCommand(Command):
         self._prev = None
 
     def do(self, scene) -> None:
-        if _doc.ENABLED:
-            self._prev = _presentation.set_section_label(self.plane, self.name, self.symbol)
-            scene.bump_sections()
-            return
-        self._prev = (self.plane.name, self.plane.symbol)
-        self.plane.name, self.plane.symbol = self.name, self.symbol
+        self._prev = _presentation.set_section_label(self.plane, self.name, self.symbol)
         scene.bump_sections()
 
     def undo(self, scene) -> None:
-        if _doc.ENABLED:
-            _presentation.set_section_label(self.plane, *self._prev)
-            scene.bump_sections()
-            return
-        self.plane.name, self.plane.symbol = self._prev
+        _presentation.set_section_label(self.plane, *self._prev)
         scene.bump_sections()
 
 
@@ -2038,20 +1843,11 @@ class AddSheetCommand(Command):
         self.sheet = sheet
 
     def do(self, scene) -> None:
-        if _doc.ENABLED:
-            _presentation.add_item(scene.compositions, self.sheet)
-            scene.version += 1
-            return
-        scene.compositions.append(self.sheet)
+        _presentation.add_item(scene.compositions, self.sheet)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        if _doc.ENABLED:
-            _presentation.remove_item(scene.compositions, self.sheet)
-            scene.version += 1
-            return
-        if self.sheet in scene.compositions:
-            scene.compositions.remove(self.sheet)
+        _presentation.remove_item(scene.compositions, self.sheet)
         scene.version += 1
 
 
@@ -2066,20 +1862,11 @@ class PlaceViewCommand(Command):
         self.frame = frame
 
     def do(self, scene) -> None:
-        if _doc.ENABLED:
-            _presentation.add_item(self.sheet.frames, self.frame)
-            scene.version += 1
-            return
-        self.sheet.frames.append(self.frame)
+        _presentation.add_item(self.sheet.frames, self.frame)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        if _doc.ENABLED:
-            _presentation.remove_item(self.sheet.frames, self.frame)
-            scene.version += 1
-            return
-        if self.frame in self.sheet.frames:
-            self.sheet.frames.remove(self.frame)
+        _presentation.remove_item(self.sheet.frames, self.frame)
         scene.version += 1
 
 
@@ -2095,24 +1882,11 @@ class MoveSheetCommand(Command):
         self._old = None
 
     def do(self, scene) -> None:
-        if _doc.ENABLED:
-            self._old = _presentation.move_item(scene.compositions, self.sheet, self.index, True, False)
-            scene.version += 1
-            return
-        comps = scene.compositions
-        self._old = comps.index(self.sheet)
-        comps.remove(self.sheet)
-        comps.insert(max(0, min(self.index, len(comps))), self.sheet)
+        self._old = _presentation.move_item(scene.compositions, self.sheet, self.index, True, False)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        if _doc.ENABLED:
-            _presentation.move_item(scene.compositions, self.sheet, self._old, False, False)
-            scene.version += 1
-            return
-        comps = scene.compositions
-        comps.remove(self.sheet)
-        comps.insert(self._old, self.sheet)
+        _presentation.move_item(scene.compositions, self.sheet, self._old, False, False)
         scene.version += 1
 
 
@@ -2140,34 +1914,11 @@ class CreatePlanCommand(Command):
         self._prev_active = None
 
     def do(self, scene) -> None:
-        if _doc.ENABLED:
-            self._prev_active = _presentation.make_plan(scene, self.plane, self.view, self.sheet, self.add_plane)
-            scene.version += 1
-            return
-        self._prev_active = scene.active_section()
-        if self.add_plane:
-            scene.section_planes.append(self.plane)
-        scene.set_active_section(self.plane)
-        scene.saved_views.append(self.view)
-        if self.sheet is not None:
-            scene.compositions.append(self.sheet)
+        self._prev_active = _presentation.make_plan(scene, self.plane, self.view, self.sheet, self.add_plane)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        if _doc.ENABLED:
-            _presentation.remove_plan(scene, self.plane, self.view, self.sheet, self.add_plane, self._prev_active)
-            scene.selection.discard(self.plane)
-            scene.version += 1
-            return
-        if self.sheet is not None and self.sheet in scene.compositions:
-            scene.compositions.remove(self.sheet)
-        if self.view in scene.saved_views:
-            scene.saved_views.remove(self.view)
-        if self.add_plane and self.plane in scene.section_planes:
-            scene.section_planes.remove(self.plane)
-        prev = self._prev_active
-        scene.set_active_section(
-            prev if prev in scene.section_planes else None)
+        _presentation.remove_plan(scene, self.plane, self.view, self.sheet, self.add_plane, self._prev_active)
         scene.selection.discard(self.plane)
         scene.version += 1
 
@@ -2212,25 +1963,11 @@ class AddSceneCommand(Command):
         self.index = index
 
     def do(self, scene) -> None:
-        if _doc.ENABLED:
-            _presentation.insert_scene(scene, self.view, self.index)
-            scene.version += 1
-            return
-        views = scene.saved_views
-        at = len(views) if self.index is None else self.index
-        views.insert(max(0, min(at, len(views))), self.view)
-        # Filed in a folder, it goes with the rest of that folder.
-        from core.scene_folders import sync_order
-        sync_order(scene)
+        _presentation.insert_scene(scene, self.view, self.index)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        if _doc.ENABLED:
-            _presentation.remove_item(scene.saved_views, self.view)
-            scene.version += 1
-            return
-        if self.view in scene.saved_views:
-            scene.saved_views.remove(self.view)
+        _presentation.remove_item(scene.saved_views, self.view)
         scene.version += 1
 
 
@@ -2245,23 +1982,11 @@ class DeleteScenesCommand(Command):
         self._at: list = []
 
     def do(self, scene) -> None:
-        if _doc.ENABLED:
-            self._at = _presentation.delete_items(scene.saved_views, self.views, None)
-            scene.version += 1
-            return
-        self._at = [(scene.saved_views.index(v), v) for v in self.views
-                    if v in scene.saved_views]
-        for _i, v in self._at:
-            scene.saved_views.remove(v)
+        self._at = _presentation.delete_items(scene.saved_views, self.views, None)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        if _doc.ENABLED:
-            _presentation.restore_items(scene.saved_views, self._at)
-            scene.version += 1
-            return
-        for i, v in sorted(self._at, key=lambda t: t[0]):
-            scene.saved_views.insert(i, v)
+        _presentation.restore_items(scene.saved_views, self._at)
         scene.version += 1
 
 
@@ -2281,27 +2006,12 @@ class UpdateSceneCommand(Command):
         self._after: Optional[dict] = None
 
     def do(self, scene) -> None:
-        if _doc.ENABLED:
-            self._before, self._after = _presentation.update_scene(
-                scene, self.view, self.camera, self.style, self._after)
-            scene.version += 1
-            return
-        self._before = {k: getattr(self.view, k) for k in self.view._record_fields}
-        if self._after is None:          # redo puts back the same capture
-            self.view.recapture(scene, self.camera, self.style)
-            self._after = {k: getattr(self.view, k) for k in self.view._record_fields}
-        else:
-            for k, value in self._after.items():
-                setattr(self.view, k, value)
+        self._before, self._after = _presentation.update_scene(
+            scene, self.view, self.camera, self.style, self._after)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        if _doc.ENABLED:
-            _presentation.restore_fields(self.view, self._before)
-            scene.version += 1
-            return
-        for k, value in self._before.items():
-            setattr(self.view, k, value)
+        _presentation.restore_fields(self.view, self._before)
         scene.version += 1
 
 
@@ -2321,22 +2031,10 @@ class SceneTreeCommand(Command):
         self._after: Optional[tuple] = None
 
     def do(self, scene) -> None:
-        if _doc.ENABLED:
-            state = _presentation.edit_view_tree(scene, self.change, self._before, self._after)
-            if state is None:
-                raise CommandRejected("Nothing to change")
-            self._before, self._after = state
-            scene.version += 1
-            return
-        from core import scene_folders as SF
-        if self._after is not None:
-            SF.restore(scene, self._after)
-        else:
-            self._before = SF.state(scene)
-            if not self.change(scene):
-                SF.restore(scene, self._before)
-                raise CommandRejected("Nothing to change")
-            self._after = SF.state(scene)
+        state = _presentation.edit_view_tree(scene, self.change, self._before, self._after)
+        if state is None:
+            raise CommandRejected("Nothing to change")
+        self._before, self._after = state
         scene.version += 1
 
     def undo(self, scene) -> None:
@@ -2360,21 +2058,11 @@ class MoveSectionPlanesCommand(Command):
         self.delta = QVector3D(delta)
 
     def do(self, scene) -> None:
-        if _doc.ENABLED:
-            _presentation.translate_items(self._planes, "point", self.delta)
-            scene.bump_sections()
-            return
-        for p in self._planes:
-            p.point = p.point + self.delta
+        _presentation.translate_items(self._planes, "point", self.delta)
         scene.bump_sections()
 
     def undo(self, scene) -> None:
-        if _doc.ENABLED:
-            _presentation.translate_items(self._planes, "point", -self.delta)
-            scene.bump_sections()
-            return
-        for p in self._planes:
-            p.point = p.point - self.delta
+        _presentation.translate_items(self._planes, "point", -self.delta)
         scene.bump_sections()
 
 
@@ -2395,17 +2083,8 @@ class RotateSectionPlanesCommand(Command):
         self.deg = float(deg)
 
     def _apply(self, scene, deg: float) -> None:
-        if _doc.ENABLED:
-            m = rotation_matrix(self.centre, self.axis, deg)
-            _presentation.rotate_sections(self._planes, m)
-            scene.bump_sections()
-            return
         m = rotation_matrix(self.centre, self.axis, deg)
-        for p in self._planes:
-            p.point = m.map(p.point)
-            n = m.mapVector(p.normal)
-            if n.length() > 1e-12:
-                p.normal = n.normalized()
+        _presentation.rotate_sections(self._planes, m)
         scene.bump_sections()
 
     def do(self, scene) -> None:
@@ -2430,19 +2109,10 @@ class ChangeGuideCommand(Command):
         self.old: Optional[QVector3D] = None
 
     def do(self, scene) -> None:
-        if _doc.ENABLED:
-            self.old = _presentation.set_direction(self.guide, self.new)
-            scene.version += 1
-            return
-        self.old = self.guide.direction
-        self.guide.direction = QVector3D(self.new)
+        self.old = _presentation.set_direction(self.guide, self.new)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        if _doc.ENABLED:
-            self.guide.direction = self.old
-            scene.version += 1
-            return
         self.guide.direction = self.old
         scene.version += 1
 
@@ -2465,25 +2135,11 @@ class DeleteGuidesCommand(Command):
         self._restore: list[tuple[int, object]] = []
 
     def do(self, scene) -> None:
-        if _doc.ENABLED:
-            self._restore = _presentation.delete_items(scene.guides, self._guides, scene.selection.discard)
-            scene.version += 1
-            return
-        self._restore = [(scene.guides.index(g), g)
-                         for g in self._guides if g in scene.guides]
-        for g in self._guides:
-            if g in scene.guides:
-                scene.guides.remove(g)
-            scene.selection.discard(g)
+        self._restore = _presentation.delete_items(scene.guides, self._guides, scene.selection.discard)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        if _doc.ENABLED:
-            _presentation.restore_items(scene.guides, self._restore)
-            scene.version += 1
-            return
-        for i, g in sorted(self._restore):
-            scene.guides.insert(i, g)
+        _presentation.restore_items(scene.guides, self._restore)
         scene.version += 1
 
 
