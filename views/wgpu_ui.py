@@ -232,6 +232,7 @@ def _send_tools(view, win) -> None:
     """Once the window has built its tool actions (after the first view)."""
     tools = getattr(win, "_tools", {})
     groups = []
+    disabled = []
     view._ui_palette_runs = {}
     for keys in GROUPS:
         row = []
@@ -244,12 +245,17 @@ def _send_tools(view, win) -> None:
                 action = win._tool_actions.get(key) if key in tools else None
             if action is None:
                 continue
+            if not action.isEnabled():
+                disabled.append(key)
             shortcut = action.shortcut().toString(QKeySequence.NativeText)
             w, h, rgba = _icon_rgba(key)
             row.append((key, action.text().replace("&", ""), shortcut, w, h, rgba))
         if row:
             groups.append(row)
-    view.renderer.ui_set_tools(groups)
+    if disabled:
+        view.renderer.ui_set_tools(groups, disabled)
+    else:
+        view.renderer.ui_set_tools(groups)
     # Full bleed: the palette replaces every tool bar.
     from PySide6.QtWidgets import QToolBar
     for bar in win.findChildren(QToolBar):

@@ -240,7 +240,7 @@ impl Ui {
                 let image = egui::ColorImage::from_rgba_unmultiplied([w, h], &rgba);
                 self.ctx.load_texture(format!("sheet:{id}"), image, egui::TextureOptions::LINEAR)
             });
-            Tool { id, label, key, icon }
+            Tool { id, label, key, icon, enabled: true }
         }).collect()).collect();
     }
     pub fn set_sheet_active(&mut self, id: String) { self.sheets.active = id; }

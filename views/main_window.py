@@ -504,6 +504,71 @@ def _after_unlink_step(window, stack) -> None:
     if stack and unlinks(stack[-1]):
         window._unlinked()
 
+
+def build_tools() -> dict:
+    """Create a fresh tool registry for a classic or native window."""
+    tools = {
+        "select": SelectTool(),
+        "line": LineTool(),
+        "freehand": FreehandTool(),
+        "rectangle": RectangleTool(),
+        "rotated_rect": RotatedRectangleTool(),
+        "circle": CircleTool(),
+        "polygon": PolygonTool(),
+        "arc": ArcTool(),
+        "arc3": ThreePointArcTool(),
+        "center_arc": CenterArcTool(),
+        "pie": PieTool(),
+        "pushpull": PushPullTool(),
+        "offset": OffsetTool(),
+        "move": MoveTool(),
+        "rotate": RotateTool(),
+        "scale": ScaleTool(),
+        "flip": FlipTool(),
+        "followme": FollowMeTool(),
+        "fillet": FilletTool(),
+        # Entered from a textured face's right-click menu, never from
+        # the toolbar (Texture ▸ Position).
+        "texture_position": TexturePositionTool(),
+        "paint": PaintTool(),
+        "dimension": DimensionTool(),
+        "eraser": EraserTool(),
+        "tape": TapeMeasureTool(),
+        "protractor": ProtractorTool(),
+        # Tools ▸ North: aim true north on screen, the sun turns with it.
+        "north": NorthTool(),
+        "text": TextTool(),
+        # Georef trace (Track G) — draws a GeoPath, never mesh geometry.
+        "geopath": GeoPathTool(),
+        # Tools ▸ Section Plane (core/section.py).
+        "section": SectionPlaneTool(),
+        # Camera ▸ Position Camera / Walk / Look Around
+        # (tools/walkthrough.py) — Rafael's «pasitos» for interiors.
+        "position_camera": PositionCameraTool(),
+        "walk": WalkTool(),
+        "look_around": LookAroundTool(),
+        # Walking as a game plays it (W/A/S/D + mouse look), beside
+        # the classic Walk rather than instead of it.
+        "first_person": FirstPersonTool(),
+    }
+    # The Solid Tools (tools/solid_tools.py, core/solids.py).
+    from tools.solid_tools import SOLID_TOOLS
+    for key, cls in SOLID_TOOLS:
+        tools[key] = cls()
+    # Right-click ▸ Change Axes (issue #44) — no toolbar button, the
+    # usual convention.
+    from tools.change_axes import ChangeAxesTool
+    tools["change_axes"] = ChangeAxesTool()
+    from tools.scale_manager import ScaleManagerTool
+    tools["scale_manager"] = ScaleManagerTool()
+    # Tag each tool with its icon key so the viewport can turn the mouse
+    # pointer into the tool's icon (tool-shaped cursors).
+    for key, tool in tools.items():
+        if not getattr(tool, "icon", None):
+            tool.icon = key
+    return tools
+
+
 class MainWindow(WorksessionMixin, QMainWindow):
     """Top-level IngeTrazo window."""
 
@@ -523,65 +588,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         from views.floating_toolbar import watch_toolbars
         watch_toolbars(self)
 
-        self._tools = {
-            "select": SelectTool(),
-            "line": LineTool(),
-            "freehand": FreehandTool(),
-            "rectangle": RectangleTool(),
-            "rotated_rect": RotatedRectangleTool(),
-            "circle": CircleTool(),
-            "polygon": PolygonTool(),
-            "arc": ArcTool(),
-            "arc3": ThreePointArcTool(),
-            "center_arc": CenterArcTool(),
-            "pie": PieTool(),
-            "pushpull": PushPullTool(),
-            "offset": OffsetTool(),
-            "move": MoveTool(),
-            "rotate": RotateTool(),
-            "scale": ScaleTool(),
-            "flip": FlipTool(),
-            "followme": FollowMeTool(),
-            "fillet": FilletTool(),
-            # Entered from a textured face's right-click menu, never from
-            # the toolbar (Texture ▸ Position).
-            "texture_position": TexturePositionTool(),
-            "paint": PaintTool(),
-            "dimension": DimensionTool(),
-            "eraser": EraserTool(),
-            "tape": TapeMeasureTool(),
-            "protractor": ProtractorTool(),
-            # Tools ▸ North: aim true north on screen, the sun turns with it.
-            "north": NorthTool(),
-            "text": TextTool(),
-            # Georef trace (Track G) — draws a GeoPath, never mesh geometry.
-            "geopath": GeoPathTool(),
-            # Tools ▸ Section Plane (core/section.py).
-            "section": SectionPlaneTool(),
-            # Camera ▸ Position Camera / Walk / Look Around
-            # (tools/walkthrough.py) — Rafael's «pasitos» for interiors.
-            "position_camera": PositionCameraTool(),
-            "walk": WalkTool(),
-            "look_around": LookAroundTool(),
-            # Walking as a game plays it (W/A/S/D + mouse look), beside
-            # the classic Walk rather than instead of it.
-            "first_person": FirstPersonTool(),
-        }
-        # The Solid Tools (tools/solid_tools.py, core/solids.py).
-        from tools.solid_tools import SOLID_TOOLS
-        for key, cls in SOLID_TOOLS:
-            self._tools[key] = cls()
-        # Right-click ▸ Change Axes (issue #44) — no toolbar button, the
-        # usual convention.
-        from tools.change_axes import ChangeAxesTool
-        self._tools["change_axes"] = ChangeAxesTool()
-        from tools.scale_manager import ScaleManagerTool
-        self._tools["scale_manager"] = ScaleManagerTool()
-        # Tag each tool with its icon key so the viewport can turn the mouse
-        # pointer into the tool's icon (tool-shaped cursors).
-        for key, tool in self._tools.items():
-            if not getattr(tool, "icon", None):
-                tool.icon = key
+        self._tools = build_tools()
         self._tool_actions: dict[str, QAction] = {}
 
         # The open projects, one per tab (#1066; views/documents.py). What

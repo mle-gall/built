@@ -2171,8 +2171,9 @@ impl Renderer {
         self.ui_target = self.active;
         Ok(())
     }
-    fn ui_set_tools(&mut self, groups: Vec<Vec<(String, String, String, usize, usize, Vec<u8>)>>) {
-        if let Some(ui) = self.ui.as_mut() { ui.set_tools(groups); }
+    #[pyo3(signature = (groups, disabled=None))]
+    fn ui_set_tools(&mut self, groups: Vec<Vec<(String, String, String, usize, usize, Vec<u8>)>>, disabled: Option<Vec<String>>) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_tools(groups, disabled.as_deref().unwrap_or_default()); }
     }
     fn ui_set_active(&mut self, id: String) {
         if let Some(ui) = self.ui.as_mut() { ui.set_active(id); }

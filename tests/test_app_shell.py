@@ -88,3 +88,33 @@ def test_qt_input_queries_answer_from_the_shell(host):
     assert (QCursor.pos().x(), QCursor.pos().y()) == (30, 40)
     host.key(True, Qt.Key_Shift.value, Qt.ShiftModifier.value)
     assert QApplication.keyboardModifiers() == Qt.ShiftModifier
+
+
+def test_rail_matches_classic_groups_and_dispatches(host):
+    from unittest.mock import Mock
+    from views import wgpu_library, wgpu_ui
+
+    host.open(FIXTURE)
+    win, view = host.window, host.view
+    wgpu_library.install(win)
+    view.renderer = Mock()
+    try:
+        wgpu_ui._send_tools(view, win)
+        groups, disabled = view.renderer.ui_set_tools.call_args.args
+        assert [[entry[0] for entry in group] for group in groups] == wgpu_ui.GROUPS
+        assert disabled == ["text3d"]
+        assert set(view._ui_palette_runs) == set(wgpu_ui.PALETTE_ACTIONS)
+    finally:
+        view.renderer = None
+    for group in wgpu_ui.GROUPS:
+        for key in group:
+            if key not in wgpu_ui.PALETTE_ACTIONS:
+                win._tool_actions[key].trigger()
+                assert host.viewport.active_tool is win._tools[key]
+    view._ui_palette_runs["eyedropper"]()
+    assert win._act_eyedropper.isChecked()
+    assert host.viewport.active_tool is win._tools["paint"]
+    win.release_eyedropper()
+    for key in ("bridge", "make_faces"):
+        view._ui_palette_runs[key]()
+    assert not host.errors
