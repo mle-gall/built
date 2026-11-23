@@ -19865,7 +19865,7 @@ class Viewport(QOpenGLWidget):
             self.scene.end_group_edit()
         else:
             self.scene.end_one_group_edit()
-        if level.get("affine"):
+        if share is None and "session" in level:
             from core.history import OccurrenceCommands
             OccurrenceCommands.fold(self.history, level["session"])
         _ctx_changed(self, before)

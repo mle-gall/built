@@ -6967,13 +6967,21 @@ class OccurrenceCommands(CompoundCommand):
     """Replay committed commands in their original occurrence coordinate frames."""
 
     @staticmethod
-    def fold(history, session):
+    def group_start(history, session):
         if history._native is not None:
-            return history._native.fold_occurrence(session, OccurrenceCommands)
+            return history._native.group_start(session)
         stack = history.undo_stack
         start = len(stack)
         while start and session in getattr(stack[start - 1], "_occurrences", ()):
             start -= 1
+        return start
+
+    @staticmethod
+    def fold(history, session):
+        if history._native is not None:
+            return history._native.fold_occurrence(session, OccurrenceCommands)
+        stack = history.undo_stack
+        start = OccurrenceCommands.group_start(history, session)
         if len(stack) - start > 1:
             step = OccurrenceCommands(stack[start:])
             step._occurrences = stack[start]._occurrences

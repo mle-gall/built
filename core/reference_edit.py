@@ -388,8 +388,8 @@ def record_leave(history, level, share):
     edited = group.mesh
     mark = level.get("undo_mark", len(history.undo_stack))
     mark = min(mark, len(history.undo_stack))
-    if history._native is not None and "session" in level:
-        mark = history._native.group_start(level["session"])
+    if "session" in level:
+        mark = OccurrenceCommands.group_start(history, level["session"])
     shared = edited.capture_state() != state0
     entry = level.get("entry_transaction")
     from core import doc_model

@@ -278,7 +278,10 @@ class History:
         else:
             self.undo_stack.append(cmd)
             if cap and len(self.undo_stack) > cap:
-                del self.undo_stack[:len(self.undo_stack) - cap]
+                path = getattr(cmd, "_occurrences", ())
+                steps = (OccurrenceCommands.group_start(self, path[0]) + 1
+                         if path else len(self.undo_stack))
+                del self.undo_stack[:max(0, steps - cap)]
             self.redo_stack.clear()
         self._rebind_dimensions()
 
