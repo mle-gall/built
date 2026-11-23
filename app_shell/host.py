@@ -80,12 +80,12 @@ class Host:
         #: This window should come to the front (a file already open here
         #: was opened from another window, the ›› n menu).
         self.focus_requested = False
-        from app_shell.document import ShellViewport
+        from views.document_controller import DocumentController
         from app_shell.view import ShellView
         from app_shell.window import ShellWindow
         from app_shell import files, modal
         self.window = ShellWindow(self)
-        viewport = ShellViewport(self)
+        viewport = DocumentController(self)
         try:
             viewport.history.max_steps = 200
         except Exception:

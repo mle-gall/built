@@ -7449,7 +7449,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         nat = (self._lazy_native() if hasattr(self, "_lazy_native")
                else None)
         if nat is not None and _FRONT_LEAN:
-            return DocumentInteraction._front_face_lean(self, idx, nat, o, d, which)
+            return self._front_face_lean(idx, nat, o, d, which)
         hits = DocumentInteraction._face_hits(self, idx, o, d, which)
         if hits is None or len(hits.t) == 0:
             return None
@@ -13953,7 +13953,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
 
     def _ask_open_link_qt(self, path) -> bool:
         from PySide6.QtWidgets import QMessageBox
-        box = QMessageBox(self)
+        box = QMessageBox(self.keys_stand_in or self)
         box.setIcon(QMessageBox.Question)
         box.setWindowTitle(tr("Linked document"))
         box.setText(tr("“{name}” is linked from another file.",

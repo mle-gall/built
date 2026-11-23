@@ -793,7 +793,7 @@ class ViewGrid(QWidget):
         #: scene (views/wgpu_peer.py).
         self.display = display
         self.metal = display is not None
-        self._main_min = main_viewport.minimumSize()
+        self._main_min = (display or main_viewport).minimumSize()
         self._layout = "single"
         self._maximized = None
         self._kept_sizes = None
@@ -1107,19 +1107,16 @@ class ViewGrid(QWidget):
         for cell in self.cells:
             if cell.viewport is not None:
                 continue
-            vp = Viewport(cell)
-            vp.setMinimumSize(80, 60)
             display = None
             if self.metal:
-                # The view's model, never shown (as the window's own under
-                # Metal); the cell shows a view of the resident scene.
-                vp.hide()
-                vp.setEnabled(False)
+                from views.document_controller import DocumentController
                 from views.wgpu_peer import WgpuPeerView
                 display = WgpuPeerView(self.display, cell)
                 display.setMinimumSize(80, 60)
-                display.source_viewport = vp
-                display.camera = vp.camera
+                vp = DocumentController.for_widget(display)
+            else:
+                vp = Viewport(cell)
+                vp.setMinimumSize(80, 60)
             # What extensions registered: one list per window, as in
             # MainWindow._make_viewport.
             for name in ("_ext_overlays", "_ext_snap_providers",

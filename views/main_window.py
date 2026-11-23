@@ -680,7 +680,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         self._layout_picker.chosen.connect(self.set_view_layout)
         bar.viewsRequested.connect(self._pick_view_layout)
         self._doc.viewport = self._make_viewport()
-        self._doc_stack.addWidget(self._doc.viewport)
+        self._doc_stack.addWidget(self._doc.viewport.keys_stand_in or self._doc.viewport)
         bar.add(self._doc)
         # Qt's own call: this class's setCentralWidget is the one extensions
         # see (one project's place in the stack), see centralWidget below.
@@ -3655,7 +3655,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         says where it can be docked; the one under the pointer lights up,
         and dropping there docks it on that side."""
         from PySide6.QtCore import QRect
-        vp = self.viewport
+        vp = self.viewport.keys_stand_in or self.viewport
         top_left = vp.mapTo(self, vp.rect().topLeft())
         w = max(120, min(220, vp.width() // 4))
         h = vp.height()
@@ -7694,8 +7694,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
 
     def _choose_document_renderer(self, doc):
         """Choose once per new document; an existing document never swaps."""
-        from core import renderer_settings
-        doc._renderer_wgpu = renderer_settings.wanted()
+        doc._renderer_wgpu = doc.viewport.keys_stand_in is not None
         if doc._renderer_wgpu:
             self._install_wgpu_display(doc)
         if doc is self._doc:
@@ -7774,7 +7773,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         """
         from views.wgpu_view import WgpuView
         from PySide6.QtCore import QTimer
-        display = WgpuView(self._doc_stack)
+        display = doc.viewport.keys_stand_in or WgpuView(self._doc_stack)
         display.frameReady.connect(lambda *_: self._document_first_frame(doc))
         display.source_viewport = doc.viewport
         display.camera = doc.viewport.camera
@@ -7782,7 +7781,8 @@ class MainWindow(WorksessionMixin, QMainWindow):
         # the view the user sees (Viewport.setFocus).
         doc.viewport.keys_stand_in = display
         doc.stand_in = display
-        self._doc_stack.addWidget(display)
+        if self._doc_stack.indexOf(display) < 0:
+            self._doc_stack.addWidget(display)
         display.installEventFilter(self)       # re-place the handles on resize
         refresh = QTimer(display)
         refresh.setSingleShot(True)
@@ -7839,7 +7839,13 @@ class MainWindow(WorksessionMixin, QMainWindow):
     def _make_viewport(self):
         """A viewport for a project, set up the way the window's first one
         always was."""
-        vp = Viewport(self._doc_stack)
+        from core import renderer_settings
+        if renderer_settings.wanted():
+            from views.document_controller import DocumentController
+            from views.wgpu_view import WgpuView
+            vp = DocumentController.for_widget(WgpuView(self._doc_stack))
+        else:
+            vp = Viewport(self._doc_stack)
         try:                                        # issue #56
             vp.history.max_steps = int(_gs.value("undo_steps", 200))
         except (TypeError, ValueError):
@@ -7873,8 +7879,9 @@ class MainWindow(WorksessionMixin, QMainWindow):
                 else:
                     fn(*args)
             return dispatch
-        vp.frameSwapped.connect(lambda: self._document_first_frame(
-            next((d for d in self._documents if d.viewport is vp), None)))
+        if vp.keys_stand_in is None:
+            vp.frameSwapped.connect(lambda: self._document_first_frame(
+                next((d for d in self._documents if d.viewport is vp), None)))
         vp.projectionChanged.connect(live(self._sync_projection_buttons))
         vp.smartZoomRequested.connect(live(self._on_smart_zoom))
         for name in ("tray", "bim_tray", "georef_tray", "project_browser",
@@ -7938,7 +7945,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         doc.untitled_no = self._free_untitled_no()
         doc.viewport = self._make_viewport()
         self._wire_viewport(doc.viewport)
-        self._doc_stack.addWidget(doc.viewport)
+        self._doc_stack.addWidget(doc.viewport.keys_stand_in or doc.viewport)
         self._documents.append(doc)
         self._choose_document_renderer(doc)
         bar = self._project_tabs
@@ -8863,7 +8870,8 @@ class MainWindow(WorksessionMixin, QMainWindow):
             except Exception:  # noqa: BLE001 — never block closing on cleanup
                 pass
             vp.clipboard = None
-            self._doc_stack.removeWidget(vp)
+            if vp.keys_stand_in is None:
+                self._doc_stack.removeWidget(vp)
             vp.hide()
             # Once it is really gone, give its memory back to the system.
             vp.destroyed.connect(self._schedule_reclaim)

@@ -22,6 +22,7 @@ Extents and the layout's state work as with OpenGL.
 """
 from __future__ import annotations
 
+from PySide6.QtWidgets import QWidget
 from views.wgpu_view import WgpuView
 
 
@@ -166,7 +167,7 @@ class WgpuPeerView(WgpuView):
         self.update()
 
     def showEvent(self, event):
-        super(WgpuView, self).showEvent(event)
+        QWidget.showEvent(self, event)
         self._upload()
 
     def release(self) -> None:
@@ -180,7 +181,7 @@ class WgpuPeerView(WgpuView):
         # Not the document's tracker, worker or renderer: only its surface.
         self._closed = True
         self.release()
-        super(WgpuView, self).closeEvent(event)
+        QWidget.closeEvent(self, event)
 
 
 def _release(raw, target) -> None:

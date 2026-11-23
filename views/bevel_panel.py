@@ -35,7 +35,7 @@ SHAPES = (("round", "Round", CIRCULAR), ("flat", "Flat (chamfer)", 0.25),
 
 class BevelPanel(QFrame):
     def __init__(self, viewport, tool) -> None:
-        super().__init__(viewport)
+        super().__init__(getattr(viewport, "keys_stand_in", None) or viewport)
         self._viewport = viewport
         self.tool = tool
         self.setObjectName("bevelPanel")
@@ -127,7 +127,7 @@ class BevelPanel(QFrame):
 
         self._syncing = False
         self._follow = _FollowResize(self)
-        viewport.installEventFilter(self._follow)
+        self.parentWidget().installEventFilter(self._follow)
         self.sync()
 
     # ---- Showing ------------------------------------------------------------

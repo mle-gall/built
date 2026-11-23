@@ -536,12 +536,12 @@ class ShellWindow(QObject):
         """A new, empty project with its own controller and view, right of
         the one in front."""
         from views.documents import Document
-        from app_shell.document import ShellViewport
+        from views.document_controller import DocumentController
         from app_shell.view import ShellView
         host = self._host
         doc = Document()
         doc.untitled_no = self._free_untitled_no() if self._documents else 1
-        vp = ShellViewport(host)
+        vp = DocumentController(host)
         try:
             vp.history.max_steps = 200
         except Exception:  # noqa: BLE001
