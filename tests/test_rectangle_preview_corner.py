@@ -2,7 +2,7 @@
 """The idle rectangle preview marks the next click as a corner."""
 from types import SimpleNamespace
 from ingetrazo_core import Vec3 as V
-from tools.rectangle import RectangleTool
+from tools.rust_tools import RectangleTool
 
 
 def _preview(center=False):

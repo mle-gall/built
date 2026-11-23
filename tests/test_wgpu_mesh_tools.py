@@ -9,7 +9,7 @@ from core.mesh import Mesh
 from core.group import Group
 from core.history import History
 from tools.rust_tools import LineTool
-from tools.rectangle import RectangleTool
+from tools.rust_tools import RectangleTool
 from tools.base import ToolContext
 from views.wgpu_tools import NativeTools
 from views.wgpu_scene import pack_scene

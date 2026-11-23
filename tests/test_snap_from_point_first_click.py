@@ -73,7 +73,7 @@ def test_the_viewport_keeps_the_hovered_corner_before_the_first_click():
     elif not isinstance(app, QApplication):
         pytest.skip("another Qt application flavour is already running")
     from tests.controller_surface import ControllerSurface as Viewport
-    from tools.rectangle import RectangleTool
+    from tools.rust_tools import RectangleTool
     vp = Viewport(None)
     vp.resize(1000, 600)
     vp.camera.set_aspect(1000, 600)

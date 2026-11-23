@@ -372,7 +372,7 @@ def run_rect(steps, far=False):
     from ingetrazo_core import Vec3
     from PySide6.QtCore import QPointF, Qt
     from tools.base import ToolContext
-    from tools.rectangle import RectangleTool
+    from tools.rust_tools import RectangleTool
     view = RectView(far=far)
     off = view.offset
     tool = RectangleTool()

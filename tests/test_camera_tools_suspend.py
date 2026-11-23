@@ -22,7 +22,7 @@ from tools.rust_tools import LineTool
 from tools.move import MoveTool
 from tools.protractor import ProtractorTool
 from tools.pushpull import PushPullTool
-from tools.rectangle import RectangleTool
+from tools.rust_tools import RectangleTool
 from tools.rotate import RotateTool
 from tools.tape import TapeMeasureTool
 from tests.controller_surface import ControllerSurface as Viewport

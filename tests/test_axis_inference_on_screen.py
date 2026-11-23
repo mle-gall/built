@@ -154,7 +154,7 @@ def test_the_tools_that_ask_for_it():
     from tools.rust_tools import LineTool
     from tools.move import MoveTool
     from tools.protractor import ProtractorBase
-    from tools.rectangle import RectangleTool
+    from tools.rust_tools import RectangleTool
     from tools.tape import TapeMeasureTool
     assert LineTool.screen_axis_px == 9.0
     assert MoveTool.screen_axis_px == 9.0

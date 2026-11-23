@@ -11,7 +11,7 @@ import pytest
 from PySide6.QtCore import Qt
 
 from tools.protractor import ProtractorTool
-from tools.rectangle import RectangleTool
+from tools.rust_tools import RectangleTool
 from tools.scale import ScaleTool
 
 

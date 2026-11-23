@@ -10,6 +10,7 @@ pub mod gesture;
 pub mod line;
 pub mod plane;
 pub mod preview;
+pub mod rectangle;
 pub mod py;
 pub mod select;
 #[cfg(test)]
@@ -96,6 +97,12 @@ pub enum ToolEvent {
     TripleClick(Pointer),
     Box { rect: [f64; 4], crossing: bool, mods: Mods },
     Key { key: String, mods: Mods },
+    /// A key let go; `tapped`: no other key came in between (a Ctrl that
+    /// was part of a chord is no tap, #342).
+    KeyRelease { key: String, tapped: bool },
+    /// The drawing axes `(origin, x, y, z)` and whether the cursor's snap
+    /// names a point of the model (None: no kind known), before an event.
+    Frame { axes: [P3; 4], names_point: Option<bool> },
     Value(Value),
     /// The plane the operation keeps to (a face clicked first, a plane lock).
     WorkPlane(Option<(P3, P3)>),
@@ -228,6 +235,9 @@ pub trait ToolHost {
     /// A verb the host still owns for an annotation or a section plane
     /// (`toggle_section`, `edit_text`, `edit_dimension`).
     fn host_verb(&mut self, _verb: &str, _id: u64) {}
+    /// A status message: an English template with `{name}` fields, which
+    /// the host translates and shows.
+    fn message(&mut self, _template: &str, _args: &[(&str, String)]) {}
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -271,6 +281,11 @@ pub trait Tool {
     /// Set one of the `state()` fields (scripts and tests that place a
     /// chain by hand, the host's captured plane). False when unknown.
     fn set(&mut self, _key: &str, _value: &serde_json::Value) -> bool { false }
+    /// A read-only question about the tool's geometry (`span`, `corners`…),
+    /// for the view and tests; Null when unknown.
+    fn query(&self, _what: &str, _arg: &serde_json::Value) -> serde_json::Value { serde_json::Value::Null }
+    /// A planar tool's plane lock (one owner: the machine).
+    fn plane_lock(&mut self) -> Option<&mut plane::PlaneLock> { None }
 }
 
 pub(crate) fn json_p3(v: &serde_json::Value) -> Option<P3> {
@@ -285,6 +300,7 @@ pub fn new_tool(kind: &str) -> Option<Box<dyn Tool>> {
     match kind {
         "select" => Some(Box::new(select::SelectTool::default())),
         "line" => Some(Box::new(line::LineTool::default())),
+        "rectangle" => Some(Box::new(rectangle::RectangleTool::default())),
         _ => None,
     }
 }

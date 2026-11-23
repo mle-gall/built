@@ -481,7 +481,7 @@ def test_a_rectangle_drawn_on_a_box_keeps_the_box_closed():
     from PySide6.QtCore import QPointF, Qt
     from core.orient import is_closed
     from tools.base import ToolContext
-    from tools.rectangle import RectangleTool
+    from tools.rust_tools import RectangleTool
 
     scene = Scene()
     z = 3.0

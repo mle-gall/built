@@ -29,7 +29,7 @@ from __future__ import annotations
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.i18n import set_language
-from tools.rectangle import RectangleTool
+from tools.rust_tools import RectangleTool
 
 
 def V(x, y, z=0.0):

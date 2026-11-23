@@ -73,7 +73,7 @@ def _span(points):
 
 
 def test_rectangle_at_eye_level_stands_up_with_two_real_sides(viewport):
-    from tools.rectangle import RectangleTool
+    from tools.rust_tools import RectangleTool
     _eye_level(viewport)
     tool = RectangleTool()
     horizon_y = viewport._world_to_pixel(QVector3D(0, 0, 1.6))[1]
@@ -92,7 +92,7 @@ def test_rectangle_at_eye_level_stands_up_with_two_real_sides(viewport):
 
 
 def test_orbiting_before_the_first_click_re_decides_the_plane_and_the_click_keeps_it(viewport):
-    from tools.rectangle import RectangleTool
+    from tools.rust_tools import RectangleTool
     _eye_level(viewport)
     tool = RectangleTool()
     viewport.active_tool = tool
@@ -128,7 +128,7 @@ def test_a_captured_slab_keeps_a_planar_tool_flat_at_the_horizon(viewport):
     """The near-horizon escape hatch (a horizontal captured plane yields to a
     vertical one so a LINE can rise) must not touch a rectangle's captured
     plane: its corners live in that plane by definition."""
-    from tools.rectangle import RectangleTool
+    from tools.rust_tools import RectangleTool
     _eye_level(viewport)
     tool = RectangleTool()
     tool.start_point = QVector3D(0, 0, 0)
@@ -200,7 +200,7 @@ def test_planar_preview_uses_selected_plane_color(
         tool_name):
     from core.snap import AXIS_COLORS
     from tools.circle import CircleTool
-    from tools.rectangle import RectangleTool
+    from tools.rust_tools import RectangleTool
 
     tool = {"circle": CircleTool, "rectangle": RectangleTool}[tool_name]()
     viewport.active_tool = tool
@@ -256,7 +256,7 @@ def test_empty_space_camera_plane_can_be_hit_at_a_near_grazing_angle(
 def test_planar_preview_stays_bounded_when_cursor_moves_along_x_view(
         viewport, monkeypatch, yaw, tool_name):
     from tools.circle import CircleTool
-    from tools.rectangle import RectangleTool
+    from tools.rust_tools import RectangleTool
 
     tool = {"circle": CircleTool, "rectangle": RectangleTool}[tool_name]()
     viewport.camera.target = QVector3D(0, 0, 0)
@@ -317,7 +317,7 @@ def test_circle_shows_a_ring_on_the_cursor_in_the_locked_plane_colour(viewport):
 
 def test_rectangle_shows_a_square_on_the_cursor_and_keeps_the_colour_while_drawing(viewport):
     from tools.base import PLANE_LOCK_KEYS
-    from tools.rectangle import RectangleTool
+    from tools.rust_tools import RectangleTool
     viewport.camera.set_view("iso")
     tool = RectangleTool()
     viewport.active_tool = tool
@@ -345,7 +345,7 @@ def test_a_zero_sided_rectangle_is_refused_instead_of_raising(viewport):
     """Marco's log (2026-09-14): «degenerate edge: endpoints weld to one
     vertex» from the history — the second corner sat on the first's row.
     The classic tool draws nothing; we say why."""
-    from tools.rectangle import RectangleTool
+    from tools.rust_tools import RectangleTool
     viewport.camera.set_view("iso")
     said = []
     viewport.flash_status = lambda text, *a, **k: said.append(text)
@@ -368,7 +368,7 @@ def test_a_first_click_on_a_components_face_captures_its_world_plane(viewport):
     from ingetrazo_core import Matrix4 as QMatrix4x4
     from core.group import Group
     from core.mesh import Mesh
-    from tools.rectangle import RectangleTool
+    from tools.rust_tools import RectangleTool
     viewport.camera.set_view("iso")
     mesh = Mesh()
     mesh.add_face([QVector3D(0, 0, 0), QVector3D(0, 2, 0), QVector3D(0, 2, 3), QVector3D(0, 0, 3)])  # a post side, x = 0 locally
@@ -417,7 +417,7 @@ def test_a_nested_components_face_plane_comes_through_its_placement(viewport):
     from core.group import Group
     from core.mesh import Mesh
     from core.snap import face_plane_world
-    from tools.rectangle import RectangleTool
+    from tools.rust_tools import RectangleTool
     mesh = Mesh()
     mesh.add_face([QVector3D(0, 0, 0), QVector3D(0, 2, 0), QVector3D(0, 2, 3), QVector3D(0, 0, 3)])  # local normal ±X
     child = Group(mesh, "poste")
