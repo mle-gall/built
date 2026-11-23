@@ -81,7 +81,7 @@ jobs:
           # No --exit-after flag, so give it a few seconds and require that it
           # was still alive: a crash on startup exits well before the timeout.
           set +e
-          xvfb-run -a timeout 25 "$APP" > smoke.log 2>&1
+          python3 scripts/isolated_launch.py xvfb-run -a timeout 25 "$APP" > smoke.log 2>&1
           rc=$?
           set -e
           cat smoke.log
@@ -96,7 +96,7 @@ jobs:
       - name: Smoke test the tarball
         run: |
           mkdir -p tarcheck && tar -C tarcheck -xzf dist/IngeTrazo-*-linux-x86_64.tar.gz
-          tarcheck/IngeTrazo-*/ingetrazo --check
+          python3 scripts/isolated_launch.py tarcheck/IngeTrazo-*/ingetrazo --check
 
       - uses: actions/upload-artifact@v4
         with:
@@ -171,7 +171,7 @@ jobs:
       - name: Build the PyInstaller bundle
         run: |
           ./venv/bin/python -m PyInstaller --noconfirm ingetrazo.spec
-          dist/ingetrazo/ingetrazo --check
+          python3 scripts/isolated_launch.py dist/ingetrazo/ingetrazo --check
 
       - name: Stage the snap tree
         run: |
@@ -197,7 +197,7 @@ jobs:
       - name: Smoke test the snap
         run: |
           sudo snap install --dangerous "${{ steps.snapbuild.outputs.snap }}"
-          snap run ingetrazo --check
+          python3 scripts/isolated_launch.py snap run ingetrazo --check
 
       - uses: actions/upload-artifact@v4
         with:

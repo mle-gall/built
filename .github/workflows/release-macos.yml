@@ -94,7 +94,7 @@ jobs:
         run: packaging/build-macos-app.sh dist
 
       - name: The bundle finds everything it needs
-        run: dist/IngeTrazo.app/Contents/MacOS/ingetrazo --check
+        run: python3 scripts/isolated_launch.py dist/IngeTrazo.app/Contents/MacOS/ingetrazo --check
 
       # A report: it must not hold up a package that was fine.
       - name: No Mach-O asks for a newer macOS
