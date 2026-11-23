@@ -104,101 +104,15 @@ def unique_name(taken, base: str) -> str:
     return f"{base} {n}"
 
 
-def add_folder(scene, base: str, parent: str | None = None) -> str:
-    """A new, empty folder at the end of ``parent`` (``None``: the top);
-    its name, made unique."""
-    name = unique_name(folders_of(scene), base)
-    scene.scene_folders = folders_of(scene) + [name]
-    if parent and parent in folders_of(scene):
-        scene.scene_folder_parents = {
-            **(getattr(scene, "scene_folder_parents", None) or {}),
-            name: parent}
-    return name
+# Commands, plugins and scripts use the same ordered tree edits.
+add_folder = _tree.add_folder
+rename_folder = _tree.rename_folder
+delete_folder = _tree.delete_folder
+move_folder = _tree.move_folder
 
 
-def rename_folder(scene, old: str, new: str) -> bool:
-    """Rename a folder, carrying its scenes and subfolders along. False
-    (nothing changed) when ``new`` is empty, the same, or taken."""
-    new = (new or "").strip()
-    folders = folders_of(scene)
-    if not new or new == old or old not in folders or new in folders:
-        return False
-    scene.scene_folders = [new if f == old else f for f in folders]
-    parents = dict(getattr(scene, "scene_folder_parents", None) or {})
-    parents = {(new if f == old else f): (new if p == old else p)
-               for f, p in parents.items()}
-    scene.scene_folder_parents = parents
-    for v in scene.saved_views:
-        if v.folder == old:
-            v.folder = new
-    return True
-
-
-def delete_folder(scene, name: str) -> bool:
-    """Take a folder away; what it held goes to the folder it sat in."""
-    folders = folders_of(scene)
-    if name not in folders:
-        return False
-    up = folder_parent(scene, name)
-    parents = dict(getattr(scene, "scene_folder_parents", None) or {})
-    for f in folders:
-        if parents.get(f) == name:
-            if up is None:
-                parents.pop(f, None)
-            else:
-                parents[f] = up
-    parents.pop(name, None)
-    for v in scene.saved_views:
-        if v.folder == name:
-            v.folder = up
-    scene.scene_folders = [f for f in folders if f != name]
-    scene.scene_folder_parents = parents
-    sync_order(scene)
-    return True
-
-
-def move_folder(scene, name: str, parent: str | None) -> bool:
-    """Put folder ``name`` inside ``parent`` (``None``: at the top). Never
-    into itself or into a folder it holds."""
-    folders = folders_of(scene)
-    if name not in folders or (parent is not None and parent not in folders):
-        return False
-    if parent == name or parent in subfolders(scene, name, deep=True):
-        return False
-    parents = dict(getattr(scene, "scene_folder_parents", None) or {})
-    if parent is None:
-        parents.pop(name, None)
-    else:
-        parents[name] = parent
-    scene.scene_folders = folders
-    scene.scene_folder_parents = parents
-    return True
-
-
-def move_rows(scene, views, folders, folder: str | None,
-              before=None) -> None:
-    """A drop: ``views`` (scenes) and ``folders`` go into ``folder``
-    (``None``: the top); the scenes right before scene ``before`` when one
-    is given, else at the end of that folder. Then the scenes in the tree's
-    order."""
-    for f in folders:
-        move_folder(scene, f, folder)
-    moving = [v for v in scene.saved_views if any(v is m for m in views)]
-    for v in moving:
-        v.folder = folder
-    if moving:
-        rest = [v for v in scene.saved_views
-                if not any(v is m for m in moving)]
-        at = len(rest)
-        if before is not None and any(v is before for v in rest):
-            at = next(i for i, v in enumerate(rest) if v is before)
-        else:
-            mine = [i for i, v in enumerate(rest)
-                    if folder_of(scene, v) == folder]
-            at = mine[-1] + 1 if mine else len(rest)
-        rest[at:at] = moving
-        scene.saved_views[:] = rest
-    sync_order(scene)
+def move_rows(scene, views, folders, folder, before=None):
+    _tree.move_rows(scene, list(views), list(folders), folder, before)
 
 
 def state(scene) -> tuple:
