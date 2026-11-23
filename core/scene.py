@@ -509,6 +509,12 @@ class Scene:
     def repeated_uids(self):
         return self._root._repeated_uids()
 
+    def occurrence_closure(self, wanted, exact=False):
+        """Isolating occurrence keys, from the native tree (doc/occurrences.rs):
+        (matched keys, shown keys, drawn-through keys, {group: address key})."""
+        matched, allowed, through, qualified = self._root._occurrence_closure(set(wanted), exact)
+        return matched, allowed, through, dict(qualified)
+
     def occurrence_path(self, group):
         """Return the UIDs from this scene's root through the placement."""
         return self._root._occurrence_path(group)

@@ -770,9 +770,12 @@ def _isolate(win, uids) -> None:
     from core.agent_facets import set_display
     vp = win.viewport
     if any(not isinstance(u, str) for u in uids):
-        from core.facets import build
-        keys = build(vp.scene).qualified
-        uids = [u if isinstance(u, str) else keys.get(u, u.uid) for u in uids]
+        # A placement's key is its UID, or its address when the UID repeats
+        # (core.facets): from the native tree, not the facet index.
+        from core.link_structure import row_id
+        repeated = vp.scene.repeated_uids()
+        uids = [u if isinstance(u, str) else row_id(vp.scene.occurrence_path(u) or [u.uid])
+                if u.uid in repeated or u.uid.startswith("@[") else u.uid for u in uids]
     uids = [u for u in dict.fromkeys(uids) if u]
     if not uids:
         vp.flash_status("Nothing to isolate: select objects first")

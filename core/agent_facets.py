@@ -5,16 +5,37 @@ from core import facets, bim_registry
 from core.history import SetRegistryCommand
 
 
+def _occurrences(filter):
+    """The keys of a plain «occurrence in [...]» filter (Isolate), else None."""
+    if isinstance(filter, dict) and set(filter) == {'facet', 'in'} and filter['facet'] == 'occurrence':
+        return filter['in']
+    return None
+
+
 def set_display(viewport, filter=None, color_by=None, *, isolate=True, key=None, remember=True, exact=False):
-    index = facets.build(viewport.scene)
-    uids = facets.evaluate(index, filter)
-    wanted = set(uids) if filter is not None and isolate else None
-    # Expand once; drawing and picking then share an O(1) membership test.
-    allowed = None if wanted is None else {
-        uid for uid, row in index.items()
-        if uid in wanted or (not exact and any(p in wanted for p in row['path_keys']))}
+    facets.validate_filter(filter)
+    occurrences = _occurrences(filter) if isolate and not color_by else None
+    if occurrences is not None:
+        # Isolate: the native tree gives keys, what shows and what is drawn
+        # through, without building the facet index (doc/occurrences.rs).
+        uids, allowed, through, qualified = viewport.scene.occurrence_closure(occurrences, exact)
+        wanted = set(uids)
+    else:
+        index = facets.build(viewport.scene)
+        qualified = index.qualified
+        uids = facets.evaluate(index, filter)
+        wanted = set(uids) if filter is not None and isolate else None
+        # Expand once; drawing and picking then share an O(1) membership test.
+        allowed = None if wanted is None else {
+            uid for uid, row in index.items()
+            if uid in wanted or (not exact and any(p in wanted for p in row['path_keys']))}
+        # The groups holding an isolated part (a linked file's placement above
+        # its parts): drawn through, their own geometry filtered, so they never
+        # hide what was isolated inside them.
+        through = None if allowed is None else {
+            p for uid in allowed for p in index[uid]['path_keys']} - allowed
     context = viewport.scene.edit_group
-    if allowed is not None and context is not None and index.qualified.get(context, context.uid) not in allowed:
+    if allowed is not None and context is not None and qualified.get(context, context.uid) not in allowed:
         # An open group's working mesh is drawn in the loose-geometry pass.
         # Leave it before hiding it, then re-evaluate after any share-back.
         leave = getattr(viewport, 'end_one_group_edit', None)
@@ -45,17 +66,13 @@ def set_display(viewport, filter=None, color_by=None, *, isolate=True, key=None,
     viewport.active_view_key = key
     viewport.scene._navigator_view_key = key
     viewport.view_filter = wanted
-    viewport.scene._navigator_keys = index.qualified if allowed is not None or tint else {}
+    viewport.scene._navigator_keys = qualified if allowed is not None or tint else {}
     viewport.scene._navigator_allowed = allowed
-    # The groups holding an isolated part (a linked file's placement above
-    # its parts): drawn through, their own geometry filtered, so they never
-    # hide what was isolated inside them.
-    viewport.scene._navigator_through = None if allowed is None else {
-        p for uid in allowed for p in index[uid]['path_keys']} - allowed
+    viewport.scene._navigator_through = through
     if allowed is not None:
         from core.group import Group
         viewport.scene.selection.difference_update([
-            g for g in viewport.scene.selection if isinstance(g, Group) and index.qualified.get(g, g.uid) not in allowed])
+            g for g in viewport.scene.selection if isinstance(g, Group) and qualified.get(g, g.uid) not in allowed])
     if tint and color_by != 'structure':
         for uid, row in index.items():
             if uid not in tint and row['path_keys'] and row['path_keys'][-1] in tint:
