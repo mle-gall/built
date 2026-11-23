@@ -1259,6 +1259,13 @@ def test_basic_custom_dimensions_lock_the_current_ratio():
         assert _opts(m)["paper"]["size"] == size
 
 
+def test_legacy_basic_custom_size_uses_its_own_lock():
+    model = _svg(prefs={"advanced": False, "basic_size": "custom", "basic_width": 300,
+                        "basic_height": 200, "basic_lock": False, "ratio": "screen"})
+    model.receive("height", "250")
+    assert _opts(model)["paper"]["size"] == [300, 250]
+
+
 def test_basic_and_advanced_share_face_choice_and_dimensions():
     m = _svg(advanced=False)
     for key, value in [

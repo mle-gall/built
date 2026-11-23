@@ -279,6 +279,7 @@ impl SvgOptions {
             _ => json!("screen"),
         };
         let ratio = match p["ratio"].as_str() {
+            _ if !advanced => "Free",
             Some("free") => "Free",
             Some("screen") => "Screen",
             Some(r) if advanced => r,
