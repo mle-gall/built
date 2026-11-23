@@ -1234,19 +1234,6 @@ def _snap_dropped_loose(vp):
     return drops
 
 
-def _context_stamp(vp):
-    feed = getattr(getattr(vp, "history", None), "feed", None)
-    return getattr(vp.scene, "content_version", None), feed.readers.stamp() if feed else 0
-
-
-def _ctx_changed(vp, before):
-    """``History.context_changed`` (stub viewports in tests have no
-    history, or one without it)."""
-    cc = getattr(getattr(vp, "history", None), "context_changed", None)
-    if cc is not None:
-        cc(before)
-
-
 def _px_near(x, y, ok, px, py, thr, pts=None, seen=None):
     """The projected points ``(x, y)`` in front (``ok``) within ``thr`` px of
     ``(px, py)``: their indices in order and distances, as one ``np.hypot``
@@ -2248,7 +2235,6 @@ def _face_geometry(f, memo, triangulate):
     return geom
 
 
-
 def _finite_point(p) -> bool:
     """Whether ``p`` (a QVector3D or None) is a real point."""
     import math
@@ -2303,7 +2289,11 @@ def _smooth_vcol(face, base, flat_rgb, smoother, tris, light) -> list:
     return out
 
 
-class Viewport(QOpenGLWidget):
+from views.document_tools import DocumentTools
+from views.view_navigation import ViewNavigation
+
+
+class Viewport(DocumentTools, ViewNavigation, QOpenGLWidget):
     """OpenGL viewport with orbital camera, grid, XYZ axes, tools and snapping."""
 
     valueBufferChanged = Signal(str)
@@ -2379,6 +2369,8 @@ class Viewport(QOpenGLWidget):
         "guide_point": "Guide point",
     }
 
+    _bind_bake_store = _bind_bake_store
+
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.view_filter = None
@@ -2413,26 +2405,7 @@ class Viewport(QOpenGLWidget):
         self.setFocusPolicy(Qt.StrongFocus)
         self.setMouseTracking(True)
 
-        self.camera = OrbitCamera()
-        self.scene = Scene()
-        _bind_bake_store(self)
-        from core import units as _units
-        _units.bind_scene(self.scene)   # readouts format in the model's units
-        self.history = History(self.scene)
-        # Snapping inference state (hover / acquired edges and points,
-        # the encouraged points, the axis and reference locks, the last
-        # snap) gathered in its own collaborator. The delegating
-        # properties further down keep the old attribute names reading
-        # and writing through to it.
-        self.inference = InferenceEngine(self)
-        self.active_tool: Optional[Tool] = None
-        # Extensions' overlays and snap providers (views.extension_api).
-        self._ext_overlays: list = []
-        self._ext_snap_providers: list = []
-        # Copy/paste clipboard: copied geometry (faces + edges as positions,
-        # groups as snapshot copies) plus a reference corner so Paste can
-        # place it under the cursor.
-        self.clipboard: Optional[dict] = None
+        self._init_document()
 
         # Linear-inference toggle (Alt): "all" | "off" | "parallel_perp".
         self.linear_inference_mode = "all"
@@ -10790,24 +10763,6 @@ class Viewport(QOpenGLWidget):
         painter.setBrush(QColor(243, 115, 41, 26))
         painter.drawRect(rect)
 
-    def _zoom_to_box(self, start: QPointF, end: QPointF) -> None:
-        """Zoom the camera so the dragged screen rectangle fills the view
-        (Zoom Window). Re-centres on the box's centre and scales the distance
-        by the fraction of the viewport the box covers."""
-        bw, bh = abs(end.x() - start.x()), abs(end.y() - start.y())
-        if bw < 6 or bh < 6:          # a click, not a real box → ignore
-            return
-        cx, cy = (start.x() + end.x()) / 2.0, (start.y() + end.y()) / 2.0
-        focus = self._world_under_cursor(cx, cy)
-        if focus is not None:
-            self.camera.target = focus
-        frac = max(bw / max(self.width(), 1), bh / max(self.height(), 1))
-        frac = max(frac, 0.04)        # don't zoom past a sane limit in one go
-        from core.camera import MAX_DISTANCE
-        self.camera.distance = max(
-            self.camera.min_distance(),
-            min(self.camera.distance * frac, MAX_DISTANCE))
-        self.update()
 
     def _snap_context_suffix(self, context) -> str:
         """What the ScreenTip adds after the snap's own name: the geometry
@@ -12538,41 +12493,6 @@ class Viewport(QOpenGLWidget):
         painter.drawText(QPointF(14, 24), f"{word} to reference edge")
 
     # ---- Pixel ↔ world ------------------------------------------------------
-    def _pixel_to_ray(
-        self, x: float, y: float
-    ) -> tuple[Optional[QVector3D], Optional[QVector3D]]:
-        """Camera ray (origin, unit direction) through the given pixel."""
-        w = max(self.width(), 1)
-        h = max(self.height(), 1)
-        ndc_x = 2.0 * x / w - 1.0
-        ndc_y = 1.0 - 2.0 * y / h
-        # The unfitted matrix: rays stay exactly what they were whatever
-        # depth range the frame was drawn with (fit_depth_range).
-        projection = getattr(self.camera, "picking_projection_matrix",
-                             self.camera.projection_matrix)
-        mvp = projection() * self.camera.view_matrix()
-        inv, ok = mvp.inverted()
-        if not ok:
-            return None, None
-        p_near = inv.map(QVector3D(ndc_x, ndc_y, -1.0))
-
-        def finite(v):
-            return all(map(math.isfinite, (v.x(), v.y(), v.z())))
-        # The far plane gives the most exact direction, far from the near
-        # point. But a camera a few centimetres from a part (#583) has its
-        # near plane 0.4 mm out and the far one kilometres away: past
-        # float32 the depth term rounds to exactly -1, the far plane goes
-        # to infinity, and the ray came out NaN — and with it every snap
-        # built on the cursor. Then a point just short of it serves.
-        direction = None
-        for depth in (1.0, 0.999, 0.9, 0.0):
-            d = inv.map(QVector3D(ndc_x, ndc_y, depth)) - p_near
-            if finite(d) and d.length() >= 1e-9:
-                direction = d
-                break
-        if direction is None or not finite(p_near):
-            return None, None
-        return p_near, direction.normalized()
 
     def _coplanar_eps(self, origin: QVector3D, direction: QVector3D,
                       best_t: float) -> float:
@@ -13507,51 +13427,6 @@ class Viewport(QOpenGLWidget):
             return start, QVector3D(1.0, 0.0, 0.0)
         return start, QVector3D(0.0, 1.0, 0.0)
 
-    def _project_to_lock_line(
-        self,
-        start: QVector3D,
-        lock_dir: QVector3D,
-        pixel_x: float,
-        pixel_y: float,
-    ) -> QVector3D:
-        """Closest point on the lock line (``start``, ``lock_dir``) to the
-        camera ray that passes through ``(pixel_x, pixel_y)``.
-
-        This is what makes Z-axis locks actually let you draw vertical
-        lines — moving the mouse up/down on screen slides the projected
-        point along the Z line.
-
-        The cursor is first dropped square onto the line as the screen
-        shows it, so only motion ALONG the line changes the length. In
-        perspective the closest point to the cursor's own ray also moved
-        with the cursor's sideways position (#769).
-        """
-        step = max(float(getattr(self.camera, "distance", 1.0)) * 0.25, 1e-3)
-        pa = self._world_to_pixel(start)
-        pb = self._world_to_pixel(start + lock_dir.normalized() * step)
-        if pa is not None and pb is not None:
-            dx, dy = pb[0] - pa[0], pb[1] - pa[1]
-            dd = dx * dx + dy * dy
-            if dd > 1.0:
-                s = ((pixel_x - pa[0]) * dx + (pixel_y - pa[1]) * dy) / dd
-                pixel_x, pixel_y = pa[0] + dx * s, pa[1] + dy * s
-        ray_origin, ray_dir = self._pixel_to_ray(pixel_x, pixel_y)
-        if ray_origin is None or ray_dir is None:
-            return start
-        d1 = lock_dir.normalized()
-        d2 = ray_dir
-        r = start - ray_origin
-        b = QVector3D.dotProduct(d1, d2)
-        d = QVector3D.dotProduct(d1, r)
-        e = QVector3D.dotProduct(d2, r)
-        denom = 1.0 - b * b
-        if abs(denom) < 1e-6:
-            # Lock line is parallel to the camera ray — project the ray
-            # origin onto the lock line as a stable fallback.
-            t = -d
-        else:
-            t = (b * e - d) / denom
-        return start + d1 * t
 
     #: Eye depth (m) a segment is cut at when it runs behind the camera.
     _CLIP_W = 1e-3
@@ -13670,24 +13545,6 @@ class Viewport(QOpenGLWidget):
         world_to_pixel.snap_projection = (mvp.data(), (w, h))
         return world_to_pixel
 
-    def _world_to_pixel(self, world: QVector3D,
-                        mvp: Optional[QMatrix4x4] = None
-                        ) -> Optional[tuple[float, float]]:
-        """World point → screen pixel (or None if behind the camera).
-
-        ``mvp`` lets a caller projecting a run of points in one frame pass
-        the projection*view it already built instead of paying a rebuild —
-        two matrix builds and a multiply — for every point (#439)."""
-        if mvp is None:
-            mvp = self.camera.projection_matrix() * self.camera.view_matrix()
-        clip = mvp.map(QVector4D(world.x(), world.y(), world.z(), 1.0))
-        if clip.w() <= 0:
-            return None
-        ndc_x = clip.x() / clip.w()
-        ndc_y = clip.y() / clip.w()
-        px = (ndc_x * 0.5 + 0.5) * self.width()
-        py = (1.0 - (ndc_y * 0.5 + 0.5)) * self.height()
-        return (px, py)
 
     @staticmethod
     def _mesh_fingerprint(mesh):
@@ -19361,80 +19218,6 @@ class Viewport(QOpenGLWidget):
                     best_g = self._owner_of(g)
         return best_g
 
-    # ---- Tool management ----------------------------------------------------
-    #: The tool a camera mode (Orbit, Pan, Zoom) took the view from, parked
-    #: with its state: picking it again resumes it (the modeller's suspend /
-    #: resume), picking any other tool resets it.
-    suspended_tool: Optional[Tool] = None
-
-    def set_active_tool(self, tool: Optional[Tool]) -> None:
-        suspended = self.suspended_tool
-        if suspended is not None:
-            self.suspended_tool = None
-            if tool is suspended:
-                self._resume_tool(tool)
-                return
-            # Any other tool: the parked one ends as a switch ends it.
-            suspended.on_deactivate(self)
-        if self.active_tool is tool and self.nav_mode is None:
-            # Picking the tool you already hold starts it over, the classic
-            # behaviour: the first point is released, the locks let go. Issue
-            # #34 (@pacaeiro): «If I'm drawing a line and have the first
-            # point defined… if I press (L) again, the command should
-            # reset». It used to be a no-op.
-            if tool is not None:
-                tool.on_cancel(self)
-            self.inference.clear_references()
-            self.axis_lock = None
-            self._shift_lock = None
-            self.reference_edge = None
-            self.reference_mode = None
-            self.linear_inference_mode = "all"
-            self._refresh_snap()
-            return
-        # Picking a drawing tool always leaves camera-navigation mode — and
-        # any camera drag it was in the middle of.
-        self.nav_mode = None
-        self._last_pos = None
-        self._orbit_pivot = None
-        self._pan_mode = False
-        self._look_drag = None
-        self.unsetCursor()
-        if self.active_tool is not None:
-            self.active_tool.on_deactivate(self)
-        self.active_tool = tool
-        self.linear_inference_mode = "all"   # the toggle lasts one operation
-        # …and so does the arrow-key axis lock (issue #30). It was the one
-        # sticky state this reset forgot, so a lock taken while drawing a
-        # line was still on — label and all — after switching to Rectangle,
-        # quietly constraining a tool that never asked for it.
-        self.axis_lock = None
-        self._hover_entity = None  # stale highlight from the previous tool
-        self.inference.clear_references()
-        if tool is not None:
-            tool.on_activate(self)
-        self._apply_tool_cursor()
-        self.measurementChanged.emit(self._measurement_text())
-        self.update()
-
-    def _resume_tool(self, tool: Tool) -> None:
-        """Back from a camera mode to the tool it suspended, as it was: the
-        first point placed, the rubber band, the locks. Only the camera
-        drag ends."""
-        self.nav_mode = None
-        self._last_pos = None
-        self._orbit_pivot = None
-        self._pan_mode = False
-        self._look_drag = None
-        self.active_tool = tool
-        resume = getattr(tool, "on_resume", None)
-        if callable(resume):
-            resume(self)
-        self._apply_tool_cursor()
-        self._refresh_snap()
-        self.measurementChanged.emit(self._measurement_text())
-        self.update()
-
     def _apply_tool_cursor(self) -> None:
         """The pointer becomes the active tool's icon; Select and
         unknown tools keep the standard arrow.
@@ -19689,177 +19472,6 @@ class Viewport(QOpenGLWidget):
         box.exec()
         return box.clickedButton() is opener
 
-    def begin_group_edit(self, group) -> None:
-        """Enter a group for editing (double-click-into-group). A
-        component's tools work in the frame of the selected occurrence.
-
-        A locked group (the Browser's padlock), or one inside a locked
-        group, does not open — whichever road asks: a double-click, the
-        right-click's Edit Group or a part clicked in the Parts tab."""
-        from core.outliner import path_to
-        path = path_to(self.scene.groups, group) or []
-        if any(getattr(g, "locked", False) or self.scene._layer_state(g)[1]
-               for g in [*path, group]):
-            self.flash_status(tr("Unlock it first"), 3000)
-            return
-        # A linked document (core/links.py) is edited in its own file: going
-        # into it offers to open that file instead.
-        from core import links
-        linked = links.linked_ancestor(group)
-        if linked is not None:
-            self._offer_link_source(linked)
-            return
-        parent = self.scene.edit_group
-        in_definition = (parent is not None
-                         and group in (getattr(parent, "children", None) or ())
-                         and bool(getattr(parent, "component", True)))
-        if (getattr(group, "xform", None) is not None
-                and not getattr(group, "component", True)
-                and not in_definition
-                and self._mesh_shared_elsewhere(group)):
-            # A copied GROUP shares its geometry with the other copies only
-            # until it is edited: opening it makes it its own, one undo
-            # step, instead of editing every copy like a component
-            # (issue #90 — the classic behaviour of groups).
-            from core.history import MakeUniqueCommand
-            self.history.execute(MakeUniqueCommand(group))
-        was_instance = (getattr(group, "xform", None) is not None
-                        and (bool(getattr(group, "component", True))
-                             or not getattr(group, "children", None)))
-        before = _context_stamp(self)
-        self.scene.begin_group_edit(group)
-        _ctx_changed(self, before)
-        self._edit_undo_mark = len(self.history.undo_stack)
-        # Per level too: leaving folds only what ran since THIS level opened.
-        if self.scene._edit_stack:
-            self.scene._edit_stack[-1]["undo_mark"] = self._edit_undo_mark
-        self._hover_entity = None
-        self._edges_version = -1     # the rest may fade out or leave the VBOs
-        share = self.scene._edit_stack[-1].get("share") if self.scene._edit_stack else None
-        if was_instance and share is not None:
-            copies = sum(1 for g in self.scene.groups if g.mesh is share[1]) + 1
-            self.flash_status(tr(
-                "Editing component '{name}' — the change reaches its {n} "
-                "copies when you leave (Esc); Make Unique first to edit "
-                "one copy only", name=group.name, n=copies), 6000)
-        else:
-            self.flash_status(tr(
-                "Editing {path} — Esc or click outside goes up one level",
-                path=self.edit_path_text()), 5000)
-        self.update()
-
-    def _mesh_shared_elsewhere(self, group) -> bool:
-        """Whether another placement — top level or nested at any depth —
-        draws ``group``'s mesh. A group exploded out of a component copy
-        shares its mesh with the group still inside the other copies
-        (issue #97), and the top-level scan alone did not see it."""
-        from core.purge import iter_groups
-        mesh = group.mesh
-        return any(g is not group and g.mesh is mesh for g in iter_groups(self.scene.groups))
-
-    def edit_path_text(self) -> str:
-        """Where you are, as a path: ``Plaza ▸ Jardinera ▸ Banca``.
-
-        Nesting without this reads as a broken program: you click outside,
-        the program correctly steps up ONE level into a parent that is also
-        a container, everything is still faded, and nothing seems to have
-        happened («hago clic en ese grupo que me sale atenuado y sigue así»,
-        Marco, 2026-09-11 — he was two levels deep and had no way to know).
-        """
-        from core.outliner import open_path
-        return " ▸ ".join(group.name for group in open_path(self.scene))
-
-    def end_one_group_edit(self) -> None:
-        """Step out ONE level — Esc, which leaves you inside the
-        parent when the group you were editing lived in another group."""
-        self._leave_group_edit(todos=False)
-
-    def set_document(self, scene, history) -> tuple:
-        """Show another document: ``scene`` with its own undo ``history``
-        (for an extension's workspace, ``ExtensionApp.enter_workspace``).
-        Returns the ``(scene, history)`` pair it replaces, untouched, to be
-        handed back later — the parked document keeps its undo steps and its
-        selection.
-
-        A document boundary like New / Open: the id()-keyed chunk caches
-        are reset (:meth:`reset_document_caches`), and since the other
-        render caches remember the scene VERSION they were built for, not
-        which scene it was, the incoming scene is moved past every version
-        this viewport has shown before it is drawn."""
-        self.end_group_edit()
-        old = (self.scene, self.history)
-        self.inference.reset()
-        self.reset_document_caches()
-        seen = max(getattr(self, "_versions_seen", 0), self.scene.version, scene.version)
-        scene.version = self._versions_seen = seen + 1
-        # A view preference, not document content: it follows the viewport.
-        scene.hide_similar_components = bool(
-            getattr(self.scene, "hide_similar_components", False))
-        self.scene = scene
-        self.history = history
-        _bind_bake_store(self)        # the incoming document's shared bakes
-        from core import units as _units
-        _units.bind_scene(scene)
-        self._edges_version = -1
-        self._hover_entity = None
-        self._hover_edge = None
-        self.last_snap = None
-        self.reference_edge = None
-        self.reference_mode = None
-        self.notify_scene_changed()
-        return old
-
-    def end_group_edit(self) -> None:
-        """Leave every open group, back to the model. What the menus and the
-        save/export paths call."""
-        self._leave_group_edit(todos=True)
-
-    def _leave_group_edit(self, todos: bool) -> None:
-        if self.scene.edit_group is None:
-            return
-        # Level by level: a part shares back before the assembly around it
-        # takes its matrix back up out of the parts, and each level folds
-        # only what ran since it opened.
-        while todos and len(self.scene._edit_stack) > 1:
-            self._leave_group_edit(todos=False)
-        level = self.scene._edit_stack[-1] if self.scene._edit_stack else {}
-        share = level.pop("share", None)
-        before = _context_stamp(self)
-        if todos:
-            self.scene.end_group_edit()
-        else:
-            self.scene.end_one_group_edit()
-        if share is None and "session" in level:
-            from core.history import OccurrenceCommands
-            OccurrenceCommands.fold(self.history, level["session"])
-        _ctx_changed(self, before)
-        self._hover_entity = None
-        self._edges_version = -1     # the rest comes back
-        if share is not None:
-            from core.reference_edit import record_leave
-            group, proto = share[:2]
-            shared = record_leave(self.history, level, share)
-            if shared:
-                copies = sum(1 for g, _m in self.scene.placements()
-                             if g.mesh is proto)
-                self.flash_status(tr(
-                    "Component '{name}' updated on its {n} copies",
-                    name=group.name, n=copies), 4000)
-            else:
-                self.flash_status(tr("Left the group"), 2000)
-        elif self.scene.edit_group is not None:
-            # Stepping up into another container: say so, or it reads as a
-            # click that did nothing (everything around is still faded).
-            self.flash_status(tr(
-                "Up one level — now in {path}",
-                path=self.edit_path_text()), 4000)
-        else:
-            self.flash_status(tr("Left the group"), 2000)
-        # Leaving re-shares a component: the trays (Components' «In the
-        # model» list, Entity Info) must hear it now, not at the next edit —
-        # the list read «no components yet» with the house on screen
-        # (Rafael, revision 4, 06:18).
-        self.notify_scene_changed()
 
     # ---- Rest-of-model context while editing a group -------------------------
     @property
@@ -19985,13 +19597,6 @@ class Viewport(QOpenGLWidget):
             return False          # the container and what lives inside it
         return self._owner_of(group) is not ctx
 
-    def _depth_of(self, point) -> Optional[float]:
-        """How far ``point`` lies in front of the eye, along the view
-        direction: what one pixel of pan is worth there (#184)."""
-        if point is None:
-            return None
-        cam = self.camera
-        return QVector3D.dotProduct(point - cam.eye(), cam.forward())
 
     def _model_point_at(self, x: float, y: float):
         """The model point under pixel ``(x, y)`` -- what the frame on screen
@@ -20015,44 +19620,6 @@ class Viewport(QOpenGLWidget):
                 pass
         return None
 
-    def _recentre_on(self, x: float, y: float) -> None:
-        """Bring the model point under pixel ``(x, y)`` to the centre of the
-        view: a slide, the view keeps its direction and what is at that depth
-        keeps its size on screen. With no model there, the point at the depth
-        of the view's centre: the same slide, and the zoom stays (#1154)."""
-        cam = self.camera
-        point = self._model_point_at(x, y)
-        if point is None:
-            point = self._point_at_centre_depth(x, y)
-            if point is None:
-                return
-            cam.target = point
-            self.update()
-            return
-        if cam.perspective:
-            # The depth along the view, not the slant length to the point:
-            # the eye slides sideways and comes no nearer. A parallel view
-            # keeps its distance, which is its zoom.
-            depth = self._depth_of(point)
-            if depth is None or not math.isfinite(depth) or depth <= 0.0:
-                return
-            cam.distance = max(cam.min_distance(point), depth)
-        cam.target = QVector3D(point)
-        self.update()
-
-    def _point_at_centre_depth(self, x: float, y: float):
-        """Where the ray of pixel ``(x, y)`` meets the plane through the
-        camera target, square to the view."""
-        origin, direction = self._pixel_to_ray(x, y)
-        if origin is None or direction is None:
-            return None
-        cam = self.camera
-        view = (cam.target - cam.eye()).normalized()
-        along = QVector3D.dotProduct(direction, view)
-        if abs(along) < 1e-6:
-            return None
-        t = QVector3D.dotProduct(cam.target - origin, view) / along
-        return origin + direction * t if t > 0.0 else None
 
     def _orbit_pivot_at(self, x: float, y: float):
         """Where an orbit gesture that starts at pixel ``(x, y)`` turns (#164).
@@ -20429,30 +19996,7 @@ class Viewport(QOpenGLWidget):
         self._dispatch_tool_click(ev, double=True)
 
     # ---- Mouse look (a tool with ``on_look``: First Person) -----------------
-    @staticmethod
-    def _can_warp_pointer() -> bool:
-        """Whether the pointer can be put back after each look move. Wayland
-        does not let a client move it; there the look is a plain drag."""
-        from PySide6.QtGui import QGuiApplication
-        name = QGuiApplication.platformName().lower()
-        return not (name.startswith("wayland") or name in ("offscreen",
-                                                            "minimal"))
 
-    def _begin_look(self, ev) -> None:
-        self._look_drag = (ev.button(), ev.position().toPoint())
-        self.setCursor(Qt.BlankCursor)
-
-    def _look_move(self, ev) -> None:
-        button, last = self._look_drag
-        p = ev.position().toPoint()
-        dx, dy = p.x() - last.x(), p.y() - last.y()
-        if dx or dy:
-            self.active_tool.on_look(self, dx, dy)
-        if (dx or dy) and self._can_warp_pointer():
-            from PySide6.QtGui import QCursor
-            QCursor.setPos(self.mapToGlobal(last))
-            p = last
-        self._look_drag = (button, p)
 
     def _end_look(self) -> None:
         self._look_drag = None
@@ -20896,46 +20440,6 @@ class Viewport(QOpenGLWidget):
             return None
         return ("hit", point)
 
-    def _world_under_cursor(self, x: float, y: float) -> Optional[QVector3D]:
-        """Nearest geometry hit, otherwise the focal plane through the target.
-
-        An empty-space ray near the horizon meets Z=0 arbitrarily far away.
-        Zooming toward that point magnified a tiny trackpad gesture into a
-        huge camera translation. The focal plane keeps background zoom at
-        the current viewing distance, on either side of the horizon.
-        """
-        origin, direction = self._pixel_to_ray(x, y)
-        if origin is None or direction is None:
-            return None
-        best_t = None
-        seen = self._depth_world_at(x, y) if hasattr(self, "_depth_world_at") \
-            else None
-        if seen is not None and seen[0] == "hit":
-            return seen[1]
-        # No frame to read (wheel notches faster than paints): on a huge
-        # model the ray against the index cost 2 s a notch (live profile,
-        # #158) — the focal plane below answers at once.
-        huge = (seen is None and hasattr(self, "_pick_lazy_table")
-                and self._pick_lazy_table() is not None)
-        idx = (self._pick_index(near=("px", x, y))
-               if seen is None and not huge else None)
-        if idx is not None and idx.entities:
-            import numpy as np
-            t = self._ray_hits(idx, origin, direction, idx.ent_vis,
-                               reduce_global=True)
-            if t is not None and np.isfinite(t):
-                best_t = float(t)
-        if best_t is not None:
-            return origin + direction * best_t
-        view = (self.camera.target - self.camera.eye())
-        if view.length() > 1e-9:
-            view = view.normalized()
-            denom = QVector3D.dotProduct(direction, view)
-            if abs(denom) > 1e-6:
-                t = QVector3D.dotProduct(self.camera.target - origin, view) / denom
-                if t > 0:
-                    return origin + direction * t
-        return None
 
     def wheelEvent(self, ev) -> None:
         # While a 3D mouse moves the view, wheel notches are its driver's
@@ -20967,82 +20471,12 @@ class Viewport(QOpenGLWidget):
                   extra=f"reused={'proj' if reproj else reused}", floor=10.0)
         self.update()
 
-    def _zoom_at(self, steps: float, pos):
-        """Zoom ``steps`` notches toward the point under ``pos`` -- the
-        wheel's zoom, shared with the trackpad pinch (#248). Returns
-        ``(reprojected, reused)`` for the perf log."""
-        # Zoom toward the cursor: keep the point under the
-        # pointer fixed on screen, not the origin. During a wheel burst the
-        # focus is CACHED: zoom_to pins that world point, so re-picking every
-        # tick both wasted ~25 ms/tick against a big model (the zoom felt
-        # heavy) and let float error drift the pinned point.
-        def pose():
-            c = self.camera
-            t = c.target
-            return (round(c.yaw, 9), round(c.pitch, 9),
-                    round(c.distance, 6),
-                    round(t.x(), 6), round(t.y(), 6), round(t.z(), 6))
-
-        # The pin is anchored to the CAMERA POSE, not a time window:
-        # zoom_to keeps the focus fixed on screen by construction, so slow
-        # one-notch-per-second zooming reuses it indefinitely (a 1 s window
-        # expired between deliberate notches and re-picked 280k triangles
-        # per notch — the zoom jank). Orbit/pan or an edit changes the pose
-        # or the version and honestly invalidates it.
-        cached = getattr(self, "_zoom_focus", None)
-        reused = (cached is not None and cached[0] == pose()
-                  and abs(pos.x() - cached[1]) < 24.0
-                  and abs(pos.y() - cached[2]) < 24.0
-                  and self.scene.version == cached[3])
-        reproj = False
-        if reused:
-            focus = cached[4]
-        else:
-            focus = None
-            if (cached is not None and cached[4] is not None
-                    and self.scene.version == cached[3]):
-                # Orbit/pan changed the pose, but the cursor usually still
-                # rests on the SAME world point (zoom → orbit a touch → zoom
-                # again, the modeling rhythm). Re-validate the pin by
-                # projecting it with the current camera: one matrix map
-                # instead of a ~25 ms re-pick of the whole model per notch.
-                p = self._world_to_pixel(cached[4])
-                if (p is not None and abs(p[0] - pos.x()) < 24.0
-                        and abs(p[1] - pos.y()) < 24.0):
-                    focus = cached[4]
-                    reproj = True
-            if focus is None:
-                focus = self._world_under_cursor(pos.x(), pos.y())
-        if focus is not None:
-            # A perceptible retreat even from a close-up: ~1 % of the
-            # model's size per notch when the frame scaling alone would move
-            # the eye less than that (the "zoom is stuck" report). Scale the
-            # floor by the actual wheel fraction: a trackpad can send dozens
-            # of tiny events per gesture, each previously getting a full notch.
-            self.camera.zoom_to(steps, focus,
-                                min_step=self._zoom_out_step() * abs(steps))
-        else:
-            self.camera.zoom(steps)
-        self._zoom_focus = (pose(), pos.x(), pos.y(),
-                            self.scene.version, focus)
-        return reproj, reused
 
     #: The least a notch of the wheel backs out, from a close-up, once the
     #: camera stands 2 cm or more from what it looks at — and always in an
     #: empty scene, which has no size to go by.
     _ZOOM_OUT_STEP = 0.05
 
-    def _zoom_out_step(self) -> float:
-        """Zoom-out floor per notch: 1 % of the model, never less than 5 cm
-        — as it always was — except closer than 2 cm to a small part, where
-        5 cm would throw it out of sight in one notch: there the 5 cm
-        shrinks with the distance (1.25 cm at the 5 mm close-up)."""
-        diag = self._model_diag()
-        if diag <= 0.0:
-            return self._ZOOM_OUT_STEP
-        from core.camera import MIN_DISTANCE_FAR
-        near = min(1.0, float(self.camera.distance) / MIN_DISTANCE_FAR)
-        return max(self._ZOOM_OUT_STEP * near, 0.01 * diag)
 
     def _model_diag(self) -> float:
         """The model's size, for the zoom step. On a huge model it comes

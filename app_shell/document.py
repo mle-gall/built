@@ -15,7 +15,9 @@ from app_shell.borrow import WidgetShim, _rebind, borrow, signals_of
 
 def _make_class():
     from views.viewport import Viewport
-    cls = type("ShellViewport", (WidgetShim,), {
+    from views.document_tools import DocumentTools
+    from views.view_navigation import ViewNavigation
+    cls = type("ShellViewport", (DocumentTools, ViewNavigation, WidgetShim), {
         **signals_of(Viewport),
         "__module__": __name__,
         "__doc__": "Viewport's document-controller methods on a QObject.",

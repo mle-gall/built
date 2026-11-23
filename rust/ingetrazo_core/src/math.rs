@@ -334,6 +334,34 @@ impl Matrix4 {
             (Self(self.0.inverse()), true)
         }
     }
+    /// Unproject a logical pixel using the unfitted picking transform.
+    fn pixel_ray(&self, x: f64, y: f64, width: f64, height: f64) -> (Option<Vec3>, Option<Vec3>) {
+        let (inv, valid) = self.inverted();
+        if !valid {
+            return (None, None);
+        }
+        let nx = 2.0 * x / width.max(1.0) - 1.0;
+        let ny = 1.0 - 2.0 * y / height.max(1.0);
+        let unproject = |z| inv.0.project_point3(DVec3::new(nx, ny, z));
+        let origin = unproject(-1.0);
+        // Extreme near/far ratios can put the far plane at infinity.
+        for z in [1.0, 0.999, 0.9, 0.0] {
+            let direction = unproject(z) - origin;
+            if direction.is_finite() && direction.length() >= 1e-9 {
+                return (Some(origin.into()), Some(direction.normalize().into()));
+            }
+        }
+        (None, None)
+    }
+
+    fn world_pixel(&self, world: &Bound<'_, PyAny>, width: f64, height: f64) -> PyResult<Option<(f64, f64)>> {
+        let clip = self.0 * xyz(world)?.extend(1.0);
+        if clip.w <= 0.0 {
+            return Ok(None);
+        }
+        Ok(Some(((clip.x / clip.w * 0.5 + 0.5) * width,
+                 (1.0 - (clip.y / clip.w * 0.5 + 0.5)) * height)))
+    }
     fn transposed(&self) -> Self {
         Self(self.0.transpose())
     }
