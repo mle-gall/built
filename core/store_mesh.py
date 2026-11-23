@@ -199,7 +199,10 @@ class VertexView(_ViewMixin, Vertex):
 
     @position.setter
     def position(self, value):
-        self._obj().position = value
+        if self._m.__dict__.get("_instance_definition") is not None:
+            self._m.place_vertex(self, value)
+        else:
+            self._obj().position = value
 
     @property
     def edges(self):
@@ -1711,6 +1714,8 @@ class StoreMesh(Mesh):
         if isinstance(snap, StoreState):
             _restore_store_state(self, snap)
             return
+        if self.__dict__.get("_instance_definition") is not None:
+            raise _fallback()("cannot restore an object graph into an occurrence view")
         # A Python snapshot: the mesh becomes those objects again.
         _log_object_fallback("restore object snapshot")
         _to_python_lists(self)
@@ -1826,6 +1831,8 @@ class StoreMesh(Mesh):
         docstring); a no-op once done."""
         if self.__class__ is not StoreMesh:
             return
+        if self.__dict__.get("_instance_definition") is not None:
+            raise _fallback()("this occurrence edit requires a store-backed operation")
         if self.__dict__.get("_resident_edit"):
             raise _fallback()("face edit requires unsupported mesh topology")
         _log_object_fallback("materialise")
@@ -2017,6 +2024,10 @@ def _restore_store_state(m, snap: StoreState) -> None:
                 own[k] = v
     d["_attr_table"] = snap.table
     d["_attr_own"] = own
+    definition = d.get("_instance_definition")
+    if definition is not None:
+        definition._attr_own = own
+        definition._attr_table = snap.table
     d.setdefault("_objmap", {})
     for name in ("vertices", "edges", "faces", "_registry", "_displaced",
                  "_bulk"):
@@ -2024,6 +2035,24 @@ def _restore_store_state(m, snap: StoreState) -> None:
     m.__class__ = StoreMesh
     m._chunk_dirty = True
     m._mut_serial += 1
+
+
+def instance_view(mesh, matrix):
+    """An occurrence facade over the definition store, with the same element keys."""
+    from core.mesh import DeferredMesh
+    if isinstance(mesh, DeferredMesh):
+        mesh._materialize()
+    if type(mesh) is not StoreMesh:
+        return None
+    from formats.built import placement_values
+    try:
+        view = mesh._store._instance_view(mesh, placement_values(matrix), (0., 0., 0.))
+    except ValueError:  # a singular placement has no world-to-definition inverse
+        return None
+    result = Mesh()
+    become_store(result, view, mesh._attr_table, mesh._attr_own)
+    result._instance_definition = mesh
+    return result
 
 
 def empty_store_mesh():

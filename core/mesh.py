@@ -493,6 +493,9 @@ class Mesh:
         the viewport's geometry caches (keyed on those) are not thrown
         away for a paint; see :meth:`mark_modified` for raw edits."""
         self.__dict__["_revision"] = self.__dict__.get("_revision", 0) + 1
+        definition = self.__dict__.get("_instance_definition")
+        if definition is not None:
+            definition.mark_modified()
 
     def mark_modified(self) -> None:
         """Publish a batch of direct element edits, including attributes."""

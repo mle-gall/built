@@ -186,6 +186,7 @@ def saved(scene, work: Path, tag: str) -> dict:
         again = work / f"{tag}-again-{name}"
         igz.save_scene(back, again, backup=False)
         files[name]["again"] = members(again)
+        files[name]["again_hash"] = hashlib.sha256(again.read_bytes()).hexdigest()
     return files
 
 
@@ -368,6 +369,9 @@ def main(work: Path):
     framed.begin_group_edit(first)
     endpoints = [QVector3D(1, 2, 3), QVector3D(3, 1, 2)]
     framed.mesh.add_edge(*(transform.map(p) for p in endpoints))
+    if doc_model.ENABLED:
+        assert first.mesh is second.mesh and len(second.mesh.edges) == 1
+        assert framed.take_edit_share() is None
     framed.end_group_edit()
     positions = [v.position_tuple() for v in second.mesh.vertices]
     import numpy as np

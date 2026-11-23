@@ -42,6 +42,17 @@ impl Frame {
         self.placement.as_ref().map_or(DVec3::ZERO, |p| p.translation) - DVec3::from(self.origin)
     }
 
+    pub fn matrix(&self) -> Option<[f64; 16]> {
+        self.placement.as_ref().map(|p| DMat4::from_cols(
+            p.basis.x_axis.extend(0.), p.basis.y_axis.extend(0.),
+            p.basis.z_axis.extend(0.), p.translation.extend(1.)
+        ).to_cols_array())
+    }
+
+    fn mirrored(&self) -> bool {
+        self.placement.as_ref().is_some_and(|p| p.basis.determinant() < 0.)
+    }
+
     pub fn is_model(&self) -> bool {
         self.placement.is_none() && self.origin == [0.; 3]
     }
@@ -55,7 +66,7 @@ impl Frame {
         self.placement.as_ref().map_or(v, |p| p.inverse * v).to_array()
     }
 
-    fn convert(&self, point: [f64; 3], to: &Self) -> [f64; 3] {
+    pub fn convert(&self, point: [f64; 3], to: &Self) -> [f64; 3] {
         if self.placement == to.placement {
             let delta = DVec3::from(self.origin) - DVec3::from(to.origin);
             return (DVec3::from(point) + delta).to_array();
@@ -91,6 +102,18 @@ impl State {
             }
             result
         }).collect());
+        if frame.mirrored() != self.frame.mirrored() {
+            // The ring and corner pools are appended in lockstep, including
+            // tombstones. A second reflection restores their exact order.
+            let mut corners: Vec<_> = self.corners.iter().copied().collect();
+            let mut start = 0;
+            for size in self.ring_sizes.iter() {
+                let end = start + *size as usize;
+                corners[start..end].reverse();
+                start = end;
+            }
+            out.corners = CowVec::from_vec(corners);
+        }
         out.frame = frame;
         out
     }

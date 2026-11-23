@@ -162,6 +162,8 @@ def _command_meshes(cmd, scene, phase) -> list:
             out.extend(meshes())
     seen, uniq = set(), []
     for m in out:
+        if m is not None:
+            m = m.__dict__.get("_instance_definition", m)
         if m is not None and id(m) not in seen:
             seen.add(id(m))
             uniq.append(m)

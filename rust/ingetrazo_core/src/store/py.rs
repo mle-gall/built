@@ -44,7 +44,7 @@ fn triples<'a, T: numpy::Element>(points: &'a PyReadonlyArray2<'_, T>) -> PyResu
     Ok(flat.as_chunks::<3>().0)
 }
 
-#[pyclass(module = "ingetrazo_core", name = "MeshStore")]
+#[pyclass(module = "ingetrazo_core", name = "MeshStore", subclass)]
 pub struct PyMeshStore {
     pub inner: Store,
     /// Per kind, `(revision, live slots in list order, slot -> index)`:
@@ -52,6 +52,67 @@ pub struct PyMeshStore {
     /// order per call once tombstones or a relink made it non-trivial.
     /// Every mutation bumps the revision, so a stale entry is never read.
     cache: Mutex<[Option<OrderCache>; 3]>,
+}
+
+/// An occurrence uses the same keys and generation floors as its definition.
+#[pyclass(extends=PyMeshStore, frozen)]
+struct InstanceStore {
+    definition: Py<PyMeshStore>,
+    mesh: Py<PyAny>,
+}
+
+impl InstanceStore {
+    fn refresh(slf: &Bound<'_, Self>) -> PyResult<()> {
+        let definition = slf.get().definition.bind(slf.py()).try_borrow()?;
+        let mut view = slf.as_super().try_borrow_mut()?;
+        if definition.inner.revision != view.inner.revision {
+            view._publish_frame(&definition)?;
+        }
+        Ok(())
+    }
+}
+
+#[pymethods]
+impl InstanceStore {
+    fn __getattribute__<'py>(slf: &Bound<'py, Self>, name: &str) -> PyResult<Bound<'py, PyAny>> {
+        Self::refresh(slf)?;
+        let attr = slf.as_any().py_super()?.getattr(name)?;
+        if !attr.is_callable() {
+            return Ok(attr);
+        }
+        Ok(Bound::new(slf.py(), InstanceMethod {
+            view: slf.clone().unbind(), method: attr.unbind()
+        })?.into_any())
+    }
+}
+
+#[pyclass(frozen)]
+struct InstanceMethod {
+    view: Py<InstanceStore>,
+    method: Py<PyAny>,
+}
+
+#[pymethods]
+impl InstanceMethod {
+    #[pyo3(signature=(*args, **kwargs))]
+    fn __call__<'py>(&self, py: Python<'py>, args: &Bound<'py, pyo3::types::PyTuple>,
+                     kwargs: Option<&Bound<'py, PyDict>>) -> PyResult<Bound<'py, PyAny>> {
+        let view = self.view.bind(py);
+        InstanceStore::refresh(view)?;
+        let start = view.as_super().try_borrow()?.inner.revision;
+        let result = self.method.bind(py).call(args, kwargs);
+        let current = view.as_super().try_borrow()?;
+        if current.inner.revision != start {
+            let mut definition = view.get().definition.bind(py).try_borrow_mut()?;
+            if definition.inner.revision != start {
+                return Err(PyValueError::new_err("definition changed during an occurrence edit"));
+            }
+            definition._publish_frame(&current)?;
+            drop(definition);
+            view.get().mesh.bind(py).call_method0("mark_modified")?;
+        }
+        result
+    }
 }
 
 /// `(revision, live slots in list order, slot -> list index)`.
@@ -1663,6 +1724,22 @@ impl PyMeshStore {
         Ok(rows3(py, &rows))
     }
 
+    #[getter]
+    fn frame_matrix(&self) -> Option<[f64; 16]> {
+        self.inner.state.frame.matrix()
+    }
+
+    fn _convert_point(&self, target: &PyMeshStore, point: [f64; 3]) -> [f64; 3] {
+        self.inner.state.frame.convert(point, &target.inner.state.frame)
+    }
+
+    fn _in_model_frame(&self, origin: [f64; 3]) -> Self {
+        let mut store = self.inner.clone();
+        let frame = super::frame::Frame::default().rebased(origin);
+        store.state = store.state.in_frame(frame, None);
+        Self::wrap(store)
+    }
+
     fn _in_frame(&self, origin: [f64; 3]) -> Self {
         let mut st = self.inner.clone();
         st.state = st.state.in_frame(st.state.frame.rebased(origin), None);
@@ -1676,6 +1753,13 @@ impl PyMeshStore {
         let mut store = self.inner.clone();
         store.state = store.state.in_frame(frame, None);
         Ok(Self::wrap(store))
+    }
+
+    fn _instance_view<'py>(slf: &Bound<'py, Self>, mesh: Py<PyAny>, matrix: [f64; 16], origin: [f64; 3])
+        -> PyResult<Bound<'py, InstanceStore>> {
+        let base = slf.try_borrow()?._in_instance_frame(matrix, origin)?;
+        let instance = InstanceStore { definition: slf.clone().unbind(), mesh };
+        Bound::new(slf.py(), (instance, base))
     }
 
     fn _publish_frame(&mut self, source: &PyMeshStore) -> PyResult<()> {

@@ -591,6 +591,10 @@ class Scene:
         definition = (group.mesh if callable(is_comp) and is_comp()
                       else None)
         parts = None
+        active_mesh = None
+        if _dm.ENABLED and not group.children and group.xform is not None:
+            from core.store_mesh import instance_view
+            active_mesh = instance_view(group.mesh, group.xform)
         if getattr(group, "children", None):
             # A container: its children stay children. What CANNOT stay is a
             # transform on it, because the tools work in world coordinates —
@@ -617,7 +621,7 @@ class Scene:
                 # Its matrix went down into the children and its mesh is in
                 # world coordinates now: the axes stay, as world axes.
                 group.axes = frame
-        elif getattr(group, "xform", None) is not None:
+        elif active_mesh is None and getattr(group, "xform", None) is not None:
             # A component instance: the tools work in world coordinates, so
             # the session edits a world-space COPY of the definition. On
             # leaving, the copy goes back into the shared prototype (local
@@ -639,7 +643,7 @@ class Scene:
         else:
             self._edit_stack.append(level)
         self._placement_context_bumps += 1
-        self.mesh = group.mesh
+        self.mesh = active_mesh if active_mesh is not None else group.mesh
         self.edit_group = group
         self._refresh_dimension_holds()
         self.selection.clear()

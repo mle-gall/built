@@ -87,19 +87,33 @@ def _placements(scene):
 
 
 def _targets(scene, uids):
-    if not isinstance(uids, (list, tuple)) or not uids or any(not isinstance(u, str) for u in uids):
-        raise ValueError('uids must be a nonempty list of strings')
-    wanted = set(uids)
+    if not isinstance(uids, (list, tuple)) or not uids:
+        raise ValueError('uids must be a nonempty list of strings or UID paths')
+    addresses = []
+    paths = {}
+    for uid in uids:
+        if isinstance(uid, (tuple, list)) and uid and all(isinstance(k, str) for k in uid):
+            uid = tuple(uid)
+            target = scene.resolve_occurrence(uid)
+            if target is None:
+                raise ValueError(f'Unknown occurrence path {uid!r}')
+            paths.setdefault(target, []).append(uid)
+        elif not isinstance(uid, str):
+            raise ValueError('uids must be a nonempty list of strings or UID paths')
+        addresses.append(uid)
+    wanted = set(addresses)
     targets = {}
     for group, source, _ in _placements(scene):
-        if group.uid in wanted:
+        keys = paths.get(group, ())
+        if group.uid in wanted or keys:
             if source:
                 raise ValueError('Linked placement is read-only: ' + group.uid)
             targets[group.uid] = group
+            targets.update((key, group) for key in keys)
     missing = wanted - targets.keys()
     if missing:
-        raise ValueError('Unknown uids: ' + ', '.join(sorted(missing)))
-    return [targets[uid] for uid in dict.fromkeys(uids)]
+        raise ValueError('Unknown uids: ' + ', '.join(sorted(map(str, missing))))
+    return list(dict.fromkeys(targets[uid] for uid in addresses))
 
 
 def _patch(group, recipe, registry):

@@ -419,7 +419,7 @@ def test_mesh_history_journal_does_not_walk_placements(monkeypatch):
                         lambda *a: (_ for _ in ()).throw(AssertionError('placement scan')))
     updates.apply(*updates.diff(scene))
     assert len(updates.changed) == 1
-    assert updates.changed[0][0] is mesh
+    assert updates.changed[0][0] is mesh.__dict__.get("_instance_definition", mesh)
     history.undo()
     updates.apply(*updates.diff(scene))
     assert len(updates.changed) == 1
@@ -624,10 +624,13 @@ def test_component_edit_deep_in_nested_groups_rewrites_one_row(monkeypatch):
     assert len(updates.packed.vertices) == size
     assert_matches_fresh_pack(updates, scene)
 
-    group, definition, xform, _ = scene.take_edit_share()
-    edited = group.mesh
+    share = scene.take_edit_share()
     scene.end_group_edit()
-    history.execute(ReshareInstanceCommand(group, definition, xform, edited))
+    if share is not None:
+        group, definition, xform, _ = share
+        history.execute(ReshareInstanceCommand(group, definition, xform, group.mesh))
+    else:
+        assert leaf.mesh is proto
     updates.apply(*updates.diff(scene))
     assert updates.last_local and leaf.mesh is proto
     assert_matches_fresh_pack(updates, scene)                      # the sibling too

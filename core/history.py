@@ -306,13 +306,16 @@ class History:
             return False
         target = getattr(cmd, "_history_mesh", None) or self.scene.mesh
         st = target.__dict__.get("_store")
-        if st is not None and phase == "execute" and any(st.frame_origin):
-            cmd._tool_origin = tuple(st.frame_origin)
-        frame = getattr(cmd, "_tool_origin", None)
-        if frame is not None and st is not None and tuple(st.frame_origin) != frame:
-            from core.coordinate_frame import mesh_frame
-            with mesh_frame(target, frame):
-                return self._run(cmd, phase, operation)
+        if st is not None:
+            matrix = st.frame_matrix
+            current = (tuple(st.frame_origin), tuple(matrix) if matrix is not None else None)
+            if phase == "execute" and not st._model_frame:
+                cmd._tool_frame = current
+            frame = getattr(cmd, "_tool_frame", None)
+            if frame is not None and current != frame:
+                from core.coordinate_frame import mesh_frame
+                with mesh_frame(target, frame[0], matrix=frame[1]):
+                    return self._run(cmd, phase, operation)
         listeners = tuple(self._listeners)
         self._notify(listeners, 0, cmd, phase, False)
         ran = False
