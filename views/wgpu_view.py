@@ -811,7 +811,7 @@ class MetalView(ViewNavigation):
         return cpu, gpu, wall
 
     def _fit_depth(self):
-        """The GL view's depth fit (``Viewport._fit_scene_depth``) on the
+        """The GL view's depth fit (``DocumentInteraction._fit_scene_depth``) on the
         shown placements' box. Reverse-Z already keeps millimetres apart
         at any distance here, so this only keeps the shared camera's planes
         the same in both views; the same refusals apply, and a live mesh
@@ -823,9 +823,9 @@ class MetalView(ViewNavigation):
         if (source is None or packed is None or not len(packed.instances)
                 or self.tools.mode == 'mesh' or getattr(self, 'preview_faces', None)):
             return
-        from views.viewport import Viewport
+        from views.viewport import DocumentInteraction
         try:
-            refused = Viewport._depth_fit_refused(source)
+            refused = DocumentInteraction._depth_fit_refused(source)
         except Exception:
             return
         lo, hi = np.asarray(packed.world_bounds, float)
@@ -837,16 +837,16 @@ class MetalView(ViewNavigation):
         """R3c-2a: reuse GL's frame, brackets and symbols at Metal's size."""
         from types import SimpleNamespace
         from PySide6.QtGui import QPainter
-        from views.viewport import Viewport
+        from views.viewport import DocumentInteraction
         context = SimpleNamespace(scene=self.scene, camera=self.camera,
                                   width=self.width, height=self.height)
-        context.section_plane_frame = lambda sp: Viewport.section_plane_frame(context, sp)
-        context._clip_segment_front = lambda a, b: Viewport._clip_segment_front(context, a, b)
-        context._world_to_pixel = lambda p: Viewport._world_to_pixel(context, p)
+        context.section_plane_frame = lambda sp: DocumentInteraction.section_plane_frame(context, sp)
+        context._clip_segment_front = lambda a, b: DocumentInteraction._clip_segment_front(context, a, b)
+        context._world_to_pixel = lambda p: DocumentInteraction._world_to_pixel(context, p)
         painter = QPainter(image)
         painter.setRenderHint(QPainter.Antialiasing)
         try:
-            Viewport._draw_section_planes(context, painter)
+            DocumentInteraction._draw_section_planes(context, painter)
         finally:
             painter.end()
 
@@ -1111,11 +1111,11 @@ class MetalView(ViewNavigation):
         hidden_geometry(self)
 
     def _group_obb(self, group):
-        from views.viewport import Viewport
+        from views.viewport import DocumentInteraction
         shared = self._shared.__dict__
         boxes = shared.setdefault('_container_boxes', {})
         if group not in boxes:
-            boxes[group] = Viewport._compute_obb(group)
+            boxes[group] = DocumentInteraction._compute_obb(group)
             # Which rows it measured: an edit elsewhere keeps the box.
             if getattr(self, 'uid_rows', None) is not None:
                 shared.setdefault('_container_box_rows', {})[group] = np.asarray(
@@ -1143,12 +1143,12 @@ class MetalView(ViewNavigation):
                 self._container_box_rows[group] = rows
 
     def _edit_group_box_corners(self):
-        from views.viewport import Viewport
-        return Viewport._edit_group_box_corners(self)
+        from views.viewport import DocumentInteraction
+        return DocumentInteraction._edit_group_box_corners(self)
 
     def edit_group_box_contains_pixel(self, x, y):
-        from views.viewport import Viewport
-        return Viewport.edit_group_box_contains_pixel(self, x, y)
+        from views.viewport import DocumentInteraction
+        return DocumentInteraction.edit_group_box_contains_pixel(self, x, y)
 
     def _leave_edit_on_empty_click(self, x, y, modifiers):
         if (self.scene.edit_group is not None and not self.scene.selection
@@ -1393,12 +1393,12 @@ class MetalView(ViewNavigation):
             self.tools.hover(event)
         elif event.buttons() & Qt.LeftButton and (self.tools.mode == 'select' or mode == 'zoom_window'):
             from views import wgpu_overlay
-            from views.viewport import Viewport
+            from views.viewport import DocumentInteraction
             zoom = mode == 'zoom_window'
             # GL shows a selection box only past the drag threshold (a
             # click that jitters a pixel is no box); Zoom Window at once.
             moved = self.last - self.press
-            if zoom or math.hypot(moved.x(), moved.y()) >= Viewport.BOX_DRAG_THRESHOLD_PX:
+            if zoom or math.hypot(moved.x(), moved.y()) >= DocumentInteraction.BOX_DRAG_THRESHOLD_PX:
                 primitive = wgpu_overlay.selection_rectangle((self.press.x(), self.press.y()),
                     (self.last.x(), self.last.y()), zoom=zoom)
                 self.overlay_primitives = [primitive]
@@ -1532,8 +1532,8 @@ class MetalView(ViewNavigation):
         self.update()
 
     def _is_triple_click(self, event):
-        from views.viewport import Viewport
-        return Viewport._is_triple_click(self, event)
+        from views.viewport import DocumentInteraction
+        return DocumentInteraction._is_triple_click(self, event)
 
     def event(self, event):
         if event.type() == QEvent.NativeGesture:
@@ -1551,11 +1551,11 @@ class MetalView(ViewNavigation):
                 return True
         if event.type() == QEvent.ShortcutOverride and hasattr(self, 'tools'):
             mode = self.tools.sync()
-            from views.viewport import Viewport
+            from views.viewport import DocumentInteraction
             target = self.tools if mode == 'mesh' else self.source_viewport
             if target is not None:
                 buffer = self.tools.value_buffer if mode == 'mesh' else target._value_buffer
-                if Viewport._measurement_claims_key(target, event, buffer):
+                if DocumentInteraction._measurement_claims_key(target, event, buffer):
                     event.accept()
                     return True
             claims = getattr(self.tools.tool, 'claims_key', None)
@@ -1647,7 +1647,7 @@ class MetalView(ViewNavigation):
 
     def _model_point_at(self, x, y):
         """The model point under pixel ``(x, y)`` from the Metal pick, or
-        ``None`` on sky or ground (GL's ``Viewport._model_point_at``)."""
+        ``None`` on sky or ground (GL's ``DocumentInteraction._model_point_at``)."""
         seen, point = self._depth_world_at(x, y)
         return point if seen == 'hit' else None
 
@@ -1665,9 +1665,9 @@ class MetalView(ViewNavigation):
 
     @_tool_frame
     def wheelEvent(self, event):
-        from views.viewport import Viewport
+        from views.viewport import DocumentInteraction
         self._invert_wheel = getattr(self.source_viewport, '_invert_wheel', False)
-        Viewport.wheelEvent(self, event)
+        DocumentInteraction.wheelEvent(self, event)
         self.update()
 
     def set_highlight(self, selected_ids, hovered_id=None):

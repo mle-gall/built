@@ -8,7 +8,7 @@ chrome through views/wgpu_ui.py) runs unchanged.
 """
 from __future__ import annotations
 
-from app_shell.borrow import WidgetShim
+from views.view_host import WidgetShim
 from views.wgpu_view import MetalView
 
 

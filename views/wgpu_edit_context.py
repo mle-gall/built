@@ -13,7 +13,7 @@ def rest_rows(groups, context):
 
 
 def box_primitives(view):
-    from views.viewport import Viewport, _box_edge_vertices
+    from views.viewport import DocumentInteraction, _box_edge_vertices
     from views.wgpu_overlay import Primitive
     source = view.source_viewport
     if source is None or source.plano_style is not None or source.style_override is not None:
@@ -26,7 +26,7 @@ def box_primitives(view):
                        math.tan(math.radians(view.camera.fov_deg) / 2))) / scale
     result = []
     for a, b in np.asarray(_box_edge_vertices(box)).reshape(-1, 2, 3):
-        segment = Viewport._clip_segment_front(view, QVector3D(*a), QVector3D(*b))
+        segment = DocumentInteraction._clip_segment_front(view, QVector3D(*a), QVector3D(*b))
         if segment is None:
             continue
         points = tuple(view._world_to_pixel(p) for p in segment)
@@ -57,7 +57,7 @@ def selection_box_segments(view):
     cached per group and document version: a selection change reuses
     them, an edit (move, scale, geometry) measures again."""
     from core.group import Group, oriented_box_corners
-    from views.viewport import Viewport, _box_edge_vertices
+    from views.viewport import DocumentInteraction, _box_edge_vertices
     source = view.source_viewport
     if source is None or source.plano_style is not None or source.style_override is not None:
         return _NO_BOXES
@@ -81,7 +81,7 @@ def selection_box_segments(view):
     for group in shown:
         box = cache.get(group)
         if box is None:
-            box = cache[group] = oriented_box_corners(*Viewport._compute_obb(group))
+            box = cache[group] = oriented_box_corners(*DocumentInteraction._compute_obb(group))
         parts.append(np.asarray(_box_edge_vertices(box), np.float32).reshape(-1, 2, 3))
     segments = np.concatenate(parts) if parts else _NO_BOXES[1]
     cache['key'], cache['segments'] = key, segments
@@ -107,13 +107,13 @@ def selection_box_vertices(view):
 def selection_box_primitives(view):
     """The same boxes as overlay lines, for a renderer without native
     preview edges (no depth test there)."""
-    from views.viewport import Viewport
+    from views.viewport import DocumentInteraction
     from views.wgpu_overlay import Primitive
     _, segments = selection_box_segments(view)
     scale = view.devicePixelRatioF()
     result = []
     for a, b in segments:
-        segment = Viewport._clip_segment_front(view, QVector3D(*a), QVector3D(*b))
+        segment = DocumentInteraction._clip_segment_front(view, QVector3D(*a), QVector3D(*b))
         if segment is None:
             continue
         points = tuple(view._world_to_pixel(p) for p in segment)
@@ -132,7 +132,7 @@ def billboard_outline_primitives(view):
     extent is cached per figure content, so this is four projections per
     selected figure per frame; nothing when no figure is selected."""
     from core.group import Group
-    from views.viewport import Viewport
+    from views.viewport import DocumentInteraction
     from views.wgpu_overlay import Primitive
     source = view.source_viewport
     quad_of = getattr(source, '_billboard_quad', None)
@@ -149,7 +149,7 @@ def billboard_outline_primitives(view):
             continue
         corners = quad[0]
         for a, b in zip(corners, corners[1:] + corners[:1]):
-            segment = Viewport._clip_segment_front(view, a, b)
+            segment = DocumentInteraction._clip_segment_front(view, a, b)
             if segment is None:
                 continue
             points = tuple(view._world_to_pixel(p) for p in segment)

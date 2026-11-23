@@ -1,49 +1,12 @@
-"""Native window services and adapters for the remaining Qt menu callbacks."""
+"""Window geometry, frame requests, focus and cursor services for QObject hosts."""
 from __future__ import annotations
 
-import types
 from collections import Counter
 
 from PySide6.QtCore import QObject, QPoint, QPointF, QRect, QSize, Qt
 
 #: Widget attributes the copied code looked up and the shim did not have.
 MISSING: Counter = Counter()
-
-
-def _rebind(fn, cls, depth=0):
-    """``fn`` with every ``__class__`` cell (its own and its closures')
-    pointing at ``cls``."""
-    if not isinstance(fn, types.FunctionType) or depth > 3:
-        return fn
-    code = fn.__code__
-    if not code.co_freevars:
-        return fn
-    cells = []
-    changed = False
-    for name, cell in zip(code.co_freevars, fn.__closure__):
-        if name == "__class__":
-            cells.append(types.CellType(cls))
-            changed = True
-            continue
-        try:
-            value = cell.cell_contents
-        except ValueError:
-            cells.append(cell)
-            continue
-        new = _rebind(value, cls, depth + 1)
-        if new is not value:
-            cells.append(types.CellType(new))
-            changed = True
-        else:
-            cells.append(cell)
-    if not changed:
-        return fn
-    out = types.FunctionType(code, fn.__globals__, fn.__name__, fn.__defaults__, tuple(cells))
-    out.__kwdefaults__ = fn.__kwdefaults__
-    out.__dict__.update(fn.__dict__)
-    out.__qualname__ = fn.__qualname__
-    out.__doc__ = fn.__doc__
-    return out
 
 
 class WidgetShim(QObject):

@@ -1,5 +1,5 @@
 """Document editing over a Metal window supplied by either application."""
-from app_shell.borrow import WidgetShim
+from views.view_host import WidgetShim
 from views.viewport import DocumentInteraction
 
 

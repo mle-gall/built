@@ -592,14 +592,14 @@ def nearby_edges(index, packed, camera, width, height, x, y, *,
 
 def scene_edges(view):
     """Guides, guide points and selectable image borders using GL clipping."""
-    from views.viewport import Viewport, shown_guides
+    from views.viewport import DocumentInteraction, shown_guides
     result = []
     tool = getattr(getattr(view, 'tools', None), 'tool', None)
     moving = getattr(tool, 'moving_guide_ids', lambda: ())()
     for guide in shown_guides(view.scene):
         if id(guide) in moving:
             continue
-        segment = (Viewport._guide_snap_segment(view, guide) if guide.is_line else
+        segment = (DocumentInteraction._guide_snap_segment(view, guide) if guide.is_line else
                    (QVector3D(guide.point), QVector3D(guide.point)))
         if segment is not None:
             result.append(SimpleNamespace(a=segment[0], b=segment[1],
@@ -609,7 +609,7 @@ def scene_edges(view):
         if getattr(plane, 'locked', False) or not selectable(plane):
             continue
         for a, b in plane.border_edges():
-            segment = Viewport._clip_segment_front(view, a, b)
+            segment = DocumentInteraction._clip_segment_front(view, a, b)
             if segment is not None:
                 result.append(SimpleNamespace(a=segment[0], b=segment[1], source=plane))
     return result
@@ -621,13 +621,13 @@ def reference_edge(index, view, x, y, radius_px=None):
     edges = nearby_edges(index, view.packed, view.camera, view.width(), view.height(),
                          x, y, radius_px=radius, cap=48,
                          edit_group=view.scene.edit_group)
-    from views.viewport import Viewport
+    from views.viewport import DocumentInteraction
     for edge in edges:
         pa, pb = view._world_to_pixel(edge.a), view._world_to_pixel(edge.b)
         if pa is None or pb is None:
             continue
         delta = edge.b-edge.a
-        projected = Viewport._project_to_lock_line(view, edge.a, delta, x, y)
+        projected = DocumentInteraction._project_to_lock_line(view, edge.a, delta, x, y)
         t = (QVector3D.dotProduct(projected-edge.a, delta)/delta.lengthSquared()
              if delta.lengthSquared() > 1e-12 else 0.)
         point = edge.a + delta*max(0., min(1., t))
@@ -638,7 +638,7 @@ def reference_edge(index, view, x, y, radius_px=None):
 
 def _see_through(view):
     """X-ray and wireframe show everything, so nothing hides a snap there:
-    GL's ``Viewport._is_occluded`` answers False in those styles, and the
+    GL's ``DocumentInteraction._is_occluded`` answers False in those styles, and the
     snap rules that skip hidden references (a lock taking a hidden back
     edge's height, upstream #1085) must still see through them here."""
     style = getattr(getattr(view, 'source_viewport', None), '_effective_style', None)
@@ -785,7 +785,7 @@ def snap(index, row, view, x, y, *, work_point=..., **options):
             center = QVector3D(*(matrix[:3, :3] @ center + matrix[:3, 3]))
             named_edges.append(SimpleNamespace(a=center, b=center, center=True,
                                          context=named))
-        # GL's «Arc midpoint» (Viewport._arc_midpoints): the middle of each
+        # GL's «Arc midpoint» (DocumentInteraction._arc_midpoints): the middle of each
         # open arc's sweep, from the same per-prototype fit as the centres —
         # only for the placements already met near the cursor.
         # Their tips say what GL's do (_snap_context_of): «outside» for a
@@ -823,9 +823,9 @@ def snap(index, row, view, x, y, *, work_point=..., **options):
     options.setdefault('are_occluded', hidden_many)
     options.setdefault('face_under_cursor', on_face)
     # Like GL's _pixel_projector: one matrix per query, not per candidate.
-    from views.viewport import Viewport
+    from views.viewport import DocumentInteraction
     mvp = view.camera.projection_matrix() * view.camera.view_matrix()
-    project = lambda p: Viewport._world_to_pixel(view, p, mvp)
+    project = lambda p: DocumentInteraction._world_to_pixel(view, p, mvp)
     project.snap_projection = (mvp.data(), (view.width(), view.height()))
     if 'face_centers' not in options:
         options['face_centers'] = face_centers_near(view, x, y, on_face, project)
@@ -945,7 +945,7 @@ CROSSING_CANDIDATES = 7
 
 
 def face_crossing(index, view, x, y, row, point, normal, rows, project, context):
-    """GL's ``Viewport._face_crossing_point`` from the snap index (#819):
+    """GL's ``DocumentInteraction._face_crossing_point`` from the snap index (#819):
     where the face under the cursor meets another face crossing it with no
     edge between them — ``(world point, context)`` or ``None``.
 
@@ -957,14 +957,14 @@ def face_crossing(index, view, x, y, row, point, normal, rows, project, context)
     face's — the two really meet there, in view. A view knows triangles,
     not faces: a plane stands for the face (two coplanar faces meeting the
     same third one meet it along the same line)."""
-    from views.viewport import Viewport, _active_cut, _moller_trumbore
+    from views.viewport import DocumentInteraction, _active_cut, _moller_trumbore
     if _active_cut(view.scene) is not None:
         return None
     origin, direction = view._pixel_to_ray(x, y)
     if origin is None or direction is None:
         return None
     t_f = QVector3D.dotProduct(point - origin, direction)
-    ring = Viewport._CROSSING_RING_PX
+    ring = DocumentInteraction._CROSSING_RING_PX
     o2, d2 = view._pixel_to_ray(x + ring, y)
     if o2 is None or d2 is None:
         return None
@@ -1006,7 +1006,7 @@ def face_crossing(index, view, x, y, row, point, normal, rows, project, context)
     reach_px = max(getattr(view, 'edge_snap_threshold_px', None) or 14., ring)
     for g, g_row in planes:
         found = face_crossing_near_ray(x, y, origin, direction, f, g, project,
-                                       reach_px, Viewport._CROSSING_SIDE_PX)
+                                       reach_px, DocumentInteraction._CROSSING_SIDE_PX)
         if found is None:
             continue
         crossing, probes = found
@@ -1042,8 +1042,8 @@ def start_edges(index, view, start, rows):
     cached = getattr(index, 'start_edges_cache', None)
     if cached is not None and cached[0] == key:
         return cached[1]
-    from views.viewport import Viewport
-    pixel = Viewport._world_to_pixel(view, start, mvp)
+    from views.viewport import DocumentInteraction
+    pixel = DocumentInteraction._world_to_pixel(view, start, mvp)
     found = []
     if pixel is not None:
         from core.snap import _point_on_segment_world
@@ -1084,10 +1084,10 @@ def _acquire(engine, view, edges, on_face, point, face_normal,
                        and e.distance <= reach
                        and (e.b - e.a).lengthSquared() > 1e-18),
                       key=lambda e: e.distance)
-        from views.viewport import Viewport
+        from views.viewport import DocumentInteraction
         for e in near[:3]:
             delta = e.b - e.a
-            foot = Viewport._project_to_lock_line(view, e.a, delta, x, y)
+            foot = DocumentInteraction._project_to_lock_line(view, e.a, delta, x, y)
             t = QVector3D.dotProduct(foot - e.a, delta) / delta.lengthSquared()
             if occluded is None or not occluded(e.a + delta * max(0., min(1., t))):
                 hover = e
@@ -1112,14 +1112,14 @@ FACE_CENTER_PICK_MAX = 5000
 
 
 def face_centers_near(view, x, y, on_face, project):
-    """GL's ``Viewport._face_centers_near`` for the Metal view (#736):
+    """GL's ``DocumentInteraction._face_centers_near`` for the Metal view (#736):
     ``[(point, context)]`` — the centre of area of the face under the
     cursor (when it falls inside the face and near the cursor) and of the
     selected faces near it."""
     from core.mesh import Face, face_count
     from core.snap import face_center_of_face
-    from views.viewport import Viewport
-    reach = Viewport.POINT_INFERENCE_PX
+    from views.viewport import DocumentInteraction
+    reach = DocumentInteraction.POINT_INFERENCE_PX
     tools = getattr(view, 'tools', None)
     tool = getattr(tools, 'tool', None)
     moving = getattr(tool, 'moving_face_ids', None)
@@ -1143,7 +1143,7 @@ def face_centers_near(view, x, y, on_face, project):
             if near(c):
                 out.append((c, context))
     faces = [e for e in view.scene.selection if isinstance(e, Face)]
-    if faces and len(faces) <= Viewport.FACE_CENTER_SELECTION_MAX:
+    if faces and len(faces) <= DocumentInteraction.FACE_CENTER_SELECTION_MAX:
         for f in faces:
             if f.key in moving:
                 continue

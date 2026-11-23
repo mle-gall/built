@@ -126,7 +126,7 @@ class NativeTools(MeshToolAccess):
         return self.mode
 
     #: What a camera mode parks of the tool it suspends (GL's
-    #: ``Viewport.suspended_tool``) and gives back when that tool resumes:
+    #: ``DocumentInteraction.suspended_tool``) and gives back when that tool resumes:
     #: the first point, a Move's preview rows, the typed value.
     _PARKED = ('tool', 'mode', 'start_point', 'original', 'ids', 'value_buffer')
 
@@ -235,9 +235,9 @@ class NativeTools(MeshToolAccess):
 
     def key(self, event):
         if self.mode == 'mesh':
-            from views.viewport import Viewport
+            from views.viewport import DocumentInteraction
             self._value_buffer = self.value_buffer
-            if Viewport._handle_value_key(self, event):
+            if DocumentInteraction._handle_value_key(self, event):
                 self.value_buffer = self._value_buffer
                 self.start_point = getattr(self.tool, 'start_point', None)
                 self.view.overlay_primitives = []
@@ -248,8 +248,8 @@ class NativeTools(MeshToolAccess):
         return False
 
     def _current_token_tail(self):
-        from views.viewport import Viewport
-        return Viewport._current_token_tail(self)
+        from views.viewport import DocumentInteraction
+        return DocumentInteraction._current_token_tail(self)
 
     def _array_pending(self):
         return getattr(self.tool, 'array_pending', lambda vp: False)(self)
@@ -266,8 +266,8 @@ class NativeTools(MeshToolAccess):
             signal.emit(value)
 
     def _parse_value_buffer(self, *args, **kwargs):
-        from views.viewport import Viewport
-        return Viewport._parse_value_buffer(*args, **kwargs)
+        from views.viewport import DocumentInteraction
+        return DocumentInteraction._parse_value_buffer(*args, **kwargs)
 
     def write_rows(self, rows):
         if self.view.renderer is not None:
@@ -358,12 +358,12 @@ class NativeTools(MeshToolAccess):
 
     def pick_guide(self, x, y):
         # These shared projection-only pickers never read GL caches.
-        from views.viewport import Viewport
-        return Viewport.pick_guide(self, x, y) if self.scene is not None else None
+        from views.viewport import DocumentInteraction
+        return DocumentInteraction.pick_guide(self, x, y) if self.scene is not None else None
 
     def pick_axis(self, x, y):
-        from views.viewport import Viewport
-        return Viewport.pick_axis(self, x, y) if self.scene is not None else None
+        from views.viewport import DocumentInteraction
+        return DocumentInteraction.pick_axis(self, x, y) if self.scene is not None else None
 
     def width(self):
         return self.view.width()

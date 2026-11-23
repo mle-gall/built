@@ -671,7 +671,7 @@ class Host:
         lacks (probes of the code's own lazily set attributes left out)."""
         from PySide6.QtOpenGLWidgets import QOpenGLWidget
         from PySide6.QtWidgets import QMainWindow
-        from app_shell.borrow import MISSING
+        from views.view_host import MISSING
         out = {}
         for name, n in MISSING.most_common():
             bare = name.split(".", 1)[-1]

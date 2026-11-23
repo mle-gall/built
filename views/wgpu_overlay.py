@@ -121,7 +121,7 @@ def draw_snap_indicator(painter, snap, project, clip_line, *, labels=True,
     Colors come from SnapResult, including group/context and guide overrides.
     No marker or guide is painted for axis/axis_inference snaps.
     """
-    from views.viewport import Viewport
+    from views.viewport import DocumentInteraction
     from core.i18n import tr
     # Axis-lock and inference state is conveyed by the coloured rubber
     # band; no badge follows the cursor along the lock line. Only the
@@ -217,7 +217,7 @@ def draw_snap_indicator(painter, snap, project, clip_line, *, labels=True,
         painter.drawEllipse(QPointF(px, py), 6.5, 6.5)
 
     # Tooltip text next to the marker ("On Edge", etc.).
-    label = Viewport._SNAP_LABELS.get(snap.kind) if labels else None
+    label = DocumentInteraction._SNAP_LABELS.get(snap.kind) if labels else None
     if snap.kind == "aligned" and snap.axis == "z":
         label = "Level with point"
     if label:
@@ -231,7 +231,7 @@ def draw_snap_indicator(painter, snap, project, clip_line, *, labels=True,
         elif ctx_ == "group":
             label += " " + tr("in group")
         elif ctx_ == "outside" and scene is not None:
-            # As GL's Viewport._snap_context_suffix (#1327): geometry
+            # As GL's DocumentInteraction._snap_context_suffix (#1327): geometry
             # outside the group or component open for editing.
             is_comp = (scene.edit_definition() is not None
                        if scene.edit_group is not None else None)

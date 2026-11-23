@@ -6390,6 +6390,68 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
                 painter.setPen(QColor(120, 34, 48))
                 painter.drawText(QPointF(x + 7, y - 4), gp.name)
 
+    def _draw_rubber_band_overlay(self, painter: QPainter) -> None:
+        if self._overlay_rubber is None:
+            return
+        segments, color, width = self._overlay_rubber
+        r, g, b = color[0], color[1], color[2]
+        a = color[3] if len(color) > 3 else 1.0
+        pen = QPen(QColor.fromRgbF(r, g, b, a), width)
+        pen.setCapStyle(Qt.RoundCap)
+        pen.setJoinStyle(Qt.RoundJoin)
+        painter.setPen(pen)
+        for p0, p1 in segments:
+            q = self._segment_to_pixels(p0, p1)
+            if q is not None:
+                painter.drawLine(QPointF(*q[0]), QPointF(*q[1]))
+
+    def _draw_guide_preview(self, painter: QPainter) -> None:
+        """The guide the Tape or the Protractor is about to leave, dashed
+        like the guides themselves, following the cursor (#89, @pacaeiro)."""
+        tool = self.active_tool
+        lines = (tool.guide_preview_lines()
+                 if tool is not None
+                 and hasattr(tool, "guide_preview_lines") else [])
+        if not lines:
+            return
+        pen = QPen(QColor(70, 90, 120), 1.5, Qt.DashLine)
+        pen.setDashPattern([10.0, 7.0])
+        painter.setPen(pen)
+        for p0, p1 in lines:
+            q = self._segment_to_pixels(p0, p1)
+            if q is not None:
+                painter.drawLine(QPointF(*q[0]), QPointF(*q[1]))
+
+    def _draw_route_marker(self, painter: QPainter) -> None:
+        """Profile→plan marker: the route point at the station hovered in
+        the profile panel (Track G). A method so the Metal overlay paints
+        the same dot."""
+        if getattr(self, "_route_marker", None) is None:
+            return
+        q = self._world_to_pixel(self.drape(self._route_marker))
+        if q is not None:
+            painter.setBrush(QColor(243, 115, 41))
+            painter.setPen(QPen(QColor(255, 255, 255), 1.5))
+            painter.drawEllipse(QPointF(*q), 6, 6)
+            painter.setBrush(Qt.NoBrush)
+
+    def _draw_linear_mode_label(self, painter: QPainter) -> None:
+        if getattr(self, '_chrome_owns_labels', False):
+            return  # the egui options strip shows it (views/wgpu_ui.py)
+        # The mirror image of the bug above: these had the Spanish written
+        # into the source, so an English UI showed Spanish.
+        text = {
+            "off": tr("Linear inferences: OFF (Alt)"),
+            "parallel_perp": tr("Inferences: parallel / perpendicular only (Alt)"),
+        }.get(self.linear_inference_mode)
+        if not text:
+            return
+        font = QFont()
+        font.setPointSize(9)
+        painter.setFont(font)
+        painter.setPen(QPen(QColor(210, 150, 40)))
+        painter.drawText(QPointF(14, self.height() - 16), text)
+
     def _draw_geo_paths(self, painter: QPainter) -> None:
         """Draw committed georef paths (roads / boundaries): a coloured polyline
         with node handles. Selected paths and the hovered node highlight."""
@@ -21262,38 +21324,6 @@ class Viewport(DocumentInteraction, QOpenGLWidget):
         else:
             self._overlay_rubber = (segments, color, width)
 
-    def _draw_rubber_band_overlay(self, painter: QPainter) -> None:
-        if self._overlay_rubber is None:
-            return
-        segments, color, width = self._overlay_rubber
-        r, g, b = color[0], color[1], color[2]
-        a = color[3] if len(color) > 3 else 1.0
-        pen = QPen(QColor.fromRgbF(r, g, b, a), width)
-        pen.setCapStyle(Qt.RoundCap)
-        pen.setJoinStyle(Qt.RoundJoin)
-        painter.setPen(pen)
-        for p0, p1 in segments:
-            q = self._segment_to_pixels(p0, p1)
-            if q is not None:
-                painter.drawLine(QPointF(*q[0]), QPointF(*q[1]))
-
-    def _draw_guide_preview(self, painter: QPainter) -> None:
-        """The guide the Tape or the Protractor is about to leave, dashed
-        like the guides themselves, following the cursor (#89, @pacaeiro)."""
-        tool = self.active_tool
-        lines = (tool.guide_preview_lines()
-                 if tool is not None
-                 and hasattr(tool, "guide_preview_lines") else [])
-        if not lines:
-            return
-        pen = QPen(QColor(70, 90, 120), 1.5, Qt.DashLine)
-        pen.setDashPattern([10.0, 7.0])
-        painter.setPen(pen)
-        for p0, p1 in lines:
-            q = self._segment_to_pixels(p0, p1)
-            if q is not None:
-                painter.drawLine(QPointF(*q[0]), QPointF(*q[1]))
-
     def _draw_camera_frame(self, painter: QPainter) -> None:
         """Camera Settings ▸ Frame: the picture's shape (16:9, 4:3…) as the
         largest such rectangle in the view, the bands outside it shaded and
@@ -21429,36 +21459,6 @@ class Viewport(DocumentInteraction, QOpenGLWidget):
         self._draw_zoom_box(painter)
 
         painter.end()
-
-    def _draw_route_marker(self, painter: QPainter) -> None:
-        """Profile→plan marker: the route point at the station hovered in
-        the profile panel (Track G). A method so the Metal overlay paints
-        the same dot."""
-        if getattr(self, "_route_marker", None) is None:
-            return
-        q = self._world_to_pixel(self.drape(self._route_marker))
-        if q is not None:
-            painter.setBrush(QColor(243, 115, 41))
-            painter.setPen(QPen(QColor(255, 255, 255), 1.5))
-            painter.drawEllipse(QPointF(*q), 6, 6)
-            painter.setBrush(Qt.NoBrush)
-
-    def _draw_linear_mode_label(self, painter: QPainter) -> None:
-        if getattr(self, '_chrome_owns_labels', False):
-            return  # the egui options strip shows it (views/wgpu_ui.py)
-        # The mirror image of the bug above: these had the Spanish written
-        # into the source, so an English UI showed Spanish.
-        text = {
-            "off": tr("Linear inferences: OFF (Alt)"),
-            "parallel_perp": tr("Inferences: parallel / perpendicular only (Alt)"),
-        }.get(self.linear_inference_mode)
-        if not text:
-            return
-        font = QFont()
-        font.setPointSize(9)
-        painter.setFont(font)
-        painter.setPen(QPen(QColor(210, 150, 40)))
-        painter.drawText(QPointF(14, self.height() - 16), text)
 
     def _draw_selection_box(self, painter: QPainter) -> None:
         if not self._box_active or self._box_start is None or self._box_cur is None:
