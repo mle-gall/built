@@ -139,19 +139,17 @@ def test_a_classic_group_opened_takes_the_new_group_as_a_child():
 
 
 def test_make_component_inside_an_open_group():
-    from views import prompts
+    from views import chrome_forms
     win = _window()
     try:
         scene = win.viewport.scene
         muro, a, b = _open_wall(win)
         scene.selection.clear()
         scene.selection.update(list(scene.mesh.faces))
-        orig = prompts.get_text
-        prompts.get_text = lambda *a_, text="", **k: ("Ladrillo", True)
-        try:
-            win._on_make_component()
-        finally:
-            prompts.get_text = orig
+        win._on_make_component()
+        form = chrome_forms.current(win)
+        form.receive("text", "Ladrillo")
+        form.press("ok")
         comps = [g for g in muro.children if g.is_component()]
         assert [g.name for g in comps] == ["Ladrillo"]
         assert scene.groups == [muro]
@@ -235,19 +233,17 @@ def test_the_browser_groups_rows_inside_their_group():
 
 
 def test_the_browser_makes_a_component_of_one_row():
-    from views import prompts
+    from views import chrome_forms
     win = _window()
     try:
         scene = win.viewport.scene
         a = Group(_quad(), name="A")
         scene.groups.append(a)
         panel = _browser(win)
-        orig = prompts.get_text
-        prompts.get_text = lambda *a_, text="", **k: ("Pieza", True)
-        try:
-            panel.make_from_rows([a], "component")
-        finally:
-            prompts.get_text = orig
+        panel.make_from_rows([a], "component")
+        form = chrome_forms.current(win)
+        form.receive("text", "Pieza")
+        form.press("ok")
         assert scene.groups[0].is_component()
         assert scene.groups[0].name == "Pieza"
     finally:

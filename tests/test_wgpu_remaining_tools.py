@@ -166,11 +166,15 @@ from tools.text import TextTool
     (TextTool, [(0, 0, 0), (2, 0, 0)], 'text_labels'),
 ])
 def test_annotation_history_and_cancel(tool_type, points, collection, monkeypatch):
-    monkeypatch.setattr('views.prompts.get_multiline_text', lambda *a: ('Label', True))
+    forms = []
+    monkeypatch.setattr("views.chrome_forms.show", lambda parent, form: forms.append(form))
     scene, history, native, _ = prepare(tool_type())
     native.window = lambda: None
     for point in points:
         click(native, point)
+    if tool_type is TextTool:
+        forms[-1].receive("text", "Label")
+        forms[-1].press("ok")
     assert len(getattr(scene, collection)) == 1
     history.undo()
     native.update()

@@ -14,7 +14,7 @@ import types
 import pytest
 from PySide6.QtCore import QEvent, Qt
 from PySide6.QtGui import QKeyEvent
-from PySide6.QtWidgets import QApplication, QInputDialog
+from PySide6.QtWidgets import QApplication
 
 from views import chrome_dialogs as cd
 from views import chrome_forms as cf
@@ -230,18 +230,20 @@ def test_divide_goes_through_the_protocol_once_answered(win, monkeypatch):
     assert len(scene.mesh.edges) == 4
 
 
-# ---- With no chrome: Qt, inline --------------------------------------------------
-def test_without_the_chrome_prompts_are_qt_and_answer_inline(monkeypatch):
-    from views import prompts
-    monkeypatch.setattr(prompts, "get_text", lambda *a, text="", **k: (text + "!", True))
-    monkeypatch.setattr(QInputDialog, "getInt", staticmethod(lambda *a: (a[3] + 1, True)))
-    monkeypatch.setattr(QInputDialog, "getDouble", staticmethod(lambda *a: (a[3] * 2, False)))
-    monkeypatch.setattr(QInputDialog, "getItem", staticmethod(lambda *a: (a[3][1], True)))
+def test_offscreen_prompts_deliver_typed_values(win, monkeypatch):
+    monkeypatch.setattr(cd, "live", lambda parent: None)
     got = []
-    cf.ask_text(None, "T", "L", "x", done=got.append)
-    cf.ask_number(None, "T", "L", 2, 2, 9, done=got.append)
-    cf.ask_number(None, "T", "L", 1.5, 0, 9, 2, done=got.append)
-    cf.ask_choice(None, "T", "L", ["a", "b"], done=got.append)
+    cf.ask_text(win, "T", "L", "x", done=got.append)
+    cf.current(win).receive("text", "x!")
+    cf.current(win).press("ok")
+    cf.ask_number(win, "T", "L", 2, 2, 9, done=got.append)
+    cf.current(win).receive("value", "3")
+    cf.current(win).press("ok")
+    cf.ask_number(win, "T", "L", 1.5, 0, 9, 2, done=got.append)
+    cf.current(win).press("cancel")
+    cf.ask_choice(win, "T", "L", ["a", "b"], done=got.append)
+    cf.current(win).receive("item", "1")
+    cf.current(win).press("ok")
     assert got == ["x!", 3, None, "b"]
 
 
@@ -257,17 +259,17 @@ def test_offscreen_form_reports_edited_values(win, monkeypatch):
     assert answers == [("ok", {"angle": 45, "smooth": True})]
 
 
-def test_flow_reads_steps_top_to_bottom(monkeypatch):
-    monkeypatch.setattr(QInputDialog, "getItem", staticmethod(lambda *a: (a[3][0], True)))
-    from views import prompts
-    monkeypatch.setattr(prompts, "get_text", lambda *a, text="", **k: ("Brick", True))
+def test_flow_reads_steps_top_to_bottom(win):
     out = []
 
     def steps():
-        system = yield cf.request(cf.ask_choice, None, "Classification", "System", ["Uniclass", "OmniClass"])
-        name = yield cf.request(cf.ask_text, None, "Classification", "Name", "")
+        system = yield cf.request(cf.ask_choice, win, "Classification", "System", ["Uniclass", "OmniClass"])
+        name = yield cf.request(cf.ask_text, win, "Classification", "Name", "")
         out.append((system, name))
     cf.flow(steps())
+    cf.current(win).press("ok")
+    cf.current(win).receive("text", "Brick")
+    cf.current(win).press("ok")
     assert out == [("Uniclass", "Brick")]
 
 

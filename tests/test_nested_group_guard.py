@@ -109,9 +109,7 @@ def test_grouping_only_loose_geometry_still_works():
 def test_component_from_loose_geometry_plus_a_group_holds_both(monkeypatch):
     """It used to refuse; since issue #90 it makes ONE component holding the
     loose geometry and the group, still a group inside."""
-    import views.main_window as mw
-    monkeypatch.setattr(mw._prompts, "get_text",
-                        lambda *a, **k: ("Banca", True))
+    from views import chrome_forms
     win, scene = _win_with_a_group_and_loose_geometry()
     try:
         # the scale figure (a face-me billboard) never goes inside
@@ -121,6 +119,9 @@ def test_component_from_loose_geometry_plus_a_group_holds_both(monkeypatch):
         scene.selection.clear()
         scene.selection.update(set(scene.mesh.faces) | set(scene.groups))
         win._on_make_component()
+        form = chrome_forms.current(win)
+        form.receive("text", "Banca")
+        form.press("ok")
         assert len(scene.groups) == before - len(inner) + 1
         comp = [g for g in scene.groups if g not in inner
                 and not getattr(g, "billboard", False)][0]

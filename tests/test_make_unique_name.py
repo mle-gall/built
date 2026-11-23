@@ -139,7 +139,7 @@ def test_the_menu_make_unique_renames(monkeypatch):
 
 def test_the_offered_component_name_is_the_first_free_number(monkeypatch):
     from core.i18n import tr
-    from views import prompts
+    from views import chrome_forms
     from views.main_window import MainWindow
     win = MainWindow()
     try:
@@ -153,14 +153,10 @@ def test_the_offered_component_name_is_the_first_free_number(monkeypatch):
                              V(20, 1, 0)])
         scene.selection.clear()
         scene.selection.update(scene.mesh.faces)
-        offered = {}
-
-        def ask(_parent, _title, _label, text="", **_k):
-            offered["text"] = text
-            return "", False                      # cancel: nothing made
-        monkeypatch.setattr(prompts, "get_text", ask)
         win._on_make_component()
-        assert offered["text"] == tr("Component #{n}", n=2)
+        form = chrome_forms.current(win)
+        assert form.value("text") == tr("Component #{n}", n=2)
+        form.press("cancel")
     finally:
         win._saved_version = win.viewport.scene.version
         win.close()

@@ -7,9 +7,9 @@ from tests.test_wgpu_mesh_tools import app
 def test_shared_menus_and_dock_selection(monkeypatch):
     monkeypatch.setenv('INGETRAZO_WGPU', '1')
     monkeypatch.setenv('INGETRAZO_AI_PORT', '0')
-    from views.main_window import MainWindow, _prompts
+    from views.main_window import MainWindow
+    from views import chrome_forms
     from views.scale_dialog import ScaleDialog
-    monkeypatch.setattr(_prompts, 'get_text', lambda *a, **k: ('R3c component', True))
     import os
     if os.environ.get('INGETRAZO_R3_GUI') != '1':
         # This device-free menu test exercises routing, not adapter discovery.
@@ -33,6 +33,9 @@ def test_shared_menus_and_dock_selection(monkeypatch):
         assert group in scene.selection
         display.set_scene(scene)
         win._on_make_component()
+        form = chrome_forms.current(win)
+        form.receive("text", "R3c component")
+        form.press("ok")
         assert group.is_component()
         vp.begin_group_edit(group)
         assert scene.edit_group is group

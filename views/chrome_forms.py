@@ -420,29 +420,8 @@ def _pick_path(form, f) -> None:
 
 
 # ---- Prompts -------------------------------------------------------------------
-def _no_window(done) -> bool:
-    """In the shell with no chrome up, no Qt prompt can show: cancel."""
-    from views import chrome_dialogs
-    if not chrome_dialogs.in_shell():
-        return False
-    if done is not None:
-        done(None)
-    return True
-
-
 def ask_text(parent, title, label, text="", done=None, *, multiline=False, ok=None, note=""):
     """A name prompt: ``done(text)`` or ``done(None)`` on Cancel."""
-    if not available(parent):
-        if _no_window(done):
-            return
-        from views import prompts
-        if multiline:
-            value, accepted = prompts.get_multiline_text(parent, title, label, text)
-        else:
-            value, accepted = prompts.get_text(parent, title, label, text=text)
-        if done is not None:
-            done(value if accepted else None)
-        return
     form = Form(title, [Field("text", "edit", label, text, focus=True, multiline=multiline,
                               full=multiline)],
                 note=note, buttons=[("cancel", tr("Cancel")), ("ok", ok or tr("OK"))],
@@ -454,19 +433,6 @@ def ask_text(parent, title, label, text="", done=None, *, multiline=False, ok=No
 def ask_number(parent, title, label, value, lo, hi, decimals=0, done=None, *, suffix="", step=1, note=""):
     """``QInputDialog.getInt`` (decimals 0) / ``getDouble``: ``done(value)``
     or ``done(None)``."""
-    if not available(parent):
-        if _no_window(done):
-            return
-        from PySide6.QtWidgets import QInputDialog
-        if decimals <= 0:
-            got, accepted = QInputDialog.getInt(parent, title, label, int(value), int(lo), int(hi), int(step))
-        else:
-            got, accepted = QInputDialog.getDouble(parent, title, label, float(value), float(lo),
-                                                   float(hi), int(decimals))
-        if done is not None:
-            done(got if accepted else None)
-        return
-
     def check(form, _answer):
         raw = form._texts.get("value")
         if raw is not None:
@@ -488,14 +454,6 @@ def ask_number(parent, title, label, value, lo, hi, decimals=0, done=None, *, su
 def ask_choice(parent, title, label, items, current=0, done=None, *, note=""):
     """``QInputDialog.getItem`` (not editable): ``done(item)`` or ``done(None)``."""
     items = [str(i) for i in items]
-    if not available(parent):
-        if _no_window(done):
-            return
-        from PySide6.QtWidgets import QInputDialog
-        got, accepted = QInputDialog.getItem(parent, title, label, items, int(current), False)
-        if done is not None:
-            done(got if accepted else None)
-        return
     start = items[current] if 0 <= current < len(items) else (items[0] if items else None)
     form = Form(title, [Field("item", "choice", label, start, options=items)], note=note, width=420,
                 on_done=lambda a, v: done(v["item"] if a == "ok" else None) if done else None)
@@ -516,7 +474,7 @@ class request:  # noqa: N801 — reads like a call at the yield
 
 def flow(gen) -> None:
     """Run a generator of :class:`request`: each answer is sent back in,
-    on whichever turn it comes (at once with Qt, later on the chrome)."""
+    on the turn the chrome delivers it."""
     def step(value=None, first=False):
         try:
             req = next(gen) if first else gen.send(value)

@@ -153,7 +153,7 @@ def test_select_double_click_edits_label(monkeypatch):
     """Double-clicking a leader text with Select opens the edit dialog
     (the usual convention) and commits the new text as one undoable command."""
     from types import SimpleNamespace
-    from PySide6.QtWidgets import QInputDialog
+    from views import chrome_forms
     from tools.select import SelectTool
 
     scene = Scene()
@@ -172,17 +172,18 @@ def test_select_double_click_edits_label(monkeypatch):
                           screen=SimpleNamespace(x=lambda: 0, y=lambda: 0),
                           modifiers=0)
 
-    monkeypatch.setattr(QInputDialog, "getMultiLineText",
-                        staticmethod(lambda *a, **k: ("Muro eje B", True)))
+    forms = []
+    monkeypatch.setattr(chrome_forms, "show", lambda parent, form: forms.append(form))
     SelectTool().on_double_click(ctx)
+    forms[-1].receive("text", "Muro eje B")
+    forms[-1].press("ok")
     assert lab.text == "Muro eje B"
     history.undo()
     assert lab.text == "Muro eje A"
 
     # cancelling the dialog leaves the label untouched (and no undo entry)
-    monkeypatch.setattr(QInputDialog, "getMultiLineText",
-                        staticmethod(lambda *a, **k: ("cualquier", False)))
     SelectTool().on_double_click(ctx)
+    forms[-1].press("cancel")
     assert lab.text == "Muro eje A"
 
 

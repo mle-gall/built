@@ -406,7 +406,7 @@ def test_select_double_click_edits_dimension_text(monkeypatch, tmp_path):
     survives the .igz round trip."""
     from types import SimpleNamespace
     from ingetrazo_core import Vec3 as QVector3D
-    from PySide6.QtWidgets import QInputDialog
+    from views import chrome_forms
     from core.dimension import Dimension
     from core.history import History
     from core.scene import Scene
@@ -429,25 +429,22 @@ def test_select_double_click_edits_dimension_text(monkeypatch, tmp_path):
     ctx = SimpleNamespace(viewport=viewport,
                           screen=SimpleNamespace(x=lambda: 0, y=lambda: 0),
                           modifiers=0)
-    asked = {}
-
-    def fake_get_text(parent, title, label, text="", **kw):
-        asked["prefill"] = text
-        return asked["answer"], True
-
-    monkeypatch.setattr(QInputDialog, "getText", staticmethod(fake_get_text))
-    asked["answer"] = "H = <>"
+    forms = []
+    monkeypatch.setattr(chrome_forms, "show", lambda parent, form: forms.append(form))
     SelectTool().on_double_click(ctx)
-    assert asked["prefill"] == "2.40 m"                      # shows the value
+    assert forms[-1].value("text") == "2.40 m"
+    forms[-1].receive("text", "H = <>")
+    forms[-1].press("ok")
     assert d.text == "H = <>"
     assert d.display_text("2.40 m") == "H = 2.40 m"
     history.undo()
     assert d.text is None
     history.redo()
 
-    asked["answer"] = "<>"                                   # back to automatic
     SelectTool().on_double_click(ctx)
-    assert asked["prefill"] == "H = <>"
+    assert forms[-1].value("text") == "H = <>"
+    forms[-1].receive("text", "<>")
+    forms[-1].press("ok")
     assert d.text is None
 
     d.text = "VARIABLE"

@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from views import chrome_dialogs as _dialogs
 from views import chrome_forms as _forms
-from views import prompts as _prompts
 
 import sys
 import os
