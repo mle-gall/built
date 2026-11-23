@@ -69,10 +69,10 @@ def python_vertices(mesh, points, sequential):
     return mesh.vertices, inverse
 
 
-def compact_placement(matrix):
-    """Column-major values representable by legacy IGZ readers."""
+def compact_values(values):
+    """Coordinates representable by legacy IGZ readers."""
     import numpy as np
-    return np.asarray(matrix.data(), dtype=np.float32).tolist()
+    return np.asarray(values, dtype=np.float32).tolist()
 
 
 def export_placements(scene):
@@ -90,7 +90,7 @@ def export_placements(scene):
             if links.save_as_placeholder(group, scene):
                 return
             source = np.array(placement_values(group.xform)).reshape(4, 4).T
-            target = np.array(compact_placement(group.xform)).reshape(4, 4).T
+            target = np.array(compact_values(group.xform.data())).reshape(4, 4).T
             world, exported = world @ source, exported @ target
         by_mesh.setdefault(id(group.mesh), []).append((world, exported))
         for child in group.children:
