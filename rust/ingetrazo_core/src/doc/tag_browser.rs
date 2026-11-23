@@ -89,10 +89,29 @@ pub(super) fn snapshot(doc: &Doc, owner: Key) -> Result<Snapshot, String> {
             folder.to_owned(),
         ));
     }
-    let active = match root.attr(attr_id("active_layer")?) {
-        Some(Value::Str(s)) => s.clone(),
-        _ => "Layer 0".into(),
-    };
+    let mut active = String::from("Layer 0");
+    if let Some(Value::Str(wanted)) = root.attr(attr_id("active_layer")?) {
+        if let Some(row) = rows.iter().find(|row| &row.0 == wanted && row.2 && !row.3) {
+            let flags = root.attr(attr_id("folder_visibility")?);
+            let mut folder = Some(row.5.as_str()).filter(|s| !s.is_empty());
+            let mut seen = HashSet::new();
+            let mut visible = true;
+            while let Some(key) = folder {
+                if !seen.insert(key) {
+                    break;
+                }
+                if matches!(flags, Some(Value::Dict(items)) if items.iter().any(|(k, v)| matches!(k, Value::Str(s) if s == key) && *v == Value::Bool(false)))
+                {
+                    visible = false;
+                    break;
+                }
+                folder = parents.get(key).copied();
+            }
+            if visible {
+                active.clone_from(wanted);
+            }
+        }
+    }
     Ok((rows, folders, active))
 }
 

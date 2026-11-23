@@ -463,3 +463,6 @@ def test_tag_name_filing_and_active_edits_use_stable_keys():
     with pytest.raises(ValueError):
         change("folder", "empty", layers.DEFAULT_LAYER)
     assert tag.folder == "empty" and scene.layer(layers.DEFAULT_LAYER).folder is None
+    change("active", "")
+    scene.folder_visibility["empty"] = False
+    assert scene._root._tag_browser()[2] == layers.active_layer(scene) == layers.DEFAULT_LAYER

@@ -49,12 +49,15 @@ impl Browser {
     pub fn replace(&mut self, rows: Vec<Row>, folders: Vec<(String, String)>, active: String) {
         self.active = active;
         self.folders = folders;
-        if self
-            .editing
-            .as_ref()
-            .is_some_and(|(key, _)| !rows.iter().any(|row| &row.0 == key))
-        {
-            self.editing = None;
+        if let Some((key, buffer)) = &mut self.editing {
+            if let Some(current) = rows.iter().find(|r| &r.0 == key) {
+                // Follow undo and edits from another surface unless typing a new name.
+                if self.rows.iter().any(|r| &r.0 == key && &r.4 == buffer) {
+                    buffer.clone_from(&current.4);
+                }
+            } else {
+                self.editing = None;
+            }
         }
         self.rows = rows;
         self.refresh();
@@ -164,7 +167,9 @@ impl Browser {
                             }
                             let selected = self.editing.as_ref().is_some_and(|(id, _)| id == key);
                             let (rect, response) = kit::list_row(ui, ROW_H, selected);
-                            let response = response.interact(egui::Sense::click_and_drag()).on_hover_text(path);
+                            let response = response
+                                .interact(egui::Sense::click_and_drag())
+                                .on_hover_text(path);
                             let painter = ui.painter().with_clip_rect(rect);
                             let text = painter.layout_no_wrap(path.clone(), body(), INK);
                             kit::leading(&painter, rect, rect.left() + SPACE_XS, text, INK);
@@ -177,8 +182,9 @@ impl Browser {
                             if let Some(tag) = response.dnd_release_payload::<DraggedTag>() {
                                 commands.push(edit(&tag.0, "folder", folder));
                             }
-                            if response.clicked() && key != "Layer 0" {
-                                self.editing = Some((key.clone(), name.clone()));
+                            if response.clicked() {
+                                self.editing =
+                                    (key != "Layer 0").then(|| (key.clone(), name.clone()));
                             }
                         })
                     });
