@@ -25,12 +25,13 @@ panel, the toolbar and the right-click menus never disagree.
 from __future__ import annotations
 
 from PySide6.QtCore import QEvent, QPoint, QRect, QRectF, QSize, Qt
-from PySide6.QtGui import QAction, QColor, QIcon, QPainter, QPen, QPixmap
+from PySide6.QtGui import QAction, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import (QApplication, QComboBox, QStyle,
                                QStyledItemDelegate, QToolBar)
 
 from core import layers as L
 from core.i18n import tr
+from views.tree_icons import isolate_icon, row_icon
 
 #: Where the eye, the padlock, the isolate mark and the swatch sit in a
 #: drop-down row, from its left edge (px) — the delegate paints there and the
@@ -42,54 +43,11 @@ _NAME = Qt.UserRole
 _SEPARATE = Qt.UserRole + 1
 
 
-def _ink() -> QColor:
-    return QApplication.palette().text().color()
-
-
-# ---- Icons -------------------------------------------------------------------
-
-#: The isolate marks drawn so far, by state and ink (see isolate_icon).
-_ISOLATE_ICONS: dict = {}
-
-
 def toolbar_icon(key: str) -> QIcon:
     """The Layers toolbar's icons: drawn with the other tool icons
     (views.icons, keys ``layers_*``), in the same ink and accent."""
     from views.icons import tool_icon
     return tool_icon(f"layers_{key}")
-
-
-def isolate_icon(on: bool) -> QIcon:
-    """A row's isolate mark: a target, filled on the layer shown alone.
-    Drawn once per state and theme: the Browser paints one per row, and a
-    document with ten thousand rows would otherwise draw ten thousand."""
-    ink = _ink()
-    key = (bool(on), ink.rgba())
-    icon = _ISOLATE_ICONS.get(key)
-    if icon is not None:
-        return icon
-    pm = QPixmap(18, 18)
-    pm.fill(Qt.transparent)
-    p = QPainter(pm)
-    p.setRenderHint(QPainter.Antialiasing)
-    if on:
-        p.setPen(QPen(ink, 1.3))
-        p.drawEllipse(QRectF(2, 2, 14, 14))
-        # Solid in the ink, not the accent: it must read on the list's
-        # highlighted row too, which is the accent.
-        p.setPen(Qt.NoPen)
-        p.setBrush(ink)
-        p.drawEllipse(QRectF(5, 5, 8, 8))
-    else:
-        faint = QColor(ink)
-        faint.setAlpha(110)
-        p.setPen(QPen(faint, 1.2))
-        p.drawEllipse(QRectF(2, 2, 14, 14))
-        p.drawEllipse(QRectF(6.5, 6.5, 5, 5))
-    p.end()
-    icon = QIcon(pm)
-    _ISOLATE_ICONS[key] = icon
-    return icon
 
 
 # ---- The drop-down -----------------------------------------------------------
@@ -107,7 +65,6 @@ class _LayerDelegate(QStyledItemDelegate):
         return QSize(max(size.width(), _TEXT_X + 140), max(size.height(), 22))
 
     def paint(self, painter, option, index) -> None:
-        from views.outliner import node_icon
         from views.layers_panel import layer_swatch
         style = option.widget.style() if option.widget else QApplication.style()
         style.drawPrimitive(QStyle.PE_PanelItemViewItem, option, painter,
@@ -118,9 +75,9 @@ class _LayerDelegate(QStyledItemDelegate):
         r = option.rect
         cy = r.top() + (r.height() - _GLYPH) // 2
         if ly is not None:
-            node_icon("eye" if ly.visible else "eye_off").paint(
+            row_icon("eye" if ly.visible else "eye_off").paint(
                 painter, QRect(r.left() + _EYE_X, cy, _GLYPH, _GLYPH))
-            node_icon("lock" if ly.locked else "lock_open").paint(
+            row_icon("lock" if ly.locked else "lock_open").paint(
                 painter, QRect(r.left() + _LOCK_X, cy, _GLYPH, _GLYPH))
             if ly.key != L.DEFAULT_LAYER:           # always on: nothing to do
                 isolate_icon(L.is_isolated(scene, ly.key)).paint(
@@ -296,13 +253,12 @@ class LayerCombo(QComboBox):
 def _row_icon(ly, scene) -> QIcon:
     """The closed box's icon: eye, padlock, isolate mark and swatch side by
     side, as in the list."""
-    from views.outliner import node_icon
     from views.layers_panel import layer_swatch
     pm = QPixmap(_TEXT_X - 8, _GLYPH)
     pm.fill(Qt.transparent)
     p = QPainter(pm)
-    icons = [(node_icon("eye" if ly.visible else "eye_off"), _EYE_X - 4),
-             (node_icon("lock" if ly.locked else "lock_open"), _LOCK_X - 4),
+    icons = [(row_icon("eye" if ly.visible else "eye_off"), _EYE_X - 4),
+             (row_icon("lock" if ly.locked else "lock_open"), _LOCK_X - 4),
              (layer_swatch(ly), _SWATCH_X - 4)]
     if ly.key != L.DEFAULT_LAYER:
         icons.append((isolate_icon(L.is_isolated(scene, ly.key)),
