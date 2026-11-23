@@ -3354,46 +3354,16 @@ class CoplanarMergeCommand(MeshCommand):
     def do(self, scene) -> None:
         mesh = scene.mesh
         seedkeys = {_key(p) for p in self.seed}
-        if _doc.ENABLED:
-            from core.store_mesh import EdgeView, _store_of
-            from ingetrazo_core import merge_seeded_edges
-            if merge_seeded_edges(mesh, list(seedkeys), None if self._journal_geometry else self.merges,
-                                  _store_of, EdgeView):
-                scene.version += 1
-            return
-        progress = True
-        while progress:
-            progress = False
-            for edge in list(mesh.edges):
-                if len(edge.faces) != 2:
-                    continue
-                if (_key(edge.v0.position) not in seedkeys
-                        and _key(edge.v1.position) not in seedkeys):
-                    continue
-                face_a, face_b = edge.faces[0], edge.faces[1]
-                merged = mesh.dissolve_edge(edge)
-                if merged is None:
-                    continue
-                self.merges.append((face_a, face_b, edge, merged))
-                progress = True
-                break  # mesh mutated — restart the scan
-        if self.merges:
+        from core.store_mesh import EdgeView, _store_of
+        from ingetrazo_core import merge_seeded_edges
+        if merge_seeded_edges(mesh, list(seedkeys), None if self._journal_geometry else self.merges,
+                              _store_of, EdgeView):
             scene.version += 1
 
     def undo(self, scene) -> None:
         mesh = scene.mesh
-        if _doc.ENABLED:
-            from ingetrazo_core import revert_seeded_merges
-            revert_seeded_merges(mesh, self.merges)
-            if self.merges:
-                scene.version += 1
-            self.merges = []
-            return
-        for face_a, face_b, edge, merged in reversed(self.merges):
-            mesh.remove_face(merged)
-            mesh.relink_edge(edge)
-            mesh.relink_face(face_a)
-            mesh.relink_face(face_b)
+        from ingetrazo_core import revert_seeded_merges
+        revert_seeded_merges(mesh, self.merges)
         if self.merges:
             scene.version += 1
         self.merges = []
@@ -3523,96 +3493,8 @@ def run_stitch(mesh, seedkeys: set, new_faces: Optional[set] = None,
 
 
 def _merge_object_regions(mesh, seedkeys, new_faces, start):
-    if _doc.ENABLED:
-        from ingetrazo_core import merge_materialised_regions
-        return merge_materialised_regions(mesh, list(seedkeys), new_faces, start)
-    while True:
-        merged = False
-        ncache: dict = {}
-        scache: dict = {}
-        faces = list(mesh.faces)[start:]
-        start = 0
-        for f0 in faces:
-            comp = _coplanar_component(mesh, f0, seedkeys, ncache, scache)
-            if len(comp) < 2:
-                continue
-            if new_faces is not None and not (comp & new_faces):
-                continue
-            region = mesh.dissolve_coplanar_region(comp)
-            if region is not None:
-                if new_faces is not None:
-                    new_faces -= comp
-                    new_faces.add(region)
-                merged = True
-                break
-        if not merged:
-            break
-
-
-def _coplanar_component(mesh, f0, seedkeys: set,
-                        ncache: Optional[dict] = None,
-                        scache: Optional[dict] = None) -> set:
-    """Maximal set of coplanar, edge-connected faces that touch the operation's
-    seed. Whether the component is actually merged is gated separately on it
-    containing a face the operation created (see ``run_stitch``).
-
-    An edge that also carries a *non-coplanar* face is a **crease** — a wall
-    standing under the seam — and the component never crosses it: two roof
-    slabs over a dividing wall stay two faces with a visible ridge,
-    as expected, instead of fusing into one slab floating over the wall.
-
-    ``ncache``/``scache`` memoise per-face normalized normals and seed tests
-    within one (mutation-free) scan — Newell normals recomputed per comparison
-    dominated the push drag preview."""
-    if ncache is None:
-        ncache = {}
-    if scache is None:
-        scache = {}
-
-    def nrm(f):
-        v = ncache.get(f.key)
-        if v is None:
-            v = f.normal().normalized()
-            ncache[f.key] = v
-        return v
-
-    key = scache.get("__keymemo__")
-    if key is None:
-        from core.topology import KeyMemo
-        key = scache["__keymemo__"] = KeyMemo()
-
-    def seeded(f):
-        v = scache.get(f.key)
-        if v is None:
-            v = any(key(p) in seedkeys for p in f.vertices)
-            scache[f.key] = v
-        return v
-
-    if not seeded(f0):
-        return set()
-    n0 = nrm(f0)
-    comp = {f0}
-    stack = [f0]
-    while stack:
-        f = stack.pop()
-        for loop in (f.loop, *f.hole_loops):
-            for a, b in zip(loop, loop[1:] + loop[:1]):
-                e = mesh.find_edge(a, b)
-                if e is None:
-                    continue
-                if any(abs(QVector3D.dotProduct(n0, nrm(h))) < 0.999
-                       for h in e.faces):
-                    continue  # crease: a perpendicular face holds this edge
-                for g in e.faces:
-                    if g in comp or not seeded(g):
-                        continue
-                    # Coplanar regardless of winding sign — a push/pull can leave
-                    # a fragment wound the opposite way (a prism floor cap +Z vs a
-                    # bump strip -Z); same surface, so it belongs to the region.
-                    if abs(QVector3D.dotProduct(n0, g.normal())) > 0.999:
-                        comp.add(g)
-                        stack.append(g)
-    return comp
+    from ingetrazo_core import merge_materialised_regions
+    return merge_materialised_regions(mesh, list(seedkeys), new_faces, start)
 
 
 class SnapshotMutation(MeshCommand):

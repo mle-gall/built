@@ -1657,30 +1657,8 @@ class Mesh:
         faces, the edge, and the merged face) instead of just the new face.
         The merged face gets a fresh key; both old faces and the shared edge
         retire. Other edges and vertices keep their keys."""
-        from core import doc_model
-        if doc_model.ENABLED:
-            from ingetrazo_core import dissolve_object_edge
-            return dissolve_object_edge(self, edge, True, _dominant_attrs)
-        if len(edge.faces) != 2:
-            return None
-        face_a, face_b = edge.faces[0], edge.faces[1]
-        if face_a is face_b:
-            return None
-        if QVector3D.dotProduct(face_a.normal(), face_b.normal()) < 0.999:
-            return None
-        merged = _splice_loops(face_a.loop, face_b.loop, edge.v0, edge.v1)
-        if merged is None:
-            return None
-        loop_positions = [v.position for v in merged]
-        hole_positions = [[v.position for v in h]
-                          for h in (*face_a.hole_loops, *face_b.hole_loops)]
-        self.remove_face(face_a)
-        self.remove_face(face_b)
-        self.remove_edge(edge)
-        new_face = self.add_face(loop_positions, hole_positions or None)
-        new_face.attrs = dict(_dominant_attrs((face_a, face_b)))
-        return {"kind": "merge", "edge": edge, "face_a": face_a,
-                "face_b": face_b, "merged": new_face}
+        from ingetrazo_core import dissolve_object_edge
+        return dissolve_object_edge(self, edge, True, _dominant_attrs)
 
     def dissolve_coplanar_pair(self, face_a: "Face", face_b: "Face") -> Optional[dict]:
         """Merge two coplanar faces into the boundary of their union, removing
@@ -1689,58 +1667,9 @@ class Mesh:
         single-edge splice can't fuse. Traces the union outline instead. Returns
         a reversible record, or ``None`` if they aren't a coplanar adjacent pair
         with a simple union outline."""
-        from core import doc_model
-        if doc_model.ENABLED:
-            from ingetrazo_core import dissolve_object_region
-            return dissolve_object_region(self, [face_a, face_b], True, _trace_loops,
-                                          _loop_area, _orient_union_loops, _dominant_attrs)
-        if face_a is face_b:
-            return None
-        if QVector3D.dotProduct(face_a.normal(), face_b.normal()) < 0.999:
-            return None
-        a_loops = [face_a.loop, *face_a.hole_loops]
-        b_loops = [face_b.loop, *face_b.hole_loops]
-        counts: dict = {}
-        for loops in (a_loops, b_loops):
-            for loop in loops:
-                n = len(loop)
-                for i in range(n):
-                    key = frozenset((loop[i].key, loop[(i + 1) % n].key))
-                    counts[key] = counts.get(key, 0) + 1
-        # Edges interior to the union appear in both faces; the outline is the
-        # edges that appear exactly once.
-        shared = [k for k, c in counts.items() if c >= 2]
-        if not shared:
-            return None  # not adjacent
-        by_id = {v.key: v for loop in (a_loops + b_loops) for v in loop}
-        outline: list[tuple[Vertex, Vertex]] = []
-        for loops in (a_loops, b_loops):
-            for loop in loops:
-                n = len(loop)
-                for i in range(n):
-                    u, w = loop[i], loop[(i + 1) % n]
-                    if counts[frozenset((u.key, w.key))] == 1:
-                        outline.append((u, w))
-        loops_out = _trace_loops(outline)
-        if loops_out is None:
-            return None  # pinched / non-simple union → leave it
-        # Largest-area loop is the outer boundary; the rest are holes.
-        loops_out.sort(key=lambda lp: _loop_area(lp), reverse=True)
-        outer = loops_out[0]
-        holes = loops_out[1:]
-        _orient_union_loops(outer, holes, face_a.normal())
-        shared_edges = [self.find_edge(by_id[next(iter(k))],
-                                       by_id[list(k)[-1]]) for k in shared]
-        self.remove_face(face_a)
-        self.remove_face(face_b)
-        for e in shared_edges:
-            if e is not None:
-                self.remove_edge(e)
-        merged = self.add_face([v.position for v in outer],
-                               [[v.position for v in h] for h in holes] or None)
-        merged.attrs = dict(_dominant_attrs((face_a, face_b)))
-        return {"kind": "merge_pair", "face_a": face_a, "face_b": face_b,
-                "edges": [e for e in shared_edges if e is not None], "merged": merged}
+        from ingetrazo_core import dissolve_object_region
+        return dissolve_object_region(self, [face_a, face_b], True, _trace_loops,
+                                      _loop_area, _orient_union_loops, _dominant_attrs)
 
     def dissolve_coplanar_region(self, faces: Iterable["Face"]) -> Optional["Face"]:
         """Merge a set of mutually-coplanar, edge-connected faces into one face
@@ -1751,63 +1680,9 @@ class Mesh:
         whole coplanar component at once, which is deterministic. ``None`` if the
         faces aren't all coplanar, aren't connected, or the union isn't simple."""
         faces = list(faces)
-        from core import doc_model
-        if doc_model.ENABLED:
-            from ingetrazo_core import dissolve_object_region
-            return dissolve_object_region(self, faces, False, _trace_loops,
-                                          _loop_area, _orient_union_loops, _dominant_attrs)
-        if len(faces) < 2:
-            return None
-        n0 = faces[0].normal()
-        # Coplanar regardless of winding sign (a push/pull can flip a fragment's
-        # winding): the union outline is traced from undirected edges, so an
-        # opposite-wound coplanar face merges in cleanly.
-        if any(abs(QVector3D.dotProduct(n0, f.normal())) < 0.999 for f in faces[1:]):
-            return None
-        counts: dict = {}
-        for f in faces:
-            for loop in (f.loop, *f.hole_loops):
-                n = len(loop)
-                for i in range(n):
-                    key = frozenset((loop[i].key, loop[(i + 1) % n].key))
-                    counts[key] = counts.get(key, 0) + 1
-        if not any(c >= 2 for c in counts.values()):
-            return None  # not edge-connected
-        by_id = {v.key: v for f in faces
-                 for loop in (f.loop, *f.hole_loops) for v in loop}
-        outline = [
-            (u, w)
-            for f in faces
-            for loop in (f.loop, *f.hole_loops)
-            for u, w in zip(loop, loop[1:] + loop[:1])
-            if counts[frozenset((u.key, w.key))] == 1
-        ]
-        loops_out = _trace_loops(outline)
-        if loops_out is None:
-            return None
-        if not loops_out:
-            # The union has no boundary of its own: identical cycles stacked on
-            # one another (raising a room whose shared wall the neighbour's push
-            # already built). Keep one face, drop the duplicates.
-            if not faces[0].attrs:
-                faces[0].attrs = dict(_dominant_attrs(faces[1:]))
-            for f in faces[1:]:
-                self.remove_face(f)
-            return faces[0]
-        loops_out.sort(key=_loop_area, reverse=True)
-        outer, holes = loops_out[0], loops_out[1:]
-        _orient_union_loops(outer, holes, n0)
-        interior = [self.find_edge(by_id[tuple(k)[0]], by_id[tuple(k)[-1]])
-                    for k, c in counts.items() if c >= 2]
-        for f in faces:
-            self.remove_face(f)
-        for e in interior:
-            if e is not None and not e.faces:
-                self.remove_edge(e)
-        merged = self.add_face([v.position for v in outer],
-                               [[v.position for v in h] for h in holes] or None)
-        merged.attrs = dict(_dominant_attrs(faces))
-        return merged
+        from ingetrazo_core import dissolve_object_region
+        return dissolve_object_region(self, faces, False, _trace_loops,
+                                      _loop_area, _orient_union_loops, _dominant_attrs)
 
     def revert_stitch(self, rec: dict) -> None:
         """Undo a single stitch primitive recorded by the methods above."""
@@ -1861,35 +1736,8 @@ class Mesh:
         the two incident faces are right there on ``edge.faces``; nothing is
         rediscovered by position.
         """
-        from core import doc_model
-        if doc_model.ENABLED:
-            from ingetrazo_core import dissolve_object_edge
-            return dissolve_object_edge(self, edge, False, _dominant_attrs)
-        if len(edge.faces) != 2:
-            return None
-        face_a, face_b = edge.faces[0], edge.faces[1]
-        if face_a is face_b:
-            return None  # both sides are the same face (a slit) — leave it
-        dot = QVector3D.dotProduct(face_a.normal(), face_b.normal())
-        if abs(dot) < 0.999:
-            return None  # not coplanar
-        # Opposite-wound coplanar fragments (a push/pull artefact) are still one
-        # face — flip B so the splice closes instead of leaving a phantom seam.
-        loop_b = face_b.loop if dot > 0 else list(reversed(face_b.loop))
-        merged = _splice_loops(face_a.loop, loop_b, edge.v0, edge.v1)
-        if merged is None:
-            return None
-        loop_positions = [v.position for v in merged]
-        hole_positions = [
-            [v.position for v in h]
-            for h in (*face_a.hole_loops, *face_b.hole_loops)
-        ]
-        self.remove_face(face_a)
-        self.remove_face(face_b)
-        self.remove_edge(edge)
-        merged_face = self.add_face(loop_positions, hole_positions or None)
-        merged_face.attrs = dict(_dominant_attrs((face_a, face_b)))
-        return merged_face
+        from ingetrazo_core import dissolve_object_edge
+        return dissolve_object_edge(self, edge, False, _dominant_attrs)
 
 
 
@@ -2082,42 +1930,6 @@ def _dominant_attrs(faces) -> dict:
     return best
 
 
-def _shared_edge_index(loop: list[Vertex], v0: Vertex, v1: Vertex) -> Optional[int]:
-    """Index ``i`` where ``loop[i]``–``loop[i+1]`` is the edge ``{v0, v1}``."""
-    n = len(loop)
-    for i in range(n):
-        a, b = loop[i], loop[(i + 1) % n]
-        if (a is v0 and b is v1) or (a is v1 and b is v0):
-            return i
-    return None
-
-
-def _splice_loops(
-    loop_a: list[Vertex], loop_b: list[Vertex], v0: Vertex, v1: Vertex
-) -> Optional[list[Vertex]]:
-    """Merge two vertex loops sharing the edge ``{v0, v1}`` into one, dropping the
-    shared edge. Both loops must carry the edge on their *outer* boundary with
-    consistent winding (the edge runs ``u→w`` in one and ``w→u`` in the other);
-    returns ``None`` otherwise, or if the result would repeat a vertex."""
-    ia = _shared_edge_index(loop_a, v0, v1)
-    ib = _shared_edge_index(loop_b, v0, v1)
-    if ia is None or ib is None:
-        return None
-    na, nb = len(loop_a), len(loop_b)
-    u, w = loop_a[ia], loop_a[(ia + 1) % na]  # A traverses the edge u → w
-    # Consistent winding requires B to traverse it the other way, w → u.
-    if not (loop_b[ib] is w and loop_b[(ib + 1) % nb] is u):
-        return None
-    sa = (ia + 1) % na                          # rotate A to start at w → [w … u]
-    a_path = loop_a[sa:] + loop_a[:sa]
-    sb = (ib + 1) % nb                          # rotate B to start at u → [u … w]
-    b_path = loop_b[sb:] + loop_b[:sb]
-    merged = a_path[:-1] + b_path[:-1]          # drop the duplicated u and w
-    if len({v.key for v in merged}) != len(merged):
-        return None                             # a vertex repeats → not simple
-    return merged
-
-
 def _trace_loops(outline: list[tuple[Vertex, Vertex]]) -> Optional[list[list[Vertex]]]:
     """Trace a set of undirected boundary edges into closed vertex loops. Returns
     ``None`` if any vertex has valence ≠ 2 (a pinched / non-simple outline).
@@ -2127,39 +1939,8 @@ def _trace_loops(outline: list[tuple[Vertex, Vertex]]) -> Optional[list[list[Ver
     of segments, i.e. object addresses, so the merged face's corner order
     differed from run to run (design decision 5). Vertices are known by
     key, so the store's views trace the same loops."""
-    from core import doc_model
-    if doc_model.ENABLED:
-        from ingetrazo_core import trace_object_loops
-        return trace_object_loops(outline)
-    adj: dict = {}
-    edges: dict = {}               # undirected segment -> (u, w), in order
-    for u, w in outline:
-        if u.key == w.key:
-            # An edge onto itself: the outline is pinched, not simple. Some
-            # imported models carry one, and it must be a refusal here rather
-            # than a set of one endpoint further down.
-            return None
-        adj.setdefault(u.key, []).append(w)
-        adj.setdefault(w.key, []).append(u)
-        edges.setdefault(frozenset((u.key, w.key)), (u, w))
-    for nbrs in adj.values():
-        if len(nbrs) != 2:
-            return None
-    loops: list[list[Vertex]] = []
-    while edges:
-        a, b = edges.pop(next(iter(edges)))
-        loop = [a, b]
-        prev, cur = a, b
-        while True:
-            nbrs = adj[cur.key]
-            nxt = nbrs[0] if nbrs[0].key != prev.key else nbrs[1]
-            edges.pop(frozenset((cur.key, nxt.key)), None)
-            if nxt.key == loop[0].key:
-                break
-            loop.append(nxt)
-            prev, cur = cur, nxt
-        loops.append(loop)
-    return loops
+    from ingetrazo_core import trace_object_loops
+    return trace_object_loops(outline)
 
 
 def _orient_union_loops(
