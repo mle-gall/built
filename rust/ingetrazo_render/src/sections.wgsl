@@ -7,4 +7,4 @@ struct Output { @builtin(position) position: vec4f, @location(0) color: vec3f }
     o.color = color;
     return o;
 }
-@fragment fn fs(i: Output) -> @location(0) vec4f { let c = i.color; return vec4f(select(c/12.92, pow((c+0.055)/1.055, vec3f(2.4)), c>vec3f(0.04045)), 1.); }
+@fragment fn fs(i: Output) -> @location(0) vec4f { let c = i.color; return vec4f(c, 1.); }

@@ -77,7 +77,7 @@ struct EdgePlacement { eye: vec4f, transform: mat4x4f }
  a = vec4f(a.xy + normal*side*width/camera.size.xy*a.w - cap,a.zw);
  var o: Out;
  o.section_distance = dot(inst[id].world * vec4f(pos,1.), style.section_plane);
- o.distance = corner.g * length(direction) * 0.5;
+ o.distance = (1. - corner.g) * length(direction) * 0.5;
  o.position = a; o.id = id+1u; o.color = style.edge.rgb;
  o.shade = 1.; o.decorated = (inst[id].info.z & 70u) | select(0u,16u,corner.b > 0.5 && profile && style.profiles.x > 0.);
  return o;

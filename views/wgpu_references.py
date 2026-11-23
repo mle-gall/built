@@ -21,6 +21,10 @@ def _texture(image, fallback, limit):
     return image.width(), image.height(), np.frombuffer(bytes(image.constBits()), np.uint8)
 
 
+def preview_texture(path, limit):
+    return _texture(QImage(path).mirrored(), (245, 242, 236), limit)
+
+
 def sync(view, style):
     """Keep per-layer GPU allocations across frames, including peer/capture cameras."""
     source = view.source_viewport

@@ -7,6 +7,9 @@ pub struct Settings {
     matrix: [f32; 16],
     darkness: f32,
     ground: bool,
+    fitted: Option<[f32; 16]>,
+    checked: bool,
+    soft: f32,
 }
 pub const LIVE_SIZE: u32 = 2048;
 pub const EXPORT_SIZE: u32 = 8192;
@@ -14,6 +17,9 @@ pub const EXPORT_SIZE: u32 = 8192;
 pub struct Sun {
     pub enabled: bool,
     dirty: bool,
+    fitted: Option<[f32; 16]>,
+    checked: bool,
+    fit_pipeline: Option<wgpu::ComputePipeline>,
     direction: [f32; 3],
     matrix: [f32; 16],
     darkness: f32,
@@ -139,9 +145,9 @@ impl Sun {
                                     dst_factor: wgpu::BlendFactor::Src,
                                     operation: wgpu::BlendOperation::Add,
                                 },
-                                alpha: wgpu::BlendComponent::REPLACE,
+                                alpha: wgpu::BlendComponent::OVER,
                             }),
-                            write_mask: wgpu::ColorWrites::COLOR,
+                            write_mask: wgpu::ColorWrites::ALL,
                         })],
                     }),
                     primitive: Default::default(),
@@ -158,6 +164,7 @@ impl Sun {
         Self {
             enabled: false,
             dirty: true,
+            fitted: None, checked: false, fit_pipeline: None,
             direction: [0., 0., 1.],
             matrix: glam::Mat4::IDENTITY.to_cols_array(),
             darkness: 0.55,
@@ -182,20 +189,42 @@ impl Sun {
     /// The style's part of the sun, kept per view of the same scene.
     pub fn settings(&self) -> Settings {
         Settings { enabled: self.enabled, direction: self.direction, matrix: self.matrix,
-                   darkness: self.darkness, ground: self.ground }
+                   darkness: self.darkness, ground: self.ground, fitted: self.fitted, checked: self.checked, soft: self.soft }
     }
     /// Another view's sun: the shared depth map is drawn again only if it
     /// differs from the one it holds.
     pub fn restore(&mut self, s: Settings) {
-        self.dirty |= self.matrix != s.matrix || self.direction != s.direction
+        self.dirty |= self.fitted != s.fitted || self.matrix != s.matrix || self.direction != s.direction
             || (s.enabled && !self.enabled);
         self.enabled = s.enabled;
         self.direction = s.direction;
         self.matrix = s.matrix;
         self.darkness = s.darkness;
         self.ground = s.ground;
+        self.fitted = s.fitted;
+        self.checked = s.checked;
+        self.soft = s.soft;
+    }
+    pub fn camera_changed(&mut self) {
+        self.dirty |= self.fitted.take().is_some();
+        self.checked = false;
+    }
+    pub fn needs_fit(&self) -> bool { self.enabled && !self.dirty && !self.checked }
+    pub fn settle(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, depth: &wgpu::Texture, camera: &[f32]) {
+        if !self.needs_fit() { return; }
+        self.checked = true;
+        let pipeline = self.fit_pipeline.get_or_insert_with(|| {
+            let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some("visible shadow receivers"), source: wgpu::ShaderSource::Wgsl(include_str!("shadow_fit.wgsl").into()),
+            });
+            device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor { label: Some("settled shadow fit"),
+                layout: None, module: &shader, entry_point: Some("fit"), compilation_options: Default::default(), cache: None })
+        });
+        self.fitted = crate::shadow_fit::projection(device, queue, pipeline, depth, camera, &self.matrix);
+        self.dirty = self.fitted.is_some();
     }
     pub fn invalidate(&mut self) {
+        self.camera_changed();
         self.dirty = true;
     }
     pub fn update(&mut self, value: &Bound<'_, PyAny>) -> PyResult<()> {
@@ -247,8 +276,7 @@ impl Sun {
             return Err(PyValueError::new_err("invalid sun payload"));
         }
         let direction = glam::Vec3::from(direction).normalize().to_array();
-        self.dirty |=
-            self.matrix != matrix || self.direction != direction || self.enabled != enabled;
+        if self.matrix != matrix || self.direction != direction || self.enabled != enabled { self.invalidate(); }
         self.enabled = enabled;
         self.matrix = matrix;
         self.direction = direction;
@@ -275,7 +303,7 @@ impl Sun {
             glam::Vec4::new(0., 0., 0.5, 0.),
             glam::Vec4::new(0., 0., 0.5, 1.),
         );
-        let mut camera = (conversion * glam::Mat4::from_cols_array(&self.matrix))
+        let mut camera = (conversion * glam::Mat4::from_cols_array(self.fitted.as_ref().unwrap_or(&self.matrix)))
             .to_cols_array()
             .to_vec();
         camera.extend([self.map.width() as f32, self.map.height() as f32, 0., 0.]);
@@ -369,10 +397,10 @@ impl Sun {
             glam::Vec4::new(0., 0., 0.5, 1.),
         );
         let mut data = inverse.to_cols_array().to_vec();
-        data.extend((conversion * glam::Mat4::from_cols_array(&self.matrix)).to_cols_array());
+        data.extend((conversion * glam::Mat4::from_cols_array(self.fitted.as_ref().unwrap_or(&self.matrix))).to_cols_array());
         data.extend(self.direction);
         data.push(self.darkness);
-        let [across, along] = footprint(&self.matrix);
+        let [across, along] = footprint(self.fitted.as_ref().unwrap_or(&self.matrix));
         data.extend([if self.ground { 1. } else { 0. }, self.soft, across, along]);
         q.write_buffer(&self.uniform, 0, bytemuck::cast_slice(&data));
         let map = self.map.create_view(&Default::default());

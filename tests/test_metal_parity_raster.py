@@ -111,7 +111,7 @@ def test_material_alpha_blends_without_hiding_opaque_background(native,aa):
         from PySide6.QtGui import QImage
         path=Path(os.environ['P2_RASTER_OUTPUT']); path.mkdir(parents=True,exist_ok=True)
         QImage(rgba.data,64,64,QImage.Format_RGBA8888).copy().save(str(path/f'synthetic-alpha64-msaa-{aa}.png'))
-    assert mixed[0]>70 and mixed[2]>120 and mixed[1]<5
+    np.testing.assert_allclose(mixed, [62, 0, 185], atol=3)  # 64/255 coverage in display space
     upload(native,255)
     opaque=capture(native)[32,32,:3].astype(int)
     assert opaque[0]>180 and opaque[2]<5
@@ -155,6 +155,10 @@ def test_preview_and_face_marks_are_depth_tested(native,aa):
     native.set_face_marks(marks.view(np.uint8).ravel())
     marked=capture(native)
     assert np.count_nonzero(marked[:,:,2]>original[:,:,2])>20
+    # WGSL fragment coordinates start at the top, the selection mask at the bottom.
+    mask = marked[20:44, 20:44, 2] > original[20:44, 20:44, 2]
+    y, x = np.mgrid[20:44, 20:44]
+    np.testing.assert_array_equal(mask, ((x % 6) < 2) & (((63 - y) % 6) < 2))
     native.set_face_marks(empty)
     np.testing.assert_array_equal(original,capture(native))
 
@@ -239,6 +243,44 @@ def test_shadow_toggle_and_invalid_payload(native):
     np.testing.assert_array_equal(original,capture(native))
 
 
+@pytest.mark.parametrize("aa", [False, True])
+def test_paste_preview_repeats_the_image_and_clears(native, aa, tmp_path):
+    from ingetrazo_core import Vec3
+    from ingetrazo_render import preview_materials
+    from PySide6.QtGui import QColor, QImage
+    from tools.paste import PasteTool
+    from tests.controller_surface import ControllerSurface
+    from views.wgpu_references import preview_texture
+
+    upload(native, 255)
+    native.set_antialias(aa)
+    native.set_style(dict(sky=False, edges=False))
+    original = capture(native)
+    path = str(tmp_path / "strip.png")
+    strip = QImage(2, 1, QImage.Format_RGBA8888)
+    strip.setPixelColor(0, 0, QColor(255, 255, 0))
+    strip.setPixelColor(1, 0, QColor(0, 255, 255))
+    assert strip.save(path)
+    tool = PasteTool()
+    points = [Vec3(x, y, 0) for x, y in [(-.8, -.8), (.8, -.8), (.8, .8), (-.8, .8)]]
+    texture = dict(path=path, uvw=[1.25, 0., 0., 1., 0., 1.25, 0., 1.])
+    tool._clip = {"faces": [(points, [], {"texture": texture})]}
+    tool._offset = Vec3(0, 0, .2)
+    controller = ControllerSurface(None)
+    plain, runs = preview_materials(tool.preview_faces(), controller, 1.)
+    assert not plain
+    empty = np.empty(0, np.uint8)
+    native.set_preview_mesh(empty, empty, [(p, shade, opacity, np.asarray(v))
+                            for p, shade, opacity, v in runs], preview_texture)
+    controller.close()
+    frame = capture(native)[32]
+    for x in (13, 39):
+        assert frame[x, 0] > 220 and frame[x, 2] < 35
+    assert frame[26, 2] > 220 and frame[26, 0] < 35
+    native.set_preview_mesh(empty, empty)
+    np.testing.assert_array_equal(original, capture(native))
+
+
 def test_hidden_ranges_are_opt_in(native):
     v,i,b,c,r=upload(native,255)
     hidden=v[:6].copy();hidden['pos'][:,2]=.2;hidden['color'][:]=[0,255,0,255]
@@ -267,7 +309,7 @@ def test_partial_texture_alpha_and_billboard_cutout(native,aa):
     native.set_materials(table.view(np.uint8).ravel())
     native.set_textures(1,1,2,[[255,255,255,255,255,0,0,80]])
     mixed=capture(native)[32,32,:3]
-    assert mixed[0]>80 and mixed[2]>150
+    np.testing.assert_allclose(mixed.astype(int), [78, 0, 171], atol=3)  # 80/255 texture alpha
     # Same texture on face-me geometry has a hard 0.5 threshold.
     r['info'][0,2]=8
     native.update_instances([0],r.view(np.uint8).ravel())
@@ -513,6 +555,21 @@ def test_export_shadow_map_resolves_the_ground_shadow_edge(native):
         return np.count_nonzero((r == g) & (g == b) & (r > 65) & (r < 245))
     assert 0 < transition(sharp) < transition(normal)
     np.testing.assert_array_equal(normal, frame(False))
+
+    native.resize(256, 256, 1.)
+    native.set_camera(view.data(), projection.data())
+    native.set_style(style)
+    def live():
+        native.request_capture()
+        native.render(True)
+        return np.frombuffer(bytes(native.take_capture()), np.uint8).reshape(256, 256, 4)
+    moving = live()
+    assert native.needs_shadow_fit
+    native.settle_shadows()
+    settled = live()
+    assert not native.needs_shadow_fit
+    assert transition(settled) < transition(moving)
+    np.testing.assert_array_equal(settled, live())
 
 
 @pytest.mark.parametrize('layer', ['image', 'map', 'terrain', 'photo'])

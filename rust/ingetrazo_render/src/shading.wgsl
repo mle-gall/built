@@ -124,7 +124,8 @@ fn face_pixel(i: Out, facing: bool) -> Pixel {
   if tex != 0u { base *= base_factor; }
   c = pbr_light(recipes[recipe_id], base, select(-i.normal,i.normal,facing), i.world, uv, uv_dx, uv_dy, px, py);
  }
- if (i.decorated & 6u) != 0u && style.raster.y == 0. && all((i.position.xy % vec2f(6.)) < vec2f(2.)) {
+ if camera.size.z == 3. && opacity < 1. { c = vec3f(0.5); }
+ if (i.decorated & 6u) != 0u && style.raster.y == 0. && all((vec2f(i.position.x, camera.size.y - i.position.y) % vec2f(6.)) < vec2f(2.)) {
   let surface = c / max(i.shade, 0.001);
   let high = max(surface.r,max(surface.g,surface.b));
   let low = min(surface.r,min(surface.g,surface.b));
@@ -140,10 +141,10 @@ fn face_pixel(i: Out, facing: bool) -> Pixel {
              delta/max(high,0.001) >= 0.35 && high >= 0.35 && (hue <= 0.14 || hue >= 0.96));
  }
  if (i.decorated & 64u) != 0u { c = mix(c, style.fade.rgb, style.fade.a); }
- var p: Pixel; p.color=vec4f(linear(c),select(opacity,0.6,camera.size.z == 1)); p.id=i.id; return p;
+ var p: Pixel; p.color=vec4f(c,select(opacity,0.6,camera.size.z == 1)); p.id=i.id; return p;
 }
 
-fn edge_pixel(i: Out) -> Pixel { if i.section_distance < 0. { discard; } var p: Pixel; var c = style.edge.rgb; if (i.decorated & 2u) != 0u { c = vec3f(0.95,0.45,0.16); } else if (i.decorated & 4u) != 0u { c = vec3f(0.30,0.55,0.95); } if (i.decorated & 64u) != 0u { c = mix(c, style.fade.rgb, style.fade.a); } p.color=vec4f(linear(c),1); p.id=i.id; return p; }
+fn edge_pixel(i: Out) -> Pixel { if i.section_distance < 0. { discard; } var p: Pixel; var c = style.edge.rgb; if (i.decorated & 2u) != 0u { c = vec3f(0.95,0.45,0.16); } else if (i.decorated & 4u) != 0u { c = vec3f(0.30,0.55,0.95); } if (i.decorated & 64u) != 0u { c = mix(c, style.fade.rgb, style.fade.a); } p.color=vec4f(c,1); p.id=i.id; return p; }
 
 @fragment fn color_fs(i: Out, @builtin(front_facing) front: bool) -> @location(0) vec4f {
  let p = face_pixel(i,front);
@@ -171,7 +172,7 @@ fn edge_pixel(i: Out) -> Pixel { if i.section_distance < 0. { discard; } var p: 
 }
 @fragment fn hidden_edge_fs(i: Out) -> Pixel {
  var p = edge_pixel(i);
- if camera.size.z == 1. { var c = mix(style.edge.rgb,style.background.rgb,0.6); if (i.decorated & 64u) != 0u { c = mix(c, style.fade.rgb, style.fade.a); } p.color = vec4f(linear(c),1.); }
+ if camera.size.z == 1. { var c = mix(style.edge.rgb,style.background.rgb,0.6); if (i.decorated & 64u) != 0u { c = mix(c, style.fade.rgb, style.fade.a); } p.color = vec4f(c,1.); }
  else { if (i.distance % max(style.profiles.w*2.,1.)) >= style.profiles.w { discard; } }
  return p;
 }

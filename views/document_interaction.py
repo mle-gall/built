@@ -12139,6 +12139,12 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         snapshot (an export, a failed read-back) it asks the rays."""
         snap = getattr(self, "_depth_snap", None)
         if snap is None:
+            if (not self.camera.perspective and _active_cut(self.scene) is None
+                    and self._effective_style().face_mode not in ("xray", "wireframe")):
+                from ingetrazo_render import parallel_annotation_ray
+                forward = self.camera.forward()
+                ray = parallel_annotation_ray(self.camera.eye().toTuple(), forward.toTuple(), world.toTuple())
+                return ray is not None and self.ray_distance(QVector3D(*ray[0]), forward, ray[1]) is not None
             return self._is_occluded(world)
         buf, mvp, inv, w, h, eye, fwd = snap
         c = mvp.map(QVector4D(world.x(), world.y(), world.z(), 1.0))
