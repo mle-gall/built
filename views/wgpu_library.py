@@ -109,7 +109,7 @@ def material_uses(scene) -> Counter:
     cached = getattr(scene, "_lib_uses", None)
     if cached is not None and cached[0] == sig:
         return cached[1]
-    from core.group import iter_placements
+    from core.purge import iter_groups
     from core.purge import _document_groups, iter_meshes
     from core.store_parts import material_names
     uses = Counter()
@@ -126,7 +126,7 @@ def material_uses(scene) -> Counter:
             if n:
                 uses[n] += 1
     for top in _document_groups(scene):
-        for g, _m in iter_placements(top):
+        for g in iter_groups((top,)):
             paint = getattr(g, "material", None) or {}
             if paint.get("mat"):
                 uses[paint["mat"]] += 1
@@ -144,12 +144,12 @@ def linked_material_uses(scene) -> dict:
     out = {}
     try:
         from core import links
-        from core.group import iter_placements
+        from core.purge import iter_groups
         from core.store_parts import material_names
         for path in links.sources(scene):
             counts = Counter()
             for g in links.linked_groups(scene, path):
-                for pg, _m in iter_placements(g):
+                for pg in iter_groups((g,)):
                     mesh = getattr(pg, "mesh", None)
                     if mesh is None:
                         continue
@@ -180,12 +180,12 @@ def _wears(mesh, name, memo) -> bool:
 def select_material_uses(ctx, name) -> int:
     """Select what wears ``name`` in the open context: its loose faces and
     each placement with a face or a part painted with it."""
-    from core.group import iter_placements
+    from core.purge import iter_groups
     scene, memo = ctx.scene, {}
     picked = [f for f in scene.mesh.faces
               if f.attrs.get("mat") == name or (f.attrs.get("back") or {}).get("mat") == name]
     for g in scene.groups:
-        for pg, _m in iter_placements(g):
+        for pg in iter_groups((g,)):
             if (getattr(pg, "material", None) or {}).get("mat") == name or _wears(pg.mesh, name, memo):
                 picked.append(g)
                 break

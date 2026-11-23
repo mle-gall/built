@@ -1,8 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Compatibility edit sessions for the Python reference document and object meshes.
-
-The native occurrence store and its history never enter these sessions.
-"""
+"""World-copy edit sessions for object meshes and singular store placements."""
 from ingetrazo_core import Matrix4, Vec3
 
 from core.history import Command, MeshCommand, CompoundCommand, OccurrenceCommands
@@ -404,15 +401,5 @@ def record_leave(history, level, share):
         step = ReshareAssemblyCommand(group, proto, xform, edited, state0, parts, inner)
     else:
         step = ReshareInstanceCommand(group, proto, xform, edited, inner)
-    if history._native is not None:
-        history._native.close_group(history, mark, step)
-    else:
-        del history.undo_stack[mark:]
-        try:
-            history.execute(step)
-        except BaseException:
-            history.undo_stack.extend(inner)
-            raise
-        if history.last_error or history.last_rejected:
-            history.undo_stack.extend(inner)
+    history._native.close_group(history, mark, step)
     return shared

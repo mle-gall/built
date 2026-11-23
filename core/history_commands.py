@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""Model editing commands and their Python reference inverses."""
+"""Editor command adapters for document transactions and host-owned changes."""
 from __future__ import annotations
 
 from ingetrazo_core import planar_edits as _planar
@@ -98,11 +98,11 @@ class Command(ABC):
     #: everything it changes lives in the document. A method
     #: ``doc_undo(scene) -> bool`` for commands that qualify for some
     #: inputs only (asked right after ``do``). ``undo`` stays: it is the
-    #: Python document's path and the fallback for a nested step.
+    #: direct and mixed-command replay hook.
     doc_undo = False
     _journal_geometry = False
 
-    def _reference_snapshot(self, mesh):
+    def _direct_snapshot(self, mesh):
         if not self._journal_geometry:
             return mesh.capture_state()
 
@@ -266,8 +266,8 @@ class AddEdgeCommand(MeshCommand):
 
 
 class RemoveGeometryCommand(MeshCommand):
-    """Deleting an element changes ordered incidence lists. The reference
-    mesh restores their original order with its identity-preserving snapshot."""
+    """Deleting an element changes ordered incidence lists. Direct replay
+    restores their order and the original element handles."""
     keeps_rows = True
     _before = None
 
@@ -312,7 +312,7 @@ class DeleteEdgesCommand(RemoveGeometryCommand):
                     scene.selection.discard(edge)
                 scene.version += 1
                 return
-        self._before = self._reference_snapshot(m)
+        self._before = self._direct_snapshot(m)
         self.removed_edges, self.removed_faces = _drawing.delete_edges(m, self._endpoints, self.cascade_faces, scene.selection)
         scene.version += 1
 
@@ -355,11 +355,11 @@ class EraseSelectionCommand(RemoveGeometryCommand):
 
     def do(self, scene) -> None:
         m = scene.mesh
-        self._before = self._reference_snapshot(m)
+        self._before = self._direct_snapshot(m)
         footprint = winding_footprint(m)
         from core.store_mesh import EdgeView, FaceView, StoreMesh, _hypot
         result = None
-        if _doc.ENABLED and type(m) is StoreMesh and (hypot := _hypot()) is not None:
+        if type(m) is StoreMesh and (hypot := _hypot()) is not None:
             result = m._store.erase_selection(
                 [[p.toTuple() for p in loop] for loop in self._face_loops],
                 [(m._input_point(a), m._input_point(b)) for a,b in self._edge_endpoints], hypot)
@@ -583,19 +583,19 @@ class AddFaceCommand(MeshCommand):
         if self._after is not None:
             mesh.restore_state(self._after)
         else:
-            self._before = self._reference_snapshot(mesh)
+            self._before = self._direct_snapshot(mesh)
             self.face = mesh.add_face(self.vertices, self.preset_holes)
             self.face.interior = self.interior
             if self.attrs:
                 self.face.attrs.update(self.attrs)
             if self.auto:
                 self._divide(mesh)
-            self._after = self._reference_snapshot(mesh)
+            self._after = self._direct_snapshot(mesh)
         scene.version += 1
 
     def _divide(self, mesh):
         from core.store_mesh import FaceView, StoreMesh, _hypot
-        if (_doc.ENABLED and type(mesh) is StoreMesh and not mesh.__dict__.get("_planned_points")
+        if (type(mesh) is StoreMesh and not mesh.__dict__.get("_planned_points")
                 and (hypot := _hypot()) is not None):
             result = mesh._store.divide_drawn_face(
                 self.face.key, [f.key for f in _faces_holding(mesh, self.face.vertices)],
@@ -649,7 +649,7 @@ class DeleteFaceCommand(RemoveGeometryCommand):
                     scene.selection.discard(self.face)
                 scene.version += 1
                 return
-        self._before = self._reference_snapshot(mesh)
+        self._before = self._direct_snapshot(mesh)
         self.face = _drawing.delete_face(mesh, self._loop, scene.selection)
         scene.version += 1
 
@@ -701,7 +701,7 @@ _RENDER_FIELDS = ["layer", "hidden", "material"]
 def _all_placements(items) -> bool:
     """Every item a placement whose fields live in the document: its
     renderer dirtiness then comes from the step's transaction."""
-    return _doc.ENABLED and all(isinstance(e, Group) for e in items)
+    return all(isinstance(e, Group) for e in items)
 
 
 def _bulk_set(items, field, value):
@@ -709,7 +709,7 @@ def _bulk_set(items, field, value):
     document op (``doc_set_many``: Lock, Hide or Tag of a whole selection),
     returning the previous values; ``None`` when not every item is a
     document placement (the caller writes them one by one)."""
-    if not _doc.ENABLED or not items:
+    if not items:
         return None
     try:
         prev = _doc.NATIVE.doc_get_many(items, field)
@@ -2658,9 +2658,9 @@ class _VertexEditCommand(MeshCommand):
 
     def do(self, scene):
         if self._after is None:
-            self._before = self._reference_snapshot(scene.mesh)
+            self._before = self._direct_snapshot(scene.mesh)
             self._edit(scene)
-            self._after = self._reference_snapshot(scene.mesh)
+            self._after = self._direct_snapshot(scene.mesh)
         else:
             scene.mesh.restore_state(self._after)
             scene.version += 1
@@ -2862,7 +2862,7 @@ class FlipGroupsCommand(MeshCommand):
 
     def _flip(self, scene) -> None:
         _transform.flip_groups(scene, self._groups, mirror_matrix(self.centre, self.axis))
-        if _doc.ENABLED and self.doc_undo(scene):
+        if self.doc_undo(scene):
             _dirty_placements(self._groups)
         else:
             _dirty_group_chunks(scene)
@@ -3170,7 +3170,7 @@ class StitchSolidCommand(MeshCommand):
         self.snapshot: Optional[dict] = None
 
     def do(self, scene) -> None:
-        self.snapshot = self._reference_snapshot(scene.mesh)
+        self.snapshot = self._direct_snapshot(scene.mesh)
         run_stitch(scene.mesh, {_key(p) for p in self.seed})
         scene.version += 1
 
@@ -3312,9 +3312,9 @@ class SnapshotMutation(MeshCommand):
     def do(self, scene) -> None:
         mesh = self._target(scene)
         if self.after is None:
-            self.before = self._reference_snapshot(mesh)
+            self.before = self._direct_snapshot(mesh)
             self.mutate(scene)
-            self.after = self._reference_snapshot(mesh)
+            self.after = self._direct_snapshot(mesh)
         else:
             mesh.restore_state(self.after)
         scene.version += 1
@@ -3338,11 +3338,11 @@ class SimplifyMeshCommand(MeshCommand):
     def do(self, scene) -> None:
         if self.after is None:
             from formats.fuse import simplify_mesh
-            self.before = self._reference_snapshot(scene.mesh)
+            self.before = self._direct_snapshot(scene.mesh)
             self.before_selection = ElementSet(scene.selection)
             self.faces_removed = simplify_mesh(
                 scene.mesh, self.max_angle_degrees)
-            self.after = self._reference_snapshot(scene.mesh)
+            self.after = self._direct_snapshot(scene.mesh)
         else:
             scene.mesh.restore_state(self.after)
         scene.selection.clear()
@@ -3460,7 +3460,7 @@ def _run_snapshot_parts(parent, scene):
     covered = (AddEdgeCommand, DeleteEdgesCommand, DeleteFaceCommand, TagCurveCommand,
                ExplodeCurvesCommand, PruneOrphanEdgesCommand, MoveVerticesCommand)
     for part in parent.inner:
-        # A face's reference inverse also uses snapshots. The enclosing
+        # Direct face undo also uses snapshots. The enclosing
         # command already owns them in either document mode.
         if type(part) is not AddFaceCommand and (
                 not parent._journal_geometry or type(part) not in covered):
@@ -3500,7 +3500,7 @@ class SnapshotCompound(MeshCommand):
             # First run: snapshot before, apply the plan, clean up any coplanar
             # overlap it created (redundant nested holes / spurious mother), then
             # snapshot the result so undo/redo restore exactly.
-            self.before = self._reference_snapshot(scene.mesh)
+            self.before = self._direct_snapshot(scene.mesh)
             # Which way every face looked before the draw: the heal may
             # align the faces the draw MADE, never the ones already there
             # (a Reverse Faces undone by the next rectangle).
@@ -3512,7 +3512,7 @@ class SnapshotCompound(MeshCommand):
             # A draw that split a curve leaves it in separate contours — break
             # the curve ids there, before the snapshot so redo keeps it.
             scene.mesh.resplit_curves()
-            self.after = self._reference_snapshot(scene.mesh)
+            self.after = self._direct_snapshot(scene.mesh)
         else:
             # Redo: re-running the delta plan wouldn't reproduce the splits, so
             # restore the captured result directly.
@@ -3542,7 +3542,7 @@ class MeshSnapshotCommand(MeshCommand):
         self.snapshot: Optional[dict] = None
 
     def do(self, scene) -> None:
-        self.snapshot = self._reference_snapshot(scene.mesh)
+        self.snapshot = self._direct_snapshot(scene.mesh)
         before = set(scene.mesh.faces)
         _run_snapshot_parts(self, scene)
         new_faces = set(scene.mesh.faces) - before
@@ -3588,7 +3588,7 @@ class MakeGroupCommand(MeshCommand):
 
     def do(self, scene) -> None:
         m = scene.mesh
-        self.snapshot = self._reference_snapshot(m)
+        self.snapshot = self._direct_snapshot(m)
         # Built once: a redo puts back the SAME group, the one the next
         # commands (Explode, Move, paint…) hold — a fresh one each time
         # left them pointing at a group no longer in the model, and
@@ -3596,7 +3596,7 @@ class MakeGroupCommand(MeshCommand):
         if self.group is None:
             self.group = self._build(scene)
         self._take_off_loose(scene)
-        if _doc.ENABLED and not self._journal_geometry:
+        if not self._journal_geometry:
             self._after = m.capture_state()
         scene.groups.append(self.group)
         scene.selection.clear()
@@ -3973,7 +3973,7 @@ class ReplaceComponentCommand(Command):
         self._before: list = []
 
     def do(self, scene) -> None:
-        self._before = _definitions.replace_definitions(self.targets, self.source, self._SHARED, _doc.ENABLED)
+        self._before = _definitions.replace_definitions(self.targets, self.source, self._SHARED)
         scene.version += 1
 
     def undo(self, scene) -> None:
@@ -4235,23 +4235,16 @@ class GroupInContextCommand(Command):
         ctx = self.context
         if ctx.children is None:
             ctx.children = []
-        if _doc.ENABLED:
-            # The document's lists cannot be swapped like Python lists:
-            # the scene reads its top level from ``ctx`` meanwhile.
-            d = scene.__dict__
-            prev = d.get("_groups_owner")
-            d["_groups_owner"] = ctx
-            try:
-                step(scene)
-            finally:
-                d["_groups_owner"] = prev
-            return
-        top = scene.groups
-        scene.groups = ctx.children
+        # The document's lists cannot be swapped like Python lists:
+        # the scene reads its top level from ``ctx`` meanwhile.
+        d = scene.__dict__
+        prev = d.get("_groups_owner")
+        d["_groups_owner"] = ctx
         try:
             step(scene)
         finally:
-            scene.groups = top
+            d["_groups_owner"] = prev
+        return
 
     def do(self, scene) -> None:
         from ingetrazo_core import Matrix4 as QMatrix4x4
@@ -4306,10 +4299,7 @@ class ReparentGroupsCommand(Command):
     def do(self, scene) -> None:
         self._target_state, self._moves = _placements.reparent(
             scene.groups, self.groups, self.target, scene.selection.discard)
-        if _doc.ENABLED:
-            _dirty_placements([m[0] for m in self._moves])
-        else:
-            _dirty_group_chunks(scene)
+        _dirty_placements([m[0] for m in self._moves])
         scene.version += 1
 
     def undo(self, scene) -> None:
@@ -4481,7 +4471,7 @@ class ExplodeGroupCommand(MeshCommand):
     def do(self, scene) -> None:
         m = scene.mesh
         g = self.group
-        self.snapshot = self._reference_snapshot(m)
+        self.snapshot = self._direct_snapshot(m)
         self.index = scene.groups.index(g)
         self._selection = ElementSet(scene.selection)
         P = getattr(g, "xform", None)
@@ -4492,7 +4482,7 @@ class ExplodeGroupCommand(MeshCommand):
                 parent = m._store.tool_placement()
                 transform = parent * P if P is not None else parent
             self._geometry(scene, m, g, transform, paint)
-            if _doc.ENABLED and not self._journal_geometry and self._after is None:
+            if not self._journal_geometry and self._after is None:
                 self._after = m.capture_state()
 
         # The nested objects come out one level up, whole: their placement
@@ -4977,7 +4967,7 @@ class HealOverlapsCommand(MeshCommand):
         self.healed = 0
 
     def do(self, scene) -> None:
-        self.snapshot = self._reference_snapshot(scene.mesh)
+        self.snapshot = self._direct_snapshot(scene.mesh)
         # partial defaults to auto: the aggressive pass runs only on a flat plan.
         # Orientation is not this command's business (Orient Faces is).
         removed = heal_overlapping_faces(
@@ -5227,24 +5217,11 @@ class OccurrenceCommands(CompoundCommand):
 
     @staticmethod
     def group_start(history, session):
-        if history._native is not None:
-            return history._native.group_start(session)
-        stack = history.undo_stack
-        start = len(stack)
-        while start and session in getattr(stack[start - 1], "_occurrences", ()):
-            start -= 1
-        return start
+        return history._native.group_start(session)
 
     @staticmethod
     def fold(history, session):
-        if history._native is not None:
-            return history._native.fold_occurrence(session, OccurrenceCommands)
-        stack = history.undo_stack
-        start = OccurrenceCommands.group_start(history, session)
-        if len(stack) - start > 1:
-            step = OccurrenceCommands(stack[start:])
-            step._occurrences = stack[start]._occurrences
-            stack[start:] = [step]
+        return history._native.fold_occurrence(session, OccurrenceCommands)
 
     @staticmethod
     def _in_frame(scene, cmd, action, *args):
@@ -5263,10 +5240,7 @@ class OccurrenceCommands(CompoundCommand):
         _doc.NATIVE.DocumentHistory.replay_group(self, scene, phase == "undo", True)
 
     def _replay(self, scene, undo):
-        if _doc.ENABLED:
-            return _doc.NATIVE.DocumentHistory.replay_group(self, scene, undo, False)
-        for cmd in reversed(self.commands) if undo else self.commands:
-            self._in_frame(scene, cmd, cmd.undo if undo else cmd.do, scene)
+        return _doc.NATIVE.DocumentHistory.replay_group(self, scene, undo, False)
 
     def do(self, scene):
         self._replay(scene, False)

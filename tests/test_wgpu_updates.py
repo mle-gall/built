@@ -213,7 +213,7 @@ def test_history_journal_limits_move_discovery(monkeypatch):
     ids, rows = updates.diff(scene)
     assert ids.tolist() == [0]
     updates.apply(ids, rows)
-    monkeypatch.setattr('views.wgpu_updates.iter_placements', lambda *a: (_ for _ in ()).throw(AssertionError('scan')))
+    monkeypatch.setattr('views.wgpu_updates.iter_groups', lambda *a: (_ for _ in ()).throw(AssertionError('scan')))
     history.execute(TagGroupsCommand(scene.groups, 'IfcWall'))
     renderer = Renderer()
     updates.apply(*updates.diff(scene), renderer)
@@ -336,15 +336,18 @@ def test_uid_keeps_row_when_document_replaces_group_object():
 
 def test_history_insert_undo_redo_keeps_one_row(monkeypatch):
     from core.history import History, InsertGroupCommand
-    from core.group import iter_placements
+    from core.doc_model import NATIVE
+    doc_tree = NATIVE.doc_tree
     scene, updates = fixture_scene()
     history = History(scene)
     updates.observe(history)
     added = Group(scene.groups[0].mesh)
     added.xform = QMatrix4x4()
     visited = []
-    monkeypatch.setattr('views.wgpu_scene.iter_placements',
-                        lambda group: (visited.append(group), iter_placements(group))[1])
+    def walk(roots):
+        visited.extend(roots)
+        return doc_tree(roots)
+    monkeypatch.setattr(NATIVE, "doc_tree", walk)
     history.execute(InsertGroupCommand(added))
     ids, rows = updates.diff(scene)
     assert visited == [added]
@@ -449,7 +452,7 @@ def test_mesh_history_journal_does_not_walk_placements(monkeypatch):
     mesh = scene.mesh
     history.execute(SnapshotMutation(lambda s: s.mesh.move_vertex(
         s.mesh.vertices[0], QVector3D(0, 0, 1))))
-    monkeypatch.setattr('views.wgpu_updates.iter_placements',
+    monkeypatch.setattr('views.wgpu_updates.iter_groups',
                         lambda *a: (_ for _ in ()).throw(AssertionError('placement scan')))
     updates.apply(*updates.diff(scene))
     assert len(updates.changed) == 1

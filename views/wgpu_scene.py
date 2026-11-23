@@ -18,7 +18,7 @@ from typing import NamedTuple
 import numpy as np
 from core import _native
 from core.geometry_arrays import arrays_of
-from core.group import iter_placements
+from core.purge import iter_groups
 from core.lazy_mesh import plan_of
 from views.array_bake import _attrs_table
 
@@ -355,19 +355,17 @@ def _doc_worlds(local, has, parent):
     return world, defined
 
 
-def _placement_records_doc(scene, roots, vp, state):
-    """``_placement_records(double=True)`` reading the tree from the Rust
+def _placement_records(scene, roots, vp, state):
+    """Read the tree from the Rust
     document in one call (``doc_tree``): handles, parents, f64 matrices and
     Hide flags as arrays, no attribute read per placement for them."""
     from views.viewport import Viewport
     from core import doc_model
     handles, parent, local, has, own_hidden = doc_model.NATIVE.doc_tree(roots)
     world, defined = _doc_worlds(local, has, parent)
-    proxies = []
-    for root in roots:
-        proxies.extend(Viewport._expand_placements(vp, root))
-    allowed = getattr(scene, '_navigator_allowed', None)
     par = parent.tolist()
+    proxies = Viewport._bind_placement_rows(vp, handles, par, [])
+    allowed = getattr(scene, '_navigator_allowed', None)
     own_hidden = own_hidden.tolist()
     defined = defined.tolist()
     n = len(par)
@@ -391,60 +389,6 @@ def _placement_records_doc(scene, roots, vp, state):
         flags = (int(hidden) | (OBJECT_HIDDEN if obj else 0)
                  | (VISIBILITY_FILTERED if filtered or nav else 0))
         yield g, (world[i] if defined[i] else None), proxy, flags
-
-
-def _placement_records(scene, roots, vp, state, *, double=False):
-    from views.viewport import Viewport
-    if double:
-        from core import doc_model
-        if doc_model.ENABLED:
-            try:
-                rows = _placement_records_doc(scene, roots, vp, state)
-                first = next(rows, None)
-            except TypeError:
-                rows = first = None          # not all document placements
-            if rows is not None:
-                if first is not None:
-                    yield first
-                    yield from rows
-                return
-    # Visibility is inherited down the tree, as the GL proxies do it: a
-    # placement inside a hidden group, or inside a group whose tag is off,
-    # is hidden whatever its own flags say. Taking only the root's state
-    # drew the ride's hidden concrete volumes and context walls (R-look).
-    parent_of = {}
-
-    def map_parents(group):
-        for child in getattr(group, 'children', None) or ():
-            parent_of[id(child)] = group
-            map_parents(child)
-    hidden_of = {}
-    object_hidden_of = {}
-    filtered_of = {}
-
-    from core.group import model_placements
-
-    for root in roots:
-        map_parents(root)
-        # GL proxies carry the top-level paint owner and inherited layer.
-        # Keep source groups for editing; use proxies only to resolve paint.
-        proxies = Viewport._expand_placements(vp, root)
-        placements = model_placements(root) if double else iter_placements(root)
-        for (g, matrix), proxy in zip(placements, proxies):
-            parent = parent_of.get(id(g))
-            inherited = hidden_of.get(id(parent), False) if parent is not None else False
-            hidden_of[id(g)] = inherited or not state(proxy)[0]
-            object_hidden_of[id(g)] = bool(getattr(g, 'hidden', False)) or object_hidden_of.get(id(parent), False)
-            allowed = getattr(scene, '_navigator_allowed', None)
-            # Isolated out: its own geometry; its parts too, unless it only
-            # holds something isolated (scene._navigator_through).
-            nav = allowed is not None and scene.navigator_key(g) not in allowed
-            filtered_of[id(g)] = (filtered_of.get(id(parent), False)
-                or not scene._layer_state(proxy)[0] or scene.similar_hidden(proxy)
-                or (nav and scene.navigator_key(g) not in (getattr(scene, '_navigator_through', None) or ())))
-            flags = (int(hidden_of[id(g)]) | (OBJECT_HIDDEN if object_hidden_of[id(g)] else 0)
-                     | (VISIBILITY_FILTERED if filtered_of[id(g)] or nav else 0))
-            yield g, matrix, proxy, flags
 
 
 def _profile_endpoints(mesh):
@@ -485,10 +429,10 @@ def pack_scene(scene, view_tint=None, *, face_overrides=None, texture_images=Tru
             if 0 <= code < len(previous_pack.prototype_origins):
                 old_anchors[mesh_id] = previous_pack.prototype_origins[code]
     from itertools import chain
-    placements = chain([(None, None, None, 0)], _placement_records(scene, scene.groups, vp, state, double=True))
+    placements = chain([(None, None, None, 0)], _placement_records(scene, scene.groups, vp, state))
     total = 0
     if progress is not None:
-        total = max(1, sum(1 for root in scene.groups for _ in iter_placements(root)))
+        total = max(1, sum(1 for _ in iter_groups(scene.groups)))
         progress(0.0, "Preparing the view…")
     for index, (group, matrix, paint_group, flags) in enumerate(placements):
         if progress is not None and index % 2048 == 2047:

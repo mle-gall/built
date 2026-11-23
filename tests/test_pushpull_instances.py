@@ -23,7 +23,6 @@ import pytest
 from PySide6.QtCore import QPointF, Qt
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
-from core import doc_model
 from core.group import Group, world_mesh
 from core.mesh import Mesh
 from core.orient import is_closed, signed_volume
@@ -153,7 +152,7 @@ def test_dentro_del_componente_el_push_llega_a_todas_las_copias(monkeypatch, aff
         top_center = placement.map(V(0.5, 0.5, 1))
         ray = (top_center + V(0, 0, 5), V(0, 0, -1))
         monkeypatch.setattr(vp, "_pixel_to_ray", lambda x, y: ray)
-        live_definition = doc_model.ENABLED and isinstance(proto, StoreMesh)
+        live_definition = isinstance(proto, StoreMesh)
         vp.begin_group_edit(b)
         assert scene.edit_group is b
         if live_definition:

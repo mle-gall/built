@@ -125,8 +125,7 @@ DOC_FIELDS = ("name", "layer", "xform", "children", "hidden", "uid",
 #: Custom attributes: document values too (slice 2), handed out as tracked
 #: containers that write back when edited in place (core/doc_model.py).
 ATTR_FIELDS = ("ifc", "ext", "text3d", "exploded", "explode_offset")
-if _dm.ENABLED:
-    DOC_FIELDS = DOC_FIELDS + ATTR_FIELDS + ("mesh", "billboard", "source_uid")
+DOC_FIELDS = DOC_FIELDS + ATTR_FIELDS + ("mesh", "billboard", "source_uid")
 _PY_FIELDS = tuple(f for f in GROUP_FIELDS if f not in DOC_FIELDS)
 
 
@@ -138,44 +137,8 @@ class _GroupMethods:
         # Rust document: its fields start at these defaults already (no
         # tag, shown, unlocked, unpainted, no matrix, no children, a
         # component), so only the name and the uid are written.
-        py = not _dm.ENABLED
         self.mesh = mesh if mesh is not None else Mesh()
         self.name = name or f"Group {next(_counter)}"
-        # Layer / tag name (None = default layer).
-        if py:
-            self.layer = None
-        # BIM tag ({"class": "IfcWall", "name": ...}) or None — see core/bim.py.
-        if py:
-            self.ifc = None
-        # Face-me billboard: the group's textured quad rotates
-        # around its vertical anchor axis to face the camera every frame.
-        if py:
-            self.billboard = False
-        # 3D text (core/text3d.py): the parameters this container was
-        # generated from — text, font, height… — so it can be re-edited and
-        # laid out again in place. ``None`` on every other group.
-        if py:
-            self.text3d = None
-        # Extensions' own parameters for this container, by extension key
-        # ({"windowizer": {...}}): kept with copies and saved in the .igz,
-        # and apart from ``ifc``, which the BIM panel replaces when it
-        # retags. ``None`` when no extension wrote here.
-        if py:
-            self.ext = None
-        # Hide: the object stays in the document but draws,
-        # picks, snaps and exports as if it were not there — until Unhide,
-        # or the scene that remembers it visible (Rafael, 2026-09-16: «una
-        # escena en donde esto esté oculto»). A hidden TAG hides by layer;
-        # this hides the one object.
-        if py:
-            self.hidden = False
-        # Lock: the object stays drawn but cannot be picked, selected or
-        # opened — so no tool can move or edit it — until it is unlocked
-        # from the Browser. Saved in the .igz (the Project
-        # Structure plugin of #87 kept it outside the document: «the
-        # padlock function is not saved in the .igz file»).
-        if py:
-            self.locked = False
         # Stable identity that survives save/load — what a scene names when
         # it remembers which objects it hides. Fresh per object; a copy gets
         # its own (see ``copy_group``).
@@ -183,44 +146,6 @@ class _GroupMethods:
         # viewport's placement proxies, 100k of them on the ride: a random
         # uid each was 0.75 s of every resident pack).
         self.uid = uid or new_uid()
-        #: The container's own paint (the usual convention: a group or component
-        #: instance takes a material, and every face inside that wears the
-        #: default material shows it; a face painted itself keeps its own —
-        #: issue #47, @pacaeiro). Same keys as a face's attrs: ``color`` or
-        #: ``texture``, ``opacity``, ``mat``. ``None`` = unpainted.
-        if py:
-            self.material = None
-        #: Exploded view (core/explode.py). On a container: ``{"factor",
-        #: "mode"}`` while its parts are pulled apart, ``None`` assembled.
-        #: On a part: the ``(x, y, z)`` translation, in the container's
-        #: frame, the explosion added to its matrix — what Reassemble
-        #: takes back off, so a part moved by hand meanwhile keeps that.
-        if py:
-            self.exploded = None
-            self.explode_offset = None
-        # Component instance: when set, ``mesh`` is a PROTOTYPE in
-        # local coordinates SHARED with sibling instances, and ``xform`` maps
-        # local -> world. ``None`` = classic group (mesh in world coords).
-        # Instances render/pick through transformed chunk arrays; transform
-        # tools compose into ``xform`` (O(1)); geometry edits first
-        # ``materialize`` the instance ("make unique").
-        if py:
-            self.xform = None
-        # Nested placements the group OWNS: each a Group with an ``xform``
-        # over a SHARED prototype mesh, in this group's coordinates. They
-        # render, pick and export as part of their parent — one object to
-        # the user, however deep the tree — which is what lets an imported
-        # component keep the sharing its .skp file gave it.
-        #
-        # Without them a component's internal repetition was flattened on
-        # import: the hedge in piscina.igz is 4480 + 5120 faces placed 48
-        # times, and it arrived as 230400 real ones. Twenty-four times the
-        # geometry, for the element that is 89% of that model — which is
-        # why the .skp we wrote was 80 MB against the original's 14, and
-        # why a web .skp viewer laboured over our copy of a model it draws
-        # fluently itself.
-        if py:
-            self.children = []
         # Set only on the throwaway placement proxies the viewport builds for
         # nested children: the top-level object a click must select. A real
         # group in ``scene.groups`` always has ``owner is None``.
@@ -230,24 +155,6 @@ class _GroupMethods:
         # draw passes know they are the subject and not the surroundings.
         # ``None`` at the root and on anything outside the open context.
         self.context = None
-        #: The LOCAL AXES of a classic group (issue #44, @pacaeiro): where
-        #: its own red/green/blue sit in the world, as a matrix whose
-        #: columns are the axes and whose translation is the origin. A
-        #: classic group keeps its mesh in world coordinates, so without
-        #: this every Move/Rotate/Scale baked the turn into the vertices and
-        #: the group forgot which way it faced. ``None`` = the world axes.
-        #: A component instance does not use it: its ``xform`` IS its axes.
-        if py:
-            self.axes = None
-        #: Whether this instance is a COMPONENT — a definition its copies
-        #: share, as Make Component or a .skp import makes it — or a
-        #: GROUP that only carries a matrix: a group of groups (``adopt``
-        #: makes every container an instance) or a copied group waiting to
-        #: be edited. Only meaningful with an ``xform``; read it through
-        #: :meth:`is_component` (issue #90, @fafecm: «the parent group
-        #: always becomes a component»).
-        if py:
-            self.component = True
         # ``source_uid``: set only on the parts of a linked file
         # (core/links.py), never in ``__init__``: the uid the part has in
         # its source document, from which its uid in this one is derived —
@@ -270,7 +177,7 @@ class _GroupMethods:
         transform costs nothing and closes that road."""
         from ingetrazo_core import Matrix4 as QMatrix4x4
         children = list(children)
-        if _dm.ENABLED and getattr(self, "_doc_key", 0):
+        if getattr(self, "_doc_key", 0):
             # One parent per placement: adopting takes a child out of the
             # list that held it (a loaded file's top level, a subset of a
             # tree), unless that list is this group's own. (A viewport
@@ -325,66 +232,55 @@ class _GroupMethods:
                 f"{len(self.mesh.edges)} edges)")
 
 
-if _dm.ENABLED:
-    class Group(_GroupMethods, _dm.NATIVE.Placement):
-        """A placement: a group, a component instance or a nested part.
-        Its document fields (``DOC_FIELDS``) live in the Rust document
-        (core/doc_model.py); see ``_GroupMethods`` for the rest."""
-        __slots__ = _PY_FIELDS
-        source_uid = _dm.NATIVE.DocAttr("source_uid", optional=True)
+class Group(_GroupMethods, _dm.NATIVE.Placement):
+    """A placement: a group, a component instance or a nested part.
+    Its document fields (``DOC_FIELDS``) live in the Rust document
+    (core/doc_model.py); see ``_GroupMethods`` for the rest."""
+    __slots__ = _PY_FIELDS
+    source_uid = _dm.NATIVE.DocAttr("source_uid", optional=True)
 
-        # copy, deepcopy and pickle: a new handle, then every field.
-        def __reduce__(self):
-            return (_dm.new_handle, (type(self),),
-                    _dm.handle_state(self, GROUP_FIELDS))
+    # copy, deepcopy and pickle: a new handle, then every field.
+    def __reduce__(self):
+        return (_dm.new_handle, (type(self),),
+                _dm.handle_state(self, GROUP_FIELDS))
 
-        __setstate__ = _dm.set_handle_state
+    __setstate__ = _dm.set_handle_state
 
-    for _name in ATTR_FIELDS:
-        setattr(Group, _name, _dm.attribute(_name))
-    del _name
+for _name in ATTR_FIELDS:
+    setattr(Group, _name, _dm.attribute(_name))
+del _name
 
-    class PlacementProxy(Group):
-        """A placement the VIEWPORT makes (``Viewport._expand_placements``:
-        one per nested part, carrying its composed world matrix, inherited
-        tag and paint): a ``Group`` to every draw, pick and ``isinstance``,
-        and no part of the document. Every field is a Python slot of its
-        own (they shadow the document's descriptors) and the handle names
-        no node (``_detached``), so building 18,000 of them per pack writes
-        nothing into the document and reads at slot speed."""
-        __slots__ = (*DOC_FIELDS, "source_occurrence")
+class PlacementProxy(Group):
+    """A placement the VIEWPORT makes (``Viewport._expand_placements``:
+    one per nested part, carrying its composed world matrix, inherited
+    tag and paint): a ``Group`` to every draw, pick and ``isinstance``,
+    and no part of the document. Every field is a Python slot of its
+    own (they shadow the document's descriptors) and the handle names
+    no node (``_detached``), so building 18,000 of them per pack writes
+    nothing into the document and reads at slot speed."""
+    __slots__ = (*DOC_FIELDS, "source_occurrence")
 
-        def __new__(cls, *_args, **_kwargs):
-            return _dm.NATIVE.Placement.__new__(cls, _detached=True)
+    def __new__(cls, *_args, **_kwargs):
+        return _dm.NATIVE.Placement.__new__(cls, _detached=True)
 
-        def __init__(self, mesh: Mesh | None = None, name: str | None = None,
-                     uid: str | None = None) -> None:
-            _GroupMethods.__init__(self, mesh, name, uid)
-            self.billboard = False
-            self.ifc = self.ext = self.text3d = None
-            self.exploded = self.explode_offset = None
-            self.layer = None
-            self.hidden = False
-            self.locked = False
-            self.material = None
-            self.xform = None
-            self.children = []
-            self.axes = None
-            self.component = True
+    def __init__(self, mesh: Mesh | None = None, name: str | None = None,
+                 uid: str | None = None) -> None:
+        _GroupMethods.__init__(self, mesh, name, uid)
+        self.billboard = False
+        self.ifc = self.ext = self.text3d = None
+        self.exploded = self.explode_offset = None
+        self.layer = None
+        self.hidden = False
+        self.locked = False
+        self.material = None
+        self.xform = None
+        self.children = []
+        self.axes = None
+        self.component = True
 
-        def __reduce__(self):
-            return (_dm.new_handle, (type(self),),
-                    _dm.handle_state(self, GROUP_FIELDS))
-else:
-    class Group(_GroupMethods):
-        """A placement: a group, a component instance or a nested part."""
-        __slots__ = GROUP_FIELDS
-
-    class PlacementProxy(Group):
-        """A placement the viewport makes for a nested part (see the Rust
-        document's version above); the Python document's is a plain
-        ``Group``."""
-        __slots__ = ("source_occurrence",)
+    def __reduce__(self):
+        return (_dm.new_handle, (type(self),),
+                _dm.handle_state(self, GROUP_FIELDS))
 
 
 # ---- Local axes (issue #44) ---------------------------------------------------
@@ -1033,12 +929,9 @@ def _is_link(group) -> bool:
 
 
 def _copy_definition_mesh(mesh):
-    if _dm.ENABLED:
-        # StoreMesh.__deepcopy__ forks the store chunks under fresh keys.
-        from copy import deepcopy
-        return deepcopy(mesh)
-    from ingetrazo_core import Matrix4 as QMatrix4x4
-    return transformed_mesh(mesh, QMatrix4x4())
+    # StoreMesh.__deepcopy__ forks the store chunks under fresh keys.
+    from copy import deepcopy
+    return deepcopy(mesh)
 
 
 def _hull_2d(pts):

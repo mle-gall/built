@@ -20,8 +20,6 @@ from core.mesh import Mesh
 from core.scene import Scene
 from formats import built
 
-pytestmark = pytest.mark.skipif(not doc_model.ENABLED,
-                                reason="the Rust document is not built")
 N = doc_model.NATIVE
 
 
@@ -322,12 +320,9 @@ def test_doc_walk_is_iter_groups():
     roots = _tree()
     roots.append(roots[0])                   # a root listed twice: once
     fast = list(N.doc_walk(roots))
-    doc_model.ENABLED, was = False, doc_model.ENABLED
-    try:
-        slow = list(purge.iter_groups(roots))
-    finally:
-        doc_model.ENABLED = was
-    assert fast == slow
+    assert fast == list(purge.iter_groups(roots))
+    assert [g.name for g in fast] == ["top", "mid", "leaf0", "leaf1", "leaf2",
+                                      "site", "deep", "classic"]
 
 
 # -------------------------------------------------- viewport proxies

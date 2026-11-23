@@ -87,12 +87,9 @@ class Scene:
     # With the Rust document (core/doc_model.py) ``groups`` and ``layers``
     # are the lists of the scene's root node, made with the scene; the
     # constructor still takes them.
-    if _dm.ENABLED:
-        _root: object = field(default_factory=_dm.new_scene_root,
-                              repr=False, compare=False)
-        groups: InitVar[list | None] = None
-    else:
-        groups: list = field(default_factory=list)
+    _root: object = field(default_factory=_dm.new_scene_root,
+                          repr=False, compare=False)
+    groups: InitVar[list | None] = None
     # Annotation entities (static dimensions) — not geometry, drawn as overlays.
     dimensions: list = field(default_factory=list)
     # Leader-text annotations (the Text tool) — same overlay treatment.
@@ -114,13 +111,7 @@ class Scene:
     # Layers / tags: labels with visibility + lock. The default
     # layer always exists; entities reference layers by KEY (Layer.key —
     # the name they were made with), the name being only a label.
-    if _dm.ENABLED:
-        layers: InitVar[list | None] = None
-    else:
-        layers: list = field(default_factory=lambda: [
-            __import__("core.layers", fromlist=["Layer"]).Layer(
-                __import__("core.layers", fromlist=["DEFAULT_LAYER"]).DEFAULT_LAYER)
-        ])
+    layers: InitVar[list | None] = None
     # The layer new objects go to (core.layers.active_layer); None = the
     # default layer.
     active_layer: str | None = None
@@ -283,38 +274,34 @@ class Scene:
     _loose_mesh: object | None = None
     #: The open contexts, outermost first — nested editing. Each
     #: entry pins the placement, its parent edit mesh and its drawing frame.
-    if _dm.ENABLED:
-        @property
-        def _edit_stack(self):
-            return self._root._edit_levels
-    else:
-        _edit_stack: list = field(default_factory=list)
+    @property
+    def _edit_stack(self):
+        return self._root._edit_levels
 
-    if _dm.ENABLED:
-        def __post_init__(self, groups, layers):
-            if groups is not None:
-                self.groups = groups
-            if layers is not None:
-                self.layers = layers
+    def __post_init__(self, groups, layers):
+        if groups is not None:
+            self.groups = groups
+        if layers is not None:
+            self.layers = layers
 
-        def __deepcopy__(self, memo):
-            import copy
-            out = object.__new__(type(self))
-            memo[id(self)] = out
-            for name, value in self.__dict__.items():
-                if name != "_root":
-                    object.__setattr__(out, name, copy.deepcopy(value, memo))
-            object.__setattr__(out, "_root", _dm.NATIVE.doc_new_root())
-            for level in self._edit_stack:
-                copied = copy.deepcopy(level, memo)
-                out._root._enter_edit(copied["group"], copied)
-            out.groups = copy.deepcopy(list(self.groups), memo)
-            out.layers = copy.deepcopy(list(self.layers), memo)
-            for name in ROOT_TABLES:
-                setattr(out, name, copy.deepcopy(getattr(self, name), memo))
-            out.materials = copy.deepcopy(dict(self.materials), memo)
-            out.kept_components = copy.deepcopy(list(self.kept_components), memo)
-            return out
+    def __deepcopy__(self, memo):
+        import copy
+        out = object.__new__(type(self))
+        memo[id(self)] = out
+        for name, value in self.__dict__.items():
+            if name != "_root":
+                object.__setattr__(out, name, copy.deepcopy(value, memo))
+        object.__setattr__(out, "_root", _dm.NATIVE.doc_new_root())
+        for level in self._edit_stack:
+            copied = copy.deepcopy(level, memo)
+            out._root._enter_edit(copied["group"], copied)
+        out.groups = copy.deepcopy(list(self.groups), memo)
+        out.layers = copy.deepcopy(list(self.layers), memo)
+        for name in ROOT_TABLES:
+            setattr(out, name, copy.deepcopy(getattr(self, name), memo))
+        out.materials = copy.deepcopy(dict(self.materials), memo)
+        out.kept_components = copy.deepcopy(list(self.kept_components), memo)
+        return out
 
     # ---- Geometry views (read-only over the *loose* mesh) -------------------
     # Tools, edits and topology operate on this (the loose geometry); groups are
@@ -330,7 +317,7 @@ class Scene:
     # ---- Layers --------------------------------------------------------------
     def layer_by_key(self, key: str):
         """The tag whose key is ``key`` — what entities carry."""
-        if _dm.ENABLED and isinstance(key, str):
+        if isinstance(key, str):
             return self._root._tag_by_key(key)
         for ly in self.layers:
             if ly.key == key:
@@ -345,7 +332,7 @@ class Scene:
         ly = self.layer_by_key(name)
         if ly is not None:
             return ly
-        if _dm.ENABLED and isinstance(name, str):
+        if isinstance(name, str):
             return self._root._tag_by_name(name)
         for ly in self.layers:
             if ly.name == name:
@@ -520,34 +507,15 @@ class Scene:
         return getattr(self, '_navigator_keys', {}).get(group, group.uid)
 
     def repeated_uids(self):
-        if _dm.ENABLED:
-            return self._root._repeated_uids()
-        from collections import Counter
-        from core.purge import iter_groups
-        return {uid for uid, n in Counter(g.uid for g in iter_groups(self.groups)).items() if n > 1}
+        return self._root._repeated_uids()
 
     def occurrence_path(self, group):
         """Return the UIDs from this scene's root through the placement."""
-        if _dm.ENABLED:
-            return self._root._occurrence_path(group)
-        from core.outliner import path_to
-        parents = path_to(self.groups, group)
-        return None if parents is None else [g.uid for g in (*parents, group)]
+        return self._root._occurrence_path(group)
 
     def resolve_occurrence(self, path):
         """Look up an ordered path of persisted placement UIDs from this root."""
-        if _dm.ENABLED:
-            return self._root._resolve_occurrence(path)
-        group, children = None, self.groups
-        for uid in path:
-            matches = [child for child in children if child.uid == uid]
-            if not matches:
-                return None
-            if len(matches) > 1:
-                raise ValueError(f"ambiguous placement UID {uid}")
-            group, = matches
-            children = group.children
-        return group
+        return self._root._resolve_occurrence(path)
 
     def groups_by_uid(self) -> dict:
         """``uid → group`` over the whole tree (nested placements too)."""
@@ -593,15 +561,10 @@ class Scene:
         if not anidando:
             # Tree and protocol actions can open a nested row directly.
             # Enter its ancestors just as a sequence of double-clicks would.
-            if _dm.ENABLED:
-                from core.group import Group
-                parent = group._parent
-                if isinstance(parent, Group):
-                    self.begin_group_edit(parent)
-            elif group not in self.groups:
-                from core.outliner import path_to
-                for parent in path_to(self.groups, group) or ():
-                    self.begin_group_edit(parent)
+            from core.group import Group
+            parent = group._parent
+            if isinstance(parent, Group):
+                self.begin_group_edit(parent)
         self._refresh_dimension_holds()
         attachments = ()
         entry_mesh = group.mesh
@@ -618,7 +581,7 @@ class Scene:
                       else None)
         parts = None
         active_mesh = None
-        if _dm.ENABLED and (group.xform is not None or (
+        if (group.xform is not None or (
                 self._edit_stack and self._edit_stack[-1].get("affine"))):
             from core.store_mesh import instance_view
             world = self._root._edit_matrix(group)
@@ -634,7 +597,7 @@ class Scene:
             from core.store_mesh import StoreMesh
             # A singular placement needs the compatibility world copy. Keep
             # the placement swaps on entry so its History step can replay them.
-            depth = _dm.begin() if _dm.ENABLED and type(entry_mesh) is StoreMesh else 0
+            depth = _dm.begin() if type(entry_mesh) is StoreMesh else 0
             try:
                 share, parts = enter(self, group, frame)
                 if depth:
@@ -649,10 +612,7 @@ class Scene:
                  "share": share, "entry_transaction": entry_transaction,
                  "frame": frame, "definition": definition, "parts": parts,
                  "world_copy": group.mesh if entry_mesh is not group.mesh else None}
-        if _dm.ENABLED:
-            self._root._enter_edit(group, level)
-        else:
-            self._edit_stack.append(level)
+        self._root._enter_edit(group, level)
         self._placement_context_bumps += 1
         self.mesh = active_mesh if active_mesh is not None else group.mesh
         self.edit_group = group
@@ -715,7 +675,7 @@ class Scene:
             return
         self._refresh_dimension_holds()
         attachments = self._attachment_swap() if self._edit_stack[-1].get("share") else ()
-        nivel = self._root._leave_edit() if _dm.ENABLED else self._edit_stack.pop()
+        nivel = self._root._leave_edit()
         unchanged = True
         share = nivel.pop("share", None)
         if share is not None:
@@ -1196,70 +1156,67 @@ class Scene:
         return CameraPoint(minx, miny, minz), CameraPoint(maxx, maxy, maxz)
 
 
-if _dm.ENABLED:
-    # ``_groups_owner``: a placement whose children stand in for the top
-    # level while a command runs inside an open group (GroupInContextCommand:
-    # with Python lists it swapped ``scene.groups`` for the children list).
-    def _groups(self):
-        owner = self.__dict__.get("_groups_owner")
-        return (self._root if owner is None else owner).children
+# ``_groups_owner``: a placement whose children stand in for the top
+# level while a command runs inside an open group (GroupInContextCommand:
+# with Python lists it swapped ``scene.groups`` for the children list).
+def _groups(self):
+    owner = self.__dict__.get("_groups_owner")
+    return (self._root if owner is None else owner).children
 
-    def _set_groups(self, value):
-        owner = self.__dict__.get("_groups_owner")
-        (self._root if owner is None else owner).children = value
+def _set_groups(self, value):
+    owner = self.__dict__.get("_groups_owner")
+    (self._root if owner is None else owner).children = value
 
-    def _tags(self):
-        return self._root._tags
+def _tags(self):
+    return self._root._tags
 
-    def _set_tags(self, value):
-        self._root._tags = value
+def _set_tags(self, value):
+    self._root._tags = value
 
-    Scene.groups = property(_groups, _set_groups, doc="The root placements.")
-    Scene.layers = property(_tags, _set_tags, doc="The tags, in panel order.")
+Scene.groups = property(_groups, _set_groups, doc="The root placements.")
+Scene.layers = property(_tags, _set_tags, doc="The tags, in panel order.")
 
-    def _root_table(name, track):
-        """A scene table kept on the scene's root node as a document
-        attribute (slice 2): the tag folders and their tables, the active
-        tag, plugin data. A dict or a list reads as a tracked container
-        that writes back when edited in place (core/doc_model.py)."""
-        def get(self):
-            return self._root._attr(name, track)
+def _root_table(name, track):
+    """A scene table kept on the scene's root node as a document
+    attribute (slice 2): the tag folders and their tables, the active
+    tag, plugin data. A dict or a list reads as a tracked container
+    that writes back when edited in place (core/doc_model.py)."""
+    def get(self):
+        return self._root._attr(name, track)
 
-        def put(self, value):
-            self._root._set_attr(name, value)
-        return property(get, put, doc=f"``{name}``, kept in the document.")
+    def put(self, value):
+        self._root._set_attr(name, value)
+    return property(get, put, doc=f"``{name}``, kept in the document.")
 
-    #: The scene fields that live on the root node (their dataclass
-    #: defaults still apply: ``__init__`` assigns them through these).
-    ROOT_TABLES = ("active_layer", "layer_folders", "folder_parents",
-                   "folder_visibility", "layer_folder_uids",
-                   "layer_folder_names", "plugin_data",
-                   "dimensions", "text_labels", "text_placement_anchors", "dimension_style", "saved_views",
-                   "scene_folders", "scene_folder_parents", "compositions",
-                   "guides", "image_planes", "geo_points", "geo_paths",
-                   "custom_scales", "section_planes", "show_section_planes",
-                   "show_section_cuts")
-    for _name in ROOT_TABLES:
-        setattr(Scene, _name, _root_table(_name, _name != "active_layer"))
-    del _name
+#: The scene fields that live on the root node (their dataclass
+#: defaults still apply: ``__init__`` assigns them through these).
+ROOT_TABLES = ("active_layer", "layer_folders", "folder_parents",
+               "folder_visibility", "layer_folder_uids",
+               "layer_folder_names", "plugin_data",
+               "dimensions", "text_labels", "text_placement_anchors", "dimension_style", "saved_views",
+               "scene_folders", "scene_folder_parents", "compositions",
+               "guides", "image_planes", "geo_points", "geo_paths",
+               "custom_scales", "section_planes", "show_section_planes",
+               "show_section_cuts")
+for _name in ROOT_TABLES:
+    setattr(Scene, _name, _root_table(_name, _name != "active_layer"))
+del _name
 
-    def _materials(self):
-        return self._root._materials
+def _materials(self):
+    return self._root._materials
 
-    def _set_materials(self, value):
-        self._root._materials = value
+def _set_materials(self, value):
+    self._root._materials = value
 
-    def _kept(self):
-        return self._root._kept
+def _kept(self):
+    return self._root._kept
 
-    def _set_kept(self, value):
-        self._root._kept = value
+def _set_kept(self, value):
+    self._root._kept = value
 
-    Scene.materials = property(_materials, _set_materials,
-                               doc="The materials registry, by name.")
-    Scene.kept_components = property(_kept, _set_kept,
-                                     doc="Kept component definitions.")
-else:
-    ROOT_TABLES = ()
+Scene.materials = property(_materials, _set_materials,
+                           doc="The materials registry, by name.")
+Scene.kept_components = property(_kept, _set_kept,
+                                 doc="Kept component definitions.")
 
 

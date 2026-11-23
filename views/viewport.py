@@ -4881,8 +4881,9 @@ class Viewport(QOpenGLWidget):
             cache = self._placement_proxies = {}
         out: list = []
         seen: set = set()
-        for g in groups:
-            self._expand_placements(g, out, seen)
+        from core.doc_model import NATIVE
+        handles, parents, *_ = NATIVE.doc_tree(groups)
+        Viewport._bind_placement_rows(self, handles, parents.tolist(), out, seen)
         # Proxies are pinned while a preview is running: the movers' ids are
         # what the draw passes skip on, and dropping one mid-drag would make
         # a fresh object (chunk cache miss) that the preview no longer knows.
@@ -4909,100 +4910,68 @@ class Viewport(QOpenGLWidget):
         take the subtree instead, or a component drags an empty ghost while
         its children sit frozen at the old spot. ``above`` is the paint
         ``group`` sits in, when it is not a top-level object."""
+        from core.doc_model import NATIVE
         if out is None:
             out = []
+        if not getattr(group, "children", None):
+            out.append(group)
+            return out
+        handles, parents, *_ = NATIVE.doc_tree([group])
+        return Viewport._bind_placement_rows(self, handles, parents.tolist(), out, seen, above)
+
+    def _bind_placement_rows(self, handles, parents, out, seen=None, above=None):
+        """Bind native traversal rows to the editor's persistent pick and paint handles."""
         cache = getattr(self, "_placement_proxies", None)
         if cache is None:
             cache = self._placement_proxies = {}
-        out.append(group)
-        kids = getattr(group, "children", None)
-        if not kids:
-            return out
         tops = getattr(self, "_placement_tops", None)
         if tops is None:
             tops = self._placement_tops = {}
-        vis, locked = self.scene._layer_state(group)
-        forced = group.layer if (not vis or locked) else None
-
         ctx = self.scene.edit_group
-
-        def walk(node, world, dentro=None, hidden=False, forced=forced,
-                 inherited=None, paint=None):
-            """``dentro`` = the first-level child of the open context this
-            subtree hangs from, or ``None`` outside it. ``paint`` = the
-            nearest painted container above the subtree.
-
-            INSIDE a group its children are the first-class objects: `owner`
-            points at the child, so a click selects the bench and not the
-            plaza, and `context` marks them as the subject so the draw
-            passes do not fade the very thing being edited. It has to work
-            at ANY depth — entering a group inside a group is the whole
-            point (Marco, 2026-09-11: «eso igual debe ser para grupos
-            anidados»).
-            """
-            for child in node.children:
-                m = (child.xform if world is None
-                     else (world * child.xform if child.xform is not None
-                           else world))
-                proxy = cache.get(id(child))
-                if proxy is None:
-                    proxy = cache[id(child)] = PlacementProxy(
-                        child.mesh, name=child.name, uid=child.uid)
-                if seen is not None:
-                    seen.add(id(child))
-                tops[id(proxy)] = id(group)
-                proxy.mesh = child.mesh
-                proxy.source_occurrence = child
-                proxy.uid = self.scene.navigator_key(child)
-                # A nested entity with no tag of its own inherits the
-                # nearest tag above it (the .skp convention); and when a tag
-                # above is hidden or locked the whole instance goes with it,
-                # whatever its children are tagged — at ANY depth, not only
-                # below the top-level object: a hidden group two levels down
-                # left its own children on screen.
-                # A linked file's «Untagged» is its default tag renamed: for
-                # inheritance it reads as none (the pieces of the facilities
-                # link took that one tag instead of the beams' and arches'
-                # tags above them), and stays the piece's tag only when
-                # nothing above it carries one.
-                own = (None if is_link_untagged(child.layer) else child.layer)
-                proxy.layer = (forced or own or inherited or node.layer
-                               or child.layer)
-                proxy.billboard = child.billboard
-                # Hide on an object takes its whole subtree along, and a
-                # hidden child stays hidden inside a visible parent.
-                proxy.hidden = hidden or bool(child.hidden)
-                # An unpainted piece wears the nearest painted container
-                # above it, at any depth and whatever is open (#1101):
-                # reading it off ``owner`` — the object a click selects —
-                # made it follow the open group instead.
-                proxy.material = getattr(child, "material", None) or paint
-                if child is ctx:
-                    # The group being edited, reached as a nested placement:
-                    # it is the SUBJECT, not surroundings. Comparing by
-                    # identity against `scene.edit_group` misses here, because
-                    # what the draw list holds is this proxy.
-                    proxy.owner, proxy.context = child, ctx
-                elif ctx is not None and node is ctx:
-                    proxy.owner, proxy.context = child, ctx
-                elif dentro is not None:
-                    proxy.owner, proxy.context = dentro, ctx
-                else:
-                    proxy.owner, proxy.context = group, None
-                proxy.xform = m
-                out.append(proxy)
-                if child.children:
-                    kid_forced = forced
-                    if kid_forced is None and proxy.layer:
-                        k_vis, k_locked = self.scene._layer_state(proxy)
-                        if not k_vis or k_locked:
-                            kid_forced = proxy.layer
-                    walk(child, m,
-                         child if (ctx is not None and node is ctx) else dentro,
-                         proxy.hidden, kid_forced, proxy.layer, proxy.material)
-
-        walk(group, getattr(group, "xform", None), hidden=bool(group.hidden),
-             paint=getattr(group, "material", None) or above)
+        # Keep inherited paint, visibility and edit ownership for rows with children.
+        ancestors = {}
+        for i, (child, parent) in enumerate(zip(handles, parents)):
+            has_children = i + 1 < len(parents) and parents[i + 1] == i
+            if parent < 0:
+                root = child
+                out.append(root)
+                if has_children:
+                    vis, locked = self.scene._layer_state(root)
+                    forced = root.layer if not vis or locked else None
+                    ancestors[i] = (root.xform, None, bool(root.hidden), forced,
+                                    root.layer, root.material or above)
+                continue
+            world, inside, hidden, forced, inherited, paint = ancestors[parent]
+            local = child.xform
+            world = local if world is None else (world * local if local is not None else world)
+            proxy = cache.get(id(child))
+            if proxy is None:
+                proxy = cache[id(child)] = PlacementProxy(child.mesh, name=child.name, uid=child.uid)
+            if seen is not None:
+                seen.add(id(child))
+            tops[id(proxy)] = id(root)
+            proxy.mesh = child.mesh
+            proxy.source_occurrence = child
+            proxy.uid = self.scene.navigator_key(child)
+            own = None if is_link_untagged(child.layer) else child.layer
+            proxy.layer = forced or own or inherited or handles[parent].layer or child.layer
+            proxy.billboard = child.billboard
+            proxy.hidden = hidden or bool(child.hidden)
+            proxy.material = child.material or paint
+            if ctx is not None and handles[parent] is ctx:
+                inside = child
+            if child is ctx or inside is not None:
+                proxy.owner, proxy.context = (child if child is ctx else inside), ctx
+            else:
+                proxy.owner, proxy.context = root, None
+            proxy.xform = world
+            out.append(proxy)
+            if has_children:
+                if forced is None and proxy.layer:
+                    vis, locked = self.scene._layer_state(proxy)
+                    if not vis or locked:
+                        forced = proxy.layer
+                ancestors[i] = (world, inside, proxy.hidden, forced, proxy.layer, proxy.material)
         return out
 
     def prepare_drawing(self, progress=None) -> None:
@@ -17773,14 +17742,14 @@ class Viewport(QOpenGLWidget):
         (``_chunk_dirty``, O(1)). No chunk is built to find out: validating
         against fresh local chunks built one per nested child, 384 ms on
         the first box after entering the plaza."""
-        from core.group import iter_placements
+        from core.purge import iter_groups
         store = getattr(self, "_proto_pts_store", None)
         if store is None:
             store = self._proto_pts_store = {}
         editing = self._editing_meshes()
         valid: dict = {}
         from core.mesh import DeferredMesh
-        for g, _m in iter_placements(group):
+        for g in iter_groups((group,)):
             mesh = g.mesh
             if mesh is None or id(mesh) in valid:
                 continue
@@ -17818,10 +17787,10 @@ class Viewport(QOpenGLWidget):
         store = self._proto_pts_store
         if len(store) > 512:
             store.clear()
-        from core.group import iter_placements
+        from core.purge import iter_groups
         editing = self._editing_meshes()
         serials = {id(g.mesh): getattr(g.mesh, "_mut_serial", None)
-                   for g, _m in iter_placements(group) if g.mesh is not None}
+                   for g in iter_groups((group,)) if g.mesh is not None}
         for mid, arr in protos.items():
             if mid not in editing:
                 store[mid] = (serials.get(mid), arr)
@@ -19644,9 +19613,8 @@ class Viewport(QOpenGLWidget):
         cache = getattr(self, "_group_chunks", None)
         if not wrappers:
             return
-        from core.group import iter_placements
-        live = {id(pg.mesh) for g in self.scene.groups
-                for pg, _ in iter_placements(g)}
+        from core.purge import iter_groups
+        live = {id(pg.mesh) for pg in iter_groups(self.scene.groups)}
         for g in clip.get("groups", ()):
             mid = id(g.mesh)
             if mid in live:
@@ -19785,13 +19753,9 @@ class Viewport(QOpenGLWidget):
         draws ``group``'s mesh. A group exploded out of a component copy
         shares its mesh with the group still inside the other copies
         (issue #97), and the top-level scan alone did not see it."""
-        from core.group import iter_placements
+        from core.purge import iter_groups
         mesh = group.mesh
-        for top in self.scene.groups:
-            for g, _m in iter_placements(top):
-                if g is not group and g.mesh is mesh:
-                    return True
-        return False
+        return any(g is not group and g.mesh is mesh for g in iter_groups(self.scene.groups))
 
     def edit_path_text(self) -> str:
         """Where you are, as a path: ``Plaza ▸ Jardinera ▸ Banca``.
