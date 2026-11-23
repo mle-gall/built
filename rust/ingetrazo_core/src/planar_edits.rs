@@ -104,7 +104,12 @@ fn keep_region<'py>(
             (a.x - b.x) * (a.y + b.y),
         );
     }
-    if n.dot(normal) < 0. {
+    let winding = if n.length() < 1e-9 {
+        DVec3::Z
+    } else {
+        n.normalize_or_zero()
+    };
+    if winding.dot(normal) < 0. {
         outer = PyList::new(outer.py(), rows(&outer)?.into_iter().rev())?.into_any();
         let rev = PyList::empty(holes.py());
         for h in holes.try_iter()? {
@@ -134,18 +139,58 @@ fn keep_region<'py>(
     Ok(())
 }
 
+#[pyfunction]
+fn point_in_tri(p: &Obj<'_>, a: &Obj<'_>, b: &Obj<'_>, c: &Obj<'_>) -> PyResult<bool> {
+    Ok(covers(
+        [v3(xyz(a)?), v3(xyz(b)?), v3(xyz(c)?)],
+        v3(xyz(p)?),
+        H,
+    ))
+}
+
+#[pyclass]
+struct SegmentIndex(crate::instances::PointIndex);
+
+impl SegmentIndex {
+    fn build(segments: impl Iterator<Item = (DVec3, DVec3)>) -> Self {
+        let (lo, hi): (Vec<_>, Vec<_>) = segments
+            .map(|(a, b)| {
+                let pad = DVec3::splat(4e-4 * (1. + (b - a).length()) + 4e-4);
+                ((a.min(b) - pad).to_array(), (a.max(b) + pad).to_array())
+            })
+            .unzip();
+        Self(crate::instances::PointIndex::new(&lo, &hi))
+    }
+}
+
+#[pymethods]
+impl SegmentIndex {
+    #[new]
+    fn new(segments: Vec<(Obj<'_>, Obj<'_>)>) -> PyResult<Self> {
+        let segments = segments
+            .iter()
+            .map(|(a, b)| Ok((xyz(a)?, xyz(b)?)))
+            .collect::<PyResult<Vec<_>>>()?;
+        Ok(Self::build(segments.into_iter()))
+    }
+    fn __call__(&self, point: &Obj<'_>) -> PyResult<Vec<u32>> {
+        Ok(self.0.candidates(xyz(point)?.to_array()))
+    }
+}
+
 struct Flags<'py> {
-    entries: Vec<(Obj<'py>, Obj<'py>, Obj<'py>)>,
-    near: Obj<'py>,
+    entries: Vec<(DVec3, DVec3, Obj<'py>)>,
+    near: SegmentIndex,
     stamp: Obj<'py>,
 }
 impl<'py> Flags<'py> {
     fn new(py: Python<'py>, flags: &Obj<'py>) -> PyResult<Self> {
-        let entries = flags.extract::<Vec<(Obj, Obj, Obj)>>()?;
-        let ends: Vec<_> = entries.iter().map(|(a, b, _)| (a, b)).collect();
-        let near = py
-            .import("core.history_commands")?
-            .call_method1("_segment_grid", (ends,))?;
+        let entries = flags
+            .extract::<Vec<(Obj, Obj, Obj)>>()?
+            .into_iter()
+            .map(|(a, b, f)| Ok((xyz(&a)?, xyz(&b)?, f)))
+            .collect::<PyResult<Vec<_>>>()?;
+        let near = SegmentIndex::build(entries.iter().map(|(a, b, _)| (*a, *b)));
         Ok(Self {
             entries,
             near,
@@ -156,10 +201,8 @@ impl<'py> Flags<'py> {
         let a = e.getattr("a")?;
         let b = xyz(&e.getattr("b")?)?;
         let p = xyz(&a)?;
-        for i in self.near.call1((a,))?.try_iter()? {
-            let (v, w, flags) = &self.entries[i?.extract::<usize>()?];
-            let v = xyz(v)?;
-            let w = xyz(w)?;
+        for i in self.near.0.candidates(p.to_array()) {
+            let (v, w, ref flags) = self.entries[i as usize];
             let on = |p: DVec3| {
                 let line = w - v;
                 let len = line.length();
@@ -491,6 +534,8 @@ fn install_flat(
 }
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let sub = PyModule::new(m.py(), "planar_edits")?;
+    sub.add_class::<SegmentIndex>()?;
+    sub.add_function(wrap_pyfunction!(point_in_tri, &sub)?)?;
     sub.add_function(wrap_pyfunction!(rebuild_scoped, &sub)?)?;
     sub.add_function(wrap_pyfunction!(store_regions, &sub)?)?;
     sub.add_function(wrap_pyfunction!(install_flat, &sub)?)?;
