@@ -132,7 +132,7 @@ def test_a_cold_start_without_a_file_opens_nothing(tmp_path, page):
 
 def test_a_cold_start_still_offers_the_crash_recovery(tmp_path):
     r = cold_start(tmp_path, page=True, recover=True, untitled_slot=True)
-    assert r["asked"] == ["Recovered drawing"]
+    assert r["asked"] == ["Recover the auto-saved drawing?"]
     assert r["opened"] == []                             # and opens nothing else
     assert len(r["docs"]) == 1 and "unsaved work" in r["docs"][0]["names"]   # the work is back
     assert "untitled.built" in r["slots"]                # its slot kept until a save
@@ -140,7 +140,7 @@ def test_a_cold_start_still_offers_the_crash_recovery(tmp_path):
 
 def test_declining_the_recovery_retires_the_slot(tmp_path):
     r = cold_start(tmp_path, page=True, recover=False, untitled_slot=True)
-    assert r["asked"] == ["Recovered drawing"]
+    assert r["asked"] == ["Recover the auto-saved drawing?"]
     assert r["opened"] == []
     assert len(r["docs"]) == 1 and "unsaved work" not in r["docs"][0]["names"]
     assert "untitled.built" not in r["slots"]            # moved to descartados/
