@@ -200,6 +200,10 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     placement_transform::register(m)?;
     reference_layers::register(m)?;
     definition_edits::register(m)?;
+    m.add_function(wrap_pyfunction!(structure::add_template_layers, m)?)?;
+    m.add_function(wrap_pyfunction!(structure::structure_folder_state, m)?)?;
+    m.add_function(wrap_pyfunction!(structure::apply_folder_parents, m)?)?;
+    m.add_function(wrap_pyfunction!(structure::restore_structure_folders, m)?)?;
     m.add_class::<structure::StructurePlacements>()?;
     m.add_function(wrap_pyfunction!(structure::structure_lineage, m)?)?;
     m.add_function(wrap_pyfunction!(structure::structure_targets, m)?)?;

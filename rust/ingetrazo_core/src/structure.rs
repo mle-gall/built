@@ -556,3 +556,63 @@ pub(crate) fn apply_structure_bootstrap<'py>(
     }
     api.call_method1("CompoundCommand", (commands,))
 }
+
+type LayerUids<'py> = (Vec<Obj<'py>>, Vec<Obj<'py>>);
+
+/// Remember identities across a rename between a paste/filing edit and its undo.
+#[pyfunction]
+pub(crate) fn add_template_layers<'py>(
+    scene: &Obj<'py>,
+    template: &Obj<'py>,
+) -> PyResult<LayerUids<'py>> {
+    let api = scene.py().import("core.layers")?;
+    let added = api.call_method1("add_missing", (scene, template))?;
+    let mut layers = Vec::new();
+    for name in added.get_item(0)?.try_iter()? {
+        layers.push(
+            scene
+                .call_method1("layer_by_key", (name?,))?
+                .getattr("uid")?,
+        );
+    }
+    let mut folders = Vec::new();
+    for name in added.get_item(1)?.try_iter()? {
+        folders.push(scene.getattr("layer_folder_uids")?.get_item(name?)?);
+    }
+    Ok((layers, folders))
+}
+
+#[pyfunction]
+pub(crate) fn structure_folder_state<'py>(
+    scene: &Obj<'py>,
+) -> PyResult<(Obj<'py>, Obj<'py>, Vec<Obj<'py>>, Obj<'py>)> {
+    let dict = scene.py().get_type::<PyDict>();
+    Ok((
+        dict.call1((scene.getattr("folder_parents")?,))?,
+        dict.call1((scene.getattr("layer_folder_uids")?,))?,
+        list(&scene.getattr("layer_folders")?)?,
+        scene.getattr("active_layer")?,
+    ))
+}
+
+#[pyfunction]
+pub(crate) fn apply_folder_parents(scene: &Obj<'_>, template: &Obj<'_>) -> PyResult<()> {
+    for (folder, parent) in items(&template.get_item("folder_parents")?)? {
+        let parents = scene.getattr("folder_parents")?;
+        if parent.is_none() {
+            parents.call_method1("pop", (folder, parent))?;
+        } else {
+            parents.set_item(folder, parent)?;
+        }
+    }
+    Ok(())
+}
+
+#[pyfunction]
+pub(crate) fn restore_structure_folders(scene: &Obj<'_>, before: &Obj<'_>) -> PyResult<()> {
+    scene.setattr("folder_parents", before.get_item(0)?)?;
+    scene.setattr("version", scene.getattr("version")?.add(1)?)?;
+    scene.setattr("layer_folder_uids", before.get_item(1)?)?;
+    scene.setattr("layer_folders", before.get_item(2)?)?;
+    scene.setattr("active_layer", before.get_item(3)?)
+}
