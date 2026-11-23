@@ -260,6 +260,21 @@ pub(super) fn fields(ui: &mut egui::Ui, d: &mut Dialog, out: &mut Vec<String>) {
                     let w = (ui.available_width() - sw - 16.0).max(60.0);
                     let buf = d.bufs.entry(id.clone()).or_insert_with(|| text.clone());
                     let before = buf.clone();
+                    // Numeric fields may specify a keyboard step after their unit.
+                    if kind == "number" && enabled && ui.memory(|m| m.has_focus(tid)) {
+                        if let Some(step) = options.get(1).and_then(|s| s.parse::<f64>().ok()) {
+                            let delta = ui.input_mut(|i| {
+                                if i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowUp) { step }
+                                else if i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown) { -step }
+                                else { 0. }
+                            });
+                            if delta != 0. {
+                                if let Ok(value) = buf.trim().replace(',', ".").parse::<f64>() {
+                                    *buf = (value + delta).clamp(min, max).to_string();
+                                }
+                            }
+                        }
+                    }
                     let edit = if multiline {
                         egui::TextEdit::multiline(buf).desired_rows(4)
                     } else {

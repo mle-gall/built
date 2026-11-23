@@ -27,6 +27,7 @@ fn number_row(
     raw: &str,
     range: (f64, f64),
     suffix: &str,
+    step: u32,
     flags: u32,
 ) -> Field {
     (
@@ -37,7 +38,7 @@ fn number_row(
         0.,
         range.0,
         range.1,
-        vec![suffix.into()],
+        vec![suffix.into(), step.to_string()],
         flags,
         String::new(),
     )
@@ -107,6 +108,7 @@ impl OperationForm {
                         &self.number,
                         (0., 180.),
                         "°",
+                        1,
                         flags,
                     ),
                     (
@@ -143,6 +145,7 @@ impl OperationForm {
                     &self.number,
                     (640., 16384.),
                     "",
+                    320,
                     0,
                 ),
                 check(

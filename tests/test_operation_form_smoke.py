@@ -35,6 +35,10 @@ wait 300
 state
 menu export_image_to:{picture}
 wait 400
+key tab
+wait 100
+key down
+wait 100
 key enter
 wait 600
 state
@@ -53,4 +57,4 @@ quit
     assert len(states) >= 2 and all(s["errors"] == 0 for s in states), log
     assert states[0]["status"] == "Smoothed 12 edge(s)", log
     image = QImage(str(picture))
-    assert image.width() == 3840 and image.height() > 0, log
+    assert image.width() == 3520 and image.height() > 0, log
