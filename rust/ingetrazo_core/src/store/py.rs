@@ -16,6 +16,7 @@ use super::keys::Kind;
 use super::stitch::{Merge, Plan};
 use super::topo::OpError;
 use super::{Snapshot, Store, Weld};
+use std::borrow::Cow;
 use std::sync::{Arc, Mutex};
 use numpy::ndarray::Array2;
 use numpy::{IntoPyArray, PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2, PyUntypedArrayMethods};
@@ -34,6 +35,33 @@ pyo3::create_exception!(
 enum PointArray<'py> {
     Single(PyReadonlyArray2<'py, f32>),
     Double(PyReadonlyArray2<'py, f64>),
+}
+
+/// Persisted format-3 indices are normally i32. Retain the original
+/// array while crossing the binding and widen only where the builder
+/// needs an i64. Existing callers can continue passing i64 arrays.
+enum IndexArray<'py, D: numpy::ndarray::Dimension> {
+    Narrow(numpy::PyReadonlyArray<'py, i32, D>),
+    Wide(numpy::PyReadonlyArray<'py, i64, D>),
+}
+
+impl<'a, 'py, D: numpy::ndarray::Dimension + 'a> FromPyObject<'a, 'py> for IndexArray<'py, D> {
+    type Error = PyErr;
+    fn extract(obj: Borrowed<'a, 'py, PyAny>) -> PyResult<Self> {
+        if let Ok(a) = obj.extract() { Ok(Self::Wide(a)) }
+        else { Ok(Self::Narrow(obj.extract()?)) }
+    }
+}
+impl<D: numpy::ndarray::Dimension> IndexArray<'_, D> {
+    fn indices(&self) -> PyResult<Cow<'_, [i64]>> {
+        match self {
+            Self::Wide(a) => Ok(Cow::Borrowed(a.as_slice()?)),
+            Self::Narrow(a) => Ok(Cow::Owned(a.as_slice()?.iter().copied().map(i64::from).collect())),
+        }
+    }
+    fn shape(&self) -> &[usize] {
+        match self { Self::Wide(a) => a.shape(), Self::Narrow(a) => a.shape() }
+    }
 }
 
 fn triples<'a, T: numpy::Element>(points: &'a PyReadonlyArray2<'_, T>) -> PyResult<&'a [[T; 3]]> {
@@ -501,15 +529,15 @@ impl PyMeshStore {
         py: Python<'_>,
         namespace: u64,
         pos: PointArray<'_>,
-        edges: PyReadonlyArray2<'_, i64>,
+        edges: IndexArray<'_, numpy::ndarray::Ix2>,
         flags: Option<PyReadonlyArray1<'_, u8>>,
-        curves: Option<PyReadonlyArray1<'_, i64>>,
-        layers: Option<PyReadonlyArray1<'_, i64>>,
+        curves: Option<IndexArray<'_, numpy::ndarray::Ix1>>,
+        layers: Option<IndexArray<'_, numpy::ndarray::Ix1>>,
         layer_names: Vec<String>,
-        rings: PyReadonlyArray1<'_, i64>,
-        sizes: PyReadonlyArray1<'_, i64>,
-        counts: PyReadonlyArray1<'_, i64>,
-        face_attr: Option<PyReadonlyArray1<'_, i64>>,
+        rings: IndexArray<'_, numpy::ndarray::Ix1>,
+        sizes: IndexArray<'_, numpy::ndarray::Ix1>,
+        counts: IndexArray<'_, numpy::ndarray::Ix1>,
+        face_attr: Option<IndexArray<'_, numpy::ndarray::Ix1>>,
         sequential: bool,
         scale: f64,
         tol2: f64,
@@ -519,24 +547,28 @@ impl PyMeshStore {
             PointArray::Single(p) => BlockPoints::Single(triples(p)?),
             PointArray::Double(p) => BlockPoints::Double(triples(p)?),
         };
-        if edges.ndim() != 2 || (edges.shape()[0] > 0 && edges.shape()[1] != 2) {
+        if edges.shape()[0] > 0 && edges.shape()[1] != 2 {
             return Err(PyValueError::new_err("edges: (E, 2) int64"));
         }
-        let eflat = edges.as_slice().map_err(|_| PyValueError::new_err("edges: contiguous"))?;
-        // SAFETY: the edge array is contiguous with two i64 values per row.
-        let edges2: &[[i64; 2]] =
-            unsafe { std::slice::from_raw_parts(eflat.as_ptr() as *const [i64; 2], eflat.len() / 2) };
+        let eflat = edges.indices()?;
+        let edges2 = eflat.as_chunks::<2>().0;
+        let curves = curves.as_ref().map(IndexArray::indices).transpose()?;
+        let layers = layers.as_ref().map(IndexArray::indices).transpose()?;
+        let face_attr = face_attr.as_ref().map(IndexArray::indices).transpose()?;
+        let rings = rings.indices()?;
+        let sizes = sizes.indices()?;
+        let counts = counts.indices()?;
         let block = Block {
             pos: pos3,
             edges: edges2,
             flags: flags.as_ref().map(|a| slice(a, "flags")).transpose()?,
-            curves: curves.as_ref().map(|a| slice(a, "curves")).transpose()?,
-            layers: layers.as_ref().map(|a| slice(a, "layers")).transpose()?,
+            curves: curves.as_deref(),
+            layers: layers.as_deref(),
             layer_names,
-            rings: slice(&rings, "rings")?,
-            sizes: slice(&sizes, "sizes")?,
-            counts: slice(&counts, "counts")?,
-            face_attr: face_attr.as_ref().map(|a| slice(a, "face_attr")).transpose()?,
+            rings: &rings,
+            sizes: &sizes,
+            counts: &counts,
+            face_attr: face_attr.as_deref(),
             sequential,
         };
         let w = Weld { scale, tol2, fused };
@@ -574,6 +606,81 @@ impl PyMeshStore {
     /// `(vertices, edges, faces)` live.
     fn counts(&self) -> (usize, usize, usize) {
         (self.inner.n(Kind::Vertex), self.inner.n(Kind::Edge), self.inner.n(Kind::Face))
+    }
+
+    /// Format-3 columns in the writer's first-use vertex and edge-tag order.
+    /// Multiple holes need the legacy maximal-hole policy.
+    fn igz_columns<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<Option<(Bound<'py, PyDict>, Vec<String>)>> {
+        let packed = py.detach(|| {
+            let mut d = self.inner.dense();
+            if d.ring_counts.iter().any(|&n| n > 2) {
+                return None;
+            }
+            let mut vertices = Vec::new();
+            let mut index = vec![-1i32; d.pos.len()];
+            let mut vertex = |i: i64| {
+                let k = &mut index[i as usize];
+                if *k < 0 {
+                    *k = vertices.len() as i32;
+                    vertices.push(d.pos[i as usize]);
+                }
+                *k
+            };
+            let edges: Vec<i32> = d.edges.iter().flatten().copied().map(&mut vertex).collect();
+            let rings: Vec<i32> = d.corners.iter().copied().map(vertex).collect();
+            let mut names = Vec::new();
+            let mut name_index = std::collections::HashMap::new();
+            let layers: Vec<i32> = d
+                .layer
+                .iter()
+                .map(|&id| {
+                    if id < 0 {
+                        return -1;
+                    }
+                    let name = &self.inner.state.layers[id as usize];
+                    *name_index.entry(name).or_insert_with(|| {
+                        names.push(name.clone());
+                        (names.len() - 1) as i32
+                    })
+                })
+                .collect();
+            for f in &mut d.flags {
+                *f &= if *f & 1 != 0 { 7 } else { 3 };
+            }
+            Some((d, vertices, edges, rings, layers, names))
+        });
+        let Some((d, vertices, edges, rings, layers, names)) = packed else {
+            return Ok(None);
+        };
+        let out = PyDict::new(py);
+        out.set_item("pos", rows3(py, &vertices))?;
+        out.set_item(
+            "edges",
+            Array2::from_shape_vec((edges.len() / 2, 2), edges)
+                .unwrap()
+                .into_pyarray(py),
+        )?;
+        out.set_item("rings", rings.into_pyarray(py))?;
+        let ints = |v: Vec<i64>| {
+            v.into_iter()
+                .map(|i| i as i32)
+                .collect::<Vec<_>>()
+                .into_pyarray(py)
+        };
+        out.set_item("ring_sizes", ints(d.ring_sizes))?;
+        out.set_item("ring_counts", ints(d.ring_counts))?;
+        out.set_item("face_attr", d.face_attr.into_pyarray(py))?;
+        out.set_item("edge_flags", d.flags.into_pyarray(py))?;
+        if d.curve.iter().any(|&i| i >= 0) {
+            out.set_item("edge_curve", d.curve.into_pyarray(py))?;
+        }
+        if !names.is_empty() {
+            out.set_item("edge_layer", layers.into_pyarray(py))?;
+        }
+        Ok(Some((out, names)))
     }
 
     /// Every array of the `Plan` at once, as a dict: pos, edges, flags,

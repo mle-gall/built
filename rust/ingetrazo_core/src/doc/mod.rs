@@ -29,6 +29,7 @@ mod anchor;
 mod history;
 mod feed;
 mod execute;
+mod file_view;
 pub mod py;
 pub mod value;
 

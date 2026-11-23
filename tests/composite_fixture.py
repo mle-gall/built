@@ -51,19 +51,19 @@ def _file(path, folders, tags, count, links_to=()):
     return path
 
 
-def build(folder, big=20000):
+def build(folder, big=20000, *, suffix=".igz"):
     """Write C, D, B, A and the host into ``folder``; returns their paths."""
     folder = Path(folder)
     folder.mkdir(parents=True, exist_ok=True)
-    c = _file(folder / "C.igz", {"Stairs": None}, {"Flights": "Stairs", "Landings": "Stairs"}, 600)
-    d = _file(folder / "D.igz", {"Facilities": None, "Rooms": "Facilities"},
+    c = _file(folder / f"C{suffix}", {"Stairs": None}, {"Flights": "Stairs", "Landings": "Stairs"}, 600)
+    d = _file(folder / f"D{suffix}", {"Facilities": None, "Rooms": "Facilities"},
               {"Toilets": "Rooms", "Kiosks": "Rooms", "Signs": "Facilities"}, 900)
-    b = _file(folder / "B.igz", {"Building": None, "Levels": "Building"},
+    b = _file(folder / f"B{suffix}", {"Building": None, "Levels": "Building"},
               {"Slabs": "Levels", "Walls": "Levels", "Site": "Building"}, 3000)
-    a = _file(folder / "A.igz", {"Ride": None, "Track": "Ride", "Supports": "Ride"},
+    a = _file(folder / f"A{suffix}", {"Ride": None, "Track": "Ride", "Supports": "Ride"},
               {"Rails": "Track", "Ties": "Track", "Columns": "Supports", "Base plates": "Supports",
                "Fasteners": "Ride"}, big, links_to=(c, d))
-    host = _file(folder / "Host.igz", {"Site works": None}, {"Paths": "Site works", "Fences": "Site works"},
+    host = _file(folder / f"Host{suffix}", {"Site works": None}, {"Paths": "Site works", "Fences": "Site works"},
                  50, links_to=(a, b))
     return dict(host=host, a=a, b=b, c=c, d=d)
 

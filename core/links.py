@@ -167,7 +167,7 @@ def locate(link: dict, host_path=None) -> Path | None:
     return p if p.is_file() else None
 
 
-def load_source(path, select=None, *, include_nested=True, link_meshes=None):
+def load_source(path, select=None, *, include_nested=True, link_meshes=None, progress=None):
     """``(definition, source scene)`` for the .igz at ``path``: the whole
     document as one component definition (``core.insert``), its own links
     resolved first. Raises :class:`LinkError`."""
@@ -185,7 +185,7 @@ def load_source(path, select=None, *, include_nested=True, link_meshes=None):
     stack.append(key)
     try:
         src = Scene()
-        igz.load_into(src, Path(path), include_links=include_nested, link_meshes=link_meshes)
+        igz.load_into(src, Path(path), progress=progress, include_links=include_nested, link_meshes=link_meshes)
         # A cycle further down is this link's failure too; a source of the
         # source that is merely missing is not (its copies show empty).
         for err in (getattr(src, "link_errors", None) or {}).values():
@@ -1143,13 +1143,13 @@ def adopt_parts(placement) -> None:
 
 # ---- the entry points --------------------------------------------------------------
 
-def _read_definition(registry, path, select, include_nested, previous=None):
+def _read_definition(registry, path, select, include_nested, previous=None, *, progress=None):
     from core.link_meshes import LinkMeshes
     from core.purge import iter_groups
     from core.insert import merge_materials
     reader = LinkMeshes(path, registry, previous, filtered=select is not None and 'filter' in select)
     comp, tags, materials = load_source(path, select, include_nested=include_nested,
-                                        link_meshes=reader)
+                                        link_meshes=reader, progress=progress)
     _rename_tags(comp, path, reader.reused)
     renamed = merge_materials(materials, registry, comp, reused=reader.reused)
     seen = set()
@@ -1210,7 +1210,7 @@ def set_include_nested(scene, group, enabled):
     scene.version += 1
 
 
-def reload(scene, path, host_path=None) -> None:
+def reload(scene, path, host_path=None, *, progress=None) -> None:
     """Read ``path`` again and show it in every copy. Raises
     :class:`LinkError` (the copies keep what they showed)."""
     # Prepare every subset before changing any placement or host material.
@@ -1234,7 +1234,8 @@ def reload(scene, path, host_path=None) -> None:
         nested = rec.get('include_nested', True)
         config = (source_path, repr(rec.get('select')), nested)
         if config not in definitions:
-            definitions[config] = _read_definition(materials, source_path, rec.get('select'), nested, group)
+            definitions[config] = _read_definition(materials, source_path, rec.get('select'), nested,
+                                                   group, progress=progress)
         comp, tags = definitions[config]
         prepared.append((group, comp))
         tags_by_path[source_path] = tags
@@ -1259,7 +1260,7 @@ def reload(scene, path, host_path=None) -> None:
     scene._link_mesh_changes = (before, scene.content_version, swaps)
 
 
-def resolve(scene, host_path=None) -> dict:
+def resolve(scene, host_path=None, *, progress=None) -> dict:
     """Fill the linked copies of a document just opened from their sources
     (packed ones keep what the file holds). Returns ``{path: error}`` for
     the sources that could not be read — their copies stay empty
@@ -1274,7 +1275,7 @@ def resolve(scene, host_path=None) -> dict:
         # links back to it is a cycle.
         stack.append(host_key)
         try:
-            return resolve(scene, host_path)
+            return resolve(scene, host_path, progress=progress)
         finally:
             stack.remove(host_key)
     for g in linked_groups(scene):
@@ -1285,11 +1286,15 @@ def resolve(scene, host_path=None) -> dict:
         found = locate(link, host_path)
         if found is not None and _norm(found) != _norm(link["path"]):
             link["path"] = str(found)     # the project moved: follow it
-    for path in sources(scene):
-        if is_packed(scene, path):
-            continue
+    paths = [path for path in sources(scene) if not is_packed(scene, path)]
+    for index, path in enumerate(paths):
+        def report(fraction, phase):
+            progress((index + fraction) / len(paths), f"{Path(path).name} · {phase}")
+
+        if progress:
+            report(0.0, "Reading linked document…")
         try:
-            reload(scene, path, host_path)
+            reload(scene, path, host_path, progress=report if progress else None)
         except LinkError as exc:
             errors[path] = str(exc)
     scene.link_errors = errors

@@ -65,6 +65,7 @@ def test_every_texture_packs_unpacks_and_resaves_identically(tmp_path, monkeypat
     assert all("embed" in t and "path" not in t for t in entries)
     assert "base_embed" in entries[0] and "base" not in entries[0]
     with monkeypatch.context() as mp:
+        mp.setenv("INGETRAZO_RUST_IO", "0")
         mp.setattr(igz, "_texture_slots", _reference_walk)
         old_blobs, old_missing = igz._pack_textures(expected)
     assert (payload, list(blobs.items()), missing) == \

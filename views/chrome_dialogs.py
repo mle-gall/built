@@ -724,13 +724,14 @@ class busy:
     progress: the chip is drawn before it starts and goes when it ends. A
     no-op when the chrome is not on screen."""
 
-    def __init__(self, parent, label: str, *, output_path=None):
+    def __init__(self, parent, label: str, *, output_path=None, exclusive=False):
+        self.exclusive = exclusive
         self.output_path = output_path
         self.parent, self.label, self.job = parent, label, None
 
     def __enter__(self):
         if live(self.parent) is not None:
-            self.job = Job(window_of(self.parent), self.label)
+            self.job = Job(window_of(self.parent), self.label, exclusive=self.exclusive)
             self.job.draw_now()
         return self.job
 

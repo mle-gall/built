@@ -117,6 +117,37 @@ def test_members_and_arrays_equal_the_python_reader(tmp_path, binary, engine):
         _same_arrays(a, b)
 
 
+def test_parallel_read_keeps_the_inflater_off_the_recursive_worker_stack(tmp_path):
+    import os
+    import subprocess
+    import sys
+    import textwrap
+
+    path = tmp_path / "members.zip"
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("g", b"block")
+    # Reuse one compressed range to exercise a deep job tree without a
+    # large fixture. The pool reads its stack settings once per process.
+    probe = textwrap.dedent("""
+        import os, sys, zipfile
+        from ingetrazo_core import igz_read_geometry
+
+        with zipfile.ZipFile(sys.argv[1]) as archive:
+            member = archive.getinfo("g")
+            row = (member.header_offset, member.compress_type, member.compress_size,
+                   member.file_size, member.CRC, b"g", member.flag_bits)
+            count = 2048
+            sources = [{}]
+            if os.name == "posix":
+                sources.append(dict(fd=archive.fp.fileno(), member_offsets=[31] * count))
+            for source in sources:
+                rows = igz_read_geometry(sys.argv[1], [row] * count, [None] * count, **source)
+                assert rows == [(b"block", False)] * count
+        """)
+    subprocess.run([sys.executable, "-c", probe, str(path)], check=True,
+                   env=dict(os.environ, RUST_MIN_STACK="262144", RAYON_NUM_THREADS="8"))
+
+
 def test_a_stored_document_reads_the_same(tmp_path, binary, engine):
     # zipfile's default is ZIP_STORED: the other method a member can have.
     path = _document(tmp_path)
@@ -250,3 +281,22 @@ def test_an_engine_failure_falls_back_to_python(tmp_path, binary, engine,
     back = Scene()
     igz.load_into(back, path)
     assert _canonical(back) == _canonical(py)
+
+
+def test_open_geometry_uses_original_archive_after_atomic_replace(tmp_path, binary):
+    import os
+    from formats.native_io import DocumentArchive, native_io
+
+    if not hasattr(native_io(), "igz_read_member"):
+        pytest.skip("native descriptor reader unavailable")
+    path = _document(tmp_path)
+    with DocumentArchive(path) as archive:
+        payload = json.loads(archive.read("document.json"))["scene"]
+        old = {name: archive.read(name) for name in archive.namelist()
+               if name.startswith("geom/")}
+        replacement = tmp_path / "replacement"
+        replacement.write_bytes(b"replacement")
+        os.replace(replacement, path)
+        members = igz._read_geometry_members(archive, path, payload)
+    assert members == old
+    assert len(members.checked) == len(old)

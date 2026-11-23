@@ -92,3 +92,21 @@ def test_the_count_includes_the_loose_mesh_and_each_prototype_once():
         g.xform = QMatrix4x4()
         scene.groups.append(g)
     assert igz._live_element_count(scene) == 4 + 4
+
+
+def test_native_format_choice_uses_known_face_count_before_building_edges(tmp_path, monkeypatch):
+    import pytest
+    from core.mesh import DeferredMesh
+
+    if not hasattr(igz.native_io(), "igz_large_document"):
+        pytest.skip("native format classifier unavailable")
+    scene = _doc(tmp_path, 5)
+    if type(scene.mesh) is not DeferredMesh or scene._root is None:
+        pytest.skip("requires deferred geometry in the Rust document")
+    monkeypatch.setattr(igz, "_LARGE_DOCUMENT", 4)
+    assert igz._large_document(scene)
+    assert "_deferred_plan" not in vars(scene.mesh)
+    exact = igz._live_element_count(scene)
+    for limit in (exact - 1, exact, exact + 1):
+        monkeypatch.setattr(igz, "_LARGE_DOCUMENT", limit)
+        assert igz._large_document(scene) == (exact > limit)

@@ -31,7 +31,9 @@ def test_direct_container_matches_buffered_zip_bytes(tmp_path, fast):
 
 
 @pytest.mark.parametrize("failure", [OSError, RuntimeError, KeyboardInterrupt])
-def test_failed_archive_leaves_existing_document_intact(tmp_path, monkeypatch, failure):
+@pytest.mark.parametrize("native", [False, True])
+def test_failed_archive_leaves_existing_document_intact(native, tmp_path, monkeypatch, failure):
+    monkeypatch.setenv("INGETRAZO_RUST_IO", "1" if native else "0")
     path = tmp_path / "scene.igz"
     path.write_bytes(b"previous document")
     original = zipfile.ZipFile.writestr
@@ -44,6 +46,12 @@ def test_failed_archive_leaves_existing_document_intact(tmp_path, monkeypatch, f
         return original(self, *args, **kwargs)
 
     monkeypatch.setattr(zipfile.ZipFile, "writestr", fail_after_document)
+    if native and hasattr(igz.native_io(), "igz_write_zip"):
+        original_writer = igz.native_io().igz_write_zip
+        def interrupted(fd, members, fast):
+            original_writer(fd, members[:1], fast)
+            raise failure("write interrupted")
+        monkeypatch.setattr(igz.native_io(), "igz_write_zip", interrupted)
     with pytest.raises(failure, match="write interrupted"):
         igz._write_container(path, "{}", {"textures/image.png": b"image"})
     assert path.read_bytes() == b"previous document"

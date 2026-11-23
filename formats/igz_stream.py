@@ -4,6 +4,8 @@
 import json
 import tempfile
 
+from formats.native_io import native_io
+
 _CHUNK = 1024 * 1024
 
 
@@ -68,11 +70,27 @@ class SaveStream(dict):
             size += self.file.write(pending)
         return Fragment(self.file, start, size)
 
+    def encode(self, value, *, mesh=False):
+        native = native_io()
+        if native is not None:
+            start = self.file.seek(0, 2)
+
+            def append(chunk):
+                self.file.seek(0, 2)  # nested fragments read this file too
+                self.file.write(chunk)
+
+            try:
+                native.igz_encode_json(value, append, Fragment, False)
+                return Fragment(self.file, start, self.file.seek(0, 2) - start)
+            except (TypeError, UnicodeEncodeError):
+                self.file.truncate(start)
+        return self.store(json_chunks(value, mesh=mesh))
+
     def json(self, value):
-        return self.store(json_chunks(value, mesh=True))
+        return self.encode(value, mesh=True)
 
     def document(self, value):
-        return self.store(json_chunks(value))
+        return self.encode(value)
 
 
 _encoder = json.JSONEncoder(separators=(",", ":"), allow_nan=False)
