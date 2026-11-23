@@ -12,9 +12,10 @@ def test_the_style_is_already_the_apps():
     assert isinstance(QApplication.instance().style(), theme.ChromeStyle)
 
 
-def test_applying_a_theme_does_not_set_the_style_again(monkeypatch):
+def test_startup_is_idempotent(monkeypatch):
     app = QApplication.instance()
     calls = []
-    monkeypatch.setattr(app, "setStyle", calls.append)
-    theme.apply_theme(app, theme.DARK)
+    for setter in ("setStyle", "setPalette", "setStyleSheet"):
+        monkeypatch.setattr(app, setter, calls.append)
+    theme.install_dark_palette(app)
     assert calls == []

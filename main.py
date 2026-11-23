@@ -693,8 +693,8 @@ def main() -> int:
     app.setDesktopFileName(_os.environ.get("FLATPAK_ID") or "ingetrazo")
     # Light or dark chrome: follows the desktop by default, live
     # The Qt host starts with the dark palette.
-    from views.theme import apply_theme
-    apply_theme(app)
+    from views.theme import install_dark_palette
+    install_dark_palette(app)
     # macOS 26+: menus on the AppKit menu material (views/mac_glass.py).
     from views import mac_glass
     mac_glass.install_menus(app)

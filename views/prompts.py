@@ -50,15 +50,11 @@ class _CtrlEnterAccepts(QObject):
     editor would otherwise take Ctrl+Enter as one more new line.
     """
 
-    def __init__(self, dialog: QInputDialog) -> None:
-        super().__init__(dialog)
-        self._dialog = dialog
-
     def eventFilter(self, obj, event) -> bool:  # noqa: N802 (Qt API)
         if (event.type() == QEvent.KeyPress
                 and event.key() in (Qt.Key_Return, Qt.Key_Enter)
                 and event.modifiers() & Qt.ControlModifier):
-            self._dialog.accept()
+            self.parent().accept()
             return True
         return False
 

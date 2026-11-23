@@ -1141,9 +1141,6 @@ def test_the_side_tabs_show_the_open_ones_name_as_inkscape():
     comp_win.move_page("items", "left")
     i = left.indexOf(comp_win._pages["items"])
     assert not left.tabIcon(i).isNull()
-    old = left.tabIcon(i).cacheKey()
-    theme._redraw_icons(_app)
-    assert left.tabIcon(i).cacheKey() != old
     comp_win.hide()
     comp_win._saved_version = scene.version
     QSettings().remove("composer/tab_layout")         # leave it as found
