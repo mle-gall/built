@@ -765,7 +765,10 @@ def export_igz(win, path=None) -> bool:
             scene._home_thumbnail_png = png
         activity = cd.busy(win, tr("Saving {name}…", name=path.name), exclusive=True)
         with activity as job:
-            stats = igz_format.export_igz(scene, path, confirm, progress=_save_progress(job))
+            if job is None:
+                stats = igz_format.export_igz(scene, path, confirm)
+            else:
+                stats = igz_format.export_igz(scene, path, confirm, progress=_save_progress(job))
             if stats is None and job is not None:
                 job.cancelled = True
             elif stats:
