@@ -57,7 +57,7 @@ from core.version import __version__
 from formats import built
 from formats.igz_stream import Fragment, SaveStream
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.dimension import Dimension
 from core.group import Group
@@ -2026,7 +2026,7 @@ def _load_into_inner(scene, path: Path, progress=None, link_meshes=None) -> None
         # documents without one get a fresh uid, as before.
         uid = str(raw["uid"]) if raw.get("uid") else None
         if raw.get("xform") is not None and "proto" in raw:
-            from PySide6.QtGui import QMatrix4x4
+            from ingetrazo_core import Matrix4 as QMatrix4x4
             group = Group(proto_meshes[int(raw["proto"])], name=name,
                           uid=uid)
             if is_built:
@@ -2038,7 +2038,7 @@ def _load_into_inner(scene, path: Path, progress=None, link_meshes=None) -> None
             group = Group(name=name, uid=uid)
             group.mesh = read_mesh(group.mesh, raw, ("group", group.uid))
         if isinstance(raw.get("axes"), list) and len(raw["axes"]) == 16:
-            from PySide6.QtGui import QMatrix4x4
+            from ingetrazo_core import Matrix4 as QMatrix4x4
             vals = [float(x) for x in raw["axes"]]
             group.axes = QMatrix4x4(*[vals[col * 4 + row] for row in range(4)
                                       for col in range(4)])

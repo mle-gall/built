@@ -63,7 +63,7 @@ def _yup_matrix(m) -> list:
     """A Z-up placement matrix as the matching glTF node matrix — the same
     change of axes the vertices get (:func:`_yup`) on both sides, column
     major as glTF wants it."""
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     c = QMatrix4x4(1, 0, 0, 0,
                    0, 0, 1, 0,
                    0, -1, 0, 0,
@@ -99,7 +99,7 @@ def _file_hierarchy(scene, only=None):
     :data:`_FILE_FACING`, with ``ingetrazo_faceme`` = feet and heading,
     as the Render with Blender export writes it."""
     import math
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     from core.group import transformed_mesh
     from core.i18n import tr
     from core.materials import material_sig

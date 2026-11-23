@@ -272,7 +272,7 @@ def _save_ifc(scene, path, project_name, profile, stream):
         if cls == 'IfcFacilityPartCommon':
             attrs['UsageType'] = '.NOTDEFINED.'
         if cls == 'IfcBuildingStorey':
-            from PySide6.QtGui import QVector3D
+            from ingetrazo_core import Vec3 as QVector3D
             matrix = _compose(bases[id(group)], group.xform) if group is not None else None
             attrs['Elevation'] = _f(matrix.map(QVector3D()).z() if matrix is not None else 0)
         qname, qentries, _ = class_quantities_arrays(original, arrays) if "arrays" in obj else class_quantities(original, faces)

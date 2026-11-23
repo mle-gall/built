@@ -40,7 +40,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional
 
-from PySide6.QtGui import QMatrix4x4, QVector3D
+from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core.texture import fit_uv_affine, projection_basis
 from formats.skp_consumption import (SoftSegments, _GeometryCache, _geometry_cache,

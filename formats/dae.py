@@ -24,7 +24,7 @@ from __future__ import annotations
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-from PySide6.QtGui import QMatrix4x4, QVector3D
+from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from formats.meshexport import export_triangles
 
@@ -142,7 +142,7 @@ def _convex(pts, normal) -> bool:
     concave face would fold, and a corner on a straight edge (a point along
     a mitred or subdivided edge) makes zero-area slivers that other
     programs refuse (#314). Those faces go out as triangles instead."""
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     n = len(pts)
     for i in range(n):
         a, b, c = pts[i - 1], pts[i], pts[(i + 1) % n]
@@ -1799,7 +1799,7 @@ def _boundary_rings(triangles):
     """The outline of a face given as triangles: ``[outer, *holes]`` as
     point lists (outer = the ring of largest area), or ``None`` when the
     boundary does not close into simple rings."""
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     pos: dict = {}
     directed: set = set()
     for tri in triangles:

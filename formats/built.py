@@ -37,7 +37,7 @@ def point_array(points, sink):
 
 def placement(values):
     """Qt consumes float32. Retain the source doubles on its projection."""
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     import math
     values = tuple(map(float, values))
     if len(values) != 16 or not all(map(math.isfinite, values)):

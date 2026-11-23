@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from pathlib import Path, PurePosixPath
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from .meshexport import (SmoothNormals, _corner, export_triangles,
                          material_key, world_faces_painted)
@@ -605,7 +605,7 @@ def _pieces_group(stem: str, pieces: dict, face_attrs, tick):
     """The container an OBJ made of parts imports as: an instance at
     identity with an empty mesh of its own (the same shape 3D text takes,
     see :func:`core.text3d.make_text_group`), one child per piece."""
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     from core.group import Group
     from core.mesh import Mesh
     from formats.dae import _add_fused
