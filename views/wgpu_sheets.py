@@ -1,46 +1,35 @@
 """Sheets: a workspace of the Built window, not a window of its own.
 
-The sheet composer (views/composer.py, QPainter on a QGraphicsScene) keeps
-its model, its tools and its undo; only where it is seen changes:
-
-* **The page** is the composer's own canvas view (a ``QGraphicsView``),
-  never shown. It is sized to the Metal view, rendered offscreen into an
-  image at the device pixel ratio, and only the rectangles the scene
-  reports changed (``QGraphicsScene.changed``) are rendered again and
-  uploaded (``Renderer.page_upload``). ``Renderer.render_page`` draws that
-  layer instead of the model, with the chrome over it.
-* **Input** that the chrome does not take (views/wgpu_ui.py hears it first)
-  is handed to that canvas view as Qt events, so placement, snapping, the
-  dimension tools, view editing and inline text keep their code. The
-  composer window's shortcuts are mapped here (it has no window to catch
-  them).
+* **The page** is native (docs/rust-sheets.md): ``ingetrazo_core`` reads the
+  sheet records out of the document (``sheet_page_json``) and the renderer
+  paints them under the chrome (``ingetrazo_render`` ui/page.rs), with
+  zoom, pan, picking, moving and resizing items and placing a view. Frames
+  show the composer's frame content: the vector pass (the Rust HLR drawing,
+  ``hlr_cache``) as line sets, the other styles as pictures
+  (``render_cache``). No QPainter, no uploaded page image.
+* **Edits** come back as actions (``sheets:rects``, ``sheets:place``,
+  ``sheets:select``), one per gesture, and run through the sheet's history
+  (``EditItemCommand``, ``place_tool``), so undo, auto-render and the dock
+  stay the composer's.
 * **The chrome** is the sheet's while the workspace is on (ui/sheets.rs):
   the sheet tools on the rail, the sheets and the selected item's fields in
   the dock, paper, scale, tool hint and zoom in the bottom bar. The fields
   mirror the composer's own panel widgets, so every edit goes through the
   slot the Qt panel uses (undo, re-render, cache invalidation).
 
-It works the same in the Qt app (Metal) and in the native
-``built`` shell (app_shell/), where Qt is an offscreen library: no Qt
-widget is ever shown (the shell's own guard, app_shell/qt_host.py, closes
-any window the composer would still open, and its file pickers are the
-native panels). Deleting a sheet is asked in the dock. What the dock does
-not cover yet opens in the classic sheet editor (the Qt window in the Qt
-app, the classic app from the shell).
-
-The long-term plan ports sheets to Rust (docs/rust-port-plan.md, R3 / S3):
-this adapter is deliberately thin, and the composer's model and logic stay
-where they are.
+The composer (views/composer.py) is still constructed, never shown, for the
+dock, the frame renders, the history and the exports. What the native page
+does not do yet (inline text, dimension and drawing tools, images, context
+menus, guides) opens in the classic sheet editor: the Qt window in the Qt
+app, the classic app from the shell. docs/python-glue.md lists this adapter.
 """
 from __future__ import annotations
 
 import re
 from pathlib import Path
 
-from PySide6.QtCore import QEvent, QObject, QPoint, QPointF, QRect, QRectF, QSize, Qt, QTimer
-from PySide6.QtGui import (QColor, QContextMenuEvent, QFocusEvent, QImage, QKeyEvent,
-                           QKeySequence, QMouseEvent, QPainter, QRegion, QResizeEvent,
-                           QWheelEvent)
+from PySide6.QtCore import QEvent, Qt
+from PySide6.QtGui import QImage, QKeySequence
 
 SEP = "\x1f"
 ED = "\x1d"
@@ -54,10 +43,14 @@ RAIL = [["select", "pan", "zoom", "zoom_ventana", "estilo"],
          "escala", "norte", "leyenda", "perfil"],
         ["linea", "flecha", "terreno", "rect", "elipse", "poligono"],
         ["cota", "cota_cadena", "cota_base", "cota_ang", "cota_radio"]]
-#: Tools that open a Qt dialog before anything else (no Qt window in the shell).
-_DIALOG_TOOLS = {"imagen"}
-#: The desk behind the page: the composer's slate (views/composer.py), always.
-DESK = (70, 76, 84)
+#: The tools the native page runs (ui/page.rs); the others open the
+#: classic sheet editor with that tool.
+NATIVE_TOOLS = {"select", "pan", "zoom", "zoom_ventana", "vista"}
+#: Qt cursors for the page's cursor names.
+_CURSORS = {"": Qt.ArrowCursor, "move": Qt.SizeAllCursor, "grab": Qt.OpenHandCursor,
+            "grabbing": Qt.ClosedHandCursor, "crosshair": Qt.CrossCursor,
+            "zoom": Qt.CrossCursor, "resize_h": Qt.SizeHorCursor, "resize_v": Qt.SizeVerCursor,
+            "resize_nwse": Qt.SizeFDiagCursor, "resize_nesw": Qt.SizeBDiagCursor}
 
 #: Keys that stay the window's in the workspace (save, open, new, close,
 #: quit, preferences): everything else is the page's.
@@ -130,9 +123,6 @@ def composer_class():
 
         def isMinimized(self):  # noqa: N802
             return False
-
-        def _apply_desk_colour(self):
-            self._view.setBackgroundBrush(QColor(*DESK))
 
         def showMinimized(self):  # noqa: N802
             pass
@@ -235,41 +225,20 @@ class _Act:
 # ---- The workspace ---------------------------------------------------------------
 class Workspace:
     def __init__(self, composer):
-        from PySide6.QtWidgets import QFrame, QWidget
         self.composer = composer
         self.shown = False
         self.view = None
-        cv = self.cv = composer._view
-        # Out of the window's grid (rulers, splitter) onto a bare host the
-        # workspace sizes: the window's layouts never run, it is not shown.
-        area = getattr(composer, "_canvas_area", None)
-        if area is not None and area.layout() is not None:
-            area.layout().removeWidget(cv)
-        self._host = QWidget(composer)
-        self._host.setObjectName("sheet_canvas_host")
-        self._host.hide()
-        cv.setParent(self._host)
-        cv.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        cv.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        cv.setFrameShape(QFrame.NoFrame)
-        composer.canvas.changed.connect(self._scene_changed)
-        self._connected = True
-        self.image = None
-        self.dirty = QRegion()
-        self.full = True
-        self._view_sig = None
-        self._fit_pending = True
         self._sent = {}
+        self._page = None               # the snapshot the page has
+        self._content = {}              # frame key → the cache entry it shows
+        self._tried = {}                # frame key → the page a render was tried on
+        self._more = False              # frames still to render after this turn
+        self._selection = None          # the keys the page and the composer agree on
         self._pending = None            # the dock question's subject
         self._prompt = None             # (title, body, field, buttons) to send
-        self._flash = None
-        self._on_page = False           # the last press landed on the page
         self._actions = []
         self._shell = is_shell(composer._window)
         self._keys = self._shortcuts()
-        # The desk is the dark chrome's slate, whatever palette Qt has (the
-        # shell's offscreen one is light).
-        cv.setBackgroundBrush(QColor(*DESK))
 
     # ---- In and out ------------------------------------------------------------
     def _front_view(self):
@@ -289,9 +258,6 @@ class Workspace:
         self.shown = True
         self.view = view
         view.__dict__["_sheets_ws"] = self
-        if not self._connected:             # a closed composer shown again
-            self.composer.canvas.changed.connect(self._scene_changed)
-            self._connected = True
         tools = getattr(view, "tools", None)
         if tools is not None and hasattr(tools, "cancel"):
             try:
@@ -299,10 +265,11 @@ class Workspace:
             except Exception:  # noqa: BLE001
                 pass
         self.composer._adopt_document()
-        self._activate(True)
-        self.full = True
-        self.image = None
         self._sent = {}
+        self._page = None
+        self._content = {}
+        self._tried = {}
+        self._selection = None
         renderer = getattr(view, "renderer", None)
         if renderer is not None and hasattr(renderer, "ui_show_sheets"):
             renderer.ui_show_sheets(True)
@@ -314,13 +281,6 @@ class Workspace:
             return
         self.shown = False
         view, self.view = self.view, None
-        try:
-            self.cv.cancel_placement()
-            self.composer.end_inline_edit()
-        except Exception:  # noqa: BLE001 — never block leaving
-            pass
-        self._activate(False)
-        self.image = None
         if view is not None and _alive(view):
             view.__dict__.pop("_sheets_ws", None)
             renderer = getattr(view, "renderer", None)
@@ -338,30 +298,13 @@ class Workspace:
 
     def detach(self) -> None:
         """The composer is closing: nothing of it may be reached again."""
-        if self._connected:
-            self._connected = False
-            try:
-                self.composer.canvas.changed.disconnect(self._scene_changed)
-            except (RuntimeError, TypeError):
-                pass
+        self.leave()
 
     @staticmethod
     def _reset_chrome(view) -> None:
         """The chrome's cached state goes: the other workspace sends its own."""
         for name in ("_ui_tabs", "_ui_cluster_sig", "_ui_opts", "_ui_sheet_sig", "_ui_jobs_sig"):
             view.__dict__[name] = None if name != "_ui_sheet_sig" else False
-
-    def _activate(self, on: bool) -> None:
-        """The scene as if its window were active and focused: items take
-        focus (inline text), the selection paints as current."""
-        from PySide6.QtWidgets import QApplication
-        scene = self.composer.canvas
-        if on:
-            QApplication.sendEvent(scene, QEvent(QEvent.WindowActivate))
-            QApplication.sendEvent(scene, QFocusEvent(QEvent.FocusIn, Qt.OtherFocusReason))
-        else:
-            QApplication.sendEvent(scene, QFocusEvent(QEvent.FocusOut, Qt.OtherFocusReason))
-            QApplication.sendEvent(scene, QEvent(QEvent.WindowDeactivate))
 
     def _touch(self) -> None:
         view = self.view
@@ -372,145 +315,123 @@ class Workspace:
         self.composer.statusBar().showMessage(text, msec)
         self._touch()
 
-    # ---- The page ----------------------------------------------------------------
-    def _scene_changed(self, rects) -> None:
-        if not self.shown:
-            return
-        for r in rects:
-            box = self.cv.mapFromScene(r).boundingRect().adjusted(-2, -2, 2, 2)
-            self.dirty = self.dirty.united(box)
-        self._touch()
+    # ---- The page (ingetrazo_core sheets::page → ingetrazo_render ui/page.rs) ------
+    def _send_page(self, renderer) -> None:
+        import ingetrazo_core as NATIVE
+        page = NATIVE.sheet_page_json(self.composer.comp)
+        if page != self._page:
+            self._page = page
+            renderer.page_set(page)
 
-    def _settle(self, view) -> None:
-        """The canvas the size of the Metal view, where it is on screen."""
-        from PySide6.QtWidgets import QApplication
-        size = QSize(max(1, view.width()), max(1, view.height()))
-        cv = self.cv
-        if cv.size() != size:
-            old = cv.size()
-            self._host.resize(size)
-            cv.setGeometry(0, 0, size.width(), size.height())
-            QApplication.sendEvent(cv, QResizeEvent(size, old))
-            self.full = True
-        # Dialogs and menus the composer places by its own widgets land
-        # over the Metal view.
-        try:
-            want = view.mapToGlobal(QPoint(0, 0))
-            have = cv.mapToGlobal(QPoint(0, 0))
-            if want != have:
-                self.composer.move(self.composer.pos() + (want - have))
-        except Exception:  # noqa: BLE001
-            pass
-        sig = (cv.transform(), cv.horizontalScrollBar().value(), cv.verticalScrollBar().value(),
-               cv.backgroundBrush().color().rgba())
-        if sig != self._view_sig:
-            self._view_sig = sig
-            self.full = True
+    def _send_contents(self, renderer) -> None:
+        """Each frame's content as the composer has it: the vector pass's
+        lines (paper mm in the frame) or the render, sent when it changed. A
+        frame without any is rendered, one per turn."""
+        comp = self.composer
+        serial = self._page                # tried again once the sheet changed
+        rendered = False
+        self._more = False
+        for frame in list(comp.comp.frames):
+            key = frame._doc_key
+            fid = id(frame)
+            lines = comp.hlr_cache.get(fid)
+            image = comp.render_cache.get(fid)
+            have = lines if lines is not None else image
+            if have is None and self._tried.get(key) != serial and rendered:
+                self._more = True              # the next turn renders it
+            if have is None and not rendered and self._tried.get(key) != serial:
+                self._tried[key] = serial
+                rendered = True
+                try:
+                    comp.render_frame(frame)
+                except Exception:  # noqa: BLE001 — a view that cannot render stays empty
+                    import traceback
+                    traceback.print_exc()
+                lines, image = comp.hlr_cache.get(fid), comp.render_cache.get(fid)
+                have = lines if lines is not None else image
+            if have is None or self._content.get(key) is have:
+                continue
+            self._content[key] = have
+            if lines is not None:
+                import numpy as np
+                kinds = comp.hlr_kinds.get(fid)
+                segs = np.ascontiguousarray(np.asarray(lines, dtype=np.float32).reshape(-1, 4))
+                kinds = (np.zeros(len(segs), dtype=np.uint8) if kinds is None
+                         else np.ascontiguousarray(np.asarray(kinds, dtype=np.uint8)))
+                renderer.page_frame_lines(key, segs, kinds)
+            elif isinstance(image, QImage) and not image.isNull():
+                import numpy as np
+                rgba = image.convertToFormat(QImage.Format_RGBA8888)
+                w, h = rgba.width(), rgba.height()
+                pixels = np.frombuffer(rgba.constBits(), dtype=np.uint8,
+                                       count=rgba.bytesPerLine() * h).reshape(h, -1)[:, :w * 4]
+                renderer.page_frame_image(key, w, h, pixels.copy().reshape(-1))
 
-    def render(self, view):
-        """Re-render what changed of the page into the image; returns the
-        logical rect that changed (None: nothing)."""
-        dpr = float(view.devicePixelRatioF())
-        w, h = max(1, view.width()), max(1, view.height())
-        W, H = max(1, int(w * dpr)), max(1, int(h * dpr))
-        if self.image is None or (self.image.width(), self.image.height()) != (W, H):
-            self.image = QImage(W, H, QImage.Format_RGBA8888)
-            self.image.setDevicePixelRatio(dpr)
-            self.image.fill(QColor(*DESK))
-            self.full = True
-        bounds = QRect(0, 0, w, h)
-        if self.full:
-            region = QRegion(bounds)
-        else:
-            region = self.dirty.intersected(QRegion(bounds))
-        self.full = False
-        self.dirty = QRegion()
-        if region.isEmpty():
-            return None
-        rect = region.boundingRect()
-        painter = QPainter(self.image)
-        try:
-            painter.setClipRect(rect)
-            self.cv.viewport().render(painter, rect.topLeft(), QRegion(rect))
-        finally:
-            painter.end()
-        return rect
+    def _sync_selection(self, renderer) -> None:
+        """The composer's selection (what the dock shows) and the page's."""
+        keys = [it.model._doc_key for it in self._selected()]
+        if keys != self._selection:
+            self._selection = keys
+            renderer.page_select(keys)
 
-    def upload(self, view, rect) -> None:
-        import numpy as np
-        renderer = view.renderer
-        image = self.image
-        dpr = image.devicePixelRatio()
-        x0, y0 = max(0, int(rect.x() * dpr)), max(0, int(rect.y() * dpr))
-        x1 = min(image.width(), int((rect.x() + rect.width()) * dpr + 0.999))
-        y1 = min(image.height(), int((rect.y() + rect.height()) * dpr + 0.999))
-        if x1 <= x0 or y1 <= y0:
-            return
-        part = image.copy(QRect(x0, y0, x1 - x0, y1 - y0))
-        part.setDevicePixelRatio(1.0)
-        pixels = np.frombuffer(part.constBits(), dtype=np.uint8)[: (x1 - x0) * (y1 - y0) * 4]
-        if not renderer.page_upload(image.width(), image.height(), x0, y0, x1 - x0, y1 - y0, pixels):
-            self.full = True
-        self.last_upload = (x0, y0, x1 - x0, y1 - y0)
+    def _select(self, keys) -> None:
+        from views.composer import _SheetItem
+        comp = self.composer
+        want = set(keys)
+        for it in comp.canvas.items():
+            if isinstance(it, _SheetItem):
+                it.setSelected(it.model._doc_key in want)
+        self._selection = [it.model._doc_key for it in self._selected()]
+        comp.on_selection_changed()
+
+    def _models(self) -> dict:
+        return {m._doc_key: m for m in self.composer.comp.all_items()}
+
+    def _move(self, arg: str) -> None:
+        """``key:x:y:w:h;…`` from a gesture on the page: one step of the
+        sheet's history."""
+        from core.composition import CompoundCommand, EditItemCommand, MarcoVista
+        comp = self.composer
+        models = self._models()
+        commands = []
+        for part in filter(None, arg.split(";")):
+            key, x, y, w, h = part.split(":")
+            model = models.get(int(key))
+            if model is None or getattr(model, "locked", False):
+                continue
+            new = {"x_mm": float(x), "y_mm": float(y), "w_mm": float(w), "h_mm": float(h)}
+            changes = {k: v for k, v in new.items()
+                       if k in model._record_fields and abs(getattr(model, k) - v) > 1e-9}
+            if not changes:
+                continue
+            commands.append(EditItemCommand(model, changes))
+            if isinstance(model, MarcoVista) and ("w_mm" in changes or "h_mm" in changes):
+                # Another window on the model: the view is worked out again.
+                comp._stale.add(id(model))
+                comp.hlr_cache.pop(id(model), None)
+                comp.render_cache.pop(id(model), None)
+        if commands:
+            comp.history.execute(commands[0] if len(commands) == 1 else CompoundCommand(commands))
 
     # ---- Fit and zoom ----------------------------------------------------------------
-    def free_rect(self, view) -> QRectF:
-        """The part of the window the chrome leaves the page."""
-        w, h = view.width(), view.height()
-        renderer = getattr(view, "renderer", None)
-
-        def area(*names):
-            for n in names:
-                r = renderer.ui_area_rect(n) if renderer is not None and hasattr(renderer, "ui_area_rect") else None
-                if r is not None:
-                    return r
-            return None
-        top = area("top")
-        bottom = area("bottom")
-        rail = area("sheets_rail", "palette")
-        dock = area("sheets_dock", "column")
-        left = (rail[0] + rail[2]) if rail else 80.0
-        right = dock[0] if dock else w - 316.0
-        t = (top[1] + top[3]) if top else 40.0
-        b = bottom[1] if bottom else h - 36.0
-        r = QRectF(left + 8, t + 8, max(80.0, right - left - 16), max(80.0, b - t - 16))
-        return r
-
     def fit(self, width_only: bool = False) -> None:
-        view = self.view
-        if view is None:
-            return
-        self._settle(view)
-        free = self.free_rect(view)
-        pw, ph = self.composer.comp.page_size_mm()
-        s = (free.width() - 16) / max(pw, 1.0)
-        if not width_only:
-            s = min(s, (free.height() - 16) / max(ph, 1.0))
-        c = free.center()
-        self.cv._zoom_anchored(max(s, 1e-3), QPointF(pw / 2.0, ph / 2.0 if not width_only else
-                                                      self.cv.mapToScene(c.toPoint()).y()), c.toPoint())
-        self._fit_pending = False
-        self.full = True
-        self._touch()
+        if self.view is not None:
+            self.view.renderer.page_fit(bool(width_only))
+            self._touch()
 
     def zoom_to(self, text: str) -> None:
         m = re.search(r"[-+]?\d+(?:[.,]\d+)?", text or "")
-        if m:
-            self.composer.set_zoom(float(m.group(0).replace(",", ".")))
-            self.full = True
+        if m and self.view is not None:
+            self.view.renderer.page_zoom_to(float(m.group(0).replace(",", ".")))
             self._touch()
 
     # ---- One frame ---------------------------------------------------------------------
     def before_frame(self, view) -> None:
         renderer = view.renderer
-        self._settle(view)
-        if self._fit_pending:
-            self.fit()
+        self._send_page(renderer)
+        self._sync_selection(renderer)
+        self._send_contents(renderer)
         self._send(renderer, view)
-        rect = self.render(view)
-        if rect is not None:
-            self.upload(view, rect)
-        self._sync_cursor(view)
 
     def _once(self, key, value, send) -> None:
         if self._sent.get(key, ...) != value:
@@ -522,7 +443,8 @@ class Workspace:
         if "tools" not in self._sent:
             self._sent["tools"] = True
             renderer.ui_set_sheet_tools(self._tool_groups())
-        renderer.ui_set_sheet_active(comp.tool_mode)
+        mode = comp.tool_mode if comp.tool_mode in NATIVE_TOOLS else "select"
+        renderer.ui_set_sheet_active(mode)
         self._once("list", self.sheet_rows(), renderer.ui_set_sheet_list)
         title, sections = self.inspector()
         self._once("insp", (title, sections), lambda v: renderer.ui_set_sheet_inspector(*v))
@@ -545,23 +467,16 @@ class Workspace:
         for keys in RAIL:
             row = []
             for mode in keys:
-                if mode not in icons or (self._shell and mode in _DIALOG_TOOLS):
+                if mode not in icons:
                     continue
                 w, h, rgba = wgpu_ui._icon_rgba(icons[mode])
-                row.append((mode, comp.TOOL_NAMES.get(mode, mode), "", w, h, rgba))
+                name = comp.TOOL_NAMES.get(mode, mode)
+                if mode not in NATIVE_TOOLS:
+                    name += " (classic sheet editor)"
+                row.append((mode, name, "", w, h, rgba))
             if row:
                 groups.append(row)
         return groups
-
-    def _sync_cursor(self, view) -> None:
-        if not self._on_page:
-            return
-        c = self.cv.viewport().cursor()
-        key = (int(c.shape().value) if hasattr(c.shape(), "value") else int(c.shape()),
-               c.pixmap().cacheKey() if c.shape() == Qt.BitmapCursor else 0)
-        if key != view.__dict__.get("_sheets_cursor"):
-            view._sheets_cursor = key
-            view.setCursor(c)
 
     # ---- What the dock shows -------------------------------------------------------------
     def sheet_rows(self):
@@ -702,7 +617,7 @@ class Workspace:
                 comp._panel_edit(item, dict(family=p["font"], bold=p["bold"], italic=p["italic"],
                                             size_pt=p["height"]))
                 comp.on_selection_changed()
-                self.full = True
+                self._touch()
             show(self.view.window(), "Sheet text", model.text, model.family, model.bold, model.italic,
                  model.size_pt, " pt", apply)
             return
@@ -734,7 +649,7 @@ class Workspace:
                 w.setItem(r, 1, QTableWidgetItem(value))
             else:
                 cell.setText(value)
-        self.full = True
+        self._touch()
 
     def exports(self):
         frame = self._frame() is not None
@@ -751,13 +666,15 @@ class Workspace:
         if frame is not None:
             from core.composition import format_scale
             scale = "No scale" if getattr(frame, "perspective", False) else format_scale(frame.scale_n)
-        mode = comp.tool_mode
+        mode = comp.tool_mode if comp.tool_mode in NATIVE_TOOLS else "select"
         tool = comp.TOOL_NAMES.get(mode, mode)
         hint = comp.statusBar().currentMessage()
         if not hint:
             hint = next((tip for m, _i, tip, _d in comp.TOOLS if m == mode), "")
-        cursor = comp._pos_label.text() if hasattr(comp, "_pos_label") else ""
-        zoom = f"{comp.zoom_percent():.0f}%"
+        renderer = getattr(self.view, "renderer", None)
+        at = renderer.page_pointer_mm() if renderer is not None else None
+        cursor = f"x: {at[0]:.1f} mm  y: {at[1]:.1f} mm" if at else ""
+        zoom = f"{renderer.page_zoom():.0f}%" if renderer is not None else ""
         return (paper, scale, tool, hint, cursor, zoom)
 
     def cluster(self):
@@ -786,18 +703,24 @@ class Workspace:
         comps = comp._scene().compositions
         if verb == "tool":
             act = comp._tool_actions.get(rest)
-            if act is not None and not (self._shell and rest in _DIALOG_TOOLS):
+            if rest not in NATIVE_TOOLS:
+                self.open_classic(tool=rest)
+            elif act is not None:
                 act.trigger()
+        elif verb == "select":
+            self._select(int(k) for k in rest.split(",") if k)
+        elif verb == "rects":
+            self._move(rest)
+        elif verb == "place":
+            x0, y0, x1, y1 = (float(v) for v in rest.split(SEP))
+            if comp.tool_mode == "vista":
+                comp.place_tool(x0, y0, x1, y1)
         elif verb == "open":
             comp.show_sheet(int(rest))
-            self.full = True
-            self._fit_pending = True
         elif verb == "add":
             comp._on_comp_add()
-            self._fit_pending = True
         elif verb == "dup":
             comp.duplicate_sheet(int(rest), show=True)
-            self._fit_pending = True
         elif verb == "rename":
             i, _, name = rest.partition(SEP)
             comp.rename_sheet(int(i), name)
@@ -838,12 +761,11 @@ class Workspace:
             return
         what, arg = pending
         if what == "del" and bid == "del":
-            if self.composer.delete_sheet(arg, confirm=False):
-                self._fit_pending = True
+            self.composer.delete_sheet(arg, confirm=False)
 
 
     # ---- The escape hatch ----------------------------------------------------------------
-    def open_classic(self) -> None:
+    def open_classic(self, tool: str = "") -> None:
         """What the dock does not cover yet (pens, colours, cajetín designs,
         guides, rulers…): the classic sheet editor. In the Qt app that is
         the composer's own window on this document, with the workspace
@@ -871,6 +793,9 @@ class Workspace:
         to_model(win)
         bring_to_front(classic)
         classic.show_sheet(index)
+        act = classic._tool_actions.get(tool) if tool else None
+        if act is not None:
+            act.trigger()
 
     # ---- Exports ------------------------------------------------------------------------------
     _EXPORTS = {"pdf": ("Export PDF…", ".pdf", "PDF (*.pdf)"),
@@ -940,92 +865,59 @@ class Workspace:
             self.flash(f"Exported {name} — a view would not render on {', '.join(troubled)}", 10000)
         else:
             self.flash(f"Exported {name}", 5000)
-        self.full = True
 
-    # ---- Input -----------------------------------------------------------------------------
-    def _mouse(self, qtype, event):
-        pos = QPointF(event.position())
-        try:
-            gpos = QPointF(event.globalPosition())
-        except Exception:  # noqa: BLE001
-            gpos = QPointF(pos)
-        return QMouseEvent(qtype, pos, gpos, Qt.MouseButton(_int(event.button())),
-                           Qt.MouseButton(_int(event.buttons())), Qt.KeyboardModifier(_int(event.modifiers())))
-
+    # ---- Input: the page's (ingetrazo_render ui/page.rs) ---------------------------------
     def pointer(self, kind: str, event) -> None:
-        from PySide6.QtWidgets import QApplication
-        vp = self.cv.viewport()
-        if kind == "leave" or event is None:
-            self._on_page = False
-            QApplication.sendEvent(vp, QEvent(QEvent.Leave))
+        from views import wgpu_ui
+        view = self.view
+        if view is None:
             return
-        qtype = event.type()
-        if kind == "press" and qtype not in (QEvent.MouseButtonPress, QEvent.MouseButtonDblClick):
-            qtype = QEvent.MouseButtonPress
-        elif kind == "release":
-            qtype = QEvent.MouseButtonRelease
-        elif kind == "move":
-            qtype = QEvent.MouseMove
-        if kind == "press":
-            self._on_page = True
-        elif kind == "move" and not self._on_page:
-            self._on_page = True
-            QApplication.sendEvent(vp, QEvent(QEvent.Enter))
-        QApplication.sendEvent(vp, self._mouse(qtype, event))
-        if self.view is not None:
-            self._sync_cursor(self.view)
+        renderer = view.renderer
+        if kind == "leave" or event is None:
+            renderer.page_pointer("leave", -1.0, -1.0, 0, 0)
+            return
+        if kind == "press" and _int(event.type()) == _int(QEvent.MouseButtonDblClick):
+            kind = "double"
+        p = event.position()
+        shape = renderer.page_pointer(kind, float(p.x()), float(p.y()),
+                                      wgpu_ui._BUTTONS.get(event.button(), 1), wgpu_ui._mods(event))
+        cursor = _CURSORS.get(shape, Qt.ArrowCursor)
+        if view.__dict__.get("_sheets_cursor") != cursor:
+            view._sheets_cursor = cursor
+            view.setCursor(cursor)
+        self._touch()
 
     def chrome_took(self) -> None:
         """The pointer went over the chrome: the page no longer has it."""
-        if self._on_page:
-            from PySide6.QtWidgets import QApplication
-            self._on_page = False
-            QApplication.sendEvent(self.cv.viewport(), QEvent(QEvent.Leave))
+        if self.view is not None:
+            self.view.renderer.page_pointer("leave", -1.0, -1.0, 0, 0)
+            self.view.__dict__.pop("_sheets_cursor", None)
 
     def wheel(self, event) -> None:
-        from PySide6.QtWidgets import QApplication
-        pos = QPointF(event.position())
-        try:
-            gpos = QPointF(event.globalPosition())
-        except Exception:  # noqa: BLE001
-            gpos = QPointF(pos)
-        phase = event.phase() if hasattr(event, "phase") else Qt.NoScrollPhase
-        inverted = bool(event.inverted()) if hasattr(event, "inverted") else False
-        buttons = event.buttons() if hasattr(event, "buttons") else Qt.NoButton
-        ev = QWheelEvent(pos, gpos, event.pixelDelta(), event.angleDelta(), Qt.MouseButton(_int(buttons)),
-                         Qt.KeyboardModifier(_int(event.modifiers())), phase, inverted)
-        QApplication.sendEvent(self.cv.viewport(), ev)
+        """Scrolling pans the page; with ⌘ it zooms about the pointer."""
+        p = event.position()
+        d = event.pixelDelta()
+        if d.isNull():
+            a = event.angleDelta()
+            dx, dy = a.x() / 8.0 * 3, a.y() / 8.0 * 3
+        else:
+            dx, dy = float(d.x()), float(d.y())
+        zoom = bool(event.modifiers() & Qt.ControlModifier)
+        self.view.renderer.page_wheel(float(p.x()), float(p.y()), dx, dy, zoom)
         self._touch()
 
     def gesture(self, event) -> bool:
         kind = event.gestureType()
-        pos = QPointF(event.position()).toPoint()
+        p = event.position()
         if kind == Qt.ZoomNativeGesture:
-            self.cv._zoom_about(1.0 + float(event.value()), pos)
+            self.view.renderer.page_zoom_by(float(p.x()), float(p.y()), 1.0 + float(event.value()))
         elif kind == Qt.SmartZoomNativeGesture:
             self.fit()
-        else:
-            return True
-        self.full = True
         self._touch()
         return True
 
     def context_menu(self, event) -> None:
-        if self._shell:
-            self.flash("Context menus are not in the Built shell yet", 2500)
-            return
-        if not self._on_page:
-            return
-        from PySide6.QtWidgets import QApplication
-        pos = event.pos()
-        try:
-            gpos = event.globalPos()
-        except Exception:  # noqa: BLE001
-            gpos = self.view.mapToGlobal(pos)
-        ev = QContextMenuEvent(QContextMenuEvent.Mouse, pos, gpos, Qt.KeyboardModifier(_int(event.modifiers())))
-        QApplication.sendEvent(self.cv.viewport(), ev)
-        self.full = True
-        self._touch()
+        self.flash("The sheet's context menu is in the classic sheet editor for now", 2500)
 
     def _shortcuts(self):
         comp = self.composer
@@ -1062,50 +954,44 @@ class Workspace:
         except Exception:  # noqa: BLE001
             return QKeySequence()
 
-    def _editing(self) -> bool:
-        from views.composer import InlineTextEditor
-        return isinstance(self.composer.canvas.focusItem(), InlineTextEditor)
-
     @staticmethod
     def window_key(event) -> bool:
         combo = Workspace._combo(event)
         return any(QKeySequence(k).matches(combo) == QKeySequence.ExactMatch for k in _WINDOW_KEYS)
 
     def key(self, event, pressed: bool) -> None:
-        from PySide6.QtWidgets import QApplication
-        k = Qt.Key(_int(event.key()))
-        mods = Qt.KeyboardModifier(_int(event.modifiers()))
-        text = event.text() or ""
+        """The composer's sheet shortcuts (undo, delete, duplicate, group…,
+        on the selection the page and the dock share); arrows and Escape
+        are the page's."""
+        from views import wgpu_ui
         repeat = bool(event.isAutoRepeat()) if hasattr(event, "isAutoRepeat") else False
-        if pressed and not self._editing() and not repeat:
+        if not pressed:
+            return
+        if not repeat:
             combo = self._combo(event)
             for keys, run in self._keys:
                 if any(s.matches(combo) == QKeySequence.ExactMatch for s in keys):
                     run()
-                    self.full = True
                     self._touch()
                     return
-        ev = QKeyEvent(QEvent.KeyPress if pressed else QEvent.KeyRelease, k, mods, text, repeat)
-        QApplication.sendEvent(self.cv, ev)
-        self.full = True
-        self._touch()
+        name = wgpu_ui._KEYS.get(event.key(), "")
+        if name and self.view.renderer.page_key(name, wgpu_ui._mods(event)):
+            self._touch()
 
     # ---- The shell's loop -------------------------------------------------------------------
     def timers_pending(self) -> bool:
-        """The composer's own timers (auto-render, coalesced edits): the
-        shell pumps Qt only while something is due."""
-        comp = self.composer
-        for name in ("_auto_timer",):
-            t = getattr(comp, name, None)
-            if t is not None and t.isActive():
-                return True
-        return False
+        """The composer's own timers (auto-render, coalesced edits), or
+        frames still to render: the shell pumps Qt only while something is due."""
+        if self._more:
+            return True
+        t = getattr(self.composer, "_auto_timer", None)
+        return t is not None and t.isActive()
 
 
 # ---- Hooks (views/wgpu_view.py, views/wgpu_ui.py) ---------------------------------------------
 def frame(view):
     """A frame of the workspace: the chrome's window state, the page's
-    changed rectangles, then the page and the chrome."""
+    snapshot and frame contents, then the page and the chrome."""
     import time
     from views import chrome_sheet, wgpu_start, wgpu_ui
     ws = workspace_of(view)

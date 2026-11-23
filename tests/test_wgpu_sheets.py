@@ -169,7 +169,7 @@ def test_sheet_text_font_uses_composer_history(monkeypatch):
         item = next(i for i in composer.canvas.items() if getattr(i, "model", None) is model)
         item.setSelected(True)
         workspace = Workspace(composer)
-        workspace.view = SimpleNamespace(window=lambda: host)
+        workspace.view = SimpleNamespace(window=lambda: host, update=lambda: None)
         index = next(i for i, row in enumerate(workspace.TEXT) if row[0] == "font")
 
         def choose(win, title, sample, family, bold, italic, size, unit, apply):

@@ -151,7 +151,7 @@ def test_a_link_row_selects_its_placement_and_inspects_the_file(ui):
     assert info["What"].startswith("Linked file") and info["File"] == "A.igz" and info["Items"] == str(BIG)
     assert info["Status"] == "Up to date" and info["Top node"] == "Ride"
     actions = [label for name, acts in sections if name == "Actions" for _id, label in acts]
-    assert actions[:4] == ["Open source", "Reload", "Unlink", "Show in Finder"]
+    assert actions[:4] == ["Edit source", "Reload", "Unlink", "Show in Finder"]
     assert "Select contents" in actions
     # A node inside the file selects nothing and is described instead.
     act("node", "n:" + _key(view, "Rails"))

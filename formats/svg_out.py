@@ -18,41 +18,15 @@ edge comes apart on its own.
 from __future__ import annotations
 
 import re
-from collections import defaultdict
 from pathlib import Path
 from xml.sax.saxutils import quoteattr
 
-#: Dash patterns in paper millimetres, by the DXF line type names the
-#: groups carry (the hidden lines' DASHED matches the sheets' 1.5 / 0.8).
-_DASHES = {
-    "DASHED": "1.5 0.8",
-    "HIDDEN": "0.8 0.4",
-    "DASHEDX2": "3 1.5",
-    "DOT": "0 0.6",
-    "DASHDOT": "1.5 0.6 0 0.6",
-    "DIVIDE": "1.5 0.6 0 0.6 0 0.6",
-    "CENTER": "4 0.8 0.8 0.8",
-    "PHANTOM": "4 0.8 0.8 0.8 0.8 0.8",
-    "BORDER": "1.5 0.6 1.5 0.6 0 0.6",
-}
+import ingetrazo_core as NATIVE
+import numpy as np
 
 #: The pen of a group by its line class when it brings none of its own:
 #: the vector style's cut / profile / edge weights, in paper millimetres.
 DEFAULT_PENS = {"cut": 0.5, "profile": 0.35, "edge": 0.18}
-
-#: Paper margin around the drawing, in millimetres.
-_MARGIN = 10.0
-
-_INKSCAPE = "http://www.inkscape.org/namespaces/inkscape"
-
-
-def _line_class(name: str) -> str:
-    upper = name.upper()
-    if upper.endswith("-CORTE"):
-        return "cut"
-    if upper.endswith("-PERFIL"):
-        return "profile"
-    return "edge"
 
 
 def _hex(rgb) -> str:
@@ -73,78 +47,10 @@ def _xml_id(name: str, taken: set) -> str:
     return out
 
 
-#: The sharpest turn two segments may make and still be one line: the
-#: pieces of one edge the hidden-line pass split, and the facets of an arc
-#: or a circle. A sharper bend is a corner — two lines.
-MAX_TURN_DEG = 30.0
-
-
-def chain_segments(segments, tol: float = 1e-6) -> list:
-    """Join the segments that continue one another into polylines: only
-    where exactly two meet and the line turns no more than
-    :data:`MAX_TURN_DEG`. A corner or a junction of three or more ends the
-    line there, so every edge of a drawing comes apart on its own in an
-    illustration program — chaining round corners welded a wall's outline
-    and the lines branching off it into one stroke.
-
-    Returns a list of ``(points, closed)`` with ``points`` a list of
-    (x, y); a chain that comes back to its start (a circle) is ``closed``
-    and does not repeat it. Ends closer than ``tol`` count as the same
-    point."""
-    import math
-    segs = [tuple(map(float, s)) for s in segments]
-    if not segs:
-        return []
-    inv = 1.0 / tol
-    cos_max = math.cos(math.radians(MAX_TURN_DEG))
-
-    def key(x, y):
-        return (round(x * inv), round(y * inv))
-
-    at = defaultdict(list)
-    for i, (x0, y0, x1, y1) in enumerate(segs):
-        if key(x0, y0) == key(x1, y1):
-            continue                          # a dot: nothing to draw
-        at[key(x0, y0)].append(i)
-        at[key(x1, y1)].append(i)
-    used = [False] * len(segs)
-
-    def walk(pts):
-        """Extend ``pts`` (≥ 2 points) past its last point while the line
-        goes on straight enough through a two-way node."""
-        while True:
-            here = at[key(*pts[-1])]
-            if len(here) != 2:
-                return
-            nxt = next((j for j in here if not used[j]), None)
-            if nxt is None:
-                return
-            x0, y0, x1, y1 = segs[nxt]
-            far = (x1, y1) if key(x0, y0) == key(*pts[-1]) else (x0, y0)
-            ax, ay = pts[-1][0] - pts[-2][0], pts[-1][1] - pts[-2][1]
-            bx, by = far[0] - pts[-1][0], far[1] - pts[-1][1]
-            la, lb = math.hypot(ax, ay), math.hypot(bx, by)
-            if la * lb == 0.0 or (ax * bx + ay * by) / (la * lb) < cos_max:
-                return                        # a corner: the line ends
-            used[nxt] = True
-            pts.append(far)
-
-    chains = []
-    for i, (x0, y0, x1, y1) in enumerate(segs):
-        if used[i] or key(x0, y0) == key(x1, y1):
-            continue
-        used[i] = True
-        fwd = [(x0, y0), (x1, y1)]
-        walk(fwd)
-        back = [(x1, y1), (x0, y0)]
-        walk(back)
-        back = back[1:]
-        pts = back[:0:-1] + fwd
-        closed = len(pts) > 3 and key(*pts[0]) == key(*pts[-1])
-        if closed:
-            pts = pts[:-1]
-        chains.append((pts, closed))
-    return chains
+#: Segments that continue one another joined into polylines (only where
+#: exactly two meet and the line turns at most 30°): ``[(points, closed)]``.
+#: In Rust (ingetrazo_core sheets::svg, docs/rust-sheets.md §5).
+chain_segments = NATIVE.chain_segments
 
 
 def save_svg_layers(path: str | Path, groups, scale_n: float = 100.0,
@@ -195,114 +101,53 @@ def svg_text(groups, scale_n: float = 100.0, pens: dict | None = None,
     drawing; ``margin`` — the page's margin in mm (10 by default; 0 to
     fill the page with the window edge to edge). ``seam_mm``: the hair
     of colour round each face (a small preview wants it wider)."""
-    pens = {**DEFAULT_PENS, **(pens or {})}
-    margin = _MARGIN if margin is None else float(margin)
-    groups = [g for g in groups if len(g[1])]
+    # The page, the line layers and their chaining are Rust's
+    # (ingetrazo_core sheets::svg); the faces and the picture are laid
+    # below them here, on the page Rust works out.
     faces = list(faces or ())
-    if window is not None:
-        min_x, min_y, max_x, max_y = window
-    elif image is not None:
-        min_x, min_y, max_x, max_y = image[1]
-    else:
-        xs, ys = [], []
-        for g in groups:
-            for x0, y0, x1, y1 in g[1]:
-                xs += (x0, x1)
-                ys += (y0, y1)
-        for f in faces:
-            for r in f.rings:
-                xs += list(map(float, r[:, 0]))
-                ys += list(map(float, r[:, 1]))
-        if xs:
-            min_x, max_x, min_y, max_y = min(xs), max(xs), min(ys), max(ys)
-        else:
-            min_x = max_x = min_y = max_y = 0.0
-    bw, bh = max(max_x - min_x, 1e-9), max(max_y - min_y, 1e-9)
-    if paper is not None:
-        width, height = float(paper[0]), float(paper[1])
-        k = min((width - 2 * margin) / bw, (height - 2 * margin) / bh)
-        k = max(k, 1e-9)
-        scale_n = 1000.0 / k
-        off_x = (width - bw * k) / 2.0
-        off_y = (height - bh * k) / 2.0
-    else:
-        k = 1000.0 / max(1e-9, float(scale_n))     # metres → paper mm
-        width = (max_x - min_x) * k + 2 * margin
-        height = (max_y - min_y) * k + 2 * margin
-        off_x = off_y = margin
+    fixed = image[1] if window is None and image is not None else None
+    extra = None
+    if window is None and image is None and faces:
+        xs = np.concatenate([np.asarray(r, dtype=float)[:, 0] for f in faces for r in f.rings])
+        ys = np.concatenate([np.asarray(r, dtype=float)[:, 1] for f in faces for r in f.rings])
+        extra = (float(xs.min()), float(ys.min()), float(xs.max()), float(ys.max()))
+    picture = image is not None and image[0] is not None and not image[0].isNull()
 
-    def px(x):
-        return (x - min_x) * k + off_x
+    def under(page, taken):
+        k = page["k"]
 
-    def py(y):                                 # SVG's y grows downwards
-        return (max_y - y) * k + off_y
+        def px(x):
+            return (x - page["min_x"]) * k + page["off_x"]
 
-    out = [
-        '<?xml version="1.0" encoding="UTF-8"?>\n',
-        f'<svg xmlns="http://www.w3.org/2000/svg" '
-        f'xmlns:xlink="http://www.w3.org/1999/xlink" '
-        f'xmlns:inkscape="{_INKSCAPE}" version="1.1" '
-        f'width="{width:.3f}mm" height="{height:.3f}mm" '
-        f'viewBox="0 0 {width:.3f} {height:.3f}">\n',
-        f"<desc>{_esc(_scale_label(scale_n))}</desc>\n"]
-    taken: set = {"pagina"}
-    clip = ""
-    if window is not None:
-        # What lies past the window stays out of sight: each layer is cut
-        # to the page.
-        out.append(f'<defs><clipPath id="pagina"><rect x="0" y="0" '
-                   f'width="{width:.3f}" height="{height:.3f}"/></clipPath>'
-                   f'</defs>\n')
-        clip = ' clip-path="url(#pagina)"'
-    if image is not None and image[0] is not None and not image[0].isNull():
-        # On its own window: a sheet of another shape widens the page's
-        # window round it, the picture stays where it was taken.
-        ix0, iy0, ix1, iy1 = image[1]
-        name = "VISTA-IMAGEN"
-        out.append(f'<g id="{_xml_id(name, taken)}" '
-                   f'inkscape:groupmode="layer" '
-                   f'inkscape:label={quoteattr(name)}{clip}>\n'
-                   f'<image x="{px(ix0):.3f}" y="{py(iy1):.3f}" '
-                   f'width="{(ix1 - ix0) * k:.3f}" '
-                   f'height="{(iy1 - iy0) * k:.3f}" '
-                   f'preserveAspectRatio="none" '
-                   f'xlink:href="{_encode(image[0])}"/>\n</g>\n')
-    if faces:
-        out += _face_layers(faces, px, py, taken, bake_px_per_mm, clip,
-                            (width, height), seam_mm or _SEAM_MM)
-    n = 0
-    for g in groups:
-        name, segs = str(g[0] or "VISTA"), g[1]
-        ltype = g[2] if len(g) > 2 and g[2] else "CONTINUOUS"
-        rgb = g[3] if len(g) > 3 and line_colours else None
-        weight = g[5] if len(g) > 5 and g[5] else pens[_line_class(name)]
-        attrs = (f' fill="none" stroke="{_hex(rgb)}" '
-                 f'stroke-width="{float(weight):g}" '
-                 'stroke-linecap="round" stroke-linejoin="round"')
-        dash = _DASHES.get(str(ltype).upper())
-        if not dash and len(g) > 4 and g[4]:
-            # A document's own line type: its pattern as the DXF takes it
-            # (drawing units at 1:100, gaps negative), here in paper mm.
-            dash = " ".join(f"{abs(v) * 10:g}" for v in g[4])
-        if dash:
-            attrs += f' stroke-dasharray="{dash}"'
-        out.append(f'<g id="{_xml_id(name, taken)}" '
-                   f'inkscape:groupmode="layer" '
-                   f'inkscape:label={quoteattr(name)}{attrs}{clip}>\n')
-        for pts, closed in chain_segments(segs):
-            d = "M" + " L".join(f"{px(x):.3f},{py(y):.3f}" for x, y in pts)
-            out.append(f'<path d="{d}{" Z" if closed else ""}"/>\n')
-        n += len(segs)
-        out.append("</g>\n")
-    out.append("</svg>\n")
-    return "".join(out), n
-
-
-def _scale_label(scale_n: float) -> str:
-    """``1:100`` — rounded to what a person would write for a fitted one."""
-    n = float(scale_n)
-    n = round(n) if n >= 10 else round(n, 1)
-    return f"1:{n:g}"
+        def py(y):                             # SVG's y grows downwards
+            return (page["max_y"] - y) * k + page["off_y"]
+        out = []
+        clip = page["clip"]
+        if picture:
+            # On its own window: a sheet of another shape widens the page's
+            # window round it, the picture stays where it was taken.
+            ix0, iy0, ix1, iy1 = image[1]
+            name = "VISTA-IMAGEN"
+            out.append(f'<g id="{_xml_id(name, taken)}" '
+                       f'inkscape:groupmode="layer" '
+                       f'inkscape:label={quoteattr(name)}{clip}>\n'
+                       f'<image x="{px(ix0):.3f}" y="{py(iy1):.3f}" '
+                       f'width="{(ix1 - ix0) * k:.3f}" '
+                       f'height="{(iy1 - iy0) * k:.3f}" '
+                       f'preserveAspectRatio="none" '
+                       f'xlink:href="{_encode(image[0])}"/>\n</g>\n')
+        if faces:
+            out += _face_layers(faces, px, py, taken, bake_px_per_mm, clip,
+                                (page["width"], page["height"]),
+                                seam_mm or _SEAM_MM)
+        return "".join(out)
+    return NATIVE.svg_lines(
+        groups, float(scale_n), pens, bool(line_colours),
+        None if paper is None else (float(paper[0]), float(paper[1])),
+        None if window is None else tuple(map(float, window)),
+        None if margin is None else float(margin),
+        None if fixed is None else tuple(map(float, fixed)), extra,
+        under if (picture or faces) else None)
 
 
 #: Longest side, in pixels, a texture is read at: enough for a sheet,
@@ -549,8 +394,3 @@ def _image_uri(path, shade: float):
     """The shaded texture at ``path`` as a ``data:`` URI, or ``None``."""
     img = _shaded_texture(path, shade)
     return None if img is None else _encode(img)
-
-
-def _esc(text: str) -> str:
-    return (text.replace("&", "&amp;").replace("<", "&lt;")
-            .replace(">", "&gt;"))

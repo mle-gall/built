@@ -4,6 +4,7 @@ mod panic_log;
 mod overlay;
 mod commands;
 pub mod ui;
+mod host_context;
 mod inspector;
 mod glass;
 mod axes;
@@ -144,9 +145,6 @@ struct Renderer {
     capture_next: bool,
     captured: Option<Vec<u8>>,
     overlay: overlay::Overlay,
-    /// The Sheets workspace's page (views/wgpu_sheets.py): drawn by
-    /// ``render_page`` instead of the scene.
-    page: overlay::Overlay,
     axes: axes::Axes,
     sections: sections::Sections,
     preview: preview::Preview,
@@ -154,6 +152,7 @@ struct Renderer {
     face_marks: preview::Preview,
     sun: sun::Sun,
     references: references::References,
+    host_context: preview::Preview,
     ghost_geometry: preview::Preview,
     ghost_objects: preview::Preview,
     surface: wgpu::Surface<'static>,
@@ -527,6 +526,7 @@ impl Renderer {
         let look = style::Style::new(&device);
         let preview = preview::Preview::new(samples.clone(), &device, format, &camera, &look.buffer, 0);
         let face_marks = preview::Preview::new(samples.clone(), &device, format, &camera, &look.buffer, 1);
+        let host_context = preview::Preview::new(samples.clone(), &device, format, &camera, &look.buffer, 2);
         let ghost_geometry = preview::Preview::new(samples.clone(), &device, format, &camera, &look.buffer, 2);
         let ghost_objects = preview::Preview::new(samples.clone(), &device, format, &camera, &look.buffer, 2);
         let background = background::Background::new(&device, format, &look.buffer, 1);
@@ -565,6 +565,7 @@ impl Renderer {
             transparency,
             preview,
             face_marks,
+            host_context,
             ghost_geometry,
             ghost_objects,
             references: references::References::new(samples.clone(), &device, format),
@@ -572,7 +573,6 @@ impl Renderer {
             capture_next: false,
             captured: None,
             overlay: overlay::Overlay::new(&device, config.format),
-            page: overlay::Overlay::new(&device, config.format),
             axes: axes::Axes::new(samples.clone(), &device, format, &camera),
             sections: sections::Sections::new(samples.clone(), &device, format, &camera),
             lines: lines::Lines::new(samples.clone(), &device, format, &camera),
@@ -1901,7 +1901,7 @@ impl Renderer {
             drop(pass);
             }
             if msaa && !self.pick_pending {
-                self.aa.draw(&mut e, &color, s, self.style, self.edges, self.look.data[6][0] > 0., self.multi, self.queries.as_ref(), Some(edge_only), self.references.active() || self.sections.count > 0 || self.preview.active() || self.face_marks.active() || self.ghost_geometry.active() || self.ghost_objects.active() || self.lines.active_layer(true) || (self.look.data[9][0] > 0. && self.material_transparency), &self.axes, &self.references);
+                self.aa.draw(&mut e, &color, s, self.style, self.edges, self.look.data[6][0] > 0., self.multi, self.queries.as_ref(), Some(edge_only), self.references.active() || self.sections.count > 0 || self.preview.active() || self.face_marks.active() || self.ghost_geometry.active() || self.ghost_objects.active() || self.host_context.active() || self.lines.active_layer(true) || (self.look.data[9][0] > 0. && self.material_transparency), &self.axes, &self.references);
             }
             if !edge_only && self.sun.enabled && self.style != 1 && self.style != 4 {
                 if msaa { self.aa.resolve_depth(&self.device, &mut e, &depth, None); }
@@ -1940,7 +1940,7 @@ impl Renderer {
             self.preview.draw(&mut e, &color, &depth, None);
             self.face_marks.draw(&mut e, &color, &depth, None);
         }
-        for (enabled,ghost) in [(self.look.data[9][2]>0.,&self.ghost_geometry),(self.look.data[9][3]>0.,&self.ghost_objects)] {
+        for (enabled,ghost) in [(self.host_context.active(), &self.host_context), (self.look.data[9][2]>0.,&self.ghost_geometry),(self.look.data[9][3]>0.,&self.ghost_objects)] {
             if enabled {
                 if msaa { ghost.draw(&mut e,&self.aa.color_view(),&self.aa.depth_view(),Some(&color)); }
                 else { ghost.draw(&mut e,&color,&depth,None); }
@@ -2092,24 +2092,78 @@ impl Renderer {
             .upload(&self.device, &self.queue, width, height, bytes);
         Ok(())
     }
-    /// The Sheets page layer: the ``w`` × ``h`` rectangle at ``x``, ``y`` of
-    /// a ``width`` × ``height`` image (physical pixels, straight RGBA). The
-    /// image is (re)made at that size first; False when the rectangle does
-    /// not fit it.
-    #[allow(clippy::too_many_arguments)]
-    fn page_upload(&mut self, width: u32, height: u32, x: u32, y: u32, w: u32, h: u32,
-                   rgba: PyReadonlyArray1<'_, u8>) -> PyResult<bool> {
-        let bytes = rgba.as_slice()?;
-        if width == 0 || height == 0 {
-            return Err(PyValueError::new_err("page must have a size"));
-        }
-        self.page.ensure(&self.device, width, height);
-        Ok(self.page.upload_region(&self.queue, x, y, w, h, bytes))
+    // ---- The Sheets page (ui/page.rs, docs/rust-sheets.md) -------------------
+    /// The sheet as ``ingetrazo_core.sheet_page_json`` writes it.
+    fn page_set(&mut self, snapshot: String) {
+        if let Some(ui) = self.ui.as_mut() { ui.page.set(snapshot); }
     }
-    /// The page layer's image size, or None.
-    fn page_size(&self) -> Option<(u32, u32)> { self.page.size() }
-    /// Let the page layer go (leaving the workspace).
-    fn page_clear(&mut self) { self.page.clear(); }
+    /// Let the page go (leaving the workspace).
+    fn page_clear(&mut self) {
+        if let Some(ui) = self.ui.as_mut() { ui.page.clear(); }
+    }
+    /// A frame's line drawing: ``segs`` (N,4) paper mm in the frame,
+    /// ``kinds`` (N,) 0 edge, 1 profile, 2 cut, 3 hidden.
+    fn page_frame_lines(&mut self, key: u64, segs: numpy::PyReadonlyArray2<'_, f32>,
+                        kinds: PyReadonlyArray1<'_, u8>) -> PyResult<()> {
+        let a = segs.as_array();
+        let kinds = kinds.as_slice()?.to_vec();
+        if a.nrows() != kinds.len() || (a.nrows() > 0 && a.ncols() != 4) {
+            return Err(PyValueError::new_err("segs (N,4) and kinds (N,) must agree"));
+        }
+        let segs = (0..a.nrows()).map(|i| [a[[i, 0]], a[[i, 1]], a[[i, 2]], a[[i, 3]]]).collect();
+        if let Some(ui) = self.ui.as_mut() { ui.page.set_lines(key, segs, kinds); }
+        Ok(())
+    }
+    /// A frame's picture, straight RGBA ``width`` × ``height``.
+    fn page_frame_image(&mut self, key: u64, width: usize, height: usize,
+                        rgba: PyReadonlyArray1<'_, u8>) -> PyResult<()> {
+        let bytes = rgba.as_slice()?;
+        if let Some(ui) = self.ui.as_mut() { ui.page_image(key, width, height, bytes); }
+        Ok(())
+    }
+    fn page_frame_forget(&mut self, key: u64) {
+        if let Some(ui) = self.ui.as_mut() { ui.page.forget_content(key); }
+    }
+    fn page_has_content(&self, key: u64) -> bool {
+        self.ui.as_ref().is_some_and(|ui| ui.page.has_content(key))
+    }
+    /// A pointer event the chrome left to the page (``ui_pointer`` said
+    /// False). Returns the cursor the page wants ("", "move", "grab",
+    /// "grabbing", "crosshair", "zoom", "resize_h", "resize_v",
+    /// "resize_nwse", "resize_nesw").
+    fn page_pointer(&mut self, kind: &str, x: f32, y: f32, button: u8, modifiers: u8) -> String {
+        self.ui.as_mut().map(|ui| ui.page_pointer(kind, x, y, button, modifiers).to_string()).unwrap_or_default()
+    }
+    /// A key the chrome left to the page (arrows nudge, Escape clears).
+    fn page_key(&mut self, name: &str, modifiers: u8) -> bool {
+        self.ui.as_mut().is_some_and(|ui| ui.page_key(name, modifiers))
+    }
+    /// Scroll pans; with ``zoom`` it zooms about (x, y) instead.
+    fn page_wheel(&mut self, x: f32, y: f32, dx: f32, dy: f32, zoom: bool) {
+        if let Some(ui) = self.ui.as_mut() {
+            if zoom { ui.page.zoom_about(egui::pos2(x, y), (dy * 0.0025).exp()); } else { ui.page.pan_by(dx, dy); }
+        }
+    }
+    /// Zoom by ``factor`` about (x, y) (a pinch).
+    fn page_zoom_by(&mut self, x: f32, y: f32, factor: f32) {
+        if let Some(ui) = self.ui.as_mut() { ui.page.zoom_about(egui::pos2(x, y), factor.max(0.05)); }
+    }
+    fn page_fit(&mut self, width_only: bool) {
+        if let Some(ui) = self.ui.as_mut() { ui.page.request_fit(width_only); }
+    }
+    fn page_zoom_to(&mut self, percent: f32) {
+        if let Some(ui) = self.ui.as_mut() { ui.page.request_zoom(percent); }
+    }
+    /// The zoom in percent of true paper size.
+    fn page_zoom(&self) -> f32 { self.ui.as_ref().map_or(100.0, |ui| ui.page.zoom_percent()) }
+    /// Where the pointer is on the paper (mm), or None.
+    fn page_pointer_mm(&self) -> Option<(f64, f64)> {
+        self.ui.as_ref().and_then(|ui| ui.page.pointer_mm).map(|p| (p[0], p[1]))
+    }
+    fn page_select(&mut self, keys: Vec<u64>) {
+        if let Some(ui) = self.ui.as_mut() { ui.page.set_selection(keys); }
+    }
+    fn page_selection(&self) -> Vec<u64> { self.ui.as_ref().map(|ui| ui.page.selection.clone()).unwrap_or_default() }
     /// A frame of the Sheets workspace: the desk, the page layer, the chrome
     /// over it. No scene pass runs; the resident scene stays as it is.
     #[pyo3(signature = (present=true))]
@@ -2131,7 +2185,7 @@ impl Renderer {
         let color = target.create_view(&Default::default());
         let mut e = self.device.create_command_encoder(&Default::default());
         {
-            // The composer's desk (slate, 70 76 84) where the page has no pixels yet.
+            // The desk under the page (ui/page.rs paints the paper over it).
             let _pass = e.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("page desk"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -2147,7 +2201,6 @@ impl Renderer {
                 occlusion_query_set: None,
             });
         }
-        self.page.draw(&mut e, &color, self.config.width, self.config.height, None);
         if present && self.ui_target == self.active {
             if let Some(ui) = self.ui.as_mut() {
                 ui.paint(&self.device, &self.queue, &mut e, target, &color, [self.config.width, self.config.height], self.ui_scale);
@@ -2274,8 +2327,13 @@ impl Renderer {
     fn ui_pointer(&mut self, kind: &str, x: f32, y: f32, button: u8, modifiers: u8) -> bool {
         self.ui.as_mut().is_some_and(|ui| ui.pointer(kind, x, y, button, modifiers))
     }
-    fn ui_set_cursor_value(&mut self, caption: String, value: String, typing: bool, x: f32, y: f32) {
-        if let Some(ui) = self.ui.as_mut() { ui.set_cursor_value(caption, value, typing, x, y); }
+    /// The value field on the geometry: caption, live reading or what is
+    /// typed, its anchor (points), the tool's start on screen and the
+    /// document's revision (a commit is read from them, ui/value_field.rs).
+    #[pyo3(signature = (caption, value, typing, x, y, start=None, revision=0))]
+    fn ui_set_cursor_value(&mut self, caption: String, value: String, typing: bool, x: f32, y: f32,
+                           start: Option<(f32, f32)>, revision: u64) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_cursor_value(caption, value, typing, x, y, start, revision); }
     }
     fn ui_set_selection(&mut self, summary: String, actions: Vec<(String, String, String, bool, bool)>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_selection(summary, actions); }
@@ -2323,6 +2381,30 @@ impl Renderer {
     fn ui_show_inspector(&mut self) {
         if let Some(ui) = self.ui.as_mut() { ui.show_inspector(); }
     }
+    fn ui_set_catalog_info(&mut self, filename: String, tree: &Bound<'_,PyAny>, counts: &Bound<'_,PyAny>) -> PyResult<()> {
+        if let Some(ui)=self.ui.as_mut() { ui.set_catalog_info(filename,tree,counts)?; }
+        Ok(())
+    }
+    fn ui_set_style_catalog(&mut self, owner: usize, lines: Vec<String>) {
+        if let Some(ui)=self.ui.as_mut() { ui.style_catalog(owner,lines); }
+    }
+    #[pyo3(signature=(name, origin, scene=None, mount=None))]
+    fn ui_set_host_context(&mut self, name: String, origin: [f64; 3], scene: Option<&Bound<'_, PyAny>>, mount: Option<&Bound<'_, PyAny>>) -> PyResult<()> {
+        let (edges,tags) = match (scene,mount) {
+            (Some(scene),Some(mount)) => host_context::snapshot(scene,mount,origin)?,
+            _ => (Vec::new(),Vec::new()),
+        };
+        self.host_context.upload(&self.device,&[],&edges).map_err(PyValueError::new_err)?;
+        if let Some(ui) = self.ui.as_mut() { ui.set_host_context(name,tags); }
+        self.stable_frames = 0;
+        Ok(())
+    }
+    fn ui_set_edit_path(&mut self, path: Vec<(String, String)>) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_edit_path(path); }
+    }
+    fn ui_set_identity(&mut self, rows: Vec<(String, String, String, Option<bool>)>) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_identity(rows); }
+    }
     fn ui_set_inspector(&mut self, title: String, sections: Vec<(String, Vec<(String, String)>)>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_inspector(title, sections); }
     }
@@ -2341,6 +2423,9 @@ impl Renderer {
     fn ui_set_projects(&mut self, left: f32, docs: Vec<(String, bool, bool)>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_projects(left, docs); }
     }
+    /// The free model area in device coordinates (`Ui::free_ndc`): what
+    /// Zoom Extents, Zoom Selection and Review frame into.
+    fn ui_free_ndc(&self) -> Option<[f64; 4]> { self.ui.as_ref().and_then(|ui| ui.free_ndc()) }
     fn ui_top_empty(&self, x: f32, y: f32) -> bool { self.ui.as_ref().is_some_and(|ui| ui.top_empty(x, y)) }
     /// The project tabs (views/wgpu_tabs.py, ui/tabs.rs): (id, name, front,
     /// unsaved, link source, tip, picture key), the projects in other
@@ -2412,8 +2497,13 @@ impl Renderer {
     fn ui_set_tree_sort(&mut self, sort: usize) {
         if let Some(ui) = self.ui.as_mut() { ui.set_tree_sort(sort); }
     }
-    fn ui_set_colset(&mut self, colset: u8) {
-        if let Some(ui) = self.ui.as_mut() { ui.set_colset(colset); }
+    #[pyo3(signature=(node, placements))]
+    fn ui_set_export_focus(&mut self, node: Option<String>, placements: Vec<Vec<String>>) {
+        if let Some(ui)=self.ui.as_mut() {ui.set_export_focus(node,placements);}
+    }
+    fn ui_step_issue(&mut self, step: i32) { if let Some(ui) = self.ui.as_mut() { ui.step_issue(step); } }
+    fn ui_set_lens(&mut self, lens: u8) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_lens(lens); }
     }
     fn ui_set_dock_width(&mut self, width: f32) {
         if let Some(ui) = self.ui.as_mut() { ui.set_dock_width(width); }
@@ -2781,6 +2871,8 @@ mod units_start;
 mod preferences;
 mod about;
 mod sheet_host;
+/// The Sheets workspace's page, native (docs/rust-sheets.md).
+pub mod sheet_page;
 
 /// Start an orthographic ray on the plane through the camera, aligned with the point.
 #[pyfunction]
@@ -2815,6 +2907,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(commands::command_chrome, m)?)?;
     m.add_function(wrap_pyfunction!(commands::activate_view_command, m)?)?;
     m.add_function(wrap_pyfunction!(commands::rail_layout, m)?)?;
+    m.add_function(wrap_pyfunction!(ui::tokens::chrome_token, m)?)?;
     m.add_function(wrap_pyfunction!(commands::leave_navigation, m)?)?;
     m.add_function(wrap_pyfunction!(commands::view_shortcut, m)?)?;
     m.add("build_commit", env!("BUILT_COMMIT"))?;

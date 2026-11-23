@@ -25,9 +25,9 @@ _app = QApplication.instance() or QApplication([])
 
 CENTRE = QPointF(200, 150)
 
-# What Qt makes of the screen's emulated events: the primary pointer, id 1.
-TOUCHPAD = QPointingDevice(
-    "trackpad or magic mouse", 1, QInputDevice.DeviceType.TouchPad,
+# Raw contacts and verified emulated screen events share this explicit type.
+SCREEN = QPointingDevice(
+    "trackpad or magic mouse", 1, QInputDevice.DeviceType.TouchScreen,
     QPointingDevice.PointerType.Finger, QInputDevice.Capability.Position, 2, 3)
 # A real trackpad carries its own device id.
 REAL_TRACKPAD = QPointingDevice(
@@ -36,12 +36,6 @@ REAL_TRACKPAD = QPointingDevice(
 MOUSE = QPointingDevice(
     "mouse", 2, QInputDevice.DeviceType.Mouse,
     QPointingDevice.PointerType.Generic, QInputDevice.Capability.Position, 1, 3)
-
-
-@pytest.fixture(autouse=True)
-def _touch_emulation(monkeypatch):
-    # The screen/trackpad distinction exists on macOS 27; test it everywhere.
-    monkeypatch.setattr(trackpad_nav, "TOUCH_EMULATION", True)
 
 
 @pytest.fixture
@@ -62,7 +56,7 @@ def slide_event(dx, dy, phase=Qt.ScrollUpdate, mods=Qt.NoModifier,
     return QWheelEvent(at, at, QPoint(dx, dy), QPoint(dx * 8, dy * 8),
                        Qt.NoButton, mods, phase, inverted,
                        Qt.MouseEventSynthesizedBySystem,
-                       device if device is not None else TOUCHPAD)
+                       device if device is not None else SCREEN)
 
 
 def slide(vp, dx, dy, **kw):
@@ -85,12 +79,12 @@ def notch(vp, dy, at=CENTRE):
 
 def pinch(vp, value, at=CENTRE):
     QApplication.sendEvent(vp, QNativeGestureEvent(
-        Qt.ZoomNativeGesture, TOUCHPAD, 2, at, at, at, value, QPointF(), 0))
+        Qt.ZoomNativeGesture, SCREEN, 2, at, at, at, value, QPointF(), 0))
 
 
 def gesture(vp, kind, value=0.0):
     QApplication.sendEvent(vp, QNativeGestureEvent(
-        kind, TOUCHPAD, 2, CENTRE, CENTRE, CENTRE, value, QPointF(), 0))
+        kind, SCREEN, 2, CENTRE, CENTRE, CENTRE, value, QPointF(), 0))
 
 
 def pose(vp):
@@ -111,7 +105,7 @@ def test_slide_pixels_are_a_wheels_without_natural_scrolling():
 def test_slide_pixels_fall_back_to_the_angle_without_pixel_deltas():
     ev = QWheelEvent(CENTRE, CENTRE, QPoint(), QPoint(0, 120), Qt.NoButton,
                      Qt.NoModifier, Qt.ScrollUpdate, True,
-                     Qt.MouseEventNotSynthesized, TOUCHPAD)
+                     Qt.MouseEventNotSynthesized, SCREEN)
     assert trackpad_nav.slide_pixels(ev) == (0, 15)
 
 
@@ -140,9 +134,10 @@ def test_the_screen_and_the_trackpad_are_told_apart_by_the_device():
     assert not trackpad_nav.is_touch_screen(slide_event(0, 1, device=MOUSE))
 
 
-def test_without_touch_emulation_every_slide_is_a_trackpads(monkeypatch):
-    monkeypatch.setattr(trackpad_nav, "TOUCH_EMULATION", False)
-    assert not trackpad_nav.is_touch_screen(slide_event(0, 1))
+def test_primary_pointer_id_alone_does_not_identify_a_screen():
+    unknown = QPointingDevice("primary", 1, QInputDevice.DeviceType.TouchPad,
+                              QPointingDevice.PointerType.Finger, QInputDevice.Capability.Position, 2, 3)
+    assert not trackpad_nav.is_touch_screen(slide_event(0, 1, device=unknown))
 
 
 def test_a_pinch_of_one_notchs_scale_is_one_step():

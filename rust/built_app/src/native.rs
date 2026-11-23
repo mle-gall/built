@@ -562,6 +562,58 @@ mod tests {
 }
 
 
+#[cfg(any(target_os = "macos", test))]
+#[derive(Clone, Copy)]
+struct ScrollEvidence {
+    device_id: u64,
+    subtype: i16,
+    source_pid: i64,
+    source_state: i64,
+}
+
+#[cfg(any(target_os = "macos", test))]
+#[derive(Clone, Copy)]
+struct ScrollObservation {
+    precise: bool,
+    signature: Option<ScrollEvidence>,
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn screen_emulated_scroll(event: Option<ScrollObservation>, app_pid: u32) -> bool {
+    matches!(event, Some(ScrollObservation {
+        precise: true,
+        signature: Some(ScrollEvidence { device_id: 0, subtype: 1, source_pid, source_state: 0 }),
+    }) if source_pid == i64::from(app_pid))
+}
+
+/// Inspect only scroll-event fields. CGEvent is borrowed from the live NSEvent.
+#[cfg(target_os = "macos")]
+fn scroll_evidence(event: &objc2_app_kit::NSEvent) -> Option<ScrollEvidence> {
+    use std::ffi::c_void;
+    #[link(name = "CoreGraphics", kind = "framework")]
+    extern "C" {
+        fn CGEventGetIntegerValueField(event: *const c_void, field: u32) -> i64;
+    }
+    // CGEventField constants from CGEventTypes.h.
+    const SOURCE_UNIX_PROCESS_ID: u32 = 41;
+    const SOURCE_STATE_ID: u32 = 45;
+    let subtype = event.subtype().0;
+    // Only the probed tablet-point subtype needs a deviceID query.
+    if subtype != 1 {
+        return None;
+    }
+    let cg: *const c_void = unsafe { objc2::msg_send![event, CGEvent] };
+    if cg.is_null() {
+        return None;
+    }
+    Some(ScrollEvidence {
+        device_id: event.deviceID() as u64,
+        subtype,
+        source_pid: unsafe { CGEventGetIntegerValueField(cg, SOURCE_UNIX_PROCESS_ID) },
+        source_state: unsafe { CGEventGetIntegerValueField(cg, SOURCE_STATE_ID) },
+    })
+}
+
 /// winit folds Cocoa momentum into ordinary scroll phases. Read the active
 /// scroll event while dispatching it, without installing a global input tap.
 pub fn scroll_source() -> (bool, bool, bool) {
@@ -572,16 +624,72 @@ pub fn scroll_source() -> (bool, bool, bool) {
             if e.r#type() == NSEventType::ScrollWheel {
                 return (
                     !e.momentumPhase().is_empty(),
-                    // Never ask a scroll event for `allTouches`: AppKit raises
-                    // for non-touch events and the exception aborts the app
-                    // inside winit's scroll_wheel callback (crash 2026-11-23).
-                    // Qt maps Cocoa device 0 to primary pointer 1. On the
-                    // macOS 27 touchscreen the emulated slide uses this ID.
-                    (objc2::available!(macos = 27.0) && e.hasPreciseScrollingDeltas() && e.deviceID() <= 1),
+                    objc2::available!(macos = 27.0)
+                        && screen_emulated_scroll(
+                            Some(ScrollObservation {
+                                precise: e.hasPreciseScrollingDeltas(),
+                                signature: scroll_evidence(&e),
+                            }),
+                            std::process::id(),
+                        ),
                     e.isDirectionInvertedFromDevice(),
                 );
             }
         }
     }
     (false, false, true)
+}
+
+#[cfg(test)]
+mod scroll_tests {
+    use super::*;
+
+    #[test]
+    fn only_the_recorded_emulation_signature_selects_touchscreen_navigation() {
+        let pid = std::process::id();
+        let screen = ScrollEvidence {
+            device_id: 0,
+            subtype: 1,
+            source_pid: pid.into(),
+            source_state: 0,
+        };
+        let precise_scroll = |signature| {
+            Some(ScrollObservation {
+                precise: true,
+                signature,
+            })
+        };
+        assert!(screen_emulated_scroll(precise_scroll(Some(screen)), pid));
+        // Keep every other field screen-like to isolate the measured trackpad ID.
+        let trackpad = ScrollEvidence {
+            device_id: 504403158265495724,
+            ..screen
+        };
+        assert!(!screen_emulated_scroll(precise_scroll(Some(trackpad)), pid));
+        // Magic Mouse: the only observed markers were phased, precise deltas.
+        // Neither supplies the emulation signature.
+        assert!(!screen_emulated_scroll(precise_scroll(None), pid));
+        // No NSApp.currentEvent at dispatch.
+        assert!(!screen_emulated_scroll(None, pid));
+        for other in [
+            ScrollEvidence {
+                device_id: 1,
+                ..screen
+            },
+            ScrollEvidence {
+                subtype: 0,
+                ..screen
+            },
+            ScrollEvidence {
+                source_pid: 0,
+                ..screen
+            },
+            ScrollEvidence {
+                source_state: 1,
+                ..screen
+            },
+        ] {
+            assert!(!screen_emulated_scroll(precise_scroll(Some(other)), pid));
+        }
+    }
 }

@@ -233,6 +233,20 @@ def test_open_source_makes_a_link_tab_right_of_its_host(host, tmp_path):
     assert [t[4] for t in tabs] == [False, False, True]
     assert "linked in host.built · 2 placements" in tabs[2][5]
     assert host.state()["link_tabs"] == ["mid.built"]
+    from core.layers import Layer
+    from views import wgpu_ui
+    parent, mount = wgpu_tabs.source_context(host.window)
+    assert parent.path == paths["host"] and mount in parent.viewport.scene.groups
+    guide = Layer("Survey guides")
+    parent.viewport.scene.layers.append(guide)
+    source = host.viewport
+    history_before = len(source.history.undo_stack)
+    placement = source.scene.groups[0]
+    # Host changes stay on that document's undo stack and keep the source tab active.
+    wgpu_ui._tree_action(host.window, host.view, wgpu_ui.SEP.join(("hosteye", guide.key, "0")))
+    assert not guide.visible and parent.viewport.history.undo()
+    assert guide.visible and host.viewport is source and source.scene.groups[0] is placement
+    assert len(source.history.undo_stack) == history_before
 
 
 # ---- the right-click menu ----------------------------------------------------------------
@@ -342,7 +356,7 @@ def test_the_menus_carry_the_expected_verbs(host, kinds):
     assert "Explode | Make component…" in rows("group") and "Split into pieces" in rows("group")
     assert "Select instances | Make unique" in rows("component")
     assert "Merge groups | Explode" in rows("groups")
-    assert rows("link")[:2] == ["Select contents", "Hide"] and "Open source" in rows("link")
+    assert rows("link")[:2] == ["Select contents", "Hide"] and "Edit source" in rows("link")
     assert rows("linked_part")[0] == "Select its linked file"
     assert rows("annotation") == ["Edit text…", "Zoom to | Reveal selection"]
     assert rows("guide") == ["Delete guide", "Delete all guides", "Zoom to | Reveal selection"]

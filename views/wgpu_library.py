@@ -1191,11 +1191,15 @@ def open_library(win, type_id=None, search=None, scope=None) -> bool:
 
 
 def set_mode(view, win, mode) -> None:
-    """The dock's mode: ``"problems"`` or ``""`` (the tree). The Library is
-    a sheet now: ``"library"`` opens it and leaves the dock as it is."""
+    """Route existing Project commands to their lens or Library sheet."""
     if mode == "library":
         open_library(win)
         return
+    if mode in ("problems", "deliveries"):
+        from views.wgpu_ui import apply_dock_width
+        view._ui_lens = 2
+        apply_dock_width(view)
+        mode = ""
     view._ui_mode = mode
     view._ui_mat_focus = None
     view._ui_rules_cache = None

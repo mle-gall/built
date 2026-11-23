@@ -12,18 +12,19 @@ fn temporary_directory() -> PathBuf {
     String::from_utf8(result.stdout).unwrap().trim().into()
 }
 
-fn run(trackpad: &str, touch: &str, inertia: bool, sensitivity: u16) -> Vec<Value> {
+fn run(profile: Option<&str>, gestures: &str) -> Vec<Value> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .canonicalize()
         .unwrap();
     let home = temporary_directory();
     let settings = temporary_directory();
-    fs::create_dir(settings.join("IngeTrazo")).unwrap();
-    fs::write(settings.join("IngeTrazo/IngeTrazo.ini"), format!(
-        "[nav]\ntrackpad_slide={trackpad}\ntouch_slide={touch}\ntrackpad_inertia={}\npinch_sensitivity={sensitivity}\n",u8::from(inertia))).unwrap();
+    if let Some(profile) = profile {
+        fs::create_dir(settings.join("IngeTrazo")).unwrap();
+        fs::write(settings.join("IngeTrazo/IngeTrazo.ini"), profile).unwrap();
+    }
     let script = home.join("gestures.txt");
-    fs::write(&script, "wait 300\nstate\npan2 500 350 0 0 start\npan2 500 350 18 0\nstate\npan2 500 350 10 0 momentum\nstate\ntouch-slide 500 350 20 8\nstate\nrotate 500 350 9\nstate\npinch 500 350 0.16\nstate\nsmart-zoom 500 350\nstate\nsmart-zoom 500 350\nstate\nmenu select_all\nstate\ntouch-slide 280 190 16 0\nstate\nquit\n").unwrap();
+    fs::write(&script, gestures).unwrap();
     let result = Command::new(env!("CARGO_BIN_EXE_built"))
         .env("HOME", &home)
         .env("CFFIXED_USER_HOME", &home)
@@ -47,8 +48,12 @@ fn run(trackpad: &str, touch: &str, inertia: bool, sensitivity: u16) -> Vec<Valu
         .filter_map(|line| line.strip_prefix("[built] state "))
         .map(|json| serde_json::from_str(json).unwrap())
         .collect();
-    assert!(states.len() >= 10);
-    assert!(states.iter().all(|s| s["errors"] == 0), "{states:?}");
+    assert!(states.len() >= gestures.lines().filter(|line| *line == "state").count());
+    assert!(
+        states.iter().all(|s| s["errors"] == 0),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
     states
 }
 fn displacement(a: &Value, b: &Value, key: &str) -> f64 {
@@ -60,13 +65,16 @@ fn displacement(a: &Value, b: &Value, key: &str) -> f64 {
 #[test]
 #[ignore = "opens isolated native windows"]
 fn settings_change_camera_motion() {
+    let gestures = "wait 300\nstate\npan2 500 350 0 0 start\npan2 500 350 18 0\nstate\npan2 500 350 10 0 momentum\nstate\ntouch-slide 500 350 20 8\nstate\nrotate 500 350 9\nstate\npinch 500 350 0.16\nstate\nsmart-zoom 500 350\nstate\nsmart-zoom 500 350\nstate\nmenu select_all\nstate\ntouch-slide 280 190 16 0\nstate\nquit\n";
     let mut zooms = Vec::new();
     for (track, touch, inertia, sensitivity) in [
         ("pan", "orbit", false, 50),
         ("orbit", "pan", true, 50),
         ("pan", "select", false, 200),
     ] {
-        let s = run(track, touch, inertia, sensitivity);
+        let s = run(Some(&format!(
+            "[nav]\ntrackpad_slide={track}\ntouch_slide={touch}\ntrackpad_inertia={}\npinch_sensitivity={sensitivity}\n", u8::from(inertia)
+        )), gestures);
         assert_eq!(
             displacement(&s[0], &s[1], "camera_forward") > 1e-6,
             track == "orbit"
@@ -93,6 +101,20 @@ fn settings_change_camera_motion() {
         zooms.push(zoom);
     }
     assert!(zooms[2] > 2. * zooms[0]);
+}
+
+#[test]
+#[ignore = "opens isolated native windows"]
+fn trackpad_zooms_and_touchscreen_orbits_with_default_or_saved_zoom() {
+    for profile in [None, Some("[nav]\ntrackpad_slide=zoom\n")] {
+        let s = run(profile, "wait 300\nstate\npan2 500 350 0 0 start\npan2 500 350 0 -12\nstate\ntouch-slide 500 350 20 8\nstate\nquit\n");
+        let before = s[0]["camera_distance"].as_f64().unwrap();
+        let after = s[1]["camera_distance"].as_f64().unwrap();
+        assert!((after - before).abs() > 1e-6);
+        assert!(displacement(&s[0], &s[1], "camera_forward") < 1e-6);
+        assert_eq!(s[1]["camera_distance"], s[2]["camera_distance"]);
+        assert!(displacement(&s[1], &s[2], "camera_forward") > 1e-6);
+    }
 }
 
 #[test]

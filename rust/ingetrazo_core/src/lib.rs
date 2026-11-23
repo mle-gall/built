@@ -36,6 +36,10 @@ mod file_groups;
 mod group_geometry;
 mod structure;
 mod project_tree;
+mod selection_identity;
+mod sidebar;
+mod filing_rows;
+mod readiness;
 mod project_sections;
 mod project_sheets;
 mod link_subset;
@@ -79,6 +83,7 @@ mod push_guard;
 mod object_weld;
 mod object_merge;
 mod panic_log;
+mod sheets;
 
 #[pymodule]
 fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -141,6 +146,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pack_materials::pack_materials, m)?)?;
     m.add_function(wrap_pyfunction!(pack::pack_weld, m)?)?;
     m.add_class::<HlrOccluders>()?;
+    sheets::py::register(m)?;
     m.add_function(wrap_pyfunction!(touching_boxes, m)?)?;
     m.add_class::<ParityTris>()?;
     m.add_function(wrap_pyfunction!(orient::orient_decision, m)?)?;
@@ -254,6 +260,12 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<link_subset::LinkSubset>()?;
     m.add_function(wrap_pyfunction!(link_subset::link_subset_rows, m)?)?;
     m.add_function(wrap_pyfunction!(link_subset::link_selection_sources, m)?)?;
+    m.add_function(wrap_pyfunction!(readiness::export_readiness, m)?)?;
+    m.add_function(wrap_pyfunction!(sidebar::project_sidebar, m)?)?;
+    m.add_function(wrap_pyfunction!(sidebar::promote_tag, m)?)?;
+    m.add_function(wrap_pyfunction!(filing_rows::filing_rows, m)?)?;
+    m.add_function(wrap_pyfunction!(filing_rows::mark_filing_selection, m)?)?;
+    m.add_function(wrap_pyfunction!(selection_identity::selection_identity, m)?)?;
     m.add_function(wrap_pyfunction!(project_tree::project_name_matches, m)?)?;
     m.add_function(wrap_pyfunction!(project_tree::project_item_matches, m)?)?;
     m.add_function(wrap_pyfunction!(visibility_sets::visibility_set_rows, m)?)?;

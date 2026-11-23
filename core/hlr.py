@@ -29,12 +29,9 @@ import math
 
 import numpy as np
 
+import ingetrazo_core as NATIVE
+
 from core import progress as _progress
-
-#: Merge tolerance for the union of occluded intervals, in edge-parameter
-#: units — gaps smaller than this are drafting dust, not visibility.
-_T_EPS = 1e-6
-
 
 # ── Camera basis ────────────────────────────────────────────────────────────
 
@@ -440,92 +437,6 @@ def closing_tags(cut_edges, cut_tags) -> list:
     return tags
 
 
-# ── The exact visibility kernel ─────────────────────────────────────────────
-
-def _interval_from_linear(c0: float, c1: float):
-    """Solve c0 + c1·t ≥ 0 over [0,1] → (lo, hi) or None."""
-    if abs(c1) < 1e-15:
-        return (0.0, 1.0) if c0 >= 0.0 else None
-    t = -c0 / c1
-    return (t, 1.0) if c1 > 0.0 else (0.0, t)
-
-
-def visible_spans(a2, b2, az, bz, tv2, tvz, eps: float):
-    """Visible t-intervals of ONE edge against candidate triangles.
-
-    ``a2``/``b2``: edge endpoints in 2D cam coords; ``az``/``bz`` depths;
-    ``tv2`` (K,3,2) candidate triangle 2D verts; ``tvz`` (K,3) depths."""
-    d2 = b2 - a2
-    occluded: list = []
-    for k in range(len(tv2)):
-        v = tv2[k]
-        area2 = ((v[1, 0] - v[0, 0]) * (v[2, 1] - v[0, 1])
-                 - (v[1, 1] - v[0, 1]) * (v[2, 0] - v[0, 0]))
-        if abs(area2) < 1e-14:
-            continue                    # edge-on: its own edges draw it
-        z = tvz[k]
-        if area2 < 0.0:                 # enforce CCW
-            v = v[::-1]
-            z = z[::-1]
-        lo, hi = 0.0, 1.0
-        dead = False
-        # three half-planes of the projected triangle
-        for i in range(3):
-            ex, ey = v[(i + 1) % 3] - v[i]
-            # inside: cross(edge_i, p - v_i) >= 0
-            c0 = ex * (a2[1] - v[i, 1]) - ey * (a2[0] - v[i, 0])
-            c1 = ex * d2[1] - ey * d2[0]
-            iv = _interval_from_linear(c0, c1)
-            if iv is None:
-                dead = True
-                break
-            lo, hi = max(lo, iv[0]), min(hi, iv[1])
-            if lo >= hi:
-                dead = True
-                break
-        if dead:
-            continue
-        # depth: triangle plane z(x, y) = alpha·x + beta·y + gamma
-        m = np.array([[v[0, 0], v[0, 1], 1.0],
-                      [v[1, 0], v[1, 1], 1.0],
-                      [v[2, 0], v[2, 1], 1.0]])
-        try:
-            abg = np.linalg.solve(m, z)
-        except np.linalg.LinAlgError:
-            continue
-        # occluded where edge depth > tri depth + eps (farther than the tri)
-        # e(t) = (az + t(bz-az)) - (alpha·x(t) + beta·y(t) + gamma) - eps > 0
-        c0 = (az - (abg[0] * a2[0] + abg[1] * a2[1] + abg[2]) - eps)
-        c1 = ((bz - az) - (abg[0] * d2[0] + abg[1] * d2[1]))
-        iv = _interval_from_linear(c0, c1)
-        if iv is None:
-            continue
-        lo, hi = max(lo, iv[0]), min(hi, iv[1])
-        if lo < hi:
-            occluded.append((lo, hi))
-
-    if not occluded:
-        return [(0.0, 1.0)]
-    occluded.sort()
-    merged = [list(occluded[0])]
-    for lo, hi in occluded[1:]:
-        if lo <= merged[-1][1] + _T_EPS:
-            merged[-1][1] = max(merged[-1][1], hi)
-        else:
-            merged.append([lo, hi])
-    visible: list = []
-    cursor = 0.0
-    for lo, hi in merged:
-        if lo > cursor + _T_EPS:
-            visible.append((cursor, min(lo, 1.0)))
-        cursor = max(cursor, hi)
-        if cursor >= 1.0:
-            break
-    if cursor < 1.0 - _T_EPS:
-        visible.append((cursor, 1.0))
-    return visible
-
-
 # ── The section cap: the poché covers ───────────────────────────────────────
 #
 # A section cut leaves the solid OPEN: the clipper throws the hidden half
@@ -578,80 +489,6 @@ def cap_ring_edges(loops):
     Q = np.concatenate([np.roll(np.asarray(r, dtype=np.float64)[:, :2], -1,
                                 axis=0) for r in loops])
     return P, Q
-
-
-def _inside_cap(px: float, py: float, P, Q) -> bool:
-    """Even-odd point-in-region over the stacked ring edges (ray to +x)."""
-    y0 = P[:, 1]
-    y1 = Q[:, 1]
-    hit = (y0 > py) != (y1 > py)
-    if not hit.any():
-        return False
-    ya, yb = y0[hit], y1[hit]
-    xa, xb = P[hit, 0], Q[hit, 0]
-    xi = xa + (xb - xa) * (py - ya) / (yb - ya)
-    return bool(int((xi > px).sum()) & 1)
-
-
-def cap_hidden_spans(a2, b2, az, bz, P, Q, abg, eps: float):
-    """t-intervals of ONE edge that the section cap hides: behind the cut
-    plane AND inside the filled region. Sorted and disjoint."""
-    d2 = b2 - a2
-    behind = _interval_from_linear(
-        float(az - (abg[0] * a2[0] + abg[1] * a2[1] + abg[2]) - eps),
-        float((bz - az) - (abg[0] * d2[0] + abg[1] * d2[1])))
-    if behind is None:
-        return []
-    lo, hi = max(0.0, behind[0]), min(1.0, behind[1])
-    if hi - lo <= _T_EPS:
-        return []
-    # Where the edge crosses the outline, the parity — and so the answer —
-    # flips: cut it there and ask each piece once, at its midpoint. A
-    # crossing counted twice only splits a piece in two that agree.
-    e = Q - P
-    w = P - a2
-    denom = d2[0] * e[:, 1] - d2[1] * e[:, 0]
-    ok = np.abs(denom) > 1e-15
-    cuts = np.empty(0, dtype=np.float64)
-    if ok.any():
-        dn = denom[ok]
-        t = (w[ok, 0] * e[ok, 1] - w[ok, 1] * e[ok, 0]) / dn
-        s = (w[ok, 0] * d2[1] - w[ok, 1] * d2[0]) / dn
-        m = (s >= 0.0) & (s <= 1.0) & (t > lo) & (t < hi)
-        cuts = np.sort(t[m])
-    bounds = np.concatenate(([lo], cuts, [hi]))
-    out: list = []
-    for i in range(len(bounds) - 1):
-        t0, t1 = float(bounds[i]), float(bounds[i + 1])
-        if t1 - t0 <= _T_EPS:
-            continue
-        tm = (t0 + t1) * 0.5
-        if _inside_cap(a2[0] + tm * d2[0], a2[1] + tm * d2[1], P, Q):
-            if out and t0 - out[-1][1] <= _T_EPS:
-                out[-1] = (out[-1][0], t1)
-            else:
-                out.append((t0, t1))
-    return out
-
-
-def subtract_spans(spans, hidden):
-    """``spans`` minus ``hidden`` (both sorted, disjoint, within [0,1])."""
-    if not hidden:
-        return spans
-    out: list = []
-    for lo, hi in spans:
-        cur = lo
-        for c0, c1 in hidden:
-            if c1 <= cur or c0 >= hi:
-                continue
-            if c0 - cur > _T_EPS:
-                out.append((cur, min(c0, hi)))
-            cur = max(cur, c1)
-            if cur >= hi:
-                break
-        if hi - cur > _T_EPS:
-            out.append((cur, hi))
-    return out
 
 
 def _geometry_as_lists(tris, hard, soft, soft_n):
@@ -711,211 +548,6 @@ class HlrDrawing:
 
     def __len__(self) -> int:
         return len(self.segs)
-
-
-def _surface_at(p, depth, tv2, tvz, tol) -> bool:
-    """Does any of the triangles (K,3,2)/(K,3) cover the camera-plane point
-    ``p`` with a surface no farther than ``depth + tol``? The adjacency test
-    behind Profiles: a visible edge with a covered point on each
-    side runs between two surfaces; an uncovered side is the background (or
-    a surface well behind) — the edge outlines the shape."""
-    if not len(tv2):
-        return False
-    a = tv2[:, 0]
-    v0 = tv2[:, 1] - a
-    v1 = tv2[:, 2] - a
-    v2 = p - a
-    den = v0[:, 0] * v1[:, 1] - v1[:, 0] * v0[:, 1]
-    ok = np.abs(den) > 1e-18
-    den = np.where(ok, den, 1.0)
-    l1 = (v2[:, 0] * v1[:, 1] - v1[:, 0] * v2[:, 1]) / den
-    l2 = (v0[:, 0] * v2[:, 1] - v2[:, 0] * v0[:, 1]) / den
-    l0 = 1.0 - l1 - l2
-    inside = ok & (l0 >= -1e-9) & (l1 >= -1e-9) & (l2 >= -1e-9)
-    if not inside.any():
-        return False
-    z = l0 * tvz[:, 0] + l1 * tvz[:, 1] + l2 * tvz[:, 2]
-    return bool(np.any(inside & (z <= depth + tol)))
-
-
-def _drop_hidden_under_visible(segs, world, kinds, tol: float, tags=None):
-    """A hidden line that falls on a visible one is not drawn — the
-    visible line wins (the back edges of a wall seen from the front lie
-    exactly under its front outline). Segments are grouped by their line
-    (direction and offset, rounded), so this stays linear in the drawing
-    and each hidden piece is only compared with the visible pieces on its
-    own line."""
-    def done(*arrays):
-        return arrays if tags is not None else arrays[:3]
-
-    hid = np.nonzero(kinds == KIND_HIDDEN)[0]
-    if not len(hid):
-        return done(segs, world, kinds, tags)
-    atol = 1e-6                                   # radians
-    inv_d = 1.0 / max(tol, 1e-12)
-
-    def key_and_span(row):
-        x0, y0, x1, y1 = row
-        dx, dy = x1 - x0, y1 - y0
-        ln = math.hypot(dx, dy)
-        if ln < 1e-15:
-            return None
-        ux, uy = dx / ln, dy / ln
-        if ux < -1e-12 or (abs(ux) <= 1e-12 and uy < 0):
-            ux, uy = -ux, -uy                     # one direction per line
-        ang = math.atan2(uy, ux)
-        off = ux * y0 - uy * x0                   # signed distance of line
-        t0, t1 = ux * x0 + uy * y0, ux * x1 + uy * y1
-        return ((round(ang / atol), round(off * inv_d)),
-                (min(t0, t1), max(t0, t1)))
-
-    lines: dict = {}
-    for i in np.nonzero(kinds != KIND_HIDDEN)[0]:
-        ks = key_and_span(segs[i])
-        if ks is not None:
-            lines.setdefault(ks[0], []).append(ks[1])
-    if not lines:
-        return done(segs, world, kinds, tags)
-    keep_s, keep_w, keep_k, keep_t = [], [], [], []
-    for i in range(len(segs)):
-        tag = tags[i] if tags is not None else None
-        if kinds[i] != KIND_HIDDEN:
-            keep_s.append(segs[i]); keep_w.append(world[i])
-            keep_k.append(kinds[i]); keep_t.append(tag)
-            continue
-        ks = key_and_span(segs[i])
-        if ks is None:
-            continue
-        (ka, ko), (lo, hi) = ks
-        # Hidden pieces already kept cover the line too: a box's front and
-        # back edges fall on the same line on paper, once is enough.
-        lines_here = lines
-        cover = []
-        for da in (-1, 0, 1):
-            for do in (-1, 0, 1):
-                cover.extend(lines.get((ka + da, ko + do), ()))
-        if not cover:
-            keep_s.append(segs[i]); keep_w.append(world[i])
-            keep_k.append(kinds[i]); keep_t.append(tag)
-            lines_here.setdefault((ka, ko), []).append((lo, hi))
-            continue
-        span = hi - lo
-        if span < 1e-15:
-            continue
-        cover = sorted(((max(0.0, (c0 - lo) / span),
-                         min(1.0, (c1 - lo) / span))
-                        for c0, c1 in cover if c1 > lo and c0 < hi))
-        merged: list = []
-        for c0, c1 in cover:
-            if merged and c0 <= merged[-1][1]:
-                merged[-1] = (merged[-1][0], max(merged[-1][1], c1))
-            else:
-                merged.append((c0, c1))
-        # The segment may run either way along its line.
-        x0, y0, x1, y1 = segs[i]
-        ux = (x1 - x0) / (math.hypot(x1 - x0, y1 - y0))
-        uy = (y1 - y0) / (math.hypot(x1 - x0, y1 - y0))
-        forward = ux > 1e-12 or (abs(ux) <= 1e-12 and uy > 0)
-        w0, w1 = world[i, 0, :], world[i, 1, :]
-        for t0, t1 in subtract_spans([(0.0, 1.0)], merged):
-            a, b = (t0, t1) if forward else (1.0 - t1, 1.0 - t0)
-            keep_s.append((x0 + a * (x1 - x0), y0 + a * (y1 - y0),
-                           x0 + b * (x1 - x0), y0 + b * (y1 - y0)))
-            keep_w.append((w0 + a * (w1 - w0), w0 + b * (w1 - w0)))
-            keep_k.append(KIND_HIDDEN); keep_t.append(tag)
-            lines_here.setdefault((ka, ko), []).append(
-                (lo + t0 * span, lo + t1 * span))
-    return done(np.asarray(keep_s, dtype=float).reshape(-1, 4),
-                np.asarray(keep_w, dtype=float).reshape(-1, 2, 3),
-                np.asarray(keep_k, dtype=np.int8),
-                np.asarray(keep_t, dtype=object))
-
-
-def _merge_collinear(segs, world, kinds, tol: float, tags=None):
-    """Join runs of segments of one class that meet end to end and run
-    collinear in 3D — the chords of a section through a triangulated face
-    meet at the triangle's diagonal, an edge comes back from the
-    visibility pass in pieces — into single segments. Cleaner ink (no
-    round-cap seams), fewer DXF lines, honest anchor points."""
-    n = len(segs)
-    if n < 2:
-        return (segs, world, kinds) + ((tags,) if tags is not None else ())
-    inv = 1.0 / tol
-    cells: dict = {}
-    for i in range(n):
-        _progress.tick()
-        for end in (0, 1):
-            x, y = segs[i, 2 * end], segs[i, 2 * end + 1]
-            cells.setdefault((int(math.floor(x * inv)),
-                              int(math.floor(y * inv))), []).append((i, end))
-
-    def at(x, y):
-        cx, cy = int(math.floor(x * inv)), int(math.floor(y * inv))
-        for dx in (-1, 0, 1):
-            for dy in (-1, 0, 1):
-                for i, end in cells.get((cx + dx, cy + dy), ()):
-                    yield i, end
-
-    used = np.zeros(n, dtype=bool)
-    out_s, out_w, out_k, out_t = [], [], [], []
-
-    def follow(i, end, wdir):
-        """From segment i's endpoint ``end`` walk over collinear
-        neighbours; returns the far endpoint reached (2D, world)."""
-        p2 = segs[i, 2 * end:2 * end + 2]
-        pw = world[i, end]
-        while True:
-            nxt = None
-            for j, jend in at(p2[0], p2[1]):
-                if j == i or used[j] or kinds[j] != kinds[i]:
-                    continue
-                if tags is not None and tags[j] != tags[i]:
-                    continue            # one layer's line never joins another's
-                q2 = segs[j, 2 * jend:2 * jend + 2]
-                if abs(q2[0] - p2[0]) > tol or abs(q2[1] - p2[1]) > tol:
-                    continue
-                if np.max(np.abs(world[j, jend] - pw)) > tol:
-                    continue
-                other = world[j, 1 - jend] - world[j, jend]
-                ln = float(np.linalg.norm(other))
-                if ln < 1e-15:
-                    continue
-                cr = np.cross(wdir, other / ln)
-                if float(np.dot(cr, cr)) > 1e-14 or float(np.dot(wdir, other)) <= 0:
-                    continue
-                nxt = (j, jend)
-                break
-            if nxt is None:
-                return p2, pw
-            j, jend = nxt
-            used[j] = True
-            p2 = segs[j, 2 * (1 - jend):2 * (1 - jend) + 2]
-            pw = world[j, 1 - jend]
-
-    for i in range(n):
-        _progress.tick()
-        if used[i]:
-            continue
-        used[i] = True
-        d = world[i, 1] - world[i, 0]
-        ln = float(np.linalg.norm(d))
-        tag = tags[i] if tags is not None else None
-        if ln < 1e-15:
-            out_s.append(segs[i]); out_w.append(world[i]); out_k.append(kinds[i])
-            out_t.append(tag)
-            continue
-        wdir = d / ln
-        b2, bw = follow(i, 1, wdir)
-        a2, aw = follow(i, 0, -wdir)
-        out_s.append((a2[0], a2[1], b2[0], b2[1]))
-        out_w.append((aw, bw))
-        out_k.append(kinds[i])
-        out_t.append(tag)
-    out = (np.asarray(out_s, dtype=np.float64).reshape(-1, 4),
-           np.asarray(out_w, dtype=np.float64).reshape(-1, 2, 3),
-           np.asarray(out_k, dtype=np.int8))
-    return out + ((np.asarray(out_t, dtype=object),) if tags is not None
-                  else ())
 
 
 def hlr_drawing(scene, camera, geometry=None, profiles: bool = True,
@@ -1051,39 +683,13 @@ def hlr_drawing(scene, camera, geometry=None, profiles: bool = True,
     E = np.concatenate(parts) if len(parts) > 1 else parts[0]   # (E,2,3)
     A = _to_cam(E[:, 0, :], eye, right, up, fwd)
     B = _to_cam(E[:, 1, :], eye, right, up, fwd)
-    if len(tris):
-        T = np.asarray(tris, dtype=np.float64)          # (T,3,3)
-        TC = _to_cam(T.reshape(-1, 3), eye, right, up, fwd).reshape(-1, 3, 3)
-        tv2 = TC[:, :, :2]
-        tvz = TC[:, :, 2]
-        # depth-based epsilon: relative to the scene's depth span
-        span = float(tvz.max() - tvz.min()) or 1.0
-        eps = max(span * 1e-4, 1e-9)
-        tmin = tv2.min(axis=1)                          # (T,2)
-        tmax = tv2.max(axis=1)
-        tzmin = tvz.min(axis=1)
-        # the sideways probe of the profile test: a hair, in drawing units
-        ext = float((tv2.reshape(-1, 2).max(axis=0)
-                     - tv2.reshape(-1, 2).min(axis=0)).max()) or 1.0
-        delta = max(ext * 1e-4, 1e-9)
-        # a surface counts as adjacent up to slope 10 (≈ 84°) — steeper
-        # faces are silhouettes to the eye anyway
-        ptol = eps + delta * 10.0
-    else:
-        tv2 = tvz = None
-        eps = 0.0
-        delta = ptol = 0.0
-
-    ab = np.concatenate([A[:, :2], B[:, :2]])
-    ext_e = float((ab.max(axis=0) - ab.min(axis=0)).max()) or 1.0
-    zero_len = ext_e * 1e-9             # a vertical seen end-on: a point
+    T = np.asarray(tris, dtype=np.float64).reshape(-1, 3, 3)
+    TC = _to_cam(T.reshape(-1, 3), eye, right, up, fwd).reshape(-1, 3, 3)
     # The section cap: the rings the composer fills also COVER (see above).
     loops: list = []
     loop_tags: list | None = [] if htags is not None else None
     loop_depths: list = []
     cap_P = cap_Q = cap_abg = None
-    cap_eps = 0.0
-    cap_box = None
     if len(cut_edges):
         if loop_tags is None:
             rings = [(ring, None) for ring in section_loops(cut_edges)]
@@ -1121,140 +727,26 @@ def hlr_drawing(scene, camera, geometry=None, profiles: bool = True,
             cap_abg = cap_depth_affine(sp, eye, right, up, fwd)
         if cap_abg is not None:
             cap_P, cap_Q = cap_ring_edges(loops)
-            zs = np.concatenate([A[:, 2], B[:, 2]])
-            cap_eps = max(float(zs.max() - zs.min()) * 1e-4, eps, 1e-9)
-            cap_box = (cap_P.min(axis=0), cap_P.max(axis=0))
-    out: list = []
-    out_w: list = []
-    out_k: list = []
-    # The native kernels (core._native) answer the two costly questions —
-    # every edge's visible spans, and the Profiles probes — for all rows at
-    # once, with the same arithmetic; the rest of the pass stays here.
-    from core._native import native
-    occ = n_off = n_spans = None
-    probes: list = []                   # (row in out, mid, nrm, zm)
-    if native is not None and tv2 is not None:
-        occ = native.HlrOccluders(np.ascontiguousarray(TC))
-        n_off, n_spans = occ.visible_spans(
-            np.ascontiguousarray(A), np.ascontiguousarray(B), float(eps))
-    out_t: list = []
+    # Spans, the hidden remainder, the cap, Profiles, the collinear merge
+    # and the hidden-under-visible drop: one pass in Rust
+    # (ingetrazo_core sheets::drawing, docs/rust-sheets.md §2).
     row_tags = (list(htags) + list(cut_tags)
                 if htags is not None else None)
-    for i in range(len(A)):
-        a2, b2 = A[i, :2], B[i, :2]
-        az, bz = A[i, 2], B[i, 2]
-        is_cut = i >= n_hard + n_sil
-        base_kind = (KIND_CUT if is_cut
-                     else KIND_PROFILE if i >= n_hard else KIND_EDGE)
-        if occ is not None:
-            spans = [(float(s0), float(s1))
-                     for s0, s1 in n_spans[n_off[i]:n_off[i + 1]]]
-            idx = None
-        elif tv2 is None:
-            spans = [(0.0, 1.0)]
-            idx = None
-        else:
-            lo = np.minimum(a2, b2) - 1e-9
-            hi = np.maximum(a2, b2) + 1e-9
-            cand = ~((tmax[:, 0] < lo[0]) | (tmin[:, 0] > hi[0])
-                     | (tmax[:, 1] < lo[1]) | (tmin[:, 1] > hi[1]))
-            # a triangle entirely behind both endpoints' nearest depth can
-            # never occlude — quick reject
-            cand &= tzmin < max(az, bz)
-            idx = np.nonzero(cand)[0]
-            if len(idx) == 0:
-                spans = [(0.0, 1.0)]
-            else:
-                spans = visible_spans(a2, b2, az, bz,
-                                      tv2[idx], tvz[idx], eps)
-        # The hidden part: the rest of the edge, before the section cap
-        # takes what lies inside the material (that is not drawn at all).
-        hid = (subtract_spans([(0.0, 1.0)], spans)
-               if hidden and i < n_hard else [])
-        if cap_abg is not None and (spans or hid):
-            elo = np.minimum(a2, b2)
-            ehi = np.maximum(a2, b2)
-            if not (ehi[0] < cap_box[0][0] or elo[0] > cap_box[1][0]
-                    or ehi[1] < cap_box[0][1] or elo[1] > cap_box[1][1]):
-                inside = cap_hidden_spans(a2, b2, az, bz, cap_P, cap_Q,
-                                          cap_abg, cap_eps)
-                spans = subtract_spans(spans, inside)
-                hid = subtract_spans(hid, inside)
-        for t0, t1 in hid:
-            if (t1 - t0) < 1e-9:
-                continue
-            p = a2 + t0 * (b2 - a2)
-            q = a2 + t1 * (b2 - a2)
-            if math.hypot(q[0] - p[0], q[1] - p[1]) < zero_len:
-                continue
-            out.append((p[0], p[1], q[0], q[1]))
-            out_k.append(KIND_HIDDEN)
-            out_t.append(row_tags[i] if row_tags is not None else None)
-            w0, w1 = E[i, 0, :], E[i, 1, :]
-            out_w.append((w0 + t0 * (w1 - w0), w0 + t1 * (w1 - w0)))
-        for t0, t1 in spans:
-            if (t1 - t0) < 1e-9:
-                continue
-            p = a2 + t0 * (b2 - a2)
-            q = a2 + t1 * (b2 - a2)
-            if math.hypot(q[0] - p[0], q[1] - p[1]) < zero_len:
-                continue
-            kind = base_kind
-            if (profiles and kind == KIND_EDGE and tv2 is not None):
-                # Profile test: probe a hair to each side of the visible
-                # span's midpoint; background on either side = outline.
-                d = q - p
-                ln = math.hypot(d[0], d[1])
-                if ln > 1e-12 and occ is not None:
-                    nrm = np.array([-d[1] / ln, d[0] / ln]) * delta
-                    mid = (p + q) * 0.5
-                    tm = (t0 + t1) * 0.5
-                    zm = az + tm * (bz - az)
-                    probes.append((len(out), mid, nrm, zm))
-                elif ln > 1e-12:
-                    nrm = np.array([-d[1] / ln, d[0] / ln]) * delta
-                    mid = (p + q) * 0.5
-                    tm = (t0 + t1) * 0.5
-                    zm = az + tm * (bz - az)
-                    lo2 = mid - delta * 1.001
-                    hi2 = mid + delta * 1.001
-                    near = ~((tmax[:, 0] < lo2[0]) | (tmin[:, 0] > hi2[0])
-                             | (tmax[:, 1] < lo2[1]) | (tmin[:, 1] > hi2[1]))
-                    near &= tzmin <= zm + ptol
-                    nid = np.nonzero(near)[0]
-                    if (not _surface_at(mid + nrm, zm, tv2[nid], tvz[nid],
-                                        ptol)
-                            or not _surface_at(mid - nrm, zm, tv2[nid],
-                                               tvz[nid], ptol)):
-                        kind = KIND_PROFILE
-            out.append((p[0], p[1], q[0], q[1]))
-            out_k.append(kind)
-            out_t.append(row_tags[i] if row_tags is not None else None)
-            w0, w1 = E[i, 0, :], E[i, 1, :]
-            out_w.append((w0 + t0 * (w1 - w0), w0 + t1 * (w1 - w0)))
-    if probes:
-        flags = occ.profile_flags(
-            np.array([pr[1] for pr in probes], dtype=np.float64),
-            np.array([pr[2] for pr in probes], dtype=np.float64),
-            np.array([pr[3] for pr in probes], dtype=np.float64),
-            float(delta), float(ptol))
-        for (row, _m, _n, _z), outline in zip(probes, flags):
-            if outline:
-                out_k[row] = KIND_PROFILE
-    segs = np.asarray(out) if out else np.empty((0, 4))
-    world = np.asarray(out_w) if out_w else np.empty((0, 2, 3))
-    kinds = (np.asarray(out_k, dtype=np.int8) if out_k
-             else np.empty((0,), dtype=np.int8))
-    tags = np.asarray(out_t, dtype=object) if row_tags is not None else None
-    if len(segs) > 1:
-        merged = _merge_collinear(segs, world, kinds, ext_e * 1e-9, tags)
-        segs, world, kinds = merged[:3]
-        tags = merged[3] if tags is not None else None
-    if hidden and len(segs):
-        kept = _drop_hidden_under_visible(
-            segs, world, kinds, max(ext_e * 1e-6, 1e-9), tags)
-        segs, world, kinds = kept[:3]
-        tags = kept[3] if tags is not None else None
+    tag_ids = None
+    if row_tags is not None:
+        ids: dict = {}
+        tag_ids = np.array([ids.setdefault(t, len(ids)) for t in row_tags],
+                           dtype=np.int64)
+    segs, world, kinds, rows = NATIVE.hlr_lines(
+        np.ascontiguousarray(A), np.ascontiguousarray(B),
+        np.ascontiguousarray(E), n_hard, n_sil, np.ascontiguousarray(TC),
+        bool(profiles), bool(hidden),
+        None if cap_abg is None else np.ascontiguousarray(cap_P),
+        None if cap_abg is None else np.ascontiguousarray(cap_Q),
+        None if cap_abg is None else np.asarray(cap_abg, dtype=np.float64),
+        tag_ids)
+    tags = (np.asarray(row_tags, dtype=object)[rows].reshape(-1)
+            if row_tags is not None else None)
     return HlrDrawing(segs, world, kinds, loops if fills else [], tags,
                       (loop_tags if fills else []) if loop_tags is not None
                       else None,

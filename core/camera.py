@@ -765,7 +765,7 @@ class OrbitCamera:
                             floor)
 
     def fit_box(self, min_pt: QVector3D, max_pt: QVector3D,
-                margin: float = 1.1) -> None:
+                margin: float = 1.1, free=None) -> None:
         """Zoom Extents: frame the box as the camera looks at it NOW.
 
         ``fit_to`` frames the box's bounding SPHERE, which does not depend
@@ -776,7 +776,11 @@ class OrbitCamera:
         corners are measured along the camera's right and up, so the model
         fills the window in this orientation and for this window shape;
         in perspective the camera also backs off by how far the box comes
-        toward it, so the near side is not cut by the frame."""
+        toward it, so the near side is not cut by the frame.
+
+        ``free`` — (x0, y0, x1, y1) in device coordinates, the part of the
+        window the panels leave free (the chrome's ``ui_free_ndc``) — frames
+        the box into that part instead (``ingetrazo_core.frame_box``)."""
         # Project a nearby box in Qt's local frame. A world-space float
         # matrix cannot distinguish its corners at survey coordinates.
         from core.coordinate_frame import choose_origin
@@ -787,7 +791,7 @@ class OrbitCamera:
             anchor = CameraPoint(origin)
             local = copy(self)
             local.target = (0., 0., 0.)
-            local.fit_box(min_pt - anchor, max_pt - anchor, margin)
+            local.fit_box(min_pt - anchor, max_pt - anchor, margin, free)
             self.target = anchor + local.target
             self.distance = local.distance
             return
@@ -822,6 +826,11 @@ class OrbitCamera:
         self.distance = min(max(distance, floor), MAX_DISTANCE)
         if self.perspective:
             self._settle_perspective_fit(corners, margin)
+        if free is not None:
+            self.target, self.distance = native.frame_box(
+                min_pt, max_pt, self.target, self.distance, r, u, f, self.fov_deg, self.aspect, self.perspective,
+                (self.shift_x, self.shift_y), tuple(free), margin,
+                self.min_distance(self.target), MAX_DISTANCE)
 
     def _settle_perspective_fit(self, corners, margin: float) -> None:
         """The perspective estimate above backs off for the NEAREST corner

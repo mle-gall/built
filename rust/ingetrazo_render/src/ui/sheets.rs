@@ -18,7 +18,7 @@ pub type SheetRow = (String, String, bool);
 pub struct Sheets {
     pub shown: bool,
     tools: Vec<Vec<Tool>>,
-    active: String,
+    pub(super) active: String,
     list: Vec<SheetRow>,
     /// Inline rename: the row and the text being typed.
     renaming: Option<(usize, String)>,
@@ -324,38 +324,10 @@ impl Ui {
     // ---- The tool rail -----------------------------------------------------------
     fn sheets_rail(&mut self, ctx: &egui::Context, screen: Rect, retract: f32) {
         if self.sheets.tools.is_empty() { return; }
-        let mut clicked = None;
+        // The model rail's layout rules (ui/rail.rs): two columns, three, scroll.
         let (band_top, band_bottom) = self.band(ctx, screen);
-        let room = band_bottom - band_top;
-        let groups = &self.sheets.tools;
-        let tall = |cols: usize| groups.iter().map(|g| g.len().div_ceil(cols) as f32 * 32.0).sum::<f32>()
-            + groups.len().saturating_sub(1) as f32 * 9.0 + 8.0;
-        let cols = (2..=5).find(|c| tall(*c) <= room).unwrap_or(5);
-        let active = self.sheets.active.clone();
-        egui::Area::new(egui::Id::new("sheets_rail"))
-            .constrain(false)
-            .interactable(retract == 0.0)
-            .fixed_pos(pos2(GUT - retract * (cols as f32 * 36.0 + 2.0 * GUT), band_top))
-            .order(egui::Order::Foreground)
-            .show(ctx, |ui| {
-                frame().corner_radius(CornerRadius::same(12)).inner_margin(Margin::same(4)).show(ui, |ui| {
-                    ui.set_min_height(room - 8.0);
-                    ui.spacing_mut().item_spacing = vec2(SPACE_XS, SPACE_XS);
-                    for (gi, group) in groups.iter().enumerate() {
-                        if gi > 0 {
-                            let (r, _) = ui.allocate_exact_size(vec2(cols as f32 * 32.0 - 2.0, 7.0), Sense::hover());
-                            ui.painter().hline(r.x_range().shrink(2.0), r.center().y, Stroke::new(1.0_f32, EDGE));
-                        }
-                        for row in group.chunks(cols) {
-                            ui.horizontal(|ui| {
-                                for tool in row {
-                                    if tool_button(ui, tool, tool.id == active) { clicked = Some(tool.id.clone()); }
-                                }
-                            });
-                        }
-                    }
-                });
-            });
+        let (clicked, _) = super::rail::show(ctx, "sheets_rail", &self.sheets.tools, &self.sheets.active,
+                                             band_top, band_bottom - band_top, retract);
         if let Some(id) = clicked {
             self.sheets.active = id.clone();
             self.actions.push(format!("sheets:tool{SEP}{id}"));
@@ -579,18 +551,15 @@ fn sheet_rows(ui: &mut egui::Ui, rows: &[(String, String)], edits: &mut std::col
                 });
             }
             "check" => {
-                let on = parts.get(3).copied() == Some("1");
+                // The kit's switch (design system: a control is never filled
+                // with full accent), not a filled checkbox (council C8).
+                let mut on = parts.get(3).copied() == Some("1");
                 ui.horizontal(|ui| {
                     ui.add_space(SPACE_S);
                     label_cell(ui, label);
-                    let (r, resp) = ui.allocate_exact_size(vec2((ui.available_width() - 8.0).max(60.0), CONTROL_H), Sense::click());
-                    paint_state(ui, r, state_of(&resp, false, true), R_ROW);
-                    let b = Rect::from_center_size(pos2(r.min.x + 12.0, r.center().y), vec2(14.0, 14.0));
-                    ui.painter().rect_filled(b, CornerRadius::same(4), if on { ACCENT } else { FIELD });
-                    ui.painter().rect_stroke(b, CornerRadius::same(4), Stroke::new(1.0_f32, if on { ACCENT } else { EDGE }), egui::StrokeKind::Inside);
-                    if on { ui.painter().text(b.center(), egui::Align2::CENTER_CENTER, "✓", meta(), BRIGHT); }
-                    ui.painter().text(pos2(b.max.x + 8.0, r.center().y), egui::Align2::LEFT_CENTER, if on { "On" } else { "Off" }, body(), INK);
-                    if resp.clicked() { out.push(format!("edit{SEP}{id}{SEP}{}", if on { 0 } else { 1 })); }
+                    if toggle(ui, &mut on, "").clicked() {
+                        out.push(format!("edit{SEP}{id}{SEP}{}", u8::from(on)));
+                    }
                 });
             }
             "text" => {
@@ -639,6 +608,34 @@ fn sheet_rows(ui: &mut egui::Ui, rows: &[(String, String)], edits: &mut std::col
         });
     }
 }
+
+
+// ---- The page (sheet_page.rs) --------------------------------------------------
+impl Ui {
+    /// The part of the window the Sheets chrome leaves the page (the rail,
+    /// the dock, the top and bottom bars as last laid out).
+    pub(super) fn page_free(&self, ctx: &egui::Context, screen: Rect) -> Rect {
+        let area = |n: &str| ctx.memory(|m| m.area_rect(egui::Id::new(n)));
+        let left = area("sheets_rail").map_or(80.0, |r| r.right());
+        let right = area("sheets_dock").map_or(screen.right() - DOCK_W - 16.0, |r| r.left());
+        let top = area("top").map_or(TOP_H, |r| r.bottom());
+        let bottom = area("bottom").map_or(screen.bottom() - BOT_H, |r| r.top());
+        Rect::from_min_max(pos2(left + GUT, top + GUT), pos2((right - GUT).max(left + 80.0), (bottom - GUT).max(top + 80.0)))
+    }
+    /// A pointer event the chrome left to the page; returns the cursor it wants.
+    pub fn page_pointer(&mut self, kind: &str, x: f32, y: f32, button: u8, mods: u8) -> &'static str {
+        self.page.pointer(kind, pos2(x, y), button, mods, &mut self.actions);
+        self.page.cursor
+    }
+    pub fn page_image(&mut self, key: u64, w: usize, h: usize, rgba: &[u8]) {
+        let ctx = self.ctx.clone();
+        self.page.set_image(&ctx, key, w, h, rgba);
+    }
+    pub fn page_key(&mut self, name: &str, mods: u8) -> bool {
+        self.page.key(name, mods, &mut self.actions)
+    }
+}
+
 
 #[cfg(test)]
 mod tests {

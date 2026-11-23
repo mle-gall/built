@@ -6706,7 +6706,8 @@ class MainWindow(WorksessionMixin, QMainWindow):
         bounds = self._extents_bounds()
         if bounds is None:
             return
-        self.viewport.camera.fit_box(bounds[0], bounds[1])
+        from views.wgpu_ui import free_area   # the panels' free area (B8)
+        self.viewport.camera.fit_box(bounds[0], bounds[1], free=free_area(self))
         self.viewport.update()
         grid = self._doc.view_grid
         if grid is not None:                 # every view shown frames it
@@ -6774,7 +6775,8 @@ class MainWindow(WorksessionMixin, QMainWindow):
         if lo is None:
             self.statusBar().showMessage(tr("Nothing selected"), 2500)
             return
-        self.viewport.camera.fit_box(lo, hi)
+        from views.wgpu_ui import free_area   # the panels' free area (B8)
+        self.viewport.camera.fit_box(lo, hi, free=free_area(self))
         self.viewport.update()
         grid = self._doc.view_grid
         if grid is not None:                 # every view shown frames it,

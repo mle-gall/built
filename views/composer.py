@@ -6502,7 +6502,8 @@ class ComposerWindow(QMainWindow):
 
         scene = main_window.viewport.scene
         if not scene.compositions:
-            comp = Composicion()
+            # Named in the interface's language, like a sheet added later.
+            comp = Composicion(name=tr("Sheet {n}", n=1))
             comp.frames.append(comp.default_frame())
             scene.compositions.append(comp)
         self.comp: Composicion = scene.compositions[0]
@@ -11328,14 +11329,16 @@ class ComposerWindow(QMainWindow):
 
     def _auto_render_stale(self) -> None:
         """Re-render the current sheet's stale (or never rendered) raster
-        frames; vector frames keep their badge and wait for Update — their
-        exact pass costs seconds on a real model."""
+        frames, and draw a vector frame the first time it is shown; once
+        drawn, a stale vector frame keeps its badge and waits for Update —
+        its exact pass costs seconds on a real model. (A never drawn one
+        opened blank with Auto-render on, review council C8.)"""
         self._auto_timer.stop()          # a pending auto pass is this one
         if not self._auto_render or not self.isVisible():
             return
         done = False
         for f in list(self.comp.frames):
-            if f.style == "vectorial":
+            if f.style == "vectorial" and id(f) in self.hlr_cache:
                 continue
             if (id(f) in self._stale or id(f) not in self.render_cache
                     or self._render_outgrown(f)):
@@ -15040,7 +15043,8 @@ class ComposerWindow(QMainWindow):
         # the window was closed — re-adopt the scene's compositions.
         scene = self._scene()
         if not scene.compositions:
-            comp = Composicion()
+            # Named in the interface's language, like a sheet added later.
+            comp = Composicion(name=tr("Sheet {n}", n=1))
             comp.frames.append(comp.default_frame())
             scene.compositions.append(comp)
         if self.comp not in scene.compositions:
