@@ -158,3 +158,43 @@ impl Value {
         }
     }
 }
+
+/// Replay a change to a scene table without replacing unrelated entries
+/// added, removed or edited outside History (e.g. the links registry).
+/// The usual case restores exactly the recorded value and insertion order.
+pub fn replay_table(current: &Value, from: &Value, to: &Value) -> Value {
+    if current == from {
+        return to.clone();
+    }
+    match (current, from, to) {
+        (Value::Dict(now), Value::Dict(before), Value::Dict(after)) => {
+            let mut result = now.clone();
+            result.retain(|(k, _)| !before.iter().any(|(b, _)| b == k)
+                || after.iter().any(|(a, _)| a == k));
+            for (i, (key, new)) in after.iter().enumerate() {
+                let old = before.iter().find(|(k, _)| k == key).map(|(_, v)| v);
+                if old == Some(new) { continue; }
+                if let Some((_, val)) = result.iter_mut().find(|(k, _)| k == key) {
+                    *val = old.map_or_else(|| new.clone(), |old| replay_table(val, old, new));
+                } else {
+                    result.insert(i.min(result.len()), (key.clone(), new.clone()));
+                }
+            }
+            Value::Dict(result)
+        }
+        // Folder paths are unique strings. Keep folders made in the panel
+        // since the command, inserting restored paths in their old order.
+        (Value::List(now), Value::List(before), Value::List(after))
+            if now.iter().chain(before).chain(after).all(|v| matches!(v, Value::Str(_))) => {
+            let mut result: Vec<_> = now.iter()
+                .filter(|v| !before.contains(v) || after.contains(v)).cloned().collect();
+            for (i, value) in after.iter().enumerate() {
+                if !before.contains(value) && !result.contains(value) {
+                    result.insert(i.min(result.len()), value.clone());
+                }
+            }
+            Value::List(result)
+        }
+        _ => to.clone(),
+    }
+}

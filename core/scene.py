@@ -283,7 +283,12 @@ class Scene:
     #: The open contexts, outermost first — nested editing. Each
     #: entry is ``{"group", "mesh", "share"}``: the group, the mesh ``scene.mesh``
     #: pointed at before entering it, and its pending instance share-back.
-    _edit_stack: list = field(default_factory=list)
+    if _dm.ENABLED:
+        @property
+        def _edit_stack(self):
+            return self._root._edit_levels
+    else:
+        _edit_stack: list = field(default_factory=list)
     #: While a component INSTANCE is open for editing: ``(group, proto,
     #: xform, state0)`` — the shared definition it left, its placement, and
     #: the temp mesh's snapshot at entry (to tell an edit from a look).
@@ -304,6 +309,9 @@ class Scene:
                 if name != "_root":
                     object.__setattr__(out, name, copy.deepcopy(value, memo))
             object.__setattr__(out, "_root", _dm.NATIVE.doc_new_root())
+            for level in self._edit_stack:
+                copied = copy.deepcopy(level, memo)
+                out._root._enter_edit(copied["group"], copied)
             out.groups = copy.deepcopy(list(self.groups), memo)
             out.layers = copy.deepcopy(list(self.layers), memo)
             for name in ROOT_TABLES:
@@ -352,7 +360,7 @@ class Scene:
         """(visible, locked) of the layer ``entity`` carries; unknown layer
         names read as the default (visible, unlocked)."""
         name = _layers.layer_of(entity)
-        if name == _layers.DEFAULT_LAYER and self._edit_stack:
+        if name == _layers.DEFAULT_LAYER and self.edit_group is not None:
             name = self._open_group_layer(entity) or name
         ly = self.layer_by_key(name)
         if ly is None:
@@ -370,8 +378,9 @@ class Scene:
                 hasattr(entity, "attrs") or hasattr(entity, "v0")):
             return None
         group_layer = None
-        for level in reversed(self._edit_stack):
-            group_layer = getattr(level["group"], "layer", None)
+        from core.outliner import open_path
+        for group in reversed(open_path(self)):
+            group_layer = getattr(group, "layer", None)
             if group_layer:
                 break
         if not group_layer:
@@ -390,8 +399,9 @@ class Scene:
         nearest enclosing open group's that has one — what they wore with
         the group closed (#1101), as :meth:`_open_group_layer` does for
         the layer. ``None`` outside a group or when nothing is painted."""
-        for level in reversed(self._edit_stack):
-            paint = getattr(level["group"], "material", None)
+        from core.outliner import open_path
+        for group in reversed(open_path(self)):
+            paint = getattr(group, "material", None)
             if paint:
                 return paint
         return None
@@ -606,10 +616,13 @@ class Scene:
                                 group.mesh.capture_state())
         if not self._edit_stack:
             self._loose_mesh = anterior
-        self._edit_stack.append(
-            {"group": group, "mesh": anterior, "share": self._edit_share,
-             "frame": frame, "definition": definition, "parts": parts,
-             "world_copy": group.mesh if entry_mesh is not group.mesh else None})
+        level = {"group": group, "mesh": anterior, "share": self._edit_share,
+                 "frame": frame, "definition": definition, "parts": parts,
+                 "world_copy": group.mesh if entry_mesh is not group.mesh else None}
+        if _dm.ENABLED:
+            self._root._enter_edit(group, level)
+        else:
+            self._edit_stack.append(level)
         self._placement_context_bumps += 1
         self.mesh = group.mesh
         self.edit_group = group
@@ -673,7 +686,7 @@ class Scene:
         if not self._edit_stack:
             return
         self._refresh_dimension_holds()
-        nivel = self._edit_stack.pop()
+        nivel = self._root._leave_edit() if _dm.ENABLED else self._edit_stack.pop()
         share = nivel["share"]
         nivel["share"] = None
         self._edit_share = None

@@ -141,8 +141,8 @@ def _plural(n, word):
 def _context_path(scene) -> str:
     """Where loose geometry lives: the groups open for editing, else Model."""
     names = []
-    for level in getattr(scene, "_edit_stack", None) or ():
-        g = level.get("group")
+    from core.outliner import open_path
+    for g in open_path(scene):
         names.append(getattr(g, "name", "") or ("Component" if g is not None and g.is_component() else "Group"))
     return " › ".join(names) if names else "Model"
 

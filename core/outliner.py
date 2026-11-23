@@ -57,6 +57,9 @@ def structure(groups) -> tuple:
 
 def open_path(scene) -> list:
     """The groups open for editing, outermost first (empty at the model)."""
+    root = getattr(scene, "_root", None)
+    if root is not None:
+        return root._edit_path
     return [lvl["group"] for lvl in (getattr(scene, "_edit_stack", None)
                                      or ())]
 

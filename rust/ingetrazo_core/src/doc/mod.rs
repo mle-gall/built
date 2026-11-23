@@ -20,6 +20,9 @@
 //! free a handle, whose `Drop` needs the lock). Increfs are fine. Releases
 //! are collected in a `Trash` and dropped after unlocking.
 
+mod definition;
+use definition::DefinitionRef;
+use std::sync::Arc;
 pub mod py;
 pub mod value;
 
@@ -135,6 +138,8 @@ impl Kind {
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Field {
+    Definition,
+    Billboard,
     Uid,
     Name,
     Tag,
@@ -189,6 +194,7 @@ impl Field {
             "layer" => Field::Tag,
             "xform" => Field::Xform,
             "axes" => Field::Axes,
+            "billboard" => Field::Billboard,
             "component" => Field::Component,
             "hidden" => Field::Hidden,
             "locked" => Field::Locked,
@@ -207,11 +213,13 @@ impl Field {
 
     pub fn name(self) -> &'static str {
         match self {
+            Field::Definition => "definition",
             Field::Uid => "uid",
             Field::Name => "name",
             Field::Tag => "layer",
             Field::Xform => "xform",
             Field::Axes => "axes",
+            Field::Billboard => "billboard",
             Field::Component => "component",
             Field::Hidden => "hidden",
             Field::Locked => "locked",
@@ -231,6 +239,7 @@ impl Field {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum FVal {
+    Definition(Option<Arc<DefinitionRef>>),
     Str(Option<String>),
     Bool(bool),
     Xf(Option<Xform>),
@@ -276,11 +285,13 @@ impl ListId {
 
 #[derive(Default)]
 pub struct PlacementData {
+    pub definition: Option<Arc<DefinitionRef>>,
     pub uid: Option<String>,
     pub name: Option<String>,
     pub tag: Option<String>,
     pub xform: Option<Xform>,
     pub axes: Option<Xform>,
+    pub billboard: Option<Box<Value>>,
     pub component: bool,
     pub hidden: bool,
     pub locked: bool,
@@ -311,7 +322,7 @@ pub struct MaterialData {
 }
 
 pub enum Data {
-    Root,
+    Root { edit_path: Vec<(Key, Py<PyAny>)> },
     Placement(Box<PlacementData>),
     Tag(Box<TagData>),
     Material(Box<MaterialData>),
@@ -374,7 +385,7 @@ pub struct Node {
 impl Node {
     fn new(kind: Kind) -> Node {
         let data = match kind {
-            Kind::Root => Data::Root,
+            Kind::Root => Data::Root { edit_path: Vec::new() },
             Kind::Placement => Data::Placement(Box::new(PlacementData { component: true, ..Default::default() })),
             Kind::Tag => Data::Tag(Box::new(TagData { visible: true, ..Default::default() })),
             Kind::Material => Data::Material(Box::default()),
@@ -449,11 +460,13 @@ impl Node {
         }
         let bad = || Err(format!("a {} has no field {}", self.kind.name(), f.name()));
         Ok(match (&self.data, f) {
+            (Data::Placement(p), Field::Definition) => FVal::Definition(p.definition.clone()),
             (Data::Placement(p), Field::Uid) => FVal::Str(p.uid.clone()),
             (Data::Placement(p), Field::Name) => FVal::Str(p.name.clone()),
             (Data::Placement(p), Field::Tag) => FVal::Str(p.tag.clone()),
             (Data::Placement(p), Field::Xform) => FVal::Xf(p.xform.clone()),
             (Data::Placement(p), Field::Axes) => FVal::Xf(p.axes.clone()),
+            (Data::Placement(p), Field::Billboard) => FVal::Val(Some(p.billboard.as_deref().cloned().unwrap_or(Value::Bool(false)))),
             (Data::Placement(p), Field::Component) => FVal::Bool(p.component),
             (Data::Placement(p), Field::Hidden) => FVal::Bool(p.hidden),
             (Data::Placement(p), Field::Locked) => FVal::Bool(p.locked),
@@ -496,11 +509,20 @@ impl Node {
         let kind = self.kind;
         let bad = || Err(format!("a {} has no field {} of that type", kind.name(), f.name()));
         Ok(match (&mut self.data, f, v) {
+            (Data::Placement(p), Field::Definition, FVal::Definition(d)) => FVal::Definition(std::mem::replace(&mut p.definition, d)),
             (Data::Placement(p), Field::Uid, FVal::Str(s)) => FVal::Str(std::mem::replace(&mut p.uid, s)),
             (Data::Placement(p), Field::Name, FVal::Str(s)) => FVal::Str(std::mem::replace(&mut p.name, s)),
             (Data::Placement(p), Field::Tag, FVal::Str(s)) => FVal::Str(std::mem::replace(&mut p.tag, s)),
             (Data::Placement(p), Field::Xform, FVal::Xf(x)) => FVal::Xf(std::mem::replace(&mut p.xform, x)),
             (Data::Placement(p), Field::Axes, FVal::Xf(x)) => FVal::Xf(std::mem::replace(&mut p.axes, x)),
+            (Data::Placement(p), Field::Billboard, FVal::Val(v)) => {
+                let value = match v {
+                    Some(Value::Bool(false)) => None,
+                    value => Some(Box::new(value.unwrap_or(Value::None))),
+                };
+                let old = std::mem::replace(&mut p.billboard, value);
+                FVal::Val(Some(old.map_or(Value::Bool(false), |v| *v)))
+            }
             (Data::Placement(p), Field::Component, FVal::Bool(b)) => FVal::Bool(std::mem::replace(&mut p.component, b)),
             (Data::Placement(p), Field::Hidden, FVal::Bool(b)) => FVal::Bool(std::mem::replace(&mut p.hidden, b)),
             (Data::Placement(p), Field::Locked, FVal::Bool(b)) => FVal::Bool(std::mem::replace(&mut p.locked, b)),
@@ -563,7 +585,7 @@ pub struct Open {
 
 /// Python references to release once the lock is gone.
 #[derive(Default)]
-pub struct Trash(pub Vec<Py<PyAny>>);
+pub struct Trash(pub Vec<Py<PyAny>>, Vec<Arc<DefinitionRef>>);
 
 impl Trash {
     fn push(&mut self, p: Option<Py<PyAny>>) {
@@ -775,6 +797,14 @@ impl Doc {
         for (_, v) in node.attr_views.drain(..) {
             trash.0.push(v);
         }
+        if let Data::Placement(p) = &mut node.data {
+            if let Some(def) = p.definition.take() {
+                trash.1.push(def);
+            }
+        }
+        if let Data::Root { edit_path } = &mut node.data {
+            trash.0.extend(edit_path.drain(..).map(|(_, level)| level));
+        }
         trash.push(node.strong.take());
         // Members of its lists lose an owner.
         node.mat_names.clear();
@@ -933,8 +963,20 @@ impl Doc {
     fn apply_ops(&mut self, py: Python<'_>, ops: &[Op], backwards: bool, trash: &mut Trash) -> Result<(), String> {
         let mut run = |d: &mut Doc, op: &Op| -> Result<(), String> {
             match (op, backwards) {
-                (Op::Set { k, f, old, .. }, true) => d.write(py, *k, *f, old.clone(), trash).map(|_| ()),
-                (Op::Set { k, f, new, .. }, false) => d.write(py, *k, *f, new.clone(), trash).map(|_| ()),
+                (Op::Set { k, f, old, new }, undo) => {
+                    let (from, to) = if undo { (new, old) } else { (old, new) };
+                    let node = d.need(*k)?;
+                    let value = match (node.kind, f, from, to) {
+                        (Kind::Root, Field::Attr(id), FVal::Val(Some(before)), FVal::Val(Some(after))) => {
+                            match node.attr(*id) {
+                                Some(current) => FVal::Val(Some(value::replay_table(current, before, after))),
+                                None => to.clone(),
+                            }
+                        }
+                        _ => to.clone(),
+                    };
+                    d.write(py, *k, *f, value, trash).map(|_| ())
+                }
                 (Op::SetMany { f, keys, old, .. }, true) => {
                     for (k, o) in keys.iter().zip(old.iter()).rev() {
                         d.write(py, *k, *f, o.clone(), trash)?;
@@ -995,6 +1037,9 @@ impl Doc {
         };
         if let Some((a, view, val)) = refill {
             self.refills.push((k, a, view, val));
+        }
+        if let FVal::Definition(Some(def)) = &old {
+            trash.1.push(def.clone());
         }
         self.serial += 1;
         if let Some(new) = new {
@@ -1301,6 +1346,14 @@ impl Doc {
                 for (_, v) in n.attr_views.drain(..) {
                     trash.0.push(v);
                 }
+                if let Data::Placement(p) = &mut n.data {
+                    if let Some(def) = p.definition.take() {
+                        trash.1.push(def);
+                    }
+                }
+                if let Data::Root { edit_path } = &mut n.data {
+                    trash.0.extend(edit_path.drain(..).map(|(_, level)| level));
+                }
                 n.mat_names.clear();
                 [
                     std::mem::take(&mut n.children),
@@ -1392,7 +1445,7 @@ impl Node {
             Data::Placement(p) => p.uid.as_deref().map(|u| (u, VIEW_STR0 + 1)),
             Data::Tag(t) => t.key.as_deref().map(|k| (k, VIEW_STR0 + 2)),
             Data::Material(m) => m.name.as_deref().map(|n| (n, VIEW_STR0)),
-            Data::Root => None,
+            Data::Root { .. } => None,
         }
     }
 }

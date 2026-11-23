@@ -4617,6 +4617,18 @@ class MakeGroupCommand(Command):
     mesh, removing them from the loose mesh so they no longer weld to the rest.
     Snapshot undo (geometry crosses meshes — too tangled for a per-op inverse)."""
 
+    doc_undo = True
+
+    def doc_after(self, scene, phase):
+        if phase == "undo":
+            scene.mesh.restore_state(self.snapshot)
+            scene.selection.discard(self.group)
+        else:
+            scene.mesh.restore_state(self._after)
+            scene.selection.clear()
+            scene.selection.add(self.group)
+        scene.version += 1
+
     def __init__(self, faces: Iterable[Face], edges: Iterable[Edge],
                  component: bool = False, name: str | None = None) -> None:
         # ``component=True`` builds the fresh mesh in LOCAL coordinates
@@ -4671,6 +4683,8 @@ class MakeGroupCommand(Command):
         if self.group is None:
             self.group = self._build(scene)
         self._take_off_loose(scene)
+        if _doc.ENABLED:
+            self._after = m.capture_state()
         scene.groups.append(self.group)
         scene.selection.clear()
         scene.selection.add(self.group)
@@ -4939,6 +4953,8 @@ class MakeUniqueCommand(Command):
     «Silla #2» (#620). Opening a copied group, which makes it unique on the
     way in, leaves the name alone."""
 
+    doc_undo = True
+
     def __init__(self, group, rename: bool = False) -> None:
         self.group = group
         self._rename = rename
@@ -5113,6 +5129,25 @@ class UnlinkCommand(Command):
     merged into the host's). One undo step brings the live links back
     exactly — the same part objects, meshes, registry entries and tag
     folders — and redo puts the very same copies back."""
+
+    doc_undo = True
+
+    def doc_after(self, scene, phase):
+        undo = phase == "undo"
+        moved = ({id(b): a for a, b in self._pairs} if undo else
+                 {id(a): b for a, b in self._pairs})
+        _move_holds(scene, self.groups, moved)
+        before, after = self._tags_before.cache, self._tags_after.cache
+        cache = scene.__dict__.setdefault("_link_tag_tables", {})
+        _TagState._sync(cache, after if undo else before, before if undo else after)
+        errors = getattr(scene, "link_errors", None)
+        if isinstance(errors, dict):
+            if undo:
+                errors.update(self._errors)
+            else:
+                for path in self._errors:
+                    errors.pop(path, None)
+        scene.version += 1
 
     def __init__(self, groups) -> None:
         from core import links
@@ -5295,6 +5330,8 @@ class ReplaceComponentCommand(Command):
     _SHARED = ("mesh", "children", "name", "axes", "component", "text3d",
                "ifc", "ext", "billboard", "exploded")
 
+    doc_undo = True
+
     def __init__(self, targets, source) -> None:
         self.source = source
         self.targets = [g for g in targets
@@ -5310,7 +5347,10 @@ class ReplaceComponentCommand(Command):
         self._before = [{k: getattr(g, k) for k in self._SHARED}
                         for g in self.targets]
         for g in self.targets:
-            g.mesh = src.mesh
+            if _doc.ENABLED:
+                g.definition = src.definition
+            else:
+                g.mesh = src.mesh
             # Shared like a copy's subgroups are (copy_group): an edit
             # inside any instance reaches all of them.
             if src.ext and src.ext.get("link"):
@@ -5404,6 +5444,8 @@ class GroupToComponentCommand(Command):
     The reverse road exists too (Make Unique). Exploding a 230k-face group
     to feed Make Component ground the loose-mesh machinery for minutes
     (piscina report); this is the door that was missing."""
+
+    doc_undo = True
 
     def __init__(self, group, name=None) -> None:
         self.group = group
@@ -5558,11 +5600,11 @@ class MakeNestedGroupCommand(Command):
         self._indices: list = []
         self._xform0 = None
 
-    def doc_undo(self, scene) -> bool:
-        # Groups only: the loose part goes through MakeGroupCommand (mesh).
-        return self._inner is None
+    doc_undo = True
 
     def doc_after(self, scene, phase) -> None:
+        if self._inner is not None:
+            self._inner.doc_after(scene, phase)
         scene.selection.clear()
         if phase == "redo":
             scene.selection.add(self.container)
@@ -5814,6 +5856,11 @@ class MakeComponentOfCommand(Command):
     inside — not one component per group (Marco, 24-09, with issue #90).
     It is Make Group's container, made a component."""
 
+    doc_undo = True
+
+    def doc_after(self, scene, phase):
+        self._nest.doc_after(scene, phase)
+
     def __init__(self, faces, edges, groups, name=None) -> None:
         self._nest = MakeNestedGroupCommand(faces, edges, groups, name=name)
 
@@ -5838,6 +5885,16 @@ class MergeGroupsCommand(Command):
     report); this merge goes group-to-group through the bulk-weld API and
     the loose mesh never hears about it. Undo restores the original
     groups at their positions."""
+
+    doc_undo = True
+
+    def doc_after(self, scene, phase):
+        if phase == "undo":
+            scene.selection.discard(self._merged)
+        else:
+            scene.selection.clear()
+            scene.selection.add(self._merged)
+        scene.version += 1
 
     def __init__(self, groups) -> None:
         self._groups = list(groups)
@@ -5948,6 +6005,20 @@ class ExplodeGroupCommand(Command):
     where the group's elements went: ``[(group mesh, mesh, {kind:
     [(source key, key)]})]`` (store runs only; the change feed reports it)."""
 
+    doc_undo = True
+
+    def doc_after(self, scene, phase):
+        if phase == "undo":
+            scene.mesh.restore_state(self.snapshot)
+            scene.selection = set(self._selection)
+        else:
+            scene.mesh.restore_state(self._after)
+            scene.selection.discard(self.group)
+            if self._lifted:
+                scene.selection = {row[0] for row in self._lifted}
+            _drop_dead_elements(scene, scene.mesh)
+        scene.version += 1
+
     def __init__(self, group: Group) -> None:
         self.group = group
         self.snapshot: Optional[dict] = None
@@ -5968,6 +6039,8 @@ class ExplodeGroupCommand(Command):
         paint = getattr(g, "material", None)
         if not self._replay(scene, m):
             self._geometry(scene, m, g, P, paint)
+            if _doc.ENABLED and self._after is None:
+                self._after = m.capture_state()
 
         # The nested objects come out one level up, whole: their placement
         # composes with the parent's (a shared prototype is never touched),
@@ -6296,6 +6369,8 @@ class SplitIntoPiecesCommand(Command):
     same matrix, name, layer and paint — so it moves, copies and exports as
     before, and Explode sets the pieces free. Undo puts the old contents
     back untouched (the split only ever built new meshes)."""
+
+    doc_undo = True
 
     def __init__(self, group: Group, pieces: list) -> None:
         self.group = group

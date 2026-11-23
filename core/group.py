@@ -125,7 +125,7 @@ DOC_FIELDS = ("name", "layer", "xform", "children", "hidden", "uid",
 #: containers that write back when edited in place (core/doc_model.py).
 ATTR_FIELDS = ("ifc", "ext", "text3d", "exploded", "explode_offset")
 if _dm.ENABLED:
-    DOC_FIELDS = DOC_FIELDS + ATTR_FIELDS
+    DOC_FIELDS = DOC_FIELDS + ATTR_FIELDS + ("mesh", "billboard", "source_uid")
 _PY_FIELDS = tuple(f for f in GROUP_FIELDS if f not in DOC_FIELDS)
 
 
@@ -148,7 +148,8 @@ class _GroupMethods:
             self.ifc = None
         # Face-me billboard: the group's textured quad rotates
         # around its vertical anchor axis to face the camera every frame.
-        self.billboard = False
+        if py:
+            self.billboard = False
         # 3D text (core/text3d.py): the parameters this container was
         # generated from — text, font, height… — so it can be re-edited and
         # laid out again in place. ``None`` on every other group.
@@ -314,20 +315,19 @@ class _GroupMethods:
         A copied GROUP (the copy entering a group makes unique on the way
         in) bakes into a classic group without nested placements
         (``materialize``), or keeps its tree, privately, with them."""
-        from PySide6.QtGui import QMatrix4x4
         if _is_link(self):
             # A linked file is its source's: nothing of it is this copy's to
             # make its own (it is edited in its own document).
             return
         if self.is_component():
-            self.mesh = transformed_mesh(self.mesh, QMatrix4x4())
+            self.mesh = _copy_definition_mesh(self.mesh)
             self.children = [_independent_copy(c)
                              for c in (self.children or ())]
             return
         if not self.children:
             self.materialize()
             return
-        self.mesh = transformed_mesh(self.mesh, QMatrix4x4())
+        self.mesh = _copy_definition_mesh(self.mesh)
         self.children = [_independent_copy(c) for c in self.children]
         # Nothing shared any more: what is left is a group of groups.
         self.component = False
@@ -344,6 +344,7 @@ if _dm.ENABLED:
         Its document fields (``DOC_FIELDS``) live in the Rust document
         (core/doc_model.py); see ``_GroupMethods`` for the rest."""
         __slots__ = _PY_FIELDS
+        source_uid = _dm.NATIVE.DocAttr("source_uid", optional=True)
 
         # copy, deepcopy and pickle: a new handle, then every field.
         def __reduce__(self):
@@ -372,6 +373,7 @@ if _dm.ENABLED:
         def __init__(self, mesh: Mesh | None = None, name: str | None = None,
                      uid: str | None = None) -> None:
             _GroupMethods.__init__(self, mesh, name, uid)
+            self.billboard = False
             self.ifc = self.ext = self.text3d = None
             self.exploded = self.explode_offset = None
             self.layer = None
@@ -1023,11 +1025,19 @@ def _is_link(group) -> bool:
     return isinstance(link, dict) and bool(link.get("path"))
 
 
+def _copy_definition_mesh(mesh):
+    if _dm.ENABLED:
+        # StoreMesh.__deepcopy__ forks the store chunks under fresh keys.
+        from copy import deepcopy
+        return deepcopy(mesh)
+    from PySide6.QtGui import QMatrix4x4
+    return transformed_mesh(mesh, QMatrix4x4())
+
+
 def _independent_copy(group):
     """``copy_group`` without the sharing: every mesh in the subtree is a
     copy of its own, so editing it never reaches the original's copies.
     The copy keeps the uid — it REPLACES the original in its parent."""
-    from PySide6.QtGui import QMatrix4x4
     g = copy_group(group)
     g.uid = group.uid
     if _is_link(group):
@@ -1036,7 +1046,7 @@ def _independent_copy(group):
         g.children = copy_parts(group, g)
         return g
     if group.xform is not None:
-        g.mesh = transformed_mesh(group.mesh, QMatrix4x4())
+        g.mesh = _copy_definition_mesh(group.mesh)
     g.children = [_independent_copy(c) for c in (group.children or ())]
     return g
 

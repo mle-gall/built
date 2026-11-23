@@ -108,7 +108,7 @@ def test_feed_records_agree(runs):
 def test_the_same_document_saves_the_same_bytes(runs):
     py, rs = runs
     for name in ("doc.igz", "doc.built"):
-        assert py["initial"][name]["members"] == rs["initial"][name]["members"], name
+        assert py["initial"][name]["file_hash"] == rs["initial"][name]["file_hash"], name
 
 
 def test_save_open_save_is_stable(runs):

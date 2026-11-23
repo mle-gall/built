@@ -75,7 +75,7 @@ def group_dump(g):
         "xform": matrix(g.xform), "axes": matrix(g.axes),
         "built": (built.placement_values(g.xform)
                   if g.xform is not None else None),
-        "faces": len(g.mesh.faces),
+        "faces": len(g.mesh.faces), "billboard": g.billboard,
         "ifc": g.ifc, "ext": g.ext, "text3d": g.text3d,
         "exploded": g.exploded,
         "explode_offset": (None if g.explode_offset is None
@@ -180,7 +180,8 @@ def saved(scene, work: Path, tag: str) -> dict:
         igz.save_scene(scene, path, backup=False)
         back = Scene()
         igz.load_into(back, path)
-        files[name] = {"members": members(path), "reopened": dump(back)}
+        files[name] = {"members": members(path), "reopened": dump(back),
+                       "file_hash": hashlib.sha256(path.read_bytes()).hexdigest()}
         # Saved again from the reopened document: the same bytes.
         again = work / f"{tag}-again-{name}"
         igz.save_scene(back, again, backup=False)
@@ -246,8 +247,57 @@ def slice_two(scene, h):
     return out
 
 
+def structural_steps(steps):
+    from core.history import (ExplodeGroupCommand, GroupToComponentCommand,
+                              MakeComponentOfCommand, MakeGroupCommand,
+                              MakeUniqueCommand, MergeGroupsCommand,
+                              ReplaceComponentCommand, SplitIntoPiecesCommand,
+                              UnlinkCommand)
+    scene = build()
+    scene.active_layer = None
+    history = History(scene)
+    history.feed.subscribe(lambda step: steps.append(step_record(step)))
+    assembly, target, classic = scene.groups
+    source = assembly.children[1]
+    source.billboard = "mesh"
+    link = template()
+    link.ext = {"link": {"path": "/synthetic/reference.igz"}}
+    scene.groups.append(link)
+    scene.plugin_data["links"] = {"/synthetic/reference.igz": {}}
+    box(scene.mesh)
+    commands = [
+        MakeGroupCommand(scene.mesh.faces, [], name="Faces"),
+        GroupToComponentCommand(classic),
+        MakeComponentOfCommand([], [], [classic, target], "Assembly"),
+        MakeUniqueCommand(target),
+        ReplaceComponentCommand([target], source),
+        SplitIntoPiecesCommand(classic, [template()]),
+        ExplodeGroupCommand(assembly),
+        MergeGroupsCommand([classic, target]),
+        UnlinkCommand([link]),
+    ]
+    states = []
+    for cmd in commands:
+        history.execute(cmd)
+        assert not history.last_error and not history.last_rejected
+        if doc_model.ENABLED:
+            assert cmd._doc_txn is not None, type(cmd).__name__
+        for action in (None, history.undo, history.redo, history.undo):
+            if action:
+                assert action()
+            states.append(dump(scene))
+    return states
+
+
 def main(work: Path):
-    initial = saved(build(), work, "initial")
+    initial_scene = build()
+    # The prototype table in existing files interns geometry. Two entries
+    # naming the same prototype can have different nested placement data.
+    original = initial_scene.groups[0]
+    other = Group(original.mesh, name="Second assembly", uid="other-assembly")
+    other.adopt([Group(original.children[0].mesh, name="Only part", uid="only-part")])
+    initial_scene.groups.append(other)
+    initial = saved(initial_scene, work, "initial")
     scene = build()
     h = History(scene)
     steps = []
@@ -291,6 +341,7 @@ def main(work: Path):
     h.redo()
     states.append(dump(scene))
     states.extend(slice_two(scene, h))
+    states.extend(structural_steps(steps))
     print(json.dumps({"engine": doc_model.engine(), "states": states,
                       "feed": steps, "initial": initial,
                       "final": saved(scene, work, "final")}))

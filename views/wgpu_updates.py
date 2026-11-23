@@ -267,8 +267,8 @@ class InstanceUpdates:
         edit path, so leaving it (the definition back on the instance) can
         be a row swap even after the path is closed."""
         chain = []
-        for level in getattr(self.scene, '_edit_stack', ()):
-            group = level['group']
+        from core.outliner import open_path
+        for group in open_path(self.scene):
             if chain and group not in (getattr(chain[-1], 'children', None) or ()):
                 return
             if not chain and group not in self.roots:
@@ -281,8 +281,8 @@ class InstanceUpdates:
         """The recorded path to the open group that now draws ``mesh``, or
         None (not a context swap, or not resident)."""
         self.remember_edit_path()
-        for level in getattr(self.scene, '_edit_stack', ()):
-            group = level['group']
+        from core.outliner import open_path
+        for group in open_path(self.scene):
             if group.mesh is mesh:
                 chain = self.chains.get(group.uid)
                 return chain if chain is not None and chain[-1] is group else None

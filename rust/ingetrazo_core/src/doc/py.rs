@@ -209,14 +209,15 @@ pub struct DocAttr {
     id: u16,
     name: String,
     track: bool,
+    optional: bool,
 }
 
 #[pymethods]
 impl DocAttr {
     #[new]
-    #[pyo3(signature = (name, track = false))]
-    fn new(name: &str, track: bool) -> PyResult<Self> {
-        Ok(DocAttr { id: attr_id(name).map_err(PyValueError::new_err)?, name: name.to_owned(), track })
+    #[pyo3(signature = (name, track = false, optional = false))]
+    fn new(name: &str, track: bool, optional: bool) -> PyResult<Self> {
+        Ok(DocAttr { id: attr_id(name).map_err(PyValueError::new_err)?, name: name.to_owned(), track, optional })
     }
 
     #[getter]
@@ -232,7 +233,11 @@ impl DocAttr {
     fn __get__<'py>(slf: &Bound<'py, Self>, obj: Option<&Bound<'py, PyAny>>, _owner: Option<&Bound<'py, PyAny>>) -> PyResult<Bound<'py, PyAny>> {
         let Some(obj) = obj.filter(|o| !o.is_none()) else { return Ok(slf.clone().into_any()) };
         let me = slf.get();
-        read_attr(slf.py(), obj, handle_key(obj)?, me.id, me.track)
+        let value = read_attr(slf.py(), obj, handle_key(obj)?, me.id, me.track)?;
+        if me.optional && value.is_none() {
+            return Err(pyo3::exceptions::PyAttributeError::new_err(me.name.clone()));
+        }
+        Ok(value)
     }
 
     fn __set__(&self, obj: &Bound<'_, PyAny>, value: &Bound<'_, PyAny>) -> PyResult<()> {
@@ -281,7 +286,8 @@ fn xform_of(data: &Bound<'_, PyAny>, src: &Bound<'_, PyAny>) -> PyResult<Xform> 
 
 fn fval_to_py<'py>(py: Python<'py>, v: FVal) -> PyResult<Bound<'py, PyAny>> {
     Ok(match v {
-        FVal::Str(None) | FVal::Val(None) | FVal::Xf(None) => py.None().into_bound(py),
+        FVal::Definition(Some(d)) => d.0.get().geometry.clone_ref(py).into_bound(py),
+        FVal::Definition(None) | FVal::Str(None) | FVal::Val(None) | FVal::Xf(None) => py.None().into_bound(py),
         FVal::Str(Some(s)) => s.into_pyobject(py)?.into_any(),
         FVal::Bool(b) => b.into_pyobject(py)?.to_owned().into_any(),
         FVal::Val(Some(v)) => v.to_py(py)?,
@@ -630,6 +636,18 @@ fn traverse_node(k: Key, visit: &PyVisit<'_>) -> Result<(), PyTraverseError> {
     // Under GC: never block. A missed edge only keeps objects alive longer.
     let Some(d) = try_lock() else { return Ok(()) };
     let Some(n) = d.node(k) else { return Ok(()) };
+    if let super::Data::Placement(p) = &n.data {
+        if let Some(def) = &p.definition {
+            // Journal pins share this one strong reference. Let the GC
+            // see it from the placement only when the placement owns it.
+            if std::sync::Arc::strong_count(def) == 1 {
+                visit.call(&def.0)?;
+            }
+        }
+    }
+    if let super::Data::Root { edit_path } = &n.data {
+        for (_, level) in edit_path { visit.call(level)?; }
+    }
     for v in n.views.iter() {
         visit.call(v)?;
     }
@@ -728,6 +746,34 @@ impl PyPlacement {
         write(slf.py(), slf.as_any(), slf.get().key, Field::Tag, FVal::Str(str_of(v)?))
     }
     #[getter]
+    fn mesh<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
+        read(slf.py(), slf.as_any(), slf.get().key, Field::Definition)
+    }
+    #[setter]
+    fn set_mesh(slf: &Bound<'_, Self>, mesh: &Bound<'_, PyAny>) -> PyResult<()> {
+        let definition = (!mesh.is_none()).then(|| super::DefinitionRef::for_geometry(mesh)).transpose()?;
+        write(slf.py(), slf.as_any(), slf.get().key, Field::Definition, FVal::Definition(definition))
+    }
+    #[getter]
+    fn definition(&self, py: Python<'_>) -> PyResult<Option<Py<super::definition::Definition>>> {
+        let d = lock();
+        let super::Data::Placement(p) = &d.need(self.key).map_err(err)?.data else { return Ok(None) };
+        Ok(p.definition.as_ref().map(|v| v.0.clone_ref(py)))
+    }
+    #[setter]
+    fn set_definition(slf: &Bound<'_, Self>, def: Option<Py<super::definition::Definition>>) -> PyResult<()> {
+        let value = def.map(|d| std::sync::Arc::new(super::DefinitionRef(d)));
+        write(slf.py(), slf.as_any(), slf.get().key, Field::Definition, FVal::Definition(value))
+    }
+    #[getter]
+    fn billboard<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
+        read(slf.py(), slf.as_any(), slf.get().key, Field::Billboard)
+    }
+    #[setter]
+    fn set_billboard(slf: &Bound<'_, Self>, v: &Bound<'_, PyAny>) -> PyResult<()> {
+        write(slf.py(), slf.as_any(), slf.get().key, Field::Billboard, FVal::Val(Some(Value::from_py(v)?)))
+    }
+    #[getter]
     fn component<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
         read(slf.py(), slf.as_any(), slf.get().key, Field::Component)
     }
@@ -810,6 +856,46 @@ impl PyPlacement {
         let v = if v.is_none() { PyList::empty(slf.py()).into_any() } else { v.clone() };
         set_list(slf.py(), slf.as_any(), slf.get().key, ListId::Children, &v)
     }
+    /// The active edit context belongs to the scene root. Its keys are
+    /// transient UI state, outside saved data and the undo journal.
+    fn _enter_edit(&self, placement: &Bound<'_, PyPlacement>, level: Py<PyAny>) -> PyResult<()> {
+        let mut d = lock();
+        let k = placement.get().key;
+        d.need(k).map_err(err)?;
+        d.set_handle(k, placement.as_ptr());
+        let Some(super::Data::Root { edit_path }) = d.node_mut(self.key).map(|n| &mut n.data) else {
+            return Err(PyTypeError::new_err("a scene root owns an edit path"));
+        };
+        edit_path.push((k, level));
+        Ok(())
+    }
+
+    fn _leave_edit(&self) -> Option<Py<PyAny>> {
+        if let Some(super::Data::Root { edit_path }) = lock().node_mut(self.key).map(|n| &mut n.data) {
+            return edit_path.pop().map(|(_, level)| level);
+        }
+        None
+    }
+
+    #[getter]
+    fn _edit_path(&self, py: Python<'_>) -> PyResult<Vec<Py<PyAny>>> {
+        let d = lock();
+        let super::Data::Root { edit_path } = &d.need(self.key).map_err(err)?.data else {
+            return Err(PyTypeError::new_err("a scene root owns an edit path"));
+        };
+        edit_path.iter().map(|(key, _)| d.handle_ref(py, *key)
+            .ok_or_else(|| PyRuntimeError::new_err("stale placement in edit path"))).collect()
+    }
+
+    #[getter]
+    fn _edit_levels(&self, py: Python<'_>) -> PyResult<Vec<Py<PyAny>>> {
+        let d = lock();
+        let super::Data::Root { edit_path } = &d.need(self.key).map_err(err)?.data else {
+            return Err(PyTypeError::new_err("a scene root owns an edit path"));
+        };
+        Ok(edit_path.iter().map(|(_, level)| level.clone_ref(py)).collect())
+    }
+
     /// A root's tag list (`scene.layers`).
     #[getter]
     fn _tags<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
@@ -1998,9 +2084,11 @@ fn doc_view_changed(py: Python<'_>, key: Key, which: u8, view: &Bound<'_, PyAny>
 
 fn fval_for(f: Field, v: &Bound<'_, PyAny>) -> PyResult<FVal> {
     Ok(match f {
+        Field::Billboard => FVal::Val(Some(Value::from_py(v)?)),
         Field::Component | Field::Hidden | Field::Locked | Field::Visible => FVal::Bool(v.is_truthy()?),
         Field::Uid | Field::Name | Field::Tag | Field::Key | Field::Folder | Field::Finish => FVal::Str(str_of(v)?),
         Field::Material | Field::Color | Field::Texture | Field::Opacity | Field::Pbr => opt_value(v)?,
+        Field::Definition => return Err(PyTypeError::new_err("use the mesh setter")),
         Field::Attr(_) => opt_value(v)?,
         Field::Xform | Field::Axes => return Err(PyTypeError::new_err("matrices are written one placement at a time")),
     })
@@ -2195,6 +2283,7 @@ fn doc_serial() -> u64 {
 }
 
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<super::definition::Definition>()?;
     m.add_class::<PyPlacement>()?;
     m.add_class::<PyTag>()?;
     m.add_class::<PyMaterial>()?;

@@ -363,3 +363,39 @@ def test_a_compound_of_document_commands_is_one_transaction():
     assert not any(g.locked for g in gs)
     h.redo()
     assert all(g.name == "R" and g.locked for g in gs)
+
+
+def test_geometry_definition_swap_and_rollback():
+    a = Group()
+    b = Group(a.mesh)
+    original = a.definition
+    assert b.definition is original
+    N.doc_begin()
+    a.mesh = Group().mesh
+    assert a.definition.key != original.key
+    N.doc_rollback()
+    assert a.definition is original and a.mesh is b.mesh
+
+
+def test_definition_does_not_pin_a_geometry_cycle():
+    base = placements()
+    a = Group()
+    b = Group(a.mesh)
+    a.mesh.placements = (a, b)
+    del a, b
+    assert placements() == base
+
+
+def test_scoped_delivery_copies_kept_placements_and_material_mapping():
+    from core.deliveries import scoped
+    scene = Scene()
+    kept = Group(name="Kept")
+    kept.adopt([Group(name="Child")])
+    scene.kept_components.append(kept)
+    scene.materials["Oak"] = Material("Oak")
+    out = scoped(scene, {"scope": "whole"})
+    assert out.materials["Oak"] is scene.materials["Oak"]
+    projected, = out.kept_components
+    assert projected is not kept and projected.definition is kept.definition
+    assert projected.children[0] is not kept.children[0]
+    assert kept._parent is scene._root
