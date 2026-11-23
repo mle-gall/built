@@ -107,8 +107,9 @@ def _targets(scene, uids):
         keys = paths.get(group, ())
         if group.uid in wanted or keys:
             if source:
-                raise ValueError('Linked placement is read-only: ' + group.uid)
-            targets[group.uid] = group
+                raise ValueError(f'Linked placement is read-only: {group.uid} ({source})')
+            if group.uid in wanted:
+                targets[group.uid] = group
             targets.update((key, group) for key in keys)
     missing = wanted - targets.keys()
     if missing:

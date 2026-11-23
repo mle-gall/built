@@ -727,7 +727,19 @@ class _MutList(list):
     remove = _fwd("remove")
     pop = _fwd("pop")
     clear = _fwd("clear")
-    reverse = _fwd("reverse")
+    def reverse(self):
+        face = self._owner
+        if isinstance(face, FaceView):
+            path = self._path
+            ring = 0 if path == ("loop",) else path[1] + 1 if len(path) == 2 else None
+            store = _store_of(face._m)
+            if store is not None and ring is not None:
+                store.reverse_ring(face.key, ring)
+                list.reverse(self)
+                return
+        self._real().reverse()
+        list.reverse(self)
+
     __setitem__ = _fwd("__setitem__")
     __delitem__ = _fwd("__delitem__")
 
@@ -2002,7 +2014,7 @@ def _to_python_lists(m) -> None:
 def _restore_store_state(m, snap: StoreState) -> None:
     """``m.restore_state(snap)`` for a store snapshot: ``m`` is store-backed
     afterwards. Same lineage: the store goes back to it, keys kept. Another
-    store's snapshot (``Scene.share_back``) is adopted under a fresh
+    store's snapshot is adopted under a fresh
     namespace: new keys (design decision 3)."""
     d = m.__dict__
     st = snap.owner if snap.mesh is m else d.get("_store")

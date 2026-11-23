@@ -424,7 +424,7 @@ class Scene:
     def entity_visible(self, entity) -> bool:
         from core.group import Group
         allowed = getattr(self, '_navigator_allowed', None)
-        if allowed is not None and isinstance(entity, Group) and entity.uid not in allowed:
+        if allowed is not None and isinstance(entity, Group) and self.navigator_key(entity) not in allowed:
             return False
         # A hidden thing is gone from every consumer that asks this —
         # render, pick, snap, bounds, export — whatever its layer says.
@@ -492,7 +492,7 @@ class Scene:
     def entity_selectable(self, entity) -> bool:
         from core.group import Group
         allowed = getattr(self, '_navigator_allowed', None)
-        if allowed is not None and isinstance(entity, Group) and entity.uid not in allowed:
+        if allowed is not None and isinstance(entity, Group) and self.navigator_key(entity) not in allowed:
             return False
         if self.similar_hidden(entity):
             return False
@@ -514,6 +514,16 @@ class Scene:
                     and hasattr(g, "children"):
                 return True
         return False
+
+    def navigator_key(self, group):
+        return getattr(self, '_navigator_keys', {}).get(group, group.uid)
+
+    def repeated_uids(self):
+        if _dm.ENABLED:
+            return self._root._repeated_uids()
+        from collections import Counter
+        from core.purge import iter_groups
+        return {uid for uid, n in Counter(g.uid for g in iter_groups(self.groups)).items() if n > 1}
 
     def occurrence_path(self, group):
         """Return the UIDs from this scene's root through the placement."""
@@ -579,6 +589,18 @@ class Scene:
                     and group in (getattr(self.edit_group, "children", None) or ()))
         if self.edit_group is not None and not anidando:
             self.end_group_edit()
+        if not anidando:
+            # Tree and protocol actions can open a nested row directly.
+            # Enter its ancestors just as a sequence of double-clicks would.
+            if _dm.ENABLED:
+                from core.group import Group
+                parent = group._parent
+                if isinstance(parent, Group):
+                    self.begin_group_edit(parent)
+            elif group not in self.groups:
+                from core.outliner import path_to
+                for parent in path_to(self.groups, group) or ():
+                    self.begin_group_edit(parent)
         self._refresh_dimension_holds()
         entry_mesh = group.mesh
         anterior = self.mesh

@@ -39,6 +39,36 @@ def test_stable_hosts_subset_and_rename(tmp_path):
     assert set(expected).isdisjoint(c.uid for c in other.children)
 
 
+def test_link_subsets_and_reload_resolve_occurrences(tmp_path):
+    source = Scene()
+    for name in ('west', 'east'):
+        parent = Group(uid=name)
+        child = Group(uid='beam', name=name + ' beam')
+        child.ifc = {'name': child.name}
+        parent.adopt([child])
+        source.groups.append(parent)
+    path = tmp_path / 'shared-parts.igz'
+    igz.save_scene(source, path)
+    host = Scene()
+    full = links.make_link(host, path)
+    subset = links.make_link(host, path, select={'uids': [['east', 'beam']]})
+    pair = links.make_link(host, path, select={'uids': [['east', 'beam'], ['west', 'beam']]})
+    host.groups.extend([full, subset, pair])
+
+    left, right = [g.children[0] for g in full.children]
+    host.selection.add(right)
+    after = [[c.uid for c in g.children] for g in (subset, pair)]
+    assert left.uid == right.uid and len(set(after[1])) == 2
+    assert [c.ifc['name'] for c in subset.children] == ['east beam']
+    source.groups[1].children[0].ifc = {'name': 'updated east beam'}
+    igz.save_scene(source, path)
+    links.reload(host, path)
+    assert full.children[0].children[0] is left and full.children[1].children[0] is right
+    assert right in host.selection and right.ifc['name'] == 'updated east beam'
+    assert [c.ifc['name'] for c in subset.children] == ['updated east beam']
+    assert [[c.uid for c in g.children] for g in (subset, pair)] == after
+
+
 def test_filter_and_ancestor_transform(tmp_path):
     src, path = source(tmp_path)
     child = src.groups[0]

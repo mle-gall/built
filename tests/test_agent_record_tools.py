@@ -60,6 +60,19 @@ def test_batch_history_and_rejection(model):
     assert all(g.ifc is None for g in children)
 
 
+def test_record_tools_address_one_of_two_equal_leaf_uids(model):
+    agent, parent, children = model
+    peer = Group(uid='other')
+    other = Group(uid=children[0].uid)
+    peer.adopt([other])
+    agent._viewport.scene.groups.append(peer)
+    path = [peer.uid, other.uid]
+    assert agent._tool_set_record([path], {'class': 'IfcBeam'})['applied']
+    assert agent._tool_query_record(path)['record']['class'] == 'IfcBeam'
+    assert children[0].ifc is None
+    assert agent._tool_query_records(**{'class': 'IfcBeam'})['rows'][0]['uid_path'] == path
+
+
 def test_classifications_are_per_target(model):
     a, _, children = model
     ids = [g.uid for g in children]

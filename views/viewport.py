@@ -4868,7 +4868,7 @@ class Viewport(QOpenGLWidget):
         allowed = getattr(self.scene, "_navigator_allowed", None)
         anidado = ctx is not None and getattr(ctx, "children", None)
         if not anidado and not any(getattr(g, "children", None) for g in groups):
-            shown = groups if allowed is None else [g for g in groups if g.uid in allowed]
+            shown = groups if allowed is None else [g for g in groups if self.scene.navigator_key(g) in allowed]
             self._placements_memo = (key, shown)
             return shown                       # unchanged for unfiltered flat scenes
         cache = getattr(self, "_placement_proxies", None)
@@ -4892,7 +4892,7 @@ class Viewport(QOpenGLWidget):
         # its ancestor. Ghost passes also consume this list, so hidden-object
         # display cannot bring excluded placements back into the viewport.
         if allowed is not None:
-            out = [g for g in out if g.uid in allowed]
+            out = [g for g in out if self.scene.navigator_key(g) in allowed]
         self._placements_memo = (key, out)
         return out
 
@@ -4947,7 +4947,7 @@ class Viewport(QOpenGLWidget):
                     seen.add(id(child))
                 tops[id(proxy)] = id(group)
                 proxy.mesh = child.mesh
-                proxy.uid = child.uid
+                proxy.uid = self.scene.navigator_key(child)
                 # A nested entity with no tag of its own inherits the
                 # nearest tag above it (the .skp convention); and when a tag
                 # above is hidden or locked the whole instance goes with it,

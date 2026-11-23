@@ -25,7 +25,8 @@ def load_requirements(scene, registry):
         eligible = None
         if config.get('filter') is not None:
             from core import facets
-            eligible = set(facets.evaluate(facets.build(scene), config['filter']))
+            index = facets.build(scene)
+            eligible = {index.groups[key] for key in facets.evaluate(index, config['filter'])}
         for filename in config['ids_files']:
             ref = dict(profile=profile, file=filename)
             try:
@@ -78,7 +79,7 @@ def requirement_hits(group, registry, requirements):
     rec = record.apply_type(group.ifc, registry)
     hits = []
     for eligible, cls, facets, info in requirements:
-        if eligible is not None and group.uid not in eligible:
+        if eligible is not None and group not in eligible:
             continue
         if cls and rec.get('class', '').upper() != cls.upper():
             continue

@@ -1313,7 +1313,7 @@ class WgpuView(QWidget):
             pending = [group]
             while pending:
                 child = pending.pop()
-                rows.extend(self.uid_rows.get(child.uid, ()))
+                rows.extend(self.uid_rows.get(self.packed.row_key(child), ()))
                 pending.extend(child.children or ())
             cache[group] = rows
         return cache[group]

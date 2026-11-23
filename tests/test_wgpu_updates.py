@@ -72,6 +72,40 @@ def test_record_edits_submit_nothing():
     assert renderer.calls == []
 
 
+def test_equal_leaf_uids_keep_distinct_metal_rows_on_hide():
+    from core.history import History, HideCommand
+
+    scene = Scene()
+    mesh = Mesh()
+    mesh.add_face([QVector3D(0, 0, 0), QVector3D(2, 0, 0), QVector3D(0, 3, 0)])
+    for uid in ('left', 'right'):
+        child = Group(mesh, uid='repeated')
+        child.xform = QMatrix4x4()
+        parent = Group(uid=uid)
+        parent.adopt([child])
+        scene.groups.append(parent)
+    packed = pack_scene(scene)
+    left, right = (parent.children[0] for parent in scene.groups)
+    tracker = InstanceUpdates(scene, packed)
+    history = History(scene)
+    tracker.observe(history)
+    ri, li = (tracker.rows[packed.row_key(g)] for g in (right, left))
+    assert ri != li and packed.instances[ri]['info'][0] == packed.instances[li]['info'][0]
+    history.execute(HideCommand([right]))
+    tracker.apply(*tracker.diff(scene))
+    assert packed.instances[ri]['info'][2] & 1 and not packed.instances[li]['info'][2] & 1
+    assert_matches_fresh_pack(tracker, scene)
+    assert history.undo()
+    from core.agent_facets import set_display
+    from views.wgpu_scene import VISIBILITY_FILTERED
+    vp = SimpleNamespace(scene=scene, update=lambda: None)
+    set_display(vp, {'facet': 'occurrence', 'eq': packed.row_key(right)})
+    filtered = pack_scene(scene)
+    assert not filtered.instances[ri]['info'][2] & (VISIBILITY_FILTERED | 1)
+    assert filtered.instances[li]['info'][2] & VISIBILITY_FILTERED
+
+
+
 def test_move_one_row_without_bake(monkeypatch):
     scene, updates = fixture_scene()
     monkeypatch.setattr('views.wgpu_updates.pack_scene', lambda *a: (_ for _ in ()).throw(AssertionError('bake')))

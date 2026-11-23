@@ -786,7 +786,7 @@ def _commands(win, sel):
     out = [
         ("file", "File to…", "⌘⇧F", (lambda: _file_to(win, len(groups))) if groups else None, bool(groups), False)
         if verbs.offers(kind, "fileto") else None,
-        ("isolate", "Isolate", "", lambda: _isolate(win, [getattr(e, "uid", None) for e in sel if getattr(e, "uid", None)]), True, False)
+        ("isolate", "Isolate", "", lambda: _isolate(win, [e for e in sel if getattr(e, "uid", None)]), True, False)
         if verbs.offers(kind, "isolate") else None,
         act("Hide", "hide"),
     ]
@@ -831,6 +831,10 @@ def _isolate(win, uids) -> None:
     from copy import deepcopy
     from core.agent_facets import set_display
     vp = win.viewport
+    if any(not isinstance(u, str) for u in uids):
+        from core.facets import build
+        keys = build(vp.scene).qualified
+        uids = [u if isinstance(u, str) else keys.get(u, u.uid) for u in uids]
     uids = [u for u in dict.fromkeys(uids) if u]
     if not uids:
         vp.flash_status("Nothing to isolate: select objects first")
@@ -841,7 +845,7 @@ def _isolate(win, uids) -> None:
                  getattr(vp, "_view_exact", False))
         vp._isolate_base = (state, list(getattr(vp, "_previous_views", []) or []),
                             list(vp.scene.selection), vp.scene.content_version)
-    set_display(vp, {"facet": "uid", "in": uids}, isolate=True, exact=False)
+    set_display(vp, {"facet": "occurrence", "in": uids}, isolate=True, exact=False)
 
 
 # ---- Right column: project tree and inspector -------------------------------
@@ -2056,7 +2060,7 @@ def _tree_action(win, view, action) -> None:
                 _select(win, [g])
             rebuild()
         elif verb == "isolate":
-            _isolate(win, [g.uid for g in shown()])
+            _isolate(win, [tree.row_id(g) if tree else g.uid for g in shown()])
         elif verb == "open":
             g = item()
             if g is not None:

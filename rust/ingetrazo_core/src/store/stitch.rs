@@ -1150,6 +1150,14 @@ impl Store {
         Ok((f, bumps))
     }
 
+    pub fn reverse_ring(&mut self, face: u32, ring: usize, ch: &mut Change) -> bool {
+        let mut rings = self.face_rings(face);
+        let Some(vertices) = rings.get_mut(ring) else { return false };
+        vertices.reverse();
+        self.put_rings(face, &rings, ch);
+        true
+    }
+
     /// `turn_face_over`'s `loop.reverse()` and `h.reverse()` (the attrs
     /// side stays in Python). A removed face is turned too, as its held
     /// object would be.

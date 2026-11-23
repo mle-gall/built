@@ -166,6 +166,8 @@ def scoped(scene, record):
             out.kept_components = deepcopy(kept, geometry)
     else:
         out._edit_stack = []
+    if record.get('format') == 'ifc' or 'format' not in record:
+        out._repeated_source_uids = scene.repeated_uids()
     out.edit_group = None
     out.__dict__.pop("_groups_owner", None)
     out.layers = [copy(layer) for layer in scene.layers]

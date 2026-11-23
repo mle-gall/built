@@ -24,6 +24,35 @@ pytestmark = pytest.mark.skipif(not doc_model.ENABLED,
 N = doc_model.NATIVE
 
 
+def test_shared_child_append_rolls_back_if_occurrence_copy_fails(monkeypatch):
+    from core import group as groups
+
+    scene = Scene()
+    parent, child = Group(), Group()
+    parent.adopt([child])
+    peer = groups.copy_group(parent)
+    scene.groups.extend([parent, peer])
+    counterpart, = peer.children
+    addition = Group()
+
+    def fail_copy(*args, **kwargs):
+        raise RuntimeError("occurrence copy failed")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(groups, "copy_group", fail_copy)
+        with pytest.raises(RuntimeError, match="occurrence copy failed"):
+            parent.children.append(addition)
+    assert list(parent.children) == [child]
+    assert list(peer.children) == [counterpart]
+    assert addition._parent is None
+    assert N.doc_depth() == 0
+
+    parent.children.append(addition)
+    assert peer.children[0] is counterpart
+    assert peer.children[1] is not addition
+    assert peer.children[1].mesh is addition.mesh
+
+
 def placements():
     gc.collect()
     return N.doc_stats()["placements"]

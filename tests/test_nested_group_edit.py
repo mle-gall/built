@@ -70,6 +70,22 @@ def test_entrar_a_un_hijo_empuja_un_nivel():
     assert scene.edit_group is None
 
 
+def test_open_nested_row_directly_uses_the_parent_transform():
+    scene, parent, child, _ = _plaza()
+    parent.xform.translate(12, 5, 0)
+    parent.xform.rotate(90, 0, 0, 1)
+    parent.xform.scale(-2, 3, 1)
+    child.xform = QMatrix4x4()
+    child.xform.translate(2, 4, 0)
+    world = parent.xform * child.xform
+    scene.begin_group_edit(child)
+    assert [level['group'] for level in scene._edit_stack] == [parent, child]
+    for p in (V(0, 0), V(1, 0), V(1, 1)):
+        assert scene.mesh.vertex_at(world.map(p)) is not None
+    scene.end_one_group_edit()
+    assert scene.edit_group is parent
+
+
 def test_end_group_edit_cierra_todos_los_niveles():
     """El contrato viejo: la aplicación entera llama a esto antes de guardar
     o exportar y da por hecho que al volver no queda nada abierto."""

@@ -871,6 +871,29 @@ impl PyPlacement {
     }
 
     /// Persisted address of this occurrence, including its instance ancestors.
+    /// Legacy archives can repeat a leaf UID in another branch. Adapters
+    /// qualify only those UIDs when they need a flat lookup table.
+    fn _repeated_uids(&self) -> PyResult<HashSet<String>> {
+        let doc = lock();
+        let mut stack = doc.need(self.key).map_err(err)?.children.clone();
+        let mut visited = super::FastSet::default();
+        let mut seen = HashSet::new();
+        let mut repeated = HashSet::new();
+        while let Some(key) = stack.pop() {
+            if !visited.insert(key) { continue; }
+            let node = doc.need(key).map_err(err)?;
+            if let super::Data::Placement(p) = &node.data {
+                if let Some(uid) = &p.uid {
+                    if !seen.insert(uid.as_str()) {
+                        repeated.insert(uid.clone());
+                    }
+                }
+            }
+            stack.extend(&node.children);
+        }
+        Ok(repeated)
+    }
+
     fn _occurrence_path(&self, placement: &PyPlacement) -> Option<Vec<String>> {
         let d = lock();
         let mut k = placement.key;

@@ -23,7 +23,7 @@ def ensure_guid(tag):
     return tag["guid"]
 
 
-def object_guid(scene, obj):
+def object_guid(scene, obj, occurrence=None):
     group = obj.get("group")
     if group is not None:
         tag = group.ifc
@@ -57,7 +57,7 @@ def object_guid(scene, obj):
             scene.version += 1
     if owner is not None:
         return stable_guid(scene.plugin_data["ifc_identity"]["namespace"],
-                           "faces", owner.uid, guid)
+                           "faces", occurrence or owner.uid, guid)
     return guid
 
 

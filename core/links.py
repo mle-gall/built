@@ -215,18 +215,40 @@ def load_source(path, select=None, *, include_nested=True, link_meshes=None):
         mesh = src.mesh
         if select is not None:
             from core.facets import build, evaluate
-            wanted = set(select['uids']) if 'uids' in select else set(evaluate(build(src), select['filter']))
+            from collections import Counter
+            from core.link_structure import row_id
+            refs = select.get('uids')
+            wanted = {ref for ref in refs or () if isinstance(ref, str)}
+            targets = {src.resolve_occurrence(ref) for ref in refs or () if isinstance(ref, list)}
+            requested_paths = targets.copy()
+            if refs is None:
+                index = build(src)
+                targets.update(index.groups[key] for key in evaluate(index, select['filter']))
             selected = []
+
             def visit(items, parent):
                 for group in items:
                     world = parent * (group.xform or QMatrix4x4())
-                    if group.uid in wanted:
-                        group.xform = world
-                        selected.append(group)
+                    if group.uid in wanted or group in targets:
+                        selected.append((group, world))
                     else:
                         visit(group.children or (), world)
+
+            def detached(group):
+                copy = _clone_shell(group)
+                copy.children = [detached(c) for c in group.children]
+                return copy
+
             visit(groups, QMatrix4x4())
-            groups, mesh = selected, Mesh()
+            counts = Counter(group.uid for group, _ in selected)
+            groups, mesh = [], Mesh()
+            for group, world in selected:
+                part = detached(group)
+                if group in requested_paths or counts[group.uid] > 1:
+                    # Two equal leaf UIDs can become siblings in a flat subset.
+                    part.uid = row_id(src.occurrence_path(group))
+                part.xform = world
+                groups.append(part)
             mesh.__dict__['_link_geometry'] = ((str(path), 'subset-root'), mesh.revision)
         comp = Group(mesh, name=stem(path))
         comp.adopt(groups)
@@ -599,8 +621,10 @@ def validate_select(select):
     if not isinstance(select, dict) or set(select) not in ({'uids'}, {'filter'}):
         raise ValueError('select requires exactly uids or filter')
     if 'uids' in select:
-        if not isinstance(select['uids'], list) or any(not isinstance(u, str) for u in select['uids']):
-            raise ValueError('uids must be a list of strings')
+        if not isinstance(select['uids'], list) or not all(
+                isinstance(u, str) or isinstance(u, list) and u and all(isinstance(k, str) for k in u)
+                for u in select['uids']):
+            raise ValueError('uids must be a list of strings or occurrence UID paths')
     else:
         from core.facets import validate_filter
         validate_filter(select['filter'])
@@ -677,7 +701,18 @@ def _populate(placement, source, *, reconcile=False, selection=None):
     from copy import deepcopy
     from ingetrazo_core import Matrix4 as QMatrix4x4
     from core.purge import iter_groups
-    previous = {g.uid: g for g in iter_groups(placement.children)} if reconcile else {}
+    previous = {}
+    ambiguous = set()
+    if reconcile:
+        for part in iter_groups(placement.children):
+            if part.uid in previous:
+                ambiguous.add(part.uid)
+            previous[part.uid] = part
+        if ambiguous:
+            # A unique part can move between parents. Repeated UIDs are
+            # meaningful within their own parent occurrence on reload.
+            previous = {(part.owner, part.uid) if part.uid in ambiguous else part.uid: part
+                        for part in iter_groups(placement.children)}
 
     swaps = []
     structure_changed = False
@@ -703,7 +738,7 @@ def _populate(placement, source, *, reconcile=False, selection=None):
     def clone(group, parent):
         nonlocal structure_changed
         uid = stable_uid(placement.uid, group.uid)
-        result = previous.pop(uid, None)
+        result = previous.pop((parent, uid) if uid in ambiguous else uid, None)
         old = result.mesh if result is not None else None
         new = result is None
         if new:

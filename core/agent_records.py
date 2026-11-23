@@ -46,7 +46,13 @@ class RecordTools(LinkTools):
 
     def _tool_query_record(self, uid, schema='IFC4'):
         schema_name(schema)
-        return self._record_view(self._find(uid)[0], self._tool_query_registry(), schema)
+        if isinstance(uid, list):
+            group = self._viewport.scene.resolve_occurrence(uid)
+            if group is None:
+                raise ValueError(f'Unknown occurrence path {uid!r}')
+        else:
+            group = self._find(uid)[0]
+        return self._record_view(group, self._tool_query_registry(), schema)
 
     def _tool_query_records(self, system=None, classification_system=None, code=None,
                             type=None, untagged=False, name=None, offset=0, limit=200,
@@ -93,7 +99,7 @@ class RecordTools(LinkTools):
                     and (code is None or c.get('code') == code) for c in classifications):
                 continue
             rows.append(dict(uid=group.uid, name=group.name, path=[p.name for p in parents],
-                linked=in_link,
+                uid_path=[p.uid for p in parents] + [group.uid], linked=in_link,
                 **{k: value.get(k) for k in ('class', 'predefined_type', 'tag', 'type')},
                 classifications=classifications, systems=value.get('systems', []),
                 problems=len(record.validate(value, registry, schema)) if value else 0))
@@ -134,31 +140,18 @@ class RecordTools(LinkTools):
             tag_sets=registry.get('tag_sets', {}), status=STATUS, classification_systems=summaries, codes=page(codes, offset, limit)))
 
     def _record_targets(self, uids):
-        if not isinstance(uids, list) or any(not isinstance(uid, str) for uid in uids):
-            raise ValueError('uids must be a list of strings')
-        rows = {g.uid: (g, parents) for g, parents, _ in self._groups()}
-        missing = [uid for uid in uids if uid not in rows]
-        if missing:
-            raise ValueError('Unknown group uids: ' + ', '.join(missing))
-        # A record written on a linked copy would vanish at the next refresh
-        # of the link: classify the source file instead. The tree walk, not
-        # the owner chain, decides: it is what the read tools showed.
-        from core.links import link_of
-        sources = {}
-        for uid in uids:
-            group, parents = rows[uid]
-            source = next((link_of(g)['path'] for g in [*parents, group] if link_of(g)), None)
-            if source is not None:
-                sources[uid] = source
-        if sources:
-            raise ValueError('These groups come from the linked file ' + next(iter(sources.values()))
-                             + '; open that file to classify them: ' + ', '.join(sources))
-        return [rows[uid][0] for uid in dict.fromkeys(uids)]
+        if not isinstance(uids, list):
+            raise ValueError('uids must be a list')
+        if not uids:
+            return []
+        from core.structure import _targets
+        return _targets(self._viewport.scene, uids)
 
     def _edit_records(self, targets, patches, schema, force):
         schema_name(schema)
         registry = self._tool_query_registry()
         problems = {}
+        repeated = {uid for uid, n in Counter(g.uid for g in targets).items() if n > 1}
         for group, patch in zip(targets, patches):
             patch = json_value(patch)
             if patch is not None and not isinstance(patch, dict):
@@ -169,7 +162,11 @@ class RecordTools(LinkTools):
                 value.pop('guid', None)
                 if group.ifc and group.ifc.get('guid'):
                     value['guid'] = group.ifc['guid']
-            problems[group.uid] = record.validate(value, registry, schema) if value is not None else []
+            uid = group.uid
+            if uid in repeated:
+                from core.link_structure import row_id
+                uid = row_id(self._viewport.scene.occurrence_path(group))
+            problems[uid] = record.validate(value, registry, schema) if value is not None else []
         # Only the uids with something to say: a 241-uid batch answering
         # with 241 empty lists read like 241 failures to the agent.
         problems = {uid: messages for uid, messages in problems.items() if messages}

@@ -40,7 +40,7 @@ read-only (``structure.file`` refuses linked structure anyway).
 """
 from __future__ import annotations
 
-from collections import Counter, defaultdict
+from collections import defaultdict
 import json
 
 from core import links, structure
@@ -143,8 +143,7 @@ class Tree:
         self.alias = {}
         self._host(registry)
         placements = list(walk(scene))
-        counts = Counter(g.uid for g, *_ in placements)
-        self._qualified = {uid for uid, count in counts.items() if count > 1}
+        self._qualified = scene.repeated_uids()
 
         files = {}
         for g, chain, inner, root in placements:

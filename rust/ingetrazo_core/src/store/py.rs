@@ -1703,6 +1703,16 @@ impl PyMeshStore {
     }
 
     /// `turn_face_over`'s ring reversal (outer and holes).
+    fn reverse_ring(&mut self, key: u128, ring: usize) -> PyResult<()> {
+        let face = any_of(&self.inner, Kind::Face, key)?;
+        let mut change = Change::default();
+        if !self.inner.reverse_ring(face, ring, &mut change) {
+            return Err(pyo3::exceptions::PyIndexError::new_err("face ring no longer exists"));
+        }
+        self.inner.finish(change);
+        Ok(())
+    }
+
     fn reverse_face(&mut self, key: u128) -> PyResult<PyChange> {
         let f = any_of(&self.inner, Kind::Face, key)?;
         Ok(self.op(|s, ch| {

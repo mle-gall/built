@@ -161,6 +161,8 @@ next(s for s in BUILTIN_TOOLS if s["name"] == "screenshot")["inputSchema"]["prop
 
 # Record commands already own their undo step; mutates advertises this to MCP.
 _TEXT = {'type': 'string'}
+_OCCURRENCE = {'oneOf': [_TEXT, {'type': 'array', 'items': _TEXT, 'minItems': 1}]}
+_OCCURRENCES = {'type': 'array', 'items': _OCCURRENCE}
 _PAGE = {'offset': {'type': 'integer', 'minimum': 0, 'default': 0},
          'limit': {'type': 'integer', 'minimum': 1, 'maximum': 1000, 'default': 200}}
 _SCHEMA = {'enum': ['IFC4', 'IFC4X3_ADD2'], 'default': 'IFC4'}
@@ -170,12 +172,12 @@ for _name, _description, _props, _required in [
     ('set_structure', 'Replace the section with value, or patch node fields by key (null deletes). Resync affected members.',
      {'value': {'type': 'object'}, 'patch': {'type': 'object'}, 'force': _FORCE}, []),
     ('file', 'File placements under one structure node in one undo step.',
-     {'uids': _STRINGS, 'node': _TEXT}, ['uids', 'node']),
+     {'uids': _OCCURRENCES, 'node': _TEXT}, ['uids', 'node']),
     ('query_unsorted', 'Page local placements needing filing or class review.', _PAGE, []),
     ('bootstrap_structure', 'Infer nodes and filings from existing tags. Inspect conflicts before applying.',
      {'apply': {'type': 'boolean', 'default': False}}, []),
     ('query_record', 'Read an object record, resolved type defaults and validation problems.',
-     {'uid': _TEXT, 'schema': _SCHEMA}, ['uid']),
+     {'uid': _OCCURRENCE, 'schema': _SCHEMA}, ['uid']),
     ('query_records', 'Page placed groups in outliner order; totals cover the entire model. Name is a case-insensitive substring. Problems is an error count.',
      {**{k: _TEXT for k in ('class', 'system', 'classification_system', 'code', 'type', 'name')},
       'untagged': {'type': 'boolean'},
@@ -185,14 +187,14 @@ for _name, _description, _props, _required in [
      {'schema': _SCHEMA, 'class': _TEXT, 'classification_system': _TEXT, 'search': _TEXT, **_PAGE}, []),
     ('query_registry', 'Read the detached project registry.', {}, []),
     ('set_record', 'Patch records atomically; nested fields replace. Rejection returns applied=false and per-uid problems. Null removes records.',
-     {'uids': _STRINGS, 'patch': {'type': ['object', 'null']}, 'validate_schema': _SCHEMA, 'force': _FORCE}, ['uids', 'patch']),
+     {'uids': _OCCURRENCES, 'patch': {'type': ['object', 'null']}, 'validate_schema': _SCHEMA, 'force': _FORCE}, ['uids', 'patch']),
     ('tag', 'Set a class and optional record name on groups.',
-     {'uids': _STRINGS, 'ifc_class': _TEXT, 'name': _TEXT}, ['uids', 'ifc_class']),
-    ('untag', 'Remove records in one undo step.', {'uids': _STRINGS}, ['uids']),
+     {'uids': _OCCURRENCES, 'ifc_class': _TEXT, 'name': _TEXT}, ['uids', 'ifc_class']),
+    ('untag', 'Remove records in one undo step.', {'uids': _OCCURRENCES}, ['uids']),
     ('add_classification', 'Merge a classification into each record; default name comes from the registry code.',
-     {'uids': _STRINGS, 'system': _TEXT, 'code': _TEXT, 'name': _TEXT}, ['uids', 'system', 'code']),
+     {'uids': _OCCURRENCES, 'system': _TEXT, 'code': _TEXT, 'name': _TEXT}, ['uids', 'system', 'code']),
     ('remove_classification', 'Remove one code, or all codes from a namespace, from each record.',
-     {'uids': _STRINGS, 'system': _TEXT, 'code': _TEXT}, ['uids', 'system']),
+     {'uids': _OCCURRENCES, 'system': _TEXT, 'code': _TEXT}, ['uids', 'system']),
     ('set_registry', 'Replace the project registry after validation.', {'value': {'type': 'object'}}, ['value']),
     ('add_classification_system', 'Upsert a classification namespace and optional codes.',
      {**{k: _TEXT for k in ('key', 'name', 'edition', 'source', 'description')}, 'codes': {'type': 'object'}}, ['key', 'name']),
