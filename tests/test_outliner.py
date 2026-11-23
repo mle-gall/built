@@ -249,13 +249,15 @@ def test_ten_thousand_nodes_build_once_and_refresh_quickly():
     roots = _random_tree(10_000)
     win, scene, panel = _window_with()
     scene.groups.extend(roots)
-    t0 = time.perf_counter()
+    # This process's CPU time, not wall time: under pytest-xdist the other
+    # workers' load is not the outliner's.
+    t0 = time.process_time()
     panel.refresh()
-    build = time.perf_counter() - t0
+    build = time.process_time() - t0
     assert len(panel._items) == 10_000
-    t0 = time.perf_counter()
+    t0 = time.process_time()
     panel.refresh()
-    again = time.perf_counter() - t0
+    again = time.process_time() - t0
     print(f"\n10 000 nodes: build {build * 1000:.0f} ms, "
           f"refresh {again * 1000:.0f} ms")
     assert build < 5.0

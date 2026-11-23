@@ -82,18 +82,39 @@ from PySide6.QtCore import QSettings  # noqa: E402
 _settings_dir = tempfile.mkdtemp(prefix="ingetrazo-tests-settings-")
 os.environ["BUILT_SETTINGS_DIR"] = _settings_dir
 QSettings.setDefaultFormat(QSettings.IniFormat)
-_system_settings_dir = os.path.join(_settings_dir, "system")
+
+
+#: The store the current test module writes (``_settings_per_module``).
+_module_settings = [_settings_dir]
 
 
 def _session_settings_paths():
-    QSettings.setPath(QSettings.IniFormat, QSettings.UserScope, _settings_dir)
-    QSettings.setPath(QSettings.IniFormat, QSettings.SystemScope, _system_settings_dir)
+    QSettings.setPath(QSettings.IniFormat, QSettings.UserScope, _module_settings[0])
+    QSettings.setPath(QSettings.IniFormat, QSettings.SystemScope, os.path.join(_module_settings[0], "system"))
 
 
 _session_settings_paths()
 
 
 import pytest  # noqa: E402
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _settings_per_module():
+    """Each test file starts from an empty settings store of its own. A
+    MainWindow saves its geometry and docks when it closes and the next one
+    restores them, a style test saves «the last style used»: under
+    pytest-xdist a file met whatever the files before it on its worker had
+    left (a 173 px viewport in test_join_segments). Within a file the tests
+    still share the store, in the order they always ran."""
+    folder = tempfile.mkdtemp(prefix="module-", dir=_settings_dir)
+    _module_settings[0] = folder
+    os.environ["BUILT_SETTINGS_DIR"] = folder
+    _session_settings_paths()
+    yield
+    _module_settings[0] = _settings_dir
+    os.environ["BUILT_SETTINGS_DIR"] = _settings_dir
+    _session_settings_paths()
 
 
 @pytest.fixture(autouse=True)
