@@ -98,3 +98,40 @@ def test_the_filter_finds_planes_by_name():
     match = project.action("filter", "Cr?ss")
     assert "section:" + str(b.uid) in match and "section:" + str(a.uid) not in match
     assert all(not key.startswith("section:") for key in project.action("filter", "slab"))
+
+
+def test_first_construction_tag_keeps_existing_folder_rows():
+    p = Project()
+    folder = layers.add_folder(p.scene, "Zone")
+    p.scene.layers.extend(Layer(n, folder=folder) for n in ("Walls", "Floors"))
+    previous = p.action("toggle", "preview-folder:" + folder)
+    p.scene.layers.append(Layer("Guides"))
+    p.scene.version += 1
+    rows = p.rows()
+    assert all(rows[k] == row for k, row in previous.items() if k.startswith("preview-"))
+    assert rows["preview-tag:Guides"][0] == "Guides"
+
+
+def test_a_new_folder_shows_even_empty():
+    p = Project()
+    p.action("new", "")
+    key = next(k for k, (name, _) in p.rows().items() if name == "New node")
+    assert p.rows()[key][1][1] == 0
+    p.action("rename", key + wgpu_ui.SEP + "Empty folder")
+    assert p.rows()[key][0] == "Empty folder"
+    assert p.win.viewport.history.undo() and p.rows()[key][0] == "New node"
+    assert p.win.viewport.history.undo() and key not in p.rows()
+
+
+def test_move_the_selection_here_from_the_rows_menu():
+    from core import structure
+    from tests.test_structure import model
+    scene, _, _, loose = model()
+    p = Project(scene=scene)
+    p.rows()
+    p.action("filehere", "n:sections")
+    assert not p.win.viewport.history.undo_stack
+    scene.select([loose])
+    p.action("filehere", "n:sections")
+    assert structure.node_of(loose) == "sections" and scene.layer(loose.layer).name == "Track Sections"
+    assert p.win.viewport.history.undo() and structure.node_of(loose) is None

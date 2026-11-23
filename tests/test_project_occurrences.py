@@ -345,3 +345,78 @@ def test_free_slot_fills_the_page_then_steps():
         spots.append((x, y))
     assert len(set(spots)) == 4
     assert all(x + w <= pw - 10 and y + h <= ph - 10 for x, y in spots)
+
+
+def test_component_copies_are_counted():
+    from tests.test_project_drawing_filters import Project
+    p = Project()
+    proto = Group(_box(), name="Chair")
+    proto.xform = QMatrix4x4()
+    other = copy_group(proto, QVector3D(1, 0, 0))
+    p.scene.groups.extend([proto, other])
+    p.action("toggle", "n:")
+    definition, = [t for t, _ in p.view.renderer.calls["ui_set_tree"][0] if t[0].startswith("d:")]
+    assert definition[1] == "Chair" and definition[3:5] == ["×2", "component"]
+    rows = p.action("toggle", definition[0])
+    assert all(rows["i:" + g.uid][0] == "Chair" for g in (proto, other))
+
+
+def test_rename_in_the_tree_is_one_undo_step_and_keeps_the_uid():
+    from tests.test_project_drawing_filters import Project
+    from views.wgpu_ui import SEP
+    p = Project()
+    tree = _group("Tree")
+    p.scene.groups.append(tree)
+    uid = tree.uid
+    p.action("toggle", "n:")
+    rows = p.action("rename", "i:" + uid + SEP + "Oak")
+    assert tree.name == rows["i:" + uid][0] == "Oak" and tree.uid == uid
+    assert len(p.win.viewport.history.undo_stack) == 1
+    assert p.win.viewport.history.undo() and tree.name == p.rows()["i:" + uid][0] == "Tree"
+
+
+def test_the_padlock_locks_and_unlocks_in_one_undo_step():
+    from tests.test_project_drawing_filters import Project
+    p = Project()
+    tree = _group("Tree")
+    p.scene.groups.append(tree)
+    row = "i:" + tree.uid
+    p.action("toggle", "n:")
+    assert p.action("lock", row)[row][1][6] == 1 and tree.locked
+    p.action("item", row)
+    assert not p.scene.selection
+    assert len(p.win.viewport.history.undo_stack) == 1 and p.win.viewport.history.undo()
+    assert not tree.locked and p.rows()[row][1][6] == 0
+
+
+def test_a_scene_remembers_what_the_outliner_hid():
+    from core.camera import OrbitCamera
+    from core.saved_views import SavedView
+    from tests.test_project_drawing_filters import Project
+    p, camera = Project(), OrbitCamera()
+    tree = _group("Tree")
+    p.scene.groups.append(tree)
+    row = "i:" + tree.uid
+    p.action("toggle", "n:")
+    assert p.action("eye", row)[row][1][5] == 0
+    view = SavedView.capture("Without trees", p.scene, camera)
+    assert p.action("eye", row)[row][1][5] == 1
+    view.apply(p.scene, camera)
+    p.scene.version += 1
+    assert tree.hidden and p.rows()[row][1][5] == 0
+
+
+def test_several_rows_go_to_a_layer_in_one_step():
+    from core import structure
+    from tests.test_project_drawing_filters import Project
+    from tests.test_structure import model
+    scene, _, _, _ = model()
+    p = Project(scene=scene)
+    wall, slab = _group("Wall"), _group("Slab")
+    p.scene.groups.extend([wall, slab])
+    p.rows()
+    p.scene.select([wall, slab])
+    p.action("filehere", "n:sections")
+    assert all(structure.node_of(g) == "sections" and scene.layer(g.layer).name == "Track Sections" for g in (wall, slab))
+    assert len(p.win.viewport.history.undo_stack) == 1 and p.win.viewport.history.undo()
+    assert all(g.layer is None and structure.node_of(g) is None for g in (wall, slab))

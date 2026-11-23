@@ -18,7 +18,7 @@ _app = QApplication.instance() or QApplication([])
 
 from core import layers as L
 from core.group import Group
-from core.layers import DEFAULT_LAYER, Layer, assign_layer, layer_of
+from core.layers import DEFAULT_LAYER, Layer, assign_layer
 from core.mesh import Mesh
 from core.saved_views import SavedView
 from tests.test_drawing_records import _square
@@ -410,19 +410,6 @@ def test_the_top_bar_buttons_share_one_size(win):
         panel.add_layer_btn, panel.add_folder_btn, panel.expand_btn,
         panel.color_by_layer, panel.more_btn)}
     assert len(sizes) == 1
-
-
-def test_a_new_folder_shows_even_empty(win):
-    """The add-folder button made a folder nobody could see: with no filter
-    an empty folder had no row to be shown through."""
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    panel.add_folder_btn.click()
-    name = L.folders_of(scene)[-1]
-    item = panel.item_for(name, "folder")
-    assert item is not None and not item.isHidden()
-    panel.refresh()                                   # and after a rebuild
-    assert not panel.item_for(name, "folder").isHidden()
 
 
 def test_dropping_rows_files_them_in_a_folder(win):
@@ -923,28 +910,6 @@ def test_the_delete_key_deletes_the_current_row(win, monkeypatch):
     panel.tree.setCurrentItem(panel.item_for(DEFAULT_LAYER))
     QTest.keyClick(panel.tree, Qt.Key_Delete)        # the default stays
     assert scene.layer(DEFAULT_LAYER) is not None
-
-
-def test_move_the_selection_here_from_the_rows_menu(win):
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    scene.layers += [Layer("A")]
-    g = Group(Mesh(), name="g")
-    scene.groups.append(g)
-    panel.refresh()
-    menu = QMenu()
-    panel.fill_menu(menu, panel.item_for("A"))
-    act = next(a for a in menu.actions()
-               if a.text() == "Move the selection here")
-    assert not act.isEnabled()                       # nothing selected
-    scene.select([g])
-    menu = QMenu()
-    panel.fill_menu(menu, panel.item_for("A"))
-    act = next(a for a in menu.actions()
-               if a.text() == "Move the selection here")
-    assert act.isEnabled()
-    act.trigger()
-    assert layer_of(g) == "A"
 
 
 def test_leaving_a_new_name_for_the_model_leaves_nothing_selected(win):
@@ -1488,18 +1453,3 @@ def test_layer_signature_reads_folders_once(monkeypatch):
     monkeypatch.setattr(L, 'folders_of', counted)
     assert layers_signature(scene)[2] == (None, 'one', None)
     assert len(calls) == 1
-
-
-def test_first_construction_tag_keeps_existing_folder_rows(win):
-    scene = win.viewport.scene
-    folder = L.add_folder(scene, "Zone")
-    scene.layers.extend([Layer("Walls", folder=folder), Layer("Floors", folder=folder)])
-    panel = win.layers_dock.panel
-    panel.refresh()
-    old = {panel._key(item): item for item in panel._all_items()}
-    guide = Layer("Guides")
-    scene.layers.append(guide)
-    panel._refresh_after_change()
-    rows = {panel._key(item): item for item in panel._all_items()}
-    assert all(rows[k] is item for k, item in old.items())
-    assert any(k[1] == guide.key for k in rows)

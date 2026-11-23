@@ -17,7 +17,7 @@ from core import outliner
 from core.group import Group, copy_group
 from core.mesh import Mesh
 from tests.test_project_occurrences import _box, _building, _group, _random_tree, _two_planes
-from views.outliner import COL_EYE, COL_LAYER, COL_LOCK, COL_TYPE
+from views.outliner import COL_EYE, COL_LAYER, COL_TYPE
 
 _app = QApplication.instance() or QApplication([])
 
@@ -80,16 +80,6 @@ def test_the_tree_shows_the_whole_model_nested():
     _close(win)
 
 
-def test_component_copies_are_counted():
-    proto = Group(_box(), name="Chair")
-    proto.xform = QMatrix4x4()
-    other = copy_group(proto, QVector3D(1, 0, 0))
-    win, scene, panel = _window_with(proto, other)
-    assert _row(panel, proto).text(COL_TYPE) == "Component (2 copies)"
-    assert _row(panel, proto).data(COL_TYPE, Qt.UserRole) == "component"
-    _close(win)
-
-
 def test_clicking_a_nested_row_opens_its_containers_and_selects_it():
     building, tree = _building()
     level1 = building.children[0]
@@ -139,19 +129,6 @@ def test_a_selection_in_the_view_is_found_in_the_tree():
     assert _row(panel, building).isExpanded()
     assert _row(panel, level2).isExpanded()
     assert panel.tree.currentItem() is row
-    _close(win)
-
-
-def test_rename_in_the_tree_is_one_undo_step_and_keeps_the_uid():
-    building, tree = _building()
-    win, scene, panel = _window_with(building, tree)
-    uid = tree.uid
-    _row(panel, tree).setText(0, "Oak")
-    assert tree.name == "Oak" and tree.uid == uid
-    win.viewport.history.undo()
-    panel.refresh()
-    assert tree.name == "Tree"
-    assert _row(panel, tree).text(0) == "Tree"
     _close(win)
 
 
@@ -258,20 +235,6 @@ def test_a_folded_section_waits_until_it_shows():
     assert panel.tree.topLevelItem(0).childCount() == 2
     panel.refresh()
     assert panel.tree.topLevelItem(0).childCount() == 3
-    _close(win)
-
-
-def test_a_scene_remembers_what_the_outliner_hid():
-    from core.saved_views import SavedView
-    building, tree = _building()
-    win, scene, panel = _window_with(building, tree)
-    _eye(panel, tree)
-    view = SavedView.capture("Without trees", scene, win.viewport.camera)
-    _eye(panel, tree)
-    assert not tree.hidden
-    view.apply(scene, win.viewport.camera)
-    panel.refresh()
-    assert tree.hidden and not _shown(panel, tree)
     _close(win)
 
 
@@ -502,21 +465,6 @@ def test_tab_and_shift_tab_move_in_and_out():
 # ---- Lock --------------------------------------------------------------------
 
 
-def test_the_padlock_locks_and_unlocks_in_one_undo_step():
-    building, tree = _building()
-    win, scene, panel = _window_with(building, tree)
-    panel._on_item_clicked(_row(panel, tree), COL_LOCK)
-    assert tree.locked
-    assert _row(panel, tree).data(COL_LOCK, Qt.UserRole)
-    panel.tree.setCurrentItem(_row(panel, tree))
-    assert not scene.selection                 # a locked row selects nothing
-    win.viewport.history.undo()
-    panel.refresh()
-    assert not tree.locked
-    assert not _row(panel, tree).data(COL_LOCK, Qt.UserRole)
-    _close(win)
-
-
 def test_nothing_opens_through_a_locked_group():
     building, tree = _building()
     level1 = building.children[0]
@@ -652,20 +600,6 @@ def test_the_header_shows_and_hides_columns_and_remembers():
     for col in (COL_MATERIAL, COL_COPIES, COL_IFC):
         panel2.set_column_shown(col, False)
     _close(win2)
-
-
-def test_several_rows_go_to_a_layer_in_one_step():
-    building, tree = _building()
-    level1 = building.children[0]
-    wall, slab = level1.children
-    win, scene, panel = _window_with(building, tree)
-    panel.assign_layer([wall, slab], "Structure")
-    assert outliner.layer_name(wall) == "Structure" == \
-        outliner.layer_name(slab)
-    assert _row(panel, slab).text(COL_LAYER) == "Structure"
-    win.viewport.history.undo()
-    assert outliner.layer_name(wall) != "Structure"
-    _close(win)
 
 
 def test_several_rows_painted_and_unpainted_in_one_step():
