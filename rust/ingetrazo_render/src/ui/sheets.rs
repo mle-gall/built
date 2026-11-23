@@ -324,38 +324,10 @@ impl Ui {
     // ---- The tool rail -----------------------------------------------------------
     fn sheets_rail(&mut self, ctx: &egui::Context, screen: Rect, retract: f32) {
         if self.sheets.tools.is_empty() { return; }
-        let mut clicked = None;
+        // The model rail's layout rules (ui/rail.rs): two columns, three, scroll.
         let (band_top, band_bottom) = self.band(ctx, screen);
-        let room = band_bottom - band_top;
-        let groups = &self.sheets.tools;
-        let tall = |cols: usize| groups.iter().map(|g| g.len().div_ceil(cols) as f32 * 32.0).sum::<f32>()
-            + groups.len().saturating_sub(1) as f32 * 9.0 + 8.0;
-        let cols = (2..=5).find(|c| tall(*c) <= room).unwrap_or(5);
-        let active = self.sheets.active.clone();
-        egui::Area::new(egui::Id::new("sheets_rail"))
-            .constrain(false)
-            .interactable(retract == 0.0)
-            .fixed_pos(pos2(GUT - retract * (cols as f32 * 36.0 + 2.0 * GUT), band_top))
-            .order(egui::Order::Foreground)
-            .show(ctx, |ui| {
-                frame().corner_radius(CornerRadius::same(12)).inner_margin(Margin::same(4)).show(ui, |ui| {
-                    ui.set_min_height(room - 8.0);
-                    ui.spacing_mut().item_spacing = vec2(SPACE_XS, SPACE_XS);
-                    for (gi, group) in groups.iter().enumerate() {
-                        if gi > 0 {
-                            let (r, _) = ui.allocate_exact_size(vec2(cols as f32 * 32.0 - 2.0, 7.0), Sense::hover());
-                            ui.painter().hline(r.x_range().shrink(2.0), r.center().y, Stroke::new(1.0_f32, EDGE));
-                        }
-                        for row in group.chunks(cols) {
-                            ui.horizontal(|ui| {
-                                for tool in row {
-                                    if tool_button(ui, tool, tool.id == active) { clicked = Some(tool.id.clone()); }
-                                }
-                            });
-                        }
-                    }
-                });
-            });
+        let (clicked, _) = super::rail::show(ctx, "sheets_rail", &self.sheets.tools, &self.sheets.active,
+                                             band_top, band_bottom - band_top, retract);
         if let Some(id) = clicked {
             self.sheets.active = id.clone();
             self.actions.push(format!("sheets:tool{SEP}{id}"));

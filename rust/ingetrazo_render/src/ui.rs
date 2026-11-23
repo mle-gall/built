@@ -35,6 +35,8 @@ pub mod kit;
 #[cfg(target_os = "macos")]
 mod system_fonts;
 mod gallery;
+/// The tool rail's deterministic layout (two columns, three, then scroll).
+mod rail;
 mod site_map;
 use tokens::*;
 use kit::*;
@@ -76,6 +78,8 @@ pub struct Ui {
     events: Vec<egui::Event>,
     modifiers: egui::Modifiers,
     groups: Vec<Vec<Tool>>,
+    /// The model rail's outer width as last laid out (points).
+    rail_w: f32,
     active: String,
     status: String,
     hint: String,
@@ -261,6 +265,7 @@ impl Ui {
             events: Vec::new(),
             modifiers: Default::default(),
             groups: Vec::new(),
+            rail_w: rail::width(2),
             active: String::new(),
             status: String::new(),
             hint: String::new(),
@@ -878,40 +883,10 @@ impl Ui {
     }
 
     fn palette(&mut self, ctx: &egui::Context, screen: Rect, retract: f32) {
-        let mut clicked = None;
-        // Two columns while they fit above the status line; wider, never
-        // scrolled or folded, when the window is short (council 2026-11-22).
+        // Two columns, then three, then a scroll (ui/rail.rs, council B10).
         let (band_top, band_bottom) = self.band(ctx, screen);
-        let room = band_bottom - band_top;
-        let tall = |cols: usize| self.groups.iter().map(|g| g.len().div_ceil(cols) as f32 * 32.0).sum::<f32>()
-            + self.groups.len().saturating_sub(1) as f32 * 9.0 + 8.0;
-        let cols = (2..=5).find(|c| tall(*c) <= room).unwrap_or(5);
-        egui::Area::new(egui::Id::new("palette"))
-            .constrain(false)
-            .interactable(retract == 0.0)
-            .fixed_pos(pos2(GUT - retract * (cols as f32 * 36.0 + 2.0 * GUT), band_top))
-            .order(egui::Order::Foreground)
-            .show(ctx, |ui| {
-                frame().corner_radius(CornerRadius::same(12)).inner_margin(Margin::same(4)).show(ui, |ui| {
-                    ui.set_min_height(room - 8.0);
-                    ui.spacing_mut().item_spacing = vec2(SPACE_XS, SPACE_XS);
-                    for (gi, group) in self.groups.iter().enumerate() {
-                        if gi > 0 {
-                            let (r, _) = ui.allocate_exact_size(vec2(cols as f32 * 32.0 - 2.0, 7.0), Sense::hover());
-                            ui.painter().hline(r.x_range().shrink(2.0), r.center().y, Stroke::new(1.0_f32, EDGE));
-                        }
-                        for pair in group.chunks(cols) {
-                            ui.horizontal(|ui| {
-                                for tool in pair {
-                                    if tool_button(ui, tool, tool.id == self.active) {
-                                        clicked = Some(tool.id.clone());
-                                    }
-                                }
-                            });
-                        }
-                    }
-                });
-            });
+        let (clicked, width) = rail::show(ctx, "palette", &self.groups, &self.active, band_top, band_bottom - band_top, retract);
+        self.rail_w = width;
         if let Some(id) = clicked {
             self.active = id.clone();
             self.actions.push(format!("tool:{id}"));
