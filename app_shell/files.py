@@ -678,8 +678,15 @@ def do_save(win, path: Path, copy: bool = False) -> bool:
         png = _picture_png(win, doc)
         if png is not None:
             scene._home_thumbnail_png = png
-        with cd.busy(win, tr("Saving {name}…", name=path.name), output_path=path):
-            stats = igz_format.save_scene(scene, path) or {}
+        with cd.busy(win, tr("Saving {name}…", name=path.name), output_path=path, exclusive=True) as job:
+            if job is None:
+                stats = igz_format.save_scene(scene, path) or {}
+            else:
+                from app_shell import modal
+                def progress(fraction, phase):
+                    job.update(fraction, tr(phase))
+                    modal.tick()
+                stats = igz_format.save_scene(scene, path, progress=progress) or {}
     except Exception as exc:  # noqa: BLE001
         win._host._error("save")
         cd.save_failed(win, exc, lambda: save_copy(win) if copy else save_as(win))

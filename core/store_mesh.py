@@ -2504,12 +2504,18 @@ def store_from_source(src, hooks=(), *, precise=False):
     table = [_face_attrs_from_json(row) or {} for row in raw]
     names = list(meta.get("edge_layers") or [])
     n_e = len(src["edges"]) if src.get("edges") is not None else 0
+    from formats.native_io import native_io
+    direct = native_io() is not None
+    def indices(data):
+        a = np.asarray(data)
+        dtype = a.dtype if direct and a.dtype in (np.int32, np.int64) else np.int64
+        return np.ascontiguousarray(a, dtype=dtype)
     fa = src.get("face_attr")
     nfaces = len(src["counts"])
     fa = (np.full(nfaces, -1, dtype=np.int64) if fa is None
-          else np.asarray(fa, dtype=np.int64))
+          else indices(fa))
     layers = src.get("layers")
-    layers = None if layers is None else np.asarray(layers, dtype=np.int64)
+    layers = None if layers is None else indices(layers)
     if hooks:
         table, fa, names, layers = _apply_hooks(hooks, table, fa, names,
                                                 layers, n_e)
@@ -2517,19 +2523,19 @@ def store_from_source(src, hooks=(), *, precise=False):
     ns = next(_mesh._KEY_NAMESPACES)
     pos = (np.ascontiguousarray(src["pos"], dtype=np.float64).reshape(-1, 3)
            if precise else _input_positions(src["pos"]))
-    edges = np.ascontiguousarray(src["edges"], dtype=np.int64).reshape(-1, 2)
+    edges = indices(src["edges"]).reshape(-1, 2)
     flags = src.get("flags")
     curves = src.get("curves")
     store = mod.MeshStore.from_block(
         ns, pos, edges,
         None if flags is None else np.ascontiguousarray(flags, np.uint8),
-        None if curves is None else np.ascontiguousarray(curves, np.int64),
-        None if layers is None else np.ascontiguousarray(layers, np.int64),
+        None if curves is None else indices(curves),
+        layers,
         names,
-        np.ascontiguousarray(src["rings"], dtype=np.int64),
-        np.ascontiguousarray(src["sizes"], dtype=np.int64),
-        np.ascontiguousarray(src["counts"], dtype=np.int64),
-        np.ascontiguousarray(fa, dtype=np.int64),
+        indices(src["rings"]),
+        indices(src["sizes"]),
+        indices(src["counts"]),
+        fa,
         sequential=bool(src.get("sequential", False)), **w)
     return store, table
 
@@ -2630,7 +2636,7 @@ def face_attrs(m):
         yield _copy_attrs(table[k]) if k >= 0 else {}
 
 
-def attr_columns(m, overrides=None):
+def attr_columns(m, overrides=None, *, face_attr=None):
     """``(table, face_attr)`` of a store-backed mesh for array readers
     (pack, takeoff): every face's attrs as an index into ``table`` (-1:
     none). Faces with their own dict (touched through a view) or an entry
@@ -2638,7 +2644,7 @@ def attr_columns(m, overrides=None):
     share the attribute table's rows."""
     d = m.__dict__
     st = d["_store"]
-    fa = st.arrays()["face_attr"].copy()
+    fa = st.arrays()["face_attr"].copy() if face_attr is None else face_attr.copy()
     attrs = _attribute_owner(m)
     table = list(attrs["_attr_table"])
     own = attrs["_attr_own"]

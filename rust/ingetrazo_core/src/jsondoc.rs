@@ -563,6 +563,21 @@ fn parse_faces(d: &[u8], s: usize, b: &mut Block) -> R<()> {
     }
 }
 
+/// Streamed manifests keep at most one inline mesh's source arrays.
+pub fn mesh_arrays(edges: Option<&str>, faces: Option<&str>) -> R<Option<Block>> {
+    let mut block = Block::default();
+    for (text, is_edge) in [(edges,true),(faces,false)] {
+        let Some(text) = text else {continue};
+        let bytes = text.as_bytes();
+        let start = ws(bytes,0);
+        if at(bytes,start)? != b'[' { return Err(Bail); }
+        if at(bytes,ws(bytes,start+1))? == b']' {continue}
+        if is_edge { parse_edges(bytes,start,&mut block,&mut HashMap::new())?; }
+        else { parse_faces(bytes,start,&mut block)?; }
+    }
+    Ok((!block.flags.is_empty() || !block.counts.is_empty()).then_some(block))
+}
+
 /// The document with every mesh block's arrays taken out (`"_njb": n` left
 /// in each: its number in the second value), and those blocks.
 pub fn mesh_blocks(d: &[u8]) -> R<(Vec<u8>, Vec<Block>)> {

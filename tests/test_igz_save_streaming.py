@@ -99,7 +99,9 @@ def test_many_completed_meshes_do_not_accumulate_encoded_bytes():
 
 
 @pytest.mark.parametrize("error", [OSError, RuntimeError, KeyboardInterrupt])
-def test_write_failure_preserves_old_file_and_closes_scratch(tmp_path, monkeypatch, error):
+@pytest.mark.parametrize("native", [False, True])
+def test_write_failure_preserves_old_file_and_closes_scratch(native, tmp_path, monkeypatch, error):
+    monkeypatch.setenv("INGETRAZO_RUST_IO", "1" if native else "0")
     monkeypatch.setattr(igz, "_LARGE_DOCUMENT", 0)
     monkeypatch.setattr(igz, "_BULK_MIN", 1)
     path = tmp_path / "old.igz"
@@ -117,6 +119,12 @@ def test_write_failure_preserves_old_file_and_closes_scratch(tmp_path, monkeypat
 
     monkeypatch.setattr(igz_stream.tempfile, "TemporaryFile", temporary_file)
     monkeypatch.setattr(zipfile._ZipWriteFile, "write", fail)
+    if native and hasattr(igz.native_io(), "igz_write_zip"):
+        original_writer = igz.native_io().igz_write_zip
+        def interrupted(fd, members, fast):
+            original_writer(fd, members[:1], fast)
+            raise error("injected write failure")
+        monkeypatch.setattr(igz.native_io(), "igz_write_zip", interrupted)
     with pytest.raises(error, match="injected"):
         igz.save_scene(_scene(tmp_path), path)
     assert path.read_bytes() == b"original document"

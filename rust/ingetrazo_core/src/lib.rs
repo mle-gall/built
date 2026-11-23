@@ -24,6 +24,10 @@ mod facesview;
 mod gltape;
 mod hlr;
 mod igz;
+#[cfg(target_os = "macos")]
+mod file_archive;
+mod file_json;
+mod file_geometry;
 mod instances;
 mod jsondoc;
 mod occlusion;
@@ -113,6 +117,15 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(snap_engine::resolve_snap, m)?)?;
     m.add_function(wrap_pyfunction!(snap::lock_crossing, m)?)?;
     m.add_function(wrap_pyfunction!(snap_build::build_snap_index, m)?)?;
+    #[cfg(target_os = "macos")]
+    m.add_function(wrap_pyfunction!(file_archive::igz_write_zip, m)?)?;
+    #[cfg(target_os = "macos")]
+    m.add_function(wrap_pyfunction!(file_archive::igz_read_member, m)?)?;
+    #[cfg(target_os = "macos")]
+    m.add_class::<file_archive::DocumentReader>()?;
+    m.add_function(wrap_pyfunction!(file_json::igz_json_loads, m)?)?;
+    m.add_function(wrap_pyfunction!(file_json::igz_encode_json, m)?)?;
+    m.add_class::<file_json::FileMatrix>()?;
     m.add_function(wrap_pyfunction!(igz::igz_read_geometry, m)?)?;
     // Unit tests link without libpython; this line made the test binary
     // keep the store's PyO3 glue (and its Python symbols) alive.
@@ -788,7 +801,6 @@ fn store_weld_indices<'py>(
 #[pyfunction]
 #[allow(clippy::type_complexity)]
 fn json_mesh_blocks<'py>(py: Python<'py>, doc: &Bound<'py, PyAny>) -> PyResult<Option<(Bound<'py, PyBytes>, Vec<Bound<'py, pyo3::types::PyTuple>>)>> {
-    use numpy::PyArrayMethods;
     use pyo3::types::{PyByteArray, PyByteArrayMethods, PyBytesMethods};
     let d: &[u8] = if let Ok(b) = doc.cast::<PyBytes>() {
         b.as_bytes()
@@ -799,26 +811,28 @@ fn json_mesh_blocks<'py>(py: Python<'py>, doc: &Bound<'py, PyAny>) -> PyResult<O
     let Ok((text, blocks)) = py.detach(|| jsondoc::mesh_blocks(d)) else {
         return Ok(None);
     };
-    let mut out = Vec::with_capacity(blocks.len());
-    for b in blocks {
-        let n = b.pos.len() / 3;
-        let pos = PyArray1::from_vec(py, b.pos).reshape([n, 3])?;
-        let names: Vec<Bound<'py, PyBytes>> = b.layer_names.iter().map(|x| PyBytes::new(py, x)).collect();
-        let attrs: Vec<Bound<'py, PyBytes>> = b.attrs.iter().map(|x| PyBytes::new(py, x)).collect();
-        out.push(pyo3::types::PyTuple::new(py, [
-            pos.into_any(),
-            PyArray1::from_vec(py, b.flags).into_any(),
-            PyArray1::from_vec(py, b.curves).into_any(),
-            PyArray1::from_vec(py, b.layers).into_any(),
-            pyo3::types::PyList::new(py, names)?.into_any(),
-            PyArray1::from_vec(py, b.sizes).into_any(),
-            PyArray1::from_vec(py, b.counts).into_any(),
-            PyArray1::from_vec(py, b.face_attr).into_any(),
-            pyo3::types::PyList::new(py, attrs)?.into_any(),
-            PyArray1::from_vec(py, b.multi).into_any(),
-        ])?);
-    }
+    let out = blocks.into_iter().map(|b| mesh_tuple(py, b)).collect::<PyResult<Vec<_>>>()?;
     Ok(Some((PyBytes::new(py, &text), out)))
+}
+
+fn mesh_tuple<'py>(py: Python<'py>, b: jsondoc::Block) -> PyResult<Bound<'py, pyo3::types::PyTuple>> {
+    use numpy::PyArrayMethods;
+    let n = b.pos.len() / 3;
+    let pos = PyArray1::from_vec(py, b.pos).reshape([n, 3])?;
+    let names: Vec<Bound<'py, PyBytes>> = b.layer_names.iter().map(|x| PyBytes::new(py, x)).collect();
+    let attrs: Vec<Bound<'py, PyBytes>> = b.attrs.iter().map(|x| PyBytes::new(py, x)).collect();
+    pyo3::types::PyTuple::new(py, [
+        pos.into_any(),
+        PyArray1::from_vec(py, b.flags).into_any(),
+        PyArray1::from_vec(py, b.curves).into_any(),
+        PyArray1::from_vec(py, b.layers).into_any(),
+        pyo3::types::PyList::new(py, names)?.into_any(),
+        PyArray1::from_vec(py, b.sizes).into_any(),
+        PyArray1::from_vec(py, b.counts).into_any(),
+        PyArray1::from_vec(py, b.face_attr).into_any(),
+        pyo3::types::PyList::new(py, attrs)?.into_any(),
+        PyArray1::from_vec(py, b.multi).into_any(),
+    ])
 }
 
 /// A recorded run of OpenGL calls, replayed through the current context's

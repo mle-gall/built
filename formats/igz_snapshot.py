@@ -49,12 +49,23 @@ def copy_steps(value):
 
 def geometry_steps(mesh):
     from core.mesh import DeferredMesh
-    from formats.igz import _attrs_key, _face_attrs_json
+    from formats.igz import _attrs_key, _face_attrs_json, _store_columns
     if type(mesh) is DeferredMesh:
         source = yield from copy_steps(mesh.__dict__["_deferred_source"])
         return {"geom": Geometry(deferred=source)}
     if not mesh.edges and not mesh.faces:
         return {"edges": [], "faces": []}
+    packed = _store_columns(mesh, precise=True)
+    if packed is not None:
+        import numpy as np
+        arrays, attrs, names = packed
+        # Recovery snapshots have always written both optional edge columns.
+        layer = arrays.pop("edge_layer", None)
+        if "edge_curve" not in arrays:
+            arrays["edge_curve"] = np.full(len(arrays["edges"]), -1, dtype=np.int64)
+        arrays["edge_layer"] = (layer if layer is not None else
+                                np.full(len(arrays["edges"]), -1, dtype=np.int32))
+        return {"geom": Geometry(arrays, (yield from copy_steps(attrs)), names)}
     pos, edges, rings = array('d'), array('i'), array('i')
     sizes, counts, face_attr = array('i'), array('i'), array('i')
     flags, curves, layers = array('B'), array('q'), array('i')

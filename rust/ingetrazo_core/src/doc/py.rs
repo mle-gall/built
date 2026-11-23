@@ -885,6 +885,159 @@ impl PyPlacement {
         }
         write(py, slf.as_any(), k, Field::Material, FVal::Val(val))
     }
+    /// Ordered placement metadata appended after the inline mesh or prototype.
+    /// A live plugin or paint container may have pending edits. Snapshot
+    /// its view when present, just as reading the Python attribute would.
+    fn _file_fields<'py>(
+        &self,
+        py: Python<'py>,
+        ifc: Option<Bound<'py, PyAny>>,
+    ) -> PyResult<Bound<'py, PyDict>> {
+        let fields = [
+            ("name", Field::Name),
+            ("axes", Field::Axes),
+            ("layer", Field::Tag),
+            ("billboard", Field::Billboard),
+            ("material", Field::Material),
+            ("text3d", Field::Attr(attr_id("text3d").map_err(err)?)),
+            ("ext", Field::Attr(attr_id("ext").map_err(err)?)),
+            ("uid", Field::Uid),
+            ("hidden", Field::Hidden),
+            ("locked", Field::Locked),
+            ("exploded", Field::Attr(attr_id("exploded").map_err(err)?)),
+            (
+                "explode_offset",
+                Field::Attr(attr_id("explode_offset").map_err(err)?),
+            ),
+        ];
+        let values = {
+            let d = lock();
+            let node = d.need(self.key).map_err(err)?;
+            fields
+                .iter()
+                .map(|(_, f)| {
+                    let cached = match f {
+                        Field::Attr(a) => node.attr_view(*a),
+                        Field::Material => node.views[VIEW_MATERIAL].as_ref(),
+                        _ => None,
+                    };
+                    match cached {
+                        Some(v) => Ok(FVal::Val(Some(Value::Opaque(super::value::Opaque(
+                            std::sync::Arc::new(v.clone_ref(py)),
+                        ))))),
+                        None => node.get(*f),
+                    }
+                })
+                .collect::<Result<Vec<_>, String>>()
+        }
+        .map_err(err)?;
+        let out = PyDict::new(py);
+        for ((key, _), val) in fields.into_iter().zip(values) {
+            if key == "billboard" {
+                if let Some(record) = &ifc {
+                    out.set_item("ifc", record)?;
+                }
+            }
+            let obj = match val {
+                FVal::Xf(Some(xf)) => xf.f.to_vec().into_pyobject(py)?.into_any(),
+                FVal::Xf(None) | FVal::Bool(false) | FVal::Str(None) | FVal::Val(None) => continue,
+                v => fval_to_py(py, v)?,
+            };
+            if key == "layer" || obj.is_truthy()? {
+                match key {
+                    "ext" => {
+                        // Plugins historically may supply opaque values; their
+                        // string conversion is part of the Python extension API.
+                        let json = py.import("json")?;
+                        let opts = PyDict::new(py);
+                        opts.set_item("default", py.get_type::<pyo3::types::PyString>())?;
+                        let encoded = json.call_method("dumps", (&obj,), Some(&opts))?;
+                        out.set_item(key, json.call_method1("loads", (encoded,))?)?;
+                    }
+                    "material" | "text3d" | "exploded" => {
+                        out.set_item(key, py.get_type::<PyDict>().call1((obj,))?)?
+                    }
+                    "explode_offset" => {
+                        out.set_item(key, py.get_type::<PyList>().call1((obj,))?)?
+                    }
+                    _ => out.set_item(key, obj)?,
+                }
+            }
+        }
+        Ok(out)
+    }
+
+    fn _load_file_fields(slf: &Bound<'_, Self>, raw: &Bound<'_, PyDict>) -> PyResult<()> {
+        let py = slf.py();
+        let put = |field, value| write(py, slf.as_any(), slf.get().key, field, value);
+        for (key, field) in [
+            ("layer", Field::Tag),
+            ("hidden", Field::Hidden),
+            ("locked", Field::Locked),
+            ("billboard", Field::Billboard),
+        ] {
+            if let Some(v) = raw.get_item(key)? {
+                if v.is_truthy()? {
+                    let val = match field {
+                        Field::Tag => FVal::Str(str_of(&v)?),
+                        Field::Billboard => FVal::Val(Some(Value::from_py(&v)?)),
+                        _ => FVal::Bool(true),
+                    };
+                    put(field, val)?;
+                }
+            }
+        }
+        for key in ["text3d", "ext", "material", "exploded"] {
+            if let Some(v) = raw.get_item(key)? {
+                if v.is_instance_of::<PyDict>() {
+                    let field = if key == "material" {
+                        Field::Material
+                    } else {
+                        Field::Attr(attr_id(key).map_err(err)?)
+                    };
+                    put(field, FVal::Val(Some(Value::from_py(&v)?)))?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Read a file placement without creating a Python matrix view. The
+    /// matrix handed out later is still bound to this journalled field.
+    fn _load_file_xform(slf: &Bound<'_, Self>, source: &Bound<'_, PyAny>, built: bool) -> PyResult<()> {
+        let values = if let Ok(m) = source.cast::<crate::file_json::FileMatrix>() {
+            m.get().0
+        } else { source.extract()? };
+        if built && !values.iter().all(|n| n.is_finite()) {
+            return Err(PyValueError::new_err("Invalid Built placement transform"));
+        }
+        write(
+            slf.py(),
+            slf.as_any(),
+            slf.get().key,
+            Field::Xform,
+            FVal::Xf(Some(Xform {
+                f: values,
+                src: None,
+            })),
+        )
+    }
+
+    fn _file_xform(&self, precise: bool) -> PyResult<Option<Vec<f64>>> {
+        let doc = lock();
+        let node = doc.need(self.key).map_err(err)?;
+        match node.get(Field::Xform).map_err(err)? {
+            FVal::Xf(matrix) => Ok(matrix.map(|m| {
+                if precise {
+                    m.doubles().to_vec()
+                } else {
+                    m.f.map(|n| n as f32 as f64).to_vec()
+                }
+            })),
+            _ => Err(PyTypeError::new_err("expected placement matrix")),
+        }
+    }
+
     #[getter]
     fn xform<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
         read_matrix(slf.py(), slf.as_any(), slf.get().key, Field::Xform)

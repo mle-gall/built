@@ -56,6 +56,7 @@ from pathlib import Path
 from core.version import __version__
 from formats import built
 from formats.igz_stream import Fragment, SaveStream
+from formats.native_io import DocumentArchive, native_io
 
 from ingetrazo_core import Vec3 as QVector3D
 
@@ -444,6 +445,36 @@ def _bulk_sized(n_edges: int, n_faces: int) -> bool:
     return n_edges + n_faces * 4 >= _BULK_MIN
 
 
+def _store_columns(mesh, precise=False):
+    from core import store_mesh
+    if (type(mesh) is not store_mesh.StoreMesh or native_io() is None
+            or mesh.__dict__.get("_instance_definition") is not None):
+        return None
+    if not precise and mesh.__dict__.get("_pos_cache"):
+        # The legacy IGZ writer observes in-place edits to a handed-out
+        # position vector. Built reads the binary64 store position itself.
+        return None
+    packed = mesh._store.igz_columns()
+    if packed is None:
+        return None
+    import numpy as np
+    arrays, layers = packed
+    attrs, rows = store_mesh.attr_columns(mesh, face_attr=arrays["face_attr"])
+    table, indices, mapped = [], {}, {}
+    for row in dict.fromkeys(rows.tolist()):
+        entry = _face_attrs_json(SimpleNamespace(attrs=attrs[row])) if row >= 0 else {}
+        if entry:
+            idx = indices.setdefault(_attrs_key(entry), len(table))
+            if idx == len(table):
+                table.append(entry)
+            mapped[row] = idx
+        else:
+            mapped[row] = -1
+    arrays["face_attr"] = np.fromiter((mapped[k] for k in rows.tolist()), dtype=np.int32,
+                                      count=len(rows))
+    return arrays, table, layers
+
+
 def _pack_geometry(mesh, sink: dict) -> dict:
     """Write ``mesh`` as a format-3 geometry block into ``sink`` (member
     name → bytes) and return its JSON side.
@@ -455,6 +486,10 @@ def _pack_geometry(mesh, sink: dict) -> dict:
     JSON reader drops them (:func:`core.topology._maximal_holes`)."""
     import numpy as np
     from core.topology import _maximal_holes
+
+    packed = _store_columns(mesh, getattr(sink, "built", False) or getattr(sink, "compatibility", False))
+    if packed is not None:
+        return _write_geometry(*packed, sink)
 
     edges = mesh.edges
     corners: list = []
@@ -701,20 +736,20 @@ def _backup_previous(path: Path) -> bool:
     return True
 
 
-def save_scene(scene, path: Path, *, backup=True) -> dict:
+def save_scene(scene, path: Path, *, backup=True, progress=None) -> dict:
     """Synchronous explicit save; autosave drives the same preparation in slices."""
     import gc
 
     enabled = gc.isenabled()
     gc.disable()
     try:
-        return _save_scene(scene, path, backup=backup)
+        return _save_scene(scene, path, backup=backup, progress=progress)
     finally:
         if enabled:
             gc.enable()
 
 
-def _save_scene(scene, path, *, backup, confirm_loss=None, compatibility=False):
+def _save_scene(scene, path, *, backup, confirm_loss=None, compatibility=False, progress=None):
     from core import project, links
     if hasattr(scene, "plugin_data") and not compatibility:
         project.refresh_reference(scene, path)
@@ -723,8 +758,8 @@ def _save_scene(scene, path, *, backup, confirm_loss=None, compatibility=False):
     native_document = built.is_built(path) and not compatibility
     if native_document or compatibility or _live_element_count(scene) > _LARGE_DOCUMENT:
         with SaveStream(built=native_document, compatibility=compatibility, destination=path) as stream:
-            return _prepare_and_write(scene, path, backup, stream, confirm_loss)
-    return _prepare_and_write(scene, path, backup, None)
+            return _prepare_and_write(scene, path, backup, stream, confirm_loss, progress)
+    return _prepare_and_write(scene, path, backup, None, progress=progress)
 
 
 def export_igz(scene, path, confirm_loss):
@@ -732,8 +767,10 @@ def export_igz(scene, path, confirm_loss):
     return _save_scene(scene, path, backup=True, compatibility=True, confirm_loss=confirm_loss)
 
 
-def _prepare_and_write(scene, path, backup, stream, confirm_loss=None):
-    steps = prepare_scene_steps(scene, stream=stream, large=stream is not None)
+def _prepare_and_write(scene, path, backup, stream, confirm_loss=None, progress=None):
+    if progress:
+        progress(0.02, "Preparing the document…")
+    steps = prepare_scene_steps(scene, stream=stream, large=stream is not None, progress=progress)
     while True:
         try:
             next(steps)
@@ -744,13 +781,18 @@ def _prepare_and_write(scene, path, backup, stream, confirm_loss=None):
         if not confirm_loss(stream.displacement_mm):
             return None
     backup_failed = backup and not _backup_previous(path)
-    stats = write_prepared(prepared, path, stream=stream)
+    if progress:
+        progress(0.76, "Writing the document…")
+    stats = _in_worker(lambda: write_prepared(prepared, path, stream=stream),
+                       (lambda: progress(0.76, "Writing the document…")) if progress else None)
+    if progress:
+        progress(1.0, "Saved")
     if backup_failed:
         stats["backup_failed"] = True
     return stats
 
 
-def prepare_scene_steps(scene, mesh_steps=None, *, stream=None, large=None):
+def prepare_scene_steps(scene, mesh_steps=None, *, stream=None, large=None, progress=None):
     """Yield between model blocks, returning an unencoded document payload."""
     # Accept a Scene or a bare Mesh (the M1 read-compat path feeds a Mesh).
     mesh = scene.mesh if hasattr(scene, "mesh") else scene
@@ -785,8 +827,12 @@ def prepare_scene_steps(scene, mesh_steps=None, *, stream=None, large=None):
 
         from core import links as _links
 
+        io = native_io()
+        precise = mesh_steps is not None or getattr(stream, "built", False)
+
         def _entry(g):
-            xf = getattr(g, "xform", None)
+            direct = io is not None and getattr(g, "_doc_key", 0)
+            xf = g._file_xform(precise) if direct else getattr(g, "xform", None)
             # A linked file (unpacked) is saved as an empty placement with
             # its link: the source holds the geometry (core/links.py).
             placeholder = xf is not None and _links.save_as_placeholder(
@@ -798,7 +844,7 @@ def prepare_scene_steps(scene, mesh_steps=None, *, stream=None, large=None):
                     idx = proto_index[id(mesh)] = len(protos)
                     protos.append(None)          # reserve: recursion is depth
                     protos[idx] = yield from block(mesh)
-                values = (built.placement_values(xf) if mesh_steps is not None or getattr(stream, "built", False)
+                values = (xf if direct else built.placement_values(xf) if precise
                           else built.compact_values(xf.data()))
                 entry = {"proto": idx, "xform": values}
                 # Group or component (issue #90): a group of groups and a
@@ -808,55 +854,58 @@ def prepare_scene_steps(scene, mesh_steps=None, *, stream=None, large=None):
                 entry["component"] = bool(getattr(g, "component", True))
             else:
                 entry = yield from block(g.mesh)
-            # The name — never written until 2026-09-11, so every reopened
-            # document renumbered its groups and a "Pérgola" came back as
-            # "Group 7". Older readers ignore the key.
-            if getattr(g, "name", None):
-                entry["name"] = g.name
-            axes = getattr(g, "axes", None)
-            if axes is not None:
-                # A classic group's own axes (issue #44), column-major like
-                # "xform"; older readers ignore the key.
-                entry["axes"] = list(axes.data())
-            if getattr(g, "layer", None) is not None:
-                entry["layer"] = g.layer
-            if ifc := _group_ifc_record(g):
-                entry["ifc"] = ifc
-            if getattr(g, "billboard", False):
-                # True = legacy textured-quad face-me; "mesh" = imported
-                # silhouette whose real geometry turns toward the camera.
-                entry["billboard"] = g.billboard
-            if getattr(g, "material", None):
-                # The container's own paint (issue #47); older readers
-                # ignore the key and show the faces in the default.
-                entry["material"] = dict(g.material)
-            if getattr(g, "text3d", None):
-                # A 3D text keeps what it was made from, so it reopens
-                # editable. Older readers ignore the key.
-                entry["text3d"] = dict(g.text3d)
-            if getattr(g, "ext", None):
-                # Extensions' parameters for this container (JSON-safe by
-                # contract); older readers ignore the key.
-                entry["ext"] = json.loads(json.dumps(g.ext, default=str))
-                if getattr(stream, "compatibility", False) and _links.link_of(g):
-                    link = entry["ext"][_links.LINK_KEY]
-                    link.pop("rel", None)
-                    link.update(_links._link_record(link["path"], stream.destination))
-            if getattr(g, "uid", None):
-                # The identity a scene's hidden-object list names.
-                entry["uid"] = g.uid
-            if getattr(g, "hidden", False):
-                entry["hidden"] = True
-            if getattr(g, "locked", False):
-                entry["locked"] = True          # older readers ignore it
-            if getattr(g, "exploded", None):
-                # An exploded view and each part's share of it, so the
-                # document reopens able to reassemble (core/explode.py).
-                # Older readers ignore both and see the parts where they
-                # stand.
-                entry["exploded"] = dict(g.exploded)
-            if getattr(g, "explode_offset", None):
-                entry["explode_offset"] = list(g.explode_offset)
+            if direct:
+                entry.update(g._file_fields(_group_ifc_record(g) or None))
+            else:
+                # The name — never written until 2026-09-11, so every reopened
+                # document renumbered its groups and a "Pérgola" came back as
+                # "Group 7". Older readers ignore the key.
+                if getattr(g, "name", None):
+                    entry["name"] = g.name
+                axes = getattr(g, "axes", None)
+                if axes is not None:
+                    # A classic group's own axes (issue #44), column-major like
+                    # "xform"; older readers ignore the key.
+                    entry["axes"] = list(axes.data())
+                if getattr(g, "layer", None) is not None:
+                    entry["layer"] = g.layer
+                if ifc := _group_ifc_record(g):
+                    entry["ifc"] = ifc
+                if getattr(g, "billboard", False):
+                    # True = legacy textured-quad face-me; "mesh" = imported
+                    # silhouette whose real geometry turns toward the camera.
+                    entry["billboard"] = g.billboard
+                if getattr(g, "material", None):
+                    # The container's own paint (issue #47); older readers
+                    # ignore the key and show the faces in the default.
+                    entry["material"] = dict(g.material)
+                if getattr(g, "text3d", None):
+                    # A 3D text keeps what it was made from, so it reopens
+                    # editable. Older readers ignore the key.
+                    entry["text3d"] = dict(g.text3d)
+                if getattr(g, "ext", None):
+                    # Extensions' parameters for this container (JSON-safe by
+                    # contract); older readers ignore the key.
+                    entry["ext"] = json.loads(json.dumps(g.ext, default=str))
+                if getattr(g, "uid", None):
+                    # The identity a scene's hidden-object list names.
+                    entry["uid"] = g.uid
+                if getattr(g, "hidden", False):
+                    entry["hidden"] = True
+                if getattr(g, "locked", False):
+                    entry["locked"] = True          # older readers ignore it
+                if getattr(g, "exploded", None):
+                    # An exploded view and each part's share of it, so the
+                    # document reopens able to reassemble (core/explode.py).
+                    # Older readers ignore both and see the parts where they
+                    # stand.
+                    entry["exploded"] = dict(g.exploded)
+                if getattr(g, "explode_offset", None):
+                    entry["explode_offset"] = list(g.explode_offset)
+            if getattr(stream, "compatibility", False) and _links.link_of(g):
+                link = entry["ext"][_links.LINK_KEY]
+                link.pop("rel", None)
+                link.update(_links._link_record(link["path"], stream.destination))
             kids = None if placeholder else getattr(g, "children", None)
             if kids:
                 entry["children"] = []
@@ -866,8 +915,10 @@ def prepare_scene_steps(scene, mesh_steps=None, *, stream=None, large=None):
             return entry
 
         payload["groups"] = []
-        for g in groups or ():
+        for i, g in enumerate(groups or ()):
             payload["groups"].append((yield from _entry(g)))
+            if progress and i % 64 == 0:
+                progress(0.05 + 0.65 * (i + 1) / len(groups), "Preparing placements…")
         if kept:
             # Definitions kept with no copy placed: written like instances
             # through the SAME prototype table, so one still in use is not
@@ -1161,10 +1212,20 @@ def _write_prepared(prepared, path, background, stream):
     try:
         if stream is not None:
             doc = stream.document(data)
-        elif large:
-            doc = json.dumps(data, separators=(",", ":"), allow_nan=False)
         else:
-            doc = json.dumps(data, indent=2, allow_nan=False)
+            from io import BytesIO
+            native = native_io()
+            doc = None
+            if native is not None:
+                output = BytesIO()
+                try:
+                    native.igz_encode_json(data, output.write, Fragment, not large)
+                    doc = output.getvalue()
+                except (TypeError, UnicodeEncodeError):
+                    pass
+            if doc is None:
+                doc = (json.dumps(data, separators=(",", ":"), allow_nan=False)
+                       if large else json.dumps(data, indent=2, allow_nan=False))
     except ValueError:
         # A NaN or an infinity in a coordinate (#185). Python would write
         # it as the bare word NaN — not JSON, and a broken shape for good.
@@ -1173,7 +1234,7 @@ def _write_prepared(prepared, path, background, stream):
     if container:
         _write_container(path, doc, blobs, fast=large, deflated=geom)
     else:
-        _write_atomic(path, doc if isinstance(doc, Fragment) else doc.encode("utf-8"))
+        _write_atomic(path, doc.encode("utf-8") if isinstance(doc, str) else doc)
     return {"embedded": len(blobs), "missing": missing}
 
 
@@ -1260,6 +1321,25 @@ def _write_container(path: Path, doc: str, blobs: dict,
     holds members compressed like the document — the geometry blocks."""
     import zipfile
     with _atomic_output(path) as target:
+        writer = getattr(native_io(), "igz_write_zip", None)
+        if writer is not None:
+            members = []
+            def member(name, data, compressed):
+                if isinstance(data, Fragment):
+                    data.file.flush()
+                    source = data.file.fileno(), data.offset, data.size
+                    members.append((name, compressed, None, source))
+                else:
+                    if isinstance(data, str):
+                        data = data.encode("utf-8")
+                    members.append((name, compressed, data, None))
+            member(_DOC_ENTRY, doc, True)
+            for name in sorted(deflated or ()):
+                member(name, deflated[name], True)
+            for name in sorted(blobs):
+                member(name, blobs[name], False)
+            if writer(target.fileno(), members, fast):
+                return
         with zipfile.ZipFile(target, "w") as zf:
             def write(member, data, compression):
                 info = zipfile.ZipInfo(member, date_time=_ZIP_EPOCH)
@@ -1299,9 +1379,14 @@ def _in_worker(work, pump=None):
             box["error"] = exc
     th = threading.Thread(target=run, daemon=True)
     th.start()
-    while th.is_alive():
-        th.join(0.1)
-        pump()
+    try:
+        while th.is_alive():
+            th.join(0.1)
+            pump()
+    finally:
+        # Keep the scratch ranges and archive handles alive when a progress
+        # callback cancels the operation before its worker returns.
+        th.join()
     if "error" in box:
         raise box["error"]
     return box["data"]
@@ -1452,7 +1537,7 @@ def _parse_native(raw: bytes):
     text, blocks = got
     was = _saw_nonfinite[0]
     try:
-        data = json.loads(text.decode("utf-8"), parse_constant=_note_constant)
+        data = _decode_document(text)
         _adopt_native_blocks(data, blocks)
     except Exception:  # noqa: BLE001 — the plain parser says what is wrong
         _saw_nonfinite[0] = was
@@ -1460,6 +1545,15 @@ def _parse_native(raw: bytes):
     if _saw_nonfinite[0]:
         return None                      # _without_nonfinite reads the tree
     return data
+
+
+def _decode_document(raw):
+    native = native_io()
+    if native is not None and isinstance(raw, bytes):
+        data = native.igz_json_loads(raw)
+        if data is not None:
+            return data
+    return json.loads(raw.decode("utf-8"), parse_constant=_note_constant)
 
 
 def _parse_document(read, pump=None):
@@ -1470,9 +1564,7 @@ def _parse_document(read, pump=None):
         data = _parse_native(raw)
         if data is not None:
             return data
-        text = raw.decode("utf-8")
-        del raw
-        return json.loads(text, parse_constant=_note_constant)
+        return _decode_document(raw)
     return _in_worker(work, pump)
 
 
@@ -1498,17 +1590,43 @@ def _read_member_flat(archive, name):
     return buf
 
 
-def _read_document(path: Path, pump=None):
+def _read_document(path: Path, pump=None, read_progress=None, *, placements=False):
     """``(data, archive)`` for a document of either shape — the archive is
     ``None`` for a plain-JSON one, and stays open while the caller extracts
     embedded images."""
+    import os
+    io = native_io()
+    stream_reader = getattr(io, "DocumentReader", None)
+    stream_meshes = placements and _NATIVE_JSON_MIN > 0
+
+    def decode(fd, offset, packed, size, method, crc):
+        if stream_reader is None or (size >= _NATIVE_JSON_MIN and not stream_meshes):
+            return None
+        reader = stream_reader(size)
+        def pulse():
+            if read_progress:
+                read_progress(reader.fraction())
+            elif pump:
+                pump()
+        return _in_worker(lambda: reader.parse(fd, offset, packed, method, crc, placements),
+                          pulse if pump or read_progress else None)
+
     with path.open('rb') as stream:
         magic = stream.read(len(_ZIP_MAGIC))
-    if magic != _ZIP_MAGIC:
-        return _parse_document(path.read_bytes, pump), None
+        if magic != _ZIP_MAGIC:
+            size = os.fstat(stream.fileno()).st_size
+            data = decode(stream.fileno(), 0, size, size, 0, None)
+            if data is not None:
+                return data, None
+            stream.seek(0)
+            return _parse_document(stream.read, pump), None
     import zipfile
     from core import zip_limits
-    archive = zipfile.ZipFile(path)
+    reader = getattr(native_io(), "igz_read_member", None)
+    if reader is None:
+        archive = zipfile.ZipFile(path)
+    else:
+        archive = DocumentArchive(path)
     try:
         # Every later read (geometry blocks, textures, the survey) is from
         # this archive: one check covers them all.
@@ -1517,12 +1635,25 @@ def _read_document(path: Path, pump=None):
         archive.close()
         raise
     try:
-        data = _parse_document(lambda: _read_member_flat(archive, _DOC_ENTRY),
+        info = archive.getinfo(_DOC_ENTRY)
+        if stream_reader and (stream_meshes or info.file_size < _NATIVE_JSON_MIN) and not info.flag_bits & 1:
+            with archive.open(info) as member:
+                offset = getattr(member, "_orig_compress_start", None)
+                if offset is not None:
+                    data = decode(archive.fp.fileno(), offset, info.compress_size,
+                                  info.file_size, info.compress_type, info.CRC)
+                    if data is not None:
+                        return data, archive
+        data = _parse_document(lambda: (archive.read(_DOC_ENTRY) if reader else
+                                        _read_member_flat(archive, _DOC_ENTRY)),
                                pump)
     except KeyError:
         archive.close()
         raise ValueError(
             f"{path.name} is not an IngeTrazo document (no {_DOC_ENTRY}).")
+    except BaseException:
+        archive.close()
+        raise
     return data, archive
 
 
@@ -1835,10 +1966,13 @@ def _load_into_inner(scene, path: Path, progress=None, link_meshes=None) -> None
     _dropped_nonfinite[0] = 0
     _saw_nonfinite[0] = False
 
+    from core import _native
     tick(0.05, "Reading the document…")
     data, archive = _read_document(
         path, pump=(lambda: tick(0.1, "Reading the document…"))
-        if progress is not None else None)
+        if progress is not None else None,
+        read_progress=(lambda f: tick(0.05 + 0.14 * f, "Reading the document…"))
+        if progress is not None else None, placements=bool(getattr(scene, "_root", None)) and _native.wanted())
     payload = data.get("scene", {})
 
     def read_materials():
@@ -1871,7 +2005,10 @@ def _load_into_inner(scene, path: Path, progress=None, link_meshes=None) -> None
             _unpack_textures(payload, archive)
             materials = read_materials()
             skip = link_meshes.unchanged_members(archive, payload) if link_meshes else ()
-            geom = _read_geometry_members(archive, path, payload, skip, built_format=is_built)
+            tick(0.25, "Reading geometry…")
+            geom = _in_worker(
+                lambda: _read_geometry_members(archive, path, payload, skip, built_format=is_built),
+                (lambda: tick(0.25, "Reading geometry…")) if progress is not None else None)
             # Rebuilt here, while the archive is still open — it closes below
             # and the survey's blobs live inside it.
             survey = _unpack_photo_mesh(payload, archive)
@@ -2025,6 +2162,8 @@ def _load_into_inner(scene, path: Path, progress=None, link_meshes=None) -> None
             last = _time.monotonic()
     names: list = []
 
+    io = native_io()
+
     def _group_from(raw, depth=0):
         name = raw.get("name") or None
         if name:
@@ -2037,7 +2176,12 @@ def _load_into_inner(scene, path: Path, progress=None, link_meshes=None) -> None
             from ingetrazo_core import Matrix4 as QMatrix4x4
             group = Group(proto_meshes[int(raw["proto"])], name=name,
                           uid=uid)
-            if is_built:
+            values = raw["xform"]
+            if (io is not None and getattr(group, "_doc_key", 0)
+                    and (isinstance(values, io.FileMatrix) or (isinstance(values, list)
+                         and len(values) == 16 and all(isinstance(v, (int, float)) for v in values)))):
+                group._load_file_xform(values, is_built)
+            elif is_built:
                 group.xform = built.placement(raw["xform"])
             else:
                 vals = [float(x) for x in raw["xform"]]
@@ -2050,24 +2194,27 @@ def _load_into_inner(scene, path: Path, progress=None, link_meshes=None) -> None
             vals = [float(x) for x in raw["axes"]]
             group.axes = QMatrix4x4(*[vals[col * 4 + row] for row in range(4)
                                       for col in range(4)])
-        if raw.get("layer"):
-            group.layer = raw["layer"]
         if raw.get("ifc"):
             group.ifc = dict(raw["ifc"])
-        if raw.get("billboard"):
-            group.billboard = raw["billboard"]   # True | "mesh"
-        if isinstance(raw.get("text3d"), dict):
-            group.text3d = dict(raw["text3d"])
-        if isinstance(raw.get("ext"), dict):
-            group.ext = raw["ext"]
-        if raw.get("hidden"):
-            group.hidden = True
-        if raw.get("locked"):
-            group.locked = True
-        if isinstance(raw.get("material"), dict):
-            group.material = dict(raw["material"])
-        if isinstance(raw.get("exploded"), dict):
-            group.exploded = dict(raw["exploded"])
+        if io is not None and getattr(group, "_doc_key", 0):
+            group._load_file_fields(raw)
+        else:
+            if raw.get("layer"):
+                group.layer = raw["layer"]
+            if raw.get("billboard"):
+                group.billboard = raw["billboard"]   # True | "mesh"
+            if isinstance(raw.get("text3d"), dict):
+                group.text3d = dict(raw["text3d"])
+            if isinstance(raw.get("ext"), dict):
+                group.ext = raw["ext"]
+            if raw.get("hidden"):
+                group.hidden = True
+            if raw.get("locked"):
+                group.locked = True
+            if isinstance(raw.get("material"), dict):
+                group.material = dict(raw["material"])
+            if isinstance(raw.get("exploded"), dict):
+                group.exploded = dict(raw["exploded"])
         off = raw.get("explode_offset")
         if isinstance(off, list) and len(off) == 3:
             group.explode_offset = tuple(float(v) for v in off)
