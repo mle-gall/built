@@ -311,3 +311,106 @@ def test_the_inspector_edits_the_material_paint_holds(win, monkeypatch):
     assert "lib:browse:materials" in chips
     L.edit_field(win, view, "opacity:Concrete", "50")
     assert win.viewport.scene.materials["Concrete"].opacity == pytest.approx(0.5)
+
+
+def test_online_catalogue_search_preview_download_and_document_credit(win, tmp_path, monkeypatch):
+    from core import library
+    from formats import igz
+    from core.scene import Scene
+    from PySide6.QtGui import QImage
+    import zipfile
+    import time
+
+    src = tmp_path / "source"
+    (src / "miniaturas").mkdir(parents=True)
+    (src / "modelos").mkdir()
+    entries = [{"id": "stool", "nombre": "Taburete", "nombre_en": "Stool",
+                "categoria": "Cocina", "autor": "Ana", "licencia": "CC BY", "obj": "stool.obj"},
+               {"id": "chair", "nombre": "Silla", "nombre_en": "Chair", "categoria": "Oficina"}]
+    (src / "index.json").write_text(json.dumps({"modelos": entries}))
+    with zipfile.ZipFile(src / "modelos/stool.zip", "w") as z:
+        z.writestr("stool.obj", "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n")
+        z.writestr("LICENSE.txt", "CC BY · Ana")
+    image = QImage(32, 32, QImage.Format_RGBA8888)
+    image.fill(0xff4532ab)
+    image.save(str(src / "miniaturas/stool.png"))
+    monkeypatch.setenv("INGETRAZO_LIBRARY", str(src))
+    monkeypatch.setenv("INGETRAZO_TEXTURE_CACHE", str(tmp_path / "cache/tex"))
+
+    win._on_open_library()
+    assert frame(win)["content"]["title"] == "Component library"
+    session = L._sheet_provider(win._view_).catalogue
+
+    def finish():
+        session.job.result(timeout=5)
+        session.poll()
+        return frame(win)
+
+    loaded = finish()
+    assert [i["label"] for i in tiles(loaded)] == ["Chair", "Stool"]
+    assert not library.cached_thumbnail("stool")
+    act(win, "side", "online-cat:Oficina")
+    assert [i["label"] for i in tiles(frame(win))] == ["Chair"]
+    for query in ("taburete", "stool"):
+        act(win, "search", query)
+        shown = frame(win)
+        assert [i["label"] for i in tiles(shown) if i["id"].startswith("online:")] == ["Stool"]
+    act(win, "focus", "online:stool")
+    assert any("Stool · CC BY · by Ana" in b.get("text", "") for b in detail(frame(win)))
+    act(win, "visible", "online:stool", "online:bogus")
+    deadline = time.monotonic() + 3
+    while library.thumbnails_pending() and time.monotonic() < deadline:
+        time.sleep(.01)
+    session.poll()
+    frame(win)
+    icons = win._view_.renderer.last("ui_set_icons")[0]
+    assert any(key == "online:stool" and w == h > 0 for key, w, h, _ in icons)
+    assert not library.cached_thumbnail("chair")
+    assert not (library.library_cache() / "modelos").exists()
+    placed = []
+    monkeypatch.setattr(win, "_start_place", placed.append)
+    act(win, "verb", "insert_online")
+    finish()
+    assert not cs.shown(win) and len(placed) == 1
+    assert (library.library_cache() / "modelos/stool/LICENSE.txt").read_text() == "CC BY · Ana"
+    win.viewport.scene.groups.append(placed[0])
+    win.viewport.scene.version += 1
+    path = tmp_path / "credit.built"
+    igz.save_scene(win.viewport.scene, path)
+    restored = Scene()
+    igz.load_into(restored, path)
+    assert restored.groups[-1].ext["catalogue"]["autor"] == "Ana"
+    assert restored.groups[-1].ext["catalogue"]["licencia"] == "CC BY"
+    L.open_library(win, "components", scope="s:model")
+    candidates = tiles(frame(win))
+    saved = next(it["id"] for it in candidates if it["label"] == placed[0].name)
+    act(win, "focus", saved)
+    assert any("Stool · CC BY · by Ana" in b.get("text", "") for b in detail(frame(win)))
+
+
+def test_failed_or_abandoned_catalogue_download_never_places(win, monkeypatch):
+    from core import library
+    from threading import Event
+
+    entries = [{"id":"chair", "nombre":"Silla", "nombre_en":"Chair"}]
+    monkeypatch.setattr(library, "index", lambda refresh: entries)
+    monkeypatch.setattr(library, "model_file", lambda row: None)
+    placed = []
+    monkeypatch.setattr(win, "insert_library_component", lambda *args: placed.append(args))
+    win._on_open_library()
+    frame(win)
+    session = L._sheet_provider(win._view_).catalogue
+    session.job.result(timeout=3)
+    session.poll()
+    frame(win)
+    act(win, "open", "online:chair")
+    session.job.result(timeout=3)
+    session.poll()
+    assert any("Could not download" in b.get("text", "") for b in detail(frame(win)))
+    gate = Event()
+    monkeypatch.setattr(library, "model_file", lambda row: gate.wait(3))
+    act(win, "open", "online:chair")
+    act(win, "side", "s:model")
+    gate.set()
+    QApplication.processEvents()
+    assert not placed
