@@ -81,62 +81,55 @@ def test_facet_and_tokens_browse_by_base():
     items[0]["base"], items[1]["base"] = "colour", "image"
     for e in items[2:]:
         e["base"] = "image"
-    rows, by_key = L.rows_for(items, _state(facet="colour"))
-    assert set(by_key) == {"m:b"}
-    rows, by_key = L.rows_for(items, _state(filter="is:image oak"))
-    assert set(by_key) == {"lib:w:0"}
+    assert {e["key"] for e in L.filtered(items, _state(facet="colour"))} == {"m:b"}
+    assert {e["key"] for e in L.filtered(items, _state(filter="is:image oak"))} == {"lib:w:0"}
 
 
 def _items():
-    def it(key, name, source, category="", uses=0):
-        return {"key": key, "name": name, "source": source, "category": category, "uses": uses,
-                "hex": "#808080", "thumb": None, "verbs": ("apply",)}
+    def it(key, name, source, category="", uses=0, **kw):
+        return dict({"key": key, "name": name, "source": source, "category": category, "uses": uses,
+                     "hex": "#808080", "thumb": None, "verbs": ("apply",)}, **kw)
     return [it("m:b", "Beta", "model", uses=1), it("m:a", "Alpha", "model", uses=5),
             it("lib:w:0", "Oak", "bundled", "Wood"), it("lib:w:1", "Ash", "bundled", "Wood"),
-            it("lib:s:0", "Slate", "bundled", "Stone")]
+            it("lib:s:0", "Slate", "bundled", "Stone"),
+            it("lk:/p/Ride.igz|Rail", "Rail", "linked", file="/p/Ride.igz", uses=3)]
 
 
 def _state(**kw):
     st = {"type": "materials", "view": 0, "sort": "name", "filter": "", "fold": set(), "open": set(),
-          "recent": [], "mine_rev": 0}
+          "recent": [], "mine_rev": 0, "scope": "s:model"}
     st.update(kw)
     return st
 
 
-def _shown(rows):
-    return [(r[1][0], r[0][1]) for r in rows]
+def _names(groups):
+    return [(cap, [e["name"] for e in members]) for cap, _sub, members in groups]
 
 
-def test_rows_sections_in_order_bundled_categories_folded():
-    rows, _ = L.rows_for(_items(), _state())
-    assert _shown(rows) == [(0, "In this model"), (2, "Alpha"), (2, "Beta"),
-                            (0, "My library"), (3, rows[4][0][1]),
-                            (0, "Bundled"), (1, "Stone"), (1, "Wood")]
-    # Counts everywhere: a section counts its items, a category its own.
-    counts = {r[0][1]: r[1][1] for r in rows if r[1][0] in (0, 1)}
-    assert counts == {"In this model": 2, "My library": 0, "Bundled": 3, "Stone": 1, "Wood": 2}
+def test_side_rows_scopes_then_categories_then_linked_files_read_only():
+    rows = L.side_rows(_items(), _state())
+    assert [(r[0], r[1], r[2], r[3]) for r in rows] == [
+        ("s:model", "In this model", 2, 0), ("s:recent", "Recently used", 0, 0), ("s:mine", "My library", 0, 0),
+        ("s:bundled", "Bundled", 3, 0), ("c:bundled:Stone", "Stone", 1, 1), ("c:bundled:Wood", "Wood", 2, 1),
+        ("", "Linked files · read-only", 0, 0), ("s:linked:/p/Ride.igz", "Ride.igz", 1, 0)]
+    assert rows[3][5] is True                           # Bundled folds, open
+    assert rows[-1][4] == "file"
+    folded = L.side_rows(_items(), _state(fold={"s:bundled"}))
+    assert [r[0] for r in folded if r[0].startswith("c:")] == []
 
 
-def test_rows_open_category_sort_and_filter():
-    rows, _ = L.rows_for(_items(), _state(open={"c:bundled:Wood"}))
-    assert (2, "Ash") in _shown(rows) and (2, "Oak") in _shown(rows)
-    rows, _ = L.rows_for(_items(), _state(sort="used"))
-    model = [n for k, n in _shown(rows) if k == 2][:2]
-    assert model == ["Alpha", "Beta"]
-    rows, _ = L.rows_for(_items(), _state(sort="recent", recent=["m:b"]))
-    assert [n for k, n in _shown(rows) if k == 2][:2] == ["Beta", "Alpha"]
-    # A filter opens what matches (categories too) and drops empty sections.
-    rows, by_key = L.rows_for(_items(), _state(filter="wood"))
-    assert _shown(rows) == [(0, "Bundled"), (1, "Wood"), (2, "Ash"), (2, "Oak")]
-    assert set(by_key) == {"lib:w:0", "lib:w:1"}
-
-
-def test_folded_section_hides_its_items_and_marks_the_current_paint():
-    rows, _ = L.rows_for(_items(), _state(fold={"s:model"}), current="Alpha")
-    assert (2, "Alpha") not in _shown(rows)
-    rows, _ = L.rows_for(_items(), _state(), current="Alpha")
-    alpha = next(r for r in rows if r[0][1] == "Alpha")
-    assert alpha[1][2] == 1 and alpha[1][1] == 5      # active, uses
+def test_a_scope_shows_its_items_sorted_and_a_search_shows_every_match():
+    assert _names(L.groups_for(_items(), _state())) == [("", ["Alpha", "Beta"])]
+    assert _names(L.groups_for(_items(), _state(sort="used"))) == [("", ["Alpha", "Beta"])]
+    assert _names(L.groups_for(_items(), _state(sort="recent", recent=["m:b"]))) == [("", ["Beta", "Alpha"])]
+    assert _names(L.groups_for(_items(), _state(scope="c:bundled:Wood"))) == [("", ["Ash", "Oak"])]
+    assert _names(L.groups_for(_items(), _state(scope="s:bundled"))) == [("Stone", ["Slate"]), ("Wood", ["Ash", "Oak"])]
+    assert _names(L.groups_for(_items(), _state(scope="s:linked:/p/Ride.igz"))) == [("", ["Rail"])]
+    assert _names(L.groups_for(_items(), _state(scope="s:recent", recent=["lib:w:1", "m:a"]))) == [("", ["Ash", "Alpha"])]
+    # A search looks everywhere, grouped by where it comes from.
+    got = _names(L.groups_for(_items(), _state(filter="a", scope="c:bundled:Stone")))
+    assert got == [("In this model", ["Alpha", "Beta"]), ("Bundled · Stone", ["Slate"]),
+                   ("Bundled · Wood", ["Ash", "Oak"]), ("Ride.igz · read-only", ["Rail"])]
 
 
 def test_providers_are_data_shaped_and_profiles_is_coming():
@@ -148,7 +141,7 @@ def test_providers_are_data_shaped_and_profiles_is_coming():
             assert isinstance(verb, str) and isinstance(label, str)
 
 
-# ---- dock places ----------------------------------------------------------------
+# ---- the sheet, the dock, the palette --------------------------------------------
 
 class _Renderer:
     def __init__(self):
@@ -172,19 +165,14 @@ class _Win:
         self._tool_actions = {}
 
 
-def test_library_returns_project_to_where_it_was():
+def test_the_dock_has_no_library_place_any_more(monkeypatch):
     view, win = _View(), _Win()
+    opened = []
+    monkeypatch.setattr(L, "open_library", lambda w, t=None, **kw: opened.append(t) or True)
     L.set_mode(view, win, "problems")
-    L.set_mode(view, win, "library")
-    assert view._ui_mode == "library"
-    assert ("ui_library_opened", ()) in view.renderer.calls
-    # The Project segment, or Esc: back to Problems, not to the bare tree.
-    L.set_mode(view, win, "")
-    assert view._ui_mode == "problems"
-    # From Problems, Esc (or ×) is the tree.
-    L.set_mode(view, win, "")
-    assert view._ui_mode == ""
-    L.set_mode(view, win, "library")
+    L.set_mode(view, win, "library")                    # the old switch, ⌘K, the strip: the sheet
+    assert opened == [None]
+    assert view._ui_mode == "problems"                  # the dock stays where it was
     L.set_mode(view, win, "")
     assert view._ui_mode == ""
 
@@ -193,7 +181,7 @@ def test_placing_a_component_lands_on_components():
     view, win = _View(), _Win()
     win.viewport.active_tool = type("PlaceGroupTool", (), {})()
     L._state(view)["type"] = "materials"
-    L.set_mode(view, win, "library")
+    L._land(view, win)
     assert L._state(view)["type"] == "components"
 
 

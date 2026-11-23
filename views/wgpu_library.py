@@ -134,6 +134,39 @@ def material_uses(scene) -> Counter:
     return uses
 
 
+def linked_material_uses(scene) -> dict:
+    """{linked file: Counter(material → objects wearing it)}, per content
+    version: what each linked file's parts are painted with."""
+    sig = (id(scene), scene.content_version)
+    cached = getattr(scene, "_lib_linked", None)
+    if cached is not None and cached[0] == sig:
+        return cached[1]
+    out = {}
+    try:
+        from core import links
+        from core.group import iter_placements
+        from core.store_parts import material_names
+        for path in links.sources(scene):
+            counts = Counter()
+            for g in links.linked_groups(scene, path):
+                for pg, _m in iter_placements(g):
+                    mesh = getattr(pg, "mesh", None)
+                    if mesh is None:
+                        continue
+                    names = material_names(mesh)
+                    if names is None:
+                        names = {f.attrs.get("mat") for f in mesh.faces}
+                    for n in names:
+                        if n:
+                            counts[n] += 1
+            if counts:
+                out[path] = counts
+    except Exception:  # noqa: BLE001 — no link data: nothing read-only to list
+        out = {}
+    scene._lib_linked = (sig, out)
+    return out
+
+
 def _wears(mesh, name, memo) -> bool:
     if id(mesh) not in memo:
         from core.store_parts import material_names
@@ -281,10 +314,35 @@ class MaterialsProvider(Provider):
                                 "hex": _hex(rgb), "thumb": None, "verbs": ("apply",)})
         return out
 
+    def _linked_items(self, ctx, model):
+        """The linked files' materials, read-only, under each file: the
+        registry materials that only linked parts wear move out of «In this
+        model» (editing them here would change a file that is not this one)."""
+        per_file = linked_material_uses(ctx.scene)
+        if not per_file:
+            return model, []
+        own = material_uses(ctx.scene)
+        linked_total = Counter()
+        for counts in per_file.values():
+            linked_total.update(counts)
+        out = []
+        by_name = {e["name"]: e for e in model}
+        for path, counts in per_file.items():
+            for name, n in counts.items():
+                e = by_name.get(name)
+                if e is None:
+                    continue
+                out.append(dict(e, key=f"lk:{path}|{name}", source="linked", file=path, uses=n, category="",
+                                verbs=("apply", "select")))
+        keep = [e for e in model if not (e["key"].startswith("m:") and e["name"] in linked_total
+                                         and own.get(e["name"], 0) <= linked_total[e["name"]])]
+        return keep, out
+
     def items(self, ctx):
         if getattr(self, "_bundled_cache", None) is None:
             self._bundled_cache = self._bundled(ctx)
-        return self._model_items(ctx) + self._mine_items(ctx) + [dict(e) for e in self._bundled_cache]
+        model, linked = self._linked_items(ctx, self._model_items(ctx))
+        return model + linked + self._mine_items(ctx) + [dict(e) for e in self._bundled_cache]
 
     def type_actions(self, ctx):
         from core.purge import unused_materials
@@ -341,10 +399,10 @@ class MaterialsProvider(Provider):
                     panel._apply_color(tuple(e.get("color") or (1, 1, 1)), name=name)
             else:
                 from views.wgpu_ui import _paint_with
-                _paint_with(ctx.win, key)
+                _paint_with(ctx.win, f"m:{name}" if kind == "lk" else key)
         elif verb == "edit" and kind == "m":
             ctx.view._ui_mat_focus = key
-        elif verb == "select" and kind == "m":
+        elif verb == "select" and kind in ("m", "lk"):
             n = select_material_uses(ctx, name)
             ctx.flash(f"{n} selected wearing {name}" if n else f"Nothing in the open context wears {name}")
         elif verb == "duplicate" and kind == "m":
@@ -665,7 +723,7 @@ def provider(type_id):
     return next((p for p in PROVIDERS if p.id == type_id), PROVIDERS[0])
 
 
-# ---- state and rows ------------------------------------------------------------
+# ---- state ------------------------------------------------------------------------
 
 def _state(view) -> dict:
     st = view.__dict__.get("_ui_lib")
@@ -673,8 +731,8 @@ def _state(view) -> dict:
         saved = _settings_json("library/state", {})
         st = {"type": saved.get("type", "materials"), "view": int(saved.get("view", 0)),
               "sort": saved.get("sort", "name"), "filter": "", "fold": set(saved.get("fold", [])),
-              "open": set(), "recent": _settings_json("library/recent", []), "mine_rev": 0, "cursor": None,
-              "sig": None, "items": {}}
+              "open": set(saved.get("open", [])), "recent": _settings_json("library/recent", []), "mine_rev": 0,
+              "cursor": None, "sig": None, "items": {}, "scope": saved.get("scope", "s:model")}
         if st["sort"] not in dict(SORTS):
             st["sort"] = "name"
         st["facet"] = saved.get("facet", "all")
@@ -686,8 +744,8 @@ def _state(view) -> dict:
 
 def _save_state(st) -> None:
     _store_json("library/state", {"type": st["type"], "view": st["view"], "sort": st["sort"],
-                                  "facet": st.get("facet", "all"),
-                                  "fold": sorted(st["fold"])})
+                                  "facet": st.get("facet", "all"), "scope": st.get("scope", "s:model"),
+                                  "fold": sorted(st["fold"]), "open": sorted(st.get("open", ()))})
 
 
 def _sorted(items, sort, recent):
@@ -699,12 +757,19 @@ def _sorted(items, sort, recent):
     return sorted(items, key=lambda e: _natural(e.get("label") or e["name"]))
 
 
-def rows_for(items, st, current=None):
-    """The display rows of one type's items: sections in ``SECTIONS`` order,
-    categories inside, items sorted; folded headers hide their items. A
-    filter shows every match unfolded. Returns ``(rows, item_by_key)``."""
+# ---- what the sheet lists -------------------------------------------------------------
+#: Scopes of the side list, in order (ids: "s:<scope>"; a category "c:<scope>:<name>";
+#: a linked file "s:linked:<path>").
+SCOPES = [("model", "In this model"), ("recent", "Recently used"), ("mine", "My library"),
+          ("bundled", "Bundled")]
+#: A search lists at most this many items per group (the category shows them all).
+SEARCH_CAP = 60
+
+
+def filtered(items, st):
+    """The items the facet and the search keep (``is:colour``/``is:image``
+    tokens browse by base, like the facet)."""
     words = st["filter"].lower().split()
-    # Browsing by base: the facet, or the tokens is:colour / is:image.
     bases = {"is:colour": "colour", "is:color": "colour", "is:image": "image"}
     base = next((bases[w] for w in words if w in bases), None)
     words = [w for w in words if w not in bases]
@@ -714,53 +779,91 @@ def rows_for(items, st, current=None):
         items = [e for e in items if e.get("base", base) == base]
     if words:
         items = [e for e in items
-                 if all(w in f"{e['name']} {e.get('label', '')} {e.get('short', '')} {e['category']}".lower()
-                        for w in words)]
-    by_key = {e["key"]: e for e in items}
-    rows = []
+                 if all(w in f"{e['name']} {e.get('label', '')} {e.get('short', '')} {e['category']} "
+                             f"{e.get('file', '')}".lower() for w in words)]
+    return items
 
-    def row(kind, key, name, meta="", hexc="", icon="", verbs="", count=0, active=0, expanded=0):
-        rows.append(([key, name, meta, hexc, icon, verbs], [kind, count, active, expanded]))
 
-    for sec, title in SECTIONS:
-        group = [e for e in items if e["source"] == sec]
-        if not group and (words or sec in ("linked", "bundled")):
-            continue
-        sk = f"s:{sec}"
-        open_ = bool(words) or sk not in st["fold"]
-        row(0, sk, title, count=len(group), expanded=int(open_))
-        if not open_:
-            continue
-        if not group:
-            note = {"model": "Nothing of this type in the model yet.",
-                    "mine": "Right-click an item of this model › Add to My library to keep it for every project."
-                    }.get(sec, "")
-            if note:
-                row(3, f"n:{sec}", note)
-            continue
-        cats = {}
-        for e in group:
-            cats.setdefault(e["category"], []).append(e)
-        names = sorted(cats, key=lambda c: (c != "", _natural(c)))
-        for cat in names:
-            members = _sorted(cats[cat], st["sort"], st["recent"])
-            if cat:
-                ck = f"c:{sec}:{cat}"
-                # Bundled categories start folded; the model's and mine open.
-                cat_open = bool(words) or (ck in st["open"] if sec == "bundled" else ck not in st["fold"])
-                row(1, ck, cat, count=len(members), expanded=int(cat_open))
-                if not cat_open:
-                    continue
-            for e in members[:ROW_CAP]:
-                meta = " · ".join(x for x in (e["category"], dict(SECTIONS)[e["source"]],
-                                              f"used by {e['uses']}" if e["uses"] else "") if x)
-                # A tile has room for a short name (a RAL code); a list row for all of it.
-                shown = (e.get("short") if st["view"] == 0 else None) or e.get("label") or e["name"]
-                row(2, e["key"], shown, meta, e["hex"], e.get("icon", ""), ",".join(e["verbs"]),
-                    count=e["uses"], active=int(current is not None and e["name"] == current))
-            if len(members) > ROW_CAP:
-                row(3, f"n:{sec}:{cat}:more", f"{len(members) - ROW_CAP} more — filter to find them")
-    return rows, by_key
+def in_scope(items, scope, recent=()):
+    """The items of one side row."""
+    if scope == "s:recent":
+        by_key = {e["key"]: e for e in items}
+        return [by_key[k] for k in recent if k in by_key]
+    if scope.startswith("s:linked:"):
+        path = scope[len("s:linked:"):]
+        return [e for e in items if e["source"] == "linked" and e.get("file") == path]
+    if scope.startswith("c:"):
+        _c, sec, cat = scope.split(":", 2)
+        return [e for e in items if e["source"] == sec and e["category"] == cat]
+    sec = scope[2:]
+    return [e for e in items if e["source"] == sec]
+
+
+def side_rows(items, st) -> list:
+    """The side list: (id, label, count, depth, kind, fold) per row; a
+    caption has no id. Bundled folds open on its categories."""
+    out = []
+    for sec, title in SCOPES:
+        group = in_scope(items, f"s:{sec}", st["recent"])
+        fold = None
+        cats = []
+        if sec in ("model", "bundled", "mine"):
+            cats = sorted({e["category"] for e in group if e["category"]}, key=_natural)
+        if sec == "bundled" and cats:
+            fold = f"s:{sec}" not in st["fold"]
+        out.append((f"s:{sec}", title, len(group), 0, "", fold))
+        if cats and (fold is None or fold):
+            for cat in cats:
+                out.append((f"c:{sec}:{cat}", cat, sum(1 for e in group if e["category"] == cat), 1, "", None))
+    files = {}
+    for e in items:
+        if e["source"] == "linked" and e.get("file"):
+            files.setdefault(e["file"], 0)
+            files[e["file"]] += 1
+    if files:
+        out.append(("", "Linked files · read-only", 0, 0, "caption", None))
+        for path, n in sorted(files.items(), key=lambda kv: _natural(kv[0].rsplit("/", 1)[-1])):
+            out.append((f"s:linked:{path}", path.replace("\\", "/").rsplit("/", 1)[-1], n, 0, "file", None))
+    return out
+
+
+def scope_title(scope, items) -> str:
+    if scope.startswith("s:linked:"):
+        return scope[len("s:linked:"):].replace("\\", "/").rsplit("/", 1)[-1]
+    if scope.startswith("c:"):
+        return scope.split(":", 2)[2]
+    return dict(SCOPES).get(scope[2:], "")
+
+
+def groups_for(items, st):
+    """The content: [(caption, sub, items)]. Browsing shows the side
+    row's items (the model's grouped by category); a search shows every
+    match, grouped by where it comes from."""
+    scope = st.get("scope") or "s:model"
+    if st["filter"].strip() and not st["filter"].strip().startswith("is:"):
+        out = []
+        found = filtered(items, st)
+        for sec, title in SCOPES:
+            if sec == "recent":
+                continue
+            group = [e for e in found if e["source"] == sec]
+            for cat in sorted({e["category"] for e in group}, key=lambda c: (c != "", _natural(c))):
+                members = _sorted([e for e in group if e["category"] == cat], st["sort"], st["recent"])
+                cap = f"{title} · {cat}" if cat else title
+                out.append((cap, f"{len(members)}", members[:SEARCH_CAP]))
+        linked = [e for e in found if e["source"] == "linked"]
+        for path in sorted({e.get("file", "") for e in linked}):
+            members = _sorted([e for e in linked if e.get("file") == path], st["sort"], st["recent"])
+            out.append((path.rsplit("/", 1)[-1] + " · read-only", f"{len(members)}", members[:SEARCH_CAP]))
+        return out
+    members = filtered(in_scope(items, scope, st["recent"]), st)
+    if scope != "s:recent":
+        members = _sorted(members, st["sort"], st["recent"])
+    if scope in ("s:model", "s:mine", "s:bundled"):
+        cats = sorted({e["category"] for e in members}, key=lambda c: (c != "", _natural(c)))
+        if len(cats) > 1 or (cats and cats[0]):
+            return [(c or "", "", [e for e in members if e["category"] == c][:ROW_CAP]) for c in cats]
+    return [("", "", members[:ROW_CAP])]
 
 
 def _thumb(view, path) -> str:
@@ -773,74 +876,439 @@ def _thumb(view, path) -> str:
         sent.add(key)
         img = QImage(str(path))
         if not img.isNull():
-            img = img.scaled(THUMB_PX, THUMB_PX, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
-            x, y = (img.width() - THUMB_PX) // 2, (img.height() - THUMB_PX) // 2
-            img = img.copy(x, y, THUMB_PX, THUMB_PX).convertToFormat(QImage.Format_RGBA8888)
-            view.renderer.ui_set_icons([(key, THUMB_PX, THUMB_PX, bytes(img.constBits())[: THUMB_PX * THUMB_PX * 4])])
+            px = THUMB_PX * 2
+            img = img.scaled(px, px, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+            x, y = (img.width() - px) // 2, (img.height() - px) // 2
+            img = img.copy(x, y, px, px).convertToFormat(QImage.Format_RGBA8888)
+            view.renderer.ui_set_icons([(key, px, px, bytes(img.constBits())[: px * px * 4])])
     return key
-
-
-def before_frame(view, win) -> None:
-    """While the Library is the dock's place: send its rows when anything
-    they show changed (type, view, sort, filter, folds, the model)."""
-    if view.__dict__.get("_ui_mode") != "library" or not hasattr(view.renderer, "ui_set_library"):
-        return
-    from views.wgpu_ui import _current_material_name
-    st = _state(view)
-    scene = win.viewport.scene
-    current = _current_material_name()
-    sig = (st["type"], st["view"], st["sort"], st.get("facet"), st["filter"], tuple(sorted(st["fold"])), tuple(sorted(st["open"])),
-           id(scene), scene.content_version, current, tuple(st["recent"][:12]), st["mine_rev"])
-    if sig == st["sig"]:
-        return
-    st["sig"] = sig
-    ctx = Ctx(win, view)
-    counts, active_items = {}, []
-    for p in PROVIDERS:
-        if not p.ready:
-            continue
-        items = p.items(ctx)
-        counts[p.id] = sum(1 for e in items if e["source"] in ("model", "linked"))
-        if p.id == st["type"]:
-            active_items = items
-    prov = provider(st["type"])
-    for e in active_items:
-        e["icon"] = _thumb(view, e["thumb"])
-    rows, by_key = rows_for(active_items, st, current if prov.id == "materials" else None)
-    st["items"] = {e["key"]: e for e in active_items}
-    view.renderer.ui_set_library(
-        [(p.id, p.label, counts.get(p.id, 0), p.ready) for p in PROVIDERS], prov.id, st["view"],
-        f"{st['sort']},facet:{st.get('facet', 'all')}" if getattr(prov, "facets", None) else st["sort"],
-        SORTS + ([("-", "")] + prov.facets if getattr(prov, "facets", None) else []), prov.verbs(), prov.type_actions(ctx), prov.empty, st["filter"], rows)
 
 
 def item(view, key):
     return _state(view)["items"].get(key)
 
 
-# ---- opening and leaving ---------------------------------------------------------
+# ---- the sheet -------------------------------------------------------------------------
 
-def set_mode(view, win, mode) -> None:
-    """The dock's place: ``"library"``, ``"problems"`` or ``""`` (the
-    tree). Leaving the Library returns Project to the mode it had."""
-    cur = view.__dict__.get("_ui_mode", "")
-    if mode == "library":
-        if cur != "library":
-            view._ui_lib_back = cur
-            _land(view, win)
-        view.renderer.ui_library_opened() if hasattr(view.renderer, "ui_library_opened") else None
-    elif mode == "" and cur == "library":
-        mode = view.__dict__.get("_ui_lib_back", "") or ""
-    view._ui_mode = mode
-    view._ui_tree_sig = None
-    view._ui_insp_sig = None
-    view.update()
+def _chrome_sheet():
+    from views import chrome_sheet
+    return chrome_sheet
 
+
+class LibrarySheet(_chrome_sheet().Provider):
+    """The Library on the large sheet (option B of the 2026-11-23 review):
+    types as tabs, scopes and categories on the side (the linked files'
+    materials read-only), 96-pt tiles, the focused item's details and
+    editor on the right. Painting itself is the palette strip's (C)."""
+    id = "library"
+
+    def __init__(self, view):
+        self.view = view
+        self._pending = {}          # editor values typed, not applied yet
+        self._pending_item = None
+        self._timer = None
+
+    def signature(self, ctx):
+        win = ctx.win
+        scene = win.viewport.scene
+        from views.wgpu_ui import _current_material_name
+        st = _state(self.view)
+        return (id(scene), scene.content_version, _current_material_name(), st["mine_rev"], tuple(st["recent"][:12]))
+
+    def _items(self, ctx):
+        st = _state(self.view)
+        lctx = Ctx(ctx.win, self.view)
+        counts, active = {}, []
+        for p in PROVIDERS:
+            if not p.ready:
+                continue
+            items = p.items(lctx)
+            counts[p.id] = sum(1 for e in items if e["source"] in ("model", "linked"))
+            if p.id == st["type"]:
+                active = items
+        st["items"] = {e["key"]: e for e in active}
+        return active, counts
+
+    def build(self, ctx):
+        cs = _chrome_sheet()
+        from views.wgpu_ui import _current_material_name
+        view, st = self.view, _state(self.view)
+        prov = provider(st["type"])
+        items, counts = self._items(ctx)
+        current = _current_material_name() if prov.id == "materials" else None
+        s = cs.Sheet(self.id, "", width=1240)
+        for p in PROVIDERS:
+            s.tab(p.id, p.label, counts.get(p.id, "") if p.ready else "soon", on=p.id == prov.id, enabled=p.ready)
+        s.search("Search all " + prov.label.lower())
+        sorts = list(SORTS) + ([("-", "")] + list(prov.facets) if getattr(prov, "facets", None) else [])
+        label = "Sort: " + dict(SORTS).get(st["sort"], "Name")
+        s.menus.append({"id": "sort", "label": label, "on": st["sort"],
+                        "options": [dict(cs.verb(i, lab), role=1 if (i == st["sort"] or i == "facet:" + st.get("facet", "all")) else 0)
+                                    for i, lab in sorts]})
+        scope = st.get("scope") or "s:model"
+        sides = side_rows(items, st)
+        if scope not in {r[0] for r in sides if r[0]}:
+            scope = st["scope"] = "s:model"
+        searching = bool(st["filter"].strip()) and not st["filter"].strip().startswith("is:")
+        for rid, lab, n, depth, kind, fold in sides:
+            if kind == "caption":
+                s.side_caption(lab)
+            else:
+                s.side_item(rid, lab, right=str(n) if n else "", depth=depth, kind=kind, fold=fold,
+                            on=rid == scope and not searching)
+        groups = groups_for(items, st)
+        shown = [e for _c, _s, members in groups for e in members]
+        if searching:
+            c = s.content(f"“{st['filter'].strip()}”", f"{len(shown)} found", empty="Nothing matches.")
+        else:
+            n = len(in_scope(items, scope, st["recent"]))
+            where = "Bundled" if scope.startswith("c:bundled") else ""
+            c = s.content(scope_title(scope, items), " · ".join(x for x in (where, str(n)) if x),
+                          empty=self._empty(prov, scope))
+        for cap, sub, members in groups:
+            if not members:
+                continue
+            if cap:
+                c.caption(cap, right=sub)
+            c.tiles([self._tile(prov, e, current) for e in members], size=96)
+        if not searching and scope.startswith("s:model"):
+            acts = [cs.verb(f"typeact:{a}", lab, quiet=True) for a, lab in prov.type_actions(Ctx(ctx.win, view))]
+            if acts:
+                c.buttons(acts, align="left")
+        keys = [e["key"] for e in shown]
+        if st.get("cursor") not in keys:
+            st["cursor"] = keys[0] if keys else None
+        self._detail(s, prov, ctx, st.get("cursor"), current)
+        s.footer((), "Click to see it · double-click or ↩ uses it · esc back to the model")
+        if st.get("cursor"):
+            s.focus(st["cursor"], force=bool(st.pop("force_focus", False)))
+        return s
+
+    def _empty(self, prov, scope):
+        if scope == "s:mine":
+            return "Keep a material for every project: Add to My library, on a material of this model."
+        if scope == "s:recent":
+            return "What you used last shows here."
+        if scope == "s:model":
+            return prov.empty or "Nothing of this type in the model yet."
+        return "Nothing here."
+
+    def _tile(self, prov, e, current):
+        cs = _chrome_sheet()
+        verbs = [v for v in e["verbs"]]
+        labels = dict(prov.verbs())
+        menu = [("-", "") if v == "-" else (v, labels.get(v, VERBS.get(v, v))) for v in verbs]
+        while menu and menu[-1][0] == "-":
+            menu.pop()
+        shown = e.get("label") or e["name"]
+        if e.get("short") and e["source"] == "bundled":
+            shown = e["short"]
+        sub = ""
+        if prov.id == "materials":
+            tex = e.get("thumb")
+            sub = "image" if e.get("base") == "image" else "colour"
+            if e["uses"]:
+                sub += f" · used by {e['uses']}"
+        elif e["uses"]:
+            sub = f"{e['uses']} cop{'ies' if e['uses'] != 1 else 'y'}"
+        icon = _thumb(self.view, e.get("thumb")) if e.get("thumb") else ""
+        return cs.item(e["key"], shown, sub=sub, icon=icon, hex=e.get("hex") or "", menu=menu,
+                       on=current is not None and e["name"] == current, tip=e["name"])
+
+    # -- the details pane ------------------------------------------------------------
+    def _detail(self, s, prov, ctx, key, current):
+        cs = _chrome_sheet()
+        d = s.detail(width=340, empty="Pick an item to see it here.")
+        e = _state(self.view)["items"].get(key) if key else None
+        if e is None:
+            return
+        icon = _thumb(self.view, e.get("thumb")) if e.get("thumb") else ""
+        d.picture(icon=icon, hex=e.get("hex") or "", size=180)
+        where = {"model": "In this model", "mine": "My library", "bundled": "Bundled · read-only",
+                 "linked": (e.get("file", "").rsplit("/", 1)[-1] + " · read-only")}.get(e["source"], "")
+        d.heading(e.get("label") or e["name"], right=where)
+        scene = ctx.win.viewport.scene
+        if prov.id == "components":
+            self._component_detail(d, prov, ctx, e)
+            return
+        kind = e["key"].partition(":")[0]
+        if kind == "uc":
+            k = len(unnamed_colours_cached(scene))
+            d.text("A colour painted before materials had names (an older file). Name these makes each a material.")
+            d.kv([("Colour", e["name"]), ("Used by", f"{e['uses']} object" + ("s" if e["uses"] != 1 else ""))])
+            d.buttons([cs.verb("apply", "Paint with it", key="↩", primary=True),
+                       cs.verb("select", "Select uses"), cs.verb("name", f"Name these ({k})")], align="fill")
+            return
+        if kind == "m":
+            mat = scene.materials.get(e["name"])
+            if mat is not None:
+                self._editor(d, ctx, e, mat)
+            d.buttons([cs.verb("apply", "Paint with it", key="↩", primary=True), cs.verb("select", "Select uses")],
+                      align="fill")
+            d.buttons([cs.verb("duplicate", "Duplicate", quiet=True), cs.verb("keep", "Add to My library", quiet=True),
+                       cs.verb("delete", "Delete…", quiet=True)], align="left")
+            return
+        rows = [("Base", ("Image · " + _file_stem(e["thumb"])) if e.get("base") == "image" and e.get("thumb")
+                 else "Colour " + (e.get("hex") or "").upper())]
+        if e["category"]:
+            rows.append(("Category", e["category"]))
+        used = material_uses(scene).get(e["name"], 0)
+        rows.append(("In this model", f"used by {used}" if used else "not used"))
+        d.kv(rows)
+        verbs = [cs.verb("apply", "Paint with it", key="↩", primary=True)]
+        if e["source"] == "mine":
+            verbs.append(cs.verb("unkeep", "Remove from My library"))
+        if e["source"] == "linked":
+            d.text("Edit it in its own file: the change comes in when the link reloads.", tone="faint")
+            verbs.append(cs.verb("opensource", "Open " + e.get("file", "").rsplit("/", 1)[-1]))
+        d.buttons(verbs, align="fill")
+
+    def _component_detail(self, d, prov, ctx, e):
+        cs = _chrome_sheet()
+        lctx = Ctx(ctx.win, self.view)
+        got = prov.inspector(lctx, e)
+        if got is not None:
+            _title, sections = got
+            for title, rows in sections:
+                if title == "Actions":
+                    continue
+                d.kv(rows)
+        verbs = [cs.verb("apply", "Place a copy", key="↩", primary=True)]
+        if e["key"].startswith("cm:"):
+            verbs += [cs.verb("select", "Select copies"), cs.verb("edit", "Open for editing")]
+        d.buttons(verbs, align="fill")
+        if e["key"].startswith("cm:"):
+            more = [v for v in ("rename", "keepfile", "unkeepfile", "delete") if v in e["verbs"]]
+            d.buttons([cs.verb(v, {"rename": "Rename…"}.get(v, VERBS[v]), quiet=True) for v in more], align="left")
+
+    def _editor(self, d, ctx, e, mat):
+        """The material's editor: base, colour or image and tile, surface,
+        opacity. Edits apply as they are made (sliders when they settle)."""
+        from views.chrome_forms import Field, Form
+        p = self._pending
+        tex = mat.texture or {}
+        image = bool(tex.get("path"))
+        pbr = mat.pbr or {}
+        fields = [Field("mat.base", "choice", "Base", "image" if image else "colour",
+                        options=[("colour", "Colour"), ("image", "Image")])]
+        if image:
+            fields += [Field("mat.image", "path", "Image", _file_stem(tex["path"])),
+                       Field("mat.tw", "number", "Tile width", p.get("mat.tw", tex.get("sw", 1.0)), lo=0.001, hi=1e4,
+                             decimals=3, suffix="m"),
+                       Field("mat.th", "number", "Tile height", p.get("mat.th", tex.get("sh", tex.get("sw", 1.0))),
+                             lo=0.001, hi=1e4, decimals=3, suffix="m")]
+        else:
+            fields.append(Field("mat.color", "color", "Colour", _hex(mat.color) or "#cccccc"))
+        on = any(pbr.get(c) is not None for c, _l, _m in PBR_ROWS)
+        fields.append(Field("mat.pbr", "check", "", on, row_label="Surface", tip="Metallic, roughness, normal and occlusion"))
+        fields[-1].label = "PBR surface"
+        if on:
+            for channel, label, map_key in PBR_ROWS:
+                v = pbr.get(channel)
+                pct = p.get(f"mat.{channel}", 0 if v is None else round(float(v) * 100))
+                hi = 200 if channel == "normal_scale" else 100
+                fields.append(Field(f"mat.{channel}", "slider", label, pct, lo=0, hi=hi, suffix="%"))
+                if pbr.get(map_key):
+                    fields.append(Field(f"mat.unmap.{map_key}", "button", f"Clear {label.lower()} map",
+                                        note=_file_stem(pbr[map_key].get("path", ""))))
+                else:
+                    fields.append(Field(f"mat.map.{map_key}", "button", f"{label} map…"))
+        opacity = 100 if mat.opacity is None else round(mat.opacity * 100)
+        fields.append(Field("mat.opacity", "slider", "Opacity", p.get("mat.opacity", opacity), lo=0, hi=100, suffix="%"))
+        fields.append(Field("mat.name", "button", "Rename…", note=mat.name))
+        form = Form("", fields, on_change=lambda f, fid, v: self._edit(ctx, e, fid, v),
+                    on_button=lambda f, fid: self._button(ctx, e, fid))
+        d.kv([("Used by", f"{e['uses']} object" + ("s" if e["uses"] != 1 else ""))])
+        d.fields(form, id="editor")
+
+    def _edit(self, ctx, e, fid, value):
+        prov = provider("materials")
+        lctx = Ctx(ctx.win, self.view)
+        name = e["name"]
+        if fid == "mat.base":
+            prov.edit(lctx, e, "base", "Image" if value == "image" else "Colour")
+        elif fid == "mat.color":
+            prov.edit(lctx, e, "color", str(value))
+        elif fid == "mat.pbr":
+            if value:
+                lctx.core("set_material_pbr", name=name, metallic=0.0, roughness=0.5)
+            else:
+                lctx.core("set_material_pbr", name=name, **{c: None for c, _l, _m in PBR_ROWS})
+        elif fid in ("mat.tw", "mat.th", "mat.opacity") or fid[4:] in {c for c, _l, _m in PBR_ROWS}:
+            self._pending[fid] = value
+            self._later(ctx, e)
+
+    def _later(self, ctx, e):
+        """Number fields and sliders apply when they settle (one undo step,
+        not one per keystroke or pixel)."""
+        from PySide6.QtCore import QTimer
+        if self._timer is None:
+            self._timer = QTimer(singleShot=True)
+            self._timer.setInterval(350)
+            self._timer.timeout.connect(self._settled)
+        self._pending_item = e
+        self._pending_ctx = ctx
+        self._timer.start()
+
+    def _settled(self):
+        if self._pending_item is not None:
+            self._apply(self._pending_ctx, self._pending_item)
+
+    def _apply(self, ctx, e):
+        p, self._pending = self._pending, {}
+        if not p:
+            return
+        lctx = Ctx(ctx.win, self.view)
+        name = e["name"]
+        mat = lctx.scene.materials.get(name)
+        if mat is None:
+            return
+        try:
+            if "mat.tw" in p or "mat.th" in p:
+                tex = mat.texture or {}
+                w = float(p.get("mat.tw", tex.get("sw", 1.0)))
+                h = float(p.get("mat.th", tex.get("sh", w)))
+                if w > 0 and h > 0:
+                    lctx.core("edit_material", name=name, tile=[w, h])
+            if "mat.opacity" in p:
+                lctx.core("edit_material", name=name, opacity=float(p["mat.opacity"]) / 100.0)
+            values = {k[4:]: float(v) / 100.0 for k, v in p.items() if k[4:] in {c for c, _l, _m in PBR_ROWS}}
+            if values:
+                lctx.core("set_material_pbr", name=name, **values)
+        except (KeyError, ValueError) as exc:
+            lctx.flash(str(exc).strip("'\""))
+        refresh(ctx.win)
+
+    def _button(self, ctx, e, fid):
+        prov = provider("materials")
+        lctx = Ctx(ctx.win, self.view)
+        if fid == "mat.image":
+            prov.run(lctx, "image", e)
+        elif fid.startswith("mat.map."):
+            prov.run(lctx, "map", e, fid[len("mat.map."):])
+        elif fid.startswith("mat.unmap."):
+            prov.run(lctx, "unmap", e, fid[len("mat.unmap."):])
+        elif fid == "mat.name":
+            self._rename(ctx, e)
+        refresh(ctx.win)
+
+    def _rename(self, ctx, e):
+        from views import chrome_forms
+        prov = provider(_state(self.view)["type"])
+        lctx = Ctx(ctx.win, self.view)
+        title = "Rename material" if prov.id == "materials" else "Rename component"
+
+        def done(text):
+            if text and text.strip() and text.strip() != e["name"]:
+                try:
+                    prov.run(lctx, "rename", e, text.strip())
+                except (KeyError, ValueError) as exc:
+                    lctx.flash(str(exc).strip("'\""))
+                if prov.id == "materials":
+                    _state(self.view)["cursor"] = f"m:{text.strip()}"
+                    _state(self.view)["force_focus"] = True
+            refresh(ctx.win)
+        chrome_forms.ask_text(ctx.win, title, "Name:", text=e["name"], done=done)
+
+    # -- what comes back ---------------------------------------------------------------
+    def act(self, ctx, verb, args):
+        view, win = self.view, ctx.win
+        st = _state(view)
+        arg = args[0] if args else ""
+        lctx = Ctx(win, view)
+        if verb == "search":
+            st["filter"] = arg
+        elif verb == "tab":
+            if any(p.id == arg and p.ready for p in PROVIDERS):
+                st["type"], st["scope"], st["cursor"] = arg, "s:model", None
+                _save_state(st)
+        elif verb == "side":
+            st["scope"], st["cursor"] = arg, None
+            _save_state(st)
+        elif verb == "fold":
+            st["fold"].symmetric_difference_update({arg})
+            _save_state(st)
+        elif verb == "headmenu" and len(args) > 1:
+            opt = args[1]
+            if opt.startswith("facet:"):
+                st["facet"] = opt[6:] if opt[6:] in ("all", "colour", "image") else "all"
+            elif opt in dict(SORTS):
+                st["sort"] = opt
+            _save_state(st)
+        elif verb == "focus":
+            st["cursor"] = arg
+        elif verb == "open":
+            self.run(ctx, "apply", arg)
+        elif verb == "menu" and len(args) > 1:
+            self.run(ctx, args[1], arg)
+        elif verb == "verb":
+            if arg.startswith("typeact:"):
+                provider(st["type"]).type_action(lctx, arg[len("typeact:"):])
+            elif st.get("cursor"):
+                self.run(ctx, arg, st["cursor"])
+
+    def run(self, ctx, verb, key):
+        view, win = self.view, ctx.win
+        st = _state(view)
+        e = st["items"].get(key)
+        if e is None:
+            return
+        prov = provider(st["type"])
+        lctx = Ctx(win, view)
+        if verb == "rename":
+            self._rename(ctx, e)
+            return
+        if verb == "opensource":
+            path = e.get("file")
+            if path and hasattr(win, "open_path"):
+                win.open_path(path)
+            return
+        if verb == "apply":
+            _remember(view, key)
+            st["cursor"] = key
+        prov.run(lctx, verb, e)
+        if verb == "duplicate":
+            st["force_focus"] = True
+        if verb == "apply":
+            # Painting (or placing) happens in the model: the sheet goes.
+            _chrome_sheet().close(win)
+
+    def closed(self, ctx):
+        # What was typed or dragged last still applies.
+        if self._timer is not None and self._timer.isActive():
+            self._timer.stop()
+            if self._pending_item is not None:
+                self._apply(ctx, self._pending_item)
+
+    def fallback(self, win):
+        """No chrome: the Materials tray (Qt) is the Library."""
+        tray = getattr(win, "tray", None)
+        if tray is not None and hasattr(tray, "show_materials"):
+            tray.show_materials()
+
+
+def refresh(win) -> None:
+    _chrome_sheet().refresh(win)
+
+
+def _sheet_provider(view):
+    p = view.__dict__.get("_ui_lib_sheet")
+    if p is None:
+        p = view._ui_lib_sheet = LibrarySheet(view)
+    return p
+
+
+def before_frame(view, win) -> None:
+    """The Paint strip (C's palette): the model's materials and the recent
+    ones, the current one's name, Browse all… (the sheet)."""
+    _palette(view, win)
+
+
+# ---- opening ---------------------------------------------------------------------------
 
 def _land(view, win) -> None:
-    """Which type opens: Paint's material decides between Materials and
-    Colours; a component being placed opens Components."""
-    from tools.paint import PaintTool
+    """Which type opens: a component being placed opens Components, Paint
+    opens Materials."""
     st = _state(view)
     tool = getattr(win.viewport, "active_tool", None) or getattr(getattr(win.viewport, "tools", None), "active", None)
     if type(tool).__name__ == "PlaceGroupTool":
@@ -853,23 +1321,38 @@ def _active_tool(win) -> str:
     return next((k for k, a in getattr(win, "_tool_actions", {}).items() if a.isChecked()), "")
 
 
-def open_library(win, type_id=None) -> None:
-    """Window › Library › <type>, ⌘K and the rail: the dock shows the
-    Library on that type, its filter ready for typing."""
+def open_library(win, type_id=None, search=None, scope=None) -> bool:
+    """Window › Library › <type>, ⌘K, the rail, the Paint strip's Browse
+    all…: the Library sheet on that type. False when the chrome cannot
+    draw it (``BUILT_UI=0``)."""
     view = getattr(getattr(win, "_doc", None), "stand_in", None)
     if view is None or not getattr(view, "_ui_attached", False):
+        return False
+    st = _state(view)
+    _land(view, win)
+    if type_id:
+        st["type"] = type_id
+    if scope:
+        st["scope"] = scope
+    st["filter"] = search or ""
+    return _chrome_sheet().open(win, _sheet_provider(view), search=search)
+
+
+def set_mode(view, win, mode) -> None:
+    """The dock's mode: ``"problems"`` or ``""`` (the tree). The Library is
+    a sheet now: ``"library"`` opens it and leaves the dock as it is."""
+    if mode == "library":
+        open_library(win)
         return
-    if type_id:
-        _state(view)["type"] = type_id
-    set_mode(view, win, "library")
-    if type_id:
-        _state(view)["type"] = type_id
-        _state(view)["sig"] = None
+    view._ui_mode = mode
+    view._ui_tree_sig = None
+    view._ui_insp_sig = None
+    view.update()
 
 
 def install(win) -> None:
-    """Window › Library › Materials / Colours / Components: menu entries
-    (so ⌘K finds them) and the rail's Components button."""
+    """Window › Library › Materials / Components: menu entries (so ⌘K
+    finds them) and the rail's Components button."""
     from PySide6.QtGui import QAction
     if getattr(win, "_lib_installed", False):
         return
@@ -921,15 +1404,118 @@ def _register_icon() -> None:
     icons._DRAW["components"] = draw
 
 
+# ---- the palette strip (Paint's fast path) --------------------------------------------
+
+#: How many swatches the strip shows: the model's, then recent ones not in it.
+STRIP_MODEL = 10
+STRIP_RECENT = 5
+
+
+def palette_items(view, win) -> list:
+    """(id, name, hex, icon, active) per swatch; ("-", …) a rule; ("", name…)
+    the current material's name."""
+    from views.wgpu_ui import _current_material_name, _hex
+    scene = win.viewport.scene
+    cur = _current_material_name()
+    out = []
+    mats = list((getattr(scene, "materials", None) or {}).items())
+    uses = material_uses(scene)
+    # The model's, most used first (what you paint with most is under the hand).
+    mats.sort(key=lambda kv: (-uses.get(kv[0], 0), _natural(kv[0])))
+    for name, mat in mats[:STRIP_MODEL]:
+        tex = getattr(mat, "texture", None)
+        icon = _thumb(view, tex["path"]) if tex and tex.get("path") else ""
+        out.append((f"m:{name}", name, _hex(mat.color), icon, name == cur))
+    st = _state(view)
+    rec = []
+    for key in st["recent"]:
+        if len(rec) >= STRIP_RECENT:
+            break
+        kind = key.partition(":")[0]
+        if kind not in ("lib", "ral", "my"):
+            continue
+        hexc, icon, name = _recent_look(key)
+        if name and name not in dict(mats):
+            rec.append((key, name, hexc, _thumb(view, icon) if icon else "", name == cur))
+    if rec:
+        out.append(("-", "", "", "", False))
+        out += rec
+    if cur:
+        out.append(("-", "", "", "", False))
+        out.append(("", cur, "", "", False))
+    return out
+
+
+def _recent_look(key):
+    """(hex, image path, name) of a bundled or kept material, from its key."""
+    from views import tray
+    kind, _, rest = key.partition(":")
+    try:
+        if kind == "ral" and tray._RAL_FILE.exists():
+            data = json.loads(tray._RAL_FILE.read_text(encoding="utf-8"))
+            for fam in data.get("families", []):
+                for c in fam.get("colors", []):
+                    if c["code"] == rest:
+                        rgb = [v / 255.0 if max(c["rgb"]) > 1 else v for v in c["rgb"]]
+                        return _hex(rgb), None, "%s %s" % (c["code"], tray._ral_name(c))
+        elif kind == "lib":
+            cid, _, idx = rest.rpartition(":")
+            data = json.loads((tray._TEX_DIR / "library.json").read_text(encoding="utf-8"))
+            for cat in data.get("categories", []):
+                if cat["id"] == cid:
+                    it = cat["items"][int(idx)]
+                    return "", str(tray._TEX_DIR / "library" / it["file"]), it["name"]
+        elif kind == "my":
+            e = _settings_json(_MINE_KEY, [])[int(rest)]
+            tex = (e.get("texture") or {}).get("path")
+            return _hex(e.get("color")), tex, e.get("name", "")
+    except (OSError, ValueError, IndexError, KeyError):
+        pass
+    return "", None, ""
+
+
+def _palette(view, win) -> None:
+    from views.wgpu_ui import _active_tool_id
+    items = palette_items(view, win) if _active_tool_id(win) == "paint" else []
+    if items != getattr(view, "_ui_palette", None):
+        view._ui_palette = items
+        view.renderer.ui_set_palette(items)
+
+
+def paint_from_strip(win, key) -> None:
+    """A swatch of the strip: paint with it (a recent bundled one too)."""
+    view = getattr(getattr(win, "_doc", None), "stand_in", None)
+    if view is not None:
+        _remember(view, key)
+    from views.wgpu_ui import _paint_with
+    if key.startswith("my:") and view is not None:
+        e = _settings_json(_MINE_KEY, [])
+        try:
+            entry = e[int(key[3:])]
+        except (ValueError, IndexError):
+            return
+        provider("materials").run(Ctx(win, view), "apply", {"key": key, "name": entry.get("name", "")})
+        return
+    _paint_with(win, key)
+
+
 # ---- actions ------------------------------------------------------------------
 
 def _ask(view, pending, title, body, yes) -> None:
-    view._ui_pending = ("lib", pending)
-    view.renderer.ui_set_prompt(title, body, [("yes", yes), ("no", "Cancel")])
+    """A question over the sheet (or the window): Delete… asks first."""
+    from views import chrome_dialogs
+    win = view.window() if hasattr(view, "window") else None
+
+    def done(answer):
+        if answer == "yes":
+            confirmed(win, view, pending)
+            refresh(win)
+    chrome_dialogs.ask_later(win, title, body, [("cancel", "Cancel"), ("yes", yes)], done,
+                             default="yes", cancel="cancel", tone="warning")
 
 
 def confirmed(win, view, pending, text="") -> None:
-    """The dock prompt answered yes for a Library question."""
+    """A Library question answered yes."""
     what, type_id, key = pending
     p = provider(type_id)
     if hasattr(p, "confirmed"):
@@ -944,8 +1530,8 @@ def _remember(view, key) -> None:
 
 
 def action(win, view, arg) -> None:
-    """``verb SEP key [SEP arg]`` from the browser (``verb:key`` from an
-    inspector chip)."""
+    """``verb:key`` from an inspector chip (the material being edited in
+    the dock's inspector, C's path)."""
     if view is None:
         return
     if SEP not in arg and ":" in arg:
@@ -956,69 +1542,73 @@ def action(win, view, arg) -> None:
     st = _state(view)
     ctx = Ctx(win, view)
     try:
-        if verb == "type":
-            st["type"] = key if any(p.id == key and p.ready for p in PROVIDERS) else st["type"]
-            st["filter"] = ""
-            view._ui_mat_focus = None
-            _save_state(st)
-        elif verb == "view":
-            st["view"] = 1 if key == "list" else 0
-            _save_state(st)
-        elif verb == "sort" and key.startswith("facet:"):
-            st["facet"] = key[6:] if key[6:] in ("all", "colour", "image") else "all"
-            _save_state(st)
-        elif verb == "sort":
-            st["sort"] = key if key in dict(SORTS) else "name"
-            _save_state(st)
-        elif verb == "filter":
-            st["filter"] = key
-        elif verb == "toggle":
-            sec = key.split(":")[1] if key.count(":") >= 1 else ""
-            if key.startswith("c:") and sec == "bundled":
-                st["open"].symmetric_difference_update({key})
-            else:
-                st["fold"].symmetric_difference_update({key})
-            _save_state(st)
-        elif verb == "typeact":
-            provider(st["type"]).type_action(ctx, key)
-        elif verb == "focus":
-            st["cursor"] = key
-            it = item(view, key)
-            view._ui_mat_focus = key if it is not None else None
-        else:
-            it = item(view, key)
-            if it is None:
-                return
-            p = provider(st["type"])
-            if verb == "apply":
-                _remember(view, key)
-                st["cursor"] = key
-                view._ui_mat_focus = key
-            p.run(ctx, verb, it, extra)
-        st["sig"] = None
+        if verb == "browse":
+            open_library(win, key or None)
+            return
+        it = _item_anywhere(view, win, key)
+        if it is None:
+            return
+        p = provider("components" if key.startswith(("cm:", "sc:", "pp:")) else "materials")
+        if verb == "apply":
+            _remember(view, key)
+        p.run(ctx, verb, it, extra)
         view._ui_insp_sig = None
     except (KeyError, ValueError) as exc:
         ctx.flash(str(exc).strip("'\""))
     view.update()
 
 
-# ---- inspector -------------------------------------------------------------------
+def _item_anywhere(view, win, key):
+    """The item for ``key``, from the last sheet build or the model."""
+    it = item(view, key)
+    if it is not None:
+        return it
+    if key.startswith("m:"):
+        name = key[2:]
+        mat = win.viewport.scene.materials.get(name)
+        if mat is None:
+            return None
+        return {"key": key, "name": name, "source": "model", "category": "",
+                "uses": material_uses(win.viewport.scene).get(name, 0), "hex": _hex(mat.color),
+                "thumb": (mat.texture or {}).get("path"), "verbs": ()}
+    return None
+
+
+# ---- inspector (C: the dock's inspector edits the material) ----------------------
+
+def inspector_key(view, win):
+    """The material the dock's inspector edits: one picked for editing
+    (a swatch's Edit…), else Paint's current one while Paint is active."""
+    from views.wgpu_ui import _active_tool_id, _current_material_name
+    key = view.__dict__.get("_ui_mat_focus")
+    if key and key.startswith("m:") and key[2:] in win.viewport.scene.materials:
+        return key
+    if _active_tool_id(win) == "paint":
+        cur = _current_material_name()
+        if cur and cur in win.viewport.scene.materials:
+            return f"m:{cur}"
+    return None
+
 
 def inspector(view, win):
-    """``(title, sections)`` for the Library item in focus, or None (the
-    inspector then shows the selection as usual)."""
-    key = view.__dict__.get("_ui_mat_focus")
-    it = item(view, key) if key else None
+    """``(title, sections)`` for the material the inspector edits, or None
+    (the inspector then shows the selection as usual)."""
+    key = inspector_key(view, win)
+    it = _item_anywhere(view, win, key) if key else None
     if it is None:
         return None
-    return provider(_state(view)["type"]).inspector(Ctx(win, view), it)
+    got = provider("materials").inspector(Ctx(win, view), it)
+    if got is None:
+        return None
+    title, sections = got
+    sections = [(t, [(f"lib:browse:materials", "Browse all…") if a.endswith(":apply:" + key) else (a, lab)
+                     for a, lab in rows] if t == "Actions" else rows) for t, rows in sections]
+    return title, sections
 
 
 def edit_field(win, view, arg, text) -> None:
-    """An inspector field of a Library item: ``<field>:<material name>``."""
+    """An inspector field of a material: ``<field>:<material name>``."""
     field, _, name = arg.partition(":")
-    st = _state(view)
-    it = st["items"].get(f"m:{name}") or {"key": f"m:{name}", "name": name}
-    p = provider(st["type"])
-    p.edit(Ctx(win, view), it, field, text)
-    st["sig"] = None
+    it = _item_anywhere(view, win, f"m:{name}") or {"key": f"m:{name}", "name": name}
+    provider("materials").edit(Ctx(win, view), it, field, text)
+    refresh(win)
