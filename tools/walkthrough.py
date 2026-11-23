@@ -31,7 +31,7 @@ import math
 import os
 
 from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.i18n import tr
 from tools.base import Tool, ToolContext

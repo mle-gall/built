@@ -16,7 +16,8 @@ from __future__ import annotations
 import math
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QGuiApplication, QVector3D
+from PySide6.QtGui import QGuiApplication
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.dimension import Dimension, _AXIS_VECTORS, _linear_frame
 from core.snap import project_to_view_plane

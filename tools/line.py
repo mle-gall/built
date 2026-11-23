@@ -16,7 +16,7 @@ so the viewport can:
 """
 from __future__ import annotations
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.edits import build_add_edge
 from core.history import Command

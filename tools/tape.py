@@ -30,7 +30,8 @@ locks onto, erasable with the Eraser or Edit ▸ Delete Guides. Esc cancels.
 from __future__ import annotations
 
 from PySide6.QtCore import QRectF, Qt
-from PySide6.QtGui import QColor, QPen, QVector3D
+from PySide6.QtGui import QColor, QPen
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.guide import Guide
 from core.history import AddGuideCommand
@@ -254,7 +255,7 @@ class TapeMeasureTool(Tool):
         if self._mode == "point":
             # A guide POINT at the measured spot — no source edge needed,
             # which is the whole use: marking a place on a face. It keeps
-            # its dashed segment back to the first click, as SketchUp's
+            # its dashed segment back to the first click, as the modeller's
             # does: from the red axis to a circle's centre (issue #693).
             self._place_guide_point(viewport, ctx.world,
                                     self._segment_origin(ctx.world))
