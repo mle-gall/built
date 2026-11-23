@@ -13,10 +13,6 @@ from core.i18n import current_language, resolve_language
 
 #: The import dialogs' unit vocabularies (must match the dialogs in
 #: main_window — the setting is their preselected answer).
-_OBJ_UNITS = (("m", "Metres"), ("cm", "Centimetres"), ("mm", "Millimetres"),
-              ("in", "Inches"), ("ft", "Feet"))
-_DXF_UNITS = (("mm", "Millimetres"), ("cm", "Centimetres"), ("m", "Metres"),
-              ("in", "Inches"), ("ft", "Feet"))
 _UNITS_FOR_NEW_KEY = "units/use_for_new_documents"
 
 

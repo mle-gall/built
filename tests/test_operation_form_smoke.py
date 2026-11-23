@@ -134,3 +134,28 @@ def test_native_first_run_custom_units(tmp_path):
     settings.sync()
     assert json.loads(settings.value("units/new_document")) == custom
     assert settings.value("units/use_for_new_documents") == "0"
+
+
+@pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
+                    reason="requires a built window and BUILT_WINDOW_TESTS=1")
+def test_native_settings_device_preferences(tmp_path):
+    from PySide6.QtCore import QSettings
+
+    profile = tmp_path / "profile"
+    home = tmp_path / "home"
+    home.mkdir()
+    steps = tmp_path / "commands"
+    # Navigate from the sidebar to the device pane and toggle navigation.
+    steps.write_text("wait 600\nkey escape\nmenu prefs\nwait 400\nstate\n"
+                     "click 83 244\nwait 250\nclick 390 196\nwait 250\n"
+                     "key escape\nwait 300\nstate\nquit\n")
+    result = run([str(BIN), "--root", str(ROOT), "--new-instance", "--size", "1000x720",
+                  "--script", str(steps)], home=home, settings=profile,
+                 capture_output=True, text=True, timeout=90)
+    log = result.stdout + result.stderr
+    states = [json.loads(line.removeprefix("[built] state ")) for line in log.splitlines()
+              if line.startswith("[built] state ")]
+    assert result.returncode == 0 and [s["large_sheet"] for s in states[:2]] == ["settings", "start"], log
+    assert not any(s["errors"] or s["blocked_widgets"] for s in states), log
+    settings = QSettings(str(profile / "IngeTrazo" / "IngeTrazo.ini"), QSettings.IniFormat)
+    assert settings.value("ndof/enabled") == "0"

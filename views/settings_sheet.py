@@ -9,9 +9,9 @@ north), kept in the document and saved with it. A search lists the
 matching rows of every section, each under its section's name, so nothing
 hides behind one.
 
-Every change applies at once (no OK, no Cancel), through the same
-host functions as the Qt Preferences dialog (``views/settings_apply.py``); a change that only takes effect at the next start
-says so at the top of the sheet.
+The Rust catalogue supplies preference rows, constraints and defaults. Edits
+apply through ``views/settings_apply.py``. Changes that require a restart
+appear at the top of the sheet.
 
 """
 from __future__ import annotations
@@ -23,42 +23,11 @@ from views import chrome_sheet
 from views import chrome_forms as cf
 
 #: The sections, in the side list's order: (id, label, scope).
-MAC, MODEL = "mac", "model"
-SECTIONS = (
-    ("general", "General", MAC),
-    ("navigation", "Navigation", MAC),
-    ("display", "Display", MAC),
-    ("ndof", "3D mouse", MAC),
-    ("import", "Import", MAC),
-    ("keyboard", "Keyboard", MAC),
-    ("ai", "AI assistant", MAC),
-    ("engine", "Engine", MAC),
-    ("units", "Units", MODEL),
-    ("dimensions", "Dimension style", MODEL),
-    ("location", "Location & north", MODEL),
-)
-_LABELS = {sid: label for sid, label, _scope in SECTIONS}
-_SUBS = {
-    "general": "Applies at once.",
-    "navigation": "Applies at once. Shift pans and ⌘ zooms whatever is chosen here.",
-    "display": "Applies at once, to every open project.",
-    "ndof": "Applies at once. Editing an axis makes the mapping Custom.",
-    "import": "The answers the import dialogs start with; each still asks.",
-    "keyboard": "Pick a command and change its keys. Changes apply at once.",
-    "ai": "The AI Assistant reads these when it next sends a message.",
-    "engine": "How Built computes and draws.",
-    "units": "Saved with this model. A number typed without a unit is in this unit.",
-    "dimensions": "Saved with this model: how its dimensions read.",
-    "location": "Saved with this model: where it stands and where north lies.",
-}
-#: Other names a caller may give a page.
-_ALIASES = {"3dmouse": "ndof", "mouse3d": "ndof", "shortcuts": "keyboard", "keys": "keyboard",
-            "dimension_style": "dimensions", "dimstyle": "dimensions", "north": "location",
-            "ia": "ai", "assistant": "ai"}
+from ingetrazo_render import PreferencesView, RestartPreferences
 
-#: Changes waiting for the next start: {row id: (label, value before)}.
-#: Module-wide, so closing and reopening the sheet still says it.
-_PENDING: dict = {}
+MAC, MODEL = "mac", "model"
+SECTIONS = PreferencesView.sections()
+_PENDING = RestartPreferences()
 _NO = object()
 
 
@@ -86,14 +55,14 @@ class Row:
     def __init__(self, rid, kind, label, get=None, put=None, *, options=(), lo=0.0, hi=0.0,
                  decimals=0, suffix="", tip="", restart="", default=_NO, enabled=True,
                  visible=True, row_label="", words="", pick=None, filters="", password=False,
-                 fmt=None, press=None, needs_restart=None, start=None):
+                 fmt=None, press=None, restart_value=None, start=None):
         self.id, self.kind, self.label = rid, kind, label
         self.get, self.put, self.press = get, put, press
         self.options, self.lo, self.hi, self.decimals = options, lo, hi, decimals
         self.suffix, self.tip, self.restart, self.default = suffix, tip, restart, default
         self.enabled, self.visible, self.row_label, self.words = enabled, visible, row_label, words
         self.pick, self.filters, self.password, self.fmt = pick, filters, password, fmt
-        self.needs_restart = needs_restart
+        self.restart_value = restart_value
         self.start = start              # what runs now, when not the value
 
     def opts(self, env):
@@ -185,64 +154,77 @@ def _p():
 
 
 # ---- Built · this Mac ------------------------------------------------------------
+class Binding:
+    """Read and apply one Rust-defined preference using its owning subsystem."""
+    def __init__(self, key, read, write=None, *, fmt=None, start=None, restart_value=None, **host):
+        self.key, self.read, self.write = key, read, write
+        self.fmt, self.start, self.restart_value = fmt, start, restart_value
+        self.host = host
+
+    def snapshot(self, env):
+        data = {"value": self.read(env)}
+        for key, item in self.host.items():
+            value = item(env) if callable(item) else item
+            if value is not _NO:
+                data[key] = value
+        return data
+
+
+def _pref_page(env, section, bindings):
+    from ingetrazo_render import PreferencePage
+    snapshot = {b.key: b.snapshot(env) for b in bindings}
+    page = PreferencePage(section, json.dumps(snapshot), tr)
+    handlers = {b.key: b for b in bindings}
+    def put(env, key, value):
+        handlers[key].write(env, json.loads(page.edit(key, json.dumps(value))))
+    groups = _native_groups(page.groups(), put)
+    for _, _, rows in groups:
+        for row in rows:
+            binding = handlers[row.id]
+            row.fmt, row.start, row.restart_value = binding.fmt, binding.start, binding.restart_value
+    return groups
+
+
 def _general(env) -> list:
     from core.i18n import LANGUAGE_NAMES, SYSTEM, available_languages
     from views.icons import TOOLBAR_ICON_SIZES, default_toolbar_icon_px, toolbar_icon_px
-    from views.theme import (ACCENTS, CAMPBELL, DARK, LIGHT, ORANGE, SAND, SLATE, SOLARIZED, STUDIO,
-                             SYSTEM as THEME_SYSTEM, saved_accent, saved_theme)
+    from views.theme import ACCENTS, saved_accent, saved_theme
     p = _p()
 
-    def lang_restart(value, running):
+    def selected_language(value):
         from core.i18n import resolve_language
-        return resolve_language(value) != running
+        return resolve_language(value)
 
     def running_language(env):
         from core.i18n import current_language
         return current_language()
 
     look = [
-        Row("language", "choice", tr("Language"),
-            _key("language", SYSTEM),
+        Binding("language", _key("language", SYSTEM),
             lambda env, v: p.apply_language(v, env.st),
             options=[(SYSTEM, tr("Same as the system"))]
             + [(c, LANGUAGE_NAMES.get(c, c)) for c in available_languages()],
-            restart=tr("Language"), needs_restart=lang_restart, start=running_language,
-            tip=tr("Takes effect at the next start.")),
-        Row("theme", "choice", tr("Theme"), lambda env: saved_theme(),
-            lambda env, v: p.apply_theme_choice(v),
-            options=[(DARK, tr("Dark")), (SLATE, tr("Slate")), (STUDIO, tr("Studio")),
-                     (SOLARIZED, tr("Solarized")), (CAMPBELL, tr("Campbell")), (LIGHT, tr("Light")),
-                     (SAND, tr("Sand")), (THEME_SYSTEM, tr("Same as the system"))],
-            default=DARK,
-            tip=tr("Colours of menus, panels and toolbars. «Same as the system» switches along with "
-                   "the desktop's light or dark mode. The 3D view keeps its own style.")),
-        Row("accent", "choice", tr("Accent colour"), lambda env: saved_accent(),
+            restart_value=selected_language,
+            start=running_language),
+        Binding("theme", lambda env: saved_theme(),
+            lambda env, v: p.apply_theme_choice(v)),
+        Binding("accent", lambda env: saved_accent(),
             lambda env, v: p.apply_accent_choice(v),
-            options=[(k, tr(label)) for k, label, _rgb in ACCENTS], default=ORANGE,
-            tip=tr("Colour of the details of the icons and of the toolbar buttons under the mouse.")),
+            options=[(k, tr(label)) for k, label, _rgb in ACCENTS]),
     ]
     from views import mac_glass
     if mac_glass.supported():
-        look.append(Row("glass", "check", tr("Liquid Glass window chrome"),
-                        lambda env: mac_glass.enabled(),
-                        lambda env, v: p.apply_window_glass(v),
-                        restart=tr("Window chrome"), default=True,
-                        tip=tr("Toolbars, panels and menus on macOS's translucent glass. "
-                               "Takes effect at the next start.")))
+        look.append(Binding("glass", lambda env: mac_glass.enabled(),
+                        lambda env, v: p.apply_window_glass(v)))
     look += [
-        Row("icon_px", "choice", tr("Toolbar icons"), lambda env: toolbar_icon_px(),
+        Binding("icon_px", lambda env: toolbar_icon_px(),
             lambda env, v: p.apply_toolbar_icon_px(env.win, int(v)),
             options=[(px, f"{tr(label)} ({px} px)") for px, label in TOOLBAR_ICON_SIZES],
             default=default_toolbar_icon_px()),
-        Row("ext_menus", "choice", tr("Extension menus"), _gkey("ext_menus", "auto"),
-            _set_gkey("ext_menus"),
-            options=[("auto", tr("Group them when there are many")),
-                     ("always", tr("Always in submenus")), ("flat", tr("Each entry on its own"))],
-            default="auto",
-            tip=tr("How the extensions' entries show in the right-click menu (at once) and in the "
-                   "Extensions menu (at the next start).")),
-        Row("hover_picture", "check", tr("Show a picture of the project on hover over its tab"),
-            _key("tabs/hover_picture", "1", bool), _set_key("tabs/hover_picture", bool), default=True),
+        Binding("ext_menus", _gkey("ext_menus", "auto"),
+            _set_gkey("ext_menus")),
+        Binding("hover_picture", _key("tabs/hover_picture", "1", bool),
+            _set_key("tabs/hover_picture", bool)),
     ]
 
     def autosave_put(env, on=None, minutes=None, backup=None):
@@ -253,43 +235,36 @@ def _general(env) -> list:
         env.st.sync()
 
     files = [
-        Row("autosave", "check", tr("Auto-save"), _gkey("autosave", "1", bool),
-            lambda env, v: autosave_put(env, on=v), default=True),
-        Row("autosave_min", "number", tr("Every"), _gkey("autosave_min", 5, int),
-            lambda env, v: autosave_put(env, minutes=v), lo=1, hi=60, suffix=tr("min"), default=5,
-            enabled=lambda env: _gkey("autosave", "1", bool)(env)),
-        Row("backup", "check", tr("Keep a backup of the previous save (.bak)"),
-            _gkey("backup", "1", bool), lambda env, v: autosave_put(env, backup=v), default=True),
-        Row("undo_steps", "number", tr("Undo steps"), _gkey("undo_steps", 200, int),
-            lambda env, v: (p.apply_undo_steps(env.win, v, env.st), env.st.sync()),
-            lo=0, hi=5000, default=200,
-            tip=tr("Steps kept for Undo. Each one holds a snapshot of the model, so fewer steps mean "
-                   "less memory on a big model; 0 = unlimited.")),
+        Binding("autosave", _gkey("autosave", "1", bool),
+            lambda env, v: autosave_put(env, on=v)),
+        Binding("autosave_min", _gkey("autosave_min", 5, int),
+            lambda env, v: autosave_put(env, minutes=v)),
+        Binding("backup", _gkey("backup", "1", bool),
+            lambda env, v: autosave_put(env, backup=v)),
+        Binding("undo_steps", _gkey("undo_steps", 200, int),
+            lambda env, v: (p.apply_undo_steps(env.win, v, env.st), env.st.sync())),
     ]
     from core.update_check import KEY_AUTO, store_managed
     if not store_managed():
-        files.append(Row("check_updates", "check", tr("Check for new versions at startup"),
-                         _key(KEY_AUTO, "1", bool), _set_key(KEY_AUTO, bool), default=True,
-                         tip=tr("Once a day, Built asks GitHub for the latest version number. "
-                                "Nothing about you or your files is sent.")))
-    return [("look", tr("Look"), look), ("files", tr("Files and undo"), files),
-            ("newdoc", tr("New documents"), _figure_rows(env))]
+        files.append(Binding("check_updates", _key(KEY_AUTO, "1", bool),
+                         _set_key(KEY_AUTO, bool)))
+    return _pref_page(env, "general", look + files + _figure_rows(env))
 
 
 def _figure_rows(env) -> list:
     from core import scale_figure as sf
 
-    def custom(env):
-        return _figure_pick(env) == sf.CUSTOM
-
     def put_pick(env, v):
         if v == sf.CUSTOM:
-            image = str(env.st.value(sf.KEY_IMAGE, "") or "")
             from pathlib import Path
-            if not (image and Path(image).is_file()):
-                SettingsSheet.figure_custom = True     # a picture first
+            from views.filedialogs import file_dialogs
+            saved = str(env.st.value(sf.KEY_IMAGE, "") or "")
+            if not saved or not Path(saved).is_file():
+                path, _ = file_dialogs.getOpenFileName(env.win, tr("My own picture…"), "",
+                                                       tr("Images") + " (*.png *.webp)")
+                if path:
+                    put_image(env, path)
                 return
-        SettingsSheet.figure_custom = False
         env.st.setValue(sf.KEY_PICK, v)
         env.st.sync()
 
@@ -311,9 +286,8 @@ def _figure_rows(env) -> list:
             env.st.setValue(sf.KEY_NAME, Path(path).stem.replace("_", " "))
         env.st.setValue(sf.KEY_HEIGHT, round(float(env.st.value(sf.KEY_HEIGHT, 1.70) or 1.70), 3))
         env.st.sync()
-        SettingsSheet.figure_custom = False
         if not img.hasAlphaChannel():
-            SettingsSheet.note = (tr("This picture has no transparent background, so it will show as "
+            env.state.note = (tr("This picture has no transparent background, so it will show as "
                                      "a rectangle. A PNG cut out around the person looks best."), "warn")
 
     def height(env):
@@ -324,38 +298,29 @@ def _figure_rows(env) -> list:
 
     on = _key("new_document/scale_figure", "1", bool)
     return [
-        Row("scale_figure", "check", tr("Put the scale figure in new documents"), on,
-            _set_key("new_document/scale_figure", bool), default=True),
-        Row("figure", "choice", tr("Scale figure"), _figure_pick, put_pick,
+        Binding("scale_figure", on,
+            _set_key("new_document/scale_figure", bool)),
+        Binding("figure", _figure_pick,
+            put_pick,
             options=lambda env: [(p["key"], f"{tr(p['name'])} ({float(p['height']):.2f} m)")
-                                 for p in sf.people()] + [(sf.CUSTOM, tr("My own picture…"))],
-            default=sf.DEFAULT_PICK, enabled=on),
-        Row("figure_image", "path", tr("Picture"),
-            lambda env: str(env.st.value(sf.KEY_IMAGE, "") or ""), put_image, pick="open",
-            filters=tr("Images") + " (*.png *.webp);;" + tr("All files") + " (*)",
-            visible=custom, enabled=on, tip=tr("A PNG on a transparent background")),
-        Row("figure_height", "number", tr("Height"), height,
-            lambda env, v: (env.st.setValue(sf.KEY_HEIGHT, round(float(v), 3)), env.st.sync()),
-            lo=sf.MIN_HEIGHT, hi=sf.MAX_HEIGHT, decimals=2, suffix="m", visible=custom, enabled=on,
-            tip=tr("The height this person stands")),
-        Row("figure_name", "edit", tr("Name"), lambda env: str(env.st.value(sf.KEY_NAME, "") or ""),
-            lambda env, v: (env.st.setValue(sf.KEY_NAME, v.strip()), env.st.sync()),
-            visible=custom, enabled=on),
+                                 for p in sf.people()] + [(sf.CUSTOM, tr("My own picture…"))]),
+        Binding("figure_image", lambda env: str(env.st.value(sf.KEY_IMAGE, "") or ""),
+            put_image,
+            filters=tr("Images") + " (*.png *.webp);;" + tr("All files") + " (*)"),
+        Binding("figure_height", height,
+            lambda env, v: (env.st.setValue(sf.KEY_HEIGHT, round(float(v), 3)), env.st.sync())),
+        Binding("figure_name", lambda env: str(env.st.value(sf.KEY_NAME, "") or ""),
+            lambda env, v: (env.st.setValue(sf.KEY_NAME, v.strip()), env.st.sync())),
     ]
 
 
 def _figure_pick(env):
     from core import scale_figure as sf
-    if SettingsSheet.figure_custom:
-        return sf.CUSTOM
     return str(env.st.value(sf.KEY_PICK, sf.DEFAULT_PICK) or sf.DEFAULT_PICK)
 
 
-_SLIDES = (("orbit", "Orbits the view"), ("pan", "Pans the view"), ("zoom", "Zooms the view"))
-
-
 def _navigation(env) -> list:
-    from tools.walkthrough import DEFAULT_LOOK_SENSITIVITY, look_sensitivity
+    from tools.walkthrough import look_sensitivity
     from views import trackpad_nav
     p = _p()
 
@@ -365,38 +330,29 @@ def _navigation(env) -> list:
                        trackpad_nav.load_touch_slide() if touch is None else touch,
                        trackpad_nav.load_inertia() if inertia is None else inertia, env.st)
         env.st.sync()
-    slide_opts = [(k, tr(label)) for k, label in _SLIDES]
     mouse = [
-        Row("invert_wheel", "check", tr("Invert wheel zoom"), _key("nav/invert_wheel", "0", bool),
-            lambda env, v: (p.apply_invert_wheel(env.win, v, env.st), env.st.sync()), default=False),
-        Row("invert_orbit", "check", tr("Invert vertical orbit"), _key("nav/invert_orbit_y", "0", bool),
-            lambda env, v: (p.apply_invert_orbit(env.win, v, env.st), env.st.sync()), default=False),
-        Row("look_sens", "number", tr("Mouse-look sensitivity"), lambda env: look_sensitivity(),
-            _set_key("walk/look_sensitivity"), lo=1, hi=100, default=DEFAULT_LOOK_SENSITIVITY,
-            tip=tr("How fast a drag turns the head in First Person"), words="first person walk"),
+        Binding("invert_wheel", _key("nav/invert_wheel", "0", bool),
+            lambda env, v: (p.apply_invert_wheel(env.win, v, env.st), env.st.sync())),
+        Binding("invert_orbit", _key("nav/invert_orbit_y", "0", bool),
+            lambda env, v: (p.apply_invert_orbit(env.win, v, env.st), env.st.sync())),
+        Binding("look_sens", lambda env: look_sensitivity(),
+            _set_key("walk/look_sensitivity")),
     ]
     touch = [
-        Row("trackpad_slide", "choice", tr("Two-finger slide on the trackpad"),
-            lambda env: trackpad_nav.load_slide_mode(), lambda env, v: slides(env, trackpad=v),
-            options=slide_opts, default="zoom"),
-        Row("touch_slide", "choice", tr("One-finger slide on the touch screen"),
-            lambda env: trackpad_nav.load_touch_slide(), lambda env, v: slides(env, touch=v),
-            options=slide_opts, default="orbit"),
-        Row("trackpad_inertia", "check", tr("Keep moving after the fingers lift (inertia)"),
-            lambda env: trackpad_nav.load_inertia(), lambda env, v: slides(env, inertia=v),
-            default=True),
+        Binding("trackpad_slide", lambda env: trackpad_nav.load_slide_mode(),
+            lambda env, v: slides(env, trackpad=v)),
+        Binding("touch_slide", lambda env: trackpad_nav.load_touch_slide(),
+            lambda env, v: slides(env, touch=v)),
+        Binding("trackpad_inertia", lambda env: trackpad_nav.load_inertia(),
+            lambda env, v: slides(env, inertia=v)),
     ]
     tools = [
-        Row("cursor_style", "choice", tr("Tool cursor"),
-            lambda env: _gkey("cursor_style", "tool")(env).lower(),
-            lambda env, v: (p.apply_cursor_style(env.win, v, env.st), env.st.sync()),
-            options=[("tool", tr("The tool's icon")), ("crosshair", tr("Crosshair")),
-                     ("arrow", tr("Arrow"))], default="tool"),
-        Row("ask_section", "check", tr("Ask for a name and symbol when placing a section plane"),
-            _key("section/ask_name", "1", bool), _set_key("section/ask_name", bool), default=True),
+        Binding("cursor_style", lambda env: _gkey("cursor_style", "tool")(env).lower(),
+            lambda env, v: (p.apply_cursor_style(env.win, v, env.st), env.st.sync())),
+        Binding("ask_section", _key("section/ask_name", "1", bool),
+            _set_key("section/ask_name", bool)),
     ]
-    return [("mouse", tr("Mouse"), mouse), ("touch", tr("Trackpad and touch screen"), touch),
-            ("tools", tr("Tools"), tools)]
+    return _pref_page(env, "navigation", mouse + touch + tools)
 
 
 def _display(env) -> list:
@@ -432,30 +388,21 @@ def _display(env) -> list:
             return int(round(EDIT_REST_FADE * 100))
 
     quality = [
-        Row("msaa", "choice", tr("Anti-aliasing (MSAA)"), msaa,
-            lambda env, v: (p.apply_msaa(env.win, int(v), env.st), env.st.sync()),
-            options=[(n, tr("Off") if n == 0 else f"{n}x") for n in (0, 2, 4, 8)], default=4),
-        Row("soft_shadows", "check", tr("Soft sun shadows"), soft_on, lambda env, v: put_soft(env, on=v),
-            default=False,
-            tip=tr("Shadow edges that soften away from what casts them, as in daylight. They cost the "
-                   "graphics card more while the sun casts shadows.")),
-        Row("soft_level", "choice", tr("Softness"), soft_level, lambda env, v: put_soft(env, level=v),
-            options=[(1, tr("Slight")), (2, tr("Moderate")), (3, tr("Strong"))], default=2,
-            enabled=soft_on),
+        Binding("msaa", msaa,
+            lambda env, v: (p.apply_msaa(env.win, int(v), env.st), env.st.sync())),
+        Binding("soft_shadows", soft_on,
+            lambda env, v: put_soft(env, on=v)),
+        Binding("soft_level", soft_level,
+            lambda env, v: put_soft(env, level=v)),
     ]
     editing = [
-        Row("rest_mode", "choice", tr("Rest of model while editing"), rest_mode,
-            lambda env, v: p.apply_rest_mode(env.win, v, rest_fade(env) / 100.0),
-            options=[("normal", tr("Show normally")), ("fade", tr("Fade")), ("hide", tr("Hide (fastest)"))],
-            default="fade", words="group component"),
-        Row("rest_fade", "slider", tr("Fade intensity"), rest_fade,
+        Binding("rest_mode", rest_mode,
+            lambda env, v: p.apply_rest_mode(env.win, v, rest_fade(env) / 100.0)),
+        Binding("rest_fade", rest_fade,
             lambda env, v: p.apply_rest_mode(env.win, rest_mode(env), int(v) / 100.0),
-            lo=0, hi=100, fmt=lambda v: f"{int(v or 0)} %", default=int(round(EDIT_REST_FADE * 100)),
-            enabled=lambda env: rest_mode(env) == "fade",
-            tip=tr("How strongly the rest of the model is washed toward grey while a group or "
-                   "component is open.")),
+            fmt=lambda v: f"{int(v or 0)} %"),
     ]
-    return [("quality", tr("Quality"), quality), ("editing", tr("Editing a group"), editing)]
+    return _pref_page(env, "display", quality + editing)
 
 
 def _device_preferences(env, named=None):
@@ -504,18 +451,15 @@ def _ndof(env):
 
 
 def _import(env) -> list:
-    from views.settings_apply import _DXF_UNITS, _OBJ_UNITS
     rows = [
-        Row("obj_unit", "choice", tr("Suggested unit for OBJ"), _key("import/obj_unit", "m"),
-            _set_key("import/obj_unit"), options=[(k, tr(v)) for k, v in _OBJ_UNITS], default="m"),
-        Row("dxf_unit", "choice", tr("Suggested unit for DXF/DWG"), _key("import/dxf_unit", "mm"),
-            _set_key("import/dxf_unit"), options=[(k, tr(v)) for k, v in _DXF_UNITS], default="mm"),
-        Row("coord_mode", "choice", tr("Coordinate entry"), _key("georef/coord_mode", "geo"),
-            _set_key("georef/coord_mode"),
-            options=[("geo", tr("Geographic (lat/lon)")), ("utm", tr("UTM WGS84"))], default="geo",
-            words="georeference location"),
+        Binding("obj_unit", _key("import/obj_unit", "m"),
+            _set_key("import/obj_unit")),
+        Binding("dxf_unit", _key("import/dxf_unit", "mm"),
+            _set_key("import/dxf_unit")),
+        Binding("coord_mode", _key("georef/coord_mode", "geo"),
+            _set_key("georef/coord_mode")),
     ]
-    return [("import", tr("Import"), rows)]
+    return _pref_page(env, "import", rows)
 
 
 def _ai(env) -> list:
@@ -547,43 +491,39 @@ def _ai(env) -> list:
             return ""
 
     rows = [
-        Row("ai_provider", "choice", tr("Provider"), _key("ia/proveedor", "auto"), put("ia/proveedor"),
+        Binding("ai_provider", _key("ia/proveedor", "auto"),
+            put("ia/proveedor"),
             options=providers),
-        Row("ai_key", "edit", tr("API key"), _key("ia/api_key", ""), put("ia/api_key"), password=True,
-            tip=tr("empty = local AI (Ollama, LM Studio)")),
-        Row("ai_key_env", "text", "", env_note, visible=lambda env: bool(env_note(env))),
-        Row("ai_model", "edit", tr("Model"), _key("ia/modelo", ""), put("ia/modelo", strip=True),
-            tip=tr("model (default per provider)")),
-        Row("ai_url", "edit", tr("Local AI URL"), _key("ia/ollama_url", "http://localhost:11434"),
-            put("ia/ollama_url", strip=True), words="ollama lm studio"),
-        Row("ai_shots", "check", tr("Send viewport screenshots to the model"), _key("ia/capturas", "1", bool),
-            put("ia/capturas"), words="capture"),
+        Binding("ai_key", _key("ia/api_key", ""),
+            put("ia/api_key")),
+        Binding("ai_key_env", env_note),
+        Binding("ai_model", _key("ia/modelo", ""),
+            put("ia/modelo", strip=True)),
+        Binding("ai_url", _key("ia/ollama_url", "http://localhost:11434"),
+            put("ia/ollama_url", strip=True)),
+        Binding("ai_shots", _key("ia/capturas", "1", bool),
+            put("ia/capturas")),
     ]
-    return [("ai", tr("AI assistant"), rows)]
+    return _pref_page(env, "ai", rows)
 
 
 def _engine(env) -> list:
     from core import _native, renderer_settings
-    from core.platform_choice import AUTO, WAYLAND, XCB
+    from core.platform_choice import AUTO
     p = _p()
     rust_ok = _native.available() is not None
     rows = [
-        Row("rust", "check", tr("Rust engine"),
-            lambda env: str(_gkey(_native.SETTING, _native.DEFAULT)(env)) == "1",
+        Binding("rust", lambda env: str(_gkey(_native.SETTING, _native.DEFAULT)(env)) == "1",
             lambda env, v: (p.apply_rust_engine(v, env.st), env.st.sync()),
-            restart=tr("Rust engine"), enabled=rust_ok,
+            enabled=rust_ok,
             default=(_native.DEFAULT == "1") if rust_ok else _NO,
-            tip=(tr("Computes the heavy parts (opening big files, hidden lines of the sheets, "
+            tip=tr("Computes the heavy parts (opening big files, hidden lines of the sheets, "
                     "intersections, snapping) with the native engine. Takes effect at the next start.")
-                 if rust_ok else tr("This build of Built does not carry the Rust engine."))),
+                 if rust_ok else tr("This build of Built does not carry the Rust engine.")),
     ]
     if p.graphics_server_applies():
-        rows.append(Row("platform", "choice", tr("Graphics server"), _gkey("platform", AUTO),
-                        _set_gkey("platform"),
-                        options=[(AUTO, tr("Automatic (X11 on KDE Plasma or with a fractional display "
-                                           "scale)")), (WAYLAND, tr("Wayland")), (XCB, tr("X11 (XWayland)"))],
-                        restart=tr("Graphics server"), default=AUTO,
-                        tip=tr("Which display server Qt draws through. Takes effect at the next start.")))
+        rows.append(Binding("platform", _gkey("platform", AUTO),
+                        _set_gkey("platform")))
 
     def status(env):
         try:
@@ -597,9 +537,9 @@ def _engine(env) -> list:
             return f"Python {cap.python_version} / Qt {cap.qt_version}"
         except Exception:  # noqa: BLE001
             return ""
-    about = [Row("renderer_status", "text", tr("Available renderer"), status),
-             Row("runtime", "text", tr("Runtime"), runtime)]
-    return [("engine", tr("Engine"), rows), ("about", tr("This installation"), about)]
+    about = [Binding("renderer_status", status),
+             Binding("runtime", runtime)]
+    return _pref_page(env, "engine", rows + about)
 
 
 # ---- This model ------------------------------------------------------------------
@@ -827,34 +767,28 @@ class SettingsSheet(chrome_sheet.Provider):
     one picked (or every row the search matches) in the middle."""
     id = "settings"
     #: The pending pieces of one change (class-wide, as rows read them).
-    figure_custom = False
-    note = None                         # (text, tone) shown once on top
     north_cmd = None
 
     def __init__(self, section="general"):
         self._device = None
         self._readings = None
-        self.section = section
-        self.query = ""
-        self.kb_focus = None            # "sc:<action key>"
+        self.state = PreferencesView(section)
         self._actions = None
         self._paths = None
         self._rows: dict = {}
-        self._typed: dict = {}          # a number field's text as typed
-        self._force_focus = False
 
     # -- navigation -------------------------------------------------------------
+    @property
+    def section(self):
+        return self.state.section
+
+    @property
+    def kb_focus(self):
+        return self.state.kb_focus
+
     def goto(self, page=None, shortcut_of=None) -> None:
-        if shortcut_of is not None:
-            from views.shortcuts import action_key
-            self.section = "keyboard"
-            self.kb_focus = "sc:" + action_key(shortcut_of)
-            self._force_focus = True        # scrolled to, even on an open sheet
-        elif page:
-            page = _ALIASES.get(str(page), str(page))
-            if page in _LABELS:
-                self.section = page
-        self.query = ""
+        from views.shortcuts import action_key
+        self.state.goto(page or "", action_key(shortcut_of) if shortcut_of is not None else None)
 
     def _monitor(self, active):
         from views.ndof_input import shared_input
@@ -904,18 +838,11 @@ class SettingsSheet(chrome_sheet.Provider):
             fields.append(r.field(env))
         form = cf.Form("", fields, buttons=[], on_change=self._changed, on_button=self._pressed,
                        key=gid)
-        for fid, text in list(self._typed.items()):
-            f = form.field(fid)
-            if f is None:
-                continue
-            try:
-                same = abs(float(text.replace(",", ".")) - float(f.value or 0)) < 1e-9
-            except ValueError:
-                same = False
-            if same:
-                form._texts[fid] = text     # «1.» stays as typed while it means 1
-            else:
-                self._typed.pop(fid, None)
+        for field in fields:
+            if field.kind == "number":
+                text = self.state.number_text(field.id, float(field.value or 0))
+                if text is not None:
+                    form._texts[field.id] = text
         return form
 
     def _changed(self, form, fid, value) -> None:
@@ -924,33 +851,30 @@ class SettingsSheet(chrome_sheet.Provider):
             return
         f = form.field(fid)
         if f is not None and f.kind == "number" and fid in form._texts:
-            self._typed[fid] = form._texts[fid]
+            self.state.type_number(fid, form._texts[fid])
         self.apply(row, value)
 
     def apply(self, row, value) -> None:
         """``row`` set to ``value`` at once; a refusal (a file that is no
         picture, a colour that is none) shows on top of the sheet."""
         env = Env(self._win)
+        env.state = self.state
         before = row.start(env) if row.start is not None else row.value(env)
         try:
             row.put(env, value)
         except (ValueError, KeyError, OSError) as exc:
-            SettingsSheet.note = (str(exc).strip("'\""), "error")
+            self.state.note = (str(exc).strip("'\""), "error")
             return
         except Exception as exc:  # noqa: BLE001 — one setting never takes the sheet down
             import traceback
             traceback.print_exc()
-            SettingsSheet.note = (tr("{what} could not be changed: {why}", what=row.label or row.id,
+            self.state.note = (tr("{what} could not be changed: {why}", what=row.label or row.id,
                                      why=exc), "error")
             return
         fid = row.id
         if row.restart:
-            start = _PENDING.get(fid, (row.restart, before))[1]
-            needs = row.needs_restart or (lambda v, s: v != s)
-            if needs(value, start):
-                _PENDING[fid] = (row.restart, start)
-            else:
-                _PENDING.pop(fid, None)
+            value = row.restart_value(value) if row.restart_value else value
+            _PENDING.record(fid, row.restart, json.dumps(before), json.dumps(value))
 
     def _pressed(self, form, fid) -> None:
         row = self._rows.get(fid)
@@ -960,12 +884,13 @@ class SettingsSheet(chrome_sheet.Provider):
     def build(self, ctx):
         self._win = ctx.win
         env = Env(ctx.win)
-        self._monitor(self.section == "ndof" and not self.query.strip())
+        env.state = self.state
+        self._monitor(self.section == "ndof" and not self.state.query.strip())
         env.device_readings = self._readings
         self._rows = {}
         s = chrome_sheet.Sheet(self.id, tr("Settings"), width=1100)
         s.search(tr("Search settings"))
-        query = self.query.strip().lower()
+        query = self.state.query.strip().lower()
         hits = self._hits(env, query) if query else None
         for scope, caption in ((MAC, tr("Built · this Mac")), (MODEL, tr("This model"))):
             s.side_caption(caption)
@@ -985,25 +910,24 @@ class SettingsSheet(chrome_sheet.Provider):
         s.footer([("restore", tr("Restore defaults"))],
                  tr("Changes apply at once") + " · " + tr("esc back to the model"))
         if self.kb_focus and (self.section == "keyboard" or hits is not None):
-            s.focus(self.kb_focus, force=self._force_focus)
-        self._force_focus = False
+            s.focus(self.kb_focus, force=self.state.take_focus())
         return s
 
     def _top(self, c) -> None:
-        if _PENDING:
-            names = ", ".join(label for label, _start in _PENDING.values())
+        names = ", ".join(_PENDING.labels())
+        if names:
             c.text(tr("Restart Built to apply: {names}.", names=names), tone="warn")
-        if SettingsSheet.note:
-            text, tone = SettingsSheet.note
+        if self.state.note:
+            text, tone = self.state.note
             c.text(text, tone=tone)
 
     def _section_pane(self, s, env) -> None:
         sid = self.section
-        scope = next((sc for i, _l, sc in SECTIONS if i == sid), MAC)
-        sub = tr(_SUBS.get(sid, ""))
+        title, scope, subtitle = self.state.heading()
+        sub = tr(subtitle)
         if scope == MODEL:
             sub = (sub + " " if sub else "") + tr("(Saved in the document, not on this Mac.)")
-        c = s.content(tr(_LABELS.get(sid, sid)), sub)
+        c = s.content(tr(title), sub)
         self._top(c)
         if sid == "keyboard":
             self._keyboard(s, c, env, "")
@@ -1041,15 +965,15 @@ class SettingsSheet(chrome_sheet.Provider):
     def _search_pane(self, s, env, hits) -> None:
         n = sum(len(rows) for sid, groups in hits.items() if sid != "keyboard" for _g, _c, rows in groups)
         n += len(hits.get("keyboard", ()))
-        c = s.content(tr("Results for “{q}”", q=self.query.strip()),
+        c = s.content(tr("Results for “{q}”", q=self.state.query.strip()),
                       tr("{n} matching settings in every section", n=n),
-                      empty=tr("No setting matches “{q}”.", q=self.query.strip()))
+                      empty=tr("No setting matches “{q}”.", q=self.state.query.strip()))
         self._top(c)
         for sid, label, _scope in SECTIONS:
             if sid not in hits:
                 continue
             if sid == "keyboard":
-                self._keyboard(s, c, env, self.query.strip().lower(), caption=tr(label))
+                self._keyboard(s, c, env, self.state.query.strip().lower(), caption=tr(label))
                 continue
             for gid, caption, rows in hits[sid]:
                 c.caption(f"{tr(label)} · {caption}" if caption != tr(label) else tr(label))
@@ -1136,7 +1060,7 @@ class SettingsSheet(chrome_sheet.Provider):
                 save_shortcut(other, kept)
             act.setShortcuts(seqs)
             save_shortcut(act, seqs)
-            SettingsSheet.note = None
+            self.state.note = None
             chrome_sheet.refresh(self._win)
         if clash and ask:
             names = ", ".join(_plain(a.text()) for a in clash)
@@ -1177,22 +1101,21 @@ class SettingsSheet(chrome_sheet.Provider):
         self._win = ctx.win
         arg = args[0] if args else ""
         if verb == "search":
-            self.query = arg
-        elif verb == "side" and arg in _LABELS:
-            self.section = arg
-            SettingsSheet.note = None
-            if self.query:
-                self.query = ""
+            self.state.query = arg
+        elif verb == "side":
+            searched = bool(self.state.query)
+            self.state.goto(arg, None)
+            if searched:
                 chrome_sheet.open(ctx.win, self, search="")
         elif verb == "focus" and arg.startswith("sc:"):
-            self.kb_focus = arg
+            self.state.kb_focus = arg
         elif verb == "open" and arg.startswith("sc:"):
-            self.kb_focus = arg
+            self.state.kb_focus = arg
             act = self._action(arg)
             if act is not None:
                 self._change_keys(act)
         elif verb == "menu" and len(args) > 1 and arg.startswith("sc:"):
-            self.kb_focus = arg
+            self.state.kb_focus = arg
             self._kb_verb("kb_" + args[1])
         elif verb == "verb":
             if arg.startswith("kb_"):
@@ -1247,9 +1170,9 @@ class SettingsSheet(chrome_sheet.Provider):
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(export_shortcuts(self._win), f, indent=1, ensure_ascii=False)
         except OSError as exc:
-            SettingsSheet.note = (str(exc), "error")
+            self.state.note = (str(exc), "error")
             return
-        SettingsSheet.note = (tr("Shortcuts saved to {path}.", path=path), "ok")
+        self.state.note = (tr("Shortcuts saved to {path}.", path=path), "ok")
 
     def _kb_import(self) -> None:
         import json
@@ -1264,7 +1187,7 @@ class SettingsSheet(chrome_sheet.Provider):
             with open(path, encoding="utf-8") as f:
                 applied, skipped, clashes = import_shortcuts(self._win, json.load(f))
         except (OSError, ValueError) as exc:
-            SettingsSheet.note = (str(exc), "error")
+            self.state.note = (str(exc), "error")
             return
         msg = tr("{n} shortcuts imported.", n=applied)
         if skipped:
@@ -1276,7 +1199,7 @@ class SettingsSheet(chrome_sheet.Provider):
                 tr("{key}: kept for «{kept}», taken from «{dropped}»",
                    key=QKeySequence(k).toString(QKeySequence.NativeText), kept=_plain(kept.text()),
                    dropped=_plain(dropped.text())) for k, kept, dropped in clashes)
-        SettingsSheet.note = (msg, "warn" if clashes else "ok")
+        self.state.note = (msg, "warn" if clashes else "ok")
 
     def _ndof_verb(self, verb) -> None:
         from pathlib import Path
@@ -1294,7 +1217,7 @@ class SettingsSheet(chrome_sheet.Provider):
             try:
                 profile = load_profile(path)
             except (OSError, ValueError, UnicodeError) as exc:
-                SettingsSheet.note = (tr("Invalid SpaceMouse profile") + ": " + str(exc), "error")
+                self.state.note = (tr("Invalid SpaceMouse profile") + ": " + str(exc), "error")
                 return
             from ingetrazo_render import DevicePreferences
             name = DevicePreferences.profile_name(Path(path).stem, True)
@@ -1307,7 +1230,7 @@ class SettingsSheet(chrome_sheet.Provider):
                 try:
                     name = DevicePreferences.profile_name(name, False)
                 except ValueError as exc:
-                    SettingsSheet.note = (tr(str(exc)), "error")
+                    self.state.note = (tr(str(exc)), "error")
                     chrome_sheet.refresh(self._win)
                     return
                 from core.ndof_profiles import profile_from_dict
@@ -1333,7 +1256,6 @@ class SettingsSheet(chrome_sheet.Provider):
         Restore defaults, applied at once). Left alone: the language, the
         AI Assistant, the keyboard shortcuts and this model's settings."""
         self._win = win
-        SettingsSheet.figure_custom = False
         for sid, _label, scope in SECTIONS:
             if scope != MAC or sid == "keyboard":
                 continue
@@ -1349,8 +1271,7 @@ class SettingsSheet(chrome_sheet.Provider):
 
     def closed(self, ctx) -> None:
         self._monitor(False)
-        SettingsSheet.note = None
-        SettingsSheet.figure_custom = False
+        self.state.note = None
         SettingsSheet.north_cmd = None
 
 def show(win, page=None, shortcut_of=None) -> bool:

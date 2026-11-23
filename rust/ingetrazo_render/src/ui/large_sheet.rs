@@ -800,6 +800,18 @@ fn ui_stop_search(resp: &egui::Response) {
     }
 }
 
+fn sheet_bounds(screen: Rect, area_l: f32, area_r: f32, max_w: f32, ease: f32) -> Rect {
+    let w = (area_r - area_l).min(max_w).max(320.0);
+    let x = (area_l + (area_r - area_l - w) / 2.0).max(0.0);
+    let top = TOP_H + 16.0;
+    let bottom = (screen.max.y - BOT_H - 12.0).min(top + 900.0);
+    Rect::from_min_max(pos2(x, top + (1.0 - ease) * 14.0), pos2(x + w, bottom + (1.0 - ease) * 14.0))
+}
+
+fn content_scroll(id: &str) -> egui::ScrollArea {
+    egui::ScrollArea::vertical().id_salt(("lsheet_content", id)).auto_shrink([false, false])
+}
+
 impl Ui {
     /// Show, update or (empty `json`) close the large sheet. Err: the JSON
     /// did not parse (the sheet stays as it was).
@@ -944,8 +956,6 @@ impl Ui {
                                else { (GUT + 72.0 + GUT, self.free_right(ctx, screen) - GUT) };
         let framed = free_r - free_l >= FRAMED_MIN_W;
         let (area_l, area_r) = if framed { (free_l, free_r) } else { (24.0, screen.max.x - 24.0) };
-        let w = (area_r - area_l).min(max_w).max(320.0);
-        let x = (area_l + (area_r - area_l - w) / 2.0).max(0.0);
         let dim = if framed { Rect::from_min_max(pos2(free_l - GUT, TOP_H), pos2(free_r + GUT, screen.max.y - BOT_H)) }
                   else { back };
         let blur_r = if framed { Rect::from_min_max(pos2(free_l - GUT, TOP_H), pos2(free_r + GUT, screen.max.y - BOT_H)) } else { back };
@@ -961,9 +971,7 @@ impl Ui {
                 ui.allocate_exact_size(back.size(), Sense::hover());
             });
 
-        let top = TOP_H + 16.0;
-        let bottom = (screen.max.y - BOT_H - 12.0).min(top + 900.0);
-        let sheet = Rect::from_min_max(pos2(x, top + (1.0 - ease) * 14.0), pos2(x + w, bottom + (1.0 - ease) * 14.0));
+        let sheet = sheet_bounds(screen, area_l, area_r, max_w, ease);
         self.lsheet.rect = Some(sheet);
         let icons = &self.icons;
         let st = &mut self.lsheet;
@@ -1006,7 +1014,7 @@ impl Ui {
                             }
                             ui.add_space(SPACE_S);
                         }
-                        egui::ScrollArea::vertical().id_salt(("lsheet_content", &spec.id)).auto_shrink([false, false])
+                        content_scroll(&spec.id)
                             .show(ui, |ui| {
                                 ui.set_width(ui.available_width());
                                 ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
@@ -1284,6 +1292,43 @@ mod tests {
     fn laid_out(s: &mut LargeSheet) {
         s.focus_rects = ["x", "y", "z"].iter().enumerate()
             .map(|(i, id)| (id.to_string(), Rect::from_min_size(pos2(i as f32 * 110.0, 0.0), vec2(96.0, 130.0)))).collect();
+    }
+
+    #[test]
+    fn preferences_shrinks_below_its_tallest_page() {
+        let screen = Rect::from_min_size(pos2(0., 0.), vec2(1280., 480.));
+        let sheet = sheet_bounds(screen, 24., 1256., 1100., 1.);
+        assert!(screen.contains_rect(sheet));
+        assert!(sheet.height() <= 400.);
+    }
+
+    #[test]
+    fn preferences_scrolls_while_its_actions_fit_a_short_screen() {
+        let screen = Rect::from_min_size(pos2(0., 0.), vec2(1280., 480.));
+        let ctx = egui::Context::default();
+        let _ = ctx.run(egui::RawInput { screen_rect: Some(screen), ..Default::default() }, |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                let sheet = sheet_bounds(screen, 24., 1256., 1100., 1.);
+                let frame = sheet_frame(ui, sheet, 216., 0., true);
+                let footer = frame.footer.unwrap();
+                assert!(sheet.contains_rect(footer) && sheet.contains_rect(frame.header));
+                assert!(frame.content.bottom() <= footer.top());
+                ui.scope_builder(egui::UiBuilder::new().max_rect(frame.content), |ui| {
+                    let scroll = content_scroll("settings").show(ui, |ui| {
+                        ui.allocate_space(vec2(200., 1400.));
+                    });
+                    assert!(scroll.content_size.y > scroll.inner_rect.height());
+                    assert!(frame.content.contains_rect(scroll.inner_rect));
+                });
+            });
+        });
+    }
+
+    #[test]
+    fn preferences_stops_growing_at_its_natural_size() {
+        let screen = Rect::from_min_size(pos2(0., 0.), vec2(4000., 3000.));
+        let sheet = sheet_bounds(screen, 24., 3976., 1100., 1.);
+        assert_eq!(sheet.size(), vec2(1100., 900.));
     }
 
     #[test]

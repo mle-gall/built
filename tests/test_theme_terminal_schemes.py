@@ -98,12 +98,10 @@ def test_leaving_a_new_theme_for_dark_leaves_nothing_of_it(app):
 
 def test_preferences_offer_every_theme_with_a_translated_name(app):
     from views.main_window import MainWindow
-    from views.preferences_dialog import PreferencesDialog
+    from tests.preferences_chrome import Controls
     win = MainWindow()
     try:
-        dlg = PreferencesDialog(win)
-        offered = [dlg._theme.itemData(i) for i in range(dlg._theme.count())]
-        dlg.deleteLater()
+        offered = Controls(win, "general").options("theme")
     finally:
         win._saved_version = win.viewport.scene.version
         win.close()

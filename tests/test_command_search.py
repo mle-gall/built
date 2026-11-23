@@ -275,17 +275,17 @@ def test_change_shortcut_opens_preferences_on_that_command(ventana,
 
 
 def test_preferences_open_on_the_picked_shortcut(ventana):
-    from views.preferences_dialog import PreferencesDialog
     from views.shortcuts import collect_actions
     act = next(a for a in collect_actions(ventana)
                if a.text() == "Orient Faces")
-    dlg = PreferencesDialog(ventana)
-    try:
-        dlg.show_shortcut_of(act)
-        assert dlg._tabs.currentWidget() is dlg._shortcuts
-        assert dlg._shortcuts._current()[1] is act
-    finally:
-        dlg.deleteLater()
+    from views import settings_sheet, chrome_sheet
+    from views.shortcuts import action_key
+    settings_sheet.show(ventana, shortcut_of=act)
+    sheet = chrome_sheet.current(ventana)
+    assert sheet.section == "keyboard"
+    assert sheet.kb_focus == "sc:" + action_key(act)
+    assert sheet._action(sheet.kb_focus) is act
+    chrome_sheet.close(ventana)
 
 
 # ---- where the box opens ------------------------------------------------------------

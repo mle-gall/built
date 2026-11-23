@@ -154,28 +154,24 @@ def test_inserting_a_document_leaves_out_whatever_figure_the_app_placed(tmp_path
 def test_preferences_choose_my_picture_and_ok_stores_it(tmp_path, monkeypatch):
     """The whole gesture: «My own picture…» asks for the file at once, OK
     copies it into the data folder and the next new document stands it."""
-    from PySide6.QtWidgets import QMessageBox
     from views import filedialogs
     from views.main_window import MainWindow
-    from views.preferences_dialog import PreferencesDialog
+    from tests.preferences_chrome import Controls
     monkeypatch.setattr(sf, "figures_dir", lambda: tmp_path / "figures")
     src = _png(tmp_path / "Marco_Sumari.png")
     monkeypatch.setattr(filedialogs.file_dialogs, "getOpenFileName",
                         staticmethod(lambda *a, **k: (str(src), "")))
-    monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: None)
     st = QSettings()
     keys = (sf.KEY_PICK, sf.KEY_IMAGE, sf.KEY_HEIGHT, sf.KEY_NAME)
     keep = {k: st.value(k) for k in keys}
     win = MainWindow()
     try:
-        dlg = PreferencesDialog(win)
-        assert not dlg._figure_custom_row.isVisibleTo(dlg)
-        dlg._figure.setCurrentIndex(dlg._figure.findData(sf.CUSTOM))
-        assert dlg._figure_custom_row.isVisibleTo(dlg)
-        assert dlg._figure_name.text() == "Marco Sumari"
-        dlg._figure_height.setValue(1.68)
-        assert not (tmp_path / "figures").exists()     # nothing before OK
-        dlg.accept()
+        ui = Controls(win, "general")
+        assert not ui.visible("figure_image")
+        ui.set("figure", sf.CUSTOM)
+        assert ui.visible("figure_image")
+        assert ui.value("figure_name") == "Marco Sumari"
+        ui.set("figure_height", 1.68)
         fig = sf.chosen()
         assert fig.image.parent == tmp_path / "figures"
         assert (fig.height, fig.name) == (pytest.approx(1.68), "Marco Sumari")
@@ -196,16 +192,15 @@ def test_preferences_choose_my_picture_and_ok_stores_it(tmp_path, monkeypatch):
 def test_cancelling_the_file_dialog_goes_back_to_the_person_before(monkeypatch):
     from views import filedialogs
     from views.main_window import MainWindow
-    from views.preferences_dialog import PreferencesDialog
+    from tests.preferences_chrome import Controls
     monkeypatch.setattr(filedialogs.file_dialogs, "getOpenFileName",
                         staticmethod(lambda *a, **k: ("", "")))
     win = MainWindow()
     try:
-        dlg = PreferencesDialog(win)
-        before = dlg._figure.currentData()
-        dlg._figure.setCurrentIndex(dlg._figure.findData(sf.CUSTOM))
-        assert dlg._figure.currentData() == before
-        dlg.reject()
+        ui = Controls(win, "general")
+        before = ui.value("figure")
+        ui.set("figure", sf.CUSTOM)
+        assert ui.value("figure") == before
     finally:
         win._saved_version = win.viewport.scene.version
         win.close()

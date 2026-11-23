@@ -15,6 +15,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
 import pytest
+from tests.preferences_chrome import Controls, settings_file
 from PySide6.QtCore import QSettings
 from ingetrazo_core import Vec3 as V
 from PySide6.QtWidgets import QApplication, QWidget
@@ -97,16 +98,11 @@ class _Win(QWidget):
         return [d.viewport for d in self._documents]
 
 
-def test_a_new_level_asks_the_metal_view_for_a_frame(tmp_path, monkeypatch):
-    import views.preferences_dialog as prefs_mod
-    path = tmp_path / "prefs.ini"
-    monkeypatch.setattr(prefs_mod, "QSettings",
-                        lambda: QSettings(str(path), QSettings.IniFormat))
+def test_a_new_level_asks_the_metal_view_for_a_frame(settings_file):
     win = _Win()
-    dlg = prefs_mod.PreferencesDialog(win)
-    dlg._soft_shadows.setChecked(True)
-    dlg._soft_level.setCurrentIndex(dlg._soft_level.findData(3))
-    dlg.accept()
+    ui = Controls(win, "display")
+    ui.set("soft_shadows", True)
+    ui.set("soft_level", 3)
     assert win.viewport._soft_shadows == 3
     assert win.metal.updates >= 1
     # Its next frame's payload carries the new level.

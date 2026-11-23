@@ -245,3 +245,283 @@ impl DeviceReadings {
         Ok((raw, read))
     }
 }
+
+/// One snapshot of a machine-settings page. Only the backend supplies the
+/// installed languages, drivers, figures, and values from this host.
+#[pyclass(frozen)]
+pub struct PreferencePage {
+    groups: Value,
+}
+
+#[pymethods]
+impl PreferencePage {
+    #[new]
+    fn new(section: &str, snapshot: &str, tr: &Bound<'_, PyAny>) -> PyResult<Self> {
+        use std::sync::OnceLock;
+        static CATALOG: OnceLock<Value> = OnceLock::new();
+        let catalog = CATALOG.get_or_init(|| {
+            serde_json::from_str(include_str!("preference_rows.json"))
+                .expect("valid Settings catalogue")
+        });
+        let groups = catalog[section]
+            .as_array()
+            .ok_or_else(|| PyValueError::new_err("Unknown preferences section"))?;
+        let snapshot = decode(snapshot)?;
+        let translate = |v: &Value| -> PyResult<Value> {
+            let s = v.as_str().unwrap_or_default();
+            if s.is_empty() {
+                return Ok(json!(""));
+            }
+            Ok(json!(tr.call1((s,))?.extract::<String>()?))
+        };
+        let mut result = Vec::new();
+        for group in groups {
+            let mut rows = Vec::new();
+            for schema in group[2].as_array().unwrap() {
+                let id = schema["id"].as_str().unwrap();
+                let Some(host) = snapshot[id].as_object() else {
+                    continue;
+                };
+                let mut row = schema.as_object().unwrap().clone();
+                for key in ["label", "tip", "suffix", "restart"] {
+                    if let Some(v) = row.get_mut(key) {
+                        *v = translate(v)?;
+                    }
+                }
+                if let Some(options) = row.get_mut("options").and_then(Value::as_array_mut) {
+                    for opt in options {
+                        opt[1] = translate(&opt[1])?;
+                    }
+                }
+                for (rule, output) in [("enabled_if", "enabled"), ("visible_if", "visible")] {
+                    if let Some(cond) = row.remove(rule) {
+                        let val = &snapshot[cond[0].as_str().unwrap()]["value"];
+                        let matches = if cond[1] == "nonempty" {
+                            val.as_str().is_some_and(|s| !s.is_empty())
+                        } else {
+                            *val == cond[1]
+                        };
+                        row.insert(output.into(), json!(matches));
+                    }
+                }
+                row.extend(host.clone());
+                rows.push(Value::Object(row));
+            }
+            result.push(json!([group[0], translate(&group[1])?, rows]));
+        }
+        Ok(Self {
+            groups: Value::Array(result),
+        })
+    }
+
+    fn groups(&self) -> String {
+        self.groups.to_string()
+    }
+
+    fn edit(&self, id: &str, raw: &str) -> PyResult<String> {
+        let invalid = || PyValueError::new_err(format!("Invalid setting: {id}"));
+        let row = self
+            .groups
+            .as_array()
+            .unwrap()
+            .iter()
+            .flat_map(|g| g[2].as_array().unwrap())
+            .find(|r| r["id"] == id)
+            .ok_or_else(invalid)?;
+        let v = decode(raw)?;
+        match row["kind"].as_str() {
+            Some("choice")
+                if row["options"]
+                    .as_array()
+                    .is_some_and(|opts| opts.iter().any(|o| o[0] == v)) => {}
+            Some("check") if v.is_boolean() => {}
+            Some("path" | "edit") if v.is_string() => {}
+            Some("number" | "slider") => {
+                let n = v
+                    .as_f64()
+                    .filter(|x| {
+                        x.is_finite()
+                            && *x >= row["lo"].as_f64().unwrap_or(f64::MIN)
+                            && *x <= row["hi"].as_f64().unwrap_or(f64::MAX)
+                    })
+                    .ok_or_else(invalid)?;
+                if row["decimals"].as_u64().unwrap_or(0) == 0 {
+                    return Ok(json!(n.round() as i64).to_string());
+                }
+            }
+            _ => return Err(invalid()),
+        }
+        Ok(v.to_string())
+    }
+}
+
+const SECTIONS: &[(&str, &str, &str, &str)] = &[
+    ("general", "General", "mac", "Applies at once."),
+    (
+        "navigation",
+        "Navigation",
+        "mac",
+        "Applies at once. Shift pans and ⌘ zooms whatever is chosen here.",
+    ),
+    (
+        "display",
+        "Display",
+        "mac",
+        "Applies at once, to every open project.",
+    ),
+    (
+        "ndof",
+        "3D mouse",
+        "mac",
+        "Applies at once. Editing an axis makes the mapping Custom.",
+    ),
+    (
+        "import",
+        "Import",
+        "mac",
+        "The answers the import dialogs start with; each still asks.",
+    ),
+    (
+        "keyboard",
+        "Keyboard",
+        "mac",
+        "Pick a command and change its keys. Changes apply at once.",
+    ),
+    (
+        "ai",
+        "AI assistant",
+        "mac",
+        "The AI Assistant reads these when it next sends a message.",
+    ),
+    ("engine", "Engine", "mac", "How Built computes and draws."),
+    (
+        "units",
+        "Units",
+        "model",
+        "Saved with this model. A number typed without a unit is in this unit.",
+    ),
+    (
+        "dimensions",
+        "Dimension style",
+        "model",
+        "Saved with this model: how its dimensions read.",
+    ),
+    (
+        "location",
+        "Location & north",
+        "model",
+        "Saved with this model: where it stands and where north lies.",
+    ),
+];
+
+#[pyclass]
+pub struct PreferencesView {
+    #[pyo3(get)]
+    section: String,
+    #[pyo3(get, set)]
+    query: String,
+    #[pyo3(get, set)]
+    kb_focus: Option<String>,
+    #[pyo3(get, set)]
+    note: Option<(String, String)>,
+    focus: bool,
+    typed: std::collections::HashMap<String, String>,
+}
+
+#[pymethods]
+impl PreferencesView {
+    #[new]
+    fn new(section: &str) -> Self {
+        let mut view = Self {
+            section: "general".into(),
+            query: String::new(),
+            kb_focus: None,
+            note: None,
+            focus: false,
+            typed: Default::default(),
+        };
+        view.goto(section, None);
+        view
+    }
+
+    #[staticmethod]
+    fn sections() -> Vec<(&'static str, &'static str, &'static str)> {
+        SECTIONS
+            .iter()
+            .map(|&(id, label, scope, _)| (id, label, scope))
+            .collect()
+    }
+    fn heading(&self) -> (&'static str, &'static str, &'static str) {
+        let &(_, label, scope, sub) = SECTIONS.iter().find(|row| row.0 == self.section).unwrap();
+        (label, scope, sub)
+    }
+    fn goto(&mut self, page: &str, shortcut: Option<String>) {
+        if let Some(shortcut) = shortcut {
+            self.section = "keyboard".into();
+            self.kb_focus = Some(format!("sc:{shortcut}"));
+            self.focus = true;
+        } else {
+            let id = match page {
+                "3dmouse" | "mouse3d" => "ndof",
+                "shortcuts" | "keys" => "keyboard",
+                "dimension_style" | "dimstyle" => "dimensions",
+                "north" => "location",
+                "ia" | "assistant" => "ai",
+                id => id,
+            };
+            if SECTIONS.iter().any(|row| row.0 == id) {
+                self.section = id.into();
+            }
+        }
+        self.query.clear();
+        self.note = None;
+    }
+
+    fn take_focus(&mut self) -> bool {
+        std::mem::take(&mut self.focus)
+    }
+    fn type_number(&mut self, id: String, text: String) {
+        self.typed.insert(id, text);
+    }
+    fn number_text(&mut self, id: &str, value: f64) -> Option<String> {
+        let text = self.typed.get(id)?;
+        if text
+            .replace(',', ".")
+            .parse::<f64>()
+            .is_ok_and(|n| (n - value).abs() < 1e-9)
+        {
+            return Some(text.clone());
+        }
+        self.typed.remove(id);
+        None
+    }
+}
+
+#[pyclass]
+#[derive(Default)]
+pub struct RestartPreferences {
+    changes: std::collections::BTreeMap<String, (String, String)>,
+}
+
+#[pymethods]
+impl RestartPreferences {
+    #[new]
+    fn new() -> Self {
+        Self::default()
+    }
+    fn record(&mut self, id: &str, label: &str, before: &str, value: &str) {
+        let start = self.changes.get(id).map(|v| v.1.as_str()).unwrap_or(before);
+        if start == value {
+            self.changes.remove(id);
+        } else if !self.changes.contains_key(id) {
+            self.changes
+                .insert(id.into(), (label.into(), before.into()));
+        }
+    }
+    fn labels(&self) -> Vec<String> {
+        self.changes.values().map(|v| v.0.clone()).collect()
+    }
+    fn clear(&mut self) {
+        self.changes.clear();
+    }
+}

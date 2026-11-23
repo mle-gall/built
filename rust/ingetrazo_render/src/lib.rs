@@ -2713,6 +2713,9 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(panic_log::_panic_for_test, m)?)?;
     m.add_class::<ui::operation_form::OperationForm>()?;
     m.add_class::<units_start::UnitsDraft>()?;
+    m.add_class::<preferences::PreferencesView>()?;
+    m.add_class::<preferences::RestartPreferences>()?;
+    m.add_class::<preferences::PreferencePage>()?;
     m.add_class::<preferences::DevicePreferences>()?;
     m.add_class::<preferences::DeviceReadings>()?;
     m.add_class::<release::ReleaseReview>()?;

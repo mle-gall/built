@@ -24,20 +24,10 @@ elif not isinstance(_inst, QApplication):
     pytest.skip("a non-widget QGuiApplication is already active",
                 allow_module_level=True)
 
-import views.preferences_dialog as prefs_mod  # noqa: E402
-from views.preferences_dialog import PreferencesDialog  # noqa: E402
+from tests.preferences_chrome import Controls, settings_file
 from views.document_interaction import SOFT_SHADOW_SPREAD, _load_soft_shadows
 from tests.controller_surface import ControllerSurface as Viewport
 
-
-
-@pytest.fixture
-def settings_file(tmp_path, monkeypatch):
-    path = tmp_path / "prefs.ini"
-    monkeypatch.setattr(
-        prefs_mod, "QSettings",
-        lambda: QSettings(str(path), QSettings.IniFormat))
-    return path
 
 
 class _VP:
@@ -71,25 +61,24 @@ def _fresh(path):
 
 
 def test_off_by_default_with_its_level_greyed(settings_file):
-    dlg = PreferencesDialog(_Win())
-    assert not dlg._soft_shadows.isChecked()
-    assert not dlg._soft_level.isEnabled()
-    assert dlg._soft_level.currentData() == 2
-    dlg._soft_shadows.setChecked(True)
-    assert dlg._soft_level.isEnabled()
+    ui = Controls(_Win(), "display")
+    assert not ui.value("soft_shadows")
+    assert not ui.enabled("soft_level")
+    assert ui.value("soft_level") == 2
+    ui.set("soft_shadows", True)
+    assert ui.enabled("soft_level")
 
 
 def test_ok_saves_the_level_and_every_view_redraws_at_once(settings_file):
     win = _Win()
-    dlg = PreferencesDialog(win)
-    dlg._soft_shadows.setChecked(True)
-    dlg._soft_level.setCurrentIndex(dlg._soft_level.findData(3))
-    dlg.accept()
+    ui = Controls(win, "display")
+    ui.set("soft_shadows", True)
+    ui.set("soft_level", 3)
     st = _fresh(settings_file)
     assert int(st.value("display/soft_shadows")) == 3
     for vp in (win.viewport, win.back):
         assert vp._soft_shadows == 3
-        assert vp.updates == 1
+        assert vp.updates == 2
 
 
 def test_turned_off_the_level_is_kept_for_next_time(settings_file):
@@ -98,29 +87,28 @@ def test_turned_off_the_level_is_kept_for_next_time(settings_file):
     st.setValue("display/soft_shadows_level", 1)
     st.sync()
     win = _Win()
-    dlg = PreferencesDialog(win)
-    assert dlg._soft_shadows.isChecked()
-    assert dlg._soft_level.currentData() == 1
-    dlg._soft_shadows.setChecked(False)
-    dlg.accept()
+    ui = Controls(win, "display")
+    assert ui.value("soft_shadows")
+    assert ui.value("soft_level") == 1
+    ui.set("soft_shadows", False)
     st = _fresh(settings_file)
     assert int(st.value("display/soft_shadows")) == 0
     assert int(st.value("display/soft_shadows_level")) == 1
     assert win.viewport._soft_shadows == 0
-    dlg = PreferencesDialog(_Win())
-    assert not dlg._soft_shadows.isChecked()
-    assert dlg._soft_level.currentData() == 1
+    ui = Controls(_Win(), "display")
+    assert not ui.value("soft_shadows")
+    assert ui.value("soft_level") == 1
 
 
 def test_restore_defaults_turns_them_off(settings_file):
     st = _fresh(settings_file)
     st.setValue("display/soft_shadows", 3)
     st.sync()
-    dlg = PreferencesDialog(_Win())
-    assert dlg._soft_shadows.isChecked()
-    dlg.restore_defaults()
-    assert not dlg._soft_shadows.isChecked()
-    assert dlg._soft_level.currentData() == 2
+    ui = Controls(_Win(), "display")
+    assert ui.value("soft_shadows")
+    ui.restore()
+    assert not ui.value("soft_shadows")
+    assert ui.value("soft_level") == 2
 
 
 @pytest.mark.parametrize("stored, level", [

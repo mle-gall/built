@@ -25,8 +25,8 @@ elif not isinstance(_inst, QApplication):
     pytest.skip("a non-widget QGuiApplication is already active",
                 allow_module_level=True)
 
-import views.preferences_dialog as prefs_mod  # noqa: E402
-from views.preferences_dialog import PreferencesDialog  # noqa: E402
+from tests.preferences_chrome import Controls, settings_file
+from views.settings_sheet import _PENDING
 
 
 @pytest.mark.parametrize("locales, expected", [
@@ -79,19 +79,13 @@ def test_unset_or_system_follows_the_os_and_a_pinned_one_stays(system_is_french)
 
 
 @pytest.fixture
-def prefs(tmp_path, monkeypatch, system_is_french):
-    """A throwaway settings file, the app running in French as the
-    system's, and the restart notes counted instead of shown."""
-    path = tmp_path / "prefs.ini"
-    monkeypatch.setattr(prefs_mod, "QSettings",
-                        lambda: QSettings(str(path), QSettings.IniFormat))
-    notes = []
-    monkeypatch.setattr(prefs_mod.QMessageBox, "information",
-                        lambda *a, **k: notes.append(a))
+def prefs(settings_file, system_is_french):
     before = i18n.current_language()
+    _PENDING.clear()
     i18n.set_language("fr")
-    yield path, notes
+    yield settings_file
     i18n.set_language(before)
+    _PENDING.clear()
 
 
 class _Win(QWidget):
@@ -109,33 +103,31 @@ class _Win(QWidget):
 
 
 def test_preferences_offers_the_system_language_first_and_by_default(prefs):
-    dlg = PreferencesDialog(_Win())
-    assert dlg._lang.itemData(0) == i18n.SYSTEM
-    assert dlg._lang.currentData() == i18n.SYSTEM     # nothing saved yet
+    ui = Controls(_Win(), "general")
+    assert next(iter(ui.options("language"))) == i18n.SYSTEM
+    assert ui.value("language") == i18n.SYSTEM     # nothing saved yet
 
 
 def test_going_back_to_the_system_language_is_saved(prefs):
-    path, notes = prefs
+    path = prefs
     st = QSettings(str(path), QSettings.IniFormat)
     st.setValue("language", "fr")
     st.sync()
-    dlg = PreferencesDialog(_Win())
-    assert dlg._lang.currentData() == "fr"
-    dlg._lang.setCurrentIndex(dlg._lang.findData(i18n.SYSTEM))
-    dlg.accept()
+    ui = Controls(_Win(), "general")
+    assert ui.value("language") == "fr"
+    ui.set("language", i18n.SYSTEM)
     assert QSettings(str(path), QSettings.IniFormat).value("language") == "system"
     # The system's language is the one running: nothing to restart for.
-    assert notes == []
+    assert not _PENDING.labels()
     assert i18n.current_language() == "fr"
 
 
 def test_pinning_another_language_over_the_system_one_asks_a_restart(prefs):
-    path, notes = prefs
-    dlg = PreferencesDialog(_Win())
-    dlg._lang.setCurrentIndex(dlg._lang.findData("de"))
-    dlg.accept()
+    path = prefs
+    ui = Controls(_Win(), "general")
+    ui.set("language", "de")
     assert QSettings(str(path), QSettings.IniFormat).value("language") == "de"
-    assert len(notes) == 1
+    assert len(_PENDING.labels()) == 1
     assert i18n.current_language() == "de"
 
 

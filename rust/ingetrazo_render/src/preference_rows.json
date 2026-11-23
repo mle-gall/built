@@ -1,0 +1,81 @@
+{
+  "general": [
+    ["look", "Look", [
+      {"id": "language", "kind": "choice", "label": "Language", "restart": "Language", "tip": "Takes effect at the next start."},
+      {"id": "theme", "kind": "choice", "label": "Theme", "options": [["dark", "Dark"], ["slate", "Slate"], ["studio", "Studio"], ["solarized", "Solarized"], ["campbell", "Campbell"], ["light", "Light"], ["sand", "Sand"], ["system", "Same as the system"]], "default": "dark", "tip": "Colours of menus, panels and toolbars. «Same as the system» switches along with the desktop's light or dark mode. The 3D view keeps its own style."},
+      {"id": "accent", "kind": "choice", "label": "Accent colour", "default": "orange", "tip": "Colour of the details of the icons and of the toolbar buttons under the mouse."},
+      {"id": "glass", "kind": "check", "label": "Liquid Glass window chrome", "restart": "Window chrome", "default": true, "tip": "Toolbars, panels and menus on macOS's translucent glass. Takes effect at the next start."},
+      {"id": "icon_px", "kind": "choice", "label": "Toolbar icons"},
+      {"id": "ext_menus", "kind": "choice", "label": "Extension menus", "options": [["auto", "Group them when there are many"], ["always", "Always in submenus"], ["flat", "Each entry on its own"]], "default": "auto", "tip": "How the extensions' entries show in the right-click menu (at once) and in the Extensions menu (at the next start)."},
+      {"id": "hover_picture", "kind": "check", "label": "Show a picture of the project on hover over its tab", "default": true}
+    ]],
+    ["files", "Files and undo", [
+      {"id": "autosave", "kind": "check", "label": "Auto-save", "default": true},
+      {"id": "autosave_min", "kind": "number", "label": "Every", "lo": 1, "hi": 60, "suffix": "min", "default": 5, "enabled_if": ["autosave", true]},
+      {"id": "backup", "kind": "check", "label": "Keep a backup of the previous save (.bak)", "default": true},
+      {"id": "undo_steps", "kind": "number", "label": "Undo steps", "lo": 0, "hi": 5000, "default": 200, "tip": "Steps kept for Undo. Each one holds a snapshot of the model, so fewer steps mean less memory on a big model; 0 = unlimited."},
+      {"id": "check_updates", "kind": "check", "label": "Check for new versions at startup", "default": true, "tip": "Once a day, Built asks GitHub for the latest version number. Nothing about you or your files is sent."}
+    ]],
+    ["newdoc", "New documents", [
+      {"id": "scale_figure", "kind": "check", "label": "Put the scale figure in new documents", "default": true},
+      {"id": "figure", "kind": "choice", "label": "Scale figure", "default": "ingeniero", "enabled_if": ["scale_figure", true]},
+      {"id": "figure_image", "kind": "path", "label": "Picture", "pick": "open", "visible_if": ["figure", "custom"], "enabled_if": ["scale_figure", true], "tip": "A PNG on a transparent background"},
+      {"id": "figure_height", "kind": "number", "label": "Height", "lo": 0.3, "hi": 3, "decimals": 2, "suffix": "m", "visible_if": ["figure", "custom"], "enabled_if": ["scale_figure", true], "tip": "The height this person stands"},
+      {"id": "figure_name", "kind": "edit", "label": "Name", "visible_if": ["figure", "custom"], "enabled_if": ["scale_figure", true]}
+    ]]
+  ],
+  "navigation": [
+    ["mouse", "Mouse", [
+      {"id": "invert_wheel", "kind": "check", "label": "Invert wheel zoom", "default": false},
+      {"id": "invert_orbit", "kind": "check", "label": "Invert vertical orbit", "default": false},
+      {"id": "look_sens", "kind": "number", "label": "Mouse-look sensitivity", "lo": 1, "hi": 100, "default": 25, "tip": "How fast a drag turns the head in First Person", "words": "first person walk"}
+    ]],
+    ["touch", "Trackpad and touch screen", [
+      {"id": "trackpad_slide", "kind": "choice", "label": "Two-finger slide on the trackpad", "options": [["orbit", "Orbits the view"], ["pan", "Pans the view"], ["zoom", "Zooms the view"]], "default": "zoom"},
+      {"id": "touch_slide", "kind": "choice", "label": "One-finger slide on the touch screen", "options": [["orbit", "Orbits the view"], ["pan", "Pans the view"], ["zoom", "Zooms the view"]], "default": "orbit"},
+      {"id": "trackpad_inertia", "kind": "check", "label": "Keep moving after the fingers lift (inertia)", "default": true}
+    ]],
+    ["tools", "Tools", [
+      {"id": "cursor_style", "kind": "choice", "label": "Tool cursor", "options": [["tool", "The tool's icon"], ["crosshair", "Crosshair"], ["arrow", "Arrow"]], "default": "tool"},
+      {"id": "ask_section", "kind": "check", "label": "Ask for a name and symbol when placing a section plane", "default": true}
+    ]]
+  ],
+  "display": [
+    ["quality", "Quality", [
+      {"id": "msaa", "kind": "choice", "label": "Anti-aliasing (MSAA)", "options": [[0, "Off"], [2, "2x"], [4, "4x"], [8, "8x"]], "default": 4},
+      {"id": "soft_shadows", "kind": "check", "label": "Soft sun shadows", "default": false, "tip": "Shadow edges that soften away from what casts them, as in daylight. They cost the graphics card more while the sun casts shadows."},
+      {"id": "soft_level", "kind": "choice", "label": "Softness", "options": [[1, "Slight"], [2, "Moderate"], [3, "Strong"]], "default": 2, "enabled_if": ["soft_shadows", true]}
+    ]],
+    ["editing", "Editing a group", [
+      {"id": "rest_mode", "kind": "choice", "label": "Rest of model while editing", "options": [["normal", "Show normally"], ["fade", "Fade"], ["hide", "Hide (fastest)"]], "default": "fade", "words": "group component"},
+      {"id": "rest_fade", "kind": "slider", "label": "Fade intensity", "lo": 0, "hi": 100, "default": 75, "enabled_if": ["rest_mode", "fade"], "tip": "How strongly the rest of the model is washed toward grey while a group or component is open."}
+    ]]
+  ],
+  "import": [
+    ["import", "Import", [
+      {"id": "obj_unit", "kind": "choice", "label": "Suggested unit for OBJ", "options": [["m", "Metres"], ["cm", "Centimetres"], ["mm", "Millimetres"], ["in", "Inches"], ["ft", "Feet"]], "default": "m"},
+      {"id": "dxf_unit", "kind": "choice", "label": "Suggested unit for DXF/DWG", "options": [["mm", "Millimetres"], ["cm", "Centimetres"], ["m", "Metres"], ["in", "Inches"], ["ft", "Feet"]], "default": "mm"},
+      {"id": "coord_mode", "kind": "choice", "label": "Coordinate entry", "options": [["geo", "Geographic (lat/lon)"], ["utm", "UTM WGS84"]], "default": "geo", "words": "georeference location"}
+    ]]
+  ],
+  "ai": [
+    ["ai", "AI assistant", [
+      {"id": "ai_provider", "kind": "choice", "label": "Provider"},
+      {"id": "ai_key", "kind": "edit", "label": "API key", "password": true, "tip": "empty = local AI (Ollama, LM Studio)"},
+      {"id": "ai_key_env", "kind": "text", "label": "", "visible_if": ["ai_key_env", "nonempty"]},
+      {"id": "ai_model", "kind": "edit", "label": "Model", "tip": "model (default per provider)"},
+      {"id": "ai_url", "kind": "edit", "label": "Local AI URL", "words": "ollama lm studio"},
+      {"id": "ai_shots", "kind": "check", "label": "Send viewport screenshots to the model", "words": "capture"}
+    ]]
+  ],
+  "engine": [
+    ["engine", "Engine", [
+      {"id": "rust", "kind": "check", "label": "Rust engine", "restart": "Rust engine"},
+      {"id": "platform", "kind": "choice", "label": "Graphics server", "options": [["auto", "Automatic (X11 on KDE Plasma or with a fractional display scale)"], ["wayland", "Wayland"], ["xcb", "X11 (XWayland)"]], "restart": "Graphics server", "default": "auto", "tip": "Which display server Qt draws through. Takes effect at the next start."}
+    ]],
+    ["about", "This installation", [
+      {"id": "renderer_status", "kind": "text", "label": "Available renderer"},
+      {"id": "runtime", "kind": "text", "label": "Runtime"}
+    ]]
+  ]
+}

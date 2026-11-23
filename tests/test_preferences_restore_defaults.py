@@ -11,7 +11,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
 from PySide6.QtCore import QSettings
-from PySide6.QtWidgets import QApplication, QDialogButtonBox, QMessageBox, QWidget
+from PySide6.QtWidgets import QApplication, QWidget
 
 _inst = QApplication.instance()
 if _inst is None:
@@ -20,18 +20,8 @@ elif not isinstance(_inst, QApplication):
     pytest.skip("a non-widget QGuiApplication is already active",
                 allow_module_level=True)
 
-import views.preferences_dialog as prefs_mod  # noqa: E402
-from views.preferences_dialog import PreferencesDialog  # noqa: E402
-
-
-@pytest.fixture
-def settings_file(tmp_path, monkeypatch):
-    path = tmp_path / "prefs.ini"
-    monkeypatch.setattr(
-        prefs_mod, "QSettings",
-        lambda: QSettings(str(path), QSettings.IniFormat))
-    return path
-
+from tests.preferences_chrome import Controls, settings_file
+from views import chrome_forms
 
 class _Win(QWidget):
     def __init__(self):
@@ -43,8 +33,11 @@ class _Win(QWidget):
             def set_edit_rest_mode(self, mode):
                 self.edit_rest_mode = mode
 
+        self._documents, self._tool_actions = [], {}
         self.viewport = _VP()
         self._rest_actions = {}
+        self.viewport.edit_rest_fade = 0.75
+        self.viewport.set_edit_rest_fade = lambda v: setattr(self.viewport, "edit_rest_fade", v)
 
 
 def _fresh(path):
@@ -75,96 +68,72 @@ def _customised(path):
     st.sync()
 
 
-def _restore_button(dlg):
-    box = dlg.findChild(QDialogButtonBox)
-    return next(b for b in box.buttons()
-                if box.buttonRole(b) == QDialogButtonBox.ResetRole)
+def confirmation(ui):
+    ui.sheet.act(ui.ctx, "verb", ["restore"])
+    return chrome_forms.current(ui.ctx.win)
 
 
 def test_the_tab_picture_option_is_saved_and_restored(settings_file):
-    dlg = PreferencesDialog(_Win())
-    assert dlg._hover_picture.isChecked(), "on in a fresh profile"
-    dlg._hover_picture.setChecked(False)
-    dlg.accept()
+    ui = Controls(_Win(), "general")
+    assert ui.value("hover_picture")
+    ui.set("hover_picture", False)
     assert _fresh(settings_file).value("tabs/hover_picture") == "0"
-    dlg = PreferencesDialog(_Win())
-    assert not dlg._hover_picture.isChecked()
-    dlg.restore_defaults()
-    assert dlg._hover_picture.isChecked()
+    reopened = Controls(_Win(), "general")
+    assert not reopened.value("hover_picture")
+    reopened.restore()
+    assert reopened.value("hover_picture")
 
 
 def test_the_dialog_has_a_restore_defaults_button(settings_file):
-    dlg = PreferencesDialog(_Win())
-    assert _restore_button(dlg) is dlg._defaults_btn
+    footer = Controls(_Win(), "general").wire()["footer"]
+    assert [v["id"] for v in footer["links"]] == ["restore"]
 
 
-def test_ok_stays_the_highlighted_button_after_restoring(settings_file, monkeypatch):
-    """With the focus on Restore defaults (after its click, or by Tab) it
-    took the default-button highlight from OK, and Enter restored again."""
-    dlg = PreferencesDialog(_Win())
-    dlg.show()
-    monkeypatch.setattr(prefs_mod.QMessageBox, "question",
-                        lambda *a, **k: QMessageBox.Ok)
-    dlg._defaults_btn.setFocus()
-    dlg._defaults_btn.click()
-    QApplication.processEvents()
-    box = dlg.findChild(QDialogButtonBox)
-    assert not dlg._defaults_btn.isDefault()
-    assert box.button(QDialogButtonBox.Ok).isDefault()
-    dlg.reject()
+def test_ok_stays_the_highlighted_button_after_restoring(settings_file):
+    ui = Controls(_Win(), "general")
+    form = confirmation(ui)
+    assert form.default == "ok"
+    form.press("ok")
+    assert chrome_forms.current(ui.ctx.win) is None
+    assert not ui.wire().get("default_verb")
 
 
 def test_restore_puts_every_control_back_to_its_default(settings_file):
-    _customised(settings_file)
-    dlg = PreferencesDialog(_Win())
-    assert dlg._obj_unit.currentData() == "ft"        # the tuned profile
-    assert not dlg._autosave.isChecked()
-    dlg._rest_fade.setValue(30)
-    from views.settings_sheet import SettingsSheet, Env
-    sheet = SettingsSheet()
-    env = Env(dlg._window)
-    def device_rows():
-        return {r.id: r for _, _, rows in sheet.groups(env, "ndof") for r in rows}
-    rows = device_rows()
-    rows["ndof_inv_right"].put(env, True)
-    rows["ndof_speed_right"].put(env, 200)
-    assert device_rows()["ndof_preset"].value(env) == "custom"
-    sheet.restore_defaults(dlg._window)
-    dlg.restore_defaults()
-    assert dlg._autosave.isChecked()
-    assert dlg._autosave_min.value() == 5
-    assert dlg._backup.isChecked()
-    assert dlg._undo_steps.value() == 200
-    assert dlg._ask_section.isChecked()
-    assert dlg._scale_figure.isChecked()
-    assert not dlg._invert.isChecked()
-    assert not dlg._invert_orbit.isChecked()
-    assert dlg._look_sens.value() == 25
-    assert dlg._cursor_style.currentData() == "tool"
-    assert dlg._msaa.currentData() == 4
-    assert dlg._ext_menus.currentData() == "auto"
-    assert dlg._rest.currentData() == "fade"
-    assert dlg._theme.currentData() == "dark"
-    assert dlg._accent.currentData() == "orange"
-    assert dlg._obj_unit.currentData() == "m"
-    assert dlg._dxf_unit.currentData() == "mm"
-    assert dlg._coord.currentData() == "geo"
     from core.ndof import AXES
-    rows = device_rows()
-    assert rows["ndof_on"].value(env) and rows["ndof_speed"].value(env) == 100
-    assert rows["ndof_preset"].value(env) == "original"
+    _customised(settings_file)
+    ui = Controls(_Win(), "import")
+    assert ui.value("obj_unit") == "ft"
+    assert not ui.select("general").value("autosave")
+    ui.select("display").set("rest_mode", "fade")
+    ui.set("rest_fade", 30)
+    ui.select("ndof").set("ndof_inv_right", True)
+    ui.set("ndof_speed_right", 200)
+    assert ui.value("ndof_preset") == "custom"
+    ui.restore()
+    expected = {
+        "general": dict(autosave=True, autosave_min=5, backup=True, undo_steps=200,
+                        theme="dark", accent="orange", ext_menus="auto", scale_figure=True),
+        "navigation": dict(ask_section=True, invert_wheel=False, invert_orbit=False,
+                           look_sens=25, cursor_style="tool"),
+        "display": dict(msaa=4, rest_mode="fade", rest_fade=75),
+        "import": dict(obj_unit="m", dxf_unit="mm", coord_mode="geo"),
+        "ndof": dict(ndof_on=True, ndof_speed=100, ndof_preset="original"),
+    }
+    for section, values in expected.items():
+        ui.select(section)
+        for key, value in values.items():
+            assert ui.value(key) == value, key
     for axis in AXES:
-        assert not rows["ndof_inv_" + axis].value(env)
-        assert rows["ndof_speed_" + axis].value(env) == 100
-    assert dlg._rest_fade.value() == 75
+        assert not ui.value("ndof_inv_" + axis)
+        assert ui.value("ndof_speed_" + axis) == 100
+    ui.sheet.closed(ui.ctx)
 
 
 def test_ok_saves_the_defaults_and_keeps_language_and_ai(settings_file):
     _customised(settings_file)
     win = _Win()
-    dlg = PreferencesDialog(win)
-    dlg.restore_defaults()
-    dlg.accept()
+    ui = Controls(win, "general")
+    confirmation(ui).press("ok")
     st = _fresh(settings_file)
     assert st.value("General/autosave") == "1"
     assert int(st.value("General/autosave_min")) == 5
@@ -173,7 +142,6 @@ def test_ok_saves_the_defaults_and_keeps_language_and_ai(settings_file):
     assert int(st.value("walk/look_sensitivity")) == 25
     assert st.value("import/obj_unit") == "m"
     assert win.viewport.edit_rest_mode == "fade"
-    # Not part of the reset.
     assert st.value("language") == "fr"
     assert st.value("ia/api_key") == "test-key-123"
     assert st.value("ia/modelo") == "my-model"
@@ -182,9 +150,7 @@ def test_ok_saves_the_defaults_and_keeps_language_and_ai(settings_file):
 def test_cancel_after_restore_touches_nothing(settings_file):
     _customised(settings_file)
     win = _Win()
-    dlg = PreferencesDialog(win)
-    dlg.restore_defaults()
-    dlg.reject()
+    confirmation(Controls(win, "general")).press("cancel")
     st = _fresh(settings_file)
     assert st.value("import/obj_unit") == "ft"
     assert st.value("General/autosave") == "0"
@@ -212,14 +178,12 @@ def test_restore_does_not_copy_the_document_units_to_new_documents(tmp_path):
         win.close()
 
 
-def test_the_button_asks_first(settings_file, monkeypatch):
+def test_the_button_asks_first(settings_file):
     _customised(settings_file)
-    dlg = PreferencesDialog(_Win())
-    monkeypatch.setattr(prefs_mod.QMessageBox, "question",
-                        lambda *a, **k: QMessageBox.Cancel)
-    dlg._defaults_btn.click()
-    assert dlg._obj_unit.currentData() == "ft"        # declined: untouched
-    monkeypatch.setattr(prefs_mod.QMessageBox, "question",
-                        lambda *a, **k: QMessageBox.Ok)
-    dlg._defaults_btn.click()
-    assert dlg._obj_unit.currentData() == "m"
+    ui = Controls(_Win(), "import")
+    form = confirmation(ui)
+    assert ui.value("obj_unit") == "ft"
+    form.press("cancel")
+    assert ui.value("obj_unit") == "ft"
+    confirmation(ui).press("ok")
+    assert ui.value("obj_unit") == "m"
