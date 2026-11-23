@@ -134,13 +134,14 @@ def apply_payload(scene, payload):
         definition.ext = {'rfa': deepcopy({'family': family, 'source': source,
                            'parameters': parameters, 'geometry_source': typ['geometry_source'],
                            'preview_png_base64': payload.get('preview_png_base64')})}
-        definition.ifc = {'v': 1, 'class': 'IfcBuildingElementProxy', 'name': typ['name'],
+        record = {'v': 1, 'class': 'IfcBuildingElementProxy', 'name': typ['name'],
                           'psets': {'Revit family': {
                               'Family': family.get('name', ''), 'Category': family.get('category', ''),
                               'Source file': source.get('file_name', '')},
                               'Revit parameters': {p['name']: _property(p) for p in parameters}}}
         if family.get('omniclass'):
-            definition.ifc['classifications'] = [{'system': 'omniclass', 'code': family['omniclass']}]
+            record['classifications'] = [{'system': 'omniclass', 'code': family['omniclass']}]
+        definition.ifc = record
         solids = []
         if typ['geometry_source'] == 'none':
             solids.append(_placeholder(parameters, warnings, typ['name']))
