@@ -15,6 +15,9 @@ pub(super) fn junctions(
     bounds: Option<[Point; 2]>,
     tol: f64,
 ) -> Result<Vec<(usize, usize)>, &'static str> {
+    if !tol.is_finite() || tol < 0. {
+        return Err("stitch tolerance must be finite and nonnegative");
+    }
     let mut order: Vec<_> = (0..points.len()).collect();
     order.sort_unstable_by(|&a, &b| points[a][0].total_cmp(&points[b][0]));
     let mut hits = Vec::new();
@@ -130,5 +133,32 @@ impl Store {
             }
         }
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::junctions;
+
+    #[test]
+    fn split_uses_mesh_order_in_the_seed_box() {
+        let points = [
+            [0., 0., 0.],
+            [4., 0., 0.],
+            [3., 0., 0.],
+            [1., 0., 0.],
+            [0., 2., 0.],
+            [4., 2., 0.],
+            [2., 2., 0.],
+        ];
+        let edges = [[0, 1], [4, 5]];
+        let all = junctions(&points, &edges, None, 1e-4).unwrap();
+        assert_eq!(all, [(0, 2), (1, 6)]);
+        let seed = [[0., 1.9, -0.1], [4., 2.1, 0.1]];
+        assert_eq!(
+            junctions(&points, &edges, Some(seed), 1e-4).unwrap(),
+            [(1, 6)]
+        );
+        assert!(junctions(&points, &edges, None, -1.).is_err());
     }
 }
