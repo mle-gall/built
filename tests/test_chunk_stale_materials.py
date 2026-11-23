@@ -23,7 +23,7 @@ from core.group import Group
 from core.history import History, MoveGroupCommand, SetFaceTextureCommand
 from core.mesh import Mesh
 from core.scene import Scene
-from views.viewport import Viewport
+from tests.controller_surface import ControllerSurface as Viewport
 
 
 def V(x, y, z=0.0):

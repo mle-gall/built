@@ -109,7 +109,7 @@ def test_without_the_array_rays_the_batch_still_matches(viewport,
     # A C++ library whose QVector3D length rounds otherwise: the rays are
     # built point by point, with the same answer.
     import numpy as np
-    import views.viewport as V_
+    import views.document_interaction as V_
     monkeypatch.setattr(V_, "_QV_HYPOT3", False)
     vp = viewport
     vp.camera.set_view("iso")
@@ -124,7 +124,7 @@ def test_without_the_array_rays_the_batch_still_matches(viewport,
 
 def test_the_rays_are_built_as_qvector3d_builds_them():
     import numpy as np
-    import views.viewport as V_
+    import views.document_interaction as V_
     rng = np.random.default_rng(3)
     pts = np.concatenate([
         rng.normal(size=(3000, 3)) * 10.0 ** rng.uniform(-3, 4, (3000, 1)),
@@ -166,7 +166,7 @@ def test_xray_hides_nothing_in_batch(viewport, monkeypatch):
 
 
 def test_empty_batch():
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     assert Viewport._occluded_many(object(), []) == []
 
 
@@ -209,7 +209,7 @@ def test_compute_snap_picks_the_same_candidate_with_the_batch(hidden_below):
 
 def test_the_kill_switch_keeps_the_rays_one_by_one(monkeypatch):
     # INGETRAZO_NO_SNAP_FAST=1: compute_snap gets no batch to ask.
-    import views.viewport as vv
+    import views.document_interaction as vv
     monkeypatch.setattr(vv, "_NO_SNAP_FAST", True)
     import core.snap as cs
     seen = {}
@@ -362,7 +362,7 @@ def test_the_native_rays_hide_exactly_what_numpy_hides(viewport, view,
     block runs in core/occlusion.rs; a ray it cannot call bit for bit comes
     back to NumPy. Either way the answer is NumPy's, point for point —
     points on faces and at their corners included (the threshold cases)."""
-    import views.viewport as vv
+    import views.document_interaction as vv
     if vv._occlusion_native() is None:
         pytest.skip("the native engine is off or not built")
     vp = viewport

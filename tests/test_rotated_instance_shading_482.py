@@ -50,7 +50,7 @@ def _tones(raw):
 
 
 def test_the_cpu_chunk_of_a_turned_copy_matches_the_plain_group():
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport(None)
     proto = _box()
     inst = Group(proto, "copia")

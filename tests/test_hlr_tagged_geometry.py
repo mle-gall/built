@@ -112,7 +112,7 @@ def _canon(d):
 
 
 def _viewport(scene):
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport(None)
     vp.scene = scene
     vp.resize(800, 600)

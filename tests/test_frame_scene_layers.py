@@ -27,7 +27,7 @@ from core.mesh import Mesh
 from core.scene import Scene
 from core.saved_views import SavedView, visibility_sig
 from views.composer import ComposerWindow
-from views.viewport import Viewport
+from tests.controller_surface import ControllerSurface as Viewport
 
 
 def _box(m, x0, y0, z0, x1, y1, z1):

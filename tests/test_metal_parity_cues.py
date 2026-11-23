@@ -17,7 +17,7 @@ from core.group import Group
 from core.mesh import Mesh
 from core.scene import Scene
 from core.snap import SnapResult
-from views.viewport import Viewport
+from tests.controller_surface import ControllerSurface as Viewport
 from views.wgpu_annotations import AnnotationLayout, draw_tool_feedback
 from views.wgpu_overlay import draw_snap_indicator, pixels
 from views.wgpu_scene import VERTEX, pack_scene

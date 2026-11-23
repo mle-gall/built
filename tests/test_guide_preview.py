@@ -66,7 +66,7 @@ def test_the_tape_shows_the_parallel_guide_before_the_click():
 
 
 def test_a_guide_through_the_eye_still_reaches_the_screen():
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport()
     vp.resize(800, 600)
     cam = vp.camera
@@ -85,7 +85,7 @@ def test_a_guide_through_the_eye_still_reaches_the_screen():
 
 
 def test_clipping_a_guide_through_the_eye_keeps_positive_clip_w():
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport()
     vp.resize(800, 600)
     cam = vp.camera

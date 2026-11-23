@@ -1,4 +1,4 @@
-"""Document editing over a Metal window supplied by either application."""
+"""Document editing over a wgpu window supplied by either application."""
 from views.view_host import WidgetShim
 from views.document_interaction import DocumentInteraction
 
@@ -11,12 +11,34 @@ class DocumentController(DocumentInteraction, WidgetShim):
 
     @classmethod
     def for_widget(cls, display):
+        from views.rtl import keep_ltr
+        keep_ltr(display)
         controller = cls(QtViewHost(display))
         controller.setParent(display)
         controller.keys_stand_in = display
         display.source_viewport = controller
         display.camera = controller.camera
         return controller
+
+    def resize(self, *size):
+        self.keys_stand_in.resize(*size)
+
+    def setFocus(self, *args):
+        display = getattr(self, 'keys_stand_in', None)
+        if isinstance(self._host, QtViewHost) and display is not None:
+            display.setFocus(*args)
+        else:
+            super().setFocus(*args)
+
+    def mapTo(self, target, point):
+        if isinstance(self._host, QtViewHost):
+            return self._host.display.mapTo(target, point)
+        return super().mapTo(target, point)
+
+    def cursor(self):
+        if isinstance(self._host, QtViewHost):
+            return self._host.display.cursor()
+        return super().cursor()
 
     def mapToGlobal(self, point):
         return self.keys_stand_in.mapToGlobal(point)
@@ -26,6 +48,7 @@ class DocumentController(DocumentInteraction, WidgetShim):
 
     def reset_texture_cache(self):
         self.reset_document_caches()
+        self._reference_revision = getattr(self, "_reference_revision", 0) + 1
         self.update()
 
     def _depth_world_at(self, x, y):
@@ -67,7 +90,7 @@ class DocumentController(DocumentInteraction, WidgetShim):
 
 
 class QtViewHost:
-    """Window services used by tools attached to a Qt Metal surface."""
+    """Window services used by tools attached to a Qt wgpu surface."""
 
     def __init__(self, display):
         self.display = display

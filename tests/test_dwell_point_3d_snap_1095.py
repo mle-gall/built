@@ -75,7 +75,7 @@ def test_a_planar_shape_keeps_its_from_point_on_the_face():
 
 
 def test_shift_locks_a_from_point_reference():
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
 
     class _Tool:
         def __init__(self):
@@ -103,7 +103,7 @@ def test_the_line_tool_dwell_reference_works_in_3d_through_the_viewport():
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PySide6.QtWidgets import QApplication
     QApplication.instance() or QApplication([])
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     from tools.line import LineTool
     from tools.base import ToolContext
 

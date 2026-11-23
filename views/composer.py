@@ -14098,9 +14098,7 @@ class ComposerWindow(QMainWindow):
                     getattr(frame, "pen_edge_mm", 0.18), RENDER_DPI)
                 vp._export_profile_px = pen_px(
                     getattr(frame, "pen_profile_mm", 0.35), RENDER_DPI)
-                doc = getattr(self._window, '_doc', None)
-                renderer = doc.stand_in if getattr(doc, '_renderer_wgpu', False) else vp
-                return renderer.render_image(w_px, h_px, overlays=False,
+                return vp.render_image(w_px, h_px, overlays=False,
                                              sharp_shadows=True)
             finally:
                 (vp.plano_style, vp.style_override,

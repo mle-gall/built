@@ -17,7 +17,7 @@ from ingetrazo_core import Vec3 as QVector3D
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from core import units  # noqa: E402
-from views.viewport import Viewport  # noqa: E402
+from tests.controller_surface import ControllerSurface as Viewport
 
 _app = QApplication.instance() or QApplication([])
 

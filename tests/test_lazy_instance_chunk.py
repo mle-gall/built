@@ -7,6 +7,7 @@ the bake was most of the cost. Asked for, each field is exactly what the
 eager bake gave."""
 from __future__ import annotations
 
+from tests.controller_surface import ControllerSurface
 import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -18,7 +19,7 @@ from PySide6.QtWidgets import QApplication  # noqa: E402
 
 _app = QApplication.instance() or QApplication([])
 
-import views.viewport as viewport  # noqa: E402
+import views.document_interaction as viewport  # noqa: E402
 from core.group import Group  # noqa: E402
 from core.mesh import Mesh  # noqa: E402
 
@@ -78,7 +79,7 @@ def _same(a, b):
 
 
 def test_the_pick_index_does_not_bake_what_only_drawing_reads():
-    vp = viewport.Viewport(None)
+    vp = ControllerSurface(None)
     groups = _scene(vp, _box())
     vp._pick_index()
     for g in groups:
@@ -89,7 +90,7 @@ def test_the_pick_index_does_not_bake_what_only_drawing_reads():
 
 def test_each_field_asked_for_is_what_the_eager_bake_gave(monkeypatch):
     proto = _box()
-    lazy_vp = viewport.Viewport(None)
+    lazy_vp = ControllerSurface(None)
     lazy = [lazy_vp._instance_chunk(g) for g in _scene(lazy_vp, proto)]
 
     class Eager(viewport._LazyChunk):
@@ -100,7 +101,7 @@ def test_each_field_asked_for_is_what_the_eager_bake_gave(monkeypatch):
             self._made()
 
     monkeypatch.setattr(viewport, "_LazyChunk", Eager)
-    eager_vp = viewport.Viewport(None)
+    eager_vp = ControllerSurface(None)
     eager = [eager_vp._instance_chunk(g) for g in _scene(eager_vp, proto)]
     for a, b in zip(lazy, eager):
         assert set(a) == set(b)
@@ -130,7 +131,7 @@ def test_a_moved_copy_reads_to_the_index_as_a_fresh_bake():
     bit for bit, as a bake at the new place — the native engine answers
     for the placements it does not bake from that formula (#158)."""
     proto = _box()
-    vp = viewport.Viewport(None)
+    vp = ControllerSurface(None)
     groups = _scene(vp, proto)
     for g in groups:
         vp._instance_chunk(g)
@@ -143,7 +144,7 @@ def test_a_moved_copy_reads_to_the_index_as_a_fresh_bake():
         old = tuple(vp._inst_chunks[id(g)]["ikey"][1])
         shifted = vp._instance_chunk(g)
         assert shifted["ikey"][1] != old
-        fresh_vp = viewport.Viewport(None)
+        fresh_vp = ControllerSurface(None)
         vp.scene.groups.remove(g)             # one parent per placement
         fresh_vp.scene.groups.append(g)
         fresh = fresh_vp._instance_chunk(g)

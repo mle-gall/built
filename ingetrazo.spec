@@ -14,10 +14,6 @@ sibling repo). Runtime resource lookups are repo-root-relative
 layout resolves inside ``_internal/`` — so every data destination below
 mirrors the repo layout exactly.
 
-Rendering note (Windows): Qt 6 picks desktop OpenGL and falls back to the
-bundled software rasterizer (``opengl32sw.dll``, shipped by the PySide6
-wheel) when the driver can't give a 3.3 core context — both paths satisfy
-the viewport's requirements, no forcing needed.
 """
 import site
 import sys
@@ -29,8 +25,6 @@ built_extension = run_path(str(ROOT / "formats" / "built.py"))["BUILT_SUFFIX"][1
 
 # ── Bundled assets — destinations MIRROR the repo layout ─────────────────────
 datas = [
-    ('resources/shaders/*.vert',   'resources/shaders'),
-    ('resources/shaders/*.frag',   'resources/shaders'),
     # Render with Blender (#181): the script Blender runs on the job.
     ('resources/blender/*.py',     'resources/blender'),
     ('resources/icons/*.png',      'resources/icons'),
@@ -123,8 +117,6 @@ for _plat, _names in _DWG_FILES.items():
 # ── Hidden imports ───────────────────────────────────────────────────────────
 hiddenimports = [
     # Qt submodules sometimes missed by static analysis.
-    'PySide6.QtOpenGL',
-    'PySide6.QtOpenGLWidgets',
     'PySide6.QtNetwork',        # tile/DEM fetch (georef)
     # Export ▸ Scenes as Video (.mkv): Qt Multimedia writes the file with
     # its own ffmpeg plugin; imported inside functions (views/video_export).
@@ -159,13 +151,10 @@ hiddenimports += ['core._native', 'ingetrazo_core']
 hiddenimports += ['formats.rfa']
 if _ilu.find_spec('ingetrazo_rfa') is not None:
     hiddenimports += collect_submodules('ingetrazo_rfa')
-# macOS releases must carry the Metal extension; fail packaging if the build
-# step was skipped. Other platforms keep the optional OpenGL-only package.
 hiddenimports += ['core.renderer_settings']
-if sys.platform == 'darwin' and _ilu.find_spec('ingetrazo_render') is None:
+if _ilu.find_spec('ingetrazo_render') is None:
     raise RuntimeError('Build ingetrazo_render with scripts/build_native.sh first')
-if _ilu.find_spec('ingetrazo_render') is not None:
-    hiddenimports += collect_submodules('ingetrazo_render')
+hiddenimports += collect_submodules('ingetrazo_render')
 
 hiddenimports += [
     # The bundled plugins import these at RUN time, so static analysis never

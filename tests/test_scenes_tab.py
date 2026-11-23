@@ -667,7 +667,7 @@ def test_the_pictures_do_not_build_the_composer(win, monkeypatch):
     assert (cam.target, cam.distance, cam.yaw, cam.pitch,
             cam.perspective) == moved     # the live camera comes back
     assert moved != before
-    if win.viewport._gl is not None:      # no GL (Windows offscreen): None
+    if win.viewport.keys_stand_in.renderer is not None:      # no GL (Windows offscreen): None
         assert icon is not None and not icon.isNull()
 
 

@@ -98,7 +98,7 @@ def test_a_rectangle_lines_up_with_the_group():
 # ---- Through the real viewport ------------------------------------------------
 
 def _vp_in_turned_group():
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport(None)
     vp.resize(1000, 700)
     vp.camera.set_aspect(1000, 700)
@@ -144,7 +144,7 @@ def test_an_arrow_lock_inside_the_group_runs_along_its_red():
 
 
 def test_the_axes_are_drawn_at_the_groups_origin():
-    from views.viewport import _axes_vertices
+    from views.document_interaction import _axes_vertices
     vp, _g = _vp_in_turned_group()
     vp._sync_axes()
     coords, spans = _axes_vertices(0.1)

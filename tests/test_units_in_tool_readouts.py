@@ -26,7 +26,7 @@ from core.i18n import tr  # noqa: E402
 from core.scene import Scene  # noqa: E402
 from tools.base import ToolContext  # noqa: E402
 from tools.circle import CircleTool, PolygonTool  # noqa: E402
-from views.viewport import Viewport  # noqa: E402
+from tests.controller_surface import ControllerSurface as Viewport
 
 ROOT = Path(__file__).resolve().parents[1]
 

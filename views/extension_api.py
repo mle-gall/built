@@ -143,6 +143,11 @@ class ExtensionApp:
         return self._window.viewport
 
     @property
+    def viewport_widget(self):
+        """The Qt surface an extension can put in a layout."""
+        return getattr(self.viewport, "keys_stand_in", None) or self.viewport
+
+    @property
     def scene(self):
         return self._window.viewport.scene
 

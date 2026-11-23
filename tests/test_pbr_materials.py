@@ -133,7 +133,7 @@ def test_cross_document_paste_registers_recipe_and_undoes_collision(tmp_path):
     from formats.clip import encode, decode
     from tests.test_paste import _VP, _paste_at
     from core.history import History
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     first = Scene()
     mat = Material("Metal", pbr={"normal_map": {"path": image(tmp_path / "n.png", (128, 128, 255))}})
     first.materials[mat.name] = mat

@@ -22,7 +22,6 @@ mod render_bake;
 mod scene_bake;
 mod smooth;
 mod facesview;
-mod gltape;
 mod hlr;
 mod igz;
 #[cfg(unix)]
@@ -156,7 +155,6 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(visible_parts, m)?)?;
     m.add_function(wrap_pyfunction!(earcut_indices, m)?)?;
     m.add_function(wrap_pyfunction!(faces_view, m)?)?;
-    m.add_class::<GlReplay>()?;
     m.add_class::<InstanceProto>()?;
     m.add_class::<InstanceSet>()?;
     m.add_function(wrap_pyfunction!(snap::drawing_axis, m)?)?;
@@ -941,44 +939,6 @@ fn mesh_tuple<'py>(py: Python<'py>, b: jsondoc::Block) -> PyResult<Bound<'py, py
         pyo3::types::PyList::new(py, attrs)?.into_any(),
         PyArray1::from_vec(py, b.multi).into_any(),
     ])
-}
-
-/// A recorded run of OpenGL calls, replayed through the current context's
-/// entry points (views.viewport._GlTape): ``GlReplay(addrs)`` with the
-/// eleven entry points in opcode order (glDrawArraysInstanced,
-/// glBindVertexArray, glUniform1i, glUniform1f, glUniform4f, glEnable,
-/// glDisable, glCullFace, glFrontFace, glActiveTexture, glBindTexture).
-#[pyclass(frozen)]
-struct GlReplay {
-    tape: gltape::Tape,
-}
-
-#[pymethods]
-impl GlReplay {
-    #[new]
-    fn new(addrs: Vec<usize>) -> PyResult<Self> {
-        gltape::Tape::new(&addrs)
-            .map(|tape| Self { tape })
-            .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("missing GL entry point"))
-    }
-
-    /// Run ``ops`` (R,5) int64 ``[opcode, a, b, c, d]`` with ``vals`` (R,4)
-    /// float32. The GL context the entry points came from must be current.
-    fn run(&self, ops: PyReadonlyArray2<'_, i64>, vals: PyReadonlyArray2<'_, f32>) -> PyResult<usize> {
-        let o = ops.as_array();
-        let v = vals.as_array();
-        if o.shape()[1] != 5 || v.shape()[1] != 4 || o.shape()[0] != v.shape()[0] {
-            return Err(pyo3::exceptions::PyValueError::new_err("tape shape"));
-        }
-        let rows: Vec<[i64; 5]> = (0..o.shape()[0])
-            .map(|r| [o[[r, 0]], o[[r, 1]], o[[r, 2]], o[[r, 3]], o[[r, 4]]]).collect();
-        let fl: Vec<[f32; 4]> = (0..v.shape()[0])
-            .map(|r| [v[[r, 0]], v[[r, 1]], v[[r, 2]], v[[r, 3]]]).collect();
-        // SAFETY: the viewport calls this inside paintGL, its context
-        // current, with a tape it recorded from its own calls.
-        unsafe { self.tape.run(&rows, &fl) }
-            .map_err(|r| pyo3::exceptions::PyValueError::new_err(format!("bad opcode at {r}")))
-    }
 }
 
 /// One prototype for the spatial index: its pick triangles (``v0``,

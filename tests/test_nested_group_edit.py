@@ -164,7 +164,7 @@ class _VP:
 
 
 def _visor(scene):
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     vp = _VP(scene)
     for m in ("_placements", "_expand_placements", "_context_placements",
               "_owner_of", "_draws_in_edit_context"):
@@ -273,38 +273,6 @@ def test_el_nieto_se_selecciona_solo_en_su_nivel():
     assert dueño_de_la_banca() == "Banca"
 
 
-def test_las_instancias_tambien_se_atenuan():
-    """«Hago doble clic y lo demás no se atenúa» (Marco, 2026-09-11).
-
-    El camino instanciado de la GPU es OTRA llamada de dibujo: el corte de
-    atenuado que llevan los búferes por trozos no le dice nada. Mientras
-    estabas dentro de un grupo, toda colocación instanciada seguía
-    dibujándose a plena luz — y agrupar la plaza convirtió a sus hijos en
-    justo eso.
-    """
-    from views.viewport import Viewport
-    scene, padre, h1, h2 = _plaza()
-    suelto = Group(_cuadrado(Mesh(), 20.0), name="Otro")
-    scene.groups.append(suelto)
-    vp = _visor(scene)
-    vp._edit_rest_mode = "fade"
-    vp._edit_rest_fade_strength = 0.37
-    _VP._instanced_batches = Viewport._instanced_batches
-
-    assert vp._instanced_batches([h1, suelto]) == [([h1, suelto], 0.0)], (
-        "en la raíz no se atenúa nada")
-
-    scene.begin_group_edit(padre)
-    hijos = [g for g in vp._placements() if getattr(g, "context", None) is padre]
-    lotes = vp._instanced_batches(hijos + [suelto])
-    assert lotes[0] == ([suelto], 0.37), "lo de fuera, atenuado"
-    assert lotes[1] == (hijos, 0.0), "lo de dentro, a plena luz"
-
-    vp._edit_rest_mode = "hide"
-    lotes = vp._instanced_batches(hijos + [suelto])
-    assert lotes == [(hijos, 0.0)], "en modo ocultar, lo de fuera ni se dibuja"
-
-
 def test_entrar_a_un_grupo_ANIDADO_no_lo_atenua_a_el():
     """La captura de Marco del 2026-09-11: entró a un grupo que vivía dentro
     de otro y salió lavado él, con el resto del modelo a plena luz.
@@ -337,7 +305,7 @@ def test_el_aviso_dice_en_que_nivel_estas():
     """Sin esto, anidar se lee como un programa roto: haces clic fuera, el
     programa sube UN nivel a un padre que también es contenedor, todo sigue
     atenuado y parece que no pasó nada (Marco, 2026-09-11)."""
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     scene, padre, h1, _h2 = _plaza()
     nieto = Group(_cuadrado(Mesh(), 6.0), name="Banca")
     h1.adopt([nieto])
@@ -355,57 +323,6 @@ def test_el_aviso_dice_en_que_nivel_estas():
     assert vp.edit_path_text() == "Plaza ▸ Jardinera"
 
 
-def test_el_corte_del_atenuado_se_apunta_aunque_el_sujeto_dibuje_por_otra_via():
-    """El sujeto puede dibujarse por el camino INSTANCIADO, que no pasa por
-    el búfer de trozos. Si la frontera solo se apuntaba para los que sí caen
-    en ese búfer, entrar a un grupo instanciado dejaba el corte sin poner —
-    y sin corte no se atenúa nada (Marco, 2026-09-11, segundo nivel)."""
-    import inspect
-    from views.viewport import Viewport
-    fuente = inspect.getsource(Viewport._sync_edges)
-    i_corte = fuente.index("self._edit_split_f = gface_start")
-    i_salto = fuente.index("or self._instanced_eligible(g)):", i_corte - 2000)
-    assert i_corte < i_salto, (
-        "el corte de caras debe apuntarse ANTES del continue que salta "
-        "las colocaciones instanciadas")
-
-
-def test_las_caras_texturadas_saben_quien_es_el_sujeto():
-    """El pase texturado decide el atenuado con su propia bandera. Comparaba
-    por identidad contra scene.edit_group, así que con un grupo anidado —que
-    en la lista de dibujo es una proxy— marcaba TODAS las caras texturadas
-    como decorado: la plaza entera salía lavada, el grupo editado incluido."""
-    import inspect
-    from views.viewport import Viewport
-    fuente = inspect.getsource(Viewport._sync_edges)
-    assert "subj = not self._draws_in_edit_context(g)" in fuente
-    assert "subj = g is self.scene.edit_group" not in fuente
-
-
-def test_construir_el_dibujo_de_un_prototipo_deja_el_programa_puesto():
-    """Borrar una cara dentro de un grupo anidado: «por un segundo el grupo
-    desaparece, pensé que se había eliminado» (Marco, 2026-09-11). El hijo de
-    un contenedor se dibuja por el camino INSTANCIADO, y cada cambio de su
-    malla rehace la entrada GL del prototipo A MITAD DEL CUADRO. Esa
-    construcción hacía `self._program.release()` al terminar, y todo lo que
-    se dibujaba después en ese cuadro salía sin shader: el grupo editado, sus
-    vecinos instanciados, los ejes y el muñeco. El cuadro siguiente ya estaba
-    bien, pero para entonces Marco había pulsado Ctrl+Z.
-
-    Reproducido en vivo con captura por el puente; no hay contexto GL en la
-    suite, así que se fija sobre el texto del método."""
-    import inspect
-    from views.viewport import Viewport
-    # The building half moved to _ensure_proto_draw_slow (#158); both are
-    # read.
-    fuente = (inspect.getsource(Viewport._ensure_proto_draw)
-              + inspect.getsource(Viewport._ensure_proto_draw_slow))
-    assert "self._program.bind()" in fuente
-    assert "self._program.release()" not in fuente, (
-        "la entrada del prototipo se construye a mitad del cuadro: soltar el "
-        "programa deja sin shader todo lo que se dibuja después")
-
-
 # ---- dentro de un grupo, el resto del modelo sigue siendo referencia ---------
 
 def _visor_con_picking(scene):
@@ -415,7 +332,7 @@ def _visor_con_picking(scene):
     from tests.test_pick_index import _VP as _PickVP, _bind
     vp = _bind(_PickVP(scene))
     vp._placement_proxies = {}
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     for m in ("_draws_in_edit_context", "pick_group", "_pixel_to_ray",
               "_world_to_pixel"):
         setattr(vp, m, getattr(Viewport, m).__get__(vp))
@@ -566,7 +483,7 @@ def test_la_caja_del_contenedor_sigue_a_sus_hijos():
     m.translate(10.0, 0.0, 0.0)
     padre.xform = m                              # la plaza, colocada lejos
     vp = _bind(_VP(scene))
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     vp._compute_obb = Viewport._compute_obb          # staticmethod
 
     def caja():

@@ -155,13 +155,13 @@ def test_a_lazy_placements_box_is_kept_until_it_changes(binary, tmp_path):
 class _Vp:
     def __init__(self, scene):
         self.scene = scene
-        from views.viewport import Viewport
+        from tests.controller_surface import ControllerSurface as Viewport
         for m in ("_center_of_group_edge", "_center_of_edge"):
             setattr(self, m, getattr(Viewport, m).__get__(self))
 
 
 def _pseudo(g, a, b):
-    from views.viewport import _SnapEdge
+    from views.document_interaction import _SnapEdge
     xf = g.xform
     return _SnapEdge(xf.map(a), xf.map(b), in_group=True, context="group",
                      group=g)

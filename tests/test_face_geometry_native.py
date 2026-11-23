@@ -99,7 +99,7 @@ def _polygon(rng):
 
 
 def _geometry_python(face):
-    from views.viewport import _face_geometry
+    from views.document_interaction import _face_geometry
     return _face_geometry(face, None, triangulate)
 
 

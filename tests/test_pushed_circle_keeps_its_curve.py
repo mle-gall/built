@@ -20,7 +20,7 @@ from tools.circle import CircleTool
 @pytest.fixture(scope="module")
 def viewport():
     QApplication.instance() or QApplication([])
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport(None)
     vp.flash_status = lambda *a, **k: None
     return vp

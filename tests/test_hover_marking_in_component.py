@@ -76,6 +76,14 @@ def _probe(vp):
                 yield x, y, face, placement
 
 
+def _mark_positions(face, placement=None):
+    from types import SimpleNamespace
+    from views.wgpu_parity import hover_face_marks
+    from views.wgpu_scene import VERTEX
+    marks = hover_face_marks(SimpleNamespace(source_viewport=None), face, placement)
+    return marks.view(VERTEX)['pos']
+
+
 def test_the_paint_hover_marking_lies_on_the_part_it_is_over():
     win, vp = _window_with_a_placed_exploded_component()
     try:
@@ -87,8 +95,7 @@ def test_the_paint_hover_marking_lies_on_the_part_it_is_over():
             tool.on_hover(_ctx(vp, x, y, Qt.AltModifier))
             face, placement = vp._hover_entity, vp._hover_placement
             assert face is not None and placement is not None
-            marking = np.array(vp._hover_face_data(face, placement),
-                               dtype=float).reshape(-1, 3)
+            marking = _mark_positions(face, placement)
             lo, hi = _bounds(world_mesh(placement))
             assert np.all(marking.min(axis=0) >= lo - 1e-3)
             assert np.all(marking.max(axis=0) <= hi + 1e-3)
@@ -105,8 +112,7 @@ def test_without_the_placement_the_marking_is_where_the_part_would_be_unplaced()
     win, vp = _window_with_a_placed_exploded_component()
     try:
         _x, _y, face, placement = next(_probe(vp))
-        bare = np.array(vp._hover_face_data(face, None),
-                        dtype=float).reshape(-1, 3)
+        bare = _mark_positions(face, None)
         lo, hi = _bounds(world_mesh(placement))
         assert not np.all(bare.min(axis=0) >= lo - 1e-3) \
             or not np.all(bare.max(axis=0) <= hi + 1e-3)
@@ -116,12 +122,11 @@ def test_without_the_placement_the_marking_is_where_the_part_would_be_unplaced()
 
 
 def test_a_loose_face_needs_no_placement():
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     mesh = Mesh()
     face = mesh.add_face([QVector3D(0, 0, 0), QVector3D(1, 0, 0),
                           QVector3D(1, 1, 0), QVector3D(0, 1, 0)])
-    data = np.array(Viewport._hover_face_data(face, None),
-                    dtype=float).reshape(-1, 3)
+    data = _mark_positions(face, None)
     assert data.max(axis=0).tolist() == [1.0, 1.0, 0.0]
 
 

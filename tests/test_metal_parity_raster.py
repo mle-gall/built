@@ -29,7 +29,7 @@ def test_payload_defaults_and_hidden_controls():
 
 def test_sun_matches_gl_and_can_be_disabled(monkeypatch):
     from ingetrazo_core import Vec3 as QVector3D
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     scene = Scene()
     scene.loose_mesh.add_face([QVector3D(0,0,0), QVector3D(1,0,0), QVector3D(0,1,1)])
     scene.shadows.enabled = True
@@ -600,3 +600,23 @@ def test_acquired_center_cue_projected_into_live_frame(native):
                                    (None, .9, (32, 32))]:
         native.set_center_cue(center, radius, cursor, 1.)
         np.testing.assert_array_equal(capture(native), baseline)
+
+
+@pytest.mark.parametrize("antialias", [False, True])
+def test_model_behind_reference_only_hidden_by_opaque_imagery(native, antialias):
+    upload(native, alpha=255)
+    native.set_antialias(antialias)
+    native.set_style(dict(sky=False, edges=False))
+    original = capture(native)
+    corners = [(-.8, -.8), (.8, -.8), (.8, .8), (-.8, .8)]
+    vertices = np.array([(x, y, .25, 0., 0.) for x, y in
+                         [corners[i] for i in (0, 1, 2, 0, 2, 3)]], np.float32).ravel()
+    green = np.array([20, 225, 60, 255], np.uint8)
+    def frame(opacity, depth):
+        layer = ('reference', vertices, 1, 1, green, opacity, (0., 0., 0., 0.), depth)
+        native.set_reference_layers(['reference'], [layer])
+        return capture(native)[32, 32]
+    np.testing.assert_allclose(frame(1., True)[:3], green[:3], atol=2)
+    # Flat tiles and faded images leave geometry visible behind their plane.
+    np.testing.assert_array_equal(frame(1., False), original[32, 32])
+    np.testing.assert_array_equal(frame(.5, False), original[32, 32])

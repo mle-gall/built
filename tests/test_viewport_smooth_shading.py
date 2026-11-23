@@ -34,7 +34,7 @@ elif not isinstance(_inst, QApplication):
 from core.group import Group                                      # noqa: E402
 from core.mesh import Mesh                                        # noqa: E402
 from core.scene import Scene                                      # noqa: E402
-from views.viewport import Viewport                               # noqa: E402
+from tests.controller_surface import ControllerSurface as Viewport
 
 SIDES = 12
 # A light from the side: every side face of the cylinder gets a clearly
@@ -172,35 +172,15 @@ def test_coplanar_faces_joined_by_a_soft_edge_keep_the_flat_colour():
     assert len({tuple(r[3:]) for r in rows}) == 1
 
 
-def _loose_face_rows(win):
-    sent = {}
-
-    def fake_upload(_vbo, slot, parts, empty=24):
-        data = b"".join(parts)
-        sent[slot] = data
-        return len(data)
-    vp = win.viewport
-    vp._upload_vbo = fake_upload
-    import re
-    import views.viewport as vpmod
-    src = open(vpmod.__file__, encoding="utf-8").read()
-    for name in set(re.findall(r"self\.(_\w+_vbo)\b", src)):
-        if not hasattr(vp, name):
-            setattr(vp, name, None)
-    vp._sync_edges()
-    return np.frombuffer(sent["faces"], dtype=np.float32).reshape(-1, 6)
-
-
 def test_loose_geometry_shades_round_too():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    vp, sc = win.viewport, win.viewport.scene
-    vp._LIGHT = SIDE_LIGHT
-    _cylinder(sc.mesh)
-    sc.version += 1
-    at = _colours_at(_loose_face_rows(win))
-    assert len(at) == 2 * SIDES
-    assert all(len(cols) == 2 for cols in at.values())
-    win._saved_version = sc.version
-    win.close()
-
+    from views.wgpu_scene import pack_scene
+    scene = Scene()
+    _cylinder(scene.mesh)
+    packed = pack_scene(scene)
+    by_position = defaultdict(set)
+    cmd = packed.commands[0]
+    indices = packed.indices[int(cmd['first']):int(cmd['first'] + cmd['count'])]
+    for vertex in packed.vertices[indices + cmd['base']]:
+        by_position[tuple(vertex['pos'])].add(tuple(np.round(vertex['normal'], 5)))
+    assert len(by_position) == 2 * SIDES
+    assert all(len(normals) == 2 for normals in by_position.values())

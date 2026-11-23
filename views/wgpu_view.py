@@ -206,7 +206,8 @@ class MetalView(ViewNavigation):
 
     @_tool_frame
     def hideEvent(self, event):
-        self.tools.cancel()
+        if not getattr(self, '_closed', False):
+            self.tools.cancel()
         super().hideEvent(event)
 
     def set_scene(self, scene, *, progress=None, opening=False, focus=None):
@@ -423,6 +424,8 @@ class MetalView(ViewNavigation):
         """One container box per idle slice, from a few seconds after the
         document is on screen; a box measured on demand meanwhile is kept."""
         pending = list(groups)
+        if not pending:
+            return
 
         def step():
             if getattr(self, '_closed', False) or self.scene is not scene:
@@ -890,6 +893,8 @@ class MetalView(ViewNavigation):
         width_px, height_px = int(width_px), int(height_px)
         if width_px <= 0 or height_px <= 0:
             raise ValueError("Image dimensions must be positive")
+        if hasattr(self._shared, '_content_token'):
+            self._shared.set_scene(source.scene)
         if self.packed is None:
             self.packed = pack_scene(source.scene, getattr(source, 'view_tint', None),
                                      focus=source.camera.target.toTuple())
@@ -1723,6 +1728,9 @@ class MetalView(ViewNavigation):
         if hasattr(self, '_inference_worker'):
             self._inference_worker.shutdown(wait=False, cancel_futures=True)
         super().closeEvent(event)
+        self._instance_updates = self._inference_future = self.inference_index = None
+        self.source_viewport = self._tool_source = self.scene = self.packed = None
+        self._billboards = None
 
 
 class WgpuView(MetalView, QWidget):

@@ -13,7 +13,7 @@ import numpy as np
 from ingetrazo_core import Vec3 as V
 
 from core.guide import Guide
-from views.viewport import _guide_vertices
+from views.document_interaction import _guide_vertices
 
 
 def _dashes(guide, eye):

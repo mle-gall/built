@@ -16,7 +16,7 @@ from ingetrazo_core import Vec3 as V
 from core.orient import is_closed
 from tools.base import ToolContext
 from tools.pushpull import PushPullTool
-from views.viewport import Viewport
+from tests.controller_surface import ControllerSurface as Viewport
 
 
 @pytest.fixture

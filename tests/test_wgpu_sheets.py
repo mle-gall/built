@@ -12,16 +12,13 @@ from tests.test_composer_perspective import _composer
 _app = QApplication.instance() or QApplication([])
 
 
-@pytest.mark.parametrize('metal', [False, True])
-def test_sheet_dispatch_and_override_restoration(metal):
+def test_sheet_dispatch_and_override_restoration():
     composer, host = _composer()
     calls = []
     def render(w, h, **kwargs):
         calls.append((w, h))
         return QImage(w, h, QImage.Format_RGB32)
-    host._doc = SimpleNamespace(_renderer_wgpu=metal,
-                               stand_in=SimpleNamespace(render_image=render))
-    host.viewport.render_image = render if not metal else lambda *a, **k: pytest.fail('GL used')
+    host.viewport.render_image = render
     host.viewport.plano_style = 'lineas'
     frame = MarcoVista(w_mm=20, h_mm=10, style='tecnico')
     image = composer.render_frame(frame)
@@ -61,7 +58,7 @@ def test_saved_frame_restores_hidden_camera_and_filter_on_error():
 def test_offscreen_size_and_live_camera_unchanged(monkeypatch):
     import sys
     import views.wgpu_view as module
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     from core.scene import Scene
     from core.camera import OrbitCamera
     class Renderer:

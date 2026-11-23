@@ -5,7 +5,7 @@ from __future__ import annotations
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.snap import COLOR_AXIS_X, SnapResult
-from views.viewport import Viewport
+from tests.controller_surface import ControllerSurface as Viewport
 
 
 class _Tool:

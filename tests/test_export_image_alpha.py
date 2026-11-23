@@ -332,7 +332,7 @@ def test_hidden_line_leaves_the_glass_as_it_was(view):
 
 def test_one_constant_gives_the_real_colour_back(view, monkeypatch):
     """The open decision (grey or the real colour) is this one value."""
-    import views.viewport as viewport
+    import views.document_interaction as viewport
     monkeypatch.setattr(viewport, "MONOCHROME_GLASS_RGB", None)
     _win, vp, folder = view
     img = _saved(vp, folder, "Monochrome")

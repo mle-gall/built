@@ -13,7 +13,7 @@ import numpy as np
 import pytest
 from ingetrazo_core import Matrix4 as QMatrix4x4
 
-import views.viewport as viewport_mod
+import views.document_interaction as viewport_mod
 from tests.test_lazy_native_snap import (  # noqa: F401
     VIEWS, _close, _edge_key, _set_view, _window, pytestmark)
 

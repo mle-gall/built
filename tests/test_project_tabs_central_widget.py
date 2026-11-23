@@ -46,7 +46,8 @@ class _GridOfViews:
 
     def __init__(self, window):
         self.window = window
-        self.main_vp = window.viewport
+        from views.extension_api import ExtensionApp
+        self.main_vp = ExtensionApp(window, "grid").viewport_widget
         self.container = None
         self.active = False
 
@@ -81,11 +82,11 @@ def _shown(win):
 
 
 def test_the_central_widget_an_extension_sees_is_the_viewport(win):
-    assert win.centralWidget() is win.viewport
+    assert win.centralWidget() is win.viewport.keys_stand_in
     # Qt's own central widget is still the tab area.
     assert QMainWindow.centralWidget(win) is win._doc_area
     win._new_document()
-    assert win.centralWidget() is win.viewport
+    assert win.centralWidget() is win.viewport.keys_stand_in
 
 
 def test_a_grid_of_views_takes_the_viewport_and_keeps_the_tabs(win):
@@ -94,19 +95,19 @@ def test_a_grid_of_views_takes_the_viewport_and_keeps_the_tabs(win):
     assert grid.activate()
     assert QMainWindow.centralWidget(win) is win._doc_area
     assert _shown(win) is grid.container
-    assert win.viewport.parent() is grid.container
+    assert win.viewport.keys_stand_in.parentWidget() is grid.container
     assert win.viewport is first.viewport
     assert win.centralWidget() is grid.container
     assert not win._project_tabs.isHidden()
     grid.deactivate()
-    assert _shown(win) is first.viewport
-    assert first.stand_in is None
-    assert win.centralWidget() is first.viewport
+    assert _shown(win) is first.viewport.keys_stand_in
+    assert first.stand_in is first.viewport.keys_stand_in
+    assert win.centralWidget() is first.viewport.keys_stand_in
     assert win._doc_stack.count() == 1
     # Again: the second time the extension reuses its container.
     assert grid.activate() and _shown(win) is grid.container
     grid.deactivate()
-    assert _shown(win) is first.viewport and win._doc_stack.count() == 1
+    assert _shown(win) is first.viewport.keys_stand_in and win._doc_stack.count() == 1
 
 
 def test_switching_tabs_with_the_grid_on(win):
@@ -115,18 +116,18 @@ def test_switching_tabs_with_the_grid_on(win):
     grid.activate()
     second = win._new_document()
     assert win.active_document() is second
-    assert _shown(win) is second.viewport
+    assert _shown(win) is second.viewport.keys_stand_in
     win.activate_document(first)
     assert _shown(win) is grid.container
     win.activate_document(second)
     # Turning it off from the other tab puts the first project's viewport
     # back in ITS place and leaves the tab in front alone.
     grid.deactivate()
-    assert _shown(win) is second.viewport
-    assert first.slot_widget() is first.viewport
-    assert win._doc_stack.indexOf(first.viewport) >= 0
+    assert _shown(win) is second.viewport.keys_stand_in
+    assert first.slot_widget() is first.viewport.keys_stand_in
+    assert win._doc_stack.indexOf(first.viewport.keys_stand_in) >= 0
     win.activate_document(first)
-    assert _shown(win) is first.viewport
+    assert _shown(win) is first.viewport.keys_stand_in
     assert win._doc_stack.count() == 2
 
 
@@ -134,7 +135,7 @@ def test_in_another_tab_the_extension_declines_and_nothing_moves(win):
     grid = _GridOfViews(win)
     second = win._new_document()
     assert not grid.activate()
-    assert _shown(win) is second.viewport
+    assert _shown(win) is second.viewport.keys_stand_in
     assert win._doc_stack.count() == 2
 
 
@@ -146,7 +147,7 @@ def test_closing_the_replaced_project_leaves_no_stand_in(win, monkeypatch):
     win.close_document(first, ask=False)
     _settle()
     assert win._doc_stack.count() == 1
-    assert _shown(win) is win.viewport
+    assert _shown(win) is win.viewport.keys_stand_in
 
 
 def test_set_without_take_never_deletes_a_viewport(win):
@@ -157,9 +158,9 @@ def test_set_without_take_never_deletes_a_viewport(win):
     win.setCentralWidget(panel)
     _settle()
     assert _shown(win) is panel
-    assert vp.scene is not None and vp.parent() is win._doc_stack
+    assert vp.scene is not None and vp.keys_stand_in.parentWidget() is win._doc_stack
     win.setCentralWidget(vp)
     _settle()
-    assert _shown(win) is vp
+    assert _shown(win) is vp.keys_stand_in
     with pytest.raises(RuntimeError):
         panel.objectName()                    # the stand-in was deleted

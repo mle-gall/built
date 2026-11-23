@@ -247,6 +247,9 @@ def test_the_menu_command_with_nothing_selected_cleans_the_whole_model():
     from views.main_window import MainWindow
     win = MainWindow()
     try:
+        win.show()
+        from PySide6.QtWidgets import QApplication
+        QApplication.processEvents()
         scene = win.viewport.scene
         hist = win.viewport.history
         for x in range(3):
@@ -315,6 +318,9 @@ def test_the_preview_panel_paints_and_cancel_leaves_the_model_alone():
     from views.main_window import MainWindow
     win = MainWindow()
     try:
+        win.show()
+        from PySide6.QtWidgets import QApplication
+        QApplication.processEvents()
         scene = win.viewport.scene
         hist = win.viewport.history
         for x in range(3):
@@ -324,7 +330,7 @@ def test_the_preview_panel_paints_and_cancel_leaves_the_model_alone():
         panel = win._join_preview
         assert panel.counts == {"join": 2}
         assert panel._paint in win.viewport._ext_overlays
-        assert panel.parent() is win.viewport          # floats in the view
+        assert panel.parent() is win.viewport.keys_stand_in          # floats in the view
         vp = win.viewport
         assert panel.geometry().right() <= vp.width()
         assert panel.geometry().bottom() <= vp.height()
@@ -358,13 +364,16 @@ def test_enter_on_the_view_joins_and_esc_cancels():
     from views.main_window import MainWindow
     win = MainWindow()
     try:
+        win.show()
+        from PySide6.QtWidgets import QApplication
+        QApplication.processEvents()
         scene = win.viewport.scene
         hist = win.viewport.history
         for x in range(3):
             hist.execute(AddEdgeCommand(V(x, 0), V(x + 1, 0)))
 
         def press(key):
-            QApplication.sendEvent(win.viewport, QKeyEvent(
+            QApplication.sendEvent(win.viewport.keys_stand_in, QKeyEvent(
                 QEvent.KeyPress, key, Qt.NoModifier))
 
         scene.selection.update(scene.mesh.edges)

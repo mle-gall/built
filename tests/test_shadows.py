@@ -58,7 +58,7 @@ def test_light_vp_contains_the_model():
     """Every corner of the model's bounds must land inside the sun's ortho
     frustum — points outside the map sample as 'lit', so a bad fit would
     silently erase shadows at the rims."""
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     lo, hi = V(-3, -2, 0), V(5, 7, 4)
     for d in ((0.3, 0.5, 0.8), (0.0, 0.0, 1.0), (-0.6, 0.2, 0.75)):
         n = (d[0] ** 2 + d[1] ** 2 + d[2] ** 2) ** 0.5

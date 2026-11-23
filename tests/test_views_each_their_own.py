@@ -41,7 +41,7 @@ def _cell(win, view):
 def _click(cell):
     """A click in an empty corner of the view, as the hand does."""
     vp = cell.viewport
-    QTest.mouseClick(vp, Qt.LeftButton, Qt.NoModifier,
+    QTest.mouseClick(vp.keys_stand_in, Qt.LeftButton, Qt.NoModifier,
                      QPoint(vp.width() - 6, vp.height() - 6))
     QApplication.processEvents()
 

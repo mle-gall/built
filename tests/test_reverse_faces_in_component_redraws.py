@@ -30,7 +30,8 @@ from core.history import FlipFacesCommand, History
 from core.mesh import Mesh
 from core.scene import Scene
 from tests.test_chunk_stale_materials import _stub
-from views.viewport import Viewport, _proto_wrapper
+from views.document_interaction import _proto_wrapper
+from tests.controller_surface import ControllerSurface as Viewport
 
 _app = QApplication.instance() or QApplication([])
 

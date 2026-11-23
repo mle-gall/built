@@ -29,7 +29,7 @@ from core.group import Group  # noqa: E402
 from core.history import MakeGroupCommand  # noqa: E402
 from core.mesh import Mesh  # noqa: E402
 from tools.select import SelectTool  # noqa: E402
-from views.viewport import Viewport  # noqa: E402
+from tests.controller_surface import ControllerSurface as Viewport
 
 CENTER = (1.5, 1.2)                     # of the disc, on the wall's face
 RADIUS = 0.3

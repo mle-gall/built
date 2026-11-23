@@ -21,7 +21,7 @@ if QApplication.instance() is None:
 
 from core.edits import build_add_edges  # noqa: E402
 from tools.line import LineTool  # noqa: E402
-from views.viewport import Viewport  # noqa: E402
+from tests.controller_surface import ControllerSurface as Viewport
 
 
 def _vp():

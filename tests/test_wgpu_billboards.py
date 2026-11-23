@@ -122,7 +122,7 @@ def test_billboard_inference_uses_turned_geometry():
 
 
 def test_nested_sprite_quad_matches_gl_and_survives_edit_context():
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     child = figure()
     parent = Group(Mesh())
     parent.children = [child]

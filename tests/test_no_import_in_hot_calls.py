@@ -12,7 +12,7 @@ from core.group import Group, new_uid
 from core.mesh import Mesh
 from core.scene import Scene
 from views import array_bake  # noqa: F401 — the real one is imported by now
-from views.viewport import _array_bake, _paint_of, _proto_wrapper
+from views.document_interaction import _array_bake, _paint_of, _proto_wrapper
 
 
 @pytest.fixture

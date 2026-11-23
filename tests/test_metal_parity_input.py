@@ -14,7 +14,7 @@ from core.mesh import Mesh
 from core.group import Group
 from core.history import History
 from tools.select import SelectTool
-from views.viewport import Viewport
+from tests.controller_surface import ControllerSurface as Viewport
 from views.wgpu_view import WgpuView
 from views.wgpu_inference import prepare
 

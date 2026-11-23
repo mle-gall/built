@@ -13,7 +13,7 @@ import warnings
 
 import numpy as np
 
-from views.viewport import Viewport
+from tests.controller_surface import ControllerSurface as Viewport
 
 # Keep the half-spaces x <= 10 and y >= -5.
 _PLANES = [(-1.0, 0.0, 0.0, 10.0), (0.0, 1.0, 0.0, 5.0)]

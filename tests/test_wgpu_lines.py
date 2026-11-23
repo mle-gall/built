@@ -15,7 +15,8 @@ from core.group import Group
 from core.guide import Guide
 from core.mesh import Mesh
 from core.scene import Scene
-from views.viewport import Viewport, _box_edge_vertices
+from views.document_interaction import _box_edge_vertices
+from tests.controller_surface import ControllerSurface as Viewport
 from views.wgpu_lines import SEGMENT, sync
 from views.wgpu_scene import pack_scene
 from views.wgpu_view import WgpuView

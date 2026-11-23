@@ -46,7 +46,7 @@ def _touch_emulation(monkeypatch):
 
 @pytest.fixture
 def vp():
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     view = Viewport(None)
     view.resize(400, 300)
     view._touch_slide = "orbit"
@@ -172,7 +172,7 @@ def test_the_first_pixels_are_not_lost(vp):
     slide(vp, 2, 0)
     turned_in_3 = vp.camera.yaw - yaw0
     assert turned_in_3 != 0
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     other = Viewport(None)
     other.resize(400, 300)
     other._touch_slide = "orbit"
@@ -184,7 +184,7 @@ def test_the_first_pixels_are_not_lost(vp):
 
 def test_a_slide_grabs_the_model_like_a_drag(vp):
     # A mouse drag of the same pixels through the middle button convention.
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     ref = Viewport(None)
     ref.resize(400, 300)
     pivot = ref._orbit_pivot_at(CENTRE.x(), CENTRE.y())
@@ -194,7 +194,7 @@ def test_a_slide_grabs_the_model_like_a_drag(vp):
 
 
 def test_the_invert_orbit_preference_applies(vp):
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     ref = Viewport(None)
     ref.resize(400, 300)
     ref._touch_slide = "orbit"
@@ -295,7 +295,7 @@ def test_spreading_the_fingers_zooms_in_and_pinching_zooms_out(vp):
 
 
 def test_a_pinch_of_one_notchs_scale_zooms_one_notch(vp):
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     wheel = Viewport(None)
     wheel.resize(400, 300)
     wheel._invert_wheel = False       # whatever another test left in QSettings
@@ -307,7 +307,7 @@ def test_a_pinch_of_one_notchs_scale_zooms_one_notch(vp):
 def test_tiny_pinch_steps_add_up_to_the_same_zoom(vp):
     # The first steps wait for the lock, then arrive all at once: nothing
     # of the gesture is lost.
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     one = Viewport(None)
     one.resize(400, 300)
     pinch(one, 1.0 / 0.9 - 1.0)
@@ -434,7 +434,7 @@ def test_the_metal_view_orbits_and_pinches_too():
     from core.group import Group
     from core.mesh import Mesh
     from core.scene import Scene
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     from views.wgpu_inference import prepare
     from views.wgpu_scene import pack_scene
     from views.wgpu_view import WgpuView

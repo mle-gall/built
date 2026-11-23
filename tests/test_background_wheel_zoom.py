@@ -5,7 +5,7 @@ from PySide6.QtCore import QPoint, QPointF, Qt
 from PySide6.QtGui import QWheelEvent
 from ingetrazo_core import Vec3 as V
 from core.camera import OrbitCamera
-from views.viewport import Viewport
+from tests.controller_surface import ControllerSurface as Viewport
 
 
 @pytest.mark.parametrize('slope', [-.001, 0., .001])

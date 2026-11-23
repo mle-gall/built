@@ -16,7 +16,7 @@ from PySide6.QtWidgets import QApplication
 if QApplication.instance() is None:
     QApplication(sys.argv[:1])
 
-from views import viewport as VPM                        # noqa: E402
+from views import document_interaction as VPM                        # noqa: E402
 
 
 def _png(tmp_path, name):
@@ -51,7 +51,7 @@ def test_several_views_share_the_decoding_and_one_again_lets_it_go(
 
 
 def test_a_viewport_is_counted_while_it_is_shown():
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport(None)
     try:
         assert vp in VPM._LIVE_VIEWS

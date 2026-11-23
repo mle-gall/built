@@ -212,7 +212,7 @@ def test_delete_occupied_leaf_refiles_in_one_step(panel, monkeypatch):
 
 
 def test_mounted_rows_and_exact_nested_members(panel):
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     dock, filed, loose = panel
     leaf = Group(name='Local')
     loose.children = [leaf]

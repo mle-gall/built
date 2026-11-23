@@ -37,7 +37,7 @@ def test_overlay_buffers_do_not_expand_lazy_mesh_or_follow_unrelated_edits(viewp
 
 
 def test_edit_surroundings_keep_original_instance_batch(viewport):
-    from views.viewport import _InstanceBatch
+    from views.document_interaction import _InstanceBatch
     from types import SimpleNamespace
     vp=viewport
     subject=Group(Mesh(),'open')

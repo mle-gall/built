@@ -178,7 +178,8 @@ def test_every_face_painted_reads_the_document(big_enough, tmp_path, painted):
 @pytest.mark.parametrize("tool", ["move", "rotate"])
 def test_grabbing_a_group_builds_nothing_until_a_copy_is_asked(floor, tool):
     win, vp, mesh, x, y = floor
-    t = win._activate_tool(tool) or vp.active_tool
+    t = win._tools[tool]
+    vp.set_active_tool(t)
     _hover(vp, x, y)
     _click(vp, x, y)
     if tool == "rotate":
@@ -248,34 +249,14 @@ def test_a_centre_on_a_lazy_group_follows_it_unbuilt(big_enough, tmp_path):
 
 
 def test_a_view_moving_into_the_grid_keeps_its_bakes(floor):
-    """Its new GL context needs the uploads again, not the bakes: forgetting
-    those cost seconds on a big model, and the extra views made next found
-    nothing to share."""
-    from views import array_bake
-    win, vp, mesh, _x, _y = floor
-    group = vp.scene.groups[0]
-    entry = vp._group_chunk(group)
-    vp._proto_draw = {"fake": {}}
-    vp._vbo_parts["fake"] = ([], 0, {})
-    vp._edges_version = 7
-    win._before_viewport_moves(vp)
-    assert vp._group_chunks[id(group)] is entry
-    assert not vp._proto_draw and not vp._vbo_parts and vp._edges_version == -1
-    other = win.viewport.__class__(win)
-    try:
-        other.set_document(vp.scene, vp.history)
-        baked = []
-        real_bake = array_bake._bake
-        array_bake._bake = lambda *a: baked.append(a) or real_bake(*a)
-        try:
-            shared = other._group_chunk(group)
-        finally:
-            array_bake._bake = real_bake
-        assert not baked, "the next view baked it again"
-        assert shared["faces"] is entry["faces"] or shared["vcol"] is entry["vcol"]
-    finally:
-        other.setParent(None)
-        other.deleteLater()
+    """Every surface in a document grid uses the primary scene pack."""
+    win, vp, _mesh, _x, _y = floor
+    primary = vp.keys_stand_in
+    packed = primary.packed
+    win.set_view_layout("four")
+    displays = win._doc.view_grid.displays()
+    assert len(displays) == 4
+    assert packed is not None and all(display.packed is packed for display in displays)
 
 
 def _boxed_scene(tmp_path, closed, placed):

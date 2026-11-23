@@ -34,7 +34,7 @@ def _rounded_box(app):
     """A 2 m cube whose front face (y = 0) has its top-right corner rounded
     by an arc of radius 0.5; returns the viewport and the corner sliver."""
     from tests import test_pushpull_ux as T
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport(None)
     vp.resize(1000, 700)
     vp.camera.set_aspect(1000, 700)

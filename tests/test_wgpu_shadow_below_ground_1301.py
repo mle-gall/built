@@ -38,11 +38,8 @@ def _camera(pitch_deg, perspective=True, target_z=0.0):
     return cam
 
 
-def test_catcher_height_matches_gl():
-    import inspect
-    from views.viewport import Viewport
-    assert f"z = {SHADOW_CATCHER_Z}" in inspect.getsource(Viewport._draw_shadow_ground)
-
+def test_catcher_sits_just_below_ground():
+    assert SHADOW_CATCHER_Z == -0.005
 
 def test_ground_shadows_on_from_above():
     p = sun_payload(_scene(), camera=_camera(30.0))

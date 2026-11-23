@@ -176,7 +176,7 @@ def test_sky_gradient_ramps_from_haze_to_the_picked_tones():
     horizon. Pure math (no GL) — the quads only colour their corners, so
     these ARE the rendered colours."""
     from pytest import approx
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     sky = (0.2, 0.4, 0.9)                       # a deep blue
     gnd = (0.4, 0.3, 0.2)
     s0, s1, g0, g1, line = Viewport._sky_gradient(sky, gnd, 0.0)
@@ -208,7 +208,7 @@ def test_sky_and_ground_colors_are_style_data(settings_file):
     # An old style dict without the fields gets the historical defaults —
     # which are the viewport's former constants, so old documents render
     # identically.
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     legacy = Style.from_dict({"name": "vieja"})
     assert legacy.sky_color == Viewport._SKY_RGB
     assert legacy.ground_color == Viewport._GROUND_RGB

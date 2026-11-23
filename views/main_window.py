@@ -4145,12 +4145,12 @@ class MainWindow(WorksessionMixin, QMainWindow):
         from views.report_sheets import show
         if show(self, "about"):
             return
-        from core.glinfo import describe
         from views.about_dialog import AboutDialog
-        gl_line = describe(getattr(self.viewport, "gl_info", {}))
+        display = self.viewport.keys_stand_in
+        adapter = getattr(getattr(display, "renderer", None), "adapter", "")
         # The people outside the project whose work is IN it turn in a
         # carousel there; AUTHORS says what each one gave.
-        AboutDialog(self, __version__, gl_line or "").exec()
+        AboutDialog(self, __version__, adapter).exec()
 
     def _file_actions(self) -> list[QAction]:
         actions = []
@@ -4611,35 +4611,20 @@ class MainWindow(WorksessionMixin, QMainWindow):
 
     # ---- Tool routing -------------------------------------------------------
     def _activate_tool(self, key: str) -> None:
-        # Under the Metal view the tool still becomes the viewport's active
-        # tool: the native view reads it from there and routes what it
-        # supports (R2b: Select, navigation, Tape, Move), the rest stays
-        # inert with a status note. Only the GL-only hover pickup is skipped.
-        metal = bool(getattr(self._doc, "_renderer_wgpu", False))
         if self._tool_filter is not None and key not in self._tool_filter:
             self.statusBar().showMessage(
                 tr("{name} is not available here.", name=tr(self._tools[key].name)), 3000)
             return
         tool = self._tools[key]
-        # Back from Orbit / Pan / Zoom to the tool they suspended: it goes
-        # on where it was (Viewport.suspended_tool), not from the hover.
-        resuming = getattr(self.viewport, "suspended_tool", None) is tool
         self.viewport.set_active_tool(tool)
-        if metal:
-            display = self._doc.stand_in
+        display = getattr(self.viewport, "keys_stand_in", None)
+        if display is not None:
             display.tools.sync()
             display.set_scene(self.viewport.scene)
             display.update()
         grid = self._doc.view_grid if self.__dict__.get("_doc") else None
         if grid is not None and key != "select":
             grid.cross.hide()
-        if key == "tape" and not metal and not resuming:
-            tool.start_from_hover(self.viewport)
-        from views.wgpu_tools import TOOL_DISPATCH
-        if metal and type(tool).__name__ not in TOOL_DISPATCH:
-            self.statusBar().showMessage(
-                tr("{name} is not yet available on the Metal renderer.",
-                   name=tr(tool.name)), 4000)
         action = self._tool_actions.get(key)
         if action is not None:
             action.setChecked(True)
@@ -7764,7 +7749,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
                     and (scene is not getattr(display, "scene", None)
                          or scene.version != resident_version)):
                 doc.viewport.notify_scene_changed()
-            else:
+            elif display._can_create_surface():
                 display.update()  # camera presets also use the shared viewport
                 for peer in display.peers():
                     if peer.isVisible():
@@ -8017,9 +8002,9 @@ class MainWindow(WorksessionMixin, QMainWindow):
         """The frame the viewport shows, small: the picture of the project
         on hover over its tab (one frame drawn again, as the view stands)."""
         try:
-            if not vp.isValid():
+            if vp.keys_stand_in.renderer is None:
                 return None
-            img = vp.grabFramebuffer()
+            img = vp.render_image(self.TAB_PREVIEW_PX, overlays=False)
         except Exception:  # noqa: BLE001 — a missing picture only
             return None
         if img.isNull():
@@ -8746,9 +8731,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         return True
 
     def _retire_document(self, doc) -> None:
-        """Let a closed project go: its auto-save slot retired, its GL
-        textures handed back while its context still exists, its
-        composer and viewport deleted."""
+        """Release the project, its autosave slot and each presentation surface."""
         from core import autosave
         try:
             autosave.clear(doc.path, untitled=doc.untitled_no)
@@ -8769,6 +8752,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             comp.hide()
             comp.deleteLater()
         vp, doc.viewport = doc.viewport, None
+        display = getattr(vp, "keys_stand_in", None)
         if vp is not None:
             try:
                 vp.set_active_tool(None)
@@ -8797,11 +8781,11 @@ class MainWindow(WorksessionMixin, QMainWindow):
             grid.deleteLater()
         # Release peer surfaces before closing their shared Metal renderer.
         from views.wgpu_view import WgpuView
-        if isinstance(stand_in, WgpuView):
-            stand_in._refresh_timer.stop()
-            stand_in._repaint_timer.stop()
-            stand_in.close()
-            stand_in.deleteLater()
+        if isinstance(display, WgpuView):
+            display._refresh_timer.stop()
+            display._repaint_timer.stop()
+            display.close()
+            display.deleteLater()
         self._update_title()
 
     # ---- The central widget as extensions see it (#1066) ---------------------
@@ -8819,7 +8803,8 @@ class MainWindow(WorksessionMixin, QMainWindow):
     def _central_document(self):
         for doc in self._documents:
             # An extension's widget; not the project's own grid of views.
-            if doc.stand_in is not None and doc.stand_in is not doc.view_grid:
+            if (doc.stand_in is not None and doc.stand_in is not doc.view_grid
+                    and doc.stand_in is not doc.viewport.keys_stand_in):
                 return doc
         return self._doc
 
@@ -8853,7 +8838,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             return super().setCentralWidget(widget)
         # A project's own viewport goes back to ITS place, whichever tab is
         # in front; anything else fills the place that was taken.
-        doc = next((d for d in self._documents if d.viewport is widget),
+        doc = next((d for d in self._documents if d.viewport is widget or d.viewport.keys_stand_in is widget),
                    None) or self._central_document()
         if widget is doc.viewport:
             widget = getattr(widget, "keys_stand_in", None) or widget
@@ -12160,15 +12145,15 @@ class MainWindow(WorksessionMixin, QMainWindow):
                                     and clean_state is not None)
                     else self.saveState())
         st.setValue("ui/window_geometry", self.saveGeometry())
-        # Free every GL texture while a GL context still exists — the survey
-        # atlases (hundreds of MB), the tile and terrain textures, and the
-        # general texture cache (faces, reference images). Letting Qt tear
-        # them down leaks each with a "Texture has not been destroyed"
-        # warning; the context's aboutToBeDestroyed hook alone fires too late
-        # on app exit, when the Python side is already coming apart.
         for doc in self._documents:
             if doc.composer is not None:
                 doc.composer.close()
+            if doc.view_grid is not None:
+                doc.view_grid.release_surfaces()
+            if doc.viewport is not None:
+                display = getattr(doc.viewport, "keys_stand_in", None)
+                if display is not None:
+                    display.close()
         # The close is really happening: an open still queued behind
         # this window (the deferred command-line open) must not load
         # into it afterwards (#1269).

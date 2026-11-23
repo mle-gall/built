@@ -108,7 +108,7 @@ def test_a_hidden_layer_hides_its_guides_and_a_locked_one_freezes_them():
 def _stub_viewport(scene):
     """Just what ``_shown_guides`` and ``pick_guide`` read: the scene, a
     pick threshold and a top view where world x, y are pixels."""
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     vp = SimpleNamespace(scene=scene, pick_threshold_px=8.0,
                          _clip_segment_front=lambda a, b: (a, b),
                          _world_to_pixel=lambda p: (p.x(), p.y()))

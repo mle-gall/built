@@ -18,7 +18,7 @@ _app = QApplication.instance() or QApplication([])
 
 
 def test_the_projector_gives_the_pixels_of_world_to_pixel():
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport(None)
     vp.resize(1234, 777)
     cam = vp.camera
@@ -40,7 +40,7 @@ def test_the_projector_gives_the_pixels_of_world_to_pixel():
 
 
 def test_a_stand_in_world_to_pixel_is_what_the_search_gets():
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport(None)
     vp._world_to_pixel = lambda w: (1.0, 2.0)
     assert vp._pixel_projector()(V(0, 0, 0)) == (1.0, 2.0)

@@ -18,7 +18,7 @@ from PySide6.QtWidgets import QApplication
 
 from core.group import Group
 from core.mesh import Mesh
-from views.viewport import edit_fade_color
+from views.document_interaction import edit_fade_color
 
 _app = QApplication.instance() or QApplication([])
 

@@ -36,7 +36,7 @@ def setup():
     native.view._world_to_pixel = lambda p: (p.x()*50+20, p.y()*50+20)
     native.view._pixel_to_ray = lambda x, y: (QVector3D((x-20)/50, (y-20)/50, 10), QVector3D(0, 0, -1))
     native.source = native.view.source_viewport
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     native.source.GRAZING_PLANE_DEG = Viewport.GRAZING_PLANE_DEG
     native.source._ray_plane = lambda *a: Viewport._ray_plane(native, *a)
     native.pick_face = lambda *a: scene.mesh.faces[0]
@@ -49,7 +49,7 @@ def setup():
 def test_gesture_commit_equals_gl_and_one_prototype_undo_redo(pin, modifiers):
     scene, history, native, tracker, calls = setup()
     face = native.tool.face
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     gl = Viewport(None)
     gl.flash_status = lambda *a: None
     gl._world_to_pixel = native._world_to_pixel

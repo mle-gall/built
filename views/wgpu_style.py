@@ -15,6 +15,12 @@ def style_payload(scene, override=None, *, horizon=2.0, scale=1.0, edit_rest_fad
     Preferences level (#1281)."""
     style = override or getattr(scene, 'display_style', None) or Style()
     result = style.to_dict()
+    layer = getattr(scene, 'tile_layer', None)
+    if ((getattr(layer, 'visible', False) and getattr(scene, 'georef', None) is not None)
+            or getattr(getattr(scene, 'terrain', None), 'visible', False)
+            or (getattr(getattr(scene, 'photo_mesh', None), 'visible', False)
+                and scene.entity_visible(scene.photo_mesh))):
+        result['sky'] = False
     from views.document_interaction import edit_fade_color
     result['fade'] = float(edit_rest_fade)
     result['fade_color'] = edit_fade_color(style.background)

@@ -80,7 +80,8 @@ def test_tint_overrides_face_material_and_nested_proxy():
     from types import SimpleNamespace
     from core.agent_facets import set_display
     from core.materials import effective_attrs
-    from views.viewport import Viewport, _paint_of
+    from views.document_interaction import _paint_of
+    from tests.controller_surface import ControllerSurface as Viewport
     scene, parent, child, other = model()
     vp = SimpleNamespace(scene=scene, update=lambda: None)
     set_display(vp, {'facet': 'name', 'eq': 'Pier 1'}, 'kind:discipline')
@@ -148,7 +149,7 @@ def test_filtered_ifc_profile_exports_only_matching_group(tmp_path):
 
 def test_previous_view_does_not_revive_another_documents_colour():
     from core.agent_facets import set_display, previous_display
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport()
     vp.scene = model()[0]
     set_display(vp, color_by='kind:discipline')
@@ -164,7 +165,7 @@ def test_previous_view_does_not_revive_another_documents_colour():
 
 def test_filtered_placements_cannot_reach_hidden_object_ghost_pass():
     from core.agent_facets import set_display
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport()
     scene, parent, child, other = model()
     vp.scene = scene
@@ -181,7 +182,7 @@ def test_filtered_placements_cannot_reach_hidden_object_ghost_pass():
 def test_filter_leaves_excluded_working_mesh_and_drops_hidden_selection():
     from ingetrazo_core import Vec3 as QVector3D
     from core.agent_facets import set_display
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport()
     scene, parent, child, other = model()
     parent.mesh.add_face([QVector3D(0, 0, 0), QVector3D(1, 0, 0), QVector3D(0, 1, 0)])

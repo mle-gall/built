@@ -169,7 +169,7 @@ def test_hidden_layer_hides_annotations_from_picks():
     from PySide6.QtWidgets import QApplication
     from core.dimension import Dimension
     from core.textlabel import TextLabel
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
 
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     if QApplication.instance() is None:        # QFontMetrics needs an app

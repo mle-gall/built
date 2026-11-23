@@ -2104,7 +2104,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     sceneVersionChanged = Signal(int)
     # Live measurement for the VCB box (e.g. "5.00 m", "3.00 × 2.00 m").
     measurementChanged = Signal(str)
-    glReady = Signal(dict)          # vendor/renderer/version once the context is up
     # A base-map tile finished downloading (Track G) — lets the 3D terrain
     # rebuild its mosaic as imagery arrives.
     tilesChanged = Signal()
@@ -3852,6 +3851,61 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     SHADOW_SETTLE_MS = 200
 
     # ---- Dynamic uploads ----------------------------------------------------
+    def prune_stale_selection(self):
+        """Release references to deleted elements before notifying document consumers."""
+        hover = getattr(self, "_hover_entity", None)
+        cands = [hover] if isinstance(hover, (Edge, Face)) else []
+        cands += [s for s in self.scene.selection
+                  if isinstance(s, (Edge, Face))]
+        if cands:
+            if len(cands) > 64:
+                # Selected/hovered Edge/Face refs only ever point into the
+                # active mesh (loose, or the group being edited) — the old
+                # render_edges()/render_faces() sets walked EVERY group's
+                # entities (~283k) per edit frame after an explode.
+                alive_e: set = set(map(element_identity, self.scene.mesh.edges))
+                alive_f: set = set(map(element_identity, self.scene.mesh.faces))
+
+                def alive(ent):
+                    return ent.key in (alive_e if isinstance(ent, Edge)
+                                       else alive_f)
+            else:
+                # A mesh the experimental engine has not built yet holds no
+                # Edge/Face object, so nothing can be alive in it: asking it
+                # built every lazy group of the villa (~0.5 s) on the first
+                # click inside an opened group (issue #1006). The active
+                # mesh — where a selection inside a group lives — first.
+                act = self.scene.mesh
+                gmeshes = [g.mesh for g in self._placements()
+                           if self.scene.entity_visible(g)
+                           and not getattr(g, "billboard", False)
+                           and "_deferred" not in g.mesh.__dict__]
+                gmeshes.sort(key=lambda gm: gm is not act)
+
+                # A hidden face/edge the hidden view shows is selectable,
+                # and a selection it took must not be dropped here: a
+                # single click on a ghost face looked like nothing (only
+                # a double click, which selected its visible edges too,
+                # seemed to work — Marco, 2026-09-21, issue #53).
+                def shown(ent):
+                    return (self.scene.entity_visible(ent)
+                            or self.scene.entity_selectable(ent))
+
+                def alive(ent):
+                    if isinstance(ent, Edge):
+                        if ent in self.scene.loose_mesh.edges:
+                            return shown(ent)
+                        return any(ent in gm.edges for gm in gmeshes)
+                    if ent in self.scene.loose_mesh.faces:
+                        return shown(ent)
+                    return any(ent in gm.faces for gm in gmeshes)
+
+            if isinstance(hover, (Edge, Face)) and not alive(hover):
+                self._hover_entity = None
+            for s in [s for s in self.scene.selection
+                      if isinstance(s, (Edge, Face)) and not alive(s)]:
+                self.scene.selection.discard(s)
+
     def notify_scene_changed(self) -> None:
         """Force a redraw and emit the version-changed signal.
 
@@ -3859,6 +3913,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         scene and wants subscribers (title-bar dirty flag, etc.) to react
         without waiting for the next paint.
         """
+        self.prune_stale_selection()
         self.sceneVersionChanged.emit(self.scene.version)
         self.update()
 
@@ -8843,7 +8898,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         of the frame). ``(eye, limits (gh, gw), x0, y0, dpr, device height)``
         as core.instances.DepthLimits reads it, or None without a frame."""
         import numpy as np
-        if self._depth_world_at(x, y) is None:
+        if getattr(self, "_depth_snap", None) is None:
             return None
         buf, inv, w, h = (self._depth_snap[0], self._depth_snap[2],
                           self._depth_snap[3], self._depth_snap[4])
@@ -8984,7 +9039,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         or ``None`` when the frame cannot say (no read-back, the camera
         moved since, or sky in the window: then anything may be there)."""
         import numpy as np
-        if self._depth_world_at(x, y) is None:
+        if getattr(self, "_depth_snap", None) is None:
             return None
         snap = self._depth_snap
         buf, inv, w, h = snap[0], snap[2], snap[3], snap[4]

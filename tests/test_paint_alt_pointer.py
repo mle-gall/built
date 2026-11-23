@@ -20,7 +20,7 @@ if QApplication.instance() is None:
 
 import pytest  # noqa: E402
 
-from views.viewport import Viewport  # noqa: E402
+from tests.controller_surface import ControllerSurface as Viewport
 
 
 @pytest.fixture(autouse=True)
@@ -33,7 +33,7 @@ def _only_this_test_s_viewports():
     viewports it builds; the others come back after it."""
     import weakref
 
-    from views.viewport import _AltWatch
+    from views.document_interaction import _AltWatch
     Viewport(None)                      # the watcher exists from here on
     watch = _AltWatch._instance
     kept = watch._viewports

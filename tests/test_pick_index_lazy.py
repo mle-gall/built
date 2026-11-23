@@ -107,7 +107,7 @@ def _baking(monkeypatch):
     # What the index bakes for a ray: with the experimental engine a ray
     # bakes nothing (it answers for the lazy placements itself), so these
     # watch the path that runs without it.
-    import views.viewport as vpm
+    import views.document_interaction as vpm
     monkeypatch.setattr(vpm, "_LAZY_NATIVE", False)
 
 

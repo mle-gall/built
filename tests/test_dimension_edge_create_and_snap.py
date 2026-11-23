@@ -28,7 +28,7 @@ from core.scene import Scene  # noqa: E402
 from core.snap import SnapResult, compute_snap  # noqa: E402
 from tools.base import ToolContext  # noqa: E402
 from tools.dimension import DimensionTool  # noqa: E402
-from views.viewport import Viewport  # noqa: E402
+from tests.controller_surface import ControllerSurface as Viewport
 
 
 def V(x, y, z=0.0):

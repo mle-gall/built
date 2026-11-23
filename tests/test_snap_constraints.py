@@ -156,7 +156,7 @@ def test_context_near_tie_is_preserved_across_half_pixel_bucket_boundary():
 def test_visible_part_of_edge_crossing_camera_plane_still_snaps():
     from core.camera import OrbitCamera
     from core.scene import Scene
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
 
     camera = OrbitCamera()
     camera.set_aspect(1000, 800)

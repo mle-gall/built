@@ -26,7 +26,7 @@ def viewport():
         app = QApplication([])
     elif not isinstance(app, QApplication):
         pytest.skip("another Qt application flavour is already running")
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport(None)
     vp.resize(1000, 700)
     vp.camera.set_aspect(1000, 700)
@@ -168,7 +168,7 @@ def test_a_typed_chamfer_by_depth(viewport):
 
 
 def test_the_value_box_reads_a_profile_suffix():
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     assert Viewport._parse_value_buffer("0.3p") == ("profile", 0.3)
     assert Viewport._parse_value_buffer("0,75p") == ("profile", 0.75)
     assert Viewport._parse_value_buffer("p") is None

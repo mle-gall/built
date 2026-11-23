@@ -158,6 +158,11 @@ def apply_platform_preference() -> str | None:
     QCoreApplication.setApplicationName("IngeTrazo")
     pref = str(general_settings.value("platform", AUTO) or AUTO)
     chosen = choose_platform(pref)
+    if (chosen is None and pref == AUTO and os.environ.get("DISPLAY")
+            and os.environ.get("WAYLAND_DISPLAY") and not os.environ.get("QT_QPA_PLATFORM")):
+        from PySide6.QtGui import QWindow
+        if not hasattr(QWindow, "nativeInterface"):
+            chosen = XCB
     if chosen:
         os.environ["QT_QPA_PLATFORM"] = chosen
     return chosen

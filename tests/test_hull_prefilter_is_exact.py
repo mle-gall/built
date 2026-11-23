@@ -66,7 +66,7 @@ def test_the_containers_box_reuses_the_prototypes_point_arrays(tmp_path):
     from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
     from PySide6.QtWidgets import QApplication
     QApplication.instance() or QApplication([])
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     from core.group import Group
     from core.mesh import Mesh
     vp = Viewport(None)

@@ -97,10 +97,10 @@ def test_a_key_given_to_add_scene_adds_one(win):
     from PySide6.QtGui import QAction
     assert not any(a.shortcut() == seq for a in win.findChildren(QAction))
     win._scene_actions["scene_add"].setShortcut(seq)
-    QTest.keyClick(win.viewport, Qt.Key_F1)       # the first key is dropped
+    QTest.keyClick(win.viewport.keys_stand_in, Qt.Key_F1)       # the first key is dropped
     QApplication.processEvents()
     n = len(win.viewport.scene.saved_views)
-    QTest.keyClick(win.viewport, Qt.Key_F11,
+    QTest.keyClick(win.viewport.keys_stand_in, Qt.Key_F11,
                    Qt.ControlModifier | Qt.AltModifier | Qt.ShiftModifier)
     QApplication.processEvents()
     assert len(win.viewport.scene.saved_views) == n + 1

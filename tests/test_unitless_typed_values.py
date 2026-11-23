@@ -22,7 +22,7 @@ if QApplication.instance() is None:
 
 from core import units  # noqa: E402
 from core.scene import Scene  # noqa: E402
-from views.viewport import Viewport  # noqa: E402
+from tests.controller_surface import ControllerSurface as Viewport
 
 
 @pytest.fixture

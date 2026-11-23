@@ -92,18 +92,6 @@ class WidgetShim(QObject):
 
     repaint = update
 
-    def makeCurrent(self):
-        pass
-
-    def doneCurrent(self):
-        pass
-
-    def context(self):
-        return None
-
-    def defaultFramebufferObject(self):
-        return 0
-
     # ---- cursor and focus ---------------------------------------------
     def cursor(self):
         return self._cursor

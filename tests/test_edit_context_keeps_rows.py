@@ -80,41 +80,15 @@ def vp():
 
 def _tables(vp):
     vp._tick = getattr(vp, "_tick", 0) + 1
-    vp._gather_instanced()
-    pool = vp._inst_pool
-    sil = vp._silhouette_table([g for g in vp._placements()
-                                if vp.scene.entity_visible(g)])
-    lazy = vp._pick_lazy_table()
-    return pool, sil, lazy
+    return vp._pick_lazy_table()
 
 
 def _fresh(vp):
-    vp._inst_pool = None
-    vp._sil_table = None
     vp._pick_lazy_memo = None
     return _tables(vp)
 
 
-def _same(kept, fresh):
-    (kp, ks, kl), (fp, fs, fl) = kept, fresh
-    # The pool: the same placements in the same order, the same boxes,
-    # prototypes and matrices.
-    assert [id(g) for g in kp[1]] == [id(g) for g in fp[1]]
-    for i in (2, 3, 6):
-        assert np.array_equal(kp[i], fp[i]), i
-    assert ([(id(m), mir) for m, _p, mir in (kp[5][int(c)] for c in kp[4])]
-            == [(id(m), mir) for m, _p, mir in (fp[5][int(c)] for c in fp[4])])
-    # The silhouette table: per prototype, the same rows.
-    def rows(t):
-        out = {}
-        for e in t[0]:
-            for j, g in enumerate(e["groups"]):
-                out[id(g)] = (e["uid"], e["fwd"][j].tobytes(),
-                              e["inv"][j].tobytes(), tuple(e["lo"][j]),
-                              tuple(e["hi"][j]))
-        return out, sorted(map(id, t[1]))
-    assert rows(ks) == rows(fs)
-    # The lazy pick table.
+def _same(kl, fl):
     assert [id(g) for g in kl[0]] == [id(g) for g in fl[0]]
     for i in (1, 2, 3):
         assert np.array_equal(kl[i], fl[i]), i

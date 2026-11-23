@@ -26,7 +26,7 @@ from ingetrazo_core import Vec3 as QVector3D
 from PySide6.QtWidgets import QApplication
 
 from core.guide import Guide
-from views.viewport import _guide_vertices
+from views.document_interaction import _guide_vertices
 
 _app = QApplication.instance() or QApplication([])
 V = QVector3D
@@ -94,7 +94,7 @@ def test_pick_guide_picks_a_guide_circle():
     from types import SimpleNamespace
     from core.guide import GuideCircle
     from core.scene import Scene
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
 
     scene = Scene()
     g = GuideCircle(V(0, 0, 0), V(0, 0, 1), 2.0)
@@ -115,7 +115,7 @@ def test_a_small_guide_circle_still_gets_enough_dashes():
     """A circle smaller than one dash period must not collapse to a single
     camera-sized dash: its dashes shrink so the ring stays visibly dashed."""
     from core.guide import GuideCircle
-    from views.viewport import _MIN_CIRCLE_DASHES
+    from views.document_interaction import _MIN_CIRCLE_DASHES
     coords, spans = _guide_vertices(
         [GuideCircle(V(0, 0, 0), V(0, 0, 1), 0.02)], spacing=1.0)
     assert len(spans) == 1

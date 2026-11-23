@@ -7,7 +7,8 @@ from ingetrazo_core import Vec3 as QVector3D
 from core.scene import Scene
 from core.group import Group
 from core.mesh import Mesh
-from views.viewport import Viewport, edit_fade_color
+from views.document_interaction import edit_fade_color
+from tests.controller_surface import ControllerSurface as Viewport
 from views.wgpu_view import WgpuView
 from views.wgpu_scene import pack_scene
 from views.wgpu_edit_context import rest_rows

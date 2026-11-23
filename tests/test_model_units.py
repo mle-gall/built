@@ -46,7 +46,7 @@ def test_readouts_follow_the_models_units(bound):
 
 
 def test_a_bare_number_is_typed_in_the_models_unit(bound):
-    from views.viewport import _parse_length_field
+    from views.document_interaction import _parse_length_field
     assert abs(_parse_length_field("2") - 2.0) < 1e-9
     bound.units = {"length": "mm", "precision": 0}
     assert abs(_parse_length_field("2") - 0.002) < 1e-12
@@ -87,7 +87,7 @@ def test_a_tool_label_reads_in_the_models_units(bound):
 
 
 def test_the_viewport_binds_its_scene_and_the_dialog_reads_it():
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport(None)
     assert units.model_units_of(vp.scene) == {"length": "m", "precision": 2}
     vp.scene.units = {"length": "in", "precision": 1}

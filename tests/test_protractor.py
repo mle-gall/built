@@ -179,7 +179,7 @@ def test_guide_on_a_slanted_work_plane():
 
 
 def test_vcb_parses_slope_ratio():
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     parse = Viewport._parse_value_buffer
     kind, deg = parse("3:12")
     assert kind == "ratio"

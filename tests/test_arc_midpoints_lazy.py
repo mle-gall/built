@@ -15,7 +15,7 @@ from core import mesh as M
 from core.group import Group
 from core.scene import Scene
 from formats import igz
-from views.viewport import Viewport
+from tests.controller_surface import ControllerSurface as Viewport
 
 
 @pytest.fixture

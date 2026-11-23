@@ -314,7 +314,7 @@ def test_the_viewport_knows_a_ctrl_tap_from_ctrl_z():
     from PySide6.QtWidgets import QApplication
     if QApplication.instance() is None:
         QApplication([])
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport(None)
     vp.keyPressEvent(QKeyEvent(QEvent.KeyPress, Qt.Key_Control, Qt.ControlModifier))
     assert vp.ctrl_tapped()

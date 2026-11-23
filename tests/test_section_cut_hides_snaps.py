@@ -25,7 +25,7 @@ if QApplication.instance() is None:
 from core.section import SectionPlane  # noqa: E402
 from core.snap import compute_snap  # noqa: E402
 from core.style import Style  # noqa: E402
-from views.viewport import Viewport  # noqa: E402
+from tests.controller_surface import ControllerSurface as Viewport
 
 
 def _w2p(p):

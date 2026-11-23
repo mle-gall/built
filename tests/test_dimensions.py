@@ -146,7 +146,7 @@ def test_select_tool_deletes_a_dimension():
 # ---- Style (precision / units) -------------------------------------------------
 
 def test_format_dim_value_respects_units_and_precision():
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     f = Viewport._format_dim_value
     assert f(4.0, {"units": "m", "decimals": 2}) == "4.00 m"
     assert f(4.0, {"units": "cm", "decimals": 0}) == "400 cm"
@@ -172,7 +172,7 @@ def test_is_occluded_matches_geometry():
     # of the wall (or with no geometry) is visible. Exercises the cached
     # NumPy Möller–Trumbore path headless (plaza.igz slowdown report).
     from ingetrazo_core import Vec3 as QVector3D
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
 
     scene = Scene()
     scene.mesh.add_face([QVector3D(-2, 0, -2), QVector3D(2, 0, -2),
@@ -221,7 +221,7 @@ def test_xray_and_wireframe_let_snaps_through_faces():
     # Shaded/hidden-line styles keep the visible-only rule.
     from ingetrazo_core import Vec3 as QVector3D
     from core.style import Style
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
 
     scene = Scene()
     scene.mesh.add_face([QVector3D(-2, 0, -2), QVector3D(2, 0, -2),
@@ -276,7 +276,7 @@ def test_geometry_inside_a_group_occludes_too():
     from ingetrazo_core import Vec3 as QVector3D
     from core.group import Group
     from core.mesh import Mesh
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
 
     wall = Mesh()
     wall.add_face([QVector3D(-2, 0, -2), QVector3D(2, 0, -2),
@@ -320,7 +320,7 @@ def test_world_under_cursor_uses_cached_pick():
     # bursts must not re-triangulate the model per event). Nearest hit wins;
     # empty space falls back to the focal plane through the camera target.
     from ingetrazo_core import Vec3 as QVector3D
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
 
     scene = Scene()
     scene.mesh.add_face([QVector3D(-2, 0, -2), QVector3D(2, 0, -2),

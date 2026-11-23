@@ -447,7 +447,7 @@ mod tests {
             return;
         };
         let (d, _) = pollster::block_on(a.request_device(&Default::default(), None)).unwrap();
-        let sun = super::Sun::new(&d, wgpu::TextureFormat::Bgra8UnormSrgb);
+        let sun = super::Sun::new(&d, wgpu::TextureFormat::Bgra8UnormSrgb, super::LIVE_SIZE);
         assert!(!sun.enabled);
         assert_eq!(sun.receivers.len(), 2);
     }

@@ -12,7 +12,7 @@ from PySide6.QtWidgets import QApplication, QWidget
 from core.composition import RENDER_DPI, pen_px
 from tests.test_composer_canvas import _FakeViewport
 from views.composer import ComposerWindow
-from views.viewport import Viewport
+from tests.controller_surface import ControllerSurface as Viewport
 
 _app = QApplication.instance() or QApplication([])
 

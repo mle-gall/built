@@ -116,7 +116,7 @@ def test_classic_entry_points(monkeypatch, sid, handler):
     from views import wgpu_ui, about_dialog, extension_manager_dialog
     from views.main_window import MainWindow
     monkeypatch.setattr(wgpu_ui, "ENABLED", False)
-    win = SimpleNamespace(viewport=SimpleNamespace(gl_info={}), tray=SimpleNamespace(parts=Mock()))
+    win = SimpleNamespace(viewport=SimpleNamespace(keys_stand_in=None), tray=SimpleNamespace(parts=Mock()))
     about, manager = Mock(), Mock()
     monkeypatch.setattr(about_dialog, "AboutDialog", about)
     monkeypatch.setattr(extension_manager_dialog, "ExtensionManagerDialog", manager)

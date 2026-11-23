@@ -46,13 +46,6 @@ elif sys.stderr is not None:
 # (core/black_box.py) — a force-quit hang left nothing (2026-11-18).
 from core import black_box
 
-# Native Wayland is the default. Known cosmetic tradeoff (2026-07-12): the
-# compositor interleaves stale GL viewport frames under fast zoom bursts (a
-# brief ghost/double image; flawless under XWayland, but XWayland degrades
-# mixed-DPI multi-monitor setups — the audience's common rig). Escape hatch
-# if the ghost bothers you: run with QT_QPA_PLATFORM=xcb. Re-test the ghost
-# when Mutter/Qt update; no app-side workaround cured it (see CLAUDE.md).
-
 from PySide6.QtCore import (QEvent, QLibraryInfo, QSettings, Qt,
                             QTranslator)
 from PySide6.QtWidgets import QApplication
@@ -619,7 +612,7 @@ def main() -> int:
     # HTTPS from Python (the AI assistant) must find a CA bundle: the macOS
     # package asked for one where only the build machine had it (#198).
     if "--gallery" in sys.argv[1:]:
-        os.environ.update(BUILT_GALLERY="1", BUILT_UI="1", INGETRAZO_WGPU="1")
+        os.environ.update(BUILT_GALLERY="1", BUILT_UI="1")
         sys.argv[sys.argv.index("--gallery")] = "--new-window"
     from core.tls import ensure_once
     ensure_once()

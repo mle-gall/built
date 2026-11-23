@@ -23,7 +23,7 @@ from PySide6.QtWidgets import QApplication
 _app = QApplication.instance() or QApplication([])
 
 from views import ambient_occlusion as ao  # noqa: E402
-import views.viewport as viewport  # noqa: E402
+import views.document_interaction as viewport  # noqa: E402
 
 
 def test_it_is_off_unless_asked(monkeypatch):
@@ -42,19 +42,6 @@ def test_the_settings_are_kept_in_range(monkeypatch):
     assert s["radius"] > 0 and s["samples"] == 64 and s["intensity"] == 1.0
 
 
-def test_the_tape_records_the_foliage_mark_for_the_native_replay():
-    calls = []
-    tape = viewport._GlTape()
-    tape.stencil_func(lambda *a: calls.append(a), viewport.GL_ALWAYS,
-                      viewport.AO_FOLIAGE_BIT, 0xFF)
-    assert calls == [(viewport.GL_ALWAYS, viewport.AO_FOLIAGE_BIT, 0xFF)]
-    assert tape.ops[-1][:4] == (tape.STENCIL, viewport.GL_ALWAYS,
-                                viewport.AO_FOLIAGE_BIT, 0xFF)
-    # GlReplay takes the entry points in opcode order.
-    assert viewport._TAPE_FUNCS[tape.STENCIL] == b"glStencilFunc"
-    assert len(viewport._TAPE_FUNCS) == tape.STENCIL + 1
-
-
 def _lum(img: QImage) -> np.ndarray:
     img = img.convertToFormat(QImage.Format_RGBA8888)
     buf = np.frombuffer(img.constBits(), np.uint8)
@@ -71,8 +58,8 @@ def box_on_floor():
         win.show()
         _app.processEvents()
         vp = win.viewport
-        if getattr(vp, "_gl", None) is None or not vp.isValid():
-            pytest.skip("no OpenGL context on this platform")
+        if not vp.keys_stand_in._can_create_surface():
+            pytest.skip("requires a GPU presentation surface")
         V = QVector3D
         scene = vp.scene
         scene.mesh.add_face([V(-10, -10, 0), V(10, -10, 0), V(10, 10, 0),
@@ -105,8 +92,8 @@ def step_block():
         win.show()
         _app.processEvents()
         vp = win.viewport
-        if getattr(vp, "_gl", None) is None or not vp.isValid():
-            pytest.skip("no OpenGL context on this platform")
+        if not vp.keys_stand_in._can_create_surface():
+            pytest.skip("requires a GPU presentation surface")
         V = QVector3D
         scene = vp.scene
 
@@ -160,8 +147,6 @@ def test_the_foot_of_a_box_darkens_and_the_open_floor_does_not(
     vp = box_on_floor
     off = _render(vp, monkeypatch, "0")
     on = _render(vp, monkeypatch, "1")
-    if getattr(vp, "_ao", None) is not None and vp._ao.broken:
-        pytest.skip(f"this driver refuses the pass: {vp._ao.broken}")
     darker = off - on
     assert (darker > 8).mean() > 0.002          # the corner band shows
     assert (on > off + 1).mean() < 0.001        # it never lightens
@@ -184,8 +169,6 @@ def test_a_flat_face_seen_obliquely_gets_no_vertical_bands(
     vp = step_block
     off = _render_at(vp, monkeypatch, "0", 900, 700)
     on = _render_at(vp, monkeypatch, "1", 900, 700)
-    if getattr(vp, "_ao", None) is not None and vp._ao.broken:
-        pytest.skip(f"this driver refuses the pass: {vp._ao.broken}")
     darker = off - on
     assert darker.max() > 5.0                  # the pass did something
     # The upper wall's left face (x = -3): flat, vertical, seen obliquely.
@@ -220,8 +203,8 @@ def corner_blocks():
         win.show()
         _app.processEvents()
         vp = win.viewport
-        if getattr(vp, "_gl", None) is None or not vp.isValid():
-            pytest.skip("no OpenGL context on this platform")
+        if not vp.keys_stand_in._can_create_surface():
+            pytest.skip("requires a GPU presentation surface")
         V = QVector3D
         attrs = Material("pared", color=color).face_attrs()
 
@@ -256,8 +239,6 @@ def _corner_light(vp, monkeypatch) -> float:
     """How much light the darkest of the corner keeps, on over off."""
     off = _render_at(vp, monkeypatch, "0", 1000, 800)
     on = _render_at(vp, monkeypatch, "1", 1000, 800)
-    if getattr(vp, "_ao", None) is not None and vp._ao.broken:
-        pytest.skip(f"this driver refuses the pass: {vp._ao.broken}")
     lit = off > 20
     return float(np.percentile(on[lit] / off[lit], 0.1))
 
@@ -402,8 +383,8 @@ def test_the_sky_round_a_silhouette_is_never_darkened(monkeypatch):
         win.show()
         _app.processEvents()
         vp = win.viewport
-        if getattr(vp, "_gl", None) is None or not vp.isValid():
-            pytest.skip("no OpenGL context on this platform")
+        if not vp.keys_stand_in._can_create_surface():
+            pytest.skip("requires a GPU presentation surface")
         V = QVector3D
         vp.camera.set_view("iso")
         vp.camera.fit_to(V(-3, -3, 0), V(3, 3, 3))
@@ -426,8 +407,6 @@ def test_the_sky_round_a_silhouette_is_never_darkened(monkeypatch):
         vp.scene.version += 1
         off = _render(vp, monkeypatch, "0")
         on = _render(vp, monkeypatch, "1")
-        if getattr(vp, "_ao", None) is not None and vp._ao.broken:
-            pytest.skip(f"this driver refuses the pass: {vp._ao.broken}")
         sky = empty == off
         assert sky.mean() > 0.3
         # Softly since the horizons and the bounce, but they do.
@@ -436,24 +415,3 @@ def test_the_sky_round_a_silhouette_is_never_darkened(monkeypatch):
     finally:
         win._saved_version = win.viewport.scene.version
         win.close()
-
-
-def test_an_error_left_pending_by_someone_else_does_not_switch_it_off(
-        box_on_floor, monkeypatch):
-    """Opening a big file left a GL error pending from its texture uploads;
-    the pass read it as its own depth resolve failing and stayed off for
-    the whole session, with the box ticked (Marco, playa Yanque)."""
-    vp = box_on_floor
-    off = _render(vp, monkeypatch, "0")
-    real = vp._apply_ambient_occlusion
-
-    def after_a_stray_error(*args, **kwargs):
-        vp._gl.glEnable(0x7FFF)                 # GL_INVALID_ENUM, left pending
-        return real(*args, **kwargs)
-
-    monkeypatch.setattr(vp, "_apply_ambient_occlusion", after_a_stray_error)
-    on = _render(vp, monkeypatch, "1")
-    if vp._ao.broken and vp._ao.broken != "depth resolve refused":
-        pytest.skip(f"this driver refuses the pass: {vp._ao.broken}")
-    assert not vp._ao.broken
-    assert ((off - on) > 8).mean() > 0.002      # it did darken the corner

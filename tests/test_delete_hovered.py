@@ -94,7 +94,7 @@ def test_backspace_still_erases_the_selection():
 
 
 def test_other_tools_wait_while_an_operation_holds_geometry():
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
 
     class _Idle:
         pass

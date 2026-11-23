@@ -38,7 +38,7 @@ def _hole(vp, cx, cy, r, z):
 
 def test_the_entrance_stays_open_after_the_perch_hole(app):
     from tests import test_pushpull_ux as T
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport(None)
     vp.flash_status = lambda *a, **k: None
     T._cube(vp.scene, vp.history, size=0.2, height=0.025)

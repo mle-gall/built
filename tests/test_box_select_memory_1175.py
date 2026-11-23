@@ -196,7 +196,7 @@ def test_clearing_triangle_arrays_drops_the_cached_bounds():
 
 @pytest.mark.parametrize('cache', ['none', 'valid', 'stale'])
 def test_placed_edges_keep_the_renderers_float32_rounding(cache):
-    from views.viewport import _placed_maps
+    from views.document_interaction import _placed_maps
     chunk = _chunk([[-2, -1, 0]], [[4, 0, 0]], [[0, 2, 0]],
                    [[-1, 0.1, 0], [1, 0.1, 0]])
     xf = QMatrix4x4()

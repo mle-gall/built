@@ -5,6 +5,7 @@ typed in, the lens as a focal length, roll, frame shift, clipping and the
 picture's frame — kept by scenes and by the document."""
 from __future__ import annotations
 
+from tests.controller_surface import ControllerSurface
 import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -292,8 +293,8 @@ def _fake_view(monkeypatch, w=1000, h=500):
     red exactly where the camera frame lies, so a crop can be checked
     without a graphics card."""
     from PySide6.QtGui import QColor, QImage, QPainter
-    from views import viewport as V
-    cls = V.Viewport
+    from views import document_interaction as V
+    cls = ControllerSurface
     vp = cls.__new__(cls)
     monkeypatch.setattr(cls, "width", lambda self: w)
     monkeypatch.setattr(cls, "height", lambda self: h)
@@ -763,9 +764,9 @@ def test_the_value_box_shows_with_zoom():
         cam.set_projection("perspective")
         win._activate_nav("zoom")
         assert win._vcb_value.isVisibleTo(win)
-        QTest.keyClicks(win.viewport, "35mm")
+        QTest.keyClicks(win.viewport.keys_stand_in, "35mm")
         assert win._vcb_value.text() == "35mm"
-        QTest.keyClick(win.viewport, Qt.Key_Return)
+        QTest.keyClick(win.viewport.keys_stand_in, Qt.Key_Return)
         assert win._vcb_value.text() == "35 mm"       # the new focal
         win._activate_nav("orbit")
         assert not win._vcb_value.isVisibleTo(win)    # other nav: no box

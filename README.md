@@ -86,7 +86,7 @@ Built follows the push/pull way of modelling. It is not a clone and has no affil
 python3.13 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 scripts/build_native.sh        # needs rustup + maturin; builds the Rust kernel and renderer
-INGETRAZO_WGPU=1 INGETRAZO_RUST=1 python main.py
+INGETRAZO_RUST=1 python main.py
 ```
 
 The Revit family reader needs an [rvt-rs](https://github.com/DrunkOnJava/rvt-rs) checkout next to this repository. Without it, `.rfa` import reports the reader as missing. To build a macOS app bundle: `packaging/build-macos-app.sh dist`.

@@ -72,7 +72,7 @@ def test_the_viewport_keeps_the_hovered_corner_before_the_first_click():
         app = QApplication([])
     elif not isinstance(app, QApplication):
         pytest.skip("another Qt application flavour is already running")
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     from tools.rectangle import RectangleTool
     vp = Viewport(None)
     vp.resize(1000, 600)
@@ -109,7 +109,7 @@ def test_a_tool_with_inferences_off_snaps_but_never_encourages():
         app = QApplication([])
     elif not isinstance(app, QApplication):
         pytest.skip("another Qt application flavour is already running")
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     from tools.base import Tool
 
     class _SnapsOnly(Tool):
@@ -154,7 +154,7 @@ def test_hovering_a_circles_rim_encourages_its_centre(monkeypatch):
         app = QApplication([])
     elif not isinstance(app, QApplication):
         pytest.skip("another Qt application flavour is already running")
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     from tools.circle import CircleTool
     from tools.base import ToolContext
     vp = Viewport(None)
@@ -218,7 +218,7 @@ def test_the_viewport_keeps_the_last_two_encouraged_points():
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PySide6.QtWidgets import QApplication
     QApplication.instance() or QApplication([])
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport(None)
     for pt in (V(1, 0, 0), V(2, 0, 0), V(3, 0, 0), V(3, 0, 0)):
         vp.encourage_point(pt)
@@ -230,7 +230,7 @@ def test_guides_read_on_line_and_group_points_keep_their_colours():
     """(Magenta group points, the classic way, were tried and dropped:
     a model made of components turned magenta everywhere — Marco.)"""
     from types import SimpleNamespace
-    from views.viewport import _SnapEdge
+    from views.document_interaction import _SnapEdge
     from core.snap import COLOR_ENDPOINT, COLOR_MIDPOINT, COLOR_ON_EDGE
     scene = SimpleNamespace(edges=[                           # (an elevation: x, z)
         _SnapEdge(V(0, 0, 0), V(4, 0, 0), guide=True),          # a guide line
@@ -247,7 +247,7 @@ def test_guides_read_on_line_and_group_points_keep_their_colours():
 
 def test_component_origin_and_arc_midpoint_pseudo_edges_snap_by_name():
     from types import SimpleNamespace
-    from views.viewport import _SnapEdge
+    from views.document_interaction import _SnapEdge
     scene = SimpleNamespace(edges=[
         _SnapEdge(V(1, 1, 0), V(1, 1, 0), component_origin=True),
         _SnapEdge(V(3, 3, 0), V(3, 3, 0), arc_midpoint=True),
@@ -263,7 +263,7 @@ def test_the_viewport_offers_an_arcs_sweep_midpoint_and_a_groups_origin():
     from ingetrazo_core import Matrix4 as QMatrix4x4
     from PySide6.QtWidgets import QApplication
     QApplication.instance() or QApplication([])
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     from tools.arc import ArcTool
     from tools.line import LineTool
     from tools.base import ToolContext
@@ -312,7 +312,7 @@ def test_an_arc_started_at_another_arcs_end_snaps_tangent_to_it():
     from PySide6.QtCore import QPointF, Qt
     from PySide6.QtWidgets import QApplication
     QApplication.instance() or QApplication([])
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     from tools.arc import ArcTool
     from tools.base import ToolContext
     from core.snap import COLOR_TANGENT
@@ -357,7 +357,7 @@ def _offscreen_vp():
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PySide6.QtWidgets import QApplication
     QApplication.instance() or QApplication([])
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport(None)
     vp.resize(1000, 600)
     vp.camera.set_aspect(1000, 600)

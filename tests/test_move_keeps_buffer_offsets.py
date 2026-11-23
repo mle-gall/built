@@ -196,7 +196,7 @@ def test_the_lazy_pick_table_is_kept_on_pick_up_and_its_rows_follow_a_drop(place
 def test_an_eviction_keeps_the_bakes_the_static_buffers_draw(placed,
                                                             monkeypatch):
     # The baking path: with the experimental engine a pick bakes nothing.
-    import views.viewport as vpm
+    import views.document_interaction as vpm
     monkeypatch.setattr(vpm, "_LAZY_NATIVE", False)
     vp = placed
     vp._PICK_LIVE_MAX_FACES = 12                   # two cubes
@@ -226,7 +226,7 @@ def test_arc_midpoints_are_kept_per_mesh_however_many_and_follow_the_content(
         monkeypatch):
     from core.group import Group
     from views.main_window import MainWindow
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     win = MainWindow()
     try:
         vp = win.viewport
@@ -235,7 +235,7 @@ def test_arc_midpoints_are_kept_per_mesh_however_many_and_follow_the_content(
         def mids(mesh):
             calls.append(id(mesh))
             return [V(0.0, 0.0, 0.0)]
-        monkeypatch.setattr(Viewport, "_mesh_arc_midpoints",
+        monkeypatch.setattr(type(vp), "_mesh_arc_midpoints",
                             staticmethod(mids))
         gs = []
         for k in range(2100):                      # more than 2 048 meshes

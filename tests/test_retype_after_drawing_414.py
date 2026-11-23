@@ -32,7 +32,7 @@ _app = QApplication.instance() or QApplication([])
 
 @pytest.fixture(scope="module")
 def viewport():
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport(None)
     vp.resize(1000, 700)
     vp.camera.set_aspect(1000, 700)

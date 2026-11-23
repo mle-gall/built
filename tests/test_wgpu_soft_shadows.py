@@ -22,7 +22,7 @@ from PySide6.QtWidgets import QApplication, QWidget
 _app = QApplication.instance() or QApplication([])
 
 from core.scene import Scene  # noqa: E402
-from views.viewport import SOFT_SHADOW_SPREAD  # noqa: E402
+from views.document_interaction import SOFT_SHADOW_SPREAD
 from views.wgpu_style import style_payload, sun_payload  # noqa: E402
 
 HAS_RENDERER = importlib.util.find_spec("ingetrazo_render") is not None

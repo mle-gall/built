@@ -25,7 +25,7 @@ from tools.pushpull import PushPullTool
 from tools.rectangle import RectangleTool
 from tools.rotate import RotateTool
 from tools.tape import TapeMeasureTool
-from views.viewport import Viewport
+from tests.controller_surface import ControllerSurface as Viewport
 
 from tests.test_.skp_inference_gaps import (  # noqa: F401 (fixture)
     _event, click, move, refresh, view)

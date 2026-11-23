@@ -75,7 +75,7 @@ def _new_tab(win, n, path=None):
 
 def _pane(win, n=7):
     """What a split-view extension assigns: a view on another scene."""
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     pane = Viewport(win)
     pane.hide()
     _edges(pane, n)

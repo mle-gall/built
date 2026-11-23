@@ -38,7 +38,7 @@ from core.scene import Scene
 from core.snap import compute_snap
 from tools.line import LineTool
 from tools.rectangle import RectangleTool
-from views.viewport import Viewport
+from tests.controller_surface import ControllerSurface as Viewport
 from views.wgpu_inference import prepare, surface
 from views.wgpu_view import WgpuView
 

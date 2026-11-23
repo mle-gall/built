@@ -145,5 +145,5 @@ def test_an_edit_no_sample_sees_reaches_every_paint_too(win):
 
 
 def _wrapper(vp, mesh, paint):
-    from views.viewport import _proto_wrapper
+    from views.document_interaction import _proto_wrapper
     return _proto_wrapper(vp, mesh, paint)

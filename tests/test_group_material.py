@@ -26,7 +26,7 @@ from core.scene import Scene
 from formats import igz
 from tools.base import ToolContext
 from tools.paint import PaintTool
-from views.viewport import Viewport
+from tests.controller_surface import ControllerSurface as Viewport
 
 
 def V(x, y, z=0.0):
@@ -438,7 +438,7 @@ def test_an_open_plain_piece_keeps_wearing_its_container_paint():
     for g in (g20, g19, grass):
         scene.begin_group_edit(g)
     assert scene.open_group_paint() == GRASS
-    from views.viewport import _paint_of
+    from views.document_interaction import _paint_of
     assert _paint_of(vp, scene.edit_group)["color"] == GRASS["color"]
     scene.end_group_edit()
     assert scene.open_group_paint() is None

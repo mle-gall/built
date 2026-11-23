@@ -72,7 +72,18 @@ class NativeTools(MeshToolAccess):
         self.ids = np.empty(0, np.int64)
         self.original = None
         self.groups = []
-        self.value_buffer = ""
+        self._value_buffer = ""
+
+    @property
+    def value_buffer(self):
+        return getattr(self.view.source_viewport, '_value_buffer', self._value_buffer)
+
+    @value_buffer.setter
+    def value_buffer(self, value):
+        self._value_buffer = value
+        source = self.view.source_viewport
+        if hasattr(source, '_value_buffer'):
+            source._value_buffer = value
 
     @property
     def scene(self):
@@ -102,7 +113,8 @@ class NativeTools(MeshToolAccess):
                 return self._resume(parked)
             # Another tool after the camera mode: the parked one is
             # cancelled here as any switch cancels it.
-            self.__dict__.update(parked)
+            for name, value in parked.items():
+                setattr(self, name, value)
         preview = getattr(self.view, '_texture_preview', None)
         if preview is not None:
             preview.restore()
@@ -110,7 +122,9 @@ class NativeTools(MeshToolAccess):
             self.tool._leave(self)
         self.cancel()
         self.tool = tool
-        self.mode = TOOL_DISPATCH.get(type(tool).__name__, 'select' if tool is None else 'inert')
+        from tools.base import Tool
+        default = 'select' if tool is None else ('mesh' if isinstance(tool, Tool) else 'inert')
+        self.mode = TOOL_DISPATCH.get(type(tool).__name__, default)
         if self.mode == 'move':
             # Share MoveTool's copy toggle, numeric values and array window.
             self.mode = 'mesh'
@@ -122,7 +136,7 @@ class NativeTools(MeshToolAccess):
         if hasattr(self.view, 'setCursor'):
             self._apply_tool_cursor()
         if self.mode == 'inert':
-            source.flash_status('not yet available on the Metal renderer')
+            source.flash_status('Unsupported document tool')
         return self.mode
 
     #: What a camera mode parks of the tool it suspends (GL's
@@ -148,7 +162,8 @@ class NativeTools(MeshToolAccess):
         return self.mode
 
     def _resume(self, parked):
-        self.__dict__.update(parked)
+        for name, value in parked.items():
+            setattr(self, name, value)
         self._set_value_buffer(self.value_buffer)
         if hasattr(self.tool, '_viewport'):
             self.tool._viewport = self

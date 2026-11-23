@@ -404,7 +404,7 @@ def test_right_click_reaches_a_locked_image_for_unlock_and_delete():
     again (Marco, 2026-09-14)."""
     from types import SimpleNamespace
     from core.scene import Scene
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
 
     scene = Scene()
     im = ImagePlane("x.png", V(0, 0, 0), V(10, 0, 0), V(0, 10, 0), locked=True)
@@ -479,7 +479,7 @@ def test_a_locked_image_draws_its_border_only_while_selected():
     an unlocked image keeps it so it can be found and clicked."""
     from types import SimpleNamespace
 
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
 
     free, scan = _image("free.png"), _image("scan.png")
     scan.locked = True

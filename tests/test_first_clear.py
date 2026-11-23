@@ -17,7 +17,7 @@ import numpy as np  # noqa: E402
 import pytest  # noqa: E402
 from ingetrazo_core import Vec3 as V
 
-import views.viewport as viewport_mod  # noqa: E402
+import views.document_interaction as viewport_mod  # noqa: E402
 from tests.test_lazy_native_snap import (  # noqa: E402
     VIEWS, _close, _key, _set_view, _window, pytestmark)
 
