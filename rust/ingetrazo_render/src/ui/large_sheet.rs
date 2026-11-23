@@ -527,8 +527,11 @@ impl Draw<'_> {
                     ui.add_space(10.0);
                 }
                 "table" => {
+                    let columns = b.cells.first().map_or(1, |r| r.len().max(1));
+                    let column_width = (ui.available_width() / columns as f32 - 18.0).max(55.0);
                     egui::ScrollArea::horizontal().show(ui, |ui| {
-                        egui::Grid::new((self.pane, i)).spacing(vec2(18.0, 6.0)).show(ui, |ui| {
+                        egui::Grid::new((self.pane, i)).min_col_width(column_width)
+                            .spacing(vec2(18.0, 8.0)).show(ui, |ui| {
                             for (n, row) in b.cells.iter().enumerate() {
                                 let mut bounds = Rect::NOTHING;
                                 let id = n.to_string();

@@ -199,3 +199,27 @@ def test_property_add_and_reset_without_losing_siblings(host):
     assert g.ifc["psets"]["Survey"]["Verified"]["value"] is True
     commands.run(vp.history, "patch_record_field", **kwargs, value=None)
     assert set(g.ifc["psets"]["Survey"]) == {"Count"}
+
+
+def test_report_sheet_commands_and_parts_inspector(host, monkeypatch):
+    from views import chrome_sheet, wgpu_ui
+    from tests.test_parts import _stool
+    from core import extension_manager
+    monkeypatch.setattr(extension_manager, "load_cached_catalog", lambda: None)
+    win = host.window
+    commands = {name: action for name, _, _, action in wgpu_ui._all_commands(win)}
+    for name, sid in [("About Built", "about"), ("Extension Manager", "extensions"), ("Cut list", "cutlist")]:
+        commands[name].trigger()
+        assert chrome_sheet.current(win).id == sid
+        chrome_sheet.close(win)
+    scene = host.viewport.scene
+    assembly = _stool()
+    scene.groups.append(assembly)
+    scene.select([assembly])
+    run(host, "parts.report", assembly.uid)
+    provider = chrome_sheet.current(win)
+    ctx = chrome_sheet.Ctx(win, host.view)
+    assert provider.build(ctx).wire()["content"]["title"] == assembly.name
+    provider.act(ctx, "pick", ["1"])
+    chrome_sheet.close(win)
+    assert sorted(p.name for p in scene.selection) == ["leg A", "leg B"]

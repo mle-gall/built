@@ -39,9 +39,14 @@ class About(chrome_sheet.Provider):
         from core._native import engine
         from core.version import __version__
         from views.about_dialog import system_info
-        self.info = (system_info(__version__) + f"\nEngine: {engine()}\nRenderer: Metal (wgpu)"
-                     + f"\nCommit: {commit}")
-        lines = self.info.splitlines()
+        lines = system_info(__version__).splitlines()
+        if chrome_sheet.in_shell():
+            host = ctx.win._host
+            # The embedded Qt platform supplies a synthetic offscreen screen.
+            lines = [line for line in lines if not line.startswith("Screen:")]
+            lines.append(f"Window: {host.width}x{host.height} @ {host.scale:g}x")
+        lines.extend([f"Engine: {engine()}", "Renderer: Metal (wgpu)", f"Commit: {commit}"])
+        self.info = "\n".join(lines)
         facts = [[*line.split(": ", 1), ""] for line in lines[1:]]
         return NativeSheet(self.id, dict(build=f"{lines[0]} · {commit}", facts=facts))
 
@@ -87,6 +92,9 @@ class CutList(chrome_sheet.Provider):
 
     def closed(self, ctx):
         if ctx.replaced or not self.selected or self.built_for != self.signature(ctx):
+            return
+        from core.links import linked_ancestor
+        if linked_ancestor(self.assembly):
             return
         uids = self.members[int(self.selected) - 1]
         vp = ctx.win.viewport
