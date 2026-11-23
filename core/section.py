@@ -15,7 +15,7 @@ the whole point of the track (real plans and cross-sections on the sheets).
 """
 from __future__ import annotations
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 _last_uid = 0
 

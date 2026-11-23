@@ -144,7 +144,7 @@ class TreeSnapshot(SnapshotImport):
 
     @staticmethod
     def capture(scene, serials=None):
-        from PySide6.QtGui import QMatrix4x4
+        from ingetrazo_core import Matrix4 as QMatrix4x4
         tree = []
         stack = list(scene.groups) + list(getattr(scene, "kept_components", ()) or ())
         seen = set()
@@ -169,7 +169,7 @@ class TreeSnapshot(SnapshotImport):
 
     @staticmethod
     def restore(scene, state):
-        from PySide6.QtGui import QMatrix4x4
+        from ingetrazo_core import Matrix4 as QMatrix4x4
         for g, (holder, children), values in state:
             # ``adopt`` swaps in a new list; extensions and the view may
             # hold the original one, so that object comes back, refilled.

@@ -314,7 +314,7 @@ def face_net_areas(plan) -> np.ndarray:
     Accumulate each ring in corner order in doubles, then use Qt's float
     vector length just as Face does. All rings advance together in NumPy.
     """
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     sizes = plan.ring_sizes
     if not len(sizes):
         return np.zeros(plan.nfaces)
@@ -358,7 +358,7 @@ class PlannedVertices:
         __slots__ = ("position",)
 
         def __init__(self, p):
-            from PySide6.QtGui import QVector3D
+            from ingetrazo_core import Vec3 as QVector3D
             self.position = QVector3D(float(p[0]), float(p[1]), float(p[2]))
 
     def __init__(self, pos):

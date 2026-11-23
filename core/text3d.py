@@ -24,7 +24,8 @@ after the thickness is re-edited.
 """
 from __future__ import annotations
 
-from PySide6.QtGui import QFont, QPainterPath, QTextLayout, QVector3D
+from PySide6.QtGui import QFont, QPainterPath, QTextLayout
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.mesh import Mesh
 
@@ -266,7 +267,7 @@ def _letter_groups(params: dict, xform=None) -> list:
     """One nested group per letter, each an instance over its own mesh in
     the text's frame — ``xform`` (default identity) is the pose every
     letter starts from."""
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     from core.group import Group
     kids = []
     for ch, mesh in build_text_letters(
@@ -328,7 +329,7 @@ def text_is_pristine(group) -> bool:
     if letters_fingerprint(kids) != state["hash"]:
         return False
     # A letter moved by itself: its matrix no longer matches its siblings'.
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     first = text_frame(group)
     return all((k.xform if k.xform is not None else QMatrix4x4()) == first
                for k in kids)
@@ -356,7 +357,7 @@ def text_frame(group):
     container pushes its matrix down into the children, so the frame is the
     first letter's matrix, not the container's. Identity when the container
     has no letters yet."""
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     kids = getattr(group, "children", None) or ()
     for k in kids:
         if k.xform is not None:

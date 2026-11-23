@@ -1,7 +1,7 @@
 """Viewport services used by the Rust inference rule engine for one mouse event."""
 import math
 
-from PySide6.QtGui import QVector3D as V
+from ingetrazo_core import Vec3 as V
 
 from core import snap as S
 from core.snap_query import point_result

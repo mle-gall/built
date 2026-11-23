@@ -29,7 +29,7 @@ from __future__ import annotations
 import math
 from bisect import bisect_left, bisect_right
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.arrangement import coplanar_plane, planar_rebuild
 from core.edits import face_up_or_toward

@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import math
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 #: Curated civil/architecture classes (IFC4 names).
 from core.ifc_tables import IFC_CLASSES

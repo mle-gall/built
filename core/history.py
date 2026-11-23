@@ -55,7 +55,7 @@ def _plog(tag: str, ms: float, extra: str = "", floor: float = 100.0) -> None:
                      f"{tag} {ms:.0f}ms"
                      f"{' ' + extra if extra else ''}\n")
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.group import Group
 from core import doc_model as _doc
@@ -3103,7 +3103,7 @@ class TransformImagePlaneCommand(Command):
     every way of reshaping an image shares one reversible operation."""
 
     def __init__(self, image, origin=None, u=None, v=None) -> None:
-        from PySide6.QtGui import QVector3D
+        from ingetrazo_core import Vec3 as QVector3D
         self.image = image
         self._new = (
             QVector3D(origin) if origin is not None else None,
@@ -3113,7 +3113,7 @@ class TransformImagePlaneCommand(Command):
         self._old: tuple | None = None
 
     def do(self, scene) -> None:
-        from PySide6.QtGui import QVector3D
+        from ingetrazo_core import Vec3 as QVector3D
         im = self.image
         self._old = (QVector3D(im.origin), QVector3D(im.u), QVector3D(im.v))
         origin, u, v = self._new
@@ -3126,7 +3126,7 @@ class TransformImagePlaneCommand(Command):
         scene.version += 1
 
     def undo(self, scene) -> None:
-        from PySide6.QtGui import QVector3D
+        from ingetrazo_core import Vec3 as QVector3D
         if self._old is None:
             return
         origin, u, v = self._old
@@ -3414,20 +3414,20 @@ class MoveGeoPathNodeCommand(Command):
     """Move one node of a georef path to a new position (undoable)."""
 
     def __init__(self, path, index, new_point) -> None:
-        from PySide6.QtGui import QVector3D
+        from ingetrazo_core import Vec3 as QVector3D
         self.path = path
         self.index = index
         self._new = QVector3D(new_point)
         self._old = None
 
     def do(self, scene) -> None:
-        from PySide6.QtGui import QVector3D
+        from ingetrazo_core import Vec3 as QVector3D
         self._old = QVector3D(self.path.points[self.index])
         self.path.points[self.index] = QVector3D(self._new)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        from PySide6.QtGui import QVector3D
+        from ingetrazo_core import Vec3 as QVector3D
         self.path.points[self.index] = QVector3D(self._old)
         scene.version += 1
 
@@ -3650,7 +3650,7 @@ class MoveVerticesCommand(Command):
 
     def __init__(self, positions: Iterable[QVector3D], delta: QVector3D,
                  carry_textures: bool = False) -> None:
-        if isinstance(delta, QVector3D):
+        if hasattr(delta, "toTuple"):
             self.src = [QVector3D(p) for p in positions]
             self.delta = QVector3D(delta)
         else:
@@ -3686,7 +3686,7 @@ class MoveVerticesCommand(Command):
                    if self.carry_textures else [])
         translate_points(scene, keys, self.delta)
         if carried:
-            from PySide6.QtGui import QMatrix4x4
+            from ingetrazo_core import Matrix4 as QMatrix4x4
             from core.group import _remap_uvws
             t = QMatrix4x4()
             t.translate(self.delta)
@@ -3714,7 +3714,7 @@ class MoveVerticesCommand(Command):
 
 def rotation_matrix(center: QVector3D, axis: QVector3D, degrees: float):
     """Rigid rotation of ``degrees`` around ``axis`` through ``center``."""
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     m = QMatrix4x4()
     m.translate(center)
     m.rotate(degrees, axis.normalized())
@@ -3735,7 +3735,7 @@ def rotate_points(scene, keys: set, matrix) -> None:
 def mirror_matrix(centre: QVector3D, axis: QVector3D):
     """Reflection about the plane through ``centre`` with normal ``axis``
     (Householder), as a QMatrix4x4 — the Flip tool."""
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     n = QVector3D(axis).normalized()
     r = QMatrix4x4(
         1 - 2 * n.x() * n.x(), -2 * n.x() * n.y(), -2 * n.x() * n.z(), 0,
@@ -3944,7 +3944,7 @@ def scale_matrix(center: QVector3D, factor, axes=None):
     ``axes`` = ``(red, green, blue)`` unit vectors: the three factors act
     along THOSE instead of the world's — the grip box of a turned group, on
     its own axes (issue #44). ``None`` is the world, exactly as before."""
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     if axes is not None and isinstance(factor, (tuple, list)):
         from core.axes import frame_matrix
         rot = frame_matrix(QVector3D(0.0, 0.0, 0.0), *axes)
@@ -4750,7 +4750,7 @@ class MakeGroupCommand(Command):
                 stamp_edge_flags(e, flags)
         group = Group(gmesh, name=self._name)
         if self._component:
-            from PySide6.QtGui import QMatrix4x4
+            from ingetrazo_core import Matrix4 as QMatrix4x4
             if rot is not None:
                 from core.axes import frame_matrix
                 group.xform = frame_matrix(origin, *rot)
@@ -4854,7 +4854,7 @@ class ReshareAssemblyCommand(Command):
 
     def __init__(self, group, proto, xform, edited, state0, parts,
                  inner=()) -> None:
-        from PySide6.QtGui import QMatrix4x4
+        from ingetrazo_core import Matrix4 as QMatrix4x4
         self.group = group
         self.proto = proto
         self.xform = QMatrix4x4(xform)
@@ -4888,7 +4888,7 @@ class ReshareAssemblyCommand(Command):
     def _frame(self, record, state) -> None:
         """The matrix down in the parts and the world copy in place: how
         the session stood."""
-        from PySide6.QtGui import QMatrix4x4
+        from ingetrazo_core import Matrix4 as QMatrix4x4
         from core.scene import Scene
         self.edited.restore_state(state)
         self.group.mesh = self.edited
@@ -4896,7 +4896,7 @@ class ReshareAssemblyCommand(Command):
         Scene.put_parts(self.group, record)
 
     def _unframe(self, record) -> None:
-        from PySide6.QtGui import QMatrix4x4
+        from ingetrazo_core import Matrix4 as QMatrix4x4
         from core.scene import Scene
         self.group.mesh = self.proto
         self.group.xform = QMatrix4x4(self.xform)
@@ -5342,7 +5342,7 @@ class ReplaceComponentCommand(Command):
     def do(self, scene) -> None:
         import copy
         from core.group import copy_group
-        from PySide6.QtGui import QMatrix4x4
+        from ingetrazo_core import Matrix4 as QMatrix4x4
         src = self.source
         self._before = [{k: getattr(g, k) for k in self._SHARED}
                         for g in self.targets]
@@ -5453,7 +5453,7 @@ class GroupToComponentCommand(Command):
         self._old_name = None
 
     def do(self, scene) -> None:
-        from PySide6.QtGui import QMatrix4x4
+        from ingetrazo_core import Matrix4 as QMatrix4x4
         self._old_name = self.group.name
         self._old_xform = self.group.xform
         self._old_component = self.group.component
@@ -5710,7 +5710,7 @@ class GroupInContextCommand(Command):
             scene.groups = top
 
     def do(self, scene) -> None:
-        from PySide6.QtGui import QMatrix4x4
+        from ingetrazo_core import Matrix4 as QMatrix4x4
         ctx = self.context
         self._state = (ctx.xform, ctx.component)
         self._run(scene, self.inner.do)
@@ -5763,7 +5763,7 @@ class ReparentGroupsCommand(Command):
         scene.version += 1
 
     def do(self, scene) -> None:
-        from PySide6.QtGui import QMatrix4x4
+        from ingetrazo_core import Matrix4 as QMatrix4x4
         from core import outliner
         from core.group import transformed_mesh
         up = outliner.parents(scene.groups)
@@ -6425,13 +6425,13 @@ class MoveGroupCommand(Command):
         if getattr(self.group, "xform", None) is not None:
             # Component instance: compose into the transform — O(1), and the
             # shared prototype mesh (siblings!) is never touched.
-            from PySide6.QtGui import QMatrix4x4
+            from ingetrazo_core import Matrix4 as QMatrix4x4
             t = QMatrix4x4()
             t.translate(delta)
             self.group.xform = t * self.group.xform
         else:
             from core.group import _remap_uvws
-            from PySide6.QtGui import QMatrix4x4
+            from ingetrazo_core import Matrix4 as QMatrix4x4
             for v in list(self.group.mesh.vertices):
                 self.group.mesh.move_vertex(v, delta)
             t = QMatrix4x4()
@@ -6453,7 +6453,7 @@ def placement_is_identity(xform, tol: float = 1e-6) -> bool:
     ``tol``) — straightening it would be a silent no-op."""
     if xform is None:
         return True
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     ident = QMatrix4x4()
     return all(abs(a - b) <= tol for a, b in zip(xform.data(), ident.data()))
 
@@ -6510,7 +6510,7 @@ class StraightenModelCommand(Command):
         if datum is None:
             raise ValueError("the scene has no location yet")
         if self._placement is None:
-            from PySide6.QtGui import QMatrix4x4
+            from ingetrazo_core import Matrix4 as QMatrix4x4
             from georef.datum import SceneDatum
             self.degrees = placement_rotation_deg(self.group.xform)
             self._placement = QMatrix4x4(self.group.xform)
@@ -6523,7 +6523,7 @@ class StraightenModelCommand(Command):
         if not ok:
             raise ValueError("the placement is not invertible")
         self._apply(scene, w, -self.degrees, redo=True)
-        from PySide6.QtGui import QMatrix4x4
+        from ingetrazo_core import Matrix4 as QMatrix4x4
         self.group.xform = QMatrix4x4()     # exactly on its axes, no float dust
         scene.georef = self._new_datum
         self._terrain = getattr(scene, "terrain", None)
@@ -6531,7 +6531,7 @@ class StraightenModelCommand(Command):
 
     def undo(self, scene) -> None:
         self._apply(scene, self._placement, self.degrees, redo=False)
-        from PySide6.QtGui import QMatrix4x4
+        from ingetrazo_core import Matrix4 as QMatrix4x4
         self.group.xform = QMatrix4x4(self._placement)
         scene.georef = self._old_datum
         scene.terrain = self._terrain
@@ -7232,7 +7232,7 @@ class ChangeAxesCommand(Command):
         return self._d is None
 
     def __init__(self, group, frame) -> None:
-        from PySide6.QtGui import QMatrix4x4
+        from ingetrazo_core import Matrix4 as QMatrix4x4
         self.group = group
         self.frame = QMatrix4x4(frame)
         self._old_axes = None
@@ -7313,7 +7313,7 @@ class ChangeAxesCommand(Command):
 
     @staticmethod
     def _copy(m):
-        from PySide6.QtGui import QMatrix4x4
+        from ingetrazo_core import Matrix4 as QMatrix4x4
         return QMatrix4x4(m)
 
 

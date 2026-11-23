@@ -28,7 +28,7 @@ from contextvars import ContextVar
 from typing import Iterable, Optional
 from itertools import count
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 
 # Weld tolerance — two positions within this many decimals (~0.1 mm at metric
@@ -883,9 +883,6 @@ class Mesh:
             return store_mesh.bulk_weld(self, pos)
         from core.store_mesh import StoreMesh
         store = self._store if isinstance(self, StoreMesh) else None
-        if store is None:
-            # Object vertices store their coordinates in QVector3D.
-            pos = np.ascontiguousarray(pos, dtype=np.float32)
         pos = np.ascontiguousarray(pos, dtype=np.float64)
         if not len(pos):
             return [], np.empty(0, dtype=np.int64)

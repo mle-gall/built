@@ -22,7 +22,7 @@ Headless: :func:`profiles_from_selection` reads the selection and
 """
 from __future__ import annotations
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import run_stitch
 from core.mesh import Edge, Face, turn_face_over

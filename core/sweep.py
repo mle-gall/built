@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import run_stitch
 from core.topology import _key

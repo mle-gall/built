@@ -174,7 +174,7 @@ def _inward(face, a, b, n):
     pointing into the face. A ring's interior lies to the left of its walk
     for the outer loop (the normal is that loop's own Newell normal) and to
     the right for a hole wound the same way."""
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     for k, ring in enumerate(_rings(face)):
         m = len(ring)
         for i in range(m):
@@ -192,7 +192,7 @@ def _inward(face, a, b, n):
 
 
 def _newell(points):
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     nx = ny = nz = 0.0
     m = len(points)
     for i in range(m):
@@ -393,7 +393,7 @@ def split_into_pieces(group) -> list:
     (a seat in three materials) join into the one piece they are. The group
     itself is never touched; the caller swaps the result in through a
     command, which is what makes the split undoable."""
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     from core.group import Group, PlacementProxy, world_mesh
     from core.i18n import tr
 

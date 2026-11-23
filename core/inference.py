@@ -32,7 +32,7 @@ from typing import Optional
 
 from core import _native
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.snap import COLOR_NONE, SnapResult, compute_snap
 

@@ -30,7 +30,7 @@ import os
 import weakref
 from collections import OrderedDict
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 #: ``id(mesh) -> (weakref to it, token, Scan)``, most recent last. A few
 #: meshes only: a scan holds a Python mesh's element lists (or a store

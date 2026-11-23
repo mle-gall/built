@@ -33,7 +33,7 @@ from collections.abc import Mapping
 from itertools import count
 
 import numpy as np
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core import mesh as _mesh
 from core.mesh import Edge, Face, Mesh, Vertex
@@ -1886,7 +1886,7 @@ def _hole_filter(holes):
 
 
 def _xyz(p):
-    if isinstance(p, QVector3D):
+    if hasattr(p, "toTuple"):
         return p.toTuple()
     x, y, z = p
     return (float(x), float(y), float(z))

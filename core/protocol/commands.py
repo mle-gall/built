@@ -35,7 +35,7 @@ def move_vertices(history, vertices, delta):
     """Move the vertices (keys) by ``delta`` ``[x, y, z]``: the Move
     tool's command (``MoveVerticesCommand``: coincident vertices move
     along, warped faces fold)."""
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     from core.history import MoveVerticesCommand
     vs = _need(history.scene.mesh, "vertex", vertices)
     before = history.revision
@@ -115,7 +115,7 @@ def _push_face(history, f, distance, keep_base, tool):
 
 
 def follow_me(history, face, path, closed=False):
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     from core.sweep import build_sweep_face
     points = (list(path) if store_of(history.scene.mesh) is not None else
               [QVector3D(*p) for p in path])

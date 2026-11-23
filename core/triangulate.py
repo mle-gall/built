@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 Point2 = tuple[float, float]
 Tri3 = tuple[QVector3D, QVector3D, QVector3D]

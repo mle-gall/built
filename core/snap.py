@@ -41,7 +41,7 @@ import math
 from dataclasses import dataclass
 from typing import Callable, Optional
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core import _native
 from .geometry import Edge

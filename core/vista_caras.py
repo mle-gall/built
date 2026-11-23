@@ -233,7 +233,7 @@ def _face_geometry(items, camera, proj, sp):
 
 
 def _face_geometry_py(items, camera, proj, sp):
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     out = []
     for face, m, _paint, _layer in items:
         loops = [face.vertices] + list(face.holes or [])
@@ -365,7 +365,7 @@ def view_faces(scene, camera, as_view: bool = True,
     gets the part of it the sun does not reach (``FaceFill.shadow``) and
     the shadows on the bare ground come first, as a face of their own on
     the ground layer (:data:`GROUND_LAYER`) — see :func:`_cast_shadows`."""
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     from core.group import transformed_attrs
     from core.materials import effective_attrs
     from core.style import DEFAULT_FACE_COLOR, effective_back_color
