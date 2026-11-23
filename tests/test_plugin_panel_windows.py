@@ -23,6 +23,13 @@ wait 250
 menu panel:python_console
 wait 350
 commit with open({str(marker)!r}, 'a') as stream: print('run', file=stream)
+wait 150
+menu new
+wait 400
+menu prev_doc
+wait 350
+menu panel:python_console
+wait 300
 key enter cmd
 wait 300
 key up

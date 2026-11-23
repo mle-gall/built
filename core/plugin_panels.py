@@ -93,9 +93,9 @@ class Binding:
 
 
 def sync(view, win):
-    if not hasattr(view.renderer, "ui_plugin_panel"):
-        return
     if "_panel_factories" not in vars(win):
+        return
+    if view is not getattr(getattr(win, "_doc", None), "stand_in", None) or not hasattr(view.renderer, "ui_plugin_panel"):
         return
     if getattr(view, "_plugin_scene", None) is not win.viewport.scene:
         view._plugin_scene = win.viewport.scene
@@ -111,7 +111,9 @@ def sync(view, win):
             view._plugin_bindings[binding.instance] = binding
         view._ui_plugins_sent = False
     if not getattr(view, "_ui_plugins_sent", False):
-        view.renderer.ui_plugin_reset()
+        live = [scope for doc in win._documents
+                if (scope := getattr(getattr(doc, "stand_in", None), "_plugin_document", None))]
+        view.renderer.ui_plugin_document(view._plugin_document, live)
         for binding in view._plugin_bindings.values():
             binding.dirty = True
             binding.last_event = 0

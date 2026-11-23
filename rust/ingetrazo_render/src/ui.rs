@@ -182,6 +182,8 @@ pub struct Form {
 
 pub struct Ui {
     plugins: plugins::Panels,
+    plugin_document: String,
+    background_plugins: std::collections::HashMap<String, plugins::Panels>,
     ctx: egui::Context,
     painter: egui_wgpu::Renderer,
     start: Instant,
@@ -480,6 +482,8 @@ impl Ui {
             library: Default::default(),
             dock_w: DOCK_W,
             plugins: Default::default(),
+            plugin_document: String::new(),
+            background_plugins: Default::default(),
             cursor_shape: "",
             home: Default::default(),
             sheets: Default::default(),
@@ -662,7 +666,17 @@ impl Ui {
     }
     pub fn plugin_panel(&mut self, raw: &str) -> Result<(), String> { self.plugins.set(raw) }
     pub fn plugin_open(&mut self, id: &str) { self.plugins.open(id); }
-    pub fn plugin_reset(&mut self) { self.plugins = Default::default(); }
+    pub fn plugin_document(&mut self, document: String, live: &[String]) {
+        if self.plugin_document != document {
+            let next = self.background_plugins.remove(&document).unwrap_or_default();
+            let previous = std::mem::replace(&mut self.plugins, next);
+            let old_id = std::mem::replace(&mut self.plugin_document, document);
+            if live.contains(&old_id) {
+                self.background_plugins.insert(old_id, previous);
+            }
+        }
+        self.background_plugins.retain(|key, _| live.contains(key));
+    }
     pub fn set_jobs(&mut self, jobs: Vec<Job>) { self.jobs = jobs; }
     pub fn set_tabs(&mut self, tabs: Vec<Vec<Item>>) { self.tabs = tabs; }
     pub fn set_delivery(&mut self, active: String, unfiled: u32, problems: u32) {

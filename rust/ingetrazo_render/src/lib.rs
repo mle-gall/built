@@ -2279,8 +2279,8 @@ impl Renderer {
     fn ui_plugin_open(&mut self, instance: &str) {
         if let Some(ui) = self.ui.as_mut() { ui.plugin_open(instance); }
     }
-    fn ui_plugin_reset(&mut self) {
-        if let Some(ui) = self.ui.as_mut() { ui.plugin_reset(); }
+    fn ui_plugin_document(&mut self, document: String, live: Vec<String>) {
+        if let Some(ui) = self.ui.as_mut() { ui.plugin_document(document, &live); }
     }
     /// Work in progress: (id, what, phase, fraction or -1, cancellable).
     fn ui_set_jobs(&mut self, jobs: Vec<ui::Job>) {
