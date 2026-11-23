@@ -1,0 +1,459 @@
+"""Project tabs, windows and the viewport right-click menu (shell design:
+tabs option B, the right-click menu with no More ›), headless.
+
+The windowed parts (the strip and the menu drawn by egui, windows made by
+winit) run in ``built --script``. Here the same Python the chrome calls is
+driven directly, on synthetic files under tmp_path (tests/fixtures/shell)."""
+import re
+from pathlib import Path
+
+import pytest
+from tests.shell_isolation import restore_shell_patches  # noqa: F401  (autouse)
+
+ROOT = Path(__file__).resolve().parents[1]
+FIXTURES = ROOT / "tests" / "fixtures" / "shell"
+SLAB = FIXTURES / "slab-and-cube.igz"
+
+
+@pytest.fixture
+def host(tmp_path):
+    from app_shell.host import Host
+    h = Host(0, 1280, 800, 2.0, settings=str(tmp_path / "settings"))
+    yield h
+    h.close()
+
+
+@pytest.fixture
+def second(tmp_path):
+    """A second window's host in the same process (Rust makes one per
+    winit window)."""
+    made = []
+
+    def make():
+        from app_shell.host import Host
+        h = Host(0, 1280, 800, 2.0, settings=str(tmp_path / "settings"))
+        made.append(h)
+        return h
+    yield make
+    for h in made:
+        h.close()
+
+
+def _copies(tmp_path, n):
+    out = []
+    for i in range(n):
+        p = tmp_path / f"model-{i}.igz"
+        p.write_bytes(SLAB.read_bytes())
+        out.append(p)
+    return out
+
+
+def _settle(host):
+    """The work the loop does after the first picture (links, heap)."""
+    host._picture_seen = True
+    for _ in range(8):
+        host.idle()
+
+
+class StubRenderer:
+    """What the chrome is sent, without a GPU."""
+
+    def __init__(self):
+        self.tabs = None
+        self.menu = None
+        self.icons = []
+
+    def ui_set_project_tabs(self, tabs, elsewhere=(), can_move=False, pictures=True):
+        self.tabs = (list(tabs), list(elsewhere), can_move, pictures)
+
+    def ui_set_icons(self, icons):
+        self.icons.extend(icons)
+
+    def ui_set_context_menu(self, x, y, title, subtitle, rows):
+        self.menu = (x, y, title, subtitle, rows)
+
+    def ui_over_chrome(self, x, y):
+        return False
+
+    def render(self):
+        return 0.0, 0.0
+
+    def ui_take_actions(self):
+        return []
+
+    def ui_repaint_after_ms(self):
+        return None
+
+    def __getattr__(self, name):
+        # Everything else the view asks of a renderer: nothing to draw.
+        if name.startswith("__"):
+            raise AttributeError(name)
+        return lambda *a, **k: None
+
+
+# ---- the tab strip ---------------------------------------------------------------------
+def test_tab_strip_lists_the_projects_with_front_and_unsaved(host, tmp_path):
+    from views import wgpu_tabs
+    paths = _copies(tmp_path, 4)
+    for p in paths:
+        assert host.open_path(p)
+    win = host.window
+    from core.history import AddFaceCommand
+    from PySide6.QtGui import QVector3D as V
+    host.viewport.history.execute(AddFaceCommand([V(5, 0, 0), V(6, 0, 0), V(6, 1, 0)]))
+    tabs = wgpu_tabs.tabs(win)
+    assert [t[1] for t in tabs] == [p.name for p in paths]
+    assert [t[2] for t in tabs] == [False, False, False, True]          # front
+    assert [t[3] for t in tabs] == [False, False, False, True]          # unsaved
+    assert not any(t[4] for t in tabs)                                  # no link source
+    assert tabs[0][5].endswith(f"{paths[0].name} · " + tabs[0][5].split(" · ")[-1])
+    # What the chrome is sent: the tabs, nothing elsewhere, Move offered.
+    view = host.view
+    view.renderer = StubRenderer()
+    try:
+        wgpu_tabs.before_frame(view, win)
+        sent, elsewhere, can_move, pictures = view.renderer.tabs
+        assert [t[1] for t in sent] == [p.name for p in paths]
+        assert elsewhere == [] and can_move and pictures
+    finally:
+        view.renderer = None
+
+
+def test_tab_clicks_activate_close_and_the_tab_menu(host, tmp_path):
+    from views import wgpu_tabs
+    paths = _copies(tmp_path, 4)
+    for p in paths:
+        host.open_path(p)
+    win, view = host.window, host.view
+    wgpu_tabs.action(win, view, "activate:1")
+    assert host.state()["active"] == 1
+    wgpu_tabs.action(win, view, "close:3")
+    assert host.state()["documents"] == [p.name for p in paths[:3]]
+    wgpu_tabs.action(win, view, "menu:close_right:0")
+    assert host.state()["documents"] == [paths[0].name]
+    wgpu_tabs.action(win, view, "new")
+    assert len(host.state()["documents"]) == 2
+
+
+def test_ctrl_tab_walks_the_strip_both_ways(host, tmp_path):
+    paths = _copies(tmp_path, 3)
+    for p in paths:
+        host.open_path(p)
+    assert host.state()["active"] == 2
+    host.menu("next_doc")                 # ⌃Tab (Window menu)
+    assert host.state()["active"] == 0
+    host.menu("next_doc")
+    assert host.state()["active"] == 1
+    host.menu("prev_doc")                 # ⌃⇧Tab
+    host.menu("prev_doc")
+    assert host.state()["active"] == 2
+
+
+def test_a_file_opens_only_once(host, tmp_path):
+    a, b = _copies(tmp_path, 2)
+    host.open_path(a)
+    host.open_path(b)
+    assert host.open_path(a)
+    st = host.state()
+    assert st["documents"] == [a.name, b.name] and st["active"] == 0
+
+
+def test_a_file_open_in_another_window_brings_that_window(host, second, tmp_path):
+    a, b = _copies(tmp_path, 2)
+    host.open_path(a)
+    host.open_path(b)
+    other = second()
+    host.extras()                          # nothing pending yet
+    assert other.open_path(a)
+    assert other.state()["documents"] == ["Untitled"]
+    assert host.state()["active"] == 0     # its tab in front…
+    assert host.extras()["focus"]          # …and its window asked to come forward
+
+
+# ---- windows: one process --------------------------------------------------------------
+def test_new_window_is_made_in_this_process(host, second):
+    assert host.menu("new_window")
+    token = host.extras()["new_window"]
+    assert token                           # Rust makes the window, then:
+    other = second()
+    assert other.adopt(token)
+    assert host.state()["windows"] == 2
+    assert other.state()["start_page"]
+
+
+def test_move_to_new_window_takes_the_project_and_its_history(host, second, tmp_path):
+    from views import wgpu_tabs
+    from core.history import AddFaceCommand
+    from PySide6.QtGui import QVector3D as V
+    a, b = _copies(tmp_path, 2)
+    host.open_path(a)
+    host.open_path(b)
+    faces = host.state()["faces"]
+    host.viewport.history.execute(AddFaceCommand([V(5, 0, 0), V(6, 0, 0), V(6, 1, 0)]))
+    doc = host.window._doc
+    history = doc.viewport.history
+    assert wgpu_tabs._can_move(host.window)
+    wgpu_tabs.action(host.window, host.view, "menu:move:1")
+    token = host.extras()["new_window"]
+    other = second()
+    assert other.adopt(token)
+    assert host.state()["documents"] == [a.name]
+    st = other.state()
+    assert st["documents"] == [b.name] and st["dirty"]
+    assert other.window._doc is doc and doc.viewport.history is history
+    assert doc.viewport._host is other and doc.stand_in._host is other
+    assert other.state()["faces"] == faces + 1
+    other.menu("undo")                     # its undo came along
+    assert other.state()["faces"] == faces
+    # Its window now lists the other one's project under ›› n.
+    assert [e[1] for e in wgpu_tabs._elsewhere(other.window)] == [a.name]
+
+
+def test_the_last_project_cannot_move_out(host, tmp_path):
+    from app_shell import windows
+    (a,) = _copies(tmp_path, 1)
+    host.open_path(a)
+    assert not windows.can_move(host.window)
+    assert windows.move_to_new_window(host.window, host.window._doc) is None
+
+
+# ---- link sources ------------------------------------------------------------------------
+def test_open_source_makes_a_link_tab_right_of_its_host(host, tmp_path):
+    from tests.fixtures.shell.make_composite import make
+    from views import wgpu_tabs
+    paths = make(tmp_path / "composite")
+    (other,) = _copies(tmp_path, 1)
+    host.open_path(other)
+    host.open_path(paths["host"])
+    _settle(host)
+    host.window.activate_document(host.window._documents[1])
+    assert wgpu_tabs.open_link_source(host.window, paths["mid"])
+    tabs = wgpu_tabs.tabs(host.window)
+    assert [t[1] for t in tabs] == [other.name, "host.built", "mid.built"]
+    assert [t[4] for t in tabs] == [False, False, True]
+    assert "linked in host.built · 2 placements" in tabs[2][5]
+    assert host.state()["link_tabs"] == ["mid.built"]
+
+
+# ---- the right-click menu ----------------------------------------------------------------
+@pytest.fixture
+def kinds(host, tmp_path):
+    """The model with one of each kind, open, its links loaded; what to
+    select for each kind."""
+    from core import links
+    from tests.fixtures.shell.make_kinds import make
+    paths = make(tmp_path / "kinds")
+    assert host.open_path(paths["kinds"])
+    _settle(host)
+    scene = host.viewport.scene
+    groups = {g.name: g for g in scene.groups}
+    link = next(g for g in scene.groups if links.is_linked(g))
+    face = next(iter(scene.mesh.faces))
+    edge = next(iter(scene.mesh.edges))
+    return {
+        "faces": [face], "edges": [edge], "geometry": [face, edge],
+        "group": [groups["Box A"]], "component": [groups["Door"]],
+        "groups": [groups["Box A"], groups["Box B"]], "mixed": [groups["Box A"], face],
+        "link": [link], "linked_part": [link.children[0]],
+        "annotation": [scene.text_labels[0]], "dimension": [scene.dimensions[0]],
+        "guide": [scene.guides[0]], "empty": [],
+    }
+
+
+#: Each kind's column in docs/context-menu.md: (table heading, column).
+DOC_COLUMNS = {
+    "faces": ("Raw geometry", 1), "edges": ("Raw geometry", 2), "geometry": ("Raw geometry", 3),
+    "group": ("Groups and components", 1), "component": ("Groups and components", 2),
+    "groups": ("Groups and components", 3),
+    "mixed": ("Mixed, linked, annotations, guides, empty space", 1),
+    "link": ("Mixed, linked, annotations, guides, empty space", 2),
+    "linked_part": ("Mixed, linked, annotations, guides, empty space", 3),
+    "annotation": ("Mixed, linked, annotations, guides, empty space", 4),
+    "guide": ("Mixed, linked, annotations, guides, empty space", 5),
+    "empty": ("Mixed, linked, annotations, guides, empty space", 6),
+}
+
+
+def _doc_columns():
+    """docs/context-menu.md's tables: heading → column → [(family, {verbs})]."""
+    text = (ROOT / "docs" / "context-menu.md").read_text(encoding="utf-8")
+    out = {}
+    for section in re.split(r"^### ", text, flags=re.M)[1:]:
+        title, _, body = section.partition("\n")
+        cols = {}
+        for line in body.splitlines():
+            if not line.startswith("| ") or line.startswith("| #") or line.startswith("|---"):
+                continue
+            cells = [c.strip() for c in re.split(r"(?<!\\)\|", line.strip().strip("|"))]
+            if not cells or not cells[0].isdigit():
+                continue
+            for i, cell in enumerate(cells[1:], 1):
+                cell = re.sub(r"\*\([^)]*\)\*", "", cell).replace("\\|", "|").strip()
+                if not cell:
+                    continue
+                family, _, rest = cell.rpartition(": ") if ": " in cell else ("", "", cell)
+                verbs = {v.strip() for v in rest.split("|")}
+                cols.setdefault(i, []).append((family, verbs))
+        out[title.strip()] = cols
+    return out
+
+
+def _matches(row, documented):
+    """A built row is documented when its family matches and its verbs are
+    the documented ones or some of them (the rest are conditional)."""
+    label = row.label
+    verbs = {v.label for v in row.verbs}
+    return any(family == label and verbs <= allowed for family, allowed in documented)
+
+
+@pytest.mark.parametrize("kind", list(DOC_COLUMNS) + ["dimension"])
+def test_each_kind_gets_the_rows_docs_context_menu_lists(host, kinds, kind):
+    from views import context_menu as cm
+    scene = host.viewport.scene
+    scene.select(kinds[kind])
+    menu = cm.build(host.window, host.view)
+    expected = "annotation" if kind == "dimension" else kind
+    assert menu.kind == expected
+    assert menu.rows[0].verbs[0].id == "repeat"
+    assert len(menu.rows) <= cm.MAX_ROWS
+    heading, col = DOC_COLUMNS[expected]
+    documented = _doc_columns()[heading][col]
+    missing = [r.text() for r in menu.rows[1:] if not _matches(r, documented)]
+    assert not missing, f"{kind}: rows not in docs/context-menu.md: {missing}"
+    assert not any(r.label == "More" or r.text().startswith("More") for r in menu.rows)
+
+
+def test_the_menus_carry_the_expected_verbs(host, kinds):
+    from views import context_menu as cm
+    scene = host.viewport.scene
+
+    def rows(kind):
+        scene.select(kinds[kind])
+        return cm.build(host.window, host.view).labels()[1:]
+    assert rows("faces")[:6] == ["Hide", "Zoom to", "Make group | Make component…",
+                                 "Reverse faces | Orient faces", "Intersect: Model | Selection | Context",
+                                 "Soften / Smooth edges…"]
+    assert "Divide…" in rows("edges") and "Reverse faces | Orient faces" not in rows("edges")
+    assert rows("group")[:7] == ["Open for editing", "Rename…", "Hide", "Isolate", "Lock", "Zoom to", "File to…"]
+    assert "Explode | Make component…" in rows("group") and "Split into pieces" in rows("group")
+    assert "Select instances | Make unique" in rows("component")
+    assert "Merge groups | Explode" in rows("groups")
+    assert rows("link")[:2] == ["Select contents", "Hide"] and "Open source" in rows("link")
+    assert rows("linked_part")[0] == "Select its linked file"
+    assert rows("annotation") == ["Edit text…", "Zoom to"]
+    assert rows("guide") == ["Delete guide", "Delete all guides", "Zoom to"]
+    assert rows("empty")[:3] == ["Select all", "Unhide all", "Zoom extents"]
+
+
+@pytest.mark.parametrize("kind", ["link", "linked_part"])
+def test_read_only_kinds_offer_no_editing_verbs(host, kinds, kind):
+    from views import context_menu as cm
+    host.viewport.scene.select(kinds[kind])
+    menu = cm.build(host.window, host.view)
+    assert menu.kind == kind and "read-only" in menu.subtitle
+    ids = {i.split(":")[0] for i in menu.ids()}
+    assert not ids & set(cm.EDITING), ids & set(cm.EDITING)
+    assert not menu.rows[0].verbs[0].enabled            # Repeat, greyed
+
+
+def test_the_header_says_what_and_where(host, kinds):
+    from views import context_menu as cm
+    scene = host.viewport.scene
+    scene.select(kinds["group"])
+    menu = cm.build(host.window, host.view)
+    assert (menu.title, menu.subtitle) == ("Box A", "Group · Unfiled")
+    scene.select(kinds["linked_part"])
+    assert cm.build(host.window, host.view).subtitle == "in parts.built ↗ · read-only"
+    scene.select(kinds["groups"])
+    assert cm.build(host.window, host.view).title == "2 items"
+
+
+def test_repeat_names_the_last_command_and_its_value(host, kinds):
+    from tools.pushpull import PushPullTool
+    from views import context_menu as cm
+    host.window._activate_tool("pushpull")
+    host.window._activate_tool("select")
+    old = PushPullTool.last_distance
+    PushPullTool.last_distance = 0.45
+    try:
+        repeat = cm.build(host.window, host.view).rows[0].verbs[0]
+    finally:
+        PushPullTool.last_distance = old
+    name = host.window._tools["pushpull"].name
+    assert repeat.label.startswith(f"Repeat {name}") and "0.45" in repeat.label.replace(",", ".")
+    assert repeat.enabled and repeat.key == "⇧R"
+
+
+def test_a_verb_runs_the_same_command_as_the_tree(host, kinds):
+    """Hide on one group goes through the tree's row verb (core ``hide``)."""
+    from views import context_menu as cm
+    scene = host.viewport.scene
+    box = kinds["group"][0]
+    scene.select([box])
+    menu = cm.build(host.window, host.view)
+    host.view._ctx_menu = menu
+    assert cm.action(host.window, host.view, "hide")
+    assert box.hidden
+    host.menu("undo")
+    assert not box.hidden
+
+
+def test_right_click_selects_what_it_hit_first(host, kinds, monkeypatch):
+    """Right-clicking an unselected group selects it, then the menu is the
+    group's (.skp). Picking needs the GPU, so the hit is given."""
+    box = kinds["group"][0]
+    face = kinds["faces"][0]
+    scene = host.viewport.scene
+    tools = host.view.tools
+    monkeypatch.setattr(tools, "pick_group", lambda x, y: box)
+    monkeypatch.setattr(tools, "pick_edge", lambda x, y: None)
+    monkeypatch.setattr(tools, "pick_face", lambda x, y: None)
+    scene.select([face])
+    host.pointer("press", 500.0, 400.0, 2, 2, 0)
+    host.pointer("release", 500.0, 400.0, 2, 0, 0)
+    assert list(scene.selection) == [box]
+    assert host.view._ctx_menu.kind == "group"
+
+
+def test_right_click_inside_the_selection_keeps_it(host, kinds, monkeypatch):
+    a, b = kinds["groups"]
+    scene = host.viewport.scene
+    tools = host.view.tools
+    monkeypatch.setattr(tools, "pick_group", lambda x, y: a)
+    monkeypatch.setattr(tools, "pick_edge", lambda x, y: None)
+    monkeypatch.setattr(tools, "pick_face", lambda x, y: None)
+    scene.select([a, b])
+    host.pointer("press", 500.0, 400.0, 2, 2, 0)
+    assert set(scene.selection) == {a, b}
+    assert host.view._ctx_menu.kind == "groups"
+
+
+def test_with_the_chrome_the_menu_goes_to_it(host, kinds, monkeypatch):
+    """The chrome's path (native app, BUILT_UI=1): WgpuView's right-click
+    hands the rows to the renderer, and ctx:<id> runs the verb."""
+    from views import wgpu_ui
+    box = kinds["group"][0]
+    view = host.view
+    tools = view.tools
+    monkeypatch.setattr(tools, "pick_group", lambda x, y: box)
+    monkeypatch.setattr(tools, "pick_edge", lambda x, y: None)
+    monkeypatch.setattr(tools, "pick_face", lambda x, y: None)
+    monkeypatch.setattr(wgpu_ui, "ENABLED", True)
+    stub = StubRenderer()
+    view.renderer = stub
+    view._ui_attached = True
+    view._ui_tools_sent = True
+    try:
+        from app_shell.events import ContextMenuEvent
+        view.contextMenuEvent(ContextMenuEvent(520, 410, 0))
+        x, y, title, subtitle, rows = stub.menu
+        assert (x, y, title) == (520.0, 410.0, "Box A")
+        assert rows[0][1][0][0] == "repeat"
+        assert ("Intersect", [("intersect:model", "Model", "", True, -1),
+                              ("intersect:selection", "Selection", "", True, -1),
+                              ("intersect:context", "Context", "", True, -1)]) in rows
+        wgpu_ui._run(host.window, ["ctx:hide"])
+        assert box.hidden
+    finally:
+        view.renderer = None
+        view._ui_attached = False
