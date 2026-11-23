@@ -80,7 +80,9 @@ class Document:
         if (grid is not None and self.stand_in is not None
                 and getattr(grid, "display", None) is self.stand_in):
             return grid
-        return self.stand_in if self.stand_in is not None else self.viewport
+        if self.stand_in is not None:
+            return self.stand_in
+        return getattr(self.viewport, "keys_stand_in", None) or self.viewport
 
     def display_name(self) -> str:
         if self.path is not None:

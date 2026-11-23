@@ -42,7 +42,6 @@ class ViewNavigation:
             min(self.camera.distance * frac, MAX_DISTANCE))
         self.update()
 
-
     def _project_to_lock_line(
         self,
         start: QVector3D,
@@ -89,7 +88,6 @@ class ViewNavigation:
             t = (b * e - d) / denom
         return start + d1 * t
 
-
     def _depth_of(self, point) -> Optional[float]:
         """How far ``point`` lies in front of the eye, along the view
         direction: what one pixel of pan is worth there (#184)."""
@@ -97,7 +95,6 @@ class ViewNavigation:
             return None
         cam = self.camera
         return QVector3D.dotProduct(point - cam.eye(), cam.forward())
-
 
     def _recentre_on(self, x: float, y: float) -> None:
         """Bring the model point under pixel ``(x, y)`` to the centre of the
@@ -124,7 +121,6 @@ class ViewNavigation:
         cam.target = QVector3D(point)
         self.update()
 
-
     def _point_at_centre_depth(self, x: float, y: float):
         """Where the ray of pixel ``(x, y)`` meets the plane through the
         camera target, square to the view."""
@@ -139,7 +135,6 @@ class ViewNavigation:
         t = QVector3D.dotProduct(cam.target - origin, view) / along
         return origin + direction * t if t > 0.0 else None
 
-
     @staticmethod
     def _can_warp_pointer() -> bool:
         """Whether the pointer can be put back after each look move. Wayland
@@ -149,11 +144,9 @@ class ViewNavigation:
         return not (name.startswith("wayland") or name in ("offscreen",
                                                             "minimal"))
 
-
     def _begin_look(self, ev) -> None:
         self._look_drag = (ev.button(), ev.position().toPoint())
         self.setCursor(Qt.BlankCursor)
-
 
     def _look_move(self, ev) -> None:
         button, last = self._look_drag
@@ -166,7 +159,6 @@ class ViewNavigation:
             QCursor.setPos(self.mapToGlobal(last))
             p = last
         self._look_drag = (button, p)
-
 
     def _world_under_cursor(self, x: float, y: float) -> Optional[QVector3D]:
         """Nearest geometry hit, otherwise the focal plane through the target.
@@ -208,7 +200,6 @@ class ViewNavigation:
                 if t > 0:
                     return origin + direction * t
         return None
-
 
     def _zoom_at(self, steps: float, pos):
         """Zoom ``steps`` notches toward the point under ``pos`` -- the
@@ -269,7 +260,6 @@ class ViewNavigation:
         self._zoom_focus = (pose(), pos.x(), pos.y(),
                             self.scene.version, focus)
         return reproj, reused
-
 
     def _zoom_out_step(self) -> float:
         """Zoom-out floor per notch: 1 % of the model, never less than 5 cm

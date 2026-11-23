@@ -25,7 +25,6 @@ def _ctx_changed(vp, before):
         cc(before)
 
 
-
 class DocumentTools:
     suspended_tool: Optional[Tool] = None
 
@@ -101,7 +100,6 @@ class DocumentTools:
         self.measurementChanged.emit(self._measurement_text())
         self.update()
 
-
     def _resume_tool(self, tool: Tool) -> None:
         """Back from a camera mode to the tool it suspended, as it was: the
         first point placed, the rubber band, the locks. Only the camera
@@ -119,7 +117,6 @@ class DocumentTools:
         self._refresh_snap()
         self.measurementChanged.emit(self._measurement_text())
         self.update()
-
 
     def begin_group_edit(self, group) -> None:
         """Enter a group for editing (double-click-into-group). A
@@ -180,7 +177,6 @@ class DocumentTools:
                 path=self.edit_path_text()), 5000)
         self.update()
 
-
     def _mesh_shared_elsewhere(self, group) -> bool:
         """Whether another placement — top level or nested at any depth —
         draws ``group``'s mesh. A group exploded out of a component copy
@@ -189,7 +185,6 @@ class DocumentTools:
         from core.purge import iter_groups
         mesh = group.mesh
         return any(g is not group and g.mesh is mesh for g in iter_groups(self.scene.groups))
-
 
     def edit_path_text(self) -> str:
         """Where you are, as a path: ``Plaza ▸ Jardinera ▸ Banca``.
@@ -203,12 +198,10 @@ class DocumentTools:
         from core.outliner import open_path
         return " ▸ ".join(group.name for group in open_path(self.scene))
 
-
     def end_one_group_edit(self) -> None:
         """Step out ONE level — Esc, which leaves you inside the
         parent when the group you were editing lived in another group."""
         self._leave_group_edit(todos=False)
-
 
     def set_document(self, scene, history) -> tuple:
         """Show another document: ``scene`` with its own undo ``history``
@@ -245,12 +238,10 @@ class DocumentTools:
         self.notify_scene_changed()
         return old
 
-
     def end_group_edit(self) -> None:
         """Leave every open group, back to the model. What the menus and the
         save/export paths call."""
         self._leave_group_edit(todos=True)
-
 
     def _leave_group_edit(self, todos: bool) -> None:
         if self.scene.edit_group is None:

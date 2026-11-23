@@ -8951,13 +8951,16 @@ class MainWindow(WorksessionMixin, QMainWindow):
         # in front; anything else fills the place that was taken.
         doc = next((d for d in self._documents if d.viewport is widget),
                    None) or self._central_document()
+        if widget is doc.viewport:
+            widget = getattr(widget, "keys_stand_in", None) or widget
         old = doc.slot_widget()
         if widget is old:
             return
         self._put_in_slot(doc, old, widget)
         # Qt deletes a central widget that was not taken first; never a
         # viewport, though: that one lives as long as its project.
-        if old is not None and not any(d.viewport is old for d in self._documents):
+        if old is not None and not any(d.viewport is old or getattr(d.viewport, "keys_stand_in", None) is old
+                                       for d in self._documents):
             old.hide()
             old.deleteLater()
 
