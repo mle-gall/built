@@ -1608,7 +1608,7 @@ class MetalView(ViewNavigation):
         if event.key() == Qt.Key_Escape:
             self._look_drag = None
             from ingetrazo_render import leave_navigation
-            win = self.window()
+            win = self.window() if hasattr(self, "window") else None
             if (self.source_viewport is not None and getattr(win, "viewport", None) is self.source_viewport
                     and leave_navigation(win)):
                 return
