@@ -760,15 +760,14 @@ def _units(env) -> list:
         env.st.sync()
 
     def preview(env):
-        from views.units_panel import UnitsPanel
-        return UnitsPanel.preview_text(_units_now(env)).replace("\n", "   ·   ")
+        return units.preview_text(_units_now(env)).replace("\n", "   ·   ")
 
     def ask_put(env, v):
-        from views.units_start_dialog import set_ask_at_start
+        from core.units import set_ask_at_start
         set_ask_at_start(bool(v))
 
     def ask_get(env):
-        from views.units_start_dialog import ask_at_start
+        from core.units import ask_at_start
         return ask_at_start()
 
     shown = [

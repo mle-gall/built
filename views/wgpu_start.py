@@ -994,7 +994,7 @@ def new_model(win, ask_units: bool = True) -> None:
     win._on_new()
     hide(win)
     if ask_units:
-        from views.units_start_dialog import offer_at_start
+        from views.units_question import offer_at_start
         offer_at_start(win)
 
 

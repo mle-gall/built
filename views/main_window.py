@@ -3694,7 +3694,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         if (self._current_path is not None
                 or self.viewport.scene.version != self._saved_version):
             return
-        from views.units_start_dialog import offer_at_start
+        from views.units_question import offer_at_start
         offer_at_start(self)
 
     def open_preferences(self, shortcut_of=None, page=None) -> None:

@@ -98,3 +98,33 @@ def test_native_release_review(tmp_path):
               if line.startswith("[built] state ")]
     assert [s["large_sheet"] for s in states[:2]] == ["update", ""], log
     assert all(s["errors"] == 0 and not s["blocked_widgets"] for s in states), log
+
+
+@pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
+                    reason="requires a built window and BUILT_WINDOW_TESTS=1")
+def test_native_first_run_custom_units(tmp_path):
+    from PySide6.QtCore import QSettings
+
+    profile = tmp_path / "profile"
+    folder = profile / "IngeTrazo"
+    folder.mkdir(parents=True)
+    settings = QSettings(str(folder / "IngeTrazo.ini"), QSettings.IniFormat)
+    custom = {"length": "cm", "precision": 3}
+    settings.setValue("units/new_document", json.dumps(custom))
+    settings.sync()
+    steps = tmp_path / "commands"
+    steps.write_text("wait 700\nmenu home\nwait 200\nmenu new\nwait 300\nstate\n"
+                     "key enter\nwait 300\nstate\nkey enter\nwait 300\nstate\nquit\n")
+    home = tmp_path / "home"
+    home.mkdir()
+    result = run([str(BIN), "--root", str(ROOT), "--new-instance", "--script", str(steps)],
+                 home=home, settings=profile, capture_output=True, text=True, timeout=90)
+    log = result.stdout + result.stderr
+    states = [json.loads(line.removeprefix("[built] state ")) for line in log.splitlines()
+              if line.startswith("[built] state ")]
+    assert result.returncode == 0 and len(states) >= 3, log
+    assert [s["form_open"] for s in states[:3]] == [True, True, False], log
+    assert all(s["errors"] == 0 and not s["blocked_widgets"] for s in states), log
+    assert not states[2]["dirty"]
+    settings.sync()
+    assert json.loads(settings.value("units/new_document")) == custom

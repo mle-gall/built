@@ -642,6 +642,7 @@ class Host:
             "active": win._documents.index(win._doc) if win._doc in win._documents else -1,
             "dirty": bool(win._is_dirty()),
             "large_sheet": self.renderer.ui_large_sheet_state()[0] if self.renderer is not None else "",
+            "form_open": self.renderer.ui_dialog_open() if self.renderer is not None else False,
             "start_page": bool(getattr(win.__dict__.get("_start_page"), "wanted", False)),
             "errors": len(self.errors),
             "widget_gaps": self.missing(),

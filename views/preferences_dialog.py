@@ -668,7 +668,7 @@ class PreferencesDialog(QDialog):
         self._units_for_new_explicit = False
         self._units_for_new.toggled.connect(self._units_for_new_toggled)
         form.addRow("", self._units_for_new)
-        from views.units_start_dialog import ask_at_start
+        from core.units import ask_at_start
         self._units_at_start = QCheckBox(tr("Ask which units to use at startup"))
         self._units_at_start.setChecked(ask_at_start())
         form.addRow("", self._units_at_start)
@@ -1071,7 +1071,7 @@ class PreferencesDialog(QDialog):
             st.setValue(_UNITS_FOR_NEW_KEY, "1" if for_new else "0")
             if for_new:
                 _units.remember_new_document_units(chosen)
-        from views.units_start_dialog import set_ask_at_start
+        from core.units import set_ask_at_start
         set_ask_at_start(self._units_at_start.isChecked())
 
         if apply_language(self._lang.currentData(), st):

@@ -203,18 +203,4 @@ class UnitsPanel(QWidget):
                 self.area_decimals.setValue(units.unit_setting("area_precision", s))
         finally:
             self._busy = False
-        self.preview.setText(self.preview_text(s))
-
-    @staticmethod
-    def preview_text(settings: dict) -> str:
-        """``1.2345 m → 123.5 cm`` and its area, volume and angle — what
-        the picked settings make of one value."""
-        v = units.PREVIEW_VALUE
-        given = units.localized(f"{v}", settings)
-        rows = (
-            (f"{given} m", units.fmt_len_with(v, settings)),
-            (f"{given} m²", units.fmt_area_with(v, settings)),
-            (f"{given} m³", units.fmt_volume_with(v, settings)),
-            (f"{given} rad", units.fmt_angle_with(v, settings)),
-        )
-        return "\n".join(f"{src} → {shown}" for src, shown in rows)
+        self.preview.setText(units.preview_text(s))

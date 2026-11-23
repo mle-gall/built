@@ -192,6 +192,9 @@ def step_document(win, step):
 def new_model(win) -> None:
     """File ▸ New (MainWindow._on_new: an untouched untitled one starts
     over, else a new project), and the start page goes."""
+    from views import wgpu_start
+    if wgpu_start.shown(win):
+        return wgpu_start.new_model(win)
     win._on_new()
     win._dismiss_home()
 

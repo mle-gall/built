@@ -346,6 +346,18 @@ def unit_setting(key: str, settings: dict | None = None):
 NEW_DOCUMENT_KEY = "units/new_document"
 
 
+def ask_at_start() -> bool:
+    from PySide6.QtCore import QSettings
+    return str(QSettings().value("units/ask_at_start", "1")) != "0"
+
+
+def set_ask_at_start(ask: bool) -> None:
+    from PySide6.QtCore import QSettings
+    st = QSettings()
+    st.setValue("units/ask_at_start", "1" if ask else "0")
+    st.sync()
+
+
 def new_document_units() -> dict:
     """The units a new, empty document starts with: the ones the user last
     chose «for new documents» in Preferences, or metres. Opening a file never
@@ -694,6 +706,18 @@ def fmt_len_with(metres: float, settings: dict) -> str:
 #: The value the units panel shows its preview with: 1.2345 m (and m², m³,
 #: rad), long enough to show what the precision does.
 PREVIEW_VALUE = 1.2345
+
+
+def preview_text(settings: dict) -> str:
+    v = PREVIEW_VALUE
+    given = localized(f"{v}", settings)
+    rows = (
+        (f"{given} m", fmt_len_with(v, settings)),
+        (f"{given} m²", fmt_area_with(v, settings)),
+        (f"{given} m³", fmt_volume_with(v, settings)),
+        (f"{given} rad", fmt_angle_with(v, settings)),
+    )
+    return "\n".join(f"{src} → {shown}" for src, shown in rows)
 
 
 #: The largest number a field takes (in whatever unit it is typed): a UTM
