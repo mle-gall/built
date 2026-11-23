@@ -54,12 +54,19 @@ mod pushscan;
 mod push_command;
 mod push_guard;
 mod object_weld;
+mod object_merge;
 mod panic_log;
 
 #[pymodule]
 fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(push_command::rebuild_push_planes, m)?)?;
     m.add_function(wrap_pyfunction!(store::intersection_edit::partition_intersections, m)?)?;
+    m.add_function(wrap_pyfunction!(object_merge::merge_seeded_edges, m)?)?;
+    m.add_function(wrap_pyfunction!(object_merge::revert_seeded_merges, m)?)?;
+    m.add_function(wrap_pyfunction!(object_merge::merge_materialised_regions, m)?)?;
+    m.add_function(wrap_pyfunction!(object_merge::trace_object_loops, m)?)?;
+    m.add_function(wrap_pyfunction!(object_merge::dissolve_object_edge, m)?)?;
+    m.add_function(wrap_pyfunction!(object_merge::dissolve_object_region, m)?)?;
     m.add_function(wrap_pyfunction!(object_weld::weld_object_mesh, m)?)?;
     m.add_function(wrap_pyfunction!(object_weld::weld_object_vertex, m)?)?;
     m.add_function(wrap_pyfunction!(object_weld::split_object_at_position, m)?)?;

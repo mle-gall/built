@@ -1845,6 +1845,10 @@ class Mesh:
         faces, the edge, and the merged face) instead of just the new face.
         The merged face gets a fresh key; both old faces and the shared edge
         retire. Other edges and vertices keep their keys."""
+        from core import doc_model
+        if doc_model.ENABLED:
+            from ingetrazo_core import dissolve_object_edge
+            return dissolve_object_edge(self, edge, True, _dominant_attrs)
         if len(edge.faces) != 2:
             return None
         face_a, face_b = edge.faces[0], edge.faces[1]
@@ -1873,6 +1877,11 @@ class Mesh:
         single-edge splice can't fuse. Traces the union outline instead. Returns
         a reversible record, or ``None`` if they aren't a coplanar adjacent pair
         with a simple union outline."""
+        from core import doc_model
+        if doc_model.ENABLED:
+            from ingetrazo_core import dissolve_object_region
+            return dissolve_object_region(self, [face_a, face_b], True, _trace_loops,
+                                          _loop_area, _orient_union_loops, _dominant_attrs)
         if face_a is face_b:
             return None
         if QVector3D.dotProduct(face_a.normal(), face_b.normal()) < 0.999:
@@ -1930,6 +1939,11 @@ class Mesh:
         whole coplanar component at once, which is deterministic. ``None`` if the
         faces aren't all coplanar, aren't connected, or the union isn't simple."""
         faces = list(faces)
+        from core import doc_model
+        if doc_model.ENABLED:
+            from ingetrazo_core import dissolve_object_region
+            return dissolve_object_region(self, faces, False, _trace_loops,
+                                          _loop_area, _orient_union_loops, _dominant_attrs)
         if len(faces) < 2:
             return None
         n0 = faces[0].normal()
@@ -2055,6 +2069,10 @@ class Mesh:
         the two incident faces are right there on ``edge.faces``; nothing is
         rediscovered by position.
         """
+        from core import doc_model
+        if doc_model.ENABLED:
+            from ingetrazo_core import dissolve_object_edge
+            return dissolve_object_edge(self, edge, False, _dominant_attrs)
         if len(edge.faces) != 2:
             return None
         face_a, face_b = edge.faces[0], edge.faces[1]
@@ -2317,6 +2335,10 @@ def _trace_loops(outline: list[tuple[Vertex, Vertex]]) -> Optional[list[list[Ver
     of segments, i.e. object addresses, so the merged face's corner order
     differed from run to run (design decision 5). Vertices are known by
     key, so the store's views trace the same loops."""
+    from core import doc_model
+    if doc_model.ENABLED:
+        from ingetrazo_core import trace_object_loops
+        return trace_object_loops(outline)
     adj: dict = {}
     edges: dict = {}               # undirected segment -> (u, w), in order
     for u, w in outline:

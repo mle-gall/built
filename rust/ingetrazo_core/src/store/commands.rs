@@ -7,7 +7,7 @@ type Point = [f64; 3];
 pub(crate) type Cell = [u64; 3];
 
 /// A position key supplied by a caller has already been rounded.
-pub(super) fn supplied_cell(p: Point) -> Cell {
+pub(crate) fn supplied_cell(p: Point) -> Cell {
     p.map(|x| if x == 0. { 0 } else { x.to_bits() })
 }
 

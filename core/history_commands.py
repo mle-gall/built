@@ -3354,6 +3354,13 @@ class CoplanarMergeCommand(MeshCommand):
     def do(self, scene) -> None:
         mesh = scene.mesh
         seedkeys = {_key(p) for p in self.seed}
+        if _doc.ENABLED:
+            from core.store_mesh import EdgeView, _store_of
+            from ingetrazo_core import merge_seeded_edges
+            if merge_seeded_edges(mesh, list(seedkeys), None if self._journal_geometry else self.merges,
+                                  _store_of, EdgeView):
+                scene.version += 1
+            return
         progress = True
         while progress:
             progress = False
@@ -3375,6 +3382,13 @@ class CoplanarMergeCommand(MeshCommand):
 
     def undo(self, scene) -> None:
         mesh = scene.mesh
+        if _doc.ENABLED:
+            from ingetrazo_core import revert_seeded_merges
+            revert_seeded_merges(mesh, self.merges)
+            if self.merges:
+                scene.version += 1
+            self.merges = []
+            return
         for face_a, face_b, edge, merged in reversed(self.merges):
             mesh.remove_face(merged)
             mesh.relink_edge(edge)
@@ -3509,6 +3523,9 @@ def run_stitch(mesh, seedkeys: set, new_faces: Optional[set] = None,
 
 
 def _merge_object_regions(mesh, seedkeys, new_faces, start):
+    if _doc.ENABLED:
+        from ingetrazo_core import merge_materialised_regions
+        return merge_materialised_regions(mesh, list(seedkeys), new_faces, start)
     while True:
         merged = False
         ncache: dict = {}

@@ -1313,6 +1313,16 @@ impl PyMeshStore {
             .map_err(PyValueError::new_err)
     }
 
+    fn seeded_merge_edges(&self, seeds: Vec<[f64;3]>) -> Vec<u128> {
+        use super::commands::{cell, supplied_cell};
+        let cells: std::collections::HashSet<_> = seeds.into_iter().map(supplied_cell).collect();
+        self.inner.live_slots(Kind::Edge).into_iter().filter(|&e| {
+            self.inner.edge_faces(e).len() == 2 &&
+                self.inner.state.ends.get(e as usize).iter().any(|&v|
+                    cells.contains(&cell(*self.inner.state.vpos.get(v as usize))))
+        }).map(|e| self.inner.key(Kind::Edge,e)).collect()
+    }
+
     #[pyo3(signature=(seeds, fresh, start, hypot))]
     fn stitch_region(&self, seeds: Vec<[f64; 3]>, fresh: Option<std::collections::HashSet<u128>>, start: usize, hypot: &str)
         -> PyResult<Option<(usize, Vec<u128>)>> {
