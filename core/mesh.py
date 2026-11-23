@@ -1686,7 +1686,6 @@ class Mesh:
 
     def revert_stitch(self, rec: dict) -> None:
         """Undo a single stitch primitive recorded by the methods above."""
-        from core import doc_model
         kind = rec["kind"]
         if kind == "split":
             from ingetrazo_core import revert_object_split
@@ -1710,20 +1709,9 @@ class Mesh:
                     rec["e1"].faces.append(face)
                 if face not in rec["e2"].faces:
                     rec["e2"].faces.append(face)
-        elif kind in ("merge", "merge_pair") and doc_model.ENABLED:
+        elif kind in ("merge", "merge_pair"):
             from ingetrazo_core import revert_recorded_union
             revert_recorded_union(self, rec, kind == "merge_pair")
-        elif kind == "merge":
-            self.remove_face(rec["merged"])
-            self.relink_edge(rec["edge"])
-            self.relink_face(rec["face_a"])
-            self.relink_face(rec["face_b"])
-        elif kind == "merge_pair":
-            self.remove_face(rec["merged"])
-            for e in rec["edges"]:
-                self.relink_edge(e)
-            self.relink_face(rec["face_a"])
-            self.relink_face(rec["face_b"])
 
     def dissolve_edge(self, edge: Edge) -> Optional[Face]:
         """Dissolve a *redundant* coplanar edge, merging its two faces into one.
