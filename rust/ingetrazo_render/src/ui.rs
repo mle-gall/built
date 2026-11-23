@@ -1967,6 +1967,12 @@ impl Ui {
                     let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 1.0), Sense::hover());
                     ui.painter().hline(r.x_range(), r.center().y, Stroke::new(1.0_f32, EDGE));
                     ui.add_space(SPACE_S);
+                    if self.active == "fillet" && self.panels.data["bevel"].is_object() {
+                        egui::ScrollArea::vertical().id_salt("bevel inspector").show(ui, |ui| {
+                            self.panels.bevel_inspector(ui, &mut cmds);
+                        });
+                        return;
+                    }
                     if col.mode.is_empty() && col.lens == Lens::Drawing && col.styles.draw(ui, &mut actions) { return; }
                     egui::ScrollArea::vertical().id_salt("inspector").auto_shrink([false, false]).show(ui, |ui| {
                         ui.spacing_mut().item_spacing = vec2(0.0, SPACE_XS);

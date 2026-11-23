@@ -434,52 +434,6 @@ class _OpenAborted(Exception):
     at its next milestone instead of finishing behind the close."""
 
 
-class _SceneSwitch:
-    """Show the model's scenes for a while — the scene chosen in the SVG
-    export dialog — and put the view back as it was afterwards: camera,
-    layers, style, shadows, the scene tab marked; and a document that had
-    no changes still has none."""
-
-    def __init__(self, window) -> None:
-        from core.saved_views import SavedView
-        self._window = window
-        vp = window.viewport
-        self._before = SavedView.capture("", vp.scene, vp.camera)
-        self._clean = vp.scene.version == window._saved_version
-        row = getattr(window, "_scene_tabs", None)
-        self._tab = row.tabs.currentIndex() if row is not None else -1
-        self._shown = window.tray.scenes.shown
-        self._moved = False
-
-    def show(self, view) -> None:
-        """Show ``view`` (a scene), or ``None``: the view as it was."""
-        if view is None:
-            if not self._moved:
-                return
-            view = self._before
-        self._window.tray.scenes.show_view(view)
-        self._moved = view is not self._before
-        if view is self._before:
-            self._put_back()
-
-    def restore(self) -> None:
-        if self._moved:
-            self.show(None)
-
-    def _put_back(self) -> None:
-        w = self._window
-        w.statusBar().clearMessage()          # not «Scene ''»
-        w.tray.scenes.shown = self._shown
-        row = getattr(w, "_scene_tabs", None)
-        if row is not None and self._tab >= 0:
-            row.tabs.blockSignals(True)
-            row.tabs.setCurrentIndex(self._tab)
-            row.tabs.blockSignals(False)
-        if self._clean:
-            w._saved_version = w.viewport.scene.version
-            w._update_title()
-
-
 def project_path_missing(scene):
     from core.project import path_for
     return path_for(scene) is None
@@ -11544,65 +11498,9 @@ class MainWindow(WorksessionMixin, QMainWindow):
         from formats.dxf_out import save_dxf_layers
         self._export_view_lines(path, save_dxf_layers, tr("Export DXF failed"))
 
-    def _on_export_view_svg(self) -> None:
-        """The view on screen as an SVG vector drawing at 1:100, or fitted
-        on a sheet, one layer per group of _view_line_groups and the faces
-        under them, to finish in an illustration program — the dialog
-        previews it."""
-        path, _ = file_dialogs.getSaveFileName(
-            self, tr("Export current view as SVG"), "vista.svg",
-            "SVG (*.svg)")
-        if not path:
-            return
-        if not path.lower().endswith(".svg"):
-            path += ".svg"
-        from core.sun import scene_sun_direction
-        from views.export_svg_dialog import (SvgCancelled, ask_svg_options,
-                                             faces_progress)
-        scene = self.viewport.scene
-        builder = [self.view_svg_builder()]
-        views = list(getattr(scene, "saved_views", []) or [])
-        switch = _SceneSwitch(self) if views else None
-
-        def on_scene(index):
-            # The scene chosen in the dialog, shown in the view, and a
-            # builder that reads it.
-            switch.show(None if index is None else views[index])
-            builder[0] = self.view_svg_builder()
-            return builder[0].build
-
-        try:
-            ok, opts, paper = ask_svg_options(
-                self, builder[0].build, None,
-                scene_sun_direction(scene) is not None,
-                tr("On screen"),
-                bool(getattr(scene, "show_axes", True)),
-                builder[0].screen_mm, None, bool(scene.selection),
-                builder[0].can_frame(),
-                scenes=[v.name for v in views] or None,
-                on_scene=on_scene if switch is not None else None,
-                hold=self.viewport)
-            if not ok:
-                return
-            QApplication.setOverrideCursor(Qt.WaitCursor)
-            try:
-                with faces_progress(self, self.viewport):
-                    text, n = builder[0].build(opts, paper)
-                Path(path).write_text(text, encoding="utf-8")
-            except SvgCancelled:
-                QApplication.restoreOverrideCursor()
-                self.statusBar().showMessage(tr("SVG export cancelled"), 5000)
-                return
-            except Exception as exc:  # noqa: BLE001
-                QApplication.restoreOverrideCursor()
-                _dialogs.critical(self, tr("Export SVG failed"), str(exc))
-                return
-            QApplication.restoreOverrideCursor()
-        finally:
-            if switch is not None:
-                switch.restore()
-        self.statusBar().showMessage(
-            tr("Exported {n} lines to {name}", n=n, name=path), 5000)
+    def _on_export_view_svg(self):
+        from views.svg_export import open_view_export
+        return open_view_export(self)
 
     def view_svg_builder(self):
         """The SVG builder (views.svg_export) of the view on screen: its
@@ -11636,15 +11534,10 @@ class MainWindow(WorksessionMixin, QMainWindow):
 
         @contextmanager
         def picture_alone():
-            # The picture of the selection alone; a document with nothing to
-            # save keeps nothing to save.
-            clean = vp.scene.version == self._saved_version
             try:
                 with pictured_alone(vp.scene):
                     yield
             finally:
-                if clean:
-                    self._saved_version = vp.scene.version
                 vp.update()
 
         # «On screen»: the window as it is, a pixel being 1/96 inch.

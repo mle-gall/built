@@ -682,6 +682,15 @@ impl Gallery {
                     amber_button(ui, "2 issues · Show");
                 });
                 ui.add_space(SPACE_XS);
+                disclosure(ui,"gallery-bevel","Bevel profile",false,|ui| {
+                    let id = ui.make_persistent_id("bevel fixture");
+                    let (mut editor, mut curve) = ui.data(|d| d.get_temp::<(CurveEditor, crate::inspector::bevel::Curve)>(id))
+                        .unwrap_or_else(|| (Default::default(),serde_json::from_value(serde_json::json!(
+                            [[1.,0.,false],[0.7,0.7,true],[0.,1.,false]])).unwrap()));
+                    let outline: Vec<_> = curve.points().iter().map(|p| [p.0,p.1]).collect();
+                    editor.show(ui,&mut curve,&outline);
+                    ui.data_mut(|d|d.insert_temp(id,(editor,curve)));
+                });
                 disclosure(ui, "gallery-export", "Export details", true, |ui| {
                     prop_row(ui, "IFC class", "IfcWall");
                     prop_row(ui, "Predefined type", "STANDARD");

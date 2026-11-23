@@ -1,4 +1,5 @@
 //! Native inspector and tool controls. Input snapshots belong to one document.
+pub(crate) mod bevel;
 mod parts;
 mod records;
 mod rule;
@@ -14,6 +15,10 @@ pub struct Panels {
     pub data: Value,
     pub popup_layers: Vec<egui::Id>,
     parts: parts::Parts,
+    curve_editor: kit::CurveEditor,
+    numeric_profile: bool,
+    bevel_curve: Option<bevel::Curve>,
+    bevel_outline: Vec<[f64; 2]>,
     records: records::Records,
     rule: rule::Rule,
     pub terrain: Terrain,
@@ -77,6 +82,17 @@ impl Panels {
                 &data["records"],
                 data["selection_count"].as_u64().unwrap_or_default() as usize,
             );
+        }
+        if key == "bevel" {
+            if data.is_null()
+                || (data["shape"].is_string() && data["shape"] != self.data[key]["shape"])
+            {
+                self.curve_editor = Default::default();
+                self.numeric_profile = false;
+            }
+            self.bevel_curve = serde_json::from_value(data["points"].clone()).ok();
+            self.bevel_outline =
+                serde_json::from_value(data["outline"].clone()).unwrap_or_default();
         }
         if key == "terrain" {
             self.terrain.load(&data);
@@ -211,6 +227,27 @@ impl Panels {
         !self.records.rows.is_empty()
     }
 
+    pub fn bevel_inspector(&mut self, ui: &mut Ui, out: &mut Vec<String>) {
+        let b = &self.data["bevel"];
+        kit::caption_plain(ui, "Bevel profile");
+        if b["shape"].is_null() {
+            number(
+                ui,
+                "bevel.profile",
+                "Curve (0–1)",
+                &b["profile"],
+                0.001..=0.999,
+                out,
+            );
+            return;
+        }
+        if let Some(curve) = &mut self.bevel_curve {
+            if self.curve_editor.show(ui, curve, &self.bevel_outline) {
+                send(out, "bevel.curve", json!(curve));
+            }
+        }
+    }
+
     pub fn bevel(&mut self, ui: &mut Ui, out: &mut Vec<String>) {
         let b = &self.data["bevel"];
         choice(
@@ -243,16 +280,31 @@ impl Panels {
             send(out, "bevel.amount", json!(amount));
             ui.data_mut(|d| d.remove::<String>(id));
         }
-        choice(
-            ui,
-            "bevel.shape",
-            label(&b["shape"]),
-            &[
-                "round", "chamfer", "steps", "supports", "cornice", "crown", "custom",
-            ],
-            out,
-            &mut self.popup_layers,
-        );
+        let shape = if self.numeric_profile && b["shape"].is_null() {
+            "profile value"
+        } else {
+            bevel::shape_name(b)
+        };
+        egui::ComboBox::from_id_salt("bevel.shape")
+            .selected_text(shape)
+            .show_ui(ui, |ui| {
+                self.popup_layers.push(ui.layer_id().id);
+                for name in [
+                    "round",
+                    "chamfer",
+                    "profile value",
+                    "steps",
+                    "supports",
+                    "cornice",
+                    "crown",
+                    "drawn",
+                ] {
+                    if ui.selectable_label(shape == name, name).clicked() {
+                        self.numeric_profile = name == "profile value";
+                        send(out, "bevel.shape", json!(name));
+                    }
+                }
+            });
         let mut seg = b["segments"].as_i64().unwrap_or(3);
         if ui
             .add(DragValue::new(&mut seg).range(1..=64).suffix(" segments"))
@@ -260,9 +312,7 @@ impl Panels {
         {
             send(out, "bevel.segments", json!(seg));
         }
-        ui.menu_button("Profile…", |ui| {
-            self.popup_layers.push(ui.layer_id().id);
-            ui.label("Corner fill");
+        ui.add_enabled_ui(b["affect"] == "edges", |ui| {
             choice(
                 ui,
                 "bevel.corners",
@@ -271,47 +321,6 @@ impl Panels {
                 out,
                 &mut self.popup_layers,
             );
-            let mut points = b["points"].clone();
-            if let Some(pts) = points.as_array_mut() {
-                let end = pts.len().saturating_sub(1);
-                let mut changed = false;
-                ui.label("Custom curve · x / y");
-                let (rect, _) = ui.allocate_exact_size(egui::vec2(140., 80.), egui::Sense::hover());
-                let xy = |p: &Value| {
-                    egui::pos2(
-                        rect.left() + rect.width() * p[0].as_f64().unwrap_or_default() as f32,
-                        rect.bottom() - rect.height() * p[1].as_f64().unwrap_or_default() as f32,
-                    )
-                };
-                for pair in pts.windows(2) {
-                    ui.painter().line_segment(
-                        [xy(&pair[0]), xy(&pair[1])],
-                        egui::Stroke::new(1.5_f32, tokens::INK_2),
-                    );
-                }
-                for p in pts.iter_mut().take(end).skip(1) {
-                    ui.horizontal(|ui| {
-                        for i in 0..2 {
-                            let mut v = p[i].as_f64().unwrap_or_default();
-                            if ui
-                                .add(DragValue::new(&mut v).range(0.0..=1.0).speed(0.01))
-                                .changed()
-                            {
-                                p[i] = json!(v);
-                                changed = true;
-                            }
-                        }
-                        let mut smooth = p[2] == true;
-                        if ui.checkbox(&mut smooth, "Smooth").changed() {
-                            p[2] = json!(smooth);
-                            changed = true;
-                        }
-                    });
-                }
-                if changed {
-                    send(out, "bevel.curve", points);
-                }
-            }
         });
         if ui.button("Apply").clicked() {
             send(out, "bevel.apply", Value::Null);

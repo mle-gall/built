@@ -115,11 +115,8 @@ def sync(view, win):
             measure=tool.measure,
             amount=units.fmt_len_fine(tool.radius),
             segments=tool.segments,
-            shape=(
-                tool.shape
-                if isinstance(tool.shape, str)
-                else "custom" if tool.shape else "chamfer" if tool.profile == 0.25 else "round"
-            ),
+            shape=tool.shape, profile=tool.profile,
+            outline=bevel_profiles.sample(tool.shape, tool.segments) if tool.shape else [],
             corners=tool.corners,
             points=bevel_profiles.controls(tool.shape, tool.segments),
         )
@@ -181,9 +178,7 @@ def _camera(win, view, key, v):
     vp.update()
 
 
-def _bevel(view, key, value):
-    host = view.tools
-    tool = host.tool
+def _bevel(host, tool, key, value):
     if type(tool).__name__ != "FilletTool":
         return
     if key == "apply":
@@ -200,7 +195,11 @@ def _bevel(view, key, value):
         getattr(tool, "set_" + key)(host, value)
     elif key == "shape" and value in ("round", "chamfer"):
         tool.on_profile_value(host, 0.5 if value == "round" else 0.25)
-    elif key == "shape" and value == "custom":
+    elif key == "profile":
+        tool.on_profile_value(host, value)
+    elif key == "shape" and value == "profile value":
+        tool.set_shape(host, None)
+    elif key == "shape" and value in ("drawn", "custom"):
         from core.bevel_profiles import controls
 
         tool.set_shape(host, controls(tool.shape, tool.segments))
@@ -298,7 +297,7 @@ def action(win, view, payload):
                 commands.run(vp.history, "explode_view", placement=vp.scene.occurrence_path(g), factor=v[1], mode=v[2])
             vp.notify_scene_changed()
         elif surface == "bevel":
-            _bevel(view, verb, v)
+            _bevel(view.tools, view.tools.tool, verb, v)
         elif surface == "camera":
             _camera(win, view, verb, v)
         elif surface == "terrain":

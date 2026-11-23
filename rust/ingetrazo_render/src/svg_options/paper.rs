@@ -25,13 +25,13 @@ fn parse_measure(raw: &str) -> Option<f64> {
 }
 
 pub(super) struct SvgPaper {
-    mode: usize,
-    preset: usize,
-    ratio: usize,
-    portrait: bool,
-    screen: [f64; 2],
-    size: [f64; 2],
-    editing: [Option<String>; 2],
+    pub(super) mode: usize,
+    pub(super) preset: usize,
+    pub(super) ratio: usize,
+    pub(super) portrait: bool,
+    pub(super) screen: [f64; 2],
+    pub(super) size: [f64; 2],
+    pub(super) editing: [Option<String>; 2],
 }
 
 impl SvgPaper {

@@ -14236,44 +14236,13 @@ class ComposerWindow(QMainWindow):
             tr("Exported {n} lines to {name}", n=n, name=path), 5000)
         return n
 
-    def _on_export_svg(self) -> None:
-        """The selected frame as an SVG at its own scale and pens, or
-        fitted on a sheet — the dialog previews it."""
+    def _on_export_svg(self):
+        from views.svg_export import open_view_export
         item = self._selected_item()
-        if not isinstance(item, FrameItem):
-            return
-        path, _ = file_dialogs.getSaveFileName(
-            self, tr("Export view as SVG…"), "vista.svg", "SVG (*.svg)")
-        if not path:
-            return
-        if not path.lower().endswith(".svg"):
-            path += ".svg"
-        from PySide6.QtWidgets import QApplication
-        from core.sun import scene_sun_direction
-        from views.export_svg_dialog import (SvgCancelled, ask_svg_options,
-                                             faces_progress)
-        frame = item.model
-        builder = self.frame_svg_builder(frame)
-        ok, opts, paper = ask_svg_options(
-            self, builder.build,
-            tr("Frame scale ({scale})",
-               scale=format_scale(getattr(frame, "scale_n", 100.0))),
-            scene_sun_direction(self._window.viewport.scene) is not None,
-            tr("In the frame"),
-            bool(getattr(self._window.viewport.scene, "show_axes", True)),
-            builder.screen_mm, tr("The frame"),
-            hold=self._window.viewport)
-        if not ok:
-            return
-        QApplication.setOverrideCursor(Qt.WaitCursor)
-        try:
-            with faces_progress(self, self._window.viewport):
-                self.export_frame_svg(frame, path, faces=opts, paper=paper,
-                                      builder=builder)
-        except SvgCancelled:
-            self.statusBar().showMessage(tr("SVG export cancelled"), 5000)
-        finally:
-            QApplication.restoreOverrideCursor()
+        if isinstance(item, FrameItem):
+            self._window.raise_()
+            self._window.activateWindow()
+            return open_view_export(self._window, self.frame_svg_builder(item.model))
 
     def frame_faces(self, frame: MarcoVista, **options) -> list:
         """The frame's visible faces (core.vista_caras.view_faces, with its

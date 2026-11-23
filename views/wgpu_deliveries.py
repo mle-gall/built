@@ -1,6 +1,7 @@
 """Saved deliveries, one-off export form, and the window's serial export queue."""
 import json
 from collections import deque
+from contextlib import contextmanager
 from pathlib import Path
 
 from PySide6.QtCore import QTimer, QUrl
@@ -135,43 +136,14 @@ def export_form(win, key=None, one_off=False):
                 on_done=done, on_change=changed, validate=check)
 
     def preview(ticket):
-        import time
-        from core import progress
         from views.svg_export import preview_pixels
         active = win._active_view() if hasattr(win, "_active_view") else win.viewport
         record = unpack(form.values())
-        job = None
-        started = time.monotonic()
-
-        def report(fraction):
-            nonlocal job
-            if form.closed or not svg.preview_current(ticket) or win.viewport.history is not history:
-                raise InterruptedError
-            if job is None:
-                if time.monotonic() - started < PREVIEW_JOB_DELAY:
-                    return
-                job = chrome_dialogs.Job(win, "SVG preview", on_cancel=lambda: None)
-            _report_job(win, history, job, fraction)
-            if form.closed or not svg.preview_current(ticket):
-                raise InterruptedError
-
-        try:
-            report(0)
-            with progress.reporting(report):
-                text = deliveries.preview_svg(history.scene, record, camera=active.camera,
-                                              **_svg_context(win, active, history.scene, record, preview=True))
-            return preview_pixels(text)
-        except InterruptedError:
-            if job is not None:
-                job.cancel()
-            raise
-        except Exception as exc:
-            if job is not None:
-                job.end(failed=True, detail=str(exc))
-            raise
-        finally:
-            if job is not None:
-                job.end()
+        with svg_progress(win, history, "SVG preview",
+                          lambda: not form.closed and svg.preview_current(ticket)):
+            text = deliveries.preview_svg(history.scene, record, camera=active.camera,
+                                          **_svg_context(win, active, history.scene, record, preview=True))
+        return preview_pixels(text)
 
     from ingetrazo_render import show_delivery_form
     show_delivery_form(win, form, one_off, svg, preview)
@@ -199,6 +171,44 @@ def _svg_context(win, active, scene, record, preview=False):
                 scene.show_axes = old
         ctx["svg_picture"] = picture
     return ctx
+
+
+@contextmanager
+def svg_progress(win, history, label, current=lambda: True):
+    """Show slow exports in the job capsule and stop superseded previews."""
+    import time
+    from core import progress
+    started = time.monotonic()
+    job = None
+
+    def report(fraction):
+        nonlocal job
+        if not current() or win.viewport.history is not history:
+            raise InterruptedError
+        if job is None:
+            if time.monotonic() - started < PREVIEW_JOB_DELAY:
+                return
+            job = chrome_dialogs.Job(win, label, on_cancel=lambda: None)
+        _report_job(win, history, job, fraction)
+        if not current():
+            raise InterruptedError
+
+    try:
+        report(0)
+        with progress.reporting(report):
+            yield
+        report(1)
+    except InterruptedError:
+        if job is not None:
+            job.cancel()
+        raise
+    except Exception as exc:
+        if job is not None:
+            job.end(failed=True, detail=str(exc))
+        raise
+    finally:
+        if job is not None:
+            job.end()
 
 
 def _report_job(win, history, job, fraction):
