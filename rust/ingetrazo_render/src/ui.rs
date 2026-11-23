@@ -422,9 +422,11 @@ impl Ui {
         if let Some(col) = self.column.as_mut() { col.issues = on; }
     }
     pub fn reveal_row(&mut self, key: String) {
+        self.plugins.showing = false;
         if let Some(col) = self.column.as_mut() {
             col.filter.clear();
             col.highlighted = None;
+            col.filing = None;
             col.reveal = Some(key);
         }
     }
@@ -1597,9 +1599,9 @@ impl Ui {
                     let tree_h = (nodes_len as f32 * ROW_H + SPACE_XS).min(row_room).max(3.0 * ROW_H);
                     let mut scroll = egui::ScrollArea::vertical().id_salt("tree").max_height(tree_h).auto_shrink([false, false]);
                     if let Some(key) = col.reveal.take() {
-                        if let Some(index) = col.ordered.iter().position(|&i| col.nodes[i].key == key) {
-                            let pitch = ROW_H + ui.spacing().item_spacing.y;
-                            scroll = scroll.vertical_scroll_offset((index as f32 * pitch - (tree_h - pitch) * 0.5).max(0.0));
+                        let pitch = ROW_H + ui.spacing().item_spacing.y;
+                        if let Some(offset) = tree_order::reveal_offset(&col.nodes, &col.ordered, &key, pitch, tree_h) {
+                            scroll = scroll.vertical_scroll_offset(offset);
                         }
                     }
                     scroll.show_rows(ui, ROW_H, nodes_len, |ui, range| {
@@ -1616,7 +1618,7 @@ impl Ui {
                                     resp.dnd_set_drag_payload(drawing::DraggedRow::Placement { key: n.key.clone(), selected: n.selected > 0 });
                                 }
                                 // Items in the selection are lit like a picked row; nodes count them.
-                                let lit = col.highlighted.as_deref() == Some(n.key.as_str()) || n.mark == 1;
+                                let lit = n.mark == 1 || (selection.is_none() && col.highlighted.as_deref() == Some(n.key.as_str()));
                                 let file_state = if n.row == 0 { tree_cols::file_state(&n.icon) } else { None };
                                 let cols = tree_cols::Cols::plan(col.colset, rect.min.x, rect.max.x);
                                 let linked = n.row == 0 && n.key.starts_with("n:link");
@@ -1641,7 +1643,8 @@ impl Ui {
                                 let mut cells_left = f32::MAX;
                                 let warn_col = rect.max.x - 6.0;
                                 if col.colset != 0 {
-                                    let cells = &n.cells;
+                                    // Imported tag previews contain drawing attributes only.
+                                    let cells = if n.row == 6 && col.colset == 2 { &[] } else { n.cells.as_slice() };
                                     let cell = |i: usize| cells.get(i).cloned().unwrap_or_default();
                                     let inherited = n.row != 0;
                                     let ink_c = if inherited { OFF } else { DIM };

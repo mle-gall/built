@@ -62,6 +62,19 @@ impl Sort {
     }
 }
 
+/// ScrollArea virtualizes the rows. Target their sorted display index even
+/// when the occurrence is too far away to have an egui response this frame.
+pub(super) fn reveal_offset(
+    rows: &[Node],
+    order: &[usize],
+    key: &str,
+    pitch: f32,
+    height: f32,
+) -> Option<f32> {
+    let index = order.iter().position(|&i| rows[i].key == key)?;
+    Some((index as f32 * pitch - (height - pitch) * 0.5).max(0.0))
+}
+
 fn category(row: &Node) -> u8 {
     if row.icon.starts_with("file:") {
         3
@@ -134,6 +147,21 @@ mod tests {
         assert_eq!(Sort::Locked.order(&rows), [4, 0, 2, 3, 1]);
         rows[2].eye = 0;
         assert_eq!(Sort::Visible.order(&rows), [0, 1, 3, 2, 4]);
+    }
+
+    #[test]
+    fn reveal_scrolls_to_the_sorted_occurrence_outside_the_viewport() {
+        let rows: Vec<_> = (0..100)
+            .rev()
+            .map(|n| node(&format!("i:{n}"), &format!("Door {n}"), 0, 1, 0))
+            .collect();
+        let order = Sort::Name.order(&rows);
+        assert_eq!(
+            reveal_offset(&rows, &order, "i:90", 24.0, 216.0),
+            Some(2064.0)
+        );
+        assert_eq!(reveal_offset(&rows, &order, "i:0", 24.0, 216.0), Some(0.0));
+        assert_eq!(reveal_offset(&rows, &order, "i:removed", 24.0, 216.0), None);
     }
 
     #[test]
