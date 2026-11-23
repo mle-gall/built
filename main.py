@@ -727,7 +727,7 @@ def main() -> int:
     # File ▸ New Window starts a second IngeTrazo with --new-window: it must
     # NOT hand over to the running one like a double-click does, or the
     # new window never appears (issue #76).
-    new_window = "--new-window" in sys.argv[1:]
+    new_window = "--new-window" in sys.argv[1:] or bool(os.environ.get("BUILT_SETTINGS_DIR"))
     args = [a for a in sys.argv[1:]
             if a not in ("--new-window", _native.FLAG)]
     arg = args[0] if args else ""

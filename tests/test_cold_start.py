@@ -82,7 +82,12 @@ SCRIPT = textwrap.dedent(r"""
         init(win, *a, **k)
         QTimer.singleShot(int(os.environ.get("COLD_MS", "3000")), report)
     mw.MainWindow.__init__ = init_window
-    sys.argv = ["main.py", "--new-window"]
+    from PySide6.QtNetwork import QLocalServer, QLocalSocket
+    def shared_socket(*args):
+        raise AssertionError("An isolated launch accessed the interactive instance socket")
+    QLocalSocket.connectToServer = shared_socket
+    QLocalServer.removeServer = shared_socket
+    sys.argv = ["main.py"]
     M.main()
 """)
 
