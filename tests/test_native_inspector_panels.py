@@ -84,6 +84,8 @@ def test_parts_visibility_explode_reassemble_split(host):
     assert child.hidden
     run(host, "parts.visible", [g.uid, child.uid, True])
     assert not child.hidden
+    run(host, "parts.select", [g.uid, child.uid])
+    assert s.edit_group is g and child in s.selection
     run(host, "parts.explode", [g.uid, 0.5, "x"])
     assert g.exploded["factor"] == 0.5
     run(host, "parts.explode", [g.uid, 0.0, "x"])
@@ -166,7 +168,9 @@ def test_filing_rule_preview_and_undo(host):
     vp = host.viewport
     registry = bim_registry.seed_defaults()
     original = {"class": "IfcBeam"}
-    registry["structure"] = {"nodes": {"deck": {"name": "Deck", "parent": None, "order": 0, "recipe": original}}}
+    registry["structure"] = {
+        "nodes": {"deck": {"name": "Deck", "parent": None, "order": 0, "recipe": original}}
+    }
     vp.scene.plugin_data["bim_registry"] = registry
     g = Group()
     g.ext = {"structure": {"node": "deck"}}

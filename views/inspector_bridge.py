@@ -20,9 +20,11 @@ def _marked(win):
 
 def _assembly(scene):
     sel = list(scene.selection)
-    if len(sel) == 1 and isinstance(sel[0], Group):
-        return sel[0]
-    return getattr(scene, "edit_group", None)
+    group = sel[0] if len(sel) == 1 and isinstance(sel[0], Group) else None
+    if group is not None and group.children:
+        return group
+    editing = scene.edit_group
+    return editing if editing is not None and editing.children else group
 
 
 def _selection(view, win):
@@ -61,7 +63,10 @@ def _selection(view, win):
             editable=not (links.linked_ancestor(g) or g.locked),
             mode=(g.exploded or {}).get("mode", "outward"),
             factor=(g.exploded or {}).get("factor", 0),
-            children=[dict(uid=c.uid, name=c.name or "Part", hidden=c.hidden) for c in g.children],
+            children=[
+                dict(uid=c.uid, name=c.name or "Part", hidden=c.hidden, selected=c in scene.selection)
+                for c in g.children
+            ],
         )
     rule = None
     node = focus[0] if focused else structure.node_of(groups[0]) if len(groups) == 1 else None
@@ -239,7 +244,18 @@ def action(win, view, payload):
             uid = v if verb == "split" else v[0]
             if g is None or g.uid != uid or links.linked_ancestor(g) or g.locked:
                 return
-            if vp.scene.edit_group is g:
+            if verb == "select":
+                child = next((c for c in g.children if c.uid == v[1]), None)
+                if child is None or child.hidden:
+                    return
+                if vp.scene.edit_group is not g:
+                    vp.begin_group_edit(g)
+                if vp.scene.edit_group is g:
+                    vp.scene.select([child])
+                    vp.scene.bump_view()
+                    view.update()
+                return
+            if vp.scene.edit_group is g and verb in ("explode", "split"):
                 vp.end_group_edit()
                 vp.scene.select([g])
             if verb == "visible":

@@ -92,14 +92,32 @@ impl Panels {
             ui.collapsing(format!("Parts · {}", label(&p["name"])), |ui| {
                 ui.add_enabled_ui(p["editable"] == true, |ui| {
                     for child in p["children"].as_array().into_iter().flatten() {
-                        let mut visible = child["hidden"] != true;
-                        if ui.checkbox(&mut visible, label(&child["name"])).changed() {
-                            send(
-                                out,
-                                "parts.visible",
-                                json!([p["uid"], child["uid"], visible]),
-                            );
-                        }
+                        ui.push_id(label(&child["uid"]), |ui| {
+                            ui.horizontal(|ui| {
+                                let mut visible = child["hidden"] != true;
+                                if ui
+                                    .checkbox(&mut visible, "")
+                                    .on_hover_text("Show part")
+                                    .changed()
+                                {
+                                    send(
+                                        out,
+                                        "parts.visible",
+                                        json!([p["uid"], child["uid"], visible]),
+                                    );
+                                }
+                                if ui
+                                    .selectable_label(
+                                        child["selected"] == true,
+                                        label(&child["name"]),
+                                    )
+                                    .clicked()
+                                    && visible
+                                {
+                                    send(out, "parts.select", json!([p["uid"], child["uid"]]));
+                                }
+                            })
+                        });
                     }
                     if ui.button("Split into pieces").clicked() {
                         send(out, "parts.split", p["uid"].clone());
