@@ -345,13 +345,50 @@ pub fn merge_seeded_edges(
     }
 }
 
+fn restore_union<'py>(
+    mesh: &PyObj<'py>,
+    a: &PyObj<'py>,
+    b: &PyObj<'py>,
+    edges: impl IntoIterator<Item = PyObj<'py>>,
+    merged: &PyObj<'py>,
+) -> PyResult<()> {
+    mesh.call_method1("remove_face", (merged,))?;
+    for edge in edges {
+        mesh.call_method1("relink_edge", (edge,))?;
+    }
+    mesh.call_method1("relink_face", (a,))?;
+    mesh.call_method1("relink_face", (b,))?;
+    Ok(())
+}
+
 #[pyfunction]
-pub fn revert_seeded_merges(mesh: &PyObj<'_>, records: &Bound<'_, PyList>) -> PyResult<()> {
+pub fn revert_recorded_union<'py>(mesh: &PyObj<'py>, rec: &PyObj<'py>, pair: bool) -> PyResult<()> {
+    let edges = if pair {
+        rec.get_item("edges")?
+            .try_iter()?
+            .collect::<PyResult<Vec<_>>>()?
+    } else {
+        vec![rec.get_item("edge")?]
+    };
+    restore_union(
+        mesh,
+        &rec.get_item("face_a")?,
+        &rec.get_item("face_b")?,
+        edges,
+        &rec.get_item("merged")?,
+    )
+}
+
+#[pyfunction]
+pub fn revert_seeded_merges<'py>(mesh: &PyObj<'py>, records: &Bound<'py, PyList>) -> PyResult<()> {
     for r in records.iter().rev() {
-        mesh.call_method1("remove_face", (r.get_item(3)?,))?;
-        mesh.call_method1("relink_edge", (r.get_item(2)?,))?;
-        mesh.call_method1("relink_face", (r.get_item(0)?,))?;
-        mesh.call_method1("relink_face", (r.get_item(1)?,))?;
+        restore_union(
+            mesh,
+            &r.get_item(0)?,
+            &r.get_item(1)?,
+            [r.get_item(2)?],
+            &r.get_item(3)?,
+        )?;
     }
     Ok(())
 }

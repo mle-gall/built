@@ -1686,6 +1686,7 @@ class Mesh:
 
     def revert_stitch(self, rec: dict) -> None:
         """Undo a single stitch primitive recorded by the methods above."""
+        from core import doc_model
         kind = rec["kind"]
         if kind == "split":
             from ingetrazo_core import revert_object_split
@@ -1709,6 +1710,9 @@ class Mesh:
                     rec["e1"].faces.append(face)
                 if face not in rec["e2"].faces:
                     rec["e2"].faces.append(face)
+        elif kind in ("merge", "merge_pair") and doc_model.ENABLED:
+            from ingetrazo_core import revert_recorded_union
+            revert_recorded_union(self, rec, kind == "merge_pair")
         elif kind == "merge":
             self.remove_face(rec["merged"])
             self.relink_edge(rec["edge"])
