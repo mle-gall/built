@@ -9193,24 +9193,11 @@ class MainWindow(WorksessionMixin, QMainWindow):
             recovered = answer == QMessageBox.Yes
             if not recovered:
                 autosave.clear(path)
-        # A bar while it loads (issue #59, @pacaeiro): a big document took
-        # seconds with nothing on screen, «feeling of freeze». Small ones
-        # never show it (the dialog waits 400 ms before appearing).
         dlg, cb = self._import_progress(
             tr("Opening {name}…", name=path.name), monotonic=True)
-        chrome = isinstance(dlg, _dialogs.ChromeBar)
         self._open_cancelled = False
-        if chrome:
-            # The top bar's Cancel (or Esc) stops the load and keeps the
-            # window: the tab it was opening into goes.
-            dlg.canceled.connect(self._on_open_cancelled)
-            dlg.set_cancellable(True)
-        else:
-            # The bar is window-modal: while it shows, Qt drops a close of
-            # the main window before closeEvent ever hears it (a blocked
-            # window takes no close), so the X there did nothing (Windows
-            # round 0.6.2). Closing the bar itself is the user's close, then.
-            dlg.canceled.connect(self._on_open_bar_closed)
+        dlg.canceled.connect(self._on_open_cancelled)
+        dlg.set_cancellable(True)
 
         def guarded_cb(frac, text):
             # A close that landed while the file was still coming in
@@ -9255,8 +9242,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             # resident pack allocates. Only the full heap walk is deferred.
             import gc
             gc.set_threshold(self.GC_THRESHOLD0, 10, 10)
-            if chrome:
-                dlg.set_cancellable(False)  # it is in: packing cannot stop
+            dlg.set_cancellable(False)  # it is in: packing cannot stop
             self.viewport.history.clear()
             self.viewport.reset_texture_cache()
             self._forget_coordinate()
@@ -9367,14 +9353,6 @@ class MainWindow(WorksessionMixin, QMainWindow):
             self._open_in_progress = False
             self.viewport.update()
             dlg.close()
-
-    def _on_open_bar_closed(self) -> None:
-        """The progress bar of an .igz open was closed (its X, Esc) while
-        the file was coming in: the same as closing the window then (#1269)
-        — the load unwinds and the window closes. Once the load is over,
-        the bar closing on its own means nothing."""
-        if getattr(self, "_open_in_progress", False):
-            self._open_aborted = True
 
     def _on_open_cancelled(self) -> None:
         """Cancel in the top bar while an .igz is coming in: the load
@@ -10009,55 +9987,15 @@ class MainWindow(WorksessionMixin, QMainWindow):
 
 
     def _import_progress(self, title, *, monotonic=False):
-        """A modal progress dialog + the callback the loaders call at
-        milestones (big imports take ~20 s; a bar is the usual answer)."""
-        from PySide6.QtWidgets import QApplication, QProgressDialog
-        # Closed is not deleted: each open or import left its dialog behind
-        # as a child of the window for the whole session (the release check,
-        # 25-09). The previous one is surely done by the time a new one is
-        # asked for, so it goes now — never more than one alive.
+        """Publish an import job and return its loader progress callback."""
+        from PySide6.QtWidgets import QApplication
         old = getattr(self, "_progress_dlg", None)
         if old is not None:
             try:
                 old.deleteLater()
             except RuntimeError:
                 pass
-        if _dialogs.live(self) is not None:
-            # The Built UI: the work shows in the top bar (file, phase,
-            # share, Cancel where the loader can stop), never a dialog.
-            bar = _dialogs.ChromeBar(self, title)
-            self._progress_dlg = bar
-            last_chrome = 0
-
-            def chrome_cb(frac, text):
-                nonlocal last_chrome
-                value = max(0, min(100, int(frac * 100)))
-                last_chrome = max(last_chrome, value) if monotonic else value
-                bar.setValue(last_chrome)
-                bar.setLabelText(tr(text))
-                QApplication.processEvents()
-
-            return bar, chrome_cb
-
-        class _Bar(QProgressDialog):
-            def close(self):
-                # reset() stops the timer that shows the bar after
-                # minimumDuration. Without it a bar closed before it ever
-                # showed could still pop up later, window-modal, where a
-                # close of a never-shown dialog does not take (a native
-                # child in the window, offscreen platform): the update
-                # dialog then waited behind it forever.
-                self.reset()
-                self.hide()
-                return super().close()
-
-        dlg = _Bar(title, "", 0, 100, self)
-        self._progress_dlg = dlg
-        dlg.setCancelButton(None)
-        dlg.setWindowModality(Qt.WindowModal)
-        dlg.setMinimumDuration(400)
-        dlg.setAutoClose(False)
-        dlg.setAutoReset(False)
+        dlg = self._progress_dlg = _dialogs.ChromeBar(self, title)
         last = 0
 
         def cb(frac, text):

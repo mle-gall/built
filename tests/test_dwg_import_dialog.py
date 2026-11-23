@@ -11,7 +11,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from pathlib import Path  # noqa: E402
 
 import pytest  # noqa: E402
-from PySide6.QtWidgets import QApplication, QMessageBox, QPushButton  # noqa: E402
+from PySide6.QtWidgets import QApplication, QMessageBox  # noqa: E402
 
 from formats import dwg_bridge  # noqa: E402
 
@@ -69,16 +69,15 @@ def test_cancel_is_quiet_and_reported_in_the_status_bar(
     assert "cancelled" in window.statusBar().currentMessage()
 
 
-def test_the_progress_dialog_offers_cancel_and_cancel_stops_the_converter(
+def test_the_import_job_offers_cancel_and_cancel_stops_the_converter(
         window, dialogs, monkeypatch):
     seen = {}
 
     def convert(self, dwg_path):
-        dlg = window._progress_dlg
-        seen["buttons"] = [b.text() for b in dlg.findChildren(QPushButton)]
-        # The Cancel button itself (dlg.cancel() does not emit canceled;
-        # the test passed before only because dlg.close() did).
-        dlg.findChildren(QPushButton)[0].click()
+        from views import chrome_dialogs, wgpu_ui
+        job, = chrome_dialogs.jobs(window)
+        seen["cancellable"] = job.cancellable
+        wgpu_ui._run(window, [f"job:cancel:{job.id}"])
         raise dwg_bridge.DwgBridgeError("stopped", "cancelled")
 
     cancelled = []
@@ -86,5 +85,5 @@ def test_the_progress_dialog_offers_cancel_and_cancel_stops_the_converter(
     monkeypatch.setattr(dwg_bridge.DwgConverter, "cancel",
                         lambda self: cancelled.append(True))
     window._import_dwg_path(Path("x.dwg"))
-    assert seen["buttons"] == ["Cancel"]
+    assert seen["cancellable"]
     assert cancelled

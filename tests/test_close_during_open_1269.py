@@ -100,10 +100,7 @@ def test_close_during_the_load_unwinds_it_and_closes(doc, monkeypatch):
     assert not win.isVisible()
 
 
-def test_closing_the_bar_during_the_load_closes_the_window(doc, monkeypatch):
-    """The bar is window-modal, and Qt drops a close of a window a modal
-    dialog blocks: the main window's X did nothing while the bar showed
-    (Windows round 0.6.2, secador4). The bar's own X is the way out."""
+def test_cancelling_the_job_during_the_load_keeps_the_window(doc, monkeypatch):
     import formats.igz as igz
     from views.main_window import MainWindow
 
@@ -117,7 +114,7 @@ def test_closing_the_bar_during_the_load_closes_the_window(doc, monkeypatch):
             if progress is not None:
                 progress(i / 10.0, "Loading")
             if i == 1:
-                win._progress_dlg.close()     # the bar's X (or Esc)
+                win._progress_dlg.job.cancel()
 
     monkeypatch.setattr(igz, "load_into", fake_load)
     try:
@@ -126,8 +123,9 @@ def test_closing_the_bar_during_the_load_closes_the_window(doc, monkeypatch):
         monkeypatch.undo()
     assert milestones == [0, 1, 2]
     _app.processEvents()
-    assert win._closed
-    assert not win.isVisible()
+    assert not win._closed
+    assert win._current_path is None
+    win.close()
 
 
 def test_the_bar_closing_after_the_load_leaves_the_window_open(doc):
