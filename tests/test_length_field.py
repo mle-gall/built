@@ -11,7 +11,7 @@ import random
 
 import pytest
 from PySide6.QtGui import QValidator
-from PySide6.QtWidgets import QApplication, QDialog, QWidget
+from PySide6.QtWidgets import QApplication
 
 if QApplication.instance() is None:
     QApplication([])
@@ -100,105 +100,34 @@ def test_values_survive_the_field_unrounded_to_the_micron(doc):
         assert box.value() == pytest.approx(v, abs=1e-9)
 
 
-def _run_text3d_dialog(monkeypatch, params, typed):
-    """Open the real 3D Text dialog, type into its two length fields, press
-    OK; returns (what the fields showed, the parameters it returned)."""
-    from views.main_window import MainWindow
-    shown = {}
-
-    def fake_exec(dlg):
-        boxes = dlg.findChildren(LengthSpinBox)
-        assert len(boxes) == 2
-        shown["height"], shown["depth"] = boxes[0].text(), boxes[1].text()
-        for box, text in zip(boxes, typed):
-            if text is not None:
-                box.lineEdit().setText(text)
-                box.interpretText()
-        return QDialog.Accepted
-
-    monkeypatch.setattr(QDialog, "exec", fake_exec)
-    host = QWidget()
-    try:
-        out = MainWindow._text3d_dialog(host, params)
-    finally:
-        host.deleteLater()
-    return shown, out
+def test_text3d_dialog_previews_the_font():
+    from tests.test_text3d_units import exercise_picker
+    draft, (out,) = exercise_picker("m", (None, None),
+        {"text":"Abc", "font":"Georgia", "bold":True, "italic":False},
+        changes={"font":"Helvetica", "bold":False, "italic":True})
+    assert (draft["text"], draft["font"], draft["bold"], draft["italic"]) == ("Abc", "Georgia", True, False)
+    assert (out["font"], out["bold"], out["italic"]) == ("Helvetica", False, True)
 
 
-def test_text3d_dialog_previews_the_font(doc, monkeypatch):
-    """#1017: the Text box shows the chosen font, bold and italic — on
-    opening (an edited text's own) and as each control changes — while the
-    returned parameters stay what the controls say."""
-    from PySide6.QtGui import QFont, QFontDatabase
-    from PySide6.QtWidgets import QCheckBox, QFontComboBox, QLineEdit
-    from views.main_window import MainWindow
-    doc("m", 2)
-    families = [f for f in QFontDatabase.families()
-                if not QFontDatabase.isPrivateFamily(f)]
-    assert len(families) >= 2
-    rng = random.Random(1017)
-    first, second = rng.sample(families, 2)
-    seen = {}
-
-    def fake_exec(dlg):
-        edit = dlg.findChild(QLineEdit)
-        box = dlg.findChild(QFontComboBox)
-        bold, italic = dlg.findChildren(QCheckBox)
-        f = edit.font()
-        seen["open"] = (box.currentFont().family(), f.family(),
-                        f.bold(), f.italic())
-        seen["bigger"] = f.pointSizeF() > QLineEdit().font().pointSizeF()
-        box.setCurrentFont(QFont(second))
-        bold.setChecked(False)
-        italic.setChecked(True)
-        f = edit.font()
-        seen["changed"] = (box.currentFont().family(), f.family(),
-                           f.bold(), f.italic())
-        return QDialog.Accepted
-
-    monkeypatch.setattr(QDialog, "exec", fake_exec)
-    host = QWidget()
-    try:
-        out = MainWindow._text3d_dialog(
-            host, {"text": "Abc", "font": first, "bold": True,
-                   "italic": False})
-    finally:
-        host.deleteLater()
-    box_family, edit_family, b, i = seen["open"]
-    assert edit_family == box_family and (b, i) == (True, False)
-    box_family, edit_family, b, i = seen["changed"]
-    assert edit_family == box_family and (b, i) == (False, True)
-    assert seen["bigger"]
-    assert out["font"] == box_family
-    assert out["bold"] is False and out["italic"] is True
+def test_text3d_dialog_in_millimetres():
+    from tests.test_text3d_units import exercise_picker
+    draft, (out,) = exercise_picker("mm", ("20", "3"), precision=0)
+    assert draft["lengths"]["text"] == ["250 mm", "50 mm"]
+    assert out["height"] == pytest.approx(.020) and out["thickness"] == pytest.approx(.003)
 
 
-def test_text3d_dialog_in_millimetres(doc, monkeypatch):
-    doc("mm", 0)
-    shown, out = _run_text3d_dialog(
-        monkeypatch, {"text": "IngeTrazo", "height": 0.25, "thickness": 0.05},
-        ("20", "3"))
-    assert shown == {"height": "250 mm", "depth": "50 mm"}
-    assert out["height"] == pytest.approx(0.020)       # stored in metres
-    assert out["thickness"] == pytest.approx(0.003)
+def test_text3d_dialog_in_metres_is_as_before():
+    from tests.test_text3d_units import exercise_picker
+    draft, (out,) = exercise_picker("m", (None, "20cm"))
+    assert draft["lengths"]["text"] == ["0.250 m", "0.050 m"]
+    assert out["height"] == pytest.approx(.25) and out["thickness"] == pytest.approx(.20)
 
 
-def test_text3d_dialog_in_metres_is_as_before(doc, monkeypatch):
-    doc("m", 2)
-    shown, out = _run_text3d_dialog(
-        monkeypatch, {"text": "IngeTrazo", "height": 0.25, "thickness": 0.05},
-        (None, "20cm"))
-    assert shown == {"height": "0.250 m", "depth": "0.050 m"}
-    assert out["height"] == pytest.approx(0.25)
-    assert out["thickness"] == pytest.approx(0.20)
-
-
-def test_text3d_dialog_in_inches(doc, monkeypatch):
-    doc("in-frac", 2)
-    shown, out = _run_text3d_dialog(
-        monkeypatch, {"text": "A", "height": 2 * IN, "thickness": 0.25 * IN},
-        ("1 1/2", None))
-    assert shown == {"height": '2"', "depth": '1/4"'}
+def test_text3d_dialog_in_inches():
+    from tests.test_text3d_units import exercise_picker
+    draft, (out,) = exercise_picker("in-frac", ("1 1/2", None),
+        {"text": "A", "height": 2 * IN, "thickness": .25 * IN})
+    assert draft["lengths"]["text"] == ['2"', '1/4"']
     assert out["height"] == pytest.approx(1.5 * IN)
 
 

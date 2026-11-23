@@ -499,7 +499,7 @@ impl Gallery {
             if quiet(ui, "Font picker…").clicked() {
                 self.font_picker = Some(FontPicker::new(FontChoice {
                     title: "Sheet text".into(), text: "Ground floor".into(), font: "Helvetica".into(),
-                    bold: false, italic: false, height: 14., thickness: None,
+                    bold: false, italic: false, height: 14., thickness: None, lengths: None,
                     minimum: 4., maximum: 96., unit: " pt".into(), editable: true,
                     recent: vec!["Helvetica".into()], favourites: vec!["Georgia".into()],
                 }));

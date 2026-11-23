@@ -1083,6 +1083,8 @@ pub struct FontChoice {
     pub italic: bool,
     pub height: f64,
     pub thickness: Option<f64>,
+    #[serde(default)]
+    pub lengths: Option<crate::font_lengths::FontLengths>,
     pub unit: String,
     pub minimum: f64,
     pub maximum: f64,
@@ -1317,23 +1319,33 @@ impl FontPicker {
             toggle(ui, &mut self.choice.bold, "Bold");
             toggle(ui, &mut self.choice.italic, "Italic");
             ui.label("Size");
-            ui.add(
-                number(&mut self.choice.height, &self.choice.unit)
-                    .range(self.choice.minimum..=self.choice.maximum),
-            );
+            if let Some(lengths) = &mut self.choice.lengths {
+                lengths.edit(0, ui, &mut self.choice.height, self.choice.minimum, self.choice.maximum);
+            } else {
+                ui.add(number(&mut self.choice.height, &self.choice.unit).range(self.choice.minimum..=self.choice.maximum));
+            }
         });
         if let Some(depth) = &mut self.choice.thickness {
             ui.horizontal(|ui| {
                 ui.label("Extrusion");
-                ui.add(number(depth, &self.choice.unit).range(0.0..=self.choice.maximum));
+                if let Some(lengths) = &mut self.choice.lengths {
+                    lengths.edit(1, ui, depth, 0., self.choice.maximum);
+                } else {
+                    ui.add(number(depth, &self.choice.unit).range(0.0..=self.choice.maximum));
+                }
             });
         }
+        let length_error = self.choice.lengths.as_ref().and_then(|draft| draft.error());
+        if let Some(message) = length_error {
+            caption_plain(ui, message);
+        }
+        let lengths_valid = length_error.is_none();
         let mut answer = None;
         ui.horizontal(|ui| {
             if quiet(ui, "Cancel").clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
                 answer = Some(false);
             }
-            let valid = rows.contains(&self.choice.font)
+            let valid = lengths_valid && rows.contains(&self.choice.font)
                 && (!self.choice.editable || !self.choice.text.trim().is_empty());
             ui.add_enabled_ui(valid, |ui| {
                 if sheet_button(ui, "Apply", "↩", 1) || valid && ui.input(|i| i.key_pressed(Key::Enter)) {
@@ -1488,6 +1500,7 @@ mod font_picker_tests {
             minimum: 6.,
             maximum: 28.,
             thickness: None,
+            lengths: None,
             unit: " pt".into(),
             editable: false,
             recent: vec!["C".into()],
