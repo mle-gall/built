@@ -61,8 +61,10 @@ def test_native_and_classic_share_normal_profile(tmp_path):
     script = """
         import sys
         from pathlib import Path
-        from PySide6.QtCore import QSettings, QStandardPaths
-        assert QSettings("BuiltProfileProbe", "Probe").value("home") == str(Path.home())
+        from PySide6.QtCore import QCoreApplication, QSettings, QStandardPaths
+        QCoreApplication.setOrganizationName("BuiltProfileProbe")
+        QCoreApplication.setApplicationName("Probe")
+        assert QSettings().value("home") == str(Path.home())
         def exchange():
             from core import recent, general_settings
             st = QSettings()
