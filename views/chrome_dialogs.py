@@ -129,14 +129,14 @@ def _inside_view_area(widget, win) -> bool:
 # ---- The sheet ---------------------------------------------------------------
 class _Sheet:
     __slots__ = ("title", "text", "tone", "buttons", "default", "cancel",
-                 "discard", "answer", "loop", "shown", "blocking", "done", "checklist")
+                 "discard", "answer", "event_loop", "shown", "blocking", "done", "checklist")
 
     def __init__(self, title, text, tone, buttons, default, cancel, discard, blocking):
         self.title, self.text, self.tone = title, text, tone
         self.buttons = buttons          # [(id, label, key hint, role)]
         self.default, self.cancel, self.discard = default, cancel, discard
         self.answer = None
-        self.loop = None
+        self.event_loop = None
         self.shown = False
         self.blocking = blocking
         self.checklist = None
@@ -184,7 +184,7 @@ def ask(parent, title: str, text: str, buttons, *, default=None, cancel=None,
                    default, cancel, discard, True)
     sheet.checklist = checklist
     loop = QEventLoop()
-    sheet.loop = loop
+    sheet.event_loop = loop
     _push(win, sheet)
     frames = getattr(view, "_ui_frames", 0)
 
@@ -398,8 +398,8 @@ def answer(win, bid: str) -> bool:
         return False
     sheet.answer = bid
     if sheet.blocking:
-        if sheet.loop is not None:
-            sheet.loop.quit()
+        if sheet.event_loop is not None:
+            sheet.event_loop.quit()
     else:
         _pop(win, sheet)
         if sheet.done is not None:
