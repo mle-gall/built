@@ -441,8 +441,8 @@ pub fn prepare(doc: &mut Doc, owner: Key) {
         current = parent;
     }
     if has_layout && doc.open.is_none() {
-        doc.begin();
-        doc.implicit_assembly = true;
+        let document = root_of(doc, owner, true);
+        doc.implicit_assembly = doc.begin(document).is_some();
     }
 }
 

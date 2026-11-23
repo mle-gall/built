@@ -2386,15 +2386,16 @@ fn doc_new_root(py: Python<'_>) -> PyResult<Py<PyPlacement>> {
     Py::new(py, PyPlacement { key })
 }
 
-/// Open a transaction (or a savepoint inside the open one). Returns the
-/// depth; 0 when another thread's transaction is open (not journalled).
+/// Reserve the writer before flushing pending aliases and taking the mark.
 #[pyfunction]
-fn doc_begin() -> usize {
-    let depth = lock().begin();
-    if depth > 0 {
-        super::geometry::begin();
-    }
-    depth
+#[pyo3(signature=(document=None))]
+fn doc_begin(py: Python<'_>, document: Option<Key>) -> PyResult<usize> {
+    let _writer = super::Writer::acquire(py, document)?;
+    py.import("core.doc_model")?.call_method0("flush")?;
+    let depth = { lock().begin(document) }
+        .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("Document writer reservation lost"))?;
+    super::geometry::begin();
+    Ok(depth)
 }
 
 #[pyfunction]

@@ -27,7 +27,7 @@ fn replay_direct(
     };
     let action = cmd.getattr(if undo { "undo" } else { "do" })?;
     let doc = py.import("core.doc_model")?;
-    doc.call_method0("begin")?;
+    doc.call_method1("begin", (scene.getattr("_root")?.getattr("_doc_key")?,))?;
     host.setattr("last_txn", py.None())?;
     let result = (|| {
         host.call_method1("_in_command_mesh", (cmd, action, scene))?;
@@ -182,6 +182,10 @@ impl DocumentHistory {
         undo: bool,
         sheet: bool,
     ) -> PyResult<()> {
+        let document = if sheet { None } else {
+            Some(host.getattr("scene")?.getattr("_root")?.getattr("_doc_key")?.extract()?)
+        };
+        let _writer = super::Writer::acquire(py, document)?;
         let (source, dest) = if undo {
             (&slf.undo, &slf.redo)
         } else {

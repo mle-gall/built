@@ -557,12 +557,11 @@ def record_fields(*names, extra=()):
 
 # ----------------------------------------------------------- transactions
 
-def begin() -> int:
+def begin(document=None) -> int:
     """Open the step's transaction (or a savepoint in the open one). In-place
     edits of tracked containers made before it are written back first, so
     they are not this step's."""
-    flush()
-    return NATIVE.doc_begin()
+    return NATIVE.doc_begin(document)
 
 
 def commit():
