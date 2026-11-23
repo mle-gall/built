@@ -2747,6 +2747,7 @@ fn large_sheet_check(spec: &str) -> String {
 }
 
 mod surfaces;
+mod component_catalogue;
 mod extension_previews;
 mod extensions;
 mod release;
@@ -2793,6 +2794,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(parallel_annotation_ray, m)?)?;
     m.add_function(wrap_pyfunction!(preview_texture::preview_materials, m)?)?;
     m.add_class::<extensions::ExtensionBrowser>()?;
+    m.add_class::<component_catalogue::ComponentCatalogue>()?;
     m.add_function(wrap_pyfunction!(surfaces::surface_spec, m)?)?;
     m.add_function(wrap_pyfunction!(large_sheet_check, m)?)?;
     m.add_function(wrap_pyfunction!(panic_log::install_panic_log, m)?)?;

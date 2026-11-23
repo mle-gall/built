@@ -159,6 +159,11 @@ _inflight: set = set()
 _lock = threading.Lock()
 
 
+def thumbnails_pending() -> bool:
+    with _lock:
+        return bool(_inflight)
+
+
 def prefetch_thumbnails(idents) -> None:
     """Warm the cache for ``idents`` in the background.
 

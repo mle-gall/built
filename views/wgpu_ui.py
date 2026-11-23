@@ -2876,8 +2876,13 @@ def _run(win, actions, source_view=None) -> None:
             view = getattr(getattr(win, "_doc", None), "stand_in", None)
             hits = getattr(view, "_ui_cmd_hits", [])
             i = int(arg or 0)
-            if 0 <= i < len(hits) and hits[i].isEnabled():
-                hits[i].trigger()
+            if 0 <= i < len(hits):
+                from shiboken6 import isValid
+                from views.command_metadata import remember
+                action = hits[i]
+                if isValid(action) and action.isVisible() and action.isEnabled():
+                    remember(action)
+                    action.trigger()
         elif kind == "proj":
             _project_action(win, arg)
         elif kind == "ptab":
@@ -3153,7 +3158,8 @@ def _form_apply(win, view, arg) -> None:
     view.update()
 
 
-_KEYS = {Qt.Key_Escape: "Escape", Qt.Key_Return: "Enter", Qt.Key_Enter: "Enter",
+_KEYS = {Qt.Key_PageUp: "PageUp", Qt.Key_PageDown: "PageDown", Qt.Key_Escape: "Escape",
+         Qt.Key_Return: "Enter", Qt.Key_Enter: "Enter",
          Qt.Key_Backspace: "Backspace", Qt.Key_Delete: "Delete", Qt.Key_Tab: "Tab",
          Qt.Key_Up: "ArrowUp", Qt.Key_Down: "ArrowDown", Qt.Key_Left: "ArrowLeft",
          Qt.Key_Right: "ArrowRight", Qt.Key_Home: "Home", Qt.Key_End: "End",
@@ -3167,42 +3173,22 @@ def _opens_commands(event) -> bool:
 
 
 def _all_commands(win):
-    """Every command of the window's menus: (label, path, shortcut, action)."""
-    cached = getattr(win, "_ui_commands", None)
-    if cached is not None:
-        return cached
-    out = []
-
-    def walk(menu, path):
-        for a in menu.actions():
-            if a.isSeparator():
-                continue
-            text = a.text().replace("&", "")
-            if a.menu():
-                walk(a.menu(), path + [text])
-            elif text:
-                out.append((text, " › ".join(path), a.shortcut().toString(QKeySequence.NativeText), a))
-    for a in win.menuBar().actions():
-        if a.menu():
-            walk(a.menu(), [a.text().replace("&", "")])
-    win._ui_commands = out
-    return out
+    from views.command_metadata import commands
+    return [(cmd.name, cmd.path, cmd.keys, cmd.action) for cmd in commands(win)]
 
 
 def _command_query(view, win, query) -> None:
-    words = query.lower().split()
-    cmds = _all_commands(win)
-    hits = []
-    for label, path, key, act in cmds:
-        hay = (label + " " + path).lower()
-        if all(w in hay for w in words):
-            # Label starts first, then label contains, then path only.
-            rank = 0 if words and label.lower().startswith(words[0]) else 1 if words and words[0] in label.lower() else 2
-            hits.append((rank, label, path, key, act))
-    hits.sort(key=lambda h: (h[0], h[1].lower()))
-    hits = hits[:12]
-    view._ui_cmd_hits = [h[4] for h in hits]
-    view.renderer.ui_set_command_results([(h[1], h[2], h[3], h[4].isEnabled()) for h in hits])
+    from shiboken6 import isValid
+    from views import command_metadata, wgpu_sheets
+    workspace = wgpu_sheets.workspace_of(view)
+    owner = workspace.composer if workspace is not None else win
+    if not query or getattr(view, "_ui_command_owner", None) is not owner:
+        view._ui_command_pool = command_metadata.commands(owner)
+        view._ui_command_owner = owner
+    live = [c for c in view._ui_command_pool if isValid(c.action) and c.action.isVisible()]
+    hits = command_metadata.search(owner, query, pool=live)
+    view._ui_cmd_hits = [c.action for c in hits]
+    view.renderer.ui_set_command_results([(c.name, c.path, c.keys, c.action.isEnabled()) for c in hits])
 
 
 def _problem_key(view, event) -> int:

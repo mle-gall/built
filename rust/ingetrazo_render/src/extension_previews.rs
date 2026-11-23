@@ -26,7 +26,7 @@ type Pixels = Arc<[u8]>;
 type MemoryKey = (PathBuf, SystemTime, u64);
 static MEMORY: LazyLock<Mutex<HashMap<MemoryKey, Pixels>>> = LazyLock::new(Default::default);
 
-fn read(path: &Path) -> Option<Vec<u8>> {
+pub(crate) fn read(path: &Path) -> Option<Vec<u8>> {
     let mut data = Vec::new();
     fs::File::open(path)
         .ok()?
@@ -67,7 +67,7 @@ fn digest(value: impl Hash) -> String {
 #[cfg(test)]
 thread_local! {static DECODES: std::cell::Cell<usize> = const {std::cell::Cell::new(0)};}
 
-fn decode(bytes: &[u8]) -> Option<DynamicImage> {
+pub(crate) fn decode(bytes: &[u8]) -> Option<DynamicImage> {
     #[cfg(test)]
     DECODES.with(|n| n.set(n.get() + 1));
     let mut reader = ImageReader::new(Cursor::new(bytes))

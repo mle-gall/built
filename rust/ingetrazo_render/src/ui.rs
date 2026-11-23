@@ -124,6 +124,7 @@ pub struct Ui {
     cmd_results: Vec<(String, String, String, bool)>,
     cmd_at: usize,
     cmd_focus: bool,
+    cmd_scroll: bool,
     /// The open bar menu: kind ("docs", "work", "scenes") and its button.
     menu: Option<(String, Rect)>,
     view_anchor: Rect,
@@ -291,6 +292,7 @@ impl Ui {
             cmd_results: Vec::new(),
             cmd_at: 0,
             cmd_focus: false,
+            cmd_scroll: false,
             menu: None,
             view_anchor: Rect::NOTHING,
             sel_more_anchor: Rect::NOTHING,
@@ -485,7 +487,8 @@ impl Ui {
     }
     pub fn set_command_results(&mut self, results: Vec<(String, String, String, bool)>) {
         self.cmd_results = results;
-        self.cmd_at = self.cmd_at.min(self.cmd_results.len().saturating_sub(1));
+        self.cmd_at = self.cmd_results.iter().position(|row| row.3).unwrap_or(0);
+        self.cmd_scroll = true;
     }
     pub fn set_palette(&mut self, items: Vec<(String, String, String, String, bool)>) { self.palette_items = items; }
     /// Opens (or refreshes) the settings form; an empty title closes it.
@@ -589,14 +592,24 @@ impl Ui {
         if self.cmd_open && pressed {
             match name {
                 "Escape" => { self.cmd_open = false; self.ctx.memory_mut(|m| m.stop_text_input()); return true; }
-                "ArrowDown" => { self.cmd_at = (self.cmd_at + 1).min(self.cmd_results.len().saturating_sub(1)); return true; }
-                "ArrowUp" => { self.cmd_at = self.cmd_at.saturating_sub(1); return true; }
+                "ArrowDown" | "ArrowUp" | "PageDown" | "PageUp" => {
+                    let forward = matches!(name, "ArrowDown" | "PageDown");
+                    let count = if name.starts_with("Page") { 10 } else { 1 };
+                    let last = self.cmd_results.len().saturating_sub(1);
+                    let start = if forward { self.cmd_at.saturating_add(count).min(last) }
+                        else { self.cmd_at.saturating_sub(count) };
+                    let enabled = |&i: &usize| self.cmd_results[i].3;
+                    let hit = if forward { (start..self.cmd_results.len()).find(enabled) }
+                        else { (0..=start).rev().find(|&i| self.cmd_results.get(i).is_some_and(|r| r.3)) };
+                    if let Some(i) = hit { self.cmd_at = i; self.cmd_scroll = true; }
+                    return true;
+                }
                 "Enter" => {
                     if self.cmd_results.get(self.cmd_at).is_some_and(|r| r.3) {
                         self.actions.push(format!("cmdrun:{}", self.cmd_at));
+                        self.cmd_open = false;
+                        self.ctx.memory_mut(|m| m.stop_text_input());
                     }
-                    self.cmd_open = false;
-                    self.ctx.memory_mut(|m| m.stop_text_input());
                     return true;
                 }
                 _ => {}
@@ -1173,19 +1186,17 @@ impl Ui {
                     if r.changed() { changed = true; self.cmd_at = 0; }
                     ui.add_space(SPACE_S);
                     ui.spacing_mut().item_spacing = vec2(0.0, 1.0);
-                    for (i, (label, path, key, enabled)) in self.cmd_results.iter().enumerate() {
-                        let (rect, resp) = ui.allocate_exact_size(vec2(520.0 - 16.0, CONTROL_H), Sense::click());
-                        if i == self.cmd_at { ui.painter().rect_filled(rect, CornerRadius::same(R_ROW), ACTIVE); }
-                        else if resp.hovered() { ui.painter().rect_filled(rect, CornerRadius::same(R_ROW), HOVER); }
-                        let ink = if *enabled { INK } else { OFF };
-                        let g = ui.painter().layout_no_wrap(label.clone(), body(), ink);
-                        let lw = g.size().x;
-                        ui.painter().galley(pos2(rect.min.x + 10.0, rect.center().y - g.size().y / 2.0), g, ink);
-                        ui.painter().text(pos2(rect.min.x + 18.0 + lw, rect.center().y), egui::Align2::LEFT_CENTER, path, meta(), FAINT);
-                        ui.painter().text(pos2(rect.max.x - 10.0, rect.center().y), egui::Align2::RIGHT_CENTER, key, meta(), FAINT);
-                        if resp.clicked() && *enabled { run = Some(i); }
-                        if resp.hovered() && ui.input(|i| i.pointer.delta() != Vec2::ZERO) { self.cmd_at = i; }
-                    }
+                    egui::ScrollArea::vertical().max_height((CONTROL_H + 1.0) * 10.0).show(ui, |ui| {
+                        for (i, (label, path, key, enabled)) in self.cmd_results.iter().enumerate() {
+                            let row = command_row(ui, label, path, key, *enabled, self.cmd_at == i);
+                            if self.cmd_scroll && i == self.cmd_at { row.scroll_to_me(None); }
+                            if *enabled && row.clicked() { run = Some(i); }
+                            if *enabled && row.hovered() && ui.input(|i| i.pointer.delta() != Vec2::ZERO) {
+                                self.cmd_at = i;
+                            }
+                        }
+                    });
+                    self.cmd_scroll = false;
                     if self.cmd_results.is_empty() && !self.cmd_query.is_empty() {
                         ui.label(egui::RichText::new("No command matches").font(body()).color(FAINT));
                     }

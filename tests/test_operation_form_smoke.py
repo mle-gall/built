@@ -280,3 +280,63 @@ def test_native_location_coordinates_map_apply_and_cancel(tmp_path):
     assert loaded.georef.lat == pytest.approx(48.85, abs=1e-5)
     assert loaded.georef.lon == pytest.approx(2.35 - 35 * 360 / (256 * 2**12), abs=.0004)
     assert loaded.georef.north == 31
+
+
+@pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
+                    reason="requires a built window and BUILT_WINDOW_TESTS=1")
+def test_native_online_catalogue_places_the_credited_component(tmp_path):
+    import zipfile
+    from core.scene import Scene
+    from formats.igz import save_scene, load_into
+
+    src = tmp_path / "catalogue"
+    (src / "modelos").mkdir(parents=True)
+    entry = {"id": "stool", "nombre": "Taburete", "nombre_en": "Stool",
+             "categoria": "Cocina", "autor": "Ana", "licencia": "CC BY", "obj": "stool.obj"}
+    (src / "index.json").write_text(json.dumps({"modelos": [entry]}))
+    with zipfile.ZipFile(src / "modelos/stool.zip", "w") as package:
+        package.writestr("stool.obj", "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n")
+    initial, saved = tmp_path / "empty.built", tmp_path / "placed.built"
+    save_scene(Scene(), initial)
+    steps = tmp_path / "commands"
+    steps.write_text("wait 600\nkey escape\nmenu library\nwait 450\nclick 174 135\nwait 250\n"
+                     "click 118 335\nwait 600\nstate\nkey enter\nwait 600\nstate\n"
+                     f"click 525 540\nwait 300\nkey escape\nmenu save_to:{saved}\nwait 450\nquit\n")
+    home = tmp_path / "home"
+    home.mkdir()
+    result = run([str(BIN), "--root", str(ROOT), "--venv", str(ROOT / ".venv"), "--new-instance",
+                  "--size", "1000x920", "--script", str(steps), str(initial)],
+                 env=dict(os.environ, INGETRAZO_LIBRARY=str(src), INGETRAZO_TEXTURE_CACHE=str(tmp_path / "cache/tex"),
+                          BUILT_ANSWERS="escape,cmd-d"), home=home, settings=tmp_path / "profile",
+                 capture_output=True, text=True, timeout=60)
+    log = result.stdout + result.stderr
+    states = [json.loads(line.removeprefix("[built] state ")) for line in log.splitlines()
+              if line.startswith("[built] state ")]
+    assert result.returncode == 0 and [s["large_sheet"] for s in states[:2]] == ["library", ""], log
+    assert all(not s["errors"] and not s["blocked_widgets"] for s in states), log
+    scene = Scene()
+    load_into(scene, saved)
+    assert any((g.ext or {}).get("catalogue", {}).get("autor") == "Ana" for g in scene.groups), log
+
+
+@pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
+                    reason="requires a built window and BUILT_WINDOW_TESTS=1")
+def test_native_f3_finds_and_runs_a_misspelled_command(tmp_path):
+    from core.scene import Scene
+    from formats.igz import save_scene
+    path = tmp_path / "empty.built"
+    save_scene(Scene(), path)
+    steps = tmp_path / "f3"
+    steps.write_text("wait 600\nkey escape\nkey f3\nwait 250\ntype cut lsit\nwait 300\n"
+                     "key enter\nwait 350\nstate\nkey escape\nwait 300\nstate\nquit\n")
+    home = tmp_path / "home"
+    home.mkdir()
+    result = run([str(BIN), "--root", str(ROOT), "--venv", str(ROOT / ".venv"),
+                  "--new-instance", "--size", "1000x720", "--script", str(steps), str(path)],
+                 env=dict(os.environ, BUILT_ANSWERS="escape"), home=home,
+                 settings=tmp_path / "profile", capture_output=True, text=True, timeout=45)
+    log = result.stdout + result.stderr
+    states = [json.loads(line.removeprefix("[built] state ")) for line in log.splitlines()
+              if line.startswith("[built] state ")]
+    assert result.returncode == 0 and [s["large_sheet"] for s in states[:2]] == ["cutlist", ""], log
+    assert all(not s["errors"] and not s["blocked_widgets"] for s in states), log

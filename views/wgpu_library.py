@@ -849,6 +849,7 @@ class LibrarySheet(_chrome_sheet().Provider):
 
     def __init__(self, view):
         self.view = view
+        self.catalogue = None
 
     def signature(self, ctx):
         win = ctx.win
@@ -889,7 +890,8 @@ class LibrarySheet(_chrome_sheet().Provider):
                                     for i, lab in sorts]})
         scope = st.get("scope") or "s:model"
         sides = side_rows(items, st)
-        if scope not in {r[0] for r in sides if r[0]}:
+        online = prov.id == "components" and scope == "s:online"
+        if not online and scope not in {r[0] for r in sides if r[0]}:
             scope = st["scope"] = "s:model"
         searching = bool(st["filter"].strip()) and not st["filter"].strip().startswith("is:")
         for rid, lab, n, depth, kind, fold in sides:
@@ -898,6 +900,17 @@ class LibrarySheet(_chrome_sheet().Provider):
             else:
                 s.side_item(rid, lab, right=str(n) if n else "", depth=depth, kind=kind, fold=fold,
                             on=rid == scope and not searching)
+        if prov.id == "components":
+            from core.i18n import tr
+            s.side_item("s:online", tr("Component library"), on=online)
+        if online or (prov.id == "components" and searching):
+            from views.component_catalogue import CatalogueSession
+            if self.catalogue is None:
+                self.catalogue = CatalogueSession(ctx)
+            if not searching:
+                return self.catalogue.build(s, "")
+        else:
+            self.close_catalogue()
         groups = groups_for(items, st)
         shown = [e for _c, _s, members in groups for e in members]
         if searching:
@@ -924,7 +937,7 @@ class LibrarySheet(_chrome_sheet().Provider):
         s.footer((), "Click to see it · double-click or ↩ uses it · esc back to the model")
         if st.get("cursor"):
             s.focus(st["cursor"], force=bool(st.pop("force_focus", False)))
-        return s
+        return self.catalogue.build(s, st["filter"]) if self.catalogue is not None else s
 
     def _empty(self, prov, scope):
         if scope == "s:mine":
@@ -1013,6 +1026,13 @@ class LibrarySheet(_chrome_sheet().Provider):
                 if title == "Actions":
                     continue
                 d.kv(rows)
+        row = prov._row(lctx, e) if e["key"].startswith("cm:") else None
+        if row:
+            group = row[3] or next(iter(row[2]), None)
+            if record := (getattr(group, "ext", None) or {}).get("catalogue"):
+                from core.i18n import current_language, tr
+                from ingetrazo_render import ComponentCatalogue
+                d.text(ComponentCatalogue.credit_line(json.dumps(record), current_language(), tr))
         verbs = [cs.verb("apply", "Place a copy", key="↩", primary=True)]
         if e["key"].startswith("cm:"):
             verbs += [cs.verb("select", "Select copies"), cs.verb("edit", "Open for editing")]
@@ -1045,6 +1065,16 @@ class LibrarySheet(_chrome_sheet().Provider):
         st = _state(view)
         arg = args[0] if args else ""
         lctx = Ctx(win, view)
+        if self.catalogue is not None:
+            if verb == "tab" or (verb == "side" and arg != "s:online" and not arg.startswith("online-cat:")):
+                self.close_catalogue()
+            elif verb == "side":
+                st["scope"] = "s:online"
+                self.catalogue.act(verb, args)
+                _save_state(st)
+                return
+            elif self.catalogue.act(verb, args):
+                return
         if verb == "search":
             st["filter"] = arg
         elif verb == "tab":
@@ -1101,6 +1131,14 @@ class LibrarySheet(_chrome_sheet().Provider):
         if verb == "apply" or (verb == "edit" and prov.id == "materials"):
             # Painting, placing and the material inspector use the model workspace.
             _chrome_sheet().close(win)
+
+    def close_catalogue(self):
+        if self.catalogue is not None:
+            self.catalogue.close()
+            self.catalogue = None
+
+    def closed(self, ctx):
+        self.close_catalogue()
 
 def refresh(win) -> None:
     _chrome_sheet().refresh(win)
@@ -1198,7 +1236,6 @@ def install(win) -> None:
     comp.triggered.connect(lambda: open_library(win, "components"))
     win._act_library_components = comp
     win._lib_actions = acts
-    win._ui_commands = None
     _register_icon()
 
 

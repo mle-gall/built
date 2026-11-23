@@ -60,6 +60,19 @@ def _rank(query, *labels):
     return ss.rank(query, entries)
 
 
+def test_command_index_preserves_group_boundaries_and_scores():
+    item = ss.Item(["Módelo", "", "Reverse-Faces"])
+    assert ss.words_of("Módelo ▸ Reverse-Faces") == list(item.words)
+    assert item.words == ("modelo", "reverse", "faces")
+    assert item.main == (False, True, True)
+    assert (item.main_length, item.total_length) == (12, 19)
+    assert ss.score(["rev"], item) == 1010
+    assert ss.score(["mod"], item) == 1009
+    assert ss.score(["missing"], item) is None
+    assert ss.fuzzy_errors("revs", "revs") == 0
+    assert ss.fuzzy_errors("os", "") == -1
+
+
 def test_every_word_typed_must_be_found():
     assert _rank("orient", "Orient Faces") == ["Orient Faces"]
     assert _rank("faces orient", "Orient Faces") == ["Orient Faces"]
@@ -386,6 +399,35 @@ def test_the_main_window_does_not_list_the_composers_commands(ventana):
     names = _names(ventana, "")
     assert "Chain dimension" not in names and "Ungroup" not in names
     assert "Orient Faces" in names
+
+
+def test_native_command_results_follow_the_workspace_and_live_actions(ventana):
+    from PySide6.QtWidgets import QMainWindow
+    from types import SimpleNamespace
+    from shiboken6 import delete
+    from views.wgpu_ui import _command_query
+
+    rows = []
+    view = SimpleNamespace(renderer=SimpleNamespace(ui_set_command_results=rows.append))
+    plugin = QAction("Frobnicate the walls", ventana)
+    ventana.addAction(plugin)
+    _command_query(view, ventana, "frobnic")
+    assert view._ui_cmd_hits == [plugin]
+    delete(plugin)
+    _command_query(view, ventana, "frobnic")
+    assert rows[-1] == []
+
+    composer = QMainWindow(ventana)
+    composer.addAction(QAction("Chain dimension", composer))
+    try:
+        view._sheets_ws = SimpleNamespace(shown=True, view=view, composer=composer)
+        _command_query(view, ventana, "chain dim")
+        assert rows[-1][0][0] == "Chain dimension"
+        view._sheets_ws.shown = False
+        _command_query(view, ventana, "chain dim")
+        assert all(r[0] != "Chain dimension" for r in rows[-1])
+    finally:
+        composer.close()
 
 
 def test_a_composer_tool_has_a_short_name_and_its_sentence_as_tip(ventana):
