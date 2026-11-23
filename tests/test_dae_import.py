@@ -417,24 +417,24 @@ def test_repeated_components_share_one_prototype(tmp_path, monkeypatch):
 
 
 def test_instance_edit_flows_make_unique():
-    """Entering an instance materializes it (make unique); exploding an
-    instance lands its geometry at the WORLD position."""
-    from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
+    """Editing uses world coordinates. Make Unique gives a placement an
+    independent definition, and Explode lands geometry at its world position."""
+    from ingetrazo_core import Matrix4, Vec3
     from core.group import Group
     from core.mesh import Mesh
-    from core.history import History, ExplodeGroupCommand
+    from core.history import AddEdgeCommand, ExplodeGroupCommand, History, MakeUniqueCommand
 
     scene = Scene()
     proto = Mesh()
-    proto.add_face([QVector3D(0, 0, 0), QVector3D(1, 0, 0),
-                    QVector3D(1, 1, 0), QVector3D(0, 1, 0)])
+    proto.add_face([Vec3(0, 0, 0), Vec3(1, 0, 0),
+                    Vec3(1, 1, 0), Vec3(0, 1, 0)])
     g1, g2 = Group(proto, name="a"), Group(proto, name="b")
-    m = QMatrix4x4(); m.translate(10, 0, 0)
-    g1.xform = QMatrix4x4()
+    m = Matrix4()
+    m.translate(10, 0, 0)
+    g1.xform = Matrix4()
     g2.xform = m
     scene.groups.extend([g1, g2])
 
-    # The active mesh exposes world coordinates in both engines.
     scene.begin_group_edit(g2)
     if scene._edit_stack[-1].get("affine"):
         assert g2.mesh is proto and g2.xform == m
@@ -445,16 +445,25 @@ def test_instance_edit_flows_make_unique():
     xs = {round(v.position.x(), 3) for v in scene.mesh.vertices}
     assert xs == {10.0, 11.0}
     scene.end_group_edit()
-    assert g1.mesh is proto and g1.xform is not None   # sibling untouched
+    assert g1.mesh is g2.mesh is proto and g2.xform == m
+
+    hist = History(scene)
+    hist.execute(MakeUniqueCommand(g2))
+    assert g2.mesh is not proto
+    scene.begin_group_edit(g2)
+    hist.execute(AddEdgeCommand(Vec3(12, 0, 0), Vec3(13, 0, 0)))
+    assert len(scene.mesh.edges) == 5 and len(g1.mesh.edges) == 4
+    assert hist.undo()
+    scene.end_group_edit()
+    assert hist.undo() and g2.mesh is proto and g2.xform == m
 
     # exploding an instance drops world-space geometry into the loose mesh
-    hist = History(scene)
-    hist.execute(ExplodeGroupCommand(g1))
-    assert g1 not in scene.groups
+    hist.execute(ExplodeGroupCommand(g2))
+    assert g2 not in scene.groups
     xs = {round(v.position.x(), 3) for v in scene.mesh.vertices}
-    assert xs == {0.0, 1.0}
-    hist.undo()
-    assert g1 in scene.groups and not scene.mesh.faces
+    assert xs == {10.0, 11.0}
+    assert hist.undo()
+    assert g2 in scene.groups and g2.mesh is proto and not scene.mesh.faces
 
 
 def _lines_dae(tmp_path, with_face=True):
