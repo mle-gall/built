@@ -2132,22 +2132,12 @@ def fold_nonplanar_faces(mesh, tolerance: float = _PLANAR_TOLERANCE,
     its fan are soft, so the cone reads as one smooth surface, as the
     curve's own wall did; the fold between the flat piece and the cone
     stays a line."""
-    from core import doc_model
-    from core.store_mesh import FaceView, StoreMesh, _hypot
-    if (doc_model.ENABLED and type(mesh) is StoreMesh and not mesh.__dict__.get("_planned_points")
+    from core.store_mesh import StoreMesh, _hypot
+    if (type(mesh) is StoreMesh and not mesh.__dict__.get("_planned_points")
             and (hypot := _hypot()) is not None):
         result = mesh._store.fold_nonplanar(list(moved or ()), tolerance, hypot)
         if result is not None:
-            dirty, replacements = result
-            folded = []
-            if dirty:
-                mesh._dirty(dirty)
-            for source, pieces in replacements:
-                mother = FaceView(mesh, source)
-                folded.append(mother)
-                for key in pieces:
-                    FaceView(mesh, key).attrs = dict(mother.attrs)
-            return folded
+            return mesh._inherit_face_attrs(*result)
 
     folded = []
     # A store-backed mesh names its warped faces itself (the same verdicts,
@@ -2740,92 +2730,8 @@ DEFECT_KINDS = ("duplicate_face", "overlapping_face", "pinched_face",
                 "crossed_face", "flat_face", "zero_edge")
 
 
-def _loop_crosses_itself(loop, normal: QVector3D) -> bool:
-    """Whether two non-adjacent sides of a closed loop cross or touch, in
-    the loop's own plane — a corner dragged over the far side of its face
-    turns a quad into a bow tie."""
-    count = len(loop)
-    if count < 4:
-        return False
-    n = (normal.x(), normal.y(), normal.z())
-    ax = max(range(3), key=lambda i: abs(n[i]))
-    u, w = [i for i in range(3) if i != ax]
-    pts = []
-    for v in loop:
-        p = (v.position.x(), v.position.y(), v.position.z())
-        pts.append((p[u], p[w]))
-    eps = 1e-9
-
-    def orient(a, b, c):
-        val = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
-        return 0 if abs(val) < eps else (1 if val > 0 else -1)
-
-    def on_seg(a, b, c):
-        return (min(a[0], b[0]) - eps <= c[0] <= max(a[0], b[0]) + eps and
-                min(a[1], b[1]) - eps <= c[1] <= max(a[1], b[1]) + eps)
-
-    for i in range(count):
-        a, b = pts[i], pts[(i + 1) % count]
-        for j in range(i + 2, count):
-            if i == 0 and j == count - 1:
-                continue                      # the closing side: adjacent
-            c, d = pts[j], pts[(j + 1) % count]
-            o1, o2 = orient(a, b, c), orient(a, b, d)
-            o3, o4 = orient(c, d, a), orient(c, d, b)
-            if o1 != o2 and o3 != o4 and 0 not in (o1, o2, o3, o4):
-                return True
-            if ((o1 == 0 and on_seg(a, b, c)) or (o2 == 0 and on_seg(a, b, d))
-                    or (o3 == 0 and on_seg(c, d, a))
-                    or (o4 == 0 and on_seg(c, d, b))):
-                return True
-    return False
-
-
-def _coplanar_overlap(f, g) -> bool:
-    """Whether two faces lie in one plane and cover some of the same area
-    (more than a shared side or corner): one's inside reaches into the
-    other, or a side of one cuts properly across a side of the other."""
-    nf, ng = f.normal(), g.normal()
-    if abs(QVector3D.dotProduct(nf, ng)) < 1.0 - 1e-6:
-        return False
-    origin = f.loop[0].position
-    if any(abs(QVector3D.dotProduct(v.position - origin, nf)) > _SPLIT_TOLERANCE
-           for v in g.loop):
-        return False
-    for a, b in ((f, g), (g, f)):
-        inner = _interior_point(a.vertices, a.normal())
-        if (inner is not None and _point_in_face_solid(a, inner)
-                and _point_in_face_solid(b, inner)):
-            return True
-    from core.triangulate import plane_axes
-    u, w = plane_axes(nf)
-
-    def proj(v):
-        rel = v.position - origin
-        return (QVector3D.dotProduct(rel, u), QVector3D.dotProduct(rel, w))
-
-    def sides(face):
-        pts = [proj(v) for v in face.loop]
-        return [(pts[i], pts[(i + 1) % len(pts)]) for i in range(len(pts))]
-
-    def orient(a, b, c):
-        val = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
-        return 0 if abs(val) < 1e-9 else (1 if val > 0 else -1)
-
-    for a, b in sides(f):
-        for c, d in sides(g):
-            o1, o2 = orient(a, b, c), orient(a, b, d)
-            o3, o4 = orient(c, d, a), orient(c, d, b)
-            if 0 not in (o1, o2, o3, o4) and o1 != o2 and o3 != o4:
-                return True
-    return False
-
-
 def defects_near(vertices, area_eps: float = 1e-10) -> dict:
     """Count defects incident to these vertices in landing-rejection priority order."""
-    from core import doc_model
-    if not doc_model.ENABLED:
-        return _reference_defects_near(vertices, area_eps)
     from core.store_mesh import StoreMesh, VertexView, _hypot
     from ingetrazo_core import MeshStore
     vertices = list(vertices)
@@ -2847,72 +2753,9 @@ def defects_near(vertices, area_eps: float = 1e-10) -> dict:
     return dict(zip(DEFECT_KINDS, values))
 
 
-def _reference_defects_near(vertices, area_eps: float = 1e-10) -> dict:
-    """Count the topological defects among the edges and faces that touch
-    ``vertices`` (mesh ``Vertex`` objects), by kind (:data:`DEFECT_KINDS`):
-
-    * ``duplicate_face`` — a face over the same edge cycle as another;
-    * ``overlapping_face`` — two faces in one plane covering the same area
-      (a pair counts once);
-    * ``pinched_face`` — a loop that passes twice through one vertex, or an
-      edge that borders the same face twice;
-    * ``crossed_face`` — two sides of one loop cross (a bow tie);
-    * ``flat_face`` — a face with no area left (under three distinct
-      corners, or all of them in a row);
-    * ``zero_edge`` — an edge whose ends are one point.
-
-    Edges with three or more faces are NOT a defect here: a partition
-    inside a box, or a fin on its edge, is normal surface modelling.
-
-    Local on purpose: a move checks the neighbourhood it touched before and
-    after, so a huge model pays for a few faces, and old damage elsewhere
-    never blocks an unrelated edit."""
-    counts = dict.fromkeys(DEFECT_KINDS, 0)
-    edges: dict = {}
-    faces: dict = {}
-    for v in vertices:
-        for e in v.edges:
-            edges[e.key] = e
-            for f in e.faces:
-                faces[f.key] = f
-    for e in edges.values():
-        if (e.v0 == e.v1 or
-                (e.v0.position - e.v1.position).lengthSquared() < 1e-18):
-            counts["zero_edge"] += 1
-        if len({f.key for f in e.faces}) < len(e.faces):
-            counts["pinched_face"] += 1
-    seen: set = set()
-    for f in faces.values():
-        loops = [f.loop, *f.hole_loops]
-        distinct = {x.key for x in f.loop}
-        if len(distinct) < 3 or f.area() < area_eps:
-            counts["flat_face"] += 1
-        for loop in loops:
-            if len({x.key for x in loop}) < len(loop):
-                counts["pinched_face"] += 1
-            elif len(loop) >= 4 and _loop_crosses_itself(loop, f.normal()):
-                counts["crossed_face"] += 1
-        sig = frozenset(
-            frozenset((f.loop[i].key, f.loop[(i + 1) % len(f.loop)].key))
-            for i in range(len(f.loop)))
-        if sig in seen:
-            counts["duplicate_face"] += 1
-        seen.add(sig)
-    flat = [f for f in faces.values() if len({x.key for x in f.loop}) >= 3
-            and f.area() >= area_eps]
-    for i, f in enumerate(flat):
-        for g in flat[i + 1:]:
-            if _coplanar_overlap(f, g):
-                counts["overlapping_face"] += 1
-    return counts
-
-
 def new_defects(before: dict, after: dict) -> list:
     """The defect kinds :func:`defects_near` counts more of ``after`` than
     ``before``, worst first."""
-    from core import doc_model
-    if not doc_model.ENABLED:
-        return [k for k in DEFECT_KINDS if after.get(k, 0) > before.get(k, 0)]
     from ingetrazo_core import MeshStore
     return MeshStore.increased_landing_defects([before.get(k, 0) for k in DEFECT_KINDS],
                                                [after.get(k, 0) for k in DEFECT_KINDS])

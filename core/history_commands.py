@@ -3003,47 +3003,67 @@ def defect_names() -> dict:
 
 
 def _weld_landed(mesh, moving: set) -> bool:
-    from core.store_mesh import FaceView, StoreMesh
-    if _doc.ENABLED and type(mesh) is StoreMesh and not mesh.__dict__.get("_planned_points"):
+    from core.store_mesh import StoreMesh
+    if type(mesh) is StoreMesh and not mesh.__dict__.get("_planned_points"):
         result = mesh._store.weld_landing(list(moving))
         if result is not None:
             welded, bumps, copies = result
-            if welded:
-                mesh._dirty(bumps)
-            for old, new in copies:
-                FaceView(mesh, new).attrs = dict(FaceView(mesh, old).attrs)
+            mesh._inherit_face_attrs(bumps, ((old, [new]) for old, new in copies))
             return welded
-    return _reference.weld_landed(mesh, moving)
+    from ingetrazo_core import MeshStore
+    cells = _cells_of(mesh, moving)
+    if not any(v.key not in moving for v in _vertices_at(mesh, cells)):
+        return False
+    mesh.weld_coincident()
+    for face in list(mesh.faces):
+        if face.hole_loops:
+            continue
+        loop = face.loop
+        kept = MeshStore.landing_ring([(v.key, _key(v.position) in cells) for v in loop])
+        if len(kept) != len(loop):
+            points = [QVector3D(loop[i].position) for i in kept]
+            attrs = dict(face.attrs)
+            mesh.remove_face(face)
+            if len(points) >= 3:
+                mesh.add_face(points).attrs = attrs
+    return True
 
 
 def _carried_faces(mesh, moving: set) -> list:
     """Textured faces whose outer and inner rings move as a unit."""
     from core.store_mesh import FaceView, StoreMesh
-    if _doc.ENABLED and type(mesh) is StoreMesh:
+    if type(mesh) is StoreMesh:
         keys = [f.key for f in mesh.textured_faces() if f.attrs.get("texture")]
         return [FaceView(mesh, k) for k in mesh._store.carried_faces(keys, list(moving))]
-    return _reference.carried_faces(mesh, moving)
+    from ingetrazo_core import MeshStore
+    faces = [f for f in mesh.faces if f.attrs and f.attrs.get("texture")]
+    rings = [[v.key for ring in (f.loop, *f.hole_loops) for v in ring] for f in faces]
+    return [faces[i] for i in MeshStore.carried_object_faces(rings, set(moving))]
 
 
-class MoveVerticesCommand(MeshCommand):
-    """Translate every shared vertex at a set of positions by ``delta``, then
-    **autofold**: any face the move warped out of its plane is split into
-    planar pieces along fold edges (the classic behaviour — a quad with a lifted
-    corner becomes two triangles, not a fake bent "face").
+class _VertexEditCommand(MeshCommand):
+    """Replay standalone and object-mesh edits from the shared mesh snapshot."""
+    _before = _after = None
+    undo = _reference.restore_mesh_before
 
-    Undo/redo restore identity-preserving snapshots. The old "cheap" inverse
-    translation resolved vertices *by position*, so when a moved corner landed
-    exactly on another vertex (an endpoint snap does this constantly) the undo
-    dragged the innocent coincident vertex along too, warping the drawing. The
-    before-snapshot was already being captured every time — restoring it is the
-    exact inverse for every case (plain move, fold, landed-on-vertex).
+    def do(self, scene):
+        if self._after is None:
+            self._before = self._reference_snapshot(scene.mesh)
+            self._edit(scene)
+            self._after = self._reference_snapshot(scene.mesh)
+        else:
+            scene.mesh.restore_state(self._after)
+            scene.version += 1
 
-    A move that lands on other vertices joins them — and is **refused**
-    (:class:`CommandRejected`, scene untouched) when the join leaves a
-    defect that was not there before around the landing: a face doubled
-    over another or overlapping one in its plane, pinched, crossed or
-    flattened to nothing. Only a landing
-    pays for the check, and only over the faces it touches."""
+    @abstractmethod
+    def _edit(self, scene):
+        """Apply the vertex edit to the active mesh."""
+
+
+class MoveVerticesCommand(_VertexEditCommand):
+    """Move shared vertices, carry whole-face textures and fold warped faces.
+    A snap that introduces a local topology defect rejects the transaction.
+    """
 
     keeps_rows = True
 
@@ -3058,91 +3078,37 @@ class MoveVerticesCommand(MeshCommand):
         #: The Move tool's moves: a textured face moved whole takes its
         #: image along instead of being re-projected where it lands (#1034).
         self.carry_textures = carry_textures
-        self._before: Optional[dict] = None
-        self._after: Optional[dict] = None
         #: Whether the move joined moved vertices into ones it landed on.
         self.welded = False
 
-    def do(self, scene) -> None:
-        if self._after is not None:  # redo
-            scene.mesh.restore_state(self._after)
-            scene.version += 1
-            return
-        self._before = self._reference_snapshot(scene.mesh)
+    def _edit(self, scene):
         keys = {_key(p) for p in self.src}
         if isinstance(self.delta, tuple):
             landing = {_key(tuple(x + d for x, d in zip(p, self.delta))) for p in self.src}
         else:
             landing = {_key(p + self.delta) for p in self.src}
-        from core.store_mesh import StoreMesh, _xyz
-        if (_doc.ENABLED and type(scene.mesh) is StoreMesh and not scene.mesh.__dict__.get("_planned_points")
-                and all(type(x) is float for point in keys | landing for x in point)):
-            if self._store_move(scene, keys, landing):
-                self._after = self._reference_snapshot(scene.mesh)
-                return
-        native = self._journal_geometry and type(scene.mesh) is StoreMesh
-        # The legacy cells API treats integer triples as already scaled.
-        # Native position matching takes decimal model coordinates.
-        if native and not self.carry_textures and all(type(x) is float for p in keys for x in p):
-            count = scene.mesh._store.move_without_join(list(keys), _xyz(self.delta))
-            if count is not None:
-                for _ in range(count):
-                    scene.mesh._bump()
-                scene.version += 1
-                self.welded = False
-                fold_nonplanar_faces(scene.mesh, moved=landing)
-                return
-        vertices = _vertices_at(scene.mesh, keys)
-        moving = {v.key for v in vertices}
-        before = None
-        if any(v.key not in moving
-               for v in _vertices_at(scene.mesh, landing)):
-            # Something stands where the move lands: note how healthy the
-            # neighbourhood is now, to judge the join against it.
-            before = defects_near(_vertices_at(scene.mesh, keys | landing))
-        carried = (_carried_faces(scene.mesh, moving)
-                   if self.carry_textures else [])
-        if native:
-            scene.mesh._store.move_vertices([v.key for v in vertices], _xyz(self.delta))
-            for _ in vertices:
-                scene.mesh._bump()
-            scene.version += 1
-        else:
-            translate_points(scene, keys, self.delta)
-        if carried:
-            from ingetrazo_core import Matrix4 as QMatrix4x4
-            from core.group import _remap_uvws
-            t = QMatrix4x4()
-            t.translate(self.delta)
-            _remap_uvws(scene.mesh, t, carried)
-        self.welded = _weld_landed(scene.mesh, moving)
-        fold_nonplanar_faces(scene.mesh, moved=landing)
-        if self.welded and before is not None:
-            after = defects_near(_vertices_at(scene.mesh, landing))
-            worse = new_defects(before, after)
-            if worse:
-                from core.i18n import tr
-                if not self._journal_geometry:
-                    scene.mesh.restore_state(self._before)
-                scene.version += 1
-                self.welded = False
-                raise CommandRejected(tr(
-                    "Not joined: it would leave {defect}. The move was "
-                    "undone.", defect=defect_names()[worse[0]]))
-        self._after = self._reference_snapshot(scene.mesh)
-
-    def _store_move(self, scene, keys, landing):
-        from core.store_mesh import FaceView, _hypot, _xyz
+        from core.store_mesh import StoreMesh, _hypot, _xyz
         from core.topology import DEFECT_KINDS, _PLANAR_TOLERANCE
         mesh = scene.mesh
         destinations = list(landing)
-        started = mesh._store.begin_vertex_move(list(keys), destinations, _xyz(self.delta),
-                                                self.carry_textures, _hypot())
+        started = None
+        # The facade treats integer cell coordinates as already scaled.
+        if (type(mesh) is StoreMesh and not mesh.__dict__.get("_planned_points")
+                and all(type(x) is float for point in keys | landing for x in point)):
+            started = mesh._store.begin_vertex_move(list(keys), destinations, _xyz(self.delta),
+                                                    self.carry_textures, _hypot())
         if started is None:
-            return False
-        count, moving, before = started
-        if count:
-            mesh._dirty(count)
+            vertices = _vertices_at(mesh, keys)
+            moving = {v.key for v in vertices}
+            before = (defects_near(_vertices_at(mesh, keys | landing))
+                      if any(v.key not in moving for v in _vertices_at(mesh, landing)) else None)
+            delta = self.delta if type(mesh) is StoreMesh else QVector3D(*_xyz(self.delta))
+            for v in vertices:
+                mesh.move_vertex(v, delta)
+        else:
+            count, moving, before = started
+            if count:
+                mesh._dirty(count)
         scene.version += 1
         if self.carry_textures and moving:
             carried = _carried_faces(mesh, moving)
@@ -3152,28 +3118,23 @@ class MoveVerticesCommand(MeshCommand):
                 transform = Matrix4()
                 transform.translate(self.delta)
                 _remap_uvws(mesh, transform, carried)
-        result = mesh._store.finish_vertex_move(moving, destinations, before, _PLANAR_TOLERANCE, _hypot())
+        result = None
+        if started is not None:
+            result = mesh._store.finish_vertex_move(moving, destinations, before, _PLANAR_TOLERANCE, _hypot())
+            if result is None and before is not None:
+                before = dict(zip(DEFECT_KINDS, before))
         if result is None:
             self.welded = _weld_landed(mesh, set(moving))
             fold_nonplanar_faces(mesh, moved=landing)
             if self.welded and before is not None:
-                self._check_landing(scene, dict(zip(DEFECT_KINDS, before)), landing)
+                worse = new_defects(before, defects_near(_vertices_at(mesh, landing)))
+                if worse:
+                    self._reject(scene, worse[0])
         else:
             self.welded, dirty, copies, rejection = result
             if rejection is not None:
                 self._reject(scene, rejection)
-            if dirty:
-                mesh._dirty(dirty)
-            for source, pieces in copies:
-                attrs = FaceView(mesh, source).attrs
-                for key in pieces:
-                    FaceView(mesh, key).attrs = dict(attrs)
-        return True
-
-    def _check_landing(self, scene, before, landing):
-        worse = new_defects(before, defects_near(_vertices_at(scene.mesh, landing)))
-        if worse:
-            self._reject(scene, worse[0])
+            mesh._inherit_face_attrs(dirty, copies)
 
     def _reject(self, scene, reason):
         from core.i18n import tr
@@ -3183,8 +3144,6 @@ class MoveVerticesCommand(MeshCommand):
         self.welded = False
         raise CommandRejected(tr("Not joined: it would leave {defect}. The move was undone.",
                                  defect=defect_names()[reason]))
-
-    undo = _reference.restore_mesh_before
 
 
 def rotation_matrix(center: QVector3D, axis: QVector3D, degrees: float):
@@ -3208,7 +3167,7 @@ def _map_selected_vertices(scene, keys, matrix, carry_textures):
     from core.store_mesh import StoreMesh
     from ingetrazo_core import Matrix4
     mesh = scene.mesh
-    if _doc.ENABLED and type(mesh) is StoreMesh and type(matrix) is Matrix4:
+    if type(mesh) is StoreMesh and type(matrix) is Matrix4:
         count, ids = mesh._store.transform_vertices(list(keys), matrix.data(), carry_textures)
         if count:
             mesh._dirty(count)
@@ -3320,28 +3279,19 @@ class FlipGroupsCommand(MeshCommand):
         self._flip(scene)
 
 
-class VertexTransformCommand(MeshCommand):
+class VertexTransformCommand(_VertexEditCommand):
     """Apply a matrix to loose vertices, then fold the faces they warped."""
-    _before = _after = None
     carry_textures = False
 
     @abstractmethod
     def matrix(self):
         """Transform about the tool's chosen axes and origin."""
 
-    def do(self, scene) -> None:
-        if self._after is not None:
-            scene.mesh.restore_state(self._after)
-            scene.version += 1
-            return
-        self._before = self._reference_snapshot(scene.mesh)
+    def _edit(self, scene):
         _map_selected_vertices(scene, {_key(p) for p in self.src}, self.matrix(), self.carry_textures)
         if faces := getattr(self, "_faces", ()):
             _reverse_faces(f for f in faces if isinstance(f, Face) or hasattr(f, "loop"))
         fold_nonplanar_faces(scene.mesh)
-        self._after = self._reference_snapshot(scene.mesh)
-
-    undo = _reference.restore_mesh_before
 
 
 class FlipVerticesCommand(VertexTransformCommand):
