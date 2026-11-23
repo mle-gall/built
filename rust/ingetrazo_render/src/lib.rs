@@ -2231,6 +2231,31 @@ impl Renderer {
         if let Some(ui) = self.ui.as_mut() { ui.set_projects(left, docs); }
     }
     fn ui_top_empty(&self, x: f32, y: f32) -> bool { self.ui.as_ref().is_some_and(|ui| ui.top_empty(x, y)) }
+    /// The project tabs (views/wgpu_tabs.py, ui/tabs.rs): (id, name, front,
+    /// unsaved, link source, tip, picture key), the projects in other
+    /// windows (id, name, window), and the tab menu's two switches.
+    #[pyo3(signature = (tabs, elsewhere=Vec::new(), can_move=false, pictures=true))]
+    fn ui_set_project_tabs(&mut self, tabs: Vec<(String, String, bool, bool, bool, String, String)>,
+                           elsewhere: Vec<(String, String, String)>, can_move: bool, pictures: bool) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_project_tabs(tabs, elsewhere, can_move, pictures); }
+    }
+    fn ui_project_tab_rects(&self) -> Vec<Option<(f32, f32, f32, f32)>> {
+        self.ui.as_ref().map_or_else(Vec::new, |ui| ui.project_tab_rects())
+    }
+    /// The right-click menu at (x, y) (views/context_menu.py): header, then
+    /// rows of (family label, [(id, label, key, enabled, checked)]).
+    fn ui_set_context_menu(&mut self, x: f32, y: f32, title: String, subtitle: String,
+                           rows: Vec<(String, Vec<(String, String, String, bool, i8)>)>) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_context_menu(x, y, title, subtitle, rows); }
+    }
+    fn ui_close_context_menu(&mut self) {
+        if let Some(ui) = self.ui.as_mut() { ui.close_context_menu(); }
+    }
+    fn ui_context_menu_open(&self) -> bool { self.ui.as_ref().is_some_and(|ui| ui.context_menu_open()) }
+    fn ui_context_menu_rows(&self) -> Vec<String> {
+        self.ui.as_ref().map_or_else(Vec::new, |ui| ui.context_menu_rows())
+    }
+    fn ui_over_chrome(&self, x: f32, y: f32) -> bool { self.ui.as_ref().is_some_and(|ui| ui.over_chrome_at(x, y)) }
     fn ui_set_units(&mut self, units: String) {
         if let Some(ui) = self.ui.as_mut() { ui.set_units(units); }
     }

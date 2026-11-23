@@ -1497,6 +1497,14 @@ class WgpuView(QWidget):
         if source is None:
             return
         point = event.pos()
+        # With the chrome on (the native app, or BUILT_UI=1), the menu is the
+        # chrome's: only the verbs for what was hit (docs/context-menu.md).
+        # A right-click on the chrome itself is the chrome's own.
+        from views import context_menu
+        if context_menu.chrome_menu_available(self):
+            if not self.renderer.ui_over_chrome(float(point.x()), float(point.y())):
+                context_menu.open_at(self, point.x(), point.y())
+            return
         source._context_pixel = (point.x(), point.y())
         picked = self.tools._context_pick(point.x(), point.y())
         under = self.tools.pick_locked_image_plane(point.x(), point.y())
