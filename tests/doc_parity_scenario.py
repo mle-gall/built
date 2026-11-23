@@ -382,7 +382,7 @@ def geometry_steps():
     from core.history import (MakeGroupCommand, ExplodeGroupCommand, SetFaceColorCommand,
                               AddEdgeCommand, DeleteEdgesCommand, DeleteFaceCommand,
                               ExplodeCurvesCommand, TagCurveCommand, PruneOrphanEdgesCommand,
-                              SnapshotCompound)
+                              AddFaceCommand, SnapshotCompound)
     from core.protocol import commands
 
     scene = Scene()
@@ -394,6 +394,7 @@ def geometry_steps():
         return {
             "vertices": [v.position_tuple() for v in mesh.vertices],
             "faces": [[list(v.toTuple()) for v in f.vertices] for f in mesh.faces],
+            "holes": [[[v.toTuple() for v in ring] for ring in f.holes] for f in mesh.faces],
             "paint": [dict(f.attrs) for f in mesh.faces],
             "edge_flags": [(e.soft, e.curve, e.layer) for e in mesh.edges],
             "group_faces": [len(g.mesh.faces) for g in scene.groups],
@@ -441,6 +442,19 @@ def geometry_steps():
     out.append(state())
     assert h.redo()
     out.append(state())
+    # Draw a painted panel, a hole, an adjacent opening and a corner cut.
+    def rectangle(x, y, w, height):
+        return [QVector3D(a, b, 0) for a, b in
+                ((x,y), (x+w,y), (x+w,y+height), (x,y+height))]
+    for rect, paint in [((10,0,8,8), {"color":[.2,.4,.6]}),
+                        ((12,2,1,1), None), ((13,2,1,1), None), ((10,0,1,1), None)]:
+        h.execute(AddFaceCommand(rectangle(*rect), attrs=paint))
+        assert not h.last_error and not h.last_rejected
+        out.append(state())
+        assert h.undo()
+        out.append(state())
+        assert h.redo()
+        out.append(state())
     return out
 
 

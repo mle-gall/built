@@ -662,3 +662,95 @@ impl Store {
         (removed, punch)
     }
 }
+
+/// Geometry changes after insertion of a drawn face. All rings are in model space.
+pub(super) enum Division {
+    Holes { mother: Option<u32>, swap: Option<(usize, Ring)>, enclosed: Vec<Ring> },
+    Carve { mother: u32, pieces: Vec<Vec<Ring>> },
+}
+
+impl Outline {
+    fn remainder(&self, ring: &[P]) -> Option<Vec<Ring>> {
+        use super::commands::cell;
+        use std::collections::HashSet;
+        let cells = |r: &[P]| r.iter().copied().map(cell).collect::<HashSet<_>>();
+        if let Some(pieces) = self.chain(ring).and_then(|c| self.pieces(&c, false)) {
+            let target = cells(ring);
+            if let Some(i) = pieces.iter().position(|r| cells(r) == target) {
+                return Some(vec![pieces[1 - i].clone()]);
+            }
+        }
+        self.carve(ring)
+    }
+
+    fn redistribute_holes(&self, pieces: Vec<Ring>) -> Option<Vec<Vec<Ring>>> {
+        let outlines: Vec<_> = pieces.into_iter().map(|outer| {
+            let pos: Vec<_> = outer.iter().copied().map(vector).collect();
+            let normal = super::geometry::face_normal(&pos, &(0..pos.len() as u32).collect::<Vec<_>>(), self.h);
+            Outline { rings: vec![outer], normal, axes: plane_axes(normal, self.h), h: self.h }
+        }).collect();
+        let mut result: Vec<_> = outlines.iter().map(|o| o.rings.clone()).collect();
+        for hole in self.rings.iter().skip(1) {
+            let i = outlines.iter().position(|o| o.contains(hole, false))?;
+            result[i].push(hole.clone());
+        }
+        Some(result)
+    }
+
+    /// A normal shared-rim union has one positive loop. The reference tracer
+    /// resolves ambiguous angular ties and classifies multi-loop arrangements.
+    fn joined_hole(&self, hole: Ring, drawn: Ring) -> Option<Ring> {
+        use std::collections::HashMap;
+        let mut back = HashMap::new();
+        let bits = |xy: XY| xy.map(|x| if x == 0. { 0 } else { x.to_bits() });
+        let area = |r: &[XY]| segments(r).map(|(a,b)| a[0]*b[1] - b[0]*a[1]).sum::<f64>() * 0.5;
+        let regions = [hole, drawn].into_iter().map(|r| {
+            let mut xy = self.polygon(&r);
+            back.extend(xy.iter().zip(r).map(|(&q,p)| (bits(q),p)));
+            if area(&xy) < 0. { xy.reverse(); }
+            (xy, vec![])
+        }).collect();
+        let loops = super::cap_outline::trace(regions, &[], 1e-4)?;
+        if loops.len() != 1 || area(&loops[0]) <= 1e-4 { return None; }
+        loops[0].iter().map(|&q| back.get(&bits(q)).copied()).collect()
+    }
+}
+
+impl Store {
+    pub(super) fn face_division(&self, face: u32, holding: &[u32], inside: &[u32], h: Hypot)
+        -> Option<Division> {
+        use super::keys::Kind;
+        let drawn = self.outline(face, h);
+        let ring = &drawn.rings[0];
+        let mother = self.containing_face(holding, ring, Some(self.key(Kind::Face, face)), h)
+            .and_then(|k| self.slot(Kind::Face, k));
+        let swap = if let Some(f) = mother {
+            let outline = self.outline(f,h);
+            if let Some((i,a,b)) = outline.shared_hole(ring) {
+                Some((i,outline.joined_hole(a,b)?))
+            } else { None }
+        } else { None };
+        let mut enclosed = Vec::new();
+        for &f in inside {
+            if f == face { continue; }
+            let outer: Ring = self.outer_ring(f).iter().map(|&v| *self.state.vpos.get(v as usize)).collect();
+            if let Some(&origin) = ring.first() {
+                let n = drawn.normal;
+                let d = n.dot(vector(origin), h);
+                if outer.iter().any(|&p| (n.0*p[0]+n.1*p[1]+n.2*p[2]-d).abs() > 2e-3) { continue; }
+            }
+            if drawn.contains(&outer,false) { enclosed.push(outer); }
+        }
+        if mother.is_none() && enclosed.is_empty() {
+            for &f in holding {
+                if f == face { continue; }
+                let outline = self.outline(f,h);
+                if let Some(pieces) = outline.remainder(ring).and_then(|p| outline.redistribute_holes(p)) {
+                    if self.remove_face_blocked(f) { return None; }
+                    return Some(Division::Carve { mother: f, pieces });
+                }
+            }
+        }
+        Some(Division::Holes { mother, swap, enclosed })
+    }
+}

@@ -784,183 +784,56 @@ class AddFaceCommand(MeshCommand):
         # colour/texture); they stay on the object across undo/redo.
         self.attrs = dict(attrs) if attrs else None
         self.face: Optional[Face] = None
-        # (face_that_gained_a_hole, the vertex loop punched) for undo.
-        self._punches: list[tuple[Face, list]] = []
-        self._hole_swaps: list = []
-        self._subdiv_mother: Optional[Face] = None
-        self._subdiv_remainder: Optional[list] = None
+        self._hole_swaps = False
+        self._before = self._after = None
 
     def do(self, scene) -> None:
-        m = scene.mesh
-        if self.face is None:
-            holes = (
-                [list(loop) for loop in self.preset_holes]
-                if self.preset_holes else None
-            )
-            # What add_face is about to create besides the face — its
-            # boundary edges and corners that were not there yet — so undo
-            # takes them back with it (#355).
-            loops = [self.vertices] + (holes or [])
-            pairs = [(lp[i], lp[(i + 1) % len(lp)])
-                     for lp in loops for i in range(len(lp))]
-            had_v = {v.key for p in self.vertices + [q for h in holes or []
-                                                     for q in h]
-                     for v in [m.vertex_at(p)] if v is not None}
-            had_e = set()
-            for a, b in pairs:
-                va, vb = m.vertex_at(a), m.vertex_at(b)
-                e = m.find_edge(va, vb) if va is not None and vb is not None else None
-                if e is not None:
-                    had_e.add(e.key)
-            self.face = m.add_face(self.vertices, holes)
+        mesh = scene.mesh
+        if self._after is not None:
+            mesh.restore_state(self._after)
+        else:
+            self._before = self._reference_snapshot(mesh)
+            self.face = mesh.add_face(self.vertices, self.preset_holes)
             self.face.interior = self.interior
-            # Keep created boundary handles by key so redo restores their
-            # stable identities before relinking the face.
-            self._made_pairs = set()
-            self._made_edges = {}
-            self._made_vertices = []
-            for lp in (self.face.loop, *self.face.hole_loops):
-                for i in range(len(lp)):
-                    a, b = lp[i], lp[(i + 1) % len(lp)]
-                    e = m.find_edge(a, b)
-                    if e is not None and e.key not in had_e:
-                        self._made_pairs.add(frozenset((a.key, b.key)))
-                        self._made_edges[e.key] = e
-                for v in lp:
-                    if v.key not in had_v:
-                        self._made_vertices.append(v)
             if self.attrs:
                 self.face.attrs.update(self.attrs)
-        else:
-            m.relink_vertices(getattr(self, "_made_vertices", ()))
-            for edge in self._made_edges.values():
-                m.relink_edge(edge)
-            m.relink_face(self.face)  # redo
-
-        if not self.auto:
-            scene.version += 1
-            return
-
-        # Direction A: the new face falls inside an existing mother → the mother
-        # gains the new loop as a hole.
-        mother = find_containing_face(_faces_holding(m, self.face.vertices),
-                                      self.face.vertices, exclude=self.face)
-        if mother is not None:
-            grown = hole_merged_with_loop(mother, self.face.vertices)
-            if grown is not None:
-                idx, outline = grown
-                old_loop = mother.hole_loops[idx]
-                m.remove_hole(mother, old_loop)
-                loop = m.add_hole(mother, outline)
-                self._hole_swaps.append((mother, old_loop, loop))
-            else:
-                loop = m.add_hole(mother, self.face.vertices)
-                self._punches.append((mother, loop))
-            _inherit_paint(self.face, mother)
-
-        # Direction B: the new face encloses existing smaller faces → it gains
-        # each of them as a hole.
-        # A face with a corner off the new face's plane is not inside it
-        # (the first thing loop_inside_face checks): said here with the
-        # plane worked out once, and not once per face of the model.
-        from core.topology import _PLANAR_TOLERANCE
-        plane_n = self.face.normal()
-        nx, ny, nz = plane_n.x(), plane_n.y(), plane_n.z()
-        plane_d = (QVector3D.dotProduct(plane_n, self.face.loop[0].position)
-                   if self.face.loop else None)
-        for other in _faces_inside(m, self.face):
-            if other == self.face:
-                continue
-            if plane_d is not None:
-                off = False
-                for v in other.loop:
-                    x, y, z = v.position.toTuple()
-                    if abs(nx * x + ny * y + nz * z - plane_d) \
-                            > 2.0 * _PLANAR_TOLERANCE:
-                        off = True
-                        break
-                if off:
-                    continue
-            if loop_inside_face(self.face, other.vertices):
-                loop = m.add_hole(self.face, other.vertices)
-                self._punches.append((self.face, loop))
-
-        # Direction C: drawn against an existing face's boundary (corner / edge
-        # rectangle) → carve a connected sub-region. Only when no hole applied.
-        if not self._punches and not self._hole_swaps:
-            for other in _faces_holding(m, self.face.vertices):
-                if other == self.face:
-                    continue
-                remainder = subtract_loop_from_face(other, self.face.vertices)
-                pieces = ([remainder] if remainder is not None
-                          else carve_loop_by_chords(other, self.face.vertices))
-                if not pieces:
-                    continue
-                # Each hole of the mother goes to the piece that holds it; a
-                # hole straddling a cut leaves the mother alone.
-                piece_holes: list[list[list[QVector3D]]] = [[] for _ in pieces]
-                straddle = False
-                for hole in other.holes:
-                    for k, piece in enumerate(pieces):
-                        if loop_inside_face(Face([Vertex(v) for v in piece]), hole):
-                            piece_holes[k].append([QVector3D(v) for v in hole])
-                            break
-                    else:
-                        straddle = True
-                        break
-                if straddle:
-                    continue
-                m.remove_face(other)
-                self._subdiv_remainder = []
-                for piece, holes in zip(pieces, piece_holes):
-                    rem_face = m.add_face(piece, holes or None)
-                    rem_face.attrs = dict(other.attrs)  # carved mother continues
-                    self._subdiv_remainder.append(rem_face)
-                _inherit_paint(self.face, other)    # ...and so does the cut-out
-                self._subdiv_mother = other
-                break
-
+            if self.auto:
+                self._divide(mesh)
+            self._after = self._reference_snapshot(mesh)
         scene.version += 1
+
+    def _divide(self, mesh):
+        from core.store_mesh import FaceView, StoreMesh, _hypot
+        if (_doc.ENABLED and type(mesh) is StoreMesh and not mesh.__dict__.get("_planned_points")
+                and (hypot := _hypot()) is not None):
+            result = mesh._store.divide_drawn_face(
+                self.face.key, [f.key for f in _faces_holding(mesh, self.face.vertices)],
+                [f.key for f in _faces_inside(mesh, self.face)], hypot)
+            if result is not None:
+                dirty, source, remainder, self._hole_swaps = result
+                if dirty:
+                    mesh._dirty(dirty)
+                if source is not None:
+                    mother = FaceView(mesh, source)
+                    for key in remainder:
+                        FaceView(mesh, key).attrs = dict(mother.attrs)
+                    _inherit_paint(self.face, mother)
+                return
+        self._hole_swaps = _reference.divide_drawn_face(mesh, self.face)
 
     def doc_after(self, scene, phase):
         _discard_removed_selection(scene)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        m = scene.mesh
-        if self._subdiv_mother is not None:
-            for rem in self._subdiv_remainder or ():
-                m.remove_face(rem)
-            m.relink_face(self._subdiv_mother)
-            self._subdiv_mother = None
-            self._subdiv_remainder = None
-        for face, loop in self._punches:
-            m.remove_hole(face, loop)
-        self._punches = []
-        for face, old_loop, loop in reversed(self._hole_swaps):
-            m.remove_hole(face, loop)
-            m.relink_hole(face, old_loop)
-        self._hole_swaps = []
-        if self.face is not None:
-            m.remove_face(self.face)
-            # The edges and corners this face brought with it go too, when
-            # nothing else uses them (#355, @pacaeiro: «undo leaves edges
-            # behind»). remove_face keeps edges on purpose — they may border
-            # other faces — so only the ones this command made are candidates.
-            made = getattr(self, "_made_pairs", ())
-            for lp in (self.face.loop, *self.face.hole_loops):
-                for i in range(len(lp)):
-                    a, b = lp[i], lp[(i + 1) % len(lp)]
-                    if frozenset((a.key, b.key)) not in made:
-                        continue
-                    e = m.find_edge(a, b)
-                    if e is not None and not e.faces:
-                        m.remove_edge(e)
-                        sel = scene.selection
-                        if e in sel:
-                            sel.remove(e)
-            m.drop_orphan_vertices(getattr(self, "_made_vertices", ()))
-        scene.version += 1
+        if self._before is not None:
+            selected = [e for e in scene.selection if isinstance(e, Edge) and e in scene.mesh.edges]
+            scene.mesh.restore_state(self._before)
+            for edge in selected:
+                if edge not in scene.mesh.edges:
+                    scene.selection.discard(edge)
+            _discard_removed_selection(scene)
+            scene.version += 1
 
 
 class DeleteFaceCommand(RemoveGeometryCommand):
@@ -4405,7 +4278,10 @@ def _run_snapshot_parts(parent, scene):
     covered = (AddEdgeCommand, DeleteEdgesCommand, DeleteFaceCommand, TagCurveCommand,
                ExplodeCurvesCommand, PruneOrphanEdgesCommand, MoveVerticesCommand)
     for part in parent.inner:
-        if not parent._journal_geometry or type(part) not in covered:
+        # A face's reference inverse also uses snapshots. The enclosing
+        # command already owns them in either document mode.
+        if type(part) is not AddFaceCommand and (
+                not parent._journal_geometry or type(part) not in covered):
             part.do(scene)
             continue
         previous = part._journal_geometry

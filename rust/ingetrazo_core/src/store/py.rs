@@ -1320,6 +1320,58 @@ impl PyMeshStore {
         ids.len()
     }
 
+    /// Complete the auto-division of an inserted face. Keep one store revision
+    /// per primitive, as published through the protocol before this command.
+    fn divide_drawn_face(&mut self, face: u128, holding: Vec<u128>, inside: Vec<u128>, hypot: &str)
+        -> PyResult<Option<(usize, Option<u128>, Vec<u128>, bool)>> {
+        use super::drawing_face::Division;
+        let f = live_of(&self.inner, Kind::Face, face)?;
+        let plan = self.inner.face_division(f, &self.drawing_candidates(Kind::Face, Some(holding))?,
+            &self.drawing_candidates(Kind::Face, Some(inside))?, crate::hypot_of(hypot)?);
+        let mut dirty = 0;
+        let mut remainder = Vec::new();
+        let mut swapped = false;
+        let paint_source = match plan {
+            None => return Ok(None),
+            Some(Division::Holes { mother, swap, enclosed }) => {
+                if let Some(m) = mother {
+                    let ring = if let Some((i, new)) = swap {
+                        let old = &self.inner.face_rings(m)[i+1];
+                        self.op(|s,ch| { s.remove_hole(m,old,ch); Ok(()) })?;
+                        swapped = true;
+                        new
+                    } else {
+                        self.inner.outer_ring(f).iter().map(|&v| *self.inner.state.vpos.get(v as usize)).collect()
+                    };
+                    dirty += ring.len();
+                    self.op(|s,ch| s.add_hole(m,&ring,ch))?;
+                }
+                for ring in enclosed {
+                    dirty += ring.len();
+                    self.op(|s,ch| s.add_hole(f,&ring,ch))?;
+                }
+                mother.map(|m| self.inner.key(Kind::Face,m))
+            }
+            Some(Division::Carve { mother, pieces }) => {
+                let key = self.inner.key(Kind::Face,mother);
+                self.remove_face(key)?;
+                dirty += 1;
+                for mut rings in pieces {
+                    if rings.len() > 2 {
+                        let keep = Self::maximal_holes(rings[1..].to_vec(), hypot)?;
+                        let mut mask = std::iter::once(true).chain(keep);
+                        rings.retain(|_| mask.next() == Some(true));
+                    }
+                    dirty += rings.iter().map(Vec::len).sum::<usize>();
+                    let (new,_) = self.op(|s,ch| s.add_face(&rings,ch))?;
+                    remainder.push(self.inner.key(Kind::Face,new));
+                }
+                Some(key)
+            }
+        };
+        Ok(Some((dirty,paint_source,remainder,swapped)))
+    }
+
     fn delete_face_loop(&mut self, points: Vec<[f64; 3]>, candidates: Vec<u128>)
         -> PyResult<(bool, Option<u128>)> {
         let candidates = self.drawing_candidates(Kind::Face, Some(candidates))?;
