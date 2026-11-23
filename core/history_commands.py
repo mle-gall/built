@@ -3809,6 +3809,11 @@ class MakeGroupCommand(MeshCommand):
         # share the definition through the existing prototype machinery.
         self._component = component
         self._name = name
+        if _doc.ENABLED:
+            from ingetrazo_core import GroupGeometry
+            self._geometry = GroupGeometry(faces, edges)
+            self.snapshot = self.group = None
+            return
         faces = list(faces)
         # Attrs (colour, texture, layer, IFC tag) must travel into the group's
         # fresh mesh with each face — grouping a painted set used to strip it.
@@ -3863,6 +3868,8 @@ class MakeGroupCommand(MeshCommand):
         scene.version += 1
 
     def _build(self, scene) -> Group:
+        if _doc.ENABLED:
+            return self._geometry.build(scene, self._component, self._name)
         # The group is a fresh copy built from the captured positions. A
         # COMPONENT shifts them into local coordinates around the origin.
         origin = QVector3D(0.0, 0.0, 0.0)
@@ -3945,6 +3952,8 @@ class MakeGroupCommand(MeshCommand):
 
     def _take_off_loose(self, scene) -> None:
         m = scene.mesh
+        if _doc.ENABLED:
+            return self._geometry.take_off(m, scene.selection.discard)
         # Remove the grouped geometry from the loose mesh.
         face_keysets = [frozenset(_key(p) for p in loop)
                         for loop, _h, _a in self._face_loops]
@@ -3991,6 +4000,9 @@ class MakeUniqueCommand(Command):
     def __init__(self, group, rename: bool = False) -> None:
         self.group = group
         self._rename = rename
+        self._prior = None
+        if _doc.ENABLED:
+            return
         self._name = None
         self._proto = None
         self._xform = None
@@ -3999,6 +4011,12 @@ class MakeUniqueCommand(Command):
         self._component = True
 
     def do(self, scene) -> None:
+        if _doc.ENABLED:
+            from ingetrazo_core import make_placement_unique
+            self._prior = make_placement_unique(scene, self.group, self._rename, True)
+            if self._prior is not None:
+                scene.version += 1
+            return
         if self.group.ext and self.group.ext.get("link"):
             return          # a linked file stays its source's (make_unique)
         self._proto = self.group.mesh
@@ -4015,7 +4033,17 @@ class MakeUniqueCommand(Command):
         self.group.make_unique()
         scene.version += 1
 
+    def bind_transaction(self, txn):
+        super().bind_transaction(txn)
+        self._prior = None
+
     def undo(self, scene) -> None:
+        if _doc.ENABLED:
+            from ingetrazo_core import restore_unique_placement
+            if self._prior is not None:
+                restore_unique_placement(self.group, self._prior)
+                scene.version += 1
+            return
         if self._proto is None:
             return
         self.group.mesh = self._proto
@@ -5096,28 +5124,33 @@ class ExplodeGroupCommand(MeshCommand):
         # composes with the parent's (a shared prototype is never touched),
         # and an unpainted child takes the parent's paint, as its default
         # faces were already drawn with it.
-        kids = list(getattr(g, "children", None) or [])
-        self._lifted = [(c, c.xform, c.mesh, c.material, c.axes,
-                         c.explode_offset) for c in kids]
-        for c in kids:
-            # Free of its component, a part keeps where an exploded view put
-            # it; there is no longer anything to reassemble it into.
-            c.explode_offset = None
-            if P is not None:
-                if c.xform is not None:
-                    c.xform = P * c.xform
-                else:
-                    from core.group import carry_axes, transformed_mesh
-                    c.mesh = transformed_mesh(c.mesh, P)
-                    carry_axes(c, P)          # its axes come out with it
-            if c.material is None and paint:
-                c.material = {k: (dict(v) if isinstance(v, dict) else v)
-                              for k, v in paint.items()}
-        scene.groups.remove(g)
-        # One parent per placement: what comes out leaves the group (undo
-        # gives it back).
-        g.children = []
-        scene.groups[self.index:self.index] = kids
+        if _doc.ENABLED:
+            from ingetrazo_core import lift_placements
+            self._lifted = lift_placements(scene.groups, g, self.index)
+            kids = [row[0] for row in self._lifted]
+        else:
+            kids = list(getattr(g, "children", None) or [])
+            self._lifted = [(c, c.xform, c.mesh, c.material, c.axes,
+                             c.explode_offset) for c in kids]
+            for c in kids:
+                # Free of its component, a part keeps where an exploded view put
+                # it; there is no longer anything to reassemble it into.
+                c.explode_offset = None
+                if P is not None:
+                    if c.xform is not None:
+                        c.xform = P * c.xform
+                    else:
+                        from core.group import carry_axes, transformed_mesh
+                        c.mesh = transformed_mesh(c.mesh, P)
+                        carry_axes(c, P)          # its axes come out with it
+                if c.material is None and paint:
+                    c.material = {k: (dict(v) if isinstance(v, dict) else v)
+                                  for k, v in paint.items()}
+            scene.groups.remove(g)
+            # One parent per placement: what comes out leaves the group (undo
+            # gives it back).
+            g.children = []
+            scene.groups[self.index:self.index] = kids
         scene.selection.discard(g)
         if kids:
             scene.selection = set(kids)   # select what came out
@@ -5154,39 +5187,44 @@ class ExplodeGroupCommand(MeshCommand):
                 self._after = m.capture_state()
             return
 
-        def W(p):
-            # Instance prototypes hold LOCAL coords — explode in world.
-            return P.map(p) if P is not None else QVector3D(p)
+        if _doc.ENABLED:
+            from ingetrazo_core import explode_object_geometry
+            before = list(m.faces)
+            added = explode_object_geometry(m, g.mesh, P, paint, inverse, invertible)
+        else:
+            def W(p):
+                # Instance prototypes hold LOCAL coords — explode in world.
+                return P.map(p) if P is not None else QVector3D(p)
 
-        before = list(m.faces) if m.faces else []
-        added: list = []
-        for f in g.mesh.faces:
-            nf = m.add_face([W(v) for v in f.vertices],
-                            [[W(v) for v in h] for h in f.holes] or None)
-            added.append(nf)
-            # What the face showed inside is what it keeps outside: its own
-            # paint, or — a default face — the group's on BOTH sides
-            # (issue #47: the back used to fall back to default).
-            drawn = effective_attrs(dict(f.attrs or {}), paint)
-            if invertible:
-                drawn = placed_face_paint(drawn, f, inverse)
-            for key, val in drawn.items():
-                nf.attrs[key] = dict(val) if isinstance(val, dict) else val
-        for e in g.mesh.edges:
-            v0, v1 = m.vertex_at(W(e.a)), m.vertex_at(W(e.b))
-            if v0 is None or v1 is None or m.find_edge(v0, v1) is None:
-                m.add_edge(W(e.a), W(e.b))
-        # Edge flags travel back out of the group (the mirror of
-        # MakeGroupCommand): an exploded cylinder must stay smooth, its rims
-        # keep selecting as whole curves, and a hidden edge stay hidden.
-        for e in g.mesh.edges:
-            if edge_is_plain(e):
-                continue
-            v0, v1 = m.vertex_at(W(e.a)), m.vertex_at(W(e.b))
-            k = (m.find_edge(v0, v1)
-                 if v0 is not None and v1 is not None else None)
-            if k is not None:
-                stamp_edge_flags(k, edge_flags(e))
+            before = list(m.faces) if m.faces else []
+            added: list = []
+            for f in g.mesh.faces:
+                nf = m.add_face([W(v) for v in f.vertices],
+                                [[W(v) for v in h] for h in f.holes] or None)
+                added.append(nf)
+                # What the face showed inside is what it keeps outside: its own
+                # paint, or — a default face — the group's on BOTH sides
+                # (issue #47: the back used to fall back to default).
+                drawn = effective_attrs(dict(f.attrs or {}), paint)
+                if invertible:
+                    drawn = placed_face_paint(drawn, f, inverse)
+                for key, val in drawn.items():
+                    nf.attrs[key] = dict(val) if isinstance(val, dict) else val
+            for e in g.mesh.edges:
+                v0, v1 = m.vertex_at(W(e.a)), m.vertex_at(W(e.b))
+                if v0 is None or v1 is None or m.find_edge(v0, v1) is None:
+                    m.add_edge(W(e.a), W(e.b))
+            # Edge flags travel back out of the group (the mirror of
+            # MakeGroupCommand): an exploded cylinder must stay smooth, its rims
+            # keep selecting as whole curves, and a hidden edge stay hidden.
+            for e in g.mesh.edges:
+                if edge_is_plain(e):
+                    continue
+                v0, v1 = m.vertex_at(W(e.a)), m.vertex_at(W(e.b))
+                k = (m.find_edge(v0, v1)
+                     if v0 is not None and v1 is not None else None)
+                if k is not None:
+                    stamp_edge_flags(k, edge_flags(e))
         m.resplit_curves()
         # A face that lands on faces already there merges with them, as a
         # pasted one does (#73): two boxes that touch share ONE wall instead
@@ -5195,11 +5233,15 @@ class ExplodeGroupCommand(MeshCommand):
         self.copies = []
 
     def undo(self, scene) -> None:
-        for c, xform, mesh, material, axes, offset in self._lifted:
-            if c in scene.groups:
-                scene.groups.remove(c)
-            c.xform, c.mesh, c.material, c.axes = xform, mesh, material, axes
-            c.explode_offset = offset
+        if _doc.ENABLED:
+            from ingetrazo_core import lower_placements
+            lower_placements(scene.groups, self._lifted)
+        else:
+            for c, xform, mesh, material, axes, offset in self._lifted:
+                if c in scene.groups:
+                    scene.groups.remove(c)
+                c.xform, c.mesh, c.material, c.axes = xform, mesh, material, axes
+                c.explode_offset = offset
         scene.mesh.restore_state(self.snapshot)
         self.group.children = [c for c, *_rest in self._lifted]
         scene.groups.insert(self.index, self.group)

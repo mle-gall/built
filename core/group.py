@@ -316,6 +316,9 @@ class _GroupMethods:
         A copied GROUP (the copy entering a group makes unique on the way
         in) bakes into a classic group without nested placements
         (``materialize``), or keeps its tree, privately, with them."""
+        if _dm.ENABLED:
+            from ingetrazo_core import unique_placement
+            return unique_placement(self)
         if _is_link(self):
             # A linked file is its source's: nothing of it is this copy's to
             # make its own (it is edited in its own document).
