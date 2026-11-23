@@ -12,7 +12,7 @@
 
 use egui::{pos2, vec2, Color32, CornerRadius, Margin, Pos2, Rect, Sense, Stroke};
 
-use super::{body, caption_plain, glass, menu_row, meta, paint_state, parse_hex, state_of, strong, Surface,
+use super::{BRIGHT, IMAGE_HOVER, body, caption_plain, glass, menu_row, meta, paint_state, parse_hex, state_of, strong, Surface,
             ACCENT, ACTIVE, DIM, EDGE, FAINT, FIELD, HOVER, INK, INK_2, OFF, R_CONTROL, R_ROW, State};
 
 const ROW: f32 = 22.0;
@@ -314,7 +314,7 @@ impl Library {
             self.rename_field(ui, Rect::from_min_max(pos2(x - 4.0, rect.min.y + 1.0), pos2(right, rect.max.y - 1.0)), out);
             return;
         }
-        let ink = if lit { Color32::WHITE } else { INK_2 };
+        let ink = if lit { BRIGHT } else { INK_2 };
         let g = ui.painter().layout_job(one_line(e.name.clone(), body(), ink, right - uw - x));
         ui.painter().galley(pos2(x, cy - g.size().y / 2.0), g, ink);
         if let Some(g) = uses {
@@ -344,7 +344,7 @@ impl Library {
             // Uses, as a small badge on the thumbnail's corner.
             let g = ui.painter().layout_no_wrap(e.count.to_string(), egui::FontId::proportional(9.5), INK);
             let b = Rect::from_min_size(pos2(thumb.max.x - g.size().x - 6.0, thumb.max.y - 14.0), vec2(g.size().x + 6.0, 13.0));
-            ui.painter().rect_filled(b, CornerRadius::same(4), Color32::from_black_alpha(170));
+            ui.painter().rect_filled(b, CornerRadius::same(4), IMAGE_HOVER);
             ui.painter().galley(b.center() - g.size() / 2.0, g, INK);
         }
         let text_r = Rect::from_min_max(pos2(rect.min.x + 2.0, thumb.max.y + 3.0), pos2(rect.max.x - 2.0, rect.max.y));
@@ -352,7 +352,7 @@ impl Library {
             self.rename_field(ui, text_r, out);
             return;
         }
-        let ink = if lit { Color32::WHITE } else { INK_2 };
+        let ink = if lit { BRIGHT } else { INK_2 };
         let g = ui.painter().layout_job(one_line(e.name.clone(), egui::FontId::proportional(10.5), ink, text_r.width()));
         ui.painter().galley(pos2(text_r.center().x - g.size().x / 2.0, text_r.min.y), g, ink);
         self.item_response(resp, i, out);
@@ -500,7 +500,7 @@ fn icon_toggle(ui: &mut egui::Ui, on: bool, tip: &str, glyph: fn(&egui::Ui, Rect
     let (r, resp) = ui.allocate_exact_size(vec2(24.0, 24.0), Sense::click());
     let st = state_of(&resp, on, true);
     paint_state(ui, r, st, R_CONTROL);
-    glyph(ui, r, if on { Color32::WHITE } else if st == State::Hover { INK } else { DIM });
+    glyph(ui, r, if on { BRIGHT } else if st == State::Hover { INK } else { DIM });
     resp.on_hover_text(tip).clicked()
 }
 
@@ -515,73 +515,7 @@ fn small_menu_button(ui: &mut egui::Ui, label: &str, w: f32, tip: &str) -> Optio
     resp.clicked().then_some(rect)
 }
 
-/// The dock's place switch: one inset track, the current place raised.
-/// Returns the segment clicked (also when it is the current one: a click on
-/// the lit "Project" while in Problems returns to the tree).
-pub fn segmented(ui: &mut egui::Ui, labels: &[&str], at: usize, width: f32) -> Option<usize> {
-    let (track, _) = ui.allocate_exact_size(vec2(width, 24.0), Sense::hover());
-    ui.painter().rect_filled(track, CornerRadius::same(R_CONTROL), FIELD);
-    let n = labels.len().max(1) as f32;
-    let seg_w = (width - 4.0) / n;
-    let mut hit = None;
-    for (i, label) in labels.iter().enumerate() {
-        let r = Rect::from_min_size(pos2(track.min.x + 2.0 + i as f32 * seg_w, track.min.y + 2.0), vec2(seg_w, 20.0));
-        let resp = ui.interact(r, ui.id().with(("seg", i)), Sense::click());
-        let on = i == at;
-        if on {
-            ui.painter().rect_filled(r, CornerRadius::same(R_ROW), Color32::from_rgba_premultiplied(30, 32, 36, 40));
-            ui.painter().rect_stroke(r, CornerRadius::same(R_ROW), Stroke::new(1.0_f32, EDGE), egui::StrokeKind::Inside);
-        } else if resp.hovered() {
-            ui.painter().rect_filled(r, CornerRadius::same(R_ROW), HOVER);
-        }
-        let (font, ink) = if on { (strong(12.0), INK) } else { (body(), if resp.hovered() { INK } else { DIM }) };
-        ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, *label, font, ink);
-        if resp.clicked() { hit = Some(i); }
-    }
-    hit
-}
-
-/// Second-level tabs: text on a hairline, the current one underlined in
-/// accent. (label, count or note, enabled). Labels shrink to fit the row.
-pub fn underline_tabs(ui: &mut egui::Ui, tabs: &[(String, String, bool)], at: usize) -> Option<usize> {
-    let width = ui.available_width();
-    let (row, _) = ui.allocate_exact_size(vec2(width, 26.0), Sense::hover());
-    ui.painter().hline(row.x_range(), row.max.y - 0.5, Stroke::new(1.0_f32, EDGE));
-    let lay = |t: &(String, String, bool), on: bool| {
-        let label = ui.painter().layout_no_wrap(t.0.clone(), if on { strong(12.0) } else { body() }, INK);
-        let count = (!t.1.is_empty()).then(|| ui.painter().layout_no_wrap(t.1.clone(), egui::FontId::proportional(10.5), FAINT));
-        (label, count)
-    };
-    let galleys: Vec<_> = tabs.iter().enumerate().map(|(i, t)| lay(t, i == at)).collect();
-    let natural: f32 = galleys.iter().map(|(l, c)| l.size().x + c.as_ref().map_or(0.0, |c| c.size().x + 4.0) + 16.0).sum();
-    // Too wide: drop the counts of the tabs that are not current.
-    let squeeze = natural > width;
-    let mut x = row.min.x;
-    let mut hit = None;
-    for (i, ((label, count), t)) in galleys.into_iter().zip(tabs).enumerate() {
-        let on = i == at;
-        let show_count = count.filter(|_| on || !squeeze);
-        let w = label.size().x + show_count.as_ref().map_or(0.0, |c| c.size().x + 4.0) + 16.0;
-        let r = Rect::from_min_size(pos2(x, row.min.y), vec2(w, row.height()));
-        let sense = if t.2 { Sense::click() } else { Sense::hover() };
-        let resp = ui.interact(r, ui.id().with(("utab", i)), sense);
-        let ink = if !t.2 { OFF } else if on { INK } else if resp.hovered() { INK } else { DIM };
-        let cy = r.center().y - 1.0;
-        let lw = label.size().x;
-        ui.painter().galley_with_override_text_color(pos2(r.min.x + 8.0, cy - label.size().y / 2.0), label, ink);
-        if let Some(c) = show_count {
-            ui.painter().galley(pos2(r.min.x + 8.0 + lw + 4.0, cy - c.size().y / 2.0 + 0.5), c, FAINT);
-        }
-        if on {
-            ui.painter().rect_filled(Rect::from_min_max(pos2(r.min.x + 6.0, r.max.y - 2.0), pos2(r.max.x - 6.0, r.max.y)),
-                CornerRadius::same(1), ACCENT);
-        }
-        let resp = if t.2 { resp } else { resp.on_hover_text("Coming") };
-        if resp.clicked() && t.2 { hit = Some(i); }
-        x += w;
-    }
-    hit
-}
+pub use super::kit::{segmented, underline_tabs};
 
 /// The dock header's place switch and, under Project, its mode (Problems)
 /// with a way back. Used by `Ui::right_column`.

@@ -155,7 +155,7 @@ impl Sheets {
                 ui.painter().galley(pos2(r.max.x - 8.0 - cw, r.center().y - c.size().y / 2.0), c, FAINT);
                 let mut job = egui::text::LayoutJob::single_section(name.clone(), egui::TextFormat {
                     font_id: if *current { strong(12.0) } else { body() },
-                    color: if *current { Color32::WHITE } else { INK }, ..Default::default() });
+                    color: if *current { BRIGHT } else { INK }, ..Default::default() });
                 job.wrap.max_width = (r.width() - cw - 26.0).max(20.0);
                 job.wrap.max_rows = 1;
                 job.wrap.break_anywhere = true;
@@ -580,7 +580,7 @@ fn sheet_rows(ui: &mut egui::Ui, rows: &[(String, String)], edits: &mut std::col
                     let b = Rect::from_center_size(pos2(r.min.x + 12.0, r.center().y), vec2(14.0, 14.0));
                     ui.painter().rect_filled(b, CornerRadius::same(4), if on { ACCENT } else { FIELD });
                     ui.painter().rect_stroke(b, CornerRadius::same(4), Stroke::new(1.0_f32, if on { ACCENT } else { EDGE }), egui::StrokeKind::Inside);
-                    if on { ui.painter().text(b.center(), egui::Align2::CENTER_CENTER, "✓", meta(), Color32::WHITE); }
+                    if on { ui.painter().text(b.center(), egui::Align2::CENTER_CENTER, "✓", meta(), BRIGHT); }
                     ui.painter().text(pos2(b.max.x + 8.0, r.center().y), egui::Align2::LEFT_CENTER, if on { "On" } else { "Off" }, body(), INK);
                     if resp.clicked() { out.push(format!("edit{SEP}{id}{SEP}{}", if on { 0 } else { 1 })); }
                 });

@@ -2,7 +2,6 @@ use super::*;
 
 // ID, title, detail, tone, action label and toast opacity (negative once the capsule result expires).
 pub type ActivityRow = (String, String, String, String, String, f32);
-pub(super) const ERROR: Color32 = Color32::from_rgb(235, 99, 99);
 
 impl Ui {
     pub fn set_activity(&mut self, history: Vec<ActivityRow>, banner: String) {

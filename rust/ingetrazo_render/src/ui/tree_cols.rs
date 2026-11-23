@@ -5,7 +5,7 @@
 
 use egui::{pos2, vec2, Color32, Rect, Stroke};
 
-use super::{ACCENT, DIM, EDGE, FAINT, WARN};
+use super::{FOUND, MISSING, ACCENT, DIM, EDGE, FAINT, WARN};
 
 /// A name keeps at least this much room (points) before a column hides.
 pub const MIN_NAME: f32 = 120.0;
@@ -16,8 +16,6 @@ const LEAD: f32 = 4.0 + 16.0 + 16.0;
 const PLAN_DEPTH: f32 = 2.0;
 
 /// A file found / changed on disk / not found / packed: the row's dot.
-const FOUND: Color32 = Color32::from_rgb(0x5C, 0xC4, 0x7A);
-const MISSING: Color32 = Color32::from_rgb(0xF0, 0x62, 0x5A);
 
 /// Where each column of a column set sits in a row `[left, right]`.
 #[derive(Clone, Copy, Debug, Default)]
