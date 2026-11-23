@@ -27,6 +27,10 @@ import tempfile  # noqa: E402
 
 _data_dir = tempfile.mkdtemp(prefix="ingetrazo-tests-data-")
 os.environ["XDG_DATA_HOME"] = _data_dir
+if sys.platform == "darwin":
+    # Foundation resolves QStandardPaths independently from HOME. Give each
+    # pytest worker its own Application Support and untitled recovery slots.
+    os.environ["CFFIXED_USER_HOME"] = _data_dir
 if sys.platform == "win32":
     os.environ["APPDATA"] = _data_dir
     # core.paths.user_log_dir reads it: without this every test that rolls
