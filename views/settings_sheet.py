@@ -16,6 +16,8 @@ says so at the top of the sheet.
 """
 from __future__ import annotations
 
+import json
+
 from core.i18n import tr
 from views import chrome_sheet
 from views import chrome_forms as cf
@@ -456,124 +458,49 @@ def _display(env) -> list:
     return [("quality", tr("Quality"), quality), ("editing", tr("Editing a group"), editing)]
 
 
-#: The six physical axes of the cap, as the dialog names them.
-_AXIS_LABELS = ("Move left / right", "Move up / down", "Push / pull", "Tilt forward / back",
-                "Twist left / right", "Roll left / right")
-_ACTION_LABELS = ("Pan X", "Pan Y", "Zoom", "Orbit X", "Orbit Y", "Disabled")
-
-
-def _ndof_state(env):
-    """(settings, named profiles, the preset shown)."""
-    from core.ndof import AXES, DEFAULT_MAPPING
+def _device_preferences(env, named=None):
+    from core.ndof_profiles import profile_to_dict
+    from ingetrazo_render import DevicePreferences
     from views.ndof_input import load_settings
-    p = _p()
     nd = load_settings()
-    named = p.read_named_ndof_profiles()
+    profile = profile_to_dict(nd)
     if nd.mapping_preset == "original":
-        nd.axis_inversion = p.legacy_ndof_inversion(nd)
-    chosen = str(env.st.value("ndof/selected_profile", "") or "")
-    if chosen in named:
-        return nd, named, "named:" + chosen
-    if nd.mapping_preset in ("original", "freecad"):
-        return nd, named, nd.mapping_preset
-    # Original is stored as Custom (its inversion migrated): shown as what it is.
-    if (nd.axis_mapping == DEFAULT_MAPPING and not any(nd.axis_inversion.values())
-            and all(abs(nd.axis_sensitivity[a] - 1.0) < 1e-9 for a in AXES)
-            and abs(nd.sensitivity - 1.0) < 1e-9):
-        return nd, named, "original"
-    return nd, named, "custom"
+        profile["inversion"] = _p().legacy_ndof_inversion(nd)
+    if named is None:
+        named = _p().read_named_ndof_profiles()
+    model = DevicePreferences(json.dumps(profile), json.dumps({k: profile_to_dict(v) for k, v in named.items()}),
+                              nd.mapping_preset, str(env.st.value("ndof/selected_profile", "") or ""),
+                              nd.enabled, nd.lock_rotation)
+    return model, named
 
 
-def _ndof_shown(env):
-    """:func:`_ndof_state`, read once per build (the axis table asks for it
-    eighteen times)."""
-    got = env.__dict__.get("_ndof")
-    if got is None:
-        got = env._ndof = _ndof_state(env)
-    return got
-
-
-def _ndof_put(env, *, preset=None, axis=None, what=None, value=None, **flags):
-    """One 3D mouse change, stored at once: a flag (enabled, lock), the
-    global speed, a preset, or one axis's action, inversion or speed."""
-    from core.ndof import AXES
-    p = _p()
-    nd, named, selected = _ndof_state(env)
-    for k, v in flags.items():
-        setattr(nd, k, v)
-    if preset is not None:
-        values = p.ndof_preset_values(preset, named)
-        if values is not None:
-            mapping, inversion, speeds, global_speed = values
-            nd.sensitivity = global_speed
-            for a in AXES:
-                nd.axis_mapping[a] = mapping[a]
-                nd.axis_inversion[a] = inversion[a]
-                nd.axis_sensitivity[a] = speeds[a]
-        selected = preset
-    elif axis is not None or "sensitivity" in flags:
-        if axis is not None:
-            getattr(nd, what)[axis] = value
-        selected = "custom"             # editing an axis makes it Custom
-    p.save_ndof(nd, named, selected, env.st)
+def _device_edit(env, edits, named=None):
+    from core.ndof_profiles import profile_from_dict
+    model, named = _device_preferences(env, named)
+    for key, value in edits.items():
+        model.edit(key, json.dumps(value))
+    nd = profile_from_dict(json.loads(model.profile()))
+    nd.enabled, nd.lock_rotation = model.enabled, model.locked
+    _p().save_ndof(nd, named, model.selected, env.st)
     env.st.sync()
 
 
-def _ndof(env) -> list:
-    from core.ndof import ACTIONS, AXES
-    from views.ndof_input import load_settings
-
-    def preset(env):
-        return _ndof_shown(env)[2]
-
-    def presets(env):
-        named = _p().read_named_ndof_profiles()
-        return [("original", tr("Original")), ("freecad", tr("FreeCAD-style")), ("custom", tr("Custom"))] + [
-            ("named:" + n, n) for n in sorted(named, key=str.casefold)]
-
-    device = [
-        Row("ndof_on", "check", tr("Navigate with a 3D mouse (SpaceMouse)"),
-            lambda env: load_settings().enabled, lambda env, v: _ndof_put(env, enabled=bool(v)),
-            default=True),
-        Row("ndof_speed", "number", tr("Speed"), lambda env: int(round(_ndof_shown(env)[0].sensitivity * 100)),
-            lambda env, v: _ndof_put(env, sensitivity=int(v) / 100.0), lo=25, hi=400, suffix="%"),
-        Row("ndof_lock", "check", tr("Pan and zoom only (no rotation — for drawing in plan)"),
-            lambda env: load_settings().lock_rotation, lambda env, v: _ndof_put(env, lock_rotation=bool(v)),
-            default=False),
-        Row("ndof_driver", "text", tr("Driver"), lambda env: _ndof_driver()),
-        Row("ndof_preset", "choice", tr("Axis mapping preset"), preset,
-            lambda env, v: _ndof_put(env, preset=v), options=presets, default="original"),
-    ]
-    axes = []
-    actions = [(k, tr(label)) for k, label in zip(ACTIONS, _ACTION_LABELS)]
-    for axis, label in zip(AXES, _AXIS_LABELS):
-        axes += [
-            Row(f"ndof_map_{axis}", "choice", tr(label),
-                lambda env, a=axis: _ndof_shown(env)[0].axis_mapping[a],
-                lambda env, v, a=axis: _ndof_put(env, axis=a, what="axis_mapping", value=v),
-                options=actions, words="axis"),
-            Row(f"ndof_inv_{axis}", "check", tr("Invert"),
-                lambda env, a=axis: bool(_ndof_shown(env)[0].axis_inversion[a]),
-                lambda env, v, a=axis: _ndof_put(env, axis=a, what="axis_inversion", value=bool(v)),
-                words=tr(label)),
-            Row(f"ndof_speed_{axis}", "number", tr("Speed"),
-                lambda env, a=axis: int(round(_ndof_shown(env)[0].axis_sensitivity[a] * 100)),
-                lambda env, v, a=axis: _ndof_put(env, axis=a, what="axis_sensitivity", value=int(v) / 100.0),
-                lo=25, hi=400, suffix="%", words=tr(label)),
-        ]
-    return [("device", tr("Device"), device), ("axes", tr("Axes"), axes)]
+def _native_groups(spec, put):
+    """Bind the sheet toolkit's field callbacks to rows returned by Rust."""
+    def bind(data):
+        key, kind = data.pop("id"), data.pop("kind")
+        value = data.pop("value")
+        return Row(key, kind, data.pop("label"), lambda env: value,
+                   None if kind == "text" else lambda env, v: put(env, key, v), **data)
+    return [(gid, title, [bind(data) for data in rows]) for gid, title, rows in json.loads(spec)]
 
 
-def _ndof_driver() -> str:
-    try:
-        from views.ndof_input import shared_input
-        name = shared_input().backend_name
-    except Exception:  # noqa: BLE001 — a status line, never the sheet
-        name = ""
-    if name:
-        return tr("Device driver found: {name}", name=name)
-    return tr("No 3D mouse driver found. On Linux install and start «spacenavd»; on Windows the "
-              "3Dconnexion driver is enough. macOS is not supported yet.")
+def _ndof(env):
+    from views.ndof_input import shared_input
+    model, _ = _device_preferences(env)
+    driver = shared_input().backend_name or ""
+    live = env.device_readings.text(tr) if getattr(env, "device_readings", None) else ("—", "—")
+    return _native_groups(model.groups(tr, driver, live), lambda env, key, v: _device_edit(env, {key: v}))
 
 
 def _import(env) -> list:
@@ -905,6 +832,8 @@ class SettingsSheet(chrome_sheet.Provider):
     north_cmd = None
 
     def __init__(self, section="general"):
+        self._device = None
+        self._readings = None
         self.section = section
         self.query = ""
         self.kb_focus = None            # "sc:<action key>"
@@ -926,6 +855,31 @@ class SettingsSheet(chrome_sheet.Provider):
             if page in _LABELS:
                 self.section = page
         self.query = ""
+
+    def _monitor(self, active):
+        from views.ndof_input import shared_input
+        from ingetrazo_render import DeviceReadings
+        if active and self._device is None:
+            dev = shared_input()
+            if dev.backend_name:
+                self._readings = DeviceReadings()
+                self._device = dev
+                dev.raw.connect(self._raw_sample)
+                dev.motion.connect(self._motion_sample)
+        elif not active and self._device is not None:
+            self._device.raw.disconnect(self._raw_sample)
+            self._device.motion.disconnect(self._motion_sample)
+            self._device = self._readings = None
+
+    def _raw_sample(self, values):
+        if self._readings is not None:
+            self._readings.raw(values)
+            chrome_sheet.refresh(self._win)
+
+    def _motion_sample(self, sample, _dt):
+        if self._readings is not None:
+            self._readings.motion((sample.right, sample.up, sample.forward, sample.tilt, sample.spin))
+            chrome_sheet.refresh(self._win)
 
     def signature(self, ctx):
         scene = getattr(getattr(ctx.win, "viewport", None), "scene", None)
@@ -1006,6 +960,8 @@ class SettingsSheet(chrome_sheet.Provider):
     def build(self, ctx):
         self._win = ctx.win
         env = Env(ctx.win)
+        self._monitor(self.section == "ndof" and not self.query.strip())
+        env.device_readings = self._readings
         self._rows = {}
         s = chrome_sheet.Sheet(self.id, tr("Settings"), width=1100)
         s.search(tr("Search settings"))
@@ -1327,7 +1283,7 @@ class SettingsSheet(chrome_sheet.Provider):
         p = _p()
         env = Env(self._win)
         if verb == "ndof_reset":
-            _ndof_put(env, preset="original", lock_rotation=False)
+            _device_edit(env, {"ndof_preset": "original", "ndof_lock": False})
         elif verb == "ndof_load":
             from core.ndof_profiles import load_profile
             from views.filedialogs import file_dialogs
@@ -1340,22 +1296,23 @@ class SettingsSheet(chrome_sheet.Provider):
             except (OSError, ValueError, UnicodeError) as exc:
                 SettingsSheet.note = (tr("Invalid SpaceMouse profile") + ": " + str(exc), "error")
                 return
-            name = Path(path).stem
-            if name in ("Original", "FreeCAD-style", "Custom"):
-                name += " (imported)"
+            from ingetrazo_render import DevicePreferences
+            name = DevicePreferences.profile_name(Path(path).stem, True)
             self._ndof_add(env, name, profile)
         elif verb == "ndof_save":
             def named(name):
                 if name is None:
                     return
-                name = name.strip()
-                if not name or len(name) > 80 or name in ("Original", "FreeCAD-style", "Custom"):
-                    SettingsSheet.note = (tr("Choose a different name (1–80 characters)."), "error")
+                from ingetrazo_render import DevicePreferences
+                try:
+                    name = DevicePreferences.profile_name(name, False)
+                except ValueError as exc:
+                    SettingsSheet.note = (tr(str(exc)), "error")
                     chrome_sheet.refresh(self._win)
                     return
-                from core.ndof_profiles import profile_from_dict, profile_to_dict
-                nd = _ndof_state(Env(self._win))[0]
-                profile = profile_from_dict(profile_to_dict(nd))
+                from core.ndof_profiles import profile_from_dict
+                model, _ = _device_preferences(Env(self._win))
+                profile = profile_from_dict(json.loads(model.profile()))
                 if name in p.read_named_ndof_profiles():
                     self._confirm(tr("Replace profile?"),
                                   tr("Replace the existing profile '{name}'?", name=name), tr("Replace"),
@@ -1365,11 +1322,9 @@ class SettingsSheet(chrome_sheet.Provider):
             cf.ask_text(self._win, tr("Save SpaceMouse profile"), tr("Profile name:"), done=named)
 
     def _ndof_add(self, env, name, profile) -> None:
-        p = _p()
-        nd, named, _selected = _ndof_state(env)
+        named = _p().read_named_ndof_profiles()
         named[name] = profile
-        p.save_ndof(nd, named, "named:" + name, env.st)
-        _ndof_put(env, preset="named:" + name)
+        _device_edit(env, {"ndof_preset": "named:" + name}, named)
         chrome_sheet.refresh(self._win)
 
     # -- restore defaults ---------------------------------------------------------------
@@ -1393,6 +1348,7 @@ class SettingsSheet(chrome_sheet.Provider):
         chrome_sheet.refresh(win)
 
     def closed(self, ctx) -> None:
+        self._monitor(False)
         SettingsSheet.note = None
         SettingsSheet.figure_custom = False
         SettingsSheet.north_cmd = None

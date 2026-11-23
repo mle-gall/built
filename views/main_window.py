@@ -11949,6 +11949,8 @@ class MainWindow(WorksessionMixin, QMainWindow):
         if not self._confirm_quit():
             event.ignore()
             return
+        from views import chrome_sheet
+        chrome_sheet.close(self)
         _forms.close_all(self)
         self._release_check = None
         self.persist_worksession()

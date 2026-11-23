@@ -99,7 +99,7 @@ def test_with_room_to_spare_it_opens_at_its_natural_size():
 def test_the_pages_are_all_there_and_units_still_opens_on_its_page():
     dlg = PreferencesDialog(_Win())
     names = [dlg._tabs.tabText(i) for i in range(dlg._tabs.count())]
-    assert len(names) == 5
+    assert len(names) == 4
     for i in range(dlg._tabs.count()):
         page = dlg._tabs.widget(i)
         if page is dlg._shortcuts:          # its list scrolls on its own

@@ -20,7 +20,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import QRect, QSettings, QSize, Qt
-from PySide6.QtGui import QFontDatabase, QGuiApplication, QIcon, QPixmap
+from PySide6.QtGui import QGuiApplication, QIcon, QPixmap
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -56,8 +56,8 @@ from views.settings_apply import (
     apply_invert_wheel, apply_language, apply_msaa, apply_rest_mode,
     apply_rust_engine, apply_slides, apply_soft_shadows, apply_theme_choice,
     apply_toolbar_icon_px, apply_undo_steps, apply_window_glass,
-    graphics_server_applies, legacy_ndof_inversion, native_views_of,
-    ndof_preset_values, read_named_ndof_profiles, reload_ai_panel, save_ndof,
+    graphics_server_applies, native_views_of,
+    reload_ai_panel,
     viewports_of,
 )
 
@@ -437,148 +437,6 @@ class PreferencesDialog(QDialog):
             f"Python {cap.python_version} / Qt {cap.qt_version}"))
         tabs.addTab(_ScrollingPage(general), tr("General"))
 
-        # ---- 3D mouse (issue #108) -------------------------------------------
-        from views.ndof_input import load_settings, shared_input
-        nd = load_settings()
-        mouse3d = QWidget()
-        form = QFormLayout(mouse3d)
-        self._ndof_on = QCheckBox(tr("Navigate with a 3D mouse (SpaceMouse)"))
-        self._ndof_on.setChecked(nd.enabled)
-        form.addRow("", self._ndof_on)
-        self._ndof_speed = QSpinBox()
-        self._ndof_speed.setRange(25, 400)
-        self._ndof_speed.setSingleStep(25)
-        self._ndof_speed.setSuffix(" %")
-        self._ndof_speed.setValue(int(round(nd.sensitivity * 100)))
-        form.addRow(tr("Speed:"), self._ndof_speed)
-        # Legacy inversion controls have been replaced by physical-axis controls.
-        # Preserve their effective values when upgrading an Original configuration.
-        self._ndof_lock = QCheckBox(tr(
-            "Pan and zoom only (no rotation — for drawing in plan)"))
-        self._ndof_lock.setChecked(nd.lock_rotation)
-        form.addRow("", self._ndof_lock)
-        name = shared_input().backend_name
-        status = QLabel(
-            tr("Device driver found: {name}", name=name) if name else tr(
-                "No 3D mouse driver found. On Linux install and start "
-                "«spacenavd»; on Windows the 3Dconnexion driver is enough. "
-                "macOS is not supported yet."))
-        status.setWordWrap(True)
-        form.addRow("", status)
-        # Live reading: nobody on the team has a device, so an owner can say
-        # which number each move of the cap changes and which way IngeTrazo
-        # takes it — one look settles a sign (#108, the 12-10 video).
-        if name:
-            hint = QLabel(tr("Live reading — move the cap one way at a time:"))
-            hint.setWordWrap(True)
-            form.addRow("", hint)
-            self._ndof_raw = QLabel("—")
-            self._ndof_read = QLabel("—")
-            mono = QFontDatabase.systemFont(QFontDatabase.FixedFont)
-            for lab in (self._ndof_raw, self._ndof_read):
-                lab.setFont(mono)
-                lab.setTextInteractionFlags(Qt.TextSelectableByMouse)
-                form.addRow("", lab)
-            dev = shared_input()
-            dev.raw.connect(self._show_ndof_raw)
-            dev.motion.connect(self._show_ndof_read)
-            # The device outlives the dialog: let go when it closes.
-            self.finished.connect(self._drop_ndof_monitor)
-        # Six independent physical-axis assignments.
-        from core.ndof import AXES, ACTIONS, DEFAULT_MAPPING
-        self._ndof_loading = False
-        self._ndof_named = self._read_named_ndof_profiles()
-        self._ndof_selected_name = str(st.value("ndof/selected_profile", ""))
-        self._ndof_preset = QComboBox()
-        self._ndof_preset.addItem(tr("Original"), "original")
-        self._ndof_preset.addItem(tr("FreeCAD-style"), "freecad")
-        self._ndof_preset.addItem(tr("Custom"), "custom")
-        for name in sorted(self._ndof_named, key=str.casefold):
-            self._ndof_preset.addItem(name, "named:" + name)
-        selected = ("named:" + self._ndof_selected_name
-                    if self._ndof_selected_name in self._ndof_named
-                    else nd.mapping_preset)
-        self._ndof_preset.setCurrentIndex(max(0, self._ndof_preset.findData(selected)))
-        form.addRow(tr("Axis mapping preset:"), self._ndof_preset)
-        self._ndof_axes = {}
-        axis_labels = ("Move left / right", "Move up / down", "Push / pull",
-                       "Tilt forward / back", "Twist left / right",
-                       "Roll left / right")
-        action_labels = ("Pan X", "Pan Y", "Zoom", "Orbit X", "Orbit Y",
-                         "Disabled")
-        for axis, axis_label in zip(AXES, axis_labels):
-            row = QHBoxLayout()
-            action = QComboBox()
-            for key, label in zip(ACTIONS, action_labels):
-                action.addItem(tr(label), key)
-            action.setCurrentIndex(max(
-                0, action.findData(nd.axis_mapping.get(axis, DEFAULT_MAPPING[axis]))))
-            invert = QCheckBox(tr("Invert"))
-            invert.setChecked(nd.axis_inversion.get(axis, False))
-            speed = QSpinBox()
-            speed.setRange(25, 400)
-            speed.setSingleStep(25)
-            speed.setSuffix(" %")
-            speed.setValue(round(nd.axis_sensitivity.get(axis, 1.0) * 100))
-            row.addWidget(action)
-            row.addWidget(invert)
-            row.addWidget(speed)
-            form.addRow(tr(axis_label) + ":", row)
-            self._ndof_axes[axis] = (action, invert, speed)
-
-        # Do not lock axis widgets for any preset. Editing creates Custom.
-        # Block change handlers while loading a preset to prevent recursion.
-        def _preset_changed(_index):
-            values = ndof_preset_values(self._ndof_preset.currentData(),
-                                        self._ndof_named)
-            if values is None:
-                return
-            mapping, inversion, speeds, global_speed = values
-            self._ndof_loading = True
-            try:
-                self._ndof_speed.setValue(round(global_speed * 100))
-                for axis, (action, invert, speed) in self._ndof_axes.items():
-                    action.setCurrentIndex(action.findData(mapping[axis]))
-                    invert.setChecked(inversion[axis])
-                    speed.setValue(round(speeds[axis] * 100))
-            finally:
-                self._ndof_loading = False
-
-        def _axis_edited(*_args):
-            if self._ndof_loading:
-                return
-            index = self._ndof_preset.findData("custom")
-            if self._ndof_preset.currentIndex() != index:
-                self._ndof_preset.blockSignals(True)
-                self._ndof_preset.setCurrentIndex(index)
-                self._ndof_preset.blockSignals(False)
-
-        self._ndof_preset.currentIndexChanged.connect(_preset_changed)
-        for action, invert, speed in self._ndof_axes.values():
-            action.currentIndexChanged.connect(_axis_edited)
-            invert.toggled.connect(_axis_edited)
-            speed.valueChanged.connect(_axis_edited)
-        self._ndof_speed.valueChanged.connect(_axis_edited)
-        # Respect saved values when opening the dialog; do not reapply the
-        # preset here, which could overwrite previously customised settings.
-        if nd.mapping_preset == "original":
-            legacy = legacy_ndof_inversion(nd)
-            self._ndof_loading = True
-            for axis, (_, invert, _) in self._ndof_axes.items():
-                invert.setChecked(legacy[axis])
-            self._ndof_loading = False
-        profile_buttons = QHBoxLayout()
-        self._ndof_load = QPushButton(tr("Load profile…"))
-        self._ndof_save = QPushButton(tr("Save profile…"))
-        self._ndof_reset = QPushButton(tr("Reset to defaults"))
-        for button in (self._ndof_load, self._ndof_save, self._ndof_reset):
-            profile_buttons.addWidget(button)
-        form.addRow("", profile_buttons)
-        self._ndof_load.clicked.connect(self._load_ndof_profile)
-        self._ndof_save.clicked.connect(self._save_ndof_profile)
-        self._ndof_reset.clicked.connect(self._reset_ndof_profile)
-        tabs.addTab(_ScrollingPage(mouse3d), tr("3D Mouse"))
-
         # ---- Import ---------------------------------------------------------
         imp = QWidget()
         form = QFormLayout(imp)
@@ -694,104 +552,11 @@ class PreferencesDialog(QDialog):
         self._key_env.setText(note)
         self._key_env.setVisible(bool(note))
 
-    def _drop_ndof_monitor(self, _result=0) -> None:
-        from views.ndof_input import shared_input
-        dev = shared_input()
-        for sig, slot in ((dev.raw, self._show_ndof_raw),
-                          (dev.motion, self._show_ndof_read)):
-            try:
-                sig.disconnect(slot)
-            except (RuntimeError, TypeError):
-                pass
-
-    def _show_ndof_raw(self, values) -> None:
-        names = ("X", "Y", "Z", "RX", "RY", "RZ")
-        self._ndof_raw.setText(tr("Device:") + "  " + "  ".join(
-            f"{n} {v:+5d}" for n, v in zip(names, values)))
-
-    def _show_ndof_read(self, sample, _dt) -> None:
-        self._ndof_read.setText(tr(
-            "Built: right {r:+.2f}  up {u:+.2f}  forward {f:+.2f}  "
-            "tilt {t:+.2f}  twist {s:+.2f}", r=sample.right, u=sample.up,
-            f=sample.forward, t=sample.tilt, s=sample.spin))
-
     def show_shortcut_of(self, action) -> None:
         """Open on the Keyboard shortcuts page with ``action`` picked."""
         self._tabs.setCurrentWidget(self._shortcuts)
         self._shortcuts.pick(action)
 
-    def _ndof_profile_from_ui(self):
-        from core.ndof import NdofSettings
-        from core.ndof_profiles import profile_from_dict, profile_to_dict
-        nd = NdofSettings(mapping_preset="custom")
-        nd.sensitivity = self._ndof_speed.value() / 100.0
-        for axis, (action, invert, speed) in self._ndof_axes.items():
-            nd.axis_mapping[axis] = action.currentData()
-            nd.axis_inversion[axis] = invert.isChecked()
-            nd.axis_sensitivity[axis] = speed.value() / 100.0
-        return profile_from_dict(profile_to_dict(nd))
-
-    @staticmethod
-    def _read_named_ndof_profiles():
-        return read_named_ndof_profiles()
-
-    def _add_ndof_named_profile(self, name, profile):
-        self._ndof_named[name] = profile
-        key = "named:" + name
-        index = self._ndof_preset.findData(key)
-        if index < 0:
-            self._ndof_preset.addItem(name, key)
-            index = self._ndof_preset.findData(key)
-        self._ndof_preset.setCurrentIndex(index)
-
-    def _load_ndof_profile(self):
-        from pathlib import Path
-        from core.ndof_profiles import load_profile
-        path, _ = QFileDialog.getOpenFileName(
-            self, tr("Load SpaceMouse profile"), "", "JSON (*.json)")
-        if not path:
-            return
-        try:
-            profile = load_profile(path)
-        except (OSError, ValueError, UnicodeError) as exc:
-            QMessageBox.warning(self, tr("Invalid SpaceMouse profile"), str(exc))
-            return
-        name = Path(path).stem
-        if name in ("Original", "FreeCAD-style", "Custom"):
-            name += " (imported)"
-        self._add_ndof_named_profile(name, profile)
-
-    def _save_ndof_profile(self):
-        name, ok = QInputDialog.getText(
-            self, tr("Save SpaceMouse profile"), tr("Profile name:"))
-        if not ok:
-            return
-        name = name.strip()
-        if not name or len(name) > 80 or name in ("Original", "FreeCAD-style", "Custom"):
-            QMessageBox.warning(self, tr("Invalid profile name"),
-                                tr("Choose a different name (1–80 characters)."))
-            return
-        if name in self._ndof_named and QMessageBox.question(
-                self, tr("Replace profile?"),
-                tr("Replace the existing profile '{name}'?", name=name)) != QMessageBox.Yes:
-            return
-        self._add_ndof_named_profile(name, self._ndof_profile_from_ui())
-
-    def _reset_ndof_profile(self):
-        self._ndof_preset.setCurrentIndex(self._ndof_preset.findData("original"))
-        self._ndof_lock.setChecked(False)
-        # Explicitly reload even when Original is already selected.
-        if self._ndof_preset.currentData() == "original":
-            from core.ndof import DEFAULT_MAPPING
-            self._ndof_loading = True
-            self._ndof_speed.setValue(100)
-            for axis, (action, invert, speed) in self._ndof_axes.items():
-                action.setCurrentIndex(action.findData(DEFAULT_MAPPING[axis]))
-                invert.setChecked(False)
-                speed.setValue(100)
-            self._ndof_loading = False
-
-    # ---- Apply --------------------------------------------------------------
     # ---- Scale figure of new documents (#655) ----------------------------
 
     def _build_figure_rows(self, form, st) -> None:
@@ -945,7 +710,6 @@ class PreferencesDialog(QDialog):
         model are an account, not a taste), the keyboard shortcuts (their
         page resets them) and the units, which belong to the document."""
         from core import scale_figure as sf
-        from core.ndof import NdofSettings
         from core.platform_choice import AUTO
         from tools.walkthrough import DEFAULT_LOOK_SENSITIVITY
         from views.icons import default_toolbar_icon_px
@@ -985,13 +749,6 @@ class PreferencesDialog(QDialog):
         pick(self._platform, AUTO)
         if self._rust.isEnabled():
             self._rust.setChecked(_native.DEFAULT == "1")
-
-        # The 3D Mouse page has its own reset (Original mapping, every axis
-        # at 100 %, nothing inverted); the saved named profiles stay.
-        nd = NdofSettings()
-        self._ndof_on.setChecked(nd.enabled)
-        self._reset_ndof_profile()
-        self._ndof_lock.setChecked(nd.lock_rotation)
 
         pick(self._obj_unit, "m")
         pick(self._dxf_unit, "mm")
@@ -1041,16 +798,6 @@ class PreferencesDialog(QDialog):
         setup = getattr(self._window, "_setup_autosave", None)
         if callable(setup):
             setup()                     # re-arm the timer with the new pace
-
-        from core.ndof import NdofSettings
-        nd = NdofSettings(enabled=self._ndof_on.isChecked(),
-                          sensitivity=self._ndof_speed.value() / 100.0,
-                          lock_rotation=self._ndof_lock.isChecked())
-        for axis, (action, invert, speed) in self._ndof_axes.items():
-            nd.axis_mapping[axis] = action.currentData()
-            nd.axis_inversion[axis] = invert.isChecked()
-            nd.axis_sensitivity[axis] = speed.value() / 100.0
-        save_ndof(nd, self._ndof_named, self._ndof_preset.currentData(), st)
 
         apply_invert_wheel(self._window, self._invert.isChecked(), st)
         apply_cursor_style(self._window, self._cursor_style.currentData(), st)

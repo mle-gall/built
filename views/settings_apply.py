@@ -265,26 +265,6 @@ def read_named_ndof_profiles() -> dict:
         return {}
 
 
-def ndof_preset_values(choice, named: dict):
-    """``(mapping, inversion, speeds, global_speed)`` of a preset
-    ("original", "freecad", "named:<name>"), or None ("custom", unknown)."""
-    from core.ndof import (AXES, DEFAULT_MAPPING, FREECAD_INVERSION,
-                           FREECAD_MAPPING)
-    if choice == "original":
-        return (DEFAULT_MAPPING, {axis: False for axis in AXES},
-                {axis: 1.0 for axis in AXES}, 1.0)
-    if choice == "freecad":
-        return (FREECAD_MAPPING, FREECAD_INVERSION,
-                {axis: 1.0 for axis in AXES}, 1.0)
-    if isinstance(choice, str) and choice.startswith("named:"):
-        profile = named.get(choice[6:])
-        if profile is None:
-            return None
-        return (profile.axis_mapping, profile.axis_inversion,
-                profile.axis_sensitivity, profile.sensitivity)
-    return None
-
-
 def legacy_ndof_inversion(nd) -> dict:
     """The per-axis inversion an Original configuration of the first
     settings meant (its pair switches folded into each axis)."""

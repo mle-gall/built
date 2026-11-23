@@ -607,7 +607,8 @@ class Host:
 
     def close(self):
         from app_shell import windows
-        from views import chrome_forms
+        from views import chrome_forms, chrome_sheet
+        chrome_sheet.close(self.window)
         chrome_forms.close_all(self.window)
         self.window._release_check = None
         windows.unregister(self)

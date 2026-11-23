@@ -2690,6 +2690,7 @@ fn large_sheet_check(spec: &str) -> String {
 mod surfaces;
 mod release;
 mod units_start;
+mod preferences;
 
 /// Start an orthographic ray on the plane through the camera, aligned with the point.
 #[pyfunction]
@@ -2712,6 +2713,8 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(panic_log::_panic_for_test, m)?)?;
     m.add_class::<ui::operation_form::OperationForm>()?;
     m.add_class::<units_start::UnitsDraft>()?;
+    m.add_class::<preferences::DevicePreferences>()?;
+    m.add_class::<preferences::DeviceReadings>()?;
     m.add_class::<release::ReleaseReview>()?;
     m.add_class::<Renderer>()
 }

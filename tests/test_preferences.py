@@ -215,15 +215,23 @@ def test_the_3d_mouse_page_shows_the_device_live(settings_file, monkeypatch):
     monkeypatch.setattr(ndof_input, "_shared", dev)
     monkeypatch.setattr(type(dev), "backend_name",
                         property(lambda self: "rawinput"))
-    dlg = PreferencesDialog(_Win())
+    from views import chrome_sheet, settings_sheet
+    win = _Win()
+    settings_sheet.show(win, page="ndof")
+    sheet = chrome_sheet.current(win)
+    context = chrome_sheet.Ctx(win, None)
+    sheet.build(context)
+    readings = sheet._readings
     dev.raw.emit((12, -340, 0, 0, 0, 7))
     dev.motion.emit(NdofSample(forward=0.97), 0.01)
-    assert "Y  -340" in dlg._ndof_raw.text()
-    assert "RZ    +7" in dlg._ndof_raw.text()
-    assert "+0.97" in dlg._ndof_read.text()
-    dlg.reject()
+    from tests.test_settings_sheet import fields
+    rows = fields(sheet.build(context).wire())
+    assert "Y  -340" in rows["ndof_raw"][3]
+    assert "RZ    +7" in rows["ndof_raw"][3]
+    assert "+0.97" in rows["ndof_read"][3]
+    chrome_sheet.close(win)
     dev.raw.emit((0, 0, 0, 0, 0, 0))             # closed: no longer listens
-    assert "Y  -340" in dlg._ndof_raw.text()
+    assert "Y  -340" in readings.text(str)[0]
 
 
 def test_the_tool_cursor_is_chosen_in_preferences(settings_file):

@@ -120,10 +120,16 @@ def test_restore_puts_every_control_back_to_its_default(settings_file):
     assert dlg._obj_unit.currentData() == "ft"        # the tuned profile
     assert not dlg._autosave.isChecked()
     dlg._rest_fade.setValue(30)
-    _action, invert, speed = next(iter(dlg._ndof_axes.values()))
-    invert.setChecked(True)
-    speed.setValue(200)
-    assert dlg._ndof_preset.currentData() == "custom"
+    from views.settings_sheet import SettingsSheet, Env
+    sheet = SettingsSheet()
+    env = Env(dlg._window)
+    def device_rows():
+        return {r.id: r for _, _, rows in sheet.groups(env, "ndof") for r in rows}
+    rows = device_rows()
+    rows["ndof_inv_right"].put(env, True)
+    rows["ndof_speed_right"].put(env, 200)
+    assert device_rows()["ndof_preset"].value(env) == "custom"
+    sheet.restore_defaults(dlg._window)
     dlg.restore_defaults()
     assert dlg._autosave.isChecked()
     assert dlg._autosave_min.value() == 5
@@ -143,12 +149,13 @@ def test_restore_puts_every_control_back_to_its_default(settings_file):
     assert dlg._obj_unit.currentData() == "m"
     assert dlg._dxf_unit.currentData() == "mm"
     assert dlg._coord.currentData() == "geo"
-    assert dlg._ndof_on.isChecked()
-    assert dlg._ndof_speed.value() == 100
-    assert dlg._ndof_preset.currentData() == "original"
-    for action, invert, speed in dlg._ndof_axes.values():
-        assert not invert.isChecked()
-        assert speed.value() == 100
+    from core.ndof import AXES
+    rows = device_rows()
+    assert rows["ndof_on"].value(env) and rows["ndof_speed"].value(env) == 100
+    assert rows["ndof_preset"].value(env) == "original"
+    for axis in AXES:
+        assert not rows["ndof_inv_" + axis].value(env)
+        assert rows["ndof_speed_" + axis].value(env) == 100
     assert dlg._rest_fade.value() == 75
 
 
