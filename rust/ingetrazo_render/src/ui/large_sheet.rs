@@ -51,21 +51,17 @@ const FRAMED_MIN_W: f32 = 960.0;
 const FOOT_H: f32 = 32.0;
 const PAD: f32 = 14.0;
 
-// ---- Colours: the dock's own tokens (ui.rs), nothing new. One block, so
-// moving to ui/tokens.rs (ui/design-system) is a rename. Blue is only the
-// accent: the focused tile, the selected row, the primary button, links.
+// ---- Look: the design system's names only (ui/tokens.rs, ui/kit.rs),
+// in one block. Blue is only the accent: the focused tile, the selected
+// row, the primary button, links. No colour is made here.
 /// The sheet is the dock's glass panel (Surface::Panel), not a fill of its own.
-const SHEET: Surface = Surface::Panel;
-/// The side list and the panes are set apart by hairlines only.
-const RULE: Color32 = EDGE;
-/// A picture's well (no picture yet), an inset like a field.
-const WELL: Color32 = FIELD;
-/// Link and check states: the tree's (ui/tree_cols.rs).
-const OK: Color32 = super::tree_cols::FOUND;
-const ERROR: Color32 = super::tree_cols::MISSING;
-/// The model behind: blurred as it is (no tint), then a neutral dark scrim.
-const SCRIM: Color32 = Color32::BLACK;
-const SCRIM_ALPHA: f32 = 0.38;
+const SHEET_GLASS: Surface = Surface::Panel;
+/// The side list and the panes are set apart by dividers only.
+const RULE: Color32 = DIVIDER;
+/// A picture's well (no picture yet).
+const PICTURE_WELL: Color32 = WELL;
+/// Behind the sheet: the model blurred as it is, then the scrim.
+const BEHIND: Color32 = SCRIM;
 
 // ---- What Python sends ------------------------------------------------------
 
@@ -373,9 +369,9 @@ fn tone(t: &str) -> Color32 {
     match t {
         "dim" => DIM,
         "faint" => FAINT,
-        "ok" => OK,
-        "warn" => WARN,
-        "error" => ERROR,
+        "ok" => FOUND,
+        "warn" => CHANGED,
+        "error" => MISSING,
         "accent" => ACCENT,
         "off" => OFF,
         _ => INK,
@@ -410,7 +406,7 @@ fn picture(ui: &egui::Ui, r: Rect, tex: Option<&egui::TextureHandle>, hex: &str,
     } else if let Some(c) = parse_hex(hex) {
         ui.painter().rect_filled(r, cr, c);
     } else {
-        ui.painter().rect_filled(r, cr, WELL);
+        ui.painter().rect_filled(r, cr, PICTURE_WELL);
         // A box drawing: the document has no picture (yet).
         let c = r.center();
         let k = (r.width().min(r.height()) * 0.16).clamp(5.0, 22.0);
@@ -427,7 +423,7 @@ fn picture(ui: &egui::Ui, r: Rect, tex: Option<&egui::TextureHandle>, hex: &str,
 }
 
 fn paint_dot(ui: &egui::Ui, c: Pos2, t: &str) {
-    ui.painter().circle_filled(c, 3.5, tone(t));
+    dot(ui.painter(), c, tone(t));
 }
 
 /// A small document glyph (a linked file, a file row in the side list).
@@ -441,6 +437,11 @@ fn file_glyph(ui: &egui::Ui, c: Pos2, ink: Color32) {
 
 /// A header or block button (role 1 accent, 3 quiet text, else neutral).
 fn button(ui: &mut egui::Ui, v: &Verb, width: Option<f32>) -> bool {
+    if width.is_none() && v.enabled && v.role != 3 {
+        // The kit's sheet button: the same as a question sheet's.
+        let clicked = sheet_button(ui, &v.label, &v.key, v.role);
+        return clicked;
+    }
     if v.role == 3 {
         let g = ui.painter().layout_no_wrap(v.label.clone(), body(), INK);
         let sense = if v.enabled { Sense::click() } else { Sense::hover() };
@@ -452,19 +453,18 @@ fn button(ui: &mut egui::Ui, v: &Verb, width: Option<f32>) -> bool {
         return resp.clicked() && v.enabled;
     }
     let primary = v.role == 1;
-    let ink = if !v.enabled { OFF } else if primary { Color32::WHITE } else { INK };
+    let ink = if !v.enabled { OFF } else if primary { BRIGHT } else { INK };
     let g = ui.painter().layout_no_wrap(v.label.clone(), if primary { strong(12.0) } else { body() }, ink);
     let k = (!v.key.is_empty()).then(|| ui.painter().layout_no_wrap(v.key.clone(), meta(),
-        if primary { INK_2 } else { FAINT }));
+        if primary { ON_PRIMARY_HINT } else { FAINT }));
     let kw = k.as_ref().map_or(0.0, |k| k.size().x + 8.0);
     let w = width.unwrap_or((g.size().x + kw + 22.0).max(56.0));
     let sense = if v.enabled { Sense::click() } else { Sense::hover() };
     let (rect, resp) = ui.allocate_exact_size(vec2(w, 28.0), sense);
     let cr = CornerRadius::same(R_CONTROL);
     if primary && v.enabled {
-        ui.painter().rect_filled(rect, cr, ACCENT);
-        if resp.is_pointer_button_down_on() { ui.painter().rect_filled(rect, cr, FIELD); }
-        else if resp.hovered() { ui.painter().rect_filled(rect, cr, HOVER); }
+        let fill = if resp.is_pointer_button_down_on() { PRIMARY_PRESS } else if resp.hovered() { PRIMARY_HOVER } else { ACCENT };
+        ui.painter().rect_filled(rect, cr, fill);
     } else {
         ui.painter().rect_filled(rect, cr, HOVER);
         paint_state(ui, rect, state_of(&resp, false, v.enabled), R_CONTROL);
@@ -667,18 +667,18 @@ impl Draw<'_> {
                 ui.painter().rect_stroke(pic, CornerRadius::same(8), Stroke::new(1.0_f32, INK_2), egui::StrokeKind::Outside);
             }
             if focused {
-                ui.painter().rect_stroke(pic.expand(1.0), CornerRadius::same(9), Stroke::new(2.0_f32, ACCENT), egui::StrokeKind::Outside);
+                ui.painter().rect_stroke(pic.expand(1.0), CornerRadius::same(9), Stroke::new(2.0_f32, FOCUS_RING), egui::StrokeKind::Outside);
             }
             if it.on {
                 // The current one (the material painting): a check on the corner.
                 let c = pic.left_top() + vec2(12.0, 12.0);
                 ui.painter().circle_filled(c, 8.0, ACCENT);
-                ui.painter().text(c, egui::Align2::CENTER_CENTER, "✓", meta(), Color32::WHITE);
+                ui.painter().text(c, egui::Align2::CENTER_CENTER, "✓", meta(), BRIGHT);
             }
             if !it.badge.is_empty() {
                 let g = ui.painter().layout_no_wrap(it.badge.clone(), meta(), INK);
                 let br = Rect::from_min_size(pic.right_top() + vec2(-g.size().x - 14.0, 6.0), vec2(g.size().x + 8.0, 16.0));
-                ui.painter().rect_filled(br, CornerRadius::same(8), PANEL);
+                ui.painter().rect_filled(br, CornerRadius::same(8), IMAGE_BACK);
                 ui.painter().galley(br.center() - g.size() / 2.0, g, INK);
             }
             let ink = if it.dim { FAINT } else { INK };
@@ -950,13 +950,13 @@ impl Ui {
                 ui.multiply_opacity(ease);
                 let (all, scrim) = ui.allocate_exact_size(back.size(), Sense::click_and_drag());
                 let _ = all;
-                ui.painter().rect_filled(dim, CornerRadius::ZERO, SCRIM.gamma_multiply(SCRIM_ALPHA * ease));
+                ui.painter().rect_filled(dim, CornerRadius::ZERO, BEHIND.gamma_multiply(ease));
                 if scrim.clicked() { st.menu = None; st.head_menu = None; }
                 // The dock's glass: its shadow, the blurred model through
                 // its tint, its rim (ui.rs Glass, Surface::Panel).
-                let cr = CornerRadius::same(SHEET.radius());
-                ui.painter().add(SHEET.shadow().as_shape(sheet, cr));
-                ui.painter().add(crate::glass::pane(sheet, SHEET.radius() as f32, SHEET.look()));
+                let cr = CornerRadius::same(SHEET_GLASS.radius());
+                ui.painter().add(SHEET_GLASS.shadow().as_shape(sheet, cr));
+                ui.painter().add(crate::glass::pane(sheet, SHEET_GLASS.radius() as f32, SHEET_GLASS.look()));
                 // Take every click inside the sheet (gaps between widgets too).
                 let _ = ui.interact(sheet, egui::Id::new("lsheet_body"), Sense::click());
 
@@ -1266,11 +1266,11 @@ impl Ui {
                         x += 16.0;
                     } else if !it.hex.is_empty() {
                         let sw = Rect::from_center_size(pos2(x + 6.0, r.center().y), vec2(12.0, 12.0));
-                        ui.painter().rect_filled(sw, CornerRadius::same(3), parse_hex(&it.hex).unwrap_or(Color32::GRAY));
+                        ui.painter().rect_filled(sw, CornerRadius::same(3), parse_hex(&it.hex).unwrap_or(SWATCH_FALLBACK));
                         x += 18.0;
                     }
                     let count_w = if it.right.is_empty() { 0.0 } else { 30.0 };
-                    let ink = if it.on { Color32::WHITE } else if it.dim { FAINT } else { INK };
+                    let ink = if it.on { BRIGHT } else if it.dim { FAINT } else { INK };
                     let g = fit(ui, &it.label, if it.on { strong(12.0) } else { body() }, ink, r.max.x - x - 8.0 - count_w, 1);
                     ui.painter().galley(pos2(x, r.center().y - g.size().y / 2.0), g, ink);
                     if !it.right.is_empty() {
