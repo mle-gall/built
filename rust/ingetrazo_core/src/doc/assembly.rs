@@ -14,7 +14,8 @@ struct Member {
     slot: Key,
     source: Key,
     children: Vec<Key>,
-    fields: [(Field, FVal); 4],
+    geometry: Option<u64>,
+    fields: [(Field, FVal); 3],
 }
 
 #[derive(Default)]
@@ -37,14 +38,13 @@ fn topology(doc: &Doc, owner: Key, reverse: &FastMap<Key, Key>) -> (Vec<Key>, Ve
             continue;
         }
         let n = doc.node(key).expect("attached member");
-        let fields = [
-            Field::Definition,
-            Field::Xform,
-            Field::Axes,
-            Field::Component,
-        ]
-        .map(|field| (field, n.get(field).expect("placement field")));
+        let fields = [Field::Xform, Field::Axes, Field::Component]
+            .map(|field| (field, n.get(field).expect("placement field")));
+        let Data::Placement(p) = &n.data else {
+            continue;
+        };
         members.push(Member {
+            geometry: p.definition.as_ref().map(|def| def.0.get().key),
             slot: slot(key),
             source: key,
             children: n.children.iter().copied().map(slot).collect(),
@@ -261,10 +261,13 @@ pub fn sync(py: Python<'_>, owner: Key) -> PyResult<()> {
             let child = lock()
                 .handle_ref(py, member.source)
                 .ok_or_else(|| PyValueError::new_err("detached assembly member"))?;
-            let g =
-                py.import("core.group")?
-                    .getattr("copy_group")?
-                    .call1((&child, py.None(), true))?;
+            let g = py.import("core.group")?.getattr("copy_group")?.call1((
+                &child,
+                py.None(),
+                true,
+                py.None(),
+                true,
+            ))?;
             let key = g.cast::<super::py::PyPlacement>()?.get().key;
             {
                 let mut doc = lock();
@@ -276,6 +279,17 @@ pub fn sync(py: Python<'_>, owner: Key) -> PyResult<()> {
         let mut doc = lock();
         for member in &members {
             let dst = map[&member.slot];
+            let Data::Placement(p) = &doc.need(dst).map_err(PyValueError::new_err)?.data else {
+                continue;
+            };
+            if p.definition.as_ref().map(|def| def.0.get().key) != member.geometry {
+                let value = doc
+                    .need(member.source)
+                    .and_then(|n| n.get(Field::Definition))
+                    .map_err(PyValueError::new_err)?;
+                doc.write(py, dst, Field::Definition, value, &mut trash)
+                    .map_err(PyValueError::new_err)?;
+            }
             for (field, value) in &member.fields {
                 if doc
                     .need(dst)
@@ -407,17 +421,28 @@ pub fn index(doc: &mut Doc, root: Key) {
 /// Bind before the first structural mutation. Newly created and pasted
 /// occurrences also participate before they have been opened for editing.
 pub fn prepare(doc: &mut Doc, owner: Key) {
-    if doc.replaying || doc.projecting || doc.dirty_assemblies.contains(&owner) {
+    if doc.replaying || doc.projecting {
         return;
     }
-    if !doc.node(owner).is_some_and(|n| {
-        !n.owners.is_empty()
-            && matches!(&n.data, Data::Placement(p) if p.component && p.xform.is_some())
-    }) {
-        return;
+    let mut current = owner;
+    let mut has_layout = false;
+    for _ in 0..doc.slots.len() {
+        let Some(n) = doc.node(current) else { break };
+        let Some(&parent) = n.owners.first() else {
+            break;
+        };
+        if matches!(&n.data, Data::Placement(p) if p.component && p.xform.is_some())
+            && !doc.dirty_assemblies.contains(&current)
+        {
+            if let Some(root) = root_of(doc, current, true) {
+                has_layout |= bind(doc, root, current).is_some();
+            }
+        }
+        current = parent;
     }
-    if let Some(root) = root_of(doc, owner, true) {
-        bind(doc, root, owner);
+    if has_layout && doc.open.is_none() {
+        doc.begin();
+        doc.implicit_assembly = true;
     }
 }
 
@@ -435,10 +460,39 @@ pub fn drain(py: Python<'_>) -> PyResult<()> {
     result
 }
 
-pub fn finish(py: Python<'_>) -> PyResult<()> {
-    let idle = { lock().depth() == 0 };
-    if idle {
-        drain(py)?;
+/// A raw list or placement setter has the same all-or-nothing semantics as a
+/// command. Copying a new occurrence may call the Python IFC copy hook.
+pub fn finish_result<T>(py: Python<'_>, result: PyResult<T>) -> PyResult<T> {
+    let (implicit, idle) = {
+        let doc = lock();
+        if doc.projecting {
+            return result;
+        }
+        (
+            doc.implicit_assembly && doc.depth() == 1,
+            doc.open.is_none(),
+        )
+    };
+    if !implicit {
+        if idle && result.is_ok() {
+            drain(py)?;
+        }
+        return result;
     }
-    Ok(())
+    let result = result.and_then(|value| drain(py).map(|_| value));
+    let mut trash = Trash::default();
+    let journal = {
+        let mut doc = lock();
+        doc.implicit_assembly = false;
+        if result.is_ok() {
+            doc.commit()
+        } else {
+            doc.rollback(py, &mut trash)
+                .map_err(PyValueError::new_err)?;
+            None
+        }
+    };
+    drop(journal);
+    drop(trash);
+    result
 }

@@ -624,6 +624,7 @@ pub struct Doc {
     pub replaying: bool,
     dirty_assemblies: Vec<Key>,
     projecting: bool,
+    implicit_assembly: bool,
     /// Tracked containers whose attribute a replay (undo, redo, rollback)
     /// wrote: kept as the attribute's view and refilled in place with the
     /// value once the lock is gone (`py::run_refills`), so a reference held

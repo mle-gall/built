@@ -155,9 +155,8 @@ def _command_meshes(cmd, scene, phase) -> list:
             stack.extend(c.commands)
         elif isinstance(c, SnapshotMutation):
             out.append(c._target(scene))
-        proto = _reshared_definition(c)
-        if proto is not None:
-            out.append(proto)
+        if getattr(c, "reference_instance", False) or getattr(c, "reference_assembly", False):
+            out.append(c.proto)
         meshes = getattr(c, "meshes", None)
         if callable(meshes) and type(c).__name__ in (
                 "SoftenByAngleCommand", "FlipFacesCommand", "FlipGroupsCommand"):
@@ -170,14 +169,6 @@ def _command_meshes(cmd, scene, phase) -> list:
             seen.add(id(m))
             uniq.append(m)
     return uniq
-
-
-def _reshared_definition(cmd):
-    """The shared definition a Reshare step writes (leaving an edited
-    component instance or assembly): the mesh every copy shows."""
-    if getattr(cmd, "reference_instance", False) or getattr(cmd, "reference_assembly", False):
-        return cmd.proto
-    return None
 
 
 def _placements_showing(scene, mesh) -> list:

@@ -3765,6 +3765,16 @@ def mirror_matrix(centre: QVector3D, axis: QVector3D):
     return t_out * r * t_in
 
 
+def _member_placement(scene, group):
+    """A classic member initially draws at identity in its parent's definition."""
+    if (group.xform is None and getattr(scene.mesh, "_instance_definition", None) is not None
+            and scene.edit_group is not None and group in scene.edit_group.children):
+        from ingetrazo_core import Matrix4
+        group.component = False
+        return Matrix4()
+    return group.xform
+
+
 def _edit_local_transform(scene, group, transform):
     if scene.edit_group is not None and group in scene.edit_group.children:
         view = scene.mesh.__dict__.get("_instance_definition")
@@ -3805,8 +3815,9 @@ class FlipGroupsCommand(Command):
     def _flip(self, scene) -> None:
         m = mirror_matrix(self.centre, self.axis)
         for g in self._groups:
-            if getattr(g, "xform", None) is not None:
-                g.xform = _edit_local_transform(scene, g, m) * g.xform
+            pose = _member_placement(scene, g)
+            if pose is not None:
+                g.xform = _edit_local_transform(scene, g, m) * pose
                 continue
             for v in list(g.mesh.vertices):
                 g.mesh.move_vertex(v, m.map(v.position) - v.position)
@@ -3927,9 +3938,10 @@ class RotateGroupCommand(Command):
         self._after: Optional[dict] = None
 
     def do(self, scene) -> None:
-        if getattr(self.group, "xform", None) is not None:
+        pose = _member_placement(scene, self.group)
+        if pose is not None:
             m = rotation_matrix(self.center, self.axis, self.degrees)
-            self.group.xform = _edit_local_transform(scene, self.group, m) * self.group.xform
+            self.group.xform = _edit_local_transform(scene, self.group, m) * pose
             scene.version += 1
             return
         gmesh = self.group.mesh
@@ -4055,9 +4067,10 @@ class ScaleGroupCommand(Command):
         self._after: Optional[dict] = None
 
     def do(self, scene) -> None:
-        if getattr(self.group, "xform", None) is not None:
+        pose = _member_placement(scene, self.group)
+        if pose is not None:
             m = scale_matrix(self.center, self.factor, self.axes)
-            self.group.xform = _edit_local_transform(scene, self.group, m) * self.group.xform
+            self.group.xform = _edit_local_transform(scene, self.group, m) * pose
             scene.version += 1
             return
         gmesh = self.group.mesh
@@ -6319,13 +6332,14 @@ class MoveGroupCommand(Command):
         return getattr(self.group, "xform", None) is not None
 
     def _shift(self, scene, delta) -> None:
-        if getattr(self.group, "xform", None) is not None:
+        pose = _member_placement(scene, self.group)
+        if pose is not None:
             # Component instance: compose into the transform — O(1), and the
             # shared prototype mesh (siblings!) is never touched.
             from ingetrazo_core import Matrix4 as QMatrix4x4
             t = QMatrix4x4()
             t.translate(delta)
-            self.group.xform = _edit_local_transform(scene, self.group, t) * self.group.xform
+            self.group.xform = _edit_local_transform(scene, self.group, t) * pose
         else:
             from core.group import _remap_uvws
             from ingetrazo_core import Matrix4 as QMatrix4x4

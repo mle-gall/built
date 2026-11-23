@@ -184,8 +184,7 @@ fn write_attr(py: Python<'_>, me: &Bound<'_, PyAny>, k: Key, a: u16, value: &Bou
     };
     drop(trash);
     drain_pending();
-    r.map(|_| ()).map_err(err)?;
-    super::assembly::finish(py)
+    super::assembly::finish_result(py, r.map(|_| ()).map_err(err))
 }
 
 fn handle_key(obj: &Bound<'_, PyAny>) -> PyResult<Key> {
@@ -374,7 +373,7 @@ fn write(py: Python<'_>, me: &Bound<'_, PyAny>, k: Key, f: Field, v: FVal) -> Py
     };
     drop(trash);
     drain_pending();
-    r.map(|_| ()).map_err(err)
+    super::assembly::finish_result(py, r.map(|_| ()).map_err(err))
 }
 
 fn view_slot(f: Field) -> usize {
@@ -477,7 +476,7 @@ fn write_matrix(py: Python<'_>, me: &Bound<'_, PyAny>, k: Key, f: Field, value: 
     };
     drop(trash);
     drain_pending();
-    r.map(|_| ()).map_err(err)
+    super::assembly::finish_result(py, r.map(|_| ()).map_err(err))
 }
 
 fn list_view<'py>(py: Python<'py>, me: &Bound<'py, PyAny>, k: Key, list: ListId) -> PyResult<Bound<'py, PyAny>> {
@@ -622,8 +621,7 @@ fn set_list(py: Python<'_>, me: &Bound<'_, PyAny>, k: Key, list: ListId, items: 
         }
     }
     drain_pending();
-    r.map_err(err)?;
-    super::assembly::finish(py)?;
+    super::assembly::finish_result(py, r.map_err(err))?;
     parent_reports(py)
 }
 
@@ -1000,9 +998,7 @@ impl PyPlacement {
         };
         drop(trash);
         drain_pending();
-        let removed = r.map_err(err)?;
-        super::assembly::finish(slf.py())?;
-        Ok(removed)
+        super::assembly::finish_result(slf.py(), r.map_err(err))
     }
 
     /// The node holding this placement in one of its lists, or None.
@@ -1329,9 +1325,8 @@ impl HandleList {
             d.list_insert(py, self.owner, self.l(), at, k)
         };
         drain_pending();
-        r.map_err(err)?;
-        super::assembly::finish(py)?;
-    parent_reports(py)
+        super::assembly::finish_result(py, r.map_err(err))?;
+        parent_reports(py)
     }
 
     fn remove_at(&self, py: Python<'_>, at: usize) -> PyResult<Py<PyAny>> {
@@ -1350,8 +1345,7 @@ impl HandleList {
         };
         drop(trash);
         drain_pending();
-        super::assembly::finish(py)?;
-        r
+        super::assembly::finish_result(py, r)
     }
 
     fn replace(&self, py: Python<'_>, items: &Bound<'_, PyAny>) -> PyResult<()> {
@@ -1367,9 +1361,8 @@ impl HandleList {
         drop(members);
         drop(trash);
         drain_pending();
-        r.map_err(err)?;
-        super::assembly::finish(py)?;
-    parent_reports(py)
+        super::assembly::finish_result(py, r.map_err(err))?;
+        parent_reports(py)
     }
 
     fn norm(&self, i: isize, len: usize) -> Option<usize> {
@@ -1543,9 +1536,8 @@ impl HandleList {
         };
         drop(members);
         drain_pending();
-        r.map_err(err)?;
-        super::assembly::finish(py)?;
-    parent_reports(py)
+        super::assembly::finish_result(py, r.map_err(err))?;
+        parent_reports(py)
     }
 
     fn remove(&self, py: Python<'_>, obj: &Bound<'_, PyAny>) -> PyResult<()> {
@@ -2156,9 +2148,7 @@ fn doc_view_changed(py: Python<'_>, key: Key, which: u8, view: &Bound<'_, PyAny>
     };
     drop(trash);
     drain_pending();
-    let changed = r.map_err(err)?;
-    super::assembly::finish(py)?;
-    Ok(changed)
+    super::assembly::finish_result(py, r.map_err(err))
 }
 
 fn fval_for(f: Field, v: &Bound<'_, PyAny>) -> PyResult<FVal> {

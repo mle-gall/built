@@ -303,7 +303,7 @@ def shared_assembly(work):
         for name in (("beam",) if label == "Annex" else ("beam", "post")):
             child = Group(part, name=name, uid=name if name == "beam" else f"{label}-{name}")
             child.xform = QMatrix4x4()
-            child.ifc = {"name": f"{label} {name}"}
+            child.ifc = {"class": "IfcBeam", "name": f"{label} {name}"}
             children.append(child)
         group.adopt(children)
         scene.groups.append(group)
@@ -320,6 +320,17 @@ def shared_assembly(work):
     assert scene.occurrence_path(target) == path and scene.resolve_occurrence(path) is target
     assert not west.children[0].hidden and west.children[0].layer is None
     assert h.undo() and h.redo()
+    commands.run(h, "patch_record_field", placements=[path], path=["description"], value="East only")
+    assert target.ifc["description"] == "East only"
+    assert "description" not in west.children[0].ifc
+    from core.deliveries import scoped
+    scene.select([target])
+    projection = scoped(scene, {"scope": "selection"})
+    delivered = projection.resolve_occurrence(path)
+    assert delivered is not target and delivered.mesh is target.mesh
+    assert delivered.ifc["description"] == "East only"
+    assert projection.resolve_occurrence([west.uid, target.uid]) is None
+    scene.selection.clear()
     result = saved(scene, work, "shared")
     # Independently reopen the old on-disk shape and edit through the second
     # nested placement. Both models preserve the third, divergent child tree.
@@ -442,7 +453,8 @@ def main(work: Path):
     framed.mesh.add_edge(*(transform.map(p) for p in endpoints))
     if doc_model.ENABLED:
         assert first.mesh is second.mesh and len(second.mesh.edges) == 1
-        assert framed._edit_stack[-1].pop("share", None) is None
+        from core.protocol.keys import mesh_key
+        assert mesh_key(framed.mesh) == mesh_key(second.mesh)
     framed.end_group_edit()
     positions = [v.position_tuple() for v in second.mesh.vertices]
     import numpy as np

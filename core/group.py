@@ -922,7 +922,8 @@ def translated_attrs(attrs, delta) -> dict:
     return out
 
 
-def copy_group(group, delta=None, _in_definition=False, _ifc_copy_context=None):
+def copy_group(group, delta=None, _in_definition=False, _ifc_copy_context=None,
+               _project_occurrence=False):
     """A pastable duplicate of ``group``, optionally translated by ``delta``.
 
     A component instance stays an instance: the duplicate SHARES the prototype
@@ -944,7 +945,7 @@ def copy_group(group, delta=None, _in_definition=False, _ifc_copy_context=None):
     # A linked file's placement: its parts are the source's, read-only,
     # and the copy is a live link of the same file (links.copy_parts).
     linked = _is_link(group)
-    if share and not linked:
+    if share and not linked and not _project_occurrence:
         for child in group.children or ():
             if child.xform is None:
                 child.xform = QMatrix4x4()
@@ -952,9 +953,9 @@ def copy_group(group, delta=None, _in_definition=False, _ifc_copy_context=None):
     t = QMatrix4x4()
     if delta is not None:
         t.translate(QVector3D(delta))
-    if group.xform is not None:
+    if group.xform is not None or _project_occurrence:
         g = Group(group.mesh, name=group.name)
-        g.xform = t * group.xform
+        g.xform = t * group.xform if group.xform is not None else None
         # The local axes live in the mesh's space, which the copy shares:
         # they come along as they are. Dropping them turned a pasted
         # rotated group's axes back to the world's (issue #78, @pacaeiro:
@@ -1000,7 +1001,8 @@ def copy_group(group, delta=None, _in_definition=False, _ifc_copy_context=None):
         g.children = copy_parts(group, g)
     else:
         g.children = [copy_group(c, _in_definition=share,
-                                 _ifc_copy_context=_ifc_copy_context)
+                                 _ifc_copy_context=_ifc_copy_context,
+                                 _project_occurrence=_project_occurrence)
                       for c in (group.children or ())]
     if copy_root:
         # Resolve after the complete tree is copied: a filling can precede

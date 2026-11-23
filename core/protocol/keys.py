@@ -29,6 +29,7 @@ KINDS = ("vertex", "edge", "face")
 
 def mesh_key(mesh) -> str:
     """The protocol key of ``mesh`` (given on first use)."""
+    mesh = getattr(mesh, "_instance_definition", mesh)
     k = _key_of.get(mesh)
     if k is None:
         k = f"m{next(_counter)}"
@@ -50,6 +51,10 @@ def resolve_mesh(scene, ref=None):
         return scene.mesh
     if ref == "loose":
         return getattr(scene, "loose_mesh", scene.mesh)
+    if isinstance(ref, (list, tuple)):
+        group = scene.resolve_occurrence(ref)
+        if group is not None:
+            return group.mesh
     if not isinstance(ref, str):
         raise KeyError(ref)
     m = known_mesh(ref)

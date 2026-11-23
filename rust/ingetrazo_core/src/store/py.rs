@@ -118,6 +118,8 @@ impl InstanceMethod {
         if current.inner.revision != start {
             let mut definition = view.get().definition.bind(py).try_borrow_mut()?;
             if definition.inner.revision != start {
+                drop(current);
+                view.as_super().try_borrow_mut()?._publish_frame(&definition)?;
                 return Err(PyValueError::new_err("definition changed during an occurrence edit"));
             }
             let snapshot = if matches!(self.action, InstanceAction::Restore) {
