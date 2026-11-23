@@ -224,7 +224,7 @@ def settings(tmp_path):
     st.sync()
 
 
-def test_drawing_widens_the_dock_and_filing_and_deliver_keep_the_users_width(ui, settings):
+def test_drawing_and_export_widen_the_dock_and_filing_keeps_the_users_width(ui, settings):
     scene, win, view, rows, act = ui
     settings.setValue("ui/dock_width", 320.0)
     seen = []
@@ -232,7 +232,7 @@ def test_drawing_widens_the_dock_and_filing_and_deliver_keep_the_users_width(ui,
     for colset in (1, 2, 0):
         view._ui_colset = colset
         wu.apply_dock_width(view, settings)
-    assert seen == [wu.WIDE_DOCK, 320.0, 320.0]
+    assert seen == [wu.WIDE_DOCK, wu.WIDE_DOCK, 320.0]
     # A width dragged in Drawing is kept for Drawing only.
     view._ui_colset = 1
     wu.keep_dock_width(view, "430", settings)
@@ -563,3 +563,115 @@ def test_dropped_item_uses_its_own_address_and_rejects_read_only_nodes(ui):
     act("fileitem", "i:" + item.uid, _key(view, "Rails"))
     act("fileitem", "i:" + linked.uid, dest)
     assert win.viewport.history.revision == version
+
+
+def test_unstructured_filters_and_tag_toggles_use_the_document(tmp_path):
+    from core.group import Group
+    from core.layers import Layer
+    from core.scene import Scene
+    from core.section import SectionPlane
+    from ingetrazo_core import Vec3
+    scene = Scene()
+    scene.layers.append(Layer("Steel"))
+    wall = Group(name="Wall")
+    wall.layer = "Steel"
+    door = Group(name="Door")
+    door.component = True
+    from ingetrazo_core import Matrix4
+    door.xform = Matrix4()
+    scene.groups.extend([wall, door])
+    scene.section_planes.append(SectionPlane(Vec3(0, 0, 0), Vec3(0, 0, 1), name="Cut A"))
+    scene.mesh.add_face([Vec3(0, 0, 0), Vec3(1, 0, 0), Vec3(0, 1, 0)])
+    win, view = _Win(scene), _View()
+
+    def rows(query=""):
+        wu._tree_action(win, view, wu.SEP.join(("filter", query)))
+        wu._tree(view, win)
+        return {t[1]: (t, n) for t, n in view.renderer.calls["ui_set_tree"][0]}
+
+    assert "Loose geometry" in rows() and view.renderer.calls["ui_set_proposal_available"] == (True,)
+    refs = [("eye", "is:hidden", "visible", False), ("lock", "is:locked", "locked", True)]
+    for verb, token, attr, value in refs:
+        wu._tree_action(win, view, wu.SEP.join((verb, "preview-tag:Steel")))
+        assert getattr(scene.layer("Steel"), attr) == value
+        assert {"Wall", "Steel"} <= rows(token).keys()
+        assert win.viewport.history.undo()
+        assert "Wall" not in rows(token)
+    face = next(iter(scene.mesh.faces))
+    for verb, token in (("eye", "is:hidden"), ("lock", "is:locked")):
+        wu._tree_action(win, view, wu.SEP.join((verb, "geometry:loose")))
+        assert not scene.entity_selectable(face)
+        assert "Loose geometry" in rows(token)
+        assert win.viewport.history.undo() and scene.entity_selectable(face)
+        assert "Loose geometry" not in rows(token)
+        assert win.viewport.history.redo() and not scene.entity_selectable(face)
+        assert win.viewport.history.undo()
+    assert "Door" in rows("is:component") and "Wall" not in rows("is:component")
+    assert "Cut A" in rows("is:section")
+    assert {"Wall", "Door"} <= rows("has:problem").keys()
+    assert view.renderer.calls["ui_set_proposal_available"] == (True,)
+
+
+def test_open_occurrence_scopes_tree_and_exports_keep_the_inspector(ui):
+    scene, win, view, rows, act = ui
+    key = _key(view, "Paths")
+    g = view._ui_tree["direct"][key][0]
+    act("node", "n:" + key)
+    filing = [r["key"] for r in rows()]
+    act("colset", "2")
+    assert [r["key"] for r in rows()] == filing
+    wu._inspector(view, win)
+    assert "Node" in dict(view.renderer.calls["ui_set_inspector"][1])
+    scene.begin_group_edit(g)
+    scoped = rows()
+    assert scoped[0]["key"] == "context:open" and g.name in scoped[0]["name"]
+    assert [r["key"] for r in scoped[1:]] == ["geometry:loose"]
+    scene.end_group_edit()
+    assert [r["key"] for r in rows()] == filing
+    assert "Ride.igz" in [r["name"] for r in act("filter", "is:link")]
+    act("mode", "deliveries")
+    assert view.renderer.calls["ui_set_mode"] == ("Deliveries",)
+    act("mode", "")
+    assert view.renderer.calls["ui_set_mode"] == ("",)
+
+
+def test_file_copies_have_distinct_selectable_rows(site):
+    scene, win, view, rows, act = _open(site["twice"])
+    tree = view._ui_tree["tree"]
+    key = next(k for k, gs in tree.links.items() if len(gs) == 2)
+    expanded = act("toggle", "n:" + key)
+    copies = [r for r in expanded if r["name"].startswith("Placement ")]
+    assert len(copies) == len({r["key"] for r in copies}) == 2
+    for index, r in enumerate(copies):
+        act("item", r["key"])
+        assert list(scene.selection) == [tree.links[key][index]]
+
+
+def test_reveal_expands_only_the_selected_occurrences_branch_and_page(ui, monkeypatch):
+    scene, win, view, rows, act = ui
+    monkeypatch.setattr(wu, "ROW_CAP", 2)
+    key = _key(view, "Rails")
+    group = view._ui_tree["direct"][key][-1]
+    target = "i:" + view._ui_tree["tree"].row_id(group)
+    act("collapseall", "")
+    before = set(view._ui_exp)
+    scene.select([group])
+    assert all(r["key"] != target for r in rows()) and view._ui_exp == before
+    act("revealselection", "")
+    assert view.renderer.calls["ui_reveal_row"] == (target,)
+    assert [r["key"] for r in rows() if r["mark"] == 1] == [target]
+    assert "n:link:Show building" not in view._ui_exp and "n:" + key in view._ui_exp
+    act("collapseall", "")
+    assert all(r["key"] != target for r in rows())
+
+
+def test_unlink_from_a_file_row_runs_as_one_undoable_protocol_step(site):
+    from core import links
+    scene, win, view, _, act = _open(site["host"])
+    key = "link:Show building"
+    group, = view._ui_tree["tree"].links[key]
+    before = win.viewport.history.revision
+    act("linkunlink", "n:" + key)
+    assert win.viewport.history.revision == before + 1 and not links.is_linked(group)
+    assert key not in view._ui_tree["nodes"]
+    assert win.viewport.history.undo() and links.is_linked(group)

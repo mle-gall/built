@@ -2358,6 +2358,12 @@ impl Renderer {
     fn ui_set_activity(&mut self, history: Vec<ui::ActivityRow>, banner: String) {
         if let Some(ui) = self.ui.as_mut() { ui.set_activity(history, banner); }
     }
+    fn ui_reveal_row(&mut self, key: String) {
+        if let Some(ui) = self.ui.as_mut() { ui.reveal_row(key); }
+    }
+    fn ui_set_proposal_available(&mut self, available: bool) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_proposal_available(available); }
+    }
     fn ui_set_tree_sort(&mut self, sort: usize) {
         if let Some(ui) = self.ui.as_mut() { ui.set_tree_sort(sort); }
     }

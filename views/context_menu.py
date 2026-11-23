@@ -314,6 +314,11 @@ def build(win, view=None, sel=None, *, locked_image=None, locked_group=None) -> 
     builder = _BUILDERS.get(kind)
     if builder is not None:
         builder(win, view, scene, sel, one)
+    if sel and view is not None:
+        from views import wgpu_ui
+        from PySide6.QtGui import QKeySequence
+        one(Verb("revealselection", "Reveal selection", lambda: wgpu_ui._tree_action(win, view, "revealselection" + wgpu_ui.SEP),
+                 QKeySequence("Ctrl+Shift+J").toString(QKeySequence.NativeText)))
     menu.rows = [r for r in rows if r.verbs]
     return menu
 

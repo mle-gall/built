@@ -488,7 +488,7 @@ class Scene:
             return False
         if self._face_hidden(entity) and not self.show_hidden_geometry:
             return False
-        if self.entity_locked(entity):
+        if self.entity_locked(entity) or (isinstance(entity, (Edge, Face)) and self._root._loose_locked()):
             return False
         visible, locked = self._layer_state(entity)
         return visible and not locked

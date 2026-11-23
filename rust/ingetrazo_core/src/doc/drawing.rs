@@ -82,6 +82,30 @@ pub(super) fn preview(
     let root = doc.need(owner)?;
     let names = labels(root, "layer_folder_names")?;
     let parents = labels(root, "folder_parents")?;
+    let visibility = match root.attr(attr_id("folder_visibility")?) {
+        Some(Value::Dict(entries)) => entries
+            .iter()
+            .filter_map(|(k, v)| match (k, v) {
+                (Value::Str(key), Value::Bool(false)) => Some(key.as_str()),
+                _ => None,
+            })
+            .collect::<HashSet<_>>(),
+        _ => HashSet::new(),
+    };
+    let shown = |first: &str| {
+        if visibility.contains(first) {
+            return false;
+        }
+        let mut folder = parents.get(first).copied().unwrap_or("");
+        let mut seen = HashSet::new();
+        while !folder.is_empty() && seen.insert(folder) {
+            if visibility.contains(folder) {
+                return false;
+            }
+            folder = parents.get(folder).copied().unwrap_or("");
+        }
+        true
+    };
     let mut folders = explicit_folders(root)?;
     let mut leaves = HashMap::<&str, Vec<(&str, &str, Key)>>::new();
     for &id in &root.tags {
@@ -158,7 +182,19 @@ pub(super) fn preview(
                         String::new(),
                         "folder".into(),
                     ],
-                    vec![depth as i64, 0, 0, 0, 6, -1, -1, 1, i64::from(open), 0, 0],
+                    vec![
+                        depth as i64,
+                        0,
+                        0,
+                        0,
+                        6,
+                        i64::from(shown(f)),
+                        -1,
+                        1,
+                        i64::from(open),
+                        0,
+                        0,
+                    ],
                 ));
                 if open {
                     stack.push(Visit::Children(f, depth + 1, matches));
@@ -166,12 +202,25 @@ pub(super) fn preview(
             }
             Visit::Children(f, depth, inherited) => {
                 for &(key, name, id) in leaves.get(f).into_iter().flatten() {
-                    if inherited
-                        || name.to_lowercase().contains(&query)
-                        || "drawing only".contains(&query)
-                    {
-                        let node = doc.need(id)?;
-                        let Data::Tag(tag) = &node.data else { continue };
+                    let node = doc.need(id)?;
+                    let Data::Tag(tag) = &node.data else { continue };
+                    let visible = tag.visible && shown(f);
+                    let matches = query.split_whitespace().all(|word| {
+                        let (neg, token) =
+                            word.strip_prefix('-').map_or((false, word), |t| (true, t));
+                        let hit = match token {
+                            "is:hidden" => !visible,
+                            "is:locked" => tag.locked,
+                            _ if token.contains(':') => false,
+                            _ => {
+                                inherited
+                                    || name.to_lowercase().contains(token)
+                                    || "drawing only".contains(token)
+                            }
+                        };
+                        hit != neg
+                    });
+                    if matches {
                         let mut text = vec![
                             format!("preview-tag:{key}"),
                             name.into(),
@@ -188,7 +237,7 @@ pub(super) fn preview(
                                 0,
                                 0,
                                 6,
-                                i64::from(tag.visible),
+                                i64::from(tag.visible && shown(f)),
                                 i64::from(tag.locked),
                                 0,
                                 0,

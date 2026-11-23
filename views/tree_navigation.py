@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Move the viewport into the edit context requested by a browser row."""
+"""Bind browser navigation and history commands to the active viewport."""
 from core import outliner
+from core.history import CompoundCommand
 
 
 def open_to(viewport, path) -> bool:
@@ -22,3 +23,13 @@ def open_to(viewport, path) -> bool:
     for g in path[same:]:
         viewport.begin_group_edit(g)
     return outliner.open_path(scene) == list(path)
+
+
+def execute(viewport, command):
+    if isinstance(command, CompoundCommand) and not command.commands:
+        return
+    viewport.history.execute(command)
+    error = viewport.history.last_error or viewport.history.last_rejected
+    if error:
+        raise ValueError(error)
+    viewport.refresh_after_edit()

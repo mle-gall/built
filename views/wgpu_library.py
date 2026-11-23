@@ -1337,6 +1337,7 @@ def set_mode(view, win, mode) -> None:
         open_library(win)
         return
     view._ui_mode = mode
+    view._ui_rules_cache = None
     view._ui_tree_sig = None
     view._ui_insp_sig = None
     view.update()

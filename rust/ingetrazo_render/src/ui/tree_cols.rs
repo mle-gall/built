@@ -29,6 +29,7 @@ pub struct Cols {
     pub line: Option<(f32, f32)>,
     pub swatch: Option<(f32, f32)>,
     // Export: class (and type), quantity.
+    pub checks: Option<(f32, f32)>,
     pub class: Option<(f32, f32)>,
     pub qty: Option<(f32, f32)>,
     // Filing: the item count's right edge.
@@ -57,9 +58,13 @@ impl Cols {
                 c.name_right = end - 4.0;
             }
             2 => {
-                let qty = (edge - 64.0, edge);
-                let wide = room(qty.0 - 108.0) >= MIN_NAME;
-                let class = (qty.0 - if wide { 100.0 } else { 70.0 }, qty.0 - 8.0);
+                let end = if right - left >= 340.0 {
+                    c.checks = Some((edge - 36.0, edge));
+                    edge - 42.0
+                } else { edge };
+                let qty = (end - 50.0, end);
+                let class_width = (room(qty.0) - MIN_NAME - 8.0).clamp(24.0, 100.0);
+                let class = (qty.0 - class_width, qty.0 - 8.0);
                 c.qty = Some(qty);
                 c.class = Some(class);
                 c.name_right = class.0 - 8.0;
@@ -89,6 +94,7 @@ impl Cols {
                 if let Some((a, b)) = self.swatch { at((a + b) / 2.0, "Col.", egui::Align2::CENTER_CENTER); }
             }
             2 => {
+                if let Some((_, b)) = self.checks { at(b, "Checks", egui::Align2::RIGHT_CENTER); }
                 if let Some((a, _)) = self.class { at(a, "Class", egui::Align2::LEFT_CENTER); }
                 if let Some((_, b)) = self.qty { at(b, "Quantity", egui::Align2::RIGHT_CENTER); }
             }

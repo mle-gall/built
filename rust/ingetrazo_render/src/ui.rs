@@ -204,6 +204,8 @@ pub struct Node {
 
 pub struct Column {
     nodes: Vec<Node>,
+    proposal_available: bool,
+    reveal: Option<String>,
     sort: tree_order::Sort,
     ordered: Vec<usize>,
     unfiled: u32,
@@ -373,7 +375,7 @@ impl Ui {
     /// row, eye, lock, expandable, expanded, selected]).
     pub fn set_tree(&mut self, rows: Vec<(Vec<String>, Vec<i64>)>, unfiled: u32) {
         let col = self.column.get_or_insert_with(|| Column {
-            nodes: Vec::new(), sort: Default::default(), ordered: Vec::new(), unfiled: 0, expanded: Default::default(), filter: String::new(),
+            nodes: Vec::new(), reveal: None, proposal_available: false, sort: Default::default(), ordered: Vec::new(), unfiled: 0, expanded: Default::default(), filter: String::new(),
             filing: None, focus_filter: false, row_menu: None, renaming: None, focus_rename: false, head_menu: None,
             kind_menu: None, kinds: Vec::new(), prompt: None, colset: 0, color_pick: None, edits: Default::default(), mode: String::new(), issues: false,
             inspector_title: String::new(),
@@ -400,6 +402,10 @@ impl Ui {
             expanded: g(&n, 8) != 0, selected: g(&n, 9) as u32, mark: g(&n, 10) as u8,
             cells: t.get(5..).map(|c| c.to_vec()).unwrap_or_default(),
         }}).collect();
+        if col.highlighted.as_ref().is_some_and(|k| !k.starts_with("n:") &&
+            !col.nodes.iter().any(|n| &n.key == k && n.selected > 0)) {
+            col.highlighted = None;
+        }
         col.ordered = col.sort.order(&col.nodes);
         col.unfiled = unfiled;
     }
@@ -414,6 +420,16 @@ impl Ui {
     pub fn cursor_shape(&self) -> &'static str { self.cursor_shape }
     pub fn set_issues(&mut self, on: bool) {
         if let Some(col) = self.column.as_mut() { col.issues = on; }
+    }
+    pub fn reveal_row(&mut self, key: String) {
+        if let Some(col) = self.column.as_mut() {
+            col.filter.clear();
+            col.highlighted = None;
+            col.reveal = Some(key);
+        }
+    }
+    pub fn set_proposal_available(&mut self, available: bool) {
+        if let Some(col) = self.column.as_mut() { col.proposal_available = available; }
     }
     pub fn set_tree_sort(&mut self, index: usize) {
         if let (Some(col), Some(&(sort, _))) = (self.column.as_mut(), tree_order::Sort::OPTIONS.get(index)) {
@@ -1457,7 +1473,7 @@ impl Ui {
                             let total = if col.mode.is_empty() && col.issues {
                                 delivery.as_ref().map_or(0, |d| d.2) + col.unfiled
                             } else { 0 };
-                            if total > 0 && amber_button(ui, &format!("{total} issues")) { cmds.push("deliver:problems".into()); }
+                            if total > 0 && amber_button(ui, &format!("{total} issues")) { actions.push("mode\u{1f}problems".into()); }
                             if col.mode.is_empty() {
                                 let tip = if col.issues { "Hide issues" } else { "Show issues: problem dots and what blocks delivery" };
                                 let t = (String::new(), "Issues".to_owned(), tip.to_owned(), String::new(), if col.issues { 1 } else { 0 }, true);
@@ -1480,7 +1496,7 @@ impl Ui {
                     ui.add_space(SPACE_S);
                     if col.mode.is_empty() {
                         // Column sets: second-level tabs over the same rows.
-                        let sets: Vec<(String, String, bool)> = ["Filing", "Drawing", "Deliver"].iter()
+                        let sets: Vec<(String, String, bool)> = ["Filing", "Drawing", "Export"].iter()
                             .map(|l| (l.to_string(), String::new(), true)).collect();
                         if let Some(i) = widgets::underline_tabs(ui, &sets, col.colset as usize) {
                             if col.colset != i as u8 {
@@ -1493,12 +1509,13 @@ impl Ui {
                     // The Library takes the tree's place (the tree code below
                     // stays as it was, in a block it can leave).
                     'tree: {
-                    if col.mode.is_empty() && col.colset == 2 {
+                    if col.mode == "Deliveries" {
                         ui.horizontal(|ui| {
-                            caption(ui, "Deliveries");
+                            if kit::quiet(ui, "Back to Project").clicked() { actions.push("mode\u{1f}".into()); }
                             if chip_button(ui, "+ New delivery") { cmds.push("deliver:new".into()); }
                         });
                         ui.add_space(SPACE_S);
+                        if col.nodes.is_empty() { empty_state(ui, "No deliveries yet"); }
                         egui::ScrollArea::vertical().id_salt("deliveries")
                             .max_height(ui.available_height() * 0.42).show(ui, |ui| {
                                 for n in &col.nodes {
@@ -1560,18 +1577,12 @@ impl Ui {
                     }
                     // A dock mode with nothing to inspect gives the whole dock to its list.
                     let room = if !col.mode.is_empty() && col.inspector.is_empty() { ui.available_height() - 44.0 } else { ui.available_height() * 0.6 };
-                    if col.nodes.is_empty() {
-                        ui.add_space(SPACE_S);
-                        ui.horizontal_wrapped(|ui| {
-                            ui.add_space(SPACE_S);
-                            ui.label(egui::RichText::new("No project structure yet.").font(body()).color(DIM));
-                        });
-                        ui.add_space(SPACE_S);
-                        ui.horizontal(|ui| {
-                            ui.add_space(SPACE_S);
-                            if chip_button(ui, "Propose from tags…") { actions.push("propose\u{1f}".into()); }
-                            if chip_button(ui, "New node") { actions.push("new\u{1f}".into()); }
-                        });
+                    if col.proposal_available && col.mode.is_empty() {
+                        if kit::quiet(ui, "Propose structure from tags…").clicked() {
+                            actions.push("propose\u{1f}".into());
+                        }
+                    } else if col.nodes.is_empty() {
+                        empty_state(ui, "No matching rows");
                     }
                     let nodes_len = col.nodes.len();
                     // The column set as a table (tree C): one layout for the
@@ -1584,8 +1595,14 @@ impl Ui {
                         room - ROW_H
                     } else { room };
                     let tree_h = (nodes_len as f32 * ROW_H + SPACE_XS).min(row_room).max(3.0 * ROW_H);
-                    egui::ScrollArea::vertical().id_salt("tree").max_height(tree_h).auto_shrink([false, false])
-                        .show_rows(ui, ROW_H, nodes_len, |ui, range| {
+                    let mut scroll = egui::ScrollArea::vertical().id_salt("tree").max_height(tree_h).auto_shrink([false, false]);
+                    if let Some(key) = col.reveal.take() {
+                        if let Some(index) = col.ordered.iter().position(|&i| col.nodes[i].key == key) {
+                            let pitch = ROW_H + ui.spacing().item_spacing.y;
+                            scroll = scroll.vertical_scroll_offset((index as f32 * pitch - (tree_h - pitch) * 0.5).max(0.0));
+                        }
+                    }
+                    scroll.show_rows(ui, ROW_H, nodes_len, |ui, range| {
                             for i in range {
                                 let index = if col.mode.is_empty() { col.ordered[i] } else { i };
                                 let n = &col.nodes[index];
@@ -1644,6 +1661,10 @@ impl Ui {
                                         }
                                     } else if col.colset == 2 {
                                         // Quantity at the edge, the export class (and type) before it.
+                                        if let Some((_, end)) = cols.checks {
+                                            let ink = if n.problems > 0 { WARN } else { FAINT };
+                                            ui.painter().text(pos2(end, cy), egui::Align2::RIGHT_CENTER, n.problems.to_string(), meta(), ink);
+                                        }
                                         let qty = cell(2);
                                         let (qa, qb) = cols.qty.unwrap_or((warn_col - 64.0, warn_col));
                                         if !qty.is_empty() {
@@ -1798,12 +1819,12 @@ impl Ui {
                                     let p = resp.interact_pointer_pos().unwrap_or(rect.center());
                                     if n.expandable && tri.contains(p) {
                                         actions.push(format!("toggle\u{1f}{}", n.key));
-                                    } else if n.row == 6 {
-                                        continue;
                                     } else if n.eye >= 0 && eye_r.expand(2.0).contains(p) {
                                         actions.push(format!("eye\u{1f}{}", n.key));
                                     } else if n.lock >= 0 && lock_r.expand(2.0).contains(p) {
                                         actions.push(format!("lock\u{1f}{}", n.key));
+                                    } else if n.row == 6 {
+                                        continue;
                                     } else if col.filing.is_some() {
                                         if n.row == 0 && !linked {
                                             actions.push(format!("file\u{1f}{}", n.key));
@@ -1817,18 +1838,18 @@ impl Ui {
                                         actions.push(format!("{verb}\u{1f}{}", n.key));
                                     }
                                 }
-                                if resp.double_clicked() && n.row != 6 && col.filing.is_none() {
+                                if resp.double_clicked() && n.row < 6 && col.filing.is_none() {
                                     let verb = if n.row == 0 { "isolate" } else { "open" };
                                     actions.push(format!("{verb}\u{1f}{}", n.key));
                                 }
-                                if resp.secondary_clicked() && n.row != 6 && n.row != 4 && (n.row != 5 || n.key.starts_with("cm:")) {
+                                if resp.secondary_clicked() && n.row < 6 && n.row != 4 && (n.row != 5 || n.key.starts_with("cm:")) {
                                     col.row_menu = resp.interact_pointer_pos().map(|p| (n.key.clone(), n.row, p));
                                 }
                             }
                         });
                     } // 'tree
                     // A delivery owns the inspector even when geometry is selected.
-                    let selection = if col.colset == 2 && col.mode.is_empty() { None } else { selection.as_ref() };
+                    let selection = if col.mode == "Deliveries" && !col.nodes.is_empty() { None } else { selection.as_ref() };
                     // Inspector.
                     ui.add_space(SPACE_S);
                     let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 1.0), Sense::hover());
@@ -1836,7 +1857,7 @@ impl Ui {
                     ui.add_space(SPACE_S);
                     egui::ScrollArea::vertical().id_salt("inspector").auto_shrink([false, false]).show(ui, |ui| {
                         ui.spacing_mut().item_spacing = vec2(0.0, SPACE_XS);
-                        if col.mode.is_empty() && col.colset != 2 {
+                        if col.mode.is_empty() {
                             self.panels.inspector(ui, &mut cmds);
                         }
                         if col.inspector_title.is_empty() {
@@ -1880,7 +1901,7 @@ impl Ui {
                             }));
                         }
                         ui.add_space(SPACE_XS);
-                        let native_export = self.panels.has_records() && col.mode.is_empty() && col.colset != 2;
+                        let native_export = self.panels.has_records() && col.mode.is_empty();
                         if native_export {
                             ui.collapsing("Export details", |ui| self.panels.export(ui, &mut cmds));
                         }
@@ -1948,7 +1969,8 @@ impl Ui {
             // A linked file's rows are read-only here: no filing, kind or rename.
             let link_menu: &[(&str, &str)] = &[("node", "Select"), ("contents", "Select contents"),
                 ("isolate", "Isolate"), ("zoom", "Zoom to"), ("-", ""), ("eye", "Show / hide"), ("lock", "Lock / unlock"),
-                ("-", ""), ("linkopen", "Open source"), ("linkreload", "Reload")];
+                ("-", ""), ("linkopen", "Open source"), ("linkfinder", "Show in Finder"),
+                ("linkreload", "Reload"), ("linkrelink", "Locate…"), ("linkunlink", "Unlink")];
             let menu = if row == 0 && key.starts_with("n:link") { link_menu } else if row == 0 { node_menu }
                 else if row == 5 { comp_menu } else { item_menu };
             let resp = egui::Area::new(egui::Id::new("row_menu"))
@@ -1958,7 +1980,13 @@ impl Ui {
                     glass(Surface::Raised).inner_margin(Margin::same(6)).show(ui, |ui| {
                         ui.set_width(200.0);
                         ui.spacing_mut().item_spacing = vec2(0.0, 1.0);
+                        let row = col.nodes.iter().find(|n| n.key == key);
+                        let editable_file = row.is_some_and(|n| n.icon.starts_with("file:") && !n.badge.starts_with("via "));
                         for (id, label) in menu {
+                            if row.is_some_and(|n| n.icon == "file:missing") &&
+                                matches!(*id, "contents" | "isolate" | "zoom" | "linkopen" | "linkfinder" | "linkreload") { continue; }
+                            if matches!(*id, "linkreload" | "linkrelink" | "linkunlink") &&
+                                !editable_file { continue; }
                             if *id == "-" {
                                 let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 7.0), Sense::hover());
                                 ui.painter().hline(r.x_range().shrink(6.0), r.center().y, Stroke::new(1.0_f32, EDGE));
@@ -2036,7 +2064,7 @@ impl Ui {
                     glass(Surface::Raised).inner_margin(Margin::same(6)).show(ui, |ui| {
                         ui.set_width(220.0);
                         ui.spacing_mut().item_spacing = vec2(0.0, 1.0);
-                        if col.mode.is_empty() && col.colset != 2 {
+                        if col.mode.is_empty() {
                             let options = tree_order::Sort::OPTIONS;
                             let old = options.iter().position(|(sort, _)| *sort == col.sort).unwrap_or(0);
                             let mut index = old;
@@ -2049,6 +2077,22 @@ impl Ui {
                                 col.ordered = col.sort.order(&col.nodes);
                                 actions.push(format!("sort\u{1f}{index}"));
                                 close = true;
+                            }
+                        }
+                        if col.mode.is_empty() {
+                            let shortcut = if cfg!(target_os = "macos") { "⇧⌘J" } else { "Ctrl+Shift+J" };
+                            let item = ("revealselection".into(), "Reveal selection".into(), shortcut.into(), String::new(), -1, selection.is_some());
+                            if menu_row(ui, &item) {
+                                actions.push("revealselection\u{1f}".into());
+                                close = true;
+                            }
+                        }
+                        if col.mode.is_empty() {
+                            for (mode, label) in [("deliveries", "Deliveries…"), ("problems", "Problems…")] {
+                                if menu_row(ui, &(mode.into(), label.into(), String::new(), String::new(), -1, true)) {
+                                    actions.push(format!("mode\u{1f}{mode}"));
+                                    close = true;
+                                }
                             }
                         }
                         for (id, label) in [("new", "New node"), ("propose", "Propose structure from tags…"),
