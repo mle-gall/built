@@ -455,12 +455,17 @@ class MaterialsProvider(Provider):
                 self.run(ctx, "image", {**item, "key": f"m:{name}"})
             else:
                 ctx.core("set_material_base", name=name, base="color")
-        elif field == "color":
+        elif field == "color" or field.startswith("brush_"):
             mat = ctx.scene.materials.get(name)
-            if mat is not None and (mat.texture or {}).get("path"):
+            if field == "color" and mat is not None and (mat.texture or {}).get("path"):
                 ctx.core("edit_material", name=name, color=list(_parse_hex(text)))
-            else:
-                ctx.core("set_material_base", name=name, base="color", color=list(_parse_hex(text)))
+                return
+            from ingetrazo_core import edit_swatch
+            from tools.paint import PaintTool
+            new = edit_swatch(ctx.vp.history, PaintTool, name, field, text)
+            if ctx.view is not None and ctx.view.__dict__.get("_ui_mat_focus") == f"m:{name}":
+                ctx.view._ui_mat_focus = f"m:{new}"
+            ctx.vp.refresh_after_edit()
         elif field == "tile":
             parts = [p for p in re.split(r"[^0-9.,]+", text.replace(",", ".")) if p]
             if not parts:
@@ -1300,6 +1305,8 @@ def palette_items(view, win) -> list:
         icon = _thumb(view, tex["path"]) if tex and tex.get("path") else ""
         out.append((f"m:{name}", name, _hex(mat.color), icon, name == cur))
     st = _state(view)
+    from ingetrazo_core import recent_swatches
+    from tools.paint import PaintTool
     rec = []
     for key in st["recent"]:
         if len(rec) >= STRIP_RECENT:
@@ -1308,8 +1315,13 @@ def palette_items(view, win) -> list:
         if kind not in ("lib", "ral", "my"):
             continue
         hexc, icon, name = _recent_look(key)
-        if name and name not in dict(mats):
+        if name and name not in dict(mats) and all(row[1] != name for row in rec):
             rec.append((key, name, hexc, _thumb(view, icon) if icon else "", name == cur))
+    for key, name, colour, path in recent_swatches(PaintTool):
+        if len(rec) >= STRIP_RECENT:
+            break
+        if all(row[1] != name for row in out + rec):
+            rec.append((key, name, colour, _thumb(view, path) if path else "", name == cur))
     if rec:
         out.append(("-", "", "", "", False))
         out += rec
@@ -1347,6 +1359,12 @@ def _palette(view, win) -> None:
 def paint_from_strip(win, key) -> None:
     """A swatch of the strip: paint with it (a recent bundled one too)."""
     view = getattr(getattr(win, "_doc", None), "stand_in", None)
+    if key.startswith("stamp:"):
+        from ingetrazo_core import pick_recent
+        from tools.paint import PaintTool
+        pick_recent(win.viewport.scene, PaintTool, json.loads(key[6:]))
+        win._activate_tool("paint")
+        return
     if view is not None:
         _remember(view, key)
     from views.wgpu_ui import _paint_with
@@ -1455,6 +1473,9 @@ def inspector_key(view, win):
         cur = _current_material_name()
         if cur and cur in win.viewport.scene.materials:
             return f"m:{cur}"
+        from tools.paint import PaintTool
+        if not PaintTool.current_is_default:
+            return "brush:"
     return None
 
 
@@ -1462,6 +1483,10 @@ def inspector(view, win):
     """``(title, sections)`` for the material the inspector edits, or None
     (the inspector then shows the selection as usual)."""
     key = inspector_key(view, win)
+    if key == "brush:":
+        from ingetrazo_core import brush_inspector
+        from tools.paint import PaintTool
+        return brush_inspector(PaintTool)
     it = _item_anywhere(view, win, key) if key else None
     if it is None:
         return None

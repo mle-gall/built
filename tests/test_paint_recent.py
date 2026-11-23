@@ -252,7 +252,7 @@ def test_clicking_a_recent_swatch_restores_it_exactly(window, tmp_path):
 
 
 def test_the_list_survives_a_restart_minus_missing_images(tmp_path):
-    from views.tray import load_recent_materials, save_recent_materials
+    from ingetrazo_core import load_recent_materials, save_recent_materials
     kept = _png(tmp_path / "kept.png", (0.5, 0.5, 0.5))
     entries = [
         {"texture": {"path": kept, "sw": 1.0, "sh": 1.0, "rot": 0.0},
@@ -266,7 +266,7 @@ def test_the_list_survives_a_restart_minus_missing_images(tmp_path):
 
 
 def test_corrupt_settings_read_as_empty():
-    from views.tray import load_recent_materials
+    from ingetrazo_core import load_recent_materials
     QSettings().setValue("paint/recent_materials", "{not json")
     assert load_recent_materials() == []
     QSettings().setValue("paint/recent_materials", '[1, "x", {"foo": 2}]')

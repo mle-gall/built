@@ -69,6 +69,7 @@ from georef.datum import SceneDatum
 from georef.geopath import GeoPath
 from georef.tiles import DEFAULT_SOURCE_ID, PRESETS, TileLayer, custom_source
 from tools.paint import RECENT_MAX, PaintTool
+from ingetrazo_core import load_recent_materials, save_recent_materials
 
 from core.paths import app_root
 from core.units import fmt_area, fmt_len, fmt_volume
@@ -80,32 +81,6 @@ _TEX_DIR = app_root() / "resources" / "textures"
 #: "Beige" or "Cream" would collide with strings that mean something else.
 _RAL_FILE = app_root() / "resources" / "colors" / "ral.json"
 _SWATCH = 44  # swatch pixel size
-
-
-def _ral_rgb(name: str):
-    """The library colour of a material named after a RAL colour
-    («RAL 7035 Gris claro», in either language), or None."""
-    if not name or not name.startswith("RAL "):
-        return None
-    global _RAL_BY_CODE
-    if _RAL_BY_CODE is None:
-        import json
-        _RAL_BY_CODE = {}
-        if _RAL_FILE.exists():
-            data = json.loads(_RAL_FILE.read_text(encoding="utf-8"))
-            for fam in data.get("families", []):
-                for c in fam.get("colors", []):
-                    _RAL_BY_CODE[c["code"]] = c
-    entry = _RAL_BY_CODE.get(" ".join(name.split()[:2]))
-    if entry is None:
-        return None
-    if name not in ("%s %s" % (entry["code"], entry.get("name", "")),
-                    "%s %s" % (entry["code"], entry.get("name_es", ""))):
-        return None
-    return tuple(entry["rgb"][:3])
-
-
-_RAL_BY_CODE = None
 
 
 def _ral_name(entry: dict) -> str:
@@ -2323,13 +2298,8 @@ class MaterialsPanel(QWidget):
         buys by («RAL 7035»). That one would be a lie in another colour, so
         the edit becomes a new material, «RAL 7035 … (modified)», and the
         library keeps its colour under its name."""
-        ref = _ral_rgb(name)
-        if ref is None or all(abs(a - b) < 0.002
-                              for a, b in zip(ref, rgb[:3])):
-            return name
-        from core.materials import free_name
-        return free_name("%s %s" % (name, tr("(modified)")),
-                         self._window.viewport.scene.materials)
+        from ingetrazo_core import recoloured_name
+        return recoloured_name(self._window.viewport.scene, name, rgb)
 
     def _restamp(self, old_name: str, new_mat) -> bool:
         """Put *new_mat* on every face and group wearing *old_name* — a new
@@ -2390,36 +2360,22 @@ class MaterialsPanel(QWidget):
         """The name field of «Active:» was confirmed. In the model: rename
         it everywhere. Not yet in the model (a library swatch, a fresh
         colour): only what is painted from now on takes the new name."""
-        new = self._name_edit.text().strip()
-        if PaintTool.current_is_default:
+        self._edit_active_swatch("brush_name", self._name_edit.text())
+
+    def _edit_active_swatch(self, field, value):
+        from ingetrazo_core import edit_swatch
+        vp = self._window.viewport
+        name = getattr(PaintTool.current_material, "name", "")
+        try:
+            edit_swatch(vp.history, PaintTool, name, field, value)
+        except ValueError as exc:
+            self._window.statusBar().showMessage(str(exc), 3000)
             self._refresh_preview()
-            return
-        mat = PaintTool.current_material
-        old = mat.name if mat is not None else ""
-        if not new or new == old:
-            self._refresh_preview()
-            return
-        scene = self._window.viewport.scene
-        if mat is not None and old in scene.materials:
-            if not self._renamed(old, new):
-                self._refresh_preview()
-            return
-        from core.materials import Material
-        if new in scene.materials:
-            # The model's own material of that name: paint with it.
-            PaintTool.current_material = scene.materials[new]
-        elif PaintTool.current_texture:
-            PaintTool.current_material = Material(
-                new, texture=dict(PaintTool.current_texture),
-                opacity=PaintTool.current_opacity)
-        else:
-            PaintTool.current_material = Material(
-                new, color=tuple(PaintTool.current_color),
-                opacity=PaintTool.current_opacity)
+            return False
+        vp.notify_scene_changed()
+        self.refresh_in_model()
         self._refresh_preview()
-        self._window.statusBar().showMessage(tr(
-            "Active material named '{name}' — click faces to paint it",
-            name=new), 3000)
+        return True
 
     def _on_pick_active_color(self) -> None:
         """The colour button of «Active:»."""
@@ -2622,29 +2578,8 @@ class MaterialsPanel(QWidget):
         and restamped on every face and group that wears it (one undo
         step); an anonymous colour becomes the colour to paint next.
         False when there is no colour to change."""
-        if rgb is None or PaintTool.current_is_default:
-            return False
-        rgb = tuple(float(c) for c in rgb[:3])
-        mat = PaintTool.current_material
-        scene = self._window.viewport.scene
-        if mat is not None and mat.name in scene.materials:
-            from core.materials import Material
-            old = scene.materials[mat.name]
-            new_mat = Material(self._recoloured_name(mat.name, rgb),
-                               color=rgb, opacity=old.opacity,
-                               finish=old.finish, pbr=old.pbr)
-            if self._restamp(mat.name, new_mat):
-                PaintTool.current_material = new_mat
-                PaintTool.current_color = rgb
-            return True
-        PaintTool.current_color = rgb
-        if mat is not None:
-            from core.materials import Material
-            PaintTool.current_material = Material(
-                self._recoloured_name(mat.name, rgb), color=rgb)
-        self._window.statusBar().showMessage(
-            tr("Active colour changed — click faces to paint it"), 3000)
-        return True
+        import json
+        return rgb is not None and self._edit_active_swatch("brush_color", json.dumps(list(rgb[:3])))
 
     def _apply_texture(self, path: str, size: float | None = None,
                        sw: float | None = None,
@@ -2721,20 +2656,8 @@ class MaterialsPanel(QWidget):
         """Make a recent material the active paint, exactly as it was
         painted: image with its size, turn and tint, or the colour; its
         translucency and its name."""
-        tex = entry.get("texture")
-        PaintTool.current_is_default = False
-        PaintTool.current_texture_plane = None
-        if tex:
-            PaintTool.current_texture = dict(tex)
-        else:
-            PaintTool.current_texture = None
-            PaintTool.current_color = tuple(entry.get("color") or (1, 1, 1))
-        PaintTool.current_opacity = entry.get("opacity")
-        PaintTool.current_material = self._material_for(
-            entry.get("mat"),
-            color=None if tex else PaintTool.current_color,
-            texture=dict(tex) if tex else None,
-            opacity=entry.get("opacity"))
+        from ingetrazo_core import pick_recent
+        pick_recent(self._window.viewport.scene, PaintTool, entry)
         self._window._activate_tool("paint")
         self._load_texture_fields()
         self._refresh_preview()
@@ -2789,38 +2712,6 @@ class MaterialsPanel(QWidget):
                 self._preview.setPixmap(pm)
                 return
         self._preview.setPixmap(_color_pixmap(PaintTool.current_color))
-
-
-_RECENT_KEY = "paint/recent_materials"
-
-
-def load_recent_materials() -> list[dict]:
-    """The «Recent» materials saved by the last session. An image that is
-    gone from disk (an import's temporary folder) is dropped."""
-    import json
-    raw = QSettings().value(_RECENT_KEY) or ""
-    try:
-        data = json.loads(raw) if isinstance(raw, str) and raw else []
-    except ValueError:
-        return []
-    out = []
-    for e in data if isinstance(data, list) else []:
-        if not isinstance(e, dict) or not (e.get("texture") or e.get("color")):
-            continue
-        tex = e.get("texture")
-        if tex and not (isinstance(tex, dict) and tex.get("path")
-                        and Path(tex["path"]).exists()):
-            continue
-        out.append(e)
-    return out[:RECENT_MAX]
-
-
-def save_recent_materials(entries: list[dict]) -> None:
-    import json
-    try:
-        QSettings().setValue(_RECENT_KEY, json.dumps(entries[:RECENT_MAX]))
-    except (TypeError, ValueError):
-        pass                       # a value JSON cannot hold: keep the old
 
 
 def _dialog_parent(panel) -> QWidget:

@@ -53,6 +53,7 @@ mod planar_edits;
 mod visibility_sets;
 mod scene_commands;
 mod material_library;
+mod swatch;
 mod assembly_inspector;
 mod solid_inspector;
 mod scene_tree;
@@ -306,6 +307,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(assembly_inspector::part_measures, m)?)?;
     m.add_function(wrap_pyfunction!(assembly_inspector::assembly_selection, m)?)?;
     m.add_function(wrap_pyfunction!(assembly_inspector::plan_part_edit, m)?)?;
+    swatch::register(m)?;
     m.add_function(wrap_pyfunction!(material_library::bundled_materials, m)?)?;
     m.add_function(wrap_pyfunction!(material_library::pick_library_paint, m)?)?;
     m.add_function(wrap_pyfunction!(material_library::material_inspector, m)?)?;

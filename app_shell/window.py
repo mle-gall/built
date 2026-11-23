@@ -344,7 +344,10 @@ class ShellScenes:
 
 class _Tray:
     def __init__(self, win):
+        from ingetrazo_core import PaintRecents
+        from tools.paint import PaintTool
         self.scenes = ShellScenes(win)
+        self.materials = PaintRecents(PaintTool)
 
 
 def _rebind(fn, cls, depth=0):
