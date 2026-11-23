@@ -163,17 +163,21 @@ impl Antialias {
         edge_only: Option<bool>,
         sections: bool,
         axes: &crate::axes::Axes,
+        references: &crate::references::References,
     ) {
         let color = self.color.create_view(&Default::default());
         let depth = self.depth.create_view(&Default::default());
-        if edge_only != Some(true) { self.background.draw(e, &color, None); }
+        if edge_only != Some(true) {
+            self.background.draw(e, &color, None);
+            references.draw(e, &color, &depth, Some(resolve));
+        }
         let mut pass = e.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("4x MSAA color resolve"),
             color_attachments: &[Some(color_attachment(&color, resolve, sections || edge_only == Some(false)))],
             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                 view: &depth,
                 depth_ops: Some(wgpu::Operations {
-                    load: if edge_only == Some(true) { wgpu::LoadOp::Load } else { wgpu::LoadOp::Clear(crate::depth::CLEAR) },
+                    load: if edge_only == Some(true) || references.active() { wgpu::LoadOp::Load } else { wgpu::LoadOp::Clear(crate::depth::CLEAR) },
                     store: if sections || edge_only == Some(false) { wgpu::StoreOp::Store } else { wgpu::StoreOp::Discard },
                 }),
                 stencil_ops: None,

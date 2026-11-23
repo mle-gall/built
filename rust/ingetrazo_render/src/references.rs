@@ -266,7 +266,7 @@ impl References {
             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                 view: depth,
                 depth_ops: Some(wgpu::Operations {
-                    load: wgpu::LoadOp::Load,
+                    load: wgpu::LoadOp::Clear(crate::depth::CLEAR),
                     store: wgpu::StoreOp::Store,
                 }),
                 stencil_ops: None,

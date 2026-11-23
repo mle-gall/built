@@ -1708,6 +1708,7 @@ impl Renderer {
         let color_only = !msaa && !self.edges && self.style != 4 && !plan.ao && !plan.xray;
         let draw_ids = if color_only { needs_settled_ids(self.pick_pending, self.ids_dirty, self.stable_frames) }
             else { needs_id_pass(msaa, self.pick_pending, self.ids_dirty, self.stable_frames) };
+        if !msaa { self.references.draw(&mut e, &color, &depth, None); }
         if plan.xray { self.transparency.draw(&mut e, &color, None, s, self.multi, tq); }
 
         let ao_active = plan.ao;
@@ -1747,7 +1748,7 @@ impl Renderer {
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                     view: &depth,
                     depth_ops: Some(wgpu::Operations {
-                        load: if edge_only { wgpu::LoadOp::Load } else { wgpu::LoadOp::Clear(depth::CLEAR) },
+                        load: if edge_only || self.references.active() { wgpu::LoadOp::Load } else { wgpu::LoadOp::Clear(depth::CLEAR) },
                         store: wgpu::StoreOp::Store,
                     }),
                     stencil_ops: None,
@@ -1821,14 +1822,7 @@ impl Renderer {
             drop(pass);
             }
             if msaa && !self.pick_pending {
-                self.aa.draw(&mut e, &color, s, self.style, self.edges, self.look.data[6][0] > 0., self.multi, self.queries.as_ref(), Some(edge_only), self.references.active() || self.sections.count > 0 || self.preview.active() || self.face_marks.active() || self.ghost_geometry.active() || self.ghost_objects.active() || self.lines.active_layer(true) || (self.look.data[9][0] > 0. && self.material_transparency), &self.axes);
-            }
-            if !edge_only {
-                if msaa {
-                    self.references.draw(&mut e, &self.aa.color_view(), &self.aa.depth_view(), Some(&color));
-                } else {
-                    self.references.draw(&mut e, &color, &depth, None);
-                }
+                self.aa.draw(&mut e, &color, s, self.style, self.edges, self.look.data[6][0] > 0., self.multi, self.queries.as_ref(), Some(edge_only), self.references.active() || self.sections.count > 0 || self.preview.active() || self.face_marks.active() || self.ghost_geometry.active() || self.ghost_objects.active() || self.lines.active_layer(true) || (self.look.data[9][0] > 0. && self.material_transparency), &self.axes, &self.references);
             }
             if !edge_only && self.sun.enabled && self.style != 1 && self.style != 4 {
                 if msaa { self.aa.resolve_depth(&self.device, &mut e, &depth, None); }

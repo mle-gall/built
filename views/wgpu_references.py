@@ -1,14 +1,15 @@
-"""Upload the document's display-only imagery into the shared Metal scene."""
+"""Upload the document's display-only imagery into the shared wgpu scene."""
 import numpy as np
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QImage
 
 
 def _vertices(positions, uvs, origin, triangles=None):
-    points = np.column_stack((np.asarray(positions) - origin, uvs)).astype(np.float32)
+    positions, uvs = np.asarray(positions), np.asarray(uvs)
     if triangles is not None:
-        points = points[np.asarray(triangles)]
-    return points.ravel()
+        indices = np.asarray(triangles).ravel()
+        positions, uvs = positions[indices], uvs[indices]
+    return np.column_stack((positions - origin, uvs)).astype(np.float32).ravel()
 
 
 def _texture(image, fallback, limit):
@@ -91,7 +92,7 @@ def sync(view, style):
                 continue
             corners = tuple(p.toTuple() for p in plane.corners())
             key = f'image/{i}'
-            if changed(key, (plane.path, corners, plane.opacity, fade)):
+            if changed(key, (plane.path, revision, corners, plane.opacity, fade)):
                 image = QImage(plane.path)
                 if image.isNull():
                     del layers[key]
