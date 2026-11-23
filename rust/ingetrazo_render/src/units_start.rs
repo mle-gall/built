@@ -299,15 +299,18 @@ impl UnitsDraft {
                 }
                 rows.push(row);
             }
-            rows.push(field(
+            let mut separator = field(
                 "decimal",
                 "choice",
                 t("Decimal separator:")?,
                 usize::from(self.draft["decimal"] == ","),
                 vec![t("Point (1.25)")?, t("Comma (1,25)")?],
-            ));
+            );
+            separator.9 =
+                t("How numbers are shown. Typing takes both: «1,20» and «1.20» are the same.")?;
+            rows.push(separator);
         }
-        let mut sample = field("preview", "text", t("Preview:")?, 0, vec![]);
+        let mut sample = field("preview", "text", t("Preview")?, 0, vec![]);
         sample.3 = preview.into();
         rows.push(sample);
         if self.custom {

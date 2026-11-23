@@ -1,4 +1,4 @@
-"""Apply edge softening and raster export through a real native window."""
+"""Open, apply and close migrated chrome operations in a native window."""
 import json
 import os
 from pathlib import Path
@@ -113,12 +113,15 @@ def test_native_first_run_custom_units(tmp_path):
     settings.setValue("units/new_document", json.dumps(custom))
     settings.sync()
     steps = tmp_path / "commands"
+    # In the 1000 × 720 Units sheet, click “Also use for new documents”.
     steps.write_text("wait 700\nmenu home\nwait 200\nmenu new\nwait 300\nstate\n"
                      "key enter\nwait 300\nstate\nkey enter\nwait 300\nstate\n"
-                     "menu units\nwait 300\nstate\nkey escape\nwait 300\nstate\nquit\n")
+                     "menu units\nwait 300\nstate\nclick 355 600\nwait 250\n"
+                     "key escape\nwait 300\nstate\nquit\n")
     home = tmp_path / "home"
     home.mkdir()
-    result = run([str(BIN), "--root", str(ROOT), "--new-instance", "--script", str(steps)],
+    result = run([str(BIN), "--root", str(ROOT), "--new-instance", "--size", "1000x720",
+                  "--script", str(steps)],
                  home=home, settings=profile, capture_output=True, text=True, timeout=90)
     log = result.stdout + result.stderr
     states = [json.loads(line.removeprefix("[built] state ")) for line in log.splitlines()
@@ -130,3 +133,4 @@ def test_native_first_run_custom_units(tmp_path):
     assert not states[2]["dirty"]
     settings.sync()
     assert json.loads(settings.value("units/new_document")) == custom
+    assert settings.value("units/use_for_new_documents") == "0"
