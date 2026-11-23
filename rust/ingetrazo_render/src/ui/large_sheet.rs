@@ -46,14 +46,26 @@ const SEP: char = '\u{1f}';
 /// How long opening and closing take (seconds).
 pub const ANIM_S: f32 = 0.16;
 const HEAD_H: f32 = 52.0;
+/// The room between rail and dock a sheet needs to sit there (else it covers both).
+const FRAMED_MIN_W: f32 = 960.0;
 const FOOT_H: f32 = 32.0;
 const PAD: f32 = 14.0;
-/// The sheet's surface: graphite, one step over the dock, nearly opaque.
-const SURFACE: Color32 = Color32::from_rgb(0x1C, 0x1F, 0x24);
-const SIDE_FILL: Color32 = Color32::from_rgba_premultiplied(0, 0, 0, 36);
-const WELL: Color32 = Color32::from_rgb(0x12, 0x14, 0x17);
-const OK: Color32 = Color32::from_rgb(0x4C, 0xC3, 0x7A);
-const ERROR: Color32 = Color32::from_rgb(0xF0, 0x6A, 0x5F);
+
+// ---- Colours: the dock's own tokens (ui.rs), nothing new. One block, so
+// moving to ui/tokens.rs (ui/design-system) is a rename. Blue is only the
+// accent: the focused tile, the selected row, the primary button, links.
+/// The sheet is the dock's glass panel (Surface::Panel), not a fill of its own.
+const SHEET: Surface = Surface::Panel;
+/// The side list and the panes are set apart by hairlines only.
+const RULE: Color32 = EDGE;
+/// A picture's well (no picture yet), an inset like a field.
+const WELL: Color32 = FIELD;
+/// Link and check states: the tree's (ui/tree_cols.rs).
+const OK: Color32 = super::tree_cols::FOUND;
+const ERROR: Color32 = super::tree_cols::MISSING;
+/// The model behind: blurred as it is (no tint), then a neutral dark scrim.
+const SCRIM: Color32 = Color32::BLACK;
+const SCRIM_ALPHA: f32 = 0.38;
 
 // ---- What Python sends ------------------------------------------------------
 
@@ -411,7 +423,7 @@ fn picture(ui: &egui::Ui, r: Rect, tex: Option<&egui::TextureHandle>, hex: &str,
         ui.painter().line_segment([c + vec2(-k, k * 0.5), c + vec2(0.0, k)], pen);
         ui.painter().line_segment([c + vec2(k, k * 0.5), c + vec2(0.0, k)], pen);
     }
-    ui.painter().rect_stroke(r, cr, Stroke::new(1.0_f32, EDGE), egui::StrokeKind::Inside);
+    ui.painter().rect_stroke(r, cr, Stroke::new(1.0_f32, RULE), egui::StrokeKind::Inside);
 }
 
 fn paint_dot(ui: &egui::Ui, c: Pos2, t: &str) {
@@ -443,20 +455,20 @@ fn button(ui: &mut egui::Ui, v: &Verb, width: Option<f32>) -> bool {
     let ink = if !v.enabled { OFF } else if primary { Color32::WHITE } else { INK };
     let g = ui.painter().layout_no_wrap(v.label.clone(), if primary { strong(12.0) } else { body() }, ink);
     let k = (!v.key.is_empty()).then(|| ui.painter().layout_no_wrap(v.key.clone(), meta(),
-        if primary { Color32::from_rgba_unmultiplied(255, 255, 255, 150) } else { FAINT }));
+        if primary { INK_2 } else { FAINT }));
     let kw = k.as_ref().map_or(0.0, |k| k.size().x + 8.0);
     let w = width.unwrap_or((g.size().x + kw + 22.0).max(56.0));
     let sense = if v.enabled { Sense::click() } else { Sense::hover() };
     let (rect, resp) = ui.allocate_exact_size(vec2(w, 28.0), sense);
     let cr = CornerRadius::same(R_CONTROL);
     if primary && v.enabled {
-        let fill = if resp.is_pointer_button_down_on() { Color32::from_rgb(0x55, 0x8C, 0xE6) }
-                   else if resp.hovered() { Color32::from_rgb(0x7A, 0xB0, 0xFF) } else { ACCENT };
-        ui.painter().rect_filled(rect, cr, fill);
+        ui.painter().rect_filled(rect, cr, ACCENT);
+        if resp.is_pointer_button_down_on() { ui.painter().rect_filled(rect, cr, FIELD); }
+        else if resp.hovered() { ui.painter().rect_filled(rect, cr, HOVER); }
     } else {
         ui.painter().rect_filled(rect, cr, HOVER);
         paint_state(ui, rect, state_of(&resp, false, v.enabled), R_CONTROL);
-        ui.painter().rect_stroke(rect, cr, Stroke::new(1.0_f32, EDGE), egui::StrokeKind::Inside);
+        ui.painter().rect_stroke(rect, cr, Stroke::new(1.0_f32, RULE), egui::StrokeKind::Inside);
     }
     let x0 = rect.center().x - (g.size().x + kw) / 2.0;
     ui.painter().galley(pos2(x0, rect.center().y - g.size().y / 2.0), g.clone(), ink);
@@ -502,7 +514,7 @@ impl Draw<'_> {
                 "separator" => {
                     ui.add_space(6.0);
                     let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 1.0), Sense::hover());
-                    ui.painter().hline(r.x_range(), r.center().y, Stroke::new(1.0_f32, EDGE));
+                    ui.painter().hline(r.x_range(), r.center().y, Stroke::new(1.0_f32, RULE));
                     ui.add_space(6.0);
                 }
                 "heading" => self.heading(ui, b),
@@ -666,7 +678,7 @@ impl Draw<'_> {
             if !it.badge.is_empty() {
                 let g = ui.painter().layout_no_wrap(it.badge.clone(), meta(), INK);
                 let br = Rect::from_min_size(pic.right_top() + vec2(-g.size().x - 14.0, 6.0), vec2(g.size().x + 8.0, 16.0));
-                ui.painter().rect_filled(br, CornerRadius::same(8), Color32::from_black_alpha(150));
+                ui.painter().rect_filled(br, CornerRadius::same(8), PANEL);
                 ui.painter().galley(br.center() - g.size() / 2.0, g, INK);
             }
             let ink = if it.dim { FAINT } else { INK };
@@ -898,21 +910,30 @@ impl Ui {
         // The model behind: blurred under the frame, then everything under
         // the top bar dimmed.
         let back = Rect::from_min_max(pos2(0.0, TOP_H), screen.max);
+        let max_w = if spec.width > 0.0 { spec.width } else { 1240.0 };
+        // Between the rail and the dock when there is room (the frame stays
+        // in view, undimmed, as in the review's mockups); else over all of it.
+        let (free_l, free_r) = if self.review || self.sheets.shown { (0.0, screen.max.x) }
+                               else { (GUT + 72.0 + GUT, self.free_right(ctx, screen) - GUT) };
+        let framed = free_r - free_l >= FRAMED_MIN_W;
+        let (area_l, area_r) = if framed { (free_l, free_r) } else { (24.0, screen.max.x - 24.0) };
+        let w = (area_r - area_l).min(max_w).max(320.0);
+        let x = (area_l + (area_r - area_l - w) / 2.0).max(0.0);
+        let dim = if framed { Rect::from_min_max(pos2(free_l - GUT, TOP_H), pos2(free_r + GUT, screen.max.y - BOT_H)) }
+                  else { back };
+        let blur_r = if framed { Rect::from_min_max(pos2(free_l - GUT, TOP_H), pos2(free_r + GUT, screen.max.y - BOT_H)) } else { back };
         egui::Area::new(egui::Id::new("lsheet_blur"))
             .fixed_pos(back.min)
             .order(egui::Order::Background)
             .interactable(false)
             .fade_in(false)
             .show(ctx, |ui| {
-                let look = crate::glass::Look { tint: [0.06, 0.07, 0.085, 0.30 * ease], saturation: 0.55, rim: [0.0, 0.0],
+                let look = crate::glass::Look { tint: [0.0, 0.0, 0.0, 0.0], saturation: 1.0, rim: [0.0, 0.0],
                                                 rim_width: 0.0, glow: 0.0, peak: 0.0, inner_shadow: 0.0 };
-                ui.painter().add(crate::glass::pane(back, 0.0, look));
+                ui.painter().add(crate::glass::pane(blur_r, 0.0, look));
                 ui.allocate_exact_size(back.size(), Sense::hover());
             });
 
-        let max_w = if spec.width > 0.0 { spec.width } else { 1240.0 };
-        let w = (screen.width() - 48.0).min(max_w).max(320.0);
-        let x = ((screen.width() - w) / 2.0).max(0.0);
         let top = TOP_H + 16.0;
         let bottom = (screen.max.y - BOT_H - 12.0).min(top + 900.0);
         let sheet = Rect::from_min_max(pos2(x, top + (1.0 - ease) * 14.0), pos2(x + w, bottom + (1.0 - ease) * 14.0));
@@ -928,24 +949,25 @@ impl Ui {
             .show(ctx, |ui| {
                 ui.multiply_opacity(ease);
                 let (all, scrim) = ui.allocate_exact_size(back.size(), Sense::click_and_drag());
-                ui.painter().rect_filled(all, CornerRadius::ZERO, Color32::from_black_alpha((96.0 * ease) as u8));
+                let _ = all;
+                ui.painter().rect_filled(dim, CornerRadius::ZERO, SCRIM.gamma_multiply(SCRIM_ALPHA * ease));
                 if scrim.clicked() { st.menu = None; st.head_menu = None; }
-                let cr = CornerRadius::same(14);
-                let shadow = Shadow { offset: [0, 18], blur: 48, spread: 0, color: Color32::from_black_alpha(150) };
-                ui.painter().add(shadow.as_shape(sheet, cr));
-                ui.painter().rect_filled(sheet, cr, SURFACE);
-                ui.painter().rect_stroke(sheet, cr, Stroke::new(1.0_f32, Color32::from_rgba_premultiplied(30, 30, 30, 30)), egui::StrokeKind::Inside);
+                // The dock's glass: its shadow, the blurred model through
+                // its tint, its rim (ui.rs Glass, Surface::Panel).
+                let cr = CornerRadius::same(SHEET.radius());
+                ui.painter().add(SHEET.shadow().as_shape(sheet, cr));
+                ui.painter().add(crate::glass::pane(sheet, SHEET.radius() as f32, SHEET.look()));
                 // Take every click inside the sheet (gaps between widgets too).
                 let _ = ui.interact(sheet, egui::Id::new("lsheet_body"), Sense::click());
 
                 let head = Rect::from_min_size(sheet.min, vec2(sheet.width(), HEAD_H));
                 let foot_h = if spec.footer.is_some() { FOOT_H } else { 0.0 };
                 let body_r = Rect::from_min_max(pos2(sheet.min.x, head.max.y), pos2(sheet.max.x, sheet.max.y - foot_h));
-                ui.painter().hline(sheet.x_range(), head.max.y - 0.5, Stroke::new(1.0_f32, EDGE));
+                ui.painter().hline(sheet.x_range(), head.max.y - 0.5, Stroke::new(1.0_f32, RULE));
                 Self::lsheet_header(ui, &spec, st, head, &mut out);
                 if let Some(f) = &spec.footer {
                     let fr = Rect::from_min_max(pos2(sheet.min.x, sheet.max.y - FOOT_H), sheet.max);
-                    ui.painter().hline(sheet.x_range(), fr.min.y + 0.5, Stroke::new(1.0_f32, EDGE));
+                    ui.painter().hline(sheet.x_range(), fr.min.y + 0.5, Stroke::new(1.0_f32, RULE));
                     Self::lsheet_footer(ui, f, fr, &mut out);
                 }
                 // Side | content | detail.
@@ -956,14 +978,11 @@ impl Ui {
                 let detail_r = Rect::from_min_max(pos2(body_r.max.x - detail_w, body_r.min.y), body_r.max);
                 let content_r = Rect::from_min_max(pos2(side_r.max.x, body_r.min.y), pos2(detail_r.min.x, body_r.max.y));
                 if side_w > 0.0 {
-                    let fill = Rect::from_min_max(side_r.min, side_r.max);
-                    let bl = if spec.footer.is_some() { 0 } else { 14 };
-                    ui.painter().rect_filled(fill, CornerRadius { nw: 0, ne: 0, sw: bl, se: 0 }, SIDE_FILL);
-                    ui.painter().vline(side_r.max.x - 0.5, side_r.y_range(), Stroke::new(1.0_f32, EDGE));
+                    ui.painter().vline(side_r.max.x - 0.5, side_r.y_range(), Stroke::new(1.0_f32, RULE));
                     Self::lsheet_side(ui, &spec.side, side_r, &mut out);
                 }
                 if detail_w > 0.0 {
-                    ui.painter().vline(detail_r.min.x + 0.5, detail_r.y_range(), Stroke::new(1.0_f32, EDGE));
+                    ui.painter().vline(detail_r.min.x + 0.5, detail_r.y_range(), Stroke::new(1.0_f32, RULE));
                 }
                 // Content.
                 {
@@ -1034,7 +1053,7 @@ impl Ui {
                         for (id, label) in &entries {
                             if id == "-" {
                                 let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 7.0), Sense::hover());
-                                ui.painter().hline(r.x_range().shrink(6.0), r.center().y, Stroke::new(1.0_f32, EDGE));
+                                ui.painter().hline(r.x_range().shrink(6.0), r.center().y, Stroke::new(1.0_f32, RULE));
                                 continue;
                             }
                             let it = (id.clone(), label.clone(), String::new(), String::new(), -1, true);
@@ -1063,7 +1082,7 @@ impl Ui {
                             for o in &m.options {
                                 if o.id == "-" {
                                     let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 7.0), Sense::hover());
-                                    ui.painter().hline(r.x_range().shrink(6.0), r.center().y, Stroke::new(1.0_f32, EDGE));
+                                    ui.painter().hline(r.x_range().shrink(6.0), r.center().y, Stroke::new(1.0_f32, RULE));
                                     continue;
                                 }
                                 let checked = if o.role == 1 || o.id == m.on { 1 } else { 0 };
@@ -1128,8 +1147,8 @@ impl Ui {
                     let sense = if t.enabled { Sense::click() } else { Sense::hover() };
                     let resp = ui.interact(r, egui::Id::new(("lsheet_tab", &t.id)), sense);
                     if t.on {
-                        ui.painter().rect_filled(r, CornerRadius::same(R_ROW), Color32::from_rgba_premultiplied(36, 38, 42, 46));
-                        ui.painter().rect_stroke(r, CornerRadius::same(R_ROW), Stroke::new(1.0_f32, EDGE), egui::StrokeKind::Inside);
+                        ui.painter().rect_filled(r, CornerRadius::same(R_ROW), PRESS);
+                        ui.painter().rect_stroke(r, CornerRadius::same(R_ROW), Stroke::new(1.0_f32, RULE), egui::StrokeKind::Inside);
                     } else if resp.hovered() {
                         ui.painter().rect_filled(r, CornerRadius::same(R_ROW), HOVER);
                     }
