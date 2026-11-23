@@ -1694,7 +1694,13 @@ class PartsPanel(QWidget):
         self._copy_btn.setToolTip(tr(
             "Copy the parts as a table (quantity, parts, material, length, "
             "width, thickness) — pastes into a spreadsheet"))
-        self._copy_btn.clicked.connect(self._on_copy)
+        from views import chrome_sheet
+        if chrome_sheet.available(self._window):
+            self._copy_btn.setText(tr("Cut list…"))
+            self._copy_btn.setToolTip(tr("Open the cut-list report"))
+            self._copy_btn.clicked.connect(self._window._on_cut_list)
+        else:
+            self._copy_btn.clicked.connect(self._on_copy)
         row.addWidget(self._split_btn)
         row.addStretch(1)
         row.addWidget(self._copy_btn)

@@ -241,6 +241,11 @@ def action(win, view, payload):
                 vp.notify_scene_changed()
         elif surface == "parts":
             g = _assembly(vp.scene)
+            if verb == "report":
+                if g is not None and g.uid == v:
+                    from views.report_sheets import show
+                    show(win, "cutlist")
+                return
             uid = v if verb == "split" else v[0]
             if g is None or g.uid != uid or links.linked_ancestor(g) or g.locked:
                 return

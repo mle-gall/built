@@ -2628,8 +2628,12 @@ fn large_sheet_check(spec: &str) -> String {
     }
 }
 
+mod surfaces;
+
 #[pymodule]
 pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add("build_commit", env!("BUILT_COMMIT"))?;
+    m.add_function(wrap_pyfunction!(surfaces::surface_spec, m)?)?;
     m.add_function(wrap_pyfunction!(large_sheet_check, m)?)?;
     m.add_function(wrap_pyfunction!(panic_log::install_panic_log, m)?)?;
     m.add_function(wrap_pyfunction!(panic_log::_panic_for_test, m)?)?;
