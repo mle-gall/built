@@ -21,7 +21,7 @@ def main(path: str, group: str) -> None:
     from PySide6.QtWidgets import QApplication
     QApplication.instance() or QApplication([])
     from tests.sheet_paint_cases import cases, python_ops
-    out = {name: python_ops(make()) for name, make in cases(group)}
+    out = {name: python_ops(make(), name) for name, make in cases(group)}
     with gzip.open(path, "wt") as f:
         json.dump(out, f)
     print(len(out), "cases", sum(len(v) for v in out.values()), "primitives")

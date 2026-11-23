@@ -111,3 +111,73 @@ mod tests {
         assert!((f.advance("PROYECTO") - 496.703125).abs() < 1e-6);
     }
 }
+
+/// Lines `text` takes word-wrapped in `width_mm` at `size_mm`, as Qt's
+/// `TextWordWrap` lays it out: typed breaks, then breaks after spaces and
+/// hyphens wherever the next word would pass the width (a longer word
+/// overflows on its own line). `_line_count` in views/composer.py.
+pub fn line_count(text: &str, width_mm: f64, size_mm: f64, bold: bool) -> usize {
+    if text.is_empty() {
+        return 0;
+    }
+    let face = face_for(bold);
+    let s = size_mm / 100.0 * 0.75;
+    let limit = width_mm.max(0.5) / s;
+    let mut lines = 0;
+    for para in text.split('\n') {
+        // Break opportunities: after a run of spaces, after a hyphen.
+        let mut tokens: Vec<String> = Vec::new();
+        let mut cur = String::new();
+        let chars: Vec<char> = para.chars().collect();
+        for (i, c) in chars.iter().enumerate() {
+            cur.push(*c);
+            let next = chars.get(i + 1);
+            let after_space = *c == ' ' && next != Some(&' ');
+            let after_hyphen = *c == '-' && next.is_some_and(|n| n.is_alphanumeric());
+            if after_space || after_hyphen {
+                tokens.push(std::mem::take(&mut cur));
+            }
+        }
+        if !cur.is_empty() {
+            tokens.push(cur);
+        }
+        let mut n = 1;
+        let mut line = String::new();
+        for t in tokens {
+            let candidate = format!("{line}{t}");
+            if !line.is_empty() && face.advance(candidate.trim_end_matches(' ')) > limit {
+                n += 1;
+                line = t;
+            } else {
+                line = candidate;
+            }
+        }
+        lines += n;
+    }
+    lines
+}
+
+/// `_laid_out_height_mm`: the first line's ascent + descent, then the
+/// line spacing per extra line.
+pub fn laid_out_height_mm(text: &str, width_mm: f64, size_mm: f64, bold: bool) -> f64 {
+    let n = line_count(text, width_mm, size_mm, bold);
+    if n == 0 {
+        return 0.0;
+    }
+    let f = face_for(bold);
+    let s = size_mm / 100.0 * 0.75;
+    (f.ascent + f.descent + (n - 1) as f64 * f.line_spacing) * s
+}
+
+/// `text_bg_span_mm`: (y0, y1) of a background hugging the letters.
+pub fn text_bg_span_mm(text: &str, width_mm: f64, size_mm: f64, bold: bool) -> (f64, f64) {
+    let n = line_count(text, width_mm, size_mm, bold);
+    let f = face_for(bold);
+    let s = size_mm / 100.0 * 0.75;
+    if n == 0 {
+        return (0.0, size_mm);
+    }
+    let y0 = (f.ascent - f.cap_height) * s - 0.25 * size_mm;
+    let y1 = (f.ascent + f.descent + (n - 1) as f64 * f.line_spacing) * s + 0.05 * size_mm;
+    (y0, y1)
+}

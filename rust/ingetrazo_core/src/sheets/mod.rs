@@ -10,6 +10,7 @@
 pub mod display;
 pub mod drawing;
 pub mod items;
+pub mod items_b;
 pub mod metrics;
 pub mod paint;
 pub mod model;

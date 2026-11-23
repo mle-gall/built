@@ -243,9 +243,6 @@ impl Painter {
     pub fn set_pen(&mut self, pen: Pen) {
         self.st.pen = pen;
     }
-    pub fn pen(&self) -> Pen {
-        self.st.pen.clone()
-    }
     pub fn set_brush(&mut self, brush: Option<Rgba>) {
         self.st.brush = brush;
     }

@@ -4,6 +4,7 @@
 //! that still come from Python (`items::Extra`), its painter.
 
 use super::items::{self, Extra};
+use super::items_b;
 use super::model::{Fields, ItemKind};
 use super::paint::{ops_json, Op, Painter};
 use crate::doc::value::Value;
@@ -46,8 +47,46 @@ fn swatch_pattern(py: Python<'_>, f: &Fields, name: &str) -> PyResult<Vec<f64>> 
     }
 }
 
+/// A terrain profile's samples, as ``ComposerWindow.profile_for`` gives
+/// them: ``(profile, path_name, message)``.
+fn profile_extra(py: Python<'_>, f: &Fields, given: Option<&Bound<'_, PyAny>>, x: &mut Extra) -> PyResult<()> {
+    let (profile, name, message) = match given {
+        Some(t) if !t.is_none() => {
+            let (a, b, c): (Bound<'_, PyAny>, Option<String>, Option<String>) = t.extract()?;
+            (Some(a).filter(|a| !a.is_none()), b.unwrap_or_default(), c.unwrap_or_default())
+        }
+        _ => (None, String::new(), String::new()),
+    };
+    let title = match f.text("title", "") {
+        t if !t.is_empty() => t,
+        _ => {
+            let n = if name.is_empty() { tr(py, "path", &[])? } else { name.clone() };
+            tr(py, "Longitudinal profile — {name}", &[("name", n)])?
+        }
+    };
+    x.0.insert("title".into(), Value::Str(title));
+    let waiting = if message.is_empty() { tr(py, "Loading terrain…", &[])? } else { message.clone() };
+    x.0.insert("waiting".into(), Value::Str(waiting));
+    x.0.insert("message".into(), Value::Str(message));
+    x.0.insert("caption".into(), Value::Str(tr(py, "Scale H 1:{h} · V 1:{v} · vert. exag. ×{k}", &[])?));
+    x.0.insert("fitted".into(), Value::Str(tr(py, "(fitted to the width)", &[])?));
+    if let Some(pr) = profile {
+        let mut samples = Vec::new();
+        for smp in pr.getattr("samples")?.try_iter()? {
+            let smp = smp?;
+            let st: f64 = smp.getattr("station")?.extract()?;
+            let el: Option<f64> = smp.getattr("elevation")?.extract()?;
+            samples.push(Value::Tuple(vec![Value::Float(st), el.map_or(Value::None, Value::Float)]));
+        }
+        x.0.insert("samples".into(), Value::List(samples));
+        x.0.insert("length".into(), Value::Float(pr.getattr("length")?.extract()?));
+    }
+    Ok(())
+}
+
 /// What the item's painter takes from Python.
-pub fn extra(py: Python<'_>, handle: &Bound<'_, PyAny>, kind: ItemKind, f: &Fields) -> PyResult<Extra> {
+pub fn extra(py: Python<'_>, handle: &Bound<'_, PyAny>, kind: ItemKind, f: &Fields,
+             profile: Option<&Bound<'_, PyAny>>) -> PyResult<Extra> {
     let mut x = Extra::default();
     let mut put = |k: String, v: Value| {
         x.0.insert(k, v);
@@ -68,8 +107,15 @@ pub fn extra(py: Python<'_>, handle: &Bound<'_, PyAny>, kind: ItemKind, f: &Fiel
                 put(format!("pattern.{i}"), Value::List(p.into_iter().map(Value::Float).collect()));
             }
         }
-        ItemKind::Level => {
+        ItemKind::Level | ItemKind::Dimension | ItemKind::AngularDimension | ItemKind::RadialDimension => {
             put("label".into(), Value::Str(handle.call_method0("label")?.extract()?));
+        }
+        ItemKind::Label => {
+            let expand = py.import("core.composition")?.getattr("expand_fields")?;
+            put("text".into(), Value::Str(expand.call1((f.text("text", ""),))?.extract()?));
+        }
+        ItemKind::Profile => {
+            profile_extra(py, f, profile, &mut x)?;
         }
         ItemKind::Callout => {
             let expand = py.import("core.composition")?.getattr("expand_fields")?;
@@ -95,6 +141,11 @@ pub fn paint(kind: ItemKind, f: &Fields, x: &Extra) -> Option<Vec<Op>> {
         ItemKind::Shape => items::paint_shape(&mut p, f),
         ItemKind::Callout => items::paint_callout(&mut p, f, x),
         ItemKind::Level => items::paint_level(&mut p, f, x),
+        ItemKind::Dimension => items_b::paint_dimension(&mut p, f, x),
+        ItemKind::AngularDimension => items_b::paint_angular(&mut p, f, x),
+        ItemKind::RadialDimension => items_b::paint_radial(&mut p, f, x),
+        ItemKind::Label => items_b::paint_label(&mut p, f, x),
+        ItemKind::Profile => items_b::paint_profile(&mut p, f, x),
         ItemKind::Image => {
             let path = f.text("path", "");
             items::paint_image(&mut p, f, !path.is_empty() && std::path::Path::new(&path).is_file());
@@ -104,22 +155,63 @@ pub fn paint(kind: ItemKind, f: &Fields, x: &Extra) -> Option<Vec<Op>> {
     Some(p.ops)
 }
 
+/// The item's box in paper mm, as its record class states it (the
+/// ``w_mm``/``h_mm`` fields, or the properties core.composition derives).
+pub fn size(kind: ItemKind, f: &Fields) -> (f64, f64) {
+    let field = |w: f64, h: f64| (f.num("w_mm", w), f.num("h_mm", h));
+    match kind {
+        ItemKind::ScaleBar => items::scalebar_size(f),
+        ItemKind::North => (f.num("size_mm", 18.0), f.num("size_mm", 18.0)),
+        ItemKind::Legend => (f.num("w_mm", 55.0), items::legend_height(f)),
+        ItemKind::Dimension => items_b::dimension_size(f),
+        ItemKind::AngularDimension => items_b::angular_size(f),
+        ItemKind::RadialDimension => items_b::radial_size(f),
+        ItemKind::Label => items_b::label_size(f),
+        ItemKind::Text => {
+            // TextItem.size_mm: the lines at 1.4 × the size, 6 mm at least.
+            let lines = f.text("text", "").matches('\n').count() as f64 + 1.0;
+            (f.num("w_mm", 80.0), (f.num("size_pt", 14.0) * 25.4 / 72.0 * 1.4 * lines).max(6.0))
+        }
+        ItemKind::Level => (1.0, 1.0),
+        ItemKind::Frame => field(170.0, 170.0),
+        ItemKind::TitleBlock => field(180.0, 33.0),
+        ItemKind::Image => field(60.0, 40.0),
+        ItemKind::Shape => field(40.0, 25.0),
+        ItemKind::Callout => field(30.0, 20.0),
+        ItemKind::Profile => field(180.0, 70.0),
+    }
+}
+
 /// The primitives of sheet item ``item`` (a record of core.composition), as
 /// tests/sheet_paint_recorder.py records the Python painter's: a JSON list.
+/// ``profile``: a terrain profile item's ``(profile, path_name, message)``.
 #[pyfunction]
-pub fn sheet_item_display(py: Python<'_>, item: &Bound<'_, PyAny>) -> PyResult<String> {
+#[pyo3(signature = (item, profile=None))]
+pub fn sheet_item_display(py: Python<'_>, item: &Bound<'_, PyAny>, profile: Option<Bound<'_, PyAny>>) -> PyResult<String> {
     py.import("core.doc_model")?.call_method0("flush")?;
     let class = item.get_type().name()?.to_string();
     let kind = ItemKind::of_class(&class)
         .ok_or_else(|| pyo3::exceptions::PyValueError::new_err(format!("not a sheet item: {class}")))?;
     let key = crate::doc::py::handle_key(item)?;
     let f = super::model::read_fields(key)?;
-    let x = extra(py, item, kind, &f)?;
+    let x = extra(py, item, kind, &f, profile.as_ref())?;
     let ops = paint(kind, &f, &x).unwrap_or_default();
     Ok(ops_json(&ops).to_string())
 }
 
+/// The box of sheet item ``item`` in paper mm: ``(w, h)``.
+#[pyfunction]
+pub fn sheet_item_size(py: Python<'_>, item: &Bound<'_, PyAny>) -> PyResult<(f64, f64)> {
+    py.import("core.doc_model")?.call_method0("flush")?;
+    let class = item.get_type().name()?.to_string();
+    let kind = ItemKind::of_class(&class)
+        .ok_or_else(|| pyo3::exceptions::PyValueError::new_err(format!("not a sheet item: {class}")))?;
+    let f = super::model::read_fields(crate::doc::py::handle_key(item)?)?;
+    Ok(size(kind, &f))
+}
+
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(sheet_item_display, m)?)?;
+    m.add_function(wrap_pyfunction!(sheet_item_size, m)?)?;
     Ok(())
 }

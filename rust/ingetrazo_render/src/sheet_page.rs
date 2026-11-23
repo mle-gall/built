@@ -218,6 +218,19 @@ impl Page {
     pub fn request_zoom(&mut self, percent: f32) {
         self.zoom_to = Some(percent.clamp(1.0, 1600.0));
     }
+    /// What the page does now, for the bottom bar.
+    pub fn hint(&self) -> &'static str {
+        match (&self.drag, self.tool.as_str()) {
+            (Some(Drag::Move { .. }), _) => "Edges snap to the margins, guides and other items; ⌥ moves freely.",
+            (Some(Drag::Resize { .. }), _) => "Edges snap to the margins, guides and other items; ⌥ resizes freely.",
+            (Some(Drag::Place { .. }), _) => "Release to place the view, at the scale that fits.",
+            (_, "pan") => "Drag to move the sheet. Scroll pans, ⌘-scroll zooms.",
+            (_, "zoom") | (_, "zoom_ventana") => "Click to zoom in, ⌥-click to zoom out.",
+            (_, "vista") => "Drag a rectangle to place a model view.",
+            _ if !self.selection.is_empty() => "Drag to move, the handles resize. Arrows nudge 1 mm, ⇧ 10 mm, ⌥ 0.1 mm. Esc clears.",
+            _ => "Click an item to select it, ⇧-click to add. Drag to move it.",
+        }
+    }
     pub fn zoom_percent(&self) -> f32 {
         self.zoom / PT_PER_MM * 100.0
     }
@@ -593,15 +606,9 @@ impl Page {
                 "frame" => self.paint_frame(&painter, item, rect),
                 "text" => self.paint_text(&painter, ctx, item, rect),
                 "titleblock" => self.paint_title_block(&painter, item, rect),
-                _ if item.data["display"].is_array() => {
+                _ => {
                     let place = crate::sheet_display::Place { origin: rect.min, zoom: self.zoom };
                     crate::sheet_display::paint(&painter, ctx, &mut self.pictures, &item.data["display"], place);
-                }
-                _ => {
-                    // Not drawn natively yet: its place on the sheet, and what it is.
-                    dashed_rect(&painter, rect, GUIDE_ON_PAPER);
-                    painter.text(rect.left_top() + vec2(2.0, 2.0), Align2::LEFT_TOP, &item.kind,
-                                 FontId::proportional(TYPE_META), FAINT);
                 }
             }
         }

@@ -37,13 +37,15 @@ pub fn format_scale(n: f64) -> String {
     }
 }
 
-/// Metres of model a frame `h_mm` tall shows at 1:`n`.
+/// Metres of model a frame `h_mm` tall shows at 1:`n` (the frame camera, wave R3.7 step 4).
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn model_height_for_frame(h_mm: f64, n: f64) -> f64 {
     h_mm * n / 1000.0
 }
 
 /// Camera-plane metres (x right, y up, origin at the view's centre) to
 /// frame-local paper mm, for a parallel frame (`frame_page_projector`).
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn frame_projector(w_mm: f64, h_mm: f64, n: f64) -> impl Fn(f64, f64) -> (f64, f64) {
     let half_h = model_height_for_frame(h_mm, n) / 2.0;
     let half_w = half_h * if h_mm != 0.0 { w_mm / h_mm } else { 1.0 };
@@ -62,13 +64,6 @@ impl Fields {
             Some(Value::Int(i)) => *i as f64,
             Some(Value::Bool(b)) => f64::from(u8::from(*b)),
             _ => default,
-        }
-    }
-    pub fn opt_num(&self, name: &str) -> Option<f64> {
-        match self.0.get(name) {
-            Some(Value::Float(f)) => Some(*f),
-            Some(Value::Int(i)) => Some(*i as f64),
-            _ => None,
         }
     }
     pub fn flag(&self, name: &str, default: bool) -> bool {
@@ -178,7 +173,7 @@ impl ItemKind {
     /// Whether the native page resizes it by its box (every kind moves).
     pub fn native_edit(self) -> bool {
         matches!(self, ItemKind::Frame | ItemKind::Text | ItemKind::TitleBlock | ItemKind::Image
-                 | ItemKind::Shape | ItemKind::Callout)
+                 | ItemKind::Shape | ItemKind::Callout | ItemKind::Profile)
     }
 }
 
@@ -220,33 +215,21 @@ fn handle_of<'py>(py: Python<'py>, v: &Value) -> Option<Bound<'py, PyAny>> {
     }
 }
 
-/// The size of a record whose class computes it (a scale bar's from its
-/// segments, a legend's from its rows): asked of the Python handle until
-/// those kinds are drawn natively (docs/python-glue.md).
-fn computed(handle: &Bound<'_, PyAny>, name: &str) -> Option<f64> {
-    handle.getattr(name).ok().and_then(|v| v.extract::<f64>().ok())
-}
-
-fn read_item(handle: &Bound<'_, PyAny>, kind: ItemKind) -> PyResult<Item> {
+fn read_item(handle: &Bound<'_, PyAny>, kind: ItemKind, profiles: Option<&Bound<'_, PyAny>>) -> PyResult<Item> {
     let key = doc::py::handle_key(handle)?;
     let f = read_fields(key)?;
-    let x = f.num("x_mm", 0.0);
-    let y = f.num("y_mm", 0.0);
-    let w = f.opt_num("w_mm").or_else(|| computed(handle, "w_mm")).unwrap_or(20.0);
-    let h = match kind {
-        // Text grows with its lines; the page lays it out (ingetrazo_render::page).
-        ItemKind::Text => {
-            let lines = f.text("text", "").lines().count().max(1) as f64;
-            lines * f.num("size_pt", 14.0) * 25.4 / 72.0 * 1.25
-        }
-        _ => f.opt_num("h_mm").or_else(|| computed(handle, "h_mm")).unwrap_or(10.0),
+    let profile = match profiles {
+        Some(d) if !d.is_none() => d.call_method1("get", (key,))?.into_any(),
+        _ => handle.py().None().into_bound(handle.py()),
     };
-    let extra = super::display::extra(handle.py(), handle, kind, &f)?;
+    let extra = super::display::extra(handle.py(), handle, kind, &f, Some(&profile))?;
     let display = super::display::paint(kind, &f, &extra);
+    let (w, h) = super::display::size(kind, &f);
+    let rect = [f.num("x_mm", 0.0), f.num("y_mm", 0.0), w, h];
     Ok(Item {
         key,
         kind,
-        rect: [x, y, w, h],
+        rect,
         z: f.num("z", 0.0),
         locked: f.flag("locked", false),
         hidden: f.flag("hidden", false),
@@ -257,7 +240,7 @@ fn read_item(handle: &Bound<'_, PyAny>, kind: ItemKind) -> PyResult<Item> {
 
 impl Sheet {
     /// The sheet record `comp` (a `Composicion`), read from the document.
-    pub fn read(comp: &Bound<'_, PyAny>) -> PyResult<Sheet> {
+    pub fn read(comp: &Bound<'_, PyAny>, profiles: Option<&Bound<'_, PyAny>>) -> PyResult<Sheet> {
         let py = comp.py();
         // In-place list edits (`comp.frames.append(f)`) reach the arena on flush.
         py.import("core.doc_model")?.call_method0("flush")?;
@@ -267,12 +250,12 @@ impl Sheet {
         for (list, kind) in ItemKind::LISTS {
             for v in fields.list(list) {
                 if let Some(h) = handle_of(py, v) {
-                    items.push(read_item(&h, kind)?);
+                    items.push(read_item(&h, kind, profiles)?);
                 }
             }
         }
         if let Some(h) = fields.0.get("cajetin").and_then(|v| handle_of(py, v)) {
-            items.push(read_item(&h, ItemKind::TitleBlock)?);
+            items.push(read_item(&h, ItemKind::TitleBlock, profiles)?);
         }
         // Stable: equal z keeps the list order, as the canvas stacks them.
         items.sort_by(|a, b| a.z.partial_cmp(&b.z).unwrap_or(std::cmp::Ordering::Equal));
@@ -284,7 +267,7 @@ impl Sheet {
 /// The page size of a sheet record and its margin: ``(w, h, margin)``.
 #[pyfunction]
 fn sheet_page_size(comp: &Bound<'_, PyAny>) -> PyResult<(f64, f64, f64)> {
-    let s = Sheet::read(comp)?;
+    let s = Sheet::read(comp, None)?;
     Ok((s.page.0, s.page.1, s.margin))
 }
 

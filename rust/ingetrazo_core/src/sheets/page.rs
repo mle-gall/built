@@ -193,9 +193,12 @@ pub fn page_json(s: &Sheet) -> Json {
 /// The page snapshot of sheet record ``comp`` (a ``Composicion``) as JSON:
 /// paper, margin, border, guides and every item (key, kind, rect in mm,
 /// z, locked, hidden, and the fields its painter needs).
+/// ``profiles``: ``{item key: (profile, path_name, message)}`` for its
+/// terrain profiles (``ComposerWindow.profile_for``).
 #[pyfunction]
-fn sheet_page_json(comp: &Bound<'_, PyAny>) -> PyResult<String> {
-    Ok(page_json(&Sheet::read(comp)?).to_string())
+#[pyo3(signature = (comp, profiles=None))]
+fn sheet_page_json(comp: &Bound<'_, PyAny>, profiles: Option<Bound<'_, PyAny>>) -> PyResult<String> {
+    Ok(page_json(&Sheet::read(comp, profiles.as_ref())?).to_string())
 }
 
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
