@@ -1758,7 +1758,7 @@ impl Ui {
                                 // A row with no eye or lock (problems, library) keeps its width for the name.
                                 let bare = n.eye < 0 && n.lock < 0 && n.problems == 0;
                                 let right = if col.colset == 1 { cols.name_right } else if col.colset == 2 { cells_left.min(cols.name_right) - 8.0 }
-                                    else if bare && (n.count > 0 || n.row == 0) { count_col - 34.0 }
+                                    else if (bare || !show_ctl) && (n.count > 0 || n.row == 0) { count_col - 34.0 }
                                     else if bare { rect.max.x - 8.0 } else { eye_r.min.x - 6.0 };
                                 // Item icon (a material row shows its swatch).
                                 let mut tx = x0 + 16.0;

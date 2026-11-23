@@ -341,21 +341,17 @@ class Tree:
 
 
 def file_state(scene, path, nested=False) -> str:
-    """A linked file's state for its row (one of ``STATES``), read without
-    touching the host's link registry (``links._entry`` adds entries). A
-    nested file has no entry of its own: it is missing when its file is,
-    else it is as current as the file placing it was when read."""
+    """A linked file's state for its row (one of ``STATES``). A file the
+    host has an entry for reads ``links.link_state`` (as Problems and the
+    activity banner do). A nested file has no entry of its own, and
+    ``link_state`` would add one: it is missing when its file is, else as
+    current as the file placing it was when read."""
     from pathlib import Path
     if not path:
         return "missing"
-    reg = links.registry(scene)
-    entry = reg.get(links._norm(path))
-    entry = entry if isinstance(entry, dict) else {}
-    if entry.get("packed"):
-        return "packed"
-    p = Path(path)
-    if not p.is_file():
-        return "missing"
-    if nested and "loaded_mtime_ns" not in entry:
-        return "resolved"
-    return "modified" if p.stat().st_mtime_ns != entry.get("loaded_mtime_ns") else "resolved"
+    entry = links.registry(scene).get(links._norm(path))
+    if isinstance(entry, dict) and (not nested or "loaded_mtime_ns" in entry or entry.get("packed")):
+        return links.link_state(scene, path)
+    if not nested:
+        return links.link_state(scene, path)
+    return "resolved" if Path(path).is_file() else "missing"

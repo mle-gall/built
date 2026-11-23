@@ -1236,6 +1236,10 @@ def _tree(view, win) -> None:
                              unfiled, host_of, exp, sel_ids)
     if mode != "problems":
         mark_selection(rows)
+    else:
+        # Problems lists items under rules: a selected item is lit itself.
+        for _t, ints in rows:
+            ints[10:] = [1 if ints[4] != 0 and ints[9] > 0 else 0]
     view._ui_tree = dict(direct=direct, children=children, unfiled=unfiled, recipes=recipes, to_fix=to_fix,
                          active=active, node_of=node_of, nodes=nodes, tree=tree, counts=counts,
                          node_layers={k: list(c) for k, c in node_layers.items()})
@@ -2343,7 +2347,7 @@ def _inspector(view, win) -> None:
         name_cell = _edit(f"groupname:{g.uid}", g.name or "") if verbs.name_editable(sel_kind) else (g.name or "")
         rows = [("Name", name_cell), ("Filed in", filed), ("Kind", kind)]
         if verbs.read_only(sel_kind):
-            rows.append(("Edits", "Read-only here: open its source to change it"))
+            rows.append(("Edits", "Read-only here"))
         if g.is_component():
             same = sum(1 for o, _s, _r in structure._placements(scene) if o.mesh is g.mesh)
             rows.append(("Copies", str(same)))
