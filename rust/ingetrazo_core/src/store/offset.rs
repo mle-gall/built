@@ -11,57 +11,80 @@ impl Store {
         distance: f64,
         h: Hypot,
     ) -> Vec<([f64; 3], [f64; 3])> {
-        let rings = self.face_rings(face);
-        let Some(outer) = rings.first() else {
-            return Vec::new();
-        };
-        let point = |v: u32| {
-            let p = self.state.vpos.get(v as usize);
-            V3(p[0], p[1], p[2])
-        };
-        let normal = normalized(V3(normal[0], normal[1], normal[2]), h);
-        let mut lines = Vec::new();
-        for (i, &v) in outer.iter().enumerate() {
-            let a = point(v);
-            let b = point(outer[(i + 1) % outer.len()]);
-            let delta = b.sub(a);
-            if length(delta, h) < 1e-9 {
-                continue;
-            }
-            let dir = normalized(delta, h);
-            let push = normalized(normal.cross(dir, h), h).mul(distance);
-            lines.push((a.add(push), b.add(push), dir));
-        }
-        if lines.len() < 3 {
-            return Vec::new();
-        }
-        let corners: Vec<_> = lines
-            .iter()
-            .enumerate()
-            .map(|(i, &(_, end, u))| {
-                let (start, _, v) = lines[(i + 1) % lines.len()];
-                let den = u.cross(v, h).dot(normal, h);
-                let corner = if den.abs() < 1e-9 {
-                    start
-                } else {
-                    end.add(u.mul(start.sub(end).cross(v, h).dot(normal, h) / den))
-                };
-                (length(corner.sub(end), h) <= 2. * distance.abs() + 1e-9)
-                    .then_some(corner)
-            })
-            .collect();
-        let xyz = |v: V3| [v.0, v.1, v.2];
-        let mut segments = Vec::new();
-        for (i, &(start, end, _)) in lines.iter().enumerate() {
-            let back = corners[(i + lines.len() - 1) % lines.len()].unwrap_or(start);
-            segments.push((xyz(back), xyz(corners[i].unwrap_or(end))));
-            if corners[i].is_none() {
-                segments.push((xyz(end), xyz(lines[(i + 1) % lines.len()].0)));
-            }
-        }
-        segments
+        let ring = self
+            .outer_ring(face)
+            .into_iter()
+            .map(|v| *self.state.vpos.get(v as usize))
+            .collect::<Vec<_>>();
+        outline(&ring, normal, distance, h, true)
     }
+}
 
+type Point = [f64; 3];
+pub type Ring = Vec<Point>;
+pub type Region = Vec<Ring>;
+
+fn vector(p: Point) -> V3 {
+    V3(p[0], p[1], p[2])
+}
+
+pub fn outline(
+    outer: &[Point],
+    normal: Point,
+    distance: f64,
+    h: Hypot,
+    closed: bool,
+) -> Vec<(Point, Point)> {
+    let normal = normalized(V3(normal[0], normal[1], normal[2]), h);
+    let mut lines = Vec::new();
+    for i in 0..if closed {
+        outer.len()
+    } else {
+        outer.len().saturating_sub(1)
+    } {
+        let a = vector(outer[i]);
+        let b = vector(outer[(i + 1) % outer.len()]);
+        let delta = b.sub(a);
+        if length(delta, h) < 1e-9 {
+            continue;
+        }
+        let dir = normalized(delta, h);
+        let push = normalized(normal.cross(dir, h), h).mul(distance);
+        lines.push((a.add(push), b.add(push), dir));
+    }
+    if lines.is_empty() || (closed && lines.len() < 3) {
+        return Vec::new();
+    }
+    let corners: Vec<_> = lines
+        .iter()
+        .enumerate()
+        .map(|(i, &(_, end, u))| {
+            if !closed && i + 1 == lines.len() {
+                return None;
+            }
+            let (start, _, v) = lines[(i + 1) % lines.len()];
+            let den = u.cross(v, h).dot(normal, h);
+            let corner = if den.abs() < 1e-9 {
+                start
+            } else {
+                end.add(u.mul(start.sub(end).cross(v, h).dot(normal, h) / den))
+            };
+            (length(corner.sub(end), h) <= 2. * distance.abs() + 1e-9).then_some(corner)
+        })
+        .collect();
+    let xyz = |v: V3| [v.0, v.1, v.2];
+    let mut segments = Vec::new();
+    for (i, &(start, end, _)) in lines.iter().enumerate() {
+        let back = corners[(i + lines.len() - 1) % lines.len()].unwrap_or(start);
+        segments.push((xyz(back), xyz(corners[i].unwrap_or(end))));
+        if corners[i].is_none() && (closed || i + 1 < lines.len()) {
+            segments.push((xyz(end), xyz(lines[(i + 1) % lines.len()].0)));
+        }
+    }
+    segments
+}
+
+impl Store {
     pub fn offset_face(
         &mut self,
         face: u32,
@@ -106,11 +129,6 @@ pub fn keep_regions(
     distance: f64,
     h: Hypot,
 ) -> Vec<bool> {
-    use crate::earcut::earcut;
-    use crate::store::geometry::{is_convex, plane_axes};
-    let n = normalized(V3(normal[0], normal[1], normal[2]), h);
-    let (u, v) = plane_axes(n, h);
-    let (bu, bv) = arrangement_axes(n, h);
     let rings = store.face_rings(face);
     let boundary: Vec<_> = rings
         .first()
@@ -121,6 +139,21 @@ pub fn keep_regions(
             V3(p[0], p[1], p[2])
         })
         .collect();
+    keep_outline(&boundary, regions, normal, distance, h)
+}
+
+pub fn keep_outline(
+    boundary: &[V3],
+    regions: Vec<Ring>,
+    normal: Point,
+    distance: f64,
+    h: Hypot,
+) -> Vec<bool> {
+    use crate::earcut::earcut;
+    use crate::store::geometry::{is_convex, plane_axes};
+    let n = normalized(V3(normal[0], normal[1], normal[2]), h);
+    let (u, v) = plane_axes(n, h);
+    let (bu, bv) = arrangement_axes(n, h);
     if boundary.len() < 3 {
         return vec![false; regions.len()];
     }
@@ -233,6 +266,20 @@ pub fn place_holes(
     normal: [f64; 3],
     h: Hypot,
 ) -> Option<Vec<i64>> {
+    let holes = store
+        .face_rings(face)
+        .iter()
+        .skip(1)
+        .map(|ring| {
+            ring.iter()
+                .map(|&v| *store.state.vpos.get(v as usize))
+                .collect()
+        })
+        .collect::<Vec<_>>();
+    hole_targets(&holes, regions, normal, h)
+}
+
+fn hole_targets(holes: &[Ring], regions: &[Ring], normal: Point, h: Hypot) -> Option<Vec<i64>> {
     let n = normalized(V3(normal[0], normal[1], normal[2]), h);
     let (u, v) = arrangement_axes(n, h);
     let p = regions.first()?.first()?;
@@ -246,14 +293,8 @@ pub fn place_holes(
         .map(|ring| ring.iter().map(|p| flat(V3(p[0], p[1], p[2]))).collect())
         .collect();
     let mut targets = Vec::new();
-    for ring in store.face_rings(face).iter().skip(1) {
-        let hole: Vec<_> = ring
-            .iter()
-            .map(|&s| {
-                let p = store.state.vpos.get(s as usize);
-                flat(V3(p[0], p[1], p[2]))
-            })
-            .collect();
+    for ring in holes {
+        let hole: Vec<_> = ring.iter().map(|&p| flat(vector(p))).collect();
         if flat_regions
             .iter()
             .any(|r| edges(&hole).any(|(a, b)| edges(r).any(|(c, d)| meet(a, b, c, d))))
@@ -273,4 +314,54 @@ pub fn place_holes(
         targets.push(target);
     }
     Some(targets)
+}
+
+/// Ordered strip and inner faces, including the source face's openings.
+pub fn layout(
+    source: Ring,
+    holes: Vec<Ring>,
+    regions: Vec<Ring>,
+    normal: Point,
+    distance: f64,
+    h: Hypot,
+) -> Option<Vec<Region>> {
+    if regions.is_empty() || regions.iter().any(Vec::is_empty) {
+        return None;
+    }
+    if distance > 0. {
+        let targets = hole_targets(&holes, &regions, normal, h)?;
+        let mut strip = vec![source];
+        strip.extend(regions.iter().cloned());
+        let mut faces = vec![strip];
+        faces.extend(regions.into_iter().map(|ring| vec![ring]));
+        for (hole, index) in holes.into_iter().zip(targets) {
+            faces[(index + 1) as usize].push(hole);
+        }
+        Some(faces)
+    } else {
+        let extent = |ring: &Ring| {
+            (0..3)
+                .map(|i| {
+                    let lo = ring.iter().map(|p| p[i]).fold(f64::INFINITY, f64::min);
+                    let hi = ring.iter().map(|p| p[i]).fold(f64::NEG_INFINITY, f64::max);
+                    (hi - lo) * (hi - lo)
+                })
+                .sum::<f64>()
+        };
+        // Python max keeps the first equal region.
+        let mut it = regions.into_iter();
+        let mut largest = it.next()?;
+        let mut best = extent(&largest);
+        for ring in it {
+            let size = extent(&ring);
+            if size > best {
+                largest = ring;
+                best = size;
+            }
+        }
+        let strip = vec![largest, source.clone()];
+        let mut inner = vec![source];
+        inner.extend(holes);
+        Some(vec![strip, inner])
+    }
 }

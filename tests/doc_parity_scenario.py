@@ -528,6 +528,17 @@ def geometry_steps(work):
     out.append(state())
     assert h.redo() and face_ids == [f.key for f in mesh.faces]
     out.append(state())
+    # Offset a painted face with an opening, through its normal History entry.
+    from core.offset import build_offset_face
+    slab = mesh.add_face(rectangle(850, 0, 6, 6), [rectangle(852, 2, 1, 1)])
+    slab.attrs["color"] = [.3, .4, .8]
+    h.execute(build_offset_face(mesh, slab.key, .5))
+    assert not h.last_error and not h.last_rejected
+    out.append(state())
+    assert h.undo()
+    out.append(state())
+    assert h.redo()
+    out.append(state())
     # Refused joins preserve the last published change and the exact mesh.
     refused = rectangle(600, 0, 2, 2)
     mesh.add_face(refused)

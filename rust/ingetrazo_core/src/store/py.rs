@@ -1826,6 +1826,25 @@ impl PyMeshStore {
         Ok(self.inner.offset_outline(face, normal, distance, crate::hypot_of(hypot)?))
     }
 
+    #[staticmethod]
+    fn offset_segments(points: Vec<[f64;3]>, normal: [f64;3], distance: f64, hypot: &str, closed: bool)
+        -> PyResult<Vec<([f64;3],[f64;3])>> {
+        Ok(super::offset::outline(&points, normal, distance, crate::hypot_of(hypot)?, closed))
+    }
+
+    #[staticmethod]
+    fn keep_offset_outlines(boundary: Vec<[f64;3]>, regions: Vec<super::offset::Ring>, normal: [f64;3], distance: f64, hypot: &str)
+        -> PyResult<Vec<bool>> {
+        let outline = boundary.into_iter().map(super::drawing::vector).collect::<Vec<_>>();
+        Ok(super::offset::keep_outline(&outline, regions, normal, distance, crate::hypot_of(hypot)?))
+    }
+
+    #[staticmethod]
+    fn offset_layout(source: super::offset::Ring, holes: Vec<super::offset::Ring>, regions: Vec<super::offset::Ring>,
+                     normal: [f64;3], distance: f64, hypot: &str) -> PyResult<Option<Vec<super::offset::Region>>> {
+        Ok(super::offset::layout(source, holes, regions, normal, distance, crate::hypot_of(hypot)?))
+    }
+
     fn offset_hole_targets(&self, key: u128, regions: Vec<Vec<[f64; 3]>>, normal: [f64; 3],
                            hypot: &str) -> PyResult<Option<Vec<i64>>> {
         let face = live_of(&self.inner, Kind::Face, key)?;

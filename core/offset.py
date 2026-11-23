@@ -31,6 +31,8 @@ from __future__ import annotations
 
 from typing import Optional
 
+from core import doc_model
+
 from ingetrazo_core import Vec3 as QVector3D
 
 #: How far past the offset corner a mitre may reach before it is bevelled,
@@ -139,7 +141,32 @@ def _offset_segments(loop: list, normal: QVector3D, d: float) -> list:
     return segments
 
 
-def offset_regions(loop: list, normal: QVector3D, d: float) -> list:
+def offset_regions(loop, normal, d):
+    if not doc_model.ENABLED:
+        return _reference_offset_regions(loop, normal, d)
+    return _native_regions(loop, normal, d)
+
+
+def _native_regions(loop, normal, distance):
+    from core.arrangement import planar_arrangement
+    from core.store_mesh import _hypot
+    from ingetrazo_core import MeshStore
+    unit = normal.normalized()
+    if len(loop) < 3 or abs(distance) < 1e-9 or unit.lengthSquared() < .5:
+        return []
+    points = [p.toTuple() for p in loop]
+    pairs = MeshStore.offset_segments(points, normal.toTuple(), distance, _hypot(), True)
+    segments = [(QVector3D(*a), QVector3D(*b)) for a, b in pairs]
+    try:
+        regions = planar_arrangement(segments, loop[0], unit)
+    except Exception:
+        return []
+    keep = MeshStore.keep_offset_outlines(points, [[p.toTuple() for p in outer] for outer, _ in regions],
+                                          normal.toTuple(), distance, _hypot())
+    return [region for region, kept in zip(regions, keep) if kept]
+
+
+def _reference_offset_regions(loop: list, normal: QVector3D, d: float) -> list:
     """Offset ``loop`` by ``d`` (positive inward) and return the regions that
     survive, as ``[(outer, [holes]), …]``.
 
@@ -193,7 +220,18 @@ def store_offset_regions(store, face_key, loop, normal, distance, hypot):
     return [face for face, ok in zip(faces, keep) if ok]
 
 
-def offset_chain(points: list, normal: QVector3D, d: float) -> Optional[list]:
+def offset_chain(points, normal, d):
+    if not doc_model.ENABLED:
+        return _reference_offset_chain(points, normal, d)
+    from core.store_mesh import _hypot
+    from ingetrazo_core import MeshStore
+    segments = MeshStore.offset_segments([p.toTuple() for p in points], normal.toTuple(), d, _hypot(), False)
+    if segments:
+        return [QVector3D(*segments[0][0]), *(QVector3D(*end) for _, end in segments)]
+    return None
+
+
+def _reference_offset_chain(points: list, normal: QVector3D, d: float) -> Optional[list]:
     """Offset an OPEN polyline ``points`` (coplanar, ``normal`` its plane) by
     ``d`` — the signed distance along ``cross(normal, direction)`` of each
     segment, so the sign picks the side. Consecutive slid segments are
@@ -294,6 +332,34 @@ def build_offset_face(mesh, face, distance):
     # four walls came back as a full square over the room otherwise.
     own_holes = [list(h) for h in
                  (getattr(face, "holes", None) or [])]
+    if doc_model.ENABLED:
+        from ingetrazo_core import MeshStore
+        def rows(ring):
+            return [p.toTuple() for p in ring]
+        layout = MeshStore.offset_layout(rows(outline), [rows(hole) for hole in own_holes],
+                                         [rows(loop) for loop, _ in regions], normal.toTuple(), distance, _hypot())
+        if layout is None:
+            raise OffsetHoleCollision
+        faces = [[[QVector3D(*p) for p in ring] for ring in region] for region in layout]
+    else:
+        faces = _reference_layout(face, store, outline, own_holes, regions, normal, distance, _hypot())
+    if store is not None:
+        commands = [_OffsetFace(face, faces, attrs)]
+    else:
+        commands = [DeleteFaceCommand(face)]
+        commands.extend(AddFaceCommand(rings[0], auto=False, holes=rings[1:],
+                                       attrs=dict(attrs)) for rings in faces)
+    # Curve ids only when the offset kept the source's shape one-to-one:
+    # with the boundary re-arranged there is no run to mirror.
+    if len(regions) == 1 and len(regions[0][0]) == len(outline):
+        commands.extend(_curve_tags(mesh, outline, regions[0][0]))
+    # Snapshot undo: Delete/Add compose fine forward, but the hole edges
+    # the ring creates don't reverse cleanly command-by-command (they
+    # leaked on undo). One snapshot reverses exactly.
+    return StoreFaceCompound(commands) if store is not None else SnapshotCompound(commands)
+
+
+def _reference_layout(face, store, outline, own_holes, regions, normal, distance, h):
     if distance > 0:
         outer = outline
         inners = [loop for loop, _holes in regions]
@@ -317,20 +383,7 @@ def build_offset_face(mesh, face, distance):
         inner_holes, strip_holes = [own_holes], []
     faces = [[list(outer), *inners, *strip_holes]]
     faces.extend([list(loop), *holes] for loop, holes in zip(inners, inner_holes))
-    if store is not None:
-        commands = [_OffsetFace(face, faces, attrs)]
-    else:
-        commands = [DeleteFaceCommand(face)]
-        commands.extend(AddFaceCommand(rings[0], auto=False, holes=rings[1:],
-                                       attrs=dict(attrs)) for rings in faces)
-    # Curve ids only when the offset kept the source's shape one-to-one:
-    # with the boundary re-arranged there is no run to mirror.
-    if len(regions) == 1 and len(regions[0][0]) == len(outline):
-        commands.extend(_curve_tags(mesh, outline, regions[0][0]))
-    # Snapshot undo: Delete/Add compose fine forward, but the hole edges
-    # the ring creates don't reverse cleanly command-by-command (they
-    # leaked on undo). One snapshot reverses exactly.
-    return StoreFaceCompound(commands) if store is not None else SnapshotCompound(commands)
+    return faces
 
 
 def _curve_tags(mesh, loop, off: list[QVector3D]) -> list:
@@ -344,6 +397,10 @@ def _curve_tags(mesh, loop, off: list[QVector3D]) -> list:
         e = mesh.find_edge(va, vb) if va is not None and vb is not None \
             else None
         ids.append(e.curve if e is not None else None)
+    if doc_model.ENABLED:
+        from ingetrazo_core import outline_curve_runs
+        return [TagCurveCommand([off[j] for j in run], closed=closed)
+                for run, closed in outline_curve_runs(ids, False)]
     if ids[0] is not None and all(c == ids[0] for c in ids):
         return [TagCurveCommand(list(off), closed=True)]  # full circle
     tags = []
