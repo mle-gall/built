@@ -19,6 +19,9 @@ keeps that move, because only the explosion's own share is ever undone.
 """
 from __future__ import annotations
 
+from core import doc_model
+from ingetrazo_core import placement_transform as _transform
+
 MODES = ("outward", "x", "y", "z")
 
 
@@ -32,6 +35,8 @@ def assembled_centres(container) -> list:
     """Each part's centre (the middle of its box, in the container's frame)
     where it sits assembled — its current centre minus the explosion's
     offset."""
+    if doc_model.ENABLED:
+        return _transform.assembled_centres(container)
     from ingetrazo_core import Vec3 as QVector3D
     from core.parts import part_points
     out = []
@@ -51,6 +56,8 @@ def explode_offsets(centres, factor: float, mode: str = "outward") -> list:
     every part twice as far from the centre as it was). The centre is the
     middle of the parts' centres' box, so a symmetric model explodes
     symmetrically."""
+    if doc_model.ENABLED:
+        return _transform.explode_offsets(centres, factor, mode)
     from ingetrazo_core import Vec3 as QVector3D
     if not centres:
         return []
@@ -75,6 +82,8 @@ def apply_explode(container, factor: float, mode: str = "outward",
     in place. ``centres`` (from :func:`assembled_centres`) lets a slider drag
     measure once and apply many times. The command is
     :class:`ExplodeViewCommand`; this is its body."""
+    if doc_model.ENABLED:
+        return _transform.apply_explode(container, factor, mode, centres)
     from ingetrazo_core import Matrix4 as QMatrix4x4
     kids = list(getattr(container, "children", None) or ())
     if not kids:
@@ -120,6 +129,8 @@ def rotate_offsets(container, xform) -> None:
 def snapshot(container) -> tuple:
     """Everything an explosion changes, to put back exactly (undo, and the
     slider's live preview)."""
+    if doc_model.ENABLED:
+        return _transform.exploded_snapshot(container)
     from ingetrazo_core import Matrix4 as QMatrix4x4
     kids = list(container.children)
     return (dict(container.exploded) if container.exploded else None,
@@ -128,6 +139,8 @@ def snapshot(container) -> tuple:
 
 
 def restore(container, snap) -> None:
+    if doc_model.ENABLED:
+        return _transform.restore_exploded(container, snap)
     state, kids = snap
     container.exploded = dict(state) if state else None
     for kid, xform, offset in kids:

@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from ingetrazo_core import (definition_edits as _definitions, placement_edits as _placements,
-                            presentation as _presentation)
+                            presentation as _presentation, placement_transform as _transform)
 
 from abc import ABC, abstractmethod
 from collections import Counter
@@ -2912,6 +2912,14 @@ class FlipGroupsCommand(MeshCommand):
         return self.meshes()
 
     def _flip(self, scene) -> None:
+        if _doc.ENABLED:
+            _transform.flip_groups(scene, self._groups, mirror_matrix(self.centre, self.axis))
+            if _doc.ENABLED and self.doc_undo(scene):
+                _dirty_placements(self._groups)
+            else:
+                _dirty_group_chunks(scene)
+            scene.version += 1
+            return
         m = mirror_matrix(self.centre, self.axis)
         for g in self._groups:
             pose = _member_placement(scene, g)
@@ -3015,10 +3023,20 @@ class RotateGroupCommand(GroupTransformCommand):
         self.center = QVector3D(center)
         self.axis = QVector3D(axis)
         self.degrees = degrees
+        if _doc.ENABLED:
+            self._transform = _transform.GroupTransform()
+            return
         self._before: Optional[dict] = None
         self._after: Optional[dict] = None
 
+    def _matrix(self, reverse):
+        return rotation_matrix(self.center, self.axis, -self.degrees if reverse else self.degrees)
+
     def do(self, scene) -> None:
+        if _doc.ENABLED:
+            if self._transform.apply(scene, self.group, self._matrix, False, self._journal_geometry):
+                scene.version += 1
+            return
         pose = _member_placement(scene, self.group)
         if pose is not None:
             m = rotation_matrix(self.center, self.axis, self.degrees)
@@ -3044,6 +3062,10 @@ class RotateGroupCommand(GroupTransformCommand):
         scene.version += 1
 
     def undo(self, scene) -> None:
+        if _doc.ENABLED:
+            if self._transform.apply(scene, self.group, self._matrix, True, self._journal_geometry):
+                scene.version += 1
+            return
         if getattr(self.group, "xform", None) is not None:
             m = rotation_matrix(self.center, self.axis, -self.degrees)
             self.group.xform = _edit_local_transform(scene, self.group, m) * self.group.xform
@@ -3129,10 +3151,21 @@ class ScaleGroupCommand(GroupTransformCommand):
         self.center = QVector3D(center)
         self.factor = factor
         self.axes = axes
+        if _doc.ENABLED:
+            self._transform = _transform.GroupTransform()
+            return
         self._before: Optional[dict] = None
         self._after: Optional[dict] = None
 
+    def _matrix(self, reverse):
+        factor = invert_scale_factor(self.factor) if reverse else self.factor
+        return scale_matrix(self.center, factor, self.axes)
+
     def do(self, scene) -> None:
+        if _doc.ENABLED:
+            if self._transform.apply(scene, self.group, self._matrix, False, self._journal_geometry):
+                scene.version += 1
+            return
         pose = _member_placement(scene, self.group)
         if pose is not None:
             m = scale_matrix(self.center, self.factor, self.axes)
@@ -3158,6 +3191,10 @@ class ScaleGroupCommand(GroupTransformCommand):
         scene.version += 1
 
     def undo(self, scene) -> None:
+        if _doc.ENABLED:
+            if self._transform.apply(scene, self.group, self._matrix, True, self._journal_geometry):
+                scene.version += 1
+            return
         if getattr(self.group, "xform", None) is not None:
             m = scale_matrix(self.center, invert_scale_factor(self.factor), self.axes)
             self.group.xform = _edit_local_transform(scene, self.group, m) * self.group.xform
@@ -5235,6 +5272,10 @@ class MoveGroupCommand(GroupTransformCommand):
         return getattr(self.group, "xform", None) is not None
 
     def _shift(self, scene, delta) -> None:
+        if _doc.ENABLED:
+            _transform.shift_group(scene, self.group, delta)
+            scene.version += 1
+            return
         pose = _member_placement(scene, self.group)
         if pose is not None:
             # Component instance: compose into the transform — O(1), and the
@@ -6104,12 +6145,17 @@ class ChangeAxesCommand(MeshCommand):
     def doc_undo(self, scene) -> bool:
         # A classic group swaps its axes (a document field); an instance
         # re-expresses its definition's mesh: its own undo.
+        if _doc.ENABLED:
+            return self._axes_edit.fields_only()
         return self._d is None
 
     def __init__(self, group, frame) -> None:
         from ingetrazo_core import Matrix4 as QMatrix4x4
         self.group = group
         self.frame = QMatrix4x4(frame)
+        if _doc.ENABLED:
+            self._axes_edit = _transform.AxesEdit()
+            return
         self._old_axes = None
         self._d = None
         self._instances: list = []
@@ -6145,6 +6191,10 @@ class ChangeAxesCommand(MeshCommand):
                 child.xform = d * child.xform
 
     def do(self, scene) -> None:
+        if _doc.ENABLED:
+            if self._axes_edit.apply(scene, self.group, self.frame):
+                scene.version += 1
+            return
         g = self.group
         if getattr(g, "xform", None) is None:
             self._old_axes = g.axes
@@ -6172,6 +6222,10 @@ class ChangeAxesCommand(MeshCommand):
         scene.version += 1
 
     def undo(self, scene) -> None:
+        if _doc.ENABLED:
+            if self._axes_edit.undo(self.group):
+                scene.version += 1
+            return
         g = self.group
         if getattr(g, "xform", None) is None and self._d is None:
             g.axes = self._old_axes

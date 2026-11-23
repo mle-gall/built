@@ -35,6 +35,7 @@ mod group_geometry;
 mod structure;
 mod presentation;
 mod placement_edits;
+mod placement_transform;
 mod definition_edits;
 mod file_styles;
 mod file_annotations;
@@ -195,6 +196,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<group_geometry::GroupGeometry>()?;
     presentation::register(m)?;
     placement_edits::register(m)?;
+    placement_transform::register(m)?;
     definition_edits::register(m)?;
     m.add_class::<structure::StructurePlacements>()?;
     m.add_function(wrap_pyfunction!(structure::structure_lineage, m)?)?;
