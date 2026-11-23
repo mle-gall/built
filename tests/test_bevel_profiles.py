@@ -138,8 +138,6 @@ def test_three_staircases_meet_in_a_stepped_pyramid(segments):
 
 def test_a_round_outline_drawn_by_hand_fills_like_the_sphere():
     """The spherical product of a quarter circle is the sphere."""
-    from core.fillet import _corner_product
-    import core.fillet as F
     arc = [(math.cos(a), math.sin(a), True)
            for a in (math.pi / 2 * i / 12 for i in range(13))]
     arc[0], arc[-1] = (1.0, 0.0, False), (0.0, 1.0, False)

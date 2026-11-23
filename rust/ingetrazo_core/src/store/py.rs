@@ -353,7 +353,7 @@ fn slice<'a, T: numpy::Element>(a: &'a PyReadonlyArray1<'_, T>, name: &str) -> P
 #[pyclass(module = "ingetrazo_core", name = "StoreFilletPlan", frozen)]
 struct PyRoundPlan {
     inner: super::fillet::RoundPlan,
-    lineage: u64,
+    lineage: Option<u64>,
     revision: u64,
     hypot: crate::store::geometry::Hypot,
     faces: Vec<u128>,
@@ -449,7 +449,7 @@ fn round_preview(
         materials,
         edges,
         flags,
-        lineage: s.lineage,
+        lineage: Some(s.lineage),
         revision: s.revision,
         hypot,
     })
@@ -1311,6 +1311,16 @@ impl PyMeshStore {
         let edges = edges.as_slice().map_err(|_| PyValueError::new_err("edges must be contiguous"))?;
         super::stitch_command::junctions(triples(&points)?, edges.as_chunks::<2>().0, bounds, tolerance)
             .map_err(PyValueError::new_err)
+    }
+
+    fn seeded_merge_edges(&self, seeds: Vec<[f64;3]>) -> Vec<u128> {
+        use super::commands::{cell, supplied_cell};
+        let cells: std::collections::HashSet<_> = seeds.into_iter().map(supplied_cell).collect();
+        self.inner.live_slots(Kind::Edge).into_iter().filter(|&e| {
+            self.inner.edge_faces(e).len() == 2 &&
+                self.inner.state.ends.get(e as usize).iter().any(|&v|
+                    cells.contains(&cell(*self.inner.state.vpos.get(v as usize))))
+        }).map(|e| self.inner.key(Kind::Edge,e)).collect()
     }
 
     #[pyo3(signature=(seeds, fresh, start, hypot))]
@@ -2255,6 +2265,23 @@ impl PyMeshStore {
         )
     }
 
+    #[staticmethod]
+    fn plan_object_fillet(
+        py: Python<'_>, vertices: Vec<super::fillet_incidence::Vertex>, edges: Vec<super::fillet_incidence::Edge>,
+        faces: Vec<super::fillet_incidence::Face>, count: usize, size: f64, segments: usize,
+        profile: f64, measure: &str, cut: bool, outline: Vec<(f64, f64)>, mirror: bool, steps: bool,
+    ) -> PyResult<PyRoundPlan> {
+        let incidence = super::fillet_incidence::Incidence::new(vertices, edges, faces, py.version_info().minor >= 12)?;
+        let inner = incidence.plan(count, size, segments, profile, measure, cut, &outline, mirror, steps)?;
+        Ok(PyRoundPlan {
+            faces: inner.rebuilt.iter().map(|(f, _)| u128::from(*f)).collect(),
+            materials: inner.materials.iter().copied().map(u128::from).collect(),
+            edges: inner.edges.iter().copied().map(u128::from).collect(),
+            flags: vec![], lineage: None, revision: 0,
+            hypot: crate::store::geometry::Hypot::LibCxxFma, inner,
+        })
+    }
+
     fn plan_fillet(
         &self,
         keys: Vec<u128>,
@@ -2306,7 +2333,7 @@ impl PyMeshStore {
                 .ok_or_else(|| PyValueError::new_err("material index overflow"))?,
             None => 0,
         };
-        if plan.lineage != self.inner.lineage || plan.revision != self.inner.revision {
+        if plan.lineage != Some(self.inner.lineage) || plan.revision != self.inner.revision {
             return Err(PyValueError::new_err("stale or foreign fillet plan"));
         }
         if curve_ids.len() != plan.inner.curves.len() || curve_ids.iter().any(|&id| id < 0) {

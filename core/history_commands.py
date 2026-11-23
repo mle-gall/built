@@ -1218,152 +1218,41 @@ class RestampMaterialCommand(MeshCommand):
     and container now says the new name. Only the model changes — a
     library colour renamed here stays in the library as it was."""
 
+    _kind = "stamp"
+
     def __init__(self, name, new_material) -> None:
         self._name = name
         self._new = new_material
-        self._old_material = None
-        self._old_faces: Optional[list] = None   # (face, {key: old value})
-        self._old_backs = []
-        self._old_groups: Optional[list] = None  # (container, old material)
-        self._old_target = None   # a renamed-onto entry, put back by undo
-        self._meshes: Optional[list] = None      # the ones restamped
-
-    _KEYS = ("mat", "color", "texture", "opacity", "pbr")
-
-    _include_backs = True
-
-    def _affected_faces(self, scene):
-        if self._old_faces is None:
-            faces = self._targets(scene, capture_backs=self._include_backs)
-            self._old_faces = [(face, {k: face.attrs.get(k) for k in self._KEYS})
-                               for face in faces]
-        return self._old_faces
+        self._edit = None
+        self._meshes = ()
 
     def geometry_meshes(self, scene):
         from core.purge import iter_meshes
         return list(iter_meshes(scene))
 
     def doc_after(self, scene, phase):
-        self._count_meshes(scene)
-        _dirty_group_chunks(scene)
-        scene.version += 1
-
-    def _targets(self, scene, *, capture_backs=False):
-        # Nested placements included: walking scene.groups as a flat list
-        # left every face INSIDE a component wearing the old recipe, so
-        # "change the concrete everywhere" changed it almost nowhere in an
-        # imported model. Sibling instances share one prototype mesh, hence
-        # the identity dedupe.
-        from core.group import iter_placements
-        seen: set = set()
-        meshes = [scene.loose_mesh]
-        for g in scene.groups:
-            for pg, _m in iter_placements(g):
-                if id(pg.mesh) not in seen:
-                    seen.add(id(pg.mesh))
-                    meshes.append(pg.mesh)
-        for mesh in meshes:
-            if mesh is None:
-                continue
-            for f in mesh.faces:
-                if capture_backs:
-                    back = f.attrs.get("back")
-                    if isinstance(back, dict) and back.get("mat") == self._name:
-                        self._old_backs.append((f, back))
-                if f.attrs.get("mat") == self._name:
-                    yield f
-
-    def _count_meshes(self, scene) -> None:
-        """Bump the serial of the meshes whose faces were restamped: an
-        attrs swap bumps none by itself, and the viewport's placement caches
-        would keep drawing every closed component in the old recipe."""
-        if self._meshes is None:
-            from core.group import iter_placements
-            worn = {element_identity(f) for f, _old in self._old_faces or []}
-            worn.update(element_identity(f) for f, _ in self._old_backs)
-            found: dict = {}
-            meshes = [scene.loose_mesh] + [pg.mesh for g in scene.groups
-                                           for pg, _m in iter_placements(g)]
-            for mesh in meshes:
-                if (mesh is not None and id(mesh) not in found
-                        and any(element_identity(f) in worn for f in mesh.faces)):
-                    found[id(mesh)] = mesh
-            self._meshes = list(found.values())
         for mesh in self._meshes:
             mesh._mut_serial += 1
-
-    def _painted_groups(self, scene):
-        """Every placement painted as a whole with this material, nested
-        ones included. Each placement carries its own paint, so no dedupe
-        by prototype here."""
-        from core.group import iter_placements
-        seen: set = set()
-        for g in scene.groups:
-            for pg, _m in iter_placements(g):
-                paint = getattr(pg, "material", None)
-                if (id(pg) not in seen and isinstance(paint, dict)
-                        and paint.get("mat") == self._name):
-                    seen.add(id(pg))
-                    yield pg
+        _dirty_group_chunks(scene)
+        scene.version += 1
 
     def do(self, scene) -> None:
-        stamp = self._new.face_attrs()
-        if self._old_groups is None:
-            self._old_material = scene.materials.get(self._name)
-            self._affected_faces(scene)
-            self._old_groups = [(g, g.material)
-                                for g in self._painted_groups(scene)]
-            self._old_target = scene.materials.get(self._new.name)
-        if self._new.name != self._name:
-            scene.materials.pop(self._name, None)
-        scene.materials[self._new.name] = self._new
-        keep_mapping = (self._old_material is not None
-                        and self._old_material.texture == self._new.texture)
-
-        def apply(attrs):
-            for key in self._KEYS:
-                if key == "texture" and keep_mapping:
-                    continue
-                if key in stamp:
-                    attrs[key] = stamp[key]
-                else:
-                    attrs.pop(key, None)
-
-        for face, _ in self._old_faces:
-            apply(face.attrs)
-        for face, old in self._old_backs:
-            back = dict(old)
-            apply(back)
-            face.attrs["back"] = back
-        for g, _old in self._old_groups or []:
-            g.material = dict(stamp)
-        self._count_meshes(scene)
-        _dirty_group_chunks(scene)
-        scene.version += 1
+        from ingetrazo_core import MaterialRestamp
+        from core.purge import iter_groups
+        if self._edit is None:
+            self._edit = MaterialRestamp(
+                scene.loose_mesh, iter_groups(scene.groups), scene.materials,
+                self._name, self._new.name, self._kind, not self._journal_geometry)
+            self._meshes = self._edit.meshes
+        self._edit.apply(scene.materials, self._new, getattr(self, "edited", None))
+        self.doc_after(scene, "do")
+        if self._journal_geometry:
+            self._edit = None
 
     def undo(self, scene) -> None:
-        if self._new.name != self._name:
-            if self._old_target is None:
-                scene.materials.pop(self._new.name, None)
-            else:
-                scene.materials[self._new.name] = self._old_target
-        if self._old_material is None:
-            scene.materials.pop(self._name, None)
-        else:
-            scene.materials[self._name] = self._old_material
-        for f, old in self._old_faces or []:
-            for k in self._KEYS:
-                if old[k] is None:
-                    f.attrs.pop(k, None)
-                else:
-                    f.attrs[k] = old[k]
-        for face, old in self._old_backs:
-            face.attrs["back"] = old
-        for g, old in self._old_groups or []:
-            g.material = old
-        self._count_meshes(scene)
-        _dirty_group_chunks(scene)
-        scene.version += 1
+        if self._edit is not None:
+            self._edit.restore(scene.materials)
+            self.doc_after(scene, "undo")
 
 
 class EditTexturedMaterialCommand(RestampMaterialCommand):
@@ -1386,7 +1275,7 @@ class EditTexturedMaterialCommand(RestampMaterialCommand):
     restamp's: the registry entry, each face's and each container's paint
     exactly as they were."""
 
-    _include_backs = False
+    _kind = "texture"
 
     def __init__(self, name, tint, tint_mode: int = 0, size=None) -> None:
         super().__init__(name, None)
@@ -1412,42 +1301,10 @@ class EditTexturedMaterialCommand(RestampMaterialCommand):
         old = scene.materials.get(self._name)
         if old is None or not old.texture:
             return
-        if self._old_groups is None:
-            self._old_material = old
-            self._affected_faces(scene)
-            self._old_groups = [(g, g.material)
-                                for g in self._painted_groups(scene)]
-            self._new = Material(self._name, color=old.color,
-                                 texture=self.edited(old.texture),
+        if self._edit is None:
+            self._new = Material(self._name, color=old.color, texture=self.edited(old.texture),
                                  opacity=old.opacity, finish=old.finish, pbr=old.pbr)
-        scene.materials[self._name] = self._new
-        for f, before in self._old_faces:
-            if before["texture"]:
-                f.attrs["texture"] = self.edited(before["texture"])
-        for g, before in self._old_groups or []:
-            if isinstance(before, dict) and before.get("texture"):
-                g.material = {**before,
-                              "texture": self.edited(before["texture"])}
-        self._count_meshes(scene)
-        _dirty_group_chunks(scene)
-        scene.version += 1
-
-    def undo(self, scene) -> None:
-        if self._old_faces is None:
-            return
-        # The name never changes: the restamp's undo, without its renaming.
-        scene.materials[self._name] = self._old_material
-        for f, old in self._old_faces:
-            for k in self._KEYS:
-                if old[k] is None:
-                    f.attrs.pop(k, None)
-                else:
-                    f.attrs[k] = old[k]
-        for g, old in self._old_groups or []:
-            g.material = old
-        self._count_meshes(scene)
-        _dirty_group_chunks(scene)
-        scene.version += 1
+        super().do(scene)
 
 
 class PurgeUnusedCommand(Command):
@@ -3497,32 +3354,16 @@ class CoplanarMergeCommand(MeshCommand):
     def do(self, scene) -> None:
         mesh = scene.mesh
         seedkeys = {_key(p) for p in self.seed}
-        progress = True
-        while progress:
-            progress = False
-            for edge in list(mesh.edges):
-                if len(edge.faces) != 2:
-                    continue
-                if (_key(edge.v0.position) not in seedkeys
-                        and _key(edge.v1.position) not in seedkeys):
-                    continue
-                face_a, face_b = edge.faces[0], edge.faces[1]
-                merged = mesh.dissolve_edge(edge)
-                if merged is None:
-                    continue
-                self.merges.append((face_a, face_b, edge, merged))
-                progress = True
-                break  # mesh mutated — restart the scan
-        if self.merges:
+        from core.store_mesh import EdgeView, _store_of
+        from ingetrazo_core import merge_seeded_edges
+        if merge_seeded_edges(mesh, list(seedkeys), None if self._journal_geometry else self.merges,
+                              _store_of, EdgeView):
             scene.version += 1
 
     def undo(self, scene) -> None:
         mesh = scene.mesh
-        for face_a, face_b, edge, merged in reversed(self.merges):
-            mesh.remove_face(merged)
-            mesh.relink_edge(edge)
-            mesh.relink_face(face_a)
-            mesh.relink_face(face_b)
+        from ingetrazo_core import revert_seeded_merges
+        revert_seeded_merges(mesh, self.merges)
         if self.merges:
             scene.version += 1
         self.merges = []
@@ -3652,93 +3493,8 @@ def run_stitch(mesh, seedkeys: set, new_faces: Optional[set] = None,
 
 
 def _merge_object_regions(mesh, seedkeys, new_faces, start):
-    while True:
-        merged = False
-        ncache: dict = {}
-        scache: dict = {}
-        faces = list(mesh.faces)[start:]
-        start = 0
-        for f0 in faces:
-            comp = _coplanar_component(mesh, f0, seedkeys, ncache, scache)
-            if len(comp) < 2:
-                continue
-            if new_faces is not None and not (comp & new_faces):
-                continue
-            region = mesh.dissolve_coplanar_region(comp)
-            if region is not None:
-                if new_faces is not None:
-                    new_faces -= comp
-                    new_faces.add(region)
-                merged = True
-                break
-        if not merged:
-            break
-
-
-def _coplanar_component(mesh, f0, seedkeys: set,
-                        ncache: Optional[dict] = None,
-                        scache: Optional[dict] = None) -> set:
-    """Maximal set of coplanar, edge-connected faces that touch the operation's
-    seed. Whether the component is actually merged is gated separately on it
-    containing a face the operation created (see ``run_stitch``).
-
-    An edge that also carries a *non-coplanar* face is a **crease** — a wall
-    standing under the seam — and the component never crosses it: two roof
-    slabs over a dividing wall stay two faces with a visible ridge,
-    as expected, instead of fusing into one slab floating over the wall.
-
-    ``ncache``/``scache`` memoise per-face normalized normals and seed tests
-    within one (mutation-free) scan — Newell normals recomputed per comparison
-    dominated the push drag preview."""
-    if ncache is None:
-        ncache = {}
-    if scache is None:
-        scache = {}
-
-    def nrm(f):
-        v = ncache.get(f.key)
-        if v is None:
-            v = f.normal().normalized()
-            ncache[f.key] = v
-        return v
-
-    key = scache.get("__keymemo__")
-    if key is None:
-        from core.topology import KeyMemo
-        key = scache["__keymemo__"] = KeyMemo()
-
-    def seeded(f):
-        v = scache.get(f.key)
-        if v is None:
-            v = any(key(p) in seedkeys for p in f.vertices)
-            scache[f.key] = v
-        return v
-
-    if not seeded(f0):
-        return set()
-    n0 = nrm(f0)
-    comp = {f0}
-    stack = [f0]
-    while stack:
-        f = stack.pop()
-        for loop in (f.loop, *f.hole_loops):
-            for a, b in zip(loop, loop[1:] + loop[:1]):
-                e = mesh.find_edge(a, b)
-                if e is None:
-                    continue
-                if any(abs(QVector3D.dotProduct(n0, nrm(h))) < 0.999
-                       for h in e.faces):
-                    continue  # crease: a perpendicular face holds this edge
-                for g in e.faces:
-                    if g in comp or not seeded(g):
-                        continue
-                    # Coplanar regardless of winding sign — a push/pull can leave
-                    # a fragment wound the opposite way (a prism floor cap +Z vs a
-                    # bump strip -Z); same surface, so it belongs to the region.
-                    if abs(QVector3D.dotProduct(n0, g.normal())) > 0.999:
-                        comp.add(g)
-                        stack.append(g)
-    return comp
+    from ingetrazo_core import merge_materialised_regions
+    return merge_materialised_regions(mesh, list(seedkeys), new_faces, start)
 
 
 class SnapshotMutation(MeshCommand):

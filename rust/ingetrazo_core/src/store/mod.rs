@@ -21,12 +21,16 @@
 pub mod access;
 pub mod bevel;
 pub mod fillet;
+mod fillet_incidence;
+pub(crate) mod intersection_edit;
+pub(crate) mod plane_repair;
+pub(crate) mod plane_regions;
 pub mod build;
 mod changes;
 pub mod cow;
 pub mod diff;
 pub(crate) mod drawing;
-mod commands;
+pub(crate) mod commands;
 mod fold;
 mod landing;
 mod push_band;

@@ -61,11 +61,7 @@ pub(super) fn newell(p: &[V3]) -> V3 {
     let mut n = ZERO;
     for (&a, &b) in p.iter().zip(p.iter().cycle().skip(1)) {
         let ([x, y, z], [u, v, w]) = (xyz(a), xyz(b));
-        n = n + V3(
-            (y - v) * (z + w),
-            (z - w) * (x + u),
-            (x - u) * (y + v),
-        );
+        n = n + V3((y - v) * (z + w), (z - w) * (x + u), (x - u) * (y + v));
     }
     n
 }
@@ -104,13 +100,13 @@ pub struct RoundPlan {
 impl RoundPlan {
     pub(super) fn rebuild(
         &mut self,
-        s: &Store,
+        s: &impl FilletMesh,
         f: u32,
         h: Hypot,
         mut replace: impl FnMut(&[u32], usize) -> Result<Vec<V3>>,
     ) -> Result<()> {
         let mut rings = Vec::new();
-        for ring in s.face_rings(f) {
+        for ring in s.rings(f) {
             let mut out = Vec::new();
             for i in 0..ring.len() {
                 for p in replace(&ring, i)? {
@@ -433,11 +429,75 @@ struct Round {
     // Two ends, in first-visited order (the order in which arcs get curve IDs).
     sections: Vec<(u32, Vec<V3>)>,
 }
-fn inward(s: &Store, f: u32, [a, b]: [u32; 2], h: Hypot) -> Option<V3> {
-    for ring in s.face_rings(f) {
+/// The planner only reads incidence. Object meshes supply an indexed neighbourhood
+/// in their existing traversal order, including vertices at coincident positions.
+pub(super) trait FilletMesh {
+    const OBJECT: bool;
+    fn point(&self, v: u32) -> V3;
+    fn ends(&self, e: u32) -> [u32; 2];
+    fn compensated_sum(&self) -> bool {
+        false
+    }
+    fn other_end(&self, e: u32, v: u32) -> u32 {
+        let [a, b] = self.ends(e);
+        if a == v {
+            b
+        } else {
+            a
+        }
+    }
+    fn radial(&self, e: u32) -> &[u32];
+    fn rings(&self, f: u32) -> Vec<Vec<u32>>;
+    fn normal(&self, f: u32, h: Hypot) -> V3;
+    fn plane_normal(&self, f: u32, h: Hypot) -> V3 {
+        let n = self.normal(f, h);
+        if Self::OBJECT && n.dot(n, h) > 1e-18 {
+            super::geometry::normalized(n, h)
+        } else {
+            n
+        }
+    }
+    fn adjacent(&self, v: u32) -> Vec<u32>;
+    fn disk(&self, v: u32) -> Vec<u32>;
+}
+impl FilletMesh for Store {
+    const OBJECT: bool = false;
+    fn point(&self, v: u32) -> V3 {
+        pos(self, v)
+    }
+    fn ends(&self, e: u32) -> [u32; 2] {
+        ends(self, e)
+    }
+    fn radial(&self, e: u32) -> &[u32] {
+        self.edge_faces(e)
+    }
+    fn rings(&self, f: u32) -> Vec<Vec<u32>> {
+        self.face_rings(f)
+    }
+    fn normal(&self, f: u32, h: Hypot) -> V3 {
+        self.face_normal(f, h)
+    }
+    fn adjacent(&self, v: u32) -> Vec<u32> {
+        self.faces_around(&[v])
+    }
+    fn disk(&self, v: u32) -> Vec<u32> {
+        self.edges_at(v).collect()
+    }
+}
+
+fn profile_power(profile: f64, object: bool) -> f64 {
+    if object {
+        2. / (4f64.ln() / (1. / profile).ln())
+    } else {
+        2. * (1. / profile).ln() / 4f64.ln()
+    }
+}
+
+fn inward(s: &impl FilletMesh, f: u32, [a, b]: [u32; 2], h: Hypot) -> Option<V3> {
+    for ring in s.rings(f) {
         for (&i, &j) in ring.iter().zip(ring.iter().cycle().skip(1)) {
             if (i == a && j == b) || (i == b && j == a) {
-                return unit(s.face_normal(f, h).cross(pos(s, j) - pos(s, i), h), h);
+                return unit(s.normal(f, h).cross(s.point(j) - s.point(i), h), h);
             }
         }
     }
@@ -450,9 +510,7 @@ pub(super) fn maximal_holes(holes: &[Vec<V3>], h: Hypot) -> Vec<bool> {
         .iter()
         .map(|r| {
             sides(r)
-                .fold(0., |sum, (a, b)| {
-                    sum + a.0 * b.1 - b.0 * a.1
-                })
+                .fold(0., |sum, (a, b)| sum + a.0 * b.1 - b.0 * a.1)
                 .abs()
                 / 2.
         })
@@ -464,7 +522,8 @@ pub(super) fn maximal_holes(holes: &[Vec<V3>], h: Hypot) -> Vec<bool> {
             keep.push(true);
             continue;
         }
-        let (u, v) = crate::store::geometry::plane_axes(crate::store::geometry::normalized(normal, h), h);
+        let (u, v) =
+            crate::store::geometry::plane_axes(crate::store::geometry::normalized(normal, h), h);
         let project = |p: V3| (p.dot(u, h), p.dot(v, h));
         let average = |axis: usize| {
             crate::store::geometry::py_sum(inner.iter().map(|&p| xyz(p)[axis]), true)
@@ -517,16 +576,16 @@ fn inside_2d(poly: &[(f64, f64)], (x, y): (f64, f64)) -> bool {
     }
     inside
 }
-fn solid(s: &Store, f: u32, p: V3, h: Hypot) -> bool {
-    let rings = s.face_rings(f);
+fn solid(s: &impl FilletMesh, f: u32, p: V3, h: Hypot) -> bool {
+    let rings = s.rings(f);
     let Some(&anchor) = rings.first().and_then(|ring| ring.first()) else {
         return false;
     };
-    let o = pos(s, anchor);
-    let (u, v) = crate::store::geometry::plane_axes(s.face_normal(f, h), h);
+    let o = s.point(anchor);
+    let (u, v) = crate::store::geometry::plane_axes(s.normal(f, h), h);
     let project = |p: V3| ((p - o).dot(u, h), (p - o).dot(v, h));
     let inside = |r: &Vec<u32>| {
-        let polygon: Vec<_> = r.iter().map(|&v| project(pos(s, v))).collect();
+        let polygon: Vec<_> = r.iter().map(|&v| project(s.point(v))).collect();
         inside_2d(&polygon, project(p))
     };
     inside(&rings[0]) && !rings.iter().skip(1).any(inside)
@@ -541,8 +600,8 @@ impl Round {
             .1
     }
 
-    fn section(
-        s: &Store,
+    fn section<M: FilletMesh>(
+        s: &M,
         e: u32,
         size: f64,
         n: usize,
@@ -552,14 +611,14 @@ impl Round {
         mirror: bool,
         h: Hypot,
     ) -> Result<Self> {
-        let [f, g] = s.edge_faces(e) else {
+        let [f, g] = s.radial(e) else {
             return Err((
                 "Only an edge between exactly two faces can be rounded.",
                 None,
             ));
         };
-        let vs = ends(s, e);
-        let d = unit(pos(s, vs[1]) - pos(s, vs[0]), h)
+        let vs = s.ends(e);
+        let d = unit(s.point(vs[1]) - s.point(vs[0]), h)
             .ok_or(("A zero-length edge cannot be rounded.", None))?;
         let read =
             |f| inward(s, f, vs, h).ok_or(("Could not read the faces around the edge.", None));
@@ -581,7 +640,7 @@ impl Round {
         let mut centre = (a + b) * (radius / angle.sin());
         let ta = a * t;
         let tb = b * t;
-        let sign = if s.face_normal(*f, h).dot(ta - centre, h) >= 0. {
+        let sign = if s.normal(*f, h).dot(ta - centre, h) >= 0. {
             1.
         } else {
             -1.
@@ -590,7 +649,7 @@ impl Round {
             centre = ta + tb;
             let point = |(x, y)| centre + (ta - centre) * x + (tb - centre) * y;
             if outline.is_empty() {
-                let pow = 2. * (1. / profile).ln() / 4f64.ln();
+                let pow = profile_power(profile, M::OBJECT);
                 (0..=n)
                     .map(|k| {
                         let theta = std::f64::consts::FRAC_PI_2 * k as f64 / n as f64;
@@ -603,7 +662,7 @@ impl Round {
                         })
                     })
                     .collect()
-            } else if mirror && s.face_normal(*g, h).2 > s.face_normal(*f, h).2 + 1e-6 {
+            } else if mirror && s.normal(*g, h).2 > s.normal(*f, h).2 + 1e-6 {
                 outline.iter().rev().map(|&(x, y)| point((y, x))).collect()
             } else {
                 outline.iter().copied().map(point).collect()
@@ -612,9 +671,7 @@ impl Round {
             let u = unit(ta - centre, h).ok_or(flat)?;
             let rb = tb - centre;
             let v = unit(rb - u * rb.dot(u, h), h).ok_or(flat)?;
-            let phi = u.dot(unit(rb, h).ok_or(flat)?, h)
-                .clamp(-1., 1.)
-                .acos();
+            let phi = u.dot(unit(rb, h).ok_or(flat)?, h).clamp(-1., 1.).acos();
             (0..=n)
                 .map(|i| {
                     let x = phi * i as f64 / n as f64;
@@ -652,8 +709,8 @@ impl Round {
     }
 }
 
-pub fn plan(
-    s: &Store,
+pub(super) fn plan<M: FilletMesh>(
+    s: &M,
     edges: Vec<u32>,
     size: f64,
     n: usize,
@@ -681,7 +738,7 @@ pub fn plan(
         if rounds.is_empty() {
             plan.materials.extend(r.faces)
         }
-        for v in ends(s, e) {
+        for v in s.ends(e) {
             let incident = groups.entry(v).or_default();
             if incident.is_empty() {
                 vertex_order.push(v);
@@ -695,8 +752,8 @@ pub fn plan(
     let mut patches = Vec::new();
     for &v in &vertex_order {
         let group = &groups[&v];
-        let p = pos(s, v);
-        let here = s.faces_around(&[v]);
+        let p = s.point(v);
+        let here = s.adjacent(v);
         let allowed: BTreeSet<_> = group.iter().flat_map(|&i| rounds[i].faces).collect();
         let caps: Vec<_> = here.iter().filter(|f| !allowed.contains(f)).collect();
         let err = |msg| at(msg, p);
@@ -711,12 +768,11 @@ pub fn plan(
         match group.len() {
             1 => {
                 let (q, m) = if let Some(&&f) = caps.first() {
-                    let anchor = s
-                        .outer_ring(f)
+                    let anchor = s.rings(f)[0]
                         .first()
                         .copied()
                         .ok_or(("Could not read the faces around the edge.", None))?;
-                    (pos(s, anchor), s.face_normal(f, h))
+                    (s.point(anchor), s.plane_normal(f, h))
                 } else {
                     (p, first.d)
                 };
@@ -730,7 +786,7 @@ pub fn plan(
             }
             2 => {
                 let rb = &rounds[group[1]];
-                let dir = |r: &Round| unit(pos(s, other(s, r.edge, v)) - p, h).unwrap();
+                let dir = |r: &Round| unit(s.point(s.other_end(r.edge, v)) - p, h).unwrap();
                 let m = unit(dir(first) - dir(rb), h)
                     .ok_or(err("The two edges at {p} fold back on each other."))?;
                 let sec = first
@@ -759,7 +815,7 @@ pub fn plan(
                         if others.next().is_some() {
                             return Err(simple);
                         }
-                        let normal = s.face_normal(f, h);
+                        let normal = s.plane_normal(f, h);
                         let a = p + r.w[side] * r.t;
                         let b = p + q.w[usize::from(q.faces[1] == f)] * q.t;
                         let den = r.d.cross(q.d, h).dot(normal, h);
@@ -772,8 +828,7 @@ pub fn plan(
                     if (along[0] - along[1]).abs() > 1e-3 * r.t.max(1.) {
                         return Err(err("The corner at {p} is too skewed to round."));
                     }
-                    if along[0].abs()
-                        > length(pos(s, other(s, r.edge, v)) - p, h) * 0.5 + 1e-9
+                    if along[0].abs() > length(s.point(s.other_end(r.edge, v)) - p, h) * 0.5 + 1e-9
                     {
                         return Err(err("The radius is too large for the edge at {p}."));
                     }
@@ -785,8 +840,8 @@ pub fn plan(
         }
         for (&i, sec) in group.iter().zip(sections) {
             let r = &mut rounds[i];
-            let [a, b] = ends(s, r.edge);
-            let mid = (pos(s, a) + pos(s, b)) * 0.5;
+            let [a, b] = s.ends(r.edge);
+            let mid = (s.point(a) + s.point(b)) * 0.5;
             for side in 0..2 {
                 let f = r.faces[side];
                 let q = sec[if side == 0 { 0 } else { sec.len() - 1 }];
@@ -805,20 +860,20 @@ pub fn plan(
         }
     }
     // Splice the cut sequences into each outer and hole ring in winding order.
-    let touched: BTreeSet<_> = groups.keys().flat_map(|&v| s.faces_around(&[v])).collect();
+    let touched: BTreeSet<_> = groups.keys().flat_map(|&v| s.adjacent(v)).collect();
     for f in touched {
         plan.rebuild(s, f, h, |ring, i| {
             let v = ring[i];
             if !groups.contains_key(&v) {
-                return Ok(vec![pos(s, v)]);
+                return Ok(vec![s.point(v)]);
             }
             let mut seq = replacements
                 .get(&(f, v))
                 .ok_or(("A face would collapse — the radius is too large.", None))?
                 .clone();
             if seq.len() > 1 {
-                let prev = pos(s, ring[(i + ring.len() - 1) % ring.len()]);
-                let next = pos(s, ring[(i + 1) % ring.len()]);
+                let prev = s.point(ring[(i + ring.len() - 1) % ring.len()]);
+                let next = s.point(ring[(i + 1) % ring.len()]);
                 let (a, b) = (seq[0], seq[seq.len() - 1]);
                 let cost = |a, b| length(prev - a, h) + length(next - b, h);
                 if cost(b, a) < cost(a, b) {
@@ -828,8 +883,8 @@ pub fn plan(
             Ok(seq)
         })?;
         let ring = &plan.rebuilt.last().unwrap().1[0];
-        let normal = s.face_normal(f, h);
-        let o = pos(s, s.face_rings(f)[0][0]);
+        let normal = s.plane_normal(f, h);
+        let o = s.point(s.rings(f)[0][0]);
         let span = ring.iter().map(|&p| length(p - o, h)).fold(1., f64::max);
         for &p in ring {
             if (p - o).dot(normal, h).abs() > 1e-4 * span {
@@ -839,14 +894,14 @@ pub fn plan(
     }
     // Extrude each section into strips, then close the three-way junctions.
     for r in &rounds {
-        let [va, vb] = ends(s, r.edge);
+        let [va, vb] = s.ends(r.edge);
         let a = r.end(va);
         let b = r.end(vb);
         let last = a.len() - 1;
         if (b[0] - a[0]).dot(r.d, h) <= 1e-6 {
             return Err(at(
                 "The radius is too large for the edge at {p}.",
-                pos(s, va),
+                s.point(va),
             ));
         }
         let centre = (a[0] + b[0]) * 0.5 - r.w[0] * r.t + r.centre;
@@ -860,7 +915,12 @@ pub fn plan(
             plan.strips.push(quad)
         }
         if outline.is_empty() {
-            plan.soft.extend(a.iter().copied().zip(b.iter().copied()));
+            if M::OBJECT {
+                plan.soft
+                    .extend((1..last).chain([0, last]).map(|i| (a[i], b[i])));
+            } else {
+                plan.soft.extend(a.iter().copied().zip(b.iter().copied()));
+            }
         }
         for (v, sec) in &r.sections {
             let degree = groups[v].len();
@@ -876,11 +936,11 @@ pub fn plan(
         corner(&mut plan, s, v, rs, profile, cut_corner, outline, steps, h)?;
     }
     if !outline.is_empty() {
-        smooth(&mut plan, h)
+        smooth(&mut plan, h, M::OBJECT)
     }
     for &v in groups.keys() {
         plan.edges
-            .extend(s.edges_at(v).filter(|&e| !s.edge_faces(e).is_empty()))
+            .extend(s.disk(v).into_iter().filter(|&e| !s.radial(e).is_empty()))
     }
     Ok(plan)
 }
@@ -901,8 +961,9 @@ fn side(a: V3, b: V3) -> Side {
 fn sides(r: &[V3]) -> impl Iterator<Item = (V3, V3)> + '_ {
     r.iter().copied().zip(r.iter().copied().cycle().skip(1))
 }
-fn smooth(plan: &mut RoundPlan, h: Hypot) {
+fn smooth(plan: &mut RoundPlan, h: Hypot, insertion_order: bool) {
     let mut normals: BTreeMap<Side, Vec<(V3, V3, V3)>> = BTreeMap::new();
+    let mut order = Vec::new();
     for ring in plan
         .rebuilt
         .iter()
@@ -912,11 +973,20 @@ fn smooth(plan: &mut RoundPlan, h: Hypot) {
     {
         if let Some(n) = unit(newell(ring), h) {
             for (a, b) in sides(ring) {
-                normals.entry(side(a, b)).or_default().push((n, a, b))
+                let key = side(a, b);
+                let entries = normals.entry(key).or_default();
+                if insertion_order && entries.is_empty() {
+                    order.push(key);
+                }
+                entries.push((n, a, b));
             }
         }
     }
-    for ns in normals.values() {
+    if !insertion_order {
+        order.extend(normals.keys().copied());
+    }
+    for key in order {
+        let ns = &normals[&key];
         if let [(n, a, b), (m, _, _)] = ns.as_slice() {
             if n.dot(*m, h) > 30f64.to_radians().cos() {
                 plan.soft.push((*a, *b))
@@ -932,24 +1002,49 @@ fn cut_faces(
     out: V3,
     tip: V3,
     h: Hypot,
+    object_order: bool,
 ) -> Option<Vec<Vec<V3>>> {
     // Corner i lies on sections i and (i+1)%3.
+    let entries = if object_order {
+        // Each incident strip visits its first corner and then its last. The
+        // first such point also supplies the common bottom on a square box.
+        let mut pts: Vec<(V3, Vec<usize>)> = Vec::new();
+        for (i, sec) in secs.iter().enumerate() {
+            for p in [sec[0], *sec.last()?] {
+                if let Some((_, sides)) = pts.iter_mut().find(|(q, _)| length(*q - p, h) < 1e-5) {
+                    sides.push(i);
+                } else {
+                    pts.push((p, vec![i]));
+                }
+            }
+        }
+        if pts.len() != 3 {
+            return None;
+        }
+        pts.into_iter()
+            .map(|(p, sides)| match sides.as_slice() {
+                &[a, b] => Some((p, a, b)),
+                _ => None,
+            })
+            .collect::<Option<Vec<_>>>()?
+    } else {
+        (0..3).map(|i| (corners[i], i, (i + 1) % 3)).collect()
+    };
     let mut bottoms = Vec::new();
-    for i in 0..3 {
-        let a = rs[i];
-        let b = rs[(i + 1) % 3];
+    for &(p, i, j) in &entries {
+        let (a, b) = (rs[i], rs[j]);
         let mut d = unit(a.d.cross(b.d, h), h)?;
         if d.dot(out, h) > 0. {
             d = d * (-1.)
         }
         let depth = (length(a.centre, h) + length(b.centre, h)) / 2. / 2f64.sqrt();
-        bottoms.push(corners[i] + d * depth);
+        bottoms.push(p + d * depth);
     }
     let centre = bottoms.iter().any(|&p| length(p - bottoms[0], h) >= 1e-5);
     let bottom = |p| {
-        corners
+        entries
             .iter()
-            .position(|&c| length(c - p, h) < 1e-5)
+            .position(|&(c, _, _)| length(c - p, h) < 1e-5)
             .map(|i| bottoms[i])
     };
     let mut faces = Vec::new();
@@ -968,9 +1063,9 @@ fn cut_faces(
     Some(faces)
 }
 
-fn corner(
+fn corner<M: FilletMesh>(
     plan: &mut RoundPlan,
-    s: &Store,
+    s: &M,
     v: u32,
     rs: [&Round; 3],
     profile: f64,
@@ -980,7 +1075,7 @@ fn corner(
     h: Hypot,
 ) -> Result<()> {
     let secs = rs.map(|r| r.end(v).clone());
-    let tip = pos(s, v);
+    let tip = s.point(v);
     let err = at("Could not close the corner at {p}.", tip);
     let meet = |a: usize, b: usize| {
         let (x, y) = (&secs[a], &secs[b]);
@@ -994,11 +1089,8 @@ fn corner(
             .ok_or(err)
     };
     let corners = [meet(0, 1)?, meet(1, 2)?, meet(2, 0)?];
-    let out = s
-        .faces_around(&[v])
-        .iter()
-        .fold(ZERO, |a, &f| a + s.face_normal(f, h));
-    let cutoff = || cut_faces(rs, &secs, corners, out, tip, h);
+    let out = s.adjacent(v).iter().fold(ZERO, |a, &f| a + s.normal(f, h));
+    let cutoff = || cut_faces(rs, &secs, corners, out, tip, h, M::OBJECT);
     if cut {
         if let Some(faces) = cutoff() {
             if outline.is_empty() || closes(&faces, &secs, &BTreeMap::new()) {
@@ -1051,8 +1143,8 @@ fn corner(
     let [Some(a), Some(b), Some(c)] = dirs else {
         return Err(err);
     };
-    let radius = rs.iter().map(|r| r.radius).sum::<f64>() / 3.;
-    let power = 2. * (1. / profile).ln() / 4f64.ln();
+    let radius = super::geometry::py_sum(rs.iter().map(|r| r.radius), s.compensated_sum()) / 3.;
+    let power = profile_power(profile, M::OBJECT);
     let mut patch = RoundPlan::default();
     grid_cap(
         &mut patch,

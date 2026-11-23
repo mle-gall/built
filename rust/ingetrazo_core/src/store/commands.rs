@@ -4,17 +4,17 @@ use super::{edit::Change, keys::Kind, Store};
 use std::collections::HashSet;
 
 type Point = [f64; 3];
-pub(super) type Cell = [u64; 3];
+pub(crate) type Cell = [u64; 3];
 
 /// A position key supplied by a caller has already been rounded.
-pub(super) fn supplied_cell(p: Point) -> Cell {
+pub(crate) fn supplied_cell(p: Point) -> Cell {
     p.map(|x| if x == 0. { 0 } else { x.to_bits() })
 }
 
 /// Bits of Python's round(x, 4), canonicalising signed zero. When the
 /// multiplication itself can change a rounding decision, round the original
 /// binary64 value directly to four decimal places.
-pub(super) fn cell(point: Point) -> Cell {
+pub(crate) fn cell(point: Point) -> Cell {
     point.map(|x| {
         let scaled = x * 10000.;
         let rounded = if scaled.abs() >= (1u64 << 52) as f64 || scaled.fract().abs() == 0.5 {

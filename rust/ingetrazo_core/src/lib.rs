@@ -52,11 +52,38 @@ mod scans;
 mod orient;
 mod pushscan;
 mod push_command;
+mod push_guard;
+mod object_weld;
+mod object_merge;
 mod panic_log;
 
 #[pymodule]
 fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(push_command::rebuild_push_planes, m)?)?;
+    m.add_function(wrap_pyfunction!(store::plane_regions::rebuild_region_faces, m)?)?;
+    m.add_function(wrap_pyfunction!(store::plane_repair::object_cap_coverage, m)?)?;
+    m.add_function(wrap_pyfunction!(store::plane_repair::shadowed_push_faces, m)?)?;
+    m.add_function(wrap_pyfunction!(store::plane_repair::plane_fingerprint, m)?)?;
+    m.add_function(wrap_pyfunction!(store::plane_repair::plane_cycle, m)?)?;
+    m.add_function(wrap_pyfunction!(store::plane_repair::install_rebuilt_plane, m)?)?;
+    m.add_function(wrap_pyfunction!(store::plane_repair::prune_object_plane, m)?)?;
+    m.add_function(wrap_pyfunction!(store::intersection_edit::partition_intersections, m)?)?;
+    m.add_function(wrap_pyfunction!(object_merge::revert_recorded_union, m)?)?;
+    m.add_function(wrap_pyfunction!(object_merge::merge_seeded_edges, m)?)?;
+    m.add_function(wrap_pyfunction!(object_merge::revert_seeded_merges, m)?)?;
+    m.add_function(wrap_pyfunction!(object_merge::merge_materialised_regions, m)?)?;
+    m.add_function(wrap_pyfunction!(object_merge::trace_object_loops, m)?)?;
+    m.add_function(wrap_pyfunction!(object_merge::dissolve_object_edge, m)?)?;
+    m.add_function(wrap_pyfunction!(object_merge::dissolve_object_region, m)?)?;
+    m.add_function(wrap_pyfunction!(object_weld::weld_object_mesh, m)?)?;
+    m.add_function(wrap_pyfunction!(object_weld::weld_object_vertex, m)?)?;
+    m.add_function(wrap_pyfunction!(object_weld::split_object_at_position, m)?)?;
+    m.add_function(wrap_pyfunction!(object_weld::split_object_edge, m)?)?;
+    m.add_function(wrap_pyfunction!(object_weld::revert_object_split, m)?)?;
+    m.add_function(wrap_pyfunction!(push_guard::guarded_push, m)?)?;
+    m.add_function(wrap_pyfunction!(push_guard::translate_prism_cap, m)?)?;
+    m.add_function(wrap_pyfunction!(push_guard::push_region, m)?)?;
+    m.add_function(wrap_pyfunction!(push_guard::push_through_face, m)?)?;
     m.add_function(wrap_pyfunction!(push_command::push_top_out, m)?)?;
     m.add_function(wrap_pyfunction!(push_command::push_secondary_faces, m)?)?;
     m.add_function(wrap_pyfunction!(push_command::outline_curve_runs, m)?)?;

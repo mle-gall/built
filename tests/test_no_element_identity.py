@@ -46,10 +46,7 @@ _ALLOWED = {
     # The Mesh kernel itself, mutation and its helpers.
     **{("core/mesh.py", fn): _KERNEL for fn in (
         "registers", "find_edge", "add_edge", "add_edges_welded", "_rekey",
-        "split_edge", "_insert_at_every_use", "_uses",
-        "_insert_into_face_loops", "weld_coincident", "_weld_into",
-        "dissolve_edge_recorded", "dissolve_coplanar_pair", "dissolve_edge",
-        "_shared_edge_index")},
+        "_insert_into_face_loops")},
     # Not elements: names that look like them.
     **{("core/triangulate.py", fn): "ear-clipping list nodes" for fn in (
         "_is_ear", "_cure_local_intersections", "_split_earcut",
