@@ -2329,6 +2329,8 @@ def _load_into_inner(scene, path: Path, progress=None, link_meshes=None) -> None
         if group_reader and getattr(scene, "_root", None) is not None:
             kept = payload.get("kept_components") or []
             reader = group_reader(len(raw_groups) + len(kept))
+            if raw_groups or kept:
+                tick(0.6, "Placing groups…")
             groups, library = _in_worker(
                 lambda: reader.build(raw_groups, kept, proto_meshes, read_mesh, is_built),
                 (lambda: tick(0.6 + 0.35 * reader.fraction(), "Placing groups…"))
