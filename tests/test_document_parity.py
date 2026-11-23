@@ -73,6 +73,11 @@ def test_engines(runs):
     assert py["engine"] == "Python" and rs["engine"] == "Rust"
 
 
+def test_affine_instance_edit_agrees(runs):
+    py, rs = runs
+    assert rs["rotated_edit"] == py["rotated_edit"]
+
+
 def test_every_state_agrees(runs):
     py, rs = runs
     assert len(py["states"]) == len(rs["states"])

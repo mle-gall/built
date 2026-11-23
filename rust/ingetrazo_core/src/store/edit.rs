@@ -60,8 +60,8 @@ impl Store {
             };
             (l2 as f64) < self.weld.tol2
         } else {
-            let d = [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
-            d[0] * d[0] + d[1] * d[1] + d[2] * d[2] < self.weld.tol2
+            let d = glam::DVec3::from(*a) - glam::DVec3::from(*b);
+            self.state.frame.definition_delta(d).length_squared() < self.weld.tol2
         }
     }
 

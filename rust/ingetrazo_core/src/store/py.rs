@@ -796,6 +796,7 @@ impl PyMeshStore {
     /// `Mesh._probe_neighbours(cell, position)`: the vertex key or None.
     fn probe(&self, cell: (i64, i64, i64), position: (f64, f64, f64)) -> Option<u128> {
         let p = self.inner.quantize(p3(position));
+        let cell = if self.inner.state.frame.is_model() { cell } else { self.inner.cell(&p) };
         self.inner.probe(cell, &p).map(|v| self.inner.key(Kind::Vertex, v))
     }
 
@@ -1647,20 +1648,41 @@ impl PyMeshStore {
     /// `capture_state`: O(chunks), whatever the mesh size.
     #[getter]
     fn frame_origin(&self) -> [f64; 3] {
-        self.inner.state.frame_origin
+        self.inner.state.frame.origin
+    }
+
+    #[getter]
+    fn _model_frame(&self) -> bool {
+        self.inner.state.frame.is_model()
+    }
+
+    fn _definition_points<'py>(&self, py: Python<'py>, points: PyReadonlyArray2<'_, f64>)
+        -> PyResult<Bound<'py, PyArray2<f64>>> {
+        let rows: Vec<_> = triples(&points)?.iter().map(|p|
+            self.inner.state.frame.definition_point(*p)).collect();
+        Ok(rows3(py, &rows))
     }
 
     fn _in_frame(&self, origin: [f64; 3]) -> Self {
         let mut st = self.inner.clone();
-        st.state = st.state.in_frame(origin, None);
+        st.state = st.state.in_frame(st.state.frame.rebased(origin), None);
         Self::wrap(st)
+    }
+
+    /// Column-major definition-to-world placement and camera origin, both f64.
+    fn _in_instance_frame(&self, matrix: [f64; 16], origin: [f64; 3]) -> PyResult<Self> {
+        let frame = super::frame::Frame::instance(matrix, origin)
+            .ok_or_else(|| PyValueError::new_err("expected a finite invertible affine placement"))?;
+        let mut store = self.inner.clone();
+        store.state = store.state.in_frame(frame, None);
+        Ok(Self::wrap(store))
     }
 
     fn _publish_frame(&mut self, source: &PyMeshStore) -> PyResult<()> {
         if self.inner.lineage != source.inner.lineage {
             return Err(PyValueError::new_err("coordinate frames must share a lineage"));
         }
-        let state = source.inner.state.in_frame(self.inner.state.frame_origin, Some(&self.inner.state));
+        let state = source.inner.state.in_frame(self.inner.state.frame.clone(), Some(&self.inner.state));
         self.inner = source.inner.clone();
         self.inner.state = state;
         *self.cache.lock().unwrap() = Default::default();
@@ -1682,7 +1704,7 @@ impl PyMeshStore {
     /// `capture_state() == snapshot`.
     fn same_as(&self, snapshot: &PyStoreSnapshot) -> bool {
         snapshot.inner.lineage == self.inner.lineage && self.inner.state.same_as(
-            &snapshot.inner.state.in_frame(self.inner.state.frame_origin, Some(&self.inner.state)))
+            &snapshot.inner.state.in_frame(self.inner.state.frame.clone(), Some(&self.inner.state)))
     }
 
     /// `(chunks shared, chunks)` between the live state and a snapshot,
@@ -1993,7 +2015,7 @@ impl PyStoreSnapshot {
     /// chunk pointers first, content only where they differ.
     fn same_as(&self, other: &PyStoreSnapshot) -> bool {
         self.inner.lineage == other.inner.lineage && self.inner.state.same_as(
-            &other.inner.state.in_frame(self.inner.state.frame_origin, Some(&self.inner.state)))
+            &other.inner.state.in_frame(self.inner.state.frame.clone(), Some(&self.inner.state)))
     }
 
     /// Net change between two immutable snapshots of one store. Across a
@@ -2006,7 +2028,7 @@ impl PyStoreSnapshot {
             return Err(PyValueError::new_err("snapshots of different stores"));
         }
         let (new, mut old) = (reader(&self.inner), reader(&before.inner));
-        old.state = old.state.in_frame(new.state.frame_origin, Some(&new.state));
+        old.state = old.state.in_frame(new.state.frame.clone(), Some(&new.state));
         let mut ch = py.detach(|| new.changes_since(&old));
         ch.modified[2].extend(attrs.into_iter().filter(|&k|
             new.slot(Kind::Face, k).is_some() && old.slot(Kind::Face, k).is_some()));

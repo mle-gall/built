@@ -297,6 +297,18 @@ def main(work: Path):
     other = Group(original.mesh, name="Second assembly", uid="other-assembly")
     other.adopt([Group(original.children[0].mesh, name="Only part", uid="only-part")])
     initial_scene.groups.append(other)
+    # Two occurrences of the same geometry can carry distinct IFC and tag
+    # values. Address the second part through its persisted UID path.
+    from core.protocol import commands
+    history = History(initial_scene)
+    child = other.children[0]
+    child.ifc = {"name": "Second record"}
+    commands.set_tag(history, [[other.uid, child.uid]], "Tag 2")
+    commands.hide(history, [[other.uid, child.uid]])
+    assert child.hidden and not original.children[0].hidden
+    assert child.layer == "Tag 2" and original.children[0].layer == "Tag 0"
+    assert history.undo() and not child.hidden
+    assert history.redo() and child.hidden
     initial = saved(initial_scene, work, "initial")
     scene = build()
     h = History(scene)
@@ -342,7 +354,25 @@ def main(work: Path):
     states.append(dump(scene))
     states.extend(slice_two(scene, h))
     states.extend(structural_steps(steps))
-    print(json.dumps({"engine": doc_model.engine(), "states": states,
+    # Rotate a mirrored, non-uniformly scaled occurrence and edit through
+    # its world-space tool coordinates. The sibling reads definition space.
+    framed = Scene()
+    first = Group(Mesh(), uid="framed")
+    second = Group(first.mesh, uid="sibling")
+    transform = QMatrix4x4()
+    transform.translate(17, 4, 2)
+    transform.rotate(90, 0, 0, 1)
+    transform.scale(-2, 3, 4)
+    first.xform, second.xform = transform, QMatrix4x4()
+    framed.groups.extend([first, second])
+    framed.begin_group_edit(first)
+    endpoints = [QVector3D(1, 2, 3), QVector3D(3, 1, 2)]
+    framed.mesh.add_edge(*(transform.map(p) for p in endpoints))
+    framed.end_group_edit()
+    positions = [v.position_tuple() for v in second.mesh.vertices]
+    import numpy as np
+    np.testing.assert_allclose(sorted(positions), sorted(p.toTuple() for p in endpoints), atol=1e-6)
+    print(json.dumps({"rotated_edit": positions, "engine": doc_model.engine(), "states": states,
                       "feed": steps, "initial": initial,
                       "final": saved(scene, work, "final")}))
 

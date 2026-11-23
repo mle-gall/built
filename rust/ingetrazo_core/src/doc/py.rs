@@ -849,6 +849,27 @@ impl PyPlacement {
         let v = if v.is_none() { PyList::empty(slf.py()).into_any() } else { v.clone() };
         set_list(slf.py(), slf.as_any(), slf.get().key, ListId::Children, &v)
     }
+    /// Resolve persisted placement UIDs one level at a time. Two branches
+    /// may contain equal leaf UIDs without aliasing each other's overrides.
+    fn _resolve_occurrence(&self, py: Python<'_>, path: Vec<String>) -> PyResult<Option<Py<PyAny>>> {
+        let d = lock();
+        let mut key = self.key;
+        if path.is_empty() { return Ok(None); }
+        for uid in path {
+            let parent = d.need(key).map_err(err)?;
+            let mut children = parent.children.iter().copied().filter(|child| {
+                matches!(d.node(*child).map(|n| &n.data), Some(super::Data::Placement(p))
+                    if p.uid.as_ref() == Some(&uid))
+            });
+            let Some(child) = children.next() else { return Ok(None) };
+            if children.next().is_some() {
+                return Err(PyValueError::new_err(format!("ambiguous placement UID {uid}")));
+            }
+            key = child;
+        }
+        Ok(d.handle_ref(py, key))
+    }
+
     /// The active edit context belongs to the scene root. Its keys are
     /// transient UI state, outside saved data and the undo journal.
     fn _enter_edit(&self, placement: &Bound<'_, PyPlacement>, level: Py<PyAny>) -> PyResult<()> {

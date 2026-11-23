@@ -432,3 +432,7 @@ Undoing that metadata change leaves exported files on disk.
 | `set_filing_rule` | `node`, `recipe`, `expected` (previous local recipe) | Checks the expected rule and registry, then writes the local overrides and resynchronises members, including descendants, in one history step. |
 
 The narrow query `core.protocol.records.occurrence` returns field paths, typed values, ownership and editability. The native inspector groups these by path and previews the explicit UID list for a mixed selection. `core.protocol.records.filing_rule` without a history previews the affected UID count and fields.
+
+Nested placement addresses for hide, unhide, lock, rename and tag assignment
+can be supplied as arrays of UIDs from the scene root to the target. A string
+keeps the existing UID lookup. Change records keep the persisted placement UID.

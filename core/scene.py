@@ -520,6 +520,21 @@ class Scene:
                 return True
         return False
 
+    def resolve_occurrence(self, path):
+        """Look up an ordered path of persisted placement UIDs from this root."""
+        if _dm.ENABLED:
+            return self._root._resolve_occurrence(path)
+        group, children = None, self.groups
+        for uid in path:
+            matches = [child for child in children if child.uid == uid]
+            if not matches:
+                return None
+            if len(matches) > 1:
+                raise ValueError(f"ambiguous placement UID {uid}")
+            group, = matches
+            children = group.children
+        return group
+
     def groups_by_uid(self) -> dict:
         """``uid → group`` over the whole tree (nested placements too)."""
         from core.purge import iter_groups

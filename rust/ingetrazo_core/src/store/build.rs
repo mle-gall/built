@@ -250,7 +250,7 @@ impl Store {
         let (sf, hf) = Slots::fresh(nf);
         store.hwm = [hv, he, hf];
         store.state = State {
-            frame_origin: [0.; 3],
+            frame: Default::default(),
             ns,
             slots: [sv, se, sf],
             order: [Order::identity(), Order::identity(), Order::identity()],

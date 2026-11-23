@@ -1308,9 +1308,6 @@ class StoreMesh(Mesh):
 
     def _probe_neighbours(self, k, position):
         p = _xyz(position)
-        origin = self._store.frame_origin
-        if any(origin):
-            k = tuple(round((v + o) * _mesh._KEY_SCALE) for v, o in zip(p, origin))
         hit = self._store.probe(tuple(k), p)
         return None if hit is None else VertexView(self, hit)
 
@@ -1721,7 +1718,7 @@ class StoreMesh(Mesh):
 
     # -- bulk construction straight into the store
     def bulk_weld(self, pos):
-        if self._store.revision == 0 and not any(self._store.counts()) and not any(self._store.frame_origin):
+        if self._store.revision == 0 and not any(self._store.counts()) and self._store._model_frame:
             return bulk_weld(self, pos)
         return Mesh.bulk_weld(self, pos)
 

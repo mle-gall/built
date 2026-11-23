@@ -453,3 +453,24 @@ def test_foreign_snapshot_needs_a_fresh_namespace():
     assert a.arrays()["pos"].tolist() == b.arrays()["pos"].tolist()
     assert not a.is_live(b.key_at("vertex", 0))
     assert not a.same_as(snap)                # other lineage: not "unchanged"
+
+
+def test_instance_frame_weld_snapshot_and_camera_origin():
+    from ingetrazo_core import MeshStore
+    origin = (1e12, -1e12, 6e11)
+    matrix = (0, -2, 0, 0, -3, 0, 0, 0, 0, 0, 5, 0, *origin, 1)
+    model = MeshStore(41)
+    key, _ = model.vertex((0.000125, 1, 0))
+    frame = model._in_instance_frame(matrix, origin)
+    assert tuple(frame.vertex_position(key)) == (-3, -0.00025, 0)
+    assert frame.vertex_at((-3, -0.00025, 0)) == key
+    snap = frame.snapshot()
+    frame.move_vertex(key, (0, -0.00025, 0))
+    model._publish_frame(frame)
+    assert tuple(model.vertex_position(key)) == (0.00025, 1, 0)
+    model.restore(snap)
+    assert tuple(model.vertex_position(key)) == (0.000125, 1, 0)
+    assert model.vertex_at((0.000125, 1, 0)) == key
+    model.check()
+    with pytest.raises(ValueError):
+        model._in_instance_frame([0.] * 16, origin)
