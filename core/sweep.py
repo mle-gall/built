@@ -19,6 +19,7 @@ from copy import deepcopy
 
 from ingetrazo_core import Vec3 as QVector3D
 
+from core import doc_model
 from core.history import run_stitch
 from core.topology import _key
 
@@ -222,6 +223,32 @@ def _revolution_rings(face, path):
 
 
 def sweep_rings(face, path, closed):
+    if not doc_model.ENABLED:
+        return _reference_sweep_rings(face, path, closed)
+    import sys
+    from ingetrazo_core import MeshStore
+    from core.store_mesh import _hypot, _xyz
+    profile = [[_xyz(p) for p in ring] for ring in (face.vertices, *face.holes)]
+    result = MeshStore.project_sweep(profile, [_xyz(p) for p in path], closed, _hypot(), sys.version_info >= (3, 12))
+    if result is None:
+        return None
+    stations, directions = result
+    return ([_sweep_vectors(station) for station in stations],
+            [QVector3D(*d) for d in directions], len(directions))
+
+
+def _sweep_vectors(rings):
+    return [[QVector3D(*p) for p in ring] for ring in rings]
+
+
+def _sweep_polygons(rings, closed, start_cap):
+    from ingetrazo_core import MeshStore
+    from core.store_mesh import _hypot
+    rows = [[[p.toTuple() for p in loop] for loop in station] for station in rings]
+    return (_sweep_vectors(face) for face in MeshStore.sweep_polygons(rows, closed, start_cap, _hypot()))
+
+
+def _reference_sweep_rings(face, path, closed):
     """The profile's rings (outer loop + holes) at every path station.
 
     Returns ``(rings, dirs, spans)`` or ``None`` on degenerate input — a
@@ -300,6 +327,8 @@ def sweep_preview_faces(face, path, closed):
         return []
     rings, _dirs, spans = got
     attrs = dict(face.attrs) if face.attrs else None
+    if doc_model.ENABLED:
+        return [Face(outer, holes or None, attrs=attrs) for outer, *holes in _sweep_polygons(rings, closed, False)]
     stations = len(rings)
     out = []
     reverse = _wall_reversals(rings)
@@ -533,28 +562,11 @@ def sweep_profile(mesh, face, path, closed) -> bool:
                            "curve", None) for s in range(spans)]
     attrs = face.attrs
     mesh.remove_face(face)                           # profile is consumed
-    reverse = _wall_reversals(rings)
-    for s in range(spans):
-        r0 = rings[s]
-        r1 = rings[(s + 1) % stations] if closed else rings[s + 1]
-        for lp0, lp1, flip in zip(r0, r1, reverse):
-            m = len(lp0)
-            for j in range(m):
-                a, b = lp0[j], lp0[(j + 1) % m]
-                b2, a2 = lp1[(j + 1) % m], lp1[j]
-                # A span that doesn't move this edge adds nothing; one that
-                # moves only one end (a point on a revolution axis) is a
-                # triangle.
-                quad = _wall([a, b, b2, a2])
-                if quad is not None:
-                    if flip:
-                        quad.reverse()
-                    mesh.add_face(quad).attrs = deepcopy(attrs)
-    if not closed:
-        for start, station in ((True, rings[0]), (False, rings[-1])):
-            cap = [ring[::-1] if start != flip else ring
-                   for ring, flip in zip(station, reverse)]
-            mesh.add_face(cap[0], cap[1:] or None).attrs = deepcopy(attrs)
+    if doc_model.ENABLED:
+        for outer, *holes in _sweep_polygons(rings, closed, True):
+            mesh.add_face(outer, holes or None).attrs = deepcopy(attrs)
+    else:
+        _reference_build_sweep(mesh, rings, spans, stations, closed, attrs)
 
     # The profile's own edges go with it: when station 0 is a mitre (the
     # profile at a corner of a closed path) they no longer bound anything
@@ -584,6 +596,31 @@ def sweep_profile(mesh, face, path, closed) -> bool:
             e.soft = True
     _tag_sweep_curves(mesh, rings, closed, spans, profile_curves, span_curves)
     return True
+
+
+def _reference_build_sweep(mesh, rings, spans, stations, closed, attrs):
+    reverse = _wall_reversals(rings)
+    for s in range(spans):
+        r0 = rings[s]
+        r1 = rings[(s + 1) % stations] if closed else rings[s + 1]
+        for lp0, lp1, flip in zip(r0, r1, reverse):
+            m = len(lp0)
+            for j in range(m):
+                a, b = lp0[j], lp0[(j + 1) % m]
+                b2, a2 = lp1[(j + 1) % m], lp1[j]
+                # A span that doesn't move this edge adds nothing; one that
+                # moves only one end (a point on a revolution axis) is a
+                # triangle.
+                quad = _wall([a, b, b2, a2])
+                if quad is not None:
+                    if flip:
+                        quad.reverse()
+                    mesh.add_face(quad).attrs = deepcopy(attrs)
+    if not closed:
+        for start, station in ((True, rings[0]), (False, rings[-1])):
+            cap = [ring[::-1] if start != flip else ring
+                   for ring, flip in zip(station, reverse)]
+            mesh.add_face(cap[0], cap[1:] or None).attrs = deepcopy(attrs)
 
 
 def _edge_at(mesh, p, q):

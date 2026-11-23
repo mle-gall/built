@@ -22,19 +22,7 @@ impl Store {
         h: Hypot,
         compensated: bool,
     ) -> Option<Vec<Station>> {
-        if path.len() < 2 {
-            return None;
-        }
-        let spans = if closed { path.len() } else { path.len() - 1 };
-        let mut dirs = Vec::with_capacity(spans);
-        for i in 0..spans {
-            let v = vector(path[(i + 1) % path.len()]).sub(vector(path[i]));
-            if length(v, h) < 1e-9 {
-                return None;
-            }
-            dirs.push(normalized(v, h));
-        }
-        let mut rings: Station = self
+        let rings: Station = self
             .face_rings(face)
             .iter()
             .map(|r| {
@@ -43,37 +31,61 @@ impl Store {
                     .collect()
             })
             .collect();
-        if closed {
-            if let Some(stations) = super::revolution::stations(path, &rings, h, compensated) {
-                return Some(stations);
-            }
+        projected_stations(rings, path, closed, h, compensated).map(|(stations, _)| stations)
+    }
+}
+
+pub fn projected_stations(
+    mut rings: Station,
+    path: &[[f64; 3]],
+    closed: bool,
+    h: Hypot,
+    compensated: bool,
+) -> Option<(Vec<Station>, Ring)> {
+    if path.len() < 2 {
+        return None;
+    }
+    let spans = if closed { path.len() } else { path.len() - 1 };
+    let mut dirs = Vec::with_capacity(spans);
+    for i in 0..spans {
+        let v = vector(path[(i + 1) % path.len()]).sub(vector(path[i]));
+        if length(v, h) < 1e-9 {
+            return None;
         }
-        let mut stations = Vec::new();
-        for (i, &anchor) in path.iter().enumerate() {
-            let dir = dirs[i.saturating_sub(1)];
-            let normal = if !closed && (i == 0 || i == spans) {
-                dir
-            } else {
-                let sum = dirs[(i + spans - 1) % spans].add(dirs[i % spans]);
-                if length(sum, h) < 1e-9 {
-                    return None;
-                }
-                normalized(sum, h)
-            };
-            let denom = dir.dot(normal, h);
-            if denom.abs() < 1e-9 {
+        dirs.push(normalized(v, h));
+    }
+    if closed {
+        if let Some(stations) = super::revolution::stations(path, &rings, h, compensated) {
+            return Some((stations, dirs.into_iter().map(coords).collect()));
+        }
+    }
+    let mut stations = Vec::new();
+    for (i, &anchor) in path.iter().enumerate() {
+        let dir = dirs[i.saturating_sub(1)];
+        let normal = if !closed && (i == 0 || i == spans) {
+            dir
+        } else {
+            let sum = dirs[(i + spans - 1) % spans].add(dirs[i % spans]);
+            if length(sum, h) < 1e-9 {
                 return None;
             }
-            for p in rings.iter_mut().flatten() {
-                let v = vector(*p);
-                let t = vector(anchor).sub(v).dot(normal, h) / denom;
-                *p = coords(v.add(dir.mul(t)));
-            }
-            stations.push(rings.clone());
+            normalized(sum, h)
+        };
+        let denom = dir.dot(normal, h);
+        if denom.abs() < 1e-9 {
+            return None;
         }
-        Some(stations)
+        for p in rings.iter_mut().flatten() {
+            let v = vector(*p);
+            let t = vector(anchor).sub(v).dot(normal, h) / denom;
+            *p = coords(v.add(dir.mul(t)));
+        }
+        stations.push(rings.clone());
     }
+    Some((stations, dirs.into_iter().map(coords).collect()))
+}
 
+impl Store {
     pub fn sweep_face(
         &mut self,
         face: u32,
@@ -83,92 +95,11 @@ impl Store {
         cap_holes: Option<&[Vec<bool>; 2]>,
         ch: &mut Change,
     ) -> Result<(), OpError> {
-        if stations.len() < 2
-            || stations[0].is_empty()
-            || stations.iter().any(|s| {
-                s.len() != stations[0].len()
-                    || s.iter()
-                        .zip(&stations[0])
-                        .any(|(a, b)| a.len() < 3 || a.len() != b.len())
-            })
-        {
-            return Err(OpError::Fallback("incompatible sweep station rings"));
-        }
-        if cap_holes.is_some_and(|ends| ends.iter().any(|mask| mask.len() + 1 != stations[0].len()))
-        {
-            return Err(OpError::Fallback("incompatible cap hole mask"));
-        }
         let profile = self.face_rings(face);
-        // Orient each ring against its motion. A pole of a lathe can stay
-        // fixed, so use the whole ring for the direction of travel.
-        let reverse: Vec<bool> = stations[0]
-            .iter()
-            .zip(&stations[1])
-            .enumerate()
-            .map(|(i, (start, end))| {
-                let mut area = V3(0., 0., 0.);
-                let mut travel = V3(0., 0., 0.);
-                for j in 0..start.len() {
-                    let a = vector(start[j]).sub(vector(start[0]));
-                    let b = vector(start[(j + 1) % start.len()]).sub(vector(start[0]));
-                    area = area.add(a.cross(b, h));
-                    travel = travel.add(vector(end[j]).sub(vector(start[j])));
-                }
-                (area.dot(travel, h) < 0.) != (i > 0)
-            })
-            .collect();
         self.remove_face(face, ch);
-        let spans = if closed {
-            stations.len()
-        } else {
-            stations.len() - 1
-        };
-        for i in 0..spans {
-            for (ring, (a, b)) in stations[i]
-                .iter()
-                .zip(&stations[(i + 1) % stations.len()])
-                .enumerate()
-            {
-                for j in 0..a.len() {
-                    let k = (j + 1) % a.len();
-                    let mut wall = Vec::with_capacity(4);
-                    let distinct = |p, q| length(vector(p).sub(vector(q)), h) >= 1e-9;
-                    for p in [a[j], a[k], b[k], b[j]] {
-                        if wall.last().is_none_or(|&q| distinct(p, q)) {
-                            wall.push(p);
-                        }
-                    }
-                    if wall.len() > 1 && !distinct(wall[0], *wall.last().unwrap()) {
-                        wall.pop();
-                    }
-                    if wall.len() >= 3 {
-                        if reverse[ring] {
-                            wall.reverse();
-                        }
-                        self.add_face(&[wall], ch)?;
-                    }
-                }
-            }
-        }
-        if !closed {
-            for (end, station) in [&stations[0], stations.last().unwrap()]
-                .into_iter()
-                .enumerate()
-            {
-                let mut cap = Vec::new();
-                for (i, ring) in station.iter().enumerate() {
-                    if i > 0 && cap_holes.is_some_and(|m| !m[end][i - 1]) {
-                        continue;
-                    }
-                    cap.push(if (end == 0) != reverse[i] {
-                        ring.iter().copied().rev().collect()
-                    } else {
-                        ring.clone()
-                    });
-                }
-                self.add_face(&cap, ch)?;
-            }
-        }
+        emit_sweep_faces(stations, closed, h, cap_holes, true, |face| {
+            self.add_face(face, ch).map(|_| ())
+        })?;
         for ring in profile {
             for (i, &v) in ring.iter().enumerate() {
                 if let Some(e) = self.find_edge(v, ring[(i + 1) % ring.len()]) {
@@ -180,6 +111,103 @@ impl Store {
         }
         Ok(())
     }
+}
+
+pub(super) fn emit_sweep_faces(
+    stations: &[Station],
+    closed: bool,
+    h: Hypot,
+    cap_holes: Option<&[Vec<bool>; 2]>,
+    start_cap: bool,
+    mut emit: impl FnMut(&[Ring]) -> Result<(), OpError>,
+) -> Result<(), OpError> {
+    if stations.len() < 2
+        || stations[0].is_empty()
+        || stations.iter().any(|s| {
+            s.len() != stations[0].len()
+                || s.iter()
+                    .zip(&stations[0])
+                    .any(|(a, b)| a.len() < 3 || a.len() != b.len())
+        })
+    {
+        return Err(OpError::Fallback("incompatible sweep station rings"));
+    }
+    if cap_holes.is_some_and(|ends| ends.iter().any(|mask| mask.len() + 1 != stations[0].len())) {
+        return Err(OpError::Fallback("incompatible cap hole mask"));
+    }
+    // Orient each ring against its motion. A pole of a lathe can stay
+    // fixed, so use the whole ring for the direction of travel.
+    let reverse: Vec<bool> = stations[0]
+        .iter()
+        .zip(&stations[1])
+        .enumerate()
+        .map(|(i, (start, end))| {
+            let mut area = V3(0., 0., 0.);
+            let mut travel = V3(0., 0., 0.);
+            for j in 0..start.len() {
+                let a = vector(start[j]).sub(vector(start[0]));
+                let b = vector(start[(j + 1) % start.len()]).sub(vector(start[0]));
+                area = area.add(a.cross(b, h));
+                travel = travel.add(vector(end[j]).sub(vector(start[j])));
+            }
+            (area.dot(travel, h) < 0.) != (i > 0)
+        })
+        .collect();
+    let spans = if closed {
+        stations.len()
+    } else {
+        stations.len() - 1
+    };
+    for i in 0..spans {
+        for (ring, (a, b)) in stations[i]
+            .iter()
+            .zip(&stations[(i + 1) % stations.len()])
+            .enumerate()
+        {
+            for j in 0..a.len() {
+                let k = (j + 1) % a.len();
+                let mut wall = Vec::with_capacity(4);
+                let distinct = |p, q| length(vector(p).sub(vector(q)), h) >= 1e-9;
+                for p in [a[j], a[k], b[k], b[j]] {
+                    if wall.last().is_none_or(|&q| distinct(p, q)) {
+                        wall.push(p);
+                    }
+                }
+                if wall.len() > 1 && !distinct(wall[0], *wall.last().unwrap()) {
+                    wall.pop();
+                }
+                if wall.len() >= 3 {
+                    if reverse[ring] {
+                        wall.reverse();
+                    }
+                    emit(&[wall])?;
+                }
+            }
+        }
+    }
+    if !closed {
+        for (end, station) in [&stations[0], stations.last().unwrap()]
+            .into_iter()
+            .enumerate()
+        {
+            if end == 0 && !start_cap {
+                continue;
+            }
+            let mut cap = Vec::new();
+            for (i, ring) in station.iter().enumerate() {
+                if i > 0 && cap_holes.is_some_and(|m| !m[end][i - 1]) {
+                    continue;
+                }
+                cap.push(if (end == 0) != reverse[i] {
+                    ring.iter().copied().rev().collect()
+                } else {
+                    ring.clone()
+                });
+            }
+            emit(&cap)?;
+        }
+    }
+    Ok(())
 }
 
 impl Store {

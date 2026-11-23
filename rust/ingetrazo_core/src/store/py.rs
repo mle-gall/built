@@ -1774,6 +1774,21 @@ impl PyMeshStore {
         Ok((self.inner.key(Kind::Edge, e), ch))
     }
 
+    #[staticmethod]
+    fn project_sweep(profile: super::sweep::Station, path: Vec<[f64;3]>, closed: bool, hypot: &str, compensated: bool)
+        -> PyResult<Option<(Vec<super::sweep::Station>,Vec<[f64;3]>)>> {
+        Ok(super::sweep::projected_stations(profile, &path, closed, crate::hypot_of(hypot)?, compensated))
+    }
+
+    #[staticmethod]
+    fn sweep_polygons(stations: Vec<super::sweep::Station>, closed: bool, start_cap: bool, hypot: &str)
+        -> PyResult<Vec<super::sweep::Station>> {
+        let mut faces = Vec::new();
+        super::sweep::emit_sweep_faces(&stations, closed, crate::hypot_of(hypot)?, None, start_cap,
+            |rings| { faces.push(rings.to_vec()); Ok(()) }).map_err(op_err)?;
+        Ok(faces)
+    }
+
     #[pyo3(signature = (key, path, closed, hypot, compensated=true))]
     fn sweep_stations(&self, key: u128, path: Vec<[f64; 3]>, closed: bool, hypot: &str, compensated: bool)
         -> PyResult<Option<Vec<super::sweep::Station>>> {

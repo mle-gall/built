@@ -539,6 +539,14 @@ def geometry_steps(work):
     out.append(state())
     assert h.redo()
     out.append(state())
+    profile = mesh.add_face(rectangle(900, 0, 2, 2))
+    profile.attrs["color"] = [.2, .6, .8]
+    assert commands.follow_me(h, profile.key, [(900, 0, 0), (900, 0, 2), (900, 3, 2)])["ok"]
+    out.append(state())
+    assert h.undo()
+    out.append(state())
+    assert h.redo()
+    out.append(state())
     # Refused joins preserve the last published change and the exact mesh.
     refused = rectangle(600, 0, 2, 2)
     mesh.add_face(refused)
