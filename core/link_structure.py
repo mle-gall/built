@@ -299,7 +299,7 @@ class Tree:
             if not ly.key.startswith(base + links.SEP) or not (ly.folder == base or ly.folder in folders):
                 continue
             parent = under(ly.folder)
-            self.nodes[pre + "tag:" + ly.key] = dict(name=ly.name or ly.key, parent=parent, order=1000 + n,
+            self.nodes[pre + "tag:" + ly.key] = dict(name=(ly.name or ly.key).removeprefix(base + links.SEP), parent=parent, order=1000 + n,
                                                     kind="tag", path=path, stems=stems,
                                                     recipe={"tag": ly.key}, tag=ly.key, folder=None)
 
@@ -358,17 +358,5 @@ class Tree:
 
 
 def file_state(scene, path, nested=False) -> str:
-    """A linked file's state for its row (one of ``STATES``). A file the
-    host has an entry for reads ``links.link_state`` (as Problems and the
-    activity banner do). A nested file has no entry of its own, and
-    ``link_state`` would add one: it is missing when its file is, else as
-    current as the file placing it was when read."""
-    from pathlib import Path
-    if not path:
-        return "missing"
-    entry = links.registry(scene).get(links._norm(path))
-    if isinstance(entry, dict) and (not nested or "loaded_mtime_ns" in entry or entry.get("packed")):
-        return links.link_state(scene, path)
-    if not nested:
-        return links.link_state(scene, path)
-    return "resolved" if Path(path).is_file() else "missing"
+    """Read the same source status as Problems and the inspector."""
+    return links.link_state(scene, path)

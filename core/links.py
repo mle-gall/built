@@ -1340,16 +1340,9 @@ def save_as_placeholder(group, scene) -> bool:
 
 def link_state(scene, path) -> str:
     """State of one source shared by file rows, Problems and the link inspector."""
-    if is_packed(scene, path):
-        return "packed"
-    from stat import S_ISREG
-    try:
-        info = Path(path).stat()
-    except OSError:
-        return "missing"
-    if not S_ISREG(info.st_mode):
-        return "missing"
-    return "resolved" if info.st_mtime_ns == _entry(scene, path).get("loaded_mtime_ns") else "modified"
+    from ingetrazo_core import source_state
+    entry = scene.plugin_data.get(REGISTRY_KEY, {}).get(_norm(path), {})
+    return source_state(os.fspath(path), bool(entry.get("packed")), entry.get("loaded_mtime_ns"))
 
 
 def query(scene):

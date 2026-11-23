@@ -312,7 +312,7 @@ class StructureDock(QDockWidget):
             self.select_unsorted()
 
     def select_groups(self, groups):
-        from views.outliner import open_to
+        from views.tree_navigation import open_to
         scene = self.vp.scene
         path = []
         if groups:

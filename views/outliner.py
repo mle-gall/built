@@ -51,7 +51,8 @@ from core import outliner
 from core.group import Group
 from core.i18n import tr
 from core.section import SectionPlane
-from views.layers_toolbar import isolate_icon
+from views.tree_navigation import open_to
+from views.tree_icons import isolate_icon, row_icon
 from views.side_tree import SideTree, StayOpenMenu, _HeaderButton
 
 # Model tab columns.
@@ -83,26 +84,6 @@ def _paint_icon(paint: dict, size: int = 16) -> QIcon:
                                for c in list(col)[:3]]))
     return QIcon(pix)
 
-
-def open_to(viewport, path) -> bool:
-    """Leave the view with exactly ``path`` open — stepping out of the
-    levels that differ, then into the rest, one level at a time, as the
-    view's own double-click and Esc do. False when a group on the way is
-    hidden or locked (it cannot be entered). The tray's «In model» list
-    opens to a nested copy the same way."""
-    if any(g.hidden or getattr(g, "locked", False) for g in path):
-        return False
-    scene = viewport.scene
-    current = outliner.open_path(scene)
-    same = 0
-    while (same < min(len(current), len(path))
-           and current[same] is path[same]):
-        same += 1
-    for _ in range(len(current) - same):
-        viewport.end_one_group_edit()
-    for g in path[same:]:
-        viewport.begin_group_edit(g)
-    return outliner.open_path(scene) == list(path)
 
 # Keys the tree answers itself while it has the focus, instead of the
 # window's single-key shortcuts (Space is Select, Esc cancels a tool…).
@@ -202,11 +183,6 @@ def _draw(key: str):
         p.drawRect(QRectF(2.5, 4.5, 13, 10))
         p.drawPolyline([QPointF(4, 13), QPointF(8, 8), QPointF(11, 11),
                         QPointF(14, 7)])
-    elif key == "scene":
-        # A camera: what a saved scene remembers.
-        p.drawRect(QRectF(2.5, 6.5, 9, 7))
-        p.drawPolygon([QPointF(11.5, 9), QPointF(15.5, 6.5),
-                       QPointF(15.5, 13.5)])
     elif key in ("cut", "cut_off"):
         # A box sliced: the cut half filled when the plane cuts.
         if key == "cut":
@@ -223,30 +199,6 @@ def _draw(key: str):
             p.setPen(QPen(faint, 1.2))
         p.drawRect(QRectF(3, 3, 12, 12))
         p.drawLine(QPointF(1.5, 16.5), QPointF(16.5, 1.5))
-    elif key in ("lock", "lock_open"):
-        # The shackle closed over the body, or swung up and open.
-        p.drawRoundedRect(QRectF(4, 8.5, 10, 7.5), 1.5, 1.5)
-        if key == "lock":
-            p.drawArc(QRectF(5.5, 2.5, 7, 10), 0, 180 * 16)
-            p.drawLine(QPointF(5.5, 7.5), QPointF(5.5, 8.5))
-            p.drawLine(QPointF(12.5, 7.5), QPointF(12.5, 8.5))
-        else:
-            faint = QColor(ink)
-            faint.setAlpha(110)
-            p.setPen(QPen(faint, 1.2))
-            p.drawRoundedRect(QRectF(4, 8.5, 10, 7.5), 1.5, 1.5)
-            p.drawArc(QRectF(8.5, 1.5, 7, 9), 0, 180 * 16)
-            p.drawLine(QPointF(8.5, 6), QPointF(8.5, 8.5))
-    elif key in ("eye", "eye_off"):
-        if key == "eye_off":
-            p.setPen(QPen(QColor(ink.red(), ink.green(), ink.blue(), 110),
-                          1.2))
-        p.drawEllipse(QRectF(2, 5.5, 14, 7))
-        p.setBrush(p.pen().color())
-        p.drawEllipse(QRectF(7, 7, 4, 4))
-        if key == "eye_off":
-            p.setPen(QPen(ink, 1.4))
-            p.drawLine(QPointF(3, 15), QPointF(15, 3))
     p.end()
     return QIcon(pm)
 
@@ -320,8 +272,8 @@ def node_icon(key: str) -> QIcon:
         elif key == "warning":
             _ICONS[slot] = QApplication.style().standardIcon(
                 QStyle.SP_MessageBoxWarning)
-        elif key == "folder":
-            _ICONS[slot] = QApplication.style().standardIcon(QStyle.SP_DirIcon)
+        elif key in ("folder", "scene", "eye", "eye_off", "lock", "lock_open"):
+            _ICONS[slot] = row_icon(key)
         else:
             _ICONS[slot] = _draw(key)
     return _ICONS[slot]

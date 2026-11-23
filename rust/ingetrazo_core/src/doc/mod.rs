@@ -33,6 +33,7 @@ mod settings;
 mod feed;
 mod execute;
 mod file_view;
+mod drawing;
 pub mod py;
 pub mod value;
 

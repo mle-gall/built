@@ -1233,6 +1233,30 @@ impl PyPlacement {
         Ok(edit_path.iter().map(|(_, level)| level.clone_ref(py)).collect())
     }
 
+    fn _loose_locked(&self) -> PyResult<bool> {
+        let doc = lock();
+        let root = doc.need(self.key).map_err(err)?;
+        let Some(Value::Dict(data)) = root.attr(super::attr_id("plugin_data").map_err(err)?) else { return Ok(false) };
+        let Some(Value::List(scopes)) = data.iter().find_map(|(k,v)| match k {
+            Value::Str(key) if key == "project_tree_loose_locks" => Some(v), _ => None,
+        }) else { return Ok(false) };
+        let super::Data::Root { edit_path } = &root.data else { return Ok(false) };
+        Ok(scopes.iter().any(|scope| match scope {
+            Value::List(uids) if uids.len() == edit_path.len() => edit_path.iter().zip(uids).all(|((id, _), uid)| {
+                matches!((doc.node(*id).map(|n| &n.data), uid), (Some(super::Data::Placement(p)), Value::Str(s)) if p.uid.as_ref() == Some(s))
+            }),
+            _ => false,
+        }))
+    }
+
+    fn _tag_edit(&self, py: Python<'_>, tags: Vec<String>, field: &str, value: &str) -> PyResult<Option<super::drawing::TagEdit>> {
+        super::drawing::prepare(py, self.key, tags, field, value)
+    }
+
+    fn _drawing_preview(&self, expanded: HashSet<String>, filter: &str, has_links: bool) -> PyResult<Vec<(Vec<String>, Vec<i64>)>> {
+        super::drawing::preview(&lock(), self.key, expanded, filter, has_links).map_err(err)
+    }
+
     /// A root's tag list (`scene.layers`).
     #[getter]
     fn _tags<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
@@ -1375,6 +1399,9 @@ impl PyTag {
     #[getter]
     fn _doc_key(&self) -> Key {
         self.key
+    }
+    fn _drawing_cells(&self) -> PyResult<Vec<String>> {
+        super::drawing::cells(lock().need(self.key).map_err(err)?).map_err(err)
     }
     #[getter]
     fn uid<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {

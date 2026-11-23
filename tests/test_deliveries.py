@@ -143,10 +143,8 @@ def test_checks_and_one_off_export(tmp_path, monkeypatch):
             got.update(sections)
         def ui_set_tree(self, rows, count):
             assert rows
-        def ui_set_colset(self, colset):
-            assert colset == 2
         def ui_set_mode(self, mode):
-            assert mode == ""
+            assert mode == "Deliveries"
     view = SimpleNamespace(renderer=Renderer())
     dock.dock(view, scene, wgpu_ui._tree_model(view, scene, scene.content_version))
     assert ("unfiled object", "1") in got["Pre-run checks"]

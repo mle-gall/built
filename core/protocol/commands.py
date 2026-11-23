@@ -329,6 +329,74 @@ def set_tag(history, placements, tag):
     return _answer(history, before)
 
 
+class EditTagCommand(Command):
+    doc_undo = True
+    keeps_rows = True
+
+    def __init__(self, edit):
+        self.edit = edit
+
+    def do(self, scene):
+        self.edit.apply(True)
+        self.doc_after(scene, "execute")
+
+    def undo(self, scene):
+        self.edit.apply(False)
+        self.doc_after(scene, "undo")
+
+    def doc_after(self, scene, phase):
+        from core.history import _dirty_group_chunks
+        _dirty_group_chunks(scene)
+        super().doc_after(scene, phase)
+
+
+def reset_link_tags(history, path):
+    from ingetrazo_core import reset_source_tags
+    command = reset_source_tags(history.scene, path)
+    before = history.revision
+    if command is not None:
+        history.execute(command)
+    return _answer(history, before)
+
+
+def unlink_placements(history, placements):
+    from core.history import UnlinkCommand
+    command = UnlinkCommand(_placements(history, placements))
+    before = history.revision
+    if command.groups:
+        history.execute(command)
+    return _answer(history, before)
+
+
+def edit_loose_geometry(history, field):
+    from ingetrazo_core import loose_edit
+    before = history.revision
+    history.execute(loose_edit(history.scene, field))
+    return _answer(history, before)
+
+
+def file_placements(history, placements, node):
+    from core import structure
+    before = history.revision
+    history.execute(structure.file(history.scene, placements, node))
+    return _answer(history, before)
+
+
+def edit_structure_node(history, node, field, value):
+    from ingetrazo_core import plan_node_edit
+    before = history.revision
+    history.execute(plan_node_edit(history.scene, node, field, value))
+    return _answer(history, before)
+
+
+def edit_tag(history, tags, field, value):
+    edit = history.scene._root._tag_edit(tags, field, value)
+    before = history.revision
+    if edit is not None:
+        history.execute(EditTagCommand(edit))
+    return _answer(history, before)
+
+
 class SetTagStateCommand(Command):
     """Show / hide and lock / unlock tags and tag folders as one step. A
     linked file's tag switched here is the host's *override* of it
@@ -799,7 +867,7 @@ COMMANDS = {"set_model_units": set_model_units, "set_annotation_font": set_annot
             "explode_view": explode_view, "purge_unused": purge_unused,
             "purge_debris": purge_debris, "undo": undo, "redo": redo,
             "hide": hide, "unhide": unhide, "lock": lock, "rename_placement": rename_placement,
-            "set_tag": set_tag, "set_tag_state": set_tag_state, "resegment_curve": resegment_curve, "repair_solid": repair_solid,
+            "reset_link_tags": reset_link_tags, "unlink_placements": unlink_placements, "edit_loose_geometry": edit_loose_geometry, "file_placements": file_placements, "edit_structure_node": edit_structure_node, "edit_tag": edit_tag, "set_tag": set_tag, "set_tag_state": set_tag_state, "resegment_curve": resegment_curve, "repair_solid": repair_solid,
             "rename_material": rename_material, "edit_material": edit_material,
             "duplicate_material": duplicate_material, "delete_material": delete_material,
             "delete_placements": delete_placements, "rename_component": rename_component,

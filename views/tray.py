@@ -1599,7 +1599,7 @@ class ComponentsPanel(QWidget):
         one already open wins a tie, then the first in the model) and those
         are selected; the status bar says how many are left elsewhere."""
         from core import outliner
-        from views.outliner import open_to
+        from views.tree_navigation import open_to
         vp = self._window.viewport
         scene = vp.scene
         by_path: dict = {}
@@ -4896,8 +4896,8 @@ class ScenesPanel(QWidget):
     def _folder_icon(self):
         """The folder of the rows. Among the pictures it keeps its own
         size, in the middle of a picture's room, instead of growing to it."""
-        from views.outliner import node_icon
-        icon = node_icon("folder")
+        from views.tree_icons import row_icon
+        icon = row_icon("folder")
         if not self.thumbnails:
             return icon
         from PySide6.QtGui import QPainter
@@ -4911,12 +4911,12 @@ class ScenesPanel(QWidget):
         return QIcon(pm)
 
     def _scene_icon(self, view):
-        from views.outliner import node_icon
+        from views.tree_icons import row_icon
         if self.thumbnails:
             icon = self._thumbs.get(self._thumb_key(view))
             if icon is not None:
                 return icon
-        return node_icon("scene")
+        return row_icon("scene")
 
     def _queue_thumbnails(self) -> None:
         """Pictures of the scenes that have none yet, one at a time from the
@@ -5048,7 +5048,6 @@ class ScenesPanel(QWidget):
     def refresh(self) -> None:
         from PySide6.QtWidgets import QTreeWidgetItem
         from core import scene_folders as SF
-        from views.outliner import node_icon
         scene = self._scene()
         views = list(scene.saved_views)
         if self.shown is not None and not any(v is self.shown for v in views):
@@ -6021,7 +6020,7 @@ class BimPanel(QWidget):
         target = obj.get("group") or obj.get("owner")
         if target is not None:
             from core import outliner
-            from views.outliner import open_to
+            from views.tree_navigation import open_to
             path = outliner.path_to(scene.groups, target)
             if "owner" in obj and path is not None:
                 path = path + [target]
@@ -6047,7 +6046,7 @@ class BimPanel(QWidget):
     def _pick_container(self, g) -> None:
         """Select an untagged group that holds tagged objects."""
         from core import outliner
-        from views.outliner import open_to
+        from views.tree_navigation import open_to
         vp = self._window.viewport
         scene = self._scene()
         path = outliner.path_to(scene.groups, g)
