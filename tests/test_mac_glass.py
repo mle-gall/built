@@ -78,16 +78,6 @@ def test_regions_skip_the_title_bar_room(qapp):
     w.deleteLater()
 
 
-def test_inspector_is_off_without_glass(qapp):
-    from views import mac_inspector
-    w = QMainWindow()
-    mac_inspector.dress(w)              # no inspector installed: no-op
-    assert getattr(w, "_mac_inspector", None) is None
-    text = mac_inspector.SHEET.format(**theme.tokens())
-    assert "::tab" in text and "{{" not in text
-    w.deleteLater()
-
-
 def test_brand_tint_is_translucent():
     for dark in (True, False):
         assert 0 < theme.brand_tint(dark).alpha() < 255

@@ -3211,10 +3211,6 @@ class MainWindow(WorksessionMixin, QMainWindow):
                 d.setTitleBarWidget(header)
                 if current is not None:
                     current.deleteLater()
-        # macOS glass: the tab bars as an inspector's segmented control
-        # (views/mac_inspector.py); a no-op elsewhere.
-        from views import mac_inspector
-        mac_inspector.dress(self)
 
     #: The «+» after the tray tabs, and the gap it keeps from the arrows.
     _PLUS_PX = 20

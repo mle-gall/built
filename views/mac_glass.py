@@ -852,7 +852,7 @@ class _Chrome(QObject):
         for tb in self.toolbars():
             self._lock(tb)
         from views.theme import accent_color, style
-        style(self._window, _window_sheet(self._window, on))
+        style(self._window, _window_sheet(on))
         tint = None
         if on:
             tint = accent_color()
@@ -1172,21 +1172,14 @@ def install(window) -> GlassWindow | None:
     chrome.seat_lights()
     window._mac_glass = glass
     window._mac_chrome = chrome
-    if hasattr(window, "_dock_tab_bars"):       # the model window's drawer
-        from views import mac_inspector
-        mac_inspector.install(window)
     apply_palette(window)
     from views.theme import style
-    style(window, _window_sheet(window, editing=False))
+    style(window, _window_sheet(editing=False))
     return glass
 
 
-def _window_sheet(window, editing: bool) -> str:
-    sheet = WINDOW_SHEET
-    if getattr(window, "_mac_inspector", None) is not None:
-        from views import mac_inspector
-        sheet += mac_inspector.SHEET
-    return sheet + (EDIT_SHEET if editing else "")
+def _window_sheet(editing: bool) -> str:
+    return WINDOW_SHEET + (EDIT_SHEET if editing else "")
 
 
 def seat_lights(window) -> None:
