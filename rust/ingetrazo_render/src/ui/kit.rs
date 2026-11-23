@@ -65,6 +65,17 @@ pub mod molecules {
         Focus,
         Off,
     }
+    /// Apply the same state painters to a whole specimen without synthesizing input.
+    pub(crate) fn specimen(ui: &mut egui::Ui, state: State, draw: impl FnOnce(&mut egui::Ui)) {
+        let tag = egui::UiStackInfo::default().with_tag_value("kit-specimen", state);
+        ui.scope_builder(egui::UiBuilder::new().ui_stack_info(tag), draw);
+    }
+    fn control_state(ui: &egui::Ui, resp: &egui::Response, selected: bool) -> State {
+        ui.stack()
+            .iter()
+            .find_map(|node| node.tags().get_downcast::<State>("kit-specimen").copied())
+            .unwrap_or_else(|| state_of(resp, selected, true))
+    }
     pub fn state_of(resp: &egui::Response, on: bool, enabled: bool) -> State {
         if !enabled || !resp.enabled() {
             State::Off
@@ -146,7 +157,7 @@ pub mod molecules {
     pub fn chip_button(ui: &mut egui::Ui, label: &str) -> bool {
         let g = ui.painter().layout_no_wrap(label.to_owned(), meta(), INK);
         let (rect, resp) = ui.allocate_exact_size(vec2(g.size().x + 20.0, 24.0), Sense::click());
-        let st = state_of(&resp, false, true);
+        let st = control_state(ui, &resp, false);
         ui.painter()
             .rect_filled(rect, CornerRadius::same(R_CONTROL), HOVER);
         paint_state(ui, rect, st, R_CONTROL);
@@ -163,25 +174,6 @@ pub mod molecules {
     /// A sheet button, 28 high: the default in accent, the rest a neutral
     /// wash; the key that answers it in faint type after the label.
     pub fn sheet_button(ui: &mut egui::Ui, label: &str, hint: &str, role: u8) -> bool {
-        sheet_button_inner(ui, label, hint, role, None)
-    }
-
-    pub(crate) fn sheet_button_sample(
-        ui: &mut egui::Ui,
-        label: &str,
-        role: u8,
-        state: State,
-    ) -> bool {
-        sheet_button_inner(ui, label, "", role, Some(state))
-    }
-
-    fn sheet_button_inner(
-        ui: &mut egui::Ui,
-        label: &str,
-        hint: &str,
-        role: u8,
-        sample: Option<State>,
-    ) -> bool {
         let primary = role == 1;
         let ink = if primary {
             BRIGHT
@@ -205,7 +197,7 @@ pub mod molecules {
             vec2((g.size().x + kw + 24.0).max(72.0), 28.0),
             Sense::click(),
         );
-        let state = sample.unwrap_or_else(|| state_of(&resp, false, true));
+        let state = control_state(ui, &resp, false);
         let r = CornerRadius::same(R_CONTROL);
         if primary {
             let fill = match state {
@@ -247,12 +239,10 @@ pub mod molecules {
             .painter()
             .layout_no_wrap(label.to_owned(), strong(11.0), WARN);
         let (rect, resp) = ui.allocate_exact_size(vec2(g.size().x + 20.0, 24.0), Sense::click());
-        let fill = if resp.is_pointer_button_down_on() {
-            WARNING_PRESS
-        } else if resp.hovered() {
-            WARNING_HOVER
-        } else {
-            WARN_FILL
+        let fill = match control_state(ui, &resp, false) {
+            State::Press => WARNING_PRESS,
+            State::Hover => WARNING_HOVER,
+            _ => WARN_FILL,
         };
         ui.painter()
             .rect_filled(rect, CornerRadius::same(R_CONTROL), fill);
@@ -286,9 +276,8 @@ pub mod molecules {
                     Stroke::new(1.0_f32, EDGE),
                     egui::StrokeKind::Inside,
                 );
-            } else if resp.hovered() {
-                ui.painter()
-                    .rect_filled(r, CornerRadius::same(R_ROW), HOVER);
+            } else {
+                paint_state(ui, r, control_state(ui, &resp, false), R_ROW);
             }
             let (font, ink) = if on {
                 (strong(12.0), INK)
@@ -347,6 +336,10 @@ pub mod molecules {
             let r = Rect::from_min_size(pos2(x, row.min.y), vec2(w, row.height()));
             let sense = if t.2 { Sense::click() } else { Sense::hover() };
             let resp = ui.interact(r, ui.id().with(("utab", i)), sense);
+            let state = control_state(ui, &resp, on);
+            if t.2 && !on {
+                paint_state(ui, r, state, R_ROW);
+            }
             let ink = if !t.2 {
                 OFF
             } else if on {
@@ -511,7 +504,7 @@ pub mod molecules {
     pub fn list_row(ui: &mut egui::Ui, height: f32, selected: bool) -> (Rect, egui::Response) {
         let (rect, resp) =
             ui.allocate_exact_size(vec2(ui.available_width(), height), Sense::click());
-        paint_state(ui, rect, state_of(&resp, selected, true), R_ROW);
+        paint_state(ui, rect, control_state(ui, &resp, selected), R_ROW);
         (rect, resp)
     }
     pub fn tree_slots(

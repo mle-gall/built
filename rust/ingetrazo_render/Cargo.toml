@@ -29,3 +29,6 @@ version = "1"
 
 [dependencies.png]
 version = "0.18"
+
+[dev-dependencies]
+proc-macro2 = "1"

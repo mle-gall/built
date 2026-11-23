@@ -8,13 +8,27 @@ struct Samples {
     filter: String,
     length: f64,
     choice: usize,
+    segment: usize,
+    tab: usize,
     toggle: bool,
     color: Option<Color32>,
 }
 
-#[derive(Default)]
 pub(super) struct Gallery {
     samples: [Samples; 6],
+}
+
+impl Default for Gallery {
+    fn default() -> Self {
+        Self {
+            samples: std::array::from_fn(|i| Samples {
+                segment: usize::from(i == 3),
+                tab: usize::from(i == 3),
+                toggle: i == 3,
+                ..Samples::default()
+            }),
+        }
+    }
 }
 
 impl Gallery {
@@ -55,6 +69,28 @@ impl Gallery {
                         });
                     }
                     ui.add_space(SPACE[1]);
+                    ui.horizontal(|ui| {
+                        for (surface, name) in [
+                            (Surface::Bar, "Bar"),
+                            (Surface::Pill, "Pill"),
+                            (Surface::Panel, "Panel"),
+                            (Surface::Raised, "Raised"),
+                        ] {
+                            glass(surface).show(ui, |ui| {
+                                label(ui, name);
+                            });
+                        }
+                        ui.add_space(SPACE[1]);
+                        for (name, font) in [
+                            ("Meta 11", meta()),
+                            ("Body 12", body()),
+                            ("Title 13", title()),
+                            ("Heading 18", heading()),
+                        ] {
+                            ui.label(egui::RichText::new(name).font(font).color(INK));
+                        }
+                    });
+                    ui.add_space(SPACE[1]);
                     ui.columns(6, |columns| {
                         let states = [
                             ("Rest", State::Idle),
@@ -73,7 +109,7 @@ impl Gallery {
                             ui.push_id(i, |ui| {
                                 ui.label(egui::RichText::new(name).font(title()).color(INK));
                                 ui.add_enabled_ui(state != State::Off, |ui| {
-                                    sample.controls(ui, state)
+                                    specimen(ui, state, |ui| sample.controls(ui, state))
                                 });
                             });
                         }
@@ -151,27 +187,28 @@ impl Samples {
             .show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 for (role, label) in [(1, "Create"), (0, "Cancel"), (2, "Discard")] {
-                    sheet_button_sample(ui, label, role, state);
+                    sheet_button(ui, label, "", role);
                 }
                 ui.horizontal(|ui| {
                     let _ = quiet(ui, "Details");
                     let _ = icon_button(ui, "×", "Close");
                     chip_button(ui, "Edit");
                 });
-                segmented(
-                    ui,
-                    &["Model", "Sheets"],
-                    usize::from(selected),
-                    ui.available_width(),
-                );
-                underline_tabs(
+                if let Some(i) =
+                    segmented(ui, &["Model", "Sheets"], self.segment, ui.available_width())
+                {
+                    self.segment = i;
+                }
+                if let Some(i) = underline_tabs(
                     ui,
                     &[
                         ("Files".into(), "3".into(), true),
                         ("Links".into(), "".into(), true),
                     ],
-                    usize::from(selected),
-                );
+                    self.tab,
+                ) {
+                    self.tab = i;
+                }
                 ui.add(
                     field(&mut self.name)
                         .hint_text("Name")
@@ -214,7 +251,6 @@ impl Samples {
                     amber_button(ui, "Missing link");
                 });
                 empty_state(ui, "No matching files");
-                paint_state(ui, r, state, R_ROW);
             });
     }
 }

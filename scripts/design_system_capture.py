@@ -1,10 +1,11 @@
 """Capture the Rust chrome from a Qt-owned Metal view using synthetic records."""
 import argparse
 import os
+import sys
 from pathlib import Path
 import tempfile
 
-from PySide6.QtCore import QSettings, Qt
+from PySide6.QtCore import QSettings, QTimer, Qt
 from PySide6.QtGui import QImage
 from PySide6.QtWidgets import QApplication, QWidget
 from ingetrazo_render import Renderer
@@ -14,6 +15,9 @@ def capture(prefix, directory):
     QSettings.setDefaultFormat(QSettings.IniFormat)
     for scope in (QSettings.UserScope, QSettings.SystemScope):
         QSettings.setPath(QSettings.IniFormat, scope, os.environ["BUILT_SETTINGS_DIR"])
+    if prefix == "gallery":
+        capture_qt_gallery(directory)
+        return
     app = QApplication([])
     window = QWidget()
     window.resize(1280, 800)
@@ -37,9 +41,6 @@ def capture(prefix, directory):
         if not img.save(str(directory / f"{name}.png")):
             raise OSError(name)
 
-    if prefix == "gallery":
-        shot("gallery-qt")
-        return
     r.ui_set_start([(["sample", "Courtyard", "Model", "Studio", ""], [1, 0])],
                    [], [("blank", "Blank model", "Start a model")], [], "Built",
                    [("recent", "Recent files")], [])
@@ -62,6 +63,44 @@ def capture(prefix, directory):
     r.ui_set_sheet("Save changes?", "Courtyard has unsaved edits.", "question",
                    [("cancel", "Cancel", "Esc", 0), ("save", "Save", "↵", 1)])
     shot(f"{prefix}-sheet")
+
+
+def capture_qt_gallery(directory):
+    # Exercise the actual Qt entry point with the same flag as an interactive launch.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    import main
+    from views.wgpu_view import WgpuView
+
+    sys.argv[:] = [sys.argv[0], "--gallery"]
+    def capture_after_layout(app):
+        def readback():
+            view = next((v for v in app.allWidgets() if isinstance(v, WgpuView)
+                         and v.isVisible() and v.renderer is not None), None)
+            if view is None:
+                return
+            for _ in range(3):
+                view.draw_frame()
+            view.renderer.request_capture()
+            view.draw_frame()
+            data = view.renderer.take_capture()
+            if data is None:
+                return
+            scale = view.devicePixelRatioF()
+            w, h = int(view.width() * scale), int(view.height() * scale)
+            img = QImage(bytes(data), w, h, QImage.Format_RGBA8888)
+            app.exit(0 if img.save(str(directory / "gallery-qt.png")) else 1)
+        for top in app.topLevelWidgets():
+            if top.isWindow() and hasattr(top, "_doc"):
+                top.resize(1400, 930)
+        timer = QTimer()
+        timer.timeout.connect(readback)
+        timer.start(600)
+        QTimer.singleShot(20000, lambda: app.exit(1))
+        return QApplication.exec()
+
+    main._App.exec = capture_after_layout
+    if main.main():
+        raise RuntimeError("Qt gallery capture failed")
 
 
 if __name__ == "__main__":
