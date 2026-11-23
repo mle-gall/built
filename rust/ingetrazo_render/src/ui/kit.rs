@@ -1747,8 +1747,17 @@ pub fn line_sample(ui: &egui::Ui, rect: Rect, mm: &str, pattern: &str, color: Co
 /// Host tag overrides belong to the host tab, including while its source is edited.
 pub fn host_visibility(ui: &mut egui::Ui, host: &str, tags: &[(String, String, bool)], actions: &mut Vec<String>) {
     if host.is_empty() { return; }
-    egui::ComboBox::from_id_salt(("host visibility",host)).selected_text("Host visibility").show_ui(ui, |ui| {
-        ui.set_min_width(204.);
+    let popup_id = ui.make_persistent_id(("host visibility", host));
+    let button = quiet(ui, "Host visibility ▾");
+    if button.clicked() { ui.memory_mut(|m| m.toggle_popup(popup_id)); }
+    if !ui.memory(|m| m.is_popup_open(popup_id)) { return; }
+    // The dock is itself foreground. Keep its rows below the popup on every frame.
+    if ui.layer_id().order == egui::Order::Foreground {
+        ui.ctx().set_sublayer(ui.layer_id(), egui::LayerId::new(egui::Order::Foreground, popup_id));
+    }
+    let content_width = ui.available_width() - ui.spacing().menu_margin.sum().x;
+    egui::popup_below_widget(ui, popup_id, &button, egui::PopupCloseBehavior::CloseOnClickOutside, |ui| {
+        ui.set_width(content_width);
         caption(ui, host);
         let id = ui.make_persistent_id(("host tag search", host));
         let mut filter = ui.data(|d| d.get_temp::<String>(id)).unwrap_or_default();
