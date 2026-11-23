@@ -260,14 +260,7 @@ fn str_of(v: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
 }
 
 fn xform_of(data: &Bound<'_, PyAny>, src: &Bound<'_, PyAny>) -> PyResult<Xform> {
-    let vals: Vec<f64> = data.extract()?;
-    if vals.len() != 16 {
-        return Err(PyValueError::new_err("a placement matrix has 16 values"));
-    }
-    let mut f = [0f32; 16];
-    for (o, v) in f.iter_mut().zip(vals) {
-        *o = v as f32;
-    }
+    let f: [f64; 16] = data.extract()?;
     let src = if src.is_none() {
         None
     } else {
@@ -408,7 +401,7 @@ fn read_matrix<'py>(py: Python<'py>, me: &Bound<'py, PyAny>, k: Key, f: Field) -
     };
     let Some(x) = x else { return Ok(py.None().into_bound(py)) };
     let (make, _) = hooks(py)?;
-    let data = PyTuple::new(py, x.f.iter().map(|&v| v as f64))?;
+    let data = PyTuple::new(py, x.f)?;
     let src = match &x.src {
         None => py.None().into_bound(py),
         Some(b) => PyTuple::new(py, [PyTuple::new(py, b.0)?, PyTuple::new(py, b.1)?])?.into_any(),
@@ -2217,7 +2210,7 @@ fn doc_tree<'py>(
                 Some(x) => {
                     has.push(true);
                     for j in 0..16 {
-                        let c = x.f[j] as f64;
+                        let c = x.f[j];
                         local.push(match &x.src {
                             Some(b) if b.1[j] == c => b.0[j],
                             _ => c,

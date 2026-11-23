@@ -12,6 +12,7 @@ use pyo3::prelude::*;
 use numpy::IntoPyArray;
 use pyo3::types::PyBytes;
 
+mod math;
 mod boxes;
 mod doc;
 mod earcut;
@@ -45,6 +46,10 @@ mod panic_log;
 
 #[pymodule]
 fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<math::Vec3>()?;
+    m.add_class::<math::Vec4>()?;
+    m.add_class::<math::Matrix4>()?;
+    m.add_class::<math::Quaternion>()?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     m.add("SOURCE_HASH", env!("INGETRAZO_SOURCE_HASH"))?;
     m.add_function(wrap_pyfunction!(panic_log::install_panic_log, m)?)?;
