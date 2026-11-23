@@ -178,8 +178,7 @@ impl Library {
             ui.spacing_mut().item_spacing = vec2(4.0, 0.0);
             // Two toggles, sort, ⋯, four gaps, and the field's own margins.
             let tools_w = 24.0 * 2.0 + 62.0 + 24.0 + 4.0 * 4.0 + 16.0 + 2.0;
-            let edit = egui::TextEdit::singleline(&mut self.filter)
-                .hint_text(egui::RichText::new(format!("Filter {label}")).color(FAINT))
+            let edit = super::kit::search(&mut self.filter, &format!("Filter {label}"))
                 .margin(Margin::symmetric(8, 5))
                 .desired_width((ui.available_width() - tools_w).max(60.0))
                 .font(egui::FontId::proportional(12.0));
@@ -291,15 +290,10 @@ impl Library {
 
     fn list_row(&mut self, ui: &mut egui::Ui, i: usize, icons: &std::collections::HashMap<String, egui::TextureHandle>,
                 scroll_to: bool, out: &mut Vec<String>) {
-        let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ROW), Sense::click());
         let e = &self.entries[i];
         let lit = self.lit(e);
-        if lit {
-            ui.painter().rect_filled(rect, CornerRadius::same(R_ROW), ACTIVE);
-            if scroll_to { ui.scroll_to_rect(rect, None); }
-        } else if resp.hovered() {
-            ui.painter().rect_filled(rect, CornerRadius::same(R_ROW), HOVER);
-        }
+        let (rect, resp) = super::kit::list_row(ui, ROW, lit);
+        if lit && scroll_to { ui.scroll_to_rect(rect, None); }
         let cy = rect.center().y;
         let sw = Rect::from_center_size(pos2(rect.min.x + 30.0, cy), vec2(16.0, 16.0));
         paint_thumb(ui, sw, e, icons, 3);
@@ -377,7 +371,7 @@ impl Library {
 
     fn rename_field(&mut self, ui: &mut egui::Ui, at: Rect, out: &mut Vec<String>) {
         let Some((_, buf)) = self.renaming.as_mut() else { return };
-        let field = egui::TextEdit::singleline(buf).font(body()).margin(Margin::symmetric(4, 1)).clip_text(true);
+        let field = super::kit::field(buf).font(body()).margin(Margin::symmetric(4, 1)).clip_text(true);
         let r = ui.put(at, field);
         r.request_focus();
         if r.lost_focus() {

@@ -259,7 +259,7 @@ fn fields(ui: &mut egui::Ui, d: &mut Dialog, out: &mut Vec<String>) {
                     let edit = if multiline {
                         egui::TextEdit::multiline(buf).desired_rows(4)
                     } else {
-                        egui::TextEdit::singleline(buf)
+                        super::kit::field(buf)
                     };
                     let edit = edit.id(tid).font(body()).margin(Margin::symmetric(6, 4)).desired_width(w)
                         .password(flags & PASSWORD != 0).clip_text(true);

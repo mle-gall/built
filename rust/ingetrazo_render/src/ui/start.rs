@@ -258,18 +258,6 @@ fn paint_thumb(ui: &egui::Ui, r: Rect, tex: Option<&egui::TextureHandle>, missin
     ui.painter().rect_stroke(r, cr, Stroke::new(1.0_f32, EDGE), egui::StrokeKind::Inside);
 }
 
-/// The focus ring and hover wash of a card.
-fn paint_card(ui: &egui::Ui, r: Rect, hovered: bool, focused: bool) {
-    let cr = CornerRadius::same(10);
-    ui.painter().rect_filled(r, cr, if hovered { CARD_HOVER } else { CARD });
-    if focused {
-        ui.painter().rect_filled(r, cr, ACTIVE);
-        ui.painter().rect_stroke(r, cr, Stroke::new(1.5_f32, ACCENT_LINE), egui::StrokeKind::Inside);
-    } else {
-        ui.painter().rect_stroke(r, cr, Stroke::new(1.0_f32, EDGE), egui::StrokeKind::Inside);
-    }
-}
-
 /// The pin at a card's corner: shown pinned (★) or on hover (☆). True: it was clicked.
 fn pin_star(ui: &egui::Ui, at: Pos2, pinned: bool, card: &egui::Response) -> (bool, bool) {
     let r = Rect::from_center_size(at, vec2(22.0, 22.0));

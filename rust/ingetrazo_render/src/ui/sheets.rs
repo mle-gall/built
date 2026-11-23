@@ -88,7 +88,7 @@ impl Sheets {
                 if !pbody.is_empty() { ui.label(egui::RichText::new(pbody.as_str()).font(body()).color(DIM)); }
                 let mut enter = false;
                 if let Some(text) = field.as_mut() {
-                    let r = ui.add(egui::TextEdit::singleline(text).font(body()).margin(Margin::symmetric(6, 4))
+                    let r = ui.add(super::kit::field(text).font(body()).margin(Margin::symmetric(6, 4))
                         .desired_width(ui.available_width() - 4.0));
                     if s.focus_prompt { r.request_focus(); s.focus_prompt = false; }
                     enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
@@ -137,7 +137,7 @@ impl Sheets {
             for (i, (name, cap, current)) in s.list.iter().enumerate() {
                 if s.renaming.as_ref().is_some_and(|(r, _)| *r == i) {
                     let (_, buf) = s.renaming.as_mut().unwrap();
-                    let resp = ui.add(egui::TextEdit::singleline(buf).font(body()).margin(Margin::symmetric(8, 4))
+                    let resp = ui.add(super::kit::field(buf).font(body()).margin(Margin::symmetric(8, 4))
                         .desired_width(ui.available_width() - 4.0));
                     if s.focus_rename { resp.request_focus(); s.focus_rename = false; }
                     if resp.lost_focus() {
@@ -503,7 +503,7 @@ impl Ui {
                         bar_divider(ui);
                         // The value field: the zoom, typed (Enter applies).
                         let buf = s.zoom_buf.get_or_insert_with(|| s.zoom.clone());
-                        let resp = ui.add(egui::TextEdit::singleline(buf).font(body()).margin(Margin::symmetric(6, 3))
+                        let resp = ui.add(super::kit::field(buf).font(body()).margin(Margin::symmetric(6, 3))
                             .desired_width(52.0).horizontal_align(egui::Align::RIGHT));
                         let resp = resp.on_hover_text("Zoom: type a percentage and press Enter");
                         if resp.lost_focus() {

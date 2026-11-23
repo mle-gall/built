@@ -224,43 +224,6 @@ pub struct Column {
     highlighted: Option<String>,
 }
 
-/// A glass surface with egui content on it: shadow, then the blurred model
-/// through the rounded shape (glass.rs), then the content. Built like an
-/// egui Frame so call sites read the same.
-struct Glass {
-    surface: Surface,
-    margin: Margin,
-    radius: u8,
-    accent: Option<Color32>,
-}
-fn frame() -> Glass { glass(Surface::Pill) }
-fn glass(surface: Surface) -> Glass {
-    Glass { surface, margin: Margin::same(4), radius: surface.radius(), accent: None }
-}
-impl Glass {
-    fn inner_margin(mut self, m: Margin) -> Self { self.margin = m; self }
-    fn corner_radius(mut self, r: CornerRadius) -> Self { self.radius = r.nw; self }
-    /// An accent outline (a field being typed into).
-    fn stroke(mut self, s: Stroke) -> Self { if s.color != EDGE { self.accent = Some(s.color); } self }
-    fn show<R>(self, ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui) -> R) -> egui::InnerResponse<R> {
-        let shadow_at = ui.painter().add(egui::Shape::Noop);
-        let glass_at = ui.painter().add(egui::Shape::Noop);
-        let mut f = egui::Frame::new().inner_margin(self.margin).corner_radius(CornerRadius::same(self.radius));
-        if let Some(c) = self.accent {
-            f = f.stroke(Stroke::new(1.0_f32, c));
-        }
-        let inner = f.show(ui, add);
-        let rect = inner.response.rect;
-        let contact = Shadow { offset: [0, 1], blur: 2, spread: 0, color: CONTACT };
-        ui.painter().set(shadow_at, egui::Shape::Vec(vec![
-            egui::Shape::Rect(self.surface.shadow().as_shape(rect, CornerRadius::same(self.radius))),
-            egui::Shape::Rect(contact.as_shape(rect, CornerRadius::same(self.radius))),
-        ]));
-        ui.painter().set(glass_at, crate::glass::pane(rect, self.radius as f32, self.surface.look()));
-        inner
-    }
-}
-
 impl Ui {
     pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat) -> Self {
         let ctx = egui::Context::default();
@@ -1062,7 +1025,7 @@ impl Ui {
                 glass(Surface::Raised).inner_margin(Margin::same(8)).show(ui, |ui| {
                     ui.set_width(520.0);
                     ui.set_max_width(520.0);
-                    let r = ui.add(egui::TextEdit::singleline(&mut self.cmd_query)
+                    let r = ui.add(kit::field(&mut self.cmd_query)
                         .hint_text(egui::RichText::new("Search commands").color(FAINT))
                         .font(egui::FontId::proportional(14.0)).margin(Margin::symmetric(10, 7))
                         .desired_width(520.0 - 20.0 - 4.0).clip_text(true));
@@ -1545,7 +1508,7 @@ impl Ui {
                             "Click a node, or type a name and Enter", meta(), INK_2);
                         ui.add_space(4.0);
                     }
-                    let edit = egui::TextEdit::singleline(&mut col.filter)
+                    let edit = kit::field(&mut col.filter)
                         .hint_text(egui::RichText::new(if col.filing.is_some() { "Node name or kind" }
                             else if col.mode == "Problems" { "Filter problems" } else { "Filter nodes" }).color(FAINT))
                         .margin(Margin::symmetric(8, 5))
@@ -1695,11 +1658,8 @@ impl Ui {
                                     let g = ui.painter().layout_no_wrap(n.count.to_string(), meta(), DIM);
                                     ui.painter().galley(pos2(count_col - g.size().x, cy - g.size().y / 2.0), g, DIM);
                                 }
-                                let lock_r = Rect::from_center_size(pos2(count_col - 44.0, cy), vec2(16.0, 16.0));
-                                let eye_r = Rect::from_center_size(pos2(count_col - 64.0, cy), vec2(16.0, 16.0));
                                 let show_ctl = resp.hovered() || n.eye == 0 || n.lock == 1;
-                                if n.eye >= 0 && show_ctl { paint_eye(ui, eye_r, n.eye == 1); }
-                                if n.lock >= 0 && show_ctl { paint_lock(ui, lock_r, n.lock == 1); }
+                                let (eye_r, lock_r) = tree_slots(ui, count_col, cy, n.eye, n.lock, show_ctl);
                                 // A row with no eye or lock (problems, library) keeps its width for the name.
                                 let bare = n.eye < 0 && n.lock < 0 && n.problems == 0;
                                 let right = if col.colset == 1 { cols.name_right } else if col.colset == 2 { cells_left.min(cols.name_right) - 8.0 }
@@ -1742,7 +1702,7 @@ impl Ui {
                                 let renaming_here = col.renaming.as_ref().is_some_and(|(k, _)| *k == n.key);
                                 if renaming_here {
                                     let buf = &mut col.renaming.as_mut().unwrap().1;
-                                    let field = egui::TextEdit::singleline(buf).font(body()).margin(Margin::symmetric(4, 1))
+                                    let field = kit::field(buf).font(body()).margin(Margin::symmetric(4, 1))
                                         .desired_width((right - tx - 16.0).max(30.0)).clip_text(true);
                                     let r = ui.put(Rect::from_min_max(pos2(tx - 4.0, rect.min.y + 1.0), pos2(right, rect.max.y - 1.0)), field);
                                     r.request_focus();
@@ -1870,7 +1830,7 @@ impl Ui {
                         }
                         if col.inspector_title.is_empty() {
                             let empty = if in_library { "Pick an item to see and edit it here" } else { "Nothing selected" };
-                            ui.horizontal(|ui| { ui.add_space(8.0); ui.label(egui::RichText::new(empty).font(body()).color(FAINT)); });
+                            ui.horizontal(|ui| { ui.add_space(8.0); empty_state(ui, empty); });
                             return;
                         }
                         {
@@ -2109,7 +2069,7 @@ impl Ui {
                         let mut enter = false;
                         if let Some((id, text)) = &field {
                             let buf = col.edits.entry(format!("prompt:{id}")).or_insert_with(|| text.clone());
-                            let r = ui.add(egui::TextEdit::singleline(buf).font(body()).margin(Margin::symmetric(6, 4))
+                            let r = ui.add(kit::field(buf).font(body()).margin(Margin::symmetric(6, 4))
                                 .desired_width((W - 40.0 - 40.0).max(60.0)).clip_text(true));
                             r.request_focus();
                             enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
@@ -2456,30 +2416,6 @@ fn item_button(ui: &mut egui::Ui, item: &Item, icon: Option<&egui::TextureHandle
     resp.on_hover_text(tip).clicked()
 }
 
-fn menu_row(ui: &mut egui::Ui, item: &Item) -> bool {
-    menu_row_resp(ui, item).0.clicked()
-}
-
-/// A menu row, 24 high: optional check lane (only when the menu has checks:
-/// the caller marks that with item.3 == "check"), label, shortcut or › right.
-fn menu_row_resp(ui: &mut egui::Ui, item: &Item) -> (egui::Response, Rect) {
-    let (_, label, tip, lane, checked, enabled) = item;
-    let sense = if *enabled { Sense::click() } else { Sense::hover() };
-    let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 24.0), sense);
-    let st = state_of(&resp, false, *enabled);
-    paint_state(ui, rect, st, R_ROW);
-    let ink = if *enabled { INK } else { OFF };
-    let x = if lane == "check" || *checked >= 0 { 28.0 } else { 12.0 };
-    if *checked == 1 {
-        ui.painter().text(pos2(rect.min.x + 14.0, rect.center().y), egui::Align2::CENTER_CENTER, "✓", body(), ACCENT);
-    }
-    ui.painter().text(pos2(rect.min.x + x, rect.center().y), egui::Align2::LEFT_CENTER, label, body(), ink);
-    if !tip.is_empty() {
-        ui.painter().text(pos2(rect.max.x - 12.0, rect.center().y), egui::Align2::RIGHT_CENTER, tip, meta(), FAINT);
-    }
-    (resp, rect)
-}
-
 /// A project tab: capsule, name (and • while unsaved), × on the right when
 /// current or hovered. Some(true): close clicked; Some(false): tab clicked.
 fn doc_tab(ui: &mut egui::Ui, name: &str, active: bool, dirty: bool) -> Option<bool> {
@@ -2590,7 +2526,7 @@ fn inspector_rows(ui: &mut egui::Ui, rows: &[(String, String)], edits: &mut std:
                 // desired_width is the text's width: leave room for the field's
                 // own margins, or the panel grows a little every frame.
                 let w = (ui.available_width() - 8.0 - 12.0 - 4.0).max(40.0);
-                let r = ui.add(egui::TextEdit::singleline(buf).font(body()).margin(Margin::symmetric(6, 3))
+                let r = ui.add(kit::field(buf).font(body()).margin(Margin::symmetric(6, 3))
                     .desired_width(w).clip_text(true));
                 if r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) && buf.as_str() != text {
                     actions.push(format!("edit\u{1f}{id}\u{1f}{buf}"));

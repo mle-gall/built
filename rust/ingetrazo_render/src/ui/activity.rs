@@ -58,8 +58,7 @@ impl Ui {
                 ui.set_width(width);
                 ui.set_max_width(width);
                 ui.set_max_height(screen.height() - TOP_H);
-                glass(Surface::Pill)
-                    .inner_margin(Margin::symmetric(8, 2))
+                activity_capsule()
                     .show(ui, |ui| {
                         ui.horizontal(|ui| {
                             let count = self.jobs.len() + self.history.len();
@@ -81,7 +80,7 @@ impl Ui {
                                     self.actions.push(format!("job:cancel:{id}"));
                                 }
                                 if *fraction < 0.0 {
-                                    ui.spinner();
+                                    ring(ui);
                                 }
                                 let text = if phase.is_empty() {
                                     title.clone()
@@ -102,15 +101,15 @@ impl Ui {
                         if let Some((_, _, _, fraction, _)) = self.jobs.first() {
                             if *fraction >= 0.0 {
                                 ui.add(
-                                    egui::ProgressBar::new(*fraction)
+                                    progress(*fraction)
                                         .desired_height(3.0)
-                                        .fill(ACCENT),
+                                        ,
                                 );
                             }
                         }
                     });
                 if self.activity_open {
-                    glass(Surface::Raised).show(ui, |ui| {
+                    popover().show(ui, |ui| {
                         egui::ScrollArea::vertical()
                             .min_scrolled_height(120.0)
                             .max_height(screen.height() * 0.55)
@@ -124,9 +123,9 @@ impl Ui {
                                         }
                                     });
                                     if *fraction >= 0.0 {
-                                        ui.add(egui::ProgressBar::new(*fraction).show_percentage());
+                                        ui.add(progress(*fraction).show_percentage());
                                     } else {
-                                        ui.spinner();
+                                        ring(ui);
                                     }
                                 }
                                 for row in &self.history {
@@ -136,14 +135,9 @@ impl Ui {
                             });
                     });
                 } else {
-                    for row in self.history.iter().filter(|r| r.5 > 0.0).take(3) {
-                        ui.scope(|ui| {
-                            ui.set_opacity(row.5);
-                            glass(Surface::Raised).show(ui, |ui| {
-                                Self::activity_row(ui, row, true, &mut self.actions);
-                            });
-                        });
-                    }
+                    toast_stack(ui, self.history.iter().map(|row| (row, row.5)), |ui, row| {
+                        Self::activity_row(ui, row, true, &mut self.actions);
+                    });
                 }
             });
     }
