@@ -371,6 +371,8 @@ class PaintTool(Tool):
         # the eyedropper on a bare-colour face) or an unnamed image paints
         # as a named material — one with the same recipe when the model has
         # it, else a new one the stroke's tag command registers.
+        from ingetrazo_core import refresh_library_paint
+        refresh_library_paint(vp.scene, PaintTool)
         if not PaintTool.current_is_default and PaintTool.current_material is None:
             from core.material_commands import material_for_paint
             PaintTool.current_material = material_for_paint(

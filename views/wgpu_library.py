@@ -368,7 +368,7 @@ class MaterialsProvider(Provider):
                 _state(ctx.view)["cursor"] = f"m:{out['name']}"
         elif verb == "rename" and kind == "m" and arg.strip() and arg.strip() != name:
             ctx.core("rename_material", name=name, new_name=arg.strip())
-            _rename_paint(name, arg.strip())
+            _rename_paint(ctx.scene, name, arg.strip())
             if ctx.view.__dict__.get("_ui_mat_focus") == key:
                 ctx.view._ui_mat_focus = f"m:{arg.strip()}"
         elif verb == "delete" and kind == "m":
@@ -437,7 +437,10 @@ class MaterialsProvider(Provider):
         if mat is None:
             return None
         from ingetrazo_core import material_inspector
-        return material_inspector(mat, item.get("uses", 0))
+        from views.wgpu_ui import _active_tool_id, _current_material_name
+        return material_inspector(mat, item.get("uses", 0),
+                                  _active_tool_id(ctx.win) == "paint" and _current_material_name() == mat.name,
+                                  ctx.view.__dict__.get("_ui_mat_focus") == key)
 
     def edit(self, ctx, item, field, text):
         name = item["name"]
@@ -649,12 +652,12 @@ def _pick_paint(win, *, name="", recipe=None):
         win._activate_tool("paint")
 
 
-def _rename_paint(old, new) -> None:
+def _rename_paint(scene, old, new) -> None:
     from tools.paint import PaintTool
     mat = getattr(PaintTool, "current_material", None)
     if mat is not None and mat.name == old:
-        from dataclasses import replace
-        PaintTool.current_material = replace(mat, name=new)
+        from ingetrazo_core import pick_library_paint
+        pick_library_paint(scene, PaintTool, name=new)
 
 
 #: The registry, in tab order.
@@ -1156,6 +1159,7 @@ def set_mode(view, win, mode) -> None:
         open_library(win)
         return
     view._ui_mode = mode
+    view._ui_mat_focus = None
     view._ui_rules_cache = None
     view._ui_tree_sig = None
     view._ui_insp_sig = None
@@ -1335,6 +1339,10 @@ def action(win, view, arg) -> None:
     the dock's inspector, C's path)."""
     if view is None:
         return
+    if arg == "done":
+        view._ui_mat_focus = view._ui_insp_sig = None
+        view.update()
+        return
     if SEP not in arg and ":" in arg:
         verb, _, rest = arg.partition(":")
         arg = verb + SEP + rest
@@ -1403,10 +1411,7 @@ def inspector(view, win):
     got = provider("materials").inspector(Ctx(win, view), it)
     if got is None:
         return None
-    title, sections = got
-    sections = [(t, [(f"lib:browse:materials", "Browse all…") if a.endswith(":apply:" + key) else (a, lab)
-                     for a, lab in rows] if t == "Actions" else rows) for t, rows in sections]
-    return title, sections
+    return got
 
 
 def edit_field(win, view, arg, text) -> None:
@@ -1414,4 +1419,7 @@ def edit_field(win, view, arg, text) -> None:
     field, _, name = arg.partition(":")
     it = _item_anywhere(view, win, f"m:{name}") or {"key": f"m:{name}", "name": name}
     provider("materials").edit(Ctx(win, view), it, field, text)
+    from ingetrazo_core import refresh_library_paint
+    from tools.paint import PaintTool
+    refresh_library_paint(win.viewport.scene, PaintTool)
     refresh(win)

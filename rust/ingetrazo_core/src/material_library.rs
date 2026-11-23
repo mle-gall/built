@@ -164,18 +164,50 @@ pub(crate) fn pick_library_paint(
     )?;
     brush.setattr("current_texture_plane", py.None())?;
     brush.setattr("current_opacity", mat.getattr("opacity")?)?;
+    // The brush may outlive this document. Keep only a weak document
+    // reference and stop following the pick when another tool changes it.
+    let source = py.import("weakref")?.call_method1("ref", (scene,))?;
+    brush.setattr("_library_pick", (source, &mat))?;
     brush.setattr("current_material", mat)?;
     brush.setattr("current_is_default", false)?;
     Ok(true)
+}
+
+/// A registered material can be replaced by an edit, undo or redo between
+/// strokes. Re-read it only for a brush still following this Library pick.
+#[pyfunction]
+pub(crate) fn refresh_library_paint(
+    scene: &Bound<'_, PyAny>,
+    brush: &Bound<'_, PyAny>,
+) -> PyResult<()> {
+    let Some(binding) = brush.getattr_opt("_library_pick")? else {
+        return Ok(());
+    };
+    if binding.is_none() {
+        return Ok(());
+    }
+    let held = binding.get_item(1)?;
+    if !binding.get_item(0)?.call0()?.is(scene) || !brush.getattr("current_material")?.is(&held) {
+        return Ok(());
+    }
+    let name: String = held.getattr("name")?.extract()?;
+    let live = scene.getattr("materials")?.call_method1("get", (&name,))?;
+    if !live.is_none() && !live.is(&held) {
+        pick_library_paint(scene, brush, &name, None)?;
+    }
+    Ok(())
 }
 
 /// The material editor's fields and actions belong to the Project inspector.
 type Sections = Vec<(String, Vec<(String, String)>)>;
 
 #[pyfunction]
+#[pyo3(signature=(mat, uses, painting=false, focused=false))]
 pub(crate) fn material_inspector(
     mat: &Bound<'_, PyAny>,
     uses: usize,
+    painting: bool,
+    focused: bool,
 ) -> PyResult<(String, Sections)> {
     let name: String = mat.getattr("name")?.extract()?;
     let key = format!("m:{name}");
@@ -203,7 +235,15 @@ pub(crate) fn material_inspector(
             switch("base", "Colour|Image", image.is_some()),
         ),
     ];
-    let mut actions = vec![act("apply", "Paint with it"), act("select", "Select uses")];
+    let paint = if painting {
+        ("lib:browse:materials".into(), "Browse all…".into())
+    } else {
+        act("apply", "Paint with it")
+    };
+    let mut actions = vec![paint, act("select", "Select uses")];
+    if focused && !painting {
+        actions.push(("lib:done".into(), "Done".into()));
+    }
     if let Some(path) = image {
         base.push((
             "Image".into(),

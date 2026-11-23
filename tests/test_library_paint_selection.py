@@ -15,11 +15,13 @@ from views import wgpu_ui
 
 @pytest.fixture
 def win(monkeypatch):
+    monkeypatch.setattr(PaintTool, "_library_pick", getattr(PaintTool, "_library_pick", None), raising=False)
     for field in ("current_color", "current_opacity", "current_texture", "current_texture_plane",
                   "current_material", "current_is_default"):
         monkeypatch.setattr(PaintTool, field, getattr(PaintTool, field))
     scene = Scene()
-    vp = SimpleNamespace(scene=scene, history=History(scene))
+    vp = SimpleNamespace(scene=scene, history=History(scene), flash_status=lambda *_: None,
+                         refresh_after_edit=lambda: None)
     selected = []
     return SimpleNamespace(viewport=vp, _activate_tool=selected.append, tools_selected=selected)
 
@@ -70,3 +72,56 @@ def test_the_color_row_recolours_a_plain_colour_material(win):
     assert vp.history.undo()
     for attrs in (g.material, face.attrs):
         assert tuple(attrs["color"]) == pytest.approx((.1,.4,.9))
+
+
+def _model_paint(win, name, color):
+    from tests.test_paint_materials import _quad
+    scene = win.viewport.scene
+    mat = Material(name, color=color)
+    scene.materials[name] = mat
+    face = _quad(scene.mesh, len(scene.mesh.faces))
+    face.attrs.update(mat.face_attrs())
+    library.paint_from_strip(win, "m:" + name)
+    return face
+
+
+def test_the_name_field_renames_the_active_material(win):
+    from tests.test_tree_links import _View
+    view = _View()
+    face = _model_paint(win, "Azul", (.1,.4,.9))
+    view._ui_mat_focus = "m:Azul"
+    wgpu_ui._tree_action(win, view, wgpu_ui.SEP.join(("edit", "libmat:name:Azul", "Fachada norte")))
+    assert face.attrs["mat"] == "Fachada norte" and PaintTool.current_material.name == "Fachada norte"
+    assert "Azul" not in win.viewport.scene.materials
+    assert library.inspector(view, win)[0] == "Fachada norte"
+    assert win.viewport.history.undo()
+    assert face.attrs["mat"] == "Azul"
+
+
+def test_the_name_field_refuses_a_name_already_taken(win):
+    from tests.test_tree_links import _View
+    view = _View()
+    _model_paint(win, "Rojo", (.9,.1,.1))
+    face = _model_paint(win, "Azul", (.1,.4,.9))
+    view._ui_mat_focus = "m:Azul"
+    before = win.viewport.history.revision
+    wgpu_ui._tree_action(win, view, wgpu_ui.SEP.join(("edit", "libmat:name:Azul", "Rojo")))
+    assert face.attrs["mat"] == "Azul" and library.inspector(view, win)[0] == "Azul"
+    assert win.viewport.scene.materials["Rojo"].color == (.9,.1,.1)
+    assert win.viewport.history.revision == before
+
+
+def test_next_stroke_uses_the_current_revision_of_a_library_pick(win):
+    from tests.test_paint_materials import _FakeViewport, _quad, _click
+    from tests.test_tree_links import _View
+    win.viewport = vp = _FakeViewport()
+    view = _View()
+    _model_paint(win, "Azul", (.1,.4,.9))
+    library.edit_field(win, view, "opacity:Azul", "62")
+    assert PaintTool.current_opacity == pytest.approx(.62)
+    face = _quad(vp.scene.mesh, 1)
+    _click(vp, face)
+    assert face.attrs["opacity"] == pytest.approx(.62)
+    assert vp.history.undo() and vp.history.undo()
+    _click(vp, face)
+    assert face.attrs.get("opacity", 1.) == 1.
