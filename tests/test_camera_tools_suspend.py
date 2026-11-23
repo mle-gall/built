@@ -18,7 +18,7 @@ from PySide6.QtWidgets import QApplication
 from tools.arc import ArcTool
 from tools.base import ToolContext
 from tools.circle import CircleTool
-from tools.line import LineTool
+from tools.rust_tools import LineTool
 from tools.move import MoveTool
 from tools.protractor import ProtractorTool
 from tools.pushpull import PushPullTool

@@ -265,7 +265,7 @@ def test_the_viewport_offers_an_arcs_sweep_midpoint_and_a_groups_origin():
     QApplication.instance() or QApplication([])
     from tests.controller_surface import ControllerSurface as Viewport
     from tools.arc import ArcTool
-    from tools.line import LineTool
+    from tools.rust_tools import LineTool
     from tools.base import ToolContext
     from core.group import Group
     from core.mesh import Mesh
@@ -409,7 +409,7 @@ def _placed(vp, mesh, dx, dy):
 def test_the_hovered_edge_can_be_a_components_and_the_tip_says_so():
     from PySide6.QtCore import QPointF, Qt
     from core.mesh import Mesh
-    from tools.line import LineTool
+    from tools.rust_tools import LineTool
     vp = _offscreen_vp()
     vp.camera.target = V(6, 5, 0)
     vp.camera.distance = 12
@@ -429,7 +429,7 @@ def test_the_hovered_edge_can_be_a_components_and_the_tip_says_so():
 
 def test_arc_midpoint_and_tangent_reach_arcs_inside_a_component():
     from PySide6.QtCore import QPointF, Qt
-    from tools.line import LineTool
+    from tools.rust_tools import LineTool
     from tools.arc import ArcTool
     from tools.base import ToolContext
     vp = _offscreen_vp()
@@ -494,7 +494,7 @@ def test_a_loose_edge_and_a_components_edge_under_the_cursor_together():
     hacían nada». The nearer of the two must simply win."""
     from PySide6.QtCore import QPointF, Qt
     from core.mesh import Mesh
-    from tools.line import LineTool
+    from tools.rust_tools import LineTool
     vp = _offscreen_vp()
     vp.camera.target = V(6, 5, 0)
     vp.camera.distance = 12

@@ -508,7 +508,7 @@ def test_escape_steps_out_of_the_open_group_from_the_window_action_too(viewport)
     a group. One cascade now: Viewport.escape()."""
     from core.group import Group
     from core.mesh import Mesh
-    from tools.select import SelectTool
+    from tools.rust_tools import SelectTool
     mesh = Mesh()
     mesh.add_face([QVector3D(0, 0, 0), QVector3D(2, 0, 0), QVector3D(2, 2, 0), QVector3D(0, 2, 0)])
     child = Group(mesh, "letras")

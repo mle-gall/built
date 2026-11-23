@@ -104,7 +104,7 @@ def test_the_line_tool_dwell_reference_works_in_3d_through_the_viewport():
     from PySide6.QtWidgets import QApplication
     QApplication.instance() or QApplication([])
     from tests.controller_surface import ControllerSurface as Viewport
-    from tools.line import LineTool
+    from tools.rust_tools import LineTool
     from tools.base import ToolContext
 
     vp = Viewport(None)

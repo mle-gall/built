@@ -140,7 +140,7 @@ def test_metal_mouse_tools_at_raw_lambert(view):
     from ingetrazo_core import Vec3 as V
     from PySide6.QtTest import QTest
     from tests.test_.skp_inference_gaps import click, move, refresh, use
-    from tools.line import LineTool
+    from tools.rust_tools import LineTool
     from tools.pushpull import PushPullTool
     from tools.rectangle import RectangleTool
 
@@ -207,7 +207,7 @@ def test_frame_preserves_numeric_input_and_feed_coordinates(view):
     from core.coordinate_frame import mesh_frame
     from ingetrazo_core import Vec3 as V
     from tests.test_.skp_inference_gaps import click, move, refresh, use
-    from tools.line import LineTool
+    from tools.rust_tools import LineTool
     from tools.rectangle import RectangleTool
 
     scene, history = view.scene, view.source_viewport.history

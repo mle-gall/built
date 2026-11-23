@@ -114,7 +114,7 @@ def test_a_box_over_a_figure_builds_the_camera_once(monkeypatch):
     chunks of a face-me): each one rebuilt the camera matrices — 1.6 s of
     a 3 s box on the villa. Same pixels, same pick."""
     import math
-    from tools.select import SelectTool
+    from tools.rust_tools import SelectTool
     win = _window()
     vp = win.viewport
     try:

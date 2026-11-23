@@ -11,7 +11,8 @@ from PySide6.QtCore import Qt
 from core.history import History
 from core.scene import Scene
 from tests.test_fuzz_engine import V, _draw_rect
-from tools.select import SelectTool, delete_selection_or_hover
+from tools.rust_tools import SelectTool
+from tools.select import delete_selection_or_hover
 
 
 class _StubViewport:

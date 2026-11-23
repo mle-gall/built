@@ -37,6 +37,34 @@ pub fn json_to_py<'py>(py: Python<'py>, v: &serde_json::Value) -> PyResult<Bound
     })
 }
 
+/// Plain Python values (and anything with `toTuple`) as JSON.
+pub fn py_to_json(v: &Bound<'_, PyAny>) -> PyResult<serde_json::Value> {
+    use serde_json::Value as J;
+    if v.is_none() {
+        return Ok(J::Null);
+    }
+    if let Ok(b) = v.cast::<pyo3::types::PyBool>() {
+        return Ok(J::Bool(b.is_true()));
+    }
+    if let Ok(i) = v.extract::<i64>() {
+        return Ok(J::from(i));
+    }
+    if let Ok(x) = v.extract::<f64>() {
+        return Ok(serde_json::json!(x));
+    }
+    if let Ok(s) = v.extract::<String>() {
+        return Ok(J::String(s));
+    }
+    if v.hasattr("toTuple")? {
+        return py_to_json(&v.call_method0("toTuple")?);
+    }
+    let mut out = Vec::new();
+    for item in v.try_iter()? {
+        out.push(py_to_json(&item?)?);
+    }
+    Ok(J::Array(out))
+}
+
 fn p3(v: &Bound<'_, PyAny>) -> PyResult<P3> {
     if let Ok(t) = v.extract::<(f64, f64, f64)>() {
         return Ok([t.0, t.1, t.2]);
@@ -312,6 +340,11 @@ impl ToolMachine {
 
     fn busy(&self) -> bool { self.tool.busy() }
 
+    /// Set a `state()` field; False when the tool has no such field.
+    fn set(&mut self, key: &str, value: &Bound<'_, PyAny>) -> PyResult<bool> {
+        Ok(self.tool.set(key, &py_to_json(value)?))
+    }
+
     fn state<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> { json_to_py(py, &self.tool.state()) }
 
     /// `{lines: [(a, b, style)], faces: [[p]], box: ((x0, y0, x1, y1), crossing) | None,
@@ -333,4 +366,11 @@ impl ToolMachine {
         d.set_item("value", p.value.map(|v| ((v.at[0], v.at[1], v.at[2]), v.label)))?;
         Ok(d)
     }
+}
+
+/// How a click with these Qt modifiers joins the selection:
+/// `replace`, `add` (Ctrl), `toggle` (Shift) or `remove` (Shift+Ctrl).
+#[pyfunction]
+pub fn select_mode(modifiers: u32) -> &'static str {
+    SelectMode::from_mods(Mods::from_qt(modifiers)).name()
 }

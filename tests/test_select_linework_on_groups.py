@@ -42,7 +42,8 @@ from core.history import History
 from core.mesh import Edge, Mesh
 from core.scene import Scene
 from tools.base import ToolContext
-from tools.select import SelectTool
+from tools.rust_tools import SelectTool
+from tools import select as _select_queries
 
 app = QApplication.instance() or QApplication([])
 V = QVector3D
@@ -205,11 +206,11 @@ def test_a_line_on_a_grouped_face_takes_the_click(make, kind, dz, angle):
         tool = SelectTool()
         on = view.pixel(V(2, 2.0, dz))
         for px in (on, (on[0], on[1] + 4)):          # on it, 4 px off it
-            picked = tool._pick(view.picks, *px)
+            picked = _select_queries.pick(view.picks, *px)
             assert any(picked == t for t in targets), (px, picked)
         # The face away from the lines still selects the slab's object.
         away = view.pixel(V(2, 0.5, 0))
-        assert tool._pick(view.picks, *away) is slab
+        assert _select_queries.pick(view.picks, *away) is slab
     finally:
         view.close()
 
@@ -222,7 +223,7 @@ def test_a_line_well_under_the_face_does_not_steal_the_click(make, kind):
     try:
         _aim(view, "top")
         px = view.pixel(V(2, 2.0, -0.05))
-        assert SelectTool()._pick(view.picks, *px) is slab
+        assert _select_queries.pick(view.picks, *px) is slab
     finally:
         view.close()
 
@@ -235,9 +236,9 @@ def test_between_the_lines_of_a_hatch_in_the_air_its_box_picks_it(make):
         _aim(view, "top")
         tool = SelectTool()
         between = view.pixel(V(2, 1.75, 0))
-        assert tool._pick(view.picks, *between) is hatch
+        assert _select_queries.pick(view.picks, *between) is hatch
         outside = view.pixel(V(3.6, 3.6, 0))
-        assert tool._pick(view.picks, *outside) is None
+        assert _select_queries.pick(view.picks, *outside) is None
     finally:
         view.close()
 
@@ -256,7 +257,7 @@ def test_repeated_clicks_cycle_through_what_lies_under_the_cursor(make):
         assert _click(view, tool, on) == {hatch}            # and back
         # Between the lines the slab comes first, the hatch's box next.
         between = view.pixel(V(2, 1.75, 0))
-        tool.note_pointer(*between)
+        tool.hover_at(view.picks, *between, 0)
         assert _click(view, tool, between) == {slab}
         assert _click(view, tool, between) == {hatch}
     finally:
@@ -289,8 +290,8 @@ def test_without_the_repeat_a_click_picks_as_before(make):
         on = view.pixel(V(2, 2.0, 0))
         assert _click(view, tool, on) == {hatch}
         # Leaving the spot ends the cycle: back there, the first pick again.
-        tool.note_pointer(on[0] + 40, on[1])
-        tool.note_pointer(*on)
+        tool.hover_at(view.picks, on[0] + 40, on[1], 0)
+        tool.hover_at(view.picks, *on, 0)
         assert _click(view, tool, on) == {hatch}
         # The selection changed in between (Esc): no cycle either.
         scene.clear_selection()
@@ -346,7 +347,7 @@ def test_inside_an_open_group_its_hatch_beats_its_slab(make):
         assert scene.edit_group is outer
         tool = SelectTool()
         on = view.pixel(V(2, 2.0, 0))
-        assert tool._pick(view.picks, on[0], on[1] + 3) is hatch
-        assert tool._pick(view.picks, *view.pixel(V(2, 0.5, 0))) is slab
+        assert _select_queries.pick(view.picks, on[0], on[1] + 3) is hatch
+        assert _select_queries.pick(view.picks, *view.pixel(V(2, 0.5, 0))) is slab
     finally:
         view.close()

@@ -126,7 +126,7 @@ def test_dimension_survives_igz_round_trip(tmp_path):
 # ---- Select + delete -----------------------------------------------------------
 
 def test_select_tool_deletes_a_dimension():
-    from tools.select import SelectTool
+    from tools.rust_tools import SelectTool
 
     scene = Scene()
     vp = _StubVP(scene)
@@ -411,7 +411,7 @@ def test_select_double_click_edits_dimension_text(monkeypatch, tmp_path):
     from core.history import History
     from core.scene import Scene
     from formats import igz as igz_format
-    from tools.select import SelectTool
+    from tools.rust_tools import SelectTool
 
     scene = Scene()
     history = History(scene)

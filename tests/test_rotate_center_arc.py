@@ -319,7 +319,7 @@ def _cube(scene, vp):
 
 
 def test_double_click_face_selects_face_plus_edges():
-    from tools.select import SelectTool
+    from tools.rust_tools import SelectTool
 
     scene = Scene()
     vp = _VpPick(scene)
@@ -340,7 +340,7 @@ def test_double_click_face_selects_face_plus_edges():
 
 def test_triple_click_selects_whole_connected_solid():
     from core.mesh import Edge, Face
-    from tools.select import SelectTool
+    from tools.rust_tools import SelectTool
 
     scene = Scene()
     vp = _VpPick(scene)

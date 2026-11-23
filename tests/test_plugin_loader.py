@@ -140,7 +140,7 @@ def test_imported_builtin_tool_not_reregistered(tmp_path):
     """A plugin importing LineTool (to reuse or subclass it) must not
     duplicate the built-in Line entry — or clone its 'L' shortcut."""
     _write(tmp_path, "reusa.py", """
-        from tools.line import LineTool
+        from tools.rust_tools import LineTool
         from tools.base import Tool
 
         class Mine(Tool):

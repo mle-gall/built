@@ -154,7 +154,7 @@ def test_select_double_click_edits_label(monkeypatch):
     (the usual convention) and commits the new text as one undoable command."""
     from types import SimpleNamespace
     from views import chrome_forms
-    from tools.select import SelectTool
+    from tools.rust_tools import SelectTool
 
     scene = Scene()
     history = History(scene)
@@ -237,7 +237,7 @@ def test_select_delete_key_removes_label():
     time — regression guard)."""
     from types import SimpleNamespace
     from PySide6.QtCore import Qt
-    from tools.select import SelectTool
+    from tools.rust_tools import SelectTool
 
     scene = Scene()
     history = History(scene)

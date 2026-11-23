@@ -16,7 +16,7 @@ from PySide6.QtWidgets import QApplication
 
 from core.edits import build_add_edges
 from tools.base import ToolContext
-from tools.line import LineTool
+from tools.rust_tools import LineTool
 
 
 @pytest.fixture(scope="module")

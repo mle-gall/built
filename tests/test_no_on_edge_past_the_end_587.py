@@ -20,7 +20,7 @@ if QApplication.instance() is None:
     QApplication([])
 
 from core.edits import build_add_edges  # noqa: E402
-from tools.line import LineTool  # noqa: E402
+from tools.rust_tools import LineTool  # noqa: E402
 from tests.controller_surface import ControllerSurface as Viewport
 
 

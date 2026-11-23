@@ -22,7 +22,7 @@ from PySide6.QtWidgets import QApplication  # noqa: E402
 if QApplication.instance() is None:
     QApplication([])
 
-from tools.line import LineTool  # noqa: E402
+from tools.rust_tools import LineTool  # noqa: E402
 from views.document_interaction import _HoverEvent
 from tests.controller_surface import ControllerSurface as Viewport
 

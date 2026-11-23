@@ -67,16 +67,16 @@ def test_a_vertical_face_looks_at_the_eye_that_drew_it():
 
 def test_line_closing_a_wall_in_front_of_the_camera_shows_its_front():
     from tests.controller_surface import ControllerSurface as Viewport
-    from tools.line import LineTool
     vp = Viewport(None)
     vp.resize(800, 600)
     vp.camera.set_aspect(800, 600)
     vp.camera.set_view("front")            # the camera sits at -Y looking +Y
     scene = vp.scene
-    tool = LineTool()
+    from core.protocol.commands import run
     pts = [V(0, 0, 0), V(0, 0, 2), V(2, 0, 2), V(2, 0, 0)]
     for a, b in zip(pts, pts[1:] + pts[:1]):
-        vp.history.execute(tool._commit_edge(vp, a, b))
+        # The Line tool's commit: the protocol's add_edge with the eye.
+        run(vp.history, "add_edge", a=a.toTuple(), b=b.toTuple(), eye=vp.camera.eye().toTuple())
     (f,) = scene.faces
     eye = vp.camera.eye()
     assert QVector3D.dotProduct(f.normal(), eye - V(1, 0, 1)) > 0
@@ -109,7 +109,7 @@ def test_switching_the_hidden_view_off_deselects_the_ghost():
 
 def test_tape_and_line_show_on_axis_before_their_first_click():
     from tests.controller_surface import ControllerSurface as Viewport
-    from tools.line import LineTool
+    from tools.rust_tools import LineTool
     from tools.tape import TapeMeasureTool
     vp = Viewport(None)
     vp.resize(1000, 600)

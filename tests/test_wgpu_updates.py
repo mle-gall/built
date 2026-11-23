@@ -939,7 +939,7 @@ def test_first_loose_edge_only_adds_its_own_row():
 
 def test_retyped_line_updates_resident_face_split():
     from core.history import History
-    from tools.line import LineTool
+    from tools.rust_tools import LineTool
 
     scene, _ = fixture_scene()
     V = QVector3D

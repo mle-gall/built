@@ -24,7 +24,7 @@ from core.group import Group
 from core.mesh import Edge, Face, Mesh, Vertex
 from core.scene import Scene
 import tools.select as select
-from tools.select import SelectTool
+from tools.rust_tools import SelectTool
 from views.wgpu_mesh_tools import MeshToolAccess, _viewport_class
 from views.wgpu_scene import pack_scene
 

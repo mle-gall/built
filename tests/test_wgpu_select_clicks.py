@@ -46,7 +46,7 @@ class _Renderer:
 @pytest.fixture
 def view():
     from tests.controller_surface import ControllerSurface as Viewport
-    from tools.select import SelectTool
+    from tools.rust_tools import SelectTool
     scene = Scene()
     mesh = Mesh()
     # Two quads sharing the edge x=2 (7 edges), and a separate quad.

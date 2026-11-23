@@ -36,7 +36,7 @@ from core.history import History
 from core.mesh import Mesh
 from core.scene import Scene
 from core.snap import compute_snap
-from tools.line import LineTool
+from tools.rust_tools import LineTool
 from tools.rectangle import RectangleTool
 from tests.controller_surface import ControllerSurface as Viewport
 from views.wgpu_inference import prepare, surface

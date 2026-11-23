@@ -52,6 +52,9 @@ def table(root=None):
         for source in sources:
             if 'class ' + cls + '(' not in source:
                 continue
+            if 'class ' + cls + '(RustTool)' in source:
+                hooks.add('Rust state machine (tools/rust_tools.py)')
+                continue
             hooks.update(re.findall(r'(?:viewport|vp)\.((?:pick_\w+|\w*preview\w*|_world_to_pixel|_pixel_to_ray))', source))
             if 'rubber_band_lines' in source:
                 hooks.add('rubber_band_lines')

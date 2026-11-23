@@ -187,6 +187,44 @@ struct Win {
     second_contact: Option<(u64, (f64, f64))>,
 }
 
+/// `BUILT_PERF=1`: pointer-move handler and frame times, reported (and
+/// reset) by each scripted `state` step (docs/rust-tools.md §13).
+mod perf {
+    use std::sync::Mutex;
+    use std::time::Instant;
+    static SAMPLES: Mutex<Vec<(&'static str, f64)>> = Mutex::new(Vec::new());
+
+    fn on() -> bool {
+        static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        *ON.get_or_init(|| std::env::var_os("BUILT_PERF").is_some())
+    }
+
+    pub fn note(what: &'static str, since: Instant) {
+        if on() {
+            SAMPLES.lock().unwrap().push((what, since.elapsed().as_secs_f64() * 1e3));
+        }
+    }
+
+    pub fn report() {
+        if !on() {
+            return;
+        }
+        let samples = std::mem::take(&mut *SAMPLES.lock().unwrap());
+        let mut parts = Vec::new();
+        for what in ["move_ms", "frame_ms"] {
+            let mut v: Vec<f64> = samples.iter().filter(|(w, _)| *w == what).map(|(_, x)| *x).collect();
+            if v.is_empty() {
+                continue;
+            }
+            v.sort_by(|a, b| a.total_cmp(b));
+            let at = |q: f64| v[((q * v.len() as f64).ceil() as usize).clamp(1, v.len()) - 1];
+            parts.push(format!("\"{what}\": {{\"n\": {}, \"median\": {:.3}, \"p95\": {:.3}, \"max\": {:.3}}}",
+                               v.len(), at(0.5), at(0.95), v[v.len() - 1]));
+        }
+        println!("[built] perf {{{}}}", parts.join(", "));
+    }
+}
+
 struct App {
     args: Args,
     /// The open windows, oldest first.
@@ -283,7 +321,11 @@ impl App {
         static CLOCK: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
         let timestamp = CLOCK.get_or_init(Instant::now).elapsed().as_millis() as u64;
         let held = w.held;
+        let t0 = Instant::now();
         w.host.call("pointer", (kind, x, y, button, held, mods, timestamp));
+        if kind == "move" {
+            perf::note("move_ms", t0);
+        }
         self.redraw(id);
     }
 
@@ -548,7 +590,10 @@ impl App {
                 self.settle();
                 self.capture(&name);
             }
-            Step::State => self.print_state(),
+            Step::State => {
+                self.print_state();
+                perf::report();
+            }
             Step::Quit => event_loop.exit(),
         }
         if self.steps.is_empty() && self.resume_at.is_none() {
@@ -871,7 +916,11 @@ impl ApplicationHandler<UserEvent> for App {
                 }
             }
             WindowEvent::RedrawRequested => {
+                let t0 = Instant::now();
                 let drew = self.win(id).is_some_and(|w| w.host.frame().is_some());
+                if drew {
+                    perf::note("frame_ms", t0);
+                }
                 if drew {
                     self.frames += 1;
                     if self.timings.first_frame.is_none()

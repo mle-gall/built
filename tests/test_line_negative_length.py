@@ -9,7 +9,7 @@ from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import History
 from core.scene import Scene
-from tools.line import LineTool
+from tools.rust_tools import LineTool
 
 
 class _Vp:

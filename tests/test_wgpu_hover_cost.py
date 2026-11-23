@@ -214,7 +214,7 @@ def test_annotation_at_front_surface_skips_gpu_reads_but_one_behind_does_not(vie
 
 
 def test_empty_canvas_work_plane_reuses_the_hover_pick(view, monkeypatch):
-    from tools.line import LineTool
+    from tools.rust_tools import LineTool
     view.tools.tool = LineTool()
     refresh(view)
     monkeypatch.setattr(view, "pick_row", lambda *_: pytest.fail("picked the same pixel again"))

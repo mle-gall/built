@@ -70,7 +70,7 @@ def test_empty_click_leaves_only_beyond_the_dotted_box(monkeypatch, component):
     """
     from ingetrazo_core import Matrix4 as QMatrix4x4
     from tools.base import ToolContext
-    from tools.select import SelectTool
+    from tools.rust_tools import SelectTool
     from views.main_window import MainWindow
 
     win = MainWindow()
@@ -84,8 +84,9 @@ def test_empty_click_leaves_only_beyond_the_dotted_box(monkeypatch, component):
 
     # Exercise the empty-click branch independently of face picking: the
     # centre stands for a hole/empty patch inside an irregular group's box.
-    monkeypatch.setattr(SelectTool, "_pick",
-                        lambda _self, _vp, _x, _y, **_kw: None)
+    from tools import select
+    monkeypatch.setattr(select, "pick", lambda _vp, _x, _y, **_kw: None)
+    monkeypatch.setattr(select, "candidates", lambda _vp, _x, _y: [])
     tool = SelectTool()
     pixels = [vp._world_to_pixel(c) for c in vp._edit_group_box_corners()]
     pixels = [p for p in pixels if p is not None]

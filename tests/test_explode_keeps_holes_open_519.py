@@ -21,7 +21,7 @@ from core.history import (EraseSelectionCommand, ExplodeGroupCommand,
 from core.scene import Scene
 from core.topology import loop_inside_face
 from tests.test_line_restarts_after_cutting_a_face import _Vp, _click
-from tools.line import LineTool
+from tools.rust_tools import LineTool
 
 
 def _sq(x0, y0, x1, y1):

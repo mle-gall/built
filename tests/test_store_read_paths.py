@@ -198,7 +198,7 @@ def test_paint_hover_marks_the_face_under_the_cursor(doc):
     (Qt.ShiftModifier | Qt.ControlModifier, False),     # remove: out
 ])
 def test_select_click_on_a_face_already_selected(doc, modifiers, stays):
-    from tools.select import SelectTool
+    from tools.rust_tools import SelectTool
     scene = doc.scene
     side = next(f for f in scene.mesh.faces if f.normal().y() < -0.9)
     scene.select([_top(scene), side])

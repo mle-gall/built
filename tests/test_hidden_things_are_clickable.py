@@ -9,6 +9,7 @@ each group's ``hidden`` but not the two view switches: Hide rebuilt the
 block without the object, and switching the view on reused it. The order
 matters — a pick between the two steps is what left the stale block."""
 from __future__ import annotations
+from tools import select as _select_queries
 
 import os
 
@@ -137,9 +138,9 @@ def test_a_click_never_lands_on_an_edge_behind_the_model():
 
 
 def test_select_takes_the_face_of_a_smooth_side():
-    from tools.select import SelectTool
+    from tools.rust_tools import SelectTool
     vp = _vp()
     _box_with_soft_diagonal(vp)
     px = vp._world_to_pixel(V(1.2, 1.0, 1))
-    picked = SelectTool()._pick(vp, *px)
+    picked = _select_queries.pick(vp, *px)
     assert picked in vp.scene.mesh.faces

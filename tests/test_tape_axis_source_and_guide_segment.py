@@ -136,7 +136,7 @@ def test_the_axis_cue_rule_lives_in_the_engine():
 def test_supported_drawing_tools_expose_an_axis_source_before_click():
     from tools.arc import ArcTool, CenterArcTool, ThreePointArcTool
     from tools.circle import CircleTool
-    from tools.line import LineTool
+    from tools.rust_tools import LineTool
     from tools.rectangle import RectangleTool
 
     for tool_type in (LineTool, RectangleTool, CircleTool, ArcTool,
@@ -152,7 +152,7 @@ def test_supported_drawing_tools_snap_to_a_visible_axis_at_first_point():
     QApplication.instance() or QApplication([])
     from tools.arc import ArcTool, CenterArcTool, ThreePointArcTool
     from tools.circle import CircleTool
-    from tools.line import LineTool
+    from tools.rust_tools import LineTool
     from tools.rectangle import RectangleTool
     from tests.controller_surface import ControllerSurface as Viewport
 

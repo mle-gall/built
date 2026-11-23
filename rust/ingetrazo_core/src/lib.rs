@@ -189,6 +189,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(snap_curve::snap_circle, m)?)?;
     m.add_class::<inference_state::InferenceMemory>()?;
     m.add_class::<tools::py::ToolMachine>()?;
+    m.add_function(wrap_pyfunction!(tools::py::select_mode, m)?)?;
     m.add_function(wrap_pyfunction!(snap_curve::arc_midpoint, m)?)?;
     m.add_function(wrap_pyfunction!(snap_planes::plane_cut_ray, m)?)?;
     m.add_function(wrap_pyfunction!(snap_planes::plane_alignments, m)?)?;

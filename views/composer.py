@@ -5164,7 +5164,7 @@ class ComposerCanvasView(QGraphicsView):
         """Select the sheet items in ``rect`` (page mm): enclosed ones in
         window mode, touched ones in crossing mode; locked items never.
         Returns the items the box found."""
-        from tools.select import selection_mode
+        from tools.rust_tools import selection_mode
         how = selection_mode(modifiers)
         mode = (Qt.IntersectsItemBoundingRect if crossing
                 else Qt.ContainsItemBoundingRect)
@@ -5194,7 +5194,7 @@ class ComposerCanvasView(QGraphicsView):
                 or (vp - start_vp).manhattanLength() < self._BAND_CLICK_PX):
             # A click on the empty sheet: plain click empties the
             # selection; with a modifier it leaves it alone.
-            from tools.select import selection_mode
+            from tools.rust_tools import selection_mode
             if selection_mode(modifiers) == "replace":
                 self.scene().clearSelection()
                 self._selection_changed()

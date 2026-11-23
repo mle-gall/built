@@ -8,7 +8,7 @@ from core.scene import Scene
 from core.mesh import Mesh
 from core.group import Group
 from core.history import History
-from tools.line import LineTool
+from tools.rust_tools import LineTool
 from tools.rectangle import RectangleTool
 from tools.base import ToolContext
 from views.wgpu_tools import NativeTools

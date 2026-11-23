@@ -68,7 +68,7 @@ from tools.circle import CircleTool, PolygonTool
 from tools.dimension import DimensionTool
 from tools.eraser import EraserTool
 from tools.geopath import GeoPathTool
-from tools.line import LineTool
+from tools.rust_tools import LineTool
 from tools.protractor import ProtractorTool
 from tools.north import NorthTool
 from tools.tape import TapeMeasureTool
@@ -91,7 +91,7 @@ from tools.freehand import FreehandTool
 from tools.section import SectionPlaneTool
 from tools.pushpull import PushPullTool
 from tools.rectangle import RectangleTool
-from tools.select import SelectTool
+from tools.rust_tools import SelectTool
 from views.tray import BimTray, GeorefTray, Tray, style_slider
 from views.icons import tool_icon
 

@@ -170,7 +170,7 @@ def _hover(vp, world):
 
 
 def test_hovering_a_rectangle_near_its_middle_offers_the_face_center():
-    from tools.line import LineTool
+    from tools.rust_tools import LineTool
     vp = _offscreen_vp()
     vp.camera.target = V(2, 1.5, 0)
     vp.camera.distance = 12
@@ -186,7 +186,7 @@ def test_hovering_a_rectangle_near_its_middle_offers_the_face_center():
 
 
 def test_an_l_shaped_face_offers_no_centre():
-    from tools.line import LineTool
+    from tools.rust_tools import LineTool
     vp = _offscreen_vp()
     vp.camera.target = V(1.5, 1.5, 0)
     vp.camera.distance = 12
@@ -198,7 +198,7 @@ def test_an_l_shaped_face_offers_no_centre():
 
 def test_a_groups_face_offers_its_centre_where_the_group_stands():
     from core.group import Group
-    from tools.line import LineTool
+    from tools.rust_tools import LineTool
     vp = _offscreen_vp()
     vp.camera.target = V(6, 5, 0)
     vp.camera.distance = 12
@@ -248,7 +248,7 @@ def _ring_vp():
 
 
 def test_a_selected_rings_centre_is_reached_from_its_hole():
-    from tools.line import LineTool
+    from tools.rust_tools import LineTool
     vp, ring = _ring_vp()
     vp.set_active_tool(LineTool())
     # Not selected: the cursor in the hole is on no face, nothing to offer.

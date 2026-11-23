@@ -16,7 +16,7 @@ from ingetrazo_core import Vec3 as QVector3D
 
 from core.geometry import Edge, Face
 from core.scene import Scene
-from tools.select import SelectTool
+from tools.rust_tools import SelectTool
 
 
 def V(x: float, y: float, z: float = 0.0) -> QVector3D:

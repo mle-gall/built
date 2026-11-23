@@ -257,6 +257,17 @@ pub trait Tool {
     fn busy(&self) -> bool { false }
     /// What the inference and the host read: named points and planes.
     fn state(&self) -> serde_json::Value { serde_json::Value::Null }
+    /// Set one of the `state()` fields (scripts and tests that place a
+    /// chain by hand, the host's captured plane). False when unknown.
+    fn set(&mut self, _key: &str, _value: &serde_json::Value) -> bool { false }
+}
+
+pub(crate) fn json_p3(v: &serde_json::Value) -> Option<P3> {
+    let a = v.as_array()?;
+    if a.len() != 3 {
+        return None;
+    }
+    Some([a[0].as_f64()?, a[1].as_f64()?, a[2].as_f64()?])
 }
 
 pub fn new_tool(kind: &str) -> Option<Box<dyn Tool>> {

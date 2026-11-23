@@ -13,7 +13,7 @@
 //!   draws it again from the same start; one undo step however often.
 //! - ⌘Z mid-chain undoes the last segment and steps the chain back (#175).
 
-use super::{add, len, opt_p3_json, p3_json, scale, sub, unit, Answer, Command, Preview, Reply, Tool,
+use super::{add, json_p3, len, opt_p3_json, p3_json, scale, sub, unit, Answer, Command, Preview, Reply, Tool,
             ToolEvent, ToolHost, ToolInfo, Value, P3};
 use super::preview::ValueAnchor;
 
@@ -75,8 +75,13 @@ impl LineTool {
 
     fn start(&self) -> Option<P3> { self.chain.as_ref().map(|c| c.start) }
 
-    fn add_edge(&self, a: P3, b: P3, host: &mut dyn ToolHost) -> Answer {
+    /// `offset`: a typed segment's exact delta, so the end is the start's
+    /// stored doubles plus it (the host resolves the start).
+    fn add_edge(&self, a: P3, b: P3, offset: Option<P3>, host: &mut dyn ToolHost) -> Answer {
         let mut args = serde_json::json!({"a": p3_json(a), "b": p3_json(b)});
+        if let Some(d) = offset {
+            args["offset"] = p3_json(d);
+        }
         if let Some(eye) = host.eye() {
             args["eye"] = p3_json(eye);
         }
@@ -89,9 +94,9 @@ impl LineTool {
 
     /// Commit `start`–`end` and move the chain on. False when the history
     /// refused the segment.
-    fn draw_segment(&mut self, start: P3, end: P3, mut last: Retype, ended: bool,
+    fn draw_segment(&mut self, start: P3, end: P3, offset: P3, mut last: Retype, ended: bool,
                     host: &mut dyn ToolHost) -> bool {
-        let answer = self.add_edge(start, end, host);
+        let answer = self.add_edge(start, end, Some(offset), host);
         if !answer.ok {
             return false;
         }
@@ -119,7 +124,7 @@ impl LineTool {
             return Reply::redraw();
         }
         let last = self.retype_state(start, world);
-        let answer = self.add_edge(start, world, host);
+        let answer = self.add_edge(start, world, None, host);
         let ended = kind == Some("close") || answer.face_delta > 0;
         self.last = answer.ok.then(|| Retype { ended, token: answer.revision, ..last });
         if ended {
@@ -148,17 +153,18 @@ impl LineTool {
     fn retype(&mut self, value: &Value, host: &mut dyn ToolHost) -> Option<bool> {
         let last = self.last.clone().expect("retype_ready");
         let start = last.start;
-        let end = match *value {
-            Value::Triple(dx, dy, dz) => add(start, [dx, dy, dz]),
+        let offset = match *value {
+            Value::Triple(dx, dy, dz) => [dx, dy, dz],
             Value::Length(v) => {
                 let delta = sub(last.end, start);
                 if v.abs() < EPS || len(delta) < EPS {
                     return None;
                 }
-                add(start, scale(unit(delta), v))
+                scale(unit(delta), v)
             }
             _ => return None,
         };
+        let end = add(start, offset);
         if same(end, start) {
             return None;
         }
@@ -168,7 +174,7 @@ impl LineTool {
         self.chain = last.chain.clone();
         self.work_plane = last.work_plane;
         let again = Retype { end, ..last.clone() };
-        let drawn = self.draw_segment(start, end, again, last.ended, host);
+        let drawn = self.draw_segment(start, end, offset, again, last.ended, host);
         if !drawn {
             // Refused: the segment already drawn comes back instead of
             // vanishing with the undo, and the window stays open.
@@ -193,8 +199,8 @@ impl LineTool {
             };
         }
         let Some(start) = self.start() else { return Reply::ignored() };
-        let end = match *value {
-            Value::Triple(dx, dy, dz) => add(start, [dx, dy, dz]),
+        let offset = match *value {
+            Value::Triple(dx, dy, dz) => [dx, dy, dz],
             Value::Length(v) => {
                 let Some(hover) = self.hover else { return Reply::ignored() };
                 if v.abs() < EPS {
@@ -204,13 +210,14 @@ impl LineTool {
                 if len(delta) < EPS {
                     return Reply::ignored();
                 }
-                add(start, scale(unit(delta), v))
+                scale(unit(delta), v)
             }
             // A pair is a rectangle's width × height, not a line.
             _ => return Reply::ignored(),
         };
+        let end = add(start, offset);
         let last = self.retype_state(start, end);
-        let drawn = self.draw_segment(start, end, last, false, host);
+        let drawn = self.draw_segment(start, end, offset, last, false, host);
         Reply { consumed: true, redraw: true, committed: drawn }
     }
 
@@ -298,5 +305,32 @@ impl Tool for LineTool {
             "work_plane": plane,
             "retype": self.last.is_some(),
         })
+    }
+
+    fn set(&mut self, key: &str, value: &serde_json::Value) -> bool {
+        let point = json_p3(value);
+        match key {
+            "start_point" => match (point, self.chain.as_mut()) {
+                (None, _) => self.chain = None,
+                (Some(p), Some(c)) => c.start = p,
+                (Some(p), None) => self.chain = Some(Chain { start: p, first: p, vertices: vec![p] }),
+            },
+            "chain_first_point" => {
+                if let (Some(p), Some(c)) = (point, self.chain.as_mut()) {
+                    c.first = p;
+                }
+            }
+            "chain_vertices" => {
+                if let Some(c) = self.chain.as_mut() {
+                    c.vertices = value.as_array().map(|a| a.iter().filter_map(json_p3).collect()).unwrap_or_default();
+                }
+            }
+            "hover_point" => self.hover = point,
+            "work_plane" => {
+                self.work_plane = value.as_array().and_then(|a| Some((json_p3(a.first()?)?, json_p3(a.get(1)?)?)));
+            }
+            _ => return false,
+        }
+        true
     }
 }

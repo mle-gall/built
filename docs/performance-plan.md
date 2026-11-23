@@ -2921,8 +2921,8 @@ Native denotes routed, not exhaustive parity acceptance.
 <!-- R3c-1 coverage -->
 | Registry key | Class | Metal status | GL hooks / preview dependencies |
 | --- | --- | --- | --- |
-| select | SelectTool | native | _world_to_pixel, pick_dimension, pick_edge, pick_face, pick_geopath, pick_group |
-| line | LineTool | native | rubber_band_lines |
+| select | SelectTool | native | Rust state machine (tools/rust_tools.py) |
+| line | LineTool | native | Rust state machine (tools/rust_tools.py) |
 | freehand | FreehandTool | native | rubber_band_lines |
 | rectangle | RectangleTool | native | rubber_band_lines |
 | rotated_rect | RotatedRectangleTool | native | rubber_band_lines |
