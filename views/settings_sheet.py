@@ -187,8 +187,6 @@ def _pref_page(env, section, bindings):
 
 def _general(env) -> list:
     from core.i18n import LANGUAGE_NAMES, SYSTEM, available_languages
-    from views.icons import TOOLBAR_ICON_SIZES, default_toolbar_icon_px, toolbar_icon_px
-    from views.theme import ACCENTS, saved_accent, saved_theme
     p = _p()
 
     def selected_language(value):
@@ -206,23 +204,6 @@ def _general(env) -> list:
             + [(c, LANGUAGE_NAMES.get(c, c)) for c in available_languages()],
             restart_value=selected_language,
             start=running_language),
-        Binding("theme", lambda env: saved_theme(),
-            lambda env, v: p.apply_theme_choice(v)),
-        Binding("accent", lambda env: saved_accent(),
-            lambda env, v: p.apply_accent_choice(v),
-            options=[(k, tr(label)) for k, label, _rgb in ACCENTS]),
-    ]
-    from views import mac_glass
-    if mac_glass.supported():
-        look.append(Binding("glass", lambda env: mac_glass.enabled(),
-                        lambda env, v: p.apply_window_glass(v)))
-    look += [
-        Binding("icon_px", lambda env: toolbar_icon_px(),
-            lambda env, v: p.apply_toolbar_icon_px(env.win, int(v)),
-            options=[(px, f"{tr(label)} ({px} px)") for px, label in TOOLBAR_ICON_SIZES],
-            default=default_toolbar_icon_px()),
-        Binding("ext_menus", _gkey("ext_menus", "auto"),
-            _set_gkey("ext_menus")),
         Binding("hover_picture", _key("tabs/hover_picture", "1", bool),
             _set_key("tabs/hover_picture", bool)),
     ]
@@ -324,10 +305,9 @@ def _navigation(env) -> list:
     from views import trackpad_nav
     p = _p()
 
-    def slides(env, trackpad=None, touch=None, inertia=None):
+    def slides(env, trackpad=None, inertia=None):
         p.apply_slides(env.win,
                        trackpad_nav.load_slide_mode() if trackpad is None else trackpad,
-                       trackpad_nav.load_touch_slide() if touch is None else touch,
                        trackpad_nav.load_inertia() if inertia is None else inertia, env.st)
         env.st.sync()
     mouse = [
@@ -341,8 +321,6 @@ def _navigation(env) -> list:
     touch = [
         Binding("trackpad_slide", lambda env: trackpad_nav.load_slide_mode(),
             lambda env, v: slides(env, trackpad=v)),
-        Binding("touch_slide", lambda env: trackpad_nav.load_touch_slide(),
-            lambda env, v: slides(env, touch=v)),
         Binding("trackpad_inertia", lambda env: trackpad_nav.load_inertia(),
             lambda env, v: slides(env, inertia=v)),
     ]
@@ -358,10 +336,6 @@ def _navigation(env) -> list:
 def _display(env) -> list:
     from views.document_interaction import EDIT_REST_FADE, SOFT_SHADOW_SPREAD
     p = _p()
-
-    def msaa(env):
-        n = _int(env.st.value("display/msaa", 4), 4)
-        return n if n in (0, 2, 4, 8) else 4
 
     def soft_level(env):
         soft = _int(env.st.value("display/soft_shadows", 0), 0)
@@ -388,8 +362,6 @@ def _display(env) -> list:
             return int(round(EDIT_REST_FADE * 100))
 
     quality = [
-        Binding("msaa", msaa,
-            lambda env, v: (p.apply_msaa(env.win, int(v), env.st), env.st.sync())),
         Binding("soft_shadows", soft_on,
             lambda env, v: put_soft(env, on=v)),
         Binding("soft_level", soft_level,
@@ -452,94 +424,11 @@ def _ndof(env):
 
 def _import(env) -> list:
     rows = [
-        Binding("obj_unit", _key("import/obj_unit", "m"),
-            _set_key("import/obj_unit")),
         Binding("dxf_unit", _key("import/dxf_unit", "mm"),
             _set_key("import/dxf_unit")),
-        Binding("coord_mode", _key("georef/coord_mode", "geo"),
-            _set_key("georef/coord_mode")),
     ]
     return _pref_page(env, "import", rows)
 
-
-def _ai(env) -> list:
-    p = _p()
-
-    def providers(env):
-        out = [("auto", tr("Auto (by key prefix)"))]
-        try:
-            from core import ai
-            out += [(prov, ai.PROVIDER_INFO[prov][0]) for prov in ai.PROVIDERS]
-        except Exception:  # noqa: BLE001 — the row, not the sheet
-            pass
-        return out
-
-    def put(key, strip=False):
-        def f(env, v):
-            if isinstance(v, bool):
-                v = "1" if v else "0"
-            env.st.setValue(key, v.strip() if strip and isinstance(v, str) else v)
-            env.st.sync()
-            p.reload_ai_panel(env.win)
-        return f
-
-    def env_note(env):
-        try:
-            from plugins.ai_assistant import env_key_note
-            return env_key_note(_key("ia/proveedor", "auto")(env), _key("ia/api_key", "")(env).strip())
-        except Exception:  # noqa: BLE001 — a note, not the sheet
-            return ""
-
-    rows = [
-        Binding("ai_provider", _key("ia/proveedor", "auto"),
-            put("ia/proveedor"),
-            options=providers),
-        Binding("ai_key", _key("ia/api_key", ""),
-            put("ia/api_key")),
-        Binding("ai_key_env", env_note),
-        Binding("ai_model", _key("ia/modelo", ""),
-            put("ia/modelo", strip=True)),
-        Binding("ai_url", _key("ia/ollama_url", "http://localhost:11434"),
-            put("ia/ollama_url", strip=True)),
-        Binding("ai_shots", _key("ia/capturas", "1", bool),
-            put("ia/capturas")),
-    ]
-    return _pref_page(env, "ai", rows)
-
-
-def _engine(env) -> list:
-    from core import _native, renderer_settings
-    from core.platform_choice import AUTO
-    p = _p()
-    rust_ok = _native.available() is not None
-    rows = [
-        Binding("rust", lambda env: str(_gkey(_native.SETTING, _native.DEFAULT)(env)) == "1",
-            lambda env, v: (p.apply_rust_engine(v, env.st), env.st.sync()),
-            enabled=rust_ok,
-            default=(_native.DEFAULT == "1") if rust_ok else _NO,
-            tip=tr("Computes the heavy parts (opening big files, hidden lines of the sheets, "
-                    "intersections, snapping) with the native engine. Takes effect at the next start.")
-                 if rust_ok else tr("This build of Built does not carry the Rust engine.")),
-    ]
-    if p.graphics_server_applies():
-        rows.append(Binding("platform", _gkey("platform", AUTO),
-                        _set_gkey("platform")))
-
-    def status(env):
-        try:
-            return renderer_settings.status_text()
-        except Exception:  # noqa: BLE001
-            return ""
-
-    def runtime(env):
-        try:
-            cap = renderer_settings.capability()
-            return f"Python {cap.python_version} / Qt {cap.qt_version}"
-        except Exception:  # noqa: BLE001
-            return ""
-    about = [Binding("renderer_status", status),
-             Binding("runtime", runtime)]
-    return _pref_page(env, "engine", rows + about)
 
 
 # ---- This model ------------------------------------------------------------------
@@ -730,7 +619,7 @@ def _add_location(env) -> None:
 
 
 _BUILDERS = {"general": _general, "navigation": _navigation, "display": _display, "ndof": _ndof,
-             "import": _import, "ai": _ai, "engine": _engine, "units": _units,
+             "import": _import, "units": _units,
              "dimensions": _dimensions, "location": _location}
 
 

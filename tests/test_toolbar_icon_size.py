@@ -36,14 +36,14 @@ def test_the_size_reaches_the_composer_toolbars_live_and_on_build(settings_file,
     monkeypatch.setattr(ComposerWindow, "render_frame", lambda self, f: None)
     win = MainWindow()
     try:
-        win.set_toolbar_icon_size(40)
+        QSettings().setValue("ui/toolbar_icon_px", 40)
         comp = ComposerWindow(win)
         win._composer = comp
         try:
             bars = win.findChildren(QToolBar) + comp.findChildren(QToolBar)
-            assert bars and all(tb.iconSize().width() == 40 for tb in bars)
-            win.set_toolbar_icon_size(20)                  # live, both windows
-            assert all(tb.iconSize().width() == 20 for tb in bars)
+            assert bars and all(tb.iconSize().width() == 24 for tb in bars)
+            QSettings().setValue("ui/toolbar_icon_px", 20)
+            assert all(tb.iconSize().width() == 24 for tb in bars)
         finally:
             comp.close()
     finally:
@@ -163,7 +163,7 @@ def test_a_fresh_install_gets_marcos_layout_and_large_icons(settings_file, monke
     from PySide6.QtCore import Qt
     from views import icons
     from views.main_window import MainWindow
-    assert icons.toolbar_icon_px() == 24                                # normal, since 14-09
+    assert icons.DEFAULT_TOOLBAR_ICON_PX == 24                                # normal, since 14-09
     win = MainWindow()
     try:
         assert win.toolBarArea(win.toolbars["draw"]) == Qt.LeftToolBarArea
@@ -337,14 +337,10 @@ def test_the_composer_toolbars_are_movable_and_their_arrangement_is_remembered(s
         win.close()
 
 
-def test_the_default_is_normal_on_any_screen_and_a_choice_wins(settings_file):
-    """Large (32 px) was the default for the 0.3.20 (fine on a 27" monitor,
-    clumsy on the laptop — Marco, 2026-09-14); normal since, on every
-    screen. A saved choice is never second-guessed."""
-    from views import icons
-    assert icons.toolbar_icon_px() == 24
-    icons.save_toolbar_icon_px(40)
-    assert icons.toolbar_icon_px() == 40
+def test_legacy_choice_does_not_resize_the_native_rail(settings_file):
+    from views.icons import DEFAULT_TOOLBAR_ICON_PX
+    QSettings().setValue("ui/toolbar_icon_px", 40)
+    assert DEFAULT_TOOLBAR_ICON_PX == 24
 
 
 

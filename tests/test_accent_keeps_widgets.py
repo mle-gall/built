@@ -16,8 +16,7 @@ from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-DOC = (Path(__file__).resolve().parents[1] / "examples"
-       / "banca-pergola-yanque.igz")
+DOC = (Path(__file__).resolve().parents[1] / "tests/fixtures/shell/slab-and-cube.igz")
 
 
 def _settle(app, rounds: int = 5) -> None:
@@ -39,10 +38,8 @@ def test_the_accent_repaint_leaves_the_panels_and_menus_alive():
         _settle(app)
         assert any(isinstance(w, QMenu) for w in app.topLevelWidgets())
         for _ in range(3):
-            theme.save_accent("blue")
             theme.apply_accent(app)
             _settle(app)
-            theme.save_accent(theme.ORANGE)
             theme.apply_accent(app)
             _settle(app)
         win._saved_version = win.viewport.scene.version
@@ -52,7 +49,6 @@ def test_the_accent_repaint_leaves_the_panels_and_menus_alive():
         win.styles_panel.refresh()
         win.shadows_panel.refresh()
     finally:
-        theme.save_accent(theme.ORANGE)
         win._saved_version = win.viewport.scene.version
         win.close()
 
@@ -80,14 +76,13 @@ def test_the_accent_still_repaints_what_carries_an_icon_key():
         return obj.icon().pixmap(32, 32).toImage()
     try:
         _settle(app)
-        before = image(act), image(btn)
-        theme.save_accent("blue")
+        from PySide6.QtGui import QIcon
+        act.setIcon(QIcon())
+        btn.setIcon(QIcon())
         theme.apply_accent(app)
         _settle(app)
-        assert image(act) != before[0]
-        assert image(btn) != before[1]
+        assert not image(act).isNull() and image(btn) == image(act)
         assert image(act) == tool_icon("line").pixmap(32, 32).toImage()
     finally:
-        theme.save_accent(theme.ORANGE)
         win._saved_version = win.viewport.scene.version
         win.close()

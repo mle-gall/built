@@ -1,12 +1,7 @@
 """Light / dark UI chrome that follows the desktop, or a fixed choice.
 
-Window ▸ Preferences ▸ Theme stores the General setting ``theme``: ``dark`` (the
-default — IngeTrazo's look, Marco 2026-09-22: the user opts into the rest),
-``light``, ``slate`` (see below), or ``system``, which follows the OS colour
-scheme and flips live when the user switches it — GNOME/KDE portals, Windows
-10/11 and macOS all report it to Qt through ``QStyleHints.colorScheme``.
-Only the chrome changes: the 3D viewport keeps the model's display style,
-and the composer's paper stays paper.
+The Qt fallback uses a fixed dark palette. Explicit palettes remain
+for legacy widgets and their rendering tests.
 
 The palettes are complete on purpose (Light/Midlight/Mid/Dark/Shadow too):
 stylesheets reference ``palette(mid)`` and ``palette(midlight)``, and a role
@@ -43,7 +38,6 @@ SOLARIZED, CAMPBELL, SAND = "solarized", "campbell", "sand"
 # And one after the 3D suites' neutral studio grey.
 STUDIO = "studio"
 THEMES = (SYSTEM, LIGHT, DARK, SLATE, SOLARIZED, CAMPBELL, SAND, STUDIO)
-_KEY = "theme"          # a General setting: core.general_settings (#266)
 
 # The one accent both themes share — selection and the IngeTrazo blue.
 _HIGHLIGHT = QColor(42, 93, 143)
@@ -69,56 +63,14 @@ def glass_tint(dark: bool) -> QColor:
     return QColor(6, 14, 28, 150) if dark else QColor(0, 0, 0, 0)
 
 
-# ---- accent colour of the icons and toolbars --------------------------------
-# Preferences ▸ General ▸ Accent colour (#393, Peter Mican by e-mail; Marco
-# 12-10: «the orange suits Ubuntu, maybe not other systems»). It paints the
-# icons' dots and handles, the hover of the toolbar buttons and the
-# docking hints. The 3D view's selection stays orange: it is how a user
-# recognises what is selected. Orange stays the default, so nobody sees a
-# change until they choose one.
-ORANGE, SYSTEM_ACCENT = "orange", "system"
-ACCENTS = (
-    (ORANGE, "Built orange", (243, 115, 41)),
-    ("blue", "Blue", (53, 132, 228)),
-    ("green", "Green", (46, 160, 67)),
-    ("red", "Red", (224, 27, 36)),
-    ("purple", "Purple", (145, 65, 172)),
-    ("yellow", "Yellow", (229, 165, 10)),
-    # Neutral accents, for a sober chrome (the user's request, 0.6.1).
-    ("white", "White", (245, 245, 245)),
-    ("light_grey", "Light grey", (184, 188, 194)),
-    (SYSTEM_ACCENT, "Same as the system", None),
-)
-_ACCENT_KEY = "accent"  # a General setting, like the theme
 # The desktop's accent, read before apply_theme replaces the palette with
 # IngeTrazo's own (Windows 11, macOS and the portals hand it to Qt there).
 _system_accent: QColor | None = None
 
 
-def saved_accent() -> str:
-    from core import general_settings
-    name = str(general_settings.value(_ACCENT_KEY, ORANGE) or ORANGE)
-    return name if any(name == key for key, _l, _c in ACCENTS) else ORANGE
-
-
-def save_accent(name: str) -> None:
-    from core import general_settings
-    general_settings.set_value(
-        _ACCENT_KEY,
-        name if any(name == key for key, _l, _c in ACCENTS) else ORANGE)
-
-
-def accent_color(name: str | None = None) -> QColor:
-    """The accent in force (or ``name``'s)."""
-    name = saved_accent() if name is None else name
-    if name == SYSTEM_ACCENT:
-        if _system_accent is not None and _system_accent.isValid():
-            return QColor(_system_accent)
-        return QColor(_HIGHLIGHT)
-    for key, _label, rgb in ACCENTS:
-        if key == name and rgb is not None:
-            return QColor(*rgb)
-    return QColor(*ACCENTS[0][2])
+def accent_color() -> QColor:
+    """The shared interface accent (ingetrazo_render/ui/tokens.rs)."""
+    return QColor("#6aa5ff")
 
 
 def _remember_system_accent(app) -> None:
@@ -126,17 +78,6 @@ def _remember_system_accent(app) -> None:
     if _system_accent is None:
         role = getattr(QPalette.ColorRole, "Accent", QPalette.Highlight)
         _system_accent = QColor(app.palette().color(role))
-
-
-def saved_theme() -> str:
-    from core import general_settings
-    mode = str(general_settings.value(_KEY, DARK) or DARK)
-    return mode if mode in THEMES else DARK
-
-
-def save_theme(mode: str) -> None:
-    from core import general_settings
-    general_settings.set_value(_KEY, mode if mode in THEMES else DARK)
 
 
 def is_dark(mode: str, system_scheme: Qt.ColorScheme) -> bool:
@@ -656,8 +597,8 @@ class _Follower(QObject):
 
     def on_scheme(self, _scheme) -> None:
         app = QGuiApplication.instance()
-        if app is not None and saved_theme() == SYSTEM:
-            apply_theme(app)
+        if app is not None and _applied == SYSTEM:
+            apply_theme(app, SYSTEM)
 
 
 _follower: _Follower | None = None
@@ -705,7 +646,7 @@ def apply_theme(app, mode: str | None = None) -> bool:
     """Set the palette for ``mode`` (default: the saved one). Returns True
     when the dark palette was applied."""
     global _follower
-    mode = saved_theme() if mode is None else mode
+    mode = DARK if mode is None else mode
     _remember_system_accent(app)
     hints = app.styleHints()
     # Clear any earlier override first so the desktop's answer is readable,

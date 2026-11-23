@@ -102,7 +102,7 @@ def test_restore_puts_every_control_back_to_its_default(settings_file):
     from core.ndof import AXES
     _customised(settings_file)
     ui = Controls(_Win(), "import")
-    assert ui.value("obj_unit") == "ft"
+    assert ui.value("dxf_unit") == "in"
     assert not ui.select("general").value("autosave")
     ui.select("display").set("rest_mode", "fade")
     ui.set("rest_fade", 30)
@@ -112,11 +112,11 @@ def test_restore_puts_every_control_back_to_its_default(settings_file):
     ui.restore()
     expected = {
         "general": dict(autosave=True, autosave_min=5, backup=True, undo_steps=200,
-                        theme="dark", accent="orange", ext_menus="auto", scale_figure=True),
+                        scale_figure=True),
         "navigation": dict(ask_section=True, invert_wheel=False, invert_orbit=False,
                            look_sens=25, cursor_style="tool"),
-        "display": dict(msaa=4, rest_mode="fade", rest_fade=75),
-        "import": dict(obj_unit="m", dxf_unit="mm", coord_mode="geo"),
+        "display": dict(rest_mode="fade", rest_fade=75),
+        "import": dict(dxf_unit="mm"),
         "ndof": dict(ndof_on=True, ndof_speed=100, ndof_preset="original"),
     }
     for section, values in expected.items():
@@ -140,7 +140,7 @@ def test_ok_saves_the_defaults_and_keeps_language_and_ai(settings_file):
     assert int(st.value("General/undo_steps")) == 200
     assert st.value("nav/invert_wheel") == "0"
     assert int(st.value("walk/look_sensitivity")) == 25
-    assert st.value("import/obj_unit") == "m"
+    assert st.value("import/obj_unit") == "ft"
     assert win.viewport.edit_rest_mode == "fade"
     assert st.value("language") == "fr"
     assert st.value("ia/api_key") == "test-key-123"
@@ -182,8 +182,8 @@ def test_the_button_asks_first(settings_file):
     _customised(settings_file)
     ui = Controls(_Win(), "import")
     form = confirmation(ui)
-    assert ui.value("obj_unit") == "ft"
+    assert ui.value("dxf_unit") == "in"
     form.press("cancel")
-    assert ui.value("obj_unit") == "ft"
+    assert ui.value("dxf_unit") == "in"
     confirmation(ui).press("ok")
-    assert ui.value("obj_unit") == "m"
+    assert ui.value("dxf_unit") == "mm"

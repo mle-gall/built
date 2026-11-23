@@ -187,3 +187,26 @@ def test_native_about_copies_diagnostics(tmp_path):
     assert result.returncode == 0 and [s["large_sheet"] for s in states[:2]] == ["about", "start"], log
     assert not any(s["errors"] or s["blocked_widgets"] for s in states), log
     assert copied.exists() and "Window: 1000x720" in copied.read_text(), log
+
+
+@pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
+                    reason="requires a built window and BUILT_WINDOW_TESTS=1")
+def test_native_section_name_question(tmp_path):
+    from core.scene import Scene
+    from formats.igz import save_scene
+
+    model = tmp_path / "empty.igz"
+    save_scene(Scene(), model)
+    steps = tmp_path / "commands"
+    steps.write_text("wait 650\nkey escape\ntool section\nwait 300\n"
+                     "click 510 435\nwait 350\nstate\nkey enter\nwait 250\nstate\nquit\n")
+    home = tmp_path / "home"
+    home.mkdir()
+    result = run([str(BIN), "--root", str(ROOT), "--new-instance", "--size", "1000x720",
+                  "--script", str(steps), str(model)], home=home, settings=tmp_path / "settings",
+                 capture_output=True, text=True, timeout=90)
+    log = result.stdout + result.stderr
+    states = [json.loads(line.removeprefix("[built] state ")) for line in log.splitlines()
+              if line.startswith("[built] state ")]
+    assert result.returncode == 0 and [s["form_open"] for s in states[:2]] == [True, False], log
+    assert not any(s["errors"] or s["blocked_widgets"] for s in states), log

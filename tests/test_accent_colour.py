@@ -23,40 +23,21 @@ def _has(icon, colour: QColor) -> bool:
     return False
 
 
-def test_orange_is_the_default_and_every_choice_has_a_colour():
+def test_a_legacy_accent_cannot_change_the_chrome():
+    from core import general_settings
+    general_settings.set_value("accent", "orange")
+    assert theme.accent_color().name() == "#6aa5ff"
+
+
+def test_the_icons_and_the_toolbar_hover_share_the_accent():
     QApplication.instance() or QApplication([])
-    assert theme.saved_accent() == theme.ORANGE
-    assert theme.accent_color() == ORANGE
-    for key, _label, _rgb in theme.ACCENTS:
-        assert theme.accent_color(key).isValid()
-    theme.save_accent("not a colour")
-    try:
-        assert theme.saved_accent() == theme.ORANGE
-    finally:
-        theme.save_accent(theme.ORANGE)
-
-
-def test_the_icons_and_the_toolbar_hover_follow_the_accent():
-    app = QApplication.instance() or QApplication([])
     button = QToolButton()
-    theme.style(button, "QToolButton:hover {{ background: "
-                        "rgb({accent_rgb}); }}")
-    assert "rgb(243, 115, 41)" in button.styleSheet()
-    assert _has(tool_icon("line"), ORANGE)
-    blue = theme.accent_color("blue")
-    try:
-        theme.save_accent("blue")
-        theme.apply_accent(app)
-        assert "rgb(53, 132, 228)" in button.styleSheet()
-        assert _has(tool_icon("line"), blue)
-        assert not _has(tool_icon("line"), ORANGE)
-    finally:
-        theme.save_accent(theme.ORANGE)
-        theme.apply_accent(app)
-    assert "rgb(243, 115, 41)" in button.styleSheet()
+    theme.style(button, "QToolButton:hover {{ background: rgb({accent_rgb}); }}")
+    assert "rgb(106, 165, 255)" in button.styleSheet()
+    assert _has(tool_icon("line"), theme.accent_color())
 
 
-def test_the_system_accent_is_a_real_colour():
-    app = QApplication.instance() or QApplication([])
-    theme._remember_system_accent(app)
-    assert theme.accent_color(theme.SYSTEM_ACCENT).isValid()
+def test_system_accent_selection_is_ignored():
+    from core import general_settings
+    general_settings.set_value("accent", "system")
+    assert theme.accent_color() == QColor("#6aa5ff")

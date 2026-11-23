@@ -176,28 +176,10 @@ def test_missing_key_hint_names_the_variable(clean_env):
         None, "gemini", "")
 
 
-def test_preferences_shows_the_same_note(clean_env, settings_file):
+def test_key_note_has_one_owner(clean_env, settings_file):
+    from plugins.ai_assistant import env_key_note
     from tests.preferences_chrome import Controls
     clean_env.setenv("GROQ_API_KEY", "gsk_env")
-
-    class _Win(QWidget):
-        def __init__(self):
-            super().__init__()
-
-            class _VP:
-                edit_rest_mode = "fade"
-
-                def set_edit_rest_mode(self, mode):
-                    self.edit_rest_mode = mode
-
-            self.viewport = _VP()
-            self._rest_actions = {}
-
-    win = _Win()
-    ui = Controls(win, "ai")
-    ui.set("ai_provider", "groq")
-    ui.set("ai_key", "")
-    assert "GROQ_API_KEY" in ui.value("ai_key_env")
-    assert ui.visible("ai_key_env")
-    ui.set("ai_key", "gsk_typed")
-    assert not ui.visible("ai_key_env")
+    assert "GROQ_API_KEY" in env_key_note("groq", "")
+    assert not env_key_note("groq", "gsk_typed")
+    assert "ai" not in {row.get("id") for row in Controls(QWidget(), "general").wire()["side"]}

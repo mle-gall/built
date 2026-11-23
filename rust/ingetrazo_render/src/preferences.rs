@@ -388,13 +388,6 @@ const SECTIONS: &[(&str, &str, &str, &str)] = &[
         "Pick a command and change its keys. Changes apply at once.",
     ),
     (
-        "ai",
-        "AI assistant",
-        "mac",
-        "The AI Assistant reads these when it next sends a message.",
-    ),
-    ("engine", "Engine", "mac", "How Built computes and draws."),
-    (
         "units",
         "Units",
         "model",
@@ -466,7 +459,6 @@ impl PreferencesView {
                 "shortcuts" | "keys" => "keyboard",
                 "dimension_style" | "dimstyle" => "dimensions",
                 "north" => "location",
-                "ia" | "assistant" => "ai",
                 id => id,
             };
             if SECTIONS.iter().any(|row| row.0 == id) {

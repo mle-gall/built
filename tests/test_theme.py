@@ -29,10 +29,8 @@ from views import theme  # noqa: E402
 @pytest.fixture
 def app():
     a = QApplication.instance()
-    before = theme.saved_theme()
     yield a
     # Leave the rest of the suite on the dark chrome it always had.
-    theme.save_theme(before)
     theme.apply_theme(a, theme.DARK)
 
 
@@ -52,14 +50,10 @@ def test_mode_resolution():
 
 
 def test_dark_is_the_default(app):
-    # Marco, 2026-09-22: IngeTrazo opens dark; light or «same as the
-    # system» is the user's choice.
-    from PySide6.QtCore import QSettings
-    QSettings().remove("General/theme")
-    QSettings().remove("general/theme")
-    assert theme.saved_theme() == theme.DARK
-    theme.save_theme("sepia")
-    assert theme.saved_theme() == theme.DARK
+    from core import general_settings
+    general_settings.set_value("theme", "light")
+    assert theme.apply_theme(app)
+    assert _window_is_dark(app)
 
 
 def test_pinned_modes_set_the_palette(app):
@@ -125,10 +119,9 @@ def test_tagged_icons_are_redrawn_in_the_new_ink(app):
 
 
 def test_system_mode_follows_a_desktop_flip(app, monkeypatch):
-    theme.save_theme(theme.SYSTEM)
     monkeypatch.setattr(theme, "_system_scheme",
                         lambda _a: Qt.ColorScheme.Light)
-    theme.apply_theme(app)
+    theme.apply_theme(app, theme.SYSTEM)
     assert not _window_is_dark(app)
     # The desktop goes dark: the follower re-applies the saved mode.
     monkeypatch.setattr(theme, "_system_scheme",
@@ -138,8 +131,7 @@ def test_system_mode_follows_a_desktop_flip(app, monkeypatch):
 
 
 def test_a_pinned_mode_ignores_the_desktop(app, monkeypatch):
-    theme.save_theme(theme.LIGHT)
-    theme.apply_theme(app)
+    theme.apply_theme(app, theme.LIGHT)
     monkeypatch.setattr(theme, "_system_scheme",
                         lambda _a: Qt.ColorScheme.Dark)
     theme._follower.on_scheme(Qt.ColorScheme.Dark)

@@ -5,7 +5,6 @@ from __future__ import annotations
 
 from PySide6.QtCore import QSettings
 
-from core import _native
 from core import general_settings as _gs
 from core.i18n import SYSTEM as SYSTEM_LANGUAGE
 from core.i18n import current_language, resolve_language
@@ -15,17 +14,6 @@ from core.i18n import current_language, resolve_language
 #: main_window — the setting is their preselected answer).
 _UNITS_FOR_NEW_KEY = "units/use_for_new_documents"
 
-
-def graphics_server_applies(platform: str | None = None) -> bool:
-    """Whether choosing the display server means anything here: on Linux."""
-    import sys
-    return (platform or sys.platform).startswith("linux")
-
-
-# ---- Applying one setting ---------------------------------------------------
-# What OK does for each setting, one function each: the dialog calls them on
-# OK, the Settings sheet (views/settings_sheet.py) the moment a value changes.
-# ``st`` defaults to a fresh ``QSettings()``.
 
 def viewports_of(window) -> list:
     """Every project's viewport (one per tab, #1066): a view setting
@@ -69,33 +57,6 @@ def apply_language(code, st=None) -> bool:
     return False
 
 
-def apply_theme_choice(theme) -> None:
-    """Theme: applies at once (a no-op re-apply is cheap)."""
-    from views.theme import apply_theme, save_theme, saved_theme
-    if theme != saved_theme():
-        save_theme(theme)
-        from PySide6.QtWidgets import QApplication
-        apply_theme(QApplication.instance(), theme)
-
-
-def apply_accent_choice(accent) -> None:
-    from views.theme import apply_accent, save_accent, saved_accent
-    if accent != saved_accent():
-        save_accent(accent)
-        from PySide6.QtWidgets import QApplication
-        apply_accent(QApplication.instance())
-
-
-def apply_window_glass(on: bool) -> bool:
-    """The Liquid Glass chrome (macOS 26+). True when it changed: it
-    applies after a restart."""
-    from views import mac_glass
-    if not mac_glass.supported() or bool(on) == mac_glass.enabled():
-        return False
-    mac_glass.set_enabled(bool(on))
-    return True
-
-
 def apply_rest_mode(window, mode, fade: float) -> None:
     """Rest-of-model mode and fade: through each viewport (it persists the
     setting), then the Camera menu checkmark follows. Every project's
@@ -130,22 +91,9 @@ def apply_autosave(window, on: bool, minutes: int, backup: bool | None = None,
 def apply_undo_steps(window, steps: int, st=None) -> None:
     st = st if st is not None else QSettings()
     _gs.set_value("undo_steps", int(steps), st)
-    history = getattr(getattr(window, "viewport", None), "history", None)
-    if history is not None:
-        history.max_steps = int(steps)
-
-
-def apply_rust_engine(on: bool, st=None) -> bool:
-    """The Rust engine, read once at start. True when the choice changed
-    (Built must restart to switch)."""
-    st = st if st is not None else QSettings()
-    rust = "1" if on else "0"
-    if _native.available() is None or rust == str(
-            _gs.value(_native.SETTING, _native.DEFAULT, st)):
-        return False
-    _gs.set_value(_native.SETTING, rust, st)
-    _native.chosen_by_user(st)
-    return True
+    for viewport in viewports_of(window):
+        if history := getattr(viewport, "history", None):
+            history.max_steps = int(steps)
 
 
 def apply_invert_wheel(window, on: bool, st=None) -> None:
@@ -162,17 +110,15 @@ def apply_invert_orbit(window, on: bool, st=None) -> None:
         v._invert_orbit_y = bool(on)
 
 
-def apply_slides(window, trackpad: str, touch: str, inertia: bool,
+def apply_slides(window, trackpad: str, inertia: bool,
                  st=None) -> None:
     """The trackpad's two-finger slide, the touch screen's one-finger
     slide and the inertia after the fingers lift."""
     st = st if st is not None else QSettings()
     st.setValue("nav/trackpad_slide", trackpad)
-    st.setValue("nav/touch_slide", touch)
     st.setValue("nav/trackpad_inertia", "1" if inertia else "0")
     for v in viewports_of(window):
         v._trackpad_slide = trackpad
-        v._touch_slide = touch
         v._trackpad_inertia = bool(inertia)
 
 
@@ -183,18 +129,6 @@ def apply_cursor_style(window, style: str, st=None) -> None:
                       "_apply_tool_cursor", None)
     if callable(reapply):
         reapply()                  # the active tool's pointer at once
-
-
-def apply_msaa(window, msaa: int, st=None) -> None:
-    st = st if st is not None else QSettings()
-    st.setValue("display/msaa", msaa)
-    for vp in viewports_of(window):
-        if getattr(vp, "_msaa", None) != msaa:
-            vp._msaa = msaa
-            # Void the FBO size so the next paint rebuilds it at the new
-            # sample count (the rebuild happens with the context current).
-            vp._fbo_size = None
-            _update(vp)
 
 
 def apply_soft_shadows(window, on: bool, level: int, st=None) -> None:
@@ -213,18 +147,6 @@ def apply_soft_shadows(window, on: bool, level: int, st=None) -> None:
     # tick or a camera move.
     for view in native_views_of(window):
         _update(view)
-
-
-def apply_toolbar_icon_px(window, px: int) -> None:
-    from views.icons import toolbar_icon_px
-    px = int(px)
-    if px != toolbar_icon_px():
-        apply_px = getattr(window, "set_toolbar_icon_size", None)
-        if callable(apply_px):
-            apply_px(px)             # persists and resizes every toolbar
-        else:
-            from views.icons import save_toolbar_icon_px
-            save_toolbar_icon_px(px)
 
 
 def document_history(viewport):
@@ -305,9 +227,3 @@ def save_ndof(nd, named: dict, selected, st=None) -> None:
                 if isinstance(selected, str) and selected.startswith("named:")
                 else "")
     save_settings(nd)                # every window reads it live
-
-
-def reload_ai_panel(window) -> None:
-    panel = getattr(window, "_ai_assistant", None)
-    if panel is not None:          # the AI tab lives on: show the change
-        panel._load_settings()

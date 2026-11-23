@@ -31,7 +31,7 @@ def _copy(text):
     return True
 
 
-def about_review(version, gl_line="", host=None):
+def about_review(version, gl_line="", host=None, renderer=None):
     import os
     import platform
     import sys
@@ -60,7 +60,7 @@ def about_review(version, gl_line="", host=None):
         system=system, release=platform.release(), machine=platform.machine(), pretty=pretty,
         os_version=platform.mac_ver()[0] if system == "Darwin" else platform.version(),
         python=platform.python_version(), qt=qVersion(), pyside=PySide6.__version__, gl=gl_line,
-        size=size, native=host is not None, language=current_language(), engine=engine(), commit=build_commit)))
+        renderer=getattr(renderer, "backend_label", "wgpu"), size=size, native=host is not None, language=current_language(), engine=engine(), commit=build_commit)))
 
 
 class About(chrome_sheet.Provider):
@@ -73,7 +73,8 @@ class About(chrome_sheet.Provider):
         from core.version import __version__
         from core.i18n import tr
         if self.review is None:
-            self.review = about_review(__version__, host=ctx.win._host if chrome_sheet.in_shell() else None)
+            self.review = about_review(__version__, host=ctx.win._host if chrome_sheet.in_shell() else None,
+                                       renderer=getattr(getattr(ctx, "view", None), "renderer", None))
         return NativeSheet(self.id, spec=self.review.sheet(tr))
 
     def signature(self, ctx):

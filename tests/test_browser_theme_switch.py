@@ -40,7 +40,6 @@ def _lightest(icon) -> int:
 def win():
     from views.main_window import MainWindow
     app = QApplication.instance()
-    before = theme.saved_theme()
     theme.apply_theme(app, theme.LIGHT)
     w = MainWindow()
     scene = w.viewport.scene
@@ -50,7 +49,6 @@ def win():
     yield w
     w._saved_version = w.viewport.scene.version
     w.close()
-    theme.save_theme(before)
     theme.apply_theme(app, theme.DARK)
 
 

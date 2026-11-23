@@ -100,18 +100,13 @@ def test_many_extensions_go_under_one_submenu(win, monkeypatch):
     assert _texts(_sub(menu, "Extensions")) == [f"Entry {i}" for i in range(n)]
 
 
-def test_always_and_flat_follow_the_preference(win, monkeypatch):
+def test_retired_grouping_choices_leave_the_default_menu(win, monkeypatch):
     _extension(win, "alpha_tool", ["Alpha…"])
     _extension(win, "beta_tool", ["Beta one", "Beta two"])
-    _gs.set_value("ext_menus", "always")
-    menu = _context_menu(win, monkeypatch)
-    assert "Alpha…" not in _texts(menu)
-    assert "Alpha…" in _texts(_sub(menu, "Extensions"))
-    _gs.set_value("ext_menus", "flat")
-    menu = _context_menu(win, monkeypatch)
-    texts = _texts(menu)
-    assert {"Alpha…", "Beta one", "Beta two"} <= set(texts)   # as before
-    assert "Extensions" not in texts and "Beta tool" not in texts
+    for old in ("always", "flat"):
+        _gs.set_value("ext_menus", old)
+        texts = _texts(_context_menu(win, monkeypatch))
+        assert "Alpha…" in texts and "Beta tool" in texts and "Extensions" not in texts
 
 
 def test_an_extension_that_raises_does_not_stop_the_menu(win, monkeypatch):

@@ -1440,17 +1440,6 @@ def _load_invert_orbit_y() -> bool:
     return str(QSettings().value("nav/invert_orbit_y", "0")) != "0"
 
 
-def _load_msaa() -> int:
-    """Scene-FBO multisample count (Preferences ▸ General). 4 is the
-    historical hardcoded value; the FBO still falls back to 0 on drivers
-    that refuse multisampling."""
-    from PySide6.QtCore import QSettings
-    try:
-        n = int(QSettings().value("display/msaa", 4))
-    except (TypeError, ValueError):
-        n = 4
-    return n if n in (0, 2, 4, 8) else 4
-
 #: Soft sun shadows (#1281), Preferences ▸ General: off (0) or a level, and
 #: how fast the penumbra widens with the distance from what casts it, in
 #: world width per world distance. The real sun is about 0.009; the levels
@@ -2226,9 +2215,8 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         self._invert_orbit_y = _load_invert_orbit_y()
         from views import trackpad_nav
         self._trackpad_slide = trackpad_nav.load_slide_mode()
-        self._touch_slide = trackpad_nav.load_touch_slide()
         self._trackpad_inertia = trackpad_nav.load_inertia()
-        self._msaa = _load_msaa()
+        self._msaa = 4
         self._soft_shadows = _load_soft_shadows()
 
         # Hover highlight (Select tool). Not version-tracked — it changes with

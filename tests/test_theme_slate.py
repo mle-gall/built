@@ -28,24 +28,19 @@ from views import theme  # noqa: E402
 @pytest.fixture
 def app():
     a = QApplication.instance()
-    before_theme, before_accent = theme.saved_theme(), theme.saved_accent()
     a.setStyleSheet("")
     theme._app_sheet = ""
     yield a
-    theme.save_theme(before_theme)
-    theme.save_accent(before_accent)
     a.setStyleSheet("")
     theme._app_sheet = ""
     theme.apply_theme(a, theme.DARK)
 
 
-def test_slate_is_a_dark_theme_that_can_be_saved(app):
+def test_slate_is_a_dark_qt_palette(app):
     assert theme.SLATE in theme.THEMES
     for scheme in (Qt.ColorScheme.Light, Qt.ColorScheme.Dark,
                    Qt.ColorScheme.Unknown):
         assert theme.is_dark(theme.SLATE, scheme) is True
-    theme.save_theme(theme.SLATE)
-    assert theme.saved_theme() == theme.SLATE
 
 
 def test_slate_sets_its_palette_and_sheet(app):
@@ -163,14 +158,9 @@ def test_a_sheet_set_by_someone_else_is_left_alone(app):
     assert app.styleSheet() == foreign
 
 
-def test_the_sheet_follows_the_accent(app):
-    theme.save_accent("blue")
+def test_the_sheet_uses_the_kit_accent(app):
     theme.apply_theme(app, theme.SLATE)
-    assert "53, 132, 228" in app.styleSheet()
-    theme.save_accent("green")
-    theme.apply_accent(app)
-    assert "46, 160, 67" in app.styleSheet()
-    assert "53, 132, 228" not in app.styleSheet()
+    assert "106, 165, 255" in app.styleSheet()
 
 
 def test_the_sheet_template_is_fully_filled():
@@ -231,7 +221,6 @@ def _rule(sheet: str, selector: str) -> str:
 
 def test_the_active_tool_is_not_painted_in_the_accent():
     # Round 2 of the user's test: the active tool keeps Dark's quiet box.
-    theme.save_accent("blue")
     sheet = theme.slate_sheet()
     body = _rule(sheet, "QToolBar QToolButton:checked")
     assert "53, 132, 228" not in body
@@ -273,14 +262,10 @@ def test_the_grip_is_one_thin_line():
     assert "QToolBar::handle" not in theme.app_sheet(theme.SLATE)
 
 
-def test_neutral_accents_are_offered():
-    # Round 6: white and light grey, for a sober chrome.
-    keys = [k for k, _l, _c in theme.ACCENTS]
-    assert "white" in keys and "light_grey" in keys
-    assert theme.accent_color("white").lightness() > 230
-    grey = theme.accent_color("light_grey")
-    assert 160 < grey.lightness() < 215
-    assert abs(grey.red() - grey.blue()) < 16      # a grey, not a tint
+def test_retired_neutral_accent_is_ignored():
+    from core import general_settings
+    general_settings.set_value("accent", "light_grey")
+    assert theme.accent_color().name() == "#6aa5ff"
 
 
 @pytest.mark.parametrize("mode", [theme.DARK, theme.LIGHT, theme.SLATE])

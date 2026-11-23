@@ -195,6 +195,8 @@ struct Renderer {
     ui_scale: f32,
     #[pyo3(get)]
     adapter: String,
+    #[pyo3(get)]
+    backend_label: String,
 }
 fn row_runs(ids: Vec<usize>) -> Vec<(usize, usize)> {
     // The CPU mirror includes flags and overrides for untouched rows. Uploading
@@ -633,6 +635,7 @@ impl Renderer {
             ui: None,
             ui_target: 0,
             ui_scale: scale as f32,
+            backend_label: format!("wgpu ({:?})", a.get_info().backend),
             adapter: format!(
                 "{:?}; multi_draw={}",
                 a.get_info(),

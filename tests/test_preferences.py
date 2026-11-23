@@ -52,35 +52,26 @@ def _fresh(path):
 def test_ok_writes_the_settings(settings_file):
     win = _Win()
     ui = Controls(win, "import")
-    ui.set("obj_unit", "cm")
     ui.select("import").set("dxf_unit", "m")
-    ui.select("import").set("coord_mode", "utm")
-    ui.select("ai").set("ai_model", "llama-3.3-70b")
-    ui.select("ai").set("ai_shots", False)
     ui.select("general").set("autosave_min", 10)
     ui.select("general").set("backup", False)
     ui.select("navigation").set("invert_wheel", True)
     ui.select("navigation").set("invert_orbit", True)
     ui.select("navigation").set("look_sens", 40)
-    ui.select("display").set("msaa", 8)
     st = _fresh(settings_file)
-    assert st.value("import/obj_unit") == "cm"
+    assert st.value("import/obj_unit") is None
     assert st.value("import/dxf_unit") == "m"
-    assert st.value("georef/coord_mode") == "utm"
-    assert st.value("ia/modelo") == "llama-3.3-70b"
-    assert st.value("ia/capturas") == "0"
+    assert st.value("georef/coord_mode") is None
     assert st.value("General/autosave") == "1"
     assert int(st.value("General/autosave_min")) == 10
     assert st.value("General/backup") == "0"
     assert st.value("nav/invert_wheel") == "1"
     assert st.value("nav/invert_orbit_y") == "1"
     assert int(st.value("walk/look_sensitivity")) == 40
-    assert int(st.value("display/msaa")) == 8
+    assert st.value("display/msaa") is None
     # The live pieces reach the viewport immediately.
     assert win.viewport._invert_wheel is True
     assert win.viewport._invert_orbit_y is True
-    assert win.viewport._msaa == 8
-    assert win.viewport._fbo_size is None   # next paint rebuilds the FBO
 
 
 def test_cancel_touches_nothing(settings_file):
@@ -114,57 +105,36 @@ def test_dialog_reloads_saved_values(settings_file):
     win = _Win()                 # referenced: see the theme test below
     ui = Controls(win, "import")
     assert ui.value("dxf_unit") == "in"
-    assert ui.select("ai").value("ai_provider") == "auto"
+    assert st.value("ia/proveedor") == "auto"
 
 
-def test_toolbar_icon_size_lives_in_preferences_and_reaches_every_toolbar(settings_file):
-    from views.icons import save_toolbar_icon_px, toolbar_icon_px
+def test_toolbar_sizes_are_fixed_even_with_old_keys(settings_file):
+    from views.icons import DEFAULT_TOOLBAR_ICON_PX
     st = _fresh(settings_file)
+    st.setValue("ui/toolbar_icon_px", 40)
     st.setValue("ui/large_toolbar_icons", "1")
-    st.sync()
-    assert toolbar_icon_px() == 32
-    win = _Win()
-    seen = []
-    win.set_toolbar_icon_size = lambda px: (seen.append(px), save_toolbar_icon_px(px))
-    ui = Controls(win, "general")
-    assert ui.value("icon_px") == 32
-    ui.set("icon_px", 40)
-    assert seen == [40]
-    assert int(st.value("ui/toolbar_icon_px")) == 40
-    assert st.value("ui/large_toolbar_icons") is None
-    assert toolbar_icon_px() == 40
+    with pytest.raises(KeyError):
+        Controls(_Win(), "general").row("icon_px")
+    assert DEFAULT_TOOLBAR_ICON_PX == 24
+    assert st.value("ui/large_toolbar_icons") == "1"
 
 
-def test_theme_choice_applies_at_once(settings_file):
+def test_old_theme_is_ignored_by_the_default_palette(settings_file):
     from views import theme
-    app = QApplication.instance()
-    before = theme.saved_theme()
-    try:
-        win = _Win()
-        ui = Controls(win, "general")
-        ui.set("theme", theme.LIGHT)
-        assert theme.saved_theme() == theme.LIGHT
-        assert app.palette().window().color().lightness() > 128
-    finally:
-        theme.save_theme(before)
-        theme.apply_theme(app, theme.DARK)
+    st = _fresh(settings_file)
+    st.setValue("General/theme", "light")
+    assert theme.apply_theme(QApplication.instance())
+    with pytest.raises(KeyError):
+        Controls(_Win(), "general").row("theme")
 
 
-def test_slate_is_offered_and_applies(settings_file):
-    from views import theme
-    app = QApplication.instance()
-    before = theme.saved_theme()
-    try:
-        win = _Win()
-        ui = Controls(win, "general")
-        assert theme.SLATE in ui.options("theme")
-        ui.set("theme", theme.SLATE)
-        assert theme.saved_theme() == theme.SLATE
-        assert "QPushButton" in app.styleSheet()
-    finally:
-        theme.save_theme(before)
-        theme.apply_theme(app, theme.DARK)
-    assert app.styleSheet() == ""
+def test_restore_leaves_retired_appearance_keys_intact(settings_file):
+    st = _fresh(settings_file)
+    st.setValue("General/theme", "slate")
+    st.setValue("General/accent", "orange")
+    Controls(_Win(), "general").restore()
+    assert st.value("General/theme") == "slate"
+    assert st.value("General/accent") == "orange"
 
 
 def test_the_3d_mouse_page_shows_the_device_live(settings_file, monkeypatch):
@@ -213,16 +183,6 @@ def test_the_tool_cursor_is_chosen_in_preferences(settings_file):
     assert Controls(win, "navigation").value("cursor_style") == "crosshair"
 
 
-def test_the_graphics_server_is_asked_only_where_there_is_a_choice(
-        settings_file, monkeypatch):
-    """Wayland or X11: Linux. On Windows the row spoke of KDE (#1179)."""
-    from views import settings_apply
-    for platform, expected in [("linux", True), ("win32", False), ("darwin", False)]:
-        assert settings_apply.graphics_server_applies(platform) is expected
-    ui = Controls(_Win(), "engine")
-    monkeypatch.setattr(settings_apply, "graphics_server_applies", lambda: True)
-    assert ui.row("platform").label == "Graphics server"
-    monkeypatch.setattr(settings_apply, "graphics_server_applies", lambda: False)
-    with pytest.raises(KeyError):
-        ui.row("platform")
-    assert _fresh(settings_file).value("general/platform", "auto") == "auto"
+def test_no_display_server_switch_in_native_settings(settings_file):
+    side = Controls(_Win(), "general").wire()["side"]
+    assert all(row.get("id") != "engine" for row in side)

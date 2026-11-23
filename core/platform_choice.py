@@ -7,9 +7,7 @@ display at 125 %): under the native Wayland plugin the viewport's frames ran
 p90 149 ms with the same model that gave p90 30 ms under ``xcb`` (XWayland) —
 Qt composes a QOpenGLWidget window through a slow path when the output scale
 is fractional. So a Wayland session whose configured monitor scale is not a
-whole number starts under ``xcb`` unless the user says otherwise
-(Preferences ▸ General ▸ Graphics server, or ``QT_QPA_PLATFORM`` set by hand,
-which always wins). ``xwayland-native-scaling`` keeps it crisp on GNOME 46+.
+whole number starts under ``xcb`` unless QT_QPA_PLATFORM is set explicitly. XWayland native scaling keeps it crisp on GNOME 46+.
 """
 from __future__ import annotations
 
@@ -152,13 +150,8 @@ def choose_platform(preference: str, env: dict | None = None,
 def apply_platform_preference() -> str | None:
     """Called BEFORE the QApplication exists: reads the preference and sets
     ``QT_QPA_PLATFORM`` when the choice says so. Returns what was set."""
-    from PySide6.QtCore import QCoreApplication
-    from core import general_settings
-    QCoreApplication.setOrganizationName("IngeTrazo")
-    QCoreApplication.setApplicationName("IngeTrazo")
-    pref = str(general_settings.value("platform", AUTO) or AUTO)
-    chosen = choose_platform(pref)
-    if (chosen is None and pref == AUTO and os.environ.get("DISPLAY")
+    chosen = choose_platform(AUTO)
+    if (chosen is None and os.environ.get("DISPLAY")
             and os.environ.get("WAYLAND_DISPLAY") and not os.environ.get("QT_QPA_PLATFORM")):
         from PySide6.QtGui import QWindow
         if not hasattr(QWindow, "nativeInterface"):

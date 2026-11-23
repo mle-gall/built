@@ -1216,14 +1216,12 @@ def test_active_pencil_follows_the_chosen_accent(win):
             for y in range(image.height()) for x in range(image.width())
         )
 
-    blue = theme.accent_color("blue")
+    blue = theme.accent_color()
     try:
-        theme.save_accent("blue")
         theme.apply_accent(_app)
         assert has(item.icon(1), blue)                       # COL_ACTIVE
         assert has(panel.tree.headerItem().icon(1), blue)
     finally:
-        theme.save_accent(theme.ORANGE)
         theme.apply_accent(_app)
 
 

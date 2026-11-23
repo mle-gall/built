@@ -119,7 +119,7 @@ impl AboutReview {
         facts.extend([
             ("Language", s("language").into()),
             ("Engine", s("engine").into()),
-            ("Renderer", "Metal (wgpu)".into()),
+            ("Renderer", source["renderer"].as_str().unwrap_or("wgpu").into()),
             ("Commit", s("commit").into()),
         ]);
         let mut info = title.clone();

@@ -80,13 +80,6 @@ def load_slide_mode() -> str:
     return mode if mode in SLIDE_MODES else DEFAULT_SLIDE
 
 
-def load_touch_slide() -> str:
-    """A finger's slide on the touch screen."""
-    from PySide6.QtCore import QSettings
-    mode = str(QSettings().value("nav/touch_slide", DEFAULT_TOUCH_SLIDE)).lower()
-    return mode if mode in SLIDE_MODES else DEFAULT_TOUCH_SLIDE
-
-
 def load_inertia() -> bool:
     """Whether the view keeps turning after the fingers lift (the momentum
     events macOS sends). On by default: it is what makes a trackpad feel
@@ -226,7 +219,7 @@ def slide(view, ev) -> bool:
         ev.accept()                 # the fingers are pinching, not sliding
         return True
     if is_touch_screen(ev):
-        default = _pref(view, "_touch_slide", load_touch_slide)
+        default = _pref(view, "_touch_slide", lambda: DEFAULT_TOUCH_SLIDE)
     else:
         default = _pref(view, "_trackpad_slide", load_slide_mode)
     mode = slide_mode(ev, default)

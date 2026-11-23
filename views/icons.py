@@ -2851,50 +2851,8 @@ def tool_cursor(key: str | None, plus: bool = False) -> QCursor | None:
     return cursor
 
 
-# ---- Toolbar icon size ----------------------------------------------------
-#: Sizes offered in Preferences ▸ General (pixels). The first version had
-#: only a «large» toggle (32) on the toolbar's right-click menu — moved
-#: here so it lives with the other settings and reaches the composer's
-#: toolbars too. 32 is the factory default: what Marco settled on after
-#: the icon pass of 2026-09-14 («configúralo por defecto para cualquier
-#: persona que instale el programa»).
-TOOLBAR_ICON_SIZES = ((20, "Small"), (24, "Normal"), (32, "Large"),
-                      (40, "Extra large"))
+# Fixed size for the remaining Qt toolbars. The native rail has its own metrics.
 DEFAULT_TOOLBAR_ICON_PX = 24
-
-
-def default_toolbar_icon_px() -> int:
-    """The size a profile that never chose gets: normal (24 px). Large was
-    the default for one release (Marco liked it on his 27" monitor) and
-    looked clumsy on his laptop — «se ven mejor los tamaños normales»
-    (2026-09-14); Preferences keeps 20/24/32/40 for whoever wants more."""
-    return DEFAULT_TOOLBAR_ICON_PX
-
-
-def toolbar_icon_px() -> int:
-    """The toolbar icon size in pixels from the settings, migrating the
-    old «large icons» toggle on first read; a profile that never chose
-    gets the size that fits its screen."""
-    from PySide6.QtCore import QSettings
-    st = QSettings()
-    raw = st.value("ui/toolbar_icon_px")
-    if raw is None or str(raw) == "":
-        px = (32 if str(st.value("ui/large_toolbar_icons", "0")) == "1"
-              else default_toolbar_icon_px())
-    else:
-        try:
-            px = int(raw)
-        except (TypeError, ValueError):
-            px = DEFAULT_TOOLBAR_ICON_PX
-    return (px if px in {s for s, _ in TOOLBAR_ICON_SIZES}
-            else DEFAULT_TOOLBAR_ICON_PX)
-
-
-def save_toolbar_icon_px(px: int) -> None:
-    from PySide6.QtCore import QSettings
-    st = QSettings()
-    st.setValue("ui/toolbar_icon_px", int(px))
-    st.remove("ui/large_toolbar_icons")
 
 
 def style_overflow_button(tb) -> None:

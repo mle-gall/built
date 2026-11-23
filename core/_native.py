@@ -1,17 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""The Rust engine (``rust/ingetrazo_core``, built with maturin).
-
-``native`` is the compiled module when the engine is on and loads, else
-``None``. It is ON unless Preferences ▸ General ▸ «Rust engine» turns it
-off (read once, so it applies at the next start; on by default since
-0.5.10). Model maths always uses the compiled extension;
-``INGETRAZO_RUST=1`` / ``=0`` overrides the setting, for tests and benches.
-Every caller keeps its Python code and uses it whenever ``native`` is
-``None``: the kernels make things faster, never different.
-
-``native`` is resolved on first use, not at import: the setting lives in
-QSettings, which needs the application's name set first."""
+"""Rust CPU kernels loaded on first use. The benchmark environment override
+and the classic launch crash guard are independent of user preferences."""
 from __future__ import annotations
 
 import logging
@@ -21,18 +11,13 @@ import sys
 
 log = logging.getLogger(__name__)
 
-#: The General setting that turns the engine on ("1") or off ("0").
-SETTING = "rust_engine"
-#: Its value when the user never chose: on.
-DEFAULT = "1"
-
+_guard_disabled = False
 _UNSET = object()
 _module = _UNSET          # the compiled module, None, or not looked at yet
 
 
 def available():
-    """The compiled module if this build has it and it loads, else None —
-    whatever the setting says (Preferences shows «not available»)."""
+    """The compiled module if this build has it and it loads, else None."""
     global _module
     if _module is _UNSET:
         try:
@@ -47,16 +32,11 @@ def available():
 
 
 def wanted() -> bool:
-    """Whether the engine is asked for: the environment first, then the
-    saved preference (on by default)."""
+    """Whether the engine is asked for: the environment overrides the classic launch guard."""
     env = os.environ.get("INGETRAZO_RUST")
     if env is not None:
         return env != "0"
-    try:
-        from core import general_settings
-        return str(general_settings.value(SETTING, DEFAULT)) == "1"
-    except Exception:  # noqa: BLE001 — no Qt settings yet: stay on Python
-        return False
+    return not _guard_disabled
 
 
 def store_wanted() -> bool:
@@ -117,9 +97,10 @@ def _count(raw) -> int:
 def start_guard(argv) -> bool:
     """Before anything reads ``native``: honour ``--python-engine``, and if
     the last FAILED_STARTS starts with the engine on never reached their
-    first frame, turn the engine off (the user turns it on again in
-    Preferences, and the next version tries it again by itself).
+    first frame, use the classic fallback for this version. A new version tries the kernels again.
     Returns True when it was turned off that way — the window says so."""
+    global _guard_disabled
+    _guard_disabled = False
     if FLAG in argv:
         os.environ["INGETRAZO_RUST"] = "0"
         return False
@@ -130,20 +111,20 @@ def start_guard(argv) -> bool:
         from core import general_settings
         from core.version import __version__
         st = QSettings()
-        on = str(general_settings.value(SETTING, DEFAULT, st)) == "1"
         off_by = str(general_settings.value(OFF_BY_GUARD, "", st))
-        if not on and off_by and off_by != __version__:
+        if off_by and off_by != __version__:
             # Turned off by the guard of another version, not by the user:
             # this version gets its own try.
-            general_settings.set_value(SETTING, "1", st)
             general_settings.set_value(OFF_BY_GUARD, "", st)
             general_settings.set_value(STARTING, "0", st)
-            on = True
             log.info("The Rust engine was turned off by the start guard of "
                      "%s: trying it again.", off_by)
+        if off_by == __version__:
+            _guard_disabled = True
+            return False
         pending = _count(general_settings.value(STARTING, "0", st))
-        if on and pending >= FAILED_STARTS:
-            general_settings.set_value(SETTING, "0", st)
+        if pending >= FAILED_STARTS:
+            _guard_disabled = True
             general_settings.set_value(STARTING, "0", st)
             general_settings.set_value(OFF_BY_GUARD, __version__, st)
             st.sync()
@@ -151,23 +132,11 @@ def start_guard(argv) -> bool:
                         "open the window: back on the Python engine.",
                         pending)
             return True
-        if on:
-            general_settings.set_value(STARTING, str(pending + 1), st)
-            st.sync()                   # on disk before anything can crash
+        general_settings.set_value(STARTING, str(pending + 1), st)
+        st.sync()                   # on disk before anything can crash
     except Exception as exc:  # noqa: BLE001 — never stop a start over this
         log.warning("Rust engine start guard: %s", exc)
     return False
-
-
-def chosen_by_user(settings=None) -> None:
-    """The user set the engine in Preferences: from now on the choice is
-    theirs, and no later version turns it back on for them."""
-    try:
-        from core import general_settings
-        general_settings.set_value(OFF_BY_GUARD, "", settings)
-        general_settings.set_value(STARTING, "0", settings)
-    except Exception as exc:  # noqa: BLE001
-        log.warning("Rust engine start guard: %s", exc)
 
 
 def start_ok() -> None:

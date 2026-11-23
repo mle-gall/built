@@ -525,8 +525,15 @@ class ShellWindow(QObject):
             shortcut = getattr(tool, "shortcut", "") or ""
             if key == "select":
                 shortcut = "Space"          # bound by MainWindow, not the tool
-            self._tool_actions[key] = ShellAction(
-                getattr(tool, "name", key), shortcut, run=lambda k=key: self._activate_tool(k))
+            action = QAction(getattr(tool, "name", key), self)
+            action.setObjectName("tool_" + key)
+            action.setCheckable(True)
+            action.setShortcut(shortcut)
+            action.triggered.connect(lambda checked=False, k=key: self._activate_tool(k))
+            self._tool_actions[key] = action
+        from views.shortcuts import remember_defaults, apply_user_shortcuts
+        remember_defaults(self)
+        apply_user_shortcuts(self)
 
     def __getattr__(self, name):
         if name.startswith("__"):
@@ -579,7 +586,8 @@ class ShellWindow(QObject):
         doc.untitled_no = self._free_untitled_no() if self._documents else 1
         vp = DocumentController(host)
         try:
-            vp.history.max_steps = 200
+            from core import general_settings
+            vp.history.max_steps = int(general_settings.value("undo_steps", 200))
         except Exception:  # noqa: BLE001
             pass
         view = ShellView(host)

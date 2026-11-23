@@ -111,10 +111,10 @@ def test_sections_in_two_groups(win):
     labels = [(r.get("kind", ""), r["label"]) for r in side]
     assert labels == [("caption", "Built · this Mac"), ("", "General"), ("", "Navigation"),
                       ("", "Display"), ("", "3D mouse"), ("", "Import"), ("", "Keyboard"),
-                      ("", "AI assistant"), ("", "Engine"), ("caption", "This model"), ("", "Units"),
+                      ("caption", "This model"), ("", "Units"),
                       ("", "Dimension style"), ("", "Location & north")]
     assert [r["id"] for r in side if r.get("on")] == ["general"]
-    assert "theme" in fields(sheet) and "autosave" in fields(sheet)
+    assert "theme" not in fields(sheet) and "autosave" in fields(sheet)
     # No OK/Cancel anywhere: the footer restores defaults, that is all.
     assert [l["id"] for l in sheet["footer"]["links"]] == ["restore"]
     assert "apply at once" in sheet["footer"]["hint"]
@@ -125,9 +125,9 @@ def test_side_picks_a_section(win):
     frame(win)
     sheet = act(win, "side", "navigation")
     assert sheet["content"]["title"] == "Navigation"
-    assert captions(sheet) == ["Mouse", "Trackpad and touch screen", "Tools"]
+    assert captions(sheet) == ["Mouse", "Trackpad", "Tools"]
     got = fields(sheet)
-    assert {"invert_wheel", "invert_orbit", "look_sens", "trackpad_slide", "touch_slide",
+    assert {"invert_wheel", "invert_orbit", "look_sens", "trackpad_slide",
             "trackpad_inertia", "cursor_style", "ask_section"} <= set(got)
     # Field ids are unique in the whole sheet.
     ids = [r[0] for b in sheet["content"]["blocks"] if b["kind"] == "fields" for r in b["fields"]]
@@ -193,10 +193,9 @@ def test_a_built_setting_applies_at_once(win):
     assert fields(sheet)["invert_wheel"][4] == 1.0
     # A choice comes as the index of its option.
     sheet = act(win, "side", "display")
-    labels = fields(sheet)["msaa"][7]
-    act(win, "v", "msaa", labels.index("2x"))
-    assert int(QSettings().value("display/msaa")) == 2
-    assert all(v._msaa == 2 for v in win.all_viewports())
+    labels = fields(sheet)["rest_mode"][7]
+    act(win, "v", "rest_mode", labels.index("Hide (fastest)"))
+    assert all(v.edit_rest_mode == "hide" for v in win.all_viewports())
     # A number typed: undo steps reach the history at once.
     act(win, "side", "general")
     act(win, "v", "undo_steps", "37")
