@@ -834,7 +834,8 @@ impl Ui {
         self.hint = hint;
     }
     /// The value field's facts for this frame (ui/value_field.rs): `start`
-    /// is the tool's start point on screen, `revision` the document's.
+    /// is the tool's start point on screen, `revision` that of what the value
+    /// acts on (the document; the lens for Zoom).
     pub fn set_cursor_value(&mut self, caption: String, value: String, typing: bool, x: f32, y: f32,
                             start: Option<(f32, f32)>, revision: u64) {
         self.cursor.set(caption, value, typing, pos2(x, y), start.map(|(x, y)| pos2(x, y)), revision);

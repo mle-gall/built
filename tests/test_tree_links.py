@@ -248,7 +248,8 @@ def _visible(scene, g):
     return False
 
 
-def test_isolate_link_row_mounted_node_host_group_and_mixed_then_show_all(ui):
+def test_isolate_link_row_mounted_node_host_group_and_mixed_then_show_all(ui, monkeypatch):
+    from core import facets
     from core.agent_facets import set_display
     import views.wgpu_ui as wu
     scene, win, view, rows, act = ui
@@ -264,9 +265,17 @@ def test_isolate_link_row_mounted_node_host_group_and_mixed_then_show_all(ui):
     set_display(vp, {"facet": "uid", "in": [a.uid, b.uid, host.uid]}, isolate=True, remember=False)
     before = (dict(vp._view_expression), list(getattr(vp, "_previous_views", [])))
     scene.select([host])
-    t = time.perf_counter()
-    act("isolate", "n:link:A")
-    assert time.perf_counter() - t < 2.0
+    # Isolate reads the native placement tree (doc/occurrences.rs): it never
+    # rebuilds the facet index, which walked every occurrence in Python and
+    # was invalidated by each view change. Measured in this process's own CPU
+    # time, not wall time, so a loaded machine does not fail it.
+    built = []
+    monkeypatch.setattr(facets, "build", lambda *a, real=facets.build: built.append(1) or real(*a))
+    t = time.process_time()
+    wu._tree_action(win, view, wu.SEP.join(["isolate", "n:link:A"]))
+    assert time.process_time() - t < 0.5
+    assert not built
+    rows()
     assert _visible(scene, a) and _visible(scene, rail) and _visible(scene, flight)
     assert not _visible(scene, b) and not _visible(scene, host)
     # A mounted node: its items show through the link placement holding them.
@@ -286,6 +295,28 @@ def test_isolate_link_row_mounted_node_host_group_and_mixed_then_show_all(ui):
     act("isolate", "n:link:B")
     wu._show_all(vp)
     assert scene._navigator_allowed is None and _visible(scene, rail)
+
+
+def test_native_isolation_matches_the_facet_index(ui):
+    """The native closure (doc/occurrences.rs) shows, and draws through,
+    exactly what the Python facet index gives for the same keys."""
+    from core import facets
+    scene, win, view, rows, act = ui
+    index = facets.build(scene)
+    tree = view._ui_tree["tree"]
+    picks = [[tree.links["link:A"][0].uid], [tree.direct[_key(view, "Rails")][0].uid],
+             [tree.direct[_key(view, "Paths")][0].uid, tree.links["link:B"][0].uid],
+             list(index)[5:40:7], ["no-such-key"]]
+    for wanted in picks:
+        for exact in (False, True):
+            want = set(facets.evaluate(index, {"facet": "occurrence", "in": wanted}))
+            allowed = {u for u, row in index.items()
+                       if u in want or (not exact and any(p in want for p in row["path_keys"]))}
+            through = {p for u in allowed for p in index[u]["path_keys"]} - allowed
+            matched, n_allowed, n_through, qualified = scene.occurrence_closure(wanted, exact)
+            assert matched == [u for u in index if u in want]
+            assert (n_allowed, n_through) == (allowed, through), (wanted, exact)
+            assert qualified == index.qualified
 
 
 def test_packer_draws_isolated_parts_through_their_link(ui):

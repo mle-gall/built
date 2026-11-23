@@ -1128,6 +1128,29 @@ impl PyPlacement {
         Ok(repeated)
     }
 
+    /// Isolate occurrence keys (`core.agent_facets.set_display` for an
+    /// "occurrence in [...]" filter): `(matched keys in walk order, shown
+    /// keys, drawn-through keys, [(placement, address key)])`, from the tree
+    /// alone, without the Python facet index (doc/occurrences.rs).
+    #[pyo3(signature = (wanted, exact=false))]
+    #[allow(clippy::type_complexity)]
+    fn _occurrence_closure(&self, py: Python<'_>, wanted: HashSet<String>, exact: bool)
+        -> PyResult<(Vec<String>, HashSet<String>, HashSet<String>, Vec<(Py<PyAny>, String)>)> {
+        let repeated = self._repeated_uids()?;
+        let doc = lock();
+        let roots = doc.need(self.key).map_err(err)?.children.clone();
+        let node = |k: Key| {
+            let n = doc.node(k)?;
+            let super::Data::Placement(p) = &n.data else { return None };
+            Some((p.uid.clone().unwrap_or_default(), n.children.clone()))
+        };
+        let c = super::occurrences::closure(&roots, &node, &repeated, &wanted, exact);
+        let qualified = c.qualified.iter()
+            .filter_map(|(k, key)| doc.handle_ref(py, *k).map(|h| (h, key.clone())))
+            .collect();
+        Ok((c.matched, c.allowed, c.through, qualified))
+    }
+
     fn _occurrence_path(&self, placement: &PyPlacement) -> Option<Vec<String>> {
         let d = lock();
         let mut k = placement.key;

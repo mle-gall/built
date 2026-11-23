@@ -3,9 +3,10 @@
 //!
 //! Python passes facts each frame: the tool's caption, its live reading or
 //! what is typed, where that sits on the geometry, the tool's start point and
-//! the document's revision. The decisions are here:
+//! the revision of what the value acts on (the document; the camera's lens
+//! for Zoom). The decisions are here:
 //!
-//! - **Commit.** Typing stopped and the document's revision moved: Enter
+//! - **Commit.** Typing stopped and that revision moved: Enter
 //!   applied the value. (Esc or Backspace to empty stop typing without a new
 //!   revision.)
 //! - **Readback.** The committed value stays on the result: the segment from
