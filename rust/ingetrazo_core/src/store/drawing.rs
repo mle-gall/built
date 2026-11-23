@@ -76,7 +76,7 @@ impl Store {
     /// includes sub-edges created when another stroke crossed the path.
     pub fn tag_curve_path(&mut self, path: &[Point], closed: bool, id: i64) -> bool {
         use glam::DVec3;
-        use super::command_delete::cell;
+        use super::commands::cell;
         if path.len() < 2 { return false; }
         let segments: Vec<_> = path.iter().zip(path.iter().cycle().skip(1))
             .take(path.len() - usize::from(!closed))

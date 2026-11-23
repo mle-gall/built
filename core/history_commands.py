@@ -3472,12 +3472,25 @@ class MoveVerticesCommand(MeshCommand):
             return
         self._before = self._reference_snapshot(scene.mesh)
         keys = {_key(p) for p in self.src}
-        vertices = _vertices_at(scene.mesh, keys)
-        moving = {v.key for v in vertices}
         if isinstance(self.delta, tuple):
             landing = {_key(tuple(x + d for x, d in zip(p, self.delta))) for p in self.src}
         else:
             landing = {_key(p + self.delta) for p in self.src}
+        from core.store_mesh import StoreMesh, _xyz
+        native = self._journal_geometry and type(scene.mesh) is StoreMesh
+        # The legacy cells API treats integer triples as already scaled.
+        # Native position matching takes decimal model coordinates.
+        if native and not self.carry_textures and all(type(x) is float for p in keys for x in p):
+            count = scene.mesh._store.move_without_join(list(keys), _xyz(self.delta))
+            if count is not None:
+                for _ in range(count):
+                    scene.mesh._bump()
+                scene.version += 1
+                self.welded = False
+                fold_nonplanar_faces(scene.mesh, moved=landing)
+                return
+        vertices = _vertices_at(scene.mesh, keys)
+        moving = {v.key for v in vertices}
         before = None
         if any(v.key not in moving
                for v in _vertices_at(scene.mesh, landing)):
@@ -3486,8 +3499,7 @@ class MoveVerticesCommand(MeshCommand):
             before = defects_near(_vertices_at(scene.mesh, keys | landing))
         carried = (_carried_faces(scene.mesh, moving)
                    if self.carry_textures else [])
-        from core.store_mesh import StoreMesh, _xyz
-        if self._journal_geometry and type(scene.mesh) is StoreMesh:
+        if native:
             scene.mesh._store.move_vertices([v.key for v in vertices], _xyz(self.delta))
             for _ in vertices:
                 scene.mesh._bump()

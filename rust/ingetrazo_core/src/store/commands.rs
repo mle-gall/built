@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Position-addressed deletion for the History drawing commands.
+//! Position-addressed edits for the History drawing commands.
 use super::{edit::Change, keys::Kind, Store};
 use std::collections::HashSet;
 
@@ -34,6 +34,41 @@ fn segment(a: Cell, b: Cell) -> [Cell; 2] {
 }
 
 impl Store {
+    /// Move the selected position cells together. A landing needs the weld
+    /// and defect checks. Detect it before writing so that path can take over.
+    pub fn move_without_join(&mut self, source: &[Point], delta: Point) -> Option<usize> {
+        let source: HashSet<_> = source.iter().copied().map(cell).collect();
+        let vertices = self.live_slots(Kind::Vertex);
+        let mut moving = Vec::new();
+        let mut landing = HashSet::new();
+        for &v in &vertices {
+            let p = *self.state.vpos.get(v as usize);
+            // Outside the range of the facade's int64 floor-cell index the
+            // candidate scan has its own overflow semantics.
+            if p.iter().any(|x| !x.is_finite() || x.abs() >= 1e11) {
+                return None;
+            }
+            if source.contains(&cell(p)) {
+                moving.push(v);
+                let dest = self.translated_position(p, delta);
+                if dest.iter().any(|x| !x.is_finite() || x.abs() >= 1e11) {
+                    return None;
+                }
+                landing.insert(cell(dest));
+            }
+        }
+        if vertices.iter().any(|&v| {
+            let position = cell(*self.state.vpos.get(v as usize));
+            landing.contains(&position) && !source.contains(&position)
+        }) {
+            return None;
+        }
+        for &v in &moving {
+            self.move_vertex(v, delta);
+        }
+        Some(moving.len())
+    }
+
     fn command_remove_face(&mut self, face: u32) {
         let mut change = Change::default();
         self.remove_face(face, &mut change);

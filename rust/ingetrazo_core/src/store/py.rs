@@ -1303,6 +1303,10 @@ impl PyMeshStore {
         Ok(existing.is_none().then(|| self.inner.key(Kind::Edge, edge)))
     }
 
+    fn move_without_join(&mut self, source: Vec<[f64; 3]>, delta: [f64; 3]) -> Option<usize> {
+        self.inner.move_without_join(&source, delta)
+    }
+
     fn tag_curve_path(&mut self, points: Vec<[f64; 3]>, closed: bool, id: i64) -> bool {
         self.inner.tag_curve_path(&points, closed, id)
     }
