@@ -40,6 +40,7 @@ def capture(prefix, directory):
         img = QImage(pixels, 1280, 800, QImage.Format_RGBA8888)
         if not img.save(str(directory / f"{name}.png")):
             raise OSError(name)
+        return img.copy()
 
     r.ui_set_start([(["sample", "Courtyard", "Model", "Studio", ""], [1, 0])],
                    [], [("blank", "Blank model", "Start a model")], [], "Built",
@@ -52,7 +53,15 @@ def capture(prefix, directory):
     r.ui_set_project_tabs([("a", "Courtyard", True, False, False, "", ""),
                            ("b", "Studio", False, True, False, "", "")])
     r.ui_set_inspector("Studio", [("Properties", [("Name", "Studio")])])
-    shot(f"{prefix}-dock-tree-tabs")
+    image = shot(f"{prefix}-dock-tree-tabs")
+    x, y, w, h = map(round, r.ui_area_rect("column"))
+    tabs = [rect for rect in r.ui_project_tab_rects() if rect]
+    tx, ty, _, th = tabs[0]
+    tab_end = max(left + width for left, _, width, _ in tabs)
+    for name, rect in [("dock", (x, y, w, h)), ("tree", (x, y, w, min(h, 194))),
+                       ("tabs", (round(tx), round(ty), round(tab_end - tx), round(th)))]:
+        if not image.copy(*rect).save(str(directory / f"{prefix}-{name}.png")):
+            raise OSError(name)
     r.ui_set_library([("materials", "Materials", 1, True)], "materials", 0, "name",
                      [], [], [], "", "", [(["brick", "Brick"], [2, 0, 0, 1])])
     r.ui_set_mode("Library")

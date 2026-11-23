@@ -47,3 +47,19 @@ A surface may introduce a custom atom, molecule or organism when it serves the i
 Run `cargo test --manifest-path rust/ingetrazo_render/Cargo.toml --lib` for the colour policy and neutral-surface tests. The policy scans Rust sources under `src/ui*` and `src/inspector`. Only `src/ui/tokens.rs` may construct chrome colours. Renderer modules outside that tree and shaders are exempt. Material values and image pixels are data: hex input is decoded by the token module, and texture uploads retain their original bytes.
 
 After building the native module and shell, run `built --gallery` or `.venv/bin/python main.py --gallery`. Run `scripts/design_system_gallery.sh` to write both host captures to `build/design-system/gallery-*.png`. The capture uses an isolated settings directory and reads back the application framebuffer.
+
+## Captures
+
+The gallery fits the full token palette and component specimens into one framebuffer in both hosts. [Rust shell](../build/design-system/gallery-built.png) · [Qt app](../build/design-system/gallery-qt.png)
+
+The comparison uses the same synthetic model metadata in each image. The baseline renderer was built from `4f9710f4`. The dock, tree and tab details are crops of the same application frame.
+
+| Surface | Before | After |
+|---|---|---|
+| Start | [Before](../build/design-system/before-start.png) | [After](../build/design-system/after-start.png) |
+| Library | [Before](../build/design-system/before-library.png) | [After](../build/design-system/after-library.png) |
+| Dock | [Before](../build/design-system/before-dock.png) | [After](../build/design-system/after-dock.png) |
+| Project tree | [Before](../build/design-system/before-tree.png) | [After](../build/design-system/after-tree.png) |
+| Project tabs | [Before](../build/design-system/before-tabs.png) | [After](../build/design-system/after-tabs.png) |
+| Question sheet | [Before](../build/design-system/before-sheet.png) | [After](../build/design-system/after-sheet.png) |
+| Activity capsule | [Before](../build/design-system/before-activity.png) | [After](../build/design-system/after-activity.png) |
