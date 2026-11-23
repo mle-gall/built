@@ -19,7 +19,7 @@ def project():
     scene = Scene()
     win, view = _Win(scene), _View()
     win._on_zoom_selection = lambda: None
-    view._ui_colset = 2
+    view._ui_lens = 2
     return scene, win, view
 
 
@@ -144,6 +144,9 @@ def test_scoped_status_fix_updates_readiness_and_undo(project, tmp_path):
     assert (initial["ready"], initial["total"]) == (0, 2)
     entries = initial["checks"]["n:walls"]["status/Pset_WallCommon"][1]
     paths = [item["path"] for item in entries]
+    target = scene.resolve_occurrence(paths[0])
+    wgpu_ui._tree_action(win, view, "eye" + wgpu_ui.SEP + "exportitem:" + json.dumps(paths[0]))
+    assert target.hidden and history.undo() and not target.hidden
     before = len(history.undo_stack)
     args = dict(placements=paths, path=["psets", entries[0]["fix"], "Status"],
                 value="EXISTING", property_kind="label")

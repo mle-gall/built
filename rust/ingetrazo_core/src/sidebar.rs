@@ -66,9 +66,27 @@ pub(crate) fn project_sidebar(
                 .unwrap_or_else(|| "Layer 0".into());
             *counts.entry(tag).or_default() += 1;
         }
+        let parents = scene.getattr("folder_parents")?;
+        let mut folder_counts = HashMap::<String, i64>::new();
+        for layer in scene.getattr("layers")?.try_iter()? {
+            let layer = layer?;
+            let key: String = layer.getattr("key")?.extract()?;
+            let count = counts.get(&key).copied().unwrap_or_default();
+            let mut folder = layer.getattr("folder")?.extract::<Option<String>>()?;
+            let mut seen = HashSet::new();
+            while let Some(name) = folder.filter(|f| !f.is_empty()) {
+                if !seen.insert(name.clone()) {
+                    break;
+                }
+                *folder_counts.entry(name.clone()).or_default() += count;
+                folder = parents.call_method1("get", (name,))?.extract()?;
+            }
+        }
         for (text, flags) in &mut tags {
             if let Some(tag) = text[0].strip_prefix("preview-tag:") {
                 flags[1] = counts.get(tag).copied().unwrap_or_default();
+            } else if let Some(folder) = text[0].strip_prefix("preview-folder:") {
+                flags[1] = folder_counts.get(folder).copied().unwrap_or_default();
             }
         }
         // Tagged placements are represented by their tag. Keep the original
@@ -121,4 +139,65 @@ pub(crate) fn project_sidebar(
         rows = context;
     }
     Ok((rows, path))
+}
+
+/// Limit the normal bootstrap plan to one local tag and its folder chain.
+/// Existing filing nodes must never be replaced by this tags-only command.
+#[pyfunction]
+pub(crate) fn promote_tag<'py>(
+    scene: &Bound<'py, PyAny>,
+    tag: &str,
+    class: &str,
+) -> PyResult<Bound<'py, PyAny>> {
+    use pyo3::{exceptions::PyValueError, types::PyDict};
+    let py = scene.py();
+    let api = py.import("core.structure")?;
+    let registry = api.getattr("bim_registry")?.call_method1("get", (scene,))?;
+    if api.call_method1("_nodes", (&registry,))?.is_truthy()?
+        || !py
+            .import("core.ifc_tables")?
+            .getattr("TABLES")?
+            .contains(class)?
+    {
+        return Err(PyValueError::new_err(
+            "Choose a kind for a tag in an unstructured document",
+        ));
+    }
+    let layer = scene.call_method1("layer_by_key", (tag,))?;
+    if layer.is_none() || tag == "Layer 0" {
+        return Err(PyValueError::new_err("Choose a named tag"));
+    }
+    let key = format!("layer:{}", layer.getattr("uid")?.extract::<String>()?);
+    let proposal = crate::structure_bootstrap::structure_proposal(scene, &registry)?;
+    let structure = proposal.as_any().get_item("structure")?;
+    let nodes = structure.get_item("nodes")?;
+    let leaf = nodes.get_item(&key)?;
+    if leaf.call_method1("get", ("source",))?.is_truthy()? {
+        return Err(PyValueError::new_err(
+            "Edit the linked source to change its filing",
+        ));
+    }
+    let recipe = PyDict::new(py);
+    recipe.set_item("tag", tag)?;
+    recipe.set_item("class", class)?;
+    leaf.set_item("recipe", recipe)?;
+    let kept = PyDict::new(py);
+    let mut parent = Some(key.clone());
+    while let Some(k) = parent {
+        let n = nodes.get_item(&k)?;
+        kept.set_item(k, &n)?;
+        parent = n.get_item("parent")?.extract()?;
+    }
+    structure.set_item("nodes", kept)?;
+    let filing = PyDict::new(py);
+    if let Some(gs) = proposal
+        .as_any()
+        .get_item("filing")?
+        .cast::<PyDict>()?
+        .get_item(&key)?
+    {
+        filing.set_item(key, gs)?;
+    }
+    proposal.set_item("filing", filing)?;
+    crate::structure::apply_structure_bootstrap(scene, proposal.as_any())
 }

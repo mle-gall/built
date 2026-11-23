@@ -137,17 +137,15 @@ def test_checks_and_one_off_export(tmp_path, monkeypatch):
     from views import wgpu_ui
     win, scene, _ = _window_with(Group(name="Loose"))
     add(win.viewport.history, tmp_path / "handover.ifc")
-    got = {}
-    class Renderer:
-        def ui_set_inspector(self, title, sections):
-            got.update(sections)
-        def ui_set_tree(self, rows, count):
-            assert rows
-        def ui_set_mode(self, mode):
-            assert mode == "Deliveries"
-    view = SimpleNamespace(renderer=Renderer())
-    dock.dock(view, scene, wgpu_ui._tree_model(view, scene, scene.content_version))
-    assert ("unfiled object", "1") in got["Pre-run checks"]
+    from tests.test_tree_links import _View
+    import json
+    view = _View()
+    view._ui_lens = 2
+    wgpu_ui._tree(view, win)
+    panel, blob = view.renderer.calls["ui_panel_set"]
+    readiness = json.loads(blob)
+    assert panel == "readiness" and (readiness["ready"], readiness["total"]) == (0, 1)
+    assert readiness["checks"]["*"]["unfiled/"][0] == "Not filed"
     actions = win._file_actions()
     assert any(a.text() == "Export…" for a in actions if hasattr(a, "text"))
     assert any(a.title() == "Export" for a in actions if hasattr(a, "title"))

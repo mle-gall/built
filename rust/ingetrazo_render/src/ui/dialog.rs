@@ -126,12 +126,11 @@ impl Ui {
         if self.dialog.as_ref().is_none_or(|d| d.seq != seq) {
             // One float at a time: the form closes whatever menu was open.
             self.view_open = false;
-            self.sel_more = false;
             self.menu = None;
             self.cmd_open = false;
             self.form = None;
             if let Some(col) = self.column.as_mut() {
-                col.row_menu = None; col.kind_menu = None; col.head_menu = None; col.color_pick = None;
+                col.row_menu = None; col.kind_menu = None; col.head_menu = None;
             }
             self.ctx.memory_mut(|m| m.stop_text_input());
             self.dialog = Some(Dialog::new(seq));

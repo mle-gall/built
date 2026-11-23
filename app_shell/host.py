@@ -144,7 +144,7 @@ class Host:
         # What the chrome was last sent for this view is no longer what the
         # renderer shows: the signatures go (the defaults come back), the
         # view's own state (expanded rows, filters, mode) stays.
-        resend = ("_ui_ptabs", "_ui_docs", "_ui_tabs", "_ui_opts", "_ui_palette", "_ui_colset",
+        resend = ("_ui_ptabs", "_ui_docs", "_ui_tabs", "_ui_opts", "_ui_palette",
                   "_ui_issues", "_ui_cursor_shape", "_ui_was_over")
         for key in [k for k in view.__dict__ if k.startswith("_ui_")]:
             if key.endswith(("_sig", "_sent", "_cv")) or key in resend:
@@ -656,7 +656,7 @@ class Host:
             "groups": len(getattr(scene, "groups", ()) or ()),
             "input": self.view.renderer.ui_input_state() if hasattr(self.view.renderer, "ui_input_state") else {},
             "filter": self.view.__dict__.get("_ui_filter", ""),
-            "dock_columns": self.view.__dict__.get("_ui_colset", 0),
+            "dock_lens": self.view.__dict__.get("_ui_lens", 0),
             "dock_mode": self.view.__dict__.get("_ui_mode", ""),
             "tool_busy": self.viewport._tool_busy_for_delete(tool),
             "edit_group": getattr(scene.edit_group, "name", None),

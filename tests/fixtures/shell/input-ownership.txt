@@ -40,11 +40,9 @@ state # review
 key escape
 wait 150
 state # model
-click 1197 72
-wait 200
-click 1197 72
-wait 200
-click 1070 114
+click 1160 72
+wait 350
+click 941 145
 type Oak
 wait 180
 state # filtered
@@ -57,7 +55,7 @@ state # blurred
 key escape
 wait 150
 state # tree
-click 1120 106
+click 1160 72
 wait 200
 state # deliveries
 key escape

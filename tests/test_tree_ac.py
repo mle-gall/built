@@ -5,9 +5,8 @@ Ride (which links Ride stairs and Ride facilities) and Show building.
 
 A: linked files are typed root rows (file icon, state dot), a file's single
 top node is merged into its row, nested files sit at the root once each
-"via" their parent, the selection is marked once. C: column sets widen the
-dock, and the inspector offers only the verbs that apply to the selection's
-kind (views/verbs.py)."""
+"via" their parent, the selection is marked once. The lenses keep the filing roots while changing the rows
+and inspector for the current task."""
 from __future__ import annotations
 
 import os
@@ -210,11 +209,12 @@ def test_mark_selection_counts_paged_out_items_on_the_node():
         ("m:a", 1, 4, 0),      # "Show more": two more past the page
         ("n:b", 0, 0, 0),
     )]
-    wu.mark_selection(rows)
+    from ingetrazo_core import mark_filing_selection
+    rows = mark_filing_selection(rows)
     assert [r[1][10] for r in rows] == [1, 1, 0, 0]
 
 
-# ---- C: column sets ---------------------------------------------------------------
+# ---- Project lenses and inspector
 
 @pytest.fixture
 def settings(tmp_path):
@@ -229,12 +229,12 @@ def test_drawing_and_export_widen_the_dock_and_filing_keeps_the_users_width(ui, 
     settings.setValue("ui/dock_width", 320.0)
     seen = []
     view.renderer.ui_set_dock_width = seen.append
-    for colset in (1, 2, 0):
-        view._ui_colset = colset
+    for lens in (1, 2, 0):
+        view._ui_lens = lens
         wu.apply_dock_width(view, settings)
     assert seen == [wu.WIDE_DOCK, wu.WIDE_DOCK, 320.0]
     # A width dragged in Drawing is kept for Drawing only.
-    view._ui_colset = 1
+    view._ui_lens = 1
     wu.keep_dock_width(view, "430", settings)
     assert float(settings.value("ui/dock_width")) == 320.0
     assert wu.dock_width(1, settings) == 430.0 and wu.dock_width(0, settings) == 320.0
@@ -243,20 +243,20 @@ def test_drawing_and_export_widen_the_dock_and_filing_keeps_the_users_width(ui, 
     assert wu.dock_width(1, settings) == 480.0
 
 
-def test_colset_action_sends_the_width(ui, monkeypatch):
+def test_lens_action_sends_the_width(ui, monkeypatch):
     scene, win, view, rows, act = ui
     seen = []
     view.renderer.ui_set_dock_width = seen.append
-    monkeypatch.setattr(wu, "dock_width", lambda colset, settings=None: 390.0 if colset == 1 else 300.0)
-    act("colset", "1")
-    act("colset", "0")
+    monkeypatch.setattr(wu, "dock_width", lambda lens, settings=None: 390.0 if lens == 1 else 300.0)
+    act("lens", "1")
+    act("lens", "0")
     assert seen == [390.0, 300.0]
-    assert view.renderer.calls["ui_set_colset"] == (0,)
+    assert view.renderer.calls["ui_set_lens"] == (0,)
 
 
 def test_drawing_cells_carry_colour_line_weight_print(ui):
     scene, win, view, rows, act = ui
-    view._ui_colset = 1
+    view._ui_lens = 1
     view._ui_tree_sig = None
     wu._tree(view, win)
     row = next(t for t, _n in view.renderer.calls["ui_set_tree"][0] if t[0] == "n:" + _key(view, "Paths"))
@@ -366,7 +366,7 @@ def test_rows_stay_fast_on_the_bigger_fixture(ui):
 def test_drawing_cell_edits_run_without_a_layer_panel_and_undo(ui):
     from core.protocol import commands
     scene, win, view, _, act = ui
-    view._ui_colset = 1
+    view._ui_lens = 1
     node = "n:" + _key(view, "Paths")
     tag = scene.layer("Paths")
     for verb, value, attr, expected in [
@@ -489,16 +489,14 @@ def test_isolating_another_node_then_show_all_restores_the_view(ui):
     assert not win.viewport._view_expression
 
 
-def test_switching_column_sets_updates_the_focused_node_inspector(ui):
-    scene, win, view, rows, act = ui
+def test_drawing_lens_sends_native_style_fields_and_catalog(ui):
+    _, _, view, _, act = ui
     key = "n:" + _key(view, "Paths")
-    act("node", key)
-    wu._inspector(view, win)
-    assert "Drawing" not in dict(view.renderer.calls["ui_set_inspector"][1])
-    act("colset", "1")
-    wu._inspector(view, win)
-    catalog = dict(view.renderer.calls["ui_set_inspector"][1])["Drawing"]
-    assert catalog[0] == ("node", key) and ("hatch", "brick_flemish") in catalog
+    act("lens","1")
+    rows = view.renderer.calls["ui_set_tree"][0]
+    cells = next(text[5:] for text, _ in rows if text[0] == key)
+    assert cells[5] and cells[6] == "auto"
+    assert "dashed" in view.renderer.calls["ui_set_style_catalog"][1]
 
 
 @pytest.mark.parametrize("operation", ["group", "insert", "paste", "link", "group_selection"])
@@ -622,7 +620,7 @@ def test_open_occurrence_scopes_tree_and_exports_keep_the_inspector(ui):
     g = view._ui_tree["direct"][key][0]
     act("node", "n:" + key)
     filing = [r["key"] for r in rows()]
-    act("colset", "2")
+    act("lens", "2")
     assert [r["key"] for r in rows() if r["key"].startswith("n:")] == [k for k in filing if k.startswith("n:")]
     filing = [r["key"] for r in rows()]
     wu._inspector(view, win)
@@ -640,7 +638,7 @@ def test_open_occurrence_scopes_tree_and_exports_keep_the_inspector(ui):
     assert [r["key"] for r in rows()] == filing
     assert "Ride.igz" in [r["name"] for r in act("filter", "is:link")]
     act("mode", "deliveries")
-    assert view.renderer.calls["ui_set_mode"] == ("",) and view._ui_colset == 2
+    assert view.renderer.calls["ui_set_mode"] == ("",) and view._ui_lens == 2
     act("mode", "")
     assert view.renderer.calls["ui_set_mode"] == ("",)
 
@@ -784,3 +782,28 @@ def test_bulk_drawing_patch_validates_every_field_and_undoes_as_one_edit():
     assert all((tag.lineweight, tag.hatch, tag.cut_weight) == (.5, "brick", .7) for tag in (a, b))
     assert history.undo()
     assert [(tag.lineweight, tag.hatch, tag.cut_weight) for tag in (a, b)] == before
+
+
+def test_promoting_one_tag_files_only_its_members_and_undoes():
+    from core import bim_registry, structure
+    from core.group import Group
+    from core.layers import Layer
+    from core.protocol import commands
+    from core.scene import Scene
+    scene = Scene()
+    scene.layer_folders = ["Building"]
+    walls = Layer("Walls", folder="Building")
+    scene.layers.extend([walls, Layer("Floors", folder="Building")])
+    wall, floor = Group(name="W-03"), Group(name="F-02")
+    wall.layer, floor.layer = "Walls", "Floors"
+    scene.groups.extend([wall, floor])
+    history = _Win(scene).viewport.history
+    key = "layer:" + walls.uid
+    assert commands.run(history, "promote_tag", tag="Walls", ifc_class="IfcWall")["ok"]
+    nodes = structure._nodes(bim_registry.get(scene))
+    assert {n["name"] for n in nodes.values()} == {"Building", "Walls"}
+    assert nodes[key]["recipe"] == {"class": "IfcWall", "tag": "Walls"}
+    assert structure.node_of(wall) == key and not structure.node_of(floor)
+    assert history.undo() and not structure._nodes(bim_registry.get(scene))
+    assert not structure.node_of(wall)
+    assert history.redo() and structure.node_of(wall) == key

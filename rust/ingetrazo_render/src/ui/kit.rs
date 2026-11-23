@@ -823,6 +823,7 @@ pub mod organisms {
     pub fn path_bar(ui: &mut egui::Ui, path: &[(String, String)], actions: &mut Vec<String>) {
         if path.len() < 2 { return; }
         ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing.x=SPACE_XS;
             if quiet(ui, "↑").on_hover_text("Up one level").clicked() {
                 actions.push(path[path.len()-2].1.clone());
             }
@@ -1737,4 +1738,25 @@ pub fn host_visibility(ui: &mut egui::Ui, host: &str, tags: &[(String, String, b
         });
         if quiet(ui,"Done").clicked() { ui.memory_mut(|m| m.close_popup()); }
     });
+}
+
+pub fn tag_inspector(ui:&mut egui::Ui, key:&str, name:&str, count:u32, cells:&[String], actions:&mut Vec<String>) -> Option<Pos2> {
+    ui.strong(name);
+    caption_plain(ui,&format!("Tag · {count} items"));
+    let mut menu=None;
+    ui.horizontal_wrapped(|ui|{
+        ui.spacing_mut().item_spacing.x=SPACE_XS;
+        for (verb,label) in [("tagselect","Select items"),("tagisolate","Isolate")] {
+            if quiet(ui,label).clicked(){actions.push(format!("{verb}\x1f{key}"));}
+        }
+        if key!="preview-tag:Layer 0" {
+            let button=quiet(ui,"Give it a kind…");
+            if button.clicked(){menu=Some(button.rect.left_bottom());}
+        }
+    });
+    if cells.len()>=5 {
+        prop_row(ui,"Line",&format!("{} · {}",cells[1],if cells[2]=="auto" {"Automatic".into()}else{format!("{} mm",cells[2])}));
+        prop_row(ui,"Colour",if cells[0].is_empty(){"By material"}else{&cells[0]});
+    }
+    menu
 }

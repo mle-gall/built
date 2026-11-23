@@ -70,6 +70,7 @@ pub(super) fn cells(node: &Node) -> Result<Vec<String>, String> {
         string("hatch", "")?,
         tag.key.clone().unwrap_or_default(),
         node.attr(attr_id("cut_weight")?).and_then(number).map_or_else(|| "auto".into(), |mm| format!("{mm:.2}")),
+        u8::from(tag.locked).to_string(),
     ])
 }
 
@@ -295,6 +296,7 @@ impl TagEdit {
 }
 
 fn drawing_value(py: Python<'_>, field: &str, input: &str) -> PyResult<(Field, FVal)> {
+    if field == "lock" && matches!(input, "0" | "1") { return Ok((Field::Locked, FVal::Bool(input == "1"))); }
     let (field, value) = match field {
         "color" if input.is_empty() => ("color", Value::None),
         "color" => {

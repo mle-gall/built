@@ -73,7 +73,58 @@ pub(crate) fn export_readiness(
         }
         _ => notes.push(format!("Placement checks do not cover {scope}")),
     }
+    let config = if format.as_deref() == Some("ifc") {
+        let profiles = scene
+            .py()
+            .import("core.bim_registry")?
+            .call_method1("get", (scene,))?
+            .call_method1("get", ("export_profiles", PyDict::new(scene.py())))?;
+        let profile = delivery
+            .as_ref()
+            .and_then(|d| d.get_item("options").ok())
+            .and_then(|options| options.call_method1("get", ("profile",)).ok())
+            .and_then(|key| key.extract::<String>().ok())
+            .unwrap_or_default();
+        if !profile.is_empty() && !profiles.contains(&profile)? {
+            notes.push(format!("Missing export profile: {profile}"));
+        }
+        profiles.call_method1("get", (profile, PyDict::new(scene.py())))?
+    } else {
+        PyDict::new(scene.py()).into_any()
+    };
+    let predicate = config.call_method1("get", ("filter",))?;
+    let allowed = if !predicate.is_none() {
+        let facets = scene.py().import("core.facets")?;
+        let index = facets.call_method1("build", (scene,))?;
+        let groups = index.getattr("groups")?;
+        let mut ids = HashSet::new();
+        for key in facets
+            .call_method1("evaluate", (&index, predicate))?
+            .try_iter()?
+        {
+            ids.insert(groups.get_item(key?)?.as_ptr() as usize);
+        }
+        Some(ids)
+    } else {
+        None
+    };
+    let include_links = format.as_deref() != Some("ifc")
+        || config
+            .call_method1("get", ("include_links", false))?
+            .is_truthy()?;
     for g in candidates {
+        let id = g.as_ptr() as usize;
+        if allowed.as_ref().is_some_and(|ids| !ids.contains(&id)) {
+            continue;
+        }
+        if !include_links
+            && membership
+                .call_method1("get", (id,))?
+                .extract::<Option<String>>()?
+                .is_some_and(|k| k.starts_with("link:"))
+        {
+            continue;
+        }
         if scope != "visible" || scene.call_method1("entity_visible", (&g,))?.is_truthy()? {
             eligible.insert(g.as_ptr() as usize, g);
         }
@@ -97,8 +148,27 @@ pub(crate) fn export_readiness(
             }
             continue;
         }
-        for obj in r.get_item(3)?.try_iter()? {
-            let obj = obj?;
+        let mut affected: Vec<Bound<'_, PyAny>> = r.get_item(3)?.extract()?;
+        if code == "solid" && !affected.is_empty() {
+            // Geometry checks run once per definition; each scoped instance
+            // of that definition counts separately towards delivery readiness.
+            let mut meshes = HashSet::new();
+            for item in &affected {
+                if !item.is_none() {
+                    meshes.insert(item.getattr("mesh")?.as_ptr());
+                }
+            }
+            for item in eligible.values() {
+                if meshes.contains(&item.getattr("mesh")?.as_ptr()) {
+                    affected.push(item.clone());
+                }
+            }
+        }
+        let mut seen = HashSet::new();
+        for obj in affected {
+            if !seen.insert(obj.as_ptr()) {
+                continue;
+            }
             if obj.is_none() {
                 if scope == "whole" || scope == "visible" {
                     checks.entry("*".into()).or_default().insert(
@@ -162,7 +232,7 @@ pub(crate) fn export_readiness(
                 }
             }
             let rule_key = format!("{code}/{fix}");
-            let element = json!({"name":name,"path":path,"fix":fix});
+            let element = json!({"name":name,"path":path,"fix":fix,"visible":!obj.getattr("hidden")?.is_truthy()?});
             if let Some(key) = parents.get(1) {
                 direct_checks
                     .entry(key.clone())
@@ -227,7 +297,7 @@ pub(crate) fn export_readiness(
                         result.push(head);
                         if open {
                             for item in items {
-                                result.push(row(
+                                let mut placement = row(
                                     format!("exportitem:{}", item["path"]),
                                     item["name"].as_str().unwrap_or("Group").into(),
                                     "",
@@ -236,7 +306,9 @@ pub(crate) fn export_readiness(
                                     10,
                                     0,
                                     0,
-                                ));
+                                );
+                                if let Some(visible) = item["visible"].as_bool() { placement.1[5] = i64::from(visible); }
+                                result.push(placement);
                             }
                         }
                     }

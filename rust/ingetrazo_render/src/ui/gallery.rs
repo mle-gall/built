@@ -502,14 +502,10 @@ impl Gallery {
                 ui.spacing_mut().item_spacing = vec2(0., SPACE_XS);
                 let w = ui.available_width();
                 ui.set_width(w);
-                segmented(ui, &["Project", "Library"], 0, w);
-                if let Some(i) = underline_tabs(
-                    ui,
-                    &[("Filing".into(), String::new(), true), ("Drawing".into(), String::new(), true), ("Deliver".into(), "2".into(), true)],
-                    self.dock_tab,
-                ) {
-                    self.dock_tab = i;
+                if let Some(index) = segmented(ui, &["Filing", "Drawing", "Export"], self.dock_tab, w) {
+                    self.dock_tab = index;
                 }
+                tag_inspector(ui,"preview-tag:Walls","Walls",24,&[],&mut Vec::new());
                 host_visibility(ui,"Plaza.built",&[("Survey".into(),"Survey".into(),true)], &mut Vec::new());
                 path_bar(ui, &[("Plaza.built".into(), String::new()), ("Core block".into(), String::new())], &mut Vec::new());
                 ui.add(search(&mut self.dock_filter, "Filter nodes").desired_width(w));

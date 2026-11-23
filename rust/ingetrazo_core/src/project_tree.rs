@@ -295,6 +295,8 @@ pub(crate) fn project_context_rows(
                     0,
                     usize::from(selection.contains(&g)?),
                 );
+                r.1[5] = i64::from(!g.getattr("hidden")?.is_truthy()?);
+                r.1[6] = i64::from(g.getattr("locked")?.is_truthy()?);
                 r.1[7] = i64::from(children.is_truthy()?);
                 r.1[8] = i64::from(open);
                 rows.push(r);
@@ -439,7 +441,7 @@ pub(crate) fn source_placement_rows(
             .getattr("name")?
             .extract::<Option<String>>()?
             .unwrap_or_default();
-        rows.push(row(
+        let mut placement = row(
             format!("i:{key}"),
             format!("Placement {} · {name}", index + 1),
             "Reference",
@@ -448,7 +450,9 @@ pub(crate) fn source_placement_rows(
             7,
             0,
             usize::from(selection.contains(g)?),
-        ));
+        );
+        placement.1[5] = i64::from(!g.getattr("hidden")?.is_truthy()?);
+        rows.push(placement);
     }
     Ok(rows)
 }

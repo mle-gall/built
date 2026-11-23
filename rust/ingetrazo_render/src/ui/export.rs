@@ -30,6 +30,9 @@ pub(super) fn strip(ui: &mut egui::Ui, report: &Value, cmds: &mut Vec<String>) {
                 if kit::quiet(ui, "New delivery…").clicked() {
                     cmds.push("deliver:new".into());
                 }
+                if !active.is_empty() && kit::quiet(ui, "Delete delivery").clicked() {
+                    cmds.push(format!("deliver:delete:{active}"));
+                }
                 if !active.is_empty() && kit::quiet(ui, "Edit delivery…").clicked() {
                     cmds.push(format!("deliver:edit:{active}"));
                 }
@@ -49,15 +52,25 @@ pub(super) fn checklist(
     ui: &mut egui::Ui,
     report: &Value,
     focus: Option<&str>,
+    placements: &std::collections::HashSet<String>,
     actions: &mut Vec<String>,
 ) {
-    let key = focus.filter(|k| k.starts_with("n:")).unwrap_or("*");
+    let key = focus.unwrap_or("*");
+    let mut count = 0;
     kit::caption(ui, "Fix checklist");
     if let Some(rules) = report["checks"][key].as_object() {
         for (rule, entry) in rules {
             let Some(items) = entry[1].as_array() else {
                 continue;
             };
+            let items: Vec<_> = items
+                .iter()
+                .filter(|el| placements.is_empty() || placements.contains(&el["path"].to_string()))
+                .collect();
+            if items.is_empty() {
+                continue;
+            }
+            count += items.len();
             ui.push_id((key, rule), |ui| {
                 ui.horizontal_wrapped(|ui| {
                     ui.label(format!(
@@ -91,7 +104,8 @@ pub(super) fn checklist(
                 });
             });
         }
-    } else {
+    }
+    if count == 0 {
         ui.label("No open checks in scope");
     }
     if let Some(notes) = report["notes"].as_array().filter(|n| !n.is_empty()) {

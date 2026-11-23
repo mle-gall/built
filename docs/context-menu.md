@@ -113,9 +113,9 @@ Isolate is left out: it shows placements, and loose geometry has none.
 | 2 | Hide | Select contents | Select its linked file | Edit text… | Delete guide | Paste here *(if something is copied)* |
 | 3 | Isolate | Hide | Isolate | Zoom to \| Reveal selection | Delete all guides | Select all |
 | 4 | Zoom to \| Reveal selection | Isolate | Zoom to \| Reveal selection | | Zoom to \| Reveal selection | Unhide all |
-| 5 | File to… | Lock *(the placement's own padlock)* | Open source | | | Show all *(if isolated)* |
+| 5 | File to… | Lock *(the placement's own padlock)* | Edit source | | | Show all *(if isolated)* |
 | 6 | Make group \| Make component… | Zoom to \| Reveal selection | Reload | | | Zoom extents |
-| 7 | Reverse faces \| Orient faces *(if faces)* | Open source | | | | Delete all guides *(if any)* |
+| 7 | Reverse faces \| Orient faces *(if faces)* | Edit source | | | | Delete all guides *(if any)* |
 | 8 | Intersect: Model \| Selection \| Context | Reload | | | | |
 | 9 | Soften / Smooth edges… | Include nested files *(check)* | | | | |
 | 10 | Flip along: Red \| Green \| Blue | | | | | |
@@ -168,5 +168,5 @@ depend on it.
 | File to… | File to… |
 
 A linked row's tree menu (Select, Select contents, Isolate, Zoom to,
-Show / hide, Lock / unlock, Open source, Reload) matches the linked
+Show / hide, Lock / unlock, Edit source, Reload) matches the linked
 placement's column above.

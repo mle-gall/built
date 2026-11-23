@@ -423,6 +423,13 @@ def edit_loose_geometry(history, field):
     return _answer(history, before)
 
 
+def promote_tag(history, tag, ifc_class):
+    from ingetrazo_core import promote_tag as plan
+    before = history.revision
+    history.execute(plan(history.scene, tag, ifc_class))
+    return _answer(history, before)
+
+
 def file_placements(history, placements, node):
     from core import structure
     before = history.revision
@@ -949,7 +956,7 @@ COMMANDS = {"set_location": set_location, "set_model_units": set_model_units, "s
             "explode_view": explode_view, "purge_unused": purge_unused,
             "purge_debris": purge_debris, "undo": undo, "redo": redo,
             "hide": hide, "unhide": unhide, "lock": lock, "rename_placement": rename_placement,
-            "edit_assembly_part": edit_assembly_part, "edit_visibility_set": edit_visibility_set, "edit_saved_scene": edit_saved_scene, "edit_link_subset": edit_link_subset, "reset_link_tags": reset_link_tags, "unlink_placements": unlink_placements, "edit_section_plane": edit_section_plane, "edit_loose_geometry": edit_loose_geometry, "file_placements": file_placements, "edit_structure_node": edit_structure_node, "edit_tag": edit_tag, "set_tag": set_tag, "set_tag_state": set_tag_state, "resegment_curve": resegment_curve, "repair_solid": repair_solid,
+            "edit_assembly_part": edit_assembly_part, "edit_visibility_set": edit_visibility_set, "edit_saved_scene": edit_saved_scene, "edit_link_subset": edit_link_subset, "reset_link_tags": reset_link_tags, "unlink_placements": unlink_placements, "edit_section_plane": edit_section_plane, "edit_loose_geometry": edit_loose_geometry, "file_placements": file_placements, "promote_tag": promote_tag, "edit_structure_node": edit_structure_node, "edit_tag": edit_tag, "set_tag": set_tag, "set_tag_state": set_tag_state, "resegment_curve": resegment_curve, "repair_solid": repair_solid,
             "rename_material": rename_material, "edit_material": edit_material,
             "duplicate_material": duplicate_material, "delete_material": delete_material,
             "delete_placements": delete_placements, "rename_component": rename_component,
