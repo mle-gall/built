@@ -19,3 +19,4 @@ pub mod page;
 pub mod py;
 pub mod pymath;
 pub mod svg;
+pub mod visibility;
