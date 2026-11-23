@@ -7,8 +7,8 @@ from ingetrazo_core import Vec3 as QVector3D
 def rest_rows(groups, context):
     if context is None:
         return []
-    from core.group import iter_placements
-    subject = {id(g) for g, _ in iter_placements(context)}
+    from core.purge import iter_groups
+    subject = {id(g) for g in iter_groups((context,))}
     return [row for row, group in enumerate(groups) if id(group) not in subject]
 
 

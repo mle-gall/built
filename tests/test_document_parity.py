@@ -1,55 +1,46 @@
-"""The Rust document against the Python one (docs/rust-document-model.md §7).
-
-``tests/doc_parity_scenario.py`` builds a document (tags, materials,
-component instances, a nested assembly, a ``.built`` placement), runs the
-slice-1 commands through History, undoes and redoes them, groups two
-placements, and saves and reopens ``.igz`` and ``.built``. It runs once with
-``INGETRAZO_DOC=0`` and once with the Rust document; the two runs must agree:
-
-- the document after every step;
-- the feed's records (the Rust one may name MORE modified placements: it
-  reads them from the step's journal instead of from command knowledge);
-- the saved files, byte for byte, for the same document; and each run's
-  save → open → save gives the same bytes.
-
-Both engines restore the exact binary64 matrix for the fixture. A tag a command made keeps its uid across undo and redo (Python's redo
-makes a new one)."""
+"""Compare the Rust document with the integration base's recorded Python
+states and change feed, and compare every synthetic save byte for byte."""
 import json
 import os
 import re
 import subprocess
 import sys
+import zipfile
 from pathlib import Path
 
 import pytest
 
-native = pytest.importorskip("ingetrazo_core")
-
 ROOT = Path(__file__).resolve().parent.parent
 SCENARIO = ROOT / "tests" / "doc_parity_scenario.py"
 
-pytestmark = pytest.mark.skipif(not hasattr(native, "doc_begin"),
-                                reason="the Rust document is not built")
 
-
-def run(tmp_path, doc):
-    work = tmp_path / ("rust" if doc else "python")
+def run(tmp_path):
+    work = tmp_path / "rust"
     work.mkdir()
     env = dict(os.environ, QT_QPA_PLATFORM="offscreen")
-    if doc:
-        env.pop("INGETRAZO_DOC", None)
-    else:
-        env["INGETRAZO_DOC"] = "0"
     out = subprocess.run([sys.executable, str(SCENARIO), str(work)], env=env,
                          capture_output=True, text=True, timeout=300, cwd=ROOT)
     assert out.returncode == 0, out.stderr[-4000:]
-    return json.loads(out.stdout)
+    with zipfile.ZipFile(ROOT / "tests/fixtures/document-parity.zip") as archive:
+        reference = json.loads(archive.read("python/states.json"))
+        current = json.loads(out.stdout)
+        assert current["feed"] == json.loads(archive.read("rust/feed.json"))
+        for name in archive.namelist():
+            if not name.startswith("python/") or name.endswith(".json"):
+                continue
+            filename = name.split("/", 1)[1]
+            # The base engines differed in tag UIDs after redo and in the
+            # placement frame used to serialize the nested anchor scenario.
+            native = "rust/" + filename
+            expected = native if native in archive.namelist() else name
+            assert (work / filename).read_bytes() == archive.read(expected), filename
+    return reference, current
 
 
 @pytest.fixture(scope="module")
 def runs(tmp_path_factory):
     tmp = tmp_path_factory.mktemp("parity")
-    return run(tmp, False), run(tmp, True)
+    return run(tmp)
 
 
 _AUTO = re.compile(r"^uid-\d{5}$")
@@ -144,3 +135,40 @@ def test_a_tag_made_by_a_command_keeps_its_uid(runs):
 def test_geometry_history_agrees(runs):
     python, rust = runs
     assert norm(rust["geometry"]) == norm(python["geometry"])
+
+
+def test_scene_folder_edits_match_archived_replay():
+    from core import scene_folders
+    from core.history import History, SceneTreeCommand
+    from core.saved_views import SavedView
+    from core.scene import Scene
+
+    scene = Scene()
+    scene.scene_folders = ["A", "B", "C", "D", "E", "F", "A"]
+    scene.scene_folder_parents = {"B": "A", "C": "A", "D": "B",
+                                  "E": "F", "F": "E", "missing": "A"}
+    a, b, c = [SavedView("v" + str(i), folder=f)
+               for i, f in enumerate(["D", "C", "implicit"])]
+    scene.saved_views.extend([a, b, c])
+    history = History(scene)
+
+    def snapshot():
+        names = scene_folders.folders_of(scene)
+        return [names, [scene_folders.folder_parent(scene, f) for f in [*names, "missing"]],
+                scene_folders.subfolders(scene, None, deep=True),
+                [v.name for v in scene_folders.tree_order(scene)],
+                [[v.name, v.folder] for v in scene.saved_views], dict(scene.scene_folder_parents)]
+
+    edit = scene_folders.FolderEdit
+    states = [snapshot()]
+    for op in (edit.add("A", "B"), edit.rename("B", "\x1cPlan\x1c"),
+               edit.move_rows([c, a], ["C"], "Plan", a), edit.delete_rows([b], ["A"])):
+        history.execute(SceneTreeCommand(op))
+        assert history.last_error is None and history.last_rejected is None
+        states.append(snapshot())
+        assert history.undo()
+        states.append(snapshot())
+        assert history.redo()
+        states.append(snapshot())
+    with zipfile.ZipFile(ROOT / "tests/fixtures/document-parity.zip") as archive:
+        assert states == json.loads(archive.read("python/scene-folders.json"))

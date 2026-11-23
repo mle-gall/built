@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Project filing (2026-11-09). Plan all projections before executing any command."""
-from collections import Counter, defaultdict
 from copy import deepcopy
 
 from core import bim_registry, links
@@ -271,133 +270,14 @@ def completeness(scene, registry):
     return stats
 
 
-def _infer(groups, key, conflicts):
-    """Infer from placed records, preserving first-seen order when a vote ties."""
-    records = [g.ifc or {} for g in groups]
-    classes = Counter(r['class'] for r in records if r.get('class'))
-    recipe = {'class': classes.most_common(1)[0][0] if classes else None}
-    missing = len(groups) - sum(classes.values())
-    if classes and 2 * sum(classes.values()) < len(groups):
-        conflicts.append(dict(node=key, reason='recorded under null class',
-                              placements=[{'uid': g.uid, 'class': g.ifc['class']}
-                                          for g in groups if (g.ifc or {}).get('class')]))
-        return {'class': None}
-    if len(classes) > 1:
-        recipe['classes_allowed'] = list(classes)
-        conflicts.append(dict(node=key, reason='mixed classes', counts=dict(classes)))
-    if classes and missing:
-        conflicts.append(dict(node=key, reason='would newly classify', count=missing))
-    if not records or not classes:
-        return recipe
-
-    first = records[0]
-    for field in ('predefined_type', 'object_type', 'type'):
-        val = first.get(field)
-        if all(r.get(field) == val for r in records):
-            if val is not None:
-                recipe[field] = val
-        else:
-            conflicts.append(dict(node=key, reason='varying ' + field))
-    for field in ('systems', 'classifications'):
-        def identity(value):
-            return (value['system'], value['code']) if field == 'classifications' else value
-        common = set(map(identity, first.get(field, [])))
-        for record in records[1:]:
-            common.intersection_update(map(identity, record.get(field, [])))
-        values = [deepcopy(v) for v in first.get(field, []) if identity(v) in common]
-        if values:
-            recipe[field] = values
-        if any(set(map(identity, r.get(field, []))) != common for r in records):
-            conflicts.append(dict(node=key, reason='varying ' + field))
-    if recipe.get('predefined_type') == 'USERDEFINED' and not recipe.get('object_type'):
-        # A shared enum without a shared user-defined label is not a valid default.
-        recipe.pop('predefined_type')
-    return recipe
-
-
 def bootstrap(scene, registry):
     """Propose one node per tag. When at least half its members are recorded,
     the majority recorded class wins; below half, the class is null. Report
     both kinds of residue. Null-class filing never edits existing records.
     Linked placements get virtual membership and are never filed by the host.
     """
-    nodes, conflicts, filing = {}, [], {}
-    by_tag = defaultdict(list)
-    source_paths = {}
-    for g, src, root in _placements(scene):
-        if src:
-            source_paths[links.stem(src)] = src
-        if g.layer and g.layer != DEFAULT_LAYER:
-            by_tag[g.layer].append((g, src))
-        elif root and not src:
-            conflicts.append(dict(uid=g.uid, name=g.name, reason='untagged placement'))
-    folders = list(dict.fromkeys([*scene.layer_folders, *(ly.folder for ly in scene.layers if ly.folder)]))
-    folder_keys = {f: ('link:' + f if f in source_paths else
-                       'folder:' + scene.layer_folder_uids.get(f, f)) for f in folders}
-    orders = Counter()
-
-    def add(key, name, parent, **extra):
-        nodes[key] = dict(name=name, parent=parent, order=orders[parent], **extra)
-        orders[parent] += 1
-
-    source_trees = {path: entry['structure'] for path, entry in
-                    scene.plugin_data.get(links.REGISTRY_KEY, {}).items() if entry.get('structure')}
-    folder_sources = {}
-    for f in folders:
-        source = source_paths.get(f) or source_paths.get(f.partition(links.SEP)[0])
-        if source:
-            folder_sources[f] = source
-        mount = f in source_paths
-        if source and not mount and source in source_trees:
-            continue
-        parent = folder_keys.get(scene.folder_parents.get(f))
-        from core.layers import folder_label
-        label = folder_label(scene, f)
-        add(folder_keys[f], label.split(links.SEP, 1)[-1] if source else label, parent,
-            **({'source': source, 'mount': mount} if source else {}))
-    # Only the host's own links get a mount: a link inside a linked file
-    # comes with that file's structure (core/link_structure.py), never as
-    # a top-level node of the host.
-    from core.link_structure import walk
-    top = {links.stem(inner[-1][1]) for _g, chain, inner, _r in walk(scene) if inner != chain and not chain}
-    for stem, src in source_paths.items():
-        key = 'link:' + stem
-        if key not in nodes and stem not in top:
-            continue
-        if key not in nodes:
-            add(key, stem, None, source=src, mount=True)
-        # Authored source keys and effective recipes survive differing host vocabularies.
-        for sk, sn in source_trees.get(src, {}).items():
-            parent = key if sn['parent'] is None else key + '/' + sn['parent']
-            nodes[key + '/' + sk] = dict(name=sn['name'], parent=parent, order=sn['order'],
-                                         source=src, source_node=sk, source_recipe=deepcopy(sn['recipe']))
-    for layer in scene.layers:
-        if layer.key == DEFAULT_LAYER:
-            continue
-        src = folder_sources.get(layer.folder)
-        if src in source_trees:
-            continue
-        key = 'layer:' + layer.uid
-        pairs = by_tag.pop(layer.key, [])
-        groups = [g for g, source in pairs if source == src and not links.is_linked(g)]
-        recipe = _infer(groups, key, conflicts)
-        recipe['tag'] = layer.key
-        name = layer.name.split(links.SEP, 1)[-1] if src else layer.name
-        if name.casefold().startswith('_to review'):
-            conflicts.append(dict(node=key, reason='review layer', count=len(groups),
-                                  placements=[dict(uid=g.uid, name=g.name) for g in groups]))
-        add(key, name, folder_keys.get(layer.folder),
-            **(dict(source=src, source_tag=layer.key, source_recipe=recipe) if src else dict(recipe=recipe)))
-        if groups and not src:
-            filing[key] = [g.uid for g in groups]
-    for tag, pairs in by_tag.items():
-        for g, src in pairs:
-            if not src:
-                conflicts.append(dict(uid=g.uid, name=g.name, reason='missing layer', tag=tag))
-    proposed = {'nodes': nodes}
-    for message in bim_registry._structure_errors({**registry, 'structure': proposed}):
-        conflicts.append(dict(reason='registry validation', message=message))
-    return dict(structure=proposed, filing=filing, conflicts=conflicts)
+    from ingetrazo_core import structure_proposal
+    return structure_proposal(scene, registry)
 
 
 def apply_bootstrap(scene, proposal):

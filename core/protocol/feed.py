@@ -26,13 +26,9 @@ other one: History makes its feed first). A step never holds a mesh
 alive: :attr:`MeshChange.mesh` is a weak reference."""
 from __future__ import annotations
 
-import logging
 import weakref
-from collections import deque
 
 from core.protocol.keys import KINDS, mesh_key, store_of, to_json_key
-
-_log = logging.getLogger("ingetrazo.protocol")
 
 
 def _empty():
@@ -284,22 +280,6 @@ def _copies(cmd) -> list:
     return out
 
 
-def _doc_state(scene):
-    from core import doc_model
-    if doc_model.ENABLED and getattr(scene, "_root", None) is not None:
-        # Placements, tags, materials and the registry all come from the
-        # step's transaction (_build).
-        return None, None, None
-    roots = {id(g): g.uid for g in scene.groups}
-    # By value: tags and materials are edited in place too.
-    # (A tag's fields are plain values: a shallow copy sees their change.)
-    from core.layers import layer_values
-    tags = {ly.key: tuple(layer_values(ly).items())
-            for ly in getattr(scene, "layers", ()) or ()}
-    mats = {k: repr(m) for k, m in (getattr(scene, "materials", {}) or {}).items()}
-    return roots, tags, mats
-
-
 def _geometry_only():
     """Commands that change only the mesh they run on (their own target
     for a snapshot mutation), whatever their ``keeps_rows``."""
@@ -397,18 +377,6 @@ def _known_placements(cmd, phase, step, scene=None, journalled=False) -> bool:
     return False
 
 
-def _dedupe(d):
-    for k, v in d.items():
-        d[k] = list(dict.fromkeys(v))
-    # A uid both removed and created (a group replaced by its copy, which
-    # keeps the uid): modified.
-    both = set(d["created"]) & set(d["removed"])
-    if both:
-        d["created"] = [u for u in d["created"] if u not in both]
-        d["removed"] = [u for u in d["removed"] if u not in both]
-        d["modified"] = list(dict.fromkeys(d["modified"] + sorted(both)))
-
-
 # ---------------------------------------------------------------- the feed
 
 class ChangeFeed:
@@ -420,9 +388,7 @@ class ChangeFeed:
     def __init__(self, history):
         self._history = weakref.ref(history)
         self._native = history._native
-        if self._native is None:
-            self._steps: deque[Step] = deque(maxlen=self.maxlen)
-        self._subscribers = history._native.subscribers if history._native is not None else []
+        self._subscribers = history._native.subscribers
         from ingetrazo_core import FeedReaders
         self.readers = FeedReaders(getattr(getattr(history.scene, "_root", None), "_doc_key", None))
         self.subscribe(self.readers)
@@ -442,19 +408,10 @@ class ChangeFeed:
 
     @property
     def last(self) -> Step | None:
-        if self._native is not None:
-            return self._native.feed_step(None)
-        return self._steps[-1] if self._steps else None
+        return self._native.feed_step(None)
 
     def step(self, revision) -> Step | None:
-        if self._native is not None:
-            return self._native.feed_step(revision) if 0 <= revision <= self.revision else None
-        for s in reversed(self._steps):
-            if s.revision == revision:
-                return s
-            if s.revision < revision:
-                break
-        return None
+        return self._native.feed_step(revision) if 0 <= revision <= self.revision else None
 
     def since(self, revision=0) -> dict:
         """``{revision, complete, steps}``: the steps after ``revision``
@@ -463,11 +420,7 @@ class ChangeFeed:
         now = self.revision
         if type(revision) is not int or revision < 0 or revision > now:
             raise ValueError("revision must be between zero and the current revision")
-        if self._native is not None:
-            return self._native.feed_since(revision)
-        floor = self._steps[0].revision - 1 if self._steps else now
-        return {"revision": now, "complete": revision >= floor,
-                "steps": [s for s in self._steps if s.revision > revision]}
+        return self._native.feed_since(revision)
 
     def subscribe(self, fn):
         """Call ``fn(step)`` after every published step; returns an
@@ -493,7 +446,7 @@ class ChangeFeed:
         meshes = _command_meshes(cmd, scene, phase)
         serial = self.readers.stamp()
         self._pending = (cmd, phase, [(m, _token(m)) for m in meshes],
-                         _doc_state(scene), getattr(scene, "content_version", None), serial)
+                         getattr(scene, "content_version", None), serial)
 
     def _after(self, cmd, phase, ran):
         self._depth = max(0, self._depth - 1)
@@ -505,58 +458,8 @@ class ChangeFeed:
         h = self._history()
         if h is None:
             return
-        step = (self._native.build_step(h, cmd, phase, pending[2])
-                if self._native is not None and pending[3][0] is None
-                else self._build(h, cmd, phase, pending))
-        step._reader_context = (pending[4], getattr(h.scene, "content_version", None), pending[5],
+        step = self._native.build_step(h, cmd, phase, pending[2])
+        step._reader_context = (pending[3], getattr(h.scene, "content_version", None), pending[4],
                                 getattr(cmd, "keeps_paint", False), getattr(cmd, "keeps_rows", False),
                                 getattr(cmd, "keeps_groups", False))
-        if self._native is not None:
-            return self._native.publish(step)
-        self._steps.append(step)
-        for entry in list(self._subscribers):
-            try:
-                entry[0](step)
-            except Exception:  # noqa: BLE001 — a consumer never breaks a command
-                _log.exception("Change feed subscriber failed")
-
-    def _build(self, h, cmd, phase, pending) -> Step:
-        _cmd, _phase, tokens, (roots0, tags0, mats0), _, _ = pending
-        scene = h.scene
-        step = Step(h.revision, phase, getattr(cmd, "history_name", type(cmd).__name__))
-        paints = _painted(cmd, tokens[0][0])
-        for mesh, token in tokens:
-            painted = paints.get(mesh, ())
-            change = _mesh_change(mesh, token, painted)
-            if painted:
-                mod = change.modified["face"]
-                mod.extend(dict.fromkeys(k for k in painted if k not in set(mod)))
-            if not change.empty():
-                step.meshes.append(change)
-        if phase != "undo":
-            step.copies = _copies(cmd)
-        # Document level: roots by identity, tags and materials by value.
-        roots1, tags1, mats1 = _doc_state(scene)
-        step.placements["created"].extend(u for i, u in roots1.items() if i not in roots0)
-        step.placements["removed"].extend(u for i, u in roots0.items() if i not in roots1)
-        step.complete = _known_placements(cmd, phase, step, scene) and step.complete
-        step.placements["modified"].extend(h._moved_signs)
-        _dedupe(step.placements)
-        if tags0 is not None:
-            for k in tags1.keys() - tags0.keys():
-                step.tags["created"].append(k)
-            for k in tags0.keys() - tags1.keys():
-                step.tags["removed"].append(k)
-            step.tags["modified"].extend(k for k in tags1.keys() & tags0.keys()
-                                         if tags1[k] != tags0[k])
-        if mats0 is not None:
-            for k in mats1.keys() - mats0.keys():
-                step.materials["created"].append(k)
-            for k in mats0.keys() - mats1.keys():
-                step.materials["removed"].append(k)
-            step.materials["modified"].extend(k for k in mats1.keys() & mats0.keys()
-                                              if mats1[k] != mats0[k])
-        for d in (step.tags, step.materials):
-            for k in d:
-                d[k] = sorted(set(d[k]))
-        return step
+        return self._native.publish(step)

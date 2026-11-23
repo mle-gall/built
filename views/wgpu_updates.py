@@ -13,7 +13,8 @@ and matrix change, so they are written from the open edit path instead of
 walking every placement of the model (2 s on the ride).
 """
 import numpy as np
-from core.group import Group, iter_placements
+from core.group import Group
+from core.purge import iter_groups
 from core.scene import Scene
 from views.wgpu_scene import (COMMAND, INSTANCE, _baked_paint, _placement_records,
                               _placement_state, pack_scene)
@@ -69,7 +70,7 @@ class InstanceUpdates:
             self.meshes[id(mesh)] = (mesh, mesh._mut_serial, code)
         # Empty containers have no GPU row, but still need a serial sentinel.
         all_meshes = [scene.loose_mesh]
-        all_meshes.extend(g.mesh for root in scene.groups for g, _ in iter_placements(root))
+        all_meshes.extend(g.mesh for g in iter_groups(scene.groups))
         for mesh in all_meshes:
             self.meshes.setdefault(id(mesh), (mesh, mesh._mut_serial, -1))
         self.mesh_revisions = {key: mesh.revision for key, (mesh, _, _) in self.meshes.items()}
@@ -443,7 +444,7 @@ class InstanceUpdates:
             seen.add(uid)
             value = np.zeros((), INSTANCE)
             value['world'] = (np.eye(4, dtype=np.float32) if matrix is None
-                              else np.asarray(matrix.data(), np.float32).reshape(4, 4))
+                              else np.asarray(matrix, np.float32))
             _, paint = state(proxy)
             value['info'][:3] = (code, paint, flags | (8 if mode else 0))
             if row < len(self.packed.instances):
@@ -473,7 +474,7 @@ class InstanceUpdates:
         removed = []
         if local:
             for root in self.pending_removed:
-                for group, _ in iter_placements(root):
+                for group in iter_groups((root,)):
                     row = self.rows.get(self.packed.row_key(group))
                     if row is not None:
                         seen.discard(self.packed.row_key(group))

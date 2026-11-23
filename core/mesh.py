@@ -1272,26 +1272,8 @@ class Mesh:
 
         Used by the stitch pass, whose splits/merges/collapses interact too much
         for a clean per-op inverse — restoring the whole touched mesh is robust."""
-        return {
-            "vertices": list(self.vertices),
-            "edges": list(self.edges),
-            "faces": list(self.faces),
-            "registry": dict(self._registry),
-            "vpos": {v.key: QVector3D(v.position) for v in self.vertices},
-            "vedges": {v.key: set(v.edges) for v in self.vertices},
-            "efaces": {e.key: list(e.faces) for e in self.edges},
-            "esoft": {e.key: e.soft for e in self.edges},
-            "eflat": {e.key: e.flat for e in self.edges},
-            "ehidden": {e.key: e.hidden for e in self.edges},
-            "elayer": {e.key: e.layer for e in self.edges},
-            "ecurve": {e.key: e.curve for e in self.edges},
-            "floop": {f.key: list(f.loop) for f in self.faces},
-            "fholes": {f.key: [list(h) for h in f.hole_loops] for f in self.faces},
-            "fattrs": {f.key: dict(f.attrs) for f in self.faces},
-            # orient_outward re-marks interior partitions inside a push, so a
-            # restore that skipped the flag could leave it changed after Esc.
-            "finterior": {f.key: f.interior for f in self.faces},
-        }
+        from ingetrazo_core import object_replay
+        return object_replay.capture(self)
 
     def restore_state(self, snap: dict) -> None:
         """Restore a :meth:`capture_state` snapshot. Objects created since are
@@ -1302,55 +1284,8 @@ class Mesh:
             from core import store_mesh
             store_mesh._restore_store_state(self, snap)
             return
-        self._chunk_dirty = True
-        # The faces' attrs come back too, and a repaint moves no vertex: a
-        # bake that took this for a move kept the old material on screen.
-        # (Flag only: the _chunk_dirty above already advanced the revision.)
-        self.__dict__["_attrs_dirty_value"] = True
-        self._mut_serial += 1
-        self.vertices[:] = snap["vertices"]
-        self.edges[:] = snap["edges"]
-        self.faces[:] = snap["faces"]
-        self._registry.clear()
-        self._registry.update(snap["registry"])
-        self._displaced.clear()
-        by_key = {e.key: e for e in (*self.vertices, *self.edges, *self.faces)}
-        for v, p in snap["vpos"].items():
-            v = by_key[v]
-            v.position = QVector3D(p)
-        for v, es in snap["vedges"].items():
-            v = by_key[v]
-            v.edges = set(es)
-        for e, fs in snap["efaces"].items():
-            e = by_key[e]
-            e.faces = list(fs)
-        for e, soft in snap.get("esoft", {}).items():
-            e = by_key[e]
-            e.soft = soft
-        for e, hidden in snap.get("ehidden", {}).items():
-            e = by_key[e]
-            e.hidden = hidden
-        for e, flat in snap.get("eflat", {}).items():
-            e = by_key[e]
-            e.flat = flat
-        for e, layer in snap.get("elayer", {}).items():
-            e = by_key[e]
-            e.layer = layer
-        for e, cid in snap.get("ecurve", {}).items():
-            e = by_key[e]
-            e.curve = cid
-        for f, loop in snap["floop"].items():
-            f = by_key[f]
-            f.loop = list(loop)
-        for f, holes in snap["fholes"].items():
-            f = by_key[f]
-            f.hole_loops = [list(h) for h in holes]
-        for f, attrs in snap.get("fattrs", {}).items():
-            f = by_key[f]
-            f.attrs = dict(attrs)
-        for f, interior in snap.get("finterior", {}).items():
-            f = by_key[f]
-            f.interior = interior
+        from ingetrazo_core import object_replay
+        return object_replay.restore(self, snap)
 
     def note_rewound(self) -> None:
         """Say that faces may have changed winding (#197): no count,

@@ -1,7 +1,7 @@
 """Document-tool facade for native mesh editing; no GL picking or drawing."""
 import numpy as np
 from ingetrazo_core import Vec3 as QVector3D, Matrix4 as QMatrix4x4
-from core.group import iter_placements
+from core.purge import iter_groups
 
 _VIEWPORT = None
 
@@ -672,7 +672,7 @@ class MeshToolAccess:
     def begin_groups_preview(self, groups):
         # Their selection boxes stay behind until the commit (GL skips them).
         self._moving_groups = tuple(groups)
-        selected = {g.uid for root in groups for g, _ in iter_placements(root)}
+        selected = {g.uid for g in iter_groups(self._moving_groups)}
         self.ids = np.asarray([row for uid in selected
                                for row in self.view.uid_rows.get(uid, ())], np.int64)
         billboards = getattr(self.view, '_billboards', None)

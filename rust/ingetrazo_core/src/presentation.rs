@@ -401,17 +401,16 @@ fn edit_view_tree<'py>(
     before: &Obj<'py>,
     after: &Obj<'py>,
 ) -> PyResult<Option<(Obj<'py>, Obj<'py>)>> {
-    let api = scene.py().import("core.scene_folders")?;
     if !after.is_none() {
-        api.call_method1("restore", (scene, after))?;
+        crate::scene_tree::restore(scene, after)?;
         return Ok(Some((before.clone(), after.clone())));
     }
-    let initial = api.call_method1("state", (scene,))?;
+    let initial = crate::scene_tree::state(scene)?;
     if !change.call1((scene,))?.is_truthy()? {
-        api.call_method1("restore", (scene, &initial))?;
+        crate::scene_tree::restore(scene, &initial)?;
         return Ok(None);
     }
-    Ok(Some((initial, api.call_method1("state", (scene,))?)))
+    Ok(Some((initial, crate::scene_tree::state(scene)?)))
 }
 #[pyfunction]
 fn set_direction<'py>(guide: &Obj<'py>, direction: &Obj<'py>) -> PyResult<Obj<'py>> {

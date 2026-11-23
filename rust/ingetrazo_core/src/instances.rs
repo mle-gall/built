@@ -59,6 +59,44 @@ fn build_bvh(blo: &[[f64; 3]], bhi: &[[f64; 3]], cen: &[[f64; 3]]) -> (Vec<u32>,
     (order, nodes)
 }
 
+/// Point queries over padded segment bounds. Use world coordinates directly:
+/// surveyed positions can exceed the range of an integer cell index.
+pub(crate) struct PointIndex {
+    order: Vec<u32>,
+    nodes: Vec<Node>,
+}
+
+impl PointIndex {
+    pub(crate) fn new(lo: &[[f64; 3]], hi: &[[f64; 3]]) -> Self {
+        let centres: Vec<_> = lo.iter().zip(hi).map(|(a, b)| {
+            std::array::from_fn(|k| 0.5 * a[k] + 0.5 * b[k])
+        }).collect();
+        let (order, nodes) = build_bvh(lo, hi, &centres);
+        Self { order, nodes }
+    }
+
+    pub(crate) fn candidates(&self, point: [f64; 3]) -> Vec<u32> {
+        if self.nodes.is_empty() {
+            return Vec::new();
+        }
+        let mut found = Vec::new();
+        let mut todo = vec![0];
+        while let Some(i) = todo.pop() {
+            let n = &self.nodes[i as usize];
+            if (0..3).any(|k| point[k] < n.lo[k] || point[k] > n.hi[k]) {
+                continue;
+            }
+            if n.leaf {
+                found.extend_from_slice(&self.order[n.start as usize..n.end as usize]);
+            } else {
+                todo.extend([n.left, n.left + 1]);
+            }
+        }
+        found.sort_unstable();
+        found
+    }
+}
+
 /// The box and the centres' box of ``order``'s rows.
 fn range_bounds(order: &[u32], blo: &[[f64; 3]], bhi: &[[f64; 3]], cen: &[[f64; 3]])
                 -> ([f64; 3], [f64; 3], [f64; 3], [f64; 3]) {

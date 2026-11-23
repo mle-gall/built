@@ -1864,15 +1864,15 @@ class ComposerHistory:
     retype", not letter by letter."""
 
     def __init__(self, on_change=None) -> None:
-        self._native = doc_model.NATIVE.DocumentHistory() if doc_model.ENABLED else None
-        self._undo = self._native.undo if self._native is not None else []
-        self._redo = self._native.redo if self._native is not None else []
+        self._native = doc_model.NATIVE.DocumentHistory()
+        self._undo = self._native.undo
+        self._redo = self._native.redo
         self._on_change = on_change
 
     def execute(self, cmd: ComposerCommand, notify: bool = True,
                 coalesce: bool = False) -> None:
         txn = None
-        if doc_model.ENABLED and cmd.journalled():
+        if cmd.journalled():
             # A drag has already written its preview to the item. Start the
             # transaction at the press position for those explicit fields.
             cmd.restore_preview()
@@ -1887,19 +1887,7 @@ class ComposerHistory:
         else:
             cmd.do()
         cmd._txn = txn
-        top = self._undo[-1] if self._undo else None
-        if self._native is not None:
-            self._native.push_sheet(cmd, coalesce)
-        elif (coalesce and top is not None
-                and _edit_signature(top) is not None
-                and _edit_signature(top) == _edit_signature(cmd)):
-            top._txn = (txn.compose([top._txn, txn])
-                        if txn is not None and top._txn is not None else None)
-            # keep top's `before`
-            for t, c in zip(_edits_of(top), _edits_of(cmd)):
-                t.after = dict(c.after)
-        else:
-            self._undo.append(cmd)
+        self._native.push_sheet(cmd, coalesce)
         self._redo.clear()
         if notify and self._on_change:
             self._on_change()
@@ -1907,12 +1895,7 @@ class ComposerHistory:
     def undo(self) -> bool:
         if not self._undo:
             return False
-        if self._native is not None:
-            self._native.replay(self, True, True)
-        else:
-            cmd = self._undo.pop()
-            cmd.undo()
-            self._redo.append(cmd)
+        self._native.replay(self, True, True)
         if self._on_change:
             self._on_change()
         return True
@@ -1920,12 +1903,7 @@ class ComposerHistory:
     def redo(self) -> bool:
         if not self._redo:
             return False
-        if self._native is not None:
-            self._native.replay(self, False, True)
-        else:
-            cmd = self._redo.pop()
-            cmd.do()
-            self._undo.append(cmd)
+        self._native.replay(self, False, True)
         if self._on_change:
             self._on_change()
         return True

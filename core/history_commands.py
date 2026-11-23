@@ -1,8 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""Model editing commands and their Python reference inverses."""
+"""Editor command adapters for document transactions and host-owned changes."""
 from __future__ import annotations
 
+from ingetrazo_core import planar_edits as _planar
+from ingetrazo_core import object_replay as _replay, object_drawing as _drawing
 from ingetrazo_core import (definition_edits as _definitions, placement_edits as _placements,
                             presentation as _presentation, placement_transform as _transform,
                             reference_layers as _references)
@@ -17,7 +19,6 @@ from ingetrazo_core import Vec3 as QVector3D
 
 from core.group import Group
 from core import doc_model as _doc
-from core import history_command_reference as _reference
 from core.materials import has_own_material
 from core.mesh import (PAINT_KEYS, Edge, Face, Mesh, Vertex, edge_flags,
                        edge_is_plain, stamp_edge_flags)
@@ -97,11 +98,11 @@ class Command(ABC):
     #: everything it changes lives in the document. A method
     #: ``doc_undo(scene) -> bool`` for commands that qualify for some
     #: inputs only (asked right after ``do``). ``undo`` stays: it is the
-    #: Python document's path and the fallback for a nested step.
+    #: direct and mixed-command replay hook.
     doc_undo = False
     _journal_geometry = False
 
-    def _reference_snapshot(self, mesh):
+    def _direct_snapshot(self, mesh):
         if not self._journal_geometry:
             return mesh.capture_state()
 
@@ -232,8 +233,6 @@ class AddEdgeCommand(MeshCommand):
         self.edge: Optional[Edge] = None
         self._owned = False
 
-    _stamp = _reference.stamp_edge
-
     def do(self, scene) -> None:
         m = scene.mesh
         if self._journal_geometry and type(self.soft) in (bool, type(None)) and (
@@ -252,23 +251,30 @@ class AddEdgeCommand(MeshCommand):
                     m.mark_modified()
                 scene.version += 1
                 return
-        _reference.draw_edge(self, scene)
+        _replay.draw_edge(self, m)
+        scene.version += 1
 
     def doc_after(self, scene, phase):
         if phase == "undo" and self._owned:
             scene.selection.discard(self.edge)
         scene.version += 1
 
-    undo = _reference.undo_draw_edge
+    def undo(self, scene):
+        if _replay.undo_edge(self, scene.mesh):
+            scene.selection.discard(self.edge)
+            scene.version += 1
 
 
 class RemoveGeometryCommand(MeshCommand):
-    """Deleting an element changes ordered incidence lists. The reference
-    mesh restores their original order with its identity-preserving snapshot."""
+    """Deleting an element changes ordered incidence lists. Direct replay
+    restores their order and the original element handles."""
     keeps_rows = True
     _before = None
 
-    undo = _reference.restore_mesh_before
+    def undo(self, scene):
+        if self._before is not None:
+            scene.mesh.restore_state(self._before)
+            scene.version += 1
 
     def doc_after(self, scene, phase):
         _discard_removed_selection(scene)
@@ -306,7 +312,9 @@ class DeleteEdgesCommand(RemoveGeometryCommand):
                     scene.selection.discard(edge)
                 scene.version += 1
                 return
-        _reference.delete_edges(self, scene)
+        self._before = self._direct_snapshot(m)
+        self.removed_edges, self.removed_faces = _drawing.delete_edges(m, self._endpoints, self.cascade_faces, scene.selection)
+        scene.version += 1
 
 
 def _faces_by_segments(mesh, segments) -> list:
@@ -347,16 +355,16 @@ class EraseSelectionCommand(RemoveGeometryCommand):
 
     def do(self, scene) -> None:
         m = scene.mesh
-        self._before = self._reference_snapshot(m)
+        self._before = self._direct_snapshot(m)
         footprint = winding_footprint(m)
         from core.store_mesh import EdgeView, FaceView, StoreMesh, _hypot
         result = None
-        if _doc.ENABLED and type(m) is StoreMesh and (hypot := _hypot()) is not None:
+        if type(m) is StoreMesh and (hypot := _hypot()) is not None:
             result = m._store.erase_selection(
                 [[p.toTuple() for p in loop] for loop in self._face_loops],
                 [(m._input_point(a), m._input_point(b)) for a,b in self._edge_endpoints], hypot)
         if result is None:
-            slit_planes, across = _reference.erase_selected_geometry(self, scene)
+            slit_planes, across = _drawing.erase_selection(m, self._face_loops, self._edge_endpoints, scene.selection)
         else:
             dirty, edges, faces, merges, slits, across_keys = result
             if dirty:
@@ -405,9 +413,7 @@ class EraseSelectionCommand(RemoveGeometryCommand):
             if n:
                 m._dirty(n)
         else:
-            for e in _reference._soft_faceless_edges(m):
-                if e.soft and not e.faces:
-                    m.remove_edge(e)
+            _drawing.prune_soft_edges(m)
         # A merge can leave the big enclosing face overlapping its subdivisions;
         # drop any such redundant mother (covered by the snapshot undo above).
         for f in heal_overlapping_faces(m, footprint=footprint):
@@ -577,19 +583,19 @@ class AddFaceCommand(MeshCommand):
         if self._after is not None:
             mesh.restore_state(self._after)
         else:
-            self._before = self._reference_snapshot(mesh)
+            self._before = self._direct_snapshot(mesh)
             self.face = mesh.add_face(self.vertices, self.preset_holes)
             self.face.interior = self.interior
             if self.attrs:
                 self.face.attrs.update(self.attrs)
             if self.auto:
                 self._divide(mesh)
-            self._after = self._reference_snapshot(mesh)
+            self._after = self._direct_snapshot(mesh)
         scene.version += 1
 
     def _divide(self, mesh):
         from core.store_mesh import FaceView, StoreMesh, _hypot
-        if (_doc.ENABLED and type(mesh) is StoreMesh and not mesh.__dict__.get("_planned_points")
+        if (type(mesh) is StoreMesh and not mesh.__dict__.get("_planned_points")
                 and (hypot := _hypot()) is not None):
             result = mesh._store.divide_drawn_face(
                 self.face.key, [f.key for f in _faces_holding(mesh, self.face.vertices)],
@@ -604,7 +610,7 @@ class AddFaceCommand(MeshCommand):
                         FaceView(mesh, key).attrs = dict(mother.attrs)
                     _inherit_paint(self.face, mother)
                 return
-        self._hole_swaps = _reference.divide_drawn_face(mesh, self.face)
+        self._hole_swaps = _drawing.divide_face(mesh, self.face)
 
     def doc_after(self, scene, phase):
         _discard_removed_selection(scene)
@@ -643,7 +649,9 @@ class DeleteFaceCommand(RemoveGeometryCommand):
                     scene.selection.discard(self.face)
                 scene.version += 1
                 return
-        _reference.delete_face(self, scene)
+        self._before = self._direct_snapshot(mesh)
+        self.face = _drawing.delete_face(mesh, self._loop, scene.selection)
+        scene.version += 1
 
 
 def _dirty_group_chunks(scene) -> None:
@@ -693,7 +701,7 @@ _RENDER_FIELDS = ["layer", "hidden", "material"]
 def _all_placements(items) -> bool:
     """Every item a placement whose fields live in the document: its
     renderer dirtiness then comes from the step's transaction."""
-    return _doc.ENABLED and all(isinstance(e, Group) for e in items)
+    return all(isinstance(e, Group) for e in items)
 
 
 def _bulk_set(items, field, value):
@@ -701,7 +709,7 @@ def _bulk_set(items, field, value):
     document op (``doc_set_many``: Lock, Hide or Tag of a whole selection),
     returning the previous values; ``None`` when not every item is a
     document placement (the caller writes them one by one)."""
-    if not _doc.ENABLED or not items:
+    if not items:
         return None
     try:
         prev = _doc.NATIVE.doc_get_many(items, field)
@@ -1938,15 +1946,21 @@ class ExplodeCurvesCommand(MeshCommand):
         if self._journal_geometry and type(scene.mesh) is StoreMesh:
             ids = {e.curve for e in self.edges if getattr(e, "curve", None) is not None}
             if not all(type(i) is int and 0 <= i < 2**63 for i in ids):
-                return _reference.explode_curves(self, scene)
+                return self._explode(scene)
             self.curves = scene.mesh._store.explode_curves(ids)
             scene.mesh._chunk_dirty = True
             scene.mesh._mut_serial += 1
             scene.version += 1
             return
-        _reference.explode_curves(self, scene)
+        self._explode(scene)
 
-    undo = _reference.undo_explode_curves
+    def _explode(self, scene):
+        self.curves, self._ids = _replay.explode_curves(scene.mesh, self.edges)
+        scene.version += 1
+
+    def undo(self, scene):
+        _replay.restore_curves(scene.mesh, self._ids)
+        scene.version += 1
 
 
 class AddSceneCommand(Command):
@@ -2640,13 +2654,13 @@ def _carried_faces(mesh, moving: set) -> list:
 class _VertexEditCommand(MeshCommand):
     """Replay standalone and object-mesh edits from the shared mesh snapshot."""
     _before = _after = None
-    undo = _reference.restore_mesh_before
+    undo = RemoveGeometryCommand.undo
 
     def do(self, scene):
         if self._after is None:
-            self._before = self._reference_snapshot(scene.mesh)
+            self._before = self._direct_snapshot(scene.mesh)
             self._edit(scene)
-            self._after = self._reference_snapshot(scene.mesh)
+            self._after = self._direct_snapshot(scene.mesh)
         else:
             scene.mesh.restore_state(self._after)
             scene.version += 1
@@ -2848,7 +2862,7 @@ class FlipGroupsCommand(MeshCommand):
 
     def _flip(self, scene) -> None:
         _transform.flip_groups(scene, self._groups, mirror_matrix(self.centre, self.axis))
-        if _doc.ENABLED and self.doc_undo(scene):
+        if self.doc_undo(scene):
             _dirty_placements(self._groups)
         else:
             _dirty_group_chunks(scene)
@@ -3156,7 +3170,7 @@ class StitchSolidCommand(MeshCommand):
         self.snapshot: Optional[dict] = None
 
     def do(self, scene) -> None:
-        self.snapshot = self._reference_snapshot(scene.mesh)
+        self.snapshot = self._direct_snapshot(scene.mesh)
         run_stitch(scene.mesh, {_key(p) for p in self.seed})
         scene.version += 1
 
@@ -3298,9 +3312,9 @@ class SnapshotMutation(MeshCommand):
     def do(self, scene) -> None:
         mesh = self._target(scene)
         if self.after is None:
-            self.before = self._reference_snapshot(mesh)
+            self.before = self._direct_snapshot(mesh)
             self.mutate(scene)
-            self.after = self._reference_snapshot(mesh)
+            self.after = self._direct_snapshot(mesh)
         else:
             mesh.restore_state(self.after)
         scene.version += 1
@@ -3324,11 +3338,11 @@ class SimplifyMeshCommand(MeshCommand):
     def do(self, scene) -> None:
         if self.after is None:
             from formats.fuse import simplify_mesh
-            self.before = self._reference_snapshot(scene.mesh)
+            self.before = self._direct_snapshot(scene.mesh)
             self.before_selection = ElementSet(scene.selection)
             self.faces_removed = simplify_mesh(
                 scene.mesh, self.max_angle_degrees)
-            self.after = self._reference_snapshot(scene.mesh)
+            self.after = self._direct_snapshot(scene.mesh)
         else:
             scene.mesh.restore_state(self.after)
         scene.selection.clear()
@@ -3446,7 +3460,7 @@ def _run_snapshot_parts(parent, scene):
     covered = (AddEdgeCommand, DeleteEdgesCommand, DeleteFaceCommand, TagCurveCommand,
                ExplodeCurvesCommand, PruneOrphanEdgesCommand, MoveVerticesCommand)
     for part in parent.inner:
-        # A face's reference inverse also uses snapshots. The enclosing
+        # Direct face undo also uses snapshots. The enclosing
         # command already owns them in either document mode.
         if type(part) is not AddFaceCommand and (
                 not parent._journal_geometry or type(part) not in covered):
@@ -3486,7 +3500,7 @@ class SnapshotCompound(MeshCommand):
             # First run: snapshot before, apply the plan, clean up any coplanar
             # overlap it created (redundant nested holes / spurious mother), then
             # snapshot the result so undo/redo restore exactly.
-            self.before = self._reference_snapshot(scene.mesh)
+            self.before = self._direct_snapshot(scene.mesh)
             # Which way every face looked before the draw: the heal may
             # align the faces the draw MADE, never the ones already there
             # (a Reverse Faces undone by the next rectangle).
@@ -3498,7 +3512,7 @@ class SnapshotCompound(MeshCommand):
             # A draw that split a curve leaves it in separate contours — break
             # the curve ids there, before the snapshot so redo keeps it.
             scene.mesh.resplit_curves()
-            self.after = self._reference_snapshot(scene.mesh)
+            self.after = self._direct_snapshot(scene.mesh)
         else:
             # Redo: re-running the delta plan wouldn't reproduce the splits, so
             # restore the captured result directly.
@@ -3528,7 +3542,7 @@ class MeshSnapshotCommand(MeshCommand):
         self.snapshot: Optional[dict] = None
 
     def do(self, scene) -> None:
-        self.snapshot = self._reference_snapshot(scene.mesh)
+        self.snapshot = self._direct_snapshot(scene.mesh)
         before = set(scene.mesh.faces)
         _run_snapshot_parts(self, scene)
         new_faces = set(scene.mesh.faces) - before
@@ -3574,7 +3588,7 @@ class MakeGroupCommand(MeshCommand):
 
     def do(self, scene) -> None:
         m = scene.mesh
-        self.snapshot = self._reference_snapshot(m)
+        self.snapshot = self._direct_snapshot(m)
         # Built once: a redo puts back the SAME group, the one the next
         # commands (Explode, Move, paint…) hold — a fresh one each time
         # left them pointing at a group no longer in the model, and
@@ -3582,7 +3596,7 @@ class MakeGroupCommand(MeshCommand):
         if self.group is None:
             self.group = self._build(scene)
         self._take_off_loose(scene)
-        if _doc.ENABLED and not self._journal_geometry:
+        if not self._journal_geometry:
             self._after = m.capture_state()
         scene.groups.append(self.group)
         scene.selection.clear()
@@ -3959,7 +3973,7 @@ class ReplaceComponentCommand(Command):
         self._before: list = []
 
     def do(self, scene) -> None:
-        self._before = _definitions.replace_definitions(self.targets, self.source, self._SHARED, _doc.ENABLED)
+        self._before = _definitions.replace_definitions(self.targets, self.source, self._SHARED)
         scene.version += 1
 
     def undo(self, scene) -> None:
@@ -4221,23 +4235,16 @@ class GroupInContextCommand(Command):
         ctx = self.context
         if ctx.children is None:
             ctx.children = []
-        if _doc.ENABLED:
-            # The document's lists cannot be swapped like Python lists:
-            # the scene reads its top level from ``ctx`` meanwhile.
-            d = scene.__dict__
-            prev = d.get("_groups_owner")
-            d["_groups_owner"] = ctx
-            try:
-                step(scene)
-            finally:
-                d["_groups_owner"] = prev
-            return
-        top = scene.groups
-        scene.groups = ctx.children
+        # The document's lists cannot be swapped like Python lists:
+        # the scene reads its top level from ``ctx`` meanwhile.
+        d = scene.__dict__
+        prev = d.get("_groups_owner")
+        d["_groups_owner"] = ctx
         try:
             step(scene)
         finally:
-            scene.groups = top
+            d["_groups_owner"] = prev
+        return
 
     def do(self, scene) -> None:
         from ingetrazo_core import Matrix4 as QMatrix4x4
@@ -4292,10 +4299,7 @@ class ReparentGroupsCommand(Command):
     def do(self, scene) -> None:
         self._target_state, self._moves = _placements.reparent(
             scene.groups, self.groups, self.target, scene.selection.discard)
-        if _doc.ENABLED:
-            _dirty_placements([m[0] for m in self._moves])
-        else:
-            _dirty_group_chunks(scene)
+        _dirty_placements([m[0] for m in self._moves])
         scene.version += 1
 
     def undo(self, scene) -> None:
@@ -4467,7 +4471,7 @@ class ExplodeGroupCommand(MeshCommand):
     def do(self, scene) -> None:
         m = scene.mesh
         g = self.group
-        self.snapshot = self._reference_snapshot(m)
+        self.snapshot = self._direct_snapshot(m)
         self.index = scene.groups.index(g)
         self._selection = ElementSet(scene.selection)
         P = getattr(g, "xform", None)
@@ -4478,7 +4482,7 @@ class ExplodeGroupCommand(MeshCommand):
                 parent = m._store.tool_placement()
                 transform = parent * P if P is not None else parent
             self._geometry(scene, m, g, transform, paint)
-            if _doc.ENABLED and not self._journal_geometry and self._after is None:
+            if not self._journal_geometry and self._after is None:
                 self._after = m.capture_state()
 
         # The nested objects come out one level up, whole: their placement
@@ -4963,7 +4967,7 @@ class HealOverlapsCommand(MeshCommand):
         self.healed = 0
 
     def do(self, scene) -> None:
-        self.snapshot = self._reference_snapshot(scene.mesh)
+        self.snapshot = self._direct_snapshot(scene.mesh)
         # partial defaults to auto: the aggressive pass runs only on a flat plan.
         # Orientation is not this command's business (Orient Faces is).
         removed = heal_overlapping_faces(
@@ -4979,92 +4983,8 @@ class HealOverlapsCommand(MeshCommand):
             scene.version += 1
 
 
-_IN_TRI_SLACK = 1e-7
-
-
-def _point_in_tri(p: QVector3D, t0: QVector3D, t1: QVector3D,
-                  t2: QVector3D) -> bool:
-    """Coplanar point-in-triangle via consistent cross-product orientation.
-
-    Measured as distances (``_IN_TRI_SLACK`` metres outside an edge still
-    counts), and a sliver -- three nearly collinear corners, as a face whose
-    side was split on a straight border triangulates -- contains nothing.
-    The raw ``c·n > -1e-9`` test scaled with the triangle's area squared: a
-    sliver's tiny normal let every point through, and a 3 mm disc on the
-    border of a courtyard "covered" the 548 m² courtyard 8 m away.
-    """
-    n = QVector3D.crossProduct(t1 - t0, t2 - t0)
-    nl = n.length()
-    longest = max((t1 - t0).lengthSquared(), (t2 - t1).lengthSquared(),
-                  (t0 - t2).lengthSquared())
-    if nl < 1e-12 or nl < 1e-9 * longest:
-        return False
-    for a, b in ((t0, t1), (t1, t2), (t2, t0)):
-        c = QVector3D.crossProduct(b - a, p - a)
-        side = (b - a).length()
-        if side > 0 and QVector3D.dotProduct(c, n) / (nl * side) \
-                < -_IN_TRI_SLACK:
-            return False
-    return True
-
-
-def _segment_grid(segments):
-    """A lookup ``near(p)`` giving, in ascending order, the indices of the
-    ``segments`` (``(QVector3D, QVector3D)`` pairs) that ``p`` can lie on
-    under ``_point_on_seg_incl``.
-
-    The rebuild re-stamped curve flags by testing every new edge against
-    every flagged one: 167 M tests, 218 s, on an exploded DWG plan (#491).
-    Each segment goes in the cells of its box padded past the test's reach
-    (its ``t`` slack scales with length); the cell size grows until the boxes
-    cover at most a few cells each, so a long wall cannot flood the grid."""
-    import math
-    if not segments:
-        return lambda p: ()
-    boxes = []
-    for a, b in segments:
-        pad = 4e-4 * (1.0 + (b - a).length()) + 4e-4
-        boxes.append((min(a.x(), b.x()) - pad, min(a.y(), b.y()) - pad,
-                      min(a.z(), b.z()) - pad, max(a.x(), b.x()) + pad,
-                      max(a.y(), b.y()) + pad, max(a.z(), b.z()) + pad))
-    ext = sorted(max(bx[3] - bx[0], bx[4] - bx[1], bx[5] - bx[2])
-                 for bx in boxes)
-    size = ext[len(ext) // 2]
-
-    def span(lo, hi):
-        return math.floor(hi / size) - math.floor(lo / size) + 1
-
-    while sum(span(bx[0], bx[3]) * span(bx[1], bx[4]) * span(bx[2], bx[5])
-              for bx in boxes) > 8 * len(boxes):
-        size *= 2.0
-    cells: dict = {}
-    for i, (x0, y0, z0, x1, y1, z1) in enumerate(boxes):
-        for cx in range(math.floor(x0 / size), math.floor(x1 / size) + 1):
-            for cy in range(math.floor(y0 / size), math.floor(y1 / size) + 1):
-                for cz in range(math.floor(z0 / size),
-                                math.floor(z1 / size) + 1):
-                    cells.setdefault((cx, cy, cz), []).append(i)
-
-    def near(p):
-        return cells.get((math.floor(p.x() / size), math.floor(p.y() / size),
-                          math.floor(p.z() / size)), ())
-    return near
-
-
-def _welded_loop(mesh, loop):
-    """``loop`` with the corners the mesh welds into one merged, or ``None``
-    if fewer than three are left -- see the weld note in
-    :meth:`RebuildPlanarFacesCommand.do`."""
-    out = []
-    for p in loop:
-        v = mesh.vertex(p)
-        if not out or v != out[-1]:
-            out.append(v)
-    if len(out) > 1 and out[0] == out[-1]:
-        out.pop()
-    if len(out) < 3:
-        return None
-    return [v.position for v in out]
+_point_in_tri = _planar.point_in_tri
+_segment_grid = _planar.SegmentIndex
 
 
 class RebuildPlanarFacesCommand(MeshCommand):
@@ -5081,7 +5001,6 @@ class RebuildPlanarFacesCommand(MeshCommand):
 
     def do(self, scene) -> None:
         from core.arrangement import coplanar_plane, planar_rebuild
-        from core.topology import _point_on_seg_incl
 
         self.snapshot = scene.mesh.capture_state()  # source paint for rebuilt faces
         mesh = scene.mesh
@@ -5120,45 +5039,8 @@ class RebuildPlanarFacesCommand(MeshCommand):
                          for f in mesh.faces if f.attrs]
         edges, faces = planar_rebuild(segments, origin, normal)
 
-        near_flagged = _segment_grid([(fa, fb) for fa, fb, _ in flagged])
-
         scene.selection.clear()
-        if type(mesh) is StoreMesh:
-            mesh._store.drawing_clear()
-            mesh._attr_own.clear()
-            mesh._bump()
-        else:
-            mesh.clear()
-        for a, b in edges:
-            if mesh.vertex(a) == mesh.vertex(b):
-                # Shorter than the weld: the arrangement keys points on a
-                # 0.1 mm grid, so two ends a hair apart across a cell line
-                # stay two -- the mesh welds them into one. Raising here
-                # rolled the whole draw back on an exploded DWG plan (#491).
-                continue
-            e = mesh.add_edge(a, b)
-            for i in near_flagged(e.a):
-                fa, fb, flags = flagged[i]
-                if _point_on_seg_incl(e.a, fa, fb) and _point_on_seg_incl(e.b, fa, fb):
-                    stamp_edge_flags(e, flags)
-                    break
-        for outer, holes in faces:
-            outer = _welded_loop(mesh, outer)
-            if outer is None:
-                continue
-            holes = [h for h in (_welded_loop(mesh, h) for h in holes) if h]
-            f = mesh.add_face(outer, holes or None)
-            if f is None or not old_attrs:
-                continue
-            tris = f.triangulate()
-            if not tris:
-                continue
-            probe = (tris[0][0] + tris[0][1] + tris[0][2]) / 3.0
-            for old_tris, attrs in old_attrs:
-                if any(_point_in_tri(probe, t0, t1, t2)
-                       for t0, t1, t2 in old_tris):
-                    f.attrs.update(attrs)
-                    break
+        _planar.install_flat(mesh, type(mesh) is StoreMesh, edges, faces, flagged, old_attrs)
         if native and (self.snapshot.own or self.snapshot.table):
             own = {k: bool(attrs) for k, attrs in self.snapshot.own.items()}
             rows = [i + 1 for i, attrs in enumerate(self.snapshot.table) if attrs]
@@ -5180,34 +5062,6 @@ class RebuildPlanarFacesCommand(MeshCommand):
         if self.snapshot is not None:
             scene.mesh.restore_state(self.snapshot)
             scene.version += 1
-
-
-def _cyclic(ring, both_ways=False) -> tuple:
-    """``ring``'s position keys from its smallest one: equal for two rings
-    that are the same cycle (``both_ways``: in either direction)."""
-    keys = [_key(p) for p in ring]
-    if not keys:
-        return ()
-    def from_min(ks):
-        i = ks.index(min(ks))
-        return tuple(ks[i:] + ks[:i])
-    if not both_ways:
-        return from_min(keys)
-    return min(from_min(keys), from_min(keys[::-1]))
-
-
-def _region_is_face(face, outer, holes) -> bool:
-    """Whether a rebuilt region (``outer`` wound like ``face``, ``holes``)
-    is ``face`` itself: the same outer ring, corner for corner in the same
-    order, and the same openings. The rebuild then keeps the face (its
-    key, attrs and edges) instead of removing it and adding an equal one:
-    a stroke drawn beside a plate leaves the plate's face alone."""
-    if getattr(face, "interior", False):
-        return False                    # a re-added face would lose the flag
-    if _cyclic(face.vertices) != _cyclic(outer):
-        return False
-    have = sorted(_cyclic(h, True) for h in (face.holes or ()))
-    return have == sorted(_cyclic(h, True) for h in (holes or ()))
 
 
 class RebuildPlaneFacesCommand(MeshCommand):
@@ -5267,8 +5121,6 @@ class RebuildPlaneFacesCommand(MeshCommand):
 
     def do(self, scene) -> None:
         from core.arrangement import planar_rebuild
-        from core.triangulate import triangulate
-        from core.topology import _point_on_seg_incl
 
         self.snapshot = (scene.mesh.capture_state() if self.take_snapshot
                          else None)
@@ -5291,152 +5143,15 @@ class RebuildPlaneFacesCommand(MeshCommand):
             rings = [[[p.toTuple() for p in ring] for ring in (outer, *(holes or ()))]
                      for outer, holes in regions]
             keys, owners = mesh._store.drawing_coverage(o, n, rings, hypot)
-            from core.triangulate import _newell
-            keep, unchanged = [], set()
-            for i, owner, normal in owners:
-                outer, holes = regions[i]
-                if QVector3D.dotProduct(_newell(outer), QVector3D(*normal)) < 0:
-                    outer = list(reversed(outer))
-                    holes = [list(reversed(h)) for h in (holes or [])]
-                face = FaceView(mesh, owner)
-                if owner not in unchanged and _region_is_face(face, outer, holes):
-                    unchanged.add(owner)        # comes out as it was: kept
-                    continue
-                keep.append((outer, holes or None, dict(face.attrs)))
-            keys = [k for k in keys if k not in unchanged]
-            mesh._store.remove_drawing_faces(keys)
-            mesh._dirty(len(keys))
-            self._restore_regions(scene, keep, flagged, len(unchanged))
+            self.rebuilt = _planar.store_regions(mesh, regions, keys, owners, flagged)
+            scene.selection.clear()
+            scene.version += 1
             return
-        if self.faces is not None:
-            live = set(map(element_identity, mesh.faces))
-            plane_faces = [f for f in self.faces if f.key in live]
-            plane_edges = []
-            for f in plane_faces:
-                for loop in (f.loop, *f.hole_loops):
-                    for a, b in zip(loop, loop[1:] + loop[:1]):
-                        e = mesh.find_edge(a, b)
-                        if e is not None and e not in plane_edges:
-                            plane_edges.append(e)
-        else:
-            plane_edges = [e for e in self._near_plane(mesh, "edge")
-                           if self._on_plane(e.a) and self._on_plane(e.b)]
-        if not plane_edges:
-            if self.faces is not None:
-                for f in plane_faces:
-                    mesh.remove_face(f)
-            return
-        if self.faces is None:
-            plane_faces = [
-                f for f in self._near_plane(mesh, "face")
-                if all(self._on_plane(v.position) for v in f.loop)
-                and all(self._on_plane(v.position)
-                        for h in f.hole_loops for v in h)
-            ]
-        old = [([tuple(t) for t in f.triangulate()], f.normal(), dict(f.attrs))
-               for f in plane_faces]
-        segments = [(QVector3D(e.a), QVector3D(e.b)) for e in plane_edges]
-        # Copy/Explode can arrive without the drawing planner pre-splitting
-        # crossings. Carry flags onto the arrangement's new sub-edges too.
-        flagged = [(QVector3D(e.a), QVector3D(e.b), edge_flags(e))
-                   for e in plane_edges if not edge_is_plain(e)]
-        _, regions = planar_rebuild(segments, self.origin, self.normal)
-
-        def ring(loop):
-            return frozenset(_key(p) for p in loop)
-
-        # The openings the plane's faces already have, and the outlines a
-        # face was drawn exactly along. A region that is one of those
-        # openings stays open unless a face traces it (capping a hole on
-        # purpose) or traces the whole face around it (redrawing that face
-        # fills it, #538): a rectangle or an offset drawn AROUND a through
-        # hole covered it and the fresh face filled the hole (tutorial hunt
-        # 2, A15).
-        outlines = Counter(ring(f.vertices) for f in plane_faces)
-        openings: dict = {}
-        for f in plane_faces:
-            for h in f.holes:
-                openings.setdefault(ring(h), set()).add(ring(f.vertices))
-
-        def stays_open(outer) -> bool:
-            owners = openings.get(ring(outer))
-            if owners is None or outlines[ring(outer)]:
-                return False
-            return not any(outlines[o] > 1 for o in owners)
-
-        def covering(outer, holes):
-            tris = triangulate(outer, holes, self.normal)
-            if not tris:
-                return None
-            # The centroid of the largest triangle, not the first: the first
-            # of a circle's fan is a sliver at the rim, and on a centimetre
-            # part its centroid sat within rounding of the face around the
-            # hole -- the hole read as covered and was capped (A15).
-            big = max(tris, key=lambda t: QVector3D.crossProduct(
-                t[1] - t[0], t[2] - t[0]).lengthSquared())
-            probe = (big[0] + big[1] + big[2]) / 3.0
-            for face, (old_tris, nrm, attrs) in zip(plane_faces, old):
-                if any(_point_in_tri(probe, t0, t1, t2)
-                       for t0, t1, t2 in old_tris):
-                    return nrm, attrs, face
-            return None
-
-        keep, unchanged = [], set()
-        for outer, holes in regions:
-            if not holes and stays_open(outer):
-                continue                      # an existing opening
-            cov = covering(outer, holes or [])
-            if cov is None:
-                continue                      # uncovered region: stays empty
-            nrm, attrs, owner = cov
-            # Arrangement emits CCW around self.normal; match the old face.
-            from core.triangulate import _newell
-            if QVector3D.dotProduct(_newell(outer), nrm) < 0:
-                outer = list(reversed(outer))
-                holes = [list(reversed(h)) for h in (holes or [])]
-            if owner.key not in unchanged and _region_is_face(owner, outer, holes):
-                unchanged.add(owner.key)        # comes out as it was: kept
-                continue
-            keep.append((outer, holes or None, attrs))
-        for f in plane_faces:
-            if f.key not in unchanged:
-                mesh.remove_face(f)
-        self._restore_regions(scene, keep, flagged, len(unchanged))
-
-    def _restore_regions(self, scene, keep, flagged, unchanged=0):
-        from core.topology import _point_on_seg_incl
-        mesh = scene.mesh
-        near_flagged = _segment_grid([(a, b) for a, b, _flags in flagged])
-        restored = set()
-        for outer, holes, attrs in keep:
-            f = mesh.add_face(outer, holes)
-            if attrs:
-                f.attrs.update(attrs)
-            if flagged:
-                for loop in (f.loop, *f.hole_loops):
-                    for a, b in zip(loop, loop[1:] + loop[:1]):
-                        edge = mesh.find_edge(a, b)
-                        if edge is None or edge in restored:
-                            continue
-                        restored.add(edge)
-                        for i in near_flagged(edge.a):
-                            fa, fb, flags = flagged[i]
-                            if (_point_on_seg_incl(edge.a, fa, fb)
-                                    and _point_on_seg_incl(edge.b, fa, fb)):
-                                stamp_edge_flags(edge, flags)
-                                break
-        # AddFaceCommand re-creates a polygon's full-length side even when the
-        # planner already split it at a crossing — a border-0 collinear
-        # duplicate that fragments the curve contours at resplit (degree-3
-        # vertices). The regions above were re-added from the fully noded
-        # arrangement, so the duplicates now bound nothing: prune them.
-        from core.topology import prune_collinear_orphan_edges
-
-        prune_collinear_orphan_edges(mesh)
-        mesh.resplit_curves()
-        self.rebuilt = len(keep) + unchanged
-        scene.selection.clear()
-        scene.version += 1
+        count = _planar.rebuild_scoped(self, mesh)
+        if count is not None:
+            self.rebuilt = count
+            scene.selection.clear()
+            scene.version += 1
 
     def undo(self, scene) -> None:
         if self.snapshot is not None:
@@ -5502,24 +5217,11 @@ class OccurrenceCommands(CompoundCommand):
 
     @staticmethod
     def group_start(history, session):
-        if history._native is not None:
-            return history._native.group_start(session)
-        stack = history.undo_stack
-        start = len(stack)
-        while start and session in getattr(stack[start - 1], "_occurrences", ()):
-            start -= 1
-        return start
+        return history._native.group_start(session)
 
     @staticmethod
     def fold(history, session):
-        if history._native is not None:
-            return history._native.fold_occurrence(session, OccurrenceCommands)
-        stack = history.undo_stack
-        start = OccurrenceCommands.group_start(history, session)
-        if len(stack) - start > 1:
-            step = OccurrenceCommands(stack[start:])
-            step._occurrences = stack[start]._occurrences
-            stack[start:] = [step]
+        return history._native.fold_occurrence(session, OccurrenceCommands)
 
     @staticmethod
     def _in_frame(scene, cmd, action, *args):
@@ -5538,10 +5240,7 @@ class OccurrenceCommands(CompoundCommand):
         _doc.NATIVE.DocumentHistory.replay_group(self, scene, phase == "undo", True)
 
     def _replay(self, scene, undo):
-        if _doc.ENABLED:
-            return _doc.NATIVE.DocumentHistory.replay_group(self, scene, undo, False)
-        for cmd in reversed(self.commands) if undo else self.commands:
-            self._in_frame(scene, cmd, cmd.undo if undo else cmd.do, scene)
+        return _doc.NATIVE.DocumentHistory.replay_group(self, scene, undo, False)
 
     def do(self, scene):
         self._replay(scene, False)

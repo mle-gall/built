@@ -28,7 +28,6 @@ fn replace_definitions<'py>(
     targets: Vec<Obj<'py>>,
     source: &Obj<'py>,
     fields: Vec<String>,
-    native_document: bool,
 ) -> PyResult<Vec<Bound<'py, PyDict>>> {
     let py = source.py();
     let copy = py.import("core.group")?.getattr("copy_group")?;
@@ -44,12 +43,7 @@ fn replace_definitions<'py>(
         before.push(values);
     }
     for g in targets {
-        let field = if native_document {
-            "definition"
-        } else {
-            "mesh"
-        };
-        g.setattr(field, source.getattr(field)?)?;
+        g.setattr("definition", source.getattr("definition")?)?;
         let ext = source.getattr("ext")?;
         if ext.is_truthy()? && ext.call_method1("get", ("link",))?.is_truthy()? {
             g.setattr(

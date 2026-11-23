@@ -7,24 +7,11 @@ from core.section import cut_chords, fill_triangles, hatch_segments, effective_f
 def capture_rows(packed, scene, tint):
     """Resolve saved-frame visibility without baking or changing resident rows."""
     from types import SimpleNamespace
-    from views.viewport import Viewport
-    from core.group import iter_placements
-    from views.wgpu_scene import _placement_state
+    from views.wgpu_scene import _placement_records, _placement_state
     state = _placement_state(scene)
-    visible = {}
     vp = SimpleNamespace(scene=scene)
-    for root in scene.groups:
-        inherited = {}
-        parents = {}
-        def visit(g):
-            for child in g.children:
-                parents[id(child)] = g
-                visit(child)
-        visit(root)
-        for (group, _), proxy in zip(iter_placements(root), Viewport._expand_placements(vp, root)):
-            hidden = inherited.get(id(parents.get(id(group))), False) or not state(proxy)[0]
-            inherited[id(group)] = hidden
-            visible[id(group)] = not hidden
+    visible = {id(group): not (flags & 1) for group, _, _, flags in
+               _placement_records(scene, scene.groups, vp, state)}
     rows = packed.instances.copy()
     for i, (uid, group) in enumerate(zip(packed.uids, packed.groups)):
         rows['info'][i, 2] = int(not visible.get(id(group), group is None)) | (8 if getattr(group, 'billboard', False) else 0)

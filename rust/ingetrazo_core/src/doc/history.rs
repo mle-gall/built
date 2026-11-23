@@ -9,6 +9,45 @@ use pyo3::class::gc::{PyTraverseError, PyVisit};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 
+/// Journal a direct inverse for the change feed. Commands with host-owned
+/// effects run in their original editor mesh just like transaction replays.
+fn replay_direct(
+    py: Python<'_>,
+    host: &Bound<'_, PyAny>,
+    cmd: &Bound<'_, PyAny>,
+    undo: bool,
+) -> PyResult<()> {
+    let scene = host.getattr("scene")?;
+    let keywords = pyo3::types::PyDict::new(py);
+    keywords.set_item("include_groups", !cmd.getattr("keeps_rows")?.is_truthy()?)?;
+    let objects = if undo {
+        None
+    } else {
+        Some(host.call_method("_objects_before", (), Some(&keywords))?)
+    };
+    let action = cmd.getattr(if undo { "undo" } else { "do" })?;
+    let doc = py.import("core.doc_model")?;
+    doc.call_method0("begin")?;
+    host.setattr("last_txn", py.None())?;
+    let result = (|| {
+        host.call_method1("_in_command_mesh", (cmd, action, scene))?;
+        host.call_method0("_follow_text_placements")?;
+        doc.call_method0("commit")
+    })();
+    match result {
+        Ok(txn) if !txn.is_none() => host.setattr("last_txn", (txn, false))?,
+        Ok(_) => (),
+        Err(err) => {
+            doc.call_method0("rollback")?;
+            return Err(err);
+        }
+    }
+    if let Some(objects) = objects {
+        host.call_method("_tag_new_objects", (objects,), Some(&keywords))?;
+    }
+    Ok(())
+}
+
 #[pyclass(module = "ingetrazo_core")]
 pub struct DocumentHistory {
     #[pyo3(get)]
@@ -183,7 +222,7 @@ impl DocumentHistory {
             } else if sheet {
                 cmd.call_method0(if undo { "undo" } else { "do" })?;
             } else {
-                host.call_method1("_reference_replay", (&cmd, undo))?;
+                replay_direct(py, host, &cmd, undo)?;
             }
             Ok(())
         })();

@@ -741,34 +741,28 @@ STYLE_FIELDS = ("linetype", "lineweight", "cut_weight", "hatch",
                 "joints", "mortar", "opacity", "printable")
 TAG_FIELDS = CORE_TAG_FIELDS + STYLE_FIELDS
 
-if _dm.ENABLED:
-    class Layer(_LayerMethods, _dm.NATIVE.Tag):
-        __doc__ = _LayerMethods.__doc__
+class Layer(_LayerMethods, _dm.NATIVE.Tag):
+    __doc__ = _LayerMethods.__doc__
 
-        def __reduce__(self):
-            state = dict(vars(self))
-            state.update(_dm.handle_state(self, TAG_FIELDS))
-            return (_dm.new_handle, (type(self),), state)
+    def __reduce__(self):
+        state = dict(vars(self))
+        state.update(_dm.handle_state(self, TAG_FIELDS))
+        return (_dm.new_handle, (type(self),), state)
 
-        __setstate__ = _dm.set_handle_state
+    __setstate__ = _dm.set_handle_state
 
-    for _name in STYLE_FIELDS:
-        setattr(Layer, _name, _dm.attribute(_name, track=False))
-    del _name
-else:
-    class Layer(_LayerMethods):
-        __doc__ = _LayerMethods.__doc__
+for _name in STYLE_FIELDS:
+    setattr(Layer, _name, _dm.attribute(_name, track=False))
+del _name
 
 
 def layer_values(ly) -> dict:
     """Every field of a tag by name — what ``vars(ly)`` gave when all of
     them were instance attributes (in the order ``__init__`` sets them)."""
     out = dict(vars(ly))
-    if _dm.ENABLED:
-        doc = {name: getattr(ly, name) for name in _INIT_ORDER}
-        doc.update(out)
-        return doc
-    return out
+    doc = {name: getattr(ly, name) for name in _INIT_ORDER}
+    doc.update(out)
+    return doc
 
 
 #: The order ``Layer.__init__`` sets its fields in.

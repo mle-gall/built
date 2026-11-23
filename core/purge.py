@@ -33,7 +33,7 @@ def iter_groups(groups):
     With the Rust document the walk is one call (``doc_walk``): the tree as
     it is when the walk starts.
     """
-    if _dm.ENABLED and groups and (_dm.is_list(groups)
+    if groups and (_dm.is_list(groups)
                                    or isinstance(groups, tuple)):
         try:
             yield from _dm.NATIVE.doc_walk(groups)

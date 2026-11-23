@@ -1,10 +1,5 @@
-"""One document scenario, run by tests/test_document_parity.py in two
-processes: ``INGETRAZO_DOC=0`` (the Python document) and the default (the
-Rust document, core/doc_model.py). Prints one JSON object: the document
-after every step, the feed's records, and what the saved files hold.
-
-    python tests/doc_parity_scenario.py <workdir>
-"""
+"""Build the synthetic document and emit the states, feed and save archives
+compared with the archived Python reference in test_document_parity."""
 from __future__ import annotations
 
 import hashlib
@@ -286,8 +281,7 @@ def structural_steps(steps):
     for cmd in commands:
         history.execute(cmd)
         assert not history.last_error and not history.last_rejected
-        if doc_model.ENABLED:
-            assert cmd._doc_txn is not None, type(cmd).__name__
+        assert cmd._doc_txn is not None, type(cmd).__name__
         for action in (None, history.undo, history.redo, history.undo):
             if action:
                 assert action()
@@ -350,30 +344,29 @@ def shared_assembly(work):
     restored.mesh.add_edge(QVector3D(8, 8, 8), QVector3D(10, 8, 8))
     restored.end_group_edit()
     assert len(west.children[0].mesh.edges) == 13 and len(annex.children) == 1
-    if doc_model.ENABLED:
-        history = History(restored)
-        old = east.children[1]
-        counterpart = west.children[1]
-        history.execute(DeleteGroupCommand(old))
-        assert history.last_error is None and list(east.children) == [target]
-        assert len(west.children) == len(annex.children) == 1
-        assert history.undo() and west.children[1] is counterpart and east.children[1] is old
-        assert history.redo() and len(west.children) == 1
-        assert history.undo()
-        # Reorder the slots and write an override through a path. Both
-        # occurrences keep their original handles and the old UID paths resolve.
-        east.children[:] = list(reversed(east.children))
-        assert west.children[0] is counterpart and restored.resolve_occurrence(path) is target
-        restored.begin_group_edit(east)
-        new_child = Group(part, uid="East-brace")
-        new_child.xform = QMatrix4x4()
-        history.execute(InsertGroupCommand(new_child))
-        assert history.last_error is None and len(west.children) == len(east.children) == 3
-        projected = west.children[-1]
-        assert projected.uid != new_child.uid and projected.mesh is new_child.mesh
-        assert history.undo() and len(west.children) == 2
-        assert history.redo() and west.children[-1] is projected
-        restored.end_group_edit()
+    history = History(restored)
+    old = east.children[1]
+    counterpart = west.children[1]
+    history.execute(DeleteGroupCommand(old))
+    assert history.last_error is None and list(east.children) == [target]
+    assert len(west.children) == len(annex.children) == 1
+    assert history.undo() and west.children[1] is counterpart and east.children[1] is old
+    assert history.redo() and len(west.children) == 1
+    assert history.undo()
+    # Reorder the slots and write an override through a path. Both
+    # occurrences keep their original handles and the old UID paths resolve.
+    east.children[:] = list(reversed(east.children))
+    assert west.children[0] is counterpart and restored.resolve_occurrence(path) is target
+    restored.begin_group_edit(east)
+    new_child = Group(part, uid="East-brace")
+    new_child.xform = QMatrix4x4()
+    history.execute(InsertGroupCommand(new_child))
+    assert history.last_error is None and len(west.children) == len(east.children) == 3
+    projected = west.children[-1]
+    assert projected.uid != new_child.uid and projected.mesh is new_child.mesh
+    assert history.undo() and len(west.children) == 2
+    assert history.redo() and west.children[-1] is projected
+    restored.end_group_edit()
     return result
 
 
@@ -712,8 +705,7 @@ def presentation_steps(scene, steps):
     for cmd in edits:
         h.execute(cmd)
         assert not h.last_error, h.last_error
-        if doc_model.ENABLED:
-            assert cmd._doc_txn is not None
+        assert cmd._doc_txn is not None
         states.append(dump(scene))
     for action in (h.undo, h.redo):
         for _ in edits:
@@ -806,10 +798,9 @@ def main(work: Path):
     framed.begin_group_edit(first)
     endpoints = [QVector3D(1, 2, 3), QVector3D(3, 1, 2)]
     framed.mesh.add_edge(*(transform.map(p) for p in endpoints))
-    if doc_model.ENABLED:
-        assert first.mesh is second.mesh and len(second.mesh.edges) == 1
-        from core.protocol.keys import mesh_key
-        assert mesh_key(framed.mesh) == mesh_key(second.mesh)
+    assert first.mesh is second.mesh and len(second.mesh.edges) == 1
+    from core.protocol.keys import mesh_key
+    assert mesh_key(framed.mesh) == mesh_key(second.mesh)
     framed.end_group_edit()
     positions = [v.position_tuple() for v in second.mesh.vertices]
     import numpy as np

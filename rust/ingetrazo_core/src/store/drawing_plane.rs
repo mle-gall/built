@@ -40,7 +40,7 @@ pub(super) fn tris(r: &[Ring], n: V3, h: Hypot) -> Vec<[V3; 3]> {
     .map(|t| t.map(|i| p[i as usize]))
     .collect()
 }
-fn covers(t: [V3; 3], p: V3, h: Hypot) -> bool {
+pub(crate) fn covers(t: [V3; 3], p: V3, h: Hypot) -> bool {
     let [a, b, c] = t;
     let n = b.sub(a).cross(c.sub(a), h);
     let nl = length(n, h);

@@ -1,14 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""The Rust document model's switch and its Python side
-(docs/rust-document-model.md).
-
-``NATIVE`` is ``ingetrazo_core`` when the document lives in Rust, else
-``None`` (``INGETRAZO_DOC=0``, ``INGETRAZO_RUST=0``, or a build without the
-module). Decided once, at import: ``core.group.Group``,
-``core.layers.Layer`` and ``core.scene.Scene`` are defined over it, so a
-process runs one model or the other, never both (one owner per piece of
-state). The Python classes are the oracle the parity tests compare with.
+"""Python handles and transaction boundaries for the Rust document.
 
 What lives here:
 
@@ -26,26 +18,13 @@ from __future__ import annotations
 import os
 import weakref
 
+import ingetrazo_core as NATIVE
 from ingetrazo_core import Matrix4 as QMatrix4x4
 
 
-def _module():
-    if os.environ.get("INGETRAZO_DOC") == "0" or os.environ.get("INGETRAZO_RUST") == "0":
-        return None
-    from core import _native
-    mod = _native.available()
-    if mod is None or not hasattr(mod, "doc_new_root"):
-        return None
-    return mod
-
-
-NATIVE = _module()
-ENABLED = NATIVE is not None
-
-
 def engine() -> str:
-    """«Rust» or «Python», for the logs and the probes."""
-    return "Rust" if ENABLED else "Python"
+    """Document engine name for logs and probes."""
+    return "Rust"
 
 
 # --------------------------------------------------------------- matrices
@@ -202,8 +181,7 @@ def _bind(value, key, which):
     return value, value.data(), getattr(value, "_built_source", None)
 
 
-if ENABLED:
-    NATIVE.doc_set_hooks(_make, _bind)
+NATIVE.doc_set_hooks(_make, _bind)
 
 
 #: The tree invariant (one parent per placement, docs/rust-document-model.md
@@ -215,16 +193,13 @@ PARENT_MODES = {"off": 0, "warn": 1, "raise": 2}
 
 def parent_mode(mode: str) -> str:
     """Set the tree invariant's mode; returns the previous one."""
-    if not ENABLED:
-        return "off"
     old = NATIVE.doc_parent_mode(PARENT_MODES[mode])
     return {v: k for k, v in PARENT_MODES.items()}[old]
 
 
-if ENABLED:
-    parent_mode(os.environ.get("INGETRAZO_DOC_PARENT", "raise")
-                if os.environ.get("INGETRAZO_DOC_PARENT") in PARENT_MODES
-                else "raise")
+parent_mode(os.environ.get("INGETRAZO_DOC_PARENT", "raise")
+            if os.environ.get("INGETRAZO_DOC_PARENT") in PARENT_MODES
+            else "raise")
 
 
 # ---------------------------------------------------- tracked containers
@@ -309,10 +284,10 @@ def _stored(node, value):
 
 
 def flush() -> None:
-    """(Python document: nothing to do.) Write back every tracked container edited in place since the last
+    """Write back every tracked container edited in place since the last
     call (and every suspect one); a container whose attribute was replaced
     meanwhile becomes a plain one."""
-    if not ENABLED or not (_DIRTY or _SUSPECT):
+    if not (_DIRTY or _SUSPECT):
         return
     anchors = dict(_SUSPECT)
     anchors.update(_DIRTY)
@@ -526,9 +501,8 @@ def plain(value):
     return _plain(value)
 
 
-if ENABLED:
-    NATIVE.doc_set_track_hook(_track)
-    NATIVE.doc_set_refill_hook(_refill)
+NATIVE.doc_set_track_hook(_track)
+NATIVE.doc_set_refill_hook(_refill)
 
 
 def attribute(name: str, track: bool = True):
@@ -536,7 +510,7 @@ def attribute(name: str, track: bool = True):
     return NATIVE.DocAttr(name, track=track)
 
 
-class Record(NATIVE.DocRecord if ENABLED else object):
+class Record(NATIVE.DocRecord):
     """Python editor handle for a document record."""
 
     __slots__ = ()
@@ -574,9 +548,8 @@ def record_fields(*names, extra=()):
         cls._record_fields = (names or tuple(cls.__dataclass_fields__)) + extra
         for name in extra:
             setattr(cls, name, None)
-        if ENABLED:
-            for name in cls._record_fields:
-                setattr(cls, name, attribute(name))
+        for name in cls._record_fields:
+            setattr(cls, name, attribute(name))
         return cls
     return bind
 
@@ -587,8 +560,6 @@ def begin() -> int:
     """Open the step's transaction (or a savepoint in the open one). In-place
     edits of tracked containers made before it are written back first, so
     they are not this step's."""
-    if not ENABLED:
-        return 0
     if NATIVE.doc_depth() == 0:
         flush()
     return NATIVE.doc_begin()
@@ -597,8 +568,6 @@ def begin() -> int:
 def commit():
     """Close it: the outermost level returns its ``Transaction`` (with the
     step's in-place edits of tracked containers written back into it)."""
-    if not ENABLED:
-        return None
     if NATIVE.doc_depth() == 1:
         flush()
     return NATIVE.doc_commit()
@@ -607,13 +576,12 @@ def commit():
 def rollback() -> None:
     """Put back what the innermost level wrote (in-place edits of tracked
     containers included), and close it."""
-    if ENABLED:
-        flush()
-        NATIVE.doc_rollback()
+    flush()
+    NATIVE.doc_rollback()
 
 
 def stats() -> dict:
-    return NATIVE.doc_stats() if ENABLED else {}
+    return NATIVE.doc_stats()
 
 
 # ---------------------------------------------------------------- handles
@@ -642,7 +610,7 @@ def is_list(value) -> bool:
     """A list, or a document list (``g.children``, ``scene.groups``,
     ``scene.layers``) that behaves as one."""
     return isinstance(value, list) or (
-        ENABLED and type(value) is NATIVE.HandleList)
+        type(value) is NATIVE.HandleList)
 
 
 def object_state(obj) -> dict:
@@ -666,7 +634,7 @@ def set_object_state(obj, values: dict) -> None:
     from core.layers import TAG_FIELDS, Layer
     values = dict(values)
     doc = {}
-    if ENABLED and isinstance(obj, Layer):
+    if isinstance(obj, Layer):
         doc = {k: values.pop(k) for k in TAG_FIELDS if k in values}
     if hasattr(obj, "__dict__"):
         vars(obj).clear()

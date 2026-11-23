@@ -37,7 +37,7 @@ from core import doc_model as _dm
 
 
 @dataclass
-class Material(_dm.NATIVE.MaterialData if _dm.ENABLED else object):
+class Material(_dm.NATIVE.MaterialData):
     """A named paint recipe: what stamping this material puts on a face.
 
     With the Rust document (core/doc_model.py) its fields live there: the
@@ -104,18 +104,17 @@ class Material(_dm.NATIVE.MaterialData if _dm.ENABLED else object):
         )
 
 
-if _dm.ENABLED:
-    MATERIAL_FIELDS = ("name", "color", "texture", "opacity", "finish", "pbr")
-    for _name in MATERIAL_FIELDS[1:]:
-        delattr(Material, _name)
-    del _name
+MATERIAL_FIELDS = ("name", "color", "texture", "opacity", "finish", "pbr")
+for _name in MATERIAL_FIELDS[1:]:
+    delattr(Material, _name)
+del _name
 
-    def _material_reduce(self):
-        return (_dm.new_handle, (type(self),),
-                _dm.handle_state(self, MATERIAL_FIELDS))
+def _material_reduce(self):
+    return (_dm.new_handle, (type(self),),
+            _dm.handle_state(self, MATERIAL_FIELDS))
 
-    Material.__reduce__ = _material_reduce
-    Material.__setstate__ = _dm.set_handle_state
+Material.__reduce__ = _material_reduce
+Material.__setstate__ = _dm.set_handle_state
 
 
 def is_translucent(attrs) -> bool:

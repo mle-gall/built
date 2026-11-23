@@ -333,14 +333,11 @@ def test_format_three_reopens_edge_with_original_float32_weld_decision(
 
 
 def test_camera_relative_edit_through_a_far_mirrored_occurrence(monkeypatch):
-    from core import doc_model
     from core.coordinate_frame import mesh_frame
     from core.group import Group
     from core.history import SnapshotMutation
     from ingetrazo_core import Matrix4, Vec3
 
-    if not doc_model.ENABLED:
-        pytest.skip("requires a native document edit frame")
     monkeypatch.setenv("INGETRAZO_STORE", "1")
     scene = Scene()
     group = Group()

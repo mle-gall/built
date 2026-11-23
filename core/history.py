@@ -6,11 +6,10 @@ from __future__ import annotations
 import logging
 import os as _os
 import time as _time_mod
-from collections import deque
 from pathlib import Path as _Path
 from typing import Optional
 
-from core import doc_model as _doc
+from ingetrazo_core import DocumentHistory
 from core import history_commands
 from core.history_commands import *  # Existing editor and extension API.
 from core.history_commands import _dirty_placements, _RENDER_FIELDS
@@ -78,15 +77,9 @@ class History:
         self.scene = scene
         self._listeners = []
         self._running = False
-        self._native = _doc.NATIVE.DocumentHistory() if _doc.ENABLED else None
-        if self._native is None:
-            self._revision = 0
-            self._changes = deque(maxlen=256)
-            self.undo_stack = []
-            self.redo_stack = []
-        else:
-            self.undo_stack = self._native.undo
-            self.redo_stack = self._native.redo
+        self._native = DocumentHistory()
+        self.undo_stack = self._native.undo
+        self.redo_stack = self._native.redo
         #: Message describing the last rolled-back failure (UI may flash it).
         self.last_error: Optional[str] = None
         #: Why the last command declined to happen (:class:`CommandRejected`).
@@ -94,7 +87,7 @@ class History:
         #: The document transaction of the last step that ran (execute,
         #: undo or redo) and whether it is read backwards: ``(txn,
         #: inverse)``, what the feed takes the document half of a step's
-        #: record from. ``None`` with the Python document.
+        #: record from.
         self.last_txn = None
         #: The change feed (core/protocol, docs/core-protocol.md): one
         #: record per step by stable keys. Subscribed first, so a step's
@@ -133,17 +126,13 @@ class History:
 
     @property
     def revision(self):
-        return self._native.revision if self._native is not None else self._revision
+        return self._native.revision
 
     def changes_since(self, revision=0):
         """Bounded command journal; not a geometric diff or a persisted log."""
         if type(revision) is not int or revision < 0 or revision > self.revision:
             raise ValueError("revision must be between zero and the current revision")
-        if self._native is not None:
-            return self._native.changes_since(revision)
-        floor = self._changes[0]["revision"] - 1 if self._changes else self.revision
-        return {"revision": self.revision, "complete": revision >= floor,
-                "changes": [dict(c) for c in self._changes if c["revision"] > revision]}
+        return self._native.changes_since(revision)
 
     def _run(self, cmd, phase, operation):
         if getattr(self.scene, 'worksession_read_only', False):
@@ -174,12 +163,7 @@ class History:
                    if phase == "execute" else bool(result))
             if ran and not nested:
                 name = getattr(cmd, "history_name", type(cmd).__name__)
-                if self._native is not None:
-                    self._native.advance(phase, name)
-                else:
-                    self._revision += 1
-                    self._changes.append({"revision": self.revision, "phase": phase,
-                                          "command": name})
+                self._native.advance(phase, name)
             return result
         finally:
             self._running = nested
@@ -226,7 +210,6 @@ class History:
 
     def _execute(self, cmd: Command, nested=False) -> None:
         _t0 = _time_mod.perf_counter() if _PERF else 0.0
-        snapshot = None
         self.last_rejected = None
         before = getattr(self.scene, "content_version", None)
         # Geometry-only commands cannot create groups, even on an active tag.
@@ -238,17 +221,8 @@ class History:
             self._tag_new_objects(objs_before, include_groups=include_groups)
 
         try:
-            if self._native is not None:
-                self._native.execute(self, cmd, tag_objects)
-            else:
-                snapshot = self.scene.mesh.capture_state()
-                cmd.do(self.scene)
-                self._follow_text_placements()
-                tag_objects()
-                cmd._doc_txn = None
+            self._native.execute(self, cmd, tag_objects)
         except Exception as exc:
-            if snapshot is not None:
-                self.scene.mesh.restore_state(snapshot)
             self.scene.version += 1
             if isinstance(exc, CommandRejected):
                 self.last_error = None
@@ -273,16 +247,7 @@ class History:
         if nested:
             return
         cap = max(0, int(self.max_steps or 0))
-        if self._native is not None:
-            self._native.push(cmd, cap)
-        else:
-            self.undo_stack.append(cmd)
-            if cap and len(self.undo_stack) > cap:
-                path = getattr(cmd, "_occurrences", ())
-                steps = (OccurrenceCommands.group_start(self, path[0]) + 1
-                         if path else len(self.undo_stack))
-                del self.undo_stack[:max(0, steps - cap)]
-            self.redo_stack.clear()
+        self._native.push(cmd, cap)
         self._rebind_dimensions()
 
     def _follow_text_placements(self):
@@ -335,27 +300,14 @@ class History:
         return self._replay(False)
 
     def _replay(self, undo):
-        source, dest = ((self.undo_stack, self.redo_stack) if undo
-                        else (self.redo_stack, self.undo_stack))
+        source = self.undo_stack if undo else self.redo_stack
         before = getattr(self.scene, "content_version", None)
         cmd = source[-1]
-        if self._native is not None:
-            self._native.replay(self, undo, False)
-        else:
-            self._reference_replay(cmd, undo)
-            dest.append(source.pop())
+        self._native.replay(self, undo, False)
         self._dirty_from_txn()
         self._keep_geometry_caches(cmd, before)
         self._rebind_dimensions()
         return True
-
-    def _reference_replay(self, cmd, undo):
-        include_groups = not cmd.keeps_rows
-        objects = None if undo else self._objects_before(include_groups=include_groups)
-        action = cmd.undo if undo else cmd.do
-        self._journalled(lambda: self._in_command_mesh(cmd, action, self.scene))
-        if not undo:
-            self._tag_new_objects(objects, include_groups=include_groups)
 
     def _dirty_from_txn(self) -> None:
         """The renderer's dirtiness from the step's transaction: the meshes
@@ -369,21 +321,6 @@ class History:
         touched = rec[0].placements(_RENDER_FIELDS)
         if touched:
             _dirty_placements(touched)
-
-    def _journalled(self, fn) -> None:
-        """Run a command's own undo or redo inside a transaction kept only
-        for the feed's record (``last_txn``)."""
-        depth = _doc.begin()
-        self.last_txn = None
-        try:
-            fn()
-            self._follow_text_placements()
-            txn = _doc.commit() if depth else None
-        except Exception:
-            if depth:
-                _doc.rollback()
-            raise
-        self.last_txn = (txn, False) if txn is not None else None
 
     def _objects_before(self, *, include_groups=True):
         """The objects in the document before a command runs. With no

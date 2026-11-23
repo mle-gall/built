@@ -19,8 +19,6 @@ from core.mesh import Mesh
 from core.scene import Scene
 from formats import built
 
-pytestmark = pytest.mark.skipif(not doc_model.ENABLED,
-                                reason="the Rust document is not built")
 N = doc_model.NATIVE
 
 
@@ -65,6 +63,10 @@ def test_copy_of_open_document_edits_its_copied_definition():
     scene.begin_group_edit(g)
     other = deepcopy(scene)
     other.mesh.add_edge(Vec3(12, 3, 0), Vec3(14, 3, 0))
+    if not other._edit_stack[-1]["affine"]:
+        # An object mesh shares its world copy back on leaving the occurrence.
+        assert other.groups[0].mesh.vertex_at(Vec3(14, 3, 0)) is not None
+        other.end_group_edit()
     assert other.groups[0].mesh.vertex_at(Vec3(2, 0, 0)) is not None
     assert not g.mesh.edges
 
@@ -510,7 +512,8 @@ def test_singular_store_session_keeps_shared_keys_on_replay():
     scene.begin_group_edit(a)
     level = scene._edit_stack[-1]
     level["undo_mark"] = 0
-    assert level["entry_transaction"] is not None
+    from core.store_mesh import StoreMesh
+    assert (level["entry_transaction"] is not None) == isinstance(definition, StoreMesh)
     h.execute(AddEdgeCommand(QVector3D(0, 1, 0), QVector3D(1, 1, 0)))
     share = level.pop("share")
     scene.end_group_edit()

@@ -146,26 +146,23 @@ def scoped(scene, record):
         return item
 
     out = copy(scene)
-    if doc_model.ENABLED:
-        # The tables kept on the scene's root (tag folders, active tag,
-        # plugin data, materials, kept components) come with the copy.
-        from core.scene import ROOT_TABLES
-        tables = {name: copy(getattr(scene, name)) for name in ROOT_TABLES}
-        tables["plugin_data"] = deepcopy(scene.plugin_data)
-        materials = scene.materials.copy()
-        kept = list(getattr(scene, "kept_components", []) or [])
-        out._root = doc_model.new_scene_root()
-        for name, value in tables.items():
-            setattr(out, name, value)
-        out.materials = materials
-        if kept:
-            # A kept placement has one parent. Give the projection its own
-            # placement handles while preserving the geometry definitions.
-            from core.purge import iter_groups
-            geometry = {id(g.mesh): g.mesh for g in iter_groups(kept)}
-            out.kept_components = deepcopy(kept, geometry)
-    else:
-        out._edit_stack = []
+    # The tables kept on the scene's root (tag folders, active tag,
+    # plugin data, materials, kept components) come with the copy.
+    from core.scene import ROOT_TABLES
+    tables = {name: copy(getattr(scene, name)) for name in ROOT_TABLES}
+    tables["plugin_data"] = deepcopy(scene.plugin_data)
+    materials = scene.materials.copy()
+    kept = list(getattr(scene, "kept_components", []) or [])
+    out._root = doc_model.new_scene_root()
+    for name, value in tables.items():
+        setattr(out, name, value)
+    out.materials = materials
+    if kept:
+        # A kept placement has one parent. Give the projection its own
+        # placement handles while preserving the geometry definitions.
+        from core.purge import iter_groups
+        geometry = {id(g.mesh): g.mesh for g in iter_groups(kept)}
+        out.kept_components = deepcopy(kept, geometry)
     if record.get('format') == 'ifc' or 'format' not in record:
         out._repeated_source_uids = scene.repeated_uids()
     out.edit_group = None

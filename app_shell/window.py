@@ -353,11 +353,8 @@ class ShellScenes:
             folder = SF.folder_of(scene, prev) if prev is not None else None
             before = None
 
-        def run(s):
-            sig = SF.signature(s)
-            SF.move_rows(s, [view], [], folder, before)
-            return SF.signature(s) != sig
-        vp.history.execute(SceneTreeCommand(run))
+        edit = SF.FolderEdit.move_rows([view], [], folder, before)
+        vp.history.execute(SceneTreeCommand(edit))
         self._touch()
 
 

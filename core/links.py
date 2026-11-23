@@ -661,7 +661,7 @@ def _clone_shell(group):
         return copy(group)
     out = cls.__new__(cls)
     for name in _GROUP_SLOTS:
-        if name == "children" and _doc_enabled():
+        if name == "children":
             # Every caller gives the clone children of its own; with the
             # Rust document a list names its members once (one parent).
             continue
@@ -671,11 +671,6 @@ def _clone_shell(group):
             continue
         setattr(out, name, value)
     return out
-
-
-def _doc_enabled() -> bool:
-    from core import doc_model
-    return doc_model.ENABLED
 
 
 _GROUP_CLASS = None
