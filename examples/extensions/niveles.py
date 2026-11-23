@@ -23,7 +23,8 @@ from __future__ import annotations
 import math
 
 from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QColor, QFont, QPen, QVector3D
+from PySide6.QtGui import QColor, QFont, QPen
+from ingetrazo_core import Vec3 as QVector3D
 from PySide6.QtWidgets import (
     QCheckBox, QDialog, QDialogButtonBox, QDoubleSpinBox, QFormLayout,
     QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem,

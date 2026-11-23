@@ -301,7 +301,7 @@ def _selected_faces(scene):
 def faces_plane(faces):
     """``(origin, u, v, n)`` of the plane shared by ``faces``: the model's
     origin projected onto it, and the drawing's axes in it."""
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     from core.axes import plane_axes
     n = QVector3D(faces[0].normal())
     if n.length() < 1e-9:
@@ -323,7 +323,7 @@ def faces_plane(faces):
 
 def selection_properties(scene):
     """``(props, plane, counts)`` for the faces selected in ``scene``."""
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     faces = _selected_faces(scene)
     if not faces:
         raise PolygonError(_tr("Select a face (or several faces in one plane) first."))
