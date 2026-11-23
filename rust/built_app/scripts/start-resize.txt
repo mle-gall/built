@@ -1,0 +1,13 @@
+resize 1000 650
+wait 500
+capture after-small
+resize 1420 810
+wait 500
+capture after-large
+open tests/fixtures/shell/slab-and-cube.igz
+wait 500
+menu home
+wait 500
+capture after-model
+state
+quit

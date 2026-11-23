@@ -6,6 +6,7 @@
 //! ```text
 //! open tests/fixtures/x.igz     # a document (relative to the cwd)
 //! wait 300                      # milliseconds of normal event-loop time
+//! resize 1280 800               # window content size in logical pixels
 //! move 400 300                  # pointer moves (hover)
 //! click 400 300 [left|right|middle] [mods]
 //! double 400 300
@@ -27,6 +28,7 @@
 pub enum Step {
     Open(String),
     Wait(u64),
+    Resize(u32, u32),
     Move(f64, f64),
     Click(f64, f64, u32, u32),
     Double(f64, f64, u32, u32),
@@ -87,6 +89,13 @@ pub fn parse(text: &str) -> Result<Vec<Step>, String> {
         let step = match w[0] {
             "open" => Step::Open(rest(1)),
             "wait" => Step::Wait(num(w.get(1), line)? as u64),
+            "resize" => {
+                let dimension = |word: Option<&&str>| {
+                    word.and_then(|s| s.parse::<u32>().ok()).filter(|n| *n > 0)
+                        .ok_or_else(|| format!("line {line}: expected positive window dimensions"))
+                };
+                Step::Resize(dimension(w.get(1))?, dimension(w.get(2))?)
+            }
             "move" => Step::Move(num(w.get(1), line)?, num(w.get(2), line)?),
             "click" | "double" => {
                 let (b, _, m) = tail(3);

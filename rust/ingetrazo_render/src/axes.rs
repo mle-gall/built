@@ -6,6 +6,7 @@ pub struct Axes {
     uniform: wgpu::Buffer,
     data: Vec<f32>,
     pub visible: bool,
+    pub welcome_grid: bool,
 }
 impl Axes {
     pub fn new(d: &wgpu::Device, format: wgpu::TextureFormat, camera: &wgpu::Buffer) -> Self {
@@ -35,26 +36,33 @@ impl Axes {
         let group = d.create_bind_group(&wgpu::BindGroupDescriptor { label: None, layout: &bind_layout,
             entries: &[wgpu::BindGroupEntry { binding: 0, resource: camera.as_entire_binding() },
                        wgpu::BindGroupEntry { binding: 1, resource: uniform.as_entire_binding() }] });
-        Self { pipelines, group, uniform, data: Vec::new(), visible: false }
+        Self { pipelines, group, uniform, data: Vec::new(), visible: false, welcome_grid: false }
     }
     pub fn set(&mut self, queue: &wgpu::Queue, frame: &[f32], spacing: f32, visible: bool) {
         self.visible = visible;
         let mut data = frame.to_vec();
-        data.extend([spacing, 0., 0., 0.]);
+        let grid_ink = egui::Rgba::from(crate::ui::tokens::OFF);
+        data.extend([spacing, grid_ink.r(), grid_ink.g(), grid_ink.b()]);
         if self.data != data {
             queue.write_buffer(&self.uniform, 0, bytemuck::cast_slice(&data));
             self.data = data;
         }
     }
     pub fn encode<'a>(&'a self, pass: &mut wgpu::RenderPass<'a>, msaa: bool) {
-        if !self.visible { return; }
+        if !self.visible && !self.welcome_grid { return; }
         pass.set_pipeline(&self.pipelines[usize::from(msaa)]);
         pass.set_bind_group(0, &self.group, &[]);
-        pass.draw(0..3126, 0..3);
+        if self.welcome_grid {
+            // A quad for each of 33 lines in each direction on the drawing plane.
+            pass.draw(0..6, 3..69);
+        }
+        if self.visible {
+            pass.draw(0..3126, 0..3);
+        }
     }
     pub fn draw(&self, e: &mut wgpu::CommandEncoder, color: &wgpu::TextureView,
                 depth: &wgpu::TextureView, resolve: Option<&wgpu::TextureView>) {
-        if !self.visible { return; }
+        if !self.visible && !self.welcome_grid { return; }
         let mut pass = e.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("drawing axes"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment { view: color, resolve_target: resolve,
@@ -63,9 +71,7 @@ impl Axes {
                 depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store }), stencil_ops: None }),
             timestamp_writes: None, occlusion_query_set: None,
         });
-        pass.set_pipeline(&self.pipelines[usize::from(resolve.is_some())]);
-        pass.set_bind_group(0, &self.group, &[]);
-        pass.draw(0..3126, 0..3);
+        self.encode(&mut pass, resolve.is_some());
     }
 }
 

@@ -1733,6 +1733,7 @@ impl Renderer {
         let mut e = self.device.create_command_encoder(&Default::default());
         let tq = self.queries.as_ref().filter(|_| self.detailed_timestamps);
         self.sun.prepare(&self.device, &self.queue, &mut e, s, &self.textures, &self.look.buffer);
+        self.axes.welcome_grid = self.ui.as_ref().is_some_and(ui::Ui::empty_start_shown);
         self.background.draw(&mut e, &color, tq);
         e.clear_buffer(&s.counters, 0, None);
         e.copy_buffer_to_buffer(if self.look.data[6][0] > 0. { &s.template } else { &s.hard_template }, 0, &s.commands, 0, s.p as u64 * 40);
@@ -1773,7 +1774,7 @@ impl Renderer {
                 if msaa { self.lines.draw(&mut e, &self.aa.color_view(), &self.aa.depth_view(), Some(&color), false); }
                 else { self.lines.draw(&mut e, &color, &depth, None, false); }
             }
-            if edge_only && !(self.edges || self.style == 4 || ao_active || self.axes.visible) { break; }
+            if edge_only && !(self.edges || self.style == 4 || ao_active || self.axes.visible || self.axes.welcome_grid) { break; }
             if !msaa || self.pick_pending {
             let mut pass = e.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: None,

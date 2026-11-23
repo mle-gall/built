@@ -13,8 +13,19 @@ struct Out { @builtin(position) position: vec4f, @location(0) color: vec3f }
   t0 = -f32(segment-1u)*axes.spacing.x;
   t1 = t0-0.18*axes.spacing.x;
  }
- let direction = normalize(axes.frame[axis].xyz);
- let origin = axes.frame[3].xyz;
+ let grid = axis >= 3u;
+ var along = min(axis, 2u);
+ var origin = axes.frame[3].xyz;
+ if grid {
+  let line = axis - 3u;
+  along = line / 33u;
+  let step = axes.spacing.x * 10.;
+  let offset = (f32(line % 33u) - 16.) * step;
+  origin += normalize(axes.frame[1u - along].xyz) * offset;
+  t0 = -16. * step;
+  t1 = 16. * step;
+ }
+ let direction = normalize(axes.frame[along].xyz);
  var a = camera.vp * vec4f(origin + direction*select(t0,t1,end),1.);
  var b = camera.vp * vec4f(origin + direction*select(t1,t0,end),1.);
  // Reverse-Z: the near plane is z = w, so w - z is the signed distance
@@ -29,8 +40,9 @@ struct Out { @builtin(position) position: vec4f, @location(0) color: vec3f }
  let side = select(-1.,1.,side_bit)*select(1.,-1.,end);
  // One physical pixel, like GL_LINES. The factor two from NDC cancels
  // the half-width; no device-scale multiplication belongs here.
- out.position = vec4f(a.xy+normal*side/camera.size.xy*a.w,a.zw);
- out.color = array<vec3f,3>(vec3f(0.86,0.22,0.27),vec3f(0.16,0.62,0.36),vec3f(0.20,0.40,0.78))[axis];
+ out.position = vec4f(a.xy+normal*side*select(1., 2., grid)/camera.size.xy*a.w,a.zw);
+ out.color = array<vec3f,3>(vec3f(0.86,0.22,0.27),vec3f(0.16,0.62,0.36),vec3f(0.20,0.40,0.78))[along];
+ if grid { out.color = axes.spacing.yzw; }
  return out;
 }
 @fragment fn fs(i: Out) -> @location(0) vec4f {
