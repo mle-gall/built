@@ -267,9 +267,10 @@ def open_document(win, path: Path) -> bool:
     view = doc.stand_in
     recovered = False
     slot = autosave.pending(path)
-    if slot is not None:
+    defer_recovery = slot is not None and cd.live(win) is not None
+    if slot is not None and not defer_recovery:
         answer = cd.question(
-            win, tr("Recovered drawing"),
+            win, tr("Recover the auto-saved drawing?"),
             tr("A session with '{name}' ended without saving (auto-saved "
                "copy found). Recover it instead of the file on disk?", name=path.name),
             QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
@@ -302,7 +303,7 @@ def open_document(win, path: Path) -> bool:
             win._finish_cancelled_open()
             return False
         except Exception as exc:  # noqa: BLE001 — any IO/parse error goes to the user
-            bar.close()
+            cd.close_failed(bar, exc)
             host._error("open")
             cd.critical(win, tr("Open failed"), str(exc))
             return False
@@ -352,6 +353,9 @@ def open_document(win, path: Path) -> bool:
         win._update_title()
         vp._pick_warm_due = True
         cb(1.0, "Document loaded")
+        cd.opened(bar, win, path)
+        if defer_recovery:
+            cd.offer_recovery(win, path, slot)
         return True
     finally:
         win._opening_document = False
@@ -519,7 +523,7 @@ def dxf_options(win, path, header_scale=None):
     if last not in keys:
         last = "mm"
     faces = QSettings().value("import/dxf_make_faces", False, type=bool)
-    got = cd.ask(win, tr("Import DXF"),
+    got = cd.ask(win, tr("What unit is this drawing in?"),
                  tr("What unit is this drawing in? (CAD headers often lie)") + "\n" +
                  (tr("Faces from closed outlines: on") if faces else tr("Faces from closed outlines: off")),
                  [("cancel", tr("Cancel"))] + [(k, labels[k]) for k in keys],
@@ -631,11 +635,11 @@ def do_save(win, path: Path, copy: bool = False) -> bool:
         png = _picture_png(win, doc)
         if png is not None:
             scene._home_thumbnail_png = png
-        with cd.busy(win, tr("Saving {name}…", name=path.name)):
+        with cd.busy(win, tr("Saving {name}…", name=path.name), output_path=path):
             stats = igz_format.save_scene(scene, path) or {}
     except Exception as exc:  # noqa: BLE001
         win._host._error("save")
-        cd.critical(win, tr("Save failed"), str(exc))
+        cd.save_failed(win, exc, lambda: save_copy(win) if copy else save_as(win))
         return False
     finally:
         if copy and doc.path is not None:
@@ -690,7 +694,7 @@ def export_igz(win, path=None) -> bool:
     path = Path(path).with_suffix(".igz")
 
     def confirm(mm):
-        return cd.question(win, tr("Export precision"), tr(
+        return cd.question(win, tr("Save the rounded copy?"), tr(
             "Float32 rounding moves points by up to {mm} mm. Save the copy?",
             mm=f"{mm:.6g}")) == QMessageBox.Yes
 
@@ -703,7 +707,7 @@ def export_igz(win, path=None) -> bool:
             cd.warning(win, tr("Saved with missing textures"), tr("Some texture images could not be packed."))
     except Exception as exc:  # noqa: BLE001
         win._host._error("export igz")
-        cd.critical(win, tr("Save failed"), str(exc))
+        cd.save_failed(win, exc, win._on_export_igz)
         return False
     if stats is None:
         return False                    # the precision question said no
@@ -817,7 +821,7 @@ def open_in_classic(win, path=None, why: str | None = None) -> bool:
     if path is None:
         doc = win._doc
         if doc is not None and win._doc_is_dirty(doc):
-            got = cd.ask(win, tr("Open in Classic App"),
+            got = cd.ask(win, tr("Save before opening in the classic app?"),
                          tr("The classic app opens the file on disk. Save your changes first?"),
                          [("discard", tr("Open Without Saving")), ("cancel", tr("Cancel")),
                           ("save", tr("Save and Open"))],

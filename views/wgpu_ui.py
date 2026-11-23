@@ -367,13 +367,13 @@ def _sheet_and_jobs(view, win) -> None:
     """The app sheet and the work in progress (views/chrome_dialogs.py)."""
     from views import chrome_dialogs
     sheet = chrome_dialogs.current_sheet(win)
-    sig = None if sheet is None else (id(sheet), sheet.title, sheet.text, tuple(sheet.buttons))
+    sig = None if sheet is None else (id(sheet), sheet.title, sheet.text, tuple(chrome_dialogs.sheet_buttons(sheet)))
     if sig != view.__dict__.get("_ui_sheet_sig", False):
         view._ui_sheet_sig = sig
         if sheet is None:
             view.renderer.ui_set_sheet("", "", "", [])
         else:
-            view.renderer.ui_set_sheet(sheet.title, sheet.text, sheet.tone, list(sheet.buttons))
+            view.renderer.ui_set_sheet(sheet.title, sheet.text, sheet.tone, chrome_dialogs.sheet_buttons(sheet))
     if sheet is not None:
         sheet.shown = True
     rows = [(j.id, j.label, j.phase, float(j.fraction), bool(j.cancellable))
@@ -383,7 +383,21 @@ def _sheet_and_jobs(view, win) -> None:
         view.renderer.ui_set_jobs(rows)
     # Polled work (the background auto-save) says when it is done only by
     # being gone: look again soon while any shows.
-    view._ui_poll_jobs = bool(rows)
+    import time
+    now = time.monotonic()
+    records = chrome_dialogs.history(win)
+    recent = []
+    for row in records:
+        remaining = 5 - (now - row.created)
+        opacity = min(1.0, remaining) if row.toast else 0.0
+        recent.append((row.id, row.title, row.detail, row.tone, row.action_label,
+                       opacity if remaining > 0 else -1.0))
+    banner = getattr(win._doc, "_missing_link_banner", "")
+    if ((recent, banner) != view.__dict__.get("_ui_activity_sig")
+            and hasattr(view.renderer, "ui_set_activity")):
+        view.renderer.ui_set_activity(recent, banner)
+        view._ui_activity_sig = recent, banner
+    view._ui_poll_jobs = bool(rows or recent)
 
 
 def _chrome_form(view, win) -> None:
@@ -1237,8 +1251,10 @@ def _problem_rules(scene, registry, nodes, recipes, unfiled):
     stale, states = [], {}
     for g in links.linked_groups(scene):
         rec = links.link_of(g)
-        st = states.setdefault(rec["path"], _link_state(scene, rec))
-        if st in ("missing", "modified"):
+        path = rec["path"]
+        if path not in states:
+            states[path] = links.link_state(scene, path)
+        if states[path] in ("missing", "modified"):
             stale.append(g)
     rules.append(("Needs attention", "links", "Linked file changed or missing", stale))
     leaky, checked = _not_watertight(candidates)
@@ -2313,15 +2329,8 @@ LINK_STATES = {"resolved": "Up to date", "modified": "Changed on disk", "missing
 
 
 def _link_state(scene, link) -> str:
-    """links.query's status for one placement, without walking its parts."""
-    from pathlib import Path
-    from core import links
-    path = Path(link["path"])
-    if links.is_packed(scene, path):
-        return "packed"
-    if not path.is_file():
-        return "missing"
-    return "modified" if path.stat().st_mtime_ns != links._entry(scene, path).get("loaded_mtime_ns") else "resolved"
+    from core.links import link_state
+    return link_state(scene, link["path"])
 
 
 def _link_action(win, view, g, key) -> None:
@@ -2348,20 +2357,27 @@ def _link_action(win, view, g, key) -> None:
             win._set_link_nested(g, not rec.get("include_nested", True))
         elif key == "linkrelink":
             from views.filedialogs import file_dialogs
-            path, _ = file_dialogs.getOpenFileName(win, "Relink", str(Path(rec["path"]).parent), "IngeTrazo (*.igz)")
+            from formats import built
+            source = Path(rec["path"])
+            path, _ = file_dialogs.getOpenFileName(win, f"Locate {source.name}", str(source.parent),
+                                                   built.DOCUMENT_FILTER)
             if not path:
                 return
-            previous = dict(rec)
-            rec.update(links._link_record(path, win._current_path))
+            records = [links.link_of(copy) for copy in links.linked_groups(scene, source)]
+            previous = [dict(record) for record in records]
+            for record in records:
+                record.update(links._link_record(path, win._current_path))
             try:
                 links.reload(scene, path)
             except Exception:
-                rec.clear()
-                rec.update(previous)
+                for record, original in zip(records, previous):
+                    record.clear()
+                    record.update(original)
                 raise
         win._relink_done("Linked files updated")
     except (ValueError, OSError, links.LinkError) as exc:
         vp.flash_status(str(exc))
+    view._ui_rules_cache = None
     view._ui_insp_sig = None
     view._ui_tree_sig = None
 
@@ -2493,6 +2509,24 @@ def _run(win, actions) -> None:
             continue
         if chrome_dialogs.modal(win):
             continue    # a click queued before the sheet came up
+        if kind == "activity":
+            row = next((r for r in chrome_dialogs.history(win) if r.id == arg), None)
+            if row and row.action:
+                row.action()
+            continue
+        if kind == "linkbanner":
+            if arg == "locate":
+                from core import links
+                scene = win.viewport.scene
+                group = next((g for g in links.linked_groups(scene)
+                              if links.link_state(scene, links.link_of(g)["path"]) == "missing"), None)
+                if group:
+                    _link_action(win, chrome_dialogs.view_of(win), group, "linkrelink")
+                chrome_dialogs.update_link_banner(win)
+            else:
+                win._doc._missing_link_banner = ""
+            chrome_dialogs._repaint(win)
+            continue
         if kind == "start":
             from views import wgpu_start
             wgpu_start.action(win, arg)

@@ -3,13 +3,14 @@ Metal frame) instead of Qt windows.
 
 Two surfaces, both drawn by ``rust/ingetrazo_render/src/ui.rs``:
 
-* **The sheet**: one question or message at a time, hung under the top
+* **The sheet**: one question at a time, hung under the top
   bar over the model, with a scrim that takes every click. Unsaved
   changes, errors, confirmations. :func:`ask` answers synchronously, as
   ``QMessageBox.exec()`` does (see "Blocking answers" below).
 * **Jobs**: opening, importing, saving, auto-saving, reloading links. A
   capsule in the middle of the top bar with the file, the phase, the
-  percentage and Cancel when the work can stop. Never a sheet.
+  progress and Cancel when the work can stop. Notices fade below it.
+  The capsule retains recent results and notice actions.
 
 Everything here falls back to Qt (returns ``None``, or a real
 ``QProgressDialog``) when the chrome is not on screen to answer: the UI
@@ -45,7 +46,9 @@ dialog run inline (``done`` has run when they return).
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 import itertools
+import time
 import sys
 
 from PySide6.QtCore import QEvent, QEventLoop, QObject, QTimer, Signal
@@ -126,7 +129,7 @@ def _inside_view_area(widget, win) -> bool:
 # ---- The sheet ---------------------------------------------------------------
 class _Sheet:
     __slots__ = ("title", "text", "tone", "buttons", "default", "cancel",
-                 "discard", "answer", "loop", "shown", "blocking", "done")
+                 "discard", "answer", "loop", "shown", "blocking", "done", "checklist")
 
     def __init__(self, title, text, tone, buttons, default, cancel, discard, blocking):
         self.title, self.text, self.tone = title, text, tone
@@ -136,6 +139,7 @@ class _Sheet:
         self.loop = None
         self.shown = False
         self.blocking = blocking
+        self.checklist = None
         self.done = None                # non-blocking: called with the answer
 
 
@@ -164,7 +168,7 @@ def _roles(buttons, default, cancel, discard):
 
 
 def ask(parent, title: str, text: str, buttons, *, default=None, cancel=None,
-        discard=None, tone: str = "question"):
+        discard=None, tone: str = "question", checklist=None):
     """Show a sheet and wait for its answer: the id of the button chosen,
     or ``cancel``'s id on Esc. ``None`` when the chrome cannot show it, and
     the caller then asks with Qt.
@@ -178,6 +182,7 @@ def ask(parent, title: str, text: str, buttons, *, default=None, cancel=None,
     win = window_of(parent)
     sheet = _Sheet(title, text, tone, _roles(buttons, default, cancel, discard),
                    default, cancel, discard, True)
+    sheet.checklist = checklist
     loop = QEventLoop()
     sheet.loop = loop
     _push(win, sheet)
@@ -246,16 +251,121 @@ def _qt_ask(parent, title, text, buttons, default, cancel, discard, tone):
     return next((bid for bid, b in made.items() if b is clicked), cancel)
 
 
-def notify(parent, title: str, text: str, *, tone: str = "info", button: str = "OK") -> bool:
-    """A message that does not wait: shown on the sheet, dismissed by its
-    button, Enter or Esc. False when the chrome cannot show it."""
+@dataclass
+class Activity:
+    id: str
+    title: str
+    detail: str
+    tone: str
+    created: float
+    action_label: str
+    action: object
+    toast: bool
+
+
+def history(win):
+    rows = win.__dict__.setdefault("_chrome_history", [])
+    cutoff = time.monotonic() - 45
+    rows[:] = [r for r in rows if r.created > cutoff][:30]
+    return rows
+
+
+def _record(win, title, detail, tone, action_label="", action=None, toast=True):
+    history(win).insert(0, Activity(str(next(_ids)), title, detail, tone, time.monotonic(),
+                                    action_label, action, toast))
+    _repaint(win)
+
+
+def notify(parent, title, text, *, tone="info", button="OK", action_label="", action=None):
+    """Post a nonmodal toast and retain its action in the activity history."""
     if live(parent) is None:
         return False
-    win = window_of(parent)
-    sheet = _Sheet(title, text, tone, _roles([("ok", button)], "ok", "ok", None),
-                   "ok", "ok", None, False)
-    _push(win, sheet)
+    if "<br" in text:
+        from PySide6.QtGui import QTextDocument
+        document = QTextDocument()
+        document.setHtml(text)
+        text = document.toPlainText()
+    _record(window_of(parent), title, text, tone, action_label, action)
     return True
+
+
+def offer_recovery(win, path, slot):
+    """After opening the requested file, keep the other version available."""
+    from core import autosave
+    from core.i18n import tr
+    from uuid import uuid4
+    # Reserve the snapshot before auto-save can reuse this document's slot.
+    archived = autosave.discarded_dir() / f"{path.stem}-{uuid4().hex[:12]}{slot.suffix}"
+    try:
+        slot.rename(archived)
+    except OSError:
+        archived = slot
+
+    def recover():
+        if win.open_path(archived):
+            win._current_path = None
+            win._saved_version = -1
+            win._update_title()
+
+    _record(win, tr("Auto-saved copy available"), path.name, "info",
+            tr("Open copy"), recover)
+
+
+def save_failed(win, exc, retry):
+    from core.i18n import tr
+    if live(win) is None:
+        critical(win, tr("Save failed"), str(exc))
+        return
+    answer = ask(win, tr("Save to another location?"), str(exc),
+                 [("cancel", tr("Cancel")), ("retry", tr("Save As…"))],
+                 default="retry", cancel="cancel", tone="error")
+    if answer == "retry":
+        retry()
+    elif answer is None:
+        critical(win, tr("Save failed"), str(exc))
+
+
+def opened(bar, win, path):
+    """Retain a way back to the project that finished opening."""
+    if isinstance(bar, ChromeBar):
+        doc = win._doc
+
+        def show():
+            if doc in win.documents():
+                win.activate_document(doc)
+            else:
+                win.open_path(path)
+
+        bar.job.end(action_label="Show", action=show)
+
+
+def close_failed(bar, error):
+    if isinstance(bar, ChromeBar):
+        bar.job.end(failed=True, detail=str(error))
+    bar.close()
+
+
+def autosave_result(win, name, error):
+    if live(win) is not None:
+        _record(win, f"Auto-save failed · {name}" if error else f"Auto-saved · {name}",
+                error, "error" if error else "info", toast=bool(error))
+
+
+def update_link_banner(win):
+    from core import links
+    from core.i18n import tr
+    scene = win.viewport.scene
+    count = sum(links.link_state(scene, p) == "missing" for p in links.sources(scene))
+    win._doc._missing_link_banner = (tr("1 linked file missing") if count == 1 else
+                                     tr("{n} linked files missing", n=count) if count else "")
+    return count
+
+
+def sheet_buttons(sheet):
+    rows = list(sheet.buttons)
+    for i, (label, checked) in enumerate(sheet.checklist or ()):
+        rows.append((f"check:{i}", label, "", 5 if checked else 4))
+    return rows
 
 
 def _push(win, sheet) -> None:
@@ -276,6 +386,14 @@ def _pop(win, sheet) -> None:
 def answer(win, bid: str) -> bool:
     """The chrome (or a key) answered the sheet on top."""
     sheet = current_sheet(win)
+    if sheet and sheet.checklist and bid.startswith("check:"):
+        index = bid[6:]
+        if index.isdecimal() and int(index) < len(sheet.checklist):
+            i = int(index)
+            label, checked = sheet.checklist[i]
+            sheet.checklist[i] = (label, not checked)
+            _repaint(win)
+            return True
     if sheet is None or not any(b[0] == bid for b in sheet.buttons):
         return False
     sheet.answer = bid
@@ -332,6 +450,8 @@ def _standard(parent, tone, title, text, buttons, default):
     chosen = [(b, label, accept) for b, label, accept in _STD if buttons & b]
     if not chosen:
         chosen = [(QMessageBox.Ok, "OK", True)]
+    if len(chosen) == 1 and chosen[0][0] == QMessageBox.Ok:
+        return QMessageBox.Ok if notify(parent, title, text, tone=tone) else None
     ids = {str(int(b.value)): b for b, _, _ in chosen}
     nobutton = default is None or default == QMessageBox.NoButton
     if nobutton:
@@ -539,7 +659,8 @@ class Job:
             except Exception:  # noqa: BLE001 — a missed frame only loses the chip
                 pass
 
-    def end(self) -> None:
+    def end(self, *, failed=False, detail="", action_label="", action=None) -> None:
+        """Finish once and optionally retain a result action in the capsule."""
         if self._ended:
             return
         self._ended = True
@@ -548,7 +669,9 @@ class Job:
             jobs.remove(self)
         if self.exclusive:
             _Guard.release(self.win)
-        _repaint(self.win)
+        result = "Cancelled" if self.cancelled else "Failed" if failed else "Done"
+        _record(self.win, f"{result} · {self.label.rstrip('…')}", detail,
+                "error" if failed else "info", action_label, action, toast=False)
 
 
 def jobs(win) -> list:
@@ -601,7 +724,8 @@ class busy:
     progress: the chip is drawn before it starts and goes when it ends. A
     no-op when the chrome is not on screen."""
 
-    def __init__(self, parent, label: str):
+    def __init__(self, parent, label: str, *, output_path=None):
+        self.output_path = output_path
         self.parent, self.label, self.job = parent, label, None
 
     def __enter__(self):
@@ -612,7 +736,15 @@ class busy:
 
     def __exit__(self, *exc):
         if self.job is not None:
-            self.job.end()
+            label, action = "", None
+            if self.output_path and exc[0] is None:
+                from pathlib import Path
+                from core.desktop_open import open_url
+                folder = Path(self.output_path).resolve().parent
+                label = "Open folder"
+                action = lambda: open_url(folder)
+            self.job.end(failed=exc[0] is not None, detail=str(exc[1] or ""),
+                         action_label=label, action=action)
         return False
 
 

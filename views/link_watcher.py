@@ -62,6 +62,12 @@ class LinkWatcher(QObject):
         from core import links
         paths, self._pending = self._pending, set()
         reloaded, failed = [], []
+        # On removal or failed reload the scene version need not advance.
+        for doc, scene, _ in self._hosts():
+            view = getattr(doc, "stand_in", None)
+            if view is not None and paths.intersection(links.sources(scene)):
+                view._ui_rules_cache = view._ui_tree_sig = view._ui_insp_sig = None
+                view.update()
         for path in paths:
             if not Path(path).is_file():
                 continue                # mid-save or removed: next change
