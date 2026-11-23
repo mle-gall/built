@@ -1177,7 +1177,7 @@ impl InstanceSet {
                         hypot: &str)
         -> PyResult<(i64, Bound<'py, PyArray1<i64>>)> {
         use rayon::prelude::*;
-        let h = hypot_of(hypot)?;
+        hypot_of(hypot)?; // Validate the legacy call signature.
         let c = cand.as_array().to_vec();
         self.check(&c)?;
         let mut mask = vec![false; self.places.len()];
@@ -1199,11 +1199,10 @@ impl InstanceSet {
             _ => return Err(pyo3::exceptions::PyValueError::new_err("stat and stat_cand")),
         };
         let p = rows3(&pts.as_array());
-        let e = [eye.0 as f32, eye.1 as f32, eye.2 as f32];
-        let o = [e[0] as f64, e[1] as f64, e[2] as f64];
+        let o = [eye.0, eye.1, eye.2];
         // 0 seen, 1 hidden, 2 doubt.
         let call = |q: [f64; 3]| -> u8 {
-            let Some((d, dist)) = occlusion::unit_ray(e, q, h) else {
+            let Some((d, dist)) = occlusion::unit_ray(o, q) else {
                 return 0;
             };
             let limit = dist - 1e-3;

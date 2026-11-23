@@ -15,7 +15,7 @@
 
 use rayon::prelude::*;
 
-use crate::facegeom::{hypot3, Hypot};
+
 
 const DET_MIN: f64 = 1e-6;
 const T_MIN: f64 = 1e-6;
@@ -160,34 +160,9 @@ pub fn tri_occludes(o: [f64; 3], d: [f64; 3], limit: f64,
     None
 }
 
-/// ``views.viewport._hypot3_f32`` for one vector: the three-argument
-/// ``std::hypot`` in float of the C++ library ``h``, as Qt's
-/// ``QVector3D::length`` computes it. libstdc++'s is kept here as it was
-/// (the largest magnitude scaled out), NaN included.
-#[inline]
-pub fn hypot3_f32(v: [f32; 3], h: Hypot) -> f32 {
-    if h != Hypot::LibStdCxx {
-        return hypot3(v, h);
-    }
-    let a = [v[0].abs(), v[1].abs(), v[2].abs()];
-    let m = a[0].max(a[1]).max(a[2]);
-    if !(m > 0.0) {
-        return 0.0;
-    }
-    let q = [a[0] / m, a[1] / m, a[2] / m];
-    let s = (q[0] * q[0] + q[1] * q[1]) + q[2] * q[2];
-    m * s.sqrt()
-}
-
-/// ``views.viewport._unit_rays`` for one point: the unit direction from
-/// ``eye`` (float) to ``p`` and the distance, both as float64 of the float
-/// values QVector3D holds — or None for a point on the eye.
-#[inline]
-pub fn unit_ray(eye: [f32; 3], p: [f64; 3], h: Hypot) -> Option<([f64; 3], f64)> {
-    let dl = [p[0] as f32 - eye[0], p[1] as f32 - eye[1], p[2] as f32 - eye[2]];
-    let l = hypot3_f32(dl, h);
-    if !((l as f64) >= 1e-9) {
-        return None;
-    }
-    Some(([(dl[0] / l) as f64, (dl[1] / l) as f64, (dl[2] / l) as f64], l as f64))
+/// Model-space ray shared with the viewport's binary64 batch query.
+pub fn unit_ray(eye: [f64; 3], point: [f64; 3]) -> Option<([f64; 3], f64)> {
+    let delta = glam::DVec3::from_array(point) - glam::DVec3::from_array(eye);
+    let length = delta.length();
+    (length >= 1e-9).then(|| ((delta / length).to_array(), length))
 }
