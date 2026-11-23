@@ -14,9 +14,6 @@ functions the Qt dialog's OK runs (``views/preferences_dialog.py``,
 "Applying one setting"); a change that only takes effect at the next start
 says so at the top of the sheet.
 
-The Qt :class:`~views.preferences_dialog.PreferencesDialog` stays for
-where the chrome cannot draw (``BUILT_UI=0``, the GL view, offscreen):
-:func:`show` returns False there and the caller opens it.
 """
 from __future__ import annotations
 
@@ -1485,29 +1482,13 @@ class SettingsSheet(chrome_sheet.Provider):
         SettingsSheet.figure_custom = False
         SettingsSheet.north_cmd = None
 
-    def fallback(self, win) -> None:
-        """No frame drew the sheet: the Qt dialog, on the same page."""
-        opener = getattr(win, "_open_preferences_dialog", None)
-        if not callable(opener):
-            return
-        if self.section == "keyboard" and self._action(self.kb_focus) is not None:
-            opener(shortcut_of=self._action(self.kb_focus))
-        elif self.section in ("units", "dimensions", "location"):
-            opener(page="units")
-        else:
-            opener()
-
-
 def show(win, page=None, shortcut_of=None) -> bool:
     """Settings on the sheet, on ``page`` (a section id such as "units")
-    or on the Keyboard section with ``shortcut_of`` (a QAction) focused.
-    False when the chrome cannot draw it: the caller opens the Qt dialog."""
-    if not chrome_sheet.available(win):
-        return False
+    or on the Keyboard section with ``shortcut_of`` (a QAction) focused."""
     cur = chrome_sheet.current(win)
     sheet = cur if isinstance(cur, SettingsSheet) else SettingsSheet()
     sheet._win = win
     sheet.goto(page, shortcut_of)
     focus = sheet.kb_focus if shortcut_of is not None else None
-    return chrome_sheet.open(win, sheet, search="" if cur is sheet or page or shortcut_of else None,
+    return chrome_sheet.present(win, sheet, search="" if cur is sheet or page or shortcut_of else None,
                              focus=focus)

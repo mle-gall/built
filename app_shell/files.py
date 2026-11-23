@@ -173,13 +173,8 @@ def open_library(win) -> bool:
 
 
 def open_settings(win) -> bool:
-    """Settings on the large sheet (views/settings_sheet.py); the shell has
-    no Qt dialog to fall back to."""
     from views import settings_sheet
-    if settings_sheet.show(win):
-        return True
-    win._host.not_here("Settings")
-    return False
+    return settings_sheet.show(win)
 
 
 def step_document(win, step):

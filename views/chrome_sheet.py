@@ -269,11 +269,6 @@ class Provider:
         """The sheet went: Esc, ×, :func:`close`, or another sheet opened
         over it (``ctx.replaced``)."""
 
-    def fallback(self, win) -> None:
-        """No frame drew the sheet in time (Qt app only): show the Qt
-        equivalent, if there is one."""
-
-
 class Ctx:
     """What a provider reads: the window and the view in front."""
 
@@ -431,16 +426,17 @@ def _repaint(win) -> None:
 def _arm_watchdog(win, st) -> None:
     if in_shell() or not getattr(st.provider, "watchdog", True):
         return
-    try:
-        from PySide6.QtCore import QTimer
-    except ImportError:
+    from PySide6.QtCore import QTimer
+    from PySide6.QtGui import QGuiApplication
+    if QGuiApplication.platformName() in ("offscreen", "minimal"):
         return
 
     def check():
         if _state(win) is not st or st.drawn or st.closing:
             return
         win.__dict__.pop("_chrome_sheet", None)
-        st.provider.fallback(win)
+        _closed(win, st)
+        win.viewport.flash_status(f"Built could not draw the {st.provider.id} sheet.")
     QTimer.singleShot(WATCHDOG_MS, check)
 
 

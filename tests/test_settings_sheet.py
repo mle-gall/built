@@ -13,7 +13,7 @@ import json
 import pytest
 from PySide6.QtCore import QSettings
 from PySide6.QtGui import QKeySequence
-from PySide6.QtWidgets import QApplication, QDialog
+from PySide6.QtWidgets import QApplication
 
 from core import units
 from core.scene import Scene
@@ -24,7 +24,6 @@ from views import settings_sheet as ss
 
 _app = QApplication.instance() or QApplication([])
 SEP = cs.SEP
-_REAL_AVAILABLE = cs.available
 
 
 @pytest.fixture(autouse=True)
@@ -370,48 +369,12 @@ def test_search_lists_commands_too(win):
                         for i in rows[0]["items"])
 
 
-# ---- Where the chrome cannot draw: the Qt dialog ----------------------------------
-def test_without_the_chrome_the_qt_dialog_opens(win, monkeypatch):
-    from views import preferences_dialog as prefs
-    monkeypatch.setattr(cs, "available", lambda _w: False)
-    opened = []
-
-    def fake_exec(dlg):
-        opened.append(dlg._tabs.currentWidget() is dlg._units_page)
-        return QDialog.Rejected
-    monkeypatch.setattr(prefs.PreferencesDialog, "exec", fake_exec)
+def test_offscreen_units_command_opens_settings(win):
     win._on_units()
-    assert opened == [True]
-    assert cs.current(win) is None
-    win._on_preferences()
-    assert opened == [True, False]
+    assert cs.current(win).section == "units"
 
 
-def test_built_ui_off_means_the_qt_dialog(win, monkeypatch):
-    from views import preferences_dialog as prefs
-    from views import wgpu_ui
-    monkeypatch.setattr(cs, "available", _REAL_AVAILABLE)
-    monkeypatch.setattr(wgpu_ui, "ENABLED", False)
-    assert ss.show(win) is False
-    opened = []
-    monkeypatch.setattr(prefs.PreferencesDialog, "exec", lambda dlg: opened.append(1) or QDialog.Rejected)
-    win.open_preferences()
-    assert opened == [1]
-
-
-def test_the_shell_prefs_command_opens_the_sheet(win, monkeypatch):
+def test_the_shell_prefs_command_opens_the_sheet(win):
     from app_shell import files
-
-    class Host:
-        def __init__(self):
-            self.log = []
-
-        def not_here(self, feature):
-            self.log.append(feature)
-    win._host = Host()
-    assert files.open_settings(win) is True
+    assert files.open_settings(win)
     assert isinstance(cs.current(win), ss.SettingsSheet)
-    monkeypatch.setattr(cs, "available", lambda _w: False)
-    win.__dict__.pop("_chrome_sheet", None)
-    assert files.open_settings(win) is False
-    assert win._host.log == ["Settings"]

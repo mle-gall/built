@@ -3699,28 +3699,9 @@ class MainWindow(WorksessionMixin, QMainWindow):
         offer_at_start(self)
 
     def open_preferences(self, shortcut_of=None, page=None) -> None:
-        """Settings; on the Keyboard section with that action picked when
-        ``shortcut_of`` is given (right click in F3), or on ``page``
-        (``"units"``). The large sheet of the Built chrome where it can
-        draw (views/settings_sheet.py), else the Qt dialog."""
+        """Open Settings, optionally focused on a section or shortcut."""
         from views import settings_sheet
-        if settings_sheet.show(self, page=page, shortcut_of=shortcut_of):
-            return
-        self._open_preferences_dialog(shortcut_of=shortcut_of, page=page)
-
-    def _open_preferences_dialog(self, shortcut_of=None, page=None) -> None:
-        """The Qt Preferences dialog (``BUILT_UI=0``, the GL view, or no
-        frame drew the sheet)."""
-        from views.preferences_dialog import PreferencesDialog
-        dlg = PreferencesDialog(self)
-        if shortcut_of is not None:
-            dlg.show_shortcut_of(shortcut_of)
-        elif page == "units":
-            dlg.show_units_page()
-        dlg.exec()
-        # Freed now, not when the window goes: each opening used to leave
-        # a hidden dialog hanging from the window until the app closed.
-        dlg.deleteLater()
+        settings_sheet.show(self, page=page, shortcut_of=shortcut_of)
 
     def _on_set_language(self, code: str) -> None:
         """Persist the chosen UI language (applied on next start).
