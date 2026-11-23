@@ -14,6 +14,7 @@ Model units are METRES; composer units are MILLIMETRES of paper.
 """
 from __future__ import annotations
 
+from ingetrazo_core import presentation as _presentation
 from core import doc_model
 from core.doc_model import Record, record_fields
 
@@ -1777,6 +1778,8 @@ class AddItemCommand(ComposerCommand):
         self.item = item
 
     def _list(self):
+        if doc_model.ENABLED:
+            return _presentation.sheet_container(self.comp, self.item)
         if isinstance(self.item, MarcoVista):
             return self.comp.frames
         if isinstance(self.item, TextoItem):
@@ -1811,6 +1814,9 @@ class AddItemCommand(ComposerCommand):
         return isinstance(self.comp, Record)
 
     def do(self) -> None:
+        if doc_model.ENABLED:
+            self._prev = _presentation.append_sheet_item(self.comp, self.item)
+            return
         lst = self._list()
         if lst is None:
             self._prev = self.comp.cajetin
@@ -1819,6 +1825,9 @@ class AddItemCommand(ComposerCommand):
             lst.append(self.item)
 
     def undo(self) -> None:
+        if doc_model.ENABLED:
+            _presentation.remove_sheet_item(self.comp, self.item, getattr(self, "_prev", None))
+            return
         lst = self._list()
         if lst is None:
             self.comp.cajetin = self._prev
@@ -1832,6 +1841,8 @@ class RemoveItemCommand(ComposerCommand):
         self.item = item
 
     def _list(self):
+        if doc_model.ENABLED:
+            return _presentation.sheet_container(self.comp, self.item)
         if isinstance(self.item, MarcoVista):
             return self.comp.frames
         if isinstance(self.item, TextoItem):
@@ -1866,6 +1877,9 @@ class RemoveItemCommand(ComposerCommand):
         return isinstance(self.comp, Record)
 
     def do(self) -> None:
+        if doc_model.ENABLED:
+            _presentation.remove_sheet_item(self.comp, self.item, None)
+            return
         lst = self._list()
         if lst is None:
             self.comp.cajetin = None
@@ -1873,6 +1887,9 @@ class RemoveItemCommand(ComposerCommand):
             lst.remove(self.item)
 
     def undo(self) -> None:
+        if doc_model.ENABLED:
+            _presentation.append_sheet_item(self.comp, self.item)
+            return
         lst = self._list()
         if lst is None:
             self.comp.cajetin = self.item
@@ -1890,6 +1907,9 @@ class EditItemCommand(ComposerCommand):
         self.after = dict(changes)
         # An interactive drag has already mutated the item by release time;
         # the caller passes the state it captured at press.
+        if doc_model.ENABLED:
+            self.before = _presentation.capture_sheet_fields(item, changes, before)
+            return
         self.before = dict(before) if before is not None else \
             {k: getattr(item, k) for k in changes}
 
@@ -1901,10 +1921,16 @@ class EditItemCommand(ComposerCommand):
             self.undo()
 
     def do(self) -> None:
+        if doc_model.ENABLED:
+            _presentation.restore_fields(self.item, self.after)
+            return
         for k, v in self.after.items():
             setattr(self.item, k, v)
 
     def undo(self) -> None:
+        if doc_model.ENABLED:
+            _presentation.restore_fields(self.item, self.before)
+            return
         for k, v in self.before.items():
             setattr(self.item, k, v)
 

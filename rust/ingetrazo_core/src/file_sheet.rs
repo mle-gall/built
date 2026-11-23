@@ -4,7 +4,7 @@
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyFloat, PyList, PyString, PyTuple};
 
-const ITEMS: &[(&str, &str)] = &[
+pub(crate) const ITEMS: &[(&str, &str)] = &[
     ("frames", "MarcoVista"),
     ("texts", "TextoItem"),
     ("images", "ImagenItem"),

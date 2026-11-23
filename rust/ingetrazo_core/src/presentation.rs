@@ -411,8 +411,62 @@ fn set_direction<'py>(guide: &Obj<'py>, direction: &Obj<'py>) -> PyResult<Obj<'p
 fn set_text(o: &Obj<'_>, value: &Obj<'_>) -> PyResult<()> {
     o.setattr("text", value)
 }
+/// Use the sheet codec's item table for subclasses as well as base items.
+#[pyfunction]
+fn sheet_container<'py>(sheet: &Obj<'py>, item: &Obj<'py>) -> PyResult<Option<Obj<'py>>> {
+    let classes = sheet.py().import("core.composition")?;
+    for &(field, kind) in crate::file_sheet::ITEMS {
+        if item.is_instance(&classes.getattr(kind)?)? {
+            return Ok(Some(sheet.getattr(field)?));
+        }
+    }
+    Ok(None)
+}
+
+#[pyfunction]
+fn append_sheet_item<'py>(sheet: &Obj<'py>, item: &Obj<'py>) -> PyResult<Option<Obj<'py>>> {
+    if let Some(container) = sheet_container(sheet, item)? {
+        container.call_method1("append", (item,))?;
+        Ok(None)
+    } else {
+        let previous = sheet.getattr("cajetin")?;
+        sheet.setattr("cajetin", item)?;
+        Ok(Some(previous))
+    }
+}
+#[pyfunction]
+fn remove_sheet_item(sheet: &Obj<'_>, item: &Obj<'_>, replacement: &Obj<'_>) -> PyResult<()> {
+    if let Some(container) = sheet_container(sheet, item)? {
+        container.call_method1("remove", (item,))?;
+    } else {
+        sheet.setattr("cajetin", replacement)?;
+    }
+    Ok(())
+}
+#[pyfunction]
+fn capture_sheet_fields<'py>(
+    item: &Obj<'py>,
+    changes: &Obj<'py>,
+    before: &Obj<'py>,
+) -> PyResult<Obj<'py>> {
+    if !before.is_none() {
+        return item.py().get_type::<PyDict>().call1((before,));
+    }
+    let saved = PyDict::new(item.py());
+    for key in changes.try_iter()? {
+        let key = key?;
+        let field = key.extract::<String>()?;
+        saved.set_item(key, item.getattr(field.as_str())?)?;
+    }
+    Ok(saved.into_any())
+}
+
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let sub = PyModule::new(m.py(), "presentation")?;
+    sub.add_function(wrap_pyfunction!(sheet_container, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(append_sheet_item, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(remove_sheet_item, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(capture_sheet_fields, &sub)?)?;
     sub.add_function(wrap_pyfunction!(edit_view_tree, &sub)?)?;
     sub.add_function(wrap_pyfunction!(set_direction, &sub)?)?;
     sub.add_function(wrap_pyfunction!(set_text, &sub)?)?;
