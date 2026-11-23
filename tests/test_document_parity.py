@@ -23,12 +23,12 @@ from pathlib import Path
 
 import pytest
 
-from core import doc_model
+native = pytest.importorskip("ingetrazo_core")
 
 ROOT = Path(__file__).resolve().parent.parent
 SCENARIO = ROOT / "tests" / "doc_parity_scenario.py"
 
-pytestmark = pytest.mark.skipif(not doc_model.ENABLED,
+pytestmark = pytest.mark.skipif(not hasattr(native, "doc_begin"),
                                 reason="the Rust document is not built")
 
 

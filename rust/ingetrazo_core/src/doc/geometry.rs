@@ -119,10 +119,16 @@ pub(super) fn commit(py: Python<'_>) -> PyResult<Vec<Edit>> {
 
 pub(super) fn rollback(py: Python<'_>) -> PyResult<()> {
     let level = LEVELS.with_borrow_mut(|levels| levels.pop().unwrap_or_default());
+    let mut result = Ok(());
     for e in level.into_iter().rev() {
-        e.mesh.call_method1(py, "restore_state", (e.before,))?;
+        let restore = e.mesh.call_method1(py, "restore_state", (e.before,));
+        if let Err(error) = restore {
+            if result.is_ok() {
+                result = Err(error);
+            }
+        }
     }
-    Ok(())
+    result
 }
 
 impl Edit {
@@ -148,8 +154,15 @@ impl Edit {
         self.entry.lineage
     }
 
-    pub(super) fn states(&self, py: Python<'_>, lineage: u64) -> Option<(Py<PyAny>, Py<PyAny>)> {
-        (self.entry.lineage == lineage)
+    pub(super) fn states(
+        &self,
+        py: Python<'_>,
+        mesh: &Bound<'_, PyAny>,
+    ) -> Option<(Py<PyAny>, Py<PyAny>)> {
+        self.entry
+            .mesh
+            .bind(py)
+            .is(mesh)
             .then(|| (self.entry.before.clone_ref(py), self.after.clone_ref(py)))
     }
 

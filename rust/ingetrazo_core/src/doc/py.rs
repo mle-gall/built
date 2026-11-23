@@ -1998,8 +1998,8 @@ impl PyTransaction {
     }
 
     /// Store face tools expose the same snapshots as their public change record.
-    fn geometry_states(&self, py: Python<'_>, lineage: u64) -> Option<(Py<PyAny>, Py<PyAny>)> {
-        self.geometry.iter().find_map(|edit| edit.states(py, lineage))
+    fn geometry_states(&self, py: Python<'_>, mesh: &Bound<'_, PyAny>) -> Option<(Py<PyAny>, Py<PyAny>)> {
+        self.geometry.iter().find_map(|edit| edit.states(py, mesh))
     }
 
     /// Put back what the step wrote (newest first).
@@ -2076,8 +2076,14 @@ impl PyTransaction {
 
 impl PyTransaction {
     fn run(&self, py: Python<'_>, backwards: bool) -> PyResult<()> {
-        for edit in &self.geometry {
-            edit.apply(py, backwards)?;
+        if backwards {
+            for edit in self.geometry.iter().rev() {
+                edit.apply(py, true)?;
+            }
+        } else {
+            for edit in &self.geometry {
+                edit.apply(py, false)?;
+            }
         }
         let mut trash = Trash::default();
         let r = {
@@ -2140,7 +2146,7 @@ fn doc_commit(py: Python<'_>) -> PyResult<Option<Py<PyTransaction>>> {
 /// Undo what the innermost level wrote and close it.
 #[pyfunction]
 fn doc_rollback(py: Python<'_>) -> PyResult<()> {
-    super::geometry::rollback(py)?;
+    let geometry = super::geometry::rollback(py);
     let mut trash = Trash::default();
     let r = {
         let mut d = lock();
@@ -2150,6 +2156,7 @@ fn doc_rollback(py: Python<'_>) -> PyResult<()> {
     drain_pending();
     let refilled = run_refills(py);
     r.map_err(PyRuntimeError::new_err)?;
+    geometry?;
     refilled
 }
 

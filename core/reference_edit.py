@@ -387,7 +387,8 @@ def record_leave(history, level, share):
     shared = edited.capture_state() != state0
     entry = level.get("entry_transaction")
     from core import doc_model
-    if entry is not None and not doc_model.NATIVE.doc_depth() and (shared or (parts is not None and len(history.undo_stack) > mark)):
+    changed_parts = parts is not None and len(history.undo_stack) > mark
+    if entry is not None and not doc_model.NATIVE.doc_depth() and (shared or changed_parts):
         inner = history.undo_stack[mark:]
         step = _StoreSession(share, parts, inner, shared, entry)
         del history.undo_stack[mark:]

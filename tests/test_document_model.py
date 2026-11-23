@@ -523,3 +523,63 @@ def test_singular_store_session_keeps_shared_keys_on_replay():
         assert h.undo() and a.mesh is b.mesh and definition.capture_state() == before
         assert h.redo() and a.mesh is b.mesh and definition.capture_state() == after
         assert [e.key for e in definition.edges] == keys
+
+
+def test_staged_occurrence_undo_after_leaving_keeps_canonical_coordinates():
+    from core.history import SnapshotMutation
+
+    scene = Scene()
+    a = Group()
+    transform = QMatrix4x4()
+    transform.translate(17000, 3, 5)
+    transform.rotate(37, 0, 0, 1)
+    transform.scale(-2, 3, 1)
+    a.xform = transform
+    scene.groups.append(a)
+    scene.begin_group_edit(a)
+    mesh = scene.mesh
+    if not scene._edit_stack[-1].get("affine"):
+        pytest.skip("requires the native occurrence store")
+    h = History(scene)
+    original = a.mesh.capture_state()
+    before = mesh.capture_state()
+    edge = mesh.add_edge(QVector3D(17000, 6, 9), QVector3D(17001, 4, 8))
+    after = a.mesh.capture_state()
+    h.execute(SnapshotMutation.from_states(before, mesh.capture_state()))
+    assert h.last_error is None
+    scene.end_group_edit()
+    assert h.undo() and a.mesh.capture_state() == original
+    assert h.redo() and a.mesh.capture_state() == after
+    assert a.mesh.edges[0].key == edge.key
+
+
+def test_geometry_commit_failure_rolls_back_all_targets_and_fields(monkeypatch):
+    from core.history import SnapshotMutation
+    from core.store_mesh import StoreMesh
+
+    scene = Scene()
+    part = Group(name="before")
+    scene.groups.append(part)
+    left, right = scene.mesh, part.mesh
+    if not isinstance(left, StoreMesh):
+        pytest.skip("requires the native geometry store")
+    original = [m.capture_state() for m in (left, right)]
+    snapshot = StoreMesh._journal_state
+
+    def capture(mesh, state):
+        if mesh is right and mesh.edges:
+            raise ValueError("after snapshot failed")
+        return snapshot(mesh, state)
+
+    monkeypatch.setattr(StoreMesh, "_journal_state", capture)
+    command = CompoundCommand([
+        RenameGroupCommand(part, "after"),
+        *(SnapshotMutation(lambda _, m=m: m.add_edge(QVector3D(), QVector3D(1, 0, 0)), mesh=m)
+          for m in (left, right)),
+    ])
+    history = History(scene)
+    history.execute(command)
+    assert "after snapshot failed" in history.last_error
+    assert not history.undo_stack and N.doc_depth() == 0
+    assert part.name == "before"
+    assert [m.capture_state() for m in (left, right)] == original

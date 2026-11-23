@@ -478,8 +478,7 @@ class History:
                     # the edit. Share the journal's states without recapturing.
                     mesh, = meshes
                     owner = mesh.__dict__.get("_instance_definition", mesh)
-                    if hasattr(owner, "_store"):
-                        part.before, part.after = txn.geometry_states(owner._store.lineage)
+                    part.before, part.after = txn.geometry_states(owner)
         self.last_txn = (txn, False) if txn is not None else None
         self._dirty_from_txn()
         # Kept only by the commands it undoes; the others drop it once the
@@ -781,13 +780,27 @@ class AddEdgeCommand(MeshCommand):
         scene.version += 1
 
 
-class DeleteEdgesCommand(MeshCommand):
+class RemoveGeometryCommand(MeshCommand):
+    """Deleting an element changes ordered incidence lists. The reference
+    mesh restores their original order with its identity-preserving snapshot."""
+    keeps_rows = True
+    _before = None
+
+    def undo(self, scene):
+        if self._before is not None:
+            scene.mesh.restore_state(self._before)
+            scene.version += 1
+
+    def doc_after(self, scene, phase):
+        _discard_removed_selection(scene)
+        scene.version += 1
+
+
+class DeleteEdgesCommand(RemoveGeometryCommand):
     """Erase edges (resolved by endpoint position). A face can't outlive a
     bounding edge — erasing an edge takes its faces with it — so every
     face that used a deleted edge on its *outer* boundary is removed too (its
     other edges stay, now free). Hole edges are left alone."""
-
-    keeps_rows = True
 
     def __init__(self, edges: Iterable, cascade_faces: bool = True) -> None:
         self._endpoints = [(QVector3D(e.a), QVector3D(e.b)) for e in edges]
@@ -796,6 +809,7 @@ class DeleteEdgesCommand(MeshCommand):
         self.removed_faces: list[Face] = []
 
     def do(self, scene) -> None:
+        self._before = self._reference_snapshot(scene.mesh)
         m = scene.mesh
         self.removed_edges = []
         for a, b in self._endpoints:
@@ -818,19 +832,6 @@ class DeleteEdgesCommand(MeshCommand):
         for edge in self.removed_edges:
             m.remove_edge(edge)
             scene.selection.discard(edge)
-        scene.version += 1
-
-    def doc_after(self, scene, phase):
-        _discard_removed_selection(scene)
-        scene.version += 1
-
-    def undo(self, scene) -> None:
-        m = scene.mesh
-        for edge in self.removed_edges:
-            m.relink_edge(edge)
-        for face in self.removed_faces:
-            m.relink_face(face)
-        self.removed_faces = []
         scene.version += 1
 
 
@@ -1479,30 +1480,20 @@ class AddFaceCommand(MeshCommand):
         scene.version += 1
 
 
-class DeleteFaceCommand(MeshCommand):
+class DeleteFaceCommand(RemoveGeometryCommand):
     """Remove a face (resolved by its outer loop). Holes travel with it, so undo
     restores them via relink."""
-
-    keeps_rows = True
 
     def __init__(self, face) -> None:
         self._loop = [QVector3D(v) for v in face.vertices]
         self.face: Optional[Face] = None
 
     def do(self, scene) -> None:
+        self._before = self._reference_snapshot(scene.mesh)
         self.face = _find_face_by_loop(scene.mesh, self._loop)
         if self.face is not None:
             scene.mesh.remove_face(self.face)
             scene.selection.discard(self.face)
-        scene.version += 1
-
-    def doc_after(self, scene, phase):
-        _discard_removed_selection(scene)
-        scene.version += 1
-
-    def undo(self, scene) -> None:
-        if self.face is not None:
-            scene.mesh.relink_face(self.face)
         scene.version += 1
 
 

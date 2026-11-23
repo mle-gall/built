@@ -374,7 +374,8 @@ def shared_assembly(work):
 
 def geometry_steps():
     """Compare the loose mesh, feed and replay at each command boundary."""
-    from core.history import MakeGroupCommand, ExplodeGroupCommand, SetFaceColorCommand
+    from core.history import (MakeGroupCommand, ExplodeGroupCommand, SetFaceColorCommand,
+                              AddEdgeCommand, DeleteEdgesCommand)
     from core.protocol import commands
 
     scene = Scene()
@@ -393,7 +394,9 @@ def geometry_steps():
                       {k: len(v) for k, v in m.modified.items()}) for m in h.feed.last.meshes],
         }
 
-    for edit in (lambda: h.execute(SetFaceColorCommand([mesh.faces[1]], [0., .5, 1.])),
+    for edit in (lambda: h.execute(AddEdgeCommand(QVector3D(4, 0, 0), QVector3D(4, 1, 0))),
+                 lambda: h.execute(DeleteEdgesCommand([mesh.edges[-1]])),
+                 lambda: h.execute(SetFaceColorCommand([mesh.faces[1]], [0., .5, 1.])),
                  lambda: commands.push_pull(h, mesh.faces[1].key, .25),
                  lambda: commands.move_vertices(h, [mesh.vertices[0].key], [.1, 0., 0.]),
                  lambda: h.execute(MakeGroupCommand(list(mesh.faces), list(mesh.edges))),
