@@ -28,6 +28,7 @@ use std::sync::Arc;
 mod anchor;
 mod history;
 mod paint;
+mod restamp;
 mod feed;
 mod execute;
 mod file_view;
