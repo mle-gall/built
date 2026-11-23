@@ -6,6 +6,7 @@ pub struct Preview {
     triangles: Option<wgpu::Buffer>,
     edges: Option<wgpu::Buffer>,
     counts: [u32; 2],
+    pub textures: Option<crate::preview_texture::TexturedPreview>,
 }
 impl Preview {
     pub fn new(
@@ -60,14 +61,10 @@ impl Preview {
             triangles: None,
             edges: None,
             counts: [0; 2],
+            textures: None,
         }
     }
-    pub fn upload(
-        &mut self,
-        d: &wgpu::Device,
-        triangles: &[u8],
-        edges: &[u8],
-    ) -> Result<(), &'static str> {
+    pub fn validate(triangles: &[u8], edges: &[u8]) -> Result<(), &'static str> {
         if triangles.len() % 84 != 0 || edges.len() % 56 != 0 {
             return Err("preview requires 28-byte triangle vertices and edge pairs");
         }
@@ -79,6 +76,21 @@ impl Preview {
                 return Err("nonfinite preview vertex");
             }
         }
+        Ok(())
+    }
+    pub fn upload(
+        &mut self,
+        d: &wgpu::Device,
+        triangles: &[u8],
+        edges: &[u8],
+    ) -> Result<(), &'static str> {
+        Self::validate(triangles, edges)?;
+        self.textures = None;
+        self.upload_validated(d, triangles, edges);
+        Ok(())
+    }
+
+    pub fn upload_validated(&mut self, d: &wgpu::Device, triangles: &[u8], edges: &[u8]) {
         let upload = |data: &[u8]| {
             (!data.is_empty()).then(|| {
                 d.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -91,10 +103,10 @@ impl Preview {
         self.triangles = upload(triangles);
         self.edges = upload(edges);
         self.counts = [(triangles.len() / 28) as u32, (edges.len() / 28) as u32];
-        Ok(())
     }
+    pub fn layout(&self) -> wgpu::BindGroupLayout { self.pipelines[0].get_bind_group_layout(0) }
     pub fn active(&self) -> bool {
-        self.counts != [0; 2]
+        self.counts != [0; 2] || self.textures.as_ref().is_some_and(|t| t.active())
     }
     pub fn draw(
         &self,
@@ -103,7 +115,7 @@ impl Preview {
         depth: &wgpu::TextureView,
         resolve: Option<&wgpu::TextureView>,
     ) {
-        if self.counts == [0; 2] {
+        if !self.active() {
             return;
         }
         let mut p = e.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -128,6 +140,7 @@ impl Preview {
             occlusion_query_set: None,
         });
         p.set_bind_group(0, &self.group, &[]);
+        if let Some(textures) = &self.textures { textures.draw(&mut p, resolve.is_some()); }
         for (k, buffer) in [&self.triangles, &self.edges].into_iter().enumerate() {
             if let Some(buffer) = buffer {
                 p.set_pipeline(&self.pipelines[usize::from(resolve.is_some()) * 2 + k]);

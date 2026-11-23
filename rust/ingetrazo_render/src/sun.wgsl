@@ -96,7 +96,5 @@ fn light(world_position: vec3f, pixel: vec2f) -> f32 {
  let lit = light(pos,p.xy);
  var multiplier = mix(sun.direction_dark.w,1.,clamp(dot(normal,sun.direction_dark.xyz)*1.5,0.,1.)*lit);
  if ground { multiplier = 1.-(1.-sun.direction_dark.w)*(1.-lit); }
- // sRGB render targets multiply linear light; encode GL's display multiplier.
- let linear_multiplier = pow(max(multiplier,0.),2.2);
- return vec4f(vec3f(linear_multiplier),1.);
+ return vec4f(vec3f(multiplier), select(0., 1.-multiplier, ground));
 }

@@ -5,7 +5,6 @@ struct Out { @builtin(position) position: vec4f, @location(0) y: f32 }
  let xy = vec2f(select(-1., 3., i == 1u), select(-1., 3., i == 2u));
  var o: Out; o.position = vec4f(xy,0,1); o.y = xy.y; return o;
 }
-fn linear(c: vec3f) -> vec3f { return select(c/12.92,pow((c+0.055)/1.055,vec3f(2.4)),c>vec3f(0.04045)); }
 @fragment fn fs(i: Out) -> @location(0) vec4f {
  if style.background.a < 0. { return vec4f(0.); }
  var c = style.background.rgb;
@@ -22,5 +21,5 @@ fn linear(c: vec3f) -> vec3f { return select(c/12.92,pow((c+0.055)/1.055,vec3f(2
              mix(sb,st,clamp((i.y-split)/max(1.-split,0.00001),0.,1.)),i.y>=split);
   if abs(i.y-hy) < fwidth(i.y)*0.5 { c = mix(sh,gh,0.5)*0.88; }
  }
- return vec4f(linear(c),1);
+ return vec4f(c,1);
 }

@@ -63,5 +63,5 @@ fn hidden() -> Out { var o: Out; o.position = vec4f(0.,0.,2.,1.); return o; }
   if t >= i.dash.x { discard; }
  }
  let c = i.color.rgb;
- return vec4f(select(c/12.92,pow((c+0.055)/1.055,vec3f(2.4)),c>vec3f(0.04045)),i.color.a);
+ return vec4f(c,i.color.a);
 }

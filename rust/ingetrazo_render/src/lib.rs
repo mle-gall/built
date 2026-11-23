@@ -8,9 +8,11 @@ mod glass;
 mod axes;
 mod sections;
 mod preview;
+mod preview_texture;
 mod lines;
 mod references;
 mod sun;
+mod shadow_fit;
 mod textures;
 // R-look: isolated style and background passes.
 mod style;
@@ -211,6 +213,7 @@ fn merge_instance_flags(old: u32, incoming: u32) -> u32 {
 }
 
 fn texture(d: &wgpu::Device, w: u32, h: u32, format: wgpu::TextureFormat) -> wgpu::Texture {
+    let display_format = [format.remove_srgb_suffix()];
     d.create_texture(&wgpu::TextureDescriptor {
         label: None,
         size: wgpu::Extent3d {
@@ -223,9 +226,16 @@ fn texture(d: &wgpu::Device, w: u32, h: u32, format: wgpu::TextureFormat) -> wgp
         dimension: wgpu::TextureDimension::D2,
         format,
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::TEXTURE_BINDING,
-        view_formats: &[],
+        view_formats: if format.is_srgb() { &display_format } else { &[] },
     })
 }
+fn model_color_view(target: &wgpu::Texture) -> wgpu::TextureView {
+    target.create_view(&wgpu::TextureViewDescriptor {
+        format: Some(target.format().remove_srgb_suffix()),
+        ..Default::default()
+    })
+}
+
 fn multisampled(d: &wgpu::Device, w: u32, h: u32, format: wgpu::TextureFormat) -> wgpu::Texture {
     d.create_texture(&wgpu::TextureDescriptor {
         label: Some("4x color resolve"),
@@ -351,9 +361,11 @@ impl Renderer {
             present_mode: wgpu::PresentMode::AutoNoVsync,
             desired_maximum_frame_latency: 2,
             alpha_mode: caps.alpha_modes[0],
-            view_formats: vec![],
+            view_formats: vec![format.remove_srgb_suffix()],
         };
         surface.configure(&device, &config);
+        // Blend and resolve model colors in display space. UI paints through the sRGB view.
+        let format = format.remove_srgb_suffix();
         let camera = buffer(
             &device,
             &[0; 112],
@@ -566,13 +578,13 @@ impl Renderer {
             sun,
             capture_next: false,
             captured: None,
-            overlay: overlay::Overlay::new(&device, format),
-            page: overlay::Overlay::new(&device, format),
+            overlay: overlay::Overlay::new(&device, config.format),
+            page: overlay::Overlay::new(&device, config.format),
             axes: axes::Axes::new(&device, format, &camera),
             sections: sections::Sections::new(&device, format, &camera),
             lines: lines::Lines::new(&device, format, &camera),
             depth: texture(&device, w, h, wgpu::TextureFormat::Depth32Float),
-            offscreen: texture(&device, w, h, format),
+            offscreen: texture(&device, w, h, config.format),
             ids: texture(&device, w, h, wgpu::TextureFormat::R32Uint),
             timings: (0..4)
                 .map(|_| TimingSlot {
@@ -639,7 +651,7 @@ impl Renderer {
         config.width = w;
         config.height = h;
         surface.configure(&self.device, &config);
-        let format = config.format;
+        let format = config.format.remove_srgb_suffix();
         let d = &self.device;
         let mut aa = antialias::Antialias::new(d, format, &self.look.buffer, w, h);
         aa.bind_textures(d, &self.textures);
@@ -652,11 +664,11 @@ impl Renderer {
         let target = Target {
             surface, config,
             depth: texture(d, w, h, wgpu::TextureFormat::Depth32Float),
-            offscreen: texture(d, w, h, format),
+            offscreen: texture(d, w, h, self.config.format),
             ids: texture(d, w, h, wgpu::TextureFormat::R32Uint),
             aa, transparency,
             ao: ao::AmbientOcclusion::new(d, format),
-            overlay: overlay::Overlay::new(d, format),
+            overlay: overlay::Overlay::new(d, self.config.format),
             axes: axes::Axes::new(d, format, &self.camera),
             lines: lines::Lines::new(d, format, &self.camera),
             preview: preview::Preview::new(d, format, &self.camera, &self.look.buffer, 0),
@@ -693,6 +705,7 @@ impl Renderer {
         self.targets[self.active] = Some(t);
         self.active = id;
         if seen != self.scene_epoch {
+            self.sun.invalidate();
             self.ids_dirty = true;
         }
         self.queue.write_buffer(&self.look.buffer, 0, bytemuck::cast_slice(&self.look.data));
@@ -1250,8 +1263,22 @@ impl Renderer {
     fn max_texture_size(&self) -> u32 { self.device.limits().max_texture_dimension_2d }
 
     /// World-space tool feedback, cleared on commit/cancel.
-    fn set_preview_mesh(&mut self, triangles: PyReadonlyArray1<'_, u8>, edges: PyReadonlyArray1<'_, u8>) -> PyResult<()> {
-        self.preview.upload(&self.device, triangles.as_slice()?, edges.as_slice()?).map_err(PyValueError::new_err)
+    #[pyo3(signature = (triangles, edges, runs=Vec::new(), load=None))]
+    fn set_preview_mesh(&mut self, triangles: PyReadonlyArray1<'_, u8>, edges: PyReadonlyArray1<'_, u8>,
+                        runs: Vec<preview_texture::Run<'_>>, load: Option<&Bound<'_, PyAny>>) -> PyResult<()> {
+        let (triangles, edges) = (triangles.as_slice()?, edges.as_slice()?);
+        preview::Preview::validate(triangles, edges).map_err(PyValueError::new_err)?;
+        if runs.is_empty() {
+            self.preview.textures = None;
+        } else {
+            let loader = load.ok_or_else(|| PyValueError::new_err("preview image loader required"))?;
+            let format = self.config.format.remove_srgb_suffix();
+            let layout = self.preview.layout();
+            self.preview.textures.get_or_insert_with(|| preview_texture::TexturedPreview::new(&self.device, format, &layout))
+                .upload(&self.device, &self.queue, runs, loader)?;
+        }
+        self.preview.upload_validated(&self.device, triangles, edges);
+        Ok(())
     }
     /// Depth-tested world-space lines in a named slot (``lines.rs``):
     /// 40-byte segments ``a, b (3 f32), RGBA8, width, dash, gap (f32
@@ -1350,6 +1377,15 @@ impl Renderer {
         Ok(())
     }
     fn set_antialias(&mut self, enabled: bool) { self.antialias = enabled; }
+    #[getter]
+    fn needs_shadow_fit(&self) -> bool {
+        self.style != 1 && self.style != 4 && self.sun.needs_fit()
+    }
+    fn settle_shadows(&mut self) {
+        if self.needs_shadow_fit() {
+            self.sun.settle(&self.device, &self.queue, &self.depth, &self.camera_data);
+        }
+    }
     fn read_pixels(&mut self) -> PyResult<Vec<u8>> {
         self.capture_next = true;
         self.render(true)?;
@@ -1383,7 +1419,7 @@ impl Renderer {
         } else {
             sun::LIVE_SIZE
         };
-        let format = self.config.format;
+        let format = self.config.format.remove_srgb_suffix();
         let mut aa = antialias::Antialias::new(&self.device, format, &self.look.buffer, width, height);
         let mut transparency = xray::Xray::new(&self.device, format, width, height);
         aa.bind_textures(&self.device, &self.textures);
@@ -1404,8 +1440,8 @@ impl Renderer {
         let old_transparency = std::mem::replace(&mut self.transparency, transparency);
         let old_sun = std::mem::replace(&mut self.sun, sun::Sun::new(&self.device, format, shadow_size));
         let old_ao = std::mem::replace(&mut self.ao, ao::AmbientOcclusion::new(&self.device, format));
-        let old_overlay = std::mem::replace(&mut self.overlay, overlay::Overlay::new(&self.device, format));
-        let old_color = std::mem::replace(&mut self.offscreen, texture(&self.device, width, height, format));
+        let old_overlay = std::mem::replace(&mut self.overlay, overlay::Overlay::new(&self.device, self.config.format));
+        let old_color = std::mem::replace(&mut self.offscreen, texture(&self.device, width, height, self.config.format));
         let old_depth = std::mem::replace(&mut self.depth, texture(&self.device, width, height, wgpu::TextureFormat::Depth32Float));
         let old_ids = std::mem::replace(&mut self.ids, texture(&self.device, width, height, wgpu::TextureFormat::R32Uint));
         self.config.width = width;
@@ -1420,7 +1456,19 @@ impl Renderer {
             self.set_camera(view, projection, far_clip)?;
             self.capture_next = true;
             self.render(false)?;
-            Ok(self.captured.take().unwrap_or_default())
+            let mut pixels = self.captured.take().unwrap_or_default();
+            if self.look.data[3][3] < 0. {
+                // PNG and QImage RGBA8888 expect unassociated color.
+                for pixel in pixels.chunks_exact_mut(4) {
+                    let alpha = u32::from(pixel[3]);
+                    if alpha > 0 && alpha < 255 {
+                        for channel in &mut pixel[..3] {
+                            *channel = ((u32::from(*channel) * 255 + alpha / 2) / alpha).min(255) as u8;
+                        }
+                    }
+                }
+            }
+            Ok(pixels)
         })();
         if temporary_rows.is_some() {
             if let Some(s) = &self.scene { self.queue.write_buffer(&s.inst, 0, &s.rows); }
@@ -1477,6 +1525,7 @@ impl Renderer {
         data.extend(eye.to_array());
         data.extend([-1., -1., 1., 1.]);
         if self.camera_data != data {
+            self.sun.camera_changed();
             self.stable_frames = 0;
             self.ids_dirty = true;
             self.queue.write_buffer(&self.camera, 0, bytemuck::cast_slice(&data));
@@ -1607,6 +1656,7 @@ impl Renderer {
     }
     fn resize(&mut self, w: u32, h: u32, scale: f64) {
         self.ids_dirty = true;
+        self.sun.camera_changed();
         self.ui_scale = scale as f32;
         self.config.width = ((w as f64 * scale) as u32).max(1);
         self.config.height = ((h as f64 * scale) as u32).max(1);
@@ -1677,7 +1727,7 @@ impl Renderer {
         let target = frame.as_ref().map(|f| &f.texture).unwrap_or(&self.offscreen);
         let acquired = Instant::now();
         self.last_acquire = acquired.duration_since(polled).as_secs_f64() * 1000.;
-        let color = target.create_view(&Default::default());
+        let color = model_color_view(target);
         let depth = self.depth.create_view(&Default::default());
         let ids = self.ids.create_view(&Default::default());
         let mut e = self.device.create_command_encoder(&Default::default());
@@ -1826,7 +1876,7 @@ impl Renderer {
             }
             if !edge_only && self.sun.enabled && self.style != 1 && self.style != 4 {
                 if msaa { self.aa.resolve_depth(&self.device, &mut e, &depth, None); }
-                let output = if msaa { self.aa.color_view() } else { target.create_view(&Default::default()) };
+                let output = if msaa { self.aa.color_view() } else { model_color_view(target) };
                 self.sun.draw(&self.device, &self.queue, &mut e, &output, &depth, msaa, &self.camera_data,
                               self.queries.as_ref().filter(|_| self.detailed_timestamps));
                 sun_drawn = true;
@@ -1842,7 +1892,7 @@ impl Renderer {
                     }
                 }
                 if msaa { self.aa.resolve_depth(&self.device, &mut e, &depth, tq); }
-                let output = if msaa && !self.pick_pending { self.aa.color_view() } else { target.create_view(&Default::default()) };
+                let output = if msaa && !self.pick_pending { self.aa.color_view() } else { model_color_view(target) };
                 self.ao.draw(&self.device, &self.queue, &mut e, target, &depth, &output, msaa && !self.pick_pending, tq);
             }
         }
@@ -1876,6 +1926,7 @@ impl Renderer {
             if msaa { self.aa.resolve_depth(&self.device, &mut e, &depth, None); }
             self.transparency.draw(&mut e, &color, Some(&depth), s, self.multi, tq);
         }
+        let color = target.create_view(&Default::default());
         self.overlay
             .draw(&mut e, &color, self.config.width, self.config.height, tq);
         if present && self.ui_target == self.active {
@@ -2408,7 +2459,7 @@ impl Renderer {
                 pass.set_bind_group(0, cursor_group.as_ref().unwrap_or(&s.compute), &[]);
                 pass.dispatch_workgroups(s.n.div_ceil(64), 1, 1);
             }
-            let color = self.offscreen.create_view(&Default::default());
+            let color = model_color_view(&self.offscreen);
             let ids = self.ids.create_view(&Default::default());
             let depth = self.depth.create_view(&Default::default());
             {
@@ -2638,9 +2689,21 @@ fn large_sheet_check(spec: &str) -> String {
 
 mod surfaces;
 
+/// Start an orthographic ray on the plane through the camera, aligned with the point.
+#[pyfunction]
+fn parallel_annotation_ray(eye: [f64; 3], forward: [f64; 3], point: [f64; 3]) -> Option<([f64; 3], f64)> {
+    let point = glam::DVec3::from(point);
+    let forward = glam::DVec3::from(forward).normalize_or_zero();
+    let depth = (point - glam::DVec3::from(eye)).dot(forward);
+    // Keep the same millimetre tolerance as the perspective ray on the endpoint's face.
+    (depth > 1e-3).then(|| ((point - forward * depth).to_array(), depth - 1e-3))
+}
+
 #[pymodule]
 pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("build_commit", env!("BUILT_COMMIT"))?;
+    m.add_function(wrap_pyfunction!(parallel_annotation_ray, m)?)?;
+    m.add_function(wrap_pyfunction!(preview_texture::preview_materials, m)?)?;
     m.add_function(wrap_pyfunction!(surfaces::surface_spec, m)?)?;
     m.add_function(wrap_pyfunction!(large_sheet_check, m)?)?;
     m.add_function(wrap_pyfunction!(panic_log::install_panic_log, m)?)?;

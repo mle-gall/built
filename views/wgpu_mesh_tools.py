@@ -566,8 +566,12 @@ class MeshToolAccess:
             # faces themselves carry no outline of their own.
             edges = ([(a, b, band[1]) for a, b in band[0]]
                      if band is not None and band[3] else [])
-            mesh = preview_mesh(faces, edges)
+            from ingetrazo_render import preview_materials
+            plain, runs = preview_materials(faces, getattr(self.view, 'source_viewport', None),
+                                            getattr(self.tool, 'preview_opacity', 1.0))
+            mesh = preview_mesh(plain, edges)
             key = tuple(bytes(part) for part in mesh)
+            key += tuple((path, shade, opacity, bytes(vertices)) for path, shade, opacity, vertices in runs)
             # The selected groups' boxes, depth-tested like GL's: the
             # preview is this tool's while it is active. Cached vertices,
             # compared by their key, not their bytes.
@@ -577,7 +581,12 @@ class MeshToolAccess:
                 if box is not None and len(box):
                     from views.wgpu_parity import raw
                     mesh = (mesh[0], np.concatenate((mesh[1], raw(box))))
-                renderer.set_preview_mesh(*mesh)
+                if runs:
+                    from views.wgpu_references import preview_texture
+                    renderer.set_preview_mesh(*mesh, [(path, shade, opacity, np.asarray(vertices))
+                        for path, shade, opacity, vertices in runs], preview_texture)
+                else:
+                    renderer.set_preview_mesh(*mesh)
                 self.view._preview_key = (key, box_key)
         label = self.tool.value_label() if hasattr(self.tool, 'value_label') else None
         if label is not None:

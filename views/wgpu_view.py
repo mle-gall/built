@@ -124,7 +124,7 @@ class MetalView(ViewNavigation):
         self._selection_signature = None
         self._settle_timer = QTimer(self)
         self._settle_timer.setSingleShot(True)
-        self._settle_timer.timeout.connect(self.update)
+        self._settle_timer.timeout.connect(self._settled_frame)
         self._last_camera = None
         self.renderer = None
         self.packed = None
@@ -573,7 +573,15 @@ class MetalView(ViewNavigation):
         # Keep the last Metal frame during a splitter/window drag. Surface
         # configuration waits for GPU work and reallocates all render targets;
         # doing it per pixel can consume the entire input frame budget.
+        self.camera.aspect = self.width() / max(1, self.height())
+        if getattr(self.source_viewport, "camera", None) is not None:
+            self.source_viewport.camera.aspect = self.camera.aspect
         self._resize_timer.start()
+
+    def _settled_frame(self):
+        if getattr(self.renderer, 'needs_shadow_fit', False) is True:
+            self.renderer.settle_shadows()
+        self.update()
 
     def _finish_resize(self):
         if self.renderer is not None:
@@ -835,6 +843,8 @@ class MetalView(ViewNavigation):
         from views import wgpu_ui
         wgpu_ui.before_frame(self)
         cpu, gpu = self.renderer.render()
+        if getattr(self.renderer, 'needs_shadow_fit', False) is True and not self._settle_timer.isActive():
+            self._settle_timer.start(80)
         wgpu_ui.after_frame(self)
         self._pick_frame_dirty = False
         wall = (time.perf_counter()-start)*1000

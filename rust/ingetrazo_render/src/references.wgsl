@@ -16,5 +16,7 @@ struct Out { @builtin(position) position: vec4f, @location(0) uv: vec2f }
     let texel = textureSample(atlas, sample_atlas, i.uv);
     let alpha = texel.a * appearance.opacity.x;
     if alpha == 0. { discard; }
-    return vec4f(mix(texel.rgb, appearance.fade.rgb, appearance.fade.a), alpha);
+    let c = texel.rgb;
+    let display = select(12.92*c, 1.055*pow(c,vec3f(1./2.4))-0.055, c>vec3f(0.0031308));
+    return vec4f(mix(display, appearance.fade.rgb, appearance.fade.a), alpha);
 }

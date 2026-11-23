@@ -15,11 +15,31 @@ struct Out { @builtin(position) position: vec4f, @location(0) color: vec4f, @loc
 }
 @fragment fn fs(i: Out) -> @location(0) vec4f {
  if i.section < 0. { discard; }
+ // The stipple is anchored to the lower left of the framebuffer.
+ let pixel = vec2f(i.position.x, camera.size.y - i.position.y);
  if GHOST {
-  if EDGE { if ((i.position.x+i.position.y)%6.)>=3. { discard; } }
-  else { if all((i.position.xy%vec2f(4.))>=vec2f(1.)) { discard; } }
+  if EDGE { if ((pixel.x+pixel.y)%6.)>=3. { discard; } }
+  else { if all((pixel%vec2f(4.))>=vec2f(1.)) { discard; } }
  }
- if MARK && !all((i.position.xy % vec2f(6.)) < vec2f(2.)) { discard; }
+ if MARK && !all((pixel % vec2f(6.)) < vec2f(2.)) { discard; }
  let c = i.color.rgb;
- return vec4f(select(c/12.92,pow((c+0.055)/1.055,vec3f(2.4)),c>vec3f(0.04045)),i.color.a);
+ return vec4f(c,i.color.a);
+}
+
+struct TextureVertex { @builtin(position) position: vec4f, @location(0) material: vec4f, @location(1) section: f32 }
+@group(1) @binding(0) var image: texture_2d<f32>;
+@group(1) @binding(1) var repeat_sampler: sampler;
+
+@vertex fn texture_vs(@location(0) point: vec3f, @location(1) material: vec4f) -> TextureVertex {
+ var v: TextureVertex;
+ v.position = camera.vp * vec4f(point, 1.);
+ v.section = dot(vec4f(point, 1.), style.section_plane);
+ v.material = material;
+ return v;
+}
+@fragment fn texture_fs(v: TextureVertex) -> @location(0) vec4f {
+ let texel = textureSample(image, repeat_sampler, v.material.xy);
+ let alpha = texel.a * v.material.w;
+ if alpha <= 0. || v.section < 0. { discard; }
+ return vec4f(texel.rgb * v.material.z, alpha);
 }
