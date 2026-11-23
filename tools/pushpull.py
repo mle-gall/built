@@ -87,11 +87,8 @@ from core.topology import (
 )
 from tools.base import Tool, ToolContext, ctrl_clause
 from core.units import fmt_len
-from core import push_scans, doc_model
-if doc_model.ENABLED:
-    from ingetrazo_core import guarded_push, push_region, push_through_face, translate_prism_cap
-else:
-    from core.push_guard_reference import guarded_push, push_region, push_through_face, translate_prism_cap
+from core import push_scans
+from ingetrazo_core import guarded_push, push_region, push_through_face, translate_prism_cap
 
 
 def _project_loop_2d(loop, normal):
