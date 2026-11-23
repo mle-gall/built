@@ -6,7 +6,7 @@ use super::{kit::*, tokens::*};
 use egui::{pos2, vec2, Align2, Color32, Pos2, Rect, Sense, Stroke};
 
 /// The board, in points; the Qt host scales it to fit.
-const BOARD: egui::Vec2 = vec2(1280., 1210.);
+const BOARD: egui::Vec2 = vec2(1280., 1274.);
 /// The surfaces band at the bottom: large sheet, value field, atoms, toasts.
 const BAND_H: f32 = 206.;
 const STATES: [(&str, State); 6] = [
@@ -398,7 +398,12 @@ impl Gallery {
             catalogue_fact(ui, "Licence", "MIT");
             catalogue_tag(ui, "Architecture", ui.available_width());
         });
-        y + preview.y + SPACE_S
+        y += preview.y + SPACE_S;
+        ui.painter().text(pos2(at.x, y + CONTROL_H / 2.), Align2::LEFT_CENTER, "SVG preview", meta(), INK_2);
+        let page = vec2(CONTROL_H * 3., CONTROL_H * 2.);
+        let rect = Rect::from_min_size(pos2(at.x + name_w, y), page);
+        put(ui, rect, across(), |ui| { svg_preview(ui, None, "Thirds", page); });
+        y + page.y + SPACE_S
     }
 
     fn molecule(ui: &mut egui::Ui, row: Row, st: State, cell: &mut Cell) {

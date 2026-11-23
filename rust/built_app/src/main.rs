@@ -15,6 +15,8 @@ mod keys;
 mod gestures;
 #[cfg(target_os = "macos")]
 mod menu;
+#[cfg(target_os = "macos")]
+mod menu_commands;
 mod native;
 mod python;
 mod script;
@@ -686,7 +688,10 @@ impl App {
         let id = self.make_window(event_loop)?;
         #[cfg(target_os = "macos")]
         match menu::build() {
-            Ok(m) => self._menus = Some(m),
+            Ok(m) => {
+                self._menus = Some(m);
+                if let Some(w) = self.win(id) { w.host.call0("refresh_commands"); }
+            },
             Err(e) => eprintln!("[built] menu bar: {e}"),
         }
         #[cfg(built_bundle)]
@@ -791,6 +796,9 @@ impl App {
             if self.recent_sig.as_ref() != Some(&recent) {
                 if let Some(m) = &self._menus {
                     m.set_recent(&recent);
+                    for (_, window) in &self.wins {
+                        window.host.call0("refresh_commands");
+                    }
                 }
                 self.recent_sig = Some(recent);
             }

@@ -248,7 +248,10 @@ pub fn run_view_command(win: &Bound<'_, PyAny>, id: &str, on: bool) -> PyResult<
         Shadows => win.call_method1("_on_toggle_shadows", (on,))?,
         Flag(method, field) => win.call_method1(method, (field, on))?,
         Method(method) => win.call_method0(method)?,
-        Chrome => return Ok(false),
+        Chrome => {
+            let view = win.getattr("_doc")?.getattr("stand_in")?;
+            win.py().import("views.wgpu_ui")?.call_method1("_run", (win, [format!("act:{id}")], view))?
+        }
     };
     Ok(true)
 }
@@ -355,4 +358,155 @@ pub fn rail_layout() -> Vec<Vec<(&'static str, &'static str)>> {
         vec![("tape", ""), ("protractor", ""), ("north", ""), ("dimension", ""), ("text", ""), ("text3d", "_act_3dtext"), ("geopath", ""), ("section", "")],
         vec![("outer_shell", ""), ("solid_union", ""), ("solid_subtract", ""), ("solid_trim", ""), ("solid_intersect", ""), ("solid_split", "")],
     ]
+}
+
+type RegistryRow = (String, String, String, Vec<String>, String, String);
+
+/// One row per dispatch target. A Cocoa menu entry and egui View command
+/// for the same operation share both their shortcut list and their action.
+#[pyfunction]
+pub fn command_registry(
+    tools: Vec<(String, String, Vec<String>)>,
+    mut menu: Vec<(String, String, String, String)>,
+) -> Vec<RegistryRow> {
+    use std::collections::BTreeMap;
+    let search = "command_search".to_owned();
+    let mut rows = BTreeMap::from([(
+        search.clone(),
+        (
+            search,
+            "Help".into(),
+            "Search commands…".into(),
+            vec!["F3".into(), "Ctrl+K".into()],
+            String::new(),
+            String::new(),
+        ),
+    )]);
+    for (key, label, shortcuts) in tools {
+        let id = format!("tool:{key}");
+        rows.insert(
+            id.clone(),
+            (id, "Tools".into(), label, shortcuts, key, String::new()),
+        );
+    }
+    for c in COMMANDS {
+        let tool = rows
+            .remove(&format!("tool:{}", c.id))
+            .map(|r| r.4)
+            .unwrap_or_default();
+        let id = format!("view:{}", c.id);
+        rows.insert(
+            id.clone(),
+            (
+                id,
+                c.group.to_owned(),
+                c.label.to_owned(),
+                c.shortcuts.iter().map(|s| (*s).to_owned()).collect(),
+                tool,
+                String::new(),
+            ),
+        );
+    }
+    // Reports are also available on platforms without a system menu bar.
+    if menu.is_empty() {
+        for (id, label) in [
+            ("about", "About Built"),
+            ("cutlist", "Cut list"),
+            ("extensions", "Extension Manager"),
+        ] {
+            menu.push((id.into(), "Window".into(), label.into(), String::new()));
+        }
+    }
+    for (menu_id, path, name, shortcut) in menu {
+        let id = if let Some(key) = menu_id.strip_prefix("view:") {
+            format!("view:view_{key}")
+        } else if COMMANDS.iter().any(|c| c.id == menu_id) {
+            format!("view:{menu_id}")
+        } else if menu_id.starts_with("tool:") {
+            menu_id.clone()
+        } else {
+            format!("menu:{menu_id}")
+        };
+        let row = rows.entry(id.clone()).or_insert_with(|| {
+            (
+                id,
+                path.clone(),
+                name.clone(),
+                vec![],
+                String::new(),
+                String::new(),
+            )
+        });
+        row.1 = path;
+        row.5 = menu_id;
+        if !shortcut.is_empty() && !row.3.contains(&shortcut) {
+            row.3.insert(0, shortcut);
+        }
+    }
+    rows.into_values().collect()
+}
+
+/// Qt supplies the logical key name after interpreting the native keyboard layout.
+#[pyfunction]
+pub fn shortcut_reserved(key: &str, plain: bool) -> Option<&'static str> {
+    match key {
+        "Key_Escape" | "Key_Return" | "Key_Enter" | "Key_Backspace" | "Key_Tab" | "Key_Backtab"
+        | "Key_Shift" | "Key_Control" | "Key_Alt" | "Key_Meta" | "Key_AltGr" => {
+            Some("the drawing tools use it (cancel, confirm, edit a value)")
+        }
+        "Key_Left" | "Key_Right" | "Key_Up" | "Key_Down" if plain => {
+            Some("the arrow keys lock an axis while drawing")
+        }
+        "Key_Period" | "Key_Comma" | "Key_Semicolon" | "Key_Minus" | "Key_Slash"
+        | "Key_Asterisk" | "Key_Apostrophe" | "Key_QuoteDbl"
+            if plain =>
+        {
+            Some("it types a measure in the value box")
+        }
+        name if plain
+            && name
+                .strip_prefix("Key_")
+                .is_some_and(|s| s.len() == 1 && s.as_bytes()[0].is_ascii_digit()) =>
+        {
+            Some("it types a measure in the value box")
+        }
+        _ => None,
+    }
+}
+
+/// Plan the other edits in an assignment, retaining non-conflicting alternatives.
+#[pyfunction]
+pub fn shortcut_conflicts(
+    target: &str,
+    wanted: HashSet<String>,
+    current: Vec<(String, Vec<String>)>,
+) -> Vec<(String, Vec<String>)> {
+    current
+        .into_iter()
+        .filter_map(|(id, mut keys)| {
+            let before = keys.len();
+            keys.retain(|k| !wanted.contains(k));
+            (id != target && keys.len() != before).then_some((id, keys))
+        })
+        .collect()
+}
+
+
+/// Descriptions for shared menu commands whose host action has no status tip.
+#[pyfunction]
+pub fn command_description(label: &str) -> Option<&'static str> {
+    Some(match label {
+        "Components" => "Browse component definitions and place a copy in the model.",
+        "Materials" => "Browse the materials available to apply to faces.",
+        "Cut list" => "Review part dimensions, quantities and cutting requirements.",
+        "Export" => "Choose a format and scope for a one-off export.",
+        "Hide Rest of Model" => "Hide geometry outside the component being edited.",
+        "Hide Similar Components" => "Hide other instances of the component being edited.",
+        "Home" | "Start Page" => "Open the start page to create a project or reopen a recent one.",
+        "List" => "Show saved scenes in a compact list.",
+        "Thumbnails" => "Show saved scenes with preview images.",
+        "Save a Copy as IngeTrazo (.igz)" => "Write a copy of this project in the IngeTrazo file format.",
+        "Terrain profile" => "Inspect ground elevations along a path through the model.",
+        _ => return None,
+    })
 }

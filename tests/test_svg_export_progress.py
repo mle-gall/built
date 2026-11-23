@@ -259,31 +259,43 @@ def test_the_bar_left_alone_writes_the_svg_as_before(tmp_path, monkeypatch):
         win.close()
 
 
-def test_cancel_on_a_slow_preview_turns_the_preview_off(tmp_path,
-                                                        monkeypatch):
-    _app()
-    settings = QSettings(str(tmp_path / "svg.ini"), QSettings.IniFormat)
-    built = []
+def test_cancel_on_a_slow_preview_turns_the_preview_off(monkeypatch):
+    import time
+    from types import SimpleNamespace
+    from core import deliveries
+    from core.camera import OrbitCamera
+    from core.history import History
+    from core.scene import Scene
+    from views import chrome_sheet, wgpu_deliveries
 
-    def build(options, paper=None, preview=False):
-        built.append(preview)
-        VC._visible_parts(_faces())
-        return "<svg/>", 0
+    scene = Scene()
+    win = SimpleNamespace(viewport=SimpleNamespace(scene=scene, history=History(scene), camera=OrbitCamera()))
+    ticks = []
+    monkeypatch.setattr(wgpu_deliveries.QTimer, "singleShot", lambda delay, fn: ticks.append(fn))
+    clock, built = [0.], []
 
-    dlg = D.ExportSvgDialog(None, build, settings=settings, advanced=True)
-    try:
-        dlg.preview_box.setChecked(True)
-        made = _bars(monkeypatch, cancel_after=1)
-        monkeypatch.setattr(P, "REPORT_EVERY", 0.0)
-        monkeypatch.setattr(D, "PROGRESS_AFTER", 0.0)
-        built.clear()
-        dlg._refresh_preview()
-        assert built == [True] and len(made) == 1
-        assert not dlg.preview_box.isChecked()
-        assert dlg.preview.text() == "Preview off"
-        assert QApplication.overrideCursor() is None
-    finally:
-        dlg.deleteLater()
+    def render(*args, **kwargs):
+        built.append(True)
+        clock[0] += 1.
+        P.tick(.25)
+        pytest.fail("The preview writer continued after cancellation")
+    monkeypatch.setattr(P, "REPORT_EVERY", 0)
+    monkeypatch.setattr(deliveries, "preview_svg", render)
+    monkeypatch.setattr(QApplication, "processEvents", lambda: win._chrome_jobs[0].cancel())
+    form = wgpu_deliveries.export_form(win, one_off=True)
+    form.set("format", "svg")
+    provider = chrome_sheet.current(win)
+    ctx = chrome_sheet.Ctx(win, None)
+    svg = provider.build(ctx).forms()[1]
+    svg.receive("svg_preview", "1")
+    provider.build(ctx)
+    assert len(ticks) == 1
+    monkeypatch.setattr(time, "monotonic", lambda: clock[0])
+    ticks.pop()()
+    assert built == [True] and not win._chrome_jobs
+    assert not svg.preview_enabled and provider.build(ctx).wire()["detail"] is None
+    assert QApplication.overrideCursor() is None and not ticks
+    chrome_sheet.close(win)
 
 
 def test_a_preview_does_not_start_inside_another(tmp_path, monkeypatch):

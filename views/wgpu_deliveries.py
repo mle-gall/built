@@ -1,4 +1,5 @@
 """Saved deliveries, one-off export form, and the window's serial export queue."""
+import json
 from collections import deque
 from pathlib import Path
 
@@ -8,6 +9,9 @@ from PySide6.QtGui import QDesktopServices
 from core import bim_registry, deliveries
 from core.protocol import commands
 from views import chrome_dialogs, chrome_forms
+
+
+PREVIEW_JOB_DELAY = 0.5
 
 
 def bind(win):
@@ -48,12 +52,12 @@ def export_form(win, key=None, one_off=False):
             choices.append(("scenes", "Scenes"))
         return choices
 
-    def svg(form):
-        return form.value("format") == "svg"
+    from ingetrazo_render import SvgOptions
+    view = chrome_dialogs.view_of(win)
+    screen = (view.width() * 25.4 / 96, view.height() * 25.4 / 96) if view else (297., 210.)
+    svg = SvgOptions(json.dumps(options), screen)
 
     def changed(form, fid, value):
-        if fid == "fill" and value == "picture":
-            form.set("scope", "visible")
         if fid == "format":
             choices = scopes(value)
             form.field("scope").options = choices
@@ -70,18 +74,7 @@ def export_form(win, key=None, one_off=False):
         if v["format"] == "glb":
             opts["textures"] = v["textures"]
         if v["format"] == "svg":
-            opts["scale"] = v["scale"]
-            if v["fill"] == "picture":
-                opts.update(picture=True, axes=v["axes"])
-            elif v["fill"] != "lines":
-                opts["faces"] = {"materials": v["fill"] != "default", "textures": v["fill"] == "full",
-                                 "as_view": v["as_view"], "shadows": v["shadows"]}
-            if v["size"] == "screen":
-                opts["paper"] = "screen"
-            if v["framed"]:
-                opts["frame"] = [v["pan_x"], v["pan_y"], v["zoom"]]
-            if v["size"] == "custom":
-                opts["paper"] = [v["width"], v["height"]]
+            opts.update(json.loads(svg.options_json()))
         if v["format"] == "stl":
             opts["unit"] = v["unit"]
         if v["scope"] in ("sheets", "scenes") and v["names"].strip():
@@ -93,6 +86,8 @@ def export_form(win, key=None, one_off=False):
 
     def check(form, answer):
         try:
+            if form.value("format") == "svg" and (error := svg.validation_error()):
+                return error
             deliveries.validate(unpack(form.values()))
         except ValueError as exc:
             return str(exc)
@@ -114,17 +109,6 @@ def export_form(win, key=None, one_off=False):
             view._ui_tree_sig = None
             view.update()
 
-    faces = options.get("faces", {})
-    fill = "lines"
-    if "faces" in options:
-        fill = "full" if faces.get("textures") else "colours" if faces.get("materials") else "default"
-    if options.get("picture"):
-        fill = "picture"
-    paper = options.get("paper")
-    size = "screen" if paper == "screen" else "custom" if paper else "scale"
-    if size != "custom":
-        paper = [297, 210]
-    frame = options.get("frame") or [0, 0, 1]
     fields = [
         Field("name", "edit", "Name", record.get("name", "New delivery"), focus=True),
         Field("format", "choice", "Format", fmt, options=[(k, k.upper()) for k in deliveries.FORMATS]),
@@ -138,30 +122,6 @@ def export_form(win, key=None, one_off=False):
               visible=lambda f: f.value("format") == "ifc"),
         Field("textures", "check", "Embed textures", options.get("textures", True),
               visible=lambda f: f.value("format") == "glb"),
-        Field("fill", "choice", "Faces", fill, visible=svg,
-              options=[("lines", "Lines only"), ("picture", "Viewport picture"), ("full", "Materials and textures"),
-                       ("colours", "Material colours"), ("default", "Default colour")]),
-        Field("axes", "check", "Show axes", options.get("axes", True),
-              visible=lambda f: svg(f) and f.value("fill") == "picture"),
-        Field("as_view", "check", "Viewport lighting", faces.get("as_view", True),
-              visible=lambda f: svg(f) and f.value("fill") not in ("lines", "picture")),
-        Field("shadows", "check", "Shadows", faces.get("shadows", False),
-              visible=lambda f: svg(f) and f.value("fill") not in ("lines", "picture")),
-        Field("size", "choice", "Paper size", size, visible=svg,
-              options=[("scale", "Drawing scale"), ("screen", "Screen size"), ("custom", "Custom paper")]),
-        Field("framed", "check", "Adjust framing", "frame" in options, visible=svg),
-        Field("pan_x", "number", "Pan across", frame[0], lo=-100, hi=100, decimals=2,
-              visible=lambda f: svg(f) and f.value("framed")),
-        Field("pan_y", "number", "Pan up", frame[1], lo=-100, hi=100, decimals=2,
-              visible=lambda f: svg(f) and f.value("framed")),
-        Field("zoom", "number", "Zoom", frame[2], lo=0.01, hi=100, decimals=2,
-              visible=lambda f: svg(f) and f.value("framed")),
-        Field("width", "number", "Paper width", paper[0], lo=1, hi=10000, suffix=" mm",
-              visible=lambda f: svg(f) and f.value("size") == "custom"),
-        Field("height", "number", "Paper height", paper[1], lo=1, hi=10000, suffix=" mm",
-              visible=lambda f: svg(f) and f.value("size") == "custom"),
-        Field("scale", "number", "Scale 1 ∶", options.get("scale", 100), lo=1, hi=100000,
-              visible=lambda f: f.value("format") == "svg"),
         Field("unit", "choice", "Units", options.get("unit", "mm"), options=["mm", "cm", "m", "in", "ft"],
               visible=lambda f: f.value("format") == "stl"),
         Field("destination", "path", "Destination", record.get("destination", ""), pick="save",
@@ -173,9 +133,84 @@ def export_form(win, key=None, one_off=False):
         buttons.append(("save", "Save delivery"))
     form = Form("Export" if one_off else "Delivery", fields, buttons=buttons, default=buttons[-1][0],
                 on_done=done, on_change=changed, validate=check)
+
+    def preview(ticket):
+        import time
+        from core import progress
+        from views.svg_export import preview_pixels
+        active = win._active_view() if hasattr(win, "_active_view") else win.viewport
+        record = unpack(form.values())
+        job = None
+        started = time.monotonic()
+
+        def report(fraction):
+            nonlocal job
+            if form.closed or not svg.preview_current(ticket) or win.viewport.history is not history:
+                raise InterruptedError
+            if job is None:
+                if time.monotonic() - started < PREVIEW_JOB_DELAY:
+                    return
+                job = chrome_dialogs.Job(win, "SVG preview", on_cancel=lambda: None)
+            _report_job(win, history, job, fraction)
+            if form.closed or not svg.preview_current(ticket):
+                raise InterruptedError
+
+        try:
+            report(0)
+            with progress.reporting(report):
+                text = deliveries.preview_svg(history.scene, record, camera=active.camera,
+                                              **_svg_context(win, active, history.scene, record, preview=True))
+            return preview_pixels(text)
+        except InterruptedError:
+            if job is not None:
+                job.cancel()
+            raise
+        except Exception as exc:
+            if job is not None:
+                job.end(failed=True, detail=str(exc))
+            raise
+        finally:
+            if job is not None:
+                job.end()
+
     from ingetrazo_render import show_delivery_form
-    show_delivery_form(win, form, one_off)
+    show_delivery_form(win, form, one_off, svg, preview)
     return form
+
+
+def _svg_context(win, active, scene, record, preview=False):
+    ctx = {}
+    if record["options"].get("paper") == "screen":
+        viewport = chrome_dialogs.view_of(win) or active
+        ctx["screen_mm"] = [viewport.width() * 25.4 / 96, viewport.height() * 25.4 / 96]
+    if record["options"].get("picture"):
+        def picture(axes, frame):
+            from core.vista_caras import view_rect
+            from views.svg_export import EXPORT_IMAGE_PX, PREVIEW_IMAGE_PX, framed
+            from contextlib import nullcontext
+            renderer = chrome_dialogs.view_of(win) or active
+            old = scene.show_axes
+            scene.show_axes = old and axes
+            try:
+                with framed(active.camera, frame) if frame else nullcontext():
+                    image = renderer.render_image(PREVIEW_IMAGE_PX if preview else EXPORT_IMAGE_PX, overlays=False, sharp_shadows=True)
+                    return image, view_rect(active.camera)
+            finally:
+                scene.show_axes = old
+        ctx["svg_picture"] = picture
+    return ctx
+
+
+def _report_job(win, history, job, fraction):
+    job.update(fraction)
+    if chrome_dialogs.in_shell():
+        from app_shell.modal import tick
+        tick()
+    else:
+        from PySide6.QtWidgets import QApplication
+        QApplication.processEvents()
+    if job.cancelled or win.viewport.history is not history:
+        raise InterruptedError("Delivery cancelled")
 
 
 def enqueue(win, key, record):
@@ -192,37 +227,9 @@ def enqueue(win, key, record):
     if record["format"] == "pdf":
         from views.wgpu_sheets import composer_for
         ctx["pdf_writer"] = lambda p, sheets: composer_for(win).export_all_pdf(p, sheets)
-    if record["format"] == "svg" and record["options"].get("paper") == "screen":
-        viewport = chrome_dialogs.view_of(win) or active
-        ctx["screen_mm"] = [viewport.width() * 25.4 / 96, viewport.height() * 25.4 / 96]
-    if record["format"] == "svg" and record["options"].get("picture"):
-        def picture(axes, frame):
-            from core.vista_caras import view_rect
-            from views.svg_export import EXPORT_IMAGE_PX, framed
-            from contextlib import nullcontext
-            renderer = chrome_dialogs.view_of(win) or active
-            scene = history.scene
-            old = scene.show_axes
-            scene.show_axes = old and axes
-            try:
-                with framed(active.camera, frame) if frame else nullcontext():
-                    image = renderer.render_image(EXPORT_IMAGE_PX, overlays=False, sharp_shadows=True)
-                    return image, view_rect(active.camera)
-            finally:
-                scene.show_axes = old
-        ctx["svg_picture"] = picture
+    if record["format"] == "svg":
+        ctx.update(_svg_context(win, active, history.scene, record))
     steps = deliveries.write_steps(history.scene, record, **ctx)
-
-    def report(fraction):
-        job.update(fraction)
-        if chrome_dialogs.in_shell():
-            from app_shell.modal import tick
-            tick()
-        else:
-            from PySide6.QtWidgets import QApplication
-            QApplication.processEvents()
-        if job.cancelled or win.viewport.history is not history:
-            raise InterruptedError("Delivery cancelled")
 
     def advance():
         if not job.cancelled and win.viewport.history is not history:
@@ -230,7 +237,7 @@ def enqueue(win, key, record):
         if not job.cancelled and win.viewport.history is history:
             try:
                 from core import progress
-                with progress.reporting(report):
+                with progress.reporting(lambda f: _report_job(win, history, job, f)):
                     fraction, phase = next(steps)
             except StopIteration:
                 if key in deliveries.records(history.scene):

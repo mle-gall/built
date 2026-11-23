@@ -340,3 +340,100 @@ def test_native_f3_finds_and_runs_a_misspelled_command(tmp_path):
               if line.startswith("[built] state ")]
     assert result.returncode == 0 and [s["large_sheet"] for s in states[:2]] == ["cutlist", ""], log
     assert all(not s["errors"] and not s["blocked_widgets"] for s in states), log
+
+
+@pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists()
+                    or __import__("sys").platform != "darwin", reason="requires the native macOS menu")
+def test_native_menu_search_and_persisted_keyboard_binding(tmp_path):
+    from PySide6.QtCore import QSettings
+    from core.scene import Scene
+    from formats.igz import save_scene
+    from views.shortcuts import _store_key
+    model = tmp_path / "empty.built"
+    save_scene(Scene(), model)
+    profile, home = tmp_path / "profile", tmp_path / "home"
+    config = profile / "IngeTrazo"
+    config.mkdir(parents=True)
+    home.mkdir()
+    settings = QSettings(str(config / "IngeTrazo.ini"), QSettings.IniFormat)
+    settings.setValue("shortcuts/" + _store_key("menu:cutlist"), "Ctrl+Shift+F9")
+    settings.sync()
+    steps = tmp_path / "menu-commands"
+    steps.write_text("wait 800\nkey escape\nkey f9 cmd+shift\nwait 350\nstate\nkey escape\n"
+                     "key f3\nwait 200\ntype new window\nwait 300\nkey enter\nwait 800\nstate\nquit\n")
+    result = run([str(BIN), "--root", str(ROOT), "--venv", str(ROOT / ".venv"), "--new-instance",
+                  "--size", "900x700", "--script", str(steps), str(model)], home=home, settings=profile,
+                 env=dict(os.environ, BUILT_ANSWERS="escape"), capture_output=True, text=True, timeout=60)
+    log = result.stdout + result.stderr
+    states = [json.loads(s.removeprefix("[built] state ")) for s in log.splitlines() if s.startswith("[built] state ")]
+    assert result.returncode == 0 and states[0]["large_sheet"] == "cutlist", log
+    assert states[1]["windows"] == 2 and all(not s["errors"] for s in states), log
+
+
+@pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
+                    reason="requires a built window and BUILT_WINDOW_TESTS=1")
+def test_native_ai_connection_edits_plugin_model(tmp_path):
+    from PySide6.QtCore import QSettings
+
+    home, profile = tmp_path / "home", tmp_path / "settings"
+    home.mkdir()
+    steps = tmp_path / "ai-settings"
+    steps.write_text("wait 650\nmenu prefs\nwait 350\nclick 115 353\nwait 200\n"
+                     "click 620 263\ntype fixture-model\nkey enter\nwait 250\nstate\n"
+                     "key escape\nwait 300\nstate\nquit\n")
+    result = run([str(BIN), "--root", str(ROOT), "--new-instance", "--size", "1000x720",
+                  "--script", str(steps)], home=home, settings=profile, capture_output=True,
+                 text=True, timeout=60)
+    states = [json.loads(s.removeprefix("[built] state ")) for s in result.stdout.splitlines()
+              if s.startswith("[built] state ")]
+    assert result.returncode == 0 and not any(s["errors"] for s in states), result.stderr
+    assert [s["large_sheet"] for s in states[:2]] == ["settings", "start"]
+    store = QSettings(str(profile / "IngeTrazo" / "IngeTrazo.ini"), QSettings.IniFormat)
+    assert store.value("ia/modelo") == "fixture-model"
+
+
+@pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
+                    reason="requires a built window and BUILT_WINDOW_TESTS=1")
+def test_native_svg_preview_and_delivery_edit(tmp_path):
+    from PySide6.QtGui import QImage
+    from core import deliveries
+    from core.history import History
+    from core.scene import Scene
+    from formats.igz import load_into, save_scene
+    from tests.test_ifc_export import _tagged_wall_scene
+
+    initial, saved = tmp_path / "wall.built", tmp_path / "edited.built"
+    drawing = tmp_path / "wall.svg"
+    scene = _tagged_wall_scene()
+    key = deliveries.create_delivery(History(scene), dict(name="Wall drawing", format="svg",
+        scope="visible", destination=str(tmp_path / "named.svg"), options={"paper": [297, 210]}))["key"]
+    save_scene(scene, initial)
+    venv = fixture_venv(tmp_path,
+        f"from app_shell import native\nnative.save_file = lambda *args: {str(drawing)!r}\n")
+    steps = tmp_path / "steps"
+    steps.write_text("wait 700\nkey escape\nmenu delivery_export\nwait 650\nclick 630 208\n"
+                     "wait 450\nclick 470 377\nwait 450\nclick 843 269\nwait 250\n"
+                     "click 260 329\nwait 900\ncapture one-off\nstate\nclick 392 127\n"
+                     "wait 650\nstate\nclick 1160 72\nwait 600\nclick 885 107\n"
+                     "wait 120\nclick 890 222\nwait 650\nclick 260 329\nwait 900\n"
+                     "capture named\nstate\ndrag 990 370 1030 380 left 8\nwait 600\n"
+                     f"key enter\nwait 400\nstate\nmenu save_to:{saved}\nwait 600\nquit\n")
+    result = run([str(BIN), "--root", str(ROOT), "--venv", str(venv), "--new-instance",
+                  "--size", "1280x800", "--shots", str(tmp_path), "--script", str(steps), str(initial)],
+                 env=dict(os.environ, BUILT_ANSWERS="escape,cmd-d,cmd-d"),
+                 capture_output=True, text=True, timeout=90)
+    log = result.stdout + result.stderr
+    assert result.returncode == 0 and "Traceback" not in log, log
+    states = [json.loads(line.removeprefix("[built] state ")) for line in log.splitlines()
+              if line.startswith("[built] state ")]
+    assert [s["large_sheet"] for s in states[:4]] == ["export", "", "delivery", ""], log
+    assert all(not s["errors"] and not s["blocked_widgets"] for s in states), log
+    for name in ("one-off", "named"):
+        frame = QImage(str(tmp_path / f"{name}.png"))
+        assert not frame.isNull()
+        assert frame.pixelColor(int(frame.width() * .79), int(frame.height() * .45)).lightness() > 230
+    assert "<path" in drawing.read_text()
+    edited = Scene()
+    load_into(edited, saved)
+    frame = deliveries.records(edited)[key]["options"]["frame"]
+    assert frame[0] < 0 and frame[1] > 0 and frame[2] == 1

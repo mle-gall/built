@@ -37,6 +37,7 @@ pub mod kit;
 #[cfg(target_os = "macos")]
 mod system_fonts;
 mod gallery;
+pub mod command_palette;
 /// The tool rail's deterministic layout (two columns, three, then scroll).
 mod rail;
 /// The value field on the geometry and its readback after Enter (B1).
@@ -128,6 +129,10 @@ pub struct Ui {
     /// The command palette (⌘K / F3): open, query, results (label, path, shortcut, enabled), picked row.
     cmd_open: bool,
     cmd_query: String,
+    cmd_scope: String,
+    cmd_anchor: Option<Pos2>,
+    cmd_extra: Vec<(String, bool, bool)>,
+    cmd_canvas: bool,
     cmd_results: Vec<(String, String, String, bool)>,
     cmd_at: usize,
     cmd_focus: bool,
@@ -304,6 +309,10 @@ impl Ui {
             palette_items: Vec::new(),
             cmd_open: false,
             cmd_query: String::new(),
+            cmd_scope: String::new(),
+            cmd_anchor: None,
+            cmd_extra: Vec::new(),
+            cmd_canvas: false,
             cmd_results: Vec::new(),
             cmd_at: 0,
             cmd_focus: false,
@@ -537,11 +546,7 @@ impl Ui {
         self.projects = Some((left, docs));
     }
     pub fn open_commands(&mut self) {
-        self.cmd_open = true;
-        self.cmd_query.clear();
-        self.cmd_at = 0;
-        self.cmd_focus = true;
-        self.actions.push("cmdq:".into());
+        self.start_commands(String::new(), String::new());
     }
     pub fn set_command_results(&mut self, results: Vec<(String, String, String, bool)>) {
         self.cmd_results = results;
@@ -681,6 +686,11 @@ impl Ui {
         if self.cmd_open && pressed {
             match name {
                 "Escape" => { self.cmd_open = false; self.ctx.memory_mut(|m| m.stop_text_input()); return true; }
+                "Backspace" if self.cmd_query.is_empty() && !self.cmd_scope.is_empty() => {
+                    self.cmd_scope.clear();
+                    self.actions.extend(["cmdscope:".into(), "cmdq:".into()]);
+                    return true;
+                }
                 "ArrowDown" | "ArrowUp" | "PageDown" | "PageUp" => {
                     let forward = matches!(name, "ArrowDown" | "PageDown");
                     let count = if name.starts_with("Page") { 10 } else { 1 };
@@ -1238,50 +1248,6 @@ impl Ui {
                 });
             });
         if let Some(a) = clicked { self.actions.push(a); }
-    }
-
-    /// ⌘K / F3: every command of the window by name, at the top of the model.
-    fn command_palette(&mut self, ctx: &egui::Context, screen: Rect) {
-        if !self.cmd_open { return; }
-        let mut run: Option<usize> = None;
-        let mut changed = false;
-        egui::Area::new(egui::Id::new("commands"))
-            .pivot(egui::Align2::CENTER_TOP)
-            .fixed_pos(pos2(screen.center().x, TOP_H + 60.0))
-            .order(egui::Order::Tooltip)
-            .show(ctx, |ui| {
-                glass(Surface::Raised).inner_margin(Margin::same(8)).show(ui, |ui| {
-                    ui.set_width(520.0);
-                    ui.set_max_width(520.0);
-                    let r = ui.add(kit::field(&mut self.cmd_query)
-                        .hint_text(egui::RichText::new("Search commands").color(FAINT))
-                        .font(body()).margin(Margin::symmetric(10, 7))
-                        .desired_width(520.0 - 20.0 - 4.0).clip_text(true));
-                    if self.cmd_focus { r.request_focus(); self.cmd_focus = false; }
-                    if r.changed() { changed = true; self.cmd_at = 0; }
-                    ui.add_space(SPACE_S);
-                    ui.spacing_mut().item_spacing = vec2(0.0, 1.0);
-                    egui::ScrollArea::vertical().max_height((CONTROL_H + 1.0) * 10.0).show(ui, |ui| {
-                        for (i, (label, path, key, enabled)) in self.cmd_results.iter().enumerate() {
-                            let row = command_row(ui, label, path, key, *enabled, self.cmd_at == i);
-                            if self.cmd_scroll && i == self.cmd_at { row.scroll_to_me(None); }
-                            if *enabled && row.clicked() { run = Some(i); }
-                            if *enabled && row.hovered() && ui.input(|i| i.pointer.delta() != Vec2::ZERO) {
-                                self.cmd_at = i;
-                            }
-                        }
-                    });
-                    self.cmd_scroll = false;
-                    if self.cmd_results.is_empty() && !self.cmd_query.is_empty() {
-                        ui.label(egui::RichText::new("No command matches").font(body()).color(FAINT));
-                    }
-                });
-            });
-        if changed { self.actions.push(format!("cmdq:{}", self.cmd_query)); }
-        if let Some(i) = run {
-            self.cmd_open = false;
-            self.actions.push(format!("cmdrun:{i}"));
-        }
     }
 
     /// The one open menu: documents, workspace or scenes (View has its own).
@@ -2440,6 +2406,7 @@ impl Ui {
         raw.viewports.entry(egui::ViewportId::ROOT).or_default().native_pixels_per_point = Some(scale * zoom);
         let ctx = self.ctx.clone();
         let out = ctx.run(raw, |ctx| {
+            if self.cmd_canvas { self.command_palette(ctx, screen); return; }
             if let Some(page) = &mut self.gallery { page.show(ctx); return; }
             self.panels.popup_layers.clear();
             self.top_bar(ctx, screen);

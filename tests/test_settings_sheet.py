@@ -110,7 +110,7 @@ def test_sections_in_two_groups(win):
     side = sheet["side"]
     labels = [(r.get("kind", ""), r["label"]) for r in side]
     assert labels == [("caption", "Built · this Mac"), ("", "General"), ("", "Navigation"),
-                      ("", "Display"), ("", "3D mouse"), ("", "Import"), ("", "Keyboard"),
+                      ("", "Display"), ("", "3D mouse"), ("", "Import"), ("", "Keyboard"), ("", "AI assistant"),
                       ("caption", "This model"), ("", "Units"),
                       ("", "Dimension style"), ("", "Location & north")]
     assert [r["id"] for r in side if r.get("on")] == ["general"]
@@ -465,3 +465,24 @@ def test_move_origin_confirmation_and_undo_restore_survey_datum(win, monkeypatch
     act(win, "verb", "site_apply")
     assert (scene.georef.lat, scene.georef.north, scene.georef.alt) == (46, 30, 0)
     assert win.viewport.history.undo() and scene.georef is old
+
+def test_ai_connection_reads_and_writes_the_plugins_provider_slots(win):
+    settings = QSettings()
+    settings.setValue("ia/proveedor", "groq")
+    settings.setValue("ia/api_key", "fixture-groq")
+    settings.setValue("ia/modelo", "first")
+    settings.setValue("ia/claves/openai", "fixture-openai")
+    settings.setValue("ia/modelos/openai", "second")
+    ss.show(win, page="ai")
+    owner = cs.current(win)
+    wire = fields(frame(win))
+    assert wire["ia/api_key"][8] & chrome_forms.PASSWORD
+    for key, value in [("ia/proveedor", "openai"), ("ia/modelo", "updated"),
+                       ("ia/api_key", "fixture-replacement"), ("ia/ollama_url", "http://localhost:3210")]:
+        owner.apply(owner._rows[key], value)
+        frame(win)
+    assert settings.value("ia/claves/groq") == "fixture-groq"
+    assert settings.value("ia/modelos/groq") == "first"
+    assert settings.value("ia/claves/openai") == settings.value("ia/api_key") == "fixture-replacement"
+    assert settings.value("ia/modelos/openai") == settings.value("ia/modelo") == "updated"
+    assert settings.value("ia/ollama_url") == "http://localhost:3210"

@@ -385,6 +385,49 @@ impl PreferencePage {
     }
 }
 
+/// Apply an edit to the connection slots consumed by the AI plugin. An explicit
+/// provider has its own saved model and credential. Auto uses key detection.
+#[pyfunction]
+pub fn edit_ai_connection(st: &Bound<'_, PyAny>, key: &str, value: &str, detect: &Bound<'_, PyAny>) -> PyResult<()> {
+    let get = |k: &str, default: &str| -> PyResult<String> {
+        st.call_method1("value", (k, default))?.extract()
+    };
+    let put = |k: &str, v: &str| st.call_method1("setValue", (k, v)).map(|_| ());
+    let provider = get("ia/proveedor", "auto")?;
+    let slot = |provider: &str, api_key: &str| -> PyResult<String> {
+        if provider == "auto" { detect.call1((api_key.trim(),))?.extract() } else { Ok(provider.to_owned()) }
+    };
+    match key {
+        "ia/proveedor" => {
+            if value == provider { return Ok(()); }
+            let api_key = get("ia/api_key", "")?;
+            let old = slot(&provider, &api_key)?;
+            if old != "ollama" {
+                let model = get("ia/modelo", "")?;
+                if !api_key.trim().is_empty() { put(&format!("ia/claves/{old}"), &api_key)?; }
+                if !model.trim().is_empty() { put(&format!("ia/modelos/{old}"), model.trim())?; }
+            }
+            if value != "auto" {
+                put("ia/api_key", &get(&format!("ia/claves/{value}"), "")?)?;
+                put("ia/modelo", &get(&format!("ia/modelos/{value}"), "")?)?;
+            }
+            put(key, value)
+        }
+        "ia/api_key" | "ia/modelo" => {
+            let api_key = if key == "ia/api_key" { value.into() } else { get("ia/api_key", "")? };
+            let owner = slot(&provider, &api_key)?;
+            let value = if key == "ia/modelo" { value.trim() } else { value };
+            if owner != "ollama" {
+                let group = if key == "ia/api_key" { "claves" } else { "modelos" };
+                put(&format!("ia/{group}/{owner}"), value)?;
+            }
+            put(key, value)
+        }
+        "ia/ollama_url" => put(key, value.trim()),
+        _ => Err(pyo3::exceptions::PyValueError::new_err("Unknown AI connection setting")),
+    }
+}
+
 const SECTIONS: &[(&str, &str, &str, &str)] = &[
     ("general", "General", "mac", "Applies at once."),
     (
@@ -417,6 +460,7 @@ const SECTIONS: &[(&str, &str, &str, &str)] = &[
         "mac",
         "Pick a command and change its keys. Changes apply at once.",
     ),
+    ("ai", "AI assistant", "mac", "Applies at once."),
     (
         "units",
         "Units",

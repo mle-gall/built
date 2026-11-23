@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """Shared host action metadata for search, tooltips and Keyboard settings."""
-import html
 import re
 
 from PySide6.QtCore import QSettings, Qt
@@ -78,8 +77,7 @@ def _top_menus(window, subs: dict | None = None) -> list:
 def menu_paths(window) -> dict:
     """``{action_key: "Edit ▸ Unhide"}`` for the actions in the menu bar;
     an action found only on a toolbar gets the toolbar's name («Draw»)."""
-    host_rows = vars(window).get("_ui_commands") or ()
-    paths = {action_key(action): path for _, path, _, action in host_rows}
+    paths = dict(vars(window).get("_command_paths", {}))
     subs = _submenus(window)
 
     def walk(menu: QMenu, trail: list) -> None:
@@ -175,6 +173,21 @@ class Command:
             string_search.Item(trail + [name]),
             string_search.Item([source_of(p) for p in trail] + [english]))
         self.tip = _description(action, name)
+        if not self.tip:
+            from ingetrazo_render import command_description
+            if description := command_description(english):
+                self.tip = tr(description)
+
+
+def visible(action):
+    from shiboken6 import isValid
+    return isValid(action) and action.isVisible()
+
+
+def run(action):
+    if visible(action) and action.isEnabled():
+        remember(action)
+        action.trigger()
 
 
 def _description(action: QAction, name: str) -> str:
@@ -201,24 +214,6 @@ def _description(action: QAction, name: str) -> str:
 _LEAD = re.compile(r"\s*(\([^()]*\))?\s*([—–:\-]\s*|$)")
 
 
-def tooltip_html(cmd: Command) -> str:
-    """Blender's tooltip: the name in bold, what it does, the keys —
-    wrapped to a readable width, never cut."""
-    parts = [f"<b>{html.escape(cmd.name)}</b>"]
-    if cmd.tip:
-        parts.append(html.escape(cmd.tip))
-    if cmd.keys:
-        parts.append("<span style='color:gray'>" + html.escape(
-            tr("Shortcut: {keys}", keys=cmd.keys)) + "</span>")
-    body = "<br>".join(parts)
-    if len(cmd.tip) > 60:
-        body = f"<table width='{_TIP_WIDTH}'><tr><td>{body}</td></tr></table>"
-    return "<qt>" + body + "</qt>"
-
-
-_TIP_WIDTH = 380
-
-
 def _signature(action: QAction, path: str) -> tuple:
     """What a Command is worked out from: when none of it changed, the
     one made at the last opening still holds."""
@@ -235,6 +230,8 @@ def commands(window, scope: str = "") -> list:
     in it — but a command whose text, tips, keys and path are unchanged
     reuses what the last opening worked out: splitting ~200 labels in
     two languages took most of the ~100 ms F3 needed to appear."""
+    if sync := getattr(type(window), "refresh_commands", None):
+        sync(window)
     paths = menu_paths(window)
     cache = getattr(window, "_command_cache", None) or {}
     fresh: dict = {}

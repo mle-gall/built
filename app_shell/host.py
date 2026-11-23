@@ -496,17 +496,15 @@ class Host:
         self.request_frame()
         return True
 
+    def refresh_commands(self):
+        self.window.refresh_commands()
+
     def _shortcut(self, key, modifiers):
         from PySide6.QtGui import QKeySequence
         try:
             combo = QKeySequence(int(modifiers) | int(key))
         except Exception:
             return False
-        from ingetrazo_render import view_shortcut
-        from views.view_commands import run
-        command = view_shortcut(combo.toString(QKeySequence.PortableText))
-        if command:
-            return run(self.window, command)
         from PySide6.QtGui import QAction
         for action in self.window.findChildren(QAction):
             if action.isEnabled() and any(seq.matches(combo) == QKeySequence.ExactMatch for seq in action.shortcuts()):

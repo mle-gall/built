@@ -2279,14 +2279,15 @@ class MainWindow(WorksessionMixin, QMainWindow):
         self._build_language_menu(window_menu)
 
         # Blender's F3 / a command Search: one box that runs any command
-        # by name (views/command_search.py). Made BEFORE the plugins load,
+        # by name (views/command_palette.py). Made BEFORE the plugins load,
         # so a plugin asking for F3 finds it taken; on the window too, so
         # it answers with the menu bar hidden (clean screen).
         search_action = QAction(tr("Search commands…"), self)
         search_action.setStatusTip(tr(
             "Find any command by typing part of its name, and run it."))
         search_action.setObjectName("command_search")
-        search_action.setShortcut(QKeySequence("F3"))
+        search_action.setShortcuts([QKeySequence("F3"), QKeySequence("Ctrl+K")])
+        self._act_search_commands = search_action
         search_action.triggered.connect(self._on_command_search)
         self.addAction(search_action)
 
@@ -2336,7 +2337,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         about_action.triggered.connect(self._on_about)
         help_menu.addAction(about_action)
         # A letter typed in an open menu searches that menu (Blender 4).
-        from views.command_search import install_menu_typing
+        from views.command_palette import install_menu_typing
         install_menu_typing(self)
 
     # ---- Language -----------------------------------------------------------
@@ -4034,7 +4035,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         tool.on_activate(self.viewport)
 
     def _on_command_search(self) -> None:
-        from views.command_search import open_search
+        from views.command_palette import open_search
         open_search(self)
 
     def _on_check_updates(self) -> None:
@@ -7740,7 +7741,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             self._to_sheets()
 
     def command_search_area(self):
-        """Where the command search box fits (views/command_search.py):
+        """Where the command search box fits (views/command_palette.py):
         the viewport in front, not the project tabs above it."""
         return self.viewport
 

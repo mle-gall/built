@@ -1,4 +1,12 @@
 {
+  "ai": [
+    ["connection", "Connection", [
+      {"id": "ia/proveedor", "kind": "choice", "label": "Provider"},
+      {"id": "ia/modelo", "kind": "edit", "label": "Model"},
+      {"id": "ia/api_key", "kind": "edit", "label": "API key", "password": true},
+      {"id": "ia/ollama_url", "kind": "edit", "label": "Ollama URL"}
+    ]]
+  ],
   "general": [
     ["look", "Look", [
       {"id": "language", "kind": "choice", "label": "Language", "restart": "Language", "tip": "Takes effect at the next start."},

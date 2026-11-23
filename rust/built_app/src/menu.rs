@@ -18,10 +18,45 @@ use muda::{
     accelerator::Accelerator, Menu, MenuItem, PredefinedMenuItem, Submenu,
 };
 
+pub const EMPTY_RECENT: &str = "(no recent documents)";
+
 pub struct Menus {
     // Kept alive for the life of the app: dropping a muda menu removes it.
     _bar: Menu,
     recent: Submenu,
+}
+
+type InstalledIds = std::collections::HashMap<(String, String), String>;
+
+thread_local! { static COMMAND_IDS: std::cell::RefCell<InstalledIds> = Default::default(); }
+
+pub fn command_id(path: &str, label: &str) -> Option<String> {
+    COMMAND_IDS.with(|ids| ids.borrow().get(&(path.into(), label.into())).cloned())
+}
+
+fn index_commands(rows: Vec<muda::MenuItemKind>, trail: &mut Vec<String>, ids: &mut InstalledIds) {
+    for row in rows {
+        match row {
+            muda::MenuItemKind::Submenu(sub) => {
+                trail.push(sub.text());
+                index_commands(sub.items(), trail, ids);
+                trail.pop();
+            }
+            muda::MenuItemKind::MenuItem(item) => {
+                let id = &item.id().0;
+                if !id.starts_with("recent:") || id == "recent:clear" {
+                    ids.insert((trail.join(" ▸ "), item.text()), id.clone());
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn index_bar(bar: &Menu) {
+    let mut ids = InstalledIds::new();
+    index_commands(bar.items(), &mut Vec::new(), &mut ids);
+    COMMAND_IDS.with(|slot| slot.replace(ids));
 }
 
 fn item(id: &str, text: &str, accel: Option<&str>) -> MenuItem {
@@ -60,7 +95,7 @@ pub fn build() -> muda::Result<Menus> {
             &item("quit", "Quit Built", Some("super+KeyQ")),
         ],
     )?;
-    let recent = Submenu::with_items("Open Recent", true, &[&MenuItem::new("(no recent documents)", false, None)])?;
+    let recent = Submenu::with_items("Open Recent", true, &[&MenuItem::new(EMPTY_RECENT, false, None)])?;
     let imports: Vec<MenuItem> = IMPORTS.iter().map(|(id, label)| item(id, label, None)).collect();
     let import_refs: Vec<&dyn muda::IsMenuItem> = imports.iter().map(|i| i as &dyn muda::IsMenuItem).collect();
     let import = Submenu::with_items("Import", true, &import_refs)?;
@@ -150,6 +185,7 @@ pub fn build() -> muda::Result<Menus> {
         bar.init_for_nsapp();
         window.set_as_windows_menu_for_nsapp();
     }
+    index_bar(&bar);
     Ok(Menus { _bar: bar, recent })
 }
 
@@ -161,7 +197,7 @@ impl Menus {
             let _ = self.recent.remove_at(0);
         }
         if paths.is_empty() {
-            let _ = self.recent.append(&MenuItem::new("(no recent documents)", false, None));
+            let _ = self.recent.append(&MenuItem::new(EMPTY_RECENT, false, None));
             return;
         }
         for (i, p) in paths.iter().enumerate() {
@@ -171,5 +207,6 @@ impl Menus {
         }
         let _ = self.recent.append(&PredefinedMenuItem::separator());
         let _ = self.recent.append(&item("recent:clear", "Clear Menu", None));
+        index_bar(&self._bar);
     }
 }

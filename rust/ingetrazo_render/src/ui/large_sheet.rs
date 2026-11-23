@@ -548,6 +548,13 @@ impl Draw<'_> {
                     picture(ui, r, self.icons.get(&b.icon), &b.hex, 10);
                     ui.add_space(SPACE_M);
                 }
+                "svg_preview" => {
+                    let w = ui.available_width().max(1.);
+                    if let Some((dx, dy, zoom)) = kit::svg_preview(ui, self.icons.get(&b.icon),
+                            &b.text, vec2(w, w)) {
+                        self.out.push(format!("svg_frame{SEP}{dx}{SEP}{dy}{SEP}{zoom}"));
+                    }
+                }
                 "table" => {
                     let columns = b.cells.first().map_or(1, |r| r.len().max(1));
                     let column_width = (ui.available_width() / columns as f32 - SPACE_L).max(55.0);
@@ -890,8 +897,9 @@ impl Ui {
         self.lsheet.rect.filter(|_| self.lsheet.open).map(|r| (r.min.x, r.min.y, r.width(), r.height()))
     }
 
-    /// The large sheet's id and focused item (tests, harnesses).
+    /// The active sheet only. The retained spec paints the closing animation.
     pub fn large_sheet_state(&self) -> (String, String, String) {
+        if !self.lsheet.open { return Default::default(); }
         (self.lsheet.id(), self.lsheet.focused.clone().unwrap_or_default(), self.lsheet.search.clone())
     }
 
@@ -1410,6 +1418,17 @@ mod tests {
         s.set(None);
         assert!(!s.open);
         assert!(s.spec.is_some(), "kept while it animates out");
+    }
+
+    #[test]
+    fn closed_sheet_state_is_empty_before_its_exit_animation_finishes() {
+        let Some(mut ui) = super::super::test_chrome() else { return };
+        ui.set_large_sheet(&spec_json()).unwrap();
+        assert_eq!(ui.large_sheet_state().0, "t");
+        ui.set_large_sheet("").unwrap();
+        assert!(ui.lsheet.spec.is_some());
+        assert!(!ui.large_sheet_shown());
+        assert_eq!(ui.large_sheet_state(), Default::default());
     }
 
     #[test]

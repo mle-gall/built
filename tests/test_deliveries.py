@@ -194,3 +194,67 @@ def test_running_export_observes_cancellation(tmp_path, monkeypatch):
         callbacks.pop(0)()
     assert job.cancelled and not win._chrome_jobs
     assert target.read_text() == "previous" and deliveries.records(s)[key]["last_run"] is None
+
+
+@pytest.mark.parametrize("one_off", [True, False], ids=["export", "delivery"])
+def test_svg_sheet_previews_the_page_it_writes(one_off, tmp_path, monkeypatch):
+    from views import chrome_sheet as sheet
+    from tests.test_chrome_sheet import View
+
+    scene = _tagged_wall_scene()
+    camera = OrbitCamera()
+    camera.perspective = False
+    viewport = SimpleNamespace(scene=scene, camera=camera, history=History(scene))
+    view = View()
+    view.width, view.height = lambda: 960, lambda: 640
+    win = SimpleNamespace(viewport=viewport, _doc=SimpleNamespace(stand_in=view))
+    callbacks = []
+    monkeypatch.setattr(dock.QTimer, "singleShot", lambda delay, fn: callbacks.append(fn))
+    monkeypatch.setattr(sheet, "_arm_watchdog", lambda *args: None)
+
+    form = dock.export_form(win, one_off=one_off)
+    sid = "export" if one_off else "delivery"
+
+    def act(*parts):
+        sheet.before_frame(view, win)
+        sheet.action(win, sheet.SEP.join([sid, *parts]))
+        sheet.before_frame(view, win)
+
+    target = tmp_path / "wall.svg"
+    act("v", "format", str(deliveries.FORMATS.index("svg")))
+    act("v", "destination", str(target))
+    act("v", "size", "2")
+    act("v", "paper_preset", "1")
+    act("v", "fill", "3")
+    act("v", "svg_preview", "1")
+    assert not view.renderer.icons and not target.exists()
+    while callbacks:
+        callbacks.pop(0)()
+    sheet.before_frame(view, win)
+    block = view.renderer.sent[-1]["detail"]["blocks"][0]
+    assert (block["kind"], block["text"]) == ("svg_preview", "Thirds")
+    assert view.renderer.icons == ["delivery_svg_preview"]
+
+    act("v", "svg_guides", "4")
+    assert not callbacks
+    act("svg_frame", "0.1", "-0.2", "2")
+    assert callbacks
+    act("verb", "export" if one_off else "save")
+    assert form.closed and not sheet.shown(win)
+    while callbacks:
+        callbacks.pop(0)()
+    if one_off:
+        assert target.is_file() and not deliveries.records(scene)
+        options = dict(paper=[297, 210], frame=[-0.1, -0.2, 2], scale=100,
+                       faces=dict(materials=True, textures=False, as_view=True, shadows=False))
+        record = dict(format="svg", scope="whole", options=options)
+    else:
+        record, = deliveries.records(scene).values()
+        assert not target.exists() and "svg_guides" not in record["options"]
+        assert record["options"]["frame"] == [-0.1, -0.2, 2]
+        list(deliveries.write_steps(scene, record, camera=camera))
+    text = deliveries.preview_svg(scene, record, camera=camera)
+    assert text == target.read_text() and "<path" in text
+    from views.svg_export import preview_pixels
+    w, h, rgba = preview_pixels(text)
+    assert (w, h) == (800, 566) and len(rgba) == w * h * 4

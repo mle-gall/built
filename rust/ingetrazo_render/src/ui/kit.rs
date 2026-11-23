@@ -1516,6 +1516,55 @@ pub fn catalogue_grid(width: f32, ideal: f32) -> (usize, egui::Vec2) {
     (columns, vec2(card, card * 10. / 16.))
 }
 
+/// Fit the entire exported page in its well. Guides are chrome overlays.
+pub fn svg_preview(ui: &mut egui::Ui, texture: Option<&egui::TextureHandle>, guide: &str,
+                   size: egui::Vec2) -> Option<(f32, f32, f32)> {
+    let (well, response) = ui.allocate_exact_size(size, Sense::drag());
+    ui.painter().rect_filled(well, R_CONTROL, WELL);
+    let available = well.shrink(SPACE_S).size().max(vec2(1., 1.));
+    let pixels = texture.map_or(vec2(297., 210.), |tex| tex.size_vec2());
+    let page = Rect::from_center_size(well.center(), pixels * (available / pixels).min_elem());
+    ui.painter().rect_filled(page, 0, BRIGHT);
+    if let Some(tex) = texture {
+        egui::Image::new(tex).paint_at(ui, page);
+    }
+    let painter = ui.painter_at(page);
+    let line = |a, b| {
+        let points = [page.lerp_inside(a), page.lerp_inside(b)];
+        painter.line_segment(points, Stroke::new(2., WELL.gamma_multiply(0.55)));
+        painter.line_segment(points, Stroke::new(1., BRIGHT.gamma_multiply(0.8)));
+    };
+    let divisions: &[f32] = match guide {
+        "Thirds" => &[1. / 3., 2. / 3.],
+        "Golden section" => &[0.382, 0.618],
+        "Grid" => &[0.25, 0.5, 0.75],
+        _ => &[],
+    };
+    for &p in divisions {
+        line(vec2(0., p), vec2(1., p));
+        line(vec2(p, 0.), vec2(p, 1.));
+    }
+    if guide == "Diagonals" {
+        line(vec2(0., 0.), vec2(1., 1.));
+        line(vec2(1., 0.), vec2(0., 1.));
+    }
+    if guide == "Centre" {
+        let side = page.size().min_elem();
+        let arm = vec2(0.12 * side, 0.12 * side) / page.size();
+        let center = vec2(0.5, 0.5);
+        line(center - vec2(arm.x, 0.), center + vec2(arm.x, 0.));
+        line(center - vec2(0., arm.y), center + vec2(0., arm.y));
+        for pen in [Stroke::new(2., WELL.gamma_multiply(0.55)), Stroke::new(1., BRIGHT.gamma_multiply(0.8))] {
+            painter.circle_stroke(page.center(), side * 0.04, pen);
+        }
+    }
+    let drag = response.drag_delta() / page.size();
+    let wheel = if response.hovered() {
+        ui.input_mut(|i| std::mem::take(&mut i.smooth_scroll_delta.y))
+    } else { 0. };
+    (drag != egui::Vec2::ZERO || wheel != 0.).then(|| (drag.x, drag.y, (wheel / 300.).exp()))
+}
+
 /// A catalogue fact may contain an entire licence or a long local path.
 pub fn catalogue_fact(ui: &mut egui::Ui, label: &str, value: &str) -> Rect {
     let w = ui.available_width();

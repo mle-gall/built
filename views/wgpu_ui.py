@@ -2576,22 +2576,11 @@ def _run(win, actions, source_view=None) -> None:
         elif kind == "dockw":
             view = getattr(getattr(win, "_doc", None), "stand_in", None)
             keep_dock_width(view, arg)
-        elif kind == "cmdq":
+        elif kind in ("cmdscope", "cmdq", "cmdrun", "cmdshortcut"):
             view = getattr(getattr(win, "_doc", None), "stand_in", None)
             if view is not None:
-                _command_query(view, win, arg)
+                command_action(view, win, kind, arg)
                 view.update()
-        elif kind == "cmdrun":
-            view = getattr(getattr(win, "_doc", None), "stand_in", None)
-            hits = getattr(view, "_ui_cmd_hits", [])
-            i = int(arg or 0)
-            if 0 <= i < len(hits):
-                from shiboken6 import isValid
-                from views.command_metadata import remember
-                action = hits[i]
-                if isValid(action) and action.isVisible() and action.isEnabled():
-                    remember(action)
-                    action.trigger()
         elif kind == "proj":
             _project_action(win, arg)
         elif kind == "ptab":
@@ -2876,9 +2865,14 @@ _KEYS = {Qt.Key_PageUp: "PageUp", Qt.Key_PageDown: "PageDown", Qt.Key_Escape: "E
          Qt.Key_F: "F"}
 
 
-def _opens_commands(event) -> bool:
-    """⌘K, or F3 (the app's Search commands…)."""
-    return event.key() == Qt.Key_F3 or (event.key() == Qt.Key_K and bool(event.modifiers() & Qt.ControlModifier))
+def _opens_commands(view, event) -> bool:
+    from PySide6.QtGui import QKeySequence
+    window = view.window()
+    registry = vars(window).get("_registry_actions")
+    action = registry.get("command_search") if registry is not None else getattr(window, "_act_search_commands", None)
+    if action is None:
+        return False
+    return QKeySequence(event.key() | event.modifiers().value) in action.shortcuts()
 
 
 def _all_commands(win):
@@ -2886,18 +2880,42 @@ def _all_commands(win):
     return [(cmd.name, cmd.path, cmd.keys, cmd.action) for cmd in commands(win)]
 
 
+def command_action(view, win, verb, arg):
+    from views import command_metadata
+    if verb == "cmdscope":
+        view._ui_command_scope = arg
+        view._ui_command_owner = None
+    elif verb == "cmdq":
+        _command_query(view, win, arg)
+    elif verb in ("cmdrun", "cmdshortcut"):
+        hits = getattr(view, "_ui_cmd_hits", ())
+        i = int(arg)
+        if 0 <= i < len(hits):
+            action = hits[i]
+            if verb == "cmdrun":
+                command_metadata.run(action)
+            elif command_metadata.visible(action):
+                owner = win if hasattr(win, "open_preferences") else win.parentWidget()
+                if owner is not None:
+                    owner.open_preferences(shortcut_of=action)
+
+
 def _command_query(view, win, query) -> None:
-    from shiboken6 import isValid
     from views import command_metadata, wgpu_sheets
     workspace = wgpu_sheets.workspace_of(view)
     owner = workspace.composer if workspace is not None else win
     if not query or getattr(view, "_ui_command_owner", None) is not owner:
-        view._ui_command_pool = command_metadata.commands(owner)
+        view._ui_command_pool = command_metadata.commands(owner, getattr(view, "_ui_command_scope", ""))
         view._ui_command_owner = owner
-    live = [c for c in view._ui_command_pool if isValid(c.action) and c.action.isVisible()]
+    live = [c for c in view._ui_command_pool if command_metadata.visible(c.action)]
     hits = command_metadata.search(owner, query, pool=live)
     view._ui_cmd_hits = [c.action for c in hits]
     view.renderer.ui_set_command_results([(c.name, c.path, c.keys, c.action.isEnabled()) for c in hits])
+    detail = getattr(view.renderer, "ui_set_command_details", None)
+    if detail:
+        from PySide6.QtGui import QAction
+        detail([(c.tip, isinstance(c.action, QAction) and c.action.isChecked(), isinstance(c.action, QAction))
+                for c in hits])
 
 
 def _problem_key(view, event) -> int:
@@ -2919,12 +2937,12 @@ def claims_key(view, event) -> bool:
     large = chrome_sheet.claims_key(view, event)
     if large is not None:
         # The large sheet owns every key but the window's ⌘ shortcuts.
-        return large or _opens_commands(event)
+        return large or _opens_commands(view, event)
     if event.key() == Qt.Key_Escape:
         return True  # Reserve it for the chrome and viewport Escape router.
     if _reveal_shortcut(event) or _problem_key(view, event):
         return True
-    if _opens_commands(event):
+    if _opens_commands(view, event):
         return True
     name = _KEYS.get(event.key(), "")
     if view.renderer.ui_claims_key(name):
@@ -2937,7 +2955,7 @@ def key(view, event, pressed: bool) -> bool:
     """Offer a key to the chrome first. True: it was the chrome's."""
     if not getattr(view, "_ui_attached", False):
         return False
-    if _opens_commands(event):
+    if _opens_commands(view, event):
         if pressed:
             view.renderer.ui_open_commands()
             view.update()

@@ -112,6 +112,13 @@ def test_progress_event_during_open_does_not_autosave_partial_document():
     MainWindow._on_autosave_tick(opening)
 
 
+@pytest.mark.skipif(sys.platform != "darwin", reason="macOS Foundation data paths")
+def test_macos_suite_resolves_autosave_under_its_private_data_dir():
+    import os
+    assert autosave._app_data_base().resolve().is_relative_to(
+        Path(os.environ["CFFIXED_USER_HOME"]).resolve())
+
+
 def test_autosave_dir_follows_process_appdata_on_windows(tmp_path,
                                                           monkeypatch):
     """#1180: QStandardPaths resolves the roaming folder through the OS
