@@ -2,6 +2,7 @@
 mod timing;
 mod panic_log;
 mod overlay;
+mod commands;
 pub mod ui;
 mod inspector;
 mod glass;
@@ -2308,6 +2309,9 @@ impl Renderer {
                            elsewhere: Vec<(String, String, String)>, can_move: bool, pictures: bool) {
         if let Some(ui) = self.ui.as_mut() { ui.set_project_tabs(tabs, elsewhere, can_move, pictures); }
     }
+    fn ui_cluster_buttons(&self) -> Vec<(String, (f32, f32))> {
+        self.ui.as_ref().map_or_else(Vec::new, |ui| ui.cluster_buttons.clone())
+    }
     fn ui_project_tab_rects(&self) -> Vec<Option<(f32, f32, f32, f32)>> {
         self.ui.as_ref().map_or_else(Vec::new, |ui| ui.project_tab_rects())
     }
@@ -2701,6 +2705,13 @@ fn parallel_annotation_ray(eye: [f64; 3], forward: [f64; 3], point: [f64; 3]) ->
 
 #[pymodule]
 pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(commands::view_commands, m)?)?;
+    m.add_function(wrap_pyfunction!(commands::run_view_command, m)?)?;
+    m.add_function(wrap_pyfunction!(commands::command_chrome, m)?)?;
+    m.add_function(wrap_pyfunction!(commands::activate_view_command, m)?)?;
+    m.add_function(wrap_pyfunction!(commands::rail_layout, m)?)?;
+    m.add_function(wrap_pyfunction!(commands::leave_navigation, m)?)?;
+    m.add_function(wrap_pyfunction!(commands::view_shortcut, m)?)?;
     m.add("build_commit", env!("BUILT_COMMIT"))?;
     m.add_function(wrap_pyfunction!(parallel_annotation_ray, m)?)?;
     m.add_function(wrap_pyfunction!(preview_texture::preview_materials, m)?)?;

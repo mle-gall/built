@@ -131,6 +131,15 @@ def test_k_is_back_edges_and_the_style_remembers_it():
         holders = [a for a in w.findChildren(type(w._act_style_back_edges))
                    if a.shortcut().toString() == "K"]
         assert holders == [w._act_style_back_edges]
+        from views import view_commands
+        action = w._act_style_back_edges
+        before = w.active_style().back_edges
+        assert view_commands.run(w, "back_edges")
+        assert action.isChecked() == w.active_style().back_edges == (not before)
+        action.trigger()
+        assert w.active_style().back_edges == before
+        action.setEnabled(False)
+        assert not view_commands.run(w, "back_edges")
     finally:
         w._saved_version = w.viewport.scene.version
         w.close()
