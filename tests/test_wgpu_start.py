@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""The start page (views/wgpu_start.py): drawn by the Built chrome when it
-can, the Qt Home dialog when it cannot; what it sends the chrome; what its
-actions do. Offscreen there is no Metal frame: ``available`` is forced and
-a stand-in renderer records what the page sends (the layout, filter and
-arrow keys are tested in Rust, ui/start.rs)."""
+"""The start page (views/wgpu_start.py): a large sheet (views/chrome_sheet.py)
+drawn by the Built chrome when it can, the Qt Home dialog when it cannot;
+what it sends the sheet; what its actions do. Offscreen there is no Metal
+frame: ``available`` is forced and a stand-in renderer records the sheet's
+JSON (the layout, Esc and the arrow keys are tested in Rust,
+ui/large_sheet.rs)."""
 from __future__ import annotations
 
 import json
@@ -17,6 +18,7 @@ from PySide6.QtWidgets import QApplication
 from core import recent
 from core.scene import Scene
 from formats import igz
+from views import chrome_sheet as cs
 from views import wgpu_start as ws
 
 _app = QApplication.instance() or QApplication([])
@@ -25,32 +27,18 @@ _app = QApplication.instance() or QApplication([])
 class FakeRenderer:
     def __init__(self):
         self.calls = []
-        self.shown = False
-        self.keys = []
-        self.claims = False
 
-    def ui_show_start(self, shown, back):
-        self.shown = shown
-        self.calls.append(("show", shown, back))
-
-    def ui_start_shown(self):
-        return self.shown
-
-    def ui_set_start(self, *rows):
-        self.calls.append(("rows", rows))
+    def ui_set_large_sheet(self, text):
+        self.calls.append(("sheet", json.loads(text) if text else None))
 
     def ui_set_icons(self, icons):
         self.calls.append(("icons", [i[0] for i in icons]))
 
-    def ui_start_key(self, name, text):
-        self.keys.append((name, text))
+    def ui_claims_key(self, name):
         return True
 
-    def ui_claims_key(self, name):
-        return self.claims
-
-    def rows(self):
-        return [c[1] for c in self.calls if c[0] == "rows"][-1]
+    def sheet(self):
+        return [c[1] for c in self.calls if c[0] == "sheet"][-1]
 
 
 class FakeView:
@@ -59,6 +47,7 @@ class FakeView:
         self._ui_attached = True
         self._win = win
         self.updates = 0
+        self.focused = 0
 
     def window(self):
         return self._win
@@ -67,7 +56,7 @@ class FakeView:
         self.updates += 1
 
     def setFocus(self, *_):
-        pass
+        self.focused += 1
 
 
 @pytest.fixture
@@ -80,6 +69,7 @@ def win(monkeypatch, tmp_path):
     w = MainWindow(defer_extensions=True)
     view = FakeView(w)
     monkeypatch.setattr(ws, "_view", lambda _w: view)
+    monkeypatch.setattr(cs, "_view", lambda _w: view)
     monkeypatch.setattr("views.wgpu_ui._window", lambda v: w)
     w._fake_view = view
     yield w
@@ -97,6 +87,7 @@ def win(monkeypatch, tmp_path):
 
 def on(monkeypatch):
     monkeypatch.setattr(ws, "available", lambda: True)
+    monkeypatch.setattr(cs, "available", lambda w: True)
 
 
 def thumb_png(w=40, h=24):
@@ -123,8 +114,10 @@ def doc(tmp_path, name, picture=True):
 
 
 def frame(win):
+    """One frame: the page, then the sheet it is on. Returns the renderer."""
     view = win._fake_view
     ws.before_frame(view, win)
+    cs.before_frame(view, win)
     return view.renderer
 
 
@@ -135,6 +128,23 @@ def wait_loader(win):
     p._poll()
 
 
+def sheet(win):
+    return frame(win).sheet()
+
+
+def section(sh, key):
+    """The rows of one list section (Continue, Pinned, Recent…), [] if none."""
+    return next((b["items"] for b in sh["content"]["blocks"] if b["kind"] == "rows" and b.get("id") == key), [])
+
+
+def detail(sh):
+    return (sh.get("detail") or {}).get("blocks") or []
+
+
+def act(win, verb, *args):
+    cs.action(win, cs.SEP.join(("start", verb) + args))
+
+
 # ---- Shown or not ------------------------------------------------------------
 def test_headless_and_ui_off_keep_the_qt_dialog(win, monkeypatch):
     # Offscreen (this run): the chrome cannot draw it.
@@ -143,10 +153,11 @@ def test_headless_and_ui_off_keep_the_qt_dialog(win, monkeypatch):
     assert not ws.shown(win)
     assert win._home.isVisible()
     win._home.close()
-    # BUILT_UI=0 on a real screen: the same.
+    # BUILT_UI=0 on a real screen: the same, and the sheet cannot open either.
     monkeypatch.setattr("views.wgpu_ui.ENABLED", False)
     monkeypatch.setattr("PySide6.QtGui.QGuiApplication.platformName", staticmethod(lambda: "cocoa"))
     assert not ws.available()
+    assert not cs.available(win)
 
 
 def test_the_window_opens_on_it_only_without_a_file(monkeypatch):
@@ -157,7 +168,7 @@ def test_the_window_opens_on_it_only_without_a_file(monkeypatch):
     assert not ws.wants_at_start(False)
 
 
-def test_show_home_draws_the_page_and_sends_rows(win, monkeypatch, tmp_path):
+def test_show_home_puts_the_page_on_the_sheet(win, monkeypatch, tmp_path):
     on(monkeypatch)
     a, b = doc(tmp_path, "alpha.built"), doc(tmp_path, "beta.built", picture=False)
     recent.remember(a)
@@ -165,34 +176,38 @@ def test_show_home_draws_the_page_and_sends_rows(win, monkeypatch, tmp_path):
     recent.note(a, {"project": "Ride", "links": 2, "imported": "skp", "unfiled": 5,
                     "problems": 13, "workspace": "Model"})
     win.show_home()
-    assert ws.shown(win)
+    assert ws.shown(win) and cs.current(win) is ws.page(win).sheet
     assert getattr(win, "_home", None) is None          # no Qt dialog
-    r = frame(win)
-    assert ("show", True, False) in r.calls             # blank untitled behind: no return
+    sh = sheet(win)
+    assert sh["id"] == "start" and sh["closable"] is False   # blank untitled behind: no return
+    assert [v["id"] for v in sh["verbs"]] == ["new", "openfile", "project"]
+    assert sh["menus"][0]["id"] == "template"
+    assert [o["id"] for o in sh["menus"][0]["options"]] == ["survey", "steel", "arch_mm", "blank"]
+    assert sh["search"]["placeholder"]
     wait_loader(win)
-    r = frame(win)
-    files, projects, templates, cont, footer, nav, links = r.rows()
-    names = [f[0][1] for f in files]
-    assert names == ["beta.built", "alpha.built"]       # file names, not paths
-    alpha = files[1][0]
-    assert "Ride" in alpha[2] and "links 2 files" in alpha[2] and "from .skp" in alpha[2] \
-        and "5 unfiled" in alpha[2]
-    assert alpha[4].startswith("thumb:")                # its picture, uploaded once
-    assert files[0][0][4] == ""                         # beta has none
-    assert any(c[0] == "icons" and alpha[4] in c[1] for c in r.calls)
-    # Continue: the last one opened (beta), its project line and no problems.
-    assert cont[0] == str(b.resolve()) and cont[7] == "0"
-    assert [t[0] for t in templates] == ["survey", "steel", "arch_mm", "blank"]
-    assert footer.startswith("Engine:")
-    assert [n[0] for n in nav][:3] == ["recent", "projects", "templates"]
-    assert [l[0] for l in links] == ["prefs", "extensions", "help"]
+    sh = sheet(win)
+    # Continue: the last one opened (beta); Recent: the rest, file names.
+    cont = section(sh, "cont")
+    assert [r["label"] for r in cont] == ["beta.built"] and cont[0]["id"] == "cont"
+    alpha = section(sh, "recent")[0]
+    assert alpha["label"] == "alpha.built" and alpha["badge"] == "13"
+    assert alpha["sub"].startswith("Ride")
+    assert alpha["icon"].startswith("thumb:")           # its picture, uploaded once
+    assert "icon" not in cont[0]                        # beta has none
+    assert any(c[0] == "icons" and alpha["icon"] in c[1] for c in frame(win).calls)
+    tpl = section(sh, "templates")
+    assert [t["id"] for t in tpl] == ["tpl:survey", "tpl:steel", "tpl:arch_mm", "tpl:blank"]
+    assert sh["footer"]["hint"].count("Engine:") == 1
+    assert [l["id"] for l in sh["footer"]["links"]] == ["libraries", "prefs", "extensions", "help"]
+    # The first row is focused; its preview is on the right.
+    assert sh["focus"] == "cont"
 
 
-def test_continue_names_problems_and_a_newer_autosave(win, monkeypatch, tmp_path):
+def test_the_preview_shows_project_problems_unfiled_and_where_it_was_left(win, monkeypatch, tmp_path):
     on(monkeypatch)
     a = doc(tmp_path, "job.built")
     recent.remember(a)
-    recent.note(a, {"problems": 13, "workspace": "Model › North"})
+    recent.note(a, {"project": "Park", "problems": 13, "workspace": "Model › North", "unfiled": 50})
     slot = tmp_path / "slot.built"
     slot.write_bytes(a.read_bytes())
     import os
@@ -200,15 +215,46 @@ def test_continue_names_problems_and_a_newer_autosave(win, monkeypatch, tmp_path
     monkeypatch.setattr("core.autosave.pending", lambda p, *k, **kw: slot)
     ws.show(win)
     wait_loader(win)
-    r = frame(win)
-    cont = r.rows()[3]
-    # The card and its tile share one picture, sent once: two loads of a
+    sh = sheet(win)
+    blocks = detail(sh)
+    pic = next(b for b in blocks if b["kind"] == "picture")
+    assert pic["icon"].startswith("thumb:")
+    # The row and the preview share one picture, sent once: two loads of a
     # key between frames crashed egui-wgpu (a texture freed mid-upload).
-    sent = [k for c in r.calls if c[0] == "icons" for k in c[1]]
-    assert cont[6] and sent.count(cont[6]) == 1
-    assert cont[3] == "Last in Model › North"
-    assert cont[4] == "13 items to fix"
-    assert cont[5] == "Auto-save is newer than the file."
+    sent = [k for c in frame(win).calls if c[0] == "icons" for k in c[1]]
+    assert sent.count(pic["icon"]) == 1
+    kv = dict((r[0], r[1]) for b in blocks if b["kind"] == "kv" for r in b["rows"])
+    assert kv["Project"] == "Park" and kv["Problems"] == "13 to fix" and kv["Unfiled"] == "50"
+    assert kv["Left in"].startswith("Model › North")
+    assert any(b["kind"] == "text" and "Auto-save is newer" in b["text"] for b in blocks)
+    assert any(b["kind"] == "buttons" and any(v["id"] == "open" and v["role"] == 1 for v in b["buttons"])
+               for b in blocks)
+
+
+def test_the_preview_lists_links_and_their_state(win, monkeypatch, tmp_path):
+    """The synthetic composite: Host links A (which links C and D) and B.
+    Before opening, the preview says which links are found, changed on
+    disk or missing."""
+    on(monkeypatch)
+    from tests import composite_fixture as cf
+    files = cf.build(tmp_path / "comp", big=40)
+    host = files["host"]
+    import os
+    t = host.stat().st_mtime
+    os.utime(files["b"], (t + 120, t + 120))            # B changed since Host was saved
+    files["d"].unlink()                                 # D is gone
+    recent.remember(host)
+    ws.show(win)
+    wait_loader(win)
+    sh = sheet(win)
+    blocks = detail(sh)
+    cap = next(b for b in blocks if b["kind"] == "caption" and b["text"] == "Linked files")
+    assert cap["right"] == "4 · 2 to look at"
+    rows = next(b for b in blocks if b["kind"] == "rows")["items"]
+    got = [(r["label"], r.get("depth", 0), r["dot"], r.get("dot_text", "")) for r in rows]
+    assert got == [("A.igz", 0, "ok", ""), ("C.igz", 1, "ok", ""), ("D.igz", 1, "error", "missing"),
+                   ("B.igz", 0, "warn", "changed on disk")]
+    assert all(r.get("fixed") for r in rows)            # read, not focused
 
 
 def test_first_frame_never_waits_for_pictures(win, monkeypatch, tmp_path):
@@ -219,11 +265,27 @@ def test_first_frame_never_waits_for_pictures(win, monkeypatch, tmp_path):
     real = ws._load_one
     monkeypatch.setattr(ws, "_load_one", lambda p: (gate.wait(5), real(p))[1])
     ws.show(win)
-    files = frame(win).rows()[0]                        # drawn before the worker is done
-    assert files[0][0][4] == ""
+    cont = section(sheet(win), "cont")                  # drawn before the worker is done
+    assert "icon" not in cont[0]
     gate.set()
     wait_loader(win)
-    assert frame(win).rows()[0][0][0][4].startswith("thumb:")
+    assert section(sheet(win), "cont")[0]["icon"].startswith("thumb:")
+
+
+def test_typing_filters_the_list(win, monkeypatch, tmp_path):
+    on(monkeypatch)
+    for n in ("ride.built", "site.built", "kiosk.built"):
+        recent.remember(doc(tmp_path, n))
+    ws.show(win)
+    wait_loader(win)
+    sheet(win)
+    act(win, "search", "kio")
+    sh = sheet(win)
+    names = [r["label"] for k in ("cont", "recent") for r in section(sh, k)]
+    assert names == ["kiosk.built"]
+    assert section(sh, "templates") == []
+    act(win, "search", "zzz")
+    assert "Nothing matches" in sheet(win)["content"]["empty"]
 
 
 # ---- Keys --------------------------------------------------------------------
@@ -231,52 +293,55 @@ def key_event(key, text="", mods=Qt.NoModifier):
     return QKeyEvent(QEvent.KeyPress, key, mods, text)
 
 
-def test_keys_go_to_the_page_but_command_keys_stay_the_windows(win, monkeypatch):
+def test_keys_go_to_the_sheet_but_command_keys_stay_the_windows(win, monkeypatch):
     on(monkeypatch)
     view = win._fake_view
-    assert not ws.key(view, key_event(Qt.Key_Escape), True)        # not shown
+    assert cs.claims_key(view, key_event(Qt.Key_Escape)) is None    # not shown
     ws.show(win)
-    assert ws.claims_key(view, key_event(Qt.Key_Escape))
-    assert ws.key(view, key_event(Qt.Key_Escape), True)
-    assert ws.key(view, key_event(Qt.Key_A, "a"), True)
-    assert ws.key(view, key_event(Qt.Key_Down), True)
-    assert view.renderer.keys == [("Escape", ""), ("", "a"), ("ArrowDown", "")]
+    assert cs.claims_key(view, key_event(Qt.Key_Escape))
+    assert cs.claims_key(view, key_event(Qt.Key_A, "a"))
+    assert cs.claims_key(view, key_event(Qt.Key_Down))
+    assert cs.claims_key(view, key_event(Qt.Key_F, "f", Qt.ControlModifier))   # ⌘F: the search
     # ⌘O, ⌘N, ⌘K: the window's.
-    assert not ws.claims_key(view, key_event(Qt.Key_O, "o", Qt.ControlModifier))
-    assert not ws.key(view, key_event(Qt.Key_K, "k", Qt.ControlModifier), True)
-    assert not ws.key(view, key_event(Qt.Key_F3), True)
+    assert cs.claims_key(view, key_event(Qt.Key_O, "o", Qt.ControlModifier)) is False
+    assert cs.claims_key(view, key_event(Qt.Key_K, "k", Qt.ControlModifier)) is False
 
 
 def test_escape_returns_only_to_an_open_document(win, monkeypatch, tmp_path):
     on(monkeypatch)
     ws.show(win)
-    ws.action(win, "close")                 # only the blank untitled behind
+    assert sheet(win)["closable"] is False      # only the blank untitled behind: Esc stays
+    ws.action(win, "close")
     assert ws.shown(win)
     a = doc(tmp_path, "open.built")
     assert win.open_path(a)                 # (opening dismisses it)
+    frame(win)
     assert not ws.shown(win)
     ws.show(win)
-    r = frame(win)
-    assert ("show", True, True) in r.calls
-    cont = r.rows()[3]
-    assert cont[7] == "1" and cont[1].startswith("open")    # «Open now»: the document behind
-    ws.action(win, "close")
-    assert not ws.shown(win)
-    assert ("show", False, True) in frame(win).calls
+    sh = sheet(win)
+    assert sh["closable"] is True
+    cont = section(sh, "cont")[0]
+    assert cont["right"] == "open now" and cont["label"].startswith("open")
+    act(win, "close")                       # Esc on the sheet
+    assert not ws.shown(win) and not cs.shown(win)
+    assert frame(win).calls[-1] == ("sheet", None)
 
 
 # ---- Actions -----------------------------------------------------------------
-def test_enter_on_a_tile_opens_it_through_the_window(win, monkeypatch, tmp_path):
+def test_enter_on_a_row_opens_it_through_the_window(win, monkeypatch, tmp_path):
     on(monkeypatch)
-    a = doc(tmp_path, "tile.built")
+    a, b = doc(tmp_path, "tile.built"), doc(tmp_path, "other.built")
     recent.remember(a)
+    recent.remember(b)
     opened = []
     real = win.open_path
     monkeypatch.setattr(win, "open_path", lambda p: (opened.append(p), real(p))[1])
     ws.show(win)
-    ws.action(win, "open" + ws.SEP + str(a.resolve()))
+    sheet(win)
+    act(win, "open", "file:" + str(a.resolve()))
     assert opened == [a.resolve()]
     assert win._doc.path.resolve() == a.resolve()
+    frame(win)
     assert not ws.shown(win)
     assert QSettings().value("home/last_file") == str(a.resolve())
 
@@ -289,36 +354,41 @@ def test_a_moved_file_is_located(win, monkeypatch, tmp_path):
     recent.remember(old)
     monkeypatch.setattr(file_dialogs, "getOpenFileName", lambda *a: (str(moved), ""))
     ws.show(win)
-    ws.action(win, "open" + ws.SEP + str(old.resolve()))
+    sheet(win)
+    act(win, "menu", "file:" + str(old.resolve()), "locate")
     assert win._doc.path.resolve() == moved.resolve()
     assert str(old.resolve()) not in [r["path"] for r in recent.entries()]
 
 
 def test_pin_toggles_and_pinned_come_first(win, monkeypatch, tmp_path):
     on(monkeypatch)
-    a, b = doc(tmp_path, "a.built"), doc(tmp_path, "b.built")
-    recent.remember(a)
-    recent.remember(b)
+    a, b, c = doc(tmp_path, "a.built"), doc(tmp_path, "b.built"), doc(tmp_path, "c.built")
+    for p in (a, b, c):
+        recent.remember(p)
     ws.show(win)
-    ws.action(win, "pin" + ws.SEP + str(a.resolve()))
+    sheet(win)
+    act(win, "menu", "file:" + str(a.resolve()), "pin")
     rows = recent.entries()
     assert rows[0] == {"path": str(a.resolve()), "pinned": True}
-    files = frame(win).rows()[0]
-    assert files[0][0][0] == str(a.resolve()) and files[0][1][0] == 1
-    ws.action(win, "pin" + ws.SEP + str(a.resolve()))
-    assert not recent.entries()[0]["pinned"] or recent.entries()[0]["path"] != str(a.resolve())
+    pinned = section(sheet(win), "pinned")
+    assert [r["id"] for r in pinned] == ["file:" + str(a.resolve())]
+    assert ("pin", "Unpin") in [tuple(m) for m in pinned[0]["menu"]]
+    act(win, "menu", "file:" + str(a.resolve()), "pin")
+    assert section(sheet(win), "pinned") == []
     # Pinning is not opening: Continue stays on the last document opened.
-    assert QSettings().value("home/last_file") == str(b.resolve())
+    assert QSettings().value("home/last_file") == str(c.resolve())
 
 
 def test_new_model_and_templates(win, monkeypatch):
     on(monkeypatch)
     monkeypatch.setattr("views.units_start_dialog.offer_at_start", lambda w: None)
     ws.show(win)
-    ws.action(win, "new")
+    sheet(win)
+    act(win, "verb", "new")
     assert not ws.shown(win)
     ws.show(win)
-    ws.action(win, "template" + ws.SEP + "steel")
+    sheet(win)
+    act(win, "headmenu", "template", "steel")
     assert not ws.shown(win)
     scene = win.viewport.scene
     from core import bim_registry
@@ -327,6 +397,14 @@ def test_new_model_and_templates(win, monkeypatch):
     assert reg["structure"]["active"] == "steel.beams"
     assert scene.units["length"] == "mm"
     assert win._doc_is_blank()              # a template is where it starts, not an edit
+    # A template row: its preview and Enter.
+    ws.show(win)
+    sheet(win)
+    act(win, "focus", "tpl:survey")
+    blocks = detail(sheet(win))
+    assert next(b for b in blocks if b["kind"] == "heading")["text"] == "As-built survey"
+    act(win, "open", "tpl:arch_mm")
+    assert bim_registry.get(win.viewport.scene)["structure"]["active"] == "building.walls"
 
 
 @pytest.mark.parametrize("tid", [t[0] for t in ws.TEMPLATES if t[3]])
@@ -346,6 +424,19 @@ def test_a_document_coming_in_closes_the_page(win, monkeypatch, tmp_path):
     win._open_path_here(a, a.suffix)         # not through the page or open_path
     frame(win)
     assert not ws.shown(win)
+
+
+def test_settings_from_the_footer_goes_over_it_and_the_page_comes_back(win, monkeypatch):
+    on(monkeypatch)
+    ws.show(win)
+    sheet(win)
+    other = type("Other", (cs.Provider,), {"id": "other", "build": lambda self, ctx: cs.Sheet("other", "Other")})()
+    assert cs.open(win, other)
+    assert sheet(win)["id"] == "other"
+    act_other = cs.SEP.join(("other", "close"))
+    cs.action(win, act_other)
+    frame(win)                                          # the sheet goes…
+    assert sheet(win)["id"] == "start"                  # …and the page is back under it
 
 
 def test_no_frame_drawn_falls_back_to_the_qt_dialog(win, monkeypatch):
@@ -419,10 +510,10 @@ def test_a_black_thumbnail_shows_the_placeholder(win, monkeypatch, tmp_path):
     recent.remember(lit)
     ws.show(win)
     wait_loader(win)
-    files = frame(win).rows()[0]
-    by_name = {f[0][1]: f[0] for f in files}
-    assert by_name["dark.built"][4] == ""               # placeholder
-    assert by_name["lit.built"][4].startswith("thumb:")
+    sh = sheet(win)
+    by_name = {r["label"]: r for k in ("cont", "recent") for r in section(sh, k)}
+    assert "icon" not in by_name["dark.built"]          # placeholder
+    assert by_name["lit.built"]["icon"].startswith("thumb:")
 
 
 # ---- The picture a save keeps (Metal view) ------------------------------------
@@ -517,16 +608,17 @@ def test_remove_from_recents_leaves_the_file(win, monkeypatch, tmp_path):
     recent.remember(a)
     recent.remember(b)                                  # Continue: b
     ws.show(win)
-    ws.action(win, "forget" + ws.SEP + str(b.resolve()))
+    sheet(win)
+    act(win, "menu", "cont", "forget")
     assert [r["path"] for r in recent.entries()] == [str(a.resolve())]
     assert b.is_file()
     assert QSettings().value("home/last_file", "") == ""
     wait_loader(win)
-    files, cont = frame(win).rows()[0], frame(win).rows()[3]
-    assert [f[0][0] for f in files] == [str(a.resolve())]
-    assert cont[0] == str(a.resolve())                  # Continue falls back
+    sh = sheet(win)
+    assert section(sh, "recent") == []
+    assert section(sh, "cont")[0]["label"] == "a.built"     # Continue falls back
     # Gone for good: the legacy list does not bring it back.
-    ws.action(win, "forget" + ws.SEP + str(a.resolve()))
+    act(win, "menu", "cont", "forget")
     assert recent.entries() == []
 
 
@@ -546,23 +638,23 @@ def test_a_moved_file_hides_its_dead_duplicate(win, monkeypatch, tmp_path):
     QSettings().setValue("home/recent_files", json.dumps(rows))
     ws.show(win)
     wait_loader(win)
-    files = frame(win).rows()[0]
-    paths = [f[0][0] for f in files]
-    assert str(old_ride.resolve()) not in paths
-    assert str(ride.resolve()) in paths
-    assert str(old_site.resolve()) in paths and str(stale) in paths
-    site = next(f for f in files if f[0][0] == str(old_site.resolve()))
-    assert site[1][1] == 1 and site[0][2].startswith("Not found — click to locate")
+    sh = sheet(win)
+    ids = [r["id"] for k in ("cont", "recent") for r in section(sh, k)]
+    assert "file:" + str(old_ride.resolve()) not in ids
+    assert "file:" + str(old_site.resolve()) in ids and "file:" + str(stale) in ids
+    site = next(r for r in section(sh, "recent") if r["id"] == "file:" + str(old_site.resolve()))
+    assert site["dim"] and site["sub"].startswith("Not found")
+    assert [tuple(m)[0] for m in site["menu"]][0] == "locate"
     # Still on the list (hidden, not dropped) until Clear missing.
     assert str(old_ride.resolve()) in [r["path"] for r in recent.entries()]
-    ws.action(win, "clearmissing")
+    clear = next(b for b in sh["content"]["blocks"] if b["kind"] == "buttons")["buttons"][0]
+    assert clear["id"] == "clearmissing" and "(3)" in clear["label"]
+    act(win, "verb", "clearmissing")
     left = [r["path"] for r in recent.entries()]
     assert left == [str(ride.resolve()), str(other.resolve())]
-    files = frame(win).rows()[0]
-    assert [f[0][0] for f in files] == left
 
 
-def test_a_missing_tile_still_offers_to_locate(win, monkeypatch, tmp_path):
+def test_a_missing_row_still_offers_to_locate(win, monkeypatch, tmp_path):
     on(monkeypatch)
     from views.filedialogs import file_dialogs
     found = doc(tmp_path, "found.built")
@@ -572,6 +664,12 @@ def test_a_missing_tile_still_offers_to_locate(win, monkeypatch, tmp_path):
     monkeypatch.setattr(file_dialogs, "getOpenFileName", lambda *a: (asked.append(a), (str(found), ""))[1])
     ws.show(win)
     wait_loader(win)
-    assert frame(win).rows()[0][0][1][1] == 1           # shown, missing
-    ws.action(win, "open" + ws.SEP + str(gone.resolve()))
+    sh = sheet(win)
+    row = section(sh, "recent")[0]
+    assert row["dim"]                                   # shown, missing
+    act(win, "focus", row["id"])
+    blocks = detail(sheet(win))
+    assert any(b["kind"] == "buttons" and b["buttons"][-1]["id"] == "locate" for b in blocks)
+    act(win, "open", row["id"])
     assert asked and win._doc.path.resolve() == found.resolve()
+

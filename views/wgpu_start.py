@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""The start page: a full-window state of the Built chrome (egui, in the
-Metal frame), drawn by ``rust/ingetrazo_render/src/ui/start.rs``.
+"""The start page: a large sheet over the model (``views/chrome_sheet.py``,
+option C of the 2026-11-23 review), in the Qt app with the Built chrome and
+in the native ``built`` shell.
 
 It replaces the Qt Home dialog (``views/home.py``) for a cold start
 without a file and for File ▸ New Window, and it comes back from File ▸
@@ -8,22 +9,24 @@ Home, the document menu of the top bar and ⌘K. The Qt dialog stays when
 the chrome cannot draw it: ``BUILT_UI=0``, the GL renderer, headless and
 test runs, or no frame drawn within :data:`WATCHDOG_MS` of asking.
 
-What it shows (Python owns the data, Rust the layout, the filter and
-the focus):
+What it shows (Python owns the data and the filter, the sheet the layout
+and the focus):
 
-* a side column: Recent · Projects · Templates (and Libraries when a
-  library browser is there), the recent projects with their files,
-  Preferences · Extensions · Help at the bottom;
-* the main column: New model / New project… / Open…; a Continue card for
-  the last document (its picture, project, where it was left, its open
-  problems, a newer auto-save); the recent files as tiles; templates;
-  the engine and renderer as a quiet footer.
+* the header: New model, From template ▾, Open…, New project…, a filter;
+* a dense list on the left: Continue (the document open behind the page,
+  or the last one), Pinned, Recent (missing files dimmed, "Clear missing"),
+  Projects, Templates; a right click pins, reveals or removes;
+* a preview on the right of the focused row: its picture, project, where
+  it was left, problems, unfiled, and its linked files with their state
+  (found, changed on disk, missing) read from the archive without opening
+  it (``core/link_scan.py``); Open, Show in Finder, Locate…;
+* the footer: Library · Settings · Extensions · Help, the keys, the engine.
 
 Nothing here blocks the first frame. Recents come from QSettings
 (``core.recent``) at once; whether each file still exists, its picture
-(the ``thumbnail.png`` a save puts in the archive) and each project's
-files are read by a worker thread and cached by (path, mtime, size). The
-page shows what it has and fills in as the worker reports.
+(the ``thumbnail.png`` a save puts in the archive), its links and each
+project's files are read by a worker thread and cached by path. The page
+shows what it has and fills in as the worker reports.
 
 Opening goes through ``MainWindow.open_path``, so the egui progress
 capsule (``views/chrome_dialogs``) shows over the page while it loads;
@@ -33,6 +36,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import sys
 import threading
 import time
 from pathlib import Path
@@ -142,9 +146,7 @@ def show(win) -> bool:
     shows the Qt Home dialog)."""
     if not available():
         return False
-    p = page(win)
-    p.open()
-    return True
+    return page(win).open()
 
 
 def hide(win) -> None:
@@ -170,44 +172,43 @@ def _docs_sig(win):
 
 
 class Page:
-    """One window's start page: what to show, what was sent, the loader."""
+    """One window's start page: whether it is wanted, the loader, the
+    sheet's provider (:class:`StartSheet`)."""
 
     def __init__(self, win):
         self.win = win
         self.wanted = False
         self.drawn = False
-        self.sent = None            # (shown, can_return) last sent
-        self.rows_sig = None
-        self.dirty = True
         self.docs_sig = None
-        self.icons_sent = set()     # texture keys uploaded (per renderer)
-        self.renderer = None
         self.loader = None
         self.poll = None
         self.dog = None
         self.focused = False
         self.asked = 0.0
+        self.sheet = StartSheet(self)
 
     # -- state ------------------------------------------------------------
-    def open(self) -> None:
+    def open(self) -> bool:
         win = self.win
         for doc in list(getattr(win, "_documents", []) or []):
             if getattr(doc, "path", None) is not None:
                 note(win, doc.path, doc)
-        self.dirty = True
-        if self.wanted:
+        from views import chrome_sheet
+        if self.wanted and chrome_sheet.current(win) is self.sheet:
             # Already up (asked again at the end of a cold start): fresh
             # rows, nothing typed lost.
             self.load()
-            self.repaint()
-            return
+            chrome_sheet.refresh(win)
+            return True
+        if not chrome_sheet.open(win, self.sheet):
+            return False
         self.wanted = True
         self.drawn = False
         self.focused = False
+        self.sheet.focus = None
         self.asked = time.monotonic()
         self.docs_sig = _docs_sig(win)
         self.load()
-        self.repaint()
         view = _view(win)
         if view is not None:
             try:
@@ -218,11 +219,15 @@ class Page:
             self.dog = QTimer(win, singleShot=True)
             self.dog.timeout.connect(self._watchdog)
         self.dog.start(WATCHDOG_MS)
+        return True
 
     def close(self) -> None:
         self.wanted = False
         if self.dog is not None:
             self.dog.stop()
+        from views import chrome_sheet
+        if chrome_sheet.current(self.win) is self.sheet:
+            chrome_sheet.close(self.win)
         self.repaint()
 
     def _watchdog(self) -> None:
@@ -241,6 +246,9 @@ class Page:
             self.dog.start(500)     # a cold start: the Metal view is still on its way
             return
         self.wanted = False
+        from views import chrome_sheet
+        if chrome_sheet.current(win) is self.sheet:
+            win.__dict__.pop("_chrome_sheet", None)
         _qt_home(win)
 
     def repaint(self) -> None:
@@ -250,6 +258,11 @@ class Page:
                 view.update()
             except RuntimeError:
                 pass
+
+    def changed(self) -> None:
+        from views import chrome_sheet
+        chrome_sheet.refresh(self.win)
+        self.repaint()
 
     # -- the worker -------------------------------------------------------
     def load(self) -> None:
@@ -273,125 +286,382 @@ class Page:
     def _poll(self) -> None:
         busy = self.loader is not None and self.loader.is_alive()
         if _take_news():
-            self.dirty = True
-            self.repaint()
+            self.changed()
         if not busy:
             self.poll.stop()
             if _take_news():
-                self.dirty = True
-                self.repaint()
+                self.changed()
 
     # -- a frame ----------------------------------------------------------
     def before_frame(self, view) -> None:
-        renderer = view.renderer
-        if renderer is None or not hasattr(renderer, "ui_show_start"):
-            return
-        if renderer is not self.renderer:
-            self.renderer = renderer
-            self.icons_sent = set()
-            self.sent = None
-            self.rows_sig = None
         win = self.win
         if self.wanted and _docs_sig(win) != self.docs_sig:
             # A document came in (⌘O, a drop, the OS): the page has done its job.
             self.close()
-        back = can_return(win)
-        state = (self.wanted, back)
-        if state != self.sent:
-            self.sent = state
-            renderer.ui_show_start(self.wanted, back)
         if not self.wanted:
             return
-        self.drawn = True
+        from views import chrome_sheet
+        if chrome_sheet.current(win) is not self.sheet:
+            # Another sheet took the window (Settings from the footer): the
+            # page waits under it and comes back when that one closes.
+            if chrome_sheet.current(win) is None:
+                chrome_sheet.open(win, self.sheet)
+            return
         if not self.focused:
             # Keys come to the view; never focus from inside a frame (a
             # native view can expose, and paint, right there).
             self.focused = True
+
             def focus():
                 try:
                     view.setFocus(Qt.OtherFocusReason)
                 except RuntimeError:
                     pass    # the view went first
             QTimer.singleShot(0, focus)
-        if self.dirty:
-            self.dirty = False
-            rows = self.rows(back)
-            icons = rows.pop("icons")
-            fresh = [i for i in icons if i[0] not in self.icons_sent]
-            if fresh:
-                renderer.ui_set_icons(fresh)
-                self.icons_sent.update(i[0] for i in fresh)
-            sig = repr(rows)
-            if sig != self.rows_sig:
-                self.rows_sig = sig
-                renderer.ui_set_start(rows["files"], rows["projects"], rows["templates"],
-                                      rows["cont"], rows["footer"], rows["nav"], rows["links"])
 
-    def rows(self, back: bool) -> dict:
-        # Each picture once: the Continue card and its tile share one. Two
-        # loads of a key between frames upload and free a texture in the
-        # same frame, and egui-wgpu destroys it with its upload pending.
-        icons = {}
 
-        def thumb(path):
-            c = _cached(path)
-            if c is None or c.get("thumb") is None:
-                return ""
-            key, w, h, rgba = c["thumb"]
-            icons[key] = (key, w, h, rgba)
-            return key
+# ---- The sheet ---------------------------------------------------------------
+def _sheet_class():
+    from views import chrome_sheet
+    return chrome_sheet.Provider
 
-        files = []
+
+class StartSheet(_sheet_class()):
+    """The start page on the large sheet (option C of the 2026-11-23
+    review): verbs and a filter in the header, a dense list on the left
+    (continue, pinned, recent, projects, templates), a preview on the right
+    that shows the focused file's picture, links and their state, unfiled
+    and problems before it is opened."""
+    id = "start"
+    watchdog = False                    # the page has its own (cold starts are slow)
+
+    def __init__(self, page):
+        self.page = page
+        self.focus = None               # the focused item id
+        self.filter = ""
+
+    # -- what is on it ------------------------------------------------------
+    def signature(self, ctx):
+        # A document opened behind the page changes Continue and Esc.
+        return (can_return(self.page.win),)
+
+    def items(self, back: bool) -> dict:
+        """The list's sections: {"cont", "pinned", "recent", "projects",
+        "templates"} of (id, kind, data) after the filter."""
+        words = self.filter.lower().split()
+
+        def match(*hay):
+            text = " ".join(str(h) for h in hay if h).lower()
+            return all(w in text for w in words)
+        win = self.page.win
+        cont = continue_info(win, back)
+        out = {"cont": [], "pinned": [], "recent": [], "projects": [], "templates": []}
+        if cont and match(cont["name"], cont["place"]):
+            out["cont"].append(("cont", "cont", cont))
+        skip = cont["path"] if cont else ""
         for r in visible_files():
             path = r["path"]
-            c = _cached(path) or {}
+            if path == skip:
+                continue
             m = recent.meta(path)
-            files.append(([path, Path(path).name, _meta_line(m, c), m.get("project", ""), thumb(path)],
-                          [int(bool(r.get("pinned"))), int(c.get("exists") is False)]))
-        projects = []
+            if not match(Path(path).name, m.get("project", ""), path):
+                continue
+            row = ("file:" + path, "file", r)
+            out["pinned" if r.get("pinned") else "recent"].append(row)
         for r in recent.entries("projects"):
             path = r["path"]
             c = _cached(path) or {}
-            members = c.get("files") or []
-            n = len(members)
-            if c.get("exists") is False:
-                meta = "Not found"
-            elif c.get("exists") and c.get("files") is None:
-                meta = "Can't read this project"
-            elif c.get("exists"):
-                meta = f"{n} file" + ("s" if n != 1 else "")
-            else:
-                meta = ""
-            projects.append(([path, Path(path).stem, meta],
-                             [int(bool(r.get("pinned"))), int(c.get("exists") is False)],
-                             [(f, Path(f).name, role) for f, role in members]))
-        templates = [(t[0], t[1], t[2]) for t in TEMPLATES]
-        return dict(files=files, projects=projects, templates=templates,
-                    cont=self.continue_row(back, thumb), footer=footer(), nav=nav(),
-                    links=[("prefs", "Preferences"), ("extensions", "Extensions"), ("help", "Help")],
-                    icons=list(icons.values()))
+            names = [Path(f).name for f, _role in (c.get("files") or [])]
+            if not match(Path(path).stem, path, *names):
+                continue
+            out["pinned" if r.get("pinned") else "projects"].append(("proj:" + path, "proj", r))
+        for t in TEMPLATES:
+            if match(t[1], t[2]):
+                out["templates"].append(("tpl:" + t[0], "tpl", t))
+        return out
 
-    def continue_row(self, back, thumb) -> list:
-        win = self.win
-        if back:
-            doc = getattr(win, "_doc", None)
-            path = getattr(doc, "path", None)
-            name = doc.display_name() if doc is not None and hasattr(doc, "display_name") else "Untitled"
-            m = recent.meta(path) if path else {}
-            place = " · ".join(x for x in (m.get("project", ""), _folder(path) if path else "") if x)
-            return [str(path or ""), name, place, _last_in(m) or "In Model", _problems(m), "",
-                    thumb(str(path)) if path else "", "1"]
-        path = last_file()
-        if not path:
-            return []
+    def build(self, ctx):
+        from views import chrome_sheet as cs
+        page = self.page
+        page.drawn = True
+        win = page.win
+        back = can_return(win)
+        s = cs.Sheet(self.id, "", closable=back, width=1180)
+        s.verb("new", "New model", key="⌘N", primary=True)
+        s.menu("template", "From template", [(t[0], t[1]) for t in TEMPLATES])
+        s.verb("openfile", "Open…", key="⌘O")
+        s.verb("project", "New project…")
+        s.search("Type to filter", key="")
+        sections = self.items(back)
+        order = [row[0] for k in ("cont", "pinned", "recent", "projects", "templates") for row in sections[k]]
+        if self.focus not in order:
+            self.focus = order[0] if order else None
+        empty = ("Nothing matches “%s”." % self.filter) if self.filter else "No recent files yet."
+        c = s.content(empty=empty)
+        captions = {"cont": "Continue", "pinned": "Pinned", "recent": "Recent", "projects": "Projects",
+                    "templates": "Templates"}
+        for key in ("cont", "pinned", "recent", "projects", "templates"):
+            rows = sections[key]
+            if not rows:
+                continue
+            c.caption(captions[key])
+            c.rows([self.row(s, rid, kind, data) for rid, kind, data in rows], id=key, thumbs=key != "templates")
+            if key == "recent":
+                gone = missing_files()
+                if gone and not self.filter:
+                    c.buttons([cs.verb("clearmissing", f"Clear missing ({len(gone)})", quiet=True)], align="left")
+        if not any(sections.values()) and not self.filter and not TEMPLATES:
+            c.text("Start a new model, or open one.")
+        self.preview(s, sections)
+        links = [("libraries", "Library"), ("prefs", "Settings"), ("extensions", "Extensions"), ("help", "Help")]
+        s.footer(links, "↑↓ choose · ↩ open" + (" · esc back to the model" if back else "") + "   " + footer())
+        if self.focus:
+            s.focus(self.focus)
+        return s
+
+    def row(self, s, rid, kind, data) -> dict:
+        from views import chrome_sheet as cs
+        if kind == "cont":
+            sub = " · ".join(x for x in (data["place"], data["last_in"]) if x)
+            return cs.item(rid, data["name"], sub=sub, right="open now" if data["open"] else _ago_of(data["path"]),
+                           icon=self.thumb(s, data["path"]), badge=str(data["problems"] or ""),
+                           tip=data["path"])
+        if kind == "tpl":
+            return cs.item(rid, data[1], sub=data[2], menu=[("open", "New from this template")])
+        path = data["path"]
         c = _cached(path) or {}
-        if c.get("exists") is False:
-            return []
+        missing = c.get("exists") is False
+        pinned = bool(data.get("pinned"))
+        menu = [("open", "Open"), ("pin", "Unpin" if pinned else "Pin"), ("finder", "Show in Finder"),
+                ("-", ""), ("forget", "Remove from list")]
+        if kind == "proj":
+            files = c.get("files") or []
+            sub = "Not found · Locate…" if missing else _folder(path)
+            right = f"{len(files)} file" + ("s" if len(files) != 1 else "") if files else ""
+            return cs.item(rid, Path(path).stem, sub=sub, right=right, dim=missing, tip=path, menu=menu,
+                           kind="file")
         m = recent.meta(path)
-        place = " · ".join(x for x in (m.get("project", ""), _folder(path)) if x)
-        auto = "Auto-save is newer than the file." if c.get("autosave_newer") else ""
-        return [path, Path(path).name, place, _last_in(m), _problems(m), auto, thumb(path), "0"]
+        if missing:
+            sub, right = "Not found · Locate…", ""
+            menu = [("locate", "Locate…"), ("-", ""), ("forget", "Remove from list")]
+        else:
+            sub = " · ".join(x for x in (m.get("project", ""), _folder(path)) if x)
+            right = _ago(c["mtime"]) if c.get("mtime") else ""
+        problems = int(m.get("problems") or 0)
+        return cs.item(rid, Path(path).name, sub=sub, right=right, icon=self.thumb(s, path), dim=missing,
+                       badge=str(problems) if problems and not missing else "", tip=path, menu=menu)
 
+    def thumb(self, s, path) -> str:
+        c = _cached(str(path)) if path else None
+        if not c or c.get("thumb") is None:
+            return ""
+        key, w, h, rgba = c["thumb"]
+        return s.icon(key, w, h, rgba)
+
+    # -- the preview ------------------------------------------------------------
+    def preview(self, s, sections) -> None:
+        from views import chrome_sheet as cs
+        found = next(((rid, kind, data) for rows in sections.values() for rid, kind, data in rows
+                      if rid == self.focus), None)
+        d = s.detail(width=520, empty="Pick a file to see what it holds before opening it.")
+        if found is None:
+            return
+        rid, kind, data = found
+        if kind == "tpl":
+            tid, name, desc, nodes, _active, units = data
+            d.heading(name)
+            d.text(desc)
+            rows = [("Units", (units or {}).get("length", "your usual units"))]
+            if nodes:
+                tops = [n["name"] for n in nodes.values() if n.get("parent") is None]
+                rows.append(("Structure", ", ".join(tops)))
+                rows.append(("Nodes", str(len(nodes))))
+            d.kv(rows)
+            d.buttons([cs.verb("open", "New from this template", key="↩", primary=True)])
+            return
+        if kind == "cont":
+            path = data["path"]
+            name = data["name"]
+        else:
+            path = data["path"]
+            name = Path(path).name if kind == "file" else Path(path).stem
+        c = _cached(path) or {}
+        missing = c.get("exists") is False
+        m = recent.meta(path) if path else {}
+        if kind != "proj":
+            d.picture(icon=self.thumb(s, path), size=250)
+        size = _size(path)
+        right = " · ".join(x for x in (_folder(path) if path else "", size) if x)
+        d.heading(name, star=bool(kind != "cont" and data.get("pinned")), right=right)
+        if missing:
+            d.text("This file is not where it was. Locate it, or take it off the list.", tone="warn")
+            d.buttons([cs.verb("forget", "Remove from list"), cs.verb("locate", "Locate…", key="↩", primary=True)])
+            return
+        if kind == "proj":
+            files = c.get("files")
+            if files is None and c.get("exists"):
+                d.text("Can't read this project.", tone="warn")
+            elif files:
+                d.caption("Files", right=str(len(files)))
+                d.rows([cs.item("", Path(f).name, sub=role if role != "host" else "",
+                                dot="ok" if Path(f).is_file() else "error",
+                                dot_text="" if Path(f).is_file() else "missing", kind="file", fixed=True)
+                        for f, role in files])
+            d.buttons([cs.verb("finder", "Show in Finder"), cs.verb("open", "Open project", key="↩", primary=True)])
+            return
+        rows = []
+        if m.get("project"):
+            rows.append(("Project", m["project"]))
+        where = (m.get("workspace") or "")
+        ago = _ago(c["mtime"]) if c.get("mtime") else ""
+        if where or ago:
+            rows.append(("Left in", " · ".join(x for x in (where, ago) if x)))
+        n = int(m.get("problems") or 0)
+        rows.append(("Problems", f"{n} to fix" if n else "none", "warn" if n else ""))
+        if m.get("unfiled") is not None:
+            rows.append(("Unfiled", str(int(m.get("unfiled") or 0))))
+        if m.get("imported"):
+            rows.append(("From", {"skp": ".skp", "dwg": "DWG", "dxf": "DXF", "ifc": "IFC",
+                                  "rfa": "Revit"}.get(m["imported"], m["imported"].upper())))
+        d.kv(rows)
+        if c.get("autosave_newer"):
+            d.text("Auto-save is newer than the file: opening asks which to keep.", tone="warn")
+        links = c.get("links")
+        if links is None and c.get("exists"):
+            d.caption("Linked files")
+            d.text("Reading links…", tone="faint")
+        elif links:
+            mt = c.get("mtime")
+            states = [(ln, link_state(ln, mt)) for ln in links]
+            bad = sum(1 for _ln, st in states if st != "found")
+            d.caption("Linked files", right=f"{len(links)}" + (f" · {bad} to look at" if bad else ""))
+            words = {"found": ("ok", ""), "changed": ("warn", "changed on disk"), "missing": ("error", "missing")}
+            d.rows([cs.item("", Path(ln["path"]).name, depth=ln["depth"], dot=words[st][0], dot_text=words[st][1],
+                            right=_ago_of(ln["found"]) if ln.get("found") else "", kind="file", fixed=True,
+                            tip=ln.get("found") or ln["path"])
+                    for ln, st in states])
+        verbs = [cs.verb("finder", "Show in Finder")]
+        if kind == "cont" and data["open"]:
+            verbs.append(cs.verb("open", "Back to the model", key="esc", primary=True))
+        else:
+            verbs.append(cs.verb("open", "Open", key="↩", primary=True))
+        d.buttons(verbs)
+
+    # -- what comes back --------------------------------------------------------
+    def act(self, ctx, verb, args):
+        win = self.page.win
+        arg = args[0] if args else ""
+        if verb == "search":
+            self.filter = arg
+        elif verb == "focus":
+            self.focus = arg
+        elif verb == "open":
+            self.activate(win, arg)
+        elif verb == "menu" and len(args) > 1:
+            self.item_verb(win, args[1], arg)
+        elif verb == "headmenu" and arg == "template" and len(args) > 1:
+            from_template(win, args[1])
+        elif verb == "verb":
+            if arg in ("open", "finder", "locate", "forget", "pin"):
+                self.item_verb(win, arg, self.focus or "")
+            else:
+                action(win, {"libraries": "nav" + SEP + "libraries", "prefs": "cmd" + SEP + "prefs",
+                             "extensions": "cmd" + SEP + "extensions", "help": "cmd" + SEP + "help"}.get(arg, arg))
+
+    def activate(self, win, rid) -> None:
+        kind, _, rest = rid.partition(":")
+        if rid == "cont":
+            action(win, "continue")
+        elif kind == "tpl":
+            from_template(win, rest)
+        elif kind in ("file", "proj"):
+            open_recent(win, rest)
+
+    def item_verb(self, win, verb, rid) -> None:
+        kind, _, path = rid.partition(":")
+        if rid == "cont":
+            kind, path = "file", (continue_info(win, can_return(win)) or {}).get("path", "")
+        if verb == "open":
+            self.activate(win, rid)
+        elif not path or kind not in ("file", "proj"):
+            return
+        elif verb == "pin":
+            action(win, "pin" + SEP + path)
+        elif verb == "forget":
+            action(win, "forget" + SEP + path)
+        elif verb == "locate":
+            open_recent(win, path)
+        elif verb == "finder":
+            reveal(path)
+
+    def closed(self, ctx):
+        if ctx.replaced:
+            return                      # Settings over it: the page comes back after
+        if self.page.wanted:
+            self.page.wanted = False
+            if self.page.dog is not None:
+                self.page.dog.stop()
+
+
+def continue_info(win, back) -> dict | None:
+    """The document to continue: the one open behind the page, else the
+    last one opened or saved (when it still exists)."""
+    if back:
+        doc = getattr(win, "_doc", None)
+        path = getattr(doc, "path", None)
+        name = doc.display_name() if doc is not None and hasattr(doc, "display_name") else "Untitled"
+        m = recent.meta(path) if path else {}
+        place = " · ".join(x for x in (m.get("project", ""), _folder(path) if path else "") if x)
+        return {"path": str(path or ""), "name": name, "place": place, "last_in": _last_in(m) or "In Model",
+                "problems": int(m.get("problems") or 0), "open": True}
+    path = last_file()
+    if not path:
+        return None
+    c = _cached(path) or {}
+    if c.get("exists") is False:
+        return None
+    m = recent.meta(path)
+    place = " · ".join(x for x in (m.get("project", ""), _folder(path)) if x)
+    return {"path": path, "name": Path(path).name, "place": place, "last_in": _last_in(m),
+            "problems": int(m.get("problems") or 0), "open": False}
+
+
+def link_state(link: dict, host_mtime) -> str:
+    from core import link_scan
+    return link_scan.state(link, host_mtime)
+
+
+def _ago_of(path) -> str:
+    try:
+        return _ago(os.stat(path).st_mtime) if path else ""
+    except OSError:
+        return ""
+
+
+def _size(path) -> str:
+    try:
+        n = os.stat(path).st_size
+    except (OSError, TypeError):
+        return ""
+    for unit in ("B", "KB", "MB", "GB"):
+        if n < 1024 or unit == "GB":
+            return f"{n:.0f} {unit}" if unit in ("B", "KB") else f"{n:.1f} {unit}".replace(".0 ", " ")
+        n /= 1024.0
+    return ""
+
+
+def reveal(path) -> None:
+    """Show the file in the Finder (both apps)."""
+    import subprocess
+    try:
+        if sys.platform == "darwin":
+            subprocess.Popen(["open", "-R", str(path)])
+        else:
+            from PySide6.QtCore import QUrl
+            from PySide6.QtGui import QDesktopServices
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(Path(path).parent)))
+    except OSError:
+        pass
 
 # ---- Rows --------------------------------------------------------------------
 def last_file() -> str:
@@ -602,6 +872,11 @@ def _load_one(path: str) -> dict:
         return entry
     entry["thumb"] = _thumbnail(p, st)
     try:
+        from core import link_scan
+        entry["links"] = link_scan.scan(p)
+    except Exception:  # noqa: BLE001 — the preview only loses its links
+        entry["links"] = []
+    try:
         from core import autosave
         slot = autosave.pending(p)
         entry["autosave_newer"] = bool(slot is not None and slot.stat().st_mtime > st.st_mtime + 1)
@@ -679,50 +954,18 @@ def before_frame(view, win) -> None:
         p.before_frame(view)
 
 
-_NAMES = {Qt.Key_Escape: "Escape", Qt.Key_Return: "Enter", Qt.Key_Enter: "Enter",
-          Qt.Key_Backspace: "Backspace", Qt.Key_Tab: "Tab", Qt.Key_Up: "ArrowUp",
-          Qt.Key_Down: "ArrowDown", Qt.Key_Left: "ArrowLeft", Qt.Key_Right: "ArrowRight"}
-
-
-def _page_key(view, event):
-    """(name, text) when the key is the page's, else None. ⌘ and ⌃ keys
-    stay the window's (⌘K, ⌘O, ⌘N…)."""
-    from views import wgpu_ui
-    win = wgpu_ui._window(view)
-    if not shown(win):
-        return None
-    if event.modifiers() & (Qt.ControlModifier | Qt.MetaModifier):
-        return None
-    name = _NAMES.get(event.key(), "")
-    text = event.text() if not name else ""
-    if not name and not (text and text.isprintable()):
-        return None
-    return name, text
-
-
 def claims_key(view, event) -> bool:
-    """ShortcutOverride: the page's keys fire no window shortcut."""
-    return _page_key(view, event) is not None
+    """The page is a large sheet now (views/chrome_sheet.py owns its keys)."""
+    return False
 
 
 def key(view, event, pressed: bool) -> bool:
-    """A key to the page first. True: it was the page's."""
-    got = _page_key(view, event)
-    renderer = getattr(view, "renderer", None)
-    if got is None or renderer is None or not hasattr(renderer, "ui_start_key"):
-        return False
-    if not pressed:
-        # The release goes where the press went: to the command palette's
-        # field when it is open over the page, else nowhere.
-        return not renderer.ui_claims_key(got[0])
-    taken = renderer.ui_start_key(*got)
-    if taken:
-        view.update()
-    return taken
+    return False
 
 
 def action(win, arg: str) -> None:
-    """``start:<verb>[\\x1f<arg>]`` from the chrome."""
+    """``<verb>[\\x1f<arg>]``: the page's verbs (the sheet, the shell's
+    menu and the tests call them by name)."""
     verb, _, rest = arg.partition(SEP)
     p = page(win)
     if verb == "show":
@@ -751,19 +994,16 @@ def action(win, arg: str) -> None:
     elif verb == "pin" and rest:
         row = next((r for k in ("files", "projects") for r in recent.entries(k) if r["path"] == rest), None)
         recent.remember(rest, pinned=not (row or {}).get("pinned", False))
-        p.dirty = True
-        p.repaint()
+        p.changed()
     elif verb == "forget" and rest:
         # Off the list only; the file stays where it is.
         recent.forget(rest)
-        p.dirty = True
-        p.repaint()
+        p.changed()
     elif verb == "clearmissing":
         gone = missing_files()
         if gone:
             recent.forget(gone)
-        p.dirty = True
-        p.repaint()
+        p.changed()
     elif verb == "template" and rest:
         from_template(win, rest)
     elif verb == "nav" and rest == "libraries":
@@ -780,7 +1020,6 @@ def action(win, arg: str) -> None:
         fn = getattr(win, run, None) if run else None
         if callable(fn):
             fn()
-
 
 # ---- Verbs -------------------------------------------------------------------
 def new_model(win, ask_units: bool = True) -> None:
