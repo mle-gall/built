@@ -1307,10 +1307,6 @@ class EditTexturedMaterialCommand(RestampMaterialCommand):
         super().do(scene)
 
 
-if not _doc.ENABLED:
-    from core.material_restamp_reference import RestampMaterialCommand, EditTexturedMaterialCommand
-
-
 class PurgeUnusedCommand(Command):
     """"Purge Unused", for layers and/or materials.
 

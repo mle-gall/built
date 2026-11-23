@@ -47,11 +47,6 @@ class DeleteMaterialCommand(RestampMaterialCommand):
         super().do(scene)
 
 
-from core import doc_model as _doc
-if not _doc.ENABLED:
-    from core.material_restamp_reference import DeleteMaterialCommand
-
-
 # ---- one kind of resource: every paint is a named material -------------------
 
 #: ``Material.pbr`` channels (contract: docs/skp-pbr-format.md, "Mapping to
