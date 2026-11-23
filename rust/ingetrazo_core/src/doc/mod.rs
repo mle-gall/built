@@ -291,7 +291,7 @@ pub struct PlacementData {
     pub tag: Option<String>,
     pub xform: Option<Xform>,
     pub axes: Option<Xform>,
-    pub billboard: bool,
+    pub billboard: Option<Box<Value>>,
     pub component: bool,
     pub hidden: bool,
     pub locked: bool,
@@ -466,7 +466,7 @@ impl Node {
             (Data::Placement(p), Field::Tag) => FVal::Str(p.tag.clone()),
             (Data::Placement(p), Field::Xform) => FVal::Xf(p.xform.clone()),
             (Data::Placement(p), Field::Axes) => FVal::Xf(p.axes.clone()),
-            (Data::Placement(p), Field::Billboard) => FVal::Bool(p.billboard),
+            (Data::Placement(p), Field::Billboard) => FVal::Val(Some(p.billboard.as_deref().cloned().unwrap_or(Value::Bool(false)))),
             (Data::Placement(p), Field::Component) => FVal::Bool(p.component),
             (Data::Placement(p), Field::Hidden) => FVal::Bool(p.hidden),
             (Data::Placement(p), Field::Locked) => FVal::Bool(p.locked),
@@ -515,7 +515,14 @@ impl Node {
             (Data::Placement(p), Field::Tag, FVal::Str(s)) => FVal::Str(std::mem::replace(&mut p.tag, s)),
             (Data::Placement(p), Field::Xform, FVal::Xf(x)) => FVal::Xf(std::mem::replace(&mut p.xform, x)),
             (Data::Placement(p), Field::Axes, FVal::Xf(x)) => FVal::Xf(std::mem::replace(&mut p.axes, x)),
-            (Data::Placement(p), Field::Billboard, FVal::Bool(b)) => FVal::Bool(std::mem::replace(&mut p.billboard, b)),
+            (Data::Placement(p), Field::Billboard, FVal::Val(v)) => {
+                let value = match v {
+                    Some(Value::Bool(false)) => None,
+                    value => Some(Box::new(value.unwrap_or(Value::None))),
+                };
+                let old = std::mem::replace(&mut p.billboard, value);
+                FVal::Val(Some(old.map_or(Value::Bool(false), |v| *v)))
+            }
             (Data::Placement(p), Field::Component, FVal::Bool(b)) => FVal::Bool(std::mem::replace(&mut p.component, b)),
             (Data::Placement(p), Field::Hidden, FVal::Bool(b)) => FVal::Bool(std::mem::replace(&mut p.hidden, b)),
             (Data::Placement(p), Field::Locked, FVal::Bool(b)) => FVal::Bool(std::mem::replace(&mut p.locked, b)),

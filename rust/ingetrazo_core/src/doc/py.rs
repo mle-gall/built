@@ -766,14 +766,12 @@ impl PyPlacement {
         write(slf.py(), slf.as_any(), slf.get().key, Field::Definition, FVal::Definition(value))
     }
     #[getter]
-    fn billboard(&self) -> PyResult<bool> {
-        let d = lock();
-        let super::Data::Placement(p) = &d.need(self.key).map_err(err)?.data else { return Ok(false) };
-        Ok(p.billboard)
+    fn billboard<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
+        read(slf.py(), slf.as_any(), slf.get().key, Field::Billboard)
     }
     #[setter]
-    fn set_billboard(slf: &Bound<'_, Self>, v: bool) -> PyResult<()> {
-        write(slf.py(), slf.as_any(), slf.get().key, Field::Billboard, FVal::Bool(v))
+    fn set_billboard(slf: &Bound<'_, Self>, v: &Bound<'_, PyAny>) -> PyResult<()> {
+        write(slf.py(), slf.as_any(), slf.get().key, Field::Billboard, FVal::Val(Some(Value::from_py(v)?)))
     }
     #[getter]
     fn component<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
@@ -2086,7 +2084,8 @@ fn doc_view_changed(py: Python<'_>, key: Key, which: u8, view: &Bound<'_, PyAny>
 
 fn fval_for(f: Field, v: &Bound<'_, PyAny>) -> PyResult<FVal> {
     Ok(match f {
-        Field::Billboard | Field::Component | Field::Hidden | Field::Locked | Field::Visible => FVal::Bool(v.is_truthy()?),
+        Field::Billboard => FVal::Val(Some(Value::from_py(v)?)),
+        Field::Component | Field::Hidden | Field::Locked | Field::Visible => FVal::Bool(v.is_truthy()?),
         Field::Uid | Field::Name | Field::Tag | Field::Key | Field::Folder | Field::Finish => FVal::Str(str_of(v)?),
         Field::Material | Field::Color | Field::Texture | Field::Opacity | Field::Pbr => opt_value(v)?,
         Field::Definition => return Err(PyTypeError::new_err("use the mesh setter")),

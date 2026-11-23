@@ -75,7 +75,7 @@ def group_dump(g):
         "xform": matrix(g.xform), "axes": matrix(g.axes),
         "built": (built.placement_values(g.xform)
                   if g.xform is not None else None),
-        "faces": len(g.mesh.faces),
+        "faces": len(g.mesh.faces), "billboard": g.billboard,
         "ifc": g.ifc, "ext": g.ext, "text3d": g.text3d,
         "exploded": g.exploded,
         "explode_offset": (None if g.explode_offset is None
@@ -259,6 +259,7 @@ def structural_steps(steps):
     history.feed.subscribe(lambda step: steps.append(step_record(step)))
     assembly, target, classic = scene.groups
     source = assembly.children[1]
+    source.billboard = "mesh"
     link = template()
     link.ext = {"link": {"path": "/synthetic/reference.igz"}}
     scene.groups.append(link)
@@ -289,7 +290,14 @@ def structural_steps(steps):
 
 
 def main(work: Path):
-    initial = saved(build(), work, "initial")
+    initial_scene = build()
+    # The prototype table in existing files interns geometry. Two entries
+    # naming the same prototype can have different nested placement data.
+    original = initial_scene.groups[0]
+    other = Group(original.mesh, name="Second assembly", uid="other-assembly")
+    other.adopt([Group(original.children[0].mesh, name="Only part", uid="only-part")])
+    initial_scene.groups.append(other)
+    initial = saved(initial_scene, work, "initial")
     scene = build()
     h = History(scene)
     steps = []
