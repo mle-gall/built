@@ -770,9 +770,10 @@ def _save_scene(scene, path, *, backup, confirm_loss=None, compatibility=False, 
     return _prepare_and_write(scene, path, backup, None, progress=progress)
 
 
-def export_igz(scene, path, confirm_loss):
+def export_igz(scene, path, confirm_loss, *, progress=None):
     """Write a compatibility copy. The callback receives maximum displacement in mm."""
-    return _save_scene(scene, path, backup=True, compatibility=True, confirm_loss=confirm_loss)
+    return _save_scene(scene, path, backup=True, compatibility=True, confirm_loss=confirm_loss,
+                       progress=progress)
 
 
 def _prepare_and_write(scene, path, backup, stream, confirm_loss=None, progress=None):

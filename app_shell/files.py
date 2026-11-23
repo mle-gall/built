@@ -660,6 +660,18 @@ def _picture_png(win, doc):
     return bytes(data)
 
 
+def _save_progress(job):
+    if job is None:
+        return None
+    from app_shell import modal
+
+    def update(fraction, phase):
+        job.update(fraction, tr(phase))
+        modal.tick()
+
+    return update
+
+
 def do_save(win, path: Path, copy: bool = False) -> bool:
     """MainWindow._do_save: the project's own scene and camera, links
     relative to where it goes, its picture; the previous file kept as
@@ -682,11 +694,7 @@ def do_save(win, path: Path, copy: bool = False) -> bool:
             if job is None:
                 stats = igz_format.save_scene(scene, path) or {}
             else:
-                from app_shell import modal
-                def progress(fraction, phase):
-                    job.update(fraction, tr(phase))
-                    modal.tick()
-                stats = igz_format.save_scene(scene, path, progress=progress) or {}
+                stats = igz_format.save_scene(scene, path, progress=_save_progress(job)) or {}
     except Exception as exc:  # noqa: BLE001
         win._host._error("save")
         cd.save_failed(win, exc, lambda: save_copy(win) if copy else save_as(win))
@@ -752,7 +760,16 @@ def export_igz(win, path=None) -> bool:
         scene = _copy.copy(doc.viewport.scene)
         scene.camera_home = win._camera_dict(doc.viewport)
         scene.views_home = None
-        stats = igz_format.export_igz(scene, path, confirm)
+        png = _picture_png(win, doc)
+        if png is not None:
+            scene._home_thumbnail_png = png
+        activity = cd.busy(win, tr("Saving {name}…", name=path.name), exclusive=True)
+        with activity as job:
+            stats = igz_format.export_igz(scene, path, confirm, progress=_save_progress(job))
+            if stats is None and job is not None:
+                job.cancelled = True
+            elif stats:
+                activity.output_path = path
         if stats and stats.get("missing"):
             cd.warning(win, tr("Saved with missing textures"), tr("Some texture images could not be packed."))
     except Exception as exc:  # noqa: BLE001
