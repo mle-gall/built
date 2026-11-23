@@ -94,6 +94,20 @@ impl Vec3 {
     fn __rsub__(&self, l: &Bound<'_, PyAny>) -> PyResult<Self> {
         Ok((xyz(l)? - self.v).into())
     }
+    fn __iadd__(slf: &Bound<'_, Self>, rhs: &Bound<'_, PyAny>) -> PyResult<()> {
+        let result = slf.borrow().v + xyz(rhs)?;
+        slf.borrow_mut().update(result)
+    }
+    fn __isub__(slf: &Bound<'_, Self>, rhs: &Bound<'_, PyAny>) -> PyResult<()> {
+        let result = slf.borrow().v - xyz(rhs)?;
+        slf.borrow_mut().update(result)
+    }
+    fn __imul__(&mut self, scale: f64) -> PyResult<()> {
+        self.update(self.v * scale)
+    }
+    fn __itruediv__(&mut self, scale: f64) -> PyResult<()> {
+        self.update(self.v / scale)
+    }
     fn __neg__(&self) -> Self {
         (-self.v).into()
     }
@@ -264,6 +278,9 @@ impl Matrix4 {
     fn determinant(&self) -> f64 {
         self.0.determinant()
     }
+    fn isAffine(&self) -> bool {
+        self.0.row(3) == DVec4::W
+    }
     fn isIdentity(&self) -> bool {
         self.0 == DMat4::IDENTITY
     }
@@ -385,6 +402,15 @@ impl Matrix4 {
             -2. * f * n / (f - n),
             0.,
         ])
+    }
+    fn __call__(&self, row: usize, column: usize) -> PyResult<f64> {
+        if row >= 4 || column >= 4 {
+            return Err(PyIndexError::new_err("matrix index"));
+        }
+        Ok(self.0.col(column)[row])
+    }
+    fn __getitem__(&self, index: (usize, usize)) -> PyResult<f64> {
+        self.__call__(index.0, index.1)
     }
     fn column(&self, i: usize) -> PyResult<Vec4> {
         if i >= 4 {
