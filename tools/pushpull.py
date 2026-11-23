@@ -110,6 +110,34 @@ def _loops_overlap_2d(a_xy, b_xy) -> bool:
         any(_point_in_polygon(p, a_xy) for p in b_xy)
 
 
+class _PushBand:
+    """The connecting edges and faces of one pushed ring, inside the push transaction."""
+
+    def __init__(self, base, top, *, rim=False, rails=False, walls=False, cap=False):
+        self.base, self.top = base, top
+        self.parts = rim, rails, walls, cap
+
+    def do(self, scene):
+        from core.store_mesh import StoreMesh
+        from ingetrazo_core import MeshStore
+        mesh = scene.mesh
+        if type(mesh) is StoreMesh:
+            dirty, steps = mesh._store.push_band([mesh._input_point(p) for p in self.base],
+                                                 [mesh._input_point(p) for p in self.top], *self.parts)
+            if dirty:
+                mesh._dirty(dirty)
+            scene.version += steps
+            return
+        edges, faces = MeshStore.object_push_band([p.toTuple() for p in self.base],
+                                                  [p.toTuple() for p in self.top], *self.parts)
+        for a, b in edges:
+            AddEdgeCommand(QVector3D(*a), QVector3D(*b)).do(scene)
+        for ring in faces:
+            face = mesh.add_face([QVector3D(*p) for p in ring])
+            face.interior = False
+            scene.version += 1
+
+
 class _GroupScene:
     """Scene facade aiming the push/pull machinery at a Group's isolated mesh.
 
@@ -3095,54 +3123,17 @@ class PushPullTool(Tool):
         # connectivity pass collapses them. No merge — rebuild already did.
         run_stitch(mesh, seedkeys, None, coplanar_merge=False)
 
-    def _extrude_commands(self, face, base, top, base_holes, top_holes,
-                          count, attached) -> list:
-        """Build the naive extrusion of ``face`` to ``top``: a consumed/kept
-        base, the moved cap (carrying any holes), one wall quad per boundary
-        edge, and an inner wall per hole edge — no special cases. Where a quad
-        lands on an existing face's plane (a strip on a wall, a phantom over a
-        region being carved away) the per-plane rebuild dissolves it.
-
-        Winding is deterministic: with the base wound outward (the commit
-        invariant on solids), ``[a, b, b2, a2]`` is outward for *both* push
-        directions — flipping the push flips the quad's geometric normal and
-        which side holds material together — and the cap keeps the base's
-        winding (+n faces out of an added box and out of a carved pocket
-        alike). That is what lets the rebuild trust fresh faces' normals."""
-        commands: list = []
+    def _extrude_commands(self, face, base, top, base_holes, top_holes, count, attached):
+        """Build the cap between the outer rim edges and the inner and outer walls."""
+        commands = [DeleteFaceCommand(face)] if attached else []
+        commands.append(_PushBand(base, top, rim=True, rails=True))
+        self._cap_cmd = AddFaceCommand(top, auto=not attached, holes=top_holes)
+        commands.append(self._cap_cmd)
+        for lower, upper in zip(base_holes, top_holes):
+            commands.append(_PushBand(lower, upper, rim=True, rails=True, walls=True))
+        commands.append(_PushBand(base, top, walls=True))
         if attached:
-            commands.append(DeleteFaceCommand(face))  # base consumed into the solid
-        for i in range(count):
-            commands.append(AddEdgeCommand(top[i], top[(i + 1) % count]))
-        for i in range(count):
-            commands.append(AddEdgeCommand(base[i], top[i]))
-        cap_cmd = AddFaceCommand(
-            list(top), auto=not attached,
-            holes=[list(th) for th in top_holes] or None)
-        commands.append(cap_cmd)
-        # The moved cap is the base's continuation: it inherits its attrs
-        # (material, future BIM tag). Remembered so _mutate can stamp the face
-        # the command creates when it runs.
-        self._cap_cmd = cap_cmd
-
-        # Inner walls: each hole edge raises a wall to the moved cap's opening.
-        for hb, ht in zip(base_holes, top_holes):
-            hn = len(hb)
-            for i in range(hn):
-                commands.append(AddEdgeCommand(ht[i], ht[(i + 1) % hn]))
-            for i in range(hn):
-                commands.append(AddEdgeCommand(hb[i], ht[i]))
-            for i in range(hn):
-                j = (i + 1) % hn
-                commands.append(AddFaceCommand([hb[i], hb[j], ht[j], ht[i]], auto=False))
-
-        for i in range(count):
-            j = (i + 1) % count
-            commands.append(AddFaceCommand(
-                [base[i], base[j], top[j], top[i]], auto=False))
-
-        if attached:
-            commands.append(PruneOrphanEdgesCommand(list(base)))
+            commands.append(PruneOrphanEdgesCommand(base))
         return commands
 
     # ---- Through-hole -------------------------------------------------------
@@ -3238,62 +3229,22 @@ class PushPullTool(Tool):
             return None
         return best[1], best[2], best[3]
 
-    def _through_commands(self, face, base, through, base_holes=(),
-                          faces=()) -> list:
-        """Build the commands for a through-hole: punch the far face, join it to
-        the front opening with a tunnel, and sweep the dangling base edges.
-
-        A ring (a face whose holes are filled by faces of their own, the
-        «islands») pushed right through carries each island down as a
-        block: walls along the hole and a bottom on the far face (#1083).
-        Without them the island hung open and the push topped out at the
-        far face, its bottom never punched."""
-        far_face, back_loop, remainder = through
-        count = len(base)
-        islands = (self._through_islands(face, base_holes, far_face,
-                                         back_loop, faces)
-                   if base_holes and remainder is None else [])
-        commands: list = [
-            DeleteFaceCommand(face),       # remove the pushed cap (window pane)
-            DeleteFaceCommand(far_face),   # re-add the far face with a new hole
-        ]
+    def _through_commands(self, face, base, through, base_holes=(), faces=()):
+        """Punch the far face, connect the tunnel walls and close any swept islands."""
+        far_face, back, remainder = through
+        holes = list(far_face.holes)
+        islands = []
         if remainder is None:
-            far_cmd = AddFaceCommand(
-                list(far_face.vertices), auto=False,
-                holes=[list(h) for h in far_face.holes] + [list(back_loop)],
-            )
-            commands.append(far_cmd)
-            for i in range(count):         # back opening boundary
-                commands.append(AddEdgeCommand(back_loop[i], back_loop[(i + 1) % count]))
-        else:
-            # A notch on the rim: the far face becomes what is left of it;
-            # the opening's outline that ran along the old rim is nobody's
-            # edge any more and the prune below sweeps it.
-            far_cmd = AddFaceCommand(
-                list(remainder), auto=False,
-                holes=[list(h) for h in far_face.holes])
-            commands.append(far_cmd)
-        # The rebuilt far face is the same face with a bite out of it: it
-        # keeps its paint (test_attrs_survive_corner_notch_through_floor).
-        self._far_cmd = (far_cmd, dict(far_face.attrs))
-        for i in range(count):             # tunnel verticals
-            commands.append(AddEdgeCommand(base[i], back_loop[i]))
-        for i in range(count):             # tunnel walls
-            j = (i + 1) % count
-            commands.append(AddFaceCommand(
-                [base[i], base[j], back_loop[j], back_loop[i]], auto=False))
-        for hole, back in islands:
-            m = len(hole)
-            for i in range(m):
-                commands.append(AddEdgeCommand(back[i], back[(i + 1) % m]))
-            for i in range(m):
-                commands.append(AddEdgeCommand(hole[i], back[i]))
-            for i in range(m):
-                j = (i + 1) % m
-                commands.append(AddFaceCommand(
-                    [hole[i], hole[j], back[j], back[i]], auto=False))
-            commands.append(AddFaceCommand(list(back), auto=False))
-        commands.append(PruneOrphanEdgesCommand(list(base) + list(back_loop)))
+            holes.append(back)
+            if base_holes:
+                islands = self._through_islands(face, base_holes, far_face, back, faces)
+        far = AddFaceCommand(far_face.vertices if remainder is None else remainder, auto=False, holes=holes)
+        self._far_cmd = far, dict(far_face.attrs)
+        commands = [DeleteFaceCommand(face), DeleteFaceCommand(far_face), far,
+                    _PushBand(base, back, rim=remainder is None, rails=True, walls=True)]
+        for lower, upper in islands:
+            commands.append(_PushBand(lower, upper, rim=True, rails=True, walls=True, cap=True))
+        commands.append(PruneOrphanEdgesCommand(list(base) + list(back)))
         return commands
 
     @staticmethod

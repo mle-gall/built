@@ -38,6 +38,30 @@ fn segment(a: Cell, b: Cell) -> [Cell; 2] {
     }
 }
 
+/// A landing may leave a face walking out to a tip and straight back.
+pub(super) fn trim_spurs<T: Copy>(
+    ring: &mut Vec<T>,
+    same: impl Fn(T, T) -> bool,
+    landed: impl Fn(T) -> bool,
+) {
+    while ring.len() >= 3 {
+        let n = ring.len();
+        let Some(i) = (0..n).find(|&i| {
+            let prev = ring[(i + n - 1) % n];
+            same(ring[i], prev) || (same(prev, ring[(i + 1) % n]) && landed(ring[i]))
+        }) else {
+            break;
+        };
+        if same(ring[i], ring[(i + n - 1) % n]) {
+            ring.remove(i);
+        } else {
+            let j = (i + 1) % n;
+            ring.remove(i.max(j));
+            ring.remove(i.min(j));
+        }
+    }
+}
+
 impl Store {
     /// Apply an affine point transform in mesh order. The facade moves by
     /// a delta, including its float32 rounding for older meshes.
@@ -199,22 +223,7 @@ impl Store {
             if !ring.iter().any(|&v| at_landing(v)) {
                 continue;
             }
-            while ring.len() >= 3 {
-                let n = ring.len();
-                let Some(i) = (0..n).find(|&i| {
-                    let prev = ring[(i + n - 1) % n];
-                    ring[i] == prev || (prev == ring[(i + 1) % n] && at_landing(ring[i]))
-                }) else {
-                    break;
-                };
-                if ring[i] == ring[(i + n - 1) % n] {
-                    ring.remove(i);
-                } else {
-                    let j = (i + 1) % n;
-                    ring.remove(i.max(j));
-                    ring.remove(i.min(j));
-                }
-            }
+            trim_spurs(&mut ring, |a, b| a == b, at_landing);
             if ring.len() == rings[0].len() {
                 continue;
             }

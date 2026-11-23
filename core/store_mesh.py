@@ -1307,6 +1307,18 @@ class StoreMesh(Mesh):
             d["_revision"] = d.get("_revision", 0) + n
             d["_mut_serial"] = d.get("_mut_serial", 0) + n
 
+    def _inherit_face_attrs(self, dirty, replacements):
+        """Transfer editor attributes to native replacement pieces and return their source faces."""
+        if dirty:
+            self._dirty(dirty)
+        sources = []
+        for old, pieces in replacements:
+            source = FaceView(self, old)
+            sources.append(source)
+            for key in pieces:
+                FaceView(self, key).attrs = dict(source.attrs)
+        return sources
+
     def _py(self, name, *args):
         self._materialise()
         return getattr(self, name)(*args)

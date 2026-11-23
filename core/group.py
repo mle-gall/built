@@ -484,12 +484,11 @@ def _implicit_uvw(face, tex, minv):
     inverse of the transform about to be accounted for) pins that look
     into a ``uvw`` the remap below can carry. ``None`` for a degenerate
     face, whose projection is meaningless either way."""
-    from core import doc_model
     from core.store_mesh import FaceView, StoreMesh, _hypot
     from core.texture import face_uv_axes
     from ingetrazo_core import Matrix4, Vec3
 
-    if (doc_model.ENABLED and type(face) is FaceView and type(face._m) is StoreMesh
+    if (type(face) is FaceView and type(face._m) is StoreMesh
             and type(minv) is Matrix4 and face._m._store.is_live(face.key)):
         coordinates = face._m._store.pretransform_face_normal(face.key, minv.data(), _hypot())
         normal = None if coordinates is None else Vec3(*coordinates)
@@ -552,9 +551,8 @@ def _remapped_uvw(uvw, minv) -> list:
     never as ``m(row, col)``: that call is gone from some PySide6 builds
     (Qt 6.10 raises "object is not callable", #1405)."""
     # Each UV row is a homogeneous covector: row' = row @ inverse.
-    from core import doc_model
     from ingetrazo_core import Matrix4
-    if doc_model.ENABLED and type(minv) is Matrix4 and len(uvw) == 8 and all(
+    if type(minv) is Matrix4 and len(uvw) == 8 and all(
             type(x) in (float, int) for x in uvw):
         return minv.remap_uvw(uvw, sys.version_info >= (3, 12))
     d = minv.data()

@@ -82,8 +82,8 @@ fn split(r: &[P], chain: &[P], h: Hypot, ordered: bool) -> Option<Vec<Ring>> {
     (one.len() >= 3 && two.len() >= 3).then(|| vec![one, two])
 }
 pub struct Outline {
-    rings: Vec<Ring>,
-    normal: V3,
+    pub(super) rings: Vec<Ring>,
+    pub(super) normal: V3,
     axes: (V3, V3),
     h: Hypot,
 }
@@ -99,15 +99,13 @@ impl Store {
                     .collect()
             })
             .collect();
-        Outline {
-            rings,
-            normal,
-            axes: plane_axes(normal, h),
-            h,
-        }
+        Outline::from_rings(rings, normal, h)
     }
 }
 impl Outline {
+    pub(super) fn from_rings(rings: Vec<Ring>, normal: V3, h: Hypot) -> Self {
+        Self { rings, normal, axes: plane_axes(normal, h), h }
+    }
     fn proj(&self, p: P) -> XY {
         let rel = vector(p).sub(vector(self.rings[0][0]));
         [
@@ -122,7 +120,7 @@ impl Outline {
             .abs()
             <= 1e-3
     }
-    fn polygon(&self, r: &[P]) -> Vec<XY> {
+    pub(super) fn polygon(&self, r: &[P]) -> Vec<XY> {
         r.iter().map(|&p| self.proj(p)).collect()
     }
     pub fn contains(&self, r: &[P], exclude_holes: bool) -> bool {
@@ -201,7 +199,7 @@ impl Outline {
 }
 
 impl Outline {
-    fn interior(&self) -> Option<P> {
+    pub(super) fn interior(&self) -> Option<P> {
         if self.rings.first().is_none_or(|r| r.len() < 3) {
             return None;
         }
@@ -226,7 +224,7 @@ impl Outline {
         }
         self.solid_at(p)
     }
-    fn solid_at(&self, p: P) -> bool {
+    pub(super) fn solid_at(&self, p: P) -> bool {
         let q = self.proj(p);
         inside(q, &self.polygon(&self.rings[0]), false)
             && !self
