@@ -15,37 +15,23 @@ even-odd rule) and what both keep is the new edge. Coplanar faces do not
 cross — nothing is drawn for them.
 """
 from __future__ import annotations
-import math
 
 from ingetrazo_core import Vec3 as QVector3D
 
-from core import doc_model
 from core.history import CompoundCommand
 from core.mesh import element_identity
-from core.triangulate import plane_axes
-
-#: Below this a crossing is a point, not an edge.
-_MIN_LEN = 1e-5
 
 
 class _Poly:
     """A face in world space, ready for crossing tests."""
 
-    __slots__ = ("rings", "n", "d", "lo", "hi", "u", "v", "rings2d", "native")
+    __slots__ = ("rings", "native", "n", "lo", "hi")
 
-    def __init__(self, rings: list, normal: QVector3D) -> None:
+    def __init__(self, rings, native):
         self.rings = rings
-        self.n = normal.normalized()
-        self.d = QVector3D.dotProduct(self.n, rings[0][0])
-        xs = [p.x() for p in rings[0]]
-        ys = [p.y() for p in rings[0]]
-        zs = [p.z() for p in rings[0]]
-        self.lo = (min(xs), min(ys), min(zs))
-        self.hi = (max(xs), max(ys), max(zs))
-        self.u, self.v = plane_axes(self.n)
-        self.rings2d = [[(QVector3D.dotProduct(p, self.u),
-                          QVector3D.dotProduct(p, self.v)) for p in ring]
-                        for ring in rings]
+        self.native = native
+        self.n = QVector3D(*native.normal)
+        self.lo, self.hi = native.bounds
 
 
 def world_polys(face, xform=None) -> _Poly | None:
@@ -56,32 +42,11 @@ def world_polys(face, xform=None) -> _Poly | None:
     if len(outer) < 3:
         return None
     holes = [[w(p) for p in h] for h in face.holes]
-    if doc_model.ENABLED:
-        from core.store_mesh import _hypot
-        from ingetrazo_core import IntersectionPolygon
-        rings = [outer, *holes]
-        native = IntersectionPolygon.from_rings([[p.toTuple() for p in ring] for ring in rings], _hypot())
-        if native is None:
-            return None
-        poly = _Poly.__new__(_Poly)
-        poly.rings, poly.native = rings, native
-        poly.n = QVector3D(*native.normal)
-        poly.lo, poly.hi = native.bounds
-        return poly
-    n = _newell(outer)
-    if n.length() < 1e-12:
-        return None
-    return _Poly([outer, *holes], n)
-
-
-def _newell(pts) -> QVector3D:
-    x = y = z = 0.0
-    for i, a in enumerate(pts):
-        b = pts[(i + 1) % len(pts)]
-        x += (a.y() - b.y()) * (a.z() + b.z())
-        y += (a.z() - b.z()) * (a.x() + b.x())
-        z += (a.x() - b.x()) * (a.y() + b.y())
-    return QVector3D(x, y, z)
+    from core.store_mesh import _hypot
+    from ingetrazo_core import IntersectionPolygon
+    rings = [outer, *holes]
+    native = IntersectionPolygon.from_rings([[p.toTuple() for p in ring] for ring in rings], _hypot())
+    return _Poly(rings, native) if native is not None else None
 
 
 def _boxes_touch(a: _Poly, b: _Poly, eps: float = 1e-6) -> bool:
@@ -89,77 +54,10 @@ def _boxes_touch(a: _Poly, b: _Poly, eps: float = 1e-6) -> bool:
                for i in range(3))
 
 
-def _intervals(poly: _Poly, origin: QVector3D, direction: QVector3D) -> list:
-    """Where the line ``origin + t·direction`` (lying in ``poly``'s plane)
-    is inside the polygon: sorted ``(t0, t1)`` pairs, even-odd over every
-    ring."""
-    ox = QVector3D.dotProduct(origin, poly.u)
-    oy = QVector3D.dotProduct(origin, poly.v)
-    dx = QVector3D.dotProduct(direction, poly.u)
-    dy = QVector3D.dotProduct(direction, poly.v)
-    ts = []
-    for ring in poly.rings2d:
-        n = len(ring)
-        for i in range(n):
-            ax, ay = ring[i]
-            bx, by = ring[(i + 1) % n]
-            # which side of the line each end is on (half-open: a vertex ON
-            # the line counts as the positive side, so it is crossed once)
-            sa = (ax - ox) * dy - (ay - oy) * dx
-            sb = (bx - ox) * dy - (by - oy) * dx
-            if (sa >= 0) == (sb >= 0):
-                continue
-            k = sa / (sa - sb)
-            px, py = ax + (bx - ax) * k, ay + (by - ay) * k
-            den = dx * dx + dy * dy
-            ts.append(((px - ox) * dx + (py - oy) * dy) / den)
-    ts.sort()
-    return [(ts[i], ts[i + 1]) for i in range(0, len(ts) - 1, 2)]
-
-
-def _overlap(xs: list, ys: list) -> list:
-    out, i, j = [], 0, 0
-    while i < len(xs) and j < len(ys):
-        lo = max(xs[i][0], ys[j][0])
-        hi = min(xs[i][1], ys[j][1])
-        if hi > lo:
-            out.append((lo, hi))
-        if xs[i][1] < ys[j][1]:
-            i += 1
-        else:
-            j += 1
-    return out
-
-
 def cross(a: _Poly, b: _Poly) -> list:
     """The segments where faces ``a`` and ``b`` cross (none when their
     planes are parallel)."""
-    if doc_model.ENABLED:
-        return [(QVector3D(*p), QVector3D(*q)) for p, q in a.native.cross(b.native)]
-    direction = QVector3D.crossProduct(a.n, b.n)
-    if direction.length() < 1e-9:
-        return []
-    direction = direction.normalized()
-    # A point on both planes: the one nearest the origin.
-    n1, n2 = a.n, b.n
-    d1, d2 = a.d, b.d
-    c = QVector3D.dotProduct(n1, n2)
-    den = 1.0 - c * c
-    if den < 1e-12:
-        # Nearly parallel: QVector3D works in float32, so c rounded to
-        # exactly 1 and this divided by zero (seen on a real model while
-        # testing #541). No well-defined crossing line there.
-        return []
-    k1 = (d1 - d2 * c) / den
-    k2 = (d2 - d1 * c) / den
-    origin = n1 * k1 + n2 * k2
-    segs = []
-    for t0, t1 in _overlap(_intervals(a, origin, direction),
-                           _intervals(b, origin, direction)):
-        p, q = origin + direction * t0, origin + direction * t1
-        if (q - p).length() > _MIN_LEN:
-            segs.append((p, q))
-    return segs
+    return [(QVector3D(*p), QVector3D(*q)) for p, q in a.native.cross(b.native)]
 
 
 def _boxes(polys: list):
@@ -342,7 +240,7 @@ def _partition_faces(mesh, segments):
     from core import scan_index
     from core.edits import _ScanEdges
     from core.mesh import edge_flags, stamp_edge_flags
-    from core.topology import plan_edge_split, _strictly_inside_2d
+    from core.topology import plan_edge_split
 
     lines = {}
     for a, b in segments:
@@ -367,8 +265,6 @@ def _partition_faces(mesh, segments):
     polys = {}
     for edge in lines.values():
         a, b = edge.a, edge.b
-        length = (b - a).length()
-        direction = (b - a).normalized()
         bounds = list(zip(a.toTuple(), b.toTuple()))
         box = (tuple(min(v) - 1e-4 for v in bounds), tuple(max(v) + 1e-4 for v in bounds))
         faces = sc.faces(sc.faces_meeting(box)) if sc is not None else mesh.faces
@@ -376,24 +272,11 @@ def _partition_faces(mesh, segments):
             if face.key not in polys:
                 polys[face.key] = world_polys(face)
             poly = polys[face.key]
-            if doc_model.ENABLED:
-                if poly is not None:
-                    cuts = poly.native.clip(a.toTuple(), b.toTuple())
-                    if cuts:
-                        cuts_by_face.setdefault(face, []).extend(
-                            (QVector3D(*p), QVector3D(*q)) for p, q in cuts)
-                continue
-            if poly is None or any(abs(QVector3D.dotProduct(p - poly.rings[0][0], poly.n))
-                                   > 1e-4 for p in (a, b)):
-                continue
-            for lo, hi in _overlap([(0., length)], _intervals(poly, a, direction)):
-                mid = a + direction * ((lo + hi) / 2)
-                xy = (QVector3D.dotProduct(mid, poly.u), QVector3D.dotProduct(mid, poly.v))
-                if hi - lo < _MIN_LEN or not _strictly_inside_2d(xy, poly.rings2d[0]):
-                    continue
-                cut = (a if lo == 0 else a + direction * lo,
-                       b if hi == length else a + direction * hi)
-                cuts_by_face.setdefault(face, []).append(cut)
+            if poly is not None:
+                cuts = poly.native.clip(a.toTuple(), b.toTuple())
+                if cuts:
+                    cuts_by_face.setdefault(face, []).extend(
+                        (QVector3D(*p), QVector3D(*q)) for p, q in cuts)
 
     for face, cuts in cuts_by_face.items():
         _replace_regions(mesh, face, polys[face.key], cuts)
@@ -403,7 +286,6 @@ def _replace_regions(mesh, face, poly, cuts):
     from copy import deepcopy
     from core.arrangement import planar_rebuild
     from core.make_faces import _probe
-    from core.topology import _strictly_inside_2d
     from core.triangulate import _newell
 
     boundary = [(a, b) for ring in poly.rings for a, b in zip(ring, ring[1:] + ring[:1])]
@@ -415,12 +297,7 @@ def _replace_regions(mesh, face, poly, cuts):
             mid = _probe(outer, holes, poly.n)
             if mid is None:
                 continue
-            if doc_model.ENABLED:
-                in_hole = poly.native.in_hole(mid.toTuple())
-            else:
-                xy = (QVector3D.dotProduct(mid, poly.u), QVector3D.dotProduct(mid, poly.v))
-                in_hole = any(_strictly_inside_2d(xy, h) for h in poly.rings2d[1:])
-            if in_hole:
+            if poly.native.in_hole(mid.toTuple()):
                 continue
         if QVector3D.dotProduct(_newell(outer), poly.n) < 0:
             outer.reverse()
