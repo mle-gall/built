@@ -116,7 +116,9 @@ def test_the_rays_it_cannot_call_are_asked_as_before(win, monkeypatch):
         def first_clear(self, *a):
             first, _d = iset.first_clear(*a)
             n = len(a[2]) if first < 0 else first
+            doubt_counts.append(n)
             return first, np.arange(n, dtype=np.int64)
+    doubt_counts = []
     asked = []
     real = type(vp)._occluded_many_now
     monkeypatch.setattr(type(vp), "_occluded_many_now",
@@ -132,7 +134,7 @@ def test_the_rays_it_cannot_call_are_asked_as_before(win, monkeypatch):
             want = _want(vp, pts, monkeypatch)
             asked.clear()
             assert vp._first_clear(pts) == want
-            assert len(asked) == (want if want >= 0 else len(pts))
+            assert len(asked) == min(doubt_counts[-1], want + 1 if want >= 0 else len(pts))
         monkeypatch.undo()
         monkeypatch.setattr(type(vp), "_occluded_many_now",
                             lambda self, w: (asked.append(len(w)),

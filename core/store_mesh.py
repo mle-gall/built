@@ -62,12 +62,10 @@ def _module():
 
 
 def _weld_args():
-    """The weld constants of ``core/mesh.py`` for a new store, and whether
-    this Qt fuses ``QVector3D::lengthSquared()`` (the weld distance test):
-    Apple clang on arm64 does (``libc++-fma``)."""
+    """Use the same unfused squared distance as the binary64 model vector."""
     return dict(scale=_mesh._KEY_SCALE,
                 tol2=(10.0 ** -_mesh._KEY_DECIMALS) ** 2,
-                fused=_hypot() == "libc++-fma")
+                fused=False)
 
 
 def _copy_attrs(d) -> dict:
