@@ -12,12 +12,12 @@ use pyo3::{
 #[derive(Clone)]
 pub struct Vec3 {
     v: DVec3,
-    hashed: bool,
+    hash: Option<isize>,
 }
 
 impl From<DVec3> for Vec3 {
     fn from(v: DVec3) -> Self {
-        Self { v, hashed: false }
+        Self { v, hash: None }
     }
 }
 
@@ -36,7 +36,7 @@ fn xyz(obj: &Bound<'_, PyAny>) -> PyResult<DVec3> {
 
 impl Vec3 {
     fn update(&mut self, v: DVec3) -> PyResult<()> {
-        if self.hashed {
+        if self.hash.is_some() {
             return Err(PyTypeError::new_err("cannot modify a hashed vector"));
         }
         self.v = v;
@@ -124,8 +124,12 @@ impl Vec3 {
         r.hasattr("toTuple").unwrap_or(false) && xyz(r).is_ok_and(|v| v == self.v)
     }
     fn __hash__(&mut self, py: Python<'_>) -> PyResult<isize> {
-        self.hashed = true;
-        self.toTuple().into_pyobject(py)?.hash()
+        if let Some(hash) = self.hash {
+            return Ok(hash);
+        }
+        let hash = self.toTuple().into_pyobject(py)?.hash()?;
+        self.hash = Some(hash);
+        Ok(hash)
     }
     fn __reduce__<'py>(
         slf: &Bound<'py, Self>,

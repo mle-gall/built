@@ -29,6 +29,20 @@ def test_hashed_coordinates_stay_valid_dict_keys():
     assert lookup[Vec3(1, 2, 3)]
     with pytest.raises(TypeError):
         point.setX(0)
+    with pytest.raises(TypeError):
+        point += Vec3(1, 0, 0)
+    clone = copy.copy(point)
+    clone.setX(4)
+    assert lookup[point] and clone != point
+
+    # Python hashes NaNs by object identity. Reboxing the coordinates for
+    # each lookup would give this same vector different hashes.
+    diagnostic = Vec3(float("nan"), 0, 0)
+    lookup[diagnostic] = True
+    allocated = []
+    for i in range(10):
+        allocated.append(float(i))
+        assert lookup[diagnostic]
 
 
 def test_boundary_constructors_and_axis_angle():
