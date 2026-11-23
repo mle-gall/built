@@ -102,7 +102,7 @@ def test_parts_visibility_explode_reassemble_split(host):
 def test_native_bevel_preview_then_apply(host, monkeypatch):
     from tools.fillet import FilletTool
     from tests.test_fillet import box
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
 
     vp = host.viewport
     for f in box().faces:
