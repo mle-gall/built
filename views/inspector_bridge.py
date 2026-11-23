@@ -2,7 +2,7 @@
 
 import json
 
-from core import bim_registry, links, structure
+from core import bim_registry, deliveries, links, structure
 from core.group import Group
 from core.protocol import commands
 from core.protocol.records import filing_rule, occurrence
@@ -30,14 +30,27 @@ def _selection(view, win):
     sel = list(scene.selection)
     focus = getattr(view, "_ui_insp_node", None)
     focused = focus and focus[1] == (len(sel), id(sel[0]) if sel else 0, id(sel[-1]) if sel else 0)
-    sig = (id(scene), scene.version, tuple(map(id, sel)), bool(focused), id(scene.edit_group))
+    sig = (
+        id(scene),
+        scene.version,
+        tuple(map(id, sel)),
+        focus[0] if focused else None,
+        id(scene.edit_group),
+    )
+    delivery_key = getattr(view, "_delivery_key", None)
+    sig += (delivery_key,)
     if sig == getattr(view, "_panel_selection_sig", None):
         return
     view._panel_selection_sig = sig
     groups = [g for g in sel if isinstance(g, Group) and not focused]
     records = []
+    schema = "IFC4"
     if groups:
         registry = bim_registry.get(scene)
+        delivery = deliveries.records(scene).get(delivery_key, {})
+        if delivery.get("format") == "ifc":
+            profile = delivery.get("options", {}).get("profile")
+            schema = registry.get("export_profiles", {}).get(profile, {}).get("schema", schema)
         records = [occurrence(g, registry, bool(links.linked_ancestor(g))) for g in groups]
     g = _assembly(scene) if not focused else None
     parts = None
@@ -57,10 +70,12 @@ def _selection(view, win):
         source = structure._nodes(registry).get(node)
         if source and "source" not in source:
             rule = dict(node=node, name=source["name"], recipe=source.get("recipe", {}))
+    view._panel_schema = schema
     _send(
         view,
         "selection",
         dict(
+            schema=schema,
             selection_count=len(sel),
             rule=rule,
             records=records,
@@ -203,6 +218,7 @@ def action(win, view, payload):
                 path=path,
                 value=value,
                 property_kind=kind[0] if kind else None,
+                schema=getattr(view, "_panel_schema", "IFC4"),
             )
             vp.notify_scene_changed()
         elif surface == "rule":

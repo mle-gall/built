@@ -2050,6 +2050,10 @@ impl Ui {
                             }));
                         }
                         ui.add_space(4.0);
+                        let native_export = self.panels.has_records() && col.mode.is_empty() && col.colset != 2;
+                        if native_export {
+                            ui.collapsing("Export details", |ui| self.panels.export(ui, &mut cmds));
+                        }
                         let sections = col.inspector.clone();
                         for (title, rows) in &sections {
                             if title == "Pre-run checks" {
@@ -2079,10 +2083,7 @@ impl Ui {
                                 }));
                                 continue;
                             }
-                            if title == "Export details" && self.panels.has_records() && col.mode.is_empty() && col.colset != 2 {
-                                ui.collapsing("Export details", |ui| self.panels.export(ui,&mut cmds));
-                                continue;
-                            }
+                            if title == "Export details" && native_export { continue; }
                             if title.starts_with("Export") {
                                 egui::CollapsingHeader::new(egui::RichText::new(title.to_uppercase()).font(strong(10.0)).color(FAINT))
                                     .id_salt(title).default_open(false)

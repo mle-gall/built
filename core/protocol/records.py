@@ -42,7 +42,8 @@ def occurrence(group, registry, linked=False):
             else "Filing node" if filed else "This object"
         )
         add([key], effective.get(key) or "", owner, not filed)
-    for name, props in (effective.get("psets") or {}).items():
+    psets = effective.get("psets")
+    for name, props in (psets.items() if isinstance(psets, dict) else ()):
         if not isinstance(props, dict):
             continue
         for key, entry in props.items():
@@ -96,6 +97,10 @@ def patch_record_field(history, placements, path, value, schema="IFC4", property
             row = {"editable": True, "kind": property_kind}
         if row is None or not row["editable"] or getattr(g, "locked", False):
             raise ValueError("Field is read-only or absent on " + g.uid)
+        if path == ["class"]:
+            allowed = _recipe(g, registry).get("classes_allowed")
+            if allowed is not None and value not in allowed:
+                raise ValueError("Class is outside the filing rule allowlist")
         old = g.ifc or {}
         if path[0] == "psets":
             _, pset, prop = path

@@ -92,7 +92,9 @@ impl Records {
                         field => field.to_owned(),
                     };
                     ui.strong(title);
+                    ui.add_space(7.0);
                     ui.weak(&r.owner);
+                    ui.add_space(4.0);
                     if path[0] == "psets"
                         && r.owner == "This object"
                         && ui

@@ -140,6 +140,7 @@ impl Panels {
     }
 
     pub fn export(&mut self, ui: &mut Ui, out: &mut Vec<String>) {
+        ui.strong(label(&self.data["selection"]["schema"]));
         self.records.draw(ui, out);
     }
     pub fn has_records(&self) -> bool {
@@ -332,7 +333,7 @@ impl Panels {
                     &format!("camera.sensor{i}"),
                     name,
                     &c["sensor"][i],
-                    1.0..=200.0,
+                    1.0..=100.0,
                     out,
                 );
             }
@@ -374,8 +375,8 @@ impl Panels {
             for (key, name, lo, hi) in [
                 ("fov", "Vertical FOV (°)", 1., 120.),
                 ("roll_deg", "Roll (°)", -180., 180.),
-                ("shift_x", "Horizontal shift", -2., 2.),
-                ("shift_y", "Vertical shift", -2., 2.),
+                ("shift_x", "Horizontal shift", -1., 1.),
+                ("shift_y", "Vertical shift", -1., 1.),
                 ("clip_near", "Near clip (0 = auto)", 0., 1e9),
                 ("clip_far", "Far clip (0 = auto)", 0., 1e9),
             ] {
