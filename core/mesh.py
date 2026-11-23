@@ -2169,7 +2169,7 @@ def _first_touch(name):
 for _name, _value in list(Mesh.__dict__.items()):
     if (callable(_value) and not isinstance(_value, staticmethod)
             and _name not in ("__init__", "__deepcopy__", "bump_revision",
-                              "mark_modified")
+                              "mark_modified", "invalidate_placement_chunks")
             and not (_name.startswith("__") and _name.endswith("__"))):
         setattr(DeferredMesh, _name, _first_touch(_name))
 del _name, _value
