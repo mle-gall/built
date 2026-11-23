@@ -1903,6 +1903,21 @@ pub fn line_type_preview(ui:&egui::Ui,rect:Rect,pieces:&[f64],text:&str,size:f64
     }
 }
 
+pub fn piece_sample(ui:&mut egui::Ui,kind:&str,dimensions:&[f64]){
+    super::drawing_cuts::piece_view(ui,kind,dimensions);
+}
+
+/// A saved camera view, with space reserved while its picture renders.
+pub fn scene_preview_row(ui:&mut egui::Ui,name:&str,current:bool,image:Option<&egui::TextureHandle>)->egui::Response {
+    let (r,hit)=list_row(ui,38.,current);
+    let thumb=Rect::from_center_size(r.left_center()+vec2(29.,0.),vec2(48.,32.));
+    ui.painter().rect_filled(thumb,R_INSET,WELL);
+    if let Some(image)=image{egui::Image::new(image).corner_radius(R_INSET).paint_at(ui,thumb);}
+    let text=fit(ui,name,body(),INK,r.width()-64.,1);
+    ui.painter().galley(pos2(thumb.right()+SPACE_S,r.center().y-text.size().y/2.),text,INK);
+    hit.on_hover_text(name)
+}
+
 pub fn line_sample(ui: &egui::Ui, rect: Rect, mm: &str, pattern: &str, color: Color32) {
     let width = (mm.parse::<f32>().unwrap_or(0.18)*3.8).clamp(0.7, 5.);
     let dash: &[f32] = match pattern {

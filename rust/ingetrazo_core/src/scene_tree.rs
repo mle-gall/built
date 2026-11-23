@@ -515,7 +515,7 @@ fn menu_rows(
     let mut folders = vec![(
         String::new(),
         "All scenes".into(),
-        String::new(),
+        scene.getattr("content_version")?.str()?.to_string(),
         owner.clone(),
         -1,
         true,

@@ -177,6 +177,10 @@ impl Catalog {
         self.external_tags = tags;
         true
     }
+    pub fn close_line(&mut self) {
+        self.line = None;
+        self.external_tags.clear();
+    }
     pub fn editing_line(&self) -> bool {
         self.line.is_some()
     }
@@ -390,7 +394,7 @@ mod tests {
             line.append(piece);
         }
         assert_eq!(line.numbers().unwrap(), [3., -1.5, 0.]);
-        let ctx = egui::Context::default();
+        let ctx = crate::ui::test_context();
         let output = ctx.run(Default::default(), |ctx| {
             egui::CentralPanel::default().show(ctx, |ui| {
                 line.show(ui, &[], &mut vec![]);

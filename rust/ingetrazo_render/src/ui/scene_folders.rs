@@ -2,9 +2,22 @@
 //! Browse saved views in their document folders without changing scene order.
 use super::{kit, tokens::*, Item};
 
+const PHOTO_ATTEMPTS: usize = 4;
+
+#[derive(Default)]
+struct Photo {
+    revision: String,
+    texture: Option<egui::TextureHandle>,
+    attempts: usize,
+    next: f64,
+}
+
 #[derive(Default)]
 pub(super) struct Browser {
     owner: String,
+    pub thumbnails: Option<bool>,
+    photos: std::collections::BTreeMap<String, Photo>,
+    pending: Option<String>,
     folder: String,
     destination: String,
     name: String,
@@ -12,6 +25,45 @@ pub(super) struct Browser {
 }
 
 impl Browser {
+    pub fn retain(&mut self, scenes: &[Item]) {
+        let names: std::collections::HashSet<_> = scenes.iter().map(|s| s.1.as_str()).collect();
+        self.photos.retain(|name, _| names.contains(name.as_str()));
+    }
+
+    pub fn finish(
+        &mut self,
+        ctx: &egui::Context,
+        request: &str,
+        pixels: Option<crate::scene_photo::Pixels>,
+    ) {
+        if self.pending.as_deref() != Some(request) {
+            return;
+        }
+        self.pending = None;
+        if let (Ok((owner, revision, name)), Some((w, h, pixels))) = (
+            serde_json::from_str::<(String, String, String)>(request),
+            pixels,
+        ) {
+            if owner == self.owner
+                && (1..=192).contains(&w)
+                && (1..=128).contains(&h)
+                && pixels.len() == w * h * 4
+            {
+                if let Some(photo) = self
+                    .photos
+                    .get_mut(&name)
+                    .filter(|p| p.revision == revision)
+                {
+                    let image = egui::ColorImage::from_rgba_unmultiplied([w, h], &pixels);
+                    photo.texture =
+                        Some(ctx.load_texture(name, image, egui::TextureOptions::LINEAR));
+                    photo.attempts = PHOTO_ATTEMPTS;
+                }
+            }
+        }
+        ctx.request_repaint();
+    }
+
     fn open(&mut self, key: &str) {
         self.folder = key.into();
         self.destination = key.into();
@@ -24,14 +76,28 @@ impl Browser {
         scenes: &[Item],
         folders: &[Item],
         clicked: &mut Option<String>,
+        background: &mut Vec<String>,
     ) {
         let Some(root) = folders.first() else {
             return;
         };
         if self.owner != root.3 {
+            let thumbnails = self.thumbnails;
             *self = Self::default();
+            self.thumbnails = thumbnails;
             self.owner = root.3.clone();
         }
+        let thumbnails = self.thumbnails.unwrap_or(true);
+        if let Some(choice) = kit::segmented(
+            ui,
+            &["List", "Thumbnails"],
+            usize::from(thumbnails),
+            ui.available_width(),
+        ) {
+            self.thumbnails = Some(choice == 1);
+            background.push(format!("scenephotomode:{choice}"));
+        }
+        let now = ui.input(|i| i.time);
         if !folders.iter().any(|row| row.0 == self.folder) {
             self.open("");
         }
@@ -78,15 +144,44 @@ impl Browser {
                     } {
                         continue;
                     }
-                    let target = (
-                        row.0.clone(),
-                        row.1.clone(),
-                        String::new(),
-                        "check".into(),
-                        row.4,
-                        true,
-                    );
-                    if kit::menu_row(ui, &target) {
+                    let activated = if thumbnails {
+                        let cached = self.photos.get(&row.1).and_then(|p| p.texture.as_ref());
+                        let response = kit::scene_preview_row(ui, &row.1, row.4 == 1, cached);
+                        if ui.is_rect_visible(response.rect) && self.pending.is_none() {
+                            let p = self.photos.entry(row.1.clone()).or_default();
+                            if p.revision != root.2 {
+                                p.revision = root.2.clone();
+                                p.attempts = 0;
+                                p.next = 0.;
+                            }
+                            if p.attempts < PHOTO_ATTEMPTS {
+                                if now >= p.next {
+                                    let request =
+                                        serde_json::json!([root.3, root.2, row.1]).to_string();
+                                    p.attempts += 1;
+                                    p.next = now + 0.4;
+                                    self.pending = Some(request.clone());
+                                    background.push(format!("scenephoto:{request}"));
+                                } else {
+                                    ui.ctx().request_repaint_after(
+                                        std::time::Duration::from_millis(400),
+                                    );
+                                }
+                            }
+                        }
+                        response.clicked()
+                    } else {
+                        let target = (
+                            row.0.clone(),
+                            row.1.clone(),
+                            String::new(),
+                            "check".into(),
+                            row.4,
+                            true,
+                        );
+                        kit::menu_row(ui, &target)
+                    };
+                    if activated {
                         *clicked = Some(format!("tab:{}", row.0));
                     }
                 }
@@ -147,5 +242,87 @@ impl Browser {
                 }
             });
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn row(key: &str, name: &str, rev: &str, parent: &str) -> Item {
+        (key.into(), name.into(), rev.into(), parent.into(), 0, true)
+    }
+
+    fn frame(
+        ctx: &egui::Context,
+        browser: &mut Browser,
+        rows: &[Item],
+        folders: &[Item],
+        time: f64,
+    ) -> Vec<String> {
+        let mut jobs = vec![];
+        let _ = ctx.run(
+            egui::RawInput {
+                time: Some(time),
+                ..Default::default()
+            },
+            |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    browser.show(ui, rows, folders, &mut None, &mut jobs)
+                });
+            },
+        );
+        jobs
+    }
+
+    #[test]
+    fn photos_use_visible_rows_and_retry_a_miss_without_discarding_a_previous_image() {
+        let ctx = crate::ui::test_context();
+        let mut browser = Browser::default();
+        let scenes = [
+            row("scene:0", "A", "", ""),
+            row("scene:1", "B", "", "hidden"),
+        ];
+        let mut folders = [
+            row("", "All scenes", "1", "doc"),
+            row("hidden", "Folder", "", "doc"),
+        ];
+        let first = frame(&ctx, &mut browser, &scenes, &folders, 0.);
+        assert_eq!(first.len(), 1);
+        let req = first[0].strip_prefix("scenephoto:").unwrap();
+        assert!(req.contains("\"A\""));
+        assert!(frame(&ctx, &mut browser, &scenes, &folders, 1.).is_empty());
+        browser.finish(&ctx, req, Some((2, 2, vec![255; 16])));
+        assert!(frame(&ctx, &mut browser, &scenes, &folders, 2.).is_empty());
+        folders[0].2 = "2".into();
+        for i in 0..PHOTO_ATTEMPTS {
+            let next = frame(&ctx, &mut browser, &scenes, &folders, 3. + i as f64);
+            assert_eq!(next.len(), 1);
+            browser.finish(&ctx, next[0].strip_prefix("scenephoto:").unwrap(), None);
+        }
+        assert!(frame(&ctx, &mut browser, &scenes, &folders, 7.).is_empty());
+        assert!(browser.photos["A"].texture.is_some());
+        assert!(!browser.photos.contains_key("B"));
+        browser.open("hidden");
+        assert!(frame(&ctx, &mut browser, &scenes, &folders, 8.)[0].contains("\"B\""));
+    }
+
+    #[test]
+    fn list_mode_stays_picture_free_and_late_replies_cannot_cross_documents() {
+        let ctx = crate::ui::test_context();
+        let mut browser = Browser::default();
+        let scenes = [row("scene:0", "A", "", "")];
+        let mut folders = [row("", "All scenes", "1", "doc")];
+        let old = frame(&ctx, &mut browser, &scenes, &folders, 0.)
+            .pop()
+            .unwrap();
+        folders[0].3 = "other".into();
+        browser.thumbnails = Some(false);
+        assert!(frame(&ctx, &mut browser, &scenes, &folders, 1.).is_empty());
+        browser.finish(
+            &ctx,
+            old.strip_prefix("scenephoto:").unwrap(),
+            Some((1, 1, vec![255; 4])),
+        );
+        assert!(browser.photos.is_empty());
     }
 }

@@ -29,6 +29,7 @@ mod tree_order;
 mod drawing;
 mod drawing_catalog;
 mod drawing_hatches;
+mod drawing_cuts;
 mod export;
 /// The large sheet over the dimmed model: Library, start page, Settings
 /// (views/chrome_sheet.py, docs/ui-patterns.md).
@@ -74,6 +75,19 @@ pub struct Form {
     title: String,
     fields: Vec<FormField>,
     choice_open: Option<usize>,
+}
+
+#[cfg(test)]
+fn test_context()->egui::Context{
+    let ctx=egui::Context::default();
+    let mut fonts=egui::FontDefinitions::empty();
+    let data=include_bytes!("../../../resources/fonts/inter/Inter-Regular.ttf");
+    fonts.font_data.insert("inter".into(),std::sync::Arc::new(egui::FontData::from_static(data)));
+    for family in [egui::FontFamily::Proportional,egui::FontFamily::Monospace,egui::FontFamily::Name("medium".into()),egui::FontFamily::Name("semibold".into())]{
+        fonts.families.insert(family,vec!["inter".into()]);
+    }
+    ctx.set_fonts(fonts);
+    ctx
 }
 
 pub struct Ui {
@@ -615,7 +629,15 @@ impl Ui {
         self.background_plugins.retain(|key, _| live.contains(key));
     }
     pub fn set_jobs(&mut self, jobs: Vec<Job>) { self.jobs = jobs; }
-    pub fn set_tabs(&mut self, tabs: Vec<Vec<Item>>) { self.tabs = tabs; }
+    pub fn set_tabs(&mut self, tabs: Vec<Vec<Item>>) {
+        if let Some(scenes)=tabs.get(1){self.scene_browser.retain(scenes);}
+        self.tabs=tabs;
+    }
+    pub fn scene_photo_mode(&mut self,py:pyo3::Python<'_>)->pyo3::PyResult<()>{
+        if self.scene_browser.thumbnails.is_none(){self.scene_browser.thumbnails=Some(crate::scene_photo::thumbnail_mode(py)?);}
+        Ok(())
+    }
+    pub fn finish_scene_photo(&mut self,key:&str,pixels:Option<crate::scene_photo::Pixels>){self.scene_browser.finish(&self.ctx,key,pixels);}
     pub fn set_delivery(&mut self, active: String, unfiled: u32, problems: u32) {
         self.delivery = Some((active, unfiled, problems));
     }
@@ -1319,7 +1341,7 @@ impl Ui {
                             if kind=="scenes" && self.tabs.get(3).is_some_and(|rows|!rows.is_empty()) {
                                 let scenes=&self.tabs[1];
                                 current=scenes.iter().find(|r|r.4==1).map(|r|r.1.clone());
-                                self.scene_browser.show(ui,scenes,&self.tabs[3],&mut clicked);
+                                self.scene_browser.show(ui,scenes,&self.tabs[3],&mut clicked,&mut self.actions);
                             } else if let Some(items) = self.tabs.get(group) {
                                 for item in items {
                                     if item.4 == 1 { current = Some(item.1.clone()); }
@@ -1955,6 +1977,7 @@ impl Ui {
                                 }
                                 if resp.clicked() {
                                     let p = resp.interact_pointer_pos().unwrap_or(rect.center());
+                                    if col.lens==Lens::Drawing && n.cells.len()<7 && !n.key.starts_with("preview-folder:") {col.styles.clear_focus();}
                                     if n.expandable && tri.contains(p) {
                                         actions.push(format!("toggle\u{1f}{}", n.key));
                                     } else if n.eye >= 0 && eye_r.expand(2.0).contains(p) {

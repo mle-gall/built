@@ -700,12 +700,26 @@ def dispatch(self, command):
         wgpu_ui._run(self.window,["tab:scene:add","tab:scenefolders:"+json.dumps(["add",str(id(scene)),"","","Field views"])])
         saved=self.window._scene_tabs.marked_view()
         wgpu_ui._run(self.window,["tab:scenefolders:"+json.dumps(["file",str(id(scene)),"","Field views",saved.name])])
+    elif command=="fixture-preview":
+        from ingetrazo_render import render_scene_photo
+        cam=self.viewport.camera
+        cam.shift_y=0.18
+        row=self.window._scene_tabs.marked_view()
+        pic=render_scene_photo(self.window,json.dumps([str(id(scene)),str(scene.content_version),row.name]))
+        self.fixture_photo=bool(pic and len(pic[2])==pic[0]*pic[1]*4 and max(pic[2])>min(pic[2]))
+        self.fixture_restored=(cam.shift_y==0.18)
+        wgpu_ui._paint_with(self.window,"ral:RAL 1000")
+        from views import wgpu_library
+        from tools.paint import PaintTool
+        wgpu_library.edit_field(self.window,self.view,"brush_name:"+PaintTool.current_material.name,"Site paint")
+        self.fixture_swatch=(PaintTool.current_material.name=="Site paint" and "Site paint" not in scene.materials)
     self.request_frame()
 def facts(self):
     scene=self.viewport.scene
     paths=scene.layer("Paths")
     row=self.window._scene_tabs.marked_view()
-    return dict(state(self), editor=self.renderer.ui_input_state()["drawing_line"],
+    return dict(state(self), photo=getattr(self,"fixture_photo",False), restored=getattr(self,"fixture_restored",False),
+        swatch=getattr(self,"fixture_swatch",False), editor=self.renderer.ui_input_state()["drawing_line"],
         line=paths.linetype, hatch=paths.hatch, mortar=paths.mortar, size=scene.bricks.get("brick"),
         folder=scene.layer_folder_names.get(paths.folder,paths.folder),scene_folder=getattr(row,"folder",None))
 Host.menu,Host.state=dispatch,facts
@@ -722,6 +736,8 @@ state
 menu fixture-hatch
 menu fixture-folder
 menu fixture-scenes
+wait 350
+menu fixture-preview
 wait 500
 state
 quit
@@ -737,5 +753,6 @@ quit
     assert opened["editor"] and not saved["editor"] and saved["line"] == "lin:Boundary", log
     assert edited["hatch"] == "brick" and edited["mortar"] and edited["size"] == [250, 115, 60, 8], log
     assert edited["folder"] == "Survey" and edited["scene_folder"] == "Field views", log
+    assert edited["photo"] and edited["restored"] and edited["swatch"], log
     assert output.is_file() and "*" in output.read_text(), log
     assert all(not s["errors"] and not s["blocked_widgets"] for s in states), log

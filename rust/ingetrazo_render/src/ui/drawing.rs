@@ -53,6 +53,10 @@ pub(super) struct StyleEditor {
     pub catalog: super::drawing_catalog::Catalog,
     folder_focus: bool,
     pub hatches: super::drawing_hatches::Hatches,
+    cuts: Option<(
+        super::drawing_cuts::CutSpec,
+        Option<super::drawing_cuts::Cuts>,
+    )>,
     preview: Option<(Vec<String>, Option<kit::PaperMarks>)>,
     pub lines: Vec<String>,
     pattern_source: String,
@@ -82,6 +86,7 @@ impl StyleEditor {
     pub fn pick(&mut self, n: &Node, extend: bool) {
         let Some(key) = n.cells.get(5) else { return };
         self.patch.clear();
+        self.catalog.close_line();
         self.folder_focus = false;
         if !extend {
             self.selected.clear();
@@ -110,7 +115,14 @@ impl StyleEditor {
         }
         self.catalog.applied(verb, key);
     }
+    pub fn clear_focus(&mut self) {
+        self.selected.clear();
+        self.patch.clear();
+        self.folder_focus = false;
+        self.catalog.close_line();
+    }
     pub fn pick_folder(&mut self, key: &str) {
+        self.catalog.close_line();
         self.selected.clear();
         self.patch.clear();
         self.folder_focus = true;
@@ -166,16 +178,27 @@ impl StyleEditor {
         true
     }
 
-    fn common(&self, index: usize, field: &str) -> Option<String> {
-        if let Some(v) = self.patch.get(field) {
-            return Some(v.clone());
-        }
-        let mut values = self
-            .selected
-            .values()
-            .map(|(_, cells)| cells.get(index).map(String::as_str).unwrap_or(""));
+    fn committed(&self, index: usize, field: &str) -> Option<String> {
+        let mut values = self.selected.values().map(|(_, cells)| {
+            if field == "brick"
+                && self.patch.get("hatch").is_some_and(|h| {
+                    self.hatches.kinds.get(h)
+                        != cells.get(4).and_then(|old| self.hatches.kinds.get(old))
+                })
+            {
+                return "";
+            }
+            cells.get(index).map_or("", String::as_str)
+        });
         let first = values.next()?;
-        values.all(|v| v == first).then(|| first.into())
+        values.all(|v| v == first).then(|| first.to_owned())
+    }
+
+    fn common(&self, index: usize, field: &str) -> Option<String> {
+        self.patch
+            .get(field)
+            .cloned()
+            .or_else(|| self.committed(index, field))
     }
 
     fn fields(&mut self, ui: &mut egui::Ui, actions: &mut Vec<String>) {
@@ -277,21 +300,15 @@ impl StyleEditor {
         choices: Vec<String>,
         actions: &mut Vec<String>,
     ) {
-        let mut values = self
-            .selected
-            .values()
-            .map(|(_, cells)| cells.get(index).map_or("", String::as_str));
-        let first = values.next().unwrap_or("");
-        let mixed = values.any(|v| v != first);
-        if !mixed && self.patch.get(field).is_some_and(|value| value == first) {
-            self.patch.remove(field);
-        }
-        let current = self
+        let persisted = self.committed(index, field);
+        if self
             .patch
             .get(field)
-            .map(String::as_str)
-            .or((!mixed).then_some(first))
-            .map(str::to_owned);
+            .is_some_and(|value| Some(value) == persisted.as_ref())
+        {
+            self.patch.remove(field);
+        }
+        let current = self.patch.get(field).cloned().or(persisted);
         kit::property_control(ui, name, |ui| {
             if field == "hatch" {
                 if let Some(chosen) = self.pick_hatch(ui, current.as_deref()) {
@@ -435,14 +452,56 @@ impl StyleEditor {
             egui::vec2(ui.available_width().min(160.), 48.),
             egui::Sense::hover(),
         );
+        let ground = color(self.common(11, "hatch_ground"), true);
+        let ink = color(self.common(12, "hatch_color"), false);
         kit::hatch_swatch(
             ui,
             rect,
             key,
             self.preview.as_ref().and_then(|(_, p)| p.as_ref()),
-            color(self.common(11, "hatch_ground"), true),
-            color(self.common(12, "hatch_color"), false),
+            ground,
+            ink,
         );
+        let cross = self.hatches.wood.contains(key)
+            && self.common(15, "hatch_cross").as_deref() == Some("1");
+        let fitted = self.hatches.fitted.contains(key);
+        if self.hatches.coursed.contains(key) || fitted || cross {
+            let kind = self.hatches.kinds.get(key).cloned().unwrap_or_default();
+            let size = self
+                .hatches
+                .dimensions(key, self.common(18, "brick").as_deref());
+            let spec = super::drawing_cuts::CutSpec {
+                hatch: key.into(),
+                kind,
+                size,
+                offset: self
+                    .common(14, "hatch_offset")
+                    .unwrap_or_default()
+                    .split(',')
+                    .filter_map(|t| t.trim().parse::<f64>().ok())
+                    .filter(|n| n.is_finite() && n.abs() <= 10000.)
+                    .collect(),
+                joints: self.common(16, "joints").unwrap_or_default(),
+                mortar: self.common(17, "mortar").as_deref() == Some("1"),
+                cross,
+                fitted,
+                scale: self
+                    .common(9, "hatch_scale")
+                    .and_then(|n| n.parse::<f64>().ok())
+                    .unwrap_or(1.)
+                    .clamp(0.05, 20.),
+            };
+            if self.cuts.as_ref().is_none_or(|(prev, _)| prev != &spec) {
+                let cuts = spec.build().ok();
+                self.cuts = Some((spec, cuts));
+            }
+            if let Some((look, Some(cuts))) = &self.cuts {
+                cuts.show(ui, look, ground, ink);
+                if !look.size.is_empty() {
+                    kit::piece_sample(ui, &look.kind, &look.size);
+                }
+            }
+        }
     }
 
     fn pick_hatch(&mut self, ui: &mut egui::Ui, current: Option<&str>) -> Option<String> {
@@ -549,6 +608,9 @@ impl StyleEditor {
                     "drawingpatch\u{1f}{}",
                     serde_json::json!([tags, self.patch])
                 ));
+            }
+            if pending && kit::quiet(ui, "Discard").clicked() {
+                self.patch.clear();
             }
             if !pending {
                 kit::caption_plain(ui, "Change a field to apply.");

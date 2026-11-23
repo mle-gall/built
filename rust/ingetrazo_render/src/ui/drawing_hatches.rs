@@ -16,6 +16,7 @@ pub(super) struct Hatches {
     pub favourites: Vec<String>,
     pub placed: BTreeSet<String>,
     pub wood: BTreeSet<String>,
+    pub fitted: BTreeSet<String>,
     pub coursed: BTreeSet<String>,
     pub kinds: BTreeMap<String, String>,
     sizes: Sizes,
@@ -61,6 +62,11 @@ impl Hatches {
                 .into_iter()
                 .collect();
             self.placed = domain.getattr("PLACED")?.extract()?;
+            self.fitted = domain
+                .getattr("FITTED")?
+                .try_iter()?
+                .map(|k| k?.extract())
+                .collect::<PyResult<_>>()?;
             self.coursed = domain.getattr("COURSED")?.extract()?;
             let store = settings(py)?;
             self.recent = keys(store.call_method1("value", (RECENT,))?, 7);
@@ -142,6 +148,30 @@ impl Hatches {
         Ok(())
     }
 
+    pub fn dimensions(&self, key: &str, raw: Option<&str>) -> Vec<f64> {
+        let Some(kind) = self.kinds.get(key) else {
+            return vec![];
+        };
+        if let Some(v) = raw
+            .filter(|s| !s.is_empty())
+            .and_then(|s| {
+                s.split(',')
+                    .map(|t| t.trim().parse::<f64>().ok())
+                    .collect::<Option<Vec<_>>>()
+            })
+            .filter(|v| {
+                matches!(v.len(), 4 | 5)
+                    && v.iter().all(|n| n.is_finite() && (0.0..=600.).contains(n))
+            })
+        {
+            return v;
+        }
+        self.doc
+            .get(kind)
+            .or_else(|| self.sizes.get(kind)?.first().map(|(_, v)| v))
+            .cloned()
+            .unwrap_or_default()
+    }
     pub fn piece(
         &self,
         ui: &mut egui::Ui,
@@ -170,13 +200,19 @@ impl Hatches {
                 .collect::<Vec<_>>()
                 .join(", ")
         };
-        let name = if current.is_empty() {
-            "Document size".to_owned()
-        } else {
-            choices
+        let dimensions = |value: &[f64]| {
+            value
                 .iter()
-                .find(|(_, v)| Some(v) == size.as_ref())
-                .map_or_else(|| "Custom".into(), |(n, _)| n.clone())
+                .take(3)
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(" × ")
+        };
+        let name = match size.as_ref() {
+            _ if current.is_empty() => format!("Document · {}", dimensions(doc)),
+            Some(v) if saved.contains(v) => format!("Saved · {}", dimensions(v)),
+            Some(v) if choices.iter().any(|(_, s)| s == v) => dimensions(v),
+            _ => "Custom".into(),
         };
         kit::property_control(ui, "Preset", |ui| {
             egui::ComboBox::from_id_salt("piece size preset")
@@ -185,18 +221,15 @@ impl Hatches {
                     if ui
                         .selectable_label(
                             current.is_empty(),
-                            format!("Document · {}", describe(doc)),
+                            format!("Document · {}", dimensions(doc)),
                         )
                         .clicked()
                     {
                         selected = Some(String::new());
                     }
-                    for (label, v) in choices {
+                    for (_, v) in choices {
                         if ui
-                            .selectable_label(
-                                Some(v) == size.as_ref(),
-                                format!("{label} · {}", describe(v)),
-                            )
+                            .selectable_label(Some(v) == size.as_ref(), dimensions(v))
                             .clicked()
                         {
                             selected = Some(describe(v));
@@ -206,7 +239,7 @@ impl Hatches {
                         if ui
                             .selectable_label(
                                 Some(v) == size.as_ref(),
-                                format!("Saved · {}", describe(v)),
+                                format!("Saved · {}", dimensions(v)),
                             )
                             .clicked()
                         {

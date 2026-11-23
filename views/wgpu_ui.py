@@ -2563,6 +2563,22 @@ def _run(win, actions, source_view=None) -> None:
     from views import chrome_dialogs
     for action in actions:
         kind, _, arg = action.partition(":")
+        if kind == "scenephoto":
+            from ingetrazo_render import render_scene_photo
+            view = chrome_dialogs.view_of(win)
+            if view is not None:
+                pixels = None
+                try:
+                    pixels = render_scene_photo(win, arg)
+                except (RuntimeError, ValueError, OSError):
+                    pass  # The visible row retries a missed frame.
+                finally:
+                    view.renderer.ui_finish_scene_photo(arg, pixels)
+            continue
+        if kind == "scenephotomode":
+            from ingetrazo_render import save_thumbnail_mode
+            save_thumbnail_mode(arg == "1")
+            continue
         if kind == "font":
             from views.font_picker import answer
             answer(win, arg, source_view)
