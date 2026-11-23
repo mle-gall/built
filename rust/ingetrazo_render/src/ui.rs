@@ -15,8 +15,6 @@ pub mod dialog;
 pub mod operation_form;
 /// Sheets, a workspace of the window (views/wgpu_sheets.py).
 mod sheets;
-/// The sheet page itself, native (docs/rust-sheets.md).
-pub mod page;
 mod activity;
 mod plugins;
 pub use activity::ActivityRow;
@@ -154,7 +152,7 @@ pub struct Ui {
     /// The Sheets workspace: while on, the page replaces the model (ui/sheets.rs).
     sheets: sheets::Sheets,
     /// The page of the Sheets workspace (ui/page.rs).
-    pub page: page::Page,
+    pub page: crate::sheet_page::Page,
     /// The project tabs (ui/tabs.rs): drawn instead of the document ▾
     /// once Python sends them.
     strip: tabs::Strip,

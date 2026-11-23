@@ -2826,6 +2826,8 @@ mod units_start;
 mod preferences;
 mod about;
 mod sheet_host;
+/// The Sheets workspace's page, native (docs/rust-sheets.md).
+pub mod sheet_page;
 
 /// Start an orthographic ray on the plane through the camera, aligned with the point.
 #[pyfunction]

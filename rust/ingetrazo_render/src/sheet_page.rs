@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 //! The sheet page of the Sheets workspace, native (docs/rust-sheets.md §3–4).
+//! It draws the document (paper, ink, the frames' contents): its colours
+//! are the drawing's, outside the chrome tokens; the selection, the desk
+//! and its labels use the window's tokens.
 //!
 //! The page snapshot comes from the document (`ingetrazo_core` sheets::page,
 //! JSON); the frames' contents come as line sets (the HLR drawing, paper mm,
@@ -10,8 +13,8 @@
 //! as actions (`sheets:rects`, `sheets:place`, `sheets:select`), one per
 //! gesture, which views/wgpu_sheets.py runs through the sheet's history.
 
-use super::*;
-use egui::{Align2, FontId};
+use crate::ui::tokens::{ACCENT, CONTACT, FAINT, TYPE_META, WELL};
+use egui::{pos2, vec2, Align2, Color32, FontId, Pos2, Rect, Stroke};
 use serde_json::Value as J;
 use std::collections::HashMap;
 
@@ -578,7 +581,7 @@ impl Page {
                     // Not drawn natively yet: its place on the sheet, and what it is.
                     dashed_rect(&painter, rect, GUIDE_ON_PAPER);
                     painter.text(rect.left_top() + vec2(2.0, 2.0), Align2::LEFT_TOP, &item.kind,
-                                 FontId::proportional(10.0), FAINT);
+                                 FontId::proportional(TYPE_META), FAINT);
                 }
             }
         }
@@ -645,7 +648,7 @@ impl Page {
         }
         if !self.has_content(item.key) {
             painter.text(rect.left_top() + vec2(6.0, 6.0), Align2::LEFT_TOP, "Updating the view…",
-                         FontId::proportional(11.0), FAINT);
+                         FontId::proportional(TYPE_META), FAINT);
         }
         if f["show_title"].as_bool().unwrap_or(false) {
             let size = (f["title_mm"].as_f64().unwrap_or(4.0) as f32 * z).max(4.0);
@@ -782,31 +785,6 @@ impl Page {
                 painter.rect(rect, r, fill, stroke, egui::StrokeKind::Middle);
             }
         }
-    }
-}
-
-impl Ui {
-    /// The part of the window the Sheets chrome leaves the page (the rail,
-    /// the dock, the top and bottom bars as last laid out).
-    pub(super) fn page_free(&self, ctx: &egui::Context, screen: Rect) -> Rect {
-        let area = |n: &str| ctx.memory(|m| m.area_rect(egui::Id::new(n)));
-        let left = area("sheets_rail").map_or(80.0, |r| r.right());
-        let right = area("sheets_dock").map_or(screen.right() - DOCK_W - 16.0, |r| r.left());
-        let top = area("top").map_or(TOP_H, |r| r.bottom());
-        let bottom = area("bottom").map_or(screen.bottom() - BOT_H, |r| r.top());
-        Rect::from_min_max(pos2(left + GUT, top + GUT), pos2((right - GUT).max(left + 80.0), (bottom - GUT).max(top + 80.0)))
-    }
-    /// A pointer event the chrome left to the page; returns the cursor it wants.
-    pub fn page_pointer(&mut self, kind: &str, x: f32, y: f32, button: u8, mods: u8) -> &'static str {
-        self.page.pointer(kind, pos2(x, y), button, mods, &mut self.actions);
-        self.page.cursor
-    }
-    pub fn page_image(&mut self, key: u64, w: usize, h: usize, rgba: &[u8]) {
-        let ctx = self.ctx.clone();
-        self.page.set_image(&ctx, key, w, h, rgba);
-    }
-    pub fn page_key(&mut self, name: &str, mods: u8) -> bool {
-        self.page.key(name, mods, &mut self.actions)
     }
 }
 
