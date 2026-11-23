@@ -267,12 +267,16 @@ def test_a_qt_dialog_the_borrowed_code_shows_is_refused_not_waited_for(host):
     assert "Classic App" in st["status"]
 
 
-def test_right_click_builds_the_menu_for_what_was_hit(host, tmp_path):
+def test_right_click_builds_the_menu_for_what_was_hit(host, tmp_path, monkeypatch):
     """The native app's right-click menu (docs/context-menu.md): what is
     under the pointer is selected first, and the menu is that kind's. The
     per-kind menus are tests/test_shell_tabs_menu.py's."""
     from views import context_menu
     host.open_path(_copy(tmp_path))
+    from tests.test_shell_tabs_menu import StubRenderer
+    monkeypatch.setattr(host.view, "renderer", StubRenderer())
+    monkeypatch.setattr(host.view, "_ui_attached", True, raising=False)
+    monkeypatch.setattr(host.view, "pick_row", lambda x, y: None)
     host.pointer("press", 600, 400, 2, 2, 0)
     host.pointer("release", 600, 400, 2, 0, 0)
     menu = host.view._ctx_menu
