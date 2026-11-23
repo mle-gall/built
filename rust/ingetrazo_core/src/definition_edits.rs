@@ -271,8 +271,211 @@ fn replace_roots<'py>(
     roots.call_method1("append", (merged,))?;
     Ok(indices)
 }
+#[pyfunction]
+fn group_owner<'py>(scene: &Obj<'py>, g: &Obj<'py>) -> PyResult<Option<Obj<'py>>> {
+    let roots = scene.getattr("groups")?;
+    if roots.contains(g)? {
+        return Ok(Some(roots));
+    }
+    let walk = scene
+        .py()
+        .import("core.group")?
+        .getattr("iter_placements")?;
+    for root in roots.try_iter()? {
+        for row in walk.call1((root?,))?.try_iter()? {
+            let parent = row?.get_item(0)?;
+            let kids = parent.getattr("children")?;
+            if kids.is_truthy()? && kids.contains(g)? {
+                return Ok(Some(kids));
+            }
+        }
+    }
+    Ok(None)
+}
+#[pyfunction]
+fn delete_placement<'py>(scene: &Obj<'py>, g: &Obj<'py>) -> PyResult<(Obj<'py>, usize)> {
+    let Some(owner) = group_owner(scene, g)? else {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "group is not in the scene",
+        ));
+    };
+    let index = owner.call_method1("index", (g,))?.extract()?;
+    owner.call_method1("remove", (g,))?;
+    Ok((owner, index))
+}
+#[pyfunction]
+fn restore_placement(
+    roots: &Obj<'_>,
+    owner: &Obj<'_>,
+    index: Option<usize>,
+    g: &Obj<'_>,
+) -> PyResult<()> {
+    let dest = if owner.is_none() { roots } else { owner };
+    dest.call_method1("insert", (index.unwrap_or(0).min(dest.len()?), g))?;
+    Ok(())
+}
+#[pyfunction]
+fn set_placement_field<'py>(g: &Obj<'py>, field: &str, value: &Obj<'py>) -> PyResult<Obj<'py>> {
+    let old = if field == "material" && !g.hasattr(field)? {
+        g.py().None().into_bound(g.py())
+    } else {
+        g.getattr(field)?
+    };
+    g.setattr(field, value)?;
+    Ok(old)
+}
+#[pyfunction]
+fn lock_placements<'py>(groups: &Obj<'py>, locked: bool) -> PyResult<Obj<'py>> {
+    let py = groups.py();
+    let previous = py
+        .import("core.history_commands")?
+        .call_method1("_bulk_set", (groups, "locked", locked))?;
+    if !previous.is_none() {
+        return Ok(previous);
+    }
+    let flags = PyList::empty(py);
+    for g in groups.try_iter()? {
+        let g = g?;
+        flags.append(g.hasattr("locked")? && g.getattr("locked")?.is_truthy()?)?;
+    }
+    for g in groups.try_iter()? {
+        g?.setattr("locked", locked)?;
+    }
+    Ok(flags.into_any())
+}
+#[pyfunction]
+fn restore_locks(groups: &Obj<'_>, previous: &Obj<'_>) -> PyResult<()> {
+    for (g, v) in groups.try_iter()?.zip(previous.try_iter()?) {
+        g?.setattr("locked", v?)?;
+    }
+    Ok(())
+}
+#[pyfunction]
+fn append_members(list: &Obj<'_>, items: &Obj<'_>) -> PyResult<()> {
+    list.call_method1("extend", (items,))?;
+    Ok(())
+}
+#[pyfunction]
+fn remove_members(list: &Obj<'_>, items: &Obj<'_>) -> PyResult<()> {
+    for item in items.try_iter()? {
+        let item = item?;
+        if list.contains(&item)? {
+            list.call_method1("remove", (item,))?;
+        }
+    }
+    Ok(())
+}
+#[pyfunction]
+fn rebuild_letter_placement<'py>(
+    g: &Obj<'py>,
+    params: &Obj<'py>,
+    before: &Obj<'py>,
+) -> PyResult<Obj<'py>> {
+    let py = g.py();
+    let api = py.import("core.text3d")?;
+    let before = if before.is_none() {
+        (
+            g.getattr("children")?,
+            g.getattr("text3d")?,
+            g.getattr("name")?,
+        )
+            .into_pyobject(py)?
+            .into_any()
+    } else {
+        before.clone()
+    };
+    g.setattr(
+        "children",
+        api.call_method1("rebuild_text_group", (g, params))?,
+    )?;
+    g.setattr(
+        "text3d",
+        api.call_method1("text_state", (params, g.getattr("children")?))?,
+    )?;
+    let text: String = params.get_item("text")?.call_method0("strip")?.extract()?;
+    let name: String = text.chars().take(24).collect();
+    if name.is_empty() {
+        g.setattr("name", g.getattr("name")?)?;
+    } else {
+        g.setattr("name", name)?;
+    }
+    Ok(before)
+}
+#[pyfunction]
+fn restore_letter_placement(g: &Obj<'_>, before: (Obj<'_>, Obj<'_>, Obj<'_>)) -> PyResult<()> {
+    g.setattr("children", before.0)?;
+    g.setattr("text3d", before.1)?;
+    g.setattr("name", before.2)
+}
+type UnlinkPlan<'py> = (
+    Vec<Bound<'py, PyDict>>,
+    Vec<Bound<'py, PyDict>>,
+    Vec<(Obj<'py>, Bound<'py, PyList>)>,
+);
+#[pyfunction]
+fn unlink_placements<'py>(
+    scene: &Obj<'py>,
+    groups: Vec<Obj<'py>>,
+    fields: Vec<String>,
+    pairs: &Obj<'py>,
+) -> PyResult<UnlinkPlan<'py>> {
+    let py = scene.py();
+    let links = py.import("core.links")?;
+    let names = py.import("core.kept_components")?;
+    let mut before = Vec::new();
+    let mut after: Vec<Bound<'py, PyDict>> = Vec::new();
+    let mut nested = Vec::new();
+    for g in &groups {
+        let row = PyDict::new(py);
+        for field in &fields {
+            row.set_item(field, g.getattr(field.as_str())?)?;
+        }
+        before.push(row);
+    }
+    for g in &groups {
+        let inner = PyList::empty(py);
+        let copied = links.call_method1("unlinked_copy", (g, pairs, &inner))?;
+        nested.push((
+            links.call_method1("link_of", (g,))?.get_item("path")?,
+            inner,
+        ));
+        let mut name = g.getattr("name")?;
+        if name.is_truthy()? {
+            let skip = PyDict::new(py);
+            skip.set_item("skip", g)?;
+            let used = names.getattr("names_in_use")?.call((scene,), Some(&skip))?;
+            for prior in &after {
+                used.call_method1("add", (prior.as_any().get_item("name")?,))?;
+            }
+            if used.contains(&name)? {
+                name = names.call_method1("numbered_name", (name, used))?;
+            }
+        }
+        let row = PyDict::new(py);
+        for (i, field) in ["mesh", "children", "ext"].into_iter().enumerate() {
+            row.set_item(field, copied.get_item(i)?)?;
+        }
+        row.set_item("name", name)?;
+        row.set_item("component", true)?;
+        after.push(row);
+    }
+    restore_definitions(groups, after.clone())?;
+    Ok((before, after, nested))
+}
+
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let sub = PyModule::new(m.py(), "definition_edits")?;
+    sub.add_function(wrap_pyfunction!(group_owner, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(delete_placement, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(restore_placement, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(set_placement_field, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(lock_placements, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(restore_locks, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(append_members, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(remove_members, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(rebuild_letter_placement, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(restore_letter_placement, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(unlink_placements, &sub)?)?;
     sub.add_function(wrap_pyfunction!(replacement_targets, &sub)?)?;
     sub.add_function(wrap_pyfunction!(replace_definitions, &sub)?)?;
     sub.add_function(wrap_pyfunction!(restore_definitions, &sub)?)?;
