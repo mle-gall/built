@@ -186,7 +186,7 @@ def _placements_showing(scene, mesh) -> list:
         if getattr(g, "mesh", None) is mesh:
             out.append(g.uid)
         stack.extend(getattr(g, "children", None) or ())
-    return sorted(out)
+    return out
 
 
 #: Above this many faces with attrs dicts of their own, the step's
@@ -369,7 +369,10 @@ def _known_placements(cmd, phase, step, scene=None, journalled=False) -> bool:
     if isinstance(cmd, H.ReshareInstanceCommand) and scene is not None:
         # The edited instance goes back on the definition (undo: the
         # definition goes back as it was): every placement showing it.
-        step.placements["modified"].extend(_placements_showing(scene, cmd.proto))
+        modified = step.placements["modified"]
+        modified.extend(_placements_showing(scene, cmd.proto))
+        # The journal may already name the edited instance ahead of its siblings.
+        modified.sort()
         return True
     if isinstance(cmd, H.ExplodeViewCommand):
         step.placements["modified"].extend(
