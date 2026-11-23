@@ -1,4 +1,5 @@
 //! Native inspector and tool controls. Input snapshots belong to one document.
+mod parts;
 mod records;
 mod rule;
 mod terrain;
@@ -12,6 +13,7 @@ pub use terrain::{plot_png, Terrain};
 pub struct Panels {
     pub data: Value,
     pub popup_layers: Vec<egui::Id>,
+    parts: parts::Parts,
     records: records::Records,
     rule: rule::Rule,
     pub terrain: Terrain,
@@ -90,40 +92,13 @@ impl Panels {
         self.rule.draw(ui, &self.data["rulePreview"], out);
         let p = &s["parts"];
         if p.is_object() {
-            ui.collapsing(format!("Parts · {}", label(&p["name"])), |ui| {
-                if ui.button("Cut list…").clicked() {
+            kit::disclosure(ui, ("assembly", label(&p["uid"])), &format!("Parts · {}", label(&p["name"])), false, |ui| {
+                if kit::quiet(ui, "Cut list…").clicked() {
                     send(out, "parts.report", p["uid"].clone());
                 }
+                self.parts.draw(ui, p, &self.data["partMeasures"], out);
                 ui.add_enabled_ui(p["editable"] == true, |ui| {
-                    for child in p["children"].as_array().into_iter().flatten() {
-                        ui.push_id(label(&child["uid"]), |ui| {
-                            ui.horizontal(|ui| {
-                                let mut visible = child["hidden"] != true;
-                                if ui
-                                    .checkbox(&mut visible, "")
-                                    .on_hover_text("Show part")
-                                    .changed()
-                                {
-                                    send(
-                                        out,
-                                        "parts.visible",
-                                        json!([p["uid"], child["uid"], visible]),
-                                    );
-                                }
-                                if ui
-                                    .selectable_label(
-                                        child["selected"] == true,
-                                        label(&child["name"]),
-                                    )
-                                    .clicked()
-                                    && visible
-                                {
-                                    send(out, "parts.select", json!([p["uid"], child["uid"]]));
-                                }
-                            })
-                        });
-                    }
-                    if ui.button("Split into pieces").clicked() {
+                    if p["can_split"] == true && kit::quiet(ui, "Split into pieces").clicked() {
                         send(out, "parts.split", p["uid"].clone());
                     }
                     if p["children"].as_array().is_some_and(|v| v.len() >= 2) {
@@ -132,6 +107,7 @@ impl Panels {
                         let mut mode = ui
                             .data(|d| d.get_temp::<String>(id))
                             .unwrap_or(current.to_owned());
+                        let before = mode.clone();
                         egui::ComboBox::from_id_salt(id)
                             .selected_text(&mode)
                             .show_ui(ui, |ui| {
@@ -140,19 +116,28 @@ impl Panels {
                                     ui.selectable_value(&mut mode, m.to_owned(), m);
                                 }
                             });
+                        if before != mode && p["factor"].as_f64().unwrap_or_default() != 0. {
+                            send(out, "parts.explode", json!([p["uid"], p["factor"], mode]));
+                        }
                         ui.data_mut(|d| d.insert_temp(id, mode.clone()));
                         let mut factor = ui
                             .data(|d| d.get_temp::<f64>(id.with("drag")))
                             .unwrap_or_else(|| p["factor"].as_f64().unwrap_or_default());
                         let resp = ui.add(egui::Slider::new(&mut factor, 0.0..=3.0).text("Amount"));
-                        if resp.dragged() {
+                        let cancel = resp.dragged() && ui.input(|i| i.key_pressed(egui::Key::Escape));
+                        if cancel {
+                            ui.ctx().stop_dragging();
+                            ui.data_mut(|d| d.remove::<f64>(id.with("drag")));
+                            send(out, "parts.cancel", json!([p["uid"]]));
+                        } else if resp.dragged() {
                             ui.data_mut(|d| d.insert_temp(id.with("drag"), factor));
+                            if resp.changed() {send(out, "parts.preview", json!([p["uid"], factor, mode]));}
                         }
-                        if resp.drag_stopped() || (resp.changed() && !resp.dragged()) {
+                        if !cancel && (resp.drag_stopped() || (resp.changed() && !resp.dragged())) {
                             ui.data_mut(|d| d.remove::<f64>(id.with("drag")));
                             send(out, "parts.explode", json!([p["uid"], factor, mode]));
                         }
-                        if ui.button("Reassemble").clicked() {
+                        if kit::quiet(ui, "Reassemble").clicked() {
                             send(out, "parts.explode", json!([p["uid"], 0., mode]));
                         }
                     }

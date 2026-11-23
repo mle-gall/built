@@ -165,35 +165,6 @@ def test_exploding_the_group_frees_the_parts_where_they_stand():
     assert all(k.explode_offset is not None for k in box.children[1:])
 
 
-def test_the_tray_slider_is_one_undo_step_per_drag():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    scene = win.viewport.scene
-    _s, box = _assembly()
-    _s.groups.remove(box)                  # one parent per placement
-    scene.groups.append(box)
-    scene.selection.clear()
-    scene.selection.add(box)
-    scene.version += 1
-    assembled = _world(box)
-    panel = win.tray.parts
-    panel.refresh()
-    history = win.viewport.history
-    before = len(history.undo_stack)
-    panel._on_explode_press()
-    for v in (10, 40, 90, 120):
-        panel._explode_slider.setValue(v)
-    panel._on_explode_release()
-    assert len(history.undo_stack) == before + 1
-    assert box.exploded == {"factor": 1.2, "mode": "outward"}
-    panel._on_reassemble()
-    assert _world(box) == assembled
-    history.undo()
-    history.undo()
-    assert _world(box) == assembled and box.exploded is None
-    win._saved_version = scene.version
-
-
 def test_offsets_turn_with_a_pushed_down_matrix():
     part = _cube((0, 0, 0))
     part.explode_offset = (1.0, 0.0, 0.0)

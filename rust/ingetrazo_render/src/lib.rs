@@ -54,6 +54,7 @@ struct Scene {
     inst: wgpu::Buffer,
     flags: Vec<u32>,
     rows: Vec<u8>,
+    part_preview: Vec<usize>,
     protos: wgpu::Buffer,
     prototype_data: Vec<u8>,
     survivors: wgpu::Buffer,
@@ -908,6 +909,7 @@ impl Renderer {
             material_shifts,
             inst,
             rows: instances.to_vec(),
+            part_preview: Vec::new(),
             protos,
             prototype_data: p.to_vec(),
             survivors,
@@ -1032,6 +1034,33 @@ impl Renderer {
         s.profile_draw = bind(&self.device, &self.profile_top.get_bind_group_layout(0), &[&self.camera, &s.inst, &s.survivors, &s.edge_records, &s.viewpoints]);
         self.aa.bind_scene(&self.device, &self.camera, &s.inst, &s.survivors, &self.look.buffer, &s.edge_records, &s.viewpoints);
         self.ids_dirty = true; self.scene_epoch += 1;
+        Ok(())
+    }
+
+    /// A transient assembly offset writes only the resident GPU translation.
+    /// Releasing the slider or replacing the selection restores canonical rows.
+    fn preview_parts(&mut self, offsets: Vec<(usize, [f32; 3])>) -> PyResult<()> {
+        let Some(s) = self.scene.as_mut() else { return Ok(()); };
+        if offsets.iter().any(|(id, delta)| *id >= s.n as usize || !delta.iter().all(|x| x.is_finite())) {
+            return Err(PyValueError::new_err("invalid assembly preview"));
+        }
+        if offsets.is_empty() && s.part_preview.is_empty() { return Ok(()); }
+        for row in s.part_preview.drain(..) {
+            let at = row * 80 + 48;
+            self.queue.write_buffer(&s.inst, at as u64, &s.rows[at..at+12]);
+        }
+        for (row, delta) in offsets {
+            let at = row * 80 + 48;
+            let mut position = [0_f32; 3];
+            for (i, bytes) in s.rows[at..at+12].chunks_exact(4).enumerate() {
+                position[i] = f32::from_le_bytes(bytes.try_into().unwrap()) + delta[i];
+            }
+            self.queue.write_buffer(&s.inst, at as u64, bytemuck::cast_slice(&position));
+            s.part_preview.push(row);
+        }
+        self.sun.invalidate();
+        self.ids_dirty = true;
+        self.stable_frames = 0;
         Ok(())
     }
 
@@ -2289,6 +2318,7 @@ impl Renderer {
     }
     fn ui_panel_set(&mut self, key: &str, snapshot: &str) -> PyResult<()> {
         let value = serde_json::from_str(snapshot).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        if key == "selection" { self.preview_parts(Vec::new())?; }
         if let Some(ui) = self.ui.as_mut() { ui.panels.set(key, value); }
         Ok(())
     }

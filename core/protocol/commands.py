@@ -414,6 +414,16 @@ def file_placements(history, placements, node):
     return _answer(history, before)
 
 
+def edit_assembly_part(history, placement, child=None, visible=None, name=None):
+    from ingetrazo_core import plan_part_edit
+    group, = _placements(history, [placement])
+    before = history.revision
+    command = plan_part_edit(history.scene, group, child, visible, name)
+    if command is not None:
+        history.execute(command)
+    return _answer(history, before)
+
+
 def edit_visibility_set(history, verb, key="", name=""):
     from ingetrazo_core import visibility_set_command
     before = history.revision
@@ -920,7 +930,7 @@ COMMANDS = {"set_model_units": set_model_units, "set_annotation_font": set_annot
             "explode_view": explode_view, "purge_unused": purge_unused,
             "purge_debris": purge_debris, "undo": undo, "redo": redo,
             "hide": hide, "unhide": unhide, "lock": lock, "rename_placement": rename_placement,
-            "edit_visibility_set": edit_visibility_set, "edit_saved_scene": edit_saved_scene, "edit_link_subset": edit_link_subset, "reset_link_tags": reset_link_tags, "unlink_placements": unlink_placements, "edit_section_plane": edit_section_plane, "edit_loose_geometry": edit_loose_geometry, "file_placements": file_placements, "edit_structure_node": edit_structure_node, "edit_tag": edit_tag, "set_tag": set_tag, "set_tag_state": set_tag_state, "resegment_curve": resegment_curve, "repair_solid": repair_solid,
+            "edit_assembly_part": edit_assembly_part, "edit_visibility_set": edit_visibility_set, "edit_saved_scene": edit_saved_scene, "edit_link_subset": edit_link_subset, "reset_link_tags": reset_link_tags, "unlink_placements": unlink_placements, "edit_section_plane": edit_section_plane, "edit_loose_geometry": edit_loose_geometry, "file_placements": file_placements, "edit_structure_node": edit_structure_node, "edit_tag": edit_tag, "set_tag": set_tag, "set_tag_state": set_tag_state, "resegment_curve": resegment_curve, "repair_solid": repair_solid,
             "rename_material": rename_material, "edit_material": edit_material,
             "duplicate_material": duplicate_material, "delete_material": delete_material,
             "delete_placements": delete_placements, "rename_component": rename_component,
