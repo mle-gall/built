@@ -494,17 +494,39 @@ impl Ui {
         self.view_menu = view_menu;
     }
 
+    /// Called only after the transient chrome and focused field declined Esc.
+    pub fn model_escape(chrome: Option<&mut Self>, busy: bool, selected: bool, editing: bool) -> &'static str {
+        if busy { return "tool"; }
+        if selected { return "selection"; }
+        if editing { return "edit"; }
+        let Some(ui) = chrome else { return "" };
+        if let Some(col) = ui.column.as_mut() {
+            if !col.mode.is_empty() {
+                col.mode.clear();
+                ui.actions.push("tree:mode\u{1f}".into());
+                return "dock";
+            }
+            if col.colset == 2 {
+                col.colset = 0;
+                ui.actions.push("tree:colset\u{1f}0".into());
+                return "dock";
+            }
+        }
+        ui.review = false;
+        ""
+    }
+
     /// Keyboard ownership: the chrome takes a key only while one of its
     /// fields has focus, or Escape while one of its popups is open.
     pub fn claims_key(&self, name: &str) -> bool {
         if self.gallery.is_some() || self.font_picker.is_some() { return true; }
-        if name == "Escape" && (self.strip.menus_open() || self.plugin_popup_open() || self.panels.data["terrain"].is_object()) { return true; }
+        if name == "Escape" && (self.strip.menus_open() || self.egui_popup_open() || self.panels.data["terrain"].is_object()) { return true; }
         // The large sheet owns every key while it is up (Python keeps the
         // window's ⌘ shortcuts, views/chrome_sheet.py).
         if self.lsheet.open { return true; }
         if self.sheets.shown { return self.sheets_claims_key(name); }
-        let filing = self.column.as_ref().is_some_and(|c| c.filing.is_some() || c.row_menu.is_some() || !c.mode.is_empty()
-            || c.kind_menu.is_some() || c.head_menu.is_some() || c.prompt.is_some());
+        let filing = self.column.as_ref().is_some_and(|c| c.filing.is_some() || c.row_menu.is_some() || c.pick.is_some() || c.color_pick.is_some()
+            || c.kind_menu.is_some() || c.head_menu.is_some() || c.prompt.is_some() || c.edits.contains_key("\u{1d}pick"));
         self.sheet.is_some() || self.dialog.is_some() || self.cmd_open || (name == "Escape" && (self.view_open || self.sel_more || self.menu.is_some() || self.form.is_some() || filing
             || self.ctx_menu.is_some() || self.strip.menus_open()))
             || self.ctx.wants_keyboard_input()
@@ -519,11 +541,11 @@ impl Ui {
         // The sheet's keys are answered in Python (Enter, Esc, ⌘D); none
         // reaches what is under it.
         if self.sheet.is_some() { return true; }
-        if self.dialog.is_some() { return self.dialog_key(name, pressed, mods); }
-        if name == "Escape" && self.plugin_popup_open() {
+        if name == "Escape" && self.egui_popup_open() {
             if pressed { self.ctx.memory_mut(|m| m.close_popup()); }
             return true;
         }
+        if self.dialog.is_some() { return self.dialog_key(name, pressed, mods); }
         if self.cmd_open && pressed {
             match name {
                 "Escape" => { self.cmd_open = false; self.ctx.memory_mut(|m| m.stop_text_input()); return true; }
@@ -541,7 +563,11 @@ impl Ui {
             }
         }
         if name == "Escape" && (self.ctx_menu.is_some() || self.strip.menus_open()) {
-            if pressed { self.ctx_menu = None; self.strip.close_menus(); }
+            if pressed && self.ctx_menu.take().is_none() { self.strip.close_menus(); }
+            return true;
+        }
+        if name == "Escape" && self.form.as_ref().is_some_and(|f| f.choice_open.is_some()) {
+            if pressed { self.form.as_mut().unwrap().choice_open = None; }
             return true;
         }
         if self.lsheet.open && !self.cmd_open { return self.lsheet_key(name, pressed, mods); }
@@ -552,28 +578,64 @@ impl Ui {
         }
         if name == "Escape" && (self.view_open || self.sel_more || self.menu.is_some() || self.form.is_some()) {
             if pressed {
-                if self.form.take().is_some() { self.actions.push("form:close".into()); }
-                self.view_open = false; self.sel_more = false; self.menu = None;
+                if self.sel_more {
+                    if self.sel_sub.take().is_none() { self.sel_more = false; }
+                } else if self.view_open {
+                    self.view_open = false;
+                } else if self.menu.take().is_none() && self.form.take().is_some() {
+                    self.actions.push("form:close".into());
+                }
             }
             return true;
         }
         if name == "Escape" {
             if let Some(col) = self.column.as_mut() {
-                if col.row_menu.is_some() || col.filing.is_some() || col.kind_menu.is_some() || col.head_menu.is_some()
-                    || col.prompt.is_some() || !col.mode.is_empty() {
+                if col.edits.contains_key("\u{1d}pick") {
+                    if pressed { col.edits.remove("\u{1d}pick"); }
+                    return true;
+                }
+                if col.pick.is_some() || col.color_pick.is_some() || col.kind_menu.is_some()
+                    || col.head_menu.is_some() || col.prompt.is_some() || col.row_menu.is_some() {
                     if pressed {
-                        if col.kind_menu.take().is_none() && col.head_menu.take().is_none()
-                            && col.prompt.take().is_none() && col.row_menu.take().is_none() {
-                            if col.filing.is_some() {
-                                col.filing = None;
-                                col.filter.clear();
-                            } else if !col.mode.is_empty() {
-                                col.mode.clear();
-                                self.actions.push("tree:mode\u{1f}".into());
+                        let _ = col.pick.take().is_some() || col.color_pick.take().is_some()
+                            || col.kind_menu.take().is_some() || col.head_menu.take().is_some()
+                            || col.prompt.take().is_some() || col.row_menu.take().is_some();
+                    }
+                    return true;
+                }
+                if self.ctx.memory(|m| m.has_focus(egui::Id::new("dock_filter"))) {
+                    if pressed {
+                        if col.filter.is_empty() {
+                            self.ctx.memory_mut(|m| m.stop_text_input());
+                        } else {
+                            col.filter.clear();
+                            self.actions.push("tree:filter\u{1f}".into());
+                        }
+                    }
+                    return true;
+                }
+                if let Some(focus) = self.ctx.memory(|m| m.focused()) {
+                    if let Some((_, buf)) = col.renaming.as_mut() {
+                        if pressed {
+                            if buf.is_empty() {
+                                col.renaming = None;
+                                self.ctx.memory_mut(|m| m.surrender_focus(focus));
+                            } else {
+                                buf.clear();
                             }
                         }
-                        self.ctx.memory_mut(|m| m.stop_text_input());
+                        return true;
                     }
+                    if let Some((_, buf)) = col.edits.iter_mut().find(|(id, _)| egui::Id::new(("inspector_edit", id)) == focus) {
+                        if pressed {
+                            if buf.is_empty() { self.ctx.memory_mut(|m| m.surrender_focus(focus)); }
+                            else { buf.clear(); }
+                        }
+                        return true;
+                    }
+                }
+                if col.filing.is_some() {
+                    if pressed { col.filing = None; }
                     return true;
                 }
             }
@@ -645,19 +707,38 @@ impl Ui {
     pub fn repaint_after_ms(&self) -> Option<f64> { self.repaint_ms }
 
     /// Only the interactive chrome takes the pointer; labels pass it through.
-    fn plugin_popup_open(&self) -> bool {
-        (self.plugins.showing || self.plugins.utility_open()) && self.ctx.memory(|m| m.any_popup_open())
+    fn egui_popup_open(&self) -> bool {
+        self.ctx.memory(|m| m.any_popup_open())
+    }
+
+    pub fn input_state(&self) -> std::collections::HashMap<&'static str, bool> {
+        [
+            ("view_menu", self.view_open),
+            ("review", self.review),
+            ("dialog", self.dialog.is_some()),
+            ("choice", self.dialog.as_ref().is_some_and(|d| d.choice_open.is_some())),
+            ("filter_focus", self.ctx.memory(|m| m.has_focus(egui::Id::new("dock_filter")))),
+        ].into()
+    }
+
+    fn dismissible_menu_open(&self) -> bool {
+        self.view_open || self.sel_more || self.menu.is_some() || self.cmd_open
+            || self.form.as_ref().is_some_and(|f| f.choice_open.is_some())
+            || self.ctx_menu.is_some() || self.strip.menus_open() || (self.sheets.shown && self.sheets.dismissible_menu_open())
+            || self.column.as_ref().is_some_and(|c| c.row_menu.is_some() || c.head_menu.is_some()
+                || c.kind_menu.is_some() || c.pick.is_some() || c.color_pick.is_some()
+                || c.edits.contains_key("\u{1d}pick"))
     }
 
     fn over_chrome(&self, pos: Pos2) -> bool {
         // A choice or colour picker can extend beyond its parent panel.
         // Its next outside click dismisses it before the model takes input.
-        self.font_picker.is_some() || self.plugin_popup_open() || self.hit.iter().any(|r| r.contains(pos))
+        self.font_picker.is_some() || self.egui_popup_open() || self.hit.iter().any(|r| r.contains(pos))
             || self.ctx.layer_id_at(pos).is_some_and(|layer| self.panels.popup_layers.contains(&layer.id))
     }
     /// Is (x, y) on the interactive chrome (a right-click there is the
     /// chrome's, not the model's)?
-    pub fn over_chrome_at(&self, x: f32, y: f32) -> bool { self.over_chrome(pos2(x, y)) }
+    pub fn over_chrome_at(&self, x: f32, y: f32) -> bool { self.captured || self.over_chrome(pos2(x, y)) }
 
     /// kind: "move" | "press" | "release" | "leave". Coordinates in logical
     /// points. Returns whether the chrome takes the event (the view must
@@ -677,9 +758,9 @@ impl Ui {
             }
             "press" => {
                 self.captured = self.over_chrome(pos);
-                // A press anywhere else closes the menus, ends typing in a
-                // field, and is the model's.
                 if !self.captured {
+                    self.captured = self.dismissible_menu_open();
+                    if let Some(form) = self.form.as_mut() { form.choice_open = None; }
                     self.view_open = false;
                     self.sel_more = false;
                     self.menu = None;
@@ -894,7 +975,7 @@ impl Ui {
     /// the window, as a title bar does)?
     pub fn top_empty(&self, x: f32, y: f32) -> bool {
         let p = pos2(x, y);
-        self.gallery.is_none() && y <= TOP_H && !self.top_groups.iter().any(|r| r.contains(p))
+        !self.dismissible_menu_open() && self.gallery.is_none() && y <= TOP_H && !self.top_groups.iter().any(|r| r.contains(p))
             && !self.ctx.memory(|m| m.area_rect(egui::Id::new("jobs"))).is_some_and(|r| (!self.jobs.is_empty() || !self.history.is_empty()) && r.contains(p))
             && !(self.projects.is_none() && x < 86.0)
     }
@@ -1516,7 +1597,7 @@ impl Ui {
                             "Click a node, or type a name and Enter", meta(), INK_2);
                         ui.add_space(SPACE_XS);
                     }
-                    let edit = kit::field(&mut col.filter)
+                    let edit = kit::field(&mut col.filter).id(egui::Id::new("dock_filter"))
                         .hint_text(egui::RichText::new(if col.filing.is_some() { "Node name or kind" }
                             else if col.mode == "Problems" { "Filter problems" } else { "Filter nodes" }).color(FAINT))
                         .margin(Margin::symmetric(8, 5))
@@ -2542,7 +2623,7 @@ fn inspector_rows(ui: &mut egui::Ui, rows: &[(String, String)], edits: &mut std:
                 // desired_width is the text's width: leave room for the field's
                 // own margins, or the panel grows a little every frame.
                 let w = (ui.available_width() - 8.0 - 12.0 - 4.0).max(40.0);
-                let r = ui.add(kit::field(buf).font(body()).margin(Margin::symmetric(6, 3))
+                let r = ui.add(kit::field(buf).id(egui::Id::new(("inspector_edit", id))).font(body()).margin(Margin::symmetric(6, 3))
                     .desired_width(w).clip_text(true));
                 if r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) && buf.as_str() != text {
                     actions.push(format!("edit\u{1f}{id}\u{1f}{buf}"));
@@ -2613,4 +2694,52 @@ fn tool_button(ui: &mut egui::Ui, tool: &Tool, active: bool) -> bool {
     }
     let tip = if !tool.enabled { format!("{} — Open in classic app", tool.label) } else if tool.key.is_empty() { tool.label.clone() } else { format!("{}    {}", tool.label, tool.key) };
     resp.on_hover_text(tip).clicked()
+}
+
+#[cfg(test)]
+fn test_chrome() -> Option<Ui> {
+    let instance = crate::backend::instance();
+    let adapter = pollster::block_on(instance.request_adapter(&Default::default()))?;
+    let (device, _) = pollster::block_on(adapter.request_device(&Default::default(), None)).unwrap();
+    Some(Ui::new(&device, wgpu::TextureFormat::Bgra8UnormSrgb))
+}
+
+#[test]
+fn native_input_owners_unwind_in_order() {
+    let Some(mut ui) = test_chrome() else { return };
+    ui.set_tree(vec![], 0);
+    ui.set_mode("Problems".into());
+    ui.review = true;
+    ui.view_open = true;
+    assert!(ui.key("Escape", true, 0));
+    assert!(!ui.view_open);
+    let filter = egui::Id::new("dock_filter");
+    ui.ctx.memory_mut(|m| m.request_focus(filter));
+    ui.column.as_mut().unwrap().filter = "Box".into();
+    assert!(ui.key("Escape", true, 0));
+    assert_eq!(ui.take_actions(), ["tree:filter\u{1f}"]);
+    assert!(ui.ctx.memory(|m| m.has_focus(filter)));
+    assert!(ui.key("Escape", true, 0));
+    assert!(!ui.ctx.memory(|m| m.has_focus(filter)));
+    assert_eq!(Ui::model_escape(Some(&mut ui), true, true, true), "tool");
+    assert_eq!(Ui::model_escape(Some(&mut ui), false, true, true), "selection");
+    assert_eq!(Ui::model_escape(Some(&mut ui), false, false, true), "edit");
+    assert_eq!(Ui::model_escape(Some(&mut ui), false, false, false), "dock");
+    assert_eq!(ui.take_actions(), ["tree:mode\u{1f}"]);
+    assert!(ui.review);
+    Ui::model_escape(Some(&mut ui), false, false, false);
+    assert!(!ui.review);
+
+}
+
+#[test]
+fn dismissal_consumes_press_drag_and_release() {
+    let Some(mut ui) = test_chrome() else { return };
+    ui.view_open = true;
+    assert!(ui.pointer("press", 300., 400., 1, 0));
+    assert!(!ui.view_open);
+    assert!(ui.pointer("move", 320., 420., 1, 0));
+    assert!(ui.pointer("release", 320., 420., 1, 0));
+    assert!(!ui.pointer("press", 300., 400., 1, 0));
+    assert!(!ui.pointer("release", 300., 400., 1, 0));
 }

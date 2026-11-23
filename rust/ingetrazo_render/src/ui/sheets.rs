@@ -68,8 +68,9 @@ impl Sheets {
         self.row_menu = None;
         self.pick = None;
     }
+    pub(super) fn dismissible_menu_open(&self) -> bool { self.row_menu.is_some() || self.pick.is_some() }
     fn popup_open(&self) -> bool {
-        self.row_menu.is_some() || self.pick.is_some() || self.renaming.is_some() || self.prompt.is_some()
+        self.dismissible_menu_open() || self.renaming.is_some() || self.prompt.is_some()
     }
 }
 

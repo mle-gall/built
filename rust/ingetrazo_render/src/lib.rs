@@ -2252,6 +2252,9 @@ impl Renderer {
     fn ui_set_cluster(&mut self, cluster: Vec<Vec<ui::Item>>, view_menu: Vec<(String, Vec<ui::Item>)>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_cluster(cluster, view_menu); }
     }
+    fn ui_input_state(&self) -> std::collections::HashMap<&'static str, bool> {
+        self.ui.as_ref().map(ui::Ui::input_state).unwrap_or_default()
+    }
     fn ui_claims_key(&self, name: &str) -> bool { self.ui.as_ref().is_some_and(|ui| ui.claims_key(name)) }
     fn ui_key(&mut self, name: &str, pressed: bool, modifiers: u8) -> bool {
         self.ui.as_mut().is_some_and(|ui| ui.key(name, pressed, modifiers))
@@ -2705,6 +2708,19 @@ fn parallel_annotation_ray(eye: [f64; 3], forward: [f64; 3], point: [f64; 3]) ->
     (depth > 1e-3).then(|| ((point - forward * depth).to_array(), depth - 1e-3))
 }
 
+/// Document state comes from the controller. Headless views have no dock to unwind.
+#[pyfunction(signature = (busy, selected, editing, renderer=None))]
+fn model_escape(busy: bool, selected: bool, editing: bool, mut renderer: Option<PyRefMut<'_, Renderer>>) -> &'static str {
+    ui::Ui::model_escape(renderer.as_mut().and_then(|r| r.ui.as_mut()), busy, selected, editing)
+}
+
+/// A context click on a selected item addresses its selection. A miss addresses the background.
+#[pyfunction]
+fn context_targets(hit: bool, selection: &Bound<'_, PyAny>) -> PyResult<Vec<Py<PyAny>>> {
+    if !hit { return Ok(Vec::new()); }
+    selection.try_iter()?.map(|item| item.map(Bound::unbind)).collect()
+}
+
 #[pymodule]
 pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(commands::view_commands, m)?)?;
@@ -2715,6 +2731,8 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(commands::leave_navigation, m)?)?;
     m.add_function(wrap_pyfunction!(commands::view_shortcut, m)?)?;
     m.add("build_commit", env!("BUILT_COMMIT"))?;
+    m.add_function(wrap_pyfunction!(model_escape, m)?)?;
+    m.add_function(wrap_pyfunction!(context_targets, m)?)?;
     m.add_function(wrap_pyfunction!(parallel_annotation_ray, m)?)?;
     m.add_function(wrap_pyfunction!(preview_texture::preview_materials, m)?)?;
     m.add_function(wrap_pyfunction!(surfaces::surface_spec, m)?)?;

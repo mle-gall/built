@@ -3085,6 +3085,8 @@ def claims_key(view, event) -> bool:
     if large is not None:
         # The large sheet owns every key but the window's ⌘ shortcuts.
         return large or _opens_commands(event)
+    if event.key() == Qt.Key_Escape:
+        return True  # Reserve it for the chrome and viewport Escape router.
     if _problem_key(view, event):
         return True
     if _opens_commands(event):

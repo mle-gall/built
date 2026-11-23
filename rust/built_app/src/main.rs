@@ -277,12 +277,16 @@ impl App {
         } else if kind == "release" {
             w.held &= !button;
         }
+        static CLOCK: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
+        let timestamp = CLOCK.get_or_init(Instant::now).elapsed().as_millis() as u64;
         let held = w.held;
-        w.host.call("pointer", (kind, x, y, button, held, mods));
+        w.host.call("pointer", (kind, x, y, button, held, mods, timestamp));
         self.redraw(id);
     }
 
     fn key(&mut self, id: WindowId, pressed: bool, code: u32, text: &str, repeat: bool, mods: u32) {
+        // A held Escape is one unwind, including while the key repeats.
+        if repeat && code == 0x0100_0000 { return; }
         if let Some(w) = self.win(id) {
             w.host.call("key", (pressed, code, mods, text, repeat));
         }

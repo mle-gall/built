@@ -49,7 +49,7 @@ pub struct Dialog {
     focus_pending: bool,
     /// Tab with nothing focused: the first field of the page takes it.
     tab_focus: bool,
-    choice_open: Option<String>,
+    pub(super) choice_open: Option<String>,
     color_open: Option<(String, Color32)>,
 }
 
@@ -83,6 +83,26 @@ impl Dialog {
             Some(v) => format!("{}\u{1f}{kind}\u{1f}{id}\u{1f}{v}", self.prefix),
             None => format!("{}\u{1f}{kind}\u{1f}{id}", self.prefix),
         }
+    }
+
+    /// Inner controls handle Escape before their form or containing sheet.
+    pub(super) fn escape_control(&mut self, ctx: &egui::Context, actions: &mut Vec<String>) -> bool {
+        if self.choice_open.take().is_some() || self.color_open.take().is_some() {
+            return true;
+        }
+        let Some(focus) = ctx.memory(|m| m.focused()) else { return false };
+        for (id, buf) in &mut self.bufs {
+            if focus == egui::Id::new(("dlg_edit", &self.seq, id)) {
+                if buf.is_empty() {
+                    ctx.memory_mut(|m| m.surrender_focus(focus));
+                } else {
+                    buf.clear();
+                    actions.push(format!("{}\u{1f}v\u{1f}{id}\u{1f}", self.prefix));
+                }
+                return true;
+            }
+        }
+        false
     }
 
     fn button_of(&self, role: u8) -> Option<String> {
@@ -119,8 +139,9 @@ impl Ui {
     /// Enter and Esc answer the form; the rest goes to its focused field.
     /// Always true while it is up: no key reaches the model or the tools.
     pub(super) fn dialog_key(&mut self, name: &str, pressed: bool, mods: u8) -> bool {
-        let Some(d) = self.dialog.as_ref() else { return false };
+        let Some(d) = self.dialog.as_mut() else { return false };
         if pressed && name == "Escape" {
+            if d.escape_control(&self.ctx, &mut self.actions) { return true; }
             if let Some(id) = d.button_of(3) { self.actions.push(d.act("b", &id, None)); }
             return true;
         }

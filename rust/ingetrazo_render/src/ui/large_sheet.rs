@@ -287,7 +287,7 @@ impl LargeSheet {
         }
         if !self.search.is_empty() {
             self.search.clear();
-            return (true, if in_search { Some(String::new()) } else { None });
+            return (true, None);
         }
         if in_search {
             return (true, Some(String::new()));
@@ -855,6 +855,10 @@ impl Ui {
         let command = mods & 8 != 0;
         match name {
             "Escape" => {
+                if self.lsheet.menu.is_none() && self.lsheet.head_menu.is_none()
+                    && self.lsheet.forms.values_mut().any(|d| d.escape_control(&self.ctx, &mut self.actions)) {
+                    return true;
+                }
                 let (_, act) = self.lsheet.escape(in_field, in_search);
                 match act {
                     Some(a) if a.is_empty() => self.ctx.memory_mut(|m| m.stop_text_input()),
