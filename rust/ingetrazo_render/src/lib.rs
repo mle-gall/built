@@ -1,5 +1,6 @@
 //! A resident Metal scene: compute compaction precedes native indirect draws.
 mod timing;
+mod window_timers;
 mod panic_log;
 mod overlay;
 mod commands;
@@ -2936,6 +2937,8 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<about::AboutReview>()?;
     m.add_class::<release::ReleaseReview>()?;
     m.add_class::<ui::command_palette::CommandCanvas>()?;
+    m.add_class::<window_timers::WindowTimers>()?;
+    m.add_class::<window_timers::WindowTimer>()?;
     m.add_class::<camera_inspector::CameraInspector>()?;
     m.add_class::<registry_editor::RegistryEditor>()?;
     m.add_class::<render_result::RenderResult>()?;

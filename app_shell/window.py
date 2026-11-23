@@ -28,7 +28,6 @@ build/shell-design/).
 """
 from __future__ import annotations
 
-import time
 import types
 
 from PySide6.QtCore import QObject, Qt, Signal
@@ -103,14 +102,6 @@ class _Label:
         pass
 
 
-class _Timer:
-    def __init__(self):
-        self._until = 0.0
-
-    def isActive(self):
-        return time.monotonic() < self._until
-
-
 class ShellStatusBar:
     """``statusBar()``: the base message (``name — hint``) and a timed
     flash, as views/wgpu_ui.before_frame reads them."""
@@ -119,22 +110,21 @@ class ShellStatusBar:
         self._host = host
         self._base = ""
         self._msg = _Label()
-        self._timer = _Timer()
+        self._timer = host.timers.timer(host.request_frame)
 
     def showMessage(self, text, msec=0):
         if msec:
             self._msg.setText(text)
-            self._timer._until = time.monotonic() + msec / 1000.0
-            self._host.wake_after(msec)
+            self._timer.start(msec)
         else:
             self._base = text
         self._host.request_frame()
 
     def currentMessage(self):
-        return self._msg.text() if self._timer.isActive() else self._base
+        return self._msg.text() if self._timer.remainingTime() > 0 else self._base
 
     def clearMessage(self):
-        self._timer._until = 0.0
+        self._timer.stop()
 
     # The chrome hides the Qt status bar; there is none to hide here.
     def _noop(self, *args, **kwargs):

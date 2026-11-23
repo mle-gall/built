@@ -779,7 +779,7 @@ impl App {
 
     /// One window's turn: Python's idle, cursor, title, drag, and what else
     /// it asks for (a new window, to come to the front).
-    fn turn(&mut self, event_loop: &ActiveEventLoop, id: WindowId) -> Option<f64> {
+    fn turn(&mut self, event_loop: &ActiveEventLoop, id: WindowId) -> Option<Instant> {
         let Some(w) = self.win_mut(id) else { return None };
         let measuring = perf::on() && w.host.opening();
         if measuring && w.open_frame.is_none() {
@@ -789,6 +789,9 @@ impl App {
         let w = self.win(id)?;
         let handover = measuring.then(Instant::now);
         let (wanted, wake_ms, cursor, title, drag) = w.host.idle();
+        // A later window can spend this turn loading a model or answering a
+        // question. Its work must not restart this window’s timer interval.
+        let wake_at = wake_ms.map(|ms| Instant::now() + Duration::from_millis(ms.ceil().max(1.0) as u64));
         if let Some(start) = handover {
             if !w.host.opening() {
                 perf::note("open_handover_ms", start);
@@ -851,7 +854,7 @@ impl App {
         if let Some(token) = extra.new_window {
             self.new_window(event_loop, &token);
         }
-        wake_ms
+        wake_at
     }
 }
 
@@ -968,25 +971,16 @@ impl ApplicationHandler<UserEvent> for App {
             if !self.steps.is_empty() || self.resume_at.is_some() {
                 self.run_script(event_loop);
             }
-            let mut wake: Option<f64> = None;
             let ids: Vec<WindowId> = self.wins.iter().map(|(id, _)| *id).collect();
-            for id in ids {
-                if let Some(ms) = self.turn(event_loop, id) {
-                    wake = Some(wake.map_or(ms, |w| w.min(ms)));
-                }
-            }
-            wake
+            ids.into_iter().filter_map(|id| self.turn(event_loop, id)).min()
         });
         let scripted = !self.steps.is_empty() && self.resume_at.is_none();
         let flow = if scripted {
             ControlFlow::Poll
+        } else if let Some(at) = wake.into_iter().chain(self.resume_at).min() {
+            ControlFlow::WaitUntil(at)
         } else {
-            match (wake, self.resume_at) {
-                (Some(ms), Some(at)) => ControlFlow::WaitUntil(at.min(Instant::now() + Duration::from_millis(ms.max(1.0) as u64))),
-                (None, Some(at)) => ControlFlow::WaitUntil(at),
-                (Some(ms), None) => ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(ms.max(1.0) as u64)),
-                (None, None) => ControlFlow::Wait,
-            }
+            ControlFlow::Wait
         };
         event_loop.set_control_flow(flow);
     }

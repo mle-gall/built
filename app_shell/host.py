@@ -61,7 +61,9 @@ class Host:
         self.height = max(1, int(round(height)))
         self.scale = float(scale)
         self._frame_wanted = True
-        self._wake_at = None
+        from ingetrazo_render import WindowTimers
+        self.timers = WindowTimers()
+        self._wake_timer = self.timers.timer(self.request_frame)
         self._cursor = None
         self._title = None
         self._custom_cursors = {}
@@ -108,6 +110,7 @@ class Host:
         if guard is not None:
             guard.on_blocked = lambda title: self.not_here(f"“{title}”")
         try:
+            self.window._autosave_timer = self.timers.timer(self.window._on_autosave_tick, repeat=True)
             self.window._setup_autosave()
         except Exception:
             self._error("autosave setup")
@@ -131,7 +134,6 @@ class Host:
         """The window's renderer to ``view`` (a document switch): its packed
         scene goes up again (no repack), and everything the chrome was last
         sent is sent again for it."""
-        from PySide6.QtCore import QTimer
         view.renderer = renderer
         if renderer is not None and hasattr(renderer, 'set_reference_layers'):
             renderer.set_reference_layers([], [])
@@ -139,8 +141,7 @@ class Host:
         view._reference_cache = None
         view._had_center_cue = False
         if getattr(view, "_ui_timer", None) is None:
-            view._ui_timer = QTimer(view, singleShot=True)
-            view._ui_timer.timeout.connect(view.update)
+            view._ui_timer = view._view_timer(view.update)
         # What the chrome was last sent for this view is no longer what the
         # renderer shows: the signatures go (the defaults come back), the
         # view's own state (expanded rows, filters, mode) stays.
@@ -187,8 +188,9 @@ class Host:
         self._frame_wanted = True
 
     def wake_after(self, msec):
-        at = time.monotonic() + msec / 1000.0
-        self._wake_at = at if self._wake_at is None else min(self._wake_at, at)
+        left = self._wake_timer.remainingTime()
+        if left < 0 or left > msec:
+            self._wake_timer.start(msec)
 
     def cursor_changed(self, cursor):
         try:
@@ -253,6 +255,7 @@ class Host:
         """Qt's posted events and timers; then what the window should do:
         ``(frame_wanted, wake_in_ms or None, cursor or None, title or None)``."""
         qt_host.pump()
+        self._guard("window timers", self.timers.run_due)
         pending = self.window.__dict__.get("_pending_open")
         if pending and time.monotonic() >= pending.next_poll:
             pending.next_poll = time.monotonic() + 0.032
@@ -272,20 +275,9 @@ class Host:
             if ms is not None:
                 delay = ms if delay is None else min(delay, ms)
 
-        ui_timer = getattr(view, "_ui_timer", None)
-        if ui_timer is not None and ui_timer.isActive():
-            sooner(max(0, ui_timer.remainingTime()))
-        if self._wake_at is not None:
-            wait = max(0.0, (self._wake_at - time.monotonic()) * 1000)
-            sooner(wait)
-            if wait == 0:
-                self._wake_at = None
-                self._frame_wanted = True
-        # Qt timers fire only while we pump: wake when the first is due
-        # (QTimer.start / singleShot from Python, app_shell.qt_host), and
-        # poll the view's own at the Qt app's 33 ms present cadence.
+        # Remaining plugin/tool Qt callbacks still need their event pump.
         sooner(qt_host.next_timer_ms())
-        if self._qt_timers_pending():
+        if getattr(view, "_inference_future", None) is not None or getattr(view, "_inference_queued", False):
             sooner(33)
         # File changes of linked documents arrive as Qt posted events,
         # which winit does not see: look for them once a second.
@@ -299,6 +291,7 @@ class Host:
         cursor, self._cursor = self._cursor, None
         title, self._title = self._title, None
         wanted, self._frame_wanted = self._frame_wanted, False
+        sooner(self.timers.next_ms())
         return wanted, delay, cursor, title
 
     def extras(self):
@@ -340,15 +333,6 @@ class Host:
         from app_shell import modal
         modal._HOST = self
 
-    def _qt_timers_pending(self):
-        view = self.view
-        for name in ("_settle_timer", "_resize_timer", "_ui_timer"):
-            t = getattr(view, name, None)
-            if t is not None and t.isActive():
-                return True
-        return (getattr(view, "_inference_future", None) is not None
-                or getattr(view, "_inference_queued", False))
-
     def frame(self):
         """Draw one frame. ``(cpu_ms, gpu_ms, wall_ms)`` or None."""
         view = self.view
@@ -369,9 +353,8 @@ class Host:
 
     def modal_frame(self):
         """A frame while a question or a job holds the loop (app_shell.modal)."""
-        ui_timer = getattr(self.view, "_ui_timer", None)
-        due = ui_timer is not None and ui_timer.isActive() and ui_timer.remainingTime() <= 0
-        if self._frame_wanted or due:
+        self._guard("window timers", self.timers.run_due)
+        if self._frame_wanted:
             self._frame_wanted = False
             self.frame()
 
@@ -642,6 +625,7 @@ class Host:
         chrome_forms.close_all(self.window)
         self.window._release_check = None
         windows.unregister(self)
+        self.timers.cancel_all()
         for doc in list(self.window._documents):
             view = doc.stand_in
             if view is not None:
