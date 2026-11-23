@@ -64,9 +64,17 @@ class DocumentController(DocumentInteraction, WidgetShim):
 
     def _depth_world_at(self, x, y):
         display = self.keys_stand_in
-        if display is not None and display.renderer is not None:
-            return display._depth_world_at(x, y)
-        return None
+        if display is None or display.renderer is None:
+            return None
+        painted = getattr(display, '_last_camera', None)
+        camera = display.camera
+        if painted is None or painted[0] != (tuple(camera.view_matrix().data()),
+                                            tuple(camera.projection_matrix().data())):
+            return None
+        if not (0 <= x < display.width() and 0 <= y < display.height()):
+            return None
+        kind, point = display._depth_world_at(x, y)
+        return ('background', None) if kind == 'miss' else (kind, point)
 
     def upload_terrain(self, terrain):
         self._reference_revision = getattr(self, '_reference_revision', 0) + 1

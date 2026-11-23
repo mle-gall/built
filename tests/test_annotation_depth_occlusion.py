@@ -49,8 +49,6 @@ def test_a_point_behind_a_wall_is_hidden_and_one_in_front_is_not():
         for _ in range(5):
             _app.processEvents()
         live_image(vp)       # a real frame, painted the way Qt does
-        if getattr(vp, "_depth_snap", None) is None:
-            pytest.skip("no depth readback from this surface")
         behind = V(0, 2, 1)                              # the wall hides it
         front = V(0, -2, 1)                              # nothing in front
         on_face = V(0, -0.1, 1)                          # ON the wall's face

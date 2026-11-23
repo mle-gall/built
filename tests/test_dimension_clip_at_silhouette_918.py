@@ -73,8 +73,6 @@ def _seen_length(vp, x_edge, left=False):
         _box(sc.mesh, x_edge, -0.1, 0, 3, 0.1, 3)
     sc.version += 1
     live_image(vp)
-    if getattr(vp, "_depth_snap", None) is None:
-        pytest.skip("no depth readback from this surface")
     pen = _Pen()
     vp._draw_occluded_segment(pen, V(-2, 2, 1), V(2, 2, 1))
     return pen.length()
