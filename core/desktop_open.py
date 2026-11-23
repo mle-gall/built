@@ -51,7 +51,11 @@ def open_url(target) -> bool:
         url = QUrl(str(target))
     else:
         url = QUrl.fromLocalFile(str(target))
-    opener = shutil.which("xdg-open") if _launch_ourselves() else None
+    if sys.platform == "darwin" and "built_shell" in sys.builtin_module_names:
+        # The native shell runs Qt offscreen, without Cocoa desktop services.
+        opener = "/usr/bin/open"
+    else:
+        opener = shutil.which("xdg-open") if _launch_ourselves() else None
     if opener:
         arg = url.toLocalFile() if url.isLocalFile() else url.toString()
         try:

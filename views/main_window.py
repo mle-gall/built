@@ -1105,6 +1105,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         manager = getattr(self, "_background_autosave", None)
         if manager is None:
             manager = self._background_autosave = BackgroundAutosave(self)
+            manager.finished.connect(lambda name, error: _dialogs.autosave_result(self, name, error))
         manager.request(list(self._documents))
 
     def _offer_untitled_recovery(self) -> None:
@@ -1120,7 +1121,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
     def _recover_untitled(self, n: int, slot) -> None:
         from core import autosave
         answer = _dialogs.question(
-            self, tr("Recovered drawing"),
+            self, tr("Recover the auto-saved drawing?"),
             tr("The last session ended without saving an untitled drawing "
                "(auto-saved copy found). Recover it?"),
             QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
@@ -5011,8 +5012,8 @@ class MainWindow(WorksessionMixin, QMainWindow):
         cancel the replacement."""
         names = ", ".join(sorted({g.name or tr("Component") for g in orphans}))
         answer = _dialogs.ask(
-            self, tr("No copy of {names} will be left in the model.", names=names),
-            tr("Keep it in the file, to place it or swap back to it later?"),
+            self, tr("Keep {names} in the file?", names=names),
+            tr("You can place it or swap back to it later."),
             [("drop", tr("Let It Go")), ("cancel", tr("Cancel")),
              ("keep", tr("Keep in File"))],
             default="keep", cancel="cancel")
@@ -9248,9 +9249,10 @@ class MainWindow(WorksessionMixin, QMainWindow):
         from core import autosave
         recovered = False
         slot = autosave.pending(path)
-        if slot is not None:
+        defer_recovery = slot is not None and _dialogs.live(self) is not None
+        if slot is not None and not defer_recovery:
             answer = _dialogs.question(
-                self, tr("Recovered drawing"),
+                self, tr("Recover the auto-saved drawing?"),
                 tr("A session with '{name}' ended without saving (auto-saved "
                    "copy found). Recover it instead of the file on disk?",
                    name=path.name),
@@ -9313,7 +9315,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
                     self._finish_aborted_open()
                 return False
             except Exception as exc:  # noqa: BLE001 - surface any IO/parse error to the user
-                dlg.close()
+                _dialogs.close_failed(dlg, exc)
                 _dialogs.critical(self, tr("Open failed"), str(exc))
                 return False
             # Keep the existing steady-state allocation threshold before the
@@ -9416,6 +9418,9 @@ class MainWindow(WorksessionMixin, QMainWindow):
             # screen.
             self.viewport._pick_warm_due = True
             cb(1.0, "Document loaded")
+            _dialogs.opened(dlg, self, path)
+            if defer_recovery:
+                _dialogs.offer_recovery(self, path, slot)
             # Returning to Qt lets the selected renderer present before any
             # optional panel/cache work. A timer alone is not a frame barrier.
             self._opening_document = False
@@ -9540,7 +9545,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
 
         def confirm(mm):
             return _dialogs.question(
-                self, tr("Export precision"),
+                self, tr("Save the rounded copy?"),
                 tr("Float32 rounding moves points by up to {mm} mm. Save the copy?",
                    mm=f"{mm:.6g}")) == QMessageBox.Yes
 
@@ -9554,7 +9559,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
                 _dialogs.warning(self, tr("Saved with missing textures"),
                                     tr("Some texture images could not be packed."))
         except Exception as exc:
-            _dialogs.critical(self, tr("Save failed"), str(exc))
+            _dialogs.save_failed(self, exc, self._on_export_igz)
 
     def _end_group_edits(self) -> None:
         """The view in front and the project's own, when they differ."""
@@ -9594,10 +9599,10 @@ class MainWindow(WorksessionMixin, QMainWindow):
                 image.save(buffer, 'PNG')
                 vp.scene._home_thumbnail_png = bytes(data)
             # The Built UI: «Saving …» in the top bar for the time it takes.
-            with _dialogs.busy(self, tr("Saving {name}…", name=path.name)):
+            with _dialogs.busy(self, tr("Saving {name}…", name=path.name), output_path=path):
                 stats = igz_format.save_scene(vp.scene, path) or {}
         except Exception as exc:  # noqa: BLE001
-            _dialogs.critical(self, tr("Save failed"), str(exc))
+            _dialogs.save_failed(self, exc, self._on_save_as)
             return
         # A clean save ends the recovery window for this document — and for
         # the slot of what it was called until now (untitled, or the old
@@ -10273,7 +10278,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             failure.append(exc)
         if not failure:
             return cmd
-        dlg.close()
+        _dialogs.close_failed(dlg, describe(failure[0]))
         if was_clean:
             self._saved_version = self.viewport.scene.version
         self._update_title()
@@ -10384,7 +10389,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             if isinstance(exc, skp_format.NeedsConverter):
                 payload = None             # unreadable: said below
             elif exc is not None:
-                dlg.close()
+                _dialogs.close_failed(dlg, exc)
                 _dialogs.critical(self, tr("Import SKP failed"), str(exc))
                 return False
             if payload is not None:
@@ -10412,7 +10417,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
                     self.statusBar().showMessage(
                         tr("Imported {name}", name=skp.name), 3000)
                 return True
-            dlg.close()   # the reader could not read it: said below
+            _dialogs.close_failed(dlg, exc or tr("Unreadable .skp file"))
 
         # No converter behind this: IngeTrazo reads .skp with its own
         # reader only.
@@ -10447,7 +10452,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
                    path=str(texture_cache_root())))
             return
         answer = _dialogs.question(
-            self, tr("Clear texture cache"),
+            self, tr("Clear the texture cache?"),
             tr("Delete {count} image(s) ({mb:.1f} MB) from:\n{path}\n\n"
                "Saved .igz documents carry their own copy and rebuild it when "
                "opened. Faces textured by a .skp import that was never saved "
@@ -10509,6 +10514,9 @@ class MainWindow(WorksessionMixin, QMainWindow):
         not be read (their copies stay in place, empty, until found)."""
         self._link_watcher().refresh()
         errors = getattr(self.viewport.scene, "link_errors", None) or {}
+        if _dialogs.live(self) is not None and _dialogs.update_link_banner(self):
+            _dialogs._repaint(self)
+            return
         if errors:
             _dialogs.warning(
                 self, tr("Linked files"),
@@ -10857,7 +10865,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         target, exc = self._parse_stl_threaded(
             path, scale, simplify_mode, cb, report=moved)
         if exc is not None:
-            dlg.close()
+            _dialogs.close_failed(dlg, exc)
             _dialogs.critical(self, tr("Import STL failed"), str(exc))
             return
         cmd = self._run_import(
@@ -11029,7 +11037,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
                 progress=lambda fr: (cb(fr * 0.9, "Decoding the orthomosaic…")
                                      or True))
         except (GeoTiffError, OSError, MemoryError) as exc:
-            dlg.close()
+            _dialogs.close_failed(dlg, exc)
             _dialogs.critical(self, tr("Import orthomosaic"), str(exc))
             return
         cb(0.92, "Storing the picture…")
@@ -11052,7 +11060,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         try:
             cached = cache_image(bytes(data), f"{path.stem}.{ext}", "imported")
         except OSError as exc:
-            dlg.close()
+            _dialogs.close_failed(dlg, exc)
             _dialogs.critical(self, tr("Import orthomosaic"), str(exc))
             return
         dlg.close()
@@ -11225,7 +11233,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         try:
             dxf = converter.convert(path)
         except DwgBridgeError as exc:
-            dlg.close()
+            _dialogs.close_failed(dlg, exc)
             if exc.kind == "cancelled":
                 self.statusBar().showMessage(tr("DWG import cancelled."), 5000)
             else:
@@ -11425,7 +11433,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         dlg, cb = self._import_progress(tr("Importing {name}…", name=path.name))
         mesh, images, exc = self._load_photomesh_threaded(path, datum, 0.0, cb)
         if exc is not None:
-            dlg.close()
+            _dialogs.close_failed(dlg, exc)
             _dialogs.critical(self, tr("Import failed"), str(exc))
             return
         if mesh is None or mesh.triangle_count == 0:
@@ -11745,7 +11753,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         if not sel:
             return None
         answer = _dialogs.ask(
-            self, tr("Export"), tr("Export the whole model, or only what is selected?"),
+            self, tr("What should be exported?"), tr("Export the whole model, or only what is selected?"),
             [("cancel", tr("Cancel")), ("whole", tr("Whole model")),
              ("part", tr("Only the selection"))],
             default="part", cancel="cancel")
@@ -12216,15 +12224,16 @@ class MainWindow(WorksessionMixin, QMainWindow):
                 self.activate_document(dirty[0])
             return self._confirm_discard(tr("Quit Built?"))
         names = "\n".join("• " + d.display_name() for d in dirty)
+        checklist = [(d.display_name(), True) for d in dirty]
         answer = _dialogs.ask(
-            self, tr("Unsaved changes"),
-            tr("{n} projects have unsaved changes:\n\n{names}\n\n"
-               "Save them before quitting?", n=len(dirty), names=names),
+            self, tr("Which projects should be saved?"),
+            tr("{n} projects have unsaved changes. Unchecked changes will be discarded.", n=len(dirty)),
             [("discard", tr("Don't Save")), ("cancel", tr("Cancel")),
-             ("save", tr("Save All"))],
-            default="save", cancel="cancel", discard="discard")
+             ("save", tr("Save Selected"))],
+            default="save", cancel="cancel", discard="discard", checklist=checklist)
         if answer is not None:
-            return self._save_all_or_stay(dirty, answer)
+            selected = [d for d, (_, checked) in zip(dirty, checklist) if checked]
+            return self._save_all_or_stay(selected, answer)
         box = QMessageBox(
             QMessageBox.Question, tr("Unsaved changes"),
             tr("{n} projects have unsaved changes:\n\n{names}\n\n"

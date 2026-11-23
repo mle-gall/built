@@ -167,11 +167,11 @@ def test_quit_with_several_projects_asks_once(win, monkeypatch):
     texts = []
 
     def answer():
-        texts.append(cd.current_sheet(win).text)
+        texts.append(cd.current_sheet(win).checklist)
         press(Qt.Key_D, Qt.ControlModifier, win)
     chrome(win, answer)
     assert win._confirm_quit() is True
-    assert "2" in texts[0] and first.display_name() in texts[0]
+    assert texts == [[(first.display_name(), True), (second.display_name(), True)]]
     for doc in (first, second):
         win.activate_document(doc)
         win._saved_version = win.viewport.scene.version
@@ -187,7 +187,6 @@ def test_message_boxes_map_standard_buttons(win):
     assert sheet.cancel == str(QMessageBox.No.value)
     chrome(win, lambda: press(Qt.Key_Escape, target=win))
     assert cd.question(win, "Purge", "Purge unused?") == QMessageBox.No
-    chrome(win, lambda: press(Qt.Key_Return, target=win))
     assert cd.critical(win, "Open failed", "No such file") == QMessageBox.Ok
 
 
@@ -203,21 +202,90 @@ def test_message_boxes_go_to_qt_when_the_chrome_is_off(monkeypatch):
         w.close()
 
 
-def test_a_notice_does_not_wait_and_stacks_under_a_question(win):
-    assert cd.notify(win, "Document repaired", "3 pieces left out", tone="warning")
-    notice = cd.current_sheet(win)
-    assert cd.modal(win)
-    order = []
+@pytest.mark.parametrize("method,title", [
+    ("_on_set_language", "Language changed"),
+    ("_on_recover_discarded", "Recover a discarded auto-save…"),
+    ("_on_insert_faceme_image", "Face-me image"),
+    ("_on_get_models", "Get more models and textures"),
+    ("_import_rfa_path", "Revit family import report"),
+    ("_on_clear_texture_cache", "Texture cache"),
+    ("_on_export_ifc", "Export IFC"),
+])
+def test_information_call_sites_post_toasts(win, tmp_path, monkeypatch, method, title):
+    from PySide6.QtGui import QImage
+    from core import autosave, texture
+    from formats import rfa
+    from views import main_window as mw
+    args = ()
+    if method == "_on_set_language":
+        monkeypatch.setattr(mw, "set_language", lambda lang: None)
+        monkeypatch.setattr(mw, "current_language", lambda: "en")
+        args = ("fr",)
+    elif method == "_on_recover_discarded":
+        monkeypatch.setattr(autosave, "discarded_dir", lambda: tmp_path)
+    elif method == "_on_insert_faceme_image":
+        picture = tmp_path / "opaque.png"
+        img = QImage(2, 2, QImage.Format_RGB32)
+        img.fill(Qt.white)
+        assert img.save(str(picture))
+        monkeypatch.setattr(mw.file_dialogs, "getOpenFileName", lambda *a: (str(picture), ""))
+        monkeypatch.setattr(mw._forms, "ask_number", lambda *a, **kw: None)
+    elif method == "_import_rfa_path":
+        monkeypatch.setattr(rfa, "read_rfa", lambda path: {})
+        monkeypatch.setattr(rfa, "apply_payload", lambda scene, payload: ["Imported one family"])
+        args = (tmp_path / "fixture.rfa",)
+    elif method == "_on_clear_texture_cache":
+        monkeypatch.setattr(texture, "texture_cache_stats", lambda: (0, 0))
+    getattr(win, method)(*args)
+    assert cd.history(win)[0].title == title
+    assert not cd.current_sheet(win) and not cd.modal(win)
 
-    def answer_question():
-        order.append(cd.current_sheet(win).title)
-        press(Qt.Key_Escape, target=win)
-    chrome(win, answer_question)
-    assert cd.question(win, "Purge", "Purge unused?") == QMessageBox.No
-    assert order == ["Purge"]
-    assert cd.current_sheet(win) is notice          # back on top
-    press(Qt.Key_Return, target=win)
-    assert cd.current_sheet(win) is None and not cd.modal(win)
+
+def test_notices_stack_expire_and_keep_actions(win, monkeypatch):
+    from views import wgpu_ui
+    clock = [10.]
+    monkeypatch.setattr(cd.time, "monotonic", lambda: clock[0])
+    seen = []
+    cd.notify(win, "First", "details", action_label="Show", action=lambda: seen.append(1))
+    cd.notify(win, "Second", "details")
+    clock[0] += 6
+    second, first = cd.history(win)
+    assert [second.title, first.title] == ["Second", "First"]
+    wgpu_ui._run(win, ["activity:" + first.id])
+    assert seen == [1]
+    clock[0] += 45
+    assert not cd.history(win)
+
+
+def test_save_failed_offers_recovery(win):
+    seen = []
+
+    def answer():
+        sheet = cd.current_sheet(win)
+        seen.append((sheet.tone, sheet.default, sheet.text))
+        cd.answer(win, "retry")
+
+    chrome(win, answer)
+    cd.save_failed(win, OSError("Volume full"), lambda: seen.append("retried"))
+    assert seen == [("error", "retry", "Volume full"), "retried"]
+
+
+def test_quit_saves_only_checked_projects(win, monkeypatch):
+    first = win._doc
+    dirty(win)
+    second = win._new_document()
+    dirty(win)
+    received = []
+    monkeypatch.setattr(win, "_save_all_or_stay", lambda docs, answer: received.append((docs, answer)))
+    def select():
+        cd.answer(win, "check:0")
+        cd.answer(win, "save")
+    chrome(win, select)
+    win._confirm_quit()
+    assert received == [([second], "save")]
+    for doc in (first, second):
+        win.activate_document(doc)
+        win._saved_version = win.viewport.scene.version
 
 
 def test_progress_is_a_job_in_the_bar(win):
@@ -309,3 +377,75 @@ def test_cancel_while_opening_stops_the_load_and_keeps_the_window(win, plan, mon
     assert win._current_path is None and not win._is_dirty()
     assert not cd.jobs(win) and not cd.modal(win)
     assert not win._open_in_progress and not win._open_cancelled
+
+
+def test_open_with_missing_sources_has_one_banner_and_problem_rows(win, tmp_path, monkeypatch):
+    from core import links
+    from formats import igz
+    from tests.test_links import _source, _host_with_link
+    from views import wgpu_ui
+    from views.filedialogs import file_dialogs
+
+    a, b = (_source(tmp_path / name) for name in ("A.igz", "B.igz"))
+    host, _ = _host_with_link(tmp_path, a)
+    host.groups.append(links.make_link(host, a))
+    host.groups.append(links.make_link(host, b))
+    path = tmp_path / "Host.built"
+    igz.save_scene(host, path)
+    moved = a.rename(tmp_path / "Relocated.igz")
+    b.unlink()
+    monkeypatch.setattr(cd, "ask", lambda *a, **kw: pytest.fail("blocking link question"))
+    assert win.open_path(path)
+    win._after_links_loaded()
+    assert win._doc._missing_link_banner == "2 linked files missing"
+    scene = win.viewport.scene
+    rules = wgpu_ui._problem_rules(scene, {}, {}, {}, [])
+    affected = next(groups for _, key, _, groups in rules if key == "links")
+    assert len(affected) == 3
+    monkeypatch.setattr(file_dialogs, "getOpenFileName", lambda *args: (str(moved), ""))
+    monkeypatch.setattr(cd, "view_of", lambda _: win._fake_view)
+    wgpu_ui._run(win, ["linkbanner:locate"])
+    assert win._doc._missing_link_banner == "1 linked file missing"
+    assert len(links.linked_groups(scene, moved)) == 2
+    assert links.link_state(scene, moved) == "resolved"
+    import os
+    stamp = moved.stat().st_mtime_ns + 1_000_000_000
+    os.utime(moved, ns=(stamp, stamp))
+    assert links.link_state(scene, moved) == "modified"
+    wgpu_ui._run(win, ["linkbanner:close"])
+    assert win._doc._missing_link_banner == ""
+
+
+def test_open_preserves_recovery_as_a_separate_copy(win, tmp_path, monkeypatch):
+    from core import autosave
+    from core.scene import Scene
+    from formats import igz
+    from views import wgpu_ui
+    disk = tmp_path / "original.built"
+    scene = Scene()
+    igz.save_scene(scene, disk)
+    scene.mesh.add_face([QVector3D(0, 0, 0), QVector3D(1, 0, 0), QVector3D(1, 1, 0)])
+    autosave.write(scene, disk)
+    monkeypatch.setattr(cd, "question", lambda *a, **kw: pytest.fail("blocked opening"))
+    assert win.open_path(disk)
+    assert not win.viewport.scene.mesh.faces and not win._is_dirty()
+    recovery = next(r for r in cd.history(win) if r.action_label == "Open copy")
+    wgpu_ui._run(win, ["activity:" + recovery.id])
+    assert win._current_path is None and win._is_dirty()
+    assert len(win.viewport.scene.mesh.faces) == 1
+
+
+def test_failed_job_and_export_folder_are_retained(win, tmp_path, monkeypatch):
+    from core import desktop_open
+    opened = []
+    monkeypatch.setattr(desktop_open, "open_url", opened.append)
+    with pytest.raises(OSError), cd.busy(win, "Saving"):
+        raise OSError("Volume full")
+    row = cd.history(win)[0]
+    assert row.tone == "error" and row.detail == "Volume full"
+    with cd.busy(win, "Exporting", output_path=tmp_path / "a.pdf"):
+        pass
+    row = cd.history(win)[0]
+    assert row.action_label == "Open folder"
+    row.action()
+    assert opened == [tmp_path.resolve()]

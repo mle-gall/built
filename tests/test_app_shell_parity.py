@@ -122,7 +122,7 @@ def test_igz_export_asks_about_float32_and_writes_a_copy(host, tmp_path, answers
     answers.append("yes")
     out = tmp_path / "out.igz"
     assert host.menu(f"export_igz_to:{out}")
-    assert out.is_file() and answers.asked == ["Export precision"]
+    assert out.is_file() and answers.asked == ["Save the rounded copy?"]
     assert host.state()["path"].endswith("model.igz")
 
 
@@ -166,7 +166,7 @@ def test_open_offers_the_auto_saved_copy(host, tmp_path, answers):
     answers.append("yes")
     assert host.open_path(src)
     st = host.state()
-    assert answers.asked == ["Recovered drawing"]
+    assert answers.asked == ["Recover the auto-saved drawing?"]
     assert st["faces"] == 7 and st["dirty"]         # recovered ≠ saved
 
 
@@ -218,7 +218,7 @@ def test_dxf_asks_its_unit_on_the_sheet(host, tmp_path, answers):
     dxf.write_text("\n".join(["0", "SECTION", "2", "ENTITIES", *ents, "0", "ENDSEC", "0", "EOF"]) + "\n")
     answers.append("m")
     assert host.open_path(dxf)
-    assert answers.asked == ["Import DXF"]
+    assert answers.asked == ["What unit is this drawing in?"]
     assert "plan.dxf" in host.state()["status"]
 
 

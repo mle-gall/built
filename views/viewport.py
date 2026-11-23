@@ -19708,9 +19708,9 @@ class Viewport(QOpenGLWidget):
             return
         # The Built UI asks on its sheet; Qt when the chrome is not on screen.
         answer = chrome_dialogs.ask(
-            self, tr("“{name}” is linked from another file.", name=path.name),
+            self, tr("Open the source file “{name}”?", name=path.name),
             tr("It is edited in its own document; every change saved there "
-               "shows here. Open it now?"),
+               "shows here."),
             [("cancel", tr("Cancel")), ("open", tr("Open {name}", name=path.name))],
             default="open", cancel="cancel")
         if answer is not None and answer != "open":

@@ -7,7 +7,7 @@ import threading
 import time
 import uuid
 
-from PySide6.QtCore import QObject, QTimer, Qt
+from PySide6.QtCore import QObject, QTimer, Qt, Signal
 from PySide6.QtWidgets import QApplication
 
 from core import autosave
@@ -15,6 +15,7 @@ from formats.igz_snapshot import snapshot_steps
 
 
 class BackgroundAutosave(QObject):
+    finished = Signal(str, str)  # document name, error (empty on success)
     SLICE_SECONDS = .006
 
     def __init__(self, window):
@@ -110,9 +111,11 @@ class BackgroundAutosave(QObject):
                     # A clean save/close cannot race this final rename.
                     stage.replace(job['slot'])
                     job['doc'].autosaved_version = job['version']
+                    self.finished.emit(job["doc"].display_name(), "")
                     from core.i18n import tr
                     self.window.statusBar().showMessage(tr('Auto-saved.'), 2000)
             except Exception as exc:
+                self.finished.emit(job["doc"].display_name(), str(exc))
                 self.last_error = str(exc)
                 logging.getLogger(__name__).warning('Background autosave: %s', exc)
             finally:
@@ -168,6 +171,7 @@ class BackgroundAutosave(QObject):
                 results.put((stage, error))
             threading.Thread(target=write, name='IGZ autosave', daemon=True).start()
         except Exception as exc:
+            self.finished.emit(self.job["doc"].display_name(), str(exc))
             self.last_error = str(exc)
             logging.getLogger(__name__).warning('Autosave snapshot: %s', exc)
             self.steps = None

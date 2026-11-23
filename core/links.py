@@ -1293,6 +1293,20 @@ def save_as_placeholder(group, scene) -> bool:
     return link is not None and not is_packed(scene, link["path"])
 
 
+def link_state(scene, path) -> str:
+    """State of one source shared by file rows, Problems and the link inspector."""
+    if is_packed(scene, path):
+        return "packed"
+    from stat import S_ISREG
+    try:
+        info = Path(path).stat()
+    except OSError:
+        return "missing"
+    if not S_ISREG(info.st_mode):
+        return "missing"
+    return "resolved" if info.st_mtime_ns == _entry(scene, path).get("loaded_mtime_ns") else "modified"
+
+
 def query(scene):
     """JSON metadata for UI and agents, without touching geometry."""
     from core.group import iter_placements
@@ -1300,10 +1314,7 @@ def query(scene):
     for group in linked_groups(scene):
         rec = link_of(group)
         path = Path(rec['path'])
-        stamp = path.stat().st_mtime_ns if path.is_file() else None
-        state = ('packed' if is_packed(scene, path) else 'missing' if stamp is None
-                 else 'modified' if stamp != _entry(scene, path).get('loaded_mtime_ns')
-                 else 'resolved')
+        state = link_state(scene, path)
         rows.append(dict(uid=group.uid, path=str(path), status=state,
                          include_nested=rec.get('include_nested', True),
                          select=rec.get('select'), stable_uid_count=sum(1 for _ in iter_placements(group)) - 1))
