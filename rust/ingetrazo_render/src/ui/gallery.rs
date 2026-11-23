@@ -179,7 +179,7 @@ impl Samples {
                 );
                 ui.add(search(&mut self.filter, "Search").desired_width(f32::INFINITY));
                 ui.horizontal(|ui| {
-                    ui.add(number(&mut self.length, "mm"));
+                    ui.add(number(&mut self.length, " mm"));
                     swatch(ui, self.color.get_or_insert(OK));
                 });
                 choice(ui, "kind", &mut self.choice, &["Material", "Colour"]);

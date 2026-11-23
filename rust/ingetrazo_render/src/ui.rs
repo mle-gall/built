@@ -232,7 +232,8 @@ impl Ui {
         ctx.style_mut(|s| {
             s.interaction.tooltip_delay = 0.25;
             s.visuals = egui::Visuals::dark();
-            s.visuals.window_fill = PANEL;
+            s.animation_time = MOTION_QUICK;
+            s.visuals.window_fill = POPOVER;
             s.visuals.panel_fill = PANEL;
             s.visuals.override_text_color = Some(INK);
             s.visuals.popup_shadow = Shadow { offset: [0, 4], blur: 12, spread: 0, color: POP_SHADOW };
@@ -905,7 +906,7 @@ impl Ui {
     /// the window, as a title bar does)?
     pub fn top_empty(&self, x: f32, y: f32) -> bool {
         let p = pos2(x, y);
-        y <= TOP_H && !self.top_groups.iter().any(|r| r.contains(p))
+        self.gallery.is_none() && y <= TOP_H && !self.top_groups.iter().any(|r| r.contains(p))
             && !self.ctx.memory(|m| m.area_rect(egui::Id::new("jobs"))).is_some_and(|r| (!self.jobs.is_empty() || !self.history.is_empty()) && r.contains(p))
             && !(self.projects.is_none() && x < 86.0)
     }
@@ -1747,7 +1748,7 @@ impl Ui {
                                 let mut kx = tx + name_w + 8.0;
                                 if let Some(state) = file_state {
                                     let c = pos2(kx + 2.0, cy);
-                                    ui.painter().circle_filled(c, 3.0, tree_cols::state_color(state));
+                                    dot(ui.painter(), c, tree_cols::state_color(state));
                                     let tip = match state { "resolved" => "Up to date", "modified" => "Changed on disk: reload to see the changes",
                                         "missing" => "Not found: relink it", _ => "Packed in this file" };
                                     ui.interact(Rect::from_center_size(c, vec2(10.0, 10.0)), ui.id().with(("file_dot", i)), Sense::hover())

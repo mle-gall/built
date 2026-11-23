@@ -468,7 +468,7 @@ pub mod molecules {
         field(text).hint_text(egui::RichText::new(hint).color(FAINT))
     }
     pub fn number<'a>(value: &'a mut f64, units: &str) -> egui::DragValue<'a> {
-        egui::DragValue::new(value).suffix(format!(" {units}"))
+        egui::DragValue::new(value).suffix(units)
     }
     pub fn swatch(ui: &mut egui::Ui, value: &mut Color32) -> egui::Response {
         ui.color_edit_button_srgba(value)
@@ -477,6 +477,11 @@ pub mod molecules {
         ui.toggle_value(value, label)
     }
     pub fn choice(ui: &mut egui::Ui, id: impl std::hash::Hash, value: &mut usize, labels: &[&str]) {
+        if labels.is_empty() {
+            ui.add_enabled(false, egui::Button::new("—"));
+            return;
+        }
+        *value = (*value).min(labels.len() - 1);
         egui::ComboBox::from_id_salt(id).show_index(ui, value, labels.len(), |i| labels[i]);
     }
     pub fn progress(fraction: f32) -> egui::ProgressBar {

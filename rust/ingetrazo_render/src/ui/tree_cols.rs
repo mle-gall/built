@@ -5,7 +5,7 @@
 
 use egui::{pos2, vec2, Color32, Rect, Stroke};
 
-use super::{FOUND, MISSING, ACCENT, DIM, EDGE, FAINT, WARN};
+use super::{CHANGED, FOUND, MISSING, PACKED, ACCENT, EDGE, FAINT};
 
 /// A name keeps at least this much room (points) before a column hides.
 pub const MIN_NAME: f32 = 120.0;
@@ -14,8 +14,6 @@ const INDENT: f32 = 14.0;
 const LEAD: f32 = 4.0 + 16.0 + 16.0;
 /// The depth a layout is planned for: deeper rows may still cut their names.
 const PLAN_DEPTH: f32 = 2.0;
-
-/// A file found / changed on disk / not found / packed: the row's dot.
 
 /// Where each column of a column set sits in a row `[left, right]`.
 #[derive(Clone, Copy, Debug, Default)]
@@ -112,9 +110,9 @@ pub fn paint_file(painter: &egui::Painter, c: egui::Pos2, ink: Color32) {
 pub fn state_color(state: &str) -> Color32 {
     match state {
         "resolved" => FOUND,
-        "modified" => WARN,
+        "modified" => CHANGED,
         "missing" => MISSING,
-        _ => DIM,
+        _ => PACKED,
     }
 }
 
