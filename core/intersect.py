@@ -237,10 +237,7 @@ def segments_for(scene, mode: str, selection=None) -> list:
 
 def _partition_faces(mesh, segments):
     """Install the split graph, then replace its crossed faces in mesh order."""
-    from core import doc_model, scan_index
-    if not doc_model.ENABLED:
-        from core.intersection_reference import _partition_faces as reference
-        return reference(mesh, segments)
+    from core import scan_index
     from ingetrazo_core import partition_intersections
     from core.edits import _ScanEdges
     from core.mesh import edge_flags, stamp_edge_flags
