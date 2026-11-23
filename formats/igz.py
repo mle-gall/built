@@ -817,8 +817,7 @@ def prepare_scene_steps(scene, mesh_steps=None, *, stream=None, large=None):
             if axes is not None:
                 # A classic group's own axes (issue #44), column-major like
                 # "xform"; older readers ignore the key.
-                entry["axes"] = (list(axes.data()) if mesh_steps is not None or getattr(stream, "built", False)
-                                 else built.compact_values(axes.data()))
+                entry["axes"] = list(axes.data())
             if getattr(g, "layer", None) is not None:
                 entry["layer"] = g.layer
             if ifc := _group_ifc_record(g):

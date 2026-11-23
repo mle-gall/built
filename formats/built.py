@@ -42,9 +42,7 @@ def placement(values):
     values = tuple(map(float, values))
     if len(values) != 16 or not all(map(math.isfinite, values)):
         raise ValueError("Invalid Built placement transform")
-    matrix = QMatrix4x4(*(values[c * 4 + r] for r in range(4) for c in range(4)))
-    matrix._built_source = values, tuple(matrix.data())
-    return matrix
+    return QMatrix4x4(*(values[c * 4 + r] for r in range(4) for c in range(4)))
 
 
 def placement_values(matrix):
@@ -57,13 +55,12 @@ def placement_values(matrix):
 
 
 def python_vertices(mesh, points, sequential):
-    """Build on the model coordinates while Qt displays their f32 projection."""
+    """Weld binary64 coordinates directly into the Python object mesh."""
     from core.lazy_mesh import weld
-    from core.mesh import _KEY_SCALE
-    from formats.built_vertex import BuiltVertex
+    from core.mesh import Vertex, _KEY_SCALE
     positions, inverse = weld(points, sequential, precise=True)
     for point in positions.tolist():
-        vertex = BuiltVertex(point, key=next(mesh._keys))
+        vertex = Vertex(point, key=next(mesh._keys))
         mesh._registry[tuple(round(x * _KEY_SCALE) for x in point)] = vertex
         mesh.vertices.append(vertex)
     return mesh.vertices, inverse
