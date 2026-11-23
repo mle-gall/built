@@ -834,3 +834,87 @@ def test_promoting_one_tag_files_only_its_members_and_undoes():
     assert history.undo() and not structure._nodes(bim_registry.get(scene))
     assert not structure.node_of(wall)
     assert history.redo() and structure.node_of(wall) == key
+
+
+def test_drawing_line_types_and_file_round_trip(ui, tmp_path, monkeypatch):
+    import json
+    from core.layers import parse_lin
+    from views.filedialogs import file_dialogs
+    scene, win, view, _, act = ui
+    tag = scene.layer("Paths")
+    act("lens", "1")
+    act("editline", "save", json.dumps(dict(name="Survey", pieces=[6,-2,0,-2],
+        text="SUR", text_size=2.5, color=[.2,.4,.6], tags=[tag.key])))
+    assert tag.linetype == "lin:Survey" and scene.line_types["Survey"]["color"] == (.2,.4,.6)
+    act("editline", "save", json.dumps(dict(original="Survey",name="Grid",pieces=[7,-3])))
+    assert tag.linetype == "lin:Grid" and "Survey" not in scene.line_types
+    assert win.viewport.history.undo() and tag.linetype == "lin:Survey"
+    path = tmp_path / "styles.lin"
+    monkeypatch.setattr(file_dialogs, "getSaveFileName", lambda *args: (str(path), "LIN"))
+    act("exportlin", "")
+    entries, _ = parse_lin(path.read_text())
+    assert entries["Survey"]["text"] == "SUR"
+    act("editline", "delete", json.dumps(dict(original="Survey")))
+    assert tag.linetype == "continuous" and "Survey" not in scene.line_types
+    monkeypatch.setattr(file_dialogs, "getOpenFileName", lambda *args: (str(path), "LIN"))
+    act("importlin", "")
+    assert scene.line_types["Survey"]["text"] == "SUR"
+    assert win.viewport.history.undo() and "Survey" not in scene.line_types
+
+
+def test_drawing_folders_keep_keys_and_undo_as_one_step(ui):
+    import json
+    scene, win, _, _, act = ui
+    tag = scene.layer("Paths")
+    original = tag.folder
+    def folder(verb, **args):
+        act("tagfolder", verb, json.dumps(args))
+    act("lens", "1")
+    folder("new", name="Survey")
+    key = next(k for k, label in scene.layer_folder_names.items() if label == "Survey")
+    uid = scene.layer_folder_uids[key]
+    folder("new", name="Measurements", parent=key)
+    child = next(k for k, parent in scene.folder_parents.items() if parent == key)
+    folder("file", parent=child, tags=[tag.key])
+    assert tag.folder == child
+    previous = win.viewport.history.revision
+    folder("move", folder=key, parent=child)
+    assert win.viewport.history.revision == previous
+    folder("rename", folder=child, name="Survey")
+    assert scene.layer_folder_names[key] == scene.layer_folder_names[child]
+    folder("delete", folder=child)
+    assert tag.folder == key and child not in scene.layer_folders
+    assert win.viewport.history.undo() and tag.folder == child
+    for _ in range(4):
+        assert win.viewport.history.undo()
+    assert tag.folder == original and key not in scene.layer_folders
+    assert win.viewport.history.redo() and scene.layer_folder_uids[key] == uid
+
+
+def test_drawing_detailed_hatch_and_atomic_pat_export(ui, tmp_path, monkeypatch):
+    import json
+    from core.hatches import parse_pat
+    from views.filedialogs import file_dialogs
+    scene, win, _, _, act = ui
+    tag = scene.layer("Paths")
+    act("lens", "1")
+    def patch(**fields):
+        act("drawingpatch", json.dumps([[tag.key], fields]))
+    patch(hatch="brick", brick="215, 100, 65, 10, 8", hatch_ground="layer",
+          hatch_color="#ff0000", hatch_on_paper="0", hatch_cross="1", joints="double",
+          mortar="1", hatch_offset="4, -5", opacity="0.6")
+    assert tag.brick == (215.,100.,65.,10.,8.) and tag.hatch_color == (1.,0.,0.)
+    assert tag.hatch_ground == "layer" and not tag.hatch_on_paper and tag.hatch_cross
+    assert tag.joints == "double" and tag.mortar and tag.hatch_offset == (4.,-5.)
+    assert tag.opacity == .6
+    revision=win.viewport.history.revision
+    patch(hatch="block", brick="2,3,4")
+    assert tag.hatch=="brick" and win.viewport.history.revision==revision
+    patch(hatch="block",brick="390,190,190,10")
+    assert tag.hatch=="block" and tag.brick == (390.,190.,190.,10.)
+    assert win.viewport.history.undo() and tag.brick == (215.,100.,65.,10.,8.)
+    path=tmp_path/"out.pat"
+    monkeypatch.setattr(file_dialogs,"getSaveFileName",lambda *args:(str(path),"PAT"))
+    act("exportpat","")
+    entries=parse_pat(path.read_text())
+    assert "IT-BRICK" in entries and "IT-CONC" not in entries

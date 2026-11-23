@@ -153,10 +153,11 @@ def _paint_loose_face(w, panel, rgb, name):
 
 
 def test_naming_a_swatch_not_yet_in_the_model_names_the_next_paint(window):
-    panel = _panel(window)
-    panel._apply_color((0.3, 0.6, 0.3), name="RAL 6011 Reseda green")
-    panel._name_edit.setText("Zócalo")
-    panel._on_name_edited()
+    from views import wgpu_library as library
+    from tests.test_tree_links import _View
+    name = "RAL 6011 Reseda green"
+    library._pick_paint(window, recipe={"name": name, "color": [0.3, 0.6, 0.3]})
+    library.edit_field(window, _View(), "brush_name:" + name, "Zócalo")
     assert PaintTool.current_material.name == "Zócalo"
     assert PaintTool.current_color == (0.3, 0.6, 0.3)
     assert "Zócalo" not in window.viewport.scene.materials   # until painted
@@ -166,24 +167,28 @@ def test_recolouring_a_library_colour_makes_a_new_material(window,
                                                           monkeypatch):
     """«RAL 7035» in another colour would be a lie: the faces take a new
     material «… (modified)», the library file stays byte for byte."""
-    import views.tray as T
-    ral = T._RAL_FILE.read_bytes()
+    from core.paths import app_root
+    from ingetrazo_core import ral_rgb
+    from tests.test_tree_links import _View
+    from views import wgpu_library as library
+    palette = app_root() / "resources" / "colors" / "ral.json"
+    ral = palette.read_bytes()
     entry = next(c for fam in __import__("json").loads(ral)["families"]
                  for c in fam["colors"] if c["code"] == "RAL 7035")
     name = "%s %s" % (entry["code"], entry["name"])
     panel = _panel(window)
     face = _paint_loose_face(window, panel, tuple(entry["rgb"]), name)
-    assert panel._recolour_active((0.2, 0.8, 0.2))
+    library.edit_field(window, _View(), "color:" + name, "#33cc33")
     new = face.attrs["mat"]
     assert new != name and new.startswith(name)
     assert tuple(face.attrs["color"]) == (0.2, 0.8, 0.2)
     scene = window.viewport.scene
     assert name not in scene.materials and new in scene.materials
-    assert T._RAL_FILE.read_bytes() == ral
-    assert T._ral_rgb(name) == pytest.approx(tuple(entry["rgb"]))
+    assert palette.read_bytes() == ral
+    assert ral_rgb(name) == pytest.approx(tuple(entry["rgb"]))
     # A colour of the user's own keeps its name when recoloured.
     own = _paint_loose_face(window, panel, (0.5, 0.5, 0.5), "Muro")
-    assert panel._recolour_active((0.6, 0.6, 0.6))
+    library.edit_field(window, _View(), "color:Muro", "#999999")
     assert own.attrs["mat"] == "Muro"
 
 

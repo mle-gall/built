@@ -486,6 +486,117 @@ impl FolderEdit {
         before.ne(signature(scene)?)
     }
 }
+type MenuItem = (String, String, String, String, i8, bool);
+
+/// Menu rows carry the document indices used by scene recall. Folder keys
+/// and parent names stay separate from display text (both may contain '/').
+#[pyfunction]
+#[pyo3(signature=(scene,marked=None))]
+fn menu_rows(
+    scene: &Obj<'_>,
+    marked: Option<&Obj<'_>>,
+) -> PyResult<(Vec<MenuItem>, Vec<MenuItem>)> {
+    let tree = Tree::read(scene)?;
+    let scenes = views(scene)?
+        .into_iter()
+        .enumerate()
+        .map(|(i, v)| {
+            Ok((
+                format!("scene:{i}"),
+                v.getattr("name")?.extract()?,
+                String::new(),
+                tree.view_folder(&v)?.unwrap_or_default(),
+                i8::from(marked.is_some_and(|m| v.is(m))),
+                true,
+            ))
+        })
+        .collect::<PyResult<_>>()?;
+    let owner = (scene.as_ptr() as usize).to_string();
+    let mut folders = vec![(
+        String::new(),
+        "All scenes".into(),
+        scene.getattr("content_version")?.str()?.to_string(),
+        owner.clone(),
+        -1,
+        true,
+    )];
+    for folder in &tree.names {
+        folders.push((
+            folder.clone(),
+            folder.clone(),
+            tree.parent(folder).unwrap_or("").into(),
+            owner.clone(),
+            -1,
+            true,
+        ));
+    }
+    Ok((scenes, folders))
+}
+
+#[pyfunction]
+fn edit_menu_folder(history: &Obj<'_>, request: &str) -> PyResult<String> {
+    use pyo3::exceptions::PyValueError;
+    let (verb, owner, folder, target, label): (String, String, String, String, String) =
+        serde_json::from_str(request).map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let scene = history.getattr("scene")?;
+    if owner != (scene.as_ptr() as usize).to_string() {
+        return Err(PyValueError::new_err(
+            "This scene menu belongs to another document",
+        ));
+    }
+    let tree = Tree::read(&scene)?;
+    if [&folder, &target]
+        .iter()
+        .any(|f| !f.is_empty() && !tree.known.contains(*f))
+    {
+        return Err(PyValueError::new_err("This folder no longer exists"));
+    }
+    let parent = (!target.is_empty()).then_some(target.clone());
+    let name = label.trim();
+    let op = match verb.as_str() {
+        "add" if !name.is_empty() => FolderEdit::add(name.into(), parent),
+        "rename" if !folder.is_empty() && !name.is_empty() && !tree.known.contains(name) => {
+            FolderEdit::rename(folder.clone(), name.into())
+        }
+        "remove" if !folder.is_empty() => FolderEdit::delete_rows(vec![], vec![folder.clone()]),
+        "move"
+            if !folder.is_empty()
+                && folder != target
+                && !subfolders(&scene, Some(&folder), true)?.contains(&target) =>
+        {
+            FolderEdit::move_rows(vec![], vec![folder.clone()], parent, None)
+        }
+        "file" => {
+            let saved = views(&scene)?
+                .into_iter()
+                .find(|v| {
+                    v.getattr("name")
+                        .and_then(|n| n.eq(&label))
+                        .unwrap_or(false)
+                })
+                .ok_or_else(|| PyValueError::new_err("This scene no longer exists"))?;
+            FolderEdit::move_rows(vec![saved.unbind()], vec![], parent, None)
+        }
+        _ => return Err(PyValueError::new_err("Choose a valid name and destination")),
+    };
+    let py = scene.py();
+    let edit = Py::new(py, op)?;
+    let cmd = py
+        .import("core.history")?
+        .call_method1("SceneTreeCommand", (&edit,))?;
+    let before: u64 = history.getattr("revision")?.extract()?;
+    history.call_method1("execute", (cmd,))?;
+    if history.getattr("revision")?.extract::<u64>()? == before {
+        return Err(PyValueError::new_err("No change to the scene folders"));
+    }
+    Ok(match verb.as_str() {
+        "add" => edit.borrow(py).name.clone().unwrap_or_default(),
+        "rename" => name.into(),
+        "remove" => tree.parent(&folder).unwrap_or("").into(),
+        _ => folder,
+    })
+}
+
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let sub = PyModule::new(m.py(), "scene_tree")?;
     sub.add_function(wrap_pyfunction!(folders_of, &sub)?)?;
@@ -498,6 +609,8 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     sub.add_function(wrap_pyfunction!(state, &sub)?)?;
     sub.add_function(wrap_pyfunction!(signature, &sub)?)?;
     sub.add_function(wrap_pyfunction!(restore, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(menu_rows, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(edit_menu_folder, &sub)?)?;
     sub.add_class::<FolderEdit>()?;
     sub.add_function(wrap_pyfunction!(add_folder, &sub)?)?;
     sub.add_function(wrap_pyfunction!(rename_folder, &sub)?)?;

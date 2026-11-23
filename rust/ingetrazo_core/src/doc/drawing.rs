@@ -43,12 +43,13 @@ pub(super) fn cells(node: &Node) -> Result<Vec<String>, String> {
         Value::Int(n) => Some(*n as f64),
         _ => None,
     };
-    let color = match &tag.color {
+    let colour = |value: Option<&Value>| match value {
         Some(Value::List(rgb) | Value::Tuple(rgb)) if rgb.len() >= 3 => {
             let channel =
                 |i: usize| (number(&rgb[i]).unwrap_or(0.0).clamp(0.0, 1.0) * 255.0).round() as u8;
             format!("#{:02x}{:02x}{:02x}", channel(0), channel(1), channel(2))
         }
+        Some(Value::Str(s)) if s == "layer" => s.clone(),
         _ => String::new(),
     };
     let string = |key, default: &str| -> Result<String, String> {
@@ -62,8 +63,20 @@ pub(super) fn cells(node: &Node) -> Result<Vec<String>, String> {
         .and_then(number)
         .map_or_else(|| "auto".into(), |mm| format!("{mm:.2}"));
     let print = !matches!(node.attr(attr_id("printable")?), Some(Value::Bool(false)));
+    let switch = |key, default: &str| -> Result<String,String> {
+        Ok(match node.attr(attr_id(key)?) {
+            Some(Value::Bool(on)) => u8::from(*on).to_string(),
+            _ => default.into(),
+        })
+    };
+    let measures = |key| -> Result<String,String> {
+        Ok(match node.attr(attr_id(key)?) {
+            Some(Value::List(v) | Value::Tuple(v)) => v.iter().filter_map(number).map(|n| n.to_string()).collect::<Vec<_>>().join(", "),
+            _ => String::new(),
+        })
+    };
     Ok(vec![
-        color,
+        colour(tag.color.as_ref()),
         string("linetype", "continuous")?,
         weight,
         u8::from(print).to_string(),
@@ -73,6 +86,12 @@ pub(super) fn cells(node: &Node) -> Result<Vec<String>, String> {
         u8::from(tag.locked).to_string(),
         node.attr(attr_id("hatch_angle")?).and_then(number).unwrap_or(0.).to_string(),
         node.attr(attr_id("hatch_scale")?).and_then(number).unwrap_or(1.).to_string(),
+        String::new(), // imported line families are supplied by project_sidebar
+        colour(node.attr(attr_id("hatch_ground")?)),
+        colour(node.attr(attr_id("hatch_color")?)),
+        switch("hatch_on_paper", "")?, measures("hatch_offset")?,
+        switch("hatch_cross", "0")?, string("joints", "")?, switch("mortar", "0")?,
+        measures("brick")?, node.attr(attr_id("opacity")?).and_then(number).unwrap_or(1.).to_string(),
     ])
 }
 
@@ -300,8 +319,9 @@ impl TagEdit {
 fn drawing_value(py: Python<'_>, field: &str, input: &str) -> PyResult<(Field, FVal)> {
     if field == "lock" && matches!(input, "0" | "1") { return Ok((Field::Locked, FVal::Bool(input == "1"))); }
     let (field, value) = match field {
-        "color" if input.is_empty() => ("color", Value::None),
-        "color" => {
+        "color" | "hatch_ground" | "hatch_color" if input.is_empty() => (field, Value::None),
+        "hatch_ground" | "hatch_color" if input == "layer" => (field, Value::Str("layer".into())),
+        "color" | "hatch_ground" | "hatch_color" => {
             let hex = input
                 .strip_prefix('#')
                 .filter(|s| s.len() == 6 && s.bytes().all(|b| b.is_ascii_hexdigit()))
@@ -309,7 +329,7 @@ fn drawing_value(py: Python<'_>, field: &str, input: &str) -> PyResult<(Field, F
             let rgb =
                 u32::from_str_radix(hex, 16).map_err(|e| PyValueError::new_err(e.to_string()))?;
             (
-                "color",
+                field,
                 Value::Tuple(
                     [16, 8, 0]
                         .map(|shift| Value::Float(((rgb >> shift) & 255u32) as f64 / 255.0))
@@ -333,6 +353,28 @@ fn drawing_value(py: Python<'_>, field: &str, input: &str) -> PyResult<(Field, F
                 .is_truthy()? =>
         {
             ("linetype", Value::Str(input.to_string()))
+        }
+        "hatch_on_paper" | "brick" | "hatch_offset" | "joints" if input.is_empty() => (field, Value::None),
+        "hatch_on_paper" | "mortar" | "hatch_cross" if matches!(input, "0" | "1") => (field, Value::Bool(input == "1")),
+        "joints" if matches!(input, "single" | "double" | "none") => (field, Value::Str(input.into())),
+        "opacity" => {
+            let n = input.parse::<f64>().ok().filter(|n| (0.1..=1.0).contains(n))
+                .ok_or_else(|| PyValueError::new_err("Opacity must be between 0.1 and 1"))?;
+            (field, Value::Float(n))
+        }
+        "brick" | "hatch_offset" => {
+            let nums: Vec<f64> = input.split(',').map(|token| token.trim().parse::<f64>()
+                .ok().filter(|v| v.is_finite()).ok_or_else(|| PyValueError::new_err("Expected millimetres separated by commas")))
+                .collect::<PyResult<_>>()?;
+            if field == "brick" {
+                let clean = py.import("core.hatches")?.call_method1("clean_brick", (nums,))?;
+                if clean.is_none() { return Err(PyValueError::new_err("Invalid piece dimensions or joint widths")); }
+                (field, Value::from_py(&clean)?)
+            } else {
+                if nums.len() != 2 || nums.iter().any(|v| v.abs() > 10000.) { return Err(PyValueError::new_err("Start X and Y must be within 10000 mm")); }
+                let value=py.import("core.layers")?.call_method1("clean_offset",(nums,))?;
+                (field, Value::from_py(&value)?)
+            }
         }
         "hatch_angle" | "hatch_scale" => {
             let n = input.parse::<f64>().ok().filter(|v| v.is_finite())
@@ -375,9 +417,16 @@ pub(super) fn prepare(
     if field == "style" {
         let patch: std::collections::BTreeMap<String,String> = serde_json::from_str(input).map_err(|e| PyValueError::new_err(e.to_string()))?;
         let mut combined = TagEdit {changes: Vec::new()};
+        let explicit_piece = patch.contains_key("brick");
         for (name, v) in patch {
             if name == "style" { return Err(PyValueError::new_err("Nested style patch")); }
-            if let Some(edit) = prepare(py,owner,tags.clone(),&name,&v)? { combined.changes.extend(edit.changes); }
+            if let Some(mut edit) = prepare(py,owner,tags.clone(),&name,&v)? {
+                if name == "hatch" && explicit_piece {
+                    let brick = Field::Attr(attr_id("brick").map_err(PyValueError::new_err)?);
+                    edit.changes.retain(|(_, f, _, _)| *f != brick);
+                }
+                combined.changes.extend(edit.changes);
+            }
         }
         return Ok((!combined.changes.is_empty()).then_some(combined));
     }

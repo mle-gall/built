@@ -1852,11 +1852,15 @@ mod hatch;
 pub(super) use hatch::{hatch_override, imported_hatch, PaperMarks};
 
 pub fn hatch_sample(ui: &egui::Ui, rect: Rect, key: &str, custom: Option<&PaperMarks>) {
+    hatch_swatch(ui,rect,key,custom,WELL,INK_2);
+}
+
+pub fn hatch_swatch(ui: &egui::Ui, rect: Rect, key: &str, custom: Option<&PaperMarks>, ground:Color32, ink:Color32) {
     let painter = ui.painter();
-    painter.rect_filled(rect, R_INSET, WELL);
+    painter.rect_filled(rect, R_INSET, ground);
     let paper = rect.shrink(1.);
     if key == "solid" {
-        painter.rect_filled(paper, R_INSET, INK_2);
+        painter.rect_filled(paper, R_INSET, ink);
         return;
     }
     let Some(marks) = custom.or_else(|| hatch::standard(key)) else { return };
@@ -1864,16 +1868,54 @@ pub fn hatch_sample(ui: &egui::Ui, rect: Rect, key: &str, custom: Option<&PaperM
     let origin = paper.center() - vec2(4., 1.5) * scale;
     let pos = |x, y| origin + vec2(x, y) * scale;
     let painter = painter.with_clip_rect(painter.clip_rect().intersect(paper));
-    let stroke = Stroke::new((0.16 * scale).max(1. / ui.ctx().pixels_per_point()), INK_2);
+    let stroke = Stroke::new((0.16 * scale).max(1. / ui.ctx().pixels_per_point()), ink);
     for &[x, y, u, v] in &marks.lines {
         painter.line_segment([pos(x, y), pos(u, v)], stroke);
     }
     for &[x, y] in &marks.dots {
-        painter.circle_filled(pos(x, y), stroke.width * 0.9, INK_2);
+        painter.circle_filled(pos(x, y), stroke.width * 0.9, ink);
     }
     for &[x, y, r] in &marks.circles {
         painter.circle_stroke(pos(x, y), r * scale, stroke);
     }
+}
+
+/// A paper-mm line type, with a label centered in the last gap of each repeat.
+pub fn line_type_preview(ui:&egui::Ui,rect:Rect,pieces:&[f64],text:&str,size:f64,color:Color32){
+    if pieces.is_empty(){return;}
+    let painter=ui.painter_at(rect);
+    let mut pattern=pieces.to_vec();
+    let gap=(0.68*size*text.chars().count() as f64+2.*(0.4*size).max(0.6))*4.;
+    let text_at=if !text.is_empty(){
+        if pattern.last().is_some_and(|n|*n<0.) {let last=pattern.len()-1;pattern[last]-=gap/4.;}
+        else {pattern.push(-gap/4.);}
+        Some(pattern.len()-1)
+    } else {None};
+    let mut x=rect.left();
+    let y=rect.center().y;
+    for (i,n) in pattern.iter().enumerate().cycle().take(4096){
+        let end=x+(n.abs()*4.) as f32;
+        if *n>0.{painter.line_segment([pos2(x,y),pos2(end,y)],Stroke::new(1_f32,color));}
+        else if *n==0.{painter.circle_filled(pos2(x,y),1.,color);}
+        else if text_at==Some(i){painter.text(pos2((x+end)/2.,y),egui::Align2::CENTER_CENTER,text,meta(),color);}
+        x=end;
+        if x>=rect.right(){break;}
+    }
+}
+
+pub fn piece_sample(ui:&mut egui::Ui,kind:&str,dimensions:&[f64]){
+    super::drawing_cuts::piece_view(ui,kind,dimensions);
+}
+
+/// A saved camera view, with space reserved while its picture renders.
+pub fn scene_preview_row(ui:&mut egui::Ui,name:&str,current:bool,image:Option<&egui::TextureHandle>)->egui::Response {
+    let (r,hit)=list_row(ui,38.,current);
+    let thumb=Rect::from_center_size(r.left_center()+vec2(29.,0.),vec2(48.,32.));
+    ui.painter().rect_filled(thumb,R_INSET,WELL);
+    if let Some(image)=image{egui::Image::new(image).corner_radius(R_INSET).paint_at(ui,thumb);}
+    let text=fit(ui,name,body(),INK,r.width()-64.,1);
+    ui.painter().galley(pos2(thumb.right()+SPACE_S,r.center().y-text.size().y/2.),text,INK);
+    hit.on_hover_text(name)
 }
 
 pub fn line_sample(ui: &egui::Ui, rect: Rect, mm: &str, pattern: &str, color: Color32) {

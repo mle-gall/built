@@ -611,10 +611,13 @@ impl Gallery {
                 tag_inspector(ui,"preview-tag:Walls","Walls",24,&[],&mut Vec::new());
                 host_visibility(ui,"Plaza.built",&[("Survey".into(),"Survey".into(),true)], &mut Vec::new());
                 path_bar(ui, &[("Plaza.built".into(), String::new()), ("Core block".into(), String::new())], &mut Vec::new());
+                scene_preview_row(ui,"Ground floor",true,None);
+                disclosure(ui,"gallery-piece","Masonry piece",false,|ui|piece_sample(ui,"block",&[390.,140.,190.,10.]));
                 caption(ui, "Line samples");
                 {
                     let (r, _) = ui.allocate_exact_size(vec2(w.min(160.), 14.), Sense::hover());
-                    line_sample(ui, r, "0.35", "dashed", INK);
+                    line_sample(ui, r.with_max_x(r.center().x), "0.35", "dashed", INK);
+                    line_type_preview(ui,r.with_min_x(r.center().x),&[4., -1.], "GAS", 2.5, INK);
                 }
                 ui.add(search(&mut self.dock_filter, "Filter nodes").desired_width(w));
                 ui.spacing_mut().item_spacing = vec2(0., 0.);
@@ -676,6 +679,8 @@ impl Gallery {
                 property_control(ui, "Hatch", |ui| {
                     let (sample, _) = ui.allocate_exact_size(vec2(44., 16.), Sense::hover());
                     hatch_sample(ui, sample, "brick", None);
+                    let (sample, _) = ui.allocate_exact_size(vec2(44., 16.), Sense::hover());
+                    hatch_swatch(ui,sample,"crosshatch",None,FIELD,INK);
                 });
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing = vec2(SPACE_XS, 0.);

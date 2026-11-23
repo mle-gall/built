@@ -150,3 +150,38 @@ def test_duplicate_from_the_menu_goes_right_after_and_undoes(menu):
     win.viewport.history.undo()
     win.viewport.history.undo()
     assert list(scene.saved_views) == [a, b]
+
+
+def test_scene_folder_menu_keeps_reference_order_history_and_document_identity(menu):
+    import json
+    from ingetrazo_core import scene_tree
+
+    actions, win, _ = menu
+    a, b, c = (actions.add_scene() for _ in range(3))
+    vp = win.viewport
+    scene = vp.scene
+    owner = str(id(scene))
+
+    def edit(op, folder="", dest="", name=""):
+        return scene_tree.edit_menu_folder(vp.history, json.dumps([op, owner, folder, dest, name]))
+
+    parent = edit("add", name="Plans / drawing")
+    child = edit("add", dest=parent, name="Floor 1")
+    edit("file", dest=child, name=b.name)
+    edit("file", dest=parent, name=c.name)
+    scenes, folders = scene_tree.menu_rows(scene, b)
+    assert [(r[1], r[3], r[4]) for r in scenes] == [(b.name, child, 1), (c.name, parent, 0), (a.name, "", 0)]
+    assert (folders[0][0], folders[0][2], folders[0][3]) == ("", str(scene.content_version), owner)
+    assert [(r[0], r[2]) for r in folders[1:]] == [(parent, ""), (child, parent)]
+    with pytest.raises(ValueError):
+        edit("move", parent, child)
+    with pytest.raises(ValueError):
+        edit("rename", parent, name=child)
+    edit("remove", parent)
+    assert not c.folder and scene_folders.folder_parent(scene, child) is None
+    vp.history.undo()
+    assert scene_folders.folder_parent(scene, child) == parent and c.folder == parent
+    edit("rename", parent, name="Plans")
+    assert scene_folders.folder_parent(scene, child) == "Plans"
+    with pytest.raises(ValueError, match="another document"):
+        scene_tree.edit_menu_folder(History(Scene()), json.dumps(["remove", owner, "Plans", "", ""]))

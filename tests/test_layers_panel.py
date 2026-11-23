@@ -669,7 +669,7 @@ def test_right_click_hides_and_isolates_the_clicked_layer(win):
 
 
 def test_the_default_layer_without_a_colour_shows_a_none_swatch():
-    from views.layers_panel import NO_COLOUR_SLASH, layer_swatch, swatch_icon
+    from views.tree_icons import NO_COLOUR_SLASH, layer_swatch, swatch_icon
     img = lambda icon: icon.pixmap(18, 18).toImage()
     zero = Layer(DEFAULT_LAYER)
     none = img(layer_swatch(zero))

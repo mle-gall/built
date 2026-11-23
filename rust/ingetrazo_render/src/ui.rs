@@ -27,6 +27,9 @@ mod lens;
 use lens::Lens;
 mod tree_order;
 mod drawing;
+mod drawing_catalog;
+mod drawing_hatches;
+mod drawing_cuts;
 mod export;
 /// The large sheet over the dimmed model: Library, start page, Settings
 /// (views/chrome_sheet.py, docs/ui-patterns.md).
@@ -41,6 +44,7 @@ mod host_fonts;
 #[cfg(not(target_os = "macos"))]
 use host_fonts as system_fonts;
 mod gallery;
+mod scene_folders;
 pub mod command_palette;
 /// The tool rail's deterministic layout (two columns, three, then scroll).
 mod rail;
@@ -71,6 +75,19 @@ pub struct Form {
     title: String,
     fields: Vec<FormField>,
     choice_open: Option<usize>,
+}
+
+#[cfg(test)]
+fn test_context()->egui::Context{
+    let ctx=egui::Context::default();
+    let mut fonts=egui::FontDefinitions::empty();
+    let data=include_bytes!("../../../resources/fonts/inter/Inter-Regular.ttf");
+    fonts.font_data.insert("inter".into(),std::sync::Arc::new(egui::FontData::from_static(data)));
+    for family in [egui::FontFamily::Proportional,egui::FontFamily::Monospace,egui::FontFamily::Name("medium".into()),egui::FontFamily::Name("semibold".into())]{
+        fonts.families.insert(family,vec!["inter".into()]);
+    }
+    ctx.set_fonts(fonts);
+    ctx
 }
 
 pub struct Ui {
@@ -124,6 +141,7 @@ pub struct Ui {
     delivery: Option<(String, u32, u32)>,
     /// Bottom centre: workspaces (Model, sheet) then scenes, as groups.
     tabs: Vec<Vec<Item>>,
+    scene_browser: scene_folders::Browser,
     /// Project tabs at the top left, after the window buttons' room:
     /// (left edge, [(name, active, unsaved)]).
     projects: Option<(f32, Vec<(String, bool, bool)>)>,
@@ -308,6 +326,7 @@ impl Ui {
             column: None,
             delivery: None,
             tabs: Vec::new(),
+            scene_browser: Default::default(),
             projects: None,
             review: false,
             palette_items: Vec::new(),
@@ -471,12 +490,28 @@ impl Ui {
         if let Some(col)=self.column.as_mut(){col.overview=lens::Overview::read(filename,tree,counts)?;}
         Ok(())
     }
-    pub fn style_catalog(&mut self, owner: usize, lines: Vec<String>, patterns: String) {
+    pub fn style_catalog(&mut self, owner: usize, lines: Vec<String>, patterns: String, scene: Option<&pyo3::Bound<'_,pyo3::PyAny>>) -> pyo3::PyResult<()> {
         if let Some(col)=self.column.as_mut() {
             if col.styles.owner != owner { col.styles = Default::default(); col.styles.owner=owner; col.proposal_dismissed=false; col.highlighted=None; col.issue_at=None; }
             col.styles.lines=lines;
             col.styles.set_patterns(patterns);
+            if let Some(scene)=scene { col.styles.catalog.sync(scene)?; col.styles.hatches.sync(scene)?; }
         }
+        Ok(())
+    }
+    pub fn open_line_type(&mut self,name:&str,tags:Vec<String>)->bool {
+        let Some(col)=self.column.as_mut() else{return false;};
+        col.lens=Lens::Drawing;
+        self.plugins.showing=false;
+        col.mode.clear();
+        col.styles.catalog.open_line(name,tags)
+    }
+    pub fn hatch_preference(&mut self,py:pyo3::Python<'_>,verb:&str,value:&str)->pyo3::PyResult<()> {
+        if let Some(col)=self.column.as_mut(){col.styles.hatches.preference(py,verb,value)?;}
+        Ok(())
+    }
+    pub fn drawing_edit_applied(&mut self,verb:&str,key:&str){
+        if let Some(col)=self.column.as_mut(){col.styles.applied(verb,key);}
     }
     pub fn set_export_focus(&mut self, node: Option<String>, placements: Vec<Vec<String>>) {
         if let Some(col) = self.column.as_mut() {
@@ -594,7 +629,15 @@ impl Ui {
         self.background_plugins.retain(|key, _| live.contains(key));
     }
     pub fn set_jobs(&mut self, jobs: Vec<Job>) { self.jobs = jobs; }
-    pub fn set_tabs(&mut self, tabs: Vec<Vec<Item>>) { self.tabs = tabs; }
+    pub fn set_tabs(&mut self, tabs: Vec<Vec<Item>>) {
+        if let Some(scenes)=tabs.get(1){self.scene_browser.retain(scenes);}
+        self.tabs=tabs;
+    }
+    pub fn scene_photo_mode(&mut self,py:pyo3::Python<'_>)->pyo3::PyResult<()>{
+        if self.scene_browser.thumbnails.is_none(){self.scene_browser.thumbnails=Some(crate::scene_photo::thumbnail_mode(py)?);}
+        Ok(())
+    }
+    pub fn finish_scene_photo(&mut self,key:&str,pixels:Option<crate::scene_photo::Pixels>){self.scene_browser.finish(&self.ctx,key,pixels);}
     pub fn set_delivery(&mut self, active: String, unfiled: u32, problems: u32) {
         self.delivery = Some((active, unfiled, problems));
     }
@@ -879,6 +922,7 @@ impl Ui {
             ("recent_preview", self.glass.showing_preview()),
             ("tool_rail", visible("palette") || visible("sheets_rail")), ("dock", visible("column") || visible("sheets_dock")), ("bottom_bar", visible("bottom")),
             ("view_menu", self.view_open),
+            ("drawing_line", self.column.as_ref().is_some_and(|c| c.lens==Lens::Drawing && c.styles.catalog.editing_line())),
             ("review", self.review),
             ("dialog", self.dialog.is_some()),
             ("choice", self.dialog.as_ref().is_some_and(|d| d.choice_open.is_some()) || self.lsheet.choice_open()),
@@ -1294,7 +1338,11 @@ impl Ui {
                         "work" | "scenes" => {
                             let group = if kind == "work" { 0 } else { 1 };
                             let mut current = None;
-                            if let Some(items) = self.tabs.get(group) {
+                            if kind=="scenes" && self.tabs.get(3).is_some_and(|rows|!rows.is_empty()) {
+                                let scenes=&self.tabs[1];
+                                current=scenes.iter().find(|r|r.4==1).map(|r|r.1.clone());
+                                self.scene_browser.show(ui,scenes,&self.tabs[3],&mut clicked,&mut self.actions);
+                            } else if let Some(items) = self.tabs.get(group) {
                                 for item in items {
                                     if item.4 == 1 { current = Some(item.1.clone()); }
                                     let row = (item.0.clone(), item.1.clone(), String::new(), "check".into(), check(item.4 == 1), true);
@@ -1605,7 +1653,7 @@ impl Ui {
                         export::strip(ui,&self.panels.data["readiness"],&mut cmds);
                     } else if col.lens == Lens::Drawing {
                         ui.horizontal(|ui| {
-                            kit::caption_plain(ui, "Style for all views");
+                            if kit::quiet(ui, "Tag folders").clicked() { col.styles.pick_folder(""); }
                             egui::ComboBox::from_id_salt("drawing_visibility").selected_text("Visibility set").show_ui(ui, |ui| {
                                 for set in &visibility_sets {
                                     if ui.selectable_label(false, &set.1).clicked() { cmds.push(format!("tab:{}",set.0)); }
@@ -1929,6 +1977,7 @@ impl Ui {
                                 }
                                 if resp.clicked() {
                                     let p = resp.interact_pointer_pos().unwrap_or(rect.center());
+                                    if col.lens==Lens::Drawing && n.cells.len()<7 && !n.key.starts_with("preview-folder:") {col.styles.clear_focus();}
                                     if n.expandable && tri.contains(p) {
                                         actions.push(format!("toggle\u{1f}{}", n.key));
                                     } else if n.eye >= 0 && eye_r.expand(2.0).contains(p) {
@@ -1937,6 +1986,9 @@ impl Ui {
                                         actions.push(format!("lock\u{1f}{}", n.key));
                                     } else if col.lens == Lens::Drawing && n.cells.len() >= 7 && !linked && col.filing.is_none() {
                                         col.styles.pick(n, ui.input(|i| i.modifiers.command || i.modifiers.shift));
+                                    } else if col.lens==Lens::Drawing && n.key.starts_with("preview-folder:") {
+                                        col.styles.pick_folder(&n.key["preview-folder:".len()..]);
+                                        col.highlighted=Some(n.key.clone());
                                     } else if n.row == 9 {
                                         actions.push(format!("toggle\u{1f}{}",n.key));
                                     } else if n.row == 6 {
@@ -1979,7 +2031,7 @@ impl Ui {
                         });
                         return;
                     }
-                    if col.mode.is_empty() && col.lens == Lens::Drawing && col.styles.draw(ui, &mut actions) { return; }
+                    if col.mode.is_empty() && col.lens == Lens::Drawing && (col.styles.active() || (col.inspector_title.is_empty() && selection.is_none())) && col.styles.draw(ui, &mut actions) { return; }
                     egui::ScrollArea::vertical().id_salt("inspector").auto_shrink([false, false]).show(ui, |ui| {
                         ui.spacing_mut().item_spacing = vec2(0.0, SPACE_XS);
                         if col.lens == Lens::Export {
