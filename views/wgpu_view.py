@@ -1519,6 +1519,11 @@ class MetalView(ViewNavigation):
         from views import wgpu_sheets
         if wgpu_sheets.context_menu(self, event):   # the sheet's own menus
             return
+        point = event.pos()
+        from views import context_menu
+        chrome = context_menu.chrome_menu_available(self)
+        if chrome and self.renderer.ui_over_chrome(float(point.x()), float(point.y())):
+            return
         self.tools.sync()
         tool = self.tools.tool
         menu = getattr(tool, 'context_menu', None)
@@ -1527,16 +1532,13 @@ class MetalView(ViewNavigation):
         source = self.source_viewport
         if source is None:
             return
-        point = event.pos()
         # With the chrome on (the native app, or the Qt host), the menu is the
         # chrome's: only the verbs for what was hit (docs/context-menu.md).
         # A right-click on the chrome itself is the chrome's own.
-        from views import context_menu
-        if not context_menu.chrome_menu_available(self):
+        if not chrome:
             source.flash_status("Built could not draw the context menu.")
             return
-        if not self.renderer.ui_over_chrome(float(point.x()), float(point.y())):
-            context_menu.open_at(self, point.x(), point.y())
+        context_menu.open_at(self, point.x(), point.y())
 
     @_tool_frame
     def mouseDoubleClickEvent(self, event):
@@ -1547,6 +1549,8 @@ class MetalView(ViewNavigation):
             self.last = None
             self._recentre_on(event.position().x(), event.position().y())
             return
+        if event.button() == Qt.LeftButton and getattr(self.source_viewport, 'nav_mode', None):
+            return self.mousePressEvent(event)
         mode = self.tools.sync()
         if mode in ('tape', 'move', 'mesh'):
             self.hover(event.position().x(), event.position().y(), event.modifiers())
@@ -1604,18 +1608,32 @@ class MetalView(ViewNavigation):
     def keyPressEvent(self, event):
         mode = self.tools.sync()
         if event.key() == Qt.Key_Escape:
+            from ingetrazo_render import model_escape
+            from views.document_interaction import DocumentInteraction
+            source = self.source_viewport
+            busy = bool(getattr(self, "_look_drag", None) or self.tools.value_buffer
+                        or self.tools.start_point is not None or DocumentInteraction._tool_busy_for_delete(self.tools.tool))
+            owner = model_escape(busy, bool(self.scene.selection), source is not None and self.scene.edit_group is not None,
+                                 self.renderer if getattr(self, "_ui_attached", False) else None)
             self._look_drag = None
+            from ingetrazo_render import leave_navigation
+            win = self.window() if hasattr(self, "window") else None
+            if (self.source_viewport is not None and getattr(win, "viewport", None) is self.source_viewport
+                    and leave_navigation(win)):
+                return
             self.tools._apply_tool_cursor()
-        if event.key() == Qt.Key_Escape and mode in ('tape', 'move', 'mesh'):
-            self.tools.cancel()
-        elif event.key() == Qt.Key_Escape:
-            if self.scene.edit_group is not None and self.source_viewport is not None:
-                self.source_viewport.end_one_group_edit()
-            else:
+            if owner == "tool":
+                self.tools.cancel()
+            elif owner == "edit":
+                source.end_one_group_edit()
+            elif owner == "selection":
                 self.scene.clear_selection()
-            self.last = None
-            self.overlay_primitives = []
-            self.sync_selection()
+                if source is not None:
+                    source.notify_scene_changed()
+            if owner in ("edit", "selection"):
+                self.last = None
+                self.overlay_primitives = []
+                self.sync_selection()
         elif self.tools.key(event):
             pass
         elif event.key() == Qt.Key_Down and mode in ('tape', 'mesh'):

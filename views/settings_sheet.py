@@ -611,9 +611,9 @@ def _dimensions(env) -> list:
             s = style(env)
             if env.scene is None or s.get(key) == conv(v):
                 return
-            s[key] = conv(v)
-            env.scene.version += 1
-            _scene_changed(env)
+            from core.protocol.commands import set_dimension_style
+            if set_dimension_style(_p().document_history(env.vp), key, conv(v))["ok"]:
+                _scene_changed(env)
         return f
 
     def color(env):

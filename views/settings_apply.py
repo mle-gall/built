@@ -227,6 +227,15 @@ def apply_toolbar_icon_px(window, px: int) -> None:
             save_toolbar_icon_px(px)
 
 
+def document_history(viewport):
+    """Attach a document journal for standalone preferences hosts."""
+    from core.history import History
+    history = getattr(viewport, "history", None)
+    if not callable(getattr(history, "execute", None)):
+        viewport.history = history = History(viewport.scene)
+    return history
+
+
 def apply_document_units(window, chosen: dict) -> bool:
     """Units of the open document (issue #33): saved with it, the
     dimension style following. True when they changed (the document is
@@ -236,8 +245,9 @@ def apply_document_units(window, chosen: dict) -> bool:
     scene = getattr(vp, "scene", None)
     if scene is None or chosen == _units.model_units_of(scene):
         return False
-    _units.apply_units(scene, chosen)
-    scene.version += 1
+    from core.protocol.commands import set_model_units
+    if not set_model_units(document_history(vp), chosen)["ok"]:
+        return False
     notify = getattr(vp, "notify_scene_changed", None)
     if callable(notify):
         notify()

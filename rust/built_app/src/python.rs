@@ -193,6 +193,16 @@ impl Host {
         })
     }
 
+    /// Last painted button centers, in the same logical pixels as winit.
+    pub fn command_center(&self, command: &str) -> Option<(f64, f64)> {
+        Python::attach(|py| {
+            let renderer = self.obj.bind(py).getattr("renderer").ok()?;
+            let buttons = renderer.call_method0("ui_cluster_buttons").ok()?
+                .extract::<Vec<(String, (f64, f64))>>().ok()?;
+            buttons.into_iter().find(|(id, _)| id == command).map(|(_, center)| center)
+        })
+    }
+
     /// `Host.state()` as JSON text.
     pub fn state_json(&self) -> String {
         Python::attach(|py| -> PyResult<String> {

@@ -18,7 +18,7 @@ struct Builder<'py> {
     built: bool,
 }
 impl<'py> Builder<'py> {
-    fn group(&self, raw: &Bound<'py, PyDict>, depth: usize) -> PyResult<Bound<'py, PyAny>> {
+    fn record(&self, raw: &Bound<'py, PyDict>) -> PyResult<Bound<'py, PyAny>> {
         let py = raw.py();
         let kwargs = PyDict::new(py);
         if let Some(v) = raw.get_item("name")? {
@@ -94,30 +94,63 @@ impl<'py> Builder<'py> {
                 group.setattr("explode_offset", PyTuple::new(py, items)?)?;
             }
         }
-        let mut classic_child = false;
-        if let Some(children) = raw.get_item("children")? {
-            if children.is_truthy()? {
-                let parts = PyList::empty(py);
-                for child in children.try_iter()? {
-                    let child = child?;
-                    if let Ok(child) = child.cast::<PyDict>() {
-                        classic_child |= !child.contains("xform")?;
-                    }
-                    if depth < 32 {
-                        parts.append(self.group(child.cast::<PyDict>()?, depth + 1)?)?;
-                    }
+        Ok(group)
+    }
+
+    fn group(&self, raw: &Bound<'py, PyDict>) -> PyResult<Bound<'py, PyAny>> {
+        let root = self.record(raw)?;
+        // Create records in file order (legacy names are allocated on creation)
+        // and adopt only after each child's full hierarchy has been restored.
+        enum Task<'py> {
+            Visit(Bound<'py, PyDict>, Bound<'py, PyAny>),
+            Child(Bound<'py, PyDict>, Bound<'py, PyList>),
+            Finish(
+                Bound<'py, PyDict>,
+                Bound<'py, PyAny>,
+                Bound<'py, PyList>,
+                bool,
+            ),
+        }
+        let mut stack = vec![Task::Visit(raw.clone(), root.clone())];
+        while let Some(task) = stack.pop() {
+            match task {
+                Task::Child(raw, parts) => {
+                    let group = self.record(&raw)?;
+                    parts.append(&group)?;
+                    stack.push(Task::Visit(raw, group));
                 }
-                if !parts.is_empty() {
-                    group.call_method1("adopt", (parts,))?;
+                Task::Visit(raw, group) => {
+                    let mut children = Vec::new();
+                    let mut classic = false;
+                    if let Some(rows) = raw.get_item("children")?.filter(|v| !v.is_none()) {
+                        for row in rows.try_iter()? {
+                            let row = row?.cast_into::<PyDict>()?;
+                            classic |= !row.contains("xform")?;
+                            children.push(row);
+                        }
+                    }
+                    let parts = PyList::empty(raw.py());
+                    stack.push(Task::Finish(raw, group, parts.clone(), classic));
+                    stack.extend(
+                        children
+                            .into_iter()
+                            .rev()
+                            .map(|row| Task::Child(row, parts.clone())),
+                    );
+                }
+                Task::Finish(raw, group, parts, classic) => {
+                    if !parts.is_empty() {
+                        group.call_method1("adopt", (parts,))?;
+                    }
+                    if let Some(v) = raw.get_item("component")? {
+                        group.setattr("component", v.is_truthy()?)?;
+                    } else if classic {
+                        group.setattr("component", false)?;
+                    }
                 }
             }
         }
-        if let Some(v) = raw.get_item("component")? {
-            group.setattr("component", v.is_truthy()?)?;
-        } else if classic_child {
-            group.setattr("component", false)?;
-        }
-        Ok(group)
+        Ok(root)
     }
 }
 
@@ -145,6 +178,36 @@ impl FileGroups {
             count,
         }
     }
+    #[staticmethod]
+    fn records<'py>(payload: &Bound<'py, PyDict>) -> PyResult<Bound<'py, PyList>> {
+        let records = PyList::empty(payload.py());
+        let mut pending = Vec::new();
+        for key in ["kept_components", "groups"] {
+            if let Some(rows) = payload.get_item(key)?.filter(|rows| !rows.is_none()) {
+                pending.extend(
+                    rows.try_iter()?
+                        .collect::<PyResult<Vec<_>>>()?
+                        .into_iter()
+                        .rev(),
+                );
+            }
+        }
+        while let Some(item) = pending.pop() {
+            if let Ok(row) = item.cast::<PyDict>() {
+                records.append(row)?;
+                if let Some(rows) = row.get_item("children")?.filter(|rows| !rows.is_none()) {
+                    pending.extend(
+                        rows.try_iter()?
+                            .collect::<PyResult<Vec<_>>>()?
+                            .into_iter()
+                            .rev(),
+                    );
+                }
+            }
+        }
+        Ok(records)
+    }
+
     fn fraction(&self) -> f64 {
         self.done.load(Ordering::Relaxed) as f64 / self.count.max(1) as f64
     }
@@ -169,7 +232,7 @@ impl FileGroups {
             for record in table.try_iter()? {
                 let record = record?;
                 if !is_kept || record.is_instance_of::<PyDict>() {
-                    let g = builder.group(record.cast::<PyDict>()?, 0)?;
+                    let g = builder.group(record.cast::<PyDict>()?)?;
                     if !is_kept {
                         roots.append(g)?;
                     } else if g.call_method0("is_component")?.is_truthy()? {

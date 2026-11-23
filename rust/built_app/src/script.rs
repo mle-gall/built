@@ -6,8 +6,11 @@
 //! ```text
 //! open tests/fixtures/x.igz     # a document (relative to the cwd)
 //! wait 300                      # milliseconds of normal event-loop time
+//! resize 1280 800               # window content size in logical pixels
 //! move 400 300                  # pointer moves (hover)
 //! click 400 300 [left|right|middle] [mods]
+//! click-command orbit            # click the rendered top-bar button by id
+//! press 400 300                  # hold the button across move/wait, then release X Y
 //! double 400 300
 //! drag 400 300 600 300 [middle] [steps] [mods]   # press, moves, release
 //! key escape [mods]             # a key press and release ("l", "enter", "f3")
@@ -27,8 +30,11 @@
 pub enum Step {
     Open(String),
     Wait(u64),
+    Resize(u32, u32),
     Move(f64, f64),
+    Button(bool, f64, f64, u32, u32),
     Click(f64, f64, u32, u32),
+    ClickCommand(String),
     Double(f64, f64, u32, u32),
     Drag { from: (f64, f64), to: (f64, f64), button: u32, steps: u32, mods: u32 },
     Key(String, u32),
@@ -87,7 +93,19 @@ pub fn parse(text: &str) -> Result<Vec<Step>, String> {
         let step = match w[0] {
             "open" => Step::Open(rest(1)),
             "wait" => Step::Wait(num(w.get(1), line)? as u64),
+            "resize" => {
+                let dimension = |word: Option<&&str>| {
+                    word.and_then(|s| s.parse::<u32>().ok()).filter(|n| *n > 0)
+                        .ok_or_else(|| format!("line {line}: expected positive window dimensions"))
+                };
+                Step::Resize(dimension(w.get(1))?, dimension(w.get(2))?)
+            }
             "move" => Step::Move(num(w.get(1), line)?, num(w.get(2), line)?),
+            "click-command" => Step::ClickCommand(w.get(1).ok_or(format!("line {line}: missing command id"))?.to_string()),
+            "press" | "release" => {
+                let (b, _, mods) = tail(3);
+                Step::Button(w[0] == "press", num(w.get(1), line)?, num(w.get(2), line)?, b.unwrap_or(1), mods)
+            }
             "click" | "double" => {
                 let (b, _, m) = tail(3);
                 let (x, y) = (num(w.get(1), line)?, num(w.get(2), line)?);

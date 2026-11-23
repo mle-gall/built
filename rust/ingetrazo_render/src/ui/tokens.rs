@@ -65,6 +65,12 @@ palette! {
     SWATCH_FALLBACK = Color32::GRAY;
 }
 
+/// The sheet shows the blurred scene with neutral colour and no panel rim.
+pub(crate) const SHEET_BACKDROP: crate::glass::Look = crate::glass::Look {
+    tint: [0.0; 4], saturation: 0.30, peak: 0.65,
+    rim: [0.0; 2], rim_width: 1.0, glow: 0.0, inner_shadow: 0.0,
+};
+
 // ---- Design tokens (council 2026-11-22; one place, every component
 // below draws from these). Text on graphite glass, three levels plus off.
 // Geometry (Maxence 2026-11-22: "padding issues, rectangular buttons"):

@@ -213,10 +213,8 @@ parent_mode(os.environ.get("INGETRAZO_DOC_PARENT", "raise")
 # is. Once the attribute is assigned another value (or an undo puts back an
 # old one) the container is a plain one: editing it no longer writes.
 #
-# Edits are written back at the next transaction boundary (:func:`flush`,
-# run by :func:`begin` and :func:`commit`, so by every History step), not
-# one by one: filling a table of 1,000 folders is one write. Python reads
-# the container itself meanwhile. A plain dict or list stored INTO one
+# Inside a transaction each tracked edit writes through to its keyed native
+# attribute. Outside a transaction we batch writes until the next boundary. A plain dict or list stored INTO one
 # (``reg = data["links"] = {}``) is kept as that very object, as Python
 # would, and its root re-read at every boundary from then on (``suspect``):
 # edits made through the plain reference are written back too.
@@ -270,7 +268,10 @@ def _plain(value):
 def _edited(node) -> None:
     anchor = node._doc_root
     if anchor.bind is not None:
-        _DIRTY[id(anchor)] = anchor
+        if NATIVE.doc_depth():
+            NATIVE.doc_attr_changed(*anchor.bind, anchor.root())
+        else:
+            _DIRTY[id(anchor)] = anchor
 
 
 def _stored(node, value):
@@ -556,13 +557,11 @@ def record_fields(*names, extra=()):
 
 # ----------------------------------------------------------- transactions
 
-def begin() -> int:
+def begin(document=None) -> int:
     """Open the step's transaction (or a savepoint in the open one). In-place
     edits of tracked containers made before it are written back first, so
     they are not this step's."""
-    if NATIVE.doc_depth() == 0:
-        flush()
-    return NATIVE.doc_begin()
+    return NATIVE.doc_begin(document)
 
 
 def commit():

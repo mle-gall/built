@@ -61,10 +61,11 @@ def annotation(win):
     style = env.scene.dimension_style
 
     def apply(p):
-        style.update(font_family=p["font"], font_bold=p["bold"], font_italic=p["italic"],
-                     font_size=max(6, min(28, round(p["height"]))))
-        env.scene.version += 1
-        _scene_changed(env)
+        from core.protocol.commands import set_annotation_font
+        from views.settings_apply import document_history
+        if set_annotation_font(document_history(env.vp), p["font"], p["bold"], p["italic"],
+                               round(p["height"]))["ok"]:
+            _scene_changed(env)
 
     show(win, "Dimension and label font", "2.40 m", style.get("font_family", ""),
          style.get("font_bold", True), style.get("font_italic", False),

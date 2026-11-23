@@ -332,12 +332,13 @@ fn pasteboard_types() -> (Vec<String>, isize) {
     }
 }
 
-/// macOS window tabs off for this window (shell design: one strip, the
+/// Use the sheet graphite while AppKit waits for a new drawable.
+/// Disable macOS window tabs for this window (shell design: one strip, the
 /// app's own project tabs; AppKit's tab bar would also collide with the
 /// custom 40 pt top bar). The app-wide switch is winit's
 /// `set_allows_automatic_window_tabbing(false)`; this makes sure no
 /// window joins a tab group through "Prefer tabs" in System Settings.
-pub fn no_window_tabs(view: usize) {
+pub fn configure_window(view: usize) {
     #[cfg(target_os = "macos")]
     {
         use objc2_app_kit::{NSView, NSWindowTabbingMode};
@@ -346,6 +347,9 @@ pub fn no_window_tabs(view: usize) {
         }
         let v: &NSView = unsafe { &*(view as *const NSView) };
         if let Some(window) = v.window() {
+            let g = f64::from(ingetrazo_render::ui::tokens::SHEET.r()) / 255.0;
+            let graphite = objc2_app_kit::NSColor::colorWithSRGBRed_green_blue_alpha(g, g, g, 1.0);
+            window.setBackgroundColor(Some(&graphite));
             window.setTabbingMode(NSWindowTabbingMode::Disallowed);
         }
     }

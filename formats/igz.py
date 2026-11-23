@@ -253,22 +253,8 @@ def _unpack_textures(payload, archive) -> None:
             unpacked[member] = out
         return out or None
 
-    io = native_io()
-    if io is not None:
-        io.igz_texture_references(payload, _restore, False)
-        return
-    for tex in _texture_entries(payload):
-        base_member = tex.pop("base_embed", None)
-        if base_member and not tex.get("base"):
-            restored = _restore(base_member)
-            if restored:
-                tex["base"] = restored
-        member = tex.pop("embed", None)
-        if not member or tex.get("path"):
-            continue
-        out = _restore(member)
-        if out:
-            tex["path"] = out
+    from ingetrazo_core import igz_texture_references
+    igz_texture_references(payload, _restore, False)
 
 
 def _group_ifc_record(group):
@@ -1571,12 +1557,7 @@ def _merge_native_attrs(src) -> None:
 def _adopt_native_blocks(data, blocks) -> None:
     """Hang each block's arrays where the document left its number. The very
     places the engine looked (jsondoc.rs), no deeper."""
-    def walk_group(raw):
-        adopt(raw)
-        for c in raw.get("children") if isinstance(raw.get("children"),
-                                                   list) else ():
-            if isinstance(c, dict):
-                walk_group(c)
+    from ingetrazo_core import FileGroups
 
     def adopt(raw):
         n = raw.pop("_njb", None)
@@ -1586,12 +1567,11 @@ def _adopt_native_blocks(data, blocks) -> None:
     if not isinstance(scene, dict):
         return
     adopt(scene)
-    for key, walk in (("protos", adopt), ("groups", walk_group),
-                      ("kept_components", walk_group)):
-        items = scene.get(key)
-        for raw in items if isinstance(items, list) else ():
-            if isinstance(raw, dict):
-                walk(raw)
+    for raw in scene.get("protos") or []:
+        if isinstance(raw, dict):
+            adopt(raw)
+    for raw in FileGroups.records(scene):
+        adopt(raw)
 
 
 def _parse_native(raw: bytes):
@@ -1628,7 +1608,10 @@ def _decode_document(raw):
         data = native.igz_json_loads(raw)
         if data is not None:
             return data
-    return json.loads(raw.decode("utf-8"), parse_constant=_note_constant)
+    try:
+        return json.loads(raw.decode("utf-8"), parse_constant=_note_constant)
+    except RecursionError as exc:
+        raise ValueError("Document nesting exceeds the JSON decoder limit") from exc
 
 
 def _parse_document(read, pump=None):
@@ -1822,16 +1805,9 @@ def _load_links(scene, path: Path, include_links: bool, progress=None) -> None:
     if not include_links:
         # Packed links can already have children on disk. Drop the placement
         # itself (at any depth) before resolving paths or evaluating subsets.
-        def local_groups(groups):
-            kept = []
-            for group in groups:
-                if links.is_linked(group):
-                    continue
-                if group.children:
-                    group.adopt(local_groups(group.children))
-                kept.append(group)
-            return kept
-        scene.groups = local_groups(scene.groups)
+        for group in links.linked_groups(scene):
+            group._detach()
+        scene.groups = [group for group in scene.groups if not links.is_linked(group)]
     elif links.linked_groups(scene):
         # A cancelled open must propagate through nested link readers, which
         # normally turn source errors into recoverable missing-link entries.
@@ -1897,24 +1873,13 @@ def _without_nonfinite(payload: dict) -> dict:
 
 
 def _mesh_blocks(payload: dict):
-    """Every mesh block of a document's scene the loader reads: the scene's
-    own, the prototypes, and each group's (placements use their prototype
-    instead), down to the depth :func:`_load_into_inner` builds."""
-    def group_meshes(groups, depth=0):
-        for raw in groups:
-            if not isinstance(raw, dict):
-                continue
-            # A placement uses its prototype, not any local geometry block.
-            if raw.get("xform") is None or "proto" not in raw:
-                yield raw
-            if depth < 32:             # the same limit as _group_from
-                yield from group_meshes(raw.get("children", []) or [],
-                                        depth + 1)
-
+    """Every local geometry block in the file, including nested placements."""
+    from ingetrazo_core import FileGroups
     yield payload
     yield from payload.get("protos", [])
-    yield from group_meshes(payload.get("groups", []) or [])
-    yield from group_meshes(payload.get("kept_components", []) or [])
+    for raw in FileGroups.records(payload):
+        if raw.get("xform") is None or "proto" not in raw:
+            yield raw
 
 
 class _GeomMembers(dict):
@@ -2278,111 +2243,21 @@ def _load_into_inner(scene, path: Path, progress=None, link_meshes=None) -> None
             tick(0.35 + 0.25 * k / max(1, len(raw_protos)),
                  "Building geometry…")
             last = _time.monotonic()
-    io = native_io()
-
-    def _group_from(raw, depth=0):
-        name = raw.get("name") or None
-        # The stored uid goes in at construction: a fresh one drawn only to
-        # be overwritten cost one random uid per group of the document. Older
-        # documents without one get a fresh uid, as before.
-        uid = str(raw["uid"]) if raw.get("uid") else None
-        if raw.get("xform") is not None and "proto" in raw:
-            from ingetrazo_core import Matrix4 as QMatrix4x4
-            group = Group(proto_meshes[int(raw["proto"])], name=name,
-                          uid=uid)
-            if is_built:
-                group.xform = built.placement(raw["xform"])
-            else:
-                vals = [float(x) for x in raw["xform"]]
-                group.xform = QMatrix4x4(*(vals[col * 4 + row] for row in range(4) for col in range(4)))
-        else:
-            group = Group(name=name, uid=uid)
-            group.mesh = read_mesh(group.mesh, raw, ("group", group.uid))
-        if isinstance(raw.get("axes"), list) and len(raw["axes"]) == 16:
-            from ingetrazo_core import Matrix4 as QMatrix4x4
-            vals = [float(x) for x in raw["axes"]]
-            group.axes = QMatrix4x4(*[vals[col * 4 + row] for row in range(4)
-                                      for col in range(4)])
-        if raw.get("ifc"):
-            group.ifc = dict(raw["ifc"])
-        if raw.get("layer"):
-            group.layer = raw["layer"]
-        if raw.get("billboard"):
-            group.billboard = raw["billboard"]   # True | "mesh"
-        if isinstance(raw.get("text3d"), dict):
-            group.text3d = dict(raw["text3d"])
-        if isinstance(raw.get("ext"), dict):
-            group.ext = raw["ext"]
-        if raw.get("hidden"):
-            group.hidden = True
-        if raw.get("locked"):
-            group.locked = True
-        if isinstance(raw.get("material"), dict):
-            group.material = dict(raw["material"])
-        if isinstance(raw.get("exploded"), dict):
-            group.exploded = dict(raw["exploded"])
-        off = raw.get("explode_offset")
-        if isinstance(off, list) and len(off) == 3:
-            group.explode_offset = tuple(float(v) for v in off)
-        if depth < 32:              # a corrupt document must not spin
-            group.adopt(_group_from(c, depth + 1)
-                        for c in raw.get("children", []) or [])
-        if "component" in raw:
-            group.component = bool(raw["component"])
-        elif any(isinstance(c, dict) and "xform" not in c
-                 for c in raw.get("children", []) or []):
-            # Saved before the key existed (issue #90): a container holding
-            # a CLASSIC group can only be Make Group's — a .skp import
-            # places every child with a matrix. A group, then.
-            group.component = False
-        return group
-
-    # Every name the document itself stores, children included: the groups
-    # it carries WITHOUT one are numbered continuing these, not the
-    # session's counter — the same file must load to the same names
-    # whatever was opened before it (issue #943).
-    stored_names: list = []
-
-    def _collect_name(raw, depth=0):
-        if not isinstance(raw, dict):
-            return
-        if raw.get("name"):
-            stored_names.append(raw["name"])
-        if depth < 32:              # the same limit as _group_from
-            for c in raw.get("children", []) or []:
-                _collect_name(c, depth + 1)
-
-    for raw in payload.get("groups", []) or []:
-        _collect_name(raw)
-    for raw in payload.get("kept_components", []) or []:
-        _collect_name(raw)
-
     from core.group import document_name_scope
-    raw_groups = payload.get("groups", []) or []
+    from ingetrazo_core import FileGroups
+    stored_names = [raw["name"] for raw in FileGroups.records(payload) if raw.get("name")]
+    raw_groups = payload.get("groups") or []
+    kept = payload.get("kept_components") or []
     with document_name_scope(stored_names):
-        group_reader = getattr(io, "FileGroups", None)
-        if group_reader and getattr(scene, "_root", None) is not None:
-            kept = payload.get("kept_components") or []
-            reader = group_reader(len(raw_groups) + len(kept))
-            if raw_groups or kept:
-                tick(0.6, "Placing groups…")
-            groups, library = _in_worker(
-                lambda: reader.build(raw_groups, kept, proto_meshes, read_mesh, is_built),
-                (lambda: tick(0.6 + 0.35 * reader.fraction(), "Placing groups…"))
-                if progress else None, background=True)
-            scene.groups = groups
-            scene.kept_components = library
-        else:
-            for i, raw in enumerate(raw_groups):
-                if i % 50 == 0:
-                    tick(0.6 + 0.35 * i / max(1, len(raw_groups)),
-                         "Placing groups…")
-                scene.groups.append(_group_from(raw))
-            scene.kept_components = [
-                t for t in (_group_from(raw) for raw in
-                            payload.get("kept_components", []) or []
-                            if isinstance(raw, dict))
-                if t.is_component()]
+        reader = FileGroups(len(raw_groups) + len(kept))
+        if raw_groups or kept:
+            tick(0.6, "Placing groups…")
+        groups, library = _in_worker(
+            lambda: reader.build(raw_groups, kept, proto_meshes, read_mesh, is_built),
+            (lambda: tick(0.6 + 0.35 * reader.fraction(), "Placing groups…"))
+            if progress else None, background=True)
+        scene.groups = groups
+        scene.kept_components = library
     tick(0.96, "Finishing…")
     if stored_names:
         from core.group import reserve_group_names

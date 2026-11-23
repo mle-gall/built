@@ -53,50 +53,75 @@ impl Textures<'_> {
         Ok(())
     }
 
-    fn walk(&self, node: &Bound<'_, PyAny>, depth: usize) -> PyResult<()> {
-        if depth > 512 {
-            return Err(PyRecursionError::new_err("texture reference nesting limit"));
+    fn walk(&self, root: &Bound<'_, PyAny>) -> PyResult<()> {
+        enum Task<'py> {
+            Enter(Bound<'py, PyAny>),
+            Leave(usize),
+            Slot(Bound<'py, PyDict>, Bound<'py, PyAny>, Bound<'py, PyDict>),
         }
-        if let Ok(dict) = node.cast::<PyDict>() {
-            for (key, value) in dict {
-                let text = key.cast::<PyString>().ok().and_then(|s| s.to_str().ok());
-                if let Ok(image) = value.cast::<PyDict>() {
-                    if text == Some("texture") {
-                        self.slot(dict, &key, image)?;
-                        continue;
-                    }
-                    if text == Some("pbr") {
-                        let recipe = image.copy()?;
-                        dict.set_item(key, &recipe)?;
-                        for (slot, value) in &recipe {
-                            let name = slot.cast::<PyString>()?.to_str()?;
-                            if name.ends_with("_map") {
-                                if let Ok(image) = value.cast::<PyDict>() {
-                                    self.slot(&recipe, &slot, image)?;
+        let mut pending = vec![Task::Enter(root.clone())];
+        let mut ancestors = std::collections::HashSet::new();
+        while let Some(task) = pending.pop() {
+            let node = match task {
+                Task::Leave(id) => {
+                    ancestors.remove(&id);
+                    continue;
+                }
+                Task::Slot(parent, key, image) => {
+                    self.slot(&parent, &key, &image)?;
+                    continue;
+                }
+                Task::Enter(node) => node,
+            };
+            let id = node.as_ptr() as usize;
+            if !ancestors.insert(id) {
+                return Err(PyRecursionError::new_err("cyclic texture references"));
+            }
+            pending.push(Task::Leave(id));
+            let start = pending.len();
+            if let Ok(dict) = node.cast::<PyDict>() {
+                for (key, value) in dict {
+                    let text = key.cast::<PyString>().ok().and_then(|s| s.to_str().ok());
+                    if let Ok(image) = value.cast::<PyDict>() {
+                        if text == Some("texture") {
+                            pending.push(Task::Slot(dict.clone(), key, image.clone()));
+                            continue;
+                        }
+                        if text == Some("pbr") {
+                            let recipe = image.copy()?;
+                            dict.set_item(key, &recipe)?;
+                            for (slot, value) in &recipe {
+                                if slot.cast::<PyString>()?.to_str()?.ends_with("_map") {
+                                    if let Ok(image) = value.cast::<PyDict>() {
+                                        pending.push(Task::Slot(
+                                            recipe.clone(),
+                                            slot,
+                                            image.clone(),
+                                        ));
+                                    }
                                 }
                             }
+                            continue;
                         }
-                        continue;
+                    }
+                    if !matches!(
+                        text,
+                        Some("vertices" | "holes" | "a" | "b" | "edges" | "arrays")
+                    ) && (value.is_instance_of::<PyDict>() || value.is_instance_of::<PyList>())
+                    {
+                        pending.push(Task::Enter(value));
                     }
                 }
-                if !matches!(
-                    text,
-                    Some("vertices" | "holes" | "a" | "b" | "edges" | "arrays")
-                ) {
-                    if value.is_instance_of::<PyDict>() || value.is_instance_of::<PyList>() {
-                        self.walk(&value, depth + 1)?;
-                    }
-                }
-            }
-        } else if let Ok(list) = node.cast::<PyList>() {
-            if !list.is_empty() {
-                let first = list.get_item(0)?;
-                if first.is_instance_of::<PyDict>() || first.is_instance_of::<PyList>() {
-                    for item in list {
-                        self.walk(&item, depth + 1)?;
+            } else if let Ok(list) = node.cast::<PyList>() {
+                if !list.is_empty() {
+                    let first = list.get_item(0)?;
+                    if first.is_instance_of::<PyDict>() || first.is_instance_of::<PyList>() {
+                        pending.extend(list.iter().map(Task::Enter));
                     }
                 }
             }
+            // Preserve the insertion order of content-addressed archive members.
+            pending[start..].reverse();
         }
         Ok(())
     }
@@ -108,5 +133,5 @@ pub fn igz_texture_references(
     resolve: Bound<'_, PyAny>,
     packing: bool,
 ) -> PyResult<()> {
-    Textures { resolve, packing }.walk(node, 0)
+    Textures { resolve, packing }.walk(node)
 }

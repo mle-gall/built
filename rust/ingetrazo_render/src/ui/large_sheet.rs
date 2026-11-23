@@ -215,12 +215,25 @@ fn search_id() -> egui::Id { egui::Id::new("lsheet_search") }
 impl LargeSheet {
     /// A new spec from Python; `None` closes. Returns whether it opened now.
     pub fn set(&mut self, spec: Option<Spec>) -> bool {
-        let Some(spec) = spec else {
+        let Some(mut spec) = spec else {
             self.open = false;
             self.menu = None;
             self.head_menu = None;
             return false;
         };
+        if spec.id == "start" {
+            let template = spec.focus.as_deref().is_some_and(|id| id.starts_with("tpl:"));
+            if let Some(new) = spec.verbs.iter_mut().find(|verb| verb.id == "new") {
+                new.role = u8::from(!template);
+            }
+            for button in spec.detail.iter_mut().flat_map(|pane| &mut pane.blocks)
+                .flat_map(|block| &mut block.buttons)
+            {
+                if button.role == 1 {
+                    button.role = u8::from(template && button.id == "open");
+                }
+            }
+        }
         let opening = !self.open || self.spec.as_ref().is_none_or(|s| s.id != spec.id);
         if opening {
             self.search.clear();
@@ -288,7 +301,7 @@ impl LargeSheet {
         }
         if !self.search.is_empty() {
             self.search.clear();
-            return (true, if in_search { Some(String::new()) } else { None });
+            return (true, None);
         }
         if in_search {
             return (true, Some(String::new()));
@@ -841,6 +854,10 @@ impl Ui {
         Ok(())
     }
 
+    pub(crate) fn empty_start_shown(&self) -> bool {
+        self.lsheet.open && self.lsheet.spec.as_ref().is_some_and(|s| s.id == "start" && !s.closable)
+    }
+
     pub fn large_sheet_shown(&self) -> bool { self.lsheet.open }
     pub fn large_sheet_rect(&self) -> Option<(f32, f32, f32, f32)> {
         self.lsheet.rect.filter(|_| self.lsheet.open).map(|r| (r.min.x, r.min.y, r.width(), r.height()))
@@ -871,6 +888,10 @@ impl Ui {
         let command = mods & 8 != 0;
         match name {
             "Escape" => {
+                if self.lsheet.menu.is_none() && self.lsheet.head_menu.is_none()
+                    && self.lsheet.forms.values_mut().any(|d| d.escape_control(&self.ctx, &mut self.actions)) {
+                    return true;
+                }
                 let (_, act) = self.lsheet.escape(in_field, in_search);
                 match act {
                     Some(a) if a.is_empty() => self.ctx.memory_mut(|m| m.stop_text_input()),
@@ -954,26 +975,15 @@ impl Ui {
         // the top bar dimmed.
         let back = Rect::from_min_max(pos2(0.0, TOP_H), screen.max);
         let max_w = if spec.width > 0.0 { spec.width } else { 1240.0 };
-        // Between the rail and the dock when there is room (the frame stays
-        // in view, undimmed, as in the review's mockups); else over all of it.
+        // Fit the card between the rail and dock when there is room.
         let (free_l, free_r) = if self.review || self.sheets.shown { (0.0, screen.max.x) }
                                else { (GUT + 72.0 + GUT, self.free_right(ctx, screen) - GUT) };
         let framed = free_r - free_l >= FRAMED_MIN_W;
         let (area_l, area_r) = if framed { (free_l, free_r) } else { (24.0, screen.max.x - 24.0) };
-        let dim = if framed { Rect::from_min_max(pos2(free_l - GUT, TOP_H), pos2(free_r + GUT, screen.max.y - BOT_H)) }
-                  else { back };
-        let blur_r = if framed { Rect::from_min_max(pos2(free_l - GUT, TOP_H), pos2(free_r + GUT, screen.max.y - BOT_H)) } else { back };
-        egui::Area::new(egui::Id::new("lsheet_blur"))
-            .fixed_pos(back.min)
-            .order(egui::Order::Background)
-            .interactable(false)
-            .fade_in(false)
-            .show(ctx, |ui| {
-                let look = crate::glass::Look { tint: [0.0, 0.0, 0.0, 0.0], saturation: 1.0, rim: [0.0, 0.0],
-                                                rim_width: 0.0, glow: 0.0, peak: 0.0, inner_shadow: 0.0 };
-                ui.painter().add(crate::glass::pane(blur_r, 0.0, look));
-                ui.allocate_exact_size(back.size(), Sense::hover());
-            });
+        // Composite behind every piece of chrome so the gutters all show
+        // the same scene, including when the card changes layout on resize.
+        let backdrop = ctx.layer_painter(egui::LayerId::background());
+        backdrop.add(crate::glass::pane(back, 0.0, SHEET_BACKDROP));
 
         let sheet = sheet_bounds(screen, area_l, area_r, max_w, ease);
         self.lsheet.rect = Some(sheet);
@@ -987,9 +997,8 @@ impl Ui {
             .interactable(live)
             .show(ctx, |ui| {
                 ui.multiply_opacity(ease);
-                let (all, scrim) = ui.allocate_exact_size(back.size(), Sense::click_and_drag());
-                let _ = all;
-                ui.painter().rect_filled(dim, CornerRadius::ZERO, BEHIND.gamma_multiply(ease));
+                let (_, scrim) = ui.allocate_exact_size(back.size(), Sense::click_and_drag());
+                ui.painter().rect_filled(back, CornerRadius::ZERO, BEHIND);
                 if scrim.clicked() { st.menu = None; st.head_menu = None; }
                 let side_width = if spec.side.is_empty() { 0.0 } else if spec.side_width > 0.0 { spec.side_width } else { 216.0 };
                 let detail_width = spec.detail.as_ref().map_or(0.0, |d| if d.width > 0.0 { d.width } else { 340.0 });
@@ -1333,6 +1342,21 @@ mod tests {
         let screen = Rect::from_min_size(pos2(0., 0.), vec2(4000., 3000.));
         let sheet = sheet_bounds(screen, 24., 3976., 1100., 1.);
         assert_eq!(sheet.size(), vec2(1100., 900.));
+    }
+
+    #[test]
+    fn start_promotes_only_the_action_for_the_current_selection() {
+        let mut sheet = LargeSheet::default();
+        for (focus, header, detail) in [("tpl:blank", 0, 1), ("continue", 1, 0), ("", 1, 0)] {
+            let mut spec: Spec = serde_json::from_str(r#"{"id":"start",
+                "verbs":[{"id":"new","role":1}],
+                "detail":{"blocks":[{"kind":"buttons","buttons":[{"id":"open","role":1}]}]}}"#).unwrap();
+            spec.focus = Some(focus.to_owned());
+            sheet.set(Some(spec));
+            let drawn = sheet.spec.as_ref().unwrap();
+            assert_eq!(drawn.verbs[0].role, header);
+            assert_eq!(drawn.detail.as_ref().unwrap().blocks[0].buttons[0].role, detail);
+        }
     }
 
     #[test]

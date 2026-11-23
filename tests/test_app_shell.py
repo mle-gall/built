@@ -101,13 +101,16 @@ def test_rail_matches_classic_groups_and_dispatches(host):
     try:
         wgpu_ui._send_tools(view, win)
         groups, = view.renderer.ui_set_tools.call_args.args
-        assert [[entry[0] for entry in group] for group in groups] == wgpu_ui.GROUPS
-        assert set(view._ui_palette_runs) == set(wgpu_ui.PALETTE_ACTIONS)
+        from ingetrazo_render import rail_layout
+        expected = [[key for key, _ in row] for row in rail_layout()]
+        actions = {key for row in rail_layout() for key, binding in row if binding}
+        assert [[entry[0] for entry in group] for group in groups] == expected
+        assert set(view._ui_palette_runs) == set(actions)
     finally:
         view.renderer = None
-    for group in wgpu_ui.GROUPS:
+    for group in expected:
         for key in group:
-            if key not in wgpu_ui.PALETTE_ACTIONS:
+            if key not in actions:
                 win._tool_actions[key].trigger()
                 assert host.viewport.active_tool is win._tools[key]
     view._ui_palette_runs["eyedropper"]()
