@@ -844,6 +844,21 @@ impl PyMeshStore {
     }
 
     /// Vertex positions (V, 3) float64, list order.
+    /// Candidate rows for position-key lookup in mesh order. Python applies
+    /// its exact decimal-rounding predicate only to this short list.
+    fn vertices_in_floor_cells(&self, near: std::collections::HashSet<[i64; 3]>)
+        -> Vec<(u128, [f64; 3])> {
+        self.inner.live_slots(Kind::Vertex).into_iter().filter_map(|v| {
+            let p = *self.inner.state.vpos.get(v as usize);
+            // Match numpy float64 -> int64 (out of range becomes i64::MIN).
+            let cell = p.map(|x| {
+                let n = (x * 1e4).floor();
+                if n >= i64::MIN as f64 && n < -(i64::MIN as f64) { n as i64 } else { i64::MIN }
+            });
+            near.contains(&cell).then(|| (self.inner.key(Kind::Vertex, v), p))
+        }).collect()
+    }
+
     fn positions<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<f64>> {
         let st = &self.inner.state;
         let rows: Vec<[f64; 3]> = st.order[0].live(&st.slots[0]).into_iter().map(|v| *st.vpos.get(v as usize)).collect();

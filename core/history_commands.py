@@ -3507,7 +3507,8 @@ class MoveVerticesCommand(MeshCommand):
             return
         self._before = self._reference_snapshot(scene.mesh)
         keys = {_key(p) for p in self.src}
-        moving = {v.key for v in _vertices_at(scene.mesh, keys)}
+        vertices = _vertices_at(scene.mesh, keys)
+        moving = {v.key for v in vertices}
         if isinstance(self.delta, tuple):
             landing = {_key(tuple(x + d for x, d in zip(p, self.delta))) for p in self.src}
         else:
@@ -3520,7 +3521,14 @@ class MoveVerticesCommand(MeshCommand):
             before = defects_near(_vertices_at(scene.mesh, keys | landing))
         carried = (_carried_faces(scene.mesh, moving)
                    if self.carry_textures else [])
-        translate_points(scene, keys, self.delta)
+        from core.store_mesh import StoreMesh, _xyz
+        if self._journal_geometry and type(scene.mesh) is StoreMesh:
+            scene.mesh._store.move_vertices([v.key for v in vertices], _xyz(self.delta))
+            for _ in vertices:
+                scene.mesh._bump()
+            scene.version += 1
+        else:
+            translate_points(scene, keys, self.delta)
         if carried:
             from ingetrazo_core import Matrix4 as QMatrix4x4
             from core.group import _remap_uvws
