@@ -568,6 +568,8 @@ impl Gallery {
                     ("Tag".into(), "A-WALL".into(), "eye".into(), Some(true)),
                 ], &mut Vec::new());
                 ui.add_space(SPACE_XS);
+                let (sample, _) = ui.allocate_exact_size(vec2(44., 16.), Sense::hover());
+                hatch_sample(ui, sample, "brick");
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing = vec2(SPACE_XS, 0.);
                     ui.add_space(SPACE_S);

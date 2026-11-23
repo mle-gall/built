@@ -260,7 +260,8 @@ def test_drawing_cells_carry_colour_line_weight_print(ui):
     view._ui_tree_sig = None
     wu._tree(view, win)
     row = next(t for t, _n in view.renderer.calls["ui_set_tree"][0] if t[0] == "n:" + _key(view, "Paths"))
-    assert len(row) == 10  # key, name, kind, badge, icon + colour, line, weight, print, hatch
+    assert row[10] == scene.layer("Paths").key
+    assert row[11] == "auto"
     file_row = next(t for t, _n in view.renderer.calls["ui_set_tree"][0] if t[0] == "n:link:Ride")
     assert file_row[4] == "file:resolved"
 
@@ -760,3 +761,25 @@ def test_identity_separates_physical_parent_filing_and_surface_material(tmp_path
     assert card["Inside"] == ("Plaza.built › Core block", f"open{wu.SEP}i:{tree.row_id(parent)}")
     assert card["Material"] == ("Concrete · 1 face", "insp:lib:edit:m:Concrete")
     assert card["Filed in"] == ("—", "")
+
+
+def test_bulk_drawing_patch_validates_every_field_and_undoes_as_one_edit():
+    import json
+    from core.layers import Layer
+    from core.protocol import commands
+    from core.scene import Scene
+    scene = Scene()
+    a, b = Layer("Walls"), Layer("Floors")
+    scene.layers.extend((a, b))
+    history = _Win(scene).viewport.history
+    before = [(tag.lineweight, tag.hatch, tag.cut_weight) for tag in (a, b)]
+    def apply(fields):
+        return commands.run(history, "edit_tag", tags=[a.key, b.key, a.key],
+                            field="style", value=json.dumps(fields))
+    with pytest.raises(ValueError):
+        apply({"hatch": "grid", "weight": "-1"})
+    assert [(tag.lineweight, tag.hatch, tag.cut_weight) for tag in (a, b)] == before
+    assert apply({"hatch": "brick", "weight": "0.50", "cut_weight": "0.70"})["ok"]
+    assert all((tag.lineweight, tag.hatch, tag.cut_weight) == (.5, "brick", .7) for tag in (a, b))
+    assert history.undo()
+    assert [(tag.lineweight, tag.hatch, tag.cut_weight) for tag in (a, b)] == before

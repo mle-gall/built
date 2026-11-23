@@ -156,7 +156,7 @@ def attach(view) -> None:
 #: The dock's width for the wide column sets: about 390 pt so the headed
 #: columns never crush the names (tree C). Filing keeps the user's own
 #: width ("ui/dock_width").
-WIDE_DOCK = 390.0
+WIDE_DOCK = 430.0
 #: Drawing and Export reserve room for their columns.
 WIDE_COLSETS = (1, 2)
 
@@ -1221,6 +1221,7 @@ def _tree(view, win, *, discover=False):
         from PySide6.QtCore import QSettings
         view.renderer.ui_set_tree_sort(max(0, QSettings().value("ui/project_tree_sort", 0, type=int)))
         view._ui_sort_loaded = True
+    view.renderer.ui_set_style_catalog(id(scene), [*L.LINETYPES, *(L.CUSTOM_LINETYPE + key for key in scene.line_types)])
     view.renderer.ui_set_colset(colset)
     view.renderer.ui_set_mode({"problems": "Problems", "library": "Library"}.get(mode, ""))
     view.renderer.ui_set_issues(bool(view.__dict__.get("_ui_issues", False)))
@@ -1973,6 +1974,12 @@ def _tree_action(win, view, action) -> None:
         elif verb == "sort":
             from PySide6.QtCore import QSettings
             QSettings().setValue("ui/project_tree_sort", int(rk))
+        elif verb == "drawingpatch":
+            import json
+            targets, patch = json.loads(rk)
+            _core(vp, "edit_tag", tags=targets, field="style", value=json.dumps(patch))
+            rebuild()
+            vp.notify_scene_changed()
         elif verb == "colset":
             view._ui_colset = int(rk or 0)
             apply_dock_width(view)

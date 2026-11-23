@@ -1676,3 +1676,40 @@ pub(super) fn fit(ui: &egui::Ui, text: &str, font: egui::FontId, color: Color32,
     job.wrap.break_anywhere = rows == 1;
     ui.painter().layout_job(job)
 }
+
+/// Contact sheet of the model's standard paper hatch marks at four pixels/mm.
+pub const HATCH_KEYS: &str = include_str!("assets/hatches.txt");
+
+pub fn hatch_sample(ui: &egui::Ui, rect: Rect, key: &str) {
+    ui.painter().rect_filled(rect, R_INSET, WELL);
+    let Some(index) = HATCH_KEYS.lines().position(|k| k == key) else { return };
+    let id = egui::Id::new("paper hatch samples");
+    let texture = ui.ctx().data(|d| d.get_temp::<egui::TextureHandle>(id)).unwrap_or_else(|| {
+        let image = image::load_from_memory(include_bytes!("assets/hatches.png")).expect("bundled hatch samples").to_rgba8();
+        let texture = ui.ctx().load_texture("paper hatches", egui::ColorImage::from_rgba_unmultiplied(
+            [image.width() as usize,image.height() as usize], image.as_raw()), egui::TextureOptions::LINEAR);
+        ui.ctx().data_mut(|d| d.insert_temp(id,texture.clone()));
+        texture
+    });
+    let height = HATCH_KEYS.lines().count().div_ceil(8) as f32;
+    let uv = Rect::from_min_size(pos2((index%8) as f32/8.,(index/8) as f32/height),vec2(1./8.,1./height));
+    ui.painter().image(texture.id(), rect.shrink(1.), uv, INK_2);
+}
+
+pub fn line_sample(ui: &egui::Ui, rect: Rect, mm: &str, pattern: &str, color: Color32) {
+    let width = (mm.parse::<f32>().unwrap_or(0.18)*3.8).clamp(0.7, 5.);
+    let dash: &[f32] = match pattern {
+        "dotted" => &[1.,3.], "dashed_short" => &[3.,2.], "dashed_long" => &[12.,4.],
+        "dashed" => &[7.,3.], "dashdot" | "center" => &[9.,3.,1.,3.],
+        "dashdotdot" | "phantom" | "border" => &[8.,2.,1.,2.,1.,2.], _ => &[],
+    };
+    let y=rect.center().y;
+    let stroke=Stroke::new(width,color);
+    if dash.is_empty() { ui.painter().hline(rect.x_range(),y,stroke); return; }
+    let mut x=rect.left();
+    for run in dash.chunks_exact(2).cycle() {
+        ui.painter().hline(x..=(x+run[0]).min(rect.right()),y,stroke);
+        x+=run[0]+run[1];
+        if x>=rect.right() { break; }
+    }
+}

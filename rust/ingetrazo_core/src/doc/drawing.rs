@@ -68,6 +68,8 @@ pub(super) fn cells(node: &Node) -> Result<Vec<String>, String> {
         weight,
         u8::from(print).to_string(),
         string("hatch", "")?,
+        tag.key.clone().unwrap_or_default(),
+        node.attr(attr_id("cut_weight")?).and_then(number).map_or_else(|| "auto".into(), |mm| format!("{mm:.2}")),
     ])
 }
 
@@ -311,14 +313,14 @@ fn drawing_value(py: Python<'_>, field: &str, input: &str) -> PyResult<(Field, F
                 ),
             )
         }
-        "weight" if input == "auto" => ("lineweight", Value::None),
-        "weight" => {
+        "weight" | "cut_weight" if input == "auto" => (if field=="weight" {"lineweight"} else {"cut_weight"}, Value::None),
+        "weight" | "cut_weight" => {
             let mm = input
                 .parse::<f64>()
                 .ok()
                 .filter(|n| n.is_finite() && *n > 0.0)
                 .ok_or_else(|| PyValueError::new_err("expected a positive pen width in mm"))?;
-            ("lineweight", Value::Float(mm))
+            (if field=="weight" {"lineweight"} else {"cut_weight"}, Value::Float(mm))
         }
         "linetype"
             if py
@@ -355,6 +357,15 @@ pub(super) fn prepare(
     field: &str,
     input: &str,
 ) -> PyResult<Option<TagEdit>> {
+    if field == "style" {
+        let patch: std::collections::BTreeMap<String,String> = serde_json::from_str(input).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let mut combined = TagEdit {changes: Vec::new()};
+        for (name, v) in patch {
+            if name == "style" { return Err(PyValueError::new_err("Nested style patch")); }
+            if let Some(edit) = prepare(py,owner,tags.clone(),&name,&v)? { combined.changes.extend(edit.changes); }
+        }
+        return Ok((!combined.changes.is_empty()).then_some(combined));
+    }
     let (prop, value) = drawing_value(py, field, input)?;
     let hatch_kinds = if field == "hatch" {
         let module = py.import("core.hatches")?;

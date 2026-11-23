@@ -46,9 +46,9 @@ impl Cols {
             1 => {
                 // Eye and lock stay at the right edge in Drawing. Other cells
                 // disappear from the left before they take the name's room.
-                c.flags = Some((edge - 40.0, edge));
-                let mut end = edge - 44.0;
-                for (cell, width) in [(&mut c.swatch, 18.0), (&mut c.line, 56.0),
+                c.flags = Some((edge - 20.0, edge));
+                let mut end = edge - 24.0;
+                for (cell, width) in [(&mut c.swatch, 18.0), (&mut c.line, 44.0),
                                        (&mut c.hatch, 42.0), (&mut c.weight, 32.0), (&mut c.print, 28.0)] {
                     if room(end - width - 8.0) >= MIN_NAME {
                         *cell = Some((end - width, end));
@@ -83,7 +83,7 @@ impl Cols {
         let at = |x: f32, text: &str, align: egui::Align2| {
             p.text(pos2(x, cy), align, text, font.clone(), FAINT);
         };
-        at(left + 8.0, "Name", egui::Align2::LEFT_CENTER);
+        at(left + 22.0, "Name", egui::Align2::LEFT_CENTER);
         match self.colset {
             1 => {
                 if let Some((a, b)) = self.flags { at((a + b) / 2.0, "State", egui::Align2::CENTER_CENTER); }

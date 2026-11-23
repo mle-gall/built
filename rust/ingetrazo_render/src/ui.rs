@@ -209,6 +209,7 @@ pub struct Node {
 pub struct Column {
     nodes: Vec<Node>,
     path: Vec<(String, String)>,
+    styles: drawing::StyleEditor,
     proposal_available: bool,
     reveal: Option<String>,
     sort: tree_order::Sort,
@@ -383,7 +384,7 @@ impl Ui {
     /// row, eye, lock, expandable, expanded, selected]).
     pub fn set_tree(&mut self, rows: Vec<(Vec<String>, Vec<i64>)>, unfiled: u32) {
         let col = self.column.get_or_insert_with(|| Column {
-            nodes: Vec::new(), path: Vec::new(), reveal: None, proposal_available: false, sort: Default::default(), ordered: Vec::new(), unfiled: 0, expanded: Default::default(), filter: String::new(),
+            nodes: Vec::new(), path: Vec::new(), styles: Default::default(), reveal: None, proposal_available: false, sort: Default::default(), ordered: Vec::new(), unfiled: 0, expanded: Default::default(), filter: String::new(),
             filing: None, focus_filter: false, row_menu: None, renaming: None, focus_rename: false, head_menu: None,
             kind_menu: None, kinds: Vec::new(), prompt: None, colset: 0, color_pick: None, edits: Default::default(), mode: String::new(), issues: false,
             identity: Vec::new(),
@@ -416,6 +417,7 @@ impl Ui {
             !col.nodes.iter().any(|n| &n.key == k && n.selected > 0)) {
             col.highlighted = None;
         }
+        if col.colset == 1 { col.styles.refresh(&col.nodes); }
         col.ordered = col.sort.order(&col.nodes);
         col.unfiled = unfiled;
     }
@@ -438,6 +440,12 @@ impl Ui {
             col.highlighted = None;
             col.filing = None;
             col.reveal = Some(key);
+        }
+    }
+    pub fn style_catalog(&mut self, owner: usize, lines: Vec<String>) {
+        if let Some(col)=self.column.as_mut() {
+            if col.styles.owner != owner { col.styles = Default::default(); col.styles.owner=owner; }
+            col.styles.lines=lines;
         }
     }
     pub fn set_edit_path(&mut self, path: Vec<(String, String)>) {
@@ -1564,6 +1572,7 @@ impl Ui {
 
     fn right_column(&mut self, ctx: &egui::Context, screen: Rect, retract: f32) {
         let delivery = self.delivery.clone();
+        let visibility_sets = self.tabs.get(2).cloned().unwrap_or_default();
         let selection = self.selection.clone();
         let sel_more = self.sel_more;
         let mut cmds: Vec<String> = Vec::new();
@@ -1692,6 +1701,24 @@ impl Ui {
                             });
                         break 'tree;
                     }
+                    if col.colset == 1 {
+                        ui.horizontal(|ui| {
+                            kit::caption_plain(ui, "Style for all views");
+                            egui::ComboBox::from_id_salt("drawing_visibility").selected_text("Visibility set").show_ui(ui, |ui| {
+                                for set in &visibility_sets {
+                                    if ui.selectable_label(false, &set.1).clicked() { cmds.push(format!("tab:{}",set.0)); }
+                                }
+                                if kit::quiet(ui,"Save current visibility…").clicked() { cmds.push("tab:visibility:save".into()); }
+                            });
+                        });
+                    } else if col.colset == 0 && !col.proposal_available {
+                        if let Some((target,_,_)) = &delivery {
+                            ui.horizontal(|ui| {
+                                kit::caption_plain(ui,"New items go to");
+                                ui.label(if target.is_empty() { "No filing target" } else { target });
+                            });
+                        }
+                    }
                     kit::path_bar(ui, &col.path, &mut actions);
                     if let Some(what) = &col.filing {
                         // Two short lines, never cut off at the dock's edge.
@@ -1771,7 +1798,7 @@ impl Ui {
                                     resp.dnd_set_drag_payload(drawing::DraggedRow::Placement { key: n.key.clone(), selected: n.selected > 0 });
                                 }
                                 // Items in the selection are lit like a picked row; nodes count them.
-                                let lit = n.mark == 1 || (selection.is_none() && col.highlighted.as_deref() == Some(n.key.as_str()));
+                                let lit = (col.colset == 1 && col.styles.selected(n)) || n.mark == 1 || (selection.is_none() && col.highlighted.as_deref() == Some(n.key.as_str()));
                                 let file_state = if n.row == 0 { tree_cols::file_state(&n.icon) } else { None };
                                 let cols = tree_cols::Cols::plan(col.colset, rect.min.x, rect.max.x);
                                 let linked = n.row == 0 && n.key.starts_with("n:link");
@@ -1803,8 +1830,13 @@ impl Ui {
                                     let ink_c = if inherited { OFF } else { DIM };
                                     if col.colset == 1 && !cells.is_empty() {
                                         for (slot, index) in [(cols.weight, 2), (cols.line, 1), (cols.hatch, 4)] {
-                                            if let Some((start, end)) = slot {
-                                                ui.painter().with_clip_rect(Rect::from_min_max(pos2(start, rect.top()), pos2(end, rect.bottom()))).text(pos2(end, cy), egui::Align2::RIGHT_CENTER, cell(index), meta(), ink_c);
+                                            if let Some((a, b)) = slot {
+                                                let sample = Rect::from_min_max(pos2(a,cy-6.),pos2(b,cy+6.));
+                                                if index == 4 {
+                                                    kit::hatch_sample(ui, sample, &cell(4));
+                                                } else {
+                                                    kit::line_sample(ui, sample, &cell(2), if index == 1 { cells[1].as_str() } else { "continuous" }, ink_c);
+                                                }
                                             }
                                         }
                                         if let Some((_, end)) = cols.print {
@@ -1858,7 +1890,7 @@ impl Ui {
                                     ui.painter().galley(pos2(count_col - g.size().x, cy - g.size().y / 2.0), g, DIM);
                                 }
                                 let show_ctl = resp.hovered() || n.eye == 0 || n.lock == 1;
-                                let control_edge = cols.flags.map_or(count_col, |(a, _)| a + 74.0);
+                                let control_edge = cols.flags.map_or(count_col, |(_, b)| b + 36.0);
                                 let (_, lock_r) = tree_slots(ui, control_edge, cy, -1, n.lock, show_ctl || col.colset == 1);
                                 let eye_r = Rect::from_center_size(pos2(rect.min.x + 10., cy), vec2(16., ROW_H));
                                 if n.eye >= 0 { kit::paint_eye(ui, eye_r, n.eye != 0); }
@@ -1990,6 +2022,8 @@ impl Ui {
                                         actions.push(format!("eye\u{1f}{}", n.key));
                                     } else if n.lock >= 0 && lock_r.expand(2.0).contains(p) {
                                         actions.push(format!("lock\u{1f}{}", n.key));
+                                    } else if col.colset == 1 && n.cells.len() >= 7 && !linked && col.filing.is_none() {
+                                        col.styles.pick(n, ui.input(|i| i.modifiers.command || i.modifiers.shift));
                                     } else if n.row == 6 {
                                         continue;
                                     } else if col.filing.is_some() {
@@ -2024,6 +2058,7 @@ impl Ui {
                     ui.add_space(SPACE_S);
                     egui::ScrollArea::vertical().id_salt("inspector").auto_shrink([false, false]).show(ui, |ui| {
                         ui.spacing_mut().item_spacing = vec2(0.0, SPACE_XS);
+                        if col.mode.is_empty() && col.colset == 1 && col.styles.draw(ui, &mut actions) { return; }
                         if col.inspector_title.is_empty() {
                             ui.horizontal(|ui| { ui.add_space(SPACE_S); empty_state(ui, "Nothing selected"); });
                             return;
