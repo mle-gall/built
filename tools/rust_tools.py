@@ -43,9 +43,14 @@ class _Host:
     """The machine's ``ToolHost`` over a viewport (the Metal view's
     ``NativeTools``, the controller, or a stand-in with scene and history)."""
 
-    def __init__(self, viewport, handles=None):
+    def __init__(self, viewport, handles=None, tool=None):
         self.vp = viewport
         self.handles = handles
+        self.tool = tool
+
+    def call(self, verb, args):
+        """A verb the host still owns for a tool: ``tool.host_<verb>``."""
+        return getattr(self.tool, "host_" + verb)(self.vp, args)
 
     # ---- commits: the protocol only ---------------------------------------
     def _frame_origin(self):
@@ -240,7 +245,17 @@ class RustTool(Tool):
 
     # ---- events -------------------------------------------------------------
     def _send(self, viewport, event):
-        return self._machine.event(event, _Host(viewport, self._handles))
+        # The host's callbacks may read the tool back (a repaint asks for
+        # the grab point): they get the state as it was before the event.
+        self._during = {key: self._state(key) for key in self._READ_DURING}
+        try:
+            return self._machine.event(event, _Host(viewport, self._handles, self))
+        finally:
+            self._during = None
+
+    #: The fields a callback may read while the machine is busy.
+    _READ_DURING = ("start_point", "hover_point")
+    _during = None
 
     @staticmethod
     def _pointer(kind, ctx, t=0.0):
@@ -282,6 +297,8 @@ class RustTool(Tool):
 
     # ---- what the inference and the painters read -------------------------
     def _state(self, key):
+        if self._during is not None:
+            return self._during.get(key)
         # The inference reads several fields per pointer move: one state
         # snapshot per machine serial.
         serial, fields = self._seen

@@ -8,6 +8,7 @@
 
 pub mod gesture;
 pub mod line;
+pub mod move_tool;
 pub mod plane;
 pub mod preview;
 pub mod rectangle;
@@ -97,6 +98,9 @@ pub enum ToolEvent {
     TripleClick(Pointer),
     Box { rect: [f64; 4], crossing: bool, mods: Mods },
     Key { key: String, mods: Mods },
+    /// An array typed after a copy: `count` copies, `mode` `"x"`
+    /// (multiples) or `"/"` (dividing), `step` a spacing (`5x10m`).
+    Array { count: i64, mode: String, step: Option<f64> },
     /// A key let go; `tapped`: no other key came in between (a Ctrl that
     /// was part of a chord is no tap, #342).
     KeyRelease { key: String, tapped: bool },
@@ -235,6 +239,9 @@ pub trait ToolHost {
     /// A verb the host still owns for an annotation or a section plane
     /// (`toggle_section`, `edit_text`, `edit_dimension`).
     fn host_verb(&mut self, _verb: &str, _id: u64) {}
+    /// A verb the host still owns for a tool (Move's `grab`, `preview`,
+    /// `revert`, `move`, `copy`): JSON in, JSON out.
+    fn call(&mut self, _verb: &str, _args: serde_json::Value) -> serde_json::Value { serde_json::Value::Null }
     /// A status message: an English template with `{name}` fields, which
     /// the host translates and shows.
     fn message(&mut self, _template: &str, _args: &[(&str, String)]) {}
@@ -301,6 +308,7 @@ pub fn new_tool(kind: &str) -> Option<Box<dyn Tool>> {
         "select" => Some(Box::new(select::SelectTool::default())),
         "line" => Some(Box::new(line::LineTool::default())),
         "rectangle" => Some(Box::new(rectangle::RectangleTool::default())),
+        "move" => Some(Box::new(move_tool::MoveTool::default())),
         _ => None,
     }
 }

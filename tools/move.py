@@ -40,7 +40,8 @@ from core.history import (CompoundCommand, MoveDimensionsCommand,  # noqa: F401
                           MoveGuidesCommand)
 from core.textlabel import TextLabel
 from core.topology import _key
-from tools.base import Tool, ToolContext
+from tools.base import ToolContext
+from tools.rust_tools import RustTool, _mods, _point_property
 from core.units import fmt_len
 
 
@@ -253,6 +254,8 @@ def rotation_grips(obb, eye: QVector3D) -> list:
     Taking one rotates the object in that face's plane, about the axis
     through the box centre along the normal. ``obb`` is the viewport's
     ``(frame, lo, hi)``."""
+    if obb is None:
+        return []       # a box the view cannot build yet (an empty or unpacked group)
     frame, lo, hi = obb
     axes = [QVector3D(a) for a in frame]
     ext = [hi[i] - lo[i] for i in range(3)]
@@ -277,57 +280,26 @@ def rotation_grips(obb, eye: QVector3D) -> list:
     return out
 
 
-class MoveTool(Tool):
-    name = "Move"
-    shortcut = "M"
-    description = (
-        "Move the selection, or what you click, to a new place; Ctrl "
-        "leaves a copy behind.")
-    vcb_label = "Distance"
+class MoveTool(RustTool):
+    """Move (``rust/ingetrazo_core/src/tools/move_tool.rs`` decides: the
+    grab, the Ctrl copy, typed distances and deltas, the array window).
+    This class is the host: what a click grabs (it is picking), the live
+    preview of the grabbed geometry, the rotation grips (#115, run by the
+    Rotate tool) and the commit through ``core.move_ops``."""
 
+    kind = "move"
+    _READ_DURING = ("grab", "hover_point", "copy", "window")
     # Drag on a camera-facing vertical plane (not the ground) so pulling the
     # mouse up raises geometry — what lets you lift a roof ridge straight up.
     prefers_vertical_drag = True
-    # Magnetically lock to the nearest world axis within this angle, projecting
-    # onto the axis line. Keeps a move rigid and axis-aligned (a 3 m ridge stays
-    # 3 m and level) without holding Shift; arrow-key locks still override it.
-    magnetic_axis_deg = 15.0
-    #: …and the two axes that plane can NEVER hold. The drag plane above is
-    #: vertical and faces the camera, so it contains Z and one horizontal
-    #: direction — the camera's own, which is X or Y only when the view is
-    #: square to the model. From any oblique view the world detector saw
-    #: X and Y at the camera's yaw and never fired: «MOVE/COPY cannot
-    #: detect X, Y soft magnetic snaps, but it aligns well with the Z axis»
-    #: (@pacaeiro, issue #42). The screen detector the Line tool got for
-    #: issue #31 finds them by where the cursor points and projects onto
-    #: the world axis, so the move goes along X or Y exactly.
-    screen_axis_px = 9.0
     accepts_array = True  # VCB "3x" / "/3" after a copy (arrays)
 
     def __init__(self) -> None:
-        # ``start_point`` drives the viewport's snap / axis-lock machinery, same
-        # as the drawing tools. ``grab`` is the handle the delta is measured
-        # from (identical to start_point, kept separate for clarity).
-        self.start_point: QVector3D | None = None
-        self.grab: QVector3D | None = None
-        self.hover_point: QVector3D | None = None
-        self.chain_first_point: QVector3D | None = None  # silence close-snap
-        self._positions: list[QVector3D] = []  # unique positions to translate
-        self._verts: list = []                 # resolved vertex objects (identity)
-        self._groups: list[Group] = []         # whole groups being moved
-        self._splanes: list = []               # section planes being moved
-        self._images: list = []                # reference images being moved
-        self._labels: list[TextLabel] = []     # leader texts whose label moves
-        self._moved_guides: list[Guide] = []         # construction guides being moved
-        self._dims: dict = {}                  # dimension → "line" | "rigid"
-        self._preview_delta = QVector3D(0.0, 0.0, 0.0)  # currently applied live
-        self._copy = False                     # Ctrl: move a COPY
-        self._ctrl_toggled = False             # …by the Ctrl still held down
-        self._sel_faces: list = []             # loose geometry copy mode duplicates
-        self._sel_edges: list = []
-        self._base_segments: list = []         # wireframe for the copy preview
-        self._groups_ghost_due = False
-        self._last: dict | None = None         # the copy just made, for "3x" / "/3"
+        RustTool.__init__(self)
+        self.chain_first_point = None  # silence close-snap
+        self._ctx = None
+        self._build = None             # the copy builder of the array window
+        self._clear_sets()
         # Rotation grips (issue #115): the group they sit on, the grips,
         # the one under the cursor, and — once one is taken — the Rotate
         # tool that runs the turn (its protractor, snaps, VCB and commit).
@@ -337,13 +309,98 @@ class MoveTool(Tool):
         self._grip_rot = None
         self._grip_rot_done = None             # its hot retype after the commit
 
+    def _clear_sets(self) -> None:
+        self._positions: list[QVector3D] = []  # unique positions to translate
+        self._verts: list = []                 # resolved vertex objects (identity)
+        self._groups: list[Group] = []         # whole groups being moved
+        self._splanes: list = []               # section planes being moved
+        self._images: list = []                # reference images being moved
+        self._labels: list[TextLabel] = []     # leader texts whose label moves
+        self._moved_guides: list[Guide] = []   # construction guides being moved
+        self._dims: dict = {}                  # dimension → "line" | "rigid"
+        self._preview_delta = QVector3D(0.0, 0.0, 0.0)  # currently applied live
+        self._sel_faces: list = []             # loose geometry copy mode duplicates
+        self._sel_edges: list = []
+        self._base_segments: list = []         # wireframe for the copy preview
+        self._groups_ghost_due = False
+        self._vp_preview = False
+
+    # ---- The machine's state -----------------------------------------------
+    start_point = _point_property("grab")
+    grab = _point_property("grab")
+    hover_point = _point_property("hover_point")
+
+    @property
+    def _copy(self) -> bool:
+        return bool(self._state("copy"))
+
+    @_copy.setter
+    def _copy(self, on) -> None:
+        self._machine.set("copy", bool(on))
+
+    @property
+    def cursor_plus(self) -> bool:
+        """The little + beside the cursor while Ctrl has it making a COPY."""
+        return self._copy
+
+    def _after(self, viewport):
+        if self.grab is None:
+            self._clear_sets()
+        update = getattr(viewport, "update", None)
+        if callable(update):
+            update()
+
+    # ---- Host verbs the machine calls (``ToolHost::call``) -----------------
+    def host_grab(self, viewport, world):
+        return self._grab_under(self._ctx, QVector3D(*world))
+
+    def host_preview(self, viewport, delta):
+        self._apply_preview(viewport, QVector3D(*delta))
+
+    def host_park(self, viewport, _args):
+        """Copy on: the original stops following the cursor."""
+        self._revert_preview(viewport)
+        park = getattr(viewport, "set_groups_preview_offset", None)
+        if self._vp_preview and park is not None:
+            park(QVector3D(0.0, 0.0, 0.0))
+
+    def host_revert(self, viewport, _args):
+        self._end_freeze(viewport)
+        self._revert_preview(viewport)
+
+    def host_move(self, viewport, delta):
+        from core.move_ops import move_commands
+        commands = move_commands(QVector3D(*delta), groups=self._groups, positions=self._positions,
+                                 labels=self._labels, guides=self._moved_guides, dims=self._dims,
+                                 splanes=self._splanes, images=self._images)
+        if len(commands) == 1:
+            viewport.history.execute(commands[0])
+        elif commands:
+            viewport.history.execute(CompoundCommand(commands))
+        self._tell_join(viewport, commands)
+
+    def host_copy(self, viewport, args):
+        """Stamp copies at ``deltas``; ``fresh`` makes the builder from what
+        is grabbed now, else the array window re-uses the last one.
+        Answers the history token when the copy is the top of the stack."""
+        if args["fresh"] or self._build is None:
+            self._build = self._make_copy_builder(viewport.scene)
+        cmd = self._build([QVector3D(*d) for d in args["deltas"]])
+        if cmd is None:
+            return None
+        viewport.history.execute(cmd)
+        stack = getattr(viewport.history, "undo_stack", None)
+        if not stack or stack[-1] is not cmd:
+            return None
+        from tools.rust_tools import _Host
+        return _Host(viewport).revision()
+
     # ---- Lifecycle ----------------------------------------------------------
     def on_activate(self, viewport) -> None:
         self._grip_rot = self._grip_rot_done = None
         self._clear_grips()
-        self._reset()
-        self._copy = False
-        self._last = None
+        self._send(viewport, {"type": "activate"})
+        self._after(viewport)
 
     def on_deactivate(self, viewport) -> None:
         if self._grip_rot is not None:
@@ -351,18 +408,9 @@ class MoveTool(Tool):
         # A helper left here kept the next Move a Rotate (#480).
         self._grip_rot = self._grip_rot_done = None
         self._clear_grips()
-        self._end_freeze(viewport)
-        self._revert_preview(viewport)
-        self._reset()
-        self._copy = False
-        self._last = None
-
-    @property
-    def cursor_plus(self) -> bool:
-        """The little + beside the cursor while Ctrl has it making a COPY,
-        as the Tape shows its guide mode: the status-bar flash alone was
-        easy to miss."""
-        return self._copy
+        self._send(viewport, {"type": "deactivate"})
+        self._handles.clear()
+        self._after(viewport)
 
     # ---- Keyboard -----------------------------------------------------------
     def on_key(self, viewport, key: int, modifiers) -> bool:
@@ -370,46 +418,33 @@ class MoveTool(Tool):
             return self._grip_rot.on_key(viewport, key, modifiers)
         # Ctrl toggles copy mode (move a copy, the original stays).
         if key == Qt.Key_Control:
-            self._toggle_copy(viewport)
-            self._ctrl_toggled = True
+            self._send(viewport, {"type": "key", "key": "Control", "mods": _mods(modifiers)})
+            self._copy_changed(viewport)
             return True
         return False
 
-    def _toggle_copy(self, viewport, say: bool = True) -> None:
-        self._copy = not self._copy
-        if self._copy:
-            # The original stops following the cursor; the copy's
-            # wireframe takes over in rubber_band_lines.
-            self._revert_preview(viewport)
-            park = getattr(viewport, "set_groups_preview_offset", None)
-            if getattr(self, "_vp_preview", False) and park is not None:
-                park(QVector3D(0.0, 0.0, 0.0))
-            if say:
-                viewport.flash_status(tr("Move a copy: on"))
-        else:
-            if self.grab is not None and self.hover_point is not None:
-                self._apply_preview(viewport, self.hover_point - self.grab)
-            if say:
-                viewport.flash_status(tr("Move a copy: off"))
+    def _copy_changed(self, viewport) -> None:
         apply = getattr(viewport, "_apply_tool_cursor", None)
         if apply is not None:
             apply()                      # the + appears or disappears now
         viewport.update()
 
+    def _toggle_copy(self, viewport, say: bool = True) -> None:
+        """Ctrl pressed with the click (the Metal view's own check)."""
+        self._send(viewport, {"type": "key", "key": "ToggleCopy" if say else "ToggleCopyQuiet"})
+        self._copy_changed(viewport)
+
     def on_key_release(self, viewport, key: int) -> bool:
         if self._grip_rot is not None:
             return self._grip_rot.on_key_release(viewport, key)
-        # The copy toggle happens on the Ctrl PRESS, so the + shows at
-        # once; a Ctrl that turns out to be part of a shortcut (Ctrl+Z,
-        # Ctrl+C…) takes it back on the release, silently — the Tape's
-        # #183, where Ctrl+Z switched its mode without a word.
-        if key != Qt.Key_Control or not self._ctrl_toggled:
+        if key != Qt.Key_Control:
             return False
-        self._ctrl_toggled = False
         tapped = getattr(viewport, "ctrl_tapped", None)
-        if callable(tapped) and not tapped():
-            self._toggle_copy(viewport, say=False)
-        return True
+        reply = self._send(viewport, {"type": "key_release", "key": "Control",
+                                      "tapped": not callable(tapped) or bool(tapped())})
+        if reply["consumed"]:
+            self._copy_changed(viewport)
+        return reply["consumed"]
 
     # ---- Spatial input ------------------------------------------------------
     def on_click(self, ctx: ToolContext) -> None:
@@ -425,69 +460,74 @@ class MoveTool(Tool):
         if self.start_point is None and self._hot_grip is not None:
             self._start_grip_rotation(ctx)
             return
-        if self.start_point is None:
-            groups, positions = self._gather(ctx)
-            labels = gather_labels(ctx)
-            guides = gather_guides(ctx)
-            from core.section import SectionPlane
-            splanes = [p for p in viewport.scene.selection
-                       if isinstance(p, SectionPlane)]
-            if not splanes and not viewport.scene.selection:
-                # Move grabs a section plane directly by hovering
-                # its frame — no pre-selection needed. The cut follows live.
-                pick = getattr(viewport, "pick_section_plane", None)
-                sp = (pick(ctx.screen.x(), ctx.screen.y())
-                      if pick is not None else None)
-                if sp is not None:
-                    splanes = [sp]
-                    groups, positions, guides = [], [], []
-            if labels and not viewport.scene.selection:
-                # A click on the glyphs grabs just the text, never the
-                # geometry that happens to sit behind it.
+        self._ctx = ctx
+        self._send(viewport, self._pointer("click", ctx))
+        self._ctx = None
+        self._after(viewport)
+
+    def _grab_under(self, ctx: ToolContext, world) -> bool:
+        """What the first click grabs: the selection, or what lies under the
+        cursor (a group, a vertex, a guide, a label, a dimension, a section
+        plane, an image). True when there is something."""
+        viewport = ctx.viewport
+        groups, positions = self._gather(ctx)
+        labels = gather_labels(ctx)
+        guides = gather_guides(ctx)
+        from core.section import SectionPlane
+        splanes = [p for p in viewport.scene.selection
+                   if isinstance(p, SectionPlane)]
+        if not splanes and not viewport.scene.selection:
+            # Move grabs a section plane directly by hovering
+            # its frame — no pre-selection needed. The cut follows live.
+            pick = getattr(viewport, "pick_section_plane", None)
+            sp = (pick(ctx.screen.x(), ctx.screen.y())
+                  if pick is not None else None)
+            if sp is not None:
+                splanes = [sp]
                 groups, positions, guides = [], [], []
-            hovered_guide = bool(guides) and not viewport.scene.selection
-            if hovered_guide:
-                # A click on a guide grabs the guide, not the face behind.
-                groups, positions = [], []
-            images = [] if hovered_guide else gather_images(ctx)
-            mesh = viewport.scene.mesh
-            verts = [v for v in (mesh.vertex_at(p) for p in positions)
-                     if v is not None]
-            dims = gather_dimensions(ctx, groups, verts)
-            if dims and not viewport.scene.selection:
-                # A click on a dimension's lines grabs the dimension, not
-                # the geometry behind it.
-                groups, positions, verts, guides = [], [], [], []
-            if not (groups or positions or labels or splanes or images
-                    or dims or guides):
-                return  # nothing under the cursor / selected to move
-            self._last = None            # a new move ends the array window
-            self.start_point = ctx.world
-            self.grab = ctx.world
-            self._groups = groups
-            self._positions = positions
-            self._labels = labels
-            self._moved_guides = guides
-            self._dims = dims
-            self._splanes = splanes
-            self._images = images
-            # The grabbed positions resolved to vertex OBJECTS once: the live
-            # preview then moves these identities directly, so dragging through
-            # (or onto) a coincident vertex never drags the innocent one along.
-            self._verts = verts
-            self._vp_preview = False
-            if (self._groups and not self._verts and not self._positions):
-                # Groups-only drag: viewport-side preview — the caches
-                # freeze and the movers render from one-time scratch VBOs
-                # at a translated MVP (the per-frame rebuild storm was the
-                # 'mover un grupo demora' lag).
-                begin = getattr(viewport, "begin_groups_preview", None)
-                if begin is not None:
-                    begin(self._groups)
-                    self._vp_preview = True
-            self._gather_copy_entities(ctx)
-            return
-        self._commit(viewport, ctx.world - self.grab)
+        if labels and not viewport.scene.selection:
+            # A click on the glyphs grabs just the text, never the
+            # geometry that happens to sit behind it.
+            groups, positions, guides = [], [], []
+        hovered_guide = bool(guides) and not viewport.scene.selection
+        if hovered_guide:
+            # A click on a guide grabs the guide, not the face behind.
+            groups, positions = [], []
+        images = [] if hovered_guide else gather_images(ctx)
+        mesh = viewport.scene.mesh
+        verts = [v for v in (mesh.vertex_at(p) for p in positions)
+                 if v is not None]
+        dims = gather_dimensions(ctx, groups, verts)
+        if dims and not viewport.scene.selection:
+            # A click on a dimension's lines grabs the dimension, not
+            # the geometry behind it.
+            groups, positions, verts, guides = [], [], [], []
+        if not (groups or positions or labels or splanes or images
+                or dims or guides):
+            return False  # nothing under the cursor / selected to move
+        self._groups = groups
+        self._positions = positions
+        self._labels = labels
+        self._moved_guides = guides
+        self._dims = dims
+        self._splanes = splanes
+        self._images = images
+        # The grabbed positions resolved to vertex OBJECTS once: the live
+        # preview then moves these identities directly, so dragging through
+        # (or onto) a coincident vertex never drags the innocent one along.
+        self._verts = verts
+        self._vp_preview = False
+        if (self._groups and not self._verts and not self._positions):
+            # Groups-only drag: viewport-side preview — the caches
+            # freeze and the movers render from one-time scratch VBOs
+            # at a translated MVP (the per-frame rebuild storm was the
+            # 'mover un grupo demora' lag).
+            begin = getattr(viewport, "begin_groups_preview", None)
+            if begin is not None:
+                begin(self._groups)
+                self._vp_preview = True
+        self._gather_copy_entities(ctx)
+        return True
 
     def on_hover(self, ctx: ToolContext) -> None:
         if self._grip_rot is not None:
@@ -495,9 +535,7 @@ class MoveTool(Tool):
             return
         if self.start_point is None:
             self._track_grips(ctx)
-        self.hover_point = ctx.world
-        if self.grab is not None and not self._copy:
-            self._apply_preview(ctx.viewport, ctx.world - self.grab)
+        self._send(ctx.viewport, self._pointer("hover", ctx))
         ctx.viewport.update()
 
     def value_is_unitless(self) -> bool:
@@ -516,85 +554,36 @@ class MoveTool(Tool):
                 self._grip_rot, self._grip_rot_done = None, rot
                 self._clear_grips()
             return done
-        if self.start_point is None or self.grab is None:
-            return False
-        if isinstance(value, tuple):
-            if len(value) != 3:
-                return False  # 2-tuple is a rectangle's W×H, not a move delta
-            delta = QVector3D(value[0], value[1], value[2])
-        else:
-            if self.hover_point is None:
-                return False
-            direction = self.hover_point - self.grab
-            if direction.length() < 1e-9:
-                return False
-            delta = direction.normalized() * value
-        self._commit(viewport, delta)
-        return True
+        consumed = self._send(viewport, {"type": "value", "value": value})["consumed"]
+        self._after(viewport)
+        return consumed
 
     def array_pending(self, viewport) -> bool:
         """Whether a copy was just made, so «3x» / «/3» would lay an array:
-        the viewport then lets a bare «x» open the value box (#542) instead
-        of switching to Text. The same test ``on_array_value`` applies."""
-        last = self._last
-        if last is None or self.start_point is not None:
+        the viewport then lets a bare «x» open the value box (#542)."""
+        window = self._state("window")
+        if window is None or self.start_point is not None:
             return False
-        stack = getattr(viewport.history, "undo_stack", None)
-        return bool(stack) and stack[-1] is last["cmd"]
+        from tools.rust_tools import _Host
+        return window["token"] == _Host(viewport).revision()
+
+    @property
+    def _last(self):
+        return self._state("window")
 
     def close_array_window(self) -> None:
         """Esc right after a copy: «3x» / «/3» stop applying and a bare X
         is the Text shortcut again (#542)."""
-        self._last = None
+        self._send(None, {"type": "key", "key": "CloseArray"})
 
     def on_array_value(self, viewport, count: int, mode: str,
                        step: float | None = None) -> bool:
-        """Arrays, typed right after a Move-copy: ``3x`` lays
-        three copies at multiples of the distance (external), ``/3`` three
-        copies dividing it (internal). Retyping re-lays the array; the
-        window closes at the next click or tool change.
-
-        ``5x10m`` (#111) carries the spacing too: typed right after a copy
-        it re-lays the copies ten metres apart along the copy's direction;
-        typed DURING a Ctrl-drag it makes the copy there and then — the
-        cursor gave the direction, the entry the count and the spacing."""
-        if step is not None and self.start_point is not None:
-            if not self._copy or self.hover_point is None or self.grab is None:
-                return False
-            direction = self.hover_point - self.grab
-            if direction.length() < 1e-9:
-                return False
-            self._commit(viewport, direction.normalized() * step)
-            if self._last is None:
-                return False
-            return self.on_array_value(viewport, count, mode)
-        if step is not None and self._last is not None:
-            d = self._last["delta"]
-            if d.length() < 1e-9:
-                return False
-            self._last["delta"] = d.normalized() * step
-        last = self._last
-        if last is None or self.start_point is not None or count < 1:
-            return False
-        stack = getattr(viewport.history, "undo_stack", None)
-        if not stack or stack[-1] is not last["cmd"]:
-            self._last = None
-            return False
-        delta = last["delta"]
-        if mode == "/":
-            deltas = [delta * (k / float(count)) for k in range(1, count + 1)]
-        else:
-            deltas = [delta * float(k) for k in range(1, count + 1)]
-        viewport.history.undo()
-        cmd = last["build"](deltas)
-        if cmd is None:
-            self._last = None
-            return False
-        viewport.history.execute(cmd)
-        last["cmd"] = cmd
-        viewport.flash_status(tr("{n} copies").format(n=count))
-        viewport.update()
-        return True
+        """Arrays, typed right after a Move-copy (``3x``, ``/3``, ``5x10m``,
+        #111): the machine decides, the copy builder stamps."""
+        done = self._send(viewport, {"type": "array", "count": int(count), "mode": mode,
+                                     "step": None if step is None else float(step)})["consumed"]
+        self._after(viewport)
+        return done
 
     def on_cancel(self, viewport) -> None:
         if self._grip_rot is not None:
@@ -603,11 +592,8 @@ class MoveTool(Tool):
             self._clear_grips()
             viewport.update()
             return
-        self._end_freeze(viewport)
-        self._revert_preview(viewport)
-        self._reset()
-        self._last = None
-        viewport.update()
+        self._send(viewport, {"type": "cancel"})
+        self._after(viewport)
 
     # ---- Visual preview -----------------------------------------------------
     def rubber_band_lines(self):
@@ -615,25 +601,27 @@ class MoveTool(Tool):
             return self._grip_rot.rubber_band_lines()
         # The geometry deforms live, so the only extra cue is the move vector
         # from the grab point to the cursor (also carries the axis-lock colour).
-        if self.grab is None or self.hover_point is None:
+        grab, hover = self.grab, self.hover_point
+        if grab is None or hover is None:
             return []
-        segments = [(self.grab, self.hover_point)]
+        segments = [(grab, hover)]
         if self._copy:
             self._fill_groups_ghost()
         if self._copy and self._base_segments:
             # Copy mode: the original stays put — preview the translated
             # COPY as a wireframe at the cursor offset.
-            d = self.hover_point - self.grab
+            d = hover - grab
             segments.extend((a + d, b + d) for a, b in self._base_segments)
         return segments
 
     def value_label(self):
         if self._grip_rot is not None:
             return self._grip_rot.value_label()
-        if self.grab is None or self.hover_point is None:
+        grab, hover = self.grab, self.hover_point
+        if grab is None or hover is None:
             return None
-        delta = self.hover_point - self.grab
-        mid = (self.grab + self.hover_point) * 0.5
+        delta = hover - grab
+        mid = (grab + hover) * 0.5
         return (fmt_len(delta.length()), mid)
 
     # ---- Snap exclusion -----------------------------------------------------
@@ -984,36 +972,13 @@ class MoveTool(Tool):
         if end is not None:
             end()
 
-    def _commit(self, viewport, delta: QVector3D) -> None:
-        self._end_freeze(viewport)
-        # Revert the live preview, then apply the move as one undoable command so
-        # the history holds a single clean entry (and the geometry doesn't shift
-        # by double the delta).
-        self._revert_preview(viewport)
-        if self._copy and delta.length() > 1e-9:
-            # Copy mode: the original never moved; stamp the copies.
-            build = self._make_copy_builder(viewport.scene)
-            cmd = build([delta])
-            if cmd is not None:
-                viewport.history.execute(cmd)
-                # Right after the copy, "3x" / "/3" make an array.
-                self._last = {"cmd": cmd, "build": build,
-                              "delta": QVector3D(delta)}
-            self._reset()
-            viewport.update()
-            return
-        if delta.length() > 1e-9:
-            from core.move_ops import move_commands
-            commands = move_commands(delta, groups=self._groups, positions=self._positions,
-                                     labels=self._labels, guides=self._moved_guides,
-                                     dims=self._dims, splanes=self._splanes, images=self._images)
-            if len(commands) == 1:
-                viewport.history.execute(commands[0])
-            elif commands:
-                viewport.history.execute(CompoundCommand(commands))
-            self._tell_join(viewport, commands)
-        self._reset()
-        viewport.update()
+    def _commit(self, viewport, delta) -> None:
+        """Commit what is grabbed by ``delta`` (as a typed delta would)."""
+        if self.grab is None:
+            self._machine.set("grab", (0.0, 0.0, 0.0))
+        d = delta.toTuple() if hasattr(delta, "toTuple") else tuple(delta)
+        self._send(viewport, {"type": "value", "value": tuple(map(float, d))})
+        self._after(viewport)
 
     @staticmethod
     def _tell_join(viewport, commands) -> None:
@@ -1030,21 +995,5 @@ class MoveTool(Tool):
             flash(tr("Vertices joined"))
 
     def _reset(self) -> None:
-        self.start_point = None
-        self.grab = None
-        self.hover_point = None
-        self._positions = []
-        self._verts = []
-        self._groups = []
-        self._labels = []
-        self._moved_guides = []
-        self._dims = {}
-        self._splanes = []
-        self._images = []
-        self._preview_delta = QVector3D(0.0, 0.0, 0.0)
-        self._sel_faces = []
-        self._sel_edges = []
-        self._base_segments = []
-        self._groups_ghost_due = False
-        self._vp_preview = False
-        self._copy = False      # the Ctrl modifier arms ONE operation
+        self._machine.set("reset", True)
+        self._clear_sets()
