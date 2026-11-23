@@ -672,7 +672,6 @@ class History:
 def _geometry_plan(cmd, scene, targets):
     """Enlist all known stores for rollback. Use transaction replay only
     when it also covers the other commands in the step."""
-    from core.store_mesh import StoreMesh
     if isinstance(cmd, CompoundCommand):
         coverage = [_geometry_plan(c, scene, targets) for c in cmd.commands]
         return all(coverage) and (type(cmd) is CompoundCommand or cmd.journal_parts)
@@ -683,6 +682,7 @@ def _geometry_plan(cmd, scene, targets):
     if isinstance(cmd, MakeNestedGroupCommand) and cmd._inner is not None:
         return _geometry_plan(cmd._inner, scene, targets)
     if isinstance(cmd, MeshCommand):
+        from core.store_mesh import StoreMesh
         meshes = cmd.geometry_meshes(scene)
         stores = [m for m in meshes if type(m) is StoreMesh]
         if stores:
