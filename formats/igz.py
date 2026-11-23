@@ -1580,6 +1580,8 @@ def load_into(scene, path: Path, progress=None, *, include_links=True, link_mesh
     try:
         _load_into_inner(scene, path, progress, link_meshes)
         _load_links(scene, path, include_links)
+        if getattr(scene, "_root", None) is not None:
+            scene._root._index_assemblies()
     finally:
         if _gc_was_enabled:
             gc.enable()

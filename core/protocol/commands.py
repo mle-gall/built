@@ -716,7 +716,9 @@ def rename_component(history, placement, name):
     if not name:
         raise ValueError("a component needs a name")
     kept = {getattr(t, "uid", None): t for t in getattr(scene, "kept_components", None) or ()}
-    g = kept.get(placement) or _placements(history, [placement])[0]
+    g = kept.get(placement) if isinstance(placement, str) else None
+    if g is None:
+        g, = _placements(history, [placement])
     targets = copies_of(scene, g.mesh)
     template = kept_template(scene, g.mesh)
     for extra in (template, g):

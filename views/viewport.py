@@ -4512,7 +4512,11 @@ class Viewport(QOpenGLWidget):
         # box and eligibility, the recorded passes) is keyed on the placements
         # epoch, and the epoch leaves this mesh's edits out on purpose: paint,
         # new faces and moves inside it were not drawn until it was closed.
-        if g.mesh is getattr(getattr(self, "scene", None), "mesh", None):
+        scene = getattr(self, "scene", None)
+        active = getattr(scene, "mesh", None)
+        if (g.mesh is active or (active is not None and
+                g.mesh is getattr(active, "_instance_definition", None) and
+                g.uid == scene.edit_group.uid)):
             return False
         # A MIRRORED placement turns the prototype's triangles inside out
         # for GL (front becomes back). It used to fall back to the
@@ -4593,7 +4597,8 @@ class Viewport(QOpenGLWidget):
         if live and same is not None and same[0] == cheap:
             self._epoch_memo = ((tick, _cache_ver(self)), same[1])
             return same[1]
-        parts: list = [id(sc.edit_group), id(sc.mesh),
+        definition = getattr(sc.mesh, "_instance_definition", sc.mesh)
+        parts: list = [id(sc.edit_group), id(definition),
                        getattr(self, "_preview_epoch", 0),
                        bool(getattr(self, "_preview_groups", None)),
                        getattr(self, "_edit_rest_mode", None),
@@ -19855,6 +19860,9 @@ class Viewport(QOpenGLWidget):
             self.scene.end_group_edit()
         else:
             self.scene.end_one_group_edit()
+        if level.get("affine"):
+            from core.history import OccurrenceCommands
+            OccurrenceCommands.fold(self.history, level["session"])
         _ctx_changed(self, before)
         self._hover_entity = None
         self._edges_version = -1     # the rest comes back

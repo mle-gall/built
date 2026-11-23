@@ -184,7 +184,8 @@ fn write_attr(py: Python<'_>, me: &Bound<'_, PyAny>, k: Key, a: u16, value: &Bou
     };
     drop(trash);
     drain_pending();
-    r.map(|_| ()).map_err(err)
+    r.map(|_| ()).map_err(err)?;
+    super::assembly::finish(py)
 }
 
 fn handle_key(obj: &Bound<'_, PyAny>) -> PyResult<Key> {
@@ -622,6 +623,7 @@ fn set_list(py: Python<'_>, me: &Bound<'_, PyAny>, k: Key, list: ListId, items: 
     }
     drain_pending();
     r.map_err(err)?;
+    super::assembly::finish(py)?;
     parent_reports(py)
 }
 
@@ -870,6 +872,25 @@ impl PyPlacement {
         Ok(d.handle_ref(py, key))
     }
 
+    fn _definition_uids(&self, mesh: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
+        let d = lock();
+        let mut stack = d.need(self.key).map_err(err)?.children.clone();
+        let mut seen = super::FastSet::default();
+        let mut uids = Vec::new();
+        while let Some(key) = stack.pop() {
+            if !seen.insert(key) { continue; }
+            let n = d.need(key).map_err(err)?;
+            if let super::Data::Placement(p) = &n.data {
+                if p.definition.as_ref().is_some_and(|def| def.0.get().geometry.as_ptr() == mesh.as_ptr()) {
+                    uids.extend(p.uid.iter().cloned());
+                }
+            }
+            stack.extend_from_slice(&n.children);
+        }
+        uids.sort_unstable();
+        Ok(uids)
+    }
+
     fn _edit_matrix(&self, child: &PyPlacement) -> PyResult<[f64; 16]> {
         let doc = lock();
         let super::Data::Root { edit_path } = &doc.need(self.key).map_err(err)?.data else {
@@ -893,11 +914,18 @@ impl PyPlacement {
         let k = placement.get().key;
         d.need(k).map_err(err)?;
         d.set_handle(k, placement.as_ptr());
+        if d.need(k).map_err(err)?.children.len() > 0 {
+            super::assembly::bind(&mut d, self.key, k);
+        }
         let Some(super::Data::Root { edit_path }) = d.node_mut(self.key).map(|n| &mut n.data) else {
             return Err(PyTypeError::new_err("a scene root owns an edit path"));
         };
         edit_path.push((k, level));
         Ok(())
+    }
+
+    fn _index_assemblies(&self) {
+        super::assembly::index(&mut lock(), self.key);
     }
 
     fn _leave_edit(&self) -> Option<Py<PyAny>> {
@@ -960,7 +988,9 @@ impl PyPlacement {
         };
         drop(trash);
         drain_pending();
-        r.map_err(err)
+        let removed = r.map_err(err)?;
+        super::assembly::finish(slf.py())?;
+        Ok(removed)
     }
 
     /// The node holding this placement in one of its lists, or None.
@@ -1288,7 +1318,8 @@ impl HandleList {
         };
         drain_pending();
         r.map_err(err)?;
-        parent_reports(py)
+        super::assembly::finish(py)?;
+    parent_reports(py)
     }
 
     fn remove_at(&self, py: Python<'_>, at: usize) -> PyResult<Py<PyAny>> {
@@ -1307,6 +1338,7 @@ impl HandleList {
         };
         drop(trash);
         drain_pending();
+        super::assembly::finish(py)?;
         r
     }
 
@@ -1324,7 +1356,8 @@ impl HandleList {
         drop(trash);
         drain_pending();
         r.map_err(err)?;
-        parent_reports(py)
+        super::assembly::finish(py)?;
+    parent_reports(py)
     }
 
     fn norm(&self, i: isize, len: usize) -> Option<usize> {
@@ -1499,7 +1532,8 @@ impl HandleList {
         drop(members);
         drain_pending();
         r.map_err(err)?;
-        parent_reports(py)
+        super::assembly::finish(py)?;
+    parent_reports(py)
     }
 
     fn remove(&self, py: Python<'_>, obj: &Bound<'_, PyAny>) -> PyResult<()> {
@@ -2026,6 +2060,7 @@ fn doc_depth() -> usize {
 /// Close the innermost level; the outermost returns its `Transaction`.
 #[pyfunction]
 fn doc_commit(py: Python<'_>) -> PyResult<Option<Py<PyTransaction>>> {
+    super::assembly::drain(py)?;
     let got = { lock().commit() };
     match got {
         None => Ok(None),
@@ -2109,7 +2144,9 @@ fn doc_view_changed(py: Python<'_>, key: Key, which: u8, view: &Bound<'_, PyAny>
     };
     drop(trash);
     drain_pending();
-    r.map_err(err)
+    let changed = r.map_err(err)?;
+    super::assembly::finish(py)?;
+    Ok(changed)
 }
 
 fn fval_for(f: Field, v: &Bound<'_, PyAny>) -> PyResult<FVal> {

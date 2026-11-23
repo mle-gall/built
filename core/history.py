@@ -419,6 +419,7 @@ class History:
         try:
             cmd.do(self.scene)
             self._tag_new_objects(objs_before, include_groups=include_groups)
+            txn = _doc.commit() if depth else None
         except CommandRejected as exc:
             if depth:
                 _doc.rollback()
@@ -436,7 +437,6 @@ class History:
             self.last_error = f"{type(cmd).__name__}: {exc}"
             self._log_failure(cmd, exc)
             return
-        txn = _doc.commit() if depth else None
         self.last_txn = (txn, False) if txn is not None else None
         self._dirty_from_txn()
         # Kept only by the commands it undoes; the others drop it once the
@@ -450,6 +450,9 @@ class History:
         # edited): undo/redo re-enter that context so a snapshot restore never
         # lands on the wrong mesh after the user exits the group.
         cmd._history_mesh = self.scene.mesh
+        if self.scene.edit_group is not None:
+            cmd._occurrences = tuple(level["session"] for level in self.scene._edit_stack
+                                     if level.get("affine"))
         self._keep_paint_cv(cmd, before)
         self.undo_stack.append(cmd)
         cap = int(getattr(self, "max_steps", 0) or 0)
@@ -561,9 +564,12 @@ class History:
         self.last_txn = None
         try:
             fn()
-        finally:
             txn = _doc.commit() if depth else None
-            self.last_txn = (txn, False) if txn is not None else None
+        except Exception:
+            if depth:
+                _doc.rollback()
+            raise
+        self.last_txn = (txn, False) if txn is not None else None
 
     def _objects_before(self, *, include_groups=True):
         """The objects in the document before a command runs. With no
@@ -665,6 +671,8 @@ class AddEdgeCommand(Command):
     def do(self, scene) -> None:
         m = scene.mesh
         if self._owned and self.edge is not None:
+            if getattr(self, "_made_vertices", ()):
+                m.relink_vertices(self._made_vertices)
             m.relink_edge(self.edge)  # redo of an edge this command owns
             self._stamp(self.edge)
             scene.version += 1
@@ -682,6 +690,9 @@ class AddEdgeCommand(Command):
             return
         self.edge = m.add_edge(self.a, self.b)
         self._owned = True
+        if m.__dict__.get("_instance_definition") is not None:
+            self._made_vertices = [v for prior, v in ((v0, self.edge.v0), (v1, self.edge.v1))
+                                   if prior is None]
         self._stamp(self.edge)
         scene.version += 1
 
@@ -689,6 +700,8 @@ class AddEdgeCommand(Command):
         if not self._owned or self.edge is None:
             return
         scene.mesh.remove_edge(self.edge)
+        if getattr(self, "_made_vertices", ()):
+            scene.mesh.drop_orphan_vertices(self._made_vertices)
         scene.selection.discard(self.edge)
         scene.version += 1
 
@@ -3752,6 +3765,18 @@ def mirror_matrix(centre: QVector3D, axis: QVector3D):
     return t_out * r * t_in
 
 
+def _edit_local_transform(scene, group, transform):
+    if scene.edit_group is not None and group in scene.edit_group.children:
+        view = scene.mesh.__dict__.get("_instance_definition")
+        if view is not None:
+            from formats.built import placement
+            parent = placement(scene.mesh._store.frame_matrix)
+            inverse, ok = parent.inverted()
+            if ok:
+                return inverse * transform * parent
+    return transform
+
+
 class FlipGroupsCommand(Command):
     """Flip whole groups about an axis plane (the Flip tool). Instances
     compose the reflection into their transform (O(1)); classic groups map
@@ -3782,7 +3807,7 @@ class FlipGroupsCommand(Command):
         m = mirror_matrix(self.centre, self.axis)
         for g in self._groups:
             if getattr(g, "xform", None) is not None:
-                g.xform = m * g.xform
+                g.xform = _edit_local_transform(scene, g, m) * g.xform
                 continue
             for v in list(g.mesh.vertices):
                 g.mesh.move_vertex(v, m.map(v.position) - v.position)
@@ -3905,7 +3930,7 @@ class RotateGroupCommand(Command):
     def do(self, scene) -> None:
         if getattr(self.group, "xform", None) is not None:
             m = rotation_matrix(self.center, self.axis, self.degrees)
-            self.group.xform = m * self.group.xform
+            self.group.xform = _edit_local_transform(scene, self.group, m) * self.group.xform
             scene.version += 1
             return
         gmesh = self.group.mesh
@@ -3929,7 +3954,7 @@ class RotateGroupCommand(Command):
     def undo(self, scene) -> None:
         if getattr(self.group, "xform", None) is not None:
             m = rotation_matrix(self.center, self.axis, -self.degrees)
-            self.group.xform = m * self.group.xform
+            self.group.xform = _edit_local_transform(scene, self.group, m) * self.group.xform
             scene.version += 1
             return
         if self._before is not None:
@@ -4032,8 +4057,8 @@ class ScaleGroupCommand(Command):
 
     def do(self, scene) -> None:
         if getattr(self.group, "xform", None) is not None:
-            self.group.xform = scale_matrix(
-                self.center, self.factor, self.axes) * self.group.xform
+            m = scale_matrix(self.center, self.factor, self.axes)
+            self.group.xform = _edit_local_transform(scene, self.group, m) * self.group.xform
             scene.version += 1
             return
         gmesh = self.group.mesh
@@ -4056,9 +4081,8 @@ class ScaleGroupCommand(Command):
 
     def undo(self, scene) -> None:
         if getattr(self.group, "xform", None) is not None:
-            self.group.xform = scale_matrix(
-                self.center, invert_scale_factor(self.factor),
-                self.axes) * self.group.xform
+            m = scale_matrix(self.center, invert_scale_factor(self.factor), self.axes)
+            self.group.xform = _edit_local_transform(scene, self.group, m) * self.group.xform
             scene.version += 1
             return
         if self._before is not None:
@@ -4764,6 +4788,15 @@ class MakeGroupCommand(Command):
         elif rot is not None:
             from core.axes import frame_matrix
             group.axes = frame_matrix(corner, *rot)
+        if scene.__dict__.get("_groups_owner") is not None and getattr(scene.mesh, "_instance_definition", None) is not None:
+            from formats.built import placement
+            inverse, _ = placement(scene.mesh._store.frame_matrix).inverted()
+            if group.xform is None:
+                from core.group import carry_axes, transformed_mesh
+                group.mesh = transformed_mesh(group.mesh, inverse)
+                carry_axes(group, inverse)
+            else:
+                group.xform = inverse * group.xform
         return group
 
     def _take_off_loose(self, scene) -> None:
@@ -5519,12 +5552,19 @@ class InsertGroupCommand(Command):
         ctx = self._target(scene)
         if ctx is not None:
             owner = ctx.children
-            if ctx.xform is not None:
-                inv, ok = ctx.xform.inverted()
+            frame = ctx.xform
+            if getattr(scene.mesh, "_instance_definition", None) is not None:
+                from formats.built import placement
+                frame = placement(scene.mesh._store.frame_matrix)
+            if frame is not None:
+                inv, ok = frame.inverted()
                 if ok:
                     from core.group import transformed_mesh
                     if self.group.xform is not None:
                         self.group.xform = inv * self.group.xform
+                    elif getattr(scene.mesh, "_instance_definition", None) is not None:
+                        self.group.component = False
+                        self.group.xform = inv
                     else:
                         self.group.mesh = transformed_mesh(self.group.mesh, inv)
                         self._baked = True
@@ -6041,7 +6081,12 @@ class ExplodeGroupCommand(Command):
         P = getattr(g, "xform", None)
         paint = getattr(g, "material", None)
         if not self._replay(scene, m):
-            self._geometry(scene, m, g, P, paint)
+            transform = P
+            if m.__dict__.get("_instance_definition") is not None:
+                from formats.built import placement
+                parent = placement(m._store.frame_matrix)
+                transform = parent * P if P is not None else parent
+            self._geometry(scene, m, g, transform, paint)
             if _doc.ENABLED and self._after is None:
                 self._after = m.capture_state()
 
@@ -6431,7 +6476,7 @@ class MoveGroupCommand(Command):
             from ingetrazo_core import Matrix4 as QMatrix4x4
             t = QMatrix4x4()
             t.translate(delta)
-            self.group.xform = t * self.group.xform
+            self.group.xform = _edit_local_transform(scene, self.group, t) * self.group.xform
         else:
             from core.group import _remap_uvws
             from ingetrazo_core import Matrix4 as QMatrix4x4
@@ -7214,6 +7259,47 @@ class CompoundCommand(Command):
         parts = reversed(self.commands) if phase == "undo" else self.commands
         for cmd in parts:
             cmd.doc_after(scene, phase)
+
+
+class OccurrenceCommands(CompoundCommand):
+    """Replay committed commands in their original occurrence coordinate frames."""
+
+    @staticmethod
+    def fold(history, session):
+        stack = history.undo_stack
+        start = len(stack)
+        while start and session in getattr(stack[start - 1], "_occurrences", ()):
+            start -= 1
+        if len(stack) - start > 1:
+            step = OccurrenceCommands(stack[start:])
+            step._occurrences = stack[start]._occurrences
+            stack[start:] = [step]
+
+    def _replay(self, scene, undo):
+        from contextlib import nullcontext
+        from core.coordinate_frame import mesh_frame
+        active = scene.mesh
+        try:
+            for cmd in reversed(self.commands) if undo else self.commands:
+                scene.mesh = getattr(cmd, "_history_mesh", active)
+                frame = getattr(cmd, "_tool_frame", None)
+                txn = getattr(cmd, "_doc_txn", None)
+                with mesh_frame(scene.mesh, frame[0], matrix=frame[1]) if frame else nullcontext():
+                    if txn is not None:
+                        txn.undo() if undo else txn.redo()
+                        cmd.doc_after(scene, "undo" if undo else "redo")
+                    elif undo:
+                        cmd.undo(scene)
+                    else:
+                        cmd.do(scene)
+        finally:
+            scene.mesh = active
+
+    def do(self, scene):
+        self._replay(scene, False)
+
+    def undo(self, scene):
+        self._replay(scene, True)
 
 
 class ChangeAxesCommand(Command):

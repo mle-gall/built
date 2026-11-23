@@ -120,6 +120,11 @@ class _MFace(Face):
 
 # ---- Views ----------------------------------------------------------------
 
+def _attribute_owner(mesh):
+    """The facade holding this definition's face attribute rows."""
+    return mesh.__dict__.get("_instance_definition", mesh).__dict__
+
+
 def _store_of(m):
     """The live store of a store-backed mesh, else None."""
     return m.__dict__["_store"] if m.__class__ is StoreMesh else None
@@ -555,7 +560,8 @@ class FaceView(_ViewMixin, Face):
         st = _store_of(m)
         if st is None:
             return self._obj().attrs
-        own = m.__dict__["_attr_own"]
+        attrs = _attribute_owner(m)
+        own = attrs["_attr_own"]
         d = own.get(self.key)
         if d is None:
             try:
@@ -566,7 +572,7 @@ class FaceView(_ViewMixin, Face):
             # write into it (or into a texture dict inside) stays this
             # face's, and the next read hands back the same object.
             d = own[self.key] = _copy_attrs(
-                m.__dict__["_attr_table"][idx]) if idx >= 0 else {}
+                attrs["_attr_table"][idx]) if idx >= 0 else {}
         return d
 
     @attrs.setter
@@ -575,7 +581,7 @@ class FaceView(_ViewMixin, Face):
         if _store_of(m) is None:
             self._obj().attrs = value
             return
-        m.__dict__["_attr_own"][self.key] = value
+        _attribute_owner(m)["_attr_own"][self.key] = value
 
     def reverse_rings(self) -> None:
         """``turn_face_over``'s ``loop.reverse()`` and holes' ``reverse()``
@@ -1466,7 +1472,7 @@ class StoreMesh(Mesh):
         store's snapshot, O(chunks). The per-face attrs dicts are taken as
         they stand at the revert (the record undoes geometry, LIFO, as
         history uses it)."""
-        d = self.__dict__
+        d = _attribute_owner(self)
         return StoreState(self._store.snapshot(), d["_attr_own"],
                           d["_attr_table"], self)
 
@@ -1700,12 +1706,13 @@ class StoreMesh(Mesh):
 
     def clear(self) -> None:
         self._store.clear()
-        self._attr_own.clear()
-        self._attr_table = []
+        attrs = _attribute_owner(self)
+        attrs["_attr_own"].clear()
+        attrs["_attr_table"] = []
         self._dirty()
 
     def capture_state(self):
-        d = self.__dict__
+        d = _attribute_owner(self)
         return StoreState(self._store.snapshot(),
                           {k: dict(v) for k, v in d["_attr_own"].items()},
                           d["_attr_table"], self)
@@ -2014,7 +2021,7 @@ def _restore_store_state(m, snap: StoreState) -> None:
         own = {(ns << 40) | (k & LOCAL_MASK): dict(v)
                for k, v in snap.own.items()}
     else:
-        held = d.get("_attr_own") or {}
+        held = _attribute_owner(m).get("_attr_own") or {}
         st.restore(snap.snap)
         own = {k: dict(v) for k, v in snap.own.items()}
         # The restore kept the newer elements as tombstones (restore_tail
@@ -2575,8 +2582,9 @@ def face_attrs(m):
     each distinct attribute row, and every face that has its own dict —
     without giving the others one."""
     st = m.__dict__["_store"]
-    own = m.__dict__["_attr_own"]
-    table = m.__dict__["_attr_table"]
+    attrs = _attribute_owner(m)
+    own = attrs["_attr_own"]
+    table = attrs["_attr_table"]
     fa = st.arrays()["face_attr"]
     keys = st.keys("face") if own else None
     seen = set()
@@ -2601,8 +2609,9 @@ def attr_columns(m, overrides=None):
     d = m.__dict__
     st = d["_store"]
     fa = st.arrays()["face_attr"].copy()
-    table = list(d["_attr_table"])
-    own = d["_attr_own"]
+    attrs = _attribute_owner(m)
+    table = list(attrs["_attr_table"])
+    own = attrs["_attr_own"]
     if own or overrides:
         keys = st.keys("face")
         for i, k in enumerate(keys):

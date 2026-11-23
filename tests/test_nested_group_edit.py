@@ -61,11 +61,11 @@ def test_entrar_a_un_hijo_empuja_un_nivel():
     scene.begin_group_edit(padre)
     scene.begin_group_edit(h1)                  # doble clic dentro
     assert scene.edit_group is h1
-    assert scene.mesh is h1.mesh
+    assert scene.mesh.__dict__.get("_instance_definition", scene.mesh) is h1.mesh
     assert len(scene._edit_stack) == 2
     scene.end_one_group_edit()                  # Esc
     assert scene.edit_group is padre, "Esc debe dejarte DENTRO del padre"
-    assert scene.mesh is padre.mesh
+    assert scene.mesh.__dict__.get("_instance_definition", scene.mesh) is padre.mesh
     scene.end_one_group_edit()
     assert scene.edit_group is None
 
@@ -107,6 +107,12 @@ def test_un_contenedor_movido_entra_sin_moverse():
                    for v in g.mesh.vertices
                    for c in (t.map(v.position)).toTuple())
     scene.begin_group_edit(padre)
+    if scene.mesh.__dict__.get("_instance_definition") is padre.mesh:
+        assert padre.xform == t
+        assert antes == sorted(round(c, 6) for g, world in scene.placements()
+                               if g in (h1, h2) for v in g.mesh.vertices
+                               for c in world.map(v.position).toTuple())
+        return
     assert padre.xform == QMatrix4x4(), "el contenedor debe quedar en identidad"
     despues = sorted(round(c, 6)
                      for g in (h1, h2)

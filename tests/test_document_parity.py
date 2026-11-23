@@ -116,7 +116,7 @@ def test_the_same_document_saves_the_same_bytes(runs):
 
 def test_save_open_save_is_stable(runs):
     for out in runs:
-        for when in ("initial", "final"):
+        for when in ("initial", "final", "shared"):
             for name, f in out[when].items():
                 assert f["again"] == f["members"], (out["engine"], when, name)
                 assert f["again_hash"] == f["file_hash"], (out["engine"], when, name)
@@ -124,7 +124,7 @@ def test_save_open_save_is_stable(runs):
 
 def test_reopened_documents_agree(runs):
     py, rs = runs
-    for when in ("initial", "final"):
+    for when in ("initial", "final", "shared"):
         for name in ("doc.igz", "doc.built"):
             assert norm(py[when][name]["reopened"]) == norm(rs[when][name]["reopened"]), (when, name)
 

@@ -289,8 +289,9 @@ def test_a_plain_group_of_parts_keeps_baking_on_the_way_in():
     scene.groups.append(g)
     scene.begin_group_edit(g)
     assert scene._edit_share is None
+    direct = scene.mesh.__dict__.get("_instance_definition") is g.mesh
     scene.end_group_edit()
-    assert g.xform == QMatrix4x4()
+    assert g.xform == (_at(5.0, 90.0) if direct else QMatrix4x4())
 
 
 # ---- Nested transforms: rotated and mirrored parents, two levels deep ------

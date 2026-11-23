@@ -70,7 +70,12 @@ def test_explode_in_an_assembly_preserves_placement_and_undoes_in_place(copies):
         assert parent.children == [child]
         assert [points(g) for g in scene.groups] == before
         if peer:
-            assert len(peer.children) == 1 and peer.children[0].children
+            assert len(peer.children) == 1
+            if getattr(scene.mesh, "_instance_definition", None) is parent.mesh:
+                assert not peer.children[0].children
+                assert peer.children[0].mesh is child.mesh
+            else:
+                assert peer.children[0].children
         vp.end_group_edit()
         assert [points(g) for g in scene.groups] == before
         assert hist.undo()

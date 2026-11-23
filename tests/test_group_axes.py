@@ -182,7 +182,10 @@ def test_editing_a_component_uses_its_placement_even_mid_edit():
     inst.xform = QMatrix4x4(turn)
     scene.groups.append(inst)
     scene.begin_group_edit(inst)
-    assert inst.xform is None                 # the session edits a world copy
+    if scene.mesh.__dict__.get("_instance_definition") is not None:
+        assert inst.xform == turn
+    else:
+        assert inst.xform is None
     assert scene.drawing_frame == turn        # …the axes are still its own
 
 

@@ -595,7 +595,13 @@ class Scene:
         if _dm.ENABLED and (group.xform is not None or (
                 self._edit_stack and self._edit_stack[-1].get("affine"))):
             from core.store_mesh import instance_view
-            active_mesh = instance_view(group.mesh, self._root._edit_matrix(group))
+            world = self._root._edit_matrix(group)
+            active_mesh = instance_view(group.mesh, world)
+            if active_mesh is not None:
+                from formats.built import placement
+                frame = placement(world)
+                if group.axes is not None:
+                    frame = frame * group.axes
         if active_mesh is None and getattr(group, "children", None):
             # A container: its children stay children. What CANNOT stay is a
             # transform on it, because the tools work in world coordinates —
@@ -636,7 +642,7 @@ class Scene:
                                 group.mesh.capture_state())
         if not self._edit_stack:
             self._loose_mesh = anterior
-        level = {"group": group, "mesh": anterior, "affine": active_mesh is not None,
+        level = {"group": group, "mesh": anterior, "affine": active_mesh is not None, "session": object(),
                  "share": self._edit_share,
                  "frame": frame, "definition": definition, "parts": parts,
                  "world_copy": group.mesh if entry_mesh is not group.mesh else None}

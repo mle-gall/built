@@ -112,7 +112,10 @@ def test_a_group_with_nested_placements_keeps_them():
     child.xform = QMatrix4x4()
     b.adopt([child])
     scene.begin_group_edit(b)
-    assert scene._edit_share is not None
+    if scene.mesh.__dict__.get("_instance_definition") is proto:
+        assert scene._edit_share is None
+    else:
+        assert scene._edit_share is not None
     assert b.children == [child], "los hijos se hornearon al entrar"
     assert len(child.mesh.faces) == 1
     scene.end_group_edit()

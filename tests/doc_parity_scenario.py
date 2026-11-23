@@ -290,6 +290,73 @@ def structural_steps(steps):
     return states
 
 
+def shared_assembly(work):
+    """Persisted occurrences have their own UIDs, visibility, tags and records."""
+    from core.protocol import commands
+    scene = Scene()
+    scene.layers.append(Layer("Steel", uid="steel"))
+    geometry, part = Mesh(), Mesh()
+    box(part)
+    for label in ("West", "East", "Annex"):
+        group = Group(geometry, uid=label)
+        children = []
+        for name in (("beam",) if label == "Annex" else ("beam", "post")):
+            child = Group(part, name=name, uid=f"{label}-{name}")
+            child.xform = QMatrix4x4()
+            child.ifc = {"name": f"{label} {name}"}
+            children.append(child)
+        group.adopt(children)
+        scene.groups.append(group)
+    west, east, annex = scene.groups
+    target = east.children[0]
+    path = [east.uid, target.uid]
+    h = History(scene)
+    commands.hide(h, [path])
+    commands.set_tag(h, [path], "Steel")
+    assert scene.resolve_occurrence(path) is target
+    assert not west.children[0].hidden and west.children[0].layer is None
+    assert h.undo() and h.redo()
+    result = saved(scene, work, "shared")
+    # Independently reopen the old on-disk shape and edit through the second
+    # nested placement. Both models preserve the third, divergent child tree.
+    restored = Scene()
+    igz.load_into(restored, work / "shared-doc.igz")
+    west, east, annex = restored.groups
+    target = restored.resolve_occurrence(path)
+    assert target is east.children[0] and target.hidden and target.layer == "Steel"
+    assert target.ifc["name"] == "East beam" and west.children[0].ifc["name"] == "West beam"
+    restored.begin_group_edit(east)
+    restored.begin_group_edit(target)
+    restored.mesh.add_edge(QVector3D(8, 8, 8), QVector3D(10, 8, 8))
+    restored.end_group_edit()
+    assert len(west.children[0].mesh.edges) == 13 and len(annex.children) == 1
+    if doc_model.ENABLED:
+        history = History(restored)
+        old = east.children[1]
+        counterpart = west.children[1]
+        history.execute(DeleteGroupCommand(old))
+        assert history.last_error is None and list(east.children) == [target]
+        assert len(west.children) == len(annex.children) == 1
+        assert history.undo() and west.children[1] is counterpart and east.children[1] is old
+        assert history.redo() and len(west.children) == 1
+        assert history.undo()
+        # Reorder the slots and write an override through a path. Both
+        # occurrences keep their original handles and the old UID paths resolve.
+        east.children[:] = list(reversed(east.children))
+        assert west.children[0] is counterpart and restored.resolve_occurrence(path) is target
+        restored.begin_group_edit(east)
+        new_child = Group(part, uid="East-brace")
+        new_child.xform = QMatrix4x4()
+        history.execute(InsertGroupCommand(new_child))
+        assert history.last_error is None and len(west.children) == len(east.children) == 3
+        projected = west.children[-1]
+        assert projected.uid != new_child.uid and projected.mesh is new_child.mesh
+        assert history.undo() and len(west.children) == 2
+        assert history.redo() and west.children[-1] is projected
+        restored.end_group_edit()
+    return result
+
+
 def main(work: Path):
     initial_scene = build()
     # The prototype table in existing files interns geometry. Two entries
@@ -376,7 +443,8 @@ def main(work: Path):
     positions = [v.position_tuple() for v in second.mesh.vertices]
     import numpy as np
     np.testing.assert_allclose(sorted(positions), sorted(p.toTuple() for p in endpoints), atol=1e-6)
-    print(json.dumps({"rotated_edit": positions, "engine": doc_model.engine(), "states": states,
+    shared = shared_assembly(work)
+    print(json.dumps({"shared": shared, "rotated_edit": positions, "engine": doc_model.engine(), "states": states,
                       "feed": steps, "initial": initial,
                       "final": saved(scene, work, "final")}))
 

@@ -149,6 +149,8 @@ def _command_meshes(cmd, scene, phase) -> list:
     stack = [cmd]
     while stack:
         c = stack.pop()
+        if phase != "execute":
+            out.append(getattr(c, "_history_mesh", None))
         if isinstance(c, CompoundCommand):
             stack.extend(c.commands)
         elif isinstance(c, SnapshotMutation):
@@ -334,6 +336,10 @@ def _known_placements(cmd, phase, step, scene=None, journalled=False) -> bool:
     if isinstance(cmd, H.CompoundCommand):
         return all(_known_placements(c, phase, step, scene, journalled)
                    for c in cmd.commands)
+    target = getattr(cmd, "_history_mesh", None)
+    definition = getattr(target, "_instance_definition", None)
+    if definition is not None and step.mesh_change(definition) is not None:
+        step.placements["modified"].extend(scene._root._definition_uids(definition))
     if journalled and _journal_covers(cmd):
         return True
     if getattr(cmd, "keeps_rows", False) or isinstance(cmd, _geometry_only()):
