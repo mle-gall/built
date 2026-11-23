@@ -1333,7 +1333,7 @@ def _problem_rows(view, scene, registry, nodes, recipes, unfiled, node_of, exp, 
     else:
         rules = _problem_rules(scene, registry, nodes, recipes, unfiled)
         view._ui_rules_cache = ((id(scene), scene.content_version), rules)
-    return _problem_rows_from(view, rules, nodes, node_of, exp, sel_ids)
+    return _problem_rows_from(view, rules, nodes, node_of, exp, sel_ids, scene)
 
 
 def _problem_rules(scene, registry, nodes, recipes, unfiled):
@@ -1346,7 +1346,7 @@ def _problem_rules(scene, registry, nodes, recipes, unfiled):
     except Exception:
         requirements = []
     ids = {}
-    missing, hidden, candidates, unclassified = [], [], [], []
+    missing, hidden, unclassified = [], [], []
     for g, src, root, key in structure._memberships(scene, registry):
         if key not in nodes or src:
             continue
@@ -1358,8 +1358,6 @@ def _problem_rules(scene, registry, nodes, recipes, unfiled):
                 missing.append(g)
             if getattr(g, "hidden", False):
                 hidden.append(g)
-            if not getattr(g, "children", None):
-                candidates.append(g)
         if requirements and rec:
             for hit in requirement_hits(g, registry, requirements):
                 ids.setdefault(hit.get("specification") or hit.get("file") or "IDS", []).append(g)
@@ -1376,10 +1374,11 @@ def _problem_rules(scene, registry, nodes, recipes, unfiled):
         if states[path] in ("missing", "modified"):
             stale.append(g)
     rules.append(("Needs attention", "links", "Linked file changed or missing", stale))
-    leaky, checked = _not_watertight(candidates)
-    rules.append(("Needs attention", "solid", "Not watertight", leaky))
-    if checked < len(candidates):
-        rules.append(("Info", "solidcut", f"Watertight: checked {checked} of {len(candidates)} items", []))
+    from ingetrazo_core import solid_problem_targets
+    leaky, checked, total = solid_problem_targets(scene)
+    rules.append(("Needs attention", "solid", "Solid geometry problems", leaky))
+    if checked < total:
+        rules.append(("Info", "solidcut", f"Watertight: checked {checked} of {total} meshes", []))
     rules.append(("Needs attention", "status", "Status missing", missing))
     rules.append(("Info", "hidden", "Hidden items in exported nodes", hidden))
     if not requirements:
@@ -1387,34 +1386,7 @@ def _problem_rules(scene, registry, nodes, recipes, unfiled):
     return rules
 
 
-def _not_watertight(groups, budget=1.5):
-    """The exported items whose solid leaks (the Solid Inspector's verdict),
-    one check per shared definition. A mesh not built yet is judged from its
-    load plan, without building it. Stops after ``budget`` seconds:
-    ``(leaky, items checked)``."""
-    import time
-    from core.lazy_mesh import plan_of
-    from core.solids import _lazily_open
-    from plugins.solid_inspector import inspect_mesh, is_sound
-    verdict, leaky = {}, []
-    t0 = time.perf_counter()
-    for i, g in enumerate(groups):
-        if i % 64 == 0 and time.perf_counter() - t0 > budget:
-            return leaky, i
-        m = g.mesh
-        bad = verdict.get(id(m))
-        if bad is None:
-            if plan_of(m) is not None:
-                bad = _lazily_open(m)
-            else:
-                bad = bool(m.faces) and not is_sound(inspect_mesh(m))
-            verdict[id(m)] = bad
-        if bad:
-            leaky.append(g)
-    return leaky, len(groups)
-
-
-def _problem_rows_from(view, rules, nodes, node_of, exp, sel_ids):
+def _problem_rows_from(view, rules, nodes, node_of, exp, sel_ids, scene):
     view._ui_rules = {rid: gs for _sev, rid, _l, gs in rules}
     rows, order = [], []
     for sev in ("Blocks export", "Needs attention", "Info"):
@@ -1429,6 +1401,10 @@ def _problem_rows_from(view, rules, nodes, node_of, exp, sel_ids):
             rows.append(([rk, label, "", "", ""], [1, len(gs), 0, 0, 0, -1, -1, int(bool(gs)), int(open_ and bool(gs)), 0]))
             if open_:
                 for g in gs[:ROW_CAP]:
+                    if g is None and rid == "solid":
+                        rows.append((["solid:active", scene.edit_group.name if scene.edit_group else "Loose geometry", "", "", ""],
+                                     [2, 0, 0, 0, 1, -1, -1, 0, 0, 0]))
+                        continue
                     where = node_of.get(id(g))
                     badge = nodes[where]["name"] if where in nodes else ""
                     rows.append(([f"i:{g.uid}", g.name or "Group", "", badge, "group"],
@@ -1769,11 +1745,15 @@ def _tree_action(win, view, action) -> None:
         elif verb == "insp" and key == "measure":
             _measure(view, win)
             view._ui_tree_sig = None
-        elif verb == "insp" and key == "solidrepair" and len(groups) == 1:
-            out = _core(vp, "repair_solid", placement=groups[0].uid)
+        elif verb == "insp" and (key == "solidrepair" or key.startswith("solidfault:")):
+            active = key.startswith("solidfault:active/") and getattr(view, "_ui_mode", "") == "problems"
+            if not active and len(groups) != 1:
+                return
+            out = _core(vp, "repair_solid", placement=None if active else vp.scene.occurrence_path(groups[0]),
+                        fault=key.partition(":")[2] or None)
             if out and out.get("error"):
                 vp.flash_status(out["error"])
-            elif out:
+            elif out and out["ok"]:
                 d = out["repaired"]
                 vp.flash_status(f"Repaired: {d['stray']} stray edges, {d['duplicates']} duplicated faces, "
                                 f"{d['holes']} holes closed, {d['partitions']} partitions, {d['reversed']} faces turned")
@@ -1974,8 +1954,12 @@ def _tree_action(win, view, action) -> None:
         elif verb == "mode":
             from views import wgpu_library
             wgpu_library.set_mode(view, win, rk)
+        elif verb == "item" and rk == "solid:active":
+            _select(win, [])
+            view._ui_insp_node = (rk, (0, 0, 0))
+            rebuild()
         elif verb == "node" and kind == "r":
-            _select(win, getattr(view, "_ui_rules", {}).get(ident, []))
+            _select(win, [g for g in getattr(view, "_ui_rules", {}).get(ident, []) if g is not None])
             rebuild()
         elif verb == "item" and view.__dict__.get("_ui_mode") == "problems":
             g = item()
@@ -2359,6 +2343,11 @@ def _inspector(view, win) -> None:
     from core.section import SectionPlane
     from ingetrazo_core import section_inspector
     section_key = node_focus or (f"section:{sel[0].uid}" if len(sel) == 1 and isinstance(sel[0], SectionPlane) else "")
+    if node_focus == "solid:active" and view.__dict__.get("_ui_mode") == "problems":
+        from ingetrazo_core import solid_inspector_sections
+        view.renderer.ui_set_inspector(scene.edit_group.name if scene.edit_group else "Loose geometry",
+                                       solid_inspector_sections(scene, None, True))
+        return
     if node_focus and node_focus.startswith(("sheet-page:", "sheet-frame:", "saved-scene:")):
         sheet = view._ui_sheet_catalog.inspector(node_focus)
         if sheet is not None:
@@ -2464,7 +2453,8 @@ def _inspector(view, win) -> None:
             if not hasattr(view.renderer, "ui_panel_set"):
                 sections.append(("Parts", prow))
             sections.append(("Actions", [("cutlist", "Cut list…")]))
-        solid = _solid_section(g)
+        from ingetrazo_core import solid_inspector_sections
+        solid = solid_inspector_sections(scene, g, view.__dict__.get("_ui_mode") == "problems")
         if solid and not verbs.offers(sel_kind, "repair"):
             solid = [s_ for s_ in solid if s_[0] != "Actions"]
         if solid:
@@ -2696,24 +2686,6 @@ def _link_action(win, view, g, key) -> None:
     view._ui_rules_cache = None
     view._ui_insp_sig = None
     view._ui_tree_sig = None
-
-
-def _solid_section(g):
-    """The Solid Inspector's verdict on one item, with Repair when it
-    leaks. Skipped for an assembly, a linked item or a mesh too big to
-    walk on a click."""
-    from core import links
-    from core.lazy_mesh import plan_of
-    from plugins.solid_inspector import _problem_text, inspect_mesh, is_sound
-    m = g.mesh
-    if getattr(g, "children", None) or links.link_of(g) or plan_of(m) is not None or not m.faces \
-            or len(m.faces) > 20000:
-        return []
-    report = inspect_mesh(m)
-    if is_sound(report):
-        return [("Solid", [("Watertight", f"{report['volume']:.3f} m³" if report["volume"] else "yes")])]
-    return [("Solid", [("Not watertight", _problem_text(report))]),
-            ("Actions", [("solidrepair", "Repair")])]
 
 
 def _curve_of(scene, sel):

@@ -45,6 +45,7 @@ mod visibility_sets;
 mod scene_commands;
 mod material_library;
 mod assembly_inspector;
+mod solid_inspector;
 mod scene_tree;
 mod structure_bootstrap;
 mod placement_edits;
@@ -252,6 +253,9 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(material_library::bundled_materials, m)?)?;
     m.add_function(wrap_pyfunction!(material_library::pick_library_paint, m)?)?;
     m.add_function(wrap_pyfunction!(material_library::material_inspector, m)?)?;
+    m.add_function(wrap_pyfunction!(solid_inspector::solid_inspector_sections, m)?)?;
+    m.add_function(wrap_pyfunction!(solid_inspector::plan_solid_fault, m)?)?;
+    m.add_function(wrap_pyfunction!(solid_inspector::solid_problem_targets, m)?)?;
     m.add_function(wrap_pyfunction!(material_library::material_surface_input, m)?)?;
     m.add_class::<project_sheets::ProjectSheets>()?;
     m.add_function(wrap_pyfunction!(project_tree::project_context_rows, m)?)?;

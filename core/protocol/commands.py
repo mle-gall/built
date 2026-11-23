@@ -550,14 +550,16 @@ def resegment_curve(history, edge, segments):
     return _answer(history, before)
 
 
-def repair_solid(history, placement):
+def repair_solid(history, placement, fault=None):
     """Repair what has one right answer in a placement's (uid) mesh, shared
     by its copies: stray edges, duplicated faces, flat holes, partitions,
     reversed faces (the Solid Inspector's ``RepairSolidsCommand``). The
     counts come back as ``repaired``."""
-    from plugins.solid_inspector import RepairSolidsCommand
-    g, = _placements(history, [placement])
-    cmd = RepairSolidsCommand([g.mesh])
+    from ingetrazo_core import plan_solid_fault
+    group = _placements(history, [placement])[0] if placement is not None else None
+    cmd = plan_solid_fault(history.scene, group, fault)
+    if cmd is None:
+        return {"ok": False, "step": None, "error": None, "rejected": None, "repaired": {}}
     before = history.revision
     history.execute(cmd)
     out = _answer(history, before)
