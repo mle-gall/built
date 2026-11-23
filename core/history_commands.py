@@ -4,7 +4,8 @@
 from __future__ import annotations
 
 from ingetrazo_core import (definition_edits as _definitions, placement_edits as _placements,
-                            presentation as _presentation, placement_transform as _transform)
+                            presentation as _presentation, placement_transform as _transform,
+                            reference_layers as _references)
 
 from abc import ABC, abstractmethod
 from collections import Counter
@@ -2167,6 +2168,12 @@ class AddImagePlaneCommand(Command):
         self._made_layer = False
 
     def do(self, scene) -> None:
+        if _doc.ENABLED:
+            self._made_layer = _references.add_image(scene, self.image)
+            scene.selection.clear()
+            scene.selection.add(self.image)
+            scene.version += 1
+            return
         from core.layers import Layer
         name = getattr(self.image, "layer", None)
         self._made_layer = False
@@ -2179,6 +2186,14 @@ class AddImagePlaneCommand(Command):
         scene.version += 1
 
     def undo(self, scene) -> None:
+        if _doc.ENABLED:
+            _presentation.remove_item(scene.image_planes, self.image)
+            scene.selection.discard(self.image)
+            if self._made_layer:
+                _references.remove_image_layer(scene, self.image)
+                self._made_layer = False
+            scene.version += 1
+            return
         if self.image in scene.image_planes:
             scene.image_planes.remove(self.image)
         scene.selection.discard(self.image)
@@ -2207,6 +2222,10 @@ class DeleteImagePlanesCommand(Command):
         self._restore: list[tuple[int, object]] = []
 
     def do(self, scene) -> None:
+        if _doc.ENABLED:
+            self._restore = _presentation.delete_items(scene.image_planes, self._images, scene.selection.discard)
+            scene.version += 1
+            return
         self._restore = [(scene.image_planes.index(im), im)
                          for im in self._images if im in scene.image_planes]
         for im in self._images:
@@ -2216,6 +2235,10 @@ class DeleteImagePlanesCommand(Command):
         scene.version += 1
 
     def undo(self, scene) -> None:
+        if _doc.ENABLED:
+            _presentation.restore_items(scene.image_planes, self._restore)
+            scene.version += 1
+            return
         for i, im in sorted(self._restore, key=lambda t: t[0]):
             scene.image_planes.insert(i, im)
         scene.version += 1
@@ -2240,6 +2263,10 @@ class TransformImagePlaneCommand(Command):
         self._old: tuple | None = None
 
     def do(self, scene) -> None:
+        if _doc.ENABLED:
+            self._old = _references.set_image_frame(self.image, self._new)
+            scene.version += 1
+            return
         from ingetrazo_core import Vec3 as QVector3D
         im = self.image
         self._old = (QVector3D(im.origin), QVector3D(im.u), QVector3D(im.v))
@@ -2253,6 +2280,12 @@ class TransformImagePlaneCommand(Command):
         scene.version += 1
 
     def undo(self, scene) -> None:
+        if _doc.ENABLED:
+            if self._old is None:
+                return
+            _references.set_image_frame(self.image, self._old)
+            scene.version += 1
+            return
         from ingetrazo_core import Vec3 as QVector3D
         if self._old is None:
             return
@@ -2297,6 +2330,10 @@ class MoveImagePlanesCommand(Command):
         self.delta = QVector3D(delta)
 
     def _apply(self, scene, delta: QVector3D) -> None:
+        if _doc.ENABLED:
+            _presentation.translate_items(self._images, "origin", delta)
+            scene.version += 1
+            return
         for im in self._images:
             im.origin = im.origin + delta
         scene.version += 1
@@ -2325,6 +2362,10 @@ class RotateImagePlanesCommand(Command):
         self.deg = float(deg)
 
     def _apply(self, scene, deg: float) -> None:
+        if _doc.ENABLED:
+            _references.transform_images(self._images, rotation_matrix(self.centre, self.axis, deg))
+            scene.version += 1
+            return
         m = rotation_matrix(self.centre, self.axis, deg)
         for im in self._images:
             im.origin = m.map(im.origin)
@@ -2359,6 +2400,10 @@ class ScaleImagePlanesCommand(Command):
                        if isinstance(factor, (tuple, list)) else float(factor))
 
     def _apply(self, scene, factor: float) -> None:
+        if _doc.ENABLED:
+            _references.transform_images(self._images, scale_matrix(self.anchor, factor, self.axes))
+            scene.version += 1
+            return
         m = scale_matrix(self.anchor, factor, self.axes)
         for im in self._images:
             im.origin = m.map(im.origin)
@@ -2387,10 +2432,19 @@ class AddGeoPathCommand(Command):
         self.path = path
 
     def do(self, scene) -> None:
+        if _doc.ENABLED:
+            _presentation.add_item(scene.geo_paths, self.path)
+            scene.version += 1
+            return
         scene.geo_paths.append(self.path)
         scene.version += 1
 
     def undo(self, scene) -> None:
+        if _doc.ENABLED:
+            _presentation.remove_item(scene.geo_paths, self.path)
+            scene.selection.discard(self.path)
+            scene.version += 1
+            return
         if self.path in scene.geo_paths:
             scene.geo_paths.remove(self.path)
         scene.selection.discard(self.path)
@@ -2477,6 +2531,10 @@ class DeleteGeoPointsCommand(Command):
         self._restore: list[tuple[int, object]] = []
 
     def do(self, scene) -> None:
+        if _doc.ENABLED:
+            self._restore = _presentation.delete_items(scene.geo_points, self._points, None, False)
+            scene.version += 1
+            return
         self._restore = [(scene.geo_points.index(p), p)
                          for p in self._points if p in scene.geo_points]
         for p in self._points:
@@ -2485,6 +2543,10 @@ class DeleteGeoPointsCommand(Command):
         scene.version += 1
 
     def undo(self, scene) -> None:
+        if _doc.ENABLED:
+            _presentation.restore_items(scene.geo_points, self._restore)
+            scene.version += 1
+            return
         for i, p in sorted(self._restore):
             scene.geo_points.insert(i, p)
         scene.version += 1
@@ -2505,6 +2567,10 @@ class DeleteGeoPathsCommand(Command):
         self._restore: list[tuple[int, object]] = []
 
     def do(self, scene) -> None:
+        if _doc.ENABLED:
+            self._restore = _presentation.delete_items(scene.geo_paths, self._paths, scene.selection.discard)
+            scene.version += 1
+            return
         self._restore = [(scene.geo_paths.index(p), p)
                          for p in self._paths if p in scene.geo_paths]
         for p in self._paths:
@@ -2514,6 +2580,10 @@ class DeleteGeoPathsCommand(Command):
         scene.version += 1
 
     def undo(self, scene) -> None:
+        if _doc.ENABLED:
+            _presentation.restore_items(scene.geo_paths, self._restore)
+            scene.version += 1
+            return
         for i, p in sorted(self._restore):
             scene.geo_paths.insert(i, p)
         scene.version += 1
@@ -2528,6 +2598,10 @@ class ToggleGeoPathClosedCommand(Command):
         self._paths = list(paths)
 
     def _flip(self, scene) -> None:
+        if _doc.ENABLED:
+            _references.toggle_paths(self._paths)
+            scene.version += 1
+            return
         for p in self._paths:
             p.closed = not p.closed
         scene.version += 1
@@ -2557,6 +2631,10 @@ class SetGeoPathSurfaceCommand(Command):
         self._prev: list = []
 
     def do(self, scene) -> None:
+        if _doc.ENABLED:
+            self._prev = _references.path_surfaces(self._paths, self.mode)
+            scene.version += 1
+            return
         self._prev = [(p, p.surface, p.closed) for p in self._paths]
         for p in self._paths:
             p.surface = self.mode
@@ -2566,6 +2644,10 @@ class SetGeoPathSurfaceCommand(Command):
         scene.version += 1
 
     def undo(self, scene) -> None:
+        if _doc.ENABLED:
+            _references.restore_surfaces(self._prev)
+            scene.version += 1
+            return
         for p, surface, closed in self._prev:
             p.surface = surface
             p.closed = closed
@@ -2586,12 +2668,20 @@ class MoveGeoPathNodeCommand(Command):
         self._old = None
 
     def do(self, scene) -> None:
+        if _doc.ENABLED:
+            self._old = _references.move_node(self.path, self.index, self._new)
+            scene.version += 1
+            return
         from ingetrazo_core import Vec3 as QVector3D
         self._old = QVector3D(self.path.points[self.index])
         self.path.points[self.index] = QVector3D(self._new)
         scene.version += 1
 
     def undo(self, scene) -> None:
+        if _doc.ENABLED:
+            _references.move_node(self.path, self.index, self._old)
+            scene.version += 1
+            return
         from ingetrazo_core import Vec3 as QVector3D
         self.path.points[self.index] = QVector3D(self._old)
         scene.version += 1

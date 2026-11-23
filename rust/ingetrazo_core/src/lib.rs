@@ -36,6 +36,7 @@ mod structure;
 mod presentation;
 mod placement_edits;
 mod placement_transform;
+mod reference_layers;
 mod definition_edits;
 mod file_styles;
 mod file_annotations;
@@ -197,6 +198,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     presentation::register(m)?;
     placement_edits::register(m)?;
     placement_transform::register(m)?;
+    reference_layers::register(m)?;
     definition_edits::register(m)?;
     m.add_class::<structure::StructurePlacements>()?;
     m.add_function(wrap_pyfunction!(structure::structure_lineage, m)?)?;

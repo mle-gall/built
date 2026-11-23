@@ -18,11 +18,12 @@ fn remove_item(list: &Obj<'_>, item: &Obj<'_>) -> PyResult<()> {
     Ok(())
 }
 
-#[pyfunction]
+#[pyfunction(signature=(list, items, discard, strict=true))]
 fn delete_items<'py>(
     list: &Obj<'py>,
     items: Vec<Obj<'py>>,
     discard: Option<&Obj<'py>>,
+    strict: bool,
 ) -> PyResult<Vec<Indexed<'py>>> {
     let mut before = Vec::new();
     for item in &items {
@@ -37,6 +38,10 @@ fn delete_items<'py>(
         for item in items {
             remove_item(list, &item)?;
             discard.call1((item,))?;
+        }
+    } else if !strict {
+        for item in items {
+            remove_item(list, &item)?;
         }
     } else {
         // Saved views remove every occurrence recorded in the first pass.
