@@ -4234,57 +4234,15 @@ class ReplaceComponentCommand(Command):
 
     def __init__(self, targets, source) -> None:
         self.source = source
-        if _doc.ENABLED:
-            self.targets = _definitions.replacement_targets(targets, source)
-        else:
-            self.targets = [g for g in targets
-                            if g is not source and g.is_component()
-                            and g.mesh is not source.mesh]
+        self.targets = _definitions.replacement_targets(targets, source)
         self._before: list = []
 
     def do(self, scene) -> None:
-        if _doc.ENABLED:
-            self._before = _definitions.replace_definitions(self.targets, self.source, self._SHARED, _doc.ENABLED)
-            scene.version += 1
-            return
-        import copy
-        from core.group import copy_group
-        from ingetrazo_core import Matrix4 as QMatrix4x4
-        src = self.source
-        self._before = [{k: getattr(g, k) for k in self._SHARED}
-                        for g in self.targets]
-        for g in self.targets:
-            if _doc.ENABLED:
-                g.definition = src.definition
-            else:
-                g.mesh = src.mesh
-            # Shared like a copy's subgroups are (copy_group): an edit
-            # inside any instance reaches all of them.
-            if src.ext and src.ext.get("link"):
-                # A linked file: the parts stay its own, read-only.
-                from core.links import copy_parts
-                g.children = copy_parts(src, g)
-            else:
-                g.children = [copy_group(c, _in_definition=True)
-                              for c in (src.children or ())]
-            g.name = src.name
-            g.axes = QMatrix4x4(src.axes) if src.axes is not None else None
-            g.component = True
-            g.text3d = dict(src.text3d) if src.text3d else None
-            g.ifc = copy.deepcopy({k: v for k, v in src.ifc.items() if k != "guid"}) if src.ifc else None
-            g.ext = copy.deepcopy(src.ext) if src.ext else None
-            g.billboard = src.billboard
-            g.exploded = dict(src.exploded) if src.exploded else None
+        self._before = _definitions.replace_definitions(self.targets, self.source, self._SHARED, _doc.ENABLED)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        if _doc.ENABLED:
-            _definitions.restore_definitions(self.targets, self._before)
-            scene.version += 1
-            return
-        for g, before in zip(self.targets, self._before):
-            for k, v in before.items():
-                setattr(g, k, v)
+        _definitions.restore_definitions(self.targets, self._before)
         scene.version += 1
 
 
@@ -4304,34 +4262,11 @@ class KeepComponentCommand(Command):
         self._index = None
 
     def do(self, scene) -> None:
-        if _doc.ENABLED:
-            self._template, self._index = _definitions.keep_template(scene, self.instance, self.keep, self._template)
-            scene.version += 1
-            return
-        from core.kept_components import kept_template, make_template
-        current = kept_template(scene, self.instance.mesh)
-        if self.keep and current is None:
-            self._template = self._template or make_template(self.instance)
-            scene.kept_components.append(self._template)
-            self._index = None
-        elif not self.keep and current is not None:
-            self._template = current
-            self._index = scene.kept_components.index(current)
-            scene.kept_components.remove(current)
-        else:
-            self._template = None           # already as asked: a no-op
+        self._template, self._index = _definitions.keep_template(scene, self.instance, self.keep, self._template)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        if _doc.ENABLED:
-            _definitions.restore_template(scene.kept_components, self._template, self.keep, self._index)
-            scene.version += 1
-            return
-        if self._template is not None:
-            if self.keep:
-                scene.kept_components.remove(self._template)
-            else:
-                scene.kept_components.insert(self._index, self._template)
+        _definitions.restore_template(scene.kept_components, self._template, self.keep, self._index)
         scene.version += 1
 
 
@@ -4746,66 +4681,9 @@ class MergeGroupsCommand(Command):
         self._merged = None
 
     def do(self, scene) -> None:
-        if _doc.ENABLED:
-            if self._merged is None:
-                self._merged = _definitions.merge_group_geometry(self._groups)
-            self._indices = _definitions.replace_roots(scene.groups, self._groups, self._merged, scene.selection.discard)
-            scene.selection.clear()
-            scene.selection.add(self._merged)
-            scene.version += 1
-            return
-        import numpy as np
-        from core.group import Group, world_mesh
-        from core.mesh import Mesh
         if self._merged is None:
-            flat: list = []
-            e_flat: list = []
-            e_flags: list = []
-            ring_sizes: list = []
-            ring_counts: list = []
-            attrs_list: list = []
-            for g in self._groups:
-                src = world_mesh(g)      # instances: transformed, UVs refit
-                for f in src.faces:
-                    holes = f.holes or []
-                    ring_counts.append(1 + len(holes))
-                    ring_sizes.append(len(f.vertices))
-                    flat.extend((v.x(), v.y(), v.z()) for v in f.vertices)
-                    for h in holes:
-                        ring_sizes.append(len(h))
-                        flat.extend((v.x(), v.y(), v.z()) for v in h)
-                    attrs_list.append(dict(f.attrs) if f.attrs else None)
-                for e in src.edges:
-                    e_flat.append((e.a.x(), e.a.y(), e.a.z()))
-                    e_flat.append((e.b.x(), e.b.y(), e.b.z()))
-                    e_flags.append((bool(getattr(e, "soft", False)),
-                                    getattr(e, "curve", None),
-                                    getattr(e, "layer", None),
-                                    bool(getattr(e, "hidden", False))))
-            mesh = Mesh()
-            n_edge_pts = len(e_flat)
-            if e_flat or flat:
-                vobjs, inverse = mesh.bulk_weld(
-                    np.array(e_flat + flat, dtype=np.float64))
-                emap = None
-                if e_flat:
-                    emap = mesh.add_edges_welded(
-                        vobjs, inverse[0:n_edge_pts:2],
-                        inverse[1:n_edge_pts:2], e_flags)
-                if ring_counts:
-                    mesh.add_faces_welded(
-                        vobjs, inverse[n_edge_pts:],
-                        np.asarray(ring_sizes, dtype=np.int64),
-                        np.asarray(ring_counts, dtype=np.int64),
-                        attrs_list, edge_map=emap)
-            merged = Group(mesh, name=self._groups[0].name)
-            merged.layer = getattr(self._groups[0], "layer", None)
-            self._merged = merged
-        self._indices = [scene.groups.index(g) for g in self._groups]
-        for g in self._groups:
-            scene.groups.remove(g)
-            scene.selection.discard(g)
-        scene.groups.append(self._merged)
+            self._merged = _definitions.merge_group_geometry(self._groups)
+        self._indices = _definitions.replace_roots(scene.groups, self._groups, self._merged, scene.selection.discard)
         scene.selection.clear()
         scene.selection.add(self._merged)
         scene.version += 1
