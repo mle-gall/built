@@ -14,7 +14,7 @@ def test_the_pages_are_all_there_and_units_still_opens_on_its_page():
         ui = Controls(win, "general")
         side = ui.wire()["side"]
         assert {row["id"] for row in side if row.get("id")} == {
-            "general", "navigation", "display", "ndof", "keyboard", "import",
+            "general", "navigation", "display", "ndof", "keyboard", "import", "ai",
             "units", "dimensions", "location"}
         win._on_units()
         assert chrome_sheet.current(win).section == "units"
