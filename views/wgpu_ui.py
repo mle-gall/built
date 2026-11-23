@@ -472,6 +472,8 @@ def before_frame(view) -> None:
     _palette(view, win, active)
     _cluster(view, win)
     _form(view, win)
+    from views import wgpu_deliveries
+    wgpu_deliveries.bind(win)
     _tree(view, win)
     from views import wgpu_library
     wgpu_library.before_frame(view, win)
@@ -883,6 +885,10 @@ def _tree(view, win) -> None:
     from core import links, structure
     from core import layers as L
     model = _tree_model(view, scene, cv)
+    if colset == 2 and not mode:
+        from views import wgpu_deliveries
+        wgpu_deliveries.dock(view, scene, model)
+        return
     tree, registry, recipes = model["tree"], model["registry"], model["recipes"]
     counts, problems, to_fix = model["counts"], model["problems"], model["to_fix"]
     node_layers, order = model["node_layers"], model["order"]
@@ -1230,12 +1236,14 @@ def _problem_rules(scene, registry, nodes, recipes, unfiled):
     except Exception:
         requirements = []
     ids = {}
-    missing, hidden, candidates = [], [], []
+    missing, hidden, candidates, unclassified = [], [], [], []
     for g, src, root, key in structure._memberships(scene, registry):
         if key not in nodes or src:
             continue
         rec = g.ifc or {}
         if recipes[key].get("class") is not None:
+            if not rec.get("class"):
+                unclassified.append(g)
             if not structure._has_status(rec):
                 missing.append(g)
             if getattr(g, "hidden", False):
@@ -1245,6 +1253,7 @@ def _problem_rules(scene, registry, nodes, recipes, unfiled):
         if requirements and rec:
             for hit in requirement_hits(g, registry, requirements):
                 ids.setdefault(hit.get("specification") or hit.get("file") or "IDS", []).append(g)
+    rules.append(("Needs attention", "class", "Missing IFC class", unclassified))
     for spec, gs in sorted(ids.items()):
         rules.append(("Blocks export", "ids:" + spec, f"IDS: {spec}", gs))
     from core import links
@@ -1632,7 +1641,9 @@ def _tree_action(win, view, action) -> None:
         vp = win.viewport
         sel = list(vp.scene.selection)
         groups = [e for e in sel if isinstance(e, Group)]
-        if verb == "insp" and key.startswith("status:"):
+        if verb == "insp" and key.startswith("delivery:"):
+            _run(win, ["deliver:" + key[9:]])
+        elif verb == "insp" and key.startswith("status:"):
             _set_status(win, groups, key.partition(":")[2])
         elif verb == "insp" and key == "file" and groups:
             _file_to(win, len(groups))
@@ -2106,6 +2117,9 @@ def _inspector(view, win) -> None:
     picked in the tree, one item, several, or loose geometry. Fields edit in
     place; IFC stays under Export details."""
     scene = win.viewport.scene
+    if view.__dict__.get("_ui_colset") == 2 and not view.__dict__.get("_ui_mode"):
+        view._ui_insp_sig = None
+        return
     sel = list(scene.selection)
     focus = getattr(view, "_ui_insp_node", None)
     sel_sig = (len(sel), id(sel[0]) if sel else 0, id(sel[-1]) if sel else 0)
@@ -2625,6 +2639,9 @@ def _run(win, actions) -> None:
                 view.update()
             elif arg == "active" and data.get("active"):
                 _select(win, _tree_groups(view, data["active"]))
+            else:
+                from views import wgpu_deliveries
+                wgpu_deliveries.action(win, view, arg)
         elif kind == "act" and arg.startswith("form-"):
             view = getattr(getattr(win, "_doc", None), "stand_in", None)
             if view is not None:

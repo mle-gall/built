@@ -99,6 +99,9 @@ def install(win) -> None:
 def command(win, name, *args):
     """A command by name (menu bar, start page, document ▾). Returns what
     the command returns (open/save: whether it happened)."""
+    if name == "delivery_export":
+        from views.wgpu_deliveries import export_form
+        return export_form(win, one_off=True)
     host = win._host
     kind, _, arg = name.partition(":")
     table = {

@@ -1539,7 +1539,7 @@ impl Ui {
                     ui.add_space(6.0);
                     if col.mode.is_empty() {
                         // Column sets: second-level tabs over the same rows.
-                        let sets: Vec<(String, String, bool)> = ["Filing", "Drawing", "Export"].iter()
+                        let sets: Vec<(String, String, bool)> = ["Filing", "Drawing", "Deliver"].iter()
                             .map(|l| (l.to_string(), String::new(), true)).collect();
                         if let Some(i) = library::underline_tabs(ui, &sets, col.colset as usize) {
                             if col.colset != i as u8 {
@@ -1552,6 +1552,34 @@ impl Ui {
                     // The Library takes the tree's place (the tree code below
                     // stays as it was, in a block it can leave).
                     'tree: {
+                    if col.mode.is_empty() && col.colset == 2 {
+                        ui.horizontal(|ui| {
+                            caption(ui, "Deliveries");
+                            if chip_button(ui, "+ New delivery") { cmds.push("deliver:new".into()); }
+                        });
+                        ui.add_space(6.0);
+                        egui::ScrollArea::vertical().id_salt("deliveries")
+                            .max_height(ui.available_height() * 0.42).show(ui, |ui| {
+                                for n in &col.nodes {
+                                    ui.horizontal(|ui| {
+                                        let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width() - 56.0, 40.0), Sense::click());
+                                        paint_state(ui, r, state_of(&resp, n.active, true), R_ROW);
+                                        ui.painter().text(pos2(r.min.x + 6.0, r.center().y), egui::Align2::LEFT_CENTER,
+                                            &n.kind, strong(10.0), ACCENT);
+                                        for (label, y, font, color) in [(&n.name, 12.0, strong(12.0), INK), (&n.badge, 28.0, meta(), DIM)] {
+                                            let mut line = egui::text::LayoutJob::simple_singleline(label.clone(), font, color);
+                                            line.wrap.max_width = (r.width() - 50.0).max(12.0);
+                                            line.wrap.max_rows = 1;
+                                            let galley = ui.painter().layout_job(line);
+                                            ui.painter().galley(pos2(r.min.x + 44.0, r.min.y + y - galley.size().y / 2.0), galley, color);
+                                        }
+                                        if resp.on_hover_text(&n.name).clicked() { cmds.push(format!("deliver:select:{}", n.key)); }
+                                        if chip_button(ui, "▶ Run") { cmds.push(format!("deliver:run:{}", n.key)); }
+                                    });
+                                }
+                            });
+                        break 'tree;
+                    }
                     if in_library {
                         let room = if col.inspector_title.is_empty() { ui.available_height() - 40.0 } else { ui.available_height() * 0.62 };
                         self.library.show(ui, &self_icons, room - 70.0, &mut lib_actions);
@@ -1838,6 +1866,8 @@ impl Ui {
                             }
                         });
                     } // 'tree
+                    // A delivery owns the inspector even when geometry is selected.
+                    let selection = if col.colset == 2 && col.mode.is_empty() { None } else { selection.as_ref() };
                     // Inspector.
                     ui.add_space(6.0);
                     let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 1.0), Sense::hover());
@@ -1889,6 +1919,15 @@ impl Ui {
                         ui.add_space(4.0);
                         let sections = col.inspector.clone();
                         for (title, rows) in &sections {
+                            if title == "Pre-run checks" {
+                                ui.add_space(6.0);
+                                for (label, count) in rows {
+                                    if amber_button(ui, &format!("⚠ {count} {label} · Show")) {
+                                        cmds.push("deliver:problems".into());
+                                    }
+                                }
+                                continue;
+                            }
                             if title == "Actions" {
                                 // What to do next, as commands: (id, label).
                                 ui.add_space(6.0);
