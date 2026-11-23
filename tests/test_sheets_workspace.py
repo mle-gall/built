@@ -54,6 +54,26 @@ class Recorder:
     def page_zoom(self):
         return 100.0
 
+    # What the page holds per frame: lines, a picture or a GPU render.
+    def page_frame_lines(self, key, *a):
+        self.calls.append(("page_frame_lines", (key, *a)))
+        self.__dict__.setdefault("held", set()).add(key)
+
+    def page_frame_image(self, key, *a):
+        self.calls.append(("page_frame_image", (key, *a)))
+        self.__dict__.setdefault("held", set()).add(key)
+
+    def page_frame_render(self, key, *a, **kw):
+        self.calls.append(("page_frame_render", (key, *a, kw)))
+        self.__dict__.setdefault("held", set()).add(key)
+
+    def page_frame_forget(self, key):
+        self.calls.append(("page_frame_forget", (key,)))
+        self.__dict__.setdefault("held", set()).discard(key)
+
+    def page_has_content(self, key):
+        return key in self.__dict__.get("held", ())
+
     def page_pointer_mm(self):
         return None
 
@@ -219,19 +239,24 @@ def test_the_page_follows_the_document_and_only_then(host):
 
 def test_frames_show_the_vector_pass_and_the_renders(host, monkeypatch):
     import numpy as np
-    from PySide6.QtGui import QImage
+    from views import wgpu_sheet_frames
     from views.composer import ComposerWindow
 
     def render(self, frame):
-        if frame.style == "vectorial":
-            self.hlr_cache[id(frame)] = np.array([[0, 0, 10, 0], [0, 0, 0, 5]], float)
-            self.hlr_kinds[id(frame)] = np.array([0, 1], np.int8)
-            return None
-        image = QImage(40, 30, QImage.Format_RGB32)
-        image.fill(0xff336699)
-        self.render_cache[id(frame)] = image
-        return image
+        raise AssertionError("the composer draws no frame for the page")
     monkeypatch.setattr(ComposerWindow, "render_frame", render)
+
+    def drawing(source, frame):
+        assert frame.style == "vectorial"
+        return np.array([[0, 0, 10, 0], [0, 0, 0, 5]], float), np.array([0, 1], np.int8)
+    monkeypatch.setattr(wgpu_sheet_frames, "drawing", drawing)
+    shaded = []
+
+    def native(view, frame, key):
+        shaded.append(frame)
+        view.renderer.page_frame_render(key)
+        return True
+    monkeypatch.setattr(wgpu_sheet_frames, "render", native)
     ws = _sheets(host)
     rec = host.view.renderer
     for _ in range(3):
@@ -240,12 +265,52 @@ def test_frames_show_the_vector_pass_and_the_renders(host, monkeypatch):
     lines = rec.last("page_frame_lines")
     assert lines[0] == plan._doc_key
     assert lines[1].tolist() == [[0, 0, 10, 0], [0, 0, 0, 5]] and lines[2].tolist() == [0, 1]
-    image = rec.last("page_frame_image")
-    assert image[:3] == (iso._doc_key, 40, 30) and len(image[3]) == 40 * 30 * 4
-    assert image[3][:4].tolist() == [0x33, 0x66, 0x99, 0xff]
+    assert shaded == [iso] and rec.last("page_frame_render")[0] == iso._doc_key
+    assert "page_frame_image" not in rec.names()                    # no read-back, no upload
     rec.calls.clear()
     host.view.draw_frame()
-    assert "page_frame_lines" not in rec.names() and "page_frame_image" not in rec.names()
+    assert "page_frame_lines" not in rec.names() and "page_frame_render" not in rec.names()
+    _run_actions(host, f"sheets:refresh\x1f{iso._doc_key}")         # Update view: rendered again
+    host.view.draw_frame()
+    assert rec.last("page_frame_forget") == (iso._doc_key,) and shaded == [iso, iso]
+    iso.scale_n = 200.0                      # its window changed outside the page (an undo)
+    host.view.draw_frame()
+    assert shaded == [iso, iso, iso]
+    iso.x_mm += 5.0                          # moved only: the picture stays
+    host.view.draw_frame()
+    assert shaded == [iso, iso, iso]
+
+
+
+def test_a_shaded_frame_renders_into_the_page_without_touching_the_model(host):
+    """The frame's camera and rows come from Rust; the live camera, the
+    tags and the style stay as they are; the picture goes to the page."""
+    import numpy as np
+    import ingetrazo_core as NATIVE
+    from core.composition import RENDER_DPI
+    ws = _sheets(host)
+    rec = host.view.renderer
+    plan, iso = ws.composer.comp.frames
+    vp = host.view.source_viewport
+    scene = vp.scene
+    cam = vp.camera
+    scene.layers[0].visible = False if len(scene.layers) > 1 else True
+    before = (cam.target.toTuple(), cam.distance, cam.yaw, cam.pitch, cam.perspective,
+              [ly.visible for ly in scene.layers], scene.display_style, scene.folder_visibility)
+    for _ in range(3):
+        host.view.draw_frame()
+    call = rec.last("page_frame_render")
+    assert call is not None and call[0] == iso._doc_key
+    assert call[1:3] == iso.render_px(RENDER_DPI)
+    view = next(v for v in scene.saved_views if v.name == "Iso")
+    lo, hi = scene.bounds()
+    want = NATIVE.sheet_frame_camera(iso, view, None, (lo.toTuple(), hi.toTuple()))
+    assert list(call[3]) == pytest.approx(want["view"], abs=1e-9)
+    rows = np.frombuffer(bytes(call[6]), np.uint8).reshape(-1, 80)
+    hidden = NATIVE.sheet_frame_hidden(scene._root, list(scene.groups), list(host.view.packed.groups), view)
+    assert (rows[:, 72] & 1).tolist() == list(hidden)
+    assert (cam.target.toTuple(), cam.distance, cam.yaw, cam.pitch, cam.perspective,
+            [ly.visible for ly in scene.layers], scene.display_style, scene.folder_visibility) == before
 
 
 # ---- the sheet list ------------------------------------------------------------------

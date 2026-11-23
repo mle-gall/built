@@ -78,7 +78,7 @@ def test_every_case_has_a_golden():
 
 @pytest.mark.parametrize("group,name,make", CASES, ids=[c[1] for c in CASES])
 def test_the_rust_painter_draws_what_python_drew(group, name, make):
-    profile = profile_of(name) if name.startswith("profile-") else None
+    profile = profile_of(name, native=True) if name.startswith("profile-") else None
     got = json.loads(NATIVE.sheet_item_display(make(), profile))
     assert_same_ops(got, GROUPS[group][name], name)
 

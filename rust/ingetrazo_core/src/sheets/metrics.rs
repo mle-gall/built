@@ -3,11 +3,11 @@
 //! The sheet font's metrics: what the sheet painters measure text with.
 //!
 //! `font_metrics.json` is written by scripts/sheet_font_metrics.py from
-//! Qt's "Sans Serif" at a pixel size of 100 (advances, pair kerning and the
-//! vertical metrics, regular and bold), the font the Python painters
-//! measured with; the sums reproduce `QFontMetricsF.horizontalAdvance`
-//! exactly on the strings tested. When the PDF writer embeds a font of its
-//! own (docs/rust-sheets.md §5), the table is regenerated from that font.
+//! the sheet font, the bundled Inter (SemiBold for bold), as Qt measures it
+//! at a pixel size of 100: advances, pair kerning (its GPOS) and the
+//! vertical metrics. The sums reproduce `QFontMetricsF.horizontalAdvance`
+//! exactly on the strings tested, and the advances are Inter's own widths,
+//! so the PDF writer can embed it (docs/rust-sheets.md §5).
 
 use serde_json::Value;
 use std::collections::HashMap;
@@ -105,10 +105,10 @@ pub fn text_cap_rect_mm(size_mm: f64, cap_top_y: f64, width: f64) -> [f64; 4] {
 mod tests {
     #[test]
     fn widths_are_qt_s() {
-        // QFontMetricsF("Sans Serif", px 100).horizontalAdvance on macOS.
+        // QFontMetricsF(Inter, px 100).horizontalAdvance (scripts/sheet_font.py).
         let f = super::face_for(false);
-        assert!((f.advance("AVATAR To") - 455.921875).abs() < 1e-6, "{}", f.advance("AVATAR To"));
-        assert!((f.advance("PROYECTO") - 496.703125).abs() < 1e-6);
+        assert!((f.advance("AVATAR To") - 518.984375).abs() < 1e-6, "{}", f.advance("AVATAR To"));
+        assert!((f.advance("PROYECTO") - 540.296875).abs() < 1e-6);
     }
 }
 

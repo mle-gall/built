@@ -71,15 +71,13 @@ fn profile_extra(py: Python<'_>, f: &Fields, given: Option<&Bound<'_, PyAny>>, x
     x.0.insert("caption".into(), Value::Str(tr(py, "Scale H 1:{h} · V 1:{v} · vert. exag. ×{k}", &[])?));
     x.0.insert("fitted".into(), Value::Str(tr(py, "(fitted to the width)", &[])?));
     if let Some(pr) = profile {
-        let mut samples = Vec::new();
-        for smp in pr.getattr("samples")?.try_iter()? {
-            let smp = smp?;
-            let st: f64 = smp.getattr("station")?.extract()?;
-            let el: Option<f64> = smp.getattr("elevation")?.extract()?;
-            samples.push(Value::Tuple(vec![Value::Float(st), el.map_or(Value::None, Value::Float)]));
-        }
+        // sheets::profile's sampling: {"samples": [(station, x, y, elevation)], "length"}.
+        let rows: Vec<(f64, f64, f64, Option<f64>)> = pr.get_item("samples")?.extract()?;
+        let samples = rows.into_iter()
+            .map(|(st, _, _, el)| Value::Tuple(vec![Value::Float(st), el.map_or(Value::None, Value::Float)]))
+            .collect();
         x.0.insert("samples".into(), Value::List(samples));
-        x.0.insert("length".into(), Value::Float(pr.getattr("length")?.extract()?));
+        x.0.insert("length".into(), Value::Float(pr.get_item("length")?.extract()?));
     }
     Ok(())
 }

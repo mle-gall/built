@@ -128,12 +128,17 @@ class FakeProfile:
         return max(es) if es else None
 
 
-def profile_of(name: str):
-    """``(profile, path_name, message)`` the composer would give the case."""
+def profile_of(name: str, native: bool = False):
+    """``(profile, path_name, message)`` the composer would give the case;
+    ``native``: the profile as sheets::profile hands it to the painter."""
     if name == "profile-empty":
         return None, "", "Trace a path with the Path tool (T) first."
     seed = int(name.split("-")[1])
-    return FakeProfile(seed), f"Canal {seed}", ("DEM partly loaded" if seed == 2 else None)
+    prof = FakeProfile(seed)
+    if native:
+        prof = {"samples": [(s.station, 0.0, 0.0, s.elevation) for s in prof.samples],
+                "length": prof.length, "complete": all(s.elevation is not None for s in prof.samples)}
+    return prof, f"Canal {seed}", ("DEM partly loaded" if seed == 2 else None)
 
 
 def python_ops(item, name: str = ""):
