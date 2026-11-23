@@ -42,7 +42,9 @@ def show_utility(win, key, model):
     if not getattr(view, "_ui_attached", False):
         return None
     sync(view, win)
-    bindings = getattr(view, "_plugin_bindings", {})
+    bindings = getattr(view, "_plugin_bindings", None)
+    if bindings is None or view._plugin_scene is not win.viewport.scene:
+        return None
     binding = next((b for b in bindings.values() if b.key == key), None)
     if binding is None:
         binding = Binding(win, key, lambda *_: model, view)
@@ -154,6 +156,9 @@ def dispatch(win, raw):
             or event["event_id"] <= binding.last_event):
         return
     binding.last_event = event["event_id"]
+    if (event["control"] == "_panel" and event["event"] == "closed"
+            and not getattr(binding.model, "notify_close", False)):
+        return
     try:
         if event["control"] == "_retry":
             binding.invalidate()

@@ -84,8 +84,9 @@ def test_typed_dispatch_only_to_current_instance(kind, value):
                  document="doc", revision=4, event_id=1, control=kind, event="commit", value=value)
     plugin_panels.dispatch(win, json.dumps(event))
     plugin_panels.dispatch(win, json.dumps(event))
+    plugin_panels.dispatch(win, json.dumps(dict(event, event_id=2, control="_panel", event="closed")))
     scene.version += 1
-    plugin_panels.dispatch(win, json.dumps(dict(event, event_id=2)))
+    plugin_panels.dispatch(win, json.dumps(dict(event, event_id=3)))
     model.event.assert_called_once_with(kind, "commit", value)
 
 

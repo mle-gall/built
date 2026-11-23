@@ -1627,7 +1627,7 @@ pub fn render_preview(ui: &mut egui::Ui, texture: Option<&egui::TextureHandle>, 
     let painter = ui.painter_at(well);
     painter.rect_filled(well, R_CONTROL, WELL);
     if let Some(tex) = texture {
-        painter.image(tex.id(), page, Rect::from_min_max(Pos2::ZERO, pos2(1., 1.)), egui::Color32::WHITE);
+        painter.image(tex.id(), page, Rect::from_min_max(Pos2::ZERO, pos2(1., 1.)), BRIGHT);
     } else {
         painter.rect_filled(page.shrink(SPACE_XS), R_INSET, SWATCH_FALLBACK);
     }

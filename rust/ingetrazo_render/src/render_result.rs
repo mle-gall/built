@@ -27,6 +27,10 @@ impl RenderResult {
     #[pyo3(name = "slot")]
     const SLOT: &'static str = "utility";
 
+    #[classattr]
+    #[pyo3(name = "notify_close")]
+    const NOTIFY_CLOSE: bool = true;
+
     #[new]
     fn new(
         path: String,
