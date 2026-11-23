@@ -2652,8 +2652,19 @@ impl Renderer {
 }
 /// Public so the `built` app can register the module statically
 /// (`append_to_inittab`) and share one renderer with the embedded Python.
+/// Check a large sheet's JSON against the chrome's schema without a
+/// renderer (views/chrome_sheet.py tests): "" when it parses, else why.
+#[pyfunction]
+fn large_sheet_check(spec: &str) -> String {
+    match serde_json::from_str::<ui::large_sheet::Spec>(spec) {
+        Ok(_) => String::new(),
+        Err(e) => e.to_string(),
+    }
+}
+
 #[pymodule]
 pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(large_sheet_check, m)?)?;
     m.add_function(wrap_pyfunction!(panic_log::install_panic_log, m)?)?;
     m.add_function(wrap_pyfunction!(panic_log::_panic_for_test, m)?)?;
     m.add_class::<Renderer>()

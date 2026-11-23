@@ -487,8 +487,28 @@ def before_frame(view, win) -> None:
     st.force_search = False
     text = json.dumps(wire, ensure_ascii=False, separators=(",", ":"))
     if text != st.sent:
+        try:
+            renderer.ui_set_large_sheet(text)
+        except ValueError as exc:
+            # The chrome could not read it: say why, and try again next frame.
+            print(f"[chrome_sheet] {sheet.id}: {exc}", file=sys.stderr, flush=True)
+            st.dirty = True
+            return
         st.sent = text
-        renderer.ui_set_large_sheet(text)
+
+
+def check_wire(text: str) -> None:
+    """Raise ValueError when the chrome would refuse ``text`` (tests; the
+    schema is ui/large_sheet.rs ``Spec``). Quiet without the native module."""
+    if not text:
+        return
+    try:
+        from ingetrazo_render import large_sheet_check
+    except ImportError:
+        return
+    err = large_sheet_check(text)
+    if err:
+        raise ValueError(f"the chrome cannot read this sheet: {err}")
 
 
 def _form_of(st, fid):

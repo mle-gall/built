@@ -29,6 +29,7 @@ class FakeRenderer:
         self.calls = []
 
     def ui_set_large_sheet(self, text):
+        cs.check_wire(text)       # what the chrome reads (ui/large_sheet.rs)
         self.calls.append(("sheet", json.loads(text) if text else None))
 
     def ui_set_icons(self, icons):

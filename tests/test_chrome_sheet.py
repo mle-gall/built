@@ -25,6 +25,7 @@ class Renderer:
         self.icons = []
 
     def ui_set_large_sheet(self, text):
+        cs.check_wire(text)       # what the chrome reads (ui/large_sheet.rs)
         self.sent.append(json.loads(text) if text else None)
 
     def ui_set_icons(self, icons):
