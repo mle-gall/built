@@ -2822,6 +2822,32 @@ def _coplanar_overlap(f, g) -> bool:
 
 
 def defects_near(vertices, area_eps: float = 1e-10) -> dict:
+    """Count defects incident to these vertices in landing-rejection priority order."""
+    from core import doc_model
+    if not doc_model.ENABLED:
+        return _reference_defects_near(vertices, area_eps)
+    from core.store_mesh import StoreMesh, VertexView, _hypot
+    from ingetrazo_core import MeshStore
+    vertices = list(vertices)
+    mesh = getattr(vertices[0], "_m", None) if vertices else None
+    if type(mesh) is StoreMesh and all(type(v) is VertexView and v._m is mesh for v in vertices):
+        try:
+            values = mesh._store.landing_defects([v.key for v in vertices], area_eps, _hypot())
+            return dict(zip(DEFECT_KINDS, values))
+        except KeyError:
+            pass  # A held view can resolve through a materialised object's key map.
+    edges = {edge.key: edge for v in vertices for edge in v.edges}
+    faces = {f.key: f for e in edges.values() for f in e.faces}
+    def corner(v):
+        return v.key, v.position.toTuple()
+    values = MeshStore.object_landing_defects(
+        [(corner(e.v0), corner(e.v1), [f.key for f in e.faces]) for e in edges.values()],
+        [[[corner(v) for v in ring] for ring in (f.loop, *f.hole_loops)] for f in faces.values()],
+        area_eps, _hypot())
+    return dict(zip(DEFECT_KINDS, values))
+
+
+def _reference_defects_near(vertices, area_eps: float = 1e-10) -> dict:
     """Count the topological defects among the edges and faces that touch
     ``vertices`` (mesh ``Vertex`` objects), by kind (:data:`DEFECT_KINDS`):
 
@@ -2884,4 +2910,9 @@ def defects_near(vertices, area_eps: float = 1e-10) -> dict:
 def new_defects(before: dict, after: dict) -> list:
     """The defect kinds :func:`defects_near` counts more of ``after`` than
     ``before``, worst first."""
-    return [k for k in DEFECT_KINDS if after.get(k, 0) > before.get(k, 0)]
+    from core import doc_model
+    if not doc_model.ENABLED:
+        return [k for k in DEFECT_KINDS if after.get(k, 0) > before.get(k, 0)]
+    from ingetrazo_core import MeshStore
+    return MeshStore.increased_landing_defects([before.get(k, 0) for k in DEFECT_KINDS],
+                                               [after.get(k, 0) for k in DEFECT_KINDS])

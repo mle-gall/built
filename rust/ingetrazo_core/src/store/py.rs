@@ -1303,6 +1303,68 @@ impl PyMeshStore {
         Ok(existing.is_none().then(|| self.inner.key(Kind::Edge, edge)))
     }
 
+    fn landing_defects(
+        &self,
+        py: Python<'_>,
+        vertices: Vec<u128>,
+        area_eps: f64,
+        hypot: &str,
+    ) -> PyResult<[usize; 6]> {
+        use pyo3::types::PySet;
+        // The first face in a nearly coplanar pair supplies the projection.
+        // Follow the facade's vertex.edges set order, including hash collisions.
+        let mut seen = std::collections::HashSet::new();
+        let mut near = Vec::new();
+        for key in vertices {
+            let v = any_of(&self.inner, Kind::Vertex, key)?;
+            let incident = PySet::empty(py)?;
+            for e in self.inner.edges_at(v) {
+                incident.add(self.inner.key(Kind::Edge, e))?;
+            }
+            for item in incident.iter() {
+                let e = any_of(&self.inner, Kind::Edge, item.extract()?)?;
+                if seen.insert(e) {
+                    near.push(e);
+                }
+            }
+        }
+        Ok(self
+            .inner
+            .landing_counts(&near, area_eps, crate::hypot_of(hypot)?))
+    }
+
+    #[staticmethod]
+    fn object_landing_defects(
+        edges: Vec<super::landing::Edge>,
+        faces: Vec<super::landing::Rings>,
+        area_eps: f64,
+        hypot: &str,
+    ) -> PyResult<[usize; 6]> {
+        if faces.iter().any(Vec::is_empty) {
+            return Err(PyValueError::new_err("missing outer loop"));
+        }
+        Ok(super::landing::counts(
+            edges,
+            faces,
+            area_eps,
+            crate::hypot_of(hypot)?,
+        ))
+    }
+
+    #[staticmethod]
+    fn increased_landing_defects(before: [i64; 6], after: [i64; 6]) -> Vec<&'static str> {
+        super::landing::increased(before, after).collect()
+    }
+
+    #[staticmethod]
+    fn landing_ring(ring: Vec<(i128, bool)>) -> Vec<usize> {
+        let mut order: Vec<_> = (0..ring.len()).collect();
+        if ring.iter().any(|&(_, landed)| landed) {
+            super::commands::trim_spurs(&mut order, |a, b| ring[a].0 == ring[b].0, |i| ring[i].1);
+        }
+        order
+    }
+
     fn weld_landing(
         &mut self,
         moving: Vec<u128>,
@@ -1336,6 +1398,13 @@ impl PyMeshStore {
             })
             .map(|f| self.inner.key(Kind::Face, f))
             .collect())
+    }
+
+    #[staticmethod]
+    fn carried_object_faces(corners: Vec<Vec<i128>>, moving: std::collections::HashSet<i128>) -> Vec<usize> {
+        corners.iter().enumerate().filter_map(|(i, ring)| {
+            ring.iter().all(|v| moving.contains(v)).then_some(i)
+        }).collect()
     }
 
     fn pretransform_face_normal(
@@ -1426,6 +1495,106 @@ impl PyMeshStore {
     fn transform_vertices(&mut self, source: Vec<[f64; 3]>, matrix: [f64; 16], collect: bool)
         -> (usize, Vec<u128>) {
         self.inner.transform_vertices(&source, matrix, collect)
+    }
+
+    /// The two halves of a loose move bracket the editor's update of texture
+    /// dictionaries. Keys always refer to the same enlisted store.
+    fn begin_vertex_move(
+        &mut self,
+        py: Python<'_>,
+        source: Vec<[f64; 3]>,
+        landing: Vec<[f64; 3]>,
+        delta: [f64; 3],
+        textures: bool,
+        hypot: &str,
+    ) -> PyResult<Option<(usize, Vec<u128>, Option<[usize; 6]>)>> {
+        use super::commands::{cell, supplied_cell};
+        use std::collections::HashSet;
+        if !textures {
+            if let Some(n) = self.inner.move_without_join(&source, delta) {
+                return Ok(Some((n, vec![], None)));
+            }
+        }
+        let source: HashSet<_> = source.into_iter().map(supplied_cell).collect();
+        let landing: HashSet<_> = landing.into_iter().map(supplied_cell).collect();
+        let mut moving = Vec::new();
+        let mut adjacent = Vec::new();
+        let mut check = false;
+        for v in self.inner.live_slots(Kind::Vertex) {
+            let p = *self.inner.state.vpos.get(v as usize);
+            if p.iter().any(|x| !x.is_finite() || x.abs() >= 1e11) {
+                return Ok(None);
+            }
+            let key = cell(p);
+            let selected = source.contains(&key);
+            let destination = landing.contains(&key);
+            if selected {
+                moving.push(self.inner.key(Kind::Vertex, v));
+            }
+            if selected || destination {
+                adjacent.push(self.inner.key(Kind::Vertex, v));
+            }
+            check |= destination && !selected;
+        }
+        let before = if check {
+            Some(self.landing_defects(py, adjacent, 1e-10, hypot)?)
+        } else {
+            None
+        };
+        self.move_vertices(py, moving.clone(), delta.into())?;
+        Ok(Some((moving.len(), moving, before)))
+    }
+
+    /// A staged weld or fold that needs object incidence can fall back
+    /// before publishing. The outer History record also owns translation.
+    fn finish_vertex_move(
+        &mut self,
+        py: Python<'_>,
+        moving: Vec<u128>,
+        landing: Vec<[f64; 3]>,
+        before: Option<[usize; 6]>,
+        tolerance: f64,
+        hypot: &str,
+    ) -> PyResult<Option<(bool, usize, Vec<(u128, Vec<u128>)>, Option<&'static str>)>> {
+        if moving.is_empty() {
+            return Ok(self
+                .fold_nonplanar(py, landing, tolerance, hypot)?
+                .map(|(dirty, copies)| (false, dirty, copies, None)));
+        }
+        let mut work = Self::wrap(self.inner.clone());
+        let Some((joined, dirty, trims)) = work.weld_landing(moving)? else {
+            return Ok(None);
+        };
+        let Some((fold_dirty, folds)) =
+            work.fold_nonplanar(py, landing.clone(), tolerance, hypot)?
+        else {
+            return Ok(None);
+        };
+        if let (true, Some(before)) = (joined, before) {
+            let cells: std::collections::HashSet<_> = landing
+                .into_iter()
+                .map(super::commands::supplied_cell)
+                .collect();
+            let near = work
+                .inner
+                .live_slots(Kind::Vertex)
+                .into_iter()
+                .filter(|&v| {
+                    cells.contains(&super::commands::cell(
+                        *work.inner.state.vpos.get(v as usize),
+                    ))
+                })
+                .map(|v| work.inner.key(Kind::Vertex, v))
+                .collect();
+            let after = work.landing_defects(py, near, 1e-10, hypot)?;
+            if let Some(reason) = super::landing::increased(before, after).next() {
+                return Ok(Some((false, 0, vec![], Some(reason))));
+            }
+        }
+        let mut copies: Vec<_> = trims.into_iter().map(|(a, b)| (a, vec![b])).collect();
+        copies.extend(folds);
+        self.inner = work.inner;
+        Ok(Some((joined, dirty + fold_dirty, copies, None)))
     }
 
     fn move_without_join(&mut self, source: Vec<[f64; 3]>, delta: [f64; 3]) -> Option<usize> {

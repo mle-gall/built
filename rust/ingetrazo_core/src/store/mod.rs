@@ -28,6 +28,7 @@ pub mod diff;
 pub(crate) mod drawing;
 mod commands;
 mod fold;
+mod landing;
 mod erase;
 mod drawing_face;
 mod drawing_plane;

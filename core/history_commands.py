@@ -3075,6 +3075,11 @@ class MoveVerticesCommand(MeshCommand):
         else:
             landing = {_key(p + self.delta) for p in self.src}
         from core.store_mesh import StoreMesh, _xyz
+        if (_doc.ENABLED and type(scene.mesh) is StoreMesh and not scene.mesh.__dict__.get("_planned_points")
+                and all(type(x) is float for point in keys | landing for x in point)):
+            if self._store_move(scene, keys, landing):
+                self._after = self._reference_snapshot(scene.mesh)
+                return
         native = self._journal_geometry and type(scene.mesh) is StoreMesh
         # The legacy cells API treats integer triples as already scaled.
         # Native position matching takes decimal model coordinates.
@@ -3125,6 +3130,59 @@ class MoveVerticesCommand(MeshCommand):
                     "Not joined: it would leave {defect}. The move was "
                     "undone.", defect=defect_names()[worse[0]]))
         self._after = self._reference_snapshot(scene.mesh)
+
+    def _store_move(self, scene, keys, landing):
+        from core.store_mesh import FaceView, _hypot, _xyz
+        from core.topology import DEFECT_KINDS, _PLANAR_TOLERANCE
+        mesh = scene.mesh
+        destinations = list(landing)
+        started = mesh._store.begin_vertex_move(list(keys), destinations, _xyz(self.delta),
+                                                self.carry_textures, _hypot())
+        if started is None:
+            return False
+        count, moving, before = started
+        if count:
+            mesh._dirty(count)
+        scene.version += 1
+        if self.carry_textures and moving:
+            carried = _carried_faces(mesh, moving)
+            if carried:
+                from core.group import _remap_uvws
+                from ingetrazo_core import Matrix4
+                transform = Matrix4()
+                transform.translate(self.delta)
+                _remap_uvws(mesh, transform, carried)
+        result = mesh._store.finish_vertex_move(moving, destinations, before, _PLANAR_TOLERANCE, _hypot())
+        if result is None:
+            self.welded = _weld_landed(mesh, set(moving))
+            fold_nonplanar_faces(mesh, moved=landing)
+            if self.welded and before is not None:
+                self._check_landing(scene, dict(zip(DEFECT_KINDS, before)), landing)
+        else:
+            self.welded, dirty, copies, rejection = result
+            if rejection is not None:
+                self._reject(scene, rejection)
+            if dirty:
+                mesh._dirty(dirty)
+            for source, pieces in copies:
+                attrs = FaceView(mesh, source).attrs
+                for key in pieces:
+                    FaceView(mesh, key).attrs = dict(attrs)
+        return True
+
+    def _check_landing(self, scene, before, landing):
+        worse = new_defects(before, defects_near(_vertices_at(scene.mesh, landing)))
+        if worse:
+            self._reject(scene, worse[0])
+
+    def _reject(self, scene, reason):
+        from core.i18n import tr
+        if self._before is not None:
+            scene.mesh.restore_state(self._before)
+        scene.version += 1
+        self.welded = False
+        raise CommandRejected(tr("Not joined: it would leave {defect}. The move was undone.",
+                                 defect=defect_names()[reason]))
 
     undo = _reference.restore_mesh_before
 
