@@ -106,7 +106,7 @@ impl Ui {
             self.cmd_open = false;
             self.form = None;
             if let Some(col) = self.column.as_mut() {
-                col.row_menu = None; col.kind_menu = None; col.head_menu = None; col.pick = None; col.color_pick = None;
+                col.row_menu = None; col.kind_menu = None; col.head_menu = None; col.color_pick = None;
             }
             self.ctx.memory_mut(|m| m.stop_text_input());
             self.dialog = Some(Dialog::new(seq));

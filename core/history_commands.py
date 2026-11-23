@@ -3599,6 +3599,8 @@ class MakeGroupCommand(MeshCommand):
         if not self._journal_geometry:
             self._after = m.capture_state()
         scene.groups.append(self.group)
+        from ingetrazo_core import file_created_placement
+        self._filing = file_created_placement(scene, self.group)
         scene.selection.clear()
         scene.selection.add(self.group)
         scene.version += 1
@@ -3611,6 +3613,8 @@ class MakeGroupCommand(MeshCommand):
         return self._geometry.take_off(m, scene.selection.discard)
 
     def undo(self, scene) -> None:
+        if getattr(self, "_filing", None) is not None:
+            self._filing.undo(scene)
         if self.group in scene.groups:
             scene.groups.remove(self.group)
         scene.selection.discard(self.group)
@@ -4090,6 +4094,8 @@ class InsertGroupCommand(Command):
         ctx = self._target(scene)
         self._owner, baked = _placements.insert_placement(scene.groups, ctx, scene.mesh, self.group)
         self._baked |= baked
+        from ingetrazo_core import file_created_placement
+        self._filing = file_created_placement(scene, self.group)
         if self.attachment is not None:
             from core.annotation_anchor import TextPlacementAnchor
             self._sign_anchor = TextPlacementAnchor.create(
@@ -4101,6 +4107,8 @@ class InsertGroupCommand(Command):
         scene.version += 1
 
     def undo(self, scene) -> None:
+        if getattr(self, "_filing", None) is not None:
+            self._filing.undo(scene)
         owner = self._owner if self._owner is not None else scene.groups
         if self._sign_anchor is not None and self._sign_anchor in scene.text_placement_anchors:
             scene.text_placement_anchors.remove(self._sign_anchor)
@@ -4178,11 +4186,16 @@ class MakeNestedGroupCommand(Command):
             self.container = Group(Mesh(), name=self.name)
         self._xform0, self._indices = _placements.nest(
             scene.groups, self.container, self.groups, scene.selection.discard)
+        if self._inner is None:
+            from ingetrazo_core import file_created_placement
+            self._filing = file_created_placement(scene, self.container)
         scene.selection.clear()
         scene.selection.add(self.container)
         scene.version += 1
 
     def undo(self, scene) -> None:
+        if getattr(self, "_filing", None) is not None:
+            self._filing.undo(scene)
         _placements.unnest(scene.groups, self.container, self._xform0, self._indices)
         if self._inner is not None:
             self._inner.undo(scene)        # loose geometry back, group gone

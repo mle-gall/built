@@ -49,6 +49,9 @@ class _Viewport:
     def notify_scene_changed(self):
         pass
 
+    def refresh_after_edit(self):
+        self.notify_scene_changed()
+
 
 class _Win:
     def __init__(self, scene):

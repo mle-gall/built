@@ -219,6 +219,8 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(structure::structure_targets, m)?)?;
     m.add_function(wrap_pyfunction!(structure::plan_filing, m)?)?;
     m.add_function(wrap_pyfunction!(structure::check_filing_paths, m)?)?;
+    m.add_function(wrap_pyfunction!(structure::plan_node_edit, m)?)?;
+    m.add_function(wrap_pyfunction!(structure::file_created_placement, m)?)?;
     m.add_function(wrap_pyfunction!(structure::resync_filing, m)?)?;
     m.add_function(wrap_pyfunction!(structure::apply_structure_bootstrap, m)?)?;
     m.add_function(wrap_pyfunction!(structure::set_structure_nodes, m)?)?;

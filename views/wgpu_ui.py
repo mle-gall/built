@@ -985,12 +985,6 @@ def _tree(view, win) -> None:
     from collections import Counter, defaultdict
     from core import links, structure
     from core import layers as L
-    if colset == 3 and not mode:
-        view.renderer.ui_set_tree([], 0)
-        view.renderer.ui_set_tags(*scene._root._tag_browser())
-        view.renderer.ui_set_colset(colset)
-        view.renderer.ui_set_mode("")
-        return
     model = _tree_model(view, scene, cv)
     if colset == 2 and not mode:
         from views import wgpu_deliveries
@@ -1042,14 +1036,6 @@ def _tree(view, win) -> None:
 
     def main_layer(key):
         if nodes[key]["kind"] == "host":
-            stack = [key]
-            while stack:
-                k = stack.pop(0)
-                if node_layers[k]:
-                    ly = scene.layer(node_layers[k].most_common(1)[0][0])
-                    if ly is not None:
-                        return ly
-                stack.extend(children.get(k, ()))
             return _layer(scene, recipes.get(key, {}).get("tag"))
         ts = node_tags(key)
         return scene.layer(ts[0]) if ts else None
@@ -1124,11 +1110,7 @@ def _tree(view, win) -> None:
         # The active column set's cells for a node (its tag's layer) or an item.
         if colset == 1 and key is not None:
             ly = main_layer(key)
-            if ly is None:
-                return []
-            colr = "#%02x%02x%02x" % tuple(int(max(0, min(1, c)) * 255) for c in ly.color[:3]) if ly.color else ""
-            w = "auto" if ly.lineweight is None else f"{ly.lineweight:.2f}"
-            return [colr, (ly.linetype or "continuous").replace("_", " "), w, "1" if ly.printable else "0"]
+            return ly._drawing_cells() if ly is not None else []
         if colset == 2:
             if key is not None:
                 r = recipes.get(key, {})
@@ -1251,7 +1233,7 @@ def _tree(view, win) -> None:
         elif node["kind"] == "linked":
             kind = TIP + TIPS["Linked files"]
         elif node["kind"] in ("tag", "tagfolder"):
-            kind = _kind_tip("Tag" if node["kind"] == "tag" else "", source=source)
+            kind = _kind_tip("Drawing only" if node["kind"] == "tag" else "", source=source)
         elif cls is None and children.get(key):
             kind = _kind_tip("", source=source)
         else:
@@ -1279,6 +1261,8 @@ def _tree(view, win) -> None:
         rows = _problem_rows(view, scene, registry, host, {k: recipes[k] for k in host if k in recipes},
                              unfiled, host_of, exp, sel_ids)
     if mode != "problems":
+        if tree._host_roots < 0:
+            rows[:0] = scene._root._drawing_preview(exp, flt, bool(tree.links))
         mark_selection(rows)
     else:
         # Problems lists items under rules: a selected item is lit itself.
@@ -1814,7 +1798,7 @@ def _tree_action(win, view, action) -> None:
     from core import layers as L
     from core.group import Group
     from core.history import CompoundCommand, MakeUniqueCommand, SetRegistryCommand
-    from views.structure_recipe import execute, update_node
+    from views.structure_recipe import execute
     if SEP not in action:
         # The inspector's chips and the delivery counts: "verb:arg".
         verb, _, key = action.partition(":")
@@ -1998,10 +1982,10 @@ def _tree_action(win, view, action) -> None:
             view._ui_colset = int(rk or 0)
             apply_dock_width(view)
             rebuild()
-        elif verb in ("print", "color", "linetype", "weight") and node:
-            ts = tags(node)
-            if ts:
-                _core(vp, "edit_tag", tags=ts, field=verb, value=extra)
+        elif verb in ("print", "color", "linetype", "weight", "hatch") and node and not linked:
+            layer = _layer(scene, data["recipes"][node].get("tag"))
+            if layer is not None:
+                _core(vp, "edit_tag", tags=[layer.key], field=verb, value=extra)
                 rebuild()
                 vp.notify_scene_changed()
         elif verb == "measure":
@@ -2126,9 +2110,15 @@ def _tree_action(win, view, action) -> None:
         elif verb == "fileto":
             _select(win, members())
             _file_to(win, len(members()))
+        elif verb == "parent" and node:
+            _core(vp, "edit_structure_node", node=node, field="parent", value=extra)
+            vp.notify_scene_changed()
+            rebuild()
         elif verb == "rename":
             if node:
-                update_node(vp, node, name=extra)
+                _core(vp, "edit_structure_node", node=node, field="name", value=extra)
+                vp.notify_scene_changed()
+                rebuild()
             elif item() is not None:
                 _core(vp, "rename_placement", placement=address(item()), name=extra)
                 vp.update()
@@ -2139,9 +2129,9 @@ def _tree_action(win, view, action) -> None:
                 execute(vp, structure.file(scene, uids, key))
                 vp.flash_status(f"Filed {len(uids)} to " + " › ".join(structure.path(bim_registry.get(scene), key)))
         elif verb == "active":
-            registry = bim_registry.get(scene)
-            registry.setdefault("structure", {})["active"] = node
-            execute(vp, SetRegistryCommand(registry))
+            _core(vp, "edit_structure_node", node=node, field="active", value="")
+            vp.notify_scene_changed()
+            rebuild()
         elif verb == "kind" and node:
             cls = next((c for c, k in KINDS.items() if k == extra and c), None)
             recipe = dict(structure._nodes(bim_registry.get(scene)).get(node, {}).get("recipe", {}))
@@ -2210,7 +2200,9 @@ def _tree_action(win, view, action) -> None:
         elif verb == "edit":
             what, _, arg = rk.partition(":")
             if what == "nodename":
-                update_node(vp, arg, name=extra)
+                _core(vp, "edit_structure_node", node=arg, field="name", value=extra)
+                vp.notify_scene_changed()
+                rebuild()
             elif what in ("predef", "objtype"):
                 recipe = dict(structure._nodes(bim_registry.get(scene))[arg].get("recipe", {}))
                 field = "predefined_type" if what == "predef" else "object_type"
@@ -2308,7 +2300,7 @@ def _inspector(view, win) -> None:
     sel_sig = (len(sel), id(sel[0]) if sel else 0, id(sel[-1]) if sel else 0)
     node_focus = focus[0] if focus and focus[1] == sel_sig else None
     sig = (id(scene), scene.content_version, sel_sig, node_focus, getattr(view, "_ui_tree_sig", None) is not None,
-           view.__dict__.get("_ui_mat_focus"), view.__dict__.get("_ui_mode"),
+           view.__dict__.get("_ui_mat_focus"), view.__dict__.get("_ui_mode"), view.__dict__.get("_ui_colset"),
            _current_material_name(), _active_tool_id(win))
     if sig == getattr(view, "_ui_insp_sig", None):
         return
@@ -2343,6 +2335,12 @@ def _inspector(view, win) -> None:
         sections = [("Node", rows),
                     ("Actions", [(f"kindmenu:{node_focus}", "Change kind…"), (f"active:{node_focus}", "Draw into"),
                                  (f"isolate:{node_focus}", "Isolate"), (f"cutlist:{node_focus}", "Cut list…")])]
+        if view.__dict__.get("_ui_colset") == 1:
+            from core import hatches, layers
+            sections.append(("Drawing", [("node", "n:" + node_focus),
+                                         *(("hatch", k) for k in hatches.HATCH_ORDER),
+                                         *(("line", k) for k in layers.LINETYPES),
+                                         *(("line", layers.CUSTOM_LINETYPE + k) for k in scene.line_types)]))
         if missing:
             sections.append(("Actions", [(f"nodestatus:{node_focus}:" + v, "All " + v.lower()) for v in STATUS_CHOICES]))
         export = [("IFC class", str(recipe.get("class") or "none (drawing only)")),
@@ -2536,7 +2534,7 @@ def _linked_inspector(view, win, data, key):
     layer = scene.layer(ts[0]) if ts else None
     visible = L.effective_visible(scene, layer) if layer is not None else True
     cls = node["recipe"].get("class")
-    rows = [("Name", node["name"]), ("Kind", "Tag" if kind == "tag" else "Tag folder" if kind == "tagfolder"
+    rows = [("Name", node["name"]), ("Kind", "Drawing only" if kind == "tag" else "Tag folder" if kind == "tagfolder"
                                        else kind_of(cls) if cls or not tree.children.get(key) else "Group of nodes"),
             ("From", Path(path).name + " — read-only here"), ("Items", str(count)),
             ("Visibility", "Shown" if visible else "Hidden")]
@@ -2800,16 +2798,6 @@ def _run(win, actions, source_view=None) -> None:
             if run is not None:
                 run()
                 view.update()
-        elif kind == "tag-edit":
-            import json
-            field, key, value = json.loads(arg)
-            _core(win.viewport, "edit_tag", tags=[key], field=field, value=value)
-            win.viewport.notify_scene_changed()
-        elif kind in ("tag-visible", "tag-locked"):
-            flag, _, key = arg.partition(":")
-            _core(win.viewport, "set_tag_state", tags=[key],
-                  **{kind[4:]: flag == "1"})
-            win.viewport.notify_scene_changed()
         elif kind == "tree":
             view = getattr(getattr(win, "_doc", None), "stand_in", None)
             _tree_action(win, view, arg)

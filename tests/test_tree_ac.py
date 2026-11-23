@@ -260,7 +260,7 @@ def test_drawing_cells_carry_colour_line_weight_print(ui):
     view._ui_tree_sig = None
     wu._tree(view, win)
     row = next(t for t, _n in view.renderer.calls["ui_set_tree"][0] if t[0] == "n:" + _key(view, "Paths"))
-    assert len(row) == 9   # key, name, kind, badge, icon + colour, line type, weight, print
+    assert len(row) == 10  # key, name, kind, badge, icon + colour, line, weight, print, hatch
     file_row = next(t for t, _n in view.renderer.calls["ui_set_tree"][0] if t[0] == "n:link:Ride")
     assert file_row[4] == "file:resolved"
 
@@ -359,52 +359,6 @@ def test_rows_stay_fast_on_the_bigger_fixture(ui):
     assert (time.perf_counter() - t) / 5 < 0.25
 
 
-def test_tag_browser_updates_linked_placement_visibility_and_lock(ui):
-    from core import links
-    scene, win, view, _, _ = ui
-    view._ui_colset = 3
-    tag = scene.layer("Ride / Rails")
-    registry = links.registry(scene)
-    record = next(entry for path, entry in registry.items() if path.endswith("Ride.igz"))
-
-    def state():
-        wu._tree(view, win)
-        rows, _, _ = view.renderer.calls["ui_set_tags"]
-        return next(row[2:4] for row in rows if row[0] == tag.key)
-
-    assert state() == (True, False)
-    wu._run(win, ["tag-visible:0:" + tag.key])
-    assert state() == (False, False)
-    assert record["overrides"][tag.key] is False
-    wu._run(win, ["tag-locked:1:" + tag.key])
-    assert state() == (False, True)
-    win.viewport.history.undo()
-    assert state() == (False, False)
-    win.viewport.history.undo()
-    assert state() == (True, False)
-    assert tag.key not in record["overrides"]
-    wu._run(win, ["tag-visible:0:" + tag.key, "tag-locked:1:" + tag.key,
-                  "tag-visible:1:" + tag.key])
-    assert state() == (True, True)
-
-
-def test_tag_browser_identifies_same_label_tags_by_key():
-    from core.layers import Layer
-    from core.scene import Scene
-    scene = Scene()
-    scene.layers.extend([Layer("Deck", folder="part", key="a:b"),
-                         Layer("Deck", folder="other", key="a:c")])
-    scene.layer_folders = ["host", "part", "other"]
-    scene.folder_parents = {"part": "host"}
-    scene.layer_folder_names = {"host": "Site", "part": "Building"}
-    rows = [row[:4] for row in scene._root._tag_browser()[0]]
-    assert ("a:b", "Site / Building / Deck", True, False) in rows
-    assert ("a:c", "other / Deck", True, False) in rows
-    wu._run(_Win(scene), ["tag-visible:0:a:b"])
-    assert not scene.layer_by_key("a:b").visible
-    assert scene.layer_by_key("a:c").visible
-
-
 def test_drawing_cell_edits_run_without_a_layer_panel_and_undo(ui):
     from core.protocol import commands
     scene, win, view, _, act = ui
@@ -415,7 +369,8 @@ def test_drawing_cell_edits_run_without_a_layer_panel_and_undo(ui):
             ("color", "#ff8000", "color", (1.0, 128 / 255, 0.0)),
             ("linetype", "dashed", "linetype", "dashed"),
             ("weight", "0.35", "lineweight", 0.35),
-            ("print", "0", "printable", False)]:
+            ("print", "0", "printable", False),
+            ("hatch", "brick", "hatch", "brick")]:
         before = getattr(tag, attr)
         act(verb, node, value)
         assert getattr(tag, attr) == expected
@@ -433,36 +388,145 @@ def test_drawing_cell_edits_run_without_a_layer_panel_and_undo(ui):
     assert tag.lineweight is None and win.viewport.history.revision == rev
 
 
+def test_rename_and_move_keep_node_and_membership_and_undo(ui):
+    from core import bim_registry, structure
+    scene, win, view, rows, act = ui
+    key, parent, root = (_key(view, n) for n in ("Paths", "Fences", "Site works"))
 
-def test_tag_name_filing_and_active_edits_use_stable_keys():
-    from core import layers
+    def current():
+        return structure._nodes(bim_registry.get(scene))[key]
+
+    original = current()
+    act("rename", "n:" + key, "Walkways")
+    assert current()["name"] == "Walkways"
+    assert _key(view, "Walkways") == key
+    assert win.viewport.history.undo()
+    assert current() == original
+    members = structure.members(scene, key)
+    for target in (parent, ""):
+        act("parent", "n:" + key, target)
+        assert current()["parent"] == (target or None)
+        assert structure.members(scene, key) == members
+        assert win.viewport.history.undo()
+        assert current()["parent"] == root
+    version = win.viewport.history.revision
+    for source, target in ((root, key), (key, key), (key, "link:Ride")):
+        act("parent", "n:" + source, target)
+    assert win.viewport.history.revision == version
+    assert current() == original
+
+
+def test_unstructured_host_shows_read_only_drawing_rows_without_writing():
+    from core import bim_registry
     from core.layers import Layer
-    from core.protocol import commands
     from core.scene import Scene
     scene = Scene()
-    win = _Win(scene)
-    tag = Layer("Lots", key="site:lots", folder="before", visible=False, locked=True)
-    scene.layers.append(tag)
-    scene.layer_folders = ["before", "empty"]
-    def change(field, value, key=tag.key):
-        return commands.run(win.viewport.history, "edit_tag", tags=[key], field=field, value=value)
-    change("active", "")
-    assert tag.visible and not tag.locked and layers.active_layer(scene) == tag.key
-    win.viewport.history.undo()
-    assert not tag.visible and tag.locked and layers.active_layer(scene) == layers.DEFAULT_LAYER
-    change("name", "Blocks")
-    assert scene.layer_by_key("site:lots").name == "Blocks"
-    change("folder", "empty")
-    assert tag.folder == "empty"
-    change("folder", "")
-    assert tag.folder is None
-    win.viewport.history.undo()
-    assert tag.folder == "empty"
-    with pytest.raises(KeyError):
-        change("folder", "gone")
-    with pytest.raises(ValueError):
-        change("folder", "empty", layers.DEFAULT_LAYER)
-    assert tag.folder == "empty" and scene.layer(layers.DEFAULT_LAYER).folder is None
-    change("active", "")
-    scene.folder_visibility["empty"] = False
-    assert scene._root._tag_browser()[2] == layers.active_layer(scene) == layers.DEFAULT_LAYER
+    scene.layer_folders = ["site", "empty"]
+    scene.layer_folder_names = {"site": "Site works"}
+    scene.layers.append(Layer("Paths", folder="site"))
+    scene.layers.append(Layer("Grid"))
+    view, win = _View(), _Win(scene)
+    before = scene.version, bim_registry.get(scene), dict(scene.layer_folder_uids)
+
+    def preview():
+        wu._tree(view, win)
+        return [(t[0], t[1], t[2], n[0]) for t, n in view.renderer.calls["ui_set_tree"][0] if n[4] == 6]
+
+    assert ("preview-folder:site", "Site works", "", 0) in preview()
+    assert ("preview-folder:empty", "empty", "", 0) in preview()
+    assert ("preview-tag:Grid", "Grid", "Drawing only", 0) in preview()
+    assert not any(row[1] == "Paths" for row in preview())
+    wu._tree_action(win, view, wu.SEP.join(("filter", "paths")))
+    assert preview() == [("preview-folder:site", "Site works", "", 0),
+                         ("preview-tag:Paths", "Paths", "Drawing only", 1)]
+    assert (scene.version, bim_registry.get(scene), dict(scene.layer_folder_uids)) == before
+    assert not win.viewport.history.undo_stack
+
+
+def test_drawing_row_changes_visibility_and_lock_in_undo_order(ui):
+    scene, win, view, rows, act = ui
+    key = "n:" + _key(view, "Paths")
+    tag = scene.layer("Paths")
+    act("eye", key)
+    act("lock", key)
+    assert not tag.visible and tag.locked
+    assert win.viewport.history.undo()
+    assert not tag.visible and not tag.locked
+    assert win.viewport.history.undo()
+    assert tag.visible and not tag.locked
+
+
+def test_filing_selected_items_to_active_node_is_one_undo_step(ui):
+    from core import bim_registry, structure
+    scene, win, view, rows, act = ui
+    src, dest = (_key(view, n) for n in ("Paths", "Fences"))
+    act("active", "n:" + dest)
+    group = view._ui_tree["direct"][src][0]
+    other = view._ui_tree["direct"][dest][0]
+    scene.select([group, other])
+    act("filehere", "n:" + dest)
+    assert group.uid in structure.members(scene, dest)
+    assert other.uid in structure.members(scene, dest)
+    assert group.layer == scene.layer("Fences").key
+    assert bim_registry.get(scene)["structure"]["active"] == dest
+    assert win.viewport.history.undo()
+    assert group.uid in structure.members(scene, src)
+    assert other.uid in structure.members(scene, dest)
+    assert group.layer == scene.layer("Paths").key
+
+
+def test_isolating_another_node_then_show_all_restores_the_view(ui):
+    scene, win, view, rows, act = ui
+    a, b = (_key(view, n) for n in ("Paths", "Fences"))
+    for key in (a, b):
+        act("isolate", "n:" + key)
+        assert set(win.viewport._view_expression["in"]) == set(g.uid for g in view._ui_tree["direct"][key])
+    act("showall", "")
+    assert not win.viewport._view_expression
+
+
+def test_switching_column_sets_updates_the_focused_node_inspector(ui):
+    scene, win, view, rows, act = ui
+    key = "n:" + _key(view, "Paths")
+    act("node", key)
+    wu._inspector(view, win)
+    assert "Drawing" not in dict(view.renderer.calls["ui_set_inspector"][1])
+    act("colset", "1")
+    wu._inspector(view, win)
+    catalog = dict(view.renderer.calls["ui_set_inspector"][1])["Drawing"]
+    assert catalog[0] == ("node", key) and ("hatch", "brick_flemish") in catalog
+
+
+@pytest.mark.parametrize("operation", ["group", "insert", "paste", "link", "group_selection"])
+def test_created_placement_inherits_the_active_node_in_its_creation_step(ui, site, operation):
+    from core import bim_registry, links, structure
+    from core.group import Group
+    from core.history import InsertGroupCommand, MakeGroupCommand, MakeNestedGroupCommand
+    from ingetrazo_core import Vec3
+    scene, win, view, _, act = ui
+    dest = _key(view, "Fences")
+    act("active", "n:" + dest)
+    assert bim_registry.get(scene)["structure"]["active"] == dest
+    if operation == "group":
+        f = scene.mesh.add_face([Vec3(0, 0, 0), Vec3(1, 0, 0), Vec3(0, 1, 0)])
+        cmd = MakeGroupCommand([f], list(scene.mesh.edges))
+    elif operation == "group_selection":
+        cmd = MakeNestedGroupCommand([], [], view._ui_tree["direct"][_key(view, "Paths")][:2])
+    elif operation == "link":
+        group = links.make_link(scene, site["stairs"], host_path=site["host"])
+        cmd = InsertGroupCommand(group)
+    else:
+        group = Group(name=operation)
+        if operation == "paste":
+            group.layer = scene.layer("Paths").key
+            group.ext = {"structure": {"node": _key(view, "Paths")}}
+        cmd = InsertGroupCommand(group)
+    h = win.viewport.history
+    before = len(h.undo_stack)
+    h.execute(cmd)
+    assert h.last_error is None and len(h.undo_stack) == before + 1
+    group = cmd.container if operation == "group_selection" else cmd.group
+    assert structure.node_of(group) == dest and group.layer == scene.layer("Fences").key
+    assert h.undo() and group not in scene.groups
+    assert h.redo() and group in scene.groups
+    assert structure.node_of(group) == dest and group.layer == scene.layer("Fences").key
