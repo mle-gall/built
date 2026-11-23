@@ -1,6 +1,8 @@
 //! Composite Qt's straight-alpha RGBA pixels in the same surface as the scene.
 pub struct Overlay {
     pipeline: wgpu::RenderPipeline,
+    cue: wgpu::Buffer,
+    cue_data: [f32; 4],
     image: Option<(wgpu::Texture, wgpu::BindGroup, u32, u32)>,
 }
 impl Overlay {
@@ -36,9 +38,37 @@ impl Overlay {
         });
         Self {
             pipeline,
+            cue: crate::buffer(device, &[0; 16], wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST),
+            cue_data: [0.; 4],
             image: None,
         }
     }
+    /// Project the acquired circle in physical pixels, testing its reach in logical pixels.
+    pub fn center_cue(&mut self, queue: &wgpu::Queue, camera: &[f32], size: [u32; 2],
+                      center: Option<[f32; 3]>, radius: f32, cursor: [f32; 2], scale: f32) {
+        use glam::{Mat4, Vec2, Vec3};
+        let cue = center.and_then(|center| {
+            let vp = Mat4::from_cols_array(camera.get(..16)?.try_into().ok()?);
+            let size = Vec2::new(size[0] as f32, size[1] as f32);
+            let pixel = |p: Vec3| {
+                let clip = vp * p.extend(1.);
+                (clip.w > 0.).then(|| (clip.truncate().truncate() / clip.w * Vec2::new(1., -1.) + 1.) * 0.5 * size)
+            };
+            let center = Vec3::from_array(center);
+            let pc = pixel(center)?;
+            let projected = [Vec3::X, Vec3::Y].into_iter()
+                .filter_map(|axis| pixel(center + radius * axis))
+                .map(|rim| pc.distance(rim)).fold(0., f32::max);
+            let distance = pc.distance(Vec2::from_array(cursor) * scale);
+            (projected >= 12. * scale && distance <= (40. * scale).min(projected * 0.5))
+                .then_some([pc.x, pc.y, scale, 1.])
+        }).unwrap_or([0.; 4]);
+        if self.cue_data != cue {
+            queue.write_buffer(&self.cue, 0, bytemuck::cast_slice(&cue));
+            self.cue_data = cue;
+        }
+    }
+
     pub fn upload(&mut self, d: &wgpu::Device, q: &wgpu::Queue, w: u32, h: u32, rgba: &[u8]) {
         self.ensure(d, w, h);
         self.upload_region(q, 0, 0, w, h, rgba);
@@ -67,6 +97,8 @@ impl Overlay {
                 label: None,
                 layout: &self.pipeline.get_bind_group_layout(0),
                 entries: &[wgpu::BindGroupEntry {
+                    binding: 1, resource: self.cue.as_entire_binding(),
+                }, wgpu::BindGroupEntry {
                     binding: 0,
                     resource: wgpu::BindingResource::TextureView(&view),
                 }],

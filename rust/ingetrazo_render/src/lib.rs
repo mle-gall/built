@@ -2012,6 +2012,11 @@ impl Renderer {
     fn take_capture(&mut self) -> Option<Vec<u8>> {
         self.captured.take()
     }
+    #[pyo3(signature = (center, radius, cursor, scale))]
+    fn set_center_cue(&mut self, center: Option<[f32; 3]>, radius: f32, cursor: [f32; 2], scale: f32) {
+        self.overlay.center_cue(&self.queue, &self.camera_data,
+            [self.config.width, self.config.height], center, radius, cursor, scale);
+    }
     fn set_overlay(
         &mut self,
         width: u32,

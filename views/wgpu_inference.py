@@ -697,6 +697,29 @@ def _occluded_many(index, view, points, rows=None):
     return result
 
 
+def _acquire_rim(view, index, x, y):
+    """Resolve only the hovered resident edge to its document curve."""
+    edge = reference_edge(index, view, x, y)
+    if edge is None:
+        return None
+    picked = view.tools._mesh_for_row(edge.row)
+    if picked is None:
+        return None
+    mesh, group, matrix = picked
+    inverse, ok = matrix.inverted()
+    if not ok:
+        return None
+    a, b = (mesh.vertex_at(inverse.map(point)) for point in (edge.a, edge.b))
+    real = mesh.find_edge(a, b) if a is not None and b is not None else None
+    if getattr(real, 'curve', None) is None:
+        return None
+    ref = view.source_viewport._center_of_edge(real, mesh)
+    if ref is None:
+        return None
+    place = SimpleNamespace(xform=matrix, source_occurrence=group) if group is not None else None
+    return (matrix.map(ref[0]), *ref[1:6], place)
+
+
 def snap(index, row, view, x, y, *, work_point=..., **options):
     """GL SnapResult; row may be None (guides/edges do not need a face ID)."""
     if index is None:
@@ -770,6 +793,7 @@ def snap(index, row, view, x, y, *, work_point=..., **options):
         edge_rows = [e.row for e in edges]
     feature_rows = list(dict.fromkeys(edge_rows + ([row] if picked else [])))
     named_edges = edges.features if isinstance(edges, ResidentEdges) else edges
+    may_acquire_rim = False
     for r in feature_rows:
         value = index.rows.get(r, index.packed.instances[r])
         matrix = value['world'].astype(float).T
@@ -781,6 +805,8 @@ def snap(index, row, view, x, y, *, work_point=..., **options):
                  'component' if group is not None and group.is_instance()
                  else 'group')
         centers, _tangents, mids = index.features[int(value['info'][0])]
+        if centers and np.any((columns[0] == r) & (columns[-1] <= getattr(view, 'pick_threshold_px', 8.))):
+            may_acquire_rim = True
         for center in centers:
             center = QVector3D(*(matrix[:3, :3] @ center + matrix[:3, 3]))
             named_edges.append(SimpleNamespace(a=center, b=center, center=True,
@@ -827,8 +853,21 @@ def snap(index, row, view, x, y, *, work_point=..., **options):
     mvp = view.camera.projection_matrix() * view.camera.view_matrix()
     project = lambda p: DocumentInteraction._world_to_pixel(view, p, mvp)
     project.snap_projection = (mvp.data(), (view.width(), view.height()))
+    source = getattr(view, 'source_viewport', None)
+    acquire = getattr(tool, 'uses_snap', False) and hasattr(source, '_valid_center_ref')
+    rim = _acquire_rim(view, index, x, y) if acquire and may_acquire_rim else None
     if 'face_centers' not in options:
-        options['face_centers'] = face_centers_near(view, x, y, on_face, project)
+        options['face_centers'] = face_centers_near(view, x, y, on_face, project,
+                                                    acquire=acquire and rim is None)
+    if acquire:
+        if rim is not None:
+            source._center_ref = rim
+        ref = source._valid_center_ref()
+        if ref is not None:
+            pc = project(ref[0])
+            if pc is not None and source._center_hint_px(ref, pc) > 0.:
+                named_edges.append(SimpleNamespace(a=ref[0], b=ref[0], center=True, context=None))
+
     if on_face and face_normal is not None:
         # The face rules GL's InferenceEngine.snap hands in from its own
         # picks, here from the triangle under the cursor: the ScreenTip's
@@ -1111,7 +1150,7 @@ def _acquire(engine, view, edges, on_face, point, face_normal,
 FACE_CENTER_PICK_MAX = 5000
 
 
-def face_centers_near(view, x, y, on_face, project):
+def face_centers_near(view, x, y, on_face, project, *, acquire=False):
     """GL's ``DocumentInteraction._face_centers_near`` for the Metal view (#736):
     ``[(point, context)]`` — the centre of area of the face under the
     cursor (when it falls inside the face and near the cursor) and of the
@@ -1139,6 +1178,10 @@ def face_centers_near(view, x, y, on_face, project):
             context = None
             if place is not None and group is not None:
                 context = 'component' if group.is_instance() else 'group'
+            if acquire:
+                ref = view.source_viewport._center_of_face(face, place, picked[0], x, y)
+                if ref is not None:
+                    view.source_viewport._center_ref = ref
             c = face_center_of_face(face, getattr(place, 'xform', None))
             if near(c):
                 out.append((c, context))

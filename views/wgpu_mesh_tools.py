@@ -143,6 +143,9 @@ class MeshToolAccess:
 
     def _picked_mesh(self, x, y):
         row = self._selection_row(x, y) if self.mode == 'select' else self.view.pick_row(x, y)
+        return self._mesh_for_row(row)
+
+    def _mesh_for_row(self, row):
         resolved = self.view.resolve(row)
         if resolved is None:
             return None

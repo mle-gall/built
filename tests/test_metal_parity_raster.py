@@ -584,3 +584,19 @@ def test_reference_imagery_in_live_and_export_frames(native, layer, aa, tmp_path
          'photo': scene.photo_mesh}[layer].visible = False
     sync(adapter, style)
     np.testing.assert_array_equal(capture(native), baseline)
+
+
+def test_acquired_center_cue_projected_into_live_frame(native):
+    upload(native, 255)
+    native.set_style(dict(sky=False))
+    native.set_overlay(64, 64, np.zeros(64 * 64 * 4, np.uint8))
+    baseline = capture(native)
+    native.set_center_cue((0, 0, 0), .9, (45, 32), 1.)
+    near = capture(native)
+    np.testing.assert_allclose(near[32, 32, :3], (41, 158, 92), atol=2)
+    assert np.all(near[32, 37, :3] > baseline[32, 37, :3] - 1.) or near[32, 37, 2] > 100
+    for center, radius, cursor in [((0, 0, 0), .9, (52, 32)),
+                                   ((0, 0, 0), .1, (32, 32)),
+                                   (None, .9, (32, 32))]:
+        native.set_center_cue(center, radius, cursor, 1.)
+        np.testing.assert_array_equal(capture(native), baseline)

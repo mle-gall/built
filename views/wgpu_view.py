@@ -792,6 +792,18 @@ class MetalView(ViewNavigation):
             edit_box = self._edit_box_primitives()
         primitives = (edit_box + boxes
                       + billboard_outline_primitives(self) + self.overlay_primitives)
+        if hasattr(self.renderer, 'set_center_cue'):
+            ref = getattr(self.source_viewport, '_center_ref', None)
+            cursor = getattr(self, '_cue_cursor', None)
+            cue = (ref is not None and cursor is not None and preview_here
+                   and getattr(self.tools.tool, 'uses_snap', False)
+                   and getattr(self.last_snap, 'kind', None) != 'center')
+            ref = self.source_viewport._valid_center_ref() if cue else None
+            if ref is not None or getattr(self, '_had_center_cue', False):
+                self.renderer.set_center_cue(ref[0].toTuple() if ref else None,
+                                             ref[1] if ref else 0., cursor or (0., 0.),
+                                             self.devicePixelRatioF())
+                self._had_center_cue = ref is not None
         if annotations or primitives or section_widgets or getattr(self, "_had_overlay", False):
             from views.wgpu_overlay import rasterize, pixels
             before = time.perf_counter()
@@ -984,6 +996,7 @@ class MetalView(ViewNavigation):
         start = time.perf_counter()
         self.tools.sync()
         # Select's priority walk already queries the row for its group pick.
+        self._cue_cursor = (x, y)
         self.hovered_row = None
         selecting = self.tools.mode == 'select' and not getattr(self.source_viewport, 'nav_mode', None)
         if not selecting or self.source_viewport is None:

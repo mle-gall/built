@@ -465,3 +465,17 @@ def test_face_rules_ask_only_the_placements_under_the_cursor(view, monkeypatch):
     assert calls and max(calls) <= 8, calls
     assert asked and max(asked) <= 8, asked
     del p
+
+
+def test_acquired_arc_center_survives_crossing_the_empty_interior(view):
+    _arc(view.scene.mesh, 2., 1., r=2.)
+    _look(view, V(2., 1., 0.), distance=5., pitch=math.pi / 2 - .001)
+    refresh(view)
+    move(view, V(2., 3., 0.))
+    ref = view.source_viewport._valid_center_ref()
+    assert ref is not None and (ref[0] - V(2., 1., 0.)).length() < 1e-5
+    move(view, V(2., 1.5, 0.))
+    assert move(view, V(2., 1., 0.)).kind == 'center'
+    view.scene.mesh.clear()
+    refresh(view)
+    assert view.source_viewport._valid_center_ref() is None
