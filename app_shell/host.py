@@ -420,7 +420,7 @@ class Host:
         from views import chrome_dialogs as cd
         return cd.modal(self.window)
 
-    def pointer(self, kind, x, y, button=0, held=0, modifiers=0):
+    def pointer(self, kind, x, y, button=0, held=0, modifiers=0, timestamp=0):
         from app_shell.events import ContextMenuEvent, MouseEvent
         qt_host.INPUT.update(modifiers=int(modifiers), buttons=int(held), pos=(x, y))
         if kind == "press":
@@ -428,7 +428,7 @@ class Host:
         view = self.view
         if kind == "leave":
             return self._guard("leave", view.leaveEvent, None)
-        ev = MouseEvent(kind, x, y, button, held, modifiers)
+        ev = MouseEvent(kind, x, y, button, held, modifiers, timestamp=timestamp)
         handler = {"press": view.mousePressEvent, "release": view.mouseReleaseEvent,
                    "move": view.mouseMoveEvent, "double": view.mouseDoubleClickEvent}[kind]
         self._guard(f"pointer {kind}", handler, ev)
@@ -630,6 +630,12 @@ class Host:
             "faces": len(getattr(mesh, "faces", ()) or ()),
             "edges": len(getattr(mesh, "edges", ()) or ()),
             "groups": len(getattr(scene, "groups", ()) or ()),
+            "input": self.view.renderer.ui_input_state() if hasattr(self.view.renderer, "ui_input_state") else {},
+            "filter": self.view.__dict__.get("_ui_filter", ""),
+            "dock_columns": self.view.__dict__.get("_ui_colset", 0),
+            "dock_mode": self.view.__dict__.get("_ui_mode", ""),
+            "tool_busy": self.viewport._tool_busy_for_delete(tool),
+            "edit_group": getattr(scene.edit_group, "name", None),
             "selection": len(getattr(scene, "selection", ()) or ()),
             "tool": type(tool).__name__ if tool is not None else None,
             "status": win.statusBar().currentMessage(),

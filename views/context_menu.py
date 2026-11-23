@@ -678,7 +678,9 @@ def open_at(view, x, y) -> Optional[Menu]:
     under = tools.pick_locked_image_plane(x, y)
     locked_image = under if under is not picked else None
     locked_group = tools.pick_locked_group(x, y)
-    menu = build(win, view, locked_image=locked_image, locked_group=locked_group)
+    from ingetrazo_render import context_targets
+    sel = context_targets(picked is not None, win.viewport.scene.selection)
+    menu = build(win, view, sel=sel, locked_image=locked_image, locked_group=locked_group)
     menu.at = (float(x), float(y))
     view._ctx_menu = menu
     send(view, menu)
