@@ -14,6 +14,7 @@ use pyo3::types::PyBytes;
 
 mod math;
 mod navigation;
+mod location;
 mod boxes;
 mod doc;
 mod earcut;
@@ -75,6 +76,11 @@ mod panic_log;
 
 #[pymodule]
 fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<location::LocationDraft>()?;
+    m.add_class::<location::LocationEdit>()?;
+    m.add_function(wrap_pyfunction!(location::zone_for_lon, m)?)?;
+    m.add_function(wrap_pyfunction!(location::utm_forward, m)?)?;
+    m.add_function(wrap_pyfunction!(location::utm_inverse, m)?)?;
     m.add_function(wrap_pyfunction!(push_command::rebuild_push_planes, m)?)?;
     m.add_function(wrap_pyfunction!(store::arrangement::arrange_plane, m)?)?;
     m.add_function(wrap_pyfunction!(store::arrangement::plane_split_graph, m)?)?;

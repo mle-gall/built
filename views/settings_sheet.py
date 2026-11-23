@@ -557,8 +557,8 @@ def _location(env) -> list:
         Row("north_tool", "button", tr("Aim north on screen"), press=_north_tool,
             tip=tr("Tools ▸ North: click a centre, then click toward north.")),
         Row("location", "text", tr("Location"), where),
-        Row("add_location", "button", tr("Add location…"), press=_add_location,
-            visible=lambda env: not has_location(env), enabled=lambda env: not chrome_sheet.in_shell(),
+        Row("add_location", "button", tr("Edit location…") if has_location(env) else tr("Add location…"),
+            press=lambda env: edit_location(env.win), enabled=env.scene is not None,
             words="georeference map site",
             tip=tr("Pick the site on the map: the sun and the base map stand there.")),
     ]
@@ -591,24 +591,21 @@ def _north_tool(env) -> None:
         activate("north")
 
 
-def _add_location(env) -> None:
-    """The tray's Add location (Shadows panel): pick the site on the map;
-    the north set before carries over."""
-    if chrome_sheet.in_shell():
-        return
-    from core.sun import DEFAULT_LAT, DEFAULT_LON, scene_north_deg
-    from georef.datum import SceneDatum
+def edit_location(win, *, source=None, center=None, done=None):
     from georef.tiles import DEFAULT_SOURCE_ID, PRESETS
-    from views.location_dialog import pick_location
-    scene = env.scene
-    result = pick_location(PRESETS[DEFAULT_SOURCE_ID], DEFAULT_LAT, DEFAULT_LON,
-                           env.win if hasattr(env.win, "isWindow") else None)
-    if result is None or scene is None:
-        return
-    lat, lon, _w, _l = result
-    scene.georef = SceneDatum(lat, lon, north=scene_north_deg(scene))
-    scene.version += 1
-    _scene_changed(env)
+    from core.sun import DEFAULT_LAT, DEFAULT_LON
+    from ingetrazo_core import LocationDraft
+    show(win, page="location")
+    sheet = chrome_sheet.current(win)
+    scene = win.viewport.scene
+    datum = scene.georef
+    lat, lon = center or ((datum.lat, datum.lon) if datum else (DEFAULT_LAT, DEFAULT_LON))
+    sheet.end_site()
+    sheet.site = LocationDraft(lat, lon, Env(win).st.value("georef/coord_mode", "geo"))
+    sheet.site_scene = scene
+    sheet.site_done = done
+    sheet.site_source = source or PRESETS[DEFAULT_SOURCE_ID]
+    chrome_sheet.refresh(win)
 
 
 _BUILDERS = {"general": _general, "navigation": _navigation, "display": _display, "ndof": _ndof,
@@ -652,6 +649,7 @@ class SettingsSheet(chrome_sheet.Provider):
     north_cmd = None
 
     def __init__(self, section="general"):
+        self.site = self.site_requests = None
         self._device = None
         self._readings = None
         self.state = PreferencesView(section)
@@ -767,6 +765,8 @@ class SettingsSheet(chrome_sheet.Provider):
         self._win = ctx.win
         env = Env(ctx.win)
         env.state = self.state
+        if self.site is not None and (env.scene is not self.site_scene or self.section != "location"):
+            self.end_site()
         self._monitor(self.section == "ndof" and not self.state.query.strip())
         env.device_readings = self._readings
         self._rows = {}
@@ -790,8 +790,11 @@ class SettingsSheet(chrome_sheet.Provider):
             self._search_pane(s, env, hits, keyboard)
         else:
             self._section_pane(s, env, keyboard)
-        s.footer([("restore", tr("Restore defaults"))],
-                 tr("Changes apply at once") + " · " + tr("esc back to the model"))
+        if self.site is None:
+            s.footer([("restore", tr("Restore defaults"))],
+                     tr("Changes apply at once") + " · " + tr("esc back to the model"))
+        else:
+            s.footer(hint=tr("esc back to the model"))
         if self.kb_focus and (self.section == "keyboard" or hits is not None):
             s.focus(self.kb_focus, force=self.state.take_focus())
         return s
@@ -812,6 +815,15 @@ class SettingsSheet(chrome_sheet.Provider):
             sub = (sub + " " if sub else "") + tr("(Saved in the document, not on this Mac.)")
         c = s.content(tr(title), sub)
         self._top(c)
+        if sid == "location" and self.site is not None:
+            for gid, caption, rows in _native_groups(self.site.groups(tr), self.site_edit):
+                c.caption(caption)
+                c.fields(self._form(env, rows, gid), id=gid)
+            src = self.site_source
+            root = str(self.site_requests.tiles.cache.root) if self.site_requests else ""
+            c.blocks.extend(json.loads(self.site.map_blocks(tr, src.id, root, src.max_zoom, src.attribution)))
+            c.buttons(json.loads(self.site.buttons(tr)), align="left")
+            return
         if sid == "keyboard":
             self._keyboard(s, c, keyboard)
             return
@@ -824,6 +836,78 @@ class SettingsSheet(chrome_sheet.Provider):
             c.buttons([chrome_sheet.verb("ndof_load", tr("Load profile…")),
                        chrome_sheet.verb("ndof_save", tr("Save profile…")),
                        chrome_sheet.verb("ndof_reset", tr("Reset to defaults"))], align="left")
+
+    def site_edit(self, env, key, value):
+        if self.site is not None and env.scene is self.site_scene:
+            if self.site.edit(key, str(value)):
+                env.st.setValue("georef/coord_mode", self.site.mode)
+
+    def end_site(self):
+        if self.site_requests is not None:
+            self.site_requests.close()
+            self.site_requests = None
+        self.site = self.site_scene = self.site_done = self.site_source = None
+
+    def site_action(self, ctx, action, args=()):
+        site = self.site
+        env = Env(ctx.win)
+        if site is None or env.scene is not self.site_scene or action == "site_cancel":
+            self.end_site()
+            return
+        if action == "site_map":
+            site.map_toggle()
+            if site.map and self.site_requests is None:
+                from views.location_backend import SiteRequests
+                self.site_requests = SiteRequests(site, self.site_source, ctx.refresh)
+            elif not site.map and self.site_requests is not None:
+                self.site_requests.close()
+                self.site_requests = None
+            return
+        if site.map and self.site_requests is not None:
+            if action == "site_tiles":
+                self.site_requests.request(args)
+            elif action == "site_center":
+                site.move_pin(float(args[0]), float(args[1]), int(args[2]))
+            elif action == "site_rect":
+                site.bounds(list(map(float, args)))
+            elif action == "site_search":
+                self.site_requests.searcher.search(site.query)
+            elif action == "site_locate":
+                self.site_requests.locator.locate()
+            elif site.choose(action):
+                return
+        if action != "site_apply" or site.selected() is None:
+            return
+        lat, lon, width, length = site.selected()
+        if self.site_done is not None:
+            done = self.site_done
+            self.end_site()
+            chrome_sheet.close(ctx.win)
+            done(lat, lon, width, length)
+            return
+        datum = env.scene.georef
+        if datum is not None and not site.moved(datum.lat, datum.lon):
+            self.end_site()
+            return
+        if datum is not None:
+            from views.chrome_dialogs import ask
+            message = tr("This project already has a location. Moving it makes "
+                         "the new point the model's origin (0,0): everything "
+                         "drawn keeps its local coordinates and shows up at the "
+                         "new spot on the map.\n\nMove the origin?")
+            if ask(ctx.win, tr("Move the project origin?"), message,
+                   [("cancel", tr("Cancel")), ("move", tr("Move"))], default="cancel", cancel="cancel") != "move":
+                return
+        if ctx.win.viewport.scene is not self.site_scene:
+            self.end_site()
+            return
+        from core.protocol.commands import set_location
+        result = set_location(_p().document_history(env.vp), lat, lon)
+        if result["ok"]:
+            self.end_site()
+            _scene_changed(env)
+        else:
+            self.state.note = (result["error"] or result["rejected"] or tr("Location could not be changed"), "error")
 
     def _hits(self, env, query, keyboard_count) -> dict:
         """{section: [(group caption, [Row])] or keyboard count} matching every word."""
@@ -960,6 +1044,8 @@ class SettingsSheet(chrome_sheet.Provider):
         arg = args[0] if args else ""
         if verb == "search":
             self.state.query = arg
+        elif verb in ("site_center", "site_rect", "site_tiles"):
+            self.site_action(ctx, verb, args)
         elif verb == "side":
             searched = bool(self.state.query)
             self.state.goto(arg, None)
@@ -976,7 +1062,9 @@ class SettingsSheet(chrome_sheet.Provider):
             self.state.kb_focus = arg
             self._kb_verb("kb_" + args[1])
         elif verb == "verb":
-            if arg.startswith("kb_"):
+            if arg.startswith("site_"):
+                self.site_action(ctx, arg)
+            elif arg.startswith("kb_"):
                 self._kb_verb(arg)
             elif arg.startswith("ndof_"):
                 self._ndof_verb(arg)
@@ -1127,6 +1215,7 @@ class SettingsSheet(chrome_sheet.Provider):
         chrome_sheet.refresh(win)
 
     def closed(self, ctx) -> None:
+        self.end_site()
         self._monitor(False)
         self.state.note = None
         SettingsSheet.north_cmd = None

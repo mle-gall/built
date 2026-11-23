@@ -21,6 +21,7 @@ elif not isinstance(_inst, QApplication):
     pytest.skip("a non-widget QGuiApplication is already active",
                 allow_module_level=True)
 
+from tests.test_settings_sheet import win, act, fields, frame
 from core.scene import Scene                                     # noqa: E402
 from georef.datum import utm_forward, utm_inverse                # noqa: E402
 from views.tray import BaseMapPanel                              # noqa: E402
@@ -101,45 +102,40 @@ class TestCoordModeSelector:
         assert panel._utm_e.isVisibleTo(panel)
         assert not panel._lat.isVisibleTo(panel)
 
-    def test_choice_is_remembered_everywhere(self):
+    def test_choice_is_remembered_everywhere(self, win):
         panel = BaseMapPanel(_Win())
         panel._coord_mode.setCurrentIndex(
             panel._coord_mode.findData("utm"))
         fresh = BaseMapPanel(_Win())                 # "next session"
         assert fresh._coord_mode.currentData() == "utm"
-        from georef.tiles import PRESETS
-        from views.location_dialog import LocationDialog
-        dlg = LocationDialog(PRESETS["esri_imagery"], LAT, LON)
-        assert dlg._coord_mode.currentData() == "utm"
-        assert dlg._utm_row.isVisibleTo(dlg)
-        assert not dlg._geo_row.isVisibleTo(dlg)
+        from views.settings_sheet import edit_location
+        edit_location(win, center=(LAT, LON))
+        shown = fields(frame(win))
+        assert shown["site_mode"][4] == 1 and "site_zone" in shown
+        assert "site_lat" not in shown
 
 
-class TestLocationDialogUtm:
-    def _dialog(self):
-        from georef.tiles import PRESETS
-        from views.location_dialog import LocationDialog
-        return LocationDialog(PRESETS["esri_imagery"], LAT, LON)
+def test_center_fills_both_coordinate_rows(win):
+    from views.settings_sheet import edit_location
+    edit_location(win, center=(LAT, LON))
+    shown = fields(frame(win))
+    assert float(shown["site_lat"][3]) == pytest.approx(LAT)
+    assert float(shown["site_lon"][3]) == pytest.approx(LON)
+    east, north = utm_forward(LAT, LON, 19)
+    shown = fields(act(win, "v", "site_mode", "1"))
+    assert shown["site_zone"][3] == "19" and shown["site_hemisphere"][4] == 1
+    assert float(shown["site_easting"][3]) == pytest.approx(east, abs=.01)
+    assert float(shown["site_northing"][3]) == pytest.approx(north, abs=.01)
 
-    def test_center_fills_both_coordinate_rows(self):
-        dlg = self._dialog()
-        dlg._map.set_center(LAT, LON)
-        east, north = utm_forward(LAT, LON, 19)
-        assert dlg._lat_box.value() == pytest.approx(LAT, abs=1e-6)
-        assert dlg._zone_box.value() == 19
-        assert dlg._hemi_box.currentData() is False
-        assert dlg._east_box.value() == pytest.approx(east, abs=0.01)
-        assert dlg._north_box.value() == pytest.approx(north, abs=0.01)
 
-    def test_typed_utm_moves_the_pin(self):
-        dlg = self._dialog()
-        dlg._map.set_center(LAT, LON)
-        east, north = utm_forward(LAT, LON, 19)
-        dlg._east_box.setValue(east + 250.0)
-        dlg._north_box.setValue(north - 250.0)
-        dlg._on_utm_typed()
-        lat, lon = dlg._map.center()
-        exp_lat, exp_lon = utm_inverse(east + 250.0, north - 250.0, 19,
-                                       False)
-        assert lat == pytest.approx(exp_lat, abs=1e-6)
-        assert lon == pytest.approx(exp_lon, abs=1e-6)
+def test_typed_utm_moves_the_pin(win):
+    from views.settings_sheet import edit_location
+    from views.chrome_sheet import current
+    edit_location(win, center=(LAT, LON))
+    frame(win)
+    act(win, "v", "site_mode", "1")
+    east, north = utm_forward(LAT, LON, 19)
+    act(win, "v", "site_easting", str(east + 250))
+    act(win, "v", "site_northing", str(north - 250))
+    expected = utm_inverse(east + 250, north - 250, 19, False)
+    assert current(win).site.position() == pytest.approx(expected, abs=1e-6)

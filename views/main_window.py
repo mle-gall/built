@@ -5607,8 +5607,9 @@ class MainWindow(WorksessionMixin, QMainWindow):
                 and catalog[owners[a]][1]]
         if not mine or len({owners[a] for a in mine}) <= self.EXT_MENU_INLINE:
             return
-        from views.extension_manager_dialog import _TAG_LABELS, _tag_label
-        order = list(_TAG_LABELS)
+        from ingetrazo_render import ExtensionBrowser
+        labels = dict(ExtensionBrowser.tags())
+        order = list(labels)
         by_tag: dict = {}
         for a in mine:
             tag = catalog[owners[a]][1][0]
@@ -5619,7 +5620,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         subs = []
         for tag in sorted(by_tag, key=lambda t: (order.index(t)
                                                  if t in order else len(order), t)):
-            sub = QMenu(_tag_label(tag), menu)
+            sub = QMenu(tr(labels.get(tag, tag.replace("-", " ").title())), menu)
             menu.insertMenu(mine[0], sub)
             subs.append((sub, by_tag[tag]))
         for sub, acts in subs:

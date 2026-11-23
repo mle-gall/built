@@ -12,13 +12,12 @@ from __future__ import annotations
 
 import json
 
-from PySide6.QtWidgets import QLabel, QMessageBox, QPushButton
+from tests.extensions_chrome import Browser
 
 from core import extension_manager as manager
 from core.extensions import discover_plugins
 from tests.test_extension_manager import TOOL_SOURCE, _extension
-from tests.test_extension_manager_hand_installed import (
-    _dialog, _hand_package, _rows, _texts)
+from tests.test_extension_manager_hand_installed import _hand_package
 
 
 def _managed(root, ident, version="1.0"):
@@ -82,30 +81,12 @@ def test_a_sibling_the_catalog_still_lists_is_not_taken_for_a_copy(
 def test_the_manager_lists_a_retired_extension_and_uninstalls_it(
         tmp_path, monkeypatch):
     folder = _managed(tmp_path, "archxq_it", "2.3")
-    app, dialog = _dialog(monkeypatch, tmp_path, [_extension(b"catalog")])
-    monkeypatch.setattr(QMessageBox, "question",
-                        staticmethod(lambda *a, **k: QMessageBox.Yes))
-    monkeypatch.setattr(QMessageBox, "information",
-                        staticmethod(lambda *a, **k: QMessageBox.Ok))
-    try:
-        rows = _rows(dialog)
-        assert len(rows) == 1
-        labels = _texts(rows[0], QLabel)
-        assert "archxq_it" in labels
-        assert any("No longer in the catalog" in text and "2.3" in text
-                   for text in labels)
-        buttons = _texts(rows[0], QPushButton)
-        assert "Disable" in buttons and "Uninstall" in buttons
-        next(b for b in rows[0].findChildren(QPushButton)
-             if b.text() == "Disable").click()
-        assert (folder / ".disabled").is_file()
-        assert _loaded(tmp_path) == []
-        next(b for b in _rows(dialog)[0].findChildren(QPushButton)
-             if b.text() == "Uninstall").click()
-        app.processEvents()
-        assert not folder.exists()
-        assert _rows(dialog) == []
-    finally:
-        dialog.close()
-        dialog.deleteLater()
-        app.processEvents()
+    browser = Browser(monkeypatch, tmp_path, [_extension(b"catalog")])
+    assert browser.ids == ["archxq_it"]
+    assert browser.facts["Version"] == "2.3" and browser.facts["Source"] == "No longer in the catalog"
+    assert browser.buttons["toggle"] == "Disable" and browser.buttons["remove"] == "Uninstall"
+    browser.act("verb", "toggle")
+    assert (folder / ".disabled").is_file() and _loaded(tmp_path) == []
+    browser.confirm(monkeypatch)
+    browser.act("verb", "remove")
+    assert not folder.exists() and browser.ids == []

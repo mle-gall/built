@@ -139,6 +139,7 @@ pub struct Block {
     pub fields: Vec<dialog::Field>,
     pub spans: Vec<kit::ProseSpan>,
     pub credits: Vec<kit::CreditRow>,
+    pub map: Option<super::site_map::MapSpec>,
     pub buttons: Vec<Verb>,
     /// tiles: the picture's side; picture: its height.
     pub size: f32,
@@ -190,6 +191,8 @@ pub struct LargeSheet {
     /// Shown (false while it animates out).
     pub open: bool,
     pub search: String,
+    visible_previews: Vec<String>,
+    map: super::site_map::MapState,
     search_reported: String,
     pub focused: Option<String>,
     /// Focusable items as last laid out (content pane, reading order).
@@ -223,6 +226,9 @@ impl LargeSheet {
             self.head_menu = None;
             return false;
         };
+        if !spec.content.blocks.iter().any(|block| block.map.is_some()) {
+            self.map = Default::default();
+        }
         if spec.id == "start" {
             let template = spec.focus.as_deref().is_some_and(|id| id.starts_with("tpl:"));
             if let Some(new) = spec.verbs.iter_mut().find(|verb| verb.id == "new") {
@@ -238,6 +244,8 @@ impl LargeSheet {
         }
         let opening = !self.open || self.spec.as_ref().is_none_or(|s| s.id != spec.id);
         if opening {
+            self.visible_previews.clear();
+            self.map = Default::default();
             self.search.clear();
             self.focused = None;
             self.menu = None;
@@ -567,6 +575,18 @@ impl Draw<'_> {
                         });
                     });
                 }
+                "map" => { if let Some(spec) = &b.map { self.st.map.show(ui,spec,self.out); } }
+                "facts" => {
+                    for (label, value, _) in &b.rows { kit::catalogue_fact(ui, label, value); }
+                }
+                "tags" => {
+                    let width = ui.available_width();
+                    ui.horizontal_wrapped(|ui| {
+                        ui.spacing_mut().item_spacing = vec2(SPACE_XS, SPACE_XS);
+                        for tag in &b.items { kit::catalogue_tag(ui, &tag.label, width); }
+                    });
+                    ui.add_space(SPACE_S);
+                }
                 "kv" => {
                     for (label, value, t) in &b.rows {
                         let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), PROP_H), Sense::hover());
@@ -682,10 +702,14 @@ impl Draw<'_> {
 
     fn tiles(&mut self, ui: &mut egui::Ui, b: &Block) {
         let side = if b.size > 0.0 { b.size } else { 96.0 };
-        let gap = 12.0;
-        let cell = vec2(side, side + 36.0);
+        let gap = SPACE_M;
         let w = ui.available_width();
-        let cols = (((w + gap) / (side + gap)).floor() as usize).max(1);
+        let catalogue = b.tone == "catalog";
+        let (cols, picture_size) = if catalogue { kit::catalogue_grid(w, side) }
+            else { ((((w + gap) / (side + gap)).floor() as usize).max(1), vec2(side, side)) };
+        let side = picture_size.x;
+        let cell = vec2(side, picture_size.y + 36.0);
+        let mut visible = Vec::new();
         let rows = b.items.len().div_ceil(cols);
         let h = rows as f32 * (cell.y + gap) - if rows > 0 { gap } else { 0.0 };
         let (block, _) = ui.allocate_exact_size(vec2(w, h.max(0.0)), Sense::hover());
@@ -704,7 +728,8 @@ impl Draw<'_> {
             }
             if !clip.intersects(r) { continue; }
             let resp = ui.interact(r, ui.id().with(("lstile", &it.id, i)), Sense::click());
-            let pic = Rect::from_min_size(r.min, vec2(side, side));
+            if catalogue && !it.icon.is_empty() { visible.push(it.icon.clone()); }
+            let pic = Rect::from_min_size(r.min, picture_size);
             picture(ui, pic, self.icons.get(&it.icon), &it.hex, 8);
             if resp.hovered() && !focused {
                 ui.painter().rect_stroke(pic, CornerRadius::same(8), Stroke::new(1.0_f32, INK_2), egui::StrokeKind::Outside);
@@ -733,6 +758,10 @@ impl Draw<'_> {
             }
             let resp = if it.tip.is_empty() { resp } else { resp.on_hover_text(&it.tip) };
             self.item_input(&resp, it);
+        }
+        if catalogue && self.st.visible_previews != visible {
+            self.out.push(std::iter::once("visible").chain(visible.iter().map(String::as_str)).collect::<Vec<_>>().join(&SEP.to_string()));
+            self.st.visible_previews = visible;
         }
         ui.add_space(SPACE_S);
     }

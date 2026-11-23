@@ -8,9 +8,6 @@ use std::collections::BTreeMap;
 fn button(id: &str, label: &str) -> Value {
     json!({"id":id,"label":label})
 }
-fn string(v: &Value) -> &str {
-    v.as_str().unwrap_or_default()
-}
 #[derive(Deserialize)]
 struct Part {
     uid: String,
@@ -79,121 +76,12 @@ fn cutlist(d: &Value) -> PyResult<Value> {
     )
 }
 
-fn origin(p: &Value) -> &'static str {
-    if p["included"] == true {
-        "Included with Built"
-    } else if p["manual"] == true {
-        "Manual install"
-    } else if p["bundled"] == true {
-        "Bundled example"
-    } else if p["available"] == true {
-        "Catalog"
-    } else {
-        "Managed install"
-    }
-}
-
-fn next_launch(p: &Value, safe: bool) -> &'static str {
-    if p["installed"] != true {
-        "Not installed"
-    } else if safe {
-        "Safe mode"
-    } else if p["enabled"] == true {
-        "Enabled"
-    } else {
-        "Disabled"
-    }
-}
-
-fn package_detail(p: &Value, safe: bool) -> Value {
-    let mut buttons = Vec::new();
-    if p["installed"] == true {
-        buttons.push(button(
-            "toggle",
-            if p["enabled"] == true {
-                "Disable"
-            } else {
-                "Enable"
-            },
-        ));
-        if p["update"] == true {
-            buttons.push(json!({"id":"install","label":"Update","enabled":p["compatible"]}));
-        }
-        if p["included"] != true {
-            buttons.push(button("remove", "Remove…"));
-        }
-    } else {
-        buttons.push(json!({"id":"install","label":"Install…","enabled":p["compatible"]}));
-    }
-    let running = if p["failure"] != "" {
-        "Load error"
-    } else if p["running"] == true {
-        "Running"
-    } else {
-        "Not running"
-    };
-    let mut blocks = vec![
-        json!({"kind":"text","text":p["summary"]}),
-        json!({"kind":"kv","rows":[["Source",origin(p),""],["Version",p["version"],""],
-        ["This session",running,""],["Next launch",next_launch(p,safe),""]]}),
-    ];
-    if p["failure"] != "" {
-        blocks.push(json!({"kind":"text","text":p["failure"],"tone":"error"}));
-    }
-    if p["compatible"] == false {
-        blocks
-            .push(json!({"kind":"text","text":"Requires a newer version of Built","tone":"warn"}));
-    }
-    if p["source"] != "" {
-        blocks.push(json!({"kind":"text","text":p["source"]}));
-    }
-    blocks.push(json!({"kind":"buttons","align":"fill","buttons":buttons}));
-    json!({"title":p["name"],"width":340,"blocks":blocks})
-}
-
-fn extensions(d: &Value) -> Value {
-    let tab = string(&d["tab"]);
-    let query = string(&d["query"]).to_lowercase();
-    let rows: Vec<_> = d["packages"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter(|p| {
-            let matches = query.is_empty()
-                || format!("{} {} {}", string(&p["name"]), string(&p["id"]), origin(p))
-                    .to_lowercase()
-                    .contains(&query);
-            matches
-                && match tab {
-                    "Updates" => p["update"] == true,
-                    "Browse" => p["available"] == true,
-                    _ => p["installed"] == true,
-                }
-        })
-        .collect();
-    let selected = rows.iter().find(|p| p["id"] == d["focus"]).or(rows.first());
-    let items: Vec<_> = rows
-        .iter()
-        .map(|p| json!({"id":p["id"],"label":p["name"],"sub":origin(p),"right":next_launch(p,d["safe"]==true)}))
-        .collect();
-    let detail = selected.map(|p| package_detail(p, d["safe"] == true));
-    let tabs: Vec<_> = ["Installed", "Browse", "Updates"]
-        .iter()
-        .map(|s| json!({"id":s,"label":s,"on":s==&tab}))
-        .collect();
-    json!({"id":"extensions","title":"Extension Manager","tabs":tabs,"search":{"placeholder":"Search extensions","key":"⌘F"},
-        "verbs":[button("refresh","Refresh catalog")],"force_focus":true,"focus":selected.map(|p|&p["id"]),"detail":detail,
-        "content":{"title":tab,"empty":"No matching extensions","blocks":if items.is_empty(){vec![]}else{vec![json!({"kind":"rows","items":items})]}},
-        "footer":{"links":[button("safe",if d["safe"]==true {"Leave safe mode"}else{"Safe mode"}),button("reset","Reset overrides…")],"hint":d["notice"]}})
-}
-
 #[pyfunction]
 pub fn surface_spec(id: &str, snapshot: &str) -> PyResult<String> {
     let d: Value =
         serde_json::from_str(snapshot).map_err(|e| PyValueError::new_err(e.to_string()))?;
     let spec = match id {
         "about" => crate::about::sheet(&d, false, |s| Ok(s.to_owned()))?,
-        "extensions" => extensions(&d),
         "cutlist" => cutlist(&d)?,
         _ => return Err(PyValueError::new_err("Unknown sheet")),
     };

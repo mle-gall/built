@@ -376,3 +376,92 @@ def test_the_shell_prefs_command_opens_the_sheet(win):
     from app_shell import files
     assert files.open_settings(win)
     assert isinstance(cs.current(win), ss.SettingsSheet)
+
+
+def test_add_location_opens_coordinates_first_applies_to_the_document_and_undoes(win, tmp_path, monkeypatch):
+    from core.sun import scene_north_deg
+    from georef import tile_fetcher
+    win.open_preferences(page="location")
+    frame(win)
+    scene = win.viewport.scene
+    act(win, "v", "north", "37")
+    opened = act(win, "b", "add_location")
+    assert {"site_lat", "site_lon"} <= fields(opened).keys()
+    assert "apply at once" not in opened["footer"]["hint"]
+    assert not any(b["kind"] == "map" for b in opened["content"]["blocks"])
+    invalid = act(win, "v", "site_lat", "91")
+    apply = next(v for b in invalid["content"]["blocks"] for v in b.get("buttons", ()) if v["id"] == "site_apply")
+    assert not apply["enabled"]
+    act(win, "verb", "site_apply")
+    assert scene.georef is None
+    act(win, "v", "site_lat", "48.85")
+    act(win, "v", "site_lon", "2.35")
+    calls = []
+    monkeypatch.setattr(tile_fetcher.TileFetcher, "request", lambda self, src, x, y, z: calls.append((src.id, x, y, z)))
+    mapped = act(win, "verb", "site_map")
+    map_block = next(b["map"] for b in mapped["content"]["blocks"] if b["kind"] == "map")
+    assert (map_block["lat"], map_block["lon"]) == (48.85, 2.35)
+    assert not calls
+    act(win, "site_tiles", "4,3,12")
+    assert calls == [(map_block["source"], 4, 3, 12)]
+    act(win, "site_center", "48.86", "2.36", "14")
+    act(win, "verb", "site_apply")
+    assert (scene.georef.lat, scene.georef.lon, scene_north_deg(scene)) == (48.86, 2.36, 37)
+    path = tmp_path / "located.igz"
+    win._do_save(path)
+    other = Scene()
+    igz.load_into(other, path)
+    assert (other.georef.lat, other.georef.lon, other.georef.north) == (48.86, 2.36, 37)
+    assert win.viewport.history.undo() and scene.georef is None
+    assert win.viewport.history.redo() and scene.georef.lat == 48.86
+    act(win, "b", "add_location")
+    act(win, "v", "site_lat", "-22")
+    act(win, "verb", "site_cancel")
+    assert scene.georef.lat == 48.86
+
+
+def test_place_search_approximate_location_and_capture_use_the_open_draft(win, monkeypatch):
+    from georef.geocode import Geocoder, IpLocator, Place
+
+    selected = []
+    ss.edit_location(win, center=(0, 0), done=lambda *coords: selected.append(coords))
+    frame(win)
+    act(win, "verb", "site_map")
+
+    def search(geocoder, query):
+        assert query == "Station"
+        geocoder.resultsReady.emit([Place("Station Square", 46.8, 7.5)])
+
+    monkeypatch.setattr(Geocoder, "search", search)
+    monkeypatch.setattr(IpLocator, "locate", lambda locator: locator.located.emit(46.85, 7.52, "Test town"))
+    act(win, "v", "site_query", "Station")
+    matches = act(win, "verb", "site_search")
+    assert any(v["label"] == "Station Square" for b in matches["content"]["blocks"] for v in b.get("buttons", ()))
+    assert float(fields(act(win, "verb", "site_place_0"))["site_lat"][3]) == 46.8
+    assert float(fields(act(win, "verb", "site_locate"))["site_lon"][3]) == 7.52
+    act(win, "v", "site_draw", "1")
+    act(win, "site_rect", "46.85", "7.52", "46.86", "7.53")
+    act(win, "verb", "site_apply")
+    assert len(selected) == 1
+    lat, lon, width, length = selected[0]
+    assert (lat, lon) == pytest.approx((46.855, 7.525))
+    assert 750 < width < 780 and 1100 < length < 1120
+    assert win.viewport.scene.georef is None
+
+
+def test_move_origin_confirmation_and_undo_restore_survey_datum(win, monkeypatch):
+    from georef.datum import SceneDatum
+    from views import chrome_dialogs
+    scene = win.viewport.scene
+    old = SceneDatum(45, 7, alt=1250, north=30)
+    scene.georef = old
+    ss.edit_location(win)
+    frame(win)
+    act(win, "v", "site_lat", "46")
+    choices = iter(("cancel", "move"))
+    monkeypatch.setattr(chrome_dialogs, "ask", lambda *_a, **_kw: next(choices))
+    act(win, "verb", "site_apply")
+    assert scene.georef is old
+    act(win, "verb", "site_apply")
+    assert (scene.georef.lat, scene.georef.north, scene.georef.alt) == (46, 30, 0)
+    assert win.viewport.history.undo() and scene.georef is old

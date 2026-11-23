@@ -172,133 +172,158 @@ class Extensions(chrome_sheet.Provider):
 
     def __init__(self):
         from core import extension_manager as em
+        from ingetrazo_render import ExtensionBrowser
+        self.model = ExtensionBrowser()
         self.catalog = em.load_cached_catalog()
         self.bundled = em.bundled_extensions()
-        self.tab, self.focus, self.query = "Installed", "", ""
-        self.notice = ""
+        from concurrent.futures import ThreadPoolExecutor
+        from PySide6.QtCore import QStandardPaths
+        from pathlib import Path
+        self.cache = Path(QStandardPaths.writableLocation(QStandardPaths.AppLocalDataLocation)) / "extension-screenshots"
+        self.pool = ThreadPoolExecutor(max_workers=3, thread_name_prefix="catalog")
         self.refreshing = None
+        self.requests = {}
+        self.reload = True
+
+    def closed(self, ctx):
+        self.pool.shutdown(wait=False, cancel_futures=True)
+        if timer := getattr(self, "_timer", None):
+            timer.stop()
+            timer.deleteLater()
 
     def signature(self, ctx):
-        return self.refreshing is not None and self.refreshing.done()
+        import time
+        from core import extension_manager as em
+        now = int(time.monotonic() * 1000)
+        for icon, job in list(self.requests.items()):
+            if job.done():
+                del self.requests[icon]
+                self.model.preview_done(icon, now, job.result() if job.exception() is None else None)
+        for job in self.model.jobs(now):
+            self.requests[job.icon] = self.pool.submit(job.run, em._get)
+        if self.model.pending() or self.refreshing is not None:
+            if host := getattr(ctx.win, "_host", None):
+                host.wake_after(100)
+            elif ctx.view is not None:
+                from PySide6.QtCore import QTimer
+                if not getattr(self, "_timer", None):
+                    self._timer = QTimer(ctx.view)
+                    self._timer.setSingleShot(True)
+                    self._timer.timeout.connect(ctx.view.update)
+                if not self._timer.isActive():
+                    self._timer.start(100)
+        return self.model.revision, self.refreshing is not None and self.refreshing.done()
 
     def build(self, ctx):
+        from core.i18n import tr
+        if self.refreshing is not None and self.refreshing.done():
+            try:
+                self.catalog = self.refreshing.result()
+                self.model.notice = tr("Cached catalog") if self.catalog.from_cache else tr("Catalog refreshed")
+            except Exception as exc:
+                self.model.notice = tr("Could not refresh catalog: {error}", error=str(exc))
+            self.refreshing = None
+            self.reload = True
+        if self.reload:
+            self.snapshot(ctx.win)
+            self.reload = False
+        sheet = NativeSheet(self.id, spec=self.model.sheet(tr))
+        for icon in self.model.icons():
+            sheet.icon(*icon)
+        return sheet
+
+    def snapshot(self, win):
         from core import extension_manager as em
         from core.extensions import plugin_dirs, _candidates
         from core.i18n import current_language
         from core.version import __version__
-        if self.refreshing is not None and self.refreshing.done():
-            try:
-                self.catalog = self.refreshing.result()
-                self.notice = "Catalog refreshed"
-            except Exception as exc:
-                self.notice = str(exc)
-            self.refreshing = None
-        catalog = {e.id: e for e in self.bundled}
+        self.entries = {e.id: e for e in self.bundled}
         if self.catalog:
-            catalog.update((e.id, e) for e in self.catalog.extensions)
-        self.catalog_ids = set(catalog)
-        managed = em.extension_startup_state()
-        hands = {em.hand_installed_ident(p): p for p in em.hand_installed_plugins()}
-        shipped = {stem for stem, _, _ in _candidates(plugin_dirs()[0])}
-        overrides = em.disabled_overrides()
-        loaded = getattr(ctx.win, "_running_extensions", set())
-        failures = getattr(ctx.win, "_extension_load_errors", {})
-        safe = em.safe_mode()
-        lang = current_language()
-        self.packages = {}
-        rows = []
-        for ident in sorted(set(catalog) | managed.keys() | hands.keys() | shipped):
-            ext = catalog.get(ident)
-            info = em.installed_info(ident) if ident in managed else {}
-            info = info or {}
-            included = ident in shipped
-            installed = included or ident in hands or ident in managed
-            enabled = ident not in overrides and (included or ident not in managed or em.is_extension_enabled(ident))
-            version = info.get("version")
-            if included:
-                version = __version__
-            elif not installed and ext:
-                version = ext.version
-            name = em.display_name(ext, lang) if ext else ident.replace("_", " ").title()
-            rows.append(dict(
-                id=ident, name=name, installed=installed, enabled=enabled, available=bool(ext),
-                included=included, manual=ident in hands, bundled=bool(ext and ext.bundled),
-                source=info.get("download") or (ext.repository if ext else ""),
-                version=version or "Unspecified", running=ident in loaded,
-                failure=failures.get(ident, {}).get("error", ""),
-                compatible=not ext or em.compatible_with_current(ext),
-                summary=em.display_summary(ext, lang) if ext else "",
-                update=bool(ext and info and ext.sha256 != info.get("sha256") and not included),
-            ))
-            self.packages[ident] = (ext, hands.get(ident), included, bool(info), enabled)
-        sheet = NativeSheet(self.id, dict(tab=self.tab, query=self.query, focus=self.focus, safe=safe,
-                                          notice=self.notice, packages=rows))
-        self.focus = sheet.focused or ""
-        return sheet
+            self.entries.update((e.id, e) for e in self.catalog.extensions)
+        states = em.extension_startup_state()
+        self.hands = {em.hand_installed_ident(p): p for p in em.hand_installed_plugins()}
+        self.model.load(json.dumps(dict(
+            catalog={k: vars(e) for k, e in self.entries.items()},
+            states=states, managed={k: em.installed_info(k) for k in states},
+            hands={k: str(p) for k, p in self.hands.items()},
+            shipped={k: str(p) for k, p, _ in _candidates(plugin_dirs()[0])},
+            startup=getattr(win, "_extension_startup_state", states),
+            fetched=self.catalog.fetched_at if self.catalog else "",
+            safe=em.safe_mode(), disabled=list(em.disabled_overrides()),
+            reviewed=self.catalog.reviewed if self.catalog else {},
+            running=list(getattr(win, "_running_extensions", ())),
+            errors=getattr(win, "_extension_load_errors", {}),
+            incompatible=[k for k, e in self.entries.items() if not em.compatible_with_current(e)],
+            old=[k for k, e in self.entries.items() if em.tested_version_is_old(e)],
+            cache=str(self.cache), lang=current_language(), build=__version__)))
 
     def confirm(self, win, title, text):
+        from core.i18n import tr
         from views.chrome_dialogs import ask
-        return ask(win, title, text, [("cancel", "Cancel"), ("ok", title)], cancel="cancel",
-                   default="cancel") == "ok"
+        return ask(win, title, text, [("cancel", tr("Cancel")), ("ok", title)],
+                   cancel="cancel", default="cancel") == "ok"
 
     def act(self, ctx, verb, args):
         from core import extension_manager as em
-        if verb == "tab":
-            self.tab = args[0]
-        elif verb in ("focus", "open"):
-            self.focus = args[0]
-        elif verb == "search":
-            self.query = args[0]
-        elif verb == "verb":
-            action = args[0]
-            try:
-                if action == "refresh" and self.refreshing is None:
-                    from concurrent.futures import ThreadPoolExecutor
-                    pool = ThreadPoolExecutor(max_workers=1)
-                    self.refreshing = pool.submit(em.refresh_catalog)
-                    pool.shutdown(wait=False)
-                    self.notice = "Refreshing catalog…"
-                elif action == "safe":
-                    em.set_safe_mode(not em.safe_mode())
-                    self.notice = "Restart to apply safe mode changes"
-                elif action == "reset":
-                    if self.confirm(ctx.win, "Reset overrides", "Enable all extensions and leave safe mode on next launch?"):
-                        em.reset_overrides()
-                        self.notice = "Restart to apply changes"
-                elif self.focus in self.packages:
-                    self.package_action(ctx.win, action)
-            except (OSError, em.ExtensionManagerError) as exc:
-                self.notice = str(exc)
-
-    def package_action(self, win, action):
-        from core import extension_manager as em
-        ident = self.focus
-        ext, path, included, managed, enabled = self.packages[ident]
-        if action == "toggle":
-            if managed and not included:
-                em.set_extension_enabled(ident, not enabled)
-                em.set_override(ident, False)
-            else:
-                em.set_override(ident, enabled)
-        elif action == "remove" and not included:
-            if not self.confirm(win, "Remove", f"Remove {ident} from installed extensions?"):
+        from core.desktop_open import open_url
+        from core.i18n import tr
+        from core.paths import user_log_dir
+        if verb != "verb":
+            if verb == "tab":
+                self.reload = True
+            if not self.model.receive(verb, args):
                 return
-            if path:
-                em.remove_hand_installed(path)
-            else:
-                em.uninstall_extension(ident)
-        elif action == "install" and ext:
-            reviewed = ext.bundled or (self.catalog and em.is_reviewed(ext, self.catalog.reviewed))
-            if not reviewed and not self.confirm(win, "Install unreviewed extension",
-                                                f"{ident} will run Python code on your computer. Continue?"):
-                return
-            def confirm_copies(paths):
-                names = ", ".join(p.name for p in paths)
-                return self.confirm(win, "Replace copies", f"Set aside {names} and install {ident}?")
-            em.install_extension(ext, confirm_manual_copies=confirm_copies, catalog_ids=self.catalog_ids)
+            action = "refresh"
         else:
-            return
-        self.notice = "Restart to apply changes"
+            action = args[0]
+        try:
+            if action == "refresh":
+                if self.refreshing is None:
+                    self.refreshing = self.pool.submit(em.refresh_catalog)
+                    self.model.notice = tr("Refreshing catalog…")
+                return
+            if action == "safe":
+                em.set_safe_mode(not em.safe_mode())
+            elif action == "reset":
+                if not self.confirm(ctx.win, tr("Reset overrides"), tr("Enable all extensions and leave safe mode on next launch?")):
+                    return
+                em.reset_overrides()
+            else:
+                plan = self.model.command(action, tr)
+                if plan is None:
+                    return
+                op, ident, questions = plan
+                if any(not self.confirm(ctx.win, title, msg) for title, msg in questions):
+                    return
+                if op in ("install", "replace"):
+                    def copies(paths):
+                        title, msg = self.model.copies(ident, [p.name for p in paths], tr)
+                        return self.confirm(ctx.win, title, msg)
+                    installer = em.install_extension if op == "install" else em.replace_hand_installed
+                    installer(self.entries[ident], confirm_manual_copies=copies, catalog_ids=set(self.entries))
+                elif op in ("enable", "disable"):
+                    em.set_extension_enabled(ident, op == "enable")
+                    em.set_override(ident, False)
+                elif op in ("override_on", "override_off"):
+                    em.set_override(ident, op == "override_off")
+                elif op == "set_aside":
+                    em.remove_hand_installed(self.hands[ident])
+                elif op == "uninstall":
+                    em.uninstall_extension(ident)
+                elif op == "repository":
+                    open_url(self.entries[ident].repository)
+                    return
+                elif op == "logs":
+                    open_url(user_log_dir())
+                    return
+                elif op == "folder":
+                    folder = self.hands.get(ident, em.user_plugins_dir() / ident)
+                    open_url(folder if folder.is_dir() else folder.parent)
+                    return
+            self.reload = True
+            self.model.notice = tr("Restart to apply changes")
+        except (OSError, em.ExtensionManagerError) as exc:
+            self.model.notice = str(exc)
 
 
 def show(win, sid):
