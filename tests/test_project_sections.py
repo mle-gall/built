@@ -113,3 +113,54 @@ def test_a_plane_is_renamed_in_one_undo_step(project):
     edit(p, a, "symbol", "P1")
     assert p.rows()[key(a)][0] == "P1 — Plan cut"
     assert p.win.viewport.history.undo() and a.symbol == "A"
+
+
+@pytest.fixture
+def window_project():
+    from views.main_window import MainWindow
+    win = MainWindow()
+    p = Project(scene=win.viewport.scene)
+    p.win = win
+    a, b = _two_planes(p.scene)
+    p.rows()
+    p.action("toggle", "sections:all")
+    yield p, a, b
+    for doc in win.documents():
+        doc.saved_content = doc.viewport.scene.content_version
+    win.close()
+
+
+def folder(p):
+    p.action("item", "sections:all")
+    wgpu_ui._inspector(p.view, p.win)
+    _, sections = p.view.renderer.calls["ui_set_inspector"]
+    return {title: dict(entries) for title, entries in sections}
+
+
+def test_the_folder_row_drives_the_view_menu_switches(window_project):
+    p, _, _ = window_project
+    assert folder(p)["Display"]["Cuts"] == "On"
+    p.action("eye", "sections:all")
+    assert not p.scene.show_section_planes and not p.win._act_show_splanes.isChecked()
+    wgpu_ui._tree_action(p.win, p.view, "insp:sectionview:section_cuts")
+    assert not p.scene.show_section_cuts and not p.win._act_show_scuts.isChecked()
+    assert folder(p)["Display"] == {"Frames": "Off", "Cuts": "Off", "Fill": "On"}
+    p.win._act_show_splanes.setChecked(True)
+    p.win._act_show_scuts.setChecked(True)
+    assert p.rows()["sections:all"][1][5] == 1
+    assert folder(p)["Display"]["Cuts"] == "On"
+
+
+def test_the_section_fill_switch_on_the_folder_and_the_cutting_plane(window_project):
+    p, a, b = window_project
+    action = "sectionview:section_fill"
+    assert action in folder(p)["Actions"]
+    wgpu_ui._tree_action(p.win, p.view, "insp:" + action)
+    assert not p.scene.display_style.section_fill and not p.win._act_section_fill.isChecked()
+    assert folder(p)["Display"]["Fill"] == "Off"
+    assert action in inspector(p, a)["Actions"]
+    wgpu_ui._tree_action(p.win, p.view, "insp:" + action)
+    assert p.scene.display_style.section_fill
+    assert action not in inspector(p, b)["Actions"]
+    p.win._act_section_fill.setChecked(False)
+    assert folder(p)["Display"]["Fill"] == "Off"

@@ -107,6 +107,19 @@ pub(crate) fn section_inspector(
     key: &str,
 ) -> PyResult<Option<(String, Vec<Section>)>> {
     if key == FOLDER {
+        let switches = [
+            ("Frames", scene.getattr("show_section_planes")?.is_truthy()?),
+            ("Cuts", scene.getattr("show_section_cuts")?.is_truthy()?),
+            (
+                "Fill",
+                scene
+                    .getattr("display_style")?
+                    .getattr("section_fill")?
+                    .is_truthy()?,
+            ),
+        ]
+        .map(|(name, on)| (name.into(), if on { "On" } else { "Off" }.into()))
+        .to_vec();
         let acts = [
             ("section_planes", "Show / hide frames"),
             ("section_cuts", "Switch cuts"),
@@ -116,7 +129,7 @@ pub(crate) fn section_inspector(
         .to_vec();
         return Ok(Some((
             "Section planes".into(),
-            vec![("Actions".into(), acts)],
+            vec![("Display".into(), switches), ("Actions".into(), acts)],
         )));
     }
     let Some(uid) = key.strip_prefix("section:") else {

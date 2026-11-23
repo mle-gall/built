@@ -902,7 +902,7 @@ def _tree(view, win, *, discover=False):
     geometric = view.__dict__.get("_ui_mode") == "problems" or colset == 2
     cv = scene.content_version if geometric else _tree_version(view, win, scene)
     sig = (id(scene), id(scene.edit_group), scene.mesh.revision, cv, tuple(sorted(exp)), tuple(sorted(pages.items())), flt, len(sel_ids),
-           hash(frozenset(sel_ids)), colset, getattr(view, "_ui_layer_rev", 0))
+           hash(frozenset(sel_ids)), colset, getattr(view, "_ui_layer_rev", 0), scene.show_section_planes)
     if not discover and sig == getattr(view, "_ui_tree_sig", None):
         return
     first = not hasattr(view, "_ui_tree")
@@ -2334,7 +2334,8 @@ def _inspector(view, win) -> None:
     node_focus = focus[0] if focus and focus[1] == sel_sig else None
     sig = (id(scene), scene.content_version, sel_sig, node_focus, getattr(view, "_ui_tree_sig", None) is not None,
            view.__dict__.get("_ui_mat_focus"), view.__dict__.get("_ui_mode"), view.__dict__.get("_ui_colset"),
-           _current_material_name(), _active_tool_id(win))
+           _current_material_name(), _active_tool_id(win), scene.show_section_planes, scene.show_section_cuts,
+           scene.display_style.section_fill)
     if sig == getattr(view, "_ui_insp_sig", None):
         return
     view._ui_insp_sig = sig

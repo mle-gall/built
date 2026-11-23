@@ -617,24 +617,6 @@ def test_nothing_opens_through_a_locked_group():
 # ---- Section planes ------------------------------------------------------------
 
 
-def test_the_folder_row_drives_the_view_menu_switches():
-    building, tree = _building()
-    win, scene, panel = _window_with(building, tree)
-    _two_planes(scene)
-    panel.refresh()
-    panel._on_item_clicked(panel._sec_root, COL_EYE)
-    assert not scene.show_section_planes
-    assert not win._act_show_splanes.isChecked()
-    panel._on_item_clicked(panel._sec_root, COL_LOCK)
-    assert not scene.show_section_cuts
-    assert not win._act_show_scuts.isChecked()
-    win._act_show_scuts.setChecked(True)              # from the toolbar
-    assert panel._stale                               # off screen: later
-    panel.refresh()
-    assert panel._sec_folder[2] is True               # cuts on again
-    _close(win)
-
-
 def test_keyboard_on_a_plane_row():
     from PySide6.QtTest import QTest
     building, tree = _building()
@@ -648,31 +630,6 @@ def test_keyboard_on_a_plane_row():
     assert b.hidden
     QTest.keyClick(t, Qt.Key_Return)                  # it cuts
     assert b.active and not a.active
-    _close(win)
-
-
-def test_the_section_fill_switch_on_the_folder_and_the_cutting_plane():
-    building, tree = _building()
-    win, scene, panel = _window_with(building, tree)
-    a, b = _two_planes(scene)
-    style = scene.display_style
-    style.section_fill = True
-    panel.refresh()
-    sec = panel._sec_root
-    assert sec.data(COL_LAYER, Qt.UserRole) is True
-    assert sec.child(0).data(COL_LAYER, Qt.UserRole) is True   # A cuts
-    assert sec.child(1).data(COL_LAYER, Qt.UserRole) is None   # B does not
-    panel._on_item_clicked(sec, COL_LAYER)
-    assert not style.section_fill
-    assert not win._act_section_fill.isChecked()               # menu follows
-    assert sec.text(COL_LAYER) == "No fill"
-    panel._on_item_clicked(sec.child(0), COL_LAYER)            # on A
-    assert style.section_fill
-    panel._on_item_clicked(sec.child(1), COL_LAYER)            # B: no cell
-    assert style.section_fill
-    win._act_section_fill.setChecked(False)                    # the toolbar
-    panel.refresh()
-    assert sec.data(COL_LAYER, Qt.UserRole) is False
     _close(win)
 
 
