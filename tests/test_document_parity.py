@@ -12,9 +12,7 @@ placements, and saves and reopens ``.igz`` and ``.built``. It runs once with
 - the saved files, byte for byte, for the same document; and each run's
   save → open → save gives the same bytes.
 
-Two differences are the point of the move and are asserted as such: undoing
-a Move puts back the exact matrix (Python composes ``-delta`` in float32),
-and a tag a command made keeps its uid across undo and redo (Python's redo
+Both engines restore the exact binary64 matrix for the fixture. A tag a command made keeps its uid across undo and redo (Python's redo
 makes a new one)."""
 import json
 import os
@@ -88,7 +86,7 @@ def test_undoing_a_move_is_exact(runs):
     # last command, ..., 17 undoes the Move of the part, command 6).
     before = rs["states"][5]["groups"][0]["children"][1]["xform"]
     assert rs["states"][17]["groups"][0]["children"][1]["xform"] == before
-    assert py["states"][17]["groups"][0]["children"][1]["xform"] != before
+    assert py["states"][17]["groups"][0]["children"][1]["xform"] == before
 
 
 def test_feed_records_agree(runs):

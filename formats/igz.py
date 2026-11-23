@@ -799,7 +799,7 @@ def prepare_scene_steps(scene, mesh_steps=None, *, stream=None, large=None):
                     protos.append(None)          # reserve: recursion is depth
                     protos[idx] = yield from block(mesh)
                 values = (built.placement_values(xf) if mesh_steps is not None or getattr(stream, "built", False)
-                          else list(xf.data()))
+                          else built.compact_placement(xf))
                 entry = {"proto": idx, "xform": values}
                 # Group or component (issue #90): a group of groups and a
                 # copied group carry a matrix too. Written for EVERY

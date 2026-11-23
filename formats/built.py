@@ -36,7 +36,7 @@ def point_array(points, sink):
 
 
 def placement(values):
-    """Qt consumes float32. Retain the source doubles on its projection."""
+    """Read a column-major binary64 placement."""
     from ingetrazo_core import Matrix4 as QMatrix4x4
     import math
     values = tuple(map(float, values))
@@ -69,6 +69,12 @@ def python_vertices(mesh, points, sequential):
     return mesh.vertices, inverse
 
 
+def compact_placement(matrix):
+    """Column-major values representable by legacy IGZ readers."""
+    import numpy as np
+    return np.asarray(matrix.data(), dtype=np.float32).tolist()
+
+
 def export_placements(scene):
     """For each serialized mesh, its placements before and after f32 export."""
     import numpy as np
@@ -84,7 +90,7 @@ def export_placements(scene):
             if links.save_as_placeholder(group, scene):
                 return
             source = np.array(placement_values(group.xform)).reshape(4, 4).T
-            target = np.array(group.xform.data()).reshape(4, 4).T
+            target = np.array(compact_placement(group.xform)).reshape(4, 4).T
             world, exported = world @ source, exported @ target
         by_mesh.setdefault(id(group.mesh), []).append((world, exported))
         for child in group.children:
