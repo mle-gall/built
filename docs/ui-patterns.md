@@ -50,19 +50,24 @@ Manager**, **About**.
 ```
 
 - **Geometry.** Under the top bar (+16 pt), down to 12 pt above the bottom
-  bar, centred, 24 pt from the window's sides, at most `width` (1240 pt by
-  default; the start page uses 1180, Settings 1100). Side list 216 pt,
-  detail 340 pt by default (at most half of what is left), content in
-  between. Corner radius 14. It fits 1280 × 800: there the sheet is
-  1232 × 688 pt.
-- **Behind it.** The model is blurred (the glass pass over the whole
-  window under the top bar), then everything under the top bar is dimmed
-  (black at 38 %). The real frame — rail, dock, bottom bar — stays drawn
-  under the dim: the sheet is a state of the window, not a new window.
-- **Surface.** Graphite `#1C1F24`, a hairline, a long soft shadow; the side
-  list one step darker. Text and controls use the `ui.rs` tokens (INK, DIM,
-  FAINT, ACCENT, WARN; R_CONTROL 8, R_ROW 6) and the forms' widgets
-  (`ui/dialog.rs` fields), so a setting looks the same in a form and a sheet.
+  bar. With 960 pt or more between the rail and the dock it sits there,
+  centred, at most `width` (1240 pt by default; the start page uses 1180,
+  Settings 1100): the frame stays in view beside it, undimmed, as in the
+  review's mockups. Narrower (1280 × 800 with the dock open) it covers the
+  rail and the dock, 24 pt from the window's sides: 1232 × 688 pt. Side
+  list 216 pt, detail 340 pt by default (at most half of what is left),
+  content in between.
+- **Behind it.** The model is blurred as it is (no tint), then dimmed by
+  the neutral `SCRIM`. The real frame — rail, dock, bottom bar — stays
+  drawn: the sheet is a state of the window, not a new window.
+- **Surface.** The dock's own glass (`Surface::Panel`: its tint, rim,
+  radius and shadow), panes set apart by `DIVIDER` hairlines, pictures in
+  `WELL`, link and check dots in `FOUND` / `CHANGED` / `MISSING`. Every
+  colour is a `ui/tokens.rs` role (the colour lint enforces it); buttons
+  are the kit's sheet buttons, dots its `dot` atom, and fields the forms'
+  widgets (`ui/dialog.rs`), so a setting looks the same in a form and a
+  sheet. Blue only as the accent: the focused tile, the selected row, the
+  primary button, links. No navy surfaces or washes.
 - **Motion.** In and out in 160 ms: the dim fades, the sheet rises 14 pt
   and fades. Closing keeps the last content while it goes.
 
