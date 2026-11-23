@@ -1091,6 +1091,21 @@ class HideEdgesCommand(HideCommand):
 
 class _FacePaintCommand(FaceAttributeCommand):
     """Apply owned paint fields inside the enlisted geometry transaction."""
+    def __init__(self, faces, value):
+        self._faces = list(faces)
+        self._value = value
+        self._old = None
+
+    def do(self, scene):
+        self._paint([(self.field, self._value)])
+        _dirty_group_chunks(scene)
+        scene.version += 1
+
+    def undo(self, scene):
+        self._restore_paint([self.field])
+        _dirty_group_chunks(scene)
+        scene.version += 1
+
     def _paint(self, fields):
         from ingetrazo_core import apply_face_paint
         capture = self._old is None and not self._journal_geometry
@@ -1104,89 +1119,21 @@ class _FacePaintCommand(FaceAttributeCommand):
 
 
 class SetFaceColorCommand(_FacePaintCommand):
-    """Paint a set of faces with an RGB colour (or clear it with ``None``),
-    stored in each face's ``attrs["color"]`` — the first user-facing use of the
-    generic per-region attrs (A.3), so the colour rides through push/pull and
-    the plane rebuild. Painting changes no topology, so a direct attrs swap
-    inverts it exactly — no snapshot needed. Faces are held by reference (the
-    paint click resolves them live); undo restores each face's prior colour."""
+    """Set or clear the front colour of each selected face."""
+
+    field = "color"
 
     def __init__(self, faces, color) -> None:
-        self._faces = list(faces)
-        self._color = list(color) if color is not None else None
-        self._old: Optional[list] = None  # captured on first do
-
-    def do(self, scene) -> None:
-        if _doc.ENABLED:
-            self._paint([("color", self._color)])
-            _dirty_group_chunks(scene)
-            scene.version += 1
-            return
-        if self._old is None and not self._journal_geometry:
-            self._old = [f.attrs.get("color") for f in self._faces]
-        for f in self._faces:
-            if self._color is None:
-                f.attrs.pop("color", None)
-            else:
-                f.attrs["color"] = list(self._color)
-        _dirty_group_chunks(scene)
-        scene.version += 1
-
-    def undo(self, scene) -> None:
-        if _doc.ENABLED:
-            self._restore_paint(["color"])
-            _dirty_group_chunks(scene)
-            scene.version += 1
-            return
-        for f, old in zip(self._faces, self._old or []):
-            if old is None:
-                f.attrs.pop("color", None)
-            else:
-                f.attrs["color"] = list(old)
-        _dirty_group_chunks(scene)
-        scene.version += 1
+        super().__init__(faces, list(color) if color is not None else None)
 
 
 class SetFaceOpacityCommand(_FacePaintCommand):
-    """Set (or clear with ``None``) ``attrs["opacity"]`` on a set of faces —
-    the translucency channel (glass): the render's blend pass reads it for
-    coloured and textured faces alike. Same direct-attrs-swap inversion as
-    the colour command."""
+    """Set or clear the opacity of coloured or textured faces."""
+
+    field = "opacity"
 
     def __init__(self, faces, opacity) -> None:
-        self._faces = list(faces)
-        self._opacity = float(opacity) if opacity is not None else None
-        self._old: Optional[list] = None
-
-    def do(self, scene) -> None:
-        if _doc.ENABLED:
-            self._paint([("opacity", self._opacity)])
-            _dirty_group_chunks(scene)
-            scene.version += 1
-            return
-        if self._old is None and not self._journal_geometry:
-            self._old = [f.attrs.get("opacity") for f in self._faces]
-        for f in self._faces:
-            if self._opacity is None:
-                f.attrs.pop("opacity", None)
-            else:
-                f.attrs["opacity"] = self._opacity
-        _dirty_group_chunks(scene)
-        scene.version += 1
-
-    def undo(self, scene) -> None:
-        if _doc.ENABLED:
-            self._restore_paint(["opacity"])
-            _dirty_group_chunks(scene)
-            scene.version += 1
-            return
-        for f, old in zip(self._faces, self._old or []):
-            if old is None:
-                f.attrs.pop("opacity", None)
-            else:
-                f.attrs["opacity"] = old
-        _dirty_group_chunks(scene)
-        scene.version += 1
+        super().__init__(faces, float(opacity) if opacity is not None else None)
 
 
 class SetFaceMaterialTagCommand(_FacePaintCommand):
@@ -1208,40 +1155,16 @@ class SetFaceMaterialTagCommand(_FacePaintCommand):
         self._registered = False
 
     def do(self, scene) -> None:
-        if not _doc.ENABLED and self._old is None and not self._journal_geometry:
-            self._old = [(f.attrs.get("mat"), f.attrs.get("pbr")) for f in self._faces]
         if (self._material is not None and self._name
                 and self._name not in getattr(scene, "materials", {})):
             scene.materials[self._name] = self._material
             self._registered = True
-        if _doc.ENABLED:
-            self._paint([("pbr", self._material),
-                         ("mat", self._name)])
-        else:
-            for f in self._faces:
-                if self._material is not None and self._material.pbr is not None:
-                    f.attrs["pbr"] = self._material.pbr
-                else:
-                    f.attrs.pop("pbr", None)
-                if self._name is None:
-                    f.attrs.pop("mat", None)
-                else:
-                    f.attrs["mat"] = self._name
+        self._paint([("pbr", self._material),
+                     ("mat", self._name)])
         scene.version += 1
 
     def undo(self, scene) -> None:
-        if _doc.ENABLED:
-            self._restore_paint(["pbr", "mat"])
-        else:
-            for f, (old, recipe) in zip(self._faces, self._old or []):
-                if recipe is None:
-                    f.attrs.pop("pbr", None)
-                else:
-                    f.attrs["pbr"] = recipe
-                if old is None:
-                    f.attrs.pop("mat", None)
-                else:
-                    f.attrs["mat"] = old
+        self._restore_paint(["pbr", "mat"])
         if self._registered:
             scene.materials.pop(self._name, None)
             self._registered = False
@@ -2929,93 +2852,24 @@ class MoveGeoPathNodeCommand(Command):
 
 
 class SetFaceTextureCommand(_FacePaintCommand):
-    """Apply an image texture (``{"path","sw","sh"}``) to a set of faces, or
-    clear it with ``None`` — stored in each face's ``attrs["texture"]`` (rides
-    the rebuild like the colour). Topology-free, so the attrs swap inverts it."""
+    """Set or clear a texture with an independent mapping per face."""
+
+    field = "texture"
 
     def __init__(self, faces, texture) -> None:
-        self._faces = list(faces)
-        self._tex = dict(texture) if texture is not None else None
-        self._old: Optional[list] = None
-
-    def do(self, scene) -> None:
-        if _doc.ENABLED:
-            self._paint([("texture", self._tex)])
-            _dirty_group_chunks(scene)
-            scene.version += 1
-            return
-        if self._old is None and not self._journal_geometry:
-            self._old = [f.attrs.get("texture") for f in self._faces]
-        for f in self._faces:
-            if self._tex is None:
-                f.attrs.pop("texture", None)
-            else:
-                f.attrs["texture"] = dict(self._tex)
-        _dirty_group_chunks(scene)
-        scene.version += 1
-
-    def undo(self, scene) -> None:
-        if _doc.ENABLED:
-            self._restore_paint(["texture"])
-            _dirty_group_chunks(scene)
-            scene.version += 1
-            return
-        for f, old in zip(self._faces, self._old or []):
-            if old is None:
-                f.attrs.pop("texture", None)
-            else:
-                f.attrs["texture"] = dict(old)
-        _dirty_group_chunks(scene)
-        scene.version += 1
+        super().__init__(faces, dict(texture) if texture is not None else None)
 
 
 class SetFaceBackCommand(_FacePaintCommand):
-    """Paint the BACK side of a set of faces: ``attrs["back"]`` becomes the
-    given material dict (``color``/``texture``/``opacity``/``mat``, the same
-    keys the front uses), or the side goes back to the style's default with
-    ``None``. Per face, because a positioned texture keeps its ``uvw`` only
-    on the plane it was fitted for (see the Paint tool). Topology-free, so
-    the attrs swap inverts it — the old value may be ``True`` (a two-sided
-    face) and comes back as such."""
+    """Apply per-face back paint and preserve legacy two-sided flags on replay."""
+
+    field = "back"
 
     def __init__(self, faces, backs) -> None:
-        self._faces = list(faces)
-        # One dict per face, or None for all.
+        super().__init__(faces, None)
         if backs is None or isinstance(backs, dict):
             backs = [backs] * len(self._faces)
-        self._backs = [dict(b) if isinstance(b, dict) else None for b in backs]
-        self._old: Optional[list] = None
-
-    @staticmethod
-    def _put(f, value) -> None:
-        if value is None:
-            f.attrs.pop("back", None)
-        else:
-            f.attrs["back"] = dict(value) if isinstance(value, dict) else value
-
-    def do(self, scene) -> None:
-        if _doc.ENABLED:
-            self._paint([("back", self._backs)])
-            _dirty_group_chunks(scene)
-            scene.version += 1
-            return
-        if self._old is None and not self._journal_geometry:
-            self._old = [f.attrs.get("back") for f in self._faces]
-        for f, b in zip(self._faces, self._backs):
-            self._put(f, b)
-        _dirty_group_chunks(scene)
-        scene.version += 1
-
-    def undo(self, scene) -> None:
-        if _doc.ENABLED:
-            self._restore_paint(["back"])
-            _dirty_group_chunks(scene)
-            scene.version += 1
-            return
-        for f, old in zip(self._faces, self._old or []):
-            self._put(f, old)
-        _dirty_group_chunks(scene)
-        scene.version += 1
+        self._value = [dict(b) if isinstance(b, dict) else None for b in backs]
 
 
 def translate_points(scene, keys: set, delta: QVector3D) -> None:
