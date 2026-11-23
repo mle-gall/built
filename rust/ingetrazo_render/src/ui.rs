@@ -1090,10 +1090,17 @@ impl Ui {
         if let Some(a) = clicked { self.actions.push(a); }
     }
 
+    /// Whether the Paint strip shows: always while Paint is active, even on
+    /// a model with no materials, so Browse all… is always one click away
+    /// (council B6).
+    fn paint_strip_shown(&self) -> bool {
+        self.active == "paint" || !self.palette_items.is_empty()
+    }
+
     /// With Paint active: the model's materials as a strip above the bottom
-    /// bar, the current one ringed; Library opens the full catalogue in the dock.
+    /// bar, the current one ringed, and Browse all… into the Library sheet.
     fn paint_strip(&mut self, ctx: &egui::Context, screen: Rect) {
-        if self.palette_items.is_empty() { return; }
+        if !self.paint_strip_shown() { return; }
         let (_, band_bottom) = self.band(ctx, screen);
         let centre = (GUT + 72.0 + self.free_right(ctx, screen)) / 2.0;
         let mut clicked: Option<String> = None;
@@ -1130,7 +1137,11 @@ impl Ui {
                             }
                             if resp.on_hover_text(name).clicked() { clicked = Some(format!("pal:{id}")); }
                         }
-                        if self.palette_items.last().is_some_and(|i| i.0 != "-" && !i.0.is_empty()) { bar_divider(ui); }
+                        if self.palette_items.is_empty() {
+                            ui.add_space(SPACE_XS);
+                            ui.label(egui::RichText::new("No materials in this model yet").font(body()).color(DIM));
+                            ui.add_space(SPACE_XS);
+                        } else if self.palette_items.last().is_some_and(|i| i.0 != "-" && !i.0.is_empty()) { bar_divider(ui); }
                         if text_button(ui, "Browse all…", "Every material: the Library", true) {
                             clicked = Some("libsheet:materials".into());
                         }
@@ -2497,7 +2508,7 @@ impl Ui {
                      ("view_menu", self.view_open), ("menu", self.menu.is_some()), ("form", self.form.is_some()),
                      ("plugin_utility", work && model && self.plugins.utility_open()), ("column", work && model && self.column.is_some()), ("bottom", work),
                      ("sel_more", work && model && self.sel_more && self.selection.is_some()),
-                     ("paint_strip", work && model && !self.palette_items.is_empty()),
+                     ("paint_strip", work && model && self.paint_strip_shown()),
                      ("commands", self.cmd_open),
                      ("sel_sub", work && model && self.sel_more && self.sel_sub.is_some()),
                      ("row_menu", model && self.column.as_ref().is_some_and(|c| c.row_menu.is_some())),
@@ -2844,6 +2855,33 @@ fn native_input_owners_unwind_in_order() {
     Ui::model_escape(Some(&mut ui), false, false, false);
     assert!(!ui.review);
 
+}
+
+#[test]
+fn paint_always_offers_browse_all_even_without_materials() {
+    let Some(mut ui) = test_chrome() else { return };
+    let screen = Rect::from_min_size(Pos2::ZERO, vec2(1280., 800.));
+    let strip = |ui: &mut Ui, events: Vec<egui::Event>| {
+        let ctx = ui.ctx.clone();
+        let raw = egui::RawInput { screen_rect: Some(screen), events, ..Default::default() };
+        let _ = ctx.run(raw, |c| ui.paint_strip(c, screen));
+        ctx.memory(|m| m.area_rect(egui::Id::new("paint_strip")))
+    };
+    assert!(ui.palette_items.is_empty());
+    ui.set_active("select".into());
+    assert!(!ui.paint_strip_shown());
+    ui.set_active("paint".into());
+    for _ in 0..3 { let _ = strip(&mut ui, vec![]); }
+    let r = strip(&mut ui, vec![]).expect("the strip shows with Paint active and no materials");
+    assert!(r.max.y < 800. - BOT_H, "{r:?}");
+    // Clicking Browse all…, the strip's last control, opens the Library's
+    // materials. (Tests have no fonts: the button is its 24 pt padding.)
+    let at = pos2(r.max.x - 16., r.center().y);
+    let button = |pressed| egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() };
+    let _ = strip(&mut ui, vec![egui::Event::PointerMoved(at)]);
+    let _ = strip(&mut ui, vec![button(true)]);
+    let _ = strip(&mut ui, vec![button(false)]);
+    assert!(ui.take_actions().contains(&"libsheet:materials".to_owned()));
 }
 
 #[test]
