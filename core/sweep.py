@@ -19,7 +19,6 @@ from copy import deepcopy
 
 from ingetrazo_core import Vec3 as QVector3D
 
-from core import doc_model
 from core.history import run_stitch
 from core.topology import _key
 
@@ -64,18 +63,6 @@ def order_path_edges(edges):
     return pts, closed
 
 
-def _project_ring(points, direction, plane_pt, plane_n):
-    """Slide each point parallel to ``direction`` onto the joint plane."""
-    denom_dir = QVector3D.dotProduct(direction, plane_n)
-    if abs(denom_dir) < 1e-9:
-        return None                                  # segment ⟂ joint plane
-    out = []
-    for p in points:
-        t = QVector3D.dotProduct(plane_pt - p, plane_n) / denom_dir
-        out.append(p + direction * t)
-    return out
-
-
 def _wall(quad):
     """A wall quad without its repeated corners, or ``None`` when fewer than
     three distinct corners remain."""
@@ -88,148 +75,18 @@ def _wall(quad):
     return out if len(out) >= 3 else None
 
 
-def _clip_half(loop, keep_tol):
-    """The part of a closed ``loop`` (points as (h, x, y) in the revolution
-    frame) with x >= 0 — Sutherland–Hodgman against the axis. Points on the
-    cut land exactly ON the axis (x = y = 0), so every station repeats them
-    bit for bit and the pole quads collapse to triangles."""
-    out = []
-    m = len(loop)
-    for i in range(m):
-        cur, nxt = loop[i], loop[(i + 1) % m]
-        cin, nin = cur[1] >= -keep_tol, nxt[1] >= -keep_tol
-        if cin:
-            out.append((cur[0], max(cur[1], 0.0), cur[2])
-                       if cur[1] > keep_tol else (cur[0], 0.0, 0.0))
-        if cin != nin:
-            t = cur[1] / (cur[1] - nxt[1])
-            out.append((cur[0] + (nxt[0] - cur[0]) * t, 0.0, 0.0))
-    clean = []
-    for q in out:
-        if not clean or any(abs(q[k] - clean[-1][k]) > 1e-12 for k in range(3)):
-            clean.append(q)
-    while len(clean) > 1 and all(abs(clean[0][k] - clean[-1][k]) <= 1e-12
-                                 for k in range(3)):
-        clean.pop()
-    return clean if len(clean) >= 3 else None
-
-
-def _revolution_rings(face, path):
-    """Rings for a profile turned about an AXIS (#125/#128), or ``None``.
-
-    A closed, planar, circular path whose axis lies in the profile's plane
-    is a lathe: the classic sphere is a circle swept along a circle that
-    shares its centre. The mitre construction only reproduces that when the
-    profile stands exactly on a path vertex — anywhere else it SLIDES the
-    profile onto the first joint plane and squashes it (a «sphere» with
-    radii 0.93–1.00) — and a full circle, crossing the axis, was swept
-    twice over itself. Here each station is the profile ROTATED about the
-    axis to that path vertex, and a profile that crosses the axis keeps the
-    half on its own side (the other half is the same surface again)."""
-    import math
-
-    n = len(path)
-    if n < 3:
-        return None
-    pts = [(p.x(), p.y(), p.z()) for p in path]
-    c = tuple(sum(p[k] for p in pts) / n for k in range(3))
-    # Newell normal of the path polygon: the axis.
-    ax = [0.0, 0.0, 0.0]
-    for i in range(n):
-        a, b = pts[i], pts[(i + 1) % n]
-        ax[0] += (a[1] - b[1]) * (a[2] + b[2])
-        ax[1] += (a[2] - b[2]) * (a[0] + b[0])
-        ax[2] += (a[0] - b[0]) * (a[1] + b[1])
-    la = math.sqrt(sum(v * v for v in ax))
-    if la < 1e-12:
-        return None
-    ax = [v / la for v in ax]
-    rel = [tuple(p[k] - c[k] for k in range(3)) for p in pts]
-    radii = [math.sqrt(sum(v * v for v in r)) for r in rel]
-    rmean = sum(radii) / n
-    if rmean < 1e-9:
-        return None
-    tol = max(1e-4, 1e-3 * rmean)
-    dot = lambda u, v: u[0] * v[0] + u[1] * v[1] + u[2] * v[2]
-    cross = lambda u, v: (u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2],
-                          u[0] * v[1] - u[1] * v[0])
-    if any(abs(dot(r, ax)) > tol for r in rel):
-        return None                                   # not planar
-    if max(radii) - min(radii) > tol + 1e-2 * rmean:
-        return None                                   # not a circle
-    fn = face.normal()
-    fn = (fn.x(), fn.y(), fn.z())
-    lf = math.sqrt(dot(fn, fn))
-    if lf < 1e-12:
-        return None
-    fn = tuple(v / lf for v in fn)
-    if abs(dot(fn, ax)) > 1e-3:
-        return None                                   # axis not in the plane
-    v0 = face.vertices[0]
-    if abs(dot((v0.x() - c[0], v0.y() - c[1], v0.z() - c[2]), fn)) > tol:
-        return None                                   # plane misses the axis
-    radial = cross(ax, fn)
-    lr = math.sqrt(dot(radial, radial))
-    radial = tuple(v / lr for v in radial)
-    fc = face.centroid()
-    if dot((fc.x() - c[0], fc.y() - c[1], fc.z() - c[2]), radial) < 0.0:
-        radial = tuple(-v for v in radial)
-    side = cross(ax, radial)               # completes the right-handed frame
-
-    def local(p):
-        r = (p.x() - c[0], p.y() - c[1], p.z() - c[2])
-        return (dot(r, ax), dot(r, radial), dot(r, side))
-
-    size = max(max(abs(q) for q in local(v)) for v in face.vertices) or 1.0
-    keep_tol = max(1e-7, 1e-6 * size)
-    outer = [local(v) for v in face.vertices]
-    if min(q[1] for q in outer) < -keep_tol:
-        outer = _clip_half(outer, keep_tol)
-        if outer is None:
-            return None
-    else:
-        outer = [(q[0], q[1], 0.0) if abs(q[1]) > keep_tol else (q[0], 0.0, 0.0)
-                 for q in outer]
-    holes = []
-    for h in face.holes:
-        hl = [local(v) for v in h]
-        xs = [q[1] for q in hl]
-        if min(xs) >= -keep_tol:
-            holes.append(hl)
-        elif max(xs) > keep_tol:
-            return None               # a hole across the axis: not a lathe
-    loops = [outer] + holes
-
-    rings = []
-    for r in rel:
-        # Station angle of this path vertex, measured from the profile.
-        ca, sa = dot(r, radial), dot(r, side)
-        norm = math.hypot(ca, sa) or 1.0
-        ca, sa = ca / norm, sa / norm
-        ring = []
-        for lp in loops:
-            ring.append([QVector3D(*(
-                c[k] + ax[k] * h + (radial[k] * ca + side[k] * sa) * x
-                + (side[k] * ca - radial[k] * sa) * y for k in range(3)))
-                for h, x, y in lp])
-        rings.append(ring)
-    dirs = []
-    for i in range(n):
-        d = path[(i + 1) % n] - path[i]
-        if d.length() < 1e-9:
-            return None
-        dirs.append(d.normalized())
-    return rings, dirs, n
-
-
-def sweep_rings(face, path, closed):
-    if not doc_model.ENABLED:
-        return _reference_sweep_rings(face, path, closed)
+def _project_stations(face, path, closed):
     import sys
     from ingetrazo_core import MeshStore
     from core.store_mesh import _hypot, _xyz
     profile = [[_xyz(p) for p in ring] for ring in (face.vertices, *face.holes)]
-    result = MeshStore.project_sweep(profile, [_xyz(p) for p in path], closed, _hypot(), sys.version_info >= (3, 12))
+    return MeshStore.project_sweep(profile, [_xyz(p) for p in path], closed,
+                                   _hypot(), sys.version_info >= (3, 12))
+
+
+def sweep_rings(face, path, closed):
+    """Profile rings and segment directions for tools and scripts."""
+    result = _project_stations(face, path, closed)
     if result is None:
         return None
     stations, directions = result
@@ -241,80 +98,10 @@ def _sweep_vectors(rings):
     return [[QVector3D(*p) for p in ring] for ring in rings]
 
 
-def _sweep_polygons(rings, closed, start_cap):
+def _sweep_polygons(stations, closed, start_cap):
     from ingetrazo_core import MeshStore
     from core.store_mesh import _hypot
-    rows = [[[p.toTuple() for p in loop] for loop in station] for station in rings]
-    return (_sweep_vectors(face) for face in MeshStore.sweep_polygons(rows, closed, start_cap, _hypot()))
-
-
-def _reference_sweep_rings(face, path, closed):
-    """The profile's rings (outer loop + holes) at every path station.
-
-    Returns ``(rings, dirs, spans)`` or ``None`` on degenerate input — a
-    180° reversal in the path, a segment parallel to a joint plane, a
-    zero-length span."""
-    if closed:
-        rev = _revolution_rings(face, path)
-        if rev is not None:
-            return rev
-    dirs = []
-    n = len(path)
-    spans = n if closed else n - 1
-    if spans < 1:
-        return None
-    for i in range(spans):
-        d = path[(i + 1) % n] - path[i]
-        if d.length() < 1e-9:
-            return None
-        dirs.append(d.normalized())
-
-    def joint_normal(i):
-        if closed:
-            a, b = dirs[(i - 1) % spans], dirs[i % spans]
-        elif i == 0:
-            return dirs[0]
-        elif i >= spans:
-            return dirs[-1]
-        else:
-            a, b = dirs[i - 1], dirs[i]
-        s = a + b
-        if s.length() < 1e-9:
-            return None                              # 180° reversal
-        return s.normalized()
-
-    loops = [[QVector3D(v) for v in face.vertices]]
-    loops += [[QVector3D(v) for v in h] for h in face.holes]
-
-    stations = n                                  # one ring per path vertex
-    rings: list = []
-    for i in range(stations):
-        pn = joint_normal(i)
-        if pn is None:
-            return None
-        anchor = path[i % n]
-        if i == 0:
-            ring = [_project_ring(lp, dirs[0], anchor, pn) for lp in loops]
-        else:
-            ring = [_project_ring(prev_lp, dirs[i - 1], anchor, pn)
-                    for prev_lp in rings[-1]]
-        if any(lp is None for lp in ring):
-            return None
-        rings.append(ring)
-    return rings, dirs, spans
-
-
-def _wall_reversals(rings):
-    """Outer walls follow a ring facing the next station, hole walls the opposite."""
-    reverse = []
-    for i, (start, end) in enumerate(zip(rings[0], rings[1])):
-        travel = sum((b - a for a, b in zip(start, end)), QVector3D())
-        origin = start[0]
-        area = sum((QVector3D.crossProduct(a - origin, b - origin)
-                    for a, b in zip(start, start[1:] + start[:1])), QVector3D())
-        backwards = QVector3D.dotProduct(area, travel) < 0
-        reverse.append(backwards != (i > 0))
-    return reverse
+    return (_sweep_vectors(face) for face in MeshStore.sweep_polygons(stations, closed, start_cap, _hypot()))
 
 
 def sweep_preview_faces(face, path, closed):
@@ -322,33 +109,12 @@ def sweep_preview_faces(face, path, closed):
     span and, on an open path, the far cap. No stitch, no orientation, no
     mesh: the shape while it is still moving under the cursor."""
     from core.geometry import Face          # the preview polygon (attrs kw)
-    got = sweep_rings(face, path, closed)
+    got = _project_stations(face, path, closed)
     if got is None:
         return []
-    rings, _dirs, spans = got
+    stations, _ = got
     attrs = dict(face.attrs) if face.attrs else None
-    if doc_model.ENABLED:
-        return [Face(outer, holes or None, attrs=attrs) for outer, *holes in _sweep_polygons(rings, closed, False)]
-    stations = len(rings)
-    out = []
-    reverse = _wall_reversals(rings)
-    for s in range(spans):
-        r0 = rings[s]
-        r1 = rings[(s + 1) % stations] if closed else rings[s + 1]
-        for lp0, lp1, flip in zip(r0, r1, reverse):
-            m = len(lp0)
-            for j in range(m):
-                a, b = lp0[j], lp0[(j + 1) % m]
-                b2, a2 = lp1[(j + 1) % m], lp1[j]
-                quad = _wall([a, b, b2, a2])
-                if quad is not None:
-                    if flip:
-                        quad.reverse()
-                    out.append(Face(quad, attrs=attrs))
-    if not closed:
-        cap = [ring[::-1] if flip else ring for ring, flip in zip(rings[-1], reverse)]
-        out.append(Face(cap[0], cap[1:] or None, attrs=attrs))
-    return out
+    return [Face(outer, holes or None, attrs=attrs) for outer, *holes in _sweep_polygons(stations, closed, False)]
 
 
 # ---- Manual (dragged) paths — "click and drag along the path" -----------
@@ -541,12 +307,12 @@ def sweep_profile(mesh, face, path, closed) -> bool:
                 mesh.restore_state(before)
                 raise
 
-    got = sweep_rings(face, path, closed)
+    got = _project_stations(face, path, closed)
     if got is None:
         return False
-    rings, _dirs, spans = got
+    stations, directions = got
+    spans = len(directions)
     n = len(path)
-    stations = n                                  # one ring per path vertex
 
     # Build: walls per span per loop edge; the closed path's last span goes
     # straight back to ring 0 (exact weld, no seam).
@@ -562,11 +328,8 @@ def sweep_profile(mesh, face, path, closed) -> bool:
                            "curve", None) for s in range(spans)]
     attrs = face.attrs
     mesh.remove_face(face)                           # profile is consumed
-    if doc_model.ENABLED:
-        for outer, *holes in _sweep_polygons(rings, closed, True):
-            mesh.add_face(outer, holes or None).attrs = deepcopy(attrs)
-    else:
-        _reference_build_sweep(mesh, rings, spans, stations, closed, attrs)
+    for outer, *holes in _sweep_polygons(stations, closed, True):
+        mesh.add_face(outer, holes or None).attrs = deepcopy(attrs)
 
     # The profile's own edges go with it: when station 0 is a mitre (the
     # profile at a corner of a closed path) they no longer bound anything
@@ -577,6 +340,7 @@ def sweep_profile(mesh, face, path, closed) -> bool:
             e = mesh.find_edge(lp[i], lp[(i + 1) % n_lp])
             if e is not None and not e.faces:
                 mesh.remove_edge(e)
+    rings = [_sweep_vectors(station) for station in stations]
     seed = {_key(p) for ring in rings for lp in ring for p in lp}
     run_stitch(mesh, seed, None, coplanar_merge=False)
     # Soften the seams of a curved sweep (shallow dihedral between successive
@@ -596,31 +360,6 @@ def sweep_profile(mesh, face, path, closed) -> bool:
             e.soft = True
     _tag_sweep_curves(mesh, rings, closed, spans, profile_curves, span_curves)
     return True
-
-
-def _reference_build_sweep(mesh, rings, spans, stations, closed, attrs):
-    reverse = _wall_reversals(rings)
-    for s in range(spans):
-        r0 = rings[s]
-        r1 = rings[(s + 1) % stations] if closed else rings[s + 1]
-        for lp0, lp1, flip in zip(r0, r1, reverse):
-            m = len(lp0)
-            for j in range(m):
-                a, b = lp0[j], lp0[(j + 1) % m]
-                b2, a2 = lp1[(j + 1) % m], lp1[j]
-                # A span that doesn't move this edge adds nothing; one that
-                # moves only one end (a point on a revolution axis) is a
-                # triangle.
-                quad = _wall([a, b, b2, a2])
-                if quad is not None:
-                    if flip:
-                        quad.reverse()
-                    mesh.add_face(quad).attrs = deepcopy(attrs)
-    if not closed:
-        for start, station in ((True, rings[0]), (False, rings[-1])):
-            cap = [ring[::-1] if start != flip else ring
-                   for ring, flip in zip(station, reverse)]
-            mesh.add_face(cap[0], cap[1:] or None).attrs = deepcopy(attrs)
 
 
 def _edge_at(mesh, p, q):
