@@ -10027,10 +10027,11 @@ class MainWindow(WorksessionMixin, QMainWindow):
         a container group with ONE GROUP PER LETTER, editable later from
         the right-click menu — handed to the placement tool so it settles
         on the ground (or onto a wall) like any component."""
+        from views.font_picker import text3d
+        text3d(self, None, self._place_text3d)
+
+    def _place_text3d(self, params):
         from core.text3d import make_text_group
-        params = self._text3d_dialog()
-        if params is None:
-            return
         self.viewport.end_group_edit()
         group = make_text_group(params)
         if group is None:
@@ -10062,8 +10063,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         2026-09-16: «... tampoco»; double-click keeps its usual
         meaning and enters the group). Letters pushed or painted by hand
         are regenerated."""
-        from core.history import EditText3DCommand
-        from core.text3d import make_text_group, text_is_pristine
+        from core.text3d import text_is_pristine
         group = group if group is not None else self._selected_text3d()
         if group is None or not getattr(group, "text3d", None):
             return
@@ -10072,8 +10072,12 @@ class MainWindow(WorksessionMixin, QMainWindow):
                 "This text's letters were edited by hand, so it can no "
                 "longer be regenerated as text."), 5000)
             return
-        from core.text3d import TEXT_KEYS
-        params = self._text3d_dialog(group.text3d)
+        from views.font_picker import text3d
+        text3d(self, group.text3d, lambda params: self._apply_text3d(group, params))
+
+    def _apply_text3d(self, group, params):
+        from core.history import EditText3DCommand
+        from core.text3d import make_text_group, TEXT_KEYS
         if params is None or params == {k: group.text3d.get(k) for k in TEXT_KEYS}:
             return
         if make_text_group(params) is None:

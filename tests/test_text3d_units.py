@@ -62,3 +62,24 @@ def test_a_metre_model_is_as_before(monkeypatch):
     assert [b.replace(" ", "") for b in boxes] == ["0.3m", "0.1m"] or \
         boxes[0].startswith("0.25")
     assert out["height"] == pytest.approx(0.4)
+
+
+def test_classic_insert_uses_qt_font_control(monkeypatch):
+    from PySide6.QtWidgets import QFontComboBox
+    from views import wgpu_ui
+    from views.main_window import MainWindow
+    monkeypatch.setattr(wgpu_ui, "ENABLED", False)
+    win = MainWindow()
+    seen = []
+
+    def cancel(dialog):
+        seen.append(dialog.findChild(QFontComboBox).currentFont().family())
+        return QDialog.Rejected
+
+    try:
+        monkeypatch.setattr(QDialog, "exec", cancel)
+        win._on_insert_3d_text()
+        assert seen and seen[0]
+    finally:
+        win._saved_version = win.viewport.scene.version
+        win.close()

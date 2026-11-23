@@ -459,8 +459,7 @@ class ShellWindow(QObject):
         self._act_bridge = ShellAction("Bridge", run=self._on_bridge, checkable=False)
         self._act_make_faces = ShellAction("Make Faces", run=self._on_make_faces, checkable=False)
         self._act_3dtext = QAction("3D Text", self)
-        self._act_3dtext.setToolTip("Open in classic app")
-        self._act_3dtext.setEnabled(False)  # The font picker lives in a Qt dialog.
+        self._act_3dtext.triggered.connect(self._on_insert_3d_text)
 
         self._tool_actions = {}
         self._nav_actions = {}

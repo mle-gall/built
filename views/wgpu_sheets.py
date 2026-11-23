@@ -602,7 +602,8 @@ class Workspace:
              ("button", "_on_refresh_selected_frame", "Update view"))
     TEXT = (("plain", "text_edit", "Text"), ("spin", "text_size", "Size"),
             ("check", "text_bold", "Bold"), ("check", "text_italic", "Italic"),
-            ("check", "text_underline", "Underline"), ("pick", "text_align", "Alignment"))
+            ("check", "text_underline", "Underline"), ("pick", "text_align", "Alignment"),
+            ("font", "text_family", "Font…"))
     CAJETIN = (("table", "caj_table", "Fields"), ("pick", "caj_design", "Design"),
                ("spin", "caj_w", "Width"), ("spin", "caj_h", "Height"),
                ("pick", "caj_layout", "Layout"))
@@ -640,7 +641,7 @@ class Workspace:
             if kind == "name":
                 rows.append((label, f"{ED}edit{ED}{fid}{ED}{self._clean(comp.comp.name)}"))
                 continue
-            if kind == "button":
+            if kind in ("button", "font"):
                 rows.append((label, f"{ED}button{ED}{fid}"))
                 continue
             w = getattr(comp, attr, None)
@@ -696,6 +697,18 @@ class Workspace:
             comps = comp._scene().compositions
             if comp.comp in comps:
                 comp.rename_sheet(comps.index(comp.comp), value)
+            return
+        if kind == "font":
+            from views.font_picker import show
+            item = comp._selected_item()
+            model = item.model
+            def apply(p):
+                comp._panel_edit(item, dict(family=p["font"], bold=p["bold"], italic=p["italic"],
+                                            size_pt=p["height"]))
+                comp.on_selection_changed()
+                self.full = True
+            show(self.view.window(), "Sheet text", model.text, model.family, model.bold, model.italic,
+                 model.size_pt, " pt", apply)
             return
         if kind == "button":
             getattr(comp, attr)()

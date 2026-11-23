@@ -309,6 +309,8 @@ def build(win, view=None, sel=None, *, locked_image=None, locked_group=None) -> 
         one(Verb("unlockimage", f"Unlock “{name}”", lambda im=locked_image: win._unlock_image(im)),
             Verb("deleteimage", "Delete", lambda im=locked_image: win._delete_image(im)),
             label="Image")
+    if kind in ("group", "component") and getattr(sel[0], "text3d", None) and not sel[0].locked:
+        one(Verb("edittext3d", "Edit 3D Text…", lambda: win._on_edit_3d_text(sel[0])))
     builder = _BUILDERS.get(kind)
     if builder is not None:
         builder(win, view, scene, sel, one)

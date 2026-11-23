@@ -584,7 +584,23 @@ def _options(view):
     elif name == "RectangleTool" and hasattr(tool, "_set_from_center"):
         out.append(("centre", "From centre", _ctrl(), int(bool(tool._from_center)),
                     lambda: tool._set_from_center(host, not tool._from_center)))
-    elif name == "DimensionTool":
+    elif name == "SelectTool":
+        selected = getattr(getattr(view.source_viewport, "scene", None), "selection", ())
+        if len(selected) == 1:
+            group = next(iter(selected))
+            if getattr(group, "text3d", None) and not getattr(group, "locked", False):
+                from core import links
+                if links.linked_ancestor(group) is None:
+                    out.append(("edittext3d", "Edit 3D Text…", "", 0, lambda: _window(view)._on_edit_3d_text(group)))
+    elif name == "PlaceGroupTool" and getattr(tool._group, "text3d", None):
+        from views.font_picker import text3d
+        win = _window(view)
+        out.append(("textfont", "Text and font…", "", 0,
+                    lambda: text3d(win, tool._group.text3d, win._place_text3d)))
+    elif name in ("DimensionTool", "TextTool"):
+        from views.font_picker import annotation
+        out.append(("font", "Font…", "", 0, lambda: annotation(_window(view))))
+    if name == "DimensionTool":
         out.append(("dimstyle", "Dimension style…", "", 0, lambda: _open_form(view, "dimstyle")))
     vp = view.source_viewport
     lock = getattr(vp, "axis_lock", None) if vp is not None else None
@@ -2707,7 +2723,7 @@ def after_frame(view) -> None:
     if actions:
         win = _window(view)
         # Never switch tools from inside a paint.
-        QTimer.singleShot(0, view, lambda: _run(win, actions))
+        QTimer.singleShot(0, view, lambda: _run(win, actions, view))
     delay = renderer.ui_repaint_after_ms()
     if view.__dict__.get("_ui_poll_jobs"):
         delay = 400 if delay is None else min(delay, 400)
@@ -2715,12 +2731,16 @@ def after_frame(view) -> None:
         view._ui_timer.start(max(0, int(delay)))
 
 
-def _run(win, actions) -> None:
+def _run(win, actions, source_view=None) -> None:
     if win is None:
         return
     from views import chrome_dialogs
     for action in actions:
         kind, _, arg = action.partition(":")
+        if kind == "font":
+            from views.font_picker import answer
+            answer(win, arg, source_view)
+            continue
         if kind == "review":
             continue
         if kind == "sheet":
@@ -2931,6 +2951,7 @@ FORMS = {
         ("slider", "_decimals", "Decimals", lambda p: str(p._decimals.value())),
         ("check", "_show_unit", "Show the unit"),
         ("slider", "_font", "Text size", lambda p: f"{p._font.value()} pt"),
+        ("button", None, "Font family…"),
         ("color", "_color_btn", "Colour", None, lambda p: [c / 255 for c in p._style().get("color", [45, 55, 75])]),
         ("choice", "_ends", "Ends"),
         ("slider", "_base_step", "Baseline step", lambda p: f"{p._base_step.value():g} mm", None, 2),
@@ -3042,7 +3063,10 @@ def _form_apply(win, view, arg) -> None:
     fid, _, value = arg.partition(":")
     entry = FORMS[name][2][int(fid)]
     kind, attr = entry[0], entry[1]
-    if kind == "button":
+    if name == "dimstyle" and kind == "button" and attr is None:
+        from views.font_picker import annotation
+        annotation(win)
+    elif kind == "button":
         getattr(panel, attr)()
     else:
         w = getattr(panel, attr)

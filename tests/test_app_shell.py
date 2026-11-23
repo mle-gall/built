@@ -100,9 +100,8 @@ def test_rail_matches_classic_groups_and_dispatches(host):
     view.renderer = Mock()
     try:
         wgpu_ui._send_tools(view, win)
-        groups, disabled = view.renderer.ui_set_tools.call_args.args
+        groups, = view.renderer.ui_set_tools.call_args.args
         assert [[entry[0] for entry in group] for group in groups] == wgpu_ui.GROUPS
-        assert disabled == ["text3d"]
         assert set(view._ui_palette_runs) == set(wgpu_ui.PALETTE_ACTIONS)
     finally:
         view.renderer = None
@@ -118,3 +117,65 @@ def test_rail_matches_classic_groups_and_dispatches(host):
     for key in ("bridge", "make_faces"):
         view._ui_palette_runs[key]()
     assert not host.errors
+
+
+def test_text3d_place_edit_font_and_undo(host):
+    import json
+    from unittest.mock import Mock
+    from ingetrazo_core import Vec3
+    from views import wgpu_ui
+
+    host.open(FIXTURE)
+    win, view, vp = host.window, host.view, host.viewport
+    view.renderer = Mock()
+    view._ui_attached = True
+
+    def apply(family):
+        draft = json.loads(view.renderer.ui_font_picker.call_args.args[0])
+        draft.update(text="Ab", font=family)
+        wgpu_ui._run(win, ["font:" + json.dumps(draft)])
+
+    try:
+        win._act_3dtext.trigger()
+        apply("Helvetica")
+        vp.active_tool.place_at(vp, Vec3(1, 2, 0))
+        group = vp.scene.groups[-1]
+        assert group.text3d["font"] == "Helvetica"
+        assert group.children
+        win._on_edit_3d_text(group)
+        apply("Georgia")
+        assert group.text3d["font"] == "Georgia"
+        host.menu("undo")
+        assert group.text3d["font"] == "Helvetica"
+        host.menu("undo")
+        assert not vp.scene.groups
+    finally:
+        view._ui_attached = False
+        view.renderer = None
+
+
+@pytest.mark.parametrize("tool", ["text", "dimension"])
+def test_annotation_font_options(host, tool):
+    import json
+    from unittest.mock import Mock
+    from views import wgpu_ui
+    host.open(FIXTURE)
+    view, win = host.view, host.window
+    win._activate_tool(tool)
+    view.renderer = Mock()
+    view._ui_attached = True
+    try:
+        run = next(row[-1] for row in wgpu_ui._options(view) if row[0] == "font")
+        run()
+        draft = json.loads(view.renderer.ui_font_picker.call_args.args[0])
+        assert draft["unit"].strip() == "pt"
+        draft.update(font="Georgia", height=12., italic=True)
+        wgpu_ui._run(win, ["font:" + json.dumps(draft)])
+        style = win.viewport.scene.dimension_style
+        assert (style["font_family"], style["font_size"], style["font_italic"]) == ("Georgia", 12, True)
+        run()
+        wgpu_ui._run(win, ["font:"])
+        assert style["font_family"] == "Georgia"
+    finally:
+        view._ui_attached = False
+        view.renderer = None

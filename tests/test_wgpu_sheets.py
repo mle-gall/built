@@ -158,3 +158,34 @@ def test_saved_navigator_filter_is_temporary():
     assert scene.version == before
     composer.close()
     host.close()
+
+
+def test_sheet_text_font_uses_composer_history(monkeypatch):
+    from core.composition import TextoItem
+    from views import font_picker
+    from views.wgpu_sheets import Workspace
+    composer, host = _composer()
+    try:
+        model = TextoItem(text="Floor plan")
+        composer.comp.texts.append(model)
+        composer._rebuild_canvas()
+        item = next(i for i in composer.canvas.items() if getattr(i, "model", None) is model)
+        item.setSelected(True)
+        workspace = Workspace(composer)
+        workspace.view = SimpleNamespace(window=lambda: host)
+        index = next(i for i, row in enumerate(workspace.TEXT) if row[0] == "font")
+
+        def choose(win, title, sample, family, bold, italic, size, unit, apply):
+            assert sample == model.text and unit.strip() == "pt"
+            apply(dict(font="Georgia", bold=True, italic=True, height=20.))
+            return True
+
+        monkeypatch.setattr(font_picker, "show", choose)
+        workspace.apply(str(index), "")
+        assert (model.family, model.bold, model.italic, model.size_pt) == ("Georgia", True, True, 20.)
+        assert composer.text_size.value() == 20.
+        composer.history.undo()
+        assert model.family == "Sans Serif"
+    finally:
+        composer.close()
+        host.close()
