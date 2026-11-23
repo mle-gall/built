@@ -959,7 +959,7 @@ class SettingsSheet(chrome_sheet.Provider):
     def paths(self) -> dict:
         if self._paths is None:
             try:
-                from views.command_search import menu_paths
+                from views.command_metadata import menu_paths
                 self._paths = menu_paths(self._win)
             except Exception:  # noqa: BLE001
                 self._paths = {}

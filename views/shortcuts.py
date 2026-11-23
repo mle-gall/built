@@ -391,8 +391,8 @@ class ShortcutsPanel(QWidget):
         self._actions = collect_actions(window)
         # «Selected», «Last» and «All» say little alone: each row also says
         # where its command lives (#1107). Imported here because
-        # views/command_search.py imports this module.
-        from views.command_search import menu_paths
+        # views/command_metadata.py imports this module.
+        from views.command_metadata import menu_paths
         self._paths = menu_paths(window)
         self._fill()
 

@@ -552,6 +552,39 @@ pub mod molecules {
         menu_row_resp(ui, item).0.clicked()
     }
 
+    /// Keep the command name and shortcut readable as the menu path shrinks.
+    pub fn command_row(ui: &mut egui::Ui, label: &str, path: &str, keys: &str,
+                       enabled: bool, selected: bool) -> egui::Response {
+        let sense = if enabled { Sense::click() } else { Sense::hover() };
+        let (rect, response) = ui.allocate_exact_size(vec2(ui.available_width(), CONTROL_H), sense);
+        if !ui.is_rect_visible(rect) {
+            return response;
+        }
+        let state = if enabled { control_state(ui, &response, selected) } else { State::Off };
+        if state == State::On {
+            paint_selected_row(ui, rect);
+        } else {
+            paint_state(ui, rect, state, R_ROW);
+        }
+        let ink = if state == State::Off { OFF } else { INK };
+        let available = (rect.width() - 2.0 * SPACE_M).max(0.0);
+        let shortcut = fit(ui, keys, meta(), FAINT, available / 2.0, 1);
+        let shortcut_x = rect.right() - SPACE_M - shortcut.size().x;
+        let mut x = rect.left() + SPACE_M;
+        let room = (shortcut_x - x - SPACE_S).max(0.0);
+        let title = fit(ui, label, body(), ink, room, 1);
+        let path_room = room - title.size().x - SPACE_S;
+        if !path.is_empty() && path_room > SPACE_M {
+            let trail = fit(ui, path, meta(), FAINT, path_room, 1);
+            let width = trail.size().x;
+            leading(ui.painter(), rect, x, trail, FAINT);
+            x += width + SPACE_S;
+        }
+        leading(ui.painter(), rect, x, title, ink);
+        leading(ui.painter(), rect, shortcut_x, shortcut, FAINT);
+        response
+    }
+
     /// A menu row, ROW_H high: optional check lane (only when the menu has checks:
     /// the caller marks that with item.3 == "check"), label, shortcut or › right.
     pub fn menu_row_resp(ui: &mut egui::Ui, item: &super::super::Item) -> (egui::Response, Rect) {
@@ -1620,4 +1653,13 @@ mod interaction_tests {
         assert_eq!(ctx.data(|d| d.get_temp::<f64>(id)), None);
         assert_eq!(frame(vec![]), None);
     }
+}
+
+/// One line (or `rows` lines) of text cut to `width`.
+pub(super) fn fit(ui: &egui::Ui, text: &str, font: egui::FontId, color: Color32, width: f32, rows: usize) -> std::sync::Arc<egui::Galley> {
+    let mut job = egui::text::LayoutJob::single_section(text.to_owned(), egui::TextFormat { font_id: font, color, ..Default::default() });
+    job.wrap.max_width = width.max(10.0);
+    job.wrap.max_rows = rows;
+    job.wrap.break_anywhere = rows == 1;
+    ui.painter().layout_job(job)
 }

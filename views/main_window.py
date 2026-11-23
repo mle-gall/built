@@ -9588,7 +9588,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         shared[source] = (group.mesh, QMatrix4x4(group.xform))
         self._start_place(group)
 
-    def insert_library_component(self, entry: dict) -> None:
+    def insert_library_component(self, entry: dict, obj=None) -> None:
         """Download a model from the online library and hand it to the
         placement tool, at its real size.
 
@@ -9599,12 +9599,20 @@ class MainWindow(WorksessionMixin, QMainWindow):
         so has to ask (see ``_obj_unit``). The facet seams are softened
         like the bundled starters, so a low-poly piece reads as a real one.
         """
+        from ingetrazo_render import ComponentCatalogue
+
+        def build():
+            group = self._build_library_component(entry, obj)
+            if group is not None:
+                group.ext = {**(group.ext or {}), "catalogue": ComponentCatalogue.attribution(entry)}
+            return group
+
         self.viewport.end_group_edit()
         self._start_place_shared(
             "library:" + str(entry.get("id", "")),
-            lambda: self._build_library_component(entry))
+            build)
 
-    def _build_library_component(self, entry: dict):
+    def _build_library_component(self, entry: dict, obj=None):
         """The online-library model ``entry``, downloaded the first time and
         read from its OBJ, as a group ready to place — ``None`` (the user
         told why) when it cannot be had."""
@@ -9614,7 +9622,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         from formats import obj as _obj
         from formats.fuse import soften_smooth_edges
 
-        obj = library.model_file(entry)
+        obj = obj or library.model_file(entry)
         if obj is None:
             _dialogs.warning(
                 self, tr("Component library"),
@@ -9646,8 +9654,8 @@ class MainWindow(WorksessionMixin, QMainWindow):
         return Group(mesh, name=entry.get("nombre", ""))
 
     def _on_open_library(self) -> None:
-        from views.library_dialog import LibraryDialog
-        LibraryDialog(self).exec()
+        from views.wgpu_library import open_library
+        open_library(self, "components", scope="s:online")
 
     def _text3d_dialog(self, params=None):
         """The 3D Text dialog (text, font, bold, italic, height,

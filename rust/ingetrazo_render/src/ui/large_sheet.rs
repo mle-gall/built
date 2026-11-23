@@ -229,6 +229,9 @@ impl LargeSheet {
         if !spec.content.blocks.iter().any(|block| block.map.is_some()) {
             self.map = Default::default();
         }
+        if !spec.content.blocks.iter().any(|b| matches!(b.tone.as_str(), "catalog" | "components")) {
+            self.visible_previews.clear();
+        }
         if spec.id == "start" {
             let template = spec.focus.as_deref().is_some_and(|id| id.starts_with("tpl:"));
             if let Some(new) = spec.verbs.iter_mut().find(|verb| verb.id == "new") {
@@ -398,15 +401,6 @@ fn tone(t: &str) -> Color32 {
         "off" => OFF,
         _ => INK,
     }
-}
-
-/// One line (or `rows` lines) of text cut to `width`.
-fn fit(ui: &egui::Ui, text: &str, font: egui::FontId, color: Color32, width: f32, rows: usize) -> Arc<egui::Galley> {
-    let mut job = egui::text::LayoutJob::single_section(text.to_owned(), egui::TextFormat { font_id: font, color, ..Default::default() });
-    job.wrap.max_width = width.max(10.0);
-    job.wrap.max_rows = rows;
-    job.wrap.break_anywhere = rows == 1;
-    ui.painter().layout_job(job)
 }
 
 /// A picture: the texture cropped to fill (cover), a colour, or a quiet box.
@@ -705,6 +699,7 @@ impl Draw<'_> {
         let gap = SPACE_M;
         let w = ui.available_width();
         let catalogue = b.tone == "catalog";
+        let report_visible = catalogue || b.tone == "components";
         let (cols, picture_size) = if catalogue { kit::catalogue_grid(w, side) }
             else { ((((w + gap) / (side + gap)).floor() as usize).max(1), vec2(side, side)) };
         let side = picture_size.x;
@@ -728,7 +723,7 @@ impl Draw<'_> {
             }
             if !clip.intersects(r) { continue; }
             let resp = ui.interact(r, ui.id().with(("lstile", &it.id, i)), Sense::click());
-            if catalogue && !it.icon.is_empty() { visible.push(it.icon.clone()); }
+            if report_visible && !it.icon.is_empty() { visible.push(it.icon.clone()); }
             let pic = Rect::from_min_size(r.min, picture_size);
             picture(ui, pic, self.icons.get(&it.icon), &it.hex, 8);
             if resp.hovered() && !focused {
@@ -759,7 +754,7 @@ impl Draw<'_> {
             let resp = if it.tip.is_empty() { resp } else { resp.on_hover_text(&it.tip) };
             self.item_input(&resp, it);
         }
-        if catalogue && self.st.visible_previews != visible {
+        if report_visible && self.st.visible_previews != visible {
             self.out.push(std::iter::once("visible").chain(visible.iter().map(String::as_str)).collect::<Vec<_>>().join(&SEP.to_string()));
             self.st.visible_previews = visible;
         }

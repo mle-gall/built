@@ -66,7 +66,7 @@ def test_an_unreachable_library_answers_empty_instead_of_raising(tmp_path,
                                                                  monkeypatch):
     # Working offline is one of this program's promises: a server that is not
     # there costs the catalogue, never the app.
-    monkeypatch.setenv("INGETRAZO_LIBRARY", "https://0.0.0.0/nada")
+    monkeypatch.setenv("INGETRAZO_LIBRARY", str(tmp_path / "offline"))
     monkeypatch.setenv("INGETRAZO_TEXTURE_CACHE", str(tmp_path / "tex"))
     assert library.index() == []
     assert library.thumbnail("silla") is None
@@ -229,7 +229,7 @@ def test_asking_for_the_same_preview_again_costs_nothing(served):
 def test_a_preview_that_cannot_be_had_never_raises(tmp_path, monkeypatch):
     # A blank square is the right answer to an unreachable server; an
     # exception on a worker thread is not.
-    monkeypatch.setenv("INGETRAZO_LIBRARY", "https://0.0.0.0/nada")
+    monkeypatch.setenv("INGETRAZO_LIBRARY", str(tmp_path / "offline"))
     monkeypatch.setenv("INGETRAZO_TEXTURE_CACHE", str(tmp_path / "tex"))
     library.prefetch_thumbnails(["no-existe"])
     import time
@@ -237,59 +237,32 @@ def test_a_preview_that_cannot_be_had_never_raises(tmp_path, monkeypatch):
     assert library.cached_thumbnail("no-existe") is None
 
 
-def test_the_catalogues_categories_are_said_in_the_interface_language():
-    # The entries carry the category in Spanish, because that is what the
-    # source catalogues ship. Reading an English interface and finding
-    # "Cocina" in the filter is the catalogue's word leaking through ours.
-    import os
-
-    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PySide6.QtWidgets import QApplication
-    if QApplication.instance() is None:
-        QApplication([])
-
-    from core.i18n import current_language, set_language
-    from views.library_dialog import LibraryDialog
-
+def _catalogue_sheet(entries, language):
+    from ingetrazo_render import ComponentCatalogue
+    from core.i18n import current_language, set_language, tr
+    catalogue = ComponentCatalogue()
+    catalogue.load(json.dumps(entries))
     was = current_language()
     try:
-        set_language("en")
-        assert LibraryDialog._cat_label("Cocina") == "Kitchen"
-        assert LibraryDialog._cat_label("Puertas y Ventanas") == \
-            "Doors and windows"
-        set_language("es")
-        assert LibraryDialog._cat_label("Cocina") == "Cocina"
-        # A category the map does not know still shows, untranslated,
-        # rather than coming out blank.
-        assert LibraryDialog._cat_label("Inventada") == "Inventada"
+        set_language(language)
+        return json.loads(catalogue.sheet('{"side":[],"search":{}}', language, "", tr))
     finally:
         set_language(was)
+
+
+def test_the_catalogues_categories_are_said_in_the_interface_language():
+    entries = [{"id": str(i), "categoria": c}
+               for i, c in enumerate(("Cocina", "Puertas y Ventanas", "Inventada"))]
+    def labels(lang):
+        return [r["label"] for r in _catalogue_sheet(entries, lang)["side"]]
+    assert labels("en") == ["Doors and windows", "Inventada", "Kitchen"]
+    assert set(labels("es")) == {"Cocina", "Puertas y ventanas", "Inventada"}
 
 
 def test_a_model_is_named_in_the_interface_language():
-    # The catalogue names every model in both, one to one. An English
-    # interface listing "Camarera con ruedas" is the catalogue's word
-    # leaking through ours, the same way its categories did.
-    import os
-
-    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PySide6.QtWidgets import QApplication
-    if QApplication.instance() is None:
-        QApplication([])
-
-    from core.i18n import current_language, set_language
-    from views.library_dialog import LibraryDialog
-
-    entry = {"nombre": "Silla", "nombre_en": "Chair", "id": "x"}
-    was = current_language()
-    try:
-        set_language("en")
-        assert LibraryDialog._name_of(entry) == "Chair"
-        set_language("es")
-        assert LibraryDialog._name_of(entry) == "Silla"
-        # An older index has no English name; it must still say something.
-        set_language("en")
-        assert LibraryDialog._name_of({"nombre": "Silla"}) == "Silla"
-        assert LibraryDialog._name_of({}) == "?"
-    finally:
-        set_language(was)
+    entries = [{"id": "x", "nombre": "Silla", "nombre_en": "Chair"},
+               {"id": "older", "nombre": "Mesa"}, {"id": "unnamed"}]
+    def names(lang):
+        return [it["label"] for it in _catalogue_sheet(entries, lang)["content"]["blocks"][0]["items"]]
+    assert names("en") == ["Chair", "Mesa", "unnamed"]
+    assert names("es") == ["Mesa", "Silla", "unnamed"]
