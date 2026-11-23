@@ -195,10 +195,16 @@ def discover_plugins(dirs=None, *, panels_only=False):
     errors: list[PluginError] = []
     seen: set[str] = set()
 
+    from core.extension_manager import disabled_overrides, safe_mode
+    if safe_mode():
+        return plugins, errors
+    disabled = disabled_overrides()
     for p_dir in (list(dirs) if dirs is not None else plugin_dirs()):
         if not os.path.isdir(p_dir):
             continue
         for stem, file, problem in _candidates(p_dir):
+            if stem in disabled:
+                continue
             if stem in seen:
                 log.warning("plugin %r at %s shadowed by an earlier one; "
                             "skipped", stem, file)

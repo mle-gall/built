@@ -2217,6 +2217,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
 
         # Window menu (panels + app preferences)
         window_menu = menubar.addMenu(tr("Window"))
+        window_menu.addAction(tr("Cut list…"), self._on_cut_list)
 
         # Every tray, extension tabs included, has its entry here — and the
         # same list opens on a right-click over the tabs. Only this list
@@ -3865,6 +3866,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
                 continue
             if not plug.tools:
                 count += 1                  # a panel-only extension counts
+        self._running_extensions = {plug.stem for plug in plugins}
         self._extension_load_errors = {
             err.stem: {"error": err.error, "path": str(err.path)}
             for err in errors
@@ -4005,6 +4007,9 @@ class MainWindow(WorksessionMixin, QMainWindow):
                   max(avail.top(), min(frame.top(), avail.bottom() - frame.height() + 1)))
 
     def _on_manage_extensions(self) -> None:
+        from views.report_sheets import show
+        if show(self, "extensions"):
+            return
         # An exception in a menu slot goes to stderr, and a windowed build
         # has none: the click did nothing at all (#1152).
         try:
@@ -4165,7 +4170,16 @@ class MainWindow(WorksessionMixin, QMainWindow):
         from views.update_dialog import start_check
         start_check(self, quiet=True)
 
+    def _on_cut_list(self) -> None:
+        from views.report_sheets import show
+        if not show(self, "cutlist"):
+            self.tray.parts.refresh()
+            self.tray.parts._on_copy()
+
     def _on_about(self) -> None:
+        from views.report_sheets import show
+        if show(self, "about"):
+            return
         from core.glinfo import describe
         from views.about_dialog import AboutDialog
         gl_line = describe(getattr(self.viewport, "gl_info", {}))

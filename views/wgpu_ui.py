@@ -1804,11 +1804,8 @@ def _tree_action(win, view, action) -> None:
             nk = key.partition(":")[2]
             if nk:
                 _select(win, _tree_groups(view, nk))
-            parts = getattr(getattr(win, "tray", None), "parts", None)
-            if parts is not None:
-                parts.on_scene_changed()
-                parts._on_copy()
-                vp.flash_status("Cut list copied")
+            from views.report_sheets import show
+            show(win, "cutlist")
         elif verb == "insp" and key.startswith("lib:"):
             from views import wgpu_library
             wgpu_library.action(win, view, key[4:])
@@ -2323,7 +2320,7 @@ def _inspector(view, win) -> None:
             rows.append(("Missing Status", str(missing)))
         sections = [("Node", rows),
                     ("Actions", [(f"kindmenu:{node_focus}", "Change kind…"), (f"active:{node_focus}", "Draw into"),
-                                 (f"isolate:{node_focus}", "Isolate"), (f"cutlist:{node_focus}", "Copy cut list")])]
+                                 (f"isolate:{node_focus}", "Isolate"), (f"cutlist:{node_focus}", "Cut list…")])]
         if missing:
             sections.append(("Actions", [(f"nodestatus:{node_focus}:" + v, "All " + v.lower()) for v in STATUS_CHOICES]))
         export = [("IFC class", str(recipe.get("class") or "none (drawing only)")),
@@ -2394,7 +2391,7 @@ def _inspector(view, win) -> None:
                 prow.append(("…", f"{len(parts) - 8} more kinds"))
             if not hasattr(view.renderer, "ui_panel_set"):
                 sections.append(("Parts", prow))
-            sections.append(("Actions", [("cutlist", "Copy cut list")]))
+            sections.append(("Actions", [("cutlist", "Cut list…")]))
         solid = _solid_section(g)
         if solid and not verbs.offers(sel_kind, "repair"):
             solid = [s_ for s_ in solid if s_[0] != "Actions"]

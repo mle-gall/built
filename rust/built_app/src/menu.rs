@@ -15,7 +15,7 @@
 //! the process without asking.
 
 use muda::{
-    accelerator::Accelerator, AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu,
+    accelerator::Accelerator, Menu, MenuItem, PredefinedMenuItem, Submenu,
 };
 
 pub struct Menus {
@@ -47,14 +47,7 @@ pub fn build() -> muda::Result<Menus> {
         "Built",
         true,
         &[
-            &PredefinedMenuItem::about(
-                Some("About Built"),
-                Some(AboutMetadata {
-                    name: Some("Built".into()),
-                    comments: Some("Native app (Rust shell)".into()),
-                    ..Default::default()
-                }),
-            ),
+            &item("about", "About Built", None),
             &PredefinedMenuItem::separator(),
             &item("prefs", "Settings…", Some("super+Comma")),
             &PredefinedMenuItem::separator(),
@@ -139,6 +132,8 @@ pub fn build() -> muda::Result<Menus> {
           &PredefinedMenuItem::separator(),
           &item("move_to_window", "Move Project to New Window", None),
           &PredefinedMenuItem::separator(),
+          &item("extensions", "Extension Manager…", None),
+          &item("cutlist", "Cut list…", None),
           &item("library", "Library", Some("super+shift+KeyL"))],
     )?;
     let plugins = Submenu::with_items("Plugins", true, &[

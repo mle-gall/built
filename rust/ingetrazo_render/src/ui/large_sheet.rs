@@ -141,6 +141,7 @@ pub struct Block {
     pub items: Vec<Item>,
     /// kv rows: (label, value, tone).
     pub rows: Vec<(String, String, String)>,
+    pub cells: Vec<Vec<String>>,
     pub fields: Vec<dialog::Field>,
     pub buttons: Vec<Verb>,
     /// tiles: the picture's side; picture: its height.
@@ -524,6 +525,27 @@ impl Draw<'_> {
                     let (r, _) = ui.allocate_exact_size(vec2(w, h), Sense::hover());
                     picture(ui, r, self.icons.get(&b.icon), &b.hex, 10);
                     ui.add_space(10.0);
+                }
+                "table" => {
+                    let columns = b.cells.first().map_or(1, |r| r.len().max(1));
+                    let column_width = (ui.available_width() / columns as f32 - 18.0).max(55.0);
+                    egui::ScrollArea::horizontal().show(ui, |ui| {
+                        egui::Grid::new((self.pane, i)).min_col_width(column_width)
+                            .spacing(vec2(18.0, 8.0)).show(ui, |ui| {
+                            for (n, row) in b.cells.iter().enumerate() {
+                                let mut bounds = Rect::NOTHING;
+                                let id = n.to_string();
+                                for cell in row {
+                                    let color = if n == 0 { DIM } else if id == b.right { ACCENT } else { INK };
+                                    bounds = bounds.union(ui.label(egui::RichText::new(cell).font(body()).color(color)).rect);
+                                }
+                                if n > 0 && ui.interact(bounds, ui.id().with(n), Sense::click()).clicked() {
+                                    self.out.push(format!("pick{SEP}{n}"));
+                                }
+                                ui.end_row();
+                            }
+                        });
+                    });
                 }
                 "kv" => {
                     for (label, value, t) in &b.rows {

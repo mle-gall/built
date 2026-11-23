@@ -877,3 +877,44 @@ def tested_version_is_old(extension: Extension) -> bool:
     current_major, current_minor = map(int, current.groups())
     return tested_major < current_major or (
         tested_major == current_major and current_minor - tested_minor >= 2)
+
+
+def safe_mode() -> bool:
+    """Whether the next launch should skip plugin discovery."""
+    return (user_plugins_dir() / ".safe-mode").is_file()
+
+
+def set_safe_mode(enabled: bool) -> None:
+    marker = user_plugins_dir() / ".safe-mode"
+    if enabled:
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.touch()
+    else:
+        marker.unlink(missing_ok=True)
+
+
+def disabled_overrides() -> set[str]:
+    from core import general_settings
+    try:
+        saved = json.loads(general_settings.value("extensions/disabled", "[]"))
+    except (TypeError, ValueError):
+        return set()
+    return {v for v in saved if isinstance(v, str)} if isinstance(saved, list) else set()
+
+
+def set_override(ident: str, disabled: bool) -> None:
+    from core import general_settings
+    overrides = disabled_overrides()
+    if disabled:
+        overrides.add(ident)
+    else:
+        overrides.discard(ident)
+    general_settings.set_value("extensions/disabled", json.dumps(sorted(overrides)))
+
+
+def reset_overrides() -> None:
+    from core import general_settings
+    general_settings.set_value("extensions/disabled", "[]")
+    for ident in extension_startup_state():
+        set_extension_enabled(ident, True)
+    set_safe_mode(False)
