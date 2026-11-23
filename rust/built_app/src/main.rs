@@ -430,6 +430,11 @@ impl App {
             Step::Wait(ms) => self.resume_at = Some(Instant::now() + Duration::from_millis(ms)),
             Step::Button(down, x, y, button, mods) =>
                 self.pointer(id, if down { "press" } else { "release" }, x, y, button, mods),
+            Step::Resize(width, height) => {
+                if let Some(w) = self.win(id) {
+                    let _ = w.window.request_inner_size(LogicalSize::new(width, height));
+                }
+            }
             Step::Move(x, y) => self.pointer(id, "move", x, y, 0, 0),
             Step::ClickCommand(command) => {
                 if let Some(center) = self.host(id).and_then(|h| h.command_center(&command)) {
@@ -573,7 +578,7 @@ impl App {
             _ => return Err("no supported GPU surface for this window".into()),
         };
         let ns_view = if platform == "cocoa" { window_id } else { 0 };
-        native::no_window_tabs(ns_view);
+        native::configure_window(ns_view);
         let size = window.inner_size();
         let scale = window.scale_factor();
         let host = python::Host::new(
@@ -829,11 +834,14 @@ impl ApplicationHandler<UserEvent> for App {
         match event {
             WindowEvent::CloseRequested => self.close_window(event_loop, id),
             WindowEvent::Resized(size) => {
+                if size.width == 0 || size.height == 0 { return; }
                 let s = self.scale(id);
                 if let Some(w) = self.win(id) {
                     w.host.call("resize", (size.width as f64 / s, size.height as f64 / s, s));
+                    // AppKit can stay in its live-resize loop before it
+                    // dispatches another RedrawRequested.
+                    w.host.frame();
                 }
-                self.redraw(id);
             }
             WindowEvent::RedrawRequested => {
                 let drew = self.win(id).is_some_and(|w| w.host.frame().is_some());
