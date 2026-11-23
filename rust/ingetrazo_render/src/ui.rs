@@ -22,6 +22,8 @@ mod tabs;
 /// The viewport right-click menu (views/context_menu.py, docs/context-menu.md).
 mod context_menu;
 
+mod tree_cols;
+
 // ---- Design tokens (council 2026-11-22; one place, every component
 // below draws from these). Text on graphite glass, three levels plus off.
 const INK: Color32 = Color32::from_rgb(0xEE, 0xF1, 0xF4);        // primary text, active icons
@@ -300,6 +302,9 @@ pub struct Node {
     expandable: bool,
     expanded: bool,
     selected: u32,
+    /// The selection, marked once (tree A): 1 this row holds it (lit), 2 a
+    /// row above the one holding it (a quiet dot), 0 neither.
+    mark: u8,
     icon: String,
     /// What the kind means, on hover (Python sends "kind\u{1e}tip").
     tip: String,
@@ -559,7 +564,7 @@ impl Ui {
             key: s(&t, 0), name: s(&t, 1), kind, tip, badge: s(&t, 3), icon: s(&t, 4),
             depth: g(&n, 0) as usize, count: g(&n, 1) as u32, problems: g(&n, 2) as u32, active: g(&n, 3) != 0,
             row: g(&n, 4) as u8, eye: g(&n, 5) as i8, lock: g(&n, 6) as i8, expandable: g(&n, 7) != 0,
-            expanded: g(&n, 8) != 0, selected: g(&n, 9) as u32,
+            expanded: g(&n, 8) != 0, selected: g(&n, 9) as u32, mark: g(&n, 10) as u8,
             cells: t.get(5..).map(|c| c.to_vec()).unwrap_or_default(),
         }}).collect();
         col.unfiled = unfiled;
@@ -1668,13 +1673,23 @@ impl Ui {
                         });
                     }
                     let nodes_len = col.nodes.len();
+                    // The column set as a table (tree C): one layout for the
+                    // header and every row, names never crushed.
+                    let row_left = ui.cursor().min.x;
+                    let cols = tree_cols::Cols::plan(col.colset, row_left, row_left + ui.available_width());
+                    let tree_h = if col.mode.is_empty() && nodes_len > 0 {
+                        cols.header(ui, row_left);
+                        (tree_h - 18.0).max(48.0)
+                    } else { tree_h };
                     egui::ScrollArea::vertical().id_salt("tree").max_height(tree_h).auto_shrink([false, false])
                         .show_rows(ui, ROW, nodes_len, |ui, range| {
                             for i in range {
                                 let n = &col.nodes[i];
                                 let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ROW), Sense::click());
                                 // Items in the selection are lit like a picked row; nodes count them.
-                                let lit = col.highlighted.as_deref() == Some(n.key.as_str()) || (n.row != 0 && n.selected > 0);
+                                let lit = col.highlighted.as_deref() == Some(n.key.as_str()) || n.mark == 1;
+                                let file_state = if n.row == 0 { tree_cols::file_state(&n.icon) } else { None };
+                                let cols = tree_cols::Cols::plan(col.colset, rect.min.x, rect.max.x);
                                 let linked = n.row == 0 && n.key.starts_with("n:link");
                                 let filing = col.filing.is_some() && n.row == 0 && !linked;
                                 if lit {
@@ -1702,15 +1717,20 @@ impl Ui {
                                     let inherited = n.row != 0;
                                     let ink_c = if inherited { OFF } else { DIM };
                                     if col.colset == 1 && !cells.is_empty() {
-                                        // print, weight, line type, colour (right to left)
-                                        let pr = Rect::from_center_size(pos2(warn_col - 8.0, cy), vec2(16.0, 16.0));
+                                        // print, weight, line type, colour (right to left), under their headers
+                                        let span = |c: Option<(f32, f32)>| c.map(|(a, b)| Rect::from_min_max(pos2(a, rect.min.y), pos2(b, rect.max.y)));
+                                        let pr = span(cols.print).unwrap_or(rect);
+                                        let pr = Rect::from_center_size(pos2(pr.max.x - 10.0, cy), vec2(16.0, 16.0));
                                         ui.painter().text(pr.center(), egui::Align2::CENTER_CENTER,
                                             if cell(3) == "1" { "✓" } else { "–" }, meta(), if cell(3) == "1" { ink_c } else { OFF });
-                                        let wr = Rect::from_min_max(pos2(pr.min.x - 40.0, rect.min.y), pos2(pr.min.x - 4.0, rect.max.y));
+                                        let wr = span(cols.weight).unwrap_or(rect);
                                         ui.painter().text(wr.right_center(), egui::Align2::RIGHT_CENTER, cell(2), meta(), ink_c);
-                                        let lr = Rect::from_min_max(pos2(wr.min.x - 64.0, rect.min.y), pos2(wr.min.x - 6.0, rect.max.y));
-                                        ui.painter().text(lr.right_center(), egui::Align2::RIGHT_CENTER, cell(1), meta(), ink_c);
-                                        let sr = Rect::from_center_size(pos2(lr.min.x - 10.0, cy), vec2(12.0, 12.0));
+                                        let lr = span(cols.line).unwrap_or(Rect::from_min_max(pos2(wr.min.x, rect.min.y), pos2(wr.min.x, rect.max.y)));
+                                        if cols.line.is_some() {
+                                            ui.painter().text(lr.right_center(), egui::Align2::RIGHT_CENTER, cell(1), meta(), ink_c);
+                                        }
+                                        let sw = cols.swatch.unwrap_or((lr.min.x - 22.0, lr.min.x - 8.0));
+                                        let sr = Rect::from_center_size(pos2((sw.0 + sw.1) / 2.0, cy), vec2(12.0, 12.0));
                                         if let Some(c) = parse_hex(&cell(0)) {
                                             ui.painter().rect_filled(sr, CornerRadius::same(3), c);
                                             ui.painter().rect_stroke(sr, CornerRadius::same(3), Stroke::new(1.0_f32, EDGE), egui::StrokeKind::Inside);
@@ -1718,25 +1738,33 @@ impl Ui {
                                             ui.painter().rect_stroke(sr, CornerRadius::same(3), Stroke::new(1.0_f32, FAINT), egui::StrokeKind::Inside);
                                         }
                                         if !inherited {
-                                            cell_hits = vec![(pr, "print"), (wr, "weight"), (lr, "linetype"), (sr.expand(3.0), "color")];
+                                            cell_hits = vec![(pr, "print"), (wr, "weight"), (sr.expand(3.0), "color")];
+                                            if cols.line.is_some() { cell_hits.push((lr, "linetype")); }
                                         }
                                     } else if col.colset == 2 {
                                         // Quantity at the edge, the export class (and type) before it.
                                         let qty = cell(2);
-                                        let qw = 74.0;
+                                        let (qa, qb) = cols.qty.unwrap_or((warn_col - 64.0, warn_col));
                                         if !qty.is_empty() {
-                                            ui.painter().text(pos2(warn_col, cy), egui::Align2::RIGHT_CENTER, qty, meta(), if n.row == 0 { INK_2 } else { DIM });
+                                            let mut job = egui::text::LayoutJob::single_section(qty, egui::TextFormat {
+                                                font_id: meta(), color: if n.row == 0 { INK_2 } else { DIM }, ..Default::default() });
+                                            job.wrap.max_width = qb - qa;
+                                            job.wrap.max_rows = 1;
+                                            job.wrap.break_anywhere = true;
+                                            let g = ui.painter().layout_job(job);
+                                            ui.painter().galley(pos2(qb - g.size().x, cy - g.size().y / 2.0), g, DIM);
                                         }
                                         let text = if cell(1).is_empty() { cell(0) } else { format!("{} · {}", cell(0), cell(1)) };
                                         let text = text.strip_prefix("Ifc").map(|t| t.to_string()).unwrap_or(text);
+                                        let (ca, cb) = cols.class.unwrap_or((qa - 100.0, qa - 8.0));
                                         let mut job = egui::text::LayoutJob::single_section(text, egui::TextFormat {
                                             font_id: meta(), color: FAINT, ..Default::default() });
-                                        job.wrap.max_width = 120.0;
+                                        job.wrap.max_width = cb - ca;
                                         job.wrap.max_rows = 1;
                                         job.wrap.break_anywhere = true;
                                         let g = ui.painter().layout_job(job);
-                                        cells_left = warn_col - qw - g.size().x;
-                                        ui.painter().galley(pos2(cells_left, cy - g.size().y / 2.0), g, FAINT);
+                                        cells_left = ca;
+                                        ui.painter().galley(pos2(ca, cy - g.size().y / 2.0), g, FAINT);
                                     }
                                 }
                                 let warn_col = if col.colset != 0 { rect.max.x + 1000.0 } else { warn_col };
@@ -1758,8 +1786,8 @@ impl Ui {
                                 if n.lock >= 0 && show_ctl { paint_lock(ui, lock_r, n.lock == 1); }
                                 // A row with no eye or lock (problems, library) keeps its width for the name.
                                 let bare = n.eye < 0 && n.lock < 0 && n.problems == 0;
-                                let right = if col.colset == 1 { rect.max.x - 170.0 } else if col.colset == 2 { cells_left.min(rect.max.x - 120.0) - 8.0 }
-                                    else if bare && (n.count > 0 || n.row == 0) { count_col - 34.0 }
+                                let right = if col.colset == 1 { cols.name_right } else if col.colset == 2 { cells_left.min(cols.name_right) - 8.0 }
+                                    else if (bare || !show_ctl) && (n.count > 0 || n.row == 0) { count_col - 34.0 }
                                     else if bare { rect.max.x - 8.0 } else { eye_r.min.x - 6.0 };
                                 // Item icon (a material row shows its swatch).
                                 let mut tx = x0 + 16.0;
@@ -1777,6 +1805,10 @@ impl Ui {
                                         ui.painter().rect_stroke(sw.expand(2.0), CornerRadius::same(4), Stroke::new(1.5_f32, ACCENT), egui::StrokeKind::Outside);
                                     }
                                     tx += 22.0;
+                                } else if file_state.is_some() {
+                                    // A linked file is a different kind of row: a page icon.
+                                    tree_cols::paint_file(ui.painter(), pos2(tx + 6.0, cy), if lit { Color32::WHITE } else { DIM });
+                                    tx += 16.0;
                                 } else if n.row != 0 && n.row != 4 {
                                     let glyph = match n.icon.as_str() { "component" => "◇", "section" => "⊟", "image" => "▨", "link" => "⛓", _ => "▢" };
                                     ui.painter().text(pos2(tx + 6.0, cy), egui::Align2::CENTER_CENTER, glyph, meta(),
@@ -1807,24 +1839,40 @@ impl Ui {
                                     continue;
                                 }
                                 let (ink, font) = match n.row {
-                                    0 => (if lit || n.active { Color32::WHITE } else { INK }, if n.active { strong(12.0) } else { body() }),
+                                    0 => (if lit || n.active { Color32::WHITE } else { INK },
+                                          if n.active || file_state.is_some() { strong(12.0) } else { body() }),
                                     3 | 4 => (FAINT, meta()),
                                     _ => (if lit { Color32::WHITE } else { INK_2 }, body()),
                                 };
-                                // The selection count sits at the right end; the name stops before it.
-                                let sel_g = (n.selected > 0 && n.row == 0)
-                                    .then(|| ui.painter().layout_no_wrap(format!("{} sel.", n.selected), meta(), ACCENT));
-                                let sel_right = right;
-                                let right = match &sel_g { Some(g) => right - g.size().x - 8.0, None => right };
+                                // The selection is marked once (tree A): lit where it
+                                // is held, a quiet dot on the rows above (after the name).
+                                let marks_w = if file_state.is_some() { 10.0 } else { 0.0 } + if n.mark == 2 { 10.0 } else { 0.0 };
+                                let right = right - marks_w;
                                 let name = if n.active && n.row != 5 { format!("✎ {}", n.name) } else { n.name.clone() };
                                 let full = name.clone();
                                 let g = ui.painter().layout_job(one_line(name, font, ink, right - tx));
                                 let name_w = g.size().x;
                                 // A name cut at the column shows whole on hover.
                                 let cut = g.elided || name_w >= right - tx - 1.0;
-                                let resp = if cut { resp.on_hover_text(full) } else { resp };
+                                let resp = if cut { resp.on_hover_text(full) }
+                                    else if n.mark == 1 && n.row == 0 && n.selected > 1 { resp.on_hover_text(format!("{} selected here", n.selected)) }
+                                    else { resp };
                                 ui.painter().galley(pos2(tx, cy - g.size().y / 2.0), g, ink);
                                 let mut kx = tx + name_w + 8.0;
+                                if let Some(state) = file_state {
+                                    let c = pos2(kx + 2.0, cy);
+                                    ui.painter().circle_filled(c, 3.0, tree_cols::state_color(state));
+                                    let tip = match state { "resolved" => "Up to date", "modified" => "Changed on disk: reload to see the changes",
+                                        "missing" => "Not found: relink it", _ => "Packed in this file" };
+                                    ui.interact(Rect::from_center_size(c, vec2(10.0, 10.0)), ui.id().with(("file_dot", i)), Sense::hover())
+                                        .on_hover_text(tip);
+                                    kx += 10.0;
+                                }
+                                if n.mark == 2 {
+                                    tree_cols::paint_partial(ui.painter(), pos2(kx + 2.0, cy));
+                                    kx += 10.0;
+                                }
+                                let right = right + marks_w;
                                 if !n.badge.is_empty() && n.row != 5 && kx + 20.0 < right {
                                     let col_b = if n.row == 3 { ACCENT } else { FAINT };
                                     let g = ui.painter().layout_job(one_line(n.badge.clone(), meta(), col_b, right - kx));
@@ -1846,9 +1894,6 @@ impl Ui {
                                     // A row with no kind word (Linked files): the tip on the name.
                                     let r = Rect::from_min_max(pos2(tx, rect.min.y), pos2(kx, rect.max.y));
                                     ui.interact(r, ui.id().with(("kind_tip", i)), Sense::hover()).on_hover_text(n.tip.clone());
-                                }
-                                if let Some(g) = sel_g {
-                                    ui.painter().galley(pos2(sel_right - g.size().x, cy - g.size().y / 2.0), g, ACCENT);
                                 }
                                 if resp.clicked() {
                                     let p = resp.interact_pointer_pos().unwrap_or(rect.center());

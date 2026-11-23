@@ -178,6 +178,56 @@ def attach(view) -> None:
         view.source_viewport._chrome_owns_labels = True
 
 
+#: The dock's width for the wide column sets: about 390 pt so the headed
+#: columns never crush the names (tree C). Filing keeps the user's own
+#: width ("ui/dock_width").
+WIDE_DOCK = 390.0
+#: Column sets that widen the dock (by index: 0 Filing, 1 Drawing, 2
+#: Deliver). The decision named Drawing and Export; Export became Deliver
+#: (ui/deliveries), a list of deliveries with no columns, so it keeps the
+#: user's width like Filing.
+WIDE_COLSETS = (1,)
+
+
+def dock_width(colset, settings=None) -> float:
+    """The dock width for column set ``colset``: the user's width for
+    Filing; for the wide sets the width last dragged there, at least
+    ``WIDE_DOCK`` and never narrower than the user's own."""
+    from PySide6.QtCore import QSettings
+    st = settings if settings is not None else QSettings()
+    try:
+        own = float(st.value("ui/dock_width", 300.0))
+    except (TypeError, ValueError):
+        own = 300.0
+    if colset not in WIDE_COLSETS:
+        return own
+    try:
+        wide = float(st.value("ui/dock_width_wide", WIDE_DOCK))
+    except (TypeError, ValueError):
+        wide = WIDE_DOCK
+    return max(own, wide)
+
+
+def apply_dock_width(view, settings=None) -> None:
+    renderer = getattr(view, "renderer", None)
+    if renderer is None or not hasattr(renderer, "ui_set_dock_width"):
+        return
+    renderer.ui_set_dock_width(dock_width(view.__dict__.get("_ui_colset", 0), settings))
+
+
+def keep_dock_width(view, arg, settings=None) -> None:
+    """The grip let go (or double-clicked): keep the width for the column
+    set it was dragged in, so Filing comes back to the user's width."""
+    from PySide6.QtCore import QSettings
+    st = settings if settings is not None else QSettings()
+    try:
+        w = float(arg or 300)
+    except ValueError:
+        return
+    colset = view.__dict__.get("_ui_colset", 0) if view is not None else 0
+    st.setValue("ui/dock_width_wide" if colset in WIDE_COLSETS else "ui/dock_width", w)
+
+
 def _send_tools(view, win) -> None:
     """Once the window has built its tool actions (after the first view)."""
     tools = getattr(win, "_tools", {})
@@ -699,35 +749,51 @@ MORE = ["Intersect Faces With Model", "Intersect Faces With Selection", "Interse
         "Convert Path to Geometry", "Delete Guides"]
 
 
+#: The More ▾ labels' verb ids (views/verbs.py).
+MORE_VERBS = {"Intersect Faces With Model": "intersect", "Intersect Faces With Selection": "intersect",
+              "Intersect Faces With Context": "intersect", "Soften / Smooth Edges…": "soften",
+              "Reverse Faces": "reverse", "Orient Faces": "orient", "Heal Overlapping Faces": "heal",
+              "Join Segments": "join", "Rebuild Faces (Planar)": "rebuild", "Split into Pieces": "split",
+              "Simplify Mesh…": "simplify", "Convert Path to Geometry": "topath", "Delete Guides": "guides"}
+
+
 def _commands(win, sel):
     """(id, label, shortcut, run, enabled, in More) for the selection bar.
     Fixed places (council 2026-11-22): File to…, Isolate, Hide, then what
-    the selection can become; geometry fixes under More."""
+    the selection can become; geometry fixes under More. Only the verbs
+    that apply to the selection's kind (views/verbs.py, tree C): a linked
+    file's placement or part gets no Explode, Edit or File to; raw
+    geometry no Component."""
     from core.group import Group
+    from views import verbs
     groups = [e for e in sel if isinstance(e, Group)]
     edit = _edit_actions(win)
+    kind = verbs.kind_of(getattr(getattr(win, "viewport", None), "scene", None), sel)
 
-    def act(label, name=None, more=False):
+    def act(label, vid, name=None, more=False):
         a = edit.get(label)
-        if a is None:
+        if a is None or not verbs.offers(kind, vid):
             return None
         return ("e:" + label, name or label.rstrip("…"), a.shortcut().toString(QKeySequence.NativeText),
                 a.trigger, a.isEnabled(), more)
     out = [
-        ("file", "File to…", "⌘⇧F", (lambda: _file_to(win, len(groups))) if groups else None, bool(groups), False),
-        ("isolate", "Isolate", "", lambda: _isolate(win, [getattr(e, "uid", None) for e in sel if getattr(e, "uid", None)]), True, False),
-        act("Hide"),
+        ("file", "File to…", "⌘⇧F", (lambda: _file_to(win, len(groups))) if groups else None, bool(groups), False)
+        if verbs.offers(kind, "fileto") else None,
+        ("isolate", "Isolate", "", lambda: _isolate(win, [getattr(e, "uid", None) for e in sel if getattr(e, "uid", None)]), True, False)
+        if verbs.offers(kind, "isolate") else None,
+        act("Hide", "hide"),
     ]
     if len(groups) == 1 and len(sel) == 1:
         one = groups[0]
-        out.append(("edit", "Edit", "double-click", lambda: win.viewport.begin_group_edit(one), True, False))
-        out.append(act("Explode Group", "Explode"))
+        if verbs.offers(kind, "open"):
+            out.append(("edit", "Edit", "double-click", lambda: win.viewport.begin_group_edit(one), True, False))
+        out.append(act("Explode Group", "explode", "Explode"))
     else:
-        out.append(act("Make Group", "Group"))
-    out.append(act("Make Component…", "Component"))
+        out.append(act("Make Group", "makegroup", "Group"))
+    out.append(act("Make Component…", "makecomp", "Component"))
     for label in MORE:
         name = label.replace("Intersect Faces ", "Intersect Faces ▸ ") if label.startswith("Intersect Faces ") else None
-        out.append(act(label, name, more=True))
+        out.append(act(label, MORE_VERBS.get(label, ""), name, more=True))
     return [c for c in out if c is not None]
 
 
@@ -905,7 +971,8 @@ def _tree(view, win) -> None:
         selected[nodes[key]["parent"]] += selected[key]
     active = registry.get("structure", {}).get("active")
     if first:
-        exp.update(f"n:{k}" for k in order if not nodes[k]["parent"])
+        # The host's own top nodes open; files stay folded (each is a root).
+        exp.update(f"n:{k}" for k in order if not nodes[k]["parent"] and nodes[k]["kind"] == "host")
         k = active
         while k in nodes and nodes[k]["parent"]:
             k = nodes[k]["parent"]
@@ -953,7 +1020,7 @@ def _tree(view, win) -> None:
     def layer_state(key):
         n = nodes[key]
         if n["kind"] in ("link", "linked"):
-            bases = [n["folder"]] if n["kind"] == "link" else [
+            bases = list(n.get("folders") or [n["folder"]]) if n["kind"] == "link" else [
                 nodes[c]["folder"] for c in children.get(key, ()) if nodes[c]["kind"] == "link"]
             if not bases:
                 return -1, -1
@@ -1051,7 +1118,7 @@ def _tree(view, win) -> None:
 
     def add(key, name, kind, badge, icon, d, count, probs, act, row, eye, lock, expandable, expanded, sel, extra=()):
         rows.append(([key, name, kind, badge, icon, *extra],
-                     [d, count, probs, int(act), row, eye, lock, int(expandable), int(expanded), sel]))
+                     [d, count, probs, int(act), row, eye, lock, int(expandable), int(expanded), sel, 0]))
 
     def more(key, shown, total, d):
         # The page's end: one row that shows the next page when clicked.
@@ -1129,9 +1196,21 @@ def _tree(view, win) -> None:
         name = node["name"]
         cls = recipes[key].get("class")
         source = links.stem(node["path"]) + ".igz" if node["path"] else None
+        badge, icon = "", ""
         if node["kind"] == "link":
-            name = f"{name} ↗"
-            kind = _kind_tip("Reference", path=node["path"])
+            # A file row (tree A): the file's name, a file icon with its
+            # state, and "via <file>" for a file another file places.
+            from pathlib import Path
+            from core.link_structure import file_state
+            state = file_state(scene, node["path"], nested=bool(node.get("via")))
+            name = Path(node["path"]).name if node["path"] else name
+            icon = f"file:{state}"
+            badge = f"via {node['via']}" if node.get("via") else ""
+            tip = TIPS["Reference"].format(path=node["path"] or "its file")
+            tip += "\n\n" + FILE_STATES.get(state, state)
+            if node.get("merged"):
+                tip += f"\n\nIts one top node «{node['merged']}» is shown as this row."
+            kind = TIP + tip
         elif node["kind"] == "linked":
             kind = TIP + TIPS["Linked files"]
         elif node["kind"] in ("tag", "tagfolder"):
@@ -1143,7 +1222,7 @@ def _tree(view, win) -> None:
         nk = f"n:{key}"
         expanded = filtering or nk in exp
         eye, lock = layer_state(key)
-        add(nk, name, kind, "", "", d, counts[key], problems[key], key == active, 0, eye, lock,
+        add(nk, name, kind, badge, icon, d, counts[key], problems[key], key == active, 0, eye, lock,
             bool(children.get(key)) or bool(direct[key]), expanded, selected[key], cells(key=key))
         if not expanded:
             hidden_below = d
@@ -1162,6 +1241,12 @@ def _tree(view, win) -> None:
         host_of = {i: k for i, k in node_of.items() if k in host}
         rows = _problem_rows(view, scene, registry, host, {k: recipes[k] for k in host if k in recipes},
                              unfiled, host_of, exp, sel_ids)
+    if mode != "problems":
+        mark_selection(rows)
+    else:
+        # Problems lists items under rules: a selected item is lit itself.
+        for _t, ints in rows:
+            ints[10:] = [1 if ints[4] != 0 and ints[9] > 0 else 0]
     view._ui_tree = dict(direct=direct, children=children, unfiled=unfiled, recipes=recipes, to_fix=to_fix,
                          active=active, node_of=node_of, nodes=nodes, tree=tree, counts=counts,
                          node_layers={k: list(c) for k, c in node_layers.items()})
@@ -1174,6 +1259,52 @@ def _tree(view, win) -> None:
         view._ui_kinds_sent = True
     path = node_path(active) if active in structure._nodes(registry) else ""
     view.renderer.ui_set_delivery(path, len(unfiled), len(to_fix))
+
+
+#: A file row's state, in words (its dot's tooltip and the inspector).
+FILE_STATES = {"resolved": "Up to date", "modified": "Changed on disk — reload to see the changes",
+               "missing": "Not found — relink it", "packed": "Packed in this file"}
+
+
+def mark_selection(rows) -> None:
+    """Mark the selection once (tree A): the deepest shown row holding a
+    selected thing is lit (mark 1); the rows above it get a quiet partial
+    mark (2), never a count each. A node holds its selection itself when
+    it counts more selected things than the rows shown under it — folded,
+    or past a page's end. Rows are ``(texts, ints)`` with ints[0] the
+    depth, ints[4] the row type, ints[9] the selected count and ints[10]
+    the mark (written here)."""
+    n = len(rows)
+    covered = [0] * n
+    holds = [False] * n
+    # Children come after their parent: walk backwards, summing what each
+    # row's shown children cover.
+    below = {}          # depth → running sum of the current run of children at that depth
+    for i in range(n - 1, -1, -1):
+        ints = rows[i][1]
+        d, row, sel = ints[0], ints[4], max(0, ints[9])
+        kids = below.pop(d + 1, 0)
+        for deeper in [k for k in below if k > d + 1]:
+            below.pop(deeper)
+        if row in (1, 2, 3):
+            # An item stands for itself; its parts are rows of their own.
+            holds[i] = sel > 0
+            covered[i] = sel + kids
+        else:
+            holds[i] = sel > kids
+            covered[i] = max(sel, kids)
+        below[d] = below.get(d, 0) + covered[i]
+    stack = []          # (depth, index) of the open ancestors
+    partial = set()
+    for i in range(n):
+        d = rows[i][1][0]
+        while stack and stack[-1][0] >= d:
+            stack.pop()
+        if holds[i]:
+            partial.update(j for _d, j in stack)
+        stack.append((d, i))
+    for i in range(n):
+        rows[i][1][10] = 1 if holds[i] else 2 if i in partial else 0
 
 
 #: Steps that change only geometry inside meshes (the feed's own
@@ -1687,8 +1818,15 @@ def _tree_action(win, view, action) -> None:
         elif verb == "insp" and key.startswith("lnk:"):
             what, _, nk = key[4:].partition(":")
             _tree_action(win, view, f"{'eye' if what == 'eye' else what}{SEP}n:{nk}")
+        elif verb == "insp" and key == "linkfile" and groups:
+            from core import links as _links
+            holder = _links.linked_ancestor(groups[0])
+            if holder is not None:
+                _select(win, [holder])
         elif verb == "insp" and key.startswith("link") and groups:
-            _link_action(win, view, groups[0], key)
+            from core import links as _links
+            holder = _links.linked_ancestor(groups[0])
+            _link_action(win, view, holder if holder is not None else groups[0], key)
         elif verb == "unfiled":
             _select(win, (getattr(view, "_ui_tree", None) or {}).get("unfiled", []))
         return
@@ -1758,7 +1896,7 @@ def _tree_action(win, view, action) -> None:
     def link_folders(key):
         n = data.get("nodes", {}).get(key) or {}
         if n.get("kind") == "link":
-            return [n["folder"]]
+            return list(n.get("folders") or [n["folder"]])
         if n.get("kind") == "linked":
             return [data["nodes"][c]["folder"] for c in data.get("children", {}).get(key, ())
                     if data["nodes"][c].get("kind") == "link"]
@@ -1813,6 +1951,7 @@ def _tree_action(win, view, action) -> None:
             rebuild()
         elif verb == "colset":
             view._ui_colset = int(rk or 0)
+            apply_dock_width(view)
             rebuild()
         elif verb in ("print", "color", "linetype", "weight") and node:
             panel = getattr(getattr(win, "layers_dock", None), "panel", None)
@@ -1860,9 +1999,16 @@ def _tree_action(win, view, action) -> None:
             view._ui_insp_node = (node, (len(sel), id(sel[0]) if sel else 0, id(sel[-1]) if sel else 0))
         elif verb == "contents":
             _select(win, members())
+        elif verb == "linkfinder" and linked:
+            from core.desktop_open import reveal
+            if tnode.get("path"):
+                reveal(tnode["path"])
         elif verb in ("linkopen", "linkreload", "linkunlink") and linked:
             gs = placements()
             if not gs:
+                return
+            if verb != "linkopen" and tnode.get("via"):
+                vp.flash_status(f"{tnode.get('name')} comes inside {tnode['via']}: reload or unlink {tnode['via']}")
                 return
             if verb == "linkunlink":
                 _select(win, gs[:1])
@@ -2188,6 +2334,8 @@ def _inspector(view, win) -> None:
         view.renderer.ui_set_inspector("", [])
         return
     groups = [g for g in sel if isinstance(g, Group)]
+    from views import verbs
+    sel_kind = verbs.kind_of(scene, sel)
     if len(sel) == 1 and groups:
         g = groups[0]
         rec = g.ifc or {}
@@ -2198,11 +2346,19 @@ def _inspector(view, win) -> None:
         recipe = data.get("recipes", {}).get(key, {})
         kind = (kind_of(rec.get("class") or recipe.get("class")) if (rec or recipe)
                 else "From its node, once filed" if not filed_ok else "Drawing only")
-        rows = [("Name", _edit(f"groupname:{g.uid}", g.name or "")), ("Filed in", filed), ("Kind", kind)]
+        if sel_kind == "linked_part":
+            holder = links.linked_ancestor(g)
+            src = str((links.link_of(holder) or {}).get("path", "")).rsplit("/", 1)[-1]
+            filed = data.get("nodes", {}).get(key, {}).get("name") if key in data.get("nodes", {}) else filed
+            filed = f"{src} › {filed}" if filed and filed != src.rsplit(".", 1)[0] else src
+        name_cell = _edit(f"groupname:{g.uid}", g.name or "") if verbs.name_editable(sel_kind) else (g.name or "")
+        rows = [("Name", name_cell), ("Filed in", filed), ("Kind", kind)]
+        if verbs.read_only(sel_kind):
+            rows.append(("Edits", "Read-only here"))
         if g.is_component():
             same = sum(1 for o, _s, _r in structure._placements(scene) if o.mesh is g.mesh)
             rows.append(("Copies", str(same)))
-        if links.link_of(g):
+        if links.link_of(g) or sel_kind == "linked_part":
             needs = [("Record", "Kept in the source file")]
         elif not filed_ok:
             needs = [("Filing", "Needed first")]
@@ -2211,8 +2367,10 @@ def _inspector(view, win) -> None:
         else:
             needs = [("Status", _status_text(rec) or "Missing")]
         sections = [("Item", rows), ("What it needs", needs)]
-        if rec.get("class"):
+        if rec.get("class") and verbs.offers(sel_kind, "status"):
             sections.append(("Actions", [("status:" + v, v.capitalize()) for v in STATUS_CHOICES]))
+        if sel_kind == "linked_part":
+            sections.append(("Actions", [("linkfile", "Select its linked file"), ("linkopen", "Open source")]))
         kids = list(getattr(g, "children", None) or [])
         if kids:
             parts = Counter(c.name or "Part" for c in kids)
@@ -2222,6 +2380,8 @@ def _inspector(view, win) -> None:
             sections.append(("Parts", prow))
             sections.append(("Actions", [("cutlist", "Copy cut list")]))
         solid = _solid_section(g)
+        if solid and not verbs.offers(sel_kind, "repair"):
+            solid = [s_ for s_ in solid if s_[0] != "Actions"]
         if solid:
             sections += solid
         link = links.link_of(g)
@@ -2233,11 +2393,12 @@ def _inspector(view, win) -> None:
             sections.append(("Linked file", [("Source", str(link.get("path", "")).rsplit("/", 1)[-1]),
                                              ("Status", LINK_STATES.get(state, state)), ("Subset", subset),
                                              ("Nested links", "included" if nested else "source only")]))
-            acts = [("linkreload", "Reload" if state != "modified" else "Reload changes"), ("linkrelink", "Relink…"),
-                    ("linkopen", "Open source"),
-                    ("linkpack", "Unpack" if state == "packed" else "Pack into this file"),
-                    ("linknested", "Source only" if nested else "Include nested links")]
+            acts = [("linkopen", "Open source"), ("linkreload", "Reload" if state != "modified" else "Reload changes"),
+                    ("linkunlink", "Unlink"), ("linkfinder", "Show in Finder")]
             sections.append(("Actions", acts))
+            sections.append(("Actions", [("linkrelink", "Relink…"),
+                                         ("linkpack", "Unpack" if state == "packed" else "Pack into this file"),
+                                         ("linknested", "Source only" if nested else "Include nested links")]))
         if _group_qty(view, g):
             sections.append(("Quantities", _qty_rows(_group_qty(view, g))))
         export = [("IFC class", str(rec.get("class") or recipe.get("class") or "generic object")),
@@ -2275,7 +2436,7 @@ def _inspector(view, win) -> None:
         value = _edit("segments", str(shape.segments)) if shape.flat else f"{shape.segments} (not flat)"
         sections.insert(0, ("Circle" if shape.closed else "Arc", [(label, value)]))
     missing = sum(1 for g in groups if (g.ifc or {}).get("class") and not structure._has_status(g.ifc or {}))
-    if missing:
+    if missing and verbs.offers(sel_kind, "status"):
         sections.append(("Status", [("Missing on", f"{missing} items")]))
         sections.append(("Actions", [("status:" + v, "All " + v.lower()) for v in STATUS_CHOICES]))
     view.renderer.ui_set_inspector(f"{len(sel)} selected", sections)
@@ -2306,26 +2467,32 @@ def _linked_inspector(view, win, data, key):
     if kind == "link":
         copies = tree.links.get(key, [])
         top = len(stems) == 1
-        state = _link_state(scene, links.link_of(copies[0])) if copies else "missing"
-        visible = L.folder_visible(scene, node["folder"])
+        visible = all(L.folder_visible(scene, f) for f in node.get("folders") or [node["folder"]])
         entry = links.registry(scene).get(path) or {}
         overrides = len(entry.get("overrides") or {})
         parent = Path(path).parent
         where = str(parent) if len(parent.parts) <= 3 else "…/" + "/".join(parent.parts[-2:])
-        rows = [("What", "Reference (read-only)"), ("File", Path(path).name),
+        from core.link_structure import file_state
+        state = file_state(scene, path, nested=not top)
+        rows = [("What", "Linked file (read-only)"), ("File", Path(path).name),
                 ("Folder", where), ("Status", LINK_STATES.get(state, state)),
                 ("Placed", f"{len(copies)} " + ("copy" if len(copies) == 1 else "copies")),
                 ("Items", str(count)),
                 ("Visibility", ("Shown" if visible else "Hidden")
                  + (f" · {overrides} tag override{'s' * (overrides != 1)}" if overrides else ""))]
         if not top:
-            rows.insert(2, ("Inside", " › ".join(stems[:-1])))
-        acts = [("lnk:eye:" + key, "Hide" if visible else "Show"), ("isolate:" + key, "Isolate"),
-                ("lnk:contents:" + key, "Select contents"), ("lnk:linkopen:" + key, "Open source")]
-        if top:
-            acts += [("lnk:linkreload:" + key, "Reload" if state != "modified" else "Reload changes"),
-                     ("lnk:linkunlink:" + key, "Unlink (keep geometry)")]
-        return node["name"], [("Linked file", rows), ("Actions", acts)]
+            rows.insert(2, ("Via", " › ".join(stems[:-1])))
+        if node.get("merged"):
+            rows.append(("Top node", node["merged"]))
+        # The file verbs first (views/verbs.py), then what any row offers.
+        from views import verbs
+        labels = {"linkopen": "Open source", "linkreload": "Reload" if state != "modified" else "Reload changes",
+                  "linkunlink": "Unlink", "linkfinder": "Show in Finder"}
+        acts = [("lnk:" + v + ":" + key, labels[v]) for v in verbs.file_verbs(not top)]
+        acts.append(("lnk:contents:" + key, "Select contents"))
+        if not copies:
+            acts += [("isolate:" + key, "Isolate"), ("lnk:eye:" + key, "Hide" if visible else "Show")]
+        return Path(path).name or node["name"], [("Linked file", rows), ("Actions", acts)]
     ts = [t for t in (data.get("node_layers", {}).get(k, ()) for k in tree.subtree(key)) for t in t]
     if node["tag"]:
         ts.append(node["tag"])
@@ -2361,6 +2528,18 @@ def _link_action(win, view, g, key) -> None:
     if not rec:
         return
     try:
+        if key == "linkfinder":
+            from core.desktop_open import reveal
+            reveal(rec["path"])
+            return
+        if key == "linkunlink":
+            vp.scene.select([g])
+            unlink = getattr(win, "_on_make_unique", None)
+            if unlink is not None:
+                unlink()
+            view._ui_insp_sig = None
+            view._ui_tree_sig = None
+            return
         if key == "linkreload":
             links.reload(scene, rec["path"])
         elif key == "linkopen":
@@ -2577,8 +2756,8 @@ def _run(win, actions) -> None:
             from views import wgpu_library
             wgpu_library.action(win, getattr(getattr(win, "_doc", None), "stand_in", None), arg)
         elif kind == "dockw":
-            from PySide6.QtCore import QSettings
-            QSettings().setValue("ui/dock_width", float(arg or 300))
+            view = getattr(getattr(win, "_doc", None), "stand_in", None)
+            keep_dock_width(view, arg)
         elif kind == "cmdq":
             view = getattr(getattr(win, "_doc", None), "stand_in", None)
             if view is not None:
