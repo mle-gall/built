@@ -11,6 +11,7 @@ unknown key raises ``KeyError`` before anything runs. The answer is
 from __future__ import annotations
 
 from core.history import Command
+from core.protocol.records import patch_record_field, set_filing_rule
 from core.protocol.keys import elements, from_json_key, store_of
 
 
@@ -446,7 +447,7 @@ def split_into_pieces(history, placement):
     (``ok`` False, no step) when it already is its pieces."""
     from core.history import SplitIntoPiecesCommand
     from core.pieces import split_into_pieces as split
-    g = _placement(history, placement)
+    g, = _placements(history, [placement])
     before = history.revision
     pieces = split(g)
     if not pieces:
@@ -463,7 +464,7 @@ def explode_view(history, placement, factor, mode="outward"):
     from core.history import ExplodeViewCommand
     if mode not in MODES:
         raise ValueError(f"mode must be one of {MODES}")
-    g = _placement(history, placement)
+    g, = _placements(history, [placement])
     before = history.revision
     history.execute(ExplodeViewCommand(g, float(factor), mode))
     return _answer(history, before)
@@ -736,7 +737,9 @@ def redo(history):
 
 from core.deliveries import create_delivery, edit_delivery, delete_delivery, run_delivery
 
-COMMANDS = {"create_delivery": create_delivery, "edit_delivery": edit_delivery,
+
+COMMANDS = {"patch_record_field": patch_record_field, "set_filing_rule": set_filing_rule,
+            "create_delivery": create_delivery, "edit_delivery": edit_delivery,
             "delete_delivery": delete_delivery, "run_delivery": run_delivery, "follow_me": follow_me, "intersect_faces": intersect_faces,
             "add_edge": add_edge, "add_edges": add_edges,
             "divide_edges": divide_edges, "join_edges": join_edges,

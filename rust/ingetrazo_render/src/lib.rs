@@ -3,6 +3,7 @@ mod timing;
 mod panic_log;
 mod overlay;
 mod ui;
+mod inspector;
 mod glass;
 mod axes;
 mod sections;
@@ -2211,6 +2212,20 @@ impl Renderer {
     }
     fn ui_set_tree(&mut self, rows: Vec<(Vec<String>, Vec<i64>)>, unfiled: u32) {
         if let Some(ui) = self.ui.as_mut() { ui.set_tree(rows, unfiled); }
+    }
+    fn ui_profile_png(&mut self) -> PyResult<Vec<u8>> {
+        let frame = self.read_pixels()?;
+        let panels = &self.ui.as_ref().ok_or_else(|| PyValueError::new_err("No inspector"))?.panels;
+        let rect = panels.terrain.plot.ok_or_else(|| PyValueError::new_err("No profile plot"))?;
+        let terrain = &panels.data["terrain"];
+        let title = format!("{} · {} · Station and elevation (m)", terrain["name"], terrain["source"]);
+        inspector::plot_png(&frame, self.config.width as usize, self.config.height as usize, self.ui_scale, rect, &title)
+            .map_err(PyValueError::new_err)
+    }
+    fn ui_panel_set(&mut self, key: &str, snapshot: &str) -> PyResult<()> {
+        let value = serde_json::from_str(snapshot).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        if let Some(ui) = self.ui.as_mut() { ui.panels.set(key, value); }
+        Ok(())
     }
     fn ui_set_inspector(&mut self, title: String, sections: Vec<(String, Vec<(String, String)>)>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_inspector(title, sections); }
