@@ -786,7 +786,7 @@ def _commands(win, sel):
     out = [
         ("file", "File to…", "⌘⇧F", (lambda: _file_to(win, len(groups))) if groups else None, bool(groups), False)
         if verbs.offers(kind, "fileto") else None,
-        ("isolate", "Isolate", "", lambda: _isolate(win, [getattr(e, "uid", None) for e in sel if getattr(e, "uid", None)]), True, False)
+        ("isolate", "Isolate", "", lambda: _isolate(win, [e for e in sel if getattr(e, "uid", None)]), True, False)
         if verbs.offers(kind, "isolate") else None,
         act("Hide", "hide"),
     ]
@@ -831,6 +831,10 @@ def _isolate(win, uids) -> None:
     from copy import deepcopy
     from core.agent_facets import set_display
     vp = win.viewport
+    if any(not isinstance(u, str) for u in uids):
+        from core.facets import build
+        keys = build(vp.scene).qualified
+        uids = [u if isinstance(u, str) else keys.get(u, u.uid) for u in uids]
     uids = [u for u in dict.fromkeys(uids) if u]
     if not uids:
         vp.flash_status("Nothing to isolate: select objects first")
@@ -841,7 +845,7 @@ def _isolate(win, uids) -> None:
                  getattr(vp, "_view_exact", False))
         vp._isolate_base = (state, list(getattr(vp, "_previous_views", []) or []),
                             list(vp.scene.selection), vp.scene.content_version)
-    set_display(vp, {"facet": "uid", "in": uids}, isolate=True, exact=False)
+    set_display(vp, {"facet": "occurrence", "in": uids}, isolate=True, exact=False)
 
 
 # ---- Right column: project tree and inspector -------------------------------
@@ -1172,7 +1176,7 @@ def _tree(view, win) -> None:
                 add_item(gs[0], key, d)
 
     def add_item(g, key, d, row=1):
-        ik = f"{'i' if row == 1 else 'c'}:{g.uid}"
+        ik = f"{'i' if row == 1 else 'c'}:{tree.row_id(g)}"
         kids = list(getattr(g, "children", None) or [])
         badge = "⛓" if links.is_linked(g) else ""
         add(ik, g.name or "Group", "", badge, item_kind(g), d, 0, int(id(g) in to_fix_set), False, row,
@@ -1183,7 +1187,7 @@ def _tree(view, win) -> None:
             for c in kids[:cap]:
                 where = node_of.get(id(c))
                 if where is not None and where != key and where in nodes:
-                    add(f"g:{c.uid}", c.name or "Group", "", f"→ {nodes[where]['name']}", item_kind(c), d + 1,
+                    add(f"g:{tree.row_id(c)}", c.name or "Group", "", f"→ {nodes[where]['name']}", item_kind(c), d + 1,
                         0, 0, False, 3, -1, -1, False, False, int(id(c) in sel_ids))
                 else:
                     add_item(c, key, d + 1, row=2)
@@ -1760,6 +1764,9 @@ def _tree_groups(view, key):
 
 
 def _group_by_uid(win, uid):
+    if uid.startswith("@["):
+        import json
+        return win.viewport.scene.resolve_occurrence(json.loads(uid[1:]))
     from core import structure
     for g, _src, _root in structure._placements(win.viewport.scene):
         if g.uid == uid:
@@ -1863,6 +1870,9 @@ def _tree_action(win, view, action) -> None:
     tree = data.get("tree")
     linked = link_structure.is_linked_key(node)
     tnode = (data.get("nodes") or {}).get(node) or {}
+
+    def address(group):
+        return tree.address(group) if tree is not None else group.uid
 
     def members():
         if node == "":
@@ -2050,7 +2060,7 @@ def _tree_action(win, view, action) -> None:
                 _select(win, [g])
             rebuild()
         elif verb == "isolate":
-            _isolate(win, [g.uid for g in shown()])
+            _isolate(win, [tree.row_id(g) if tree else g.uid for g in shown()])
         elif verb == "open":
             g = item()
             if g is not None:
@@ -2076,7 +2086,7 @@ def _tree_action(win, view, action) -> None:
                 gs = members()
                 if gs:
                     verb_ = "unhide" if getattr(gs[0], "hidden", False) else "hide"
-                    _core(vp, verb_, placements=[g.uid for g in gs])
+                    _core(vp, verb_, placements=[address(g) for g in gs])
             vp.notify_scene_changed() if hasattr(vp, "notify_scene_changed") else vp.update()
         elif verb == "lock" or verb == "lockitem":
             if node:
@@ -2088,12 +2098,12 @@ def _tree_action(win, view, action) -> None:
             else:
                 gs = members()
                 if gs:
-                    _core(vp, "lock", placements=[g.uid for g in gs], locked=not getattr(gs[0], "locked", False))
+                    _core(vp, "lock", placements=[address(g) for g in gs], locked=not getattr(gs[0], "locked", False))
             vp.update()
         elif verb in ("hidemembers", "hideitem"):
             gs = members()
             if gs:
-                _core(vp, "hide", placements=[g.uid for g in gs])
+                _core(vp, "hide", placements=[address(g) for g in gs])
                 vp.update()
         elif verb == "unique":
             gs = members()
@@ -2108,11 +2118,11 @@ def _tree_action(win, view, action) -> None:
             if node:
                 update_node(vp, node, name=extra)
             elif item() is not None:
-                _core(vp, "rename_placement", placement=item().uid, name=extra)
+                _core(vp, "rename_placement", placement=address(item()), name=extra)
                 vp.update()
         elif verb in ("file", "filehere"):
             key = node if verb == "filehere" else ident if kind == "n" else rk
-            uids = [g.uid for g in scene.selection if isinstance(g, Group)]
+            uids = [address(g) for g in scene.selection if isinstance(g, Group)]
             if uids and key:
                 execute(vp, structure.file(scene, uids, key))
                 vp.flash_status(f"Filed {len(uids)} to " + " › ".join(structure.path(bim_registry.get(scene), key)))

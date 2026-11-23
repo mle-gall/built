@@ -258,8 +258,14 @@ def _placement(history, uid):
 def _placements(history, uids):
     """Placements of the open context by uid, nested ones included (the
     project tree names items at any depth)."""
-    want = list(dict.fromkeys(uids))
-    wanted, found = set(want), {}
+    want = list(dict.fromkeys(tuple(u) if isinstance(u, (list, tuple)) else u for u in uids))
+    found = {}
+    for path in (u for u in want if isinstance(u, tuple)):
+        group = history.scene.resolve_occurrence(path)
+        if group is None:
+            raise KeyError(f"no placement at occurrence path {path!r}")
+        found[path] = group
+    wanted = set(want)
     stack = list(reversed(history.scene.groups))
     while stack and len(found) < len(wanted):
         g = stack.pop()
@@ -270,7 +276,7 @@ def _placements(history, uids):
     gone = [u for u in want if u not in found]
     if gone:
         raise KeyError(f"no placement with uid {gone[0]!r} in the open context")
-    return [found[u] for u in want]
+    return list(dict.fromkeys(found[u] for u in want))
 
 
 def hide(history, placements):
@@ -710,7 +716,9 @@ def rename_component(history, placement, name):
     if not name:
         raise ValueError("a component needs a name")
     kept = {getattr(t, "uid", None): t for t in getattr(scene, "kept_components", None) or ()}
-    g = kept.get(placement) or _placements(history, [placement])[0]
+    g = kept.get(placement) if isinstance(placement, str) else None
+    if g is None:
+        g, = _placements(history, [placement])
     targets = copies_of(scene, g.mesh)
     template = kept_template(scene, g.mesh)
     for extra in (template, g):

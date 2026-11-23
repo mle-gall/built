@@ -4512,7 +4512,11 @@ class Viewport(QOpenGLWidget):
         # box and eligibility, the recorded passes) is keyed on the placements
         # epoch, and the epoch leaves this mesh's edits out on purpose: paint,
         # new faces and moves inside it were not drawn until it was closed.
-        if g.mesh is getattr(getattr(self, "scene", None), "mesh", None):
+        scene = getattr(self, "scene", None)
+        active = getattr(scene, "mesh", None)
+        if (g.mesh is active or (active is not None and
+                g.mesh is getattr(active, "_instance_definition", None) and
+                g.uid == scene.edit_group.uid)):
             return False
         # A MIRRORED placement turns the prototype's triangles inside out
         # for GL (front becomes back). It used to fall back to the
@@ -4593,7 +4597,8 @@ class Viewport(QOpenGLWidget):
         if live and same is not None and same[0] == cheap:
             self._epoch_memo = ((tick, _cache_ver(self)), same[1])
             return same[1]
-        parts: list = [id(sc.edit_group), id(sc.mesh),
+        definition = getattr(sc.mesh, "_instance_definition", sc.mesh)
+        parts: list = [id(sc.edit_group), id(definition),
                        getattr(self, "_preview_epoch", 0),
                        bool(getattr(self, "_preview_groups", None)),
                        getattr(self, "_edit_rest_mode", None),
@@ -4863,7 +4868,7 @@ class Viewport(QOpenGLWidget):
         allowed = getattr(self.scene, "_navigator_allowed", None)
         anidado = ctx is not None and getattr(ctx, "children", None)
         if not anidado and not any(getattr(g, "children", None) for g in groups):
-            shown = groups if allowed is None else [g for g in groups if g.uid in allowed]
+            shown = groups if allowed is None else [g for g in groups if self.scene.navigator_key(g) in allowed]
             self._placements_memo = (key, shown)
             return shown                       # unchanged for unfiltered flat scenes
         cache = getattr(self, "_placement_proxies", None)
@@ -4887,7 +4892,7 @@ class Viewport(QOpenGLWidget):
         # its ancestor. Ghost passes also consume this list, so hidden-object
         # display cannot bring excluded placements back into the viewport.
         if allowed is not None:
-            out = [g for g in out if g.uid in allowed]
+            out = [g for g in out if self.scene.navigator_key(g) in allowed]
         self._placements_memo = (key, out)
         return out
 
@@ -4942,7 +4947,7 @@ class Viewport(QOpenGLWidget):
                     seen.add(id(child))
                 tops[id(proxy)] = id(group)
                 proxy.mesh = child.mesh
-                proxy.uid = child.uid
+                proxy.uid = self.scene.navigator_key(child)
                 # A nested entity with no tag of its own inherits the
                 # nearest tag above it (the .skp convention); and when a tag
                 # above is hidden or locked the whole instance goes with it,
@@ -19709,9 +19714,7 @@ class Viewport(QOpenGLWidget):
 
     def begin_group_edit(self, group) -> None:
         """Enter a group for editing (double-click-into-group). A
-        component instance opens on a world copy of its definition; the
-        session's commands are remembered so leaving can fold them into ONE
-        undoable share-back.
+        component's tools work in the frame of the selected occurrence.
 
         A locked group (the Browser's padlock), or one inside a locked
         group, does not open — whichever road asks: a double-click, the
@@ -19755,7 +19758,7 @@ class Viewport(QOpenGLWidget):
             self.scene._edit_stack[-1]["undo_mark"] = self._edit_undo_mark
         self._hover_entity = None
         self._edges_version = -1     # the rest may fade out or leave the VBOs
-        share = getattr(self.scene, "_edit_share", None)
+        share = self.scene._edit_stack[-1].get("share") if self.scene._edit_stack else None
         if was_instance and share is not None:
             copies = sum(1 for g in self.scene.groups if g.mesh is share[1]) + 1
             self.flash_status(tr(
@@ -19847,44 +19850,22 @@ class Viewport(QOpenGLWidget):
         while todos and len(self.scene._edit_stack) > 1:
             self._leave_group_edit(todos=False)
         level = self.scene._edit_stack[-1] if self.scene._edit_stack else {}
-        level_mark = level.get("undo_mark")
-        parts = level.get("parts")
-        share = self.scene.take_edit_share()
+        share = level.pop("share", None)
         before = getattr(self.scene, "content_version", None)
         if todos:
             self.scene.end_group_edit()
         else:
             self.scene.end_one_group_edit()
+        if level.get("affine"):
+            from core.history import OccurrenceCommands
+            OccurrenceCommands.fold(self.history, level["session"])
         _ctx_changed(self, before)
         self._hover_entity = None
         self._edges_version = -1     # the rest comes back
         if share is not None:
-            group, proto, xform, state0 = share
-            edited = group.mesh
-            mark = (level_mark if level_mark is not None
-                    else getattr(self, "_edit_undo_mark",
-                                 len(self.history.undo_stack)))
-            mark = min(mark, len(self.history.undo_stack))
-            shared = edited.capture_state() != state0
-            if parts is not None and (shared
-                                      or len(self.history.undo_stack) > mark):
-                # An assembly: what ran inside was recorded with its matrix
-                # down in the parts, so it folds into the step that brings
-                # the matrix back — a part deleted or moved undoes in place.
-                from core.history import ReshareAssemblyCommand
-                inner = self.history.undo_stack[mark:]
-                del self.history.undo_stack[mark:]
-                self.history.execute(ReshareAssemblyCommand(
-                    group, proto, xform, edited, state0, parts, inner))
-            elif not shared:
-                # Nothing ran: an assembly's parts go back bit for bit.
-                self.scene.restore_sharing(group, proto, xform, parts=parts)
-            else:
-                from core.history import ReshareInstanceCommand
-                inner = self.history.undo_stack[mark:]
-                del self.history.undo_stack[mark:]
-                self.history.execute(ReshareInstanceCommand(
-                    group, proto, xform, edited, inner))
+            from core.reference_edit import record_leave
+            group, proto = share[:2]
+            shared = record_leave(self.history, level, share)
             if shared:
                 copies = sum(1 for g, _m in self.scene.placements()
                              if g.mesh is proto)

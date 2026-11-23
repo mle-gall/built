@@ -8,7 +8,8 @@ from __future__ import annotations
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core.group import Group, world_mesh
-from core.history import History, ReshareInstanceCommand, SnapshotMutation
+from core.history import History, SnapshotMutation
+from core.reference_edit import ReshareInstanceCommand
 from core.mesh import Mesh
 from core.scene import Scene
 
@@ -36,12 +37,18 @@ def _two_instances():
 def test_entering_edits_a_world_copy_and_leaving_shares_it_back():
     scene, proto, a, b = _two_instances()
     scene.begin_group_edit(b)
-    assert scene.mesh is b.mesh and b.mesh is not proto and b.xform is None
-    assert {round(v.position.x(), 3) for v in b.mesh.vertices} == {10.0, 11.0}
+    direct = scene.mesh.__dict__.get("_instance_definition") is proto
+    if direct:
+        assert b.mesh is proto and b.xform is not None
+    else:
+        assert scene.mesh is b.mesh and b.mesh is not proto and b.xform is None
+    assert {round(v.position.x(), 3) for v in scene.mesh.vertices} == {10.0, 11.0}
     assert len(proto.faces) == 1                       # definition untouched
     scene.mesh.add_face([V(10, 0, 1), V(11, 0, 1), V(11, 1, 1), V(10, 1, 1)])
+    if direct:
+        assert len(a.mesh.faces) == 2
     scene.end_group_edit()
-    assert b.mesh is proto and b.xform is not None      # shared again
+    assert b.mesh is proto and b.xform is not None
     assert len(proto.faces) == 2                        # …and edited
     zs = sorted({round(v.position.z(), 3) for v in proto.vertices})
     xs = sorted({round(v.position.x(), 3) for v in proto.vertices})
@@ -67,7 +74,14 @@ def test_reshare_command_undoes_the_whole_session_in_one_step():
     hist.execute(SnapshotMutation(lambda s: s.mesh.add_face(
         [V(10, 0, 2), V(11, 0, 2), V(11, 1, 2), V(10, 1, 2)])))
     assert len(scene.mesh.faces) == 3
-    share = scene.take_edit_share()
+    share = scene._edit_stack[-1].pop("share", None)
+    if scene.mesh.__dict__.get("_instance_definition") is proto:
+        assert share is None
+        scene.end_group_edit()
+        assert hist.undo() and len(proto.faces) == 2
+        assert hist.undo() and len(proto.faces) == 1
+        assert hist.redo() and hist.redo() and len(proto.faces) == 3
+        return
     group, proto2, xform, state0 = share
     assert group is b and proto2 is proto
     edited = b.mesh
@@ -99,7 +113,10 @@ def test_a_group_with_nested_placements_keeps_them():
     child.xform = QMatrix4x4()
     b.adopt([child])
     scene.begin_group_edit(b)
-    assert scene._edit_share is not None
+    if scene.mesh.__dict__.get("_instance_definition") is proto:
+        assert (scene._edit_stack[-1].get("share") if scene._edit_stack else None) is None
+    else:
+        assert (scene._edit_stack[-1].get("share") if scene._edit_stack else None) is not None
     assert b.children == [child], "los hijos se hornearon al entrar"
     assert len(child.mesh.faces) == 1
     scene.end_group_edit()

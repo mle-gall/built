@@ -13,6 +13,7 @@ def temporary_display(viewport, saved_view):
     key = saved_view.navigator_view
     saved = bim_registry.get(scene).get('views', {}).get(key) if key else None
     keep = (getattr(scene, '_navigator_allowed', None),
+            getattr(scene, '_navigator_through', None), getattr(scene, '_navigator_keys', {}),
             getattr(viewport, 'view_tint', None))
     try:
         # Evaluate against the real scene but run set_display on a shallow
@@ -28,10 +29,13 @@ def temporary_display(viewport, saved_view):
                         isolate=saved.get('isolate', False), key=key,
                         remember=False, exact=saved.get('exact', False))
             scene._navigator_allowed = shadow._navigator_allowed
+            scene._navigator_through = shadow._navigator_through
+            scene._navigator_keys = shadow._navigator_keys
             viewport.view_tint = proxy.view_tint
         else:
-            scene._navigator_allowed = None
+            scene._navigator_allowed = scene._navigator_through = None
+            scene._navigator_keys = {}
             viewport.view_tint = None
         yield
     finally:
-        scene._navigator_allowed, viewport.view_tint = keep
+        scene._navigator_allowed, scene._navigator_through, scene._navigator_keys, viewport.view_tint = keep

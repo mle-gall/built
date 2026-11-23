@@ -330,3 +330,44 @@ def test_format_three_reopens_edge_with_original_float32_weld_decision(
     igz.load_into(restored, path)
     assert len(restored.mesh.edges) == 0
     assert len(restored.mesh.vertices) == 1
+
+
+def test_camera_relative_edit_through_a_far_mirrored_occurrence(monkeypatch):
+    from core import doc_model
+    from core.coordinate_frame import mesh_frame
+    from core.group import Group
+    from core.history import SnapshotMutation
+    from ingetrazo_core import Matrix4, Vec3
+
+    if not doc_model.ENABLED:
+        pytest.skip("requires a native document edit frame")
+    monkeypatch.setenv("INGETRAZO_STORE", "1")
+    scene = Scene()
+    group = Group()
+    origin = (float(2**48), -float(2**48), 42.)
+    transform = Matrix4()
+    transform.translate(*origin)
+    transform.rotate(33, 0, 0, 1)
+    transform.scale(-2, 3, .5)
+    group.xform = transform
+    scene.groups.append(group)
+    points = [Vec3(.00037, .02634, .04321), Vec3(.01867, .04678, .05432)]
+    group.mesh.add_edge(*points)
+    definition = group.mesh
+    key = definition.vertices[0].key
+    history = History(scene)
+    scene.begin_group_edit(group)
+    with mesh_frame(scene.mesh, origin):
+        vertex = scene.mesh.vertices[0]
+        np.testing.assert_allclose(vertex.position_tuple(), transform.mapVector(points[0]).toTuple(),
+                                   atol=1e-14, rtol=0)
+        moved = points[0] + Vec3(.00321, -.00432, .00876)
+        history.execute(SnapshotMutation(lambda s: s.mesh.place_vertex(vertex, transform.mapVector(moved))))
+        assert not history.last_error and not history.last_rejected
+        assert vertex.key == key
+    scene.end_group_edit()
+    np.testing.assert_allclose(definition.vertices[0].position_tuple(), moved.toTuple(), atol=1e-14, rtol=0)
+    assert definition.vertices[1].position_tuple() == points[1].toTuple()
+    assert history.undo() and definition.vertices[0].position_tuple() == points[0].toTuple()
+    assert history.redo() and definition.vertices[0].key == key
+    np.testing.assert_allclose(definition.vertices[0].position_tuple(), moved.toTuple(), atol=1e-14, rtol=0)

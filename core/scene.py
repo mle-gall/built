@@ -281,18 +281,13 @@ class Scene:
     edit_group: object | None = None
     _loose_mesh: object | None = None
     #: The open contexts, outermost first — nested editing. Each
-    #: entry is ``{"group", "mesh", "share"}``: the group, the mesh ``scene.mesh``
-    #: pointed at before entering it, and its pending instance share-back.
+    #: entry pins the placement, its parent edit mesh and its drawing frame.
     if _dm.ENABLED:
         @property
         def _edit_stack(self):
             return self._root._edit_levels
     else:
         _edit_stack: list = field(default_factory=list)
-    #: While a component INSTANCE is open for editing: ``(group, proto,
-    #: xform, state0)`` — the shared definition it left, its placement, and
-    #: the temp mesh's snapshot at entry (to tell an edit from a look).
-    _edit_share: object | None = None
 
     if _dm.ENABLED:
         def __post_init__(self, groups, layers):
@@ -429,7 +424,7 @@ class Scene:
     def entity_visible(self, entity) -> bool:
         from core.group import Group
         allowed = getattr(self, '_navigator_allowed', None)
-        if allowed is not None and isinstance(entity, Group) and entity.uid not in allowed:
+        if allowed is not None and isinstance(entity, Group) and self.navigator_key(entity) not in allowed:
             return False
         # A hidden thing is gone from every consumer that asks this —
         # render, pick, snap, bounds, export — whatever its layer says.
@@ -497,7 +492,7 @@ class Scene:
     def entity_selectable(self, entity) -> bool:
         from core.group import Group
         allowed = getattr(self, '_navigator_allowed', None)
-        if allowed is not None and isinstance(entity, Group) and entity.uid not in allowed:
+        if allowed is not None and isinstance(entity, Group) and self.navigator_key(entity) not in allowed:
             return False
         if self.similar_hidden(entity):
             return False
@@ -519,6 +514,39 @@ class Scene:
                     and hasattr(g, "children"):
                 return True
         return False
+
+    def navigator_key(self, group):
+        return getattr(self, '_navigator_keys', {}).get(group, group.uid)
+
+    def repeated_uids(self):
+        if _dm.ENABLED:
+            return self._root._repeated_uids()
+        from collections import Counter
+        from core.purge import iter_groups
+        return {uid for uid, n in Counter(g.uid for g in iter_groups(self.groups)).items() if n > 1}
+
+    def occurrence_path(self, group):
+        """Return the UIDs from this scene's root through the placement."""
+        if _dm.ENABLED:
+            return self._root._occurrence_path(group)
+        from core.outliner import path_to
+        parents = path_to(self.groups, group)
+        return None if parents is None else [g.uid for g in (*parents, group)]
+
+    def resolve_occurrence(self, path):
+        """Look up an ordered path of persisted placement UIDs from this root."""
+        if _dm.ENABLED:
+            return self._root._resolve_occurrence(path)
+        group, children = None, self.groups
+        for uid in path:
+            matches = [child for child in children if child.uid == uid]
+            if not matches:
+                return None
+            if len(matches) > 1:
+                raise ValueError(f"ambiguous placement UID {uid}")
+            group, = matches
+            children = group.children
+        return group
 
     def groups_by_uid(self) -> dict:
         """``uid → group`` over the whole tree (nested placements too)."""
@@ -555,16 +583,27 @@ class Scene:
         quiero, que se fundan todos los grupos, porque además pierdo
         rendimiento» (Marco, 2026-09-11). Now it enters as it is.
 
-        Entering a component INSTANCE edits a world copy of its shared
-        definition; leaving shares the edit back to every copy."""
+        The active store presents the definition in the occurrence frame.
+        Other placements keep reading the same definition while tools edit it."""
         anidando = (self.edit_group is not None
                     and group in (getattr(self.edit_group, "children", None) or ()))
         if self.edit_group is not None and not anidando:
             self.end_group_edit()
+        if not anidando:
+            # Tree and protocol actions can open a nested row directly.
+            # Enter its ancestors just as a sequence of double-clicks would.
+            if _dm.ENABLED:
+                from core.group import Group
+                parent = group._parent
+                if isinstance(parent, Group):
+                    self.begin_group_edit(parent)
+            elif group not in self.groups:
+                from core.outliner import path_to
+                for parent in path_to(self.groups, group) or ():
+                    self.begin_group_edit(parent)
         self._refresh_dimension_holds()
         entry_mesh = group.mesh
         anterior = self.mesh
-        self._edit_share = None
         # The context's own axes (issue #44), read BEFORE anything below
         # rewrites the placement: drawing inside a group happens on the
         # group's axes, level by level.
@@ -576,47 +615,24 @@ class Scene:
         definition = (group.mesh if callable(is_comp) and is_comp()
                       else None)
         parts = None
-        if getattr(group, "children", None):
-            # A container: its children stay children. What CANNOT stay is a
-            # transform on it, because the tools work in world coordinates —
-            # so the matrix is pushed down into the children and into its own
-            # mesh, which leaves every world position exactly where it was.
-            instance = (callable(is_comp) and is_comp()
-                        and self._mesh_placed_elsewhere(group))
-            proto, xform = group.mesh, group.xform
-            if instance:
-                parts = self.parts_record(group)
-            self._bake_container_xform(group)
-            if instance:
-                # An assembly is a component too: its own geometry is the
-                # definition its copies share. The session edits a world
-                # copy, and leaving shares it back and returns the matrix
-                # up out of the parts, as for a component with no parts.
-                from ingetrazo_core import Matrix4 as QMatrix4x4
-                if group.mesh is proto:
-                    from core.group import transformed_mesh
-                    group.mesh = transformed_mesh(proto, QMatrix4x4())
-                self._edit_share = (group, proto, QMatrix4x4(xform),
-                                    group.mesh.capture_state())
-            if frame is not None:
-                # Its matrix went down into the children and its mesh is in
-                # world coordinates now: the axes stay, as world axes.
-                group.axes = frame
-        elif getattr(group, "xform", None) is not None:
-            # A component instance: the tools work in world coordinates, so
-            # the session edits a world-space COPY of the definition. On
-            # leaving, the copy goes back into the shared prototype (local
-            # coordinates) and every sibling shows the edit — classic
-            # component editing. Make Unique first to edit one copy only.
-            from core.group import transformed_mesh
-            proto, xform = group.mesh, group.xform
-            group.mesh = transformed_mesh(proto, xform)
-            group.xform = None
-            self._edit_share = (group, proto, xform,
-                                group.mesh.capture_state())
+        active_mesh = None
+        if _dm.ENABLED and (group.xform is not None or (
+                self._edit_stack and self._edit_stack[-1].get("affine"))):
+            from core.store_mesh import instance_view
+            world = self._root._edit_matrix(group)
+            active_mesh = instance_view(group.mesh, world)
+            if active_mesh is not None:
+                frame = active_mesh._store.tool_placement()
+                if group.axes is not None:
+                    frame = frame * group.axes
+        share = None
+        if active_mesh is None and (group.children or group.xform is not None):
+            from core.reference_edit import enter
+            share, parts = enter(self, group, frame)
         if not self._edit_stack:
             self._loose_mesh = anterior
-        level = {"group": group, "mesh": anterior, "share": self._edit_share,
+        level = {"group": group, "mesh": anterior, "affine": active_mesh is not None, "session": object(),
+                 "share": share,
                  "frame": frame, "definition": definition, "parts": parts,
                  "world_copy": group.mesh if entry_mesh is not group.mesh else None}
         if _dm.ENABLED:
@@ -624,7 +640,7 @@ class Scene:
         else:
             self._edit_stack.append(level)
         self._placement_context_bumps += 1
-        self.mesh = group.mesh
+        self.mesh = active_mesh if active_mesh is not None else group.mesh
         self.edit_group = group
         self._refresh_dimension_holds()
         self.selection.clear()
@@ -638,37 +654,6 @@ class Scene:
         can move it out from under that spot."""
         for d in self.dimensions:
             d.a, d.b
-
-    @staticmethod
-    def _bake_container_xform(group) -> None:
-        """Push a container's own matrix down into its children and its mesh.
-
-        A group that owns placements is always an instance (``Group.adopt``),
-        so moving it composes into ``xform``. Inside it the tools speak world
-        coordinates, so the matrix has to come down one level: every child
-        matrix takes it on the left, the group's own geometry moves to world,
-        and the group is left at identity. Nothing moves in the world.
-
-        Its own geometry moves as a COPY, never in place: a container's mesh
-        can be the very prototype its children share (an imported component
-        tree is exactly that), and walking those vertices would drag every
-        placement with it.
-        """
-        from ingetrazo_core import Matrix4 as QMatrix4x4
-        xform = getattr(group, "xform", None)
-        if xform is None or xform == QMatrix4x4():
-            return
-        from core.explode import rotate_offsets
-        from core.group import transformed_mesh
-        for child in group.children:
-            child.xform = xform * (child.xform if child.xform is not None
-                                   else QMatrix4x4())
-        # An exploded view's offsets live in the container's frame, which
-        # has just become the world's.
-        rotate_offsets(group, xform)
-        if group.mesh.vertices:
-            group.mesh = transformed_mesh(group.mesh, xform)
-        group.xform = QMatrix4x4()
 
     def end_one_group_edit(self) -> None:
         """Leave the INNERMOST group only — Esc, which steps out
@@ -687,20 +672,11 @@ class Scene:
             return
         self._refresh_dimension_holds()
         nivel = self._root._leave_edit() if _dm.ENABLED else self._edit_stack.pop()
-        share = nivel["share"]
-        nivel["share"] = None
-        self._edit_share = None
         unchanged = True
+        share = nivel.pop("share", None)
         if share is not None:
-            # Headless callers (tests, the AI bridge): share back directly.
-            # The viewport takes the share first and wraps it in a command.
-            group, proto, xform, state0 = share
-            parts = nivel.get("parts")
-            if group.mesh.capture_state() == state0:
-                self.restore_sharing(group, proto, xform, parts=parts)
-            else:
-                unchanged = False
-                self.share_back(group, proto, xform, group.mesh, parts=parts)
+            from core.reference_edit import finish
+            unchanged = finish(share, nivel.get("parts"))
         if unchanged:
             self._placement_context_bumps += 1
         self.mesh = nivel["mesh"]
@@ -711,130 +687,6 @@ class Scene:
         self._refresh_dimension_holds()
         self.selection.clear()
         self.version += 1
-
-    def take_edit_share(self):
-        """The pending instance share-back ``(group, proto, xform, state0)``
-        of the INNERMOST open group — handed over ONCE, so whoever ends the
-        edit decides how (the viewport wraps it in an undoable command).
-
-        It belongs to its level, not to the scene: taking it has to disarm
-        that level too, or leaving would share the same edit back twice.
-        """
-        if self._edit_stack:
-            share = self._edit_stack[-1]["share"]
-            self._edit_stack[-1]["share"] = None
-            self._edit_share = None
-            return share
-        share = self._edit_share
-        self._edit_share = None
-        return share
-
-    def _mesh_placed_elsewhere(self, group) -> bool:
-        """Whether another placement, at any depth, draws ``group``'s mesh:
-        an assembly placed once has no copies to share an edit with."""
-        from core.purge import iter_groups
-        mesh = group.mesh
-        return any(g is not group and g.mesh is mesh
-                   for g in iter_groups(self.groups))
-
-    @staticmethod
-    def parts_record(group) -> tuple:
-        """An assembly's axes and its parts' matrices and offsets, copied,
-        to put back bit for bit: a round trip through the inverse matrix
-        drifts in the last digits."""
-        from ingetrazo_core import Matrix4 as QMatrix4x4
-        axes = getattr(group, "axes", None)
-        return (None if axes is None else QMatrix4x4(axes),
-                [(c, None if c.xform is None else QMatrix4x4(c.xform),
-                  c.explode_offset) for c in group.children])
-
-    @staticmethod
-    def put_parts(group, record) -> None:
-        """Put back what :meth:`parts_record` copied. The list of parts is
-        not touched: the commands that changed it undo that themselves."""
-        from ingetrazo_core import Matrix4 as QMatrix4x4
-        axes, parts = record
-        for child, xform, offset in parts:
-            child.xform = None if xform is None else QMatrix4x4(xform)
-            child.explode_offset = offset
-        group.axes = None if axes is None else QMatrix4x4(axes)
-
-    @staticmethod
-    def _unbake_container_xform(group, xform, parts=None) -> None:
-        """Undo :meth:`_bake_container_xform` on leaving an assembly: its
-        matrix comes back up out of the parts, which return to the frame
-        the copies share, and its entry axes are its axes again. Nothing
-        moves in the world. A redo arrives with the matrix already back,
-        and leaves it alone.
-
-        ``parts`` is :meth:`parts_record` on entry: a part the session left
-        where it was gets its entry matrix back bit for bit, instead of a
-        round trip through the inverse that drifts in the last digits."""
-        from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
-        if (not getattr(group, "children", None) or xform is None
-                or group.xform == xform):
-            return
-        inverse, ok = xform.inverted()
-        if not ok:
-            return
-        axes, entry = parts if parts is not None else (None, ())
-        entry = {id(c): (m, o) for c, m, o in entry}
-        for child in group.children:
-            was = entry.get(id(child))
-            now = child.xform if child.xform is not None else QMatrix4x4()
-            if was is not None:
-                m0 = was[0] if was[0] is not None else QMatrix4x4()
-                if xform * m0 == now:
-                    child.xform = None if was[0] is None else QMatrix4x4(m0)
-                else:
-                    child.xform = inverse * now
-                o0, o = was[1], child.explode_offset
-                if o0 and o:
-                    v = xform.mapVector(QVector3D(*o0))
-                    turned = (v.x(), v.y(), v.z())
-                    child.explode_offset = (o0 if turned == tuple(o) else
-                                            Scene._turned(inverse, o))
-                elif o:
-                    child.explode_offset = Scene._turned(inverse, o)
-                else:
-                    child.explode_offset = o
-            else:
-                child.xform = inverse * now
-                if child.explode_offset:
-                    child.explode_offset = Scene._turned(
-                        inverse, child.explode_offset)
-        group.axes = None if axes is None else QMatrix4x4(axes)
-
-    @staticmethod
-    def _turned(m, offset) -> tuple:
-        from ingetrazo_core import Vec3 as QVector3D
-        v = m.mapVector(QVector3D(*offset))
-        return (v.x(), v.y(), v.z())
-
-    @staticmethod
-    def restore_sharing(group, proto, xform, parts=None) -> None:
-        """The instance left untouched: back on the shared definition (an
-        assembly's matrix back up out of its ``parts``)."""
-        Scene._unbake_container_xform(group, xform, parts)
-        group.mesh = proto
-        group.xform = xform
-
-    @staticmethod
-    def share_back(group, proto, xform, edited, parts=None) -> None:
-        """Write the edited world-space mesh into the shared prototype (local
-        coordinates) and put the instance back on it: every sibling shows
-        the edit. An assembly's matrix also comes back up out of its parts
-        (``parts``: :meth:`parts_record` on entry)."""
-        from core.group import transformed_mesh
-        inverse, ok = xform.inverted()
-        local = transformed_mesh(edited, inverse if ok else xform)
-        proto.restore_state(local.capture_state())
-        # A face reversed in the session was counted on the world copy, and
-        # a reversed loop is all the definition's chunk could not see.
-        proto.note_rewound()
-        Scene._unbake_container_xform(group, xform, parts)
-        group.mesh = proto
-        group.xform = xform
 
     @property
     def drawing_frame(self):

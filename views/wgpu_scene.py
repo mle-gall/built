@@ -66,6 +66,11 @@ class PackedScene:
     model_translations: np.ndarray | None = None
     bake_focus: tuple | None = None
 
+    occurrence_keys: dict = field(default_factory=dict)
+
+    def row_key(self, group):
+        return self.occurrence_keys.get(group, getattr(group, 'uid', 'loose'))
+
     def rebase(self, origin):
         """Project the original placement translations into this view frame."""
         if self.origin == origin:
@@ -286,7 +291,7 @@ def _placement_state(scene):
     def state(group):
         if group is None:
             visible = True
-        elif group.uid in (getattr(scene, '_navigator_through', None) or ()):
+        elif getattr(scene, '_navigator_through', None) and scene.navigator_key(group) in scene._navigator_through:
             # Holds an isolated part: drawn through (its own geometry is
             # filtered in _placement_records), so its parts are not hidden.
             visible = not (scene.entity_hidden(group) or scene.similar_hidden(group)) \
@@ -375,15 +380,16 @@ def _placement_records_doc(scene, roots, vp, state):
         g, proxy, p = handles[i], proxies[i], par[i]
         hidden = not state(proxy)[0]
         obj = own_hidden[i]
+        nav = allowed is not None and scene.navigator_key(g) not in allowed
         filtered = (not layer_state(proxy)[0] or similar_hidden(proxy)
-                    or (allowed is not None and g.uid not in allowed))
+                    or (nav and scene.navigator_key(g) not in (getattr(scene, '_navigator_through', None) or ())))
         if p >= 0:
             hidden = hidden or hidden_of[p]
             obj = obj or object_hidden_of[p]
             filtered = filtered or filtered_of[p]
         hidden_of[i], object_hidden_of[i], filtered_of[i] = hidden, obj, filtered
         flags = (int(hidden) | (OBJECT_HIDDEN if obj else 0)
-                 | (VISIBILITY_FILTERED if filtered else 0))
+                 | (VISIBILITY_FILTERED if filtered or nav else 0))
         yield g, (world[i] if defined[i] else None), proxy, flags
 
 
@@ -432,10 +438,10 @@ def _placement_records(scene, roots, vp, state, *, double=False):
             allowed = getattr(scene, '_navigator_allowed', None)
             # Isolated out: its own geometry; its parts too, unless it only
             # holds something isolated (scene._navigator_through).
-            nav = allowed is not None and g.uid not in allowed
+            nav = allowed is not None and scene.navigator_key(g) not in allowed
             filtered_of[id(g)] = (filtered_of.get(id(parent), False)
                 or not scene._layer_state(proxy)[0] or scene.similar_hidden(proxy)
-                or (nav and g.uid not in (getattr(scene, '_navigator_through', None) or ())))
+                or (nav and scene.navigator_key(g) not in (getattr(scene, '_navigator_through', None) or ())))
             flags = (int(hidden_of[id(g)]) | (OBJECT_HIDDEN if object_hidden_of[id(g)] else 0)
                      | (VISIBILITY_FILTERED if filtered_of[id(g)] or nav else 0))
             yield g, matrix, proxy, flags
@@ -501,13 +507,13 @@ def pack_scene(scene, view_tint=None, *, face_overrides=None, texture_images=Tru
         key = (id(mesh), repr(baked_paint), billboard)
         variant = key
         if variant in wide_variants:
-            key = (id(mesh), (key[1], group.uid if group else None), billboard)
+            key = (id(mesh), (key[1], id(group) if group else None), billboard)
         if key not in lookup:
             arrays = _source_arrays(mesh, baked_paint, texture_ids, face_overrides, billboard,
                                     coordinates, old_anchors.get(id(mesh), (0., 0., 0.)), focus, matrix)
             if coordinates[-1][2] and focus is not None:
                 wide_variants.add(variant)
-                key = (id(mesh), (variant[1], group.uid if group else None), billboard)
+                key = (id(mesh), (variant[1], id(group) if group else None), billboard)
             lookup[key] = len(meshes) if len(arrays[0]) else -1
             if len(arrays[0]):
                 prototype_paints[len(meshes)] = baked_paint
@@ -525,6 +531,13 @@ def pack_scene(scene, view_tint=None, *, face_overrides=None, texture_images=Tru
         uids.append(getattr(group, 'uid', 'loose'))
         groups.append(group)
         paints.append(paint)
+    occurrence_keys = {}
+    repeated = scene.repeated_uids()
+    if repeated or any(u.startswith('@[') for u in uids):
+        from core.link_structure import row_id
+        for i, group in enumerate(groups):
+            if group is not None and (group.uid in repeated or group.uid.startswith('@[')):
+                uids[i] = occurrence_keys[group] = row_id(scene.occurrence_path(group))
     offsets = np.zeros((len(meshes)+1, 5), np.int64)
     for i, arrays in enumerate(meshes):
         offsets[i+1] = [len(a) for a in arrays[:5]]
@@ -610,7 +623,7 @@ def pack_scene(scene, view_tint=None, *, face_overrides=None, texture_images=Tru
     hidden_commands['start'] = hidden_edge_commands['start'] = commands['start']
     return PackedScene(vertices, indices, bounds, commands, edge_commands, instances, uids, world_bounds, dict(handoff=handoff-begin, native=baked-handoff, finish=perf_counter()-baked, peak_build_rss_bytes=(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss if resource is not None else None)), groups, materials, textures, tuple(texture_ids), hidden_commands, hidden_edge_commands, profile_exclusions,
                                (bool(getattr(scene, 'show_hidden_geometry', False)), bool(getattr(scene, 'show_hidden_objects', False))), lookup, prototype_paints, origin=origin, prototype_origins=tuple(origins), model_translations=model_translations,
-                               bake_focus=tuple(focus) if wide_variants else None)
+                               bake_focus=tuple(focus) if wide_variants else None, occurrence_keys=occurrence_keys)
 
 
 def _material_columns(pos, corners, sizes, counts, table, attributes, texture_ids, origin=(0., 0., 0.)):

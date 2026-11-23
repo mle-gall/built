@@ -380,11 +380,12 @@ def test_the_browser_reads_only_the_rows_a_group_opened_or_closed_changes():
         vp.history.execute(SetFaceColorCommand(list(sc.mesh.faces),
                                                (0.9, 0.1, 0.1)))
         panel.refresh(rows_if_changed=True)
+        direct = sc.mesh.__dict__.get("_instance_definition") is not None
         read.clear()
         vp.end_group_edit()
         panel.refresh(rows_if_changed=True)
         got = dump()
-        assert len(read) > 4
+        assert len(read) <= 4 if direct else len(read) > 4
         panel._update_rows(sc)
         assert dump() == got
     finally:

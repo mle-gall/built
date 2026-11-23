@@ -88,9 +88,10 @@ def _save_ifc(scene, path, project_name, profile, stream):
         objects = kept
     if config.get('filter') is not None:
         from core.facets import build, evaluate
-        allowed = set(evaluate(build(scene), config['filter']))
+        index = build(scene)
+        allowed = {index.groups[key] for key in evaluate(index, config['filter'])}
         objects = [obj for obj in objects
-                   if getattr(obj.get('group') if obj.get('group') is not None else obj.get('owner'), 'uid', None) in allowed]
+                   if (obj.get('group') or obj.get('owner')) in allowed]
     if not objects:
         raise ValueError('No tagged BIM objects to export')
     from core.project import read as read_project
@@ -178,6 +179,7 @@ def _save_ifc(scene, path, project_name, profile, stream):
     exported = []
     bases = {id(g): base for g, base in _placed_groups(scene.groups)}
     parents = {}
+    repeated = scene.repeated_uids() | getattr(scene, '_repeated_source_uids', set())
     def walk(groups, parent=None):
         for group in groups:
             parents[id(group)] = parent
@@ -245,7 +247,11 @@ def _save_ifc(scene, path, project_name, profile, stream):
         else:
             faces = obj['faces']
             arrays = faces_arrays(faces)
-        eg = object_guid(scene, obj)
+        face_owner = obj.get('owner')
+        address = None
+        if face_owner is not None and face_owner.uid in repeated:
+            address = scene.occurrence_path(face_owner)
+        eg = object_guid(scene, obj, address)
         attrs = dict(GlobalId=_s(eg), OwnerHistory=owner,
                      Name=_s(raw.get('name') or (group.name if group is not None else obj['name']) or cls),
                      Description=_s(r.get('description', '')), ObjectType=_s(r.get('object_type', '')),

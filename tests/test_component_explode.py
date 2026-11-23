@@ -63,6 +63,9 @@ def test_explode_in_an_assembly_preserves_placement_and_undoes_in_place(copies):
     scene, hist = vp.scene, vp.history
     before = [points(g) for g in scene.groups]
     entry = QMatrix4x4(target.xform)
+    counterpart = peer.children[0].children[0] if peer else None
+    if counterpart:
+        counterpart.ifc = {"name": "Peer child"}
     try:
         vp.begin_group_edit(parent)
         win._execute_make(ExplodeGroupCommand(target))
@@ -70,7 +73,14 @@ def test_explode_in_an_assembly_preserves_placement_and_undoes_in_place(copies):
         assert parent.children == [child]
         assert [points(g) for g in scene.groups] == before
         if peer:
-            assert len(peer.children) == 1 and peer.children[0].children
+            assert len(peer.children) == 1
+            if getattr(scene.mesh, "_instance_definition", None) is parent.mesh:
+                assert peer.children[0] is counterpart
+                assert counterpart.ifc["name"] == "Peer child"
+                assert not peer.children[0].children
+                assert peer.children[0].mesh is child.mesh
+            else:
+                assert peer.children[0].children
         vp.end_group_edit()
         assert [points(g) for g in scene.groups] == before
         assert hist.undo()

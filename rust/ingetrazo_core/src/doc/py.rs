@@ -184,7 +184,7 @@ fn write_attr(py: Python<'_>, me: &Bound<'_, PyAny>, k: Key, a: u16, value: &Bou
     };
     drop(trash);
     drain_pending();
-    r.map(|_| ()).map_err(err)
+    super::assembly::finish_result(py, r.map(|_| ()).map_err(err))
 }
 
 fn handle_key(obj: &Bound<'_, PyAny>) -> PyResult<Key> {
@@ -373,7 +373,7 @@ fn write(py: Python<'_>, me: &Bound<'_, PyAny>, k: Key, f: Field, v: FVal) -> Py
     };
     drop(trash);
     drain_pending();
-    r.map(|_| ()).map_err(err)
+    super::assembly::finish_result(py, r.map(|_| ()).map_err(err))
 }
 
 fn view_slot(f: Field) -> usize {
@@ -476,7 +476,7 @@ fn write_matrix(py: Python<'_>, me: &Bound<'_, PyAny>, k: Key, f: Field, value: 
     };
     drop(trash);
     drain_pending();
-    r.map(|_| ()).map_err(err)
+    super::assembly::finish_result(py, r.map(|_| ()).map_err(err))
 }
 
 fn list_view<'py>(py: Python<'py>, me: &Bound<'py, PyAny>, k: Key, list: ListId) -> PyResult<Bound<'py, PyAny>> {
@@ -621,7 +621,7 @@ fn set_list(py: Python<'_>, me: &Bound<'_, PyAny>, k: Key, list: ListId, items: 
         }
     }
     drain_pending();
-    r.map_err(err)?;
+    super::assembly::finish_result(py, r.map_err(err))?;
     parent_reports(py)
 }
 
@@ -849,6 +849,97 @@ impl PyPlacement {
         let v = if v.is_none() { PyList::empty(slf.py()).into_any() } else { v.clone() };
         set_list(slf.py(), slf.as_any(), slf.get().key, ListId::Children, &v)
     }
+    /// Resolve persisted placement UIDs one level at a time. Two branches
+    /// may contain equal leaf UIDs without aliasing each other's overrides.
+    fn _resolve_occurrence(&self, py: Python<'_>, path: Vec<String>) -> PyResult<Option<Py<PyAny>>> {
+        let d = lock();
+        let mut key = self.key;
+        if path.is_empty() { return Ok(None); }
+        for uid in path {
+            let parent = d.need(key).map_err(err)?;
+            let mut children = parent.children.iter().copied().filter(|child| {
+                matches!(d.node(*child).map(|n| &n.data), Some(super::Data::Placement(p))
+                    if p.uid.as_ref() == Some(&uid))
+            });
+            let Some(child) = children.next() else { return Ok(None) };
+            if children.next().is_some() {
+                return Err(PyValueError::new_err(format!("ambiguous placement UID {uid}")));
+            }
+            key = child;
+        }
+        Ok(d.handle_ref(py, key))
+    }
+
+    /// Persisted address of this occurrence, including its instance ancestors.
+    /// Legacy archives can repeat a leaf UID in another branch. Adapters
+    /// qualify only those UIDs when they need a flat lookup table.
+    fn _repeated_uids(&self) -> PyResult<HashSet<String>> {
+        let doc = lock();
+        let mut stack = doc.need(self.key).map_err(err)?.children.clone();
+        let mut visited = super::FastSet::default();
+        let mut seen = HashSet::new();
+        let mut repeated = HashSet::new();
+        while let Some(key) = stack.pop() {
+            if !visited.insert(key) { continue; }
+            let node = doc.need(key).map_err(err)?;
+            if let super::Data::Placement(p) = &node.data {
+                if let Some(uid) = &p.uid {
+                    if !seen.insert(uid.as_str()) {
+                        repeated.insert(uid.clone());
+                    }
+                }
+            }
+            stack.extend(&node.children);
+        }
+        Ok(repeated)
+    }
+
+    fn _occurrence_path(&self, placement: &PyPlacement) -> Option<Vec<String>> {
+        let d = lock();
+        let mut k = placement.key;
+        if super::assembly::root_of(&d, k, false) != Some(self.key) { return None; }
+        let mut path = Vec::new();
+        while k != self.key {
+            let n = d.node(k)?;
+            let super::Data::Placement(p) = &n.data else { return None };
+            path.push(p.uid.clone()?);
+            k = *n.owners.first()?;
+        }
+        path.reverse();
+        Some(path)
+    }
+
+    fn _definition_uids(&self, mesh: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
+        let definition = super::definition::DefinitionRef::for_geometry(mesh)?;
+        let d = lock();
+        let mut uids = Vec::new();
+        for &key in definition.0.get().placements.lock().unwrap().iter() {
+            if super::assembly::root_of(&d, key, false) == Some(self.key) {
+                if let super::Data::Placement(p) = &d.need(key).map_err(err)?.data {
+                    uids.extend(p.uid.iter().cloned());
+                }
+            }
+        }
+        uids.sort_unstable();
+        Ok(uids)
+    }
+
+    fn _edit_matrix(&self, child: &PyPlacement) -> PyResult<[f64; 16]> {
+        let doc = lock();
+        let super::Data::Root { edit_path } = &doc.need(self.key).map_err(err)?.data else {
+            return Err(PyTypeError::new_err("a scene root owns an edit path"));
+        };
+        let mut world = glam::DMat4::IDENTITY;
+        for key in edit_path.iter().map(|(key, _)| *key).chain([child.key]) {
+            if let super::Data::Placement(p) = &doc.need(key).map_err(err)?.data {
+                if let Some(x) = &p.xform {
+                    world *= glam::DMat4::from_cols_array(&x.doubles());
+                }
+            }
+        }
+        Ok(world.to_cols_array())
+    }
+
     /// The active edit context belongs to the scene root. Its keys are
     /// transient UI state, outside saved data and the undo journal.
     fn _enter_edit(&self, placement: &Bound<'_, PyPlacement>, level: Py<PyAny>) -> PyResult<()> {
@@ -856,11 +947,18 @@ impl PyPlacement {
         let k = placement.get().key;
         d.need(k).map_err(err)?;
         d.set_handle(k, placement.as_ptr());
+        if d.need(k).map_err(err)?.children.len() > 0 {
+            super::assembly::bind(&mut d, self.key, k);
+        }
         let Some(super::Data::Root { edit_path }) = d.node_mut(self.key).map(|n| &mut n.data) else {
             return Err(PyTypeError::new_err("a scene root owns an edit path"));
         };
         edit_path.push((k, level));
         Ok(())
+    }
+
+    fn _index_assemblies(&self) {
+        super::assembly::index(&mut lock(), self.key);
     }
 
     fn _leave_edit(&self) -> Option<Py<PyAny>> {
@@ -923,7 +1021,7 @@ impl PyPlacement {
         };
         drop(trash);
         drain_pending();
-        r.map_err(err)
+        super::assembly::finish_result(slf.py(), r.map_err(err))
     }
 
     /// The node holding this placement in one of its lists, or None.
@@ -1250,7 +1348,7 @@ impl HandleList {
             d.list_insert(py, self.owner, self.l(), at, k)
         };
         drain_pending();
-        r.map_err(err)?;
+        super::assembly::finish_result(py, r.map_err(err))?;
         parent_reports(py)
     }
 
@@ -1270,7 +1368,7 @@ impl HandleList {
         };
         drop(trash);
         drain_pending();
-        r
+        super::assembly::finish_result(py, r)
     }
 
     fn replace(&self, py: Python<'_>, items: &Bound<'_, PyAny>) -> PyResult<()> {
@@ -1286,7 +1384,7 @@ impl HandleList {
         drop(members);
         drop(trash);
         drain_pending();
-        r.map_err(err)?;
+        super::assembly::finish_result(py, r.map_err(err))?;
         parent_reports(py)
     }
 
@@ -1461,7 +1559,7 @@ impl HandleList {
         };
         drop(members);
         drain_pending();
-        r.map_err(err)?;
+        super::assembly::finish_result(py, r.map_err(err))?;
         parent_reports(py)
     }
 
@@ -1989,6 +2087,7 @@ fn doc_depth() -> usize {
 /// Close the innermost level; the outermost returns its `Transaction`.
 #[pyfunction]
 fn doc_commit(py: Python<'_>) -> PyResult<Option<Py<PyTransaction>>> {
+    super::assembly::drain(py)?;
     let got = { lock().commit() };
     match got {
         None => Ok(None),
@@ -2072,7 +2171,7 @@ fn doc_view_changed(py: Python<'_>, key: Key, which: u8, view: &Bound<'_, PyAny>
     };
     drop(trash);
     drain_pending();
-    r.map_err(err)
+    super::assembly::finish_result(py, r.map_err(err))
 }
 
 fn fval_for(f: Field, v: &Bound<'_, PyAny>) -> PyResult<FVal> {
@@ -2209,13 +2308,7 @@ fn doc_tree<'py>(
             match &p.xform {
                 Some(x) => {
                     has.push(true);
-                    for j in 0..16 {
-                        let c = x.f[j];
-                        local.push(match &x.src {
-                            Some(b) if b.1[j] == c => b.0[j],
-                            _ => c,
-                        });
-                    }
+                    local.extend(x.doubles());
                 }
                 None => {
                     has.push(false);

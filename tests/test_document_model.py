@@ -24,6 +24,51 @@ pytestmark = pytest.mark.skipif(not doc_model.ENABLED,
 N = doc_model.NATIVE
 
 
+def test_shared_child_append_rolls_back_if_occurrence_copy_fails(monkeypatch):
+    from core import group as groups
+
+    scene = Scene()
+    parent, child = Group(), Group()
+    parent.adopt([child])
+    peer = groups.copy_group(parent)
+    scene.groups.extend([parent, peer])
+    counterpart, = peer.children
+    addition = Group()
+
+    def fail_copy(*args, **kwargs):
+        raise RuntimeError("occurrence copy failed")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(groups, "copy_group", fail_copy)
+        with pytest.raises(RuntimeError, match="occurrence copy failed"):
+            parent.children.append(addition)
+    assert list(parent.children) == [child]
+    assert list(peer.children) == [counterpart]
+    assert addition._parent is None
+    assert N.doc_depth() == 0
+
+    parent.children.append(addition)
+    assert peer.children[0] is counterpart
+    assert peer.children[1] is not addition
+    assert peer.children[1].mesh is addition.mesh
+
+
+def test_copy_of_open_document_edits_its_copied_definition():
+    from copy import deepcopy
+    from ingetrazo_core import Matrix4, Vec3
+
+    scene = Scene()
+    g = Group()
+    g.xform = Matrix4()
+    g.xform.translate(12, 3, 0)
+    scene.groups.append(g)
+    scene.begin_group_edit(g)
+    other = deepcopy(scene)
+    other.mesh.add_edge(Vec3(12, 3, 0), Vec3(14, 3, 0))
+    assert other.groups[0].mesh.vertex_at(Vec3(2, 0, 0)) is not None
+    assert not g.mesh.edges
+
+
 def placements():
     gc.collect()
     return N.doc_stats()["placements"]

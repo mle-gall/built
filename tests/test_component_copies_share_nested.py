@@ -132,8 +132,9 @@ def test_through_the_viewport_the_edit_reaches_the_other_copy_and_undoes():
         vp.begin_group_edit(dup)
         child = dup.children[0]
         vp.begin_group_edit(child)
-        assert child.mesh is not comp.children[0].mesh   # the world copy …
-        for v in {v.key: v for f in child.mesh.faces for v in f.loop}.values():
+        direct = getattr(scene.mesh, "_instance_definition", None) is child.mesh
+        assert (child.mesh is comp.children[0].mesh) == direct
+        for v in {v.key: v for f in scene.mesh.faces for v in f.loop}.values():
             v.position = v.position + V(0, 0, 0.5)
         scene.version += 1
         while scene.edit_group is not None:

@@ -20,6 +20,7 @@
 //! free a handle, whose `Drop` needs the lock). Increfs are fine. Releases
 //! are collected in a `Trash` and dropped after unlocking.
 
+mod assembly;
 mod definition;
 use definition::DefinitionRef;
 use std::sync::Arc;
@@ -115,6 +116,18 @@ fn gen_of(k: Key) -> u32 {
 pub struct Xform {
     pub f: [f64; 16],
     pub src: Option<Box<([f64; 16], [f64; 16])>>,
+}
+
+impl Xform {
+    pub fn doubles(&self) -> [f64; 16] {
+        std::array::from_fn(|j| {
+            let current = self.f[j];
+            match &self.src {
+                Some(saved) if saved.1[j] == current => saved.0[j],
+                _ => current,
+            }
+        })
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -361,6 +374,7 @@ pub struct Node {
     pub kind: Kind,
     pub data: Data,
     pub children: Vec<Key>,
+    pub assembly: Option<Arc<Mutex<assembly::Assembly>>>,
     pub tags: Vec<Key>,
     pub kept: Vec<Key>,
     pub mats: Vec<Key>,
@@ -394,6 +408,7 @@ impl Node {
             kind,
             data,
             children: Vec::new(),
+            assembly: None,
             tags: Vec::new(),
             kept: Vec::new(),
             mats: Vec::new(),
@@ -607,6 +622,9 @@ pub struct Doc {
     /// Set while a journal is replayed (undo, redo, rollback): the tree
     /// invariant was checked when it was recorded.
     pub replaying: bool,
+    dirty_assemblies: Vec<Key>,
+    projecting: bool,
+    implicit_assembly: bool,
     /// Tracked containers whose attribute a replay (undo, redo, rollback)
     /// wrote: kept as the attribute's view and refilled in place with the
     /// value once the lock is gone (`py::run_refills`), so a reference held
@@ -799,6 +817,7 @@ impl Doc {
         }
         if let Data::Placement(p) = &mut node.data {
             if let Some(def) = p.definition.take() {
+                def.0.get().placements.lock().unwrap().remove(&k);
                 trash.1.push(def);
             }
         }
@@ -944,6 +963,7 @@ impl Doc {
         let r = self.apply(py, &undo, true, trash);
         self.open = saved;
         if !outer {
+            self.dirty_assemblies.clear();
             if let Some(o) = self.open.take() {
                 trash.0.extend(o.pins);
             }
@@ -1015,7 +1035,28 @@ impl Doc {
     // ------------------------------------------------------------ writes
 
     /// Write a field; cached views of the old value go to `trash`.
+    fn assembly_changed(&mut self, owner: Key) {
+        if self.replaying || self.projecting { return; }
+        let mut current = Some(owner);
+        let mut remaining = self.slots.len();
+        while let Some(k) = current {
+            let Some(n) = self.node(k) else { break };
+            if remaining == 0 { break; }
+            remaining -= 1;
+            current = n.owners.first().copied();
+            if n.assembly.is_some() && !self.dirty_assemblies.contains(&k) {
+                self.dirty_assemblies.push(k);
+            }
+        }
+    }
+
     pub fn write(&mut self, py: Python<'_>, k: Key, f: Field, v: FVal, trash: &mut Trash) -> Result<FVal, String> {
+        let layout_parent = if matches!(f, Field::Definition | Field::Xform | Field::Axes | Field::Component) {
+            self.node(k).and_then(|n| n.owners.first().copied())
+        } else { None };
+        if let Some(parent) = layout_parent {
+            assembly::prepare(self, parent);
+        }
         let journal = self.journal_open() && !self.open.as_ref().is_some_and(|o| o.born.contains(&k));
         let new = if journal { Some(v.clone()) } else { None };
         let replaying = self.replaying;
@@ -1038,8 +1079,19 @@ impl Doc {
         if let Some((a, view, val)) = refill {
             self.refills.push((k, a, view, val));
         }
-        if let FVal::Definition(Some(def)) = &old {
-            trash.1.push(def.clone());
+        if let FVal::Definition(previous) = &old {
+            if let Some(def) = previous {
+                def.0.get().placements.lock().unwrap().remove(&k);
+                trash.1.push(def.clone());
+            }
+            if let Data::Placement(p) = &self.node(k).unwrap().data {
+                if let Some(def) = &p.definition {
+                    def.0.get().placements.lock().unwrap().insert(k);
+                }
+            }
+        }
+        if let Some(parent) = layout_parent {
+            self.assembly_changed(parent);
         }
         self.serial += 1;
         if let Some(new) = new {
@@ -1199,6 +1251,7 @@ impl Doc {
     pub fn list_insert(&mut self, py: Python<'_>, owner: Key, list: ListId, at: usize, k: Key) -> Result<(), String> {
         self.check_member(owner, list, k)?;
         self.one_parent(owner, list, &[k], None)?;
+        if list == ListId::Children { assembly::prepare(self, owner); }
         let at = {
             let l = self.node_mut(owner).expect("checked").list_mut(list);
             let at = at.min(l.len());
@@ -1206,12 +1259,14 @@ impl Doc {
             at
         };
         self.add_owner(py, k, owner);
+        if list == ListId::Children { self.assembly_changed(owner); }
         self.serial += 1;
         self.journal_list(py, Op::Ins { owner, list, at, k }, &[owner, k]);
         Ok(())
     }
 
     pub fn list_remove(&mut self, py: Python<'_>, owner: Key, list: ListId, at: usize, trash: &mut Trash) -> Result<Key, String> {
+        if list == ListId::Children { assembly::prepare(self, owner); }
         let k = {
             let n = self.node_mut(owner).ok_or_else(|| format!("no document node {owner:#x}"))?;
             let l = n.list_mut(list);
@@ -1223,6 +1278,7 @@ impl Doc {
         // Pin before the owner goes: the journal must keep it alive.
         self.journal_list(py, Op::Rem { owner, list, at, k }, &[owner, k]);
         self.drop_owner(k, owner, trash);
+        if list == ListId::Children { self.assembly_changed(owner); }
         self.serial += 1;
         Ok(k)
     }
@@ -1238,6 +1294,7 @@ impl Doc {
             let old = self.need(owner)?.list(list).clone();
             self.one_parent(owner, list, &new, Some(&old))?;
         }
+        if list == ListId::Children { assembly::prepare(self, owner); }
         let old = std::mem::replace(self.node_mut(owner).expect("checked").list_mut(list), new.clone());
         if old == new {
             return Ok(());
@@ -1253,6 +1310,7 @@ impl Doc {
         for &k in &old {
             self.drop_owner(k, owner, trash);
         }
+        if list == ListId::Children { self.assembly_changed(owner); }
         self.serial += 1;
         Ok(())
     }
@@ -1348,6 +1406,7 @@ impl Doc {
                 }
                 if let Data::Placement(p) = &mut n.data {
                     if let Some(def) = p.definition.take() {
+                        def.0.get().placements.lock().unwrap().remove(&k);
                         trash.1.push(def);
                     }
                 }

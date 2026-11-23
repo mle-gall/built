@@ -141,7 +141,6 @@ class InstanceUpdates:
                                       SetRegistryCommand, InsertGroupCommand, DeleteGroupCommand,
                                       SnapshotMutation, SnapshotCompound, MoveVerticesCommand, AddEdgeCommand,
                                       AddFaceCommand, EraseSelectionCommand, HideCommand, AssignLayerCommand,
-                                      ReshareInstanceCommand, ReshareAssemblyCommand,
                                       AddGuideCommand, ChangeGuideCommand,
                                       DeleteGuidesCommand, MoveGuidesCommand, RotateGuidesCommand,
                                       AddDimensionCommand, AddTextLabelCommand)
@@ -155,9 +154,10 @@ class InstanceUpdates:
                     if target is None:
                         faces = set(command._faces)
                         mesh = self.scene.mesh
-                        if not faces.issubset(set(mesh.faces)) or id(mesh) not in self.meshes:
+                        definition = getattr(mesh, "_instance_definition", mesh)
+                        if not faces.issubset(set(mesh.faces)) or id(definition) not in self.meshes:
                             return False
-                        target = material_targets[command] = id(mesh)
+                        target = material_targets[command] = id(definition)
                     # Undo may occur after leaving the group's edit context.
                     self.pending_materials.add(target)
                     return True
@@ -181,7 +181,7 @@ class InstanceUpdates:
                         chain = self._stack_chain(mesh)
                         if chain is None:
                             return False
-                        self.pending_swaps[chain[-1].uid] = chain
+                        self.pending_swaps[self.packed.row_key(chain[-1])] = chain
                         return True
                     if old[2] < 0:
                         # diff already checks the loose mesh for its first row.
@@ -200,7 +200,7 @@ class InstanceUpdates:
                 if isinstance(command, SoftenByAngleCommand):
                     # Soft flags only: each mesh's prototypes rebake, smooth.
                     return all(edited(mesh) for mesh in command.meshes())
-                if isinstance(command, ReshareInstanceCommand):
+                if getattr(command, "reference_instance", False):
                     # Leaving an edited instance: back on the definition,
                     # which every copy shows (all its variants rebake).
                     if not self.queue_swap(command.group):
@@ -209,7 +209,7 @@ class InstanceUpdates:
                     if old is not None and old[2] >= 0:
                         self.pending_meshes.add(id(command.proto))
                     return True
-                if isinstance(command, ReshareAssemblyCommand):
+                if getattr(command, "reference_assembly", False):
                     # Leaving an edited assembly: its row goes back on the
                     # definition and its parts' matrices come back up, which
                     # leaves every world matrix where it was. What ran inside
@@ -220,7 +220,7 @@ class InstanceUpdates:
                     if not self.queue_swap(command.group):
                         return False
                     for inner in command.inner:
-                        if isinstance(inner, (ReshareInstanceCommand, ReshareAssemblyCommand)):
+                        if getattr(inner, "reference_instance", False) or getattr(inner, "reference_assembly", False):
                             if not visit(inner):
                                 return False
                         elif not _edits_world_copy_only(inner):
@@ -274,8 +274,8 @@ class InstanceUpdates:
             if not chain and group not in self.roots:
                 return
             chain.append(group)
-            if group.uid in self.rows:
-                self.chains[group.uid] = list(chain)
+            if self.packed.row_key(group) in self.rows:
+                self.chains[self.packed.row_key(group)] = list(chain)
 
     def _stack_chain(self, mesh):
         """The recorded path to the open group that now draws ``mesh``, or
@@ -284,17 +284,17 @@ class InstanceUpdates:
         from core.outliner import open_path
         for group in open_path(self.scene):
             if group.mesh is mesh:
-                chain = self.chains.get(group.uid)
+                chain = self.chains.get(self.packed.row_key(group))
                 return chain if chain is not None and chain[-1] is group else None
         return None
 
     def queue_swap(self, group) -> bool:
         """Rewrite ``group``'s row from its current mesh and the edit path
         it was opened on. False when that path is unknown (full diff)."""
-        chain = self.chains.get(getattr(group, 'uid', None))
+        chain = self.chains.get(self.packed.row_key(group))
         if chain is None or chain[-1] is not group:
             return False
-        self.pending_swaps[group.uid] = chain
+        self.pending_swaps[self.packed.row_key(group)] = chain
         return True
 
     def _resolve_swaps(self):
@@ -329,8 +329,8 @@ class InstanceUpdates:
             return None
         swaps = []
         for group, old_mesh in change[2]:
-            row = self.rows.get(group.uid)
-            if row is None or group.uid not in self.active or not _has_vertices(group.mesh):
+            row = self.rows.get(self.packed.row_key(group))
+            if row is None or self.packed.row_key(group) not in self.active or not _has_vertices(group.mesh):
                 return None
             code = int(self.packed.instances['info'][row, 0])
             variant = self.variants.get(old_mesh, {}).get(code)
@@ -396,6 +396,7 @@ class InstanceUpdates:
         self.pending_materials.clear()
         self.pending_meshes.clear()
         additions = []
+        new_keys = set()
         fresh = {}      # code -> mesh: variants that exist from this edit on
         for group, matrix, proxy, flags in placements:
             mesh = group.mesh if group is not None else scene.loose_mesh
@@ -404,7 +405,7 @@ class InstanceUpdates:
             key = (id(mesh), repr(paint), mode)
             old = self.meshes.get(id(mesh))
             code = self.packed.prototype_lookup.get(key)
-            uid = getattr(group, 'uid', 'loose')
+            uid = self.packed.row_key(group)
             if old is not None and old[2] < 0 and old[1] == mesh._mut_serial:
                 continue    # empty when packed, under any paint: no row
             if (old is None or old[1] != mesh._mut_serial) and not _has_vertices(mesh):
@@ -420,7 +421,21 @@ class InstanceUpdates:
             if old[1] != mesh._mut_serial:
                 changed[id(mesh)] = old
             row = self.rows.get(uid)
+            if group in self.packed.occurrence_keys:
+                from core.link_structure import row_id
+                if row_id(scene.occurrence_path(group)) != uid:
+                    return None
+            if row is not None and uid in self.active:
+                previous_group = self.packed.groups[row]
+                if previous_group is not group and (previous_group is None or
+                        scene.occurrence_path(previous_group) is not None):
+                    return None
             if row is None:
+                # A new collision changes how the whole set of equal UIDs is
+                # addressed. A new pack assigns qualified keys to all of them.
+                if uid in new_keys or any(g.uid == uid for g in self.packed.occurrence_keys):
+                    return None
+                new_keys.add(uid)
                 row = len(self.packed.instances) + len(additions)
                 additions.append((uid, group, row))
             if row < len(self.packed.groups):
@@ -459,10 +474,13 @@ class InstanceUpdates:
         if local:
             for root in self.pending_removed:
                 for group, _ in iter_placements(root):
-                    row = self.rows.get(group.uid)
+                    row = self.rows.get(self.packed.row_key(group))
                     if row is not None:
-                        seen.discard(group.uid)
+                        seen.discard(self.packed.row_key(group))
                         removed.append(row)
+        if any(key not in seen and (key in self.active or self.rows.get(key) in removed)
+               for key in self.packed.occurrence_keys.values()):
+            return None
         self.pending.clear()
         self.pending_removed.clear()
         self.version = _resident_version(scene)

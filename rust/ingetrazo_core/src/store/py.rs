@@ -44,7 +44,7 @@ fn triples<'a, T: numpy::Element>(points: &'a PyReadonlyArray2<'_, T>) -> PyResu
     Ok(flat.as_chunks::<3>().0)
 }
 
-#[pyclass(module = "ingetrazo_core", name = "MeshStore")]
+#[pyclass(module = "ingetrazo_core", name = "MeshStore", subclass)]
 pub struct PyMeshStore {
     pub inner: Store,
     /// Per kind, `(revision, live slots in list order, slot -> index)`:
@@ -52,6 +52,92 @@ pub struct PyMeshStore {
     /// order per call once tombstones or a relink made it non-trivial.
     /// Every mutation bumps the revision, so a stale entry is never read.
     cache: Mutex<[Option<OrderCache>; 3]>,
+}
+
+/// An occurrence uses the same keys and generation floors as its definition.
+#[pyclass(extends=PyMeshStore, frozen)]
+struct InstanceStore {
+    definition: Py<PyMeshStore>,
+    mesh: Py<PyAny>,
+}
+
+impl InstanceStore {
+    fn refresh(slf: &Bound<'_, Self>) -> PyResult<()> {
+        let definition = slf.get().definition.bind(slf.py()).try_borrow()?;
+        let mut view = slf.as_super().try_borrow_mut()?;
+        if definition.inner.revision != view.inner.revision {
+            view._publish_frame(&definition)?;
+        }
+        Ok(())
+    }
+}
+
+#[pymethods]
+impl InstanceStore {
+    fn __getattribute__<'py>(slf: &Bound<'py, Self>, name: &str) -> PyResult<Bound<'py, PyAny>> {
+        Self::refresh(slf)?;
+        let attr = slf.as_any().py_super()?.getattr(name)?;
+        if !attr.is_callable() {
+            return Ok(attr);
+        }
+        Ok(Bound::new(slf.py(), InstanceMethod {
+            view: slf.clone().unbind(), method: attr.unbind(),
+            action: match name {
+                "snapshot" => InstanceAction::Snapshot,
+                "restore" => InstanceAction::Restore,
+                _ => InstanceAction::Forward,
+            },
+        })?.into_any())
+    }
+}
+
+enum InstanceAction { Snapshot, Restore, Forward }
+
+#[pyclass(frozen)]
+struct InstanceMethod {
+    view: Py<InstanceStore>,
+    method: Py<PyAny>,
+    action: InstanceAction,
+}
+
+#[pymethods]
+impl InstanceMethod {
+    #[pyo3(signature=(*args, **kwargs))]
+    fn __call__<'py>(&self, py: Python<'py>, args: &Bound<'py, pyo3::types::PyTuple>,
+                     kwargs: Option<&Bound<'py, PyDict>>) -> PyResult<Bound<'py, PyAny>> {
+        let view = self.view.bind(py);
+        InstanceStore::refresh(view)?;
+        let start = view.as_super().try_borrow()?.inner.revision;
+        if matches!(self.action, InstanceAction::Snapshot) && args.is_empty() && kwargs.is_none() {
+            let mut saved = view.as_super().try_borrow()?.snapshot();
+            saved.definition = Some(Box::new(view.get().definition.bind(py).try_borrow()?.inner.snapshot()));
+            return Ok(Bound::new(py, saved)?.into_any());
+        }
+        let result = self.method.bind(py).call(args, kwargs);
+        let current = view.as_super().try_borrow()?;
+        if current.inner.revision != start {
+            let mut definition = view.get().definition.bind(py).try_borrow_mut()?;
+            if definition.inner.revision != start {
+                drop(current);
+                view.as_super().try_borrow_mut()?._publish_frame(&definition)?;
+                return Err(PyValueError::new_err("definition changed during an occurrence edit"));
+            }
+            let snapshot = if matches!(self.action, InstanceAction::Restore) {
+                args.get_item(0).ok().or_else(|| kwargs.and_then(|kw| kw.get_item("snapshot").ok().flatten()))
+            } else { None };
+            let exact = snapshot.as_ref().and_then(|arg| arg.cast::<PyStoreSnapshot>().ok())
+                .and_then(|snap| snap.get().definition.as_ref())
+                .filter(|snap| snap.lineage == definition.inner.lineage);
+            if let Some(snap) = exact {
+                definition.inner.restore(snap, None).map_err(PyValueError::new_err)?;
+            } else {
+                definition._publish_frame(&current)?;
+            }
+            drop(definition);
+            view.get().mesh.bind(py).call_method0("mark_modified")?;
+        }
+        result
+    }
 }
 
 /// `(revision, live slots in list order, slot -> list index)`.
@@ -223,6 +309,7 @@ fn p3(p: (f64, f64, f64)) -> [f64; 3] {
 #[pyclass(module = "ingetrazo_core", name = "StoreSnapshot", frozen)]
 pub struct PyStoreSnapshot {
     pub inner: Snapshot,
+    definition: Option<Box<Snapshot>>,
 }
 
 fn kind_of(s: &str) -> PyResult<Kind> {
@@ -796,6 +883,7 @@ impl PyMeshStore {
     /// `Mesh._probe_neighbours(cell, position)`: the vertex key or None.
     fn probe(&self, cell: (i64, i64, i64), position: (f64, f64, f64)) -> Option<u128> {
         let p = self.inner.quantize(p3(position));
+        let cell = if self.inner.state.frame.is_model() { cell } else { self.inner.cell(&p) };
         self.inner.probe(cell, &p).map(|v| self.inner.key(Kind::Vertex, v))
     }
 
@@ -1615,6 +1703,16 @@ impl PyMeshStore {
     }
 
     /// `turn_face_over`'s ring reversal (outer and holes).
+    fn reverse_ring(&mut self, key: u128, ring: usize) -> PyResult<()> {
+        let face = any_of(&self.inner, Kind::Face, key)?;
+        let mut change = Change::default();
+        if !self.inner.reverse_ring(face, ring, &mut change) {
+            return Err(pyo3::exceptions::PyIndexError::new_err("face ring no longer exists"));
+        }
+        self.inner.finish(change);
+        Ok(())
+    }
+
     fn reverse_face(&mut self, key: u128) -> PyResult<PyChange> {
         let f = any_of(&self.inner, Kind::Face, key)?;
         Ok(self.op(|s, ch| {
@@ -1647,20 +1745,73 @@ impl PyMeshStore {
     /// `capture_state`: O(chunks), whatever the mesh size.
     #[getter]
     fn frame_origin(&self) -> [f64; 3] {
-        self.inner.state.frame_origin
+        self.inner.state.frame.origin
+    }
+
+    #[getter]
+    fn _model_frame(&self) -> bool {
+        self.inner.state.frame.is_model()
+    }
+
+    fn _definition_points<'py>(&self, py: Python<'py>, points: PyReadonlyArray2<'_, f64>)
+        -> PyResult<Bound<'py, PyArray2<f64>>> {
+        let rows: Vec<_> = triples(&points)?.iter().map(|p|
+            self.inner.state.frame.definition_point(*p)).collect();
+        Ok(rows3(py, &rows))
+    }
+
+    #[getter]
+    fn frame_matrix(&self) -> Option<[f64; 16]> {
+        self.inner.state.frame.matrix()
+    }
+
+    fn tool_placement(&self) -> Option<crate::math::Matrix4> {
+        let frame = &self.inner.state.frame;
+        let mut matrix = frame.matrix()?;
+        for (value, origin) in matrix[12..15].iter_mut().zip(frame.origin) {
+            *value -= origin;
+        }
+        Some(crate::math::Matrix4::from(glam::DMat4::from_cols_array(&matrix)))
+    }
+
+    fn _convert_point(&self, target: &PyMeshStore, point: [f64; 3]) -> [f64; 3] {
+        self.inner.state.frame.convert(point, &target.inner.state.frame)
+    }
+
+    fn _in_model_frame(&self, origin: [f64; 3]) -> Self {
+        let mut store = self.inner.clone();
+        let frame = super::frame::Frame::default().rebased(origin);
+        store.state = store.state.in_frame(frame, None);
+        Self::wrap(store)
     }
 
     fn _in_frame(&self, origin: [f64; 3]) -> Self {
         let mut st = self.inner.clone();
-        st.state = st.state.in_frame(origin, None);
+        st.state = st.state.in_frame(st.state.frame.rebased(origin), None);
         Self::wrap(st)
+    }
+
+    /// Column-major definition-to-world placement and camera origin, both f64.
+    fn _in_instance_frame(&self, matrix: [f64; 16], origin: [f64; 3]) -> PyResult<Self> {
+        let frame = super::frame::Frame::instance(matrix, origin)
+            .ok_or_else(|| PyValueError::new_err("expected a finite invertible affine placement"))?;
+        let mut store = self.inner.clone();
+        store.state = store.state.in_frame(frame, None);
+        Ok(Self::wrap(store))
+    }
+
+    fn _instance_view<'py>(slf: &Bound<'py, Self>, mesh: Py<PyAny>, matrix: [f64; 16], origin: [f64; 3])
+        -> PyResult<Bound<'py, InstanceStore>> {
+        let base = slf.try_borrow()?._in_instance_frame(matrix, origin)?;
+        let instance = InstanceStore { definition: slf.clone().unbind(), mesh };
+        Bound::new(slf.py(), (instance, base))
     }
 
     fn _publish_frame(&mut self, source: &PyMeshStore) -> PyResult<()> {
         if self.inner.lineage != source.inner.lineage {
             return Err(PyValueError::new_err("coordinate frames must share a lineage"));
         }
-        let state = source.inner.state.in_frame(self.inner.state.frame_origin, Some(&self.inner.state));
+        let state = source.inner.state.in_frame(self.inner.state.frame.clone(), Some(&self.inner.state));
         self.inner = source.inner.clone();
         self.inner.state = state;
         *self.cache.lock().unwrap() = Default::default();
@@ -1668,7 +1819,7 @@ impl PyMeshStore {
     }
 
     fn snapshot(&self) -> PyStoreSnapshot {
-        PyStoreSnapshot { inner: self.inner.snapshot() }
+        PyStoreSnapshot { inner: self.inner.snapshot(), definition: None }
     }
 
     /// `restore_state`. A snapshot of ANOTHER store needs `namespace` (a
@@ -1682,7 +1833,7 @@ impl PyMeshStore {
     /// `capture_state() == snapshot`.
     fn same_as(&self, snapshot: &PyStoreSnapshot) -> bool {
         snapshot.inner.lineage == self.inner.lineage && self.inner.state.same_as(
-            &snapshot.inner.state.in_frame(self.inner.state.frame_origin, Some(&self.inner.state)))
+            &snapshot.inner.state.in_frame(self.inner.state.frame.clone(), Some(&self.inner.state)))
     }
 
     /// `(chunks shared, chunks)` between the live state and a snapshot,
@@ -1993,7 +2144,7 @@ impl PyStoreSnapshot {
     /// chunk pointers first, content only where they differ.
     fn same_as(&self, other: &PyStoreSnapshot) -> bool {
         self.inner.lineage == other.inner.lineage && self.inner.state.same_as(
-            &other.inner.state.in_frame(self.inner.state.frame_origin, Some(&self.inner.state)))
+            &other.inner.state.in_frame(self.inner.state.frame.clone(), Some(&self.inner.state)))
     }
 
     /// Net change between two immutable snapshots of one store. Across a
@@ -2006,7 +2157,7 @@ impl PyStoreSnapshot {
             return Err(PyValueError::new_err("snapshots of different stores"));
         }
         let (new, mut old) = (reader(&self.inner), reader(&before.inner));
-        old.state = old.state.in_frame(new.state.frame_origin, Some(&new.state));
+        old.state = old.state.in_frame(new.state.frame.clone(), Some(&new.state));
         let mut ch = py.detach(|| new.changes_since(&old));
         ch.modified[2].extend(attrs.into_iter().filter(|&k|
             new.slot(Kind::Face, k).is_some() && old.slot(Kind::Face, k).is_some()));

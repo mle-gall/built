@@ -73,6 +73,11 @@ def test_engines(runs):
     assert py["engine"] == "Python" and rs["engine"] == "Rust"
 
 
+def test_affine_instance_edit_agrees(runs):
+    py, rs = runs
+    assert norm(rs["rotated_edit"]) == norm(py["rotated_edit"])
+
+
 def test_every_state_agrees(runs):
     py, rs = runs
     assert len(py["states"]) == len(rs["states"])
@@ -111,14 +116,15 @@ def test_the_same_document_saves_the_same_bytes(runs):
 
 def test_save_open_save_is_stable(runs):
     for out in runs:
-        for when in ("initial", "final"):
+        for when in ("initial", "final", "shared"):
             for name, f in out[when].items():
                 assert f["again"] == f["members"], (out["engine"], when, name)
+                assert f["again_hash"] == f["file_hash"], (out["engine"], when, name)
 
 
 def test_reopened_documents_agree(runs):
     py, rs = runs
-    for when in ("initial", "final"):
+    for when in ("initial", "final", "shared"):
         for name in ("doc.igz", "doc.built"):
             assert norm(py[when][name]["reopened"]) == norm(rs[when][name]["reopened"]), (when, name)
 

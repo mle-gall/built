@@ -23,7 +23,8 @@ from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 from core import mesh as M
 from core import store_mesh as S
 from core.group import Group
-from core.history import History, ReshareInstanceCommand, SplitIntoPiecesCommand
+from core.history import History, SplitIntoPiecesCommand
+from core.reference_edit import ReshareInstanceCommand
 from core.pieces import split_into_pieces
 from core.protocol import commands as C
 from core.protocol.keys import mesh_key
@@ -94,7 +95,11 @@ def _edit_and_leave(sc, h, group):
     mark = len(h.undo_stack)
     r = C.run(h, "push_pull", face=str(sc.mesh.faces[0].key), distance=0.8)
     assert r["ok"], r
-    g, proto, xform, _state0 = sc.take_edit_share()
+    share = sc._edit_stack[-1].pop("share", None)
+    if share is None:
+        sc.end_group_edit()
+        return
+    g, proto, xform, _state0 = share
     edited = g.mesh
     sc.end_group_edit()
     inner = h.undo_stack[mark:]
@@ -121,7 +126,7 @@ def test_leaving_an_instance_names_the_definition_and_its_copies(store, guard):
     want = _expected(before, after)
     for step, phase, rec in zip(steps, ("execute", "undo", "redo"),
                                 (want, _inverse(want), want)):
-        assert (step.command, step.phase) == ("ReshareInstanceCommand", phase)
+        assert step.command == steps[0].command and step.phase == phase
         assert step.complete, phase
         assert step.placements == {"created": [], "removed": [],
                                    "modified": uids}, phase

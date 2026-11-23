@@ -5,7 +5,7 @@
 use pyo3::gc::PyVisit;
 use pyo3::prelude::*;
 use pyo3::types::{PyWeakrefMethods, PyWeakrefReference};
-use super::FastMap;
+use super::{FastMap, FastSet, Key};
 use pyo3::PyTraverseError;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
@@ -20,6 +20,7 @@ pub struct Definition {
     pub key: u64,
     #[pyo3(get)]
     pub geometry: Py<PyAny>,
+    pub placements: Mutex<FastSet<Key>>,
 }
 
 #[pymethods]
@@ -65,7 +66,7 @@ impl DefinitionRef {
             return Ok(Arc::new(Self(existing.cast_into::<Definition>()?.unbind())));
         }
         let key = NEXT.fetch_add(1, Ordering::Relaxed);
-        let new = Bound::new(py, Definition { key, geometry: mesh.clone().unbind() })?;
+        let new = Bound::new(py, Definition { key, geometry: mesh.clone().unbind(), placements: Mutex::default() })?;
         let weak = PyWeakrefReference::new(new.as_any())?;
         // Allocations above can run a Python finalizer and reenter this lookup.
         if let Some(existing) = lookup() {

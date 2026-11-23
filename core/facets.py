@@ -21,6 +21,7 @@ class Index(dict):
         self.scene = scene
         self.groups = {}
         self.lazy = set()
+        self.qualified = {}
 
     def prepare(self, facet):
         if facet == 'structure' and facet not in self.lazy:
@@ -29,7 +30,7 @@ class Index(dict):
             roots = {k: structure._lineage(registry, k)[0] for k in structure._nodes(registry)}
             for group, _, _, key in structure._memberships(self.scene, registry):
                 if key in roots:
-                    self[group.uid][facet] = roots[key]
+                    self[self.qualified.get(group, group.uid)][facet] = roots[key]
             self.lazy.add(facet)
         if facet not in ('material', 'problems') or facet in self.lazy:
             return
@@ -63,7 +64,9 @@ def build(scene):
     index = Index(scene)
     layers = {layer.key: layer for layer in scene.layers}
 
-    def walk(groups, names, uids, spatial=None, source=None):
+    from core.link_structure import row_id
+    repeated = scene.repeated_uids()
+    def walk(groups, names, uids, ancestors, spatial=None, source=None):
         for group in groups:
             rec = group.ifc or {}
             link = link_of(group)
@@ -74,7 +77,10 @@ def build(scene):
             layer = layers.get(group.layer)
             material = rec.get('material')
             storey = rec.get('storey') or spatial
-            row = dict(uid=group.uid, problems=None, name=group.name, path='/'.join(names), path_uids=list(uids),
+            key = group.uid
+            if key in repeated or key.startswith('@['):
+                key = index.qualified[group] = row_id([*uids, key])
+            row = dict(uid=group.uid, occurrence=key, path_keys=ancestors, problems=None, name=group.name, path='/'.join(names), path_uids=list(uids),
                        depth=len(uids), definition=group.name + ' [' + _DEFINITIONS[mesh] + ']',
                        instance=group.xform is not None, tag=group.layer,
                        tag_uid=layer.uid if layer else None,
@@ -90,11 +96,11 @@ def build(scene):
                 if name.endswith('Common') and 'Status' in pset:
                     value = pset['Status']
                     row['status'] = value.get('value') if isinstance(value, dict) else value
-            index[group.uid] = row
-            index.groups[group.uid] = group
-            walk(group.children or [], names + [group.name], uids + [group.uid],
+            index[key] = row
+            index.groups[key] = group
+            walk(group.children or [], names + [group.name], uids + [group.uid], ancestors + [key],
                  group.name if role(rec) == 'spatial' else spatial, src)
-    walk(scene.groups, [], [])
+    walk(scene.groups, [], [], [])
     scene._facet_index = (key, index)
     return index
 

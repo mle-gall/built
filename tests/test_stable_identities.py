@@ -75,6 +75,28 @@ def test_shared_face_tags_are_scoped_to_placements(tmp_path):
     assert guids(other, tmp_path / 'c.ifc') == first
 
 
+def test_nested_equal_uids_give_shared_face_tags_distinct_ifc_ids(tmp_path):
+    from core.deliveries import scoped
+    scene = Scene()
+    part = mesh()
+    tag_faces(part.faces, 'IfcWall', 'Wall', 1)
+    for name in ('west', 'east'):
+        child = Group(part, uid='repeated')
+        child.xform = QMatrix4x4()
+        parent = Group(uid=name)
+        parent.adopt([child])
+        scene.groups.append(parent)
+    ids = guids(scene, tmp_path / 'full.ifc')
+    assert len(ids) == len(set(ids))
+    first = set(re.findall(r"=IFCWALL\('([^']+)'", (tmp_path / 'full.ifc').read_text()))
+    assert len(first) == 2
+    scene.select([scene.groups[1].children[0]])
+    subset = scoped(scene, {'scope': 'selection', 'format': 'ifc'})
+    guids(subset, tmp_path / 'one.ifc')
+    only, = re.findall(r"=IFCWALL\('([^']+)'", (tmp_path / 'one.ifc').read_text())
+    assert only in first
+
+
 def test_face_copy_remaps_whole_objects():
     attrs = {'ifc': {'id': 1, 'guid': 'old', 'class': 'IfcWall'}}
     a, b = copied_face_attrs(), copied_face_attrs()

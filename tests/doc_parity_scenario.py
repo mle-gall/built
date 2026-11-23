@@ -186,6 +186,7 @@ def saved(scene, work: Path, tag: str) -> dict:
         again = work / f"{tag}-again-{name}"
         igz.save_scene(back, again, backup=False)
         files[name]["again"] = members(again)
+        files[name]["again_hash"] = hashlib.sha256(again.read_bytes()).hexdigest()
     return files
 
 
@@ -289,6 +290,88 @@ def structural_steps(steps):
     return states
 
 
+def shared_assembly(work):
+    """Persisted occurrences have their own UIDs, visibility, tags and records."""
+    from core.protocol import commands
+    scene = Scene()
+    scene.layers.append(Layer("Steel", uid="steel"))
+    geometry, part = Mesh(), Mesh()
+    box(part)
+    for label in ("West", "East", "Annex"):
+        group = Group(geometry, uid=label)
+        children = []
+        for name in (("beam",) if label == "Annex" else ("beam", "post")):
+            child = Group(part, name=name, uid=name if name == "beam" else f"{label}-{name}")
+            child.xform = QMatrix4x4()
+            child.ifc = {"class": "IfcBeam", "name": f"{label} {name}"}
+            children.append(child)
+        group.adopt(children)
+        scene.groups.append(group)
+    west, east, annex = scene.groups
+    target = east.children[0]
+    path = [east.uid, target.uid]
+    from core.link_structure import Tree
+    tree = Tree(scene, {})
+    assert tree.address(west.children[0]) == [west.uid, "beam"]
+    assert tree.address(target) == path and tree.row_id(west.children[0]) != tree.row_id(target)
+    h = History(scene)
+    commands.hide(h, [path])
+    commands.set_tag(h, [path], "Steel")
+    assert scene.occurrence_path(target) == path and scene.resolve_occurrence(path) is target
+    assert not west.children[0].hidden and west.children[0].layer is None
+    assert h.undo() and h.redo()
+    commands.run(h, "patch_record_field", placements=[path], path=["description"], value="East only")
+    assert target.ifc["description"] == "East only"
+    assert "description" not in west.children[0].ifc
+    from core.deliveries import scoped
+    scene.select([target])
+    projection = scoped(scene, {"scope": "selection"})
+    delivered = projection.resolve_occurrence(path)
+    assert delivered is not target and delivered.mesh is target.mesh
+    assert delivered.ifc["description"] == "East only"
+    assert projection.resolve_occurrence([west.uid, target.uid]) is None
+    scene.selection.clear()
+    result = saved(scene, work, "shared")
+    # Independently reopen the old on-disk shape and edit through the second
+    # nested placement. Both models preserve the third, divergent child tree.
+    restored = Scene()
+    igz.load_into(restored, work / "shared-doc.igz")
+    west, east, annex = restored.groups
+    target = restored.resolve_occurrence(path)
+    assert target is east.children[0] and target.hidden and target.layer == "Steel"
+    assert target.ifc["name"] == "East beam" and west.children[0].ifc["name"] == "West beam"
+    restored.begin_group_edit(east)
+    restored.begin_group_edit(target)
+    restored.mesh.add_edge(QVector3D(8, 8, 8), QVector3D(10, 8, 8))
+    restored.end_group_edit()
+    assert len(west.children[0].mesh.edges) == 13 and len(annex.children) == 1
+    if doc_model.ENABLED:
+        history = History(restored)
+        old = east.children[1]
+        counterpart = west.children[1]
+        history.execute(DeleteGroupCommand(old))
+        assert history.last_error is None and list(east.children) == [target]
+        assert len(west.children) == len(annex.children) == 1
+        assert history.undo() and west.children[1] is counterpart and east.children[1] is old
+        assert history.redo() and len(west.children) == 1
+        assert history.undo()
+        # Reorder the slots and write an override through a path. Both
+        # occurrences keep their original handles and the old UID paths resolve.
+        east.children[:] = list(reversed(east.children))
+        assert west.children[0] is counterpart and restored.resolve_occurrence(path) is target
+        restored.begin_group_edit(east)
+        new_child = Group(part, uid="East-brace")
+        new_child.xform = QMatrix4x4()
+        history.execute(InsertGroupCommand(new_child))
+        assert history.last_error is None and len(west.children) == len(east.children) == 3
+        projected = west.children[-1]
+        assert projected.uid != new_child.uid and projected.mesh is new_child.mesh
+        assert history.undo() and len(west.children) == 2
+        assert history.redo() and west.children[-1] is projected
+        restored.end_group_edit()
+    return result
+
+
 def main(work: Path):
     initial_scene = build()
     # The prototype table in existing files interns geometry. Two entries
@@ -297,6 +380,18 @@ def main(work: Path):
     other = Group(original.mesh, name="Second assembly", uid="other-assembly")
     other.adopt([Group(original.children[0].mesh, name="Only part", uid="only-part")])
     initial_scene.groups.append(other)
+    # Two occurrences of the same geometry can carry distinct IFC and tag
+    # values. Address the second part through its persisted UID path.
+    from core.protocol import commands
+    history = History(initial_scene)
+    child = other.children[0]
+    child.ifc = {"name": "Second record"}
+    commands.set_tag(history, [[other.uid, child.uid]], "Tag 2")
+    commands.hide(history, [[other.uid, child.uid]])
+    assert child.hidden and not original.children[0].hidden
+    assert child.layer == "Tag 2" and original.children[0].layer == "Tag 0"
+    assert history.undo() and not child.hidden
+    assert history.redo() and child.hidden
     initial = saved(initial_scene, work, "initial")
     scene = build()
     h = History(scene)
@@ -342,7 +437,30 @@ def main(work: Path):
     states.append(dump(scene))
     states.extend(slice_two(scene, h))
     states.extend(structural_steps(steps))
-    print(json.dumps({"engine": doc_model.engine(), "states": states,
+    # Rotate a mirrored, non-uniformly scaled occurrence and edit through
+    # its world-space tool coordinates. The sibling reads definition space.
+    framed = Scene()
+    first = Group(Mesh(), uid="framed")
+    second = Group(first.mesh, uid="sibling")
+    transform = QMatrix4x4()
+    transform.translate(17, 4, 2)
+    transform.rotate(90, 0, 0, 1)
+    transform.scale(-2, 3, 4)
+    first.xform, second.xform = transform, QMatrix4x4()
+    framed.groups.extend([first, second])
+    framed.begin_group_edit(first)
+    endpoints = [QVector3D(1, 2, 3), QVector3D(3, 1, 2)]
+    framed.mesh.add_edge(*(transform.map(p) for p in endpoints))
+    if doc_model.ENABLED:
+        assert first.mesh is second.mesh and len(second.mesh.edges) == 1
+        from core.protocol.keys import mesh_key
+        assert mesh_key(framed.mesh) == mesh_key(second.mesh)
+    framed.end_group_edit()
+    positions = [v.position_tuple() for v in second.mesh.vertices]
+    import numpy as np
+    np.testing.assert_allclose(sorted(positions), sorted(p.toTuple() for p in endpoints), atol=1e-6)
+    shared = shared_assembly(work)
+    print(json.dumps({"shared": shared, "rotated_edit": positions, "engine": doc_model.engine(), "states": states,
                       "feed": steps, "initial": initial,
                       "final": saved(scene, work, "final")}))
 

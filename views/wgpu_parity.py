@@ -56,8 +56,9 @@ def face_ranges(view, faces):
     if cache is None:
         cache = packed._face_ranges = {}
     if key not in cache:
+        definition = getattr(mesh, "_instance_definition", mesh)
         rows = [i for i, g in enumerate(packed.groups)
-                if (view.scene.loose_mesh if g is None else g.mesh) is mesh]
+                if (view.scene.loose_mesh if g is None else g.mesh) is definition]
         mapping, first = {}, 0
         for f in mesh.faces:
             if f.attrs.get('hidden'):

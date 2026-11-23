@@ -493,6 +493,9 @@ class Mesh:
         the viewport's geometry caches (keyed on those) are not thrown
         away for a paint; see :meth:`mark_modified` for raw edits."""
         self.__dict__["_revision"] = self.__dict__.get("_revision", 0) + 1
+        definition = self.__dict__.get("_instance_definition")
+        if definition is not None:
+            definition.mark_modified()
 
     def mark_modified(self) -> None:
         """Publish a batch of direct element edits, including attributes."""
@@ -886,7 +889,7 @@ class Mesh:
         pos = np.ascontiguousarray(pos, dtype=np.float64)
         if not len(pos):
             return [], np.empty(0, dtype=np.int64)
-        model = pos + store.frame_origin if store is not None and any(store.frame_origin) else pos
+        model = store._definition_points(pos) if store is not None and not store._model_frame else pos
         keys = np.round(model * _KEY_SCALE).astype(np.int64)
         # Byte records group equal int64 triples without the field-by-field
         # structured sort. Only equality matters: first occurrence restores
@@ -1293,9 +1296,8 @@ class Mesh:
     def restore_state(self, snap: dict) -> None:
         """Restore a :meth:`capture_state` snapshot. Objects created since are
         dropped; captured ones are re-listed with their fields reset.
-        A store-backed mesh's snapshot (``core.store_mesh.StoreState``, a
-        Scene.share_back of an edited instance) makes this mesh
-        store-backed."""
+        A store snapshot (``core.store_mesh.StoreState``) restores this mesh
+        to its store representation."""
         if not isinstance(snap, dict):
             from core import store_mesh
             store_mesh._restore_store_state(self, snap)

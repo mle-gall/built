@@ -149,32 +149,26 @@ def _command_meshes(cmd, scene, phase) -> list:
     stack = [cmd]
     while stack:
         c = stack.pop()
+        if phase != "execute":
+            out.append(getattr(c, "_history_mesh", None))
         if isinstance(c, CompoundCommand):
             stack.extend(c.commands)
         elif isinstance(c, SnapshotMutation):
             out.append(c._target(scene))
-        proto = _reshared_definition(c)
-        if proto is not None:
-            out.append(proto)
+        if getattr(c, "reference_instance", False) or getattr(c, "reference_assembly", False):
+            out.append(c.proto)
         meshes = getattr(c, "meshes", None)
         if callable(meshes) and type(c).__name__ in (
                 "SoftenByAngleCommand", "FlipFacesCommand", "FlipGroupsCommand"):
             out.extend(meshes())
     seen, uniq = set(), []
     for m in out:
+        if m is not None:
+            m = m.__dict__.get("_instance_definition", m)
         if m is not None and id(m) not in seen:
             seen.add(id(m))
             uniq.append(m)
     return uniq
-
-
-def _reshared_definition(cmd):
-    """The shared definition a Reshare step writes (leaving an edited
-    component instance or assembly): the mesh every copy shows."""
-    from core.history import ReshareAssemblyCommand, ReshareInstanceCommand
-    if isinstance(cmd, (ReshareInstanceCommand, ReshareAssemblyCommand)):
-        return cmd.proto
-    return None
 
 
 def _placements_showing(scene, mesh) -> list:
@@ -332,6 +326,10 @@ def _known_placements(cmd, phase, step, scene=None, journalled=False) -> bool:
     if isinstance(cmd, H.CompoundCommand):
         return all(_known_placements(c, phase, step, scene, journalled)
                    for c in cmd.commands)
+    target = getattr(cmd, "_history_mesh", None)
+    definition = getattr(target, "_instance_definition", None)
+    if definition is not None and step.mesh_change(definition) is not None:
+        step.placements["modified"].extend(scene._root._definition_uids(definition))
     if journalled and _journal_covers(cmd):
         return True
     if getattr(cmd, "keeps_rows", False) or isinstance(cmd, _geometry_only()):
@@ -366,7 +364,7 @@ def _known_placements(cmd, phase, step, scene=None, journalled=False) -> bool:
         step.placements["removed" if undo else "created"].extend(
             p.uid for p in cmd.pieces)
         return True
-    if isinstance(cmd, H.ReshareInstanceCommand) and scene is not None:
+    if getattr(cmd, "reference_instance", False) and scene is not None:
         # The edited instance goes back on the definition (undo: the
         # definition goes back as it was): every placement showing it.
         modified = step.placements["modified"]

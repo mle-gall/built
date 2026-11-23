@@ -22,26 +22,51 @@ def point_in_frame(point, origin):
 
 
 @contextmanager
-def mesh_frame(mesh, origin):
+def mesh_frame(mesh, origin, *, matrix=...):
     """Run a Qt tool on local coordinates. Its document and history keep model keys."""
     st = mesh.__dict__.get('_store')
-    if st is None or tuple(st.frame_origin) == tuple(origin):
+    origin = tuple(origin)
+    if matrix is ...:
+        matrix = st.frame_matrix if st is not None else None
+    matrix = None if matrix is None else tuple(matrix)
+    frame = (origin, matrix)
+    def matches(store):
+        placement = store.frame_matrix
+        return (tuple(store.frame_origin), tuple(placement) if placement is not None else None) == frame
+
+    if st is None or matches(st):
         yield
         return
     d = mesh.__dict__
+    definition = d.get('_instance_definition')
+    if definition is not None:
+        # Start at the definition's f64 positions even if the zero-origin
+        # view has already rounded a tiny offset beside a large translation.
+        view = definition._store._instance_view(definition, matrix, origin)
+        d['_store'] = view
+        active = tuple(m for m in _active.get() if m is not mesh)
+        token = _active.set(active + (mesh,) if any(origin) else active)
+        try:
+            yield
+        finally:
+            _active.reset(token)
+            d['_store'] = st
+        return
     parent = d.get('_frame_parent')
     cached = d.get('_tool_frame_cache')
-    if parent is not None and tuple(parent.frame_origin) == tuple(origin):
+    if parent is not None and matches(parent):
         local = parent
         if st.revision != parent.revision:
             local._publish_frame(st)
-    elif cached and cached[:3] == (st, st.revision, tuple(origin)):
+    elif cached and cached[:3] == (st, st.revision, frame):
         local = cached[3]
     else:
-        local = st._in_frame(origin)
+        local = (st._in_model_frame(origin) if matrix is None
+                 else st._in_instance_frame(matrix, origin))
+    entry = local
     start = local.revision
     active = tuple(m for m in _active.get() if m is not mesh)
-    token = _active.set(active + (mesh,) if any(origin) else active)
+    token = _active.set(active + (mesh,) if any(origin) or matrix is not None else active)
     d['_frame_parent'] = st
     d['_store'] = local
     try:
@@ -54,12 +79,11 @@ def mesh_frame(mesh, origin):
             # Its graph and tombstones leave the tool in the caller's frame.
             from core.mesh import Vertex, _key
             from ingetrazo_core import Vec3 as QVector3D
-            delta = np.subtract(origin, st.frame_origin)
             holders = list(d["_registry"].values())
             vertices = {v.key: v for v in d.get("_objmap", {}).values() if isinstance(v, Vertex)}
             vertices.update((v.key, v) for v in mesh.vertices)
             for v in vertices.values():
-                v.position = QVector3D(*(np.asarray(v.position.toTuple()) + delta))
+                v.position = QVector3D(*entry._convert_point(st, v.position.toTuple()))
             d["_registry"] = {_key(v.position): v for v in holders}
             d["_displaced"] = {}
             for v in mesh.vertices:
@@ -75,7 +99,7 @@ def mesh_frame(mesh, origin):
         else:
             d['_frame_parent'] = parent
         if local is not None:
-            d['_tool_frame_cache'] = (st, st.revision, tuple(origin), local)
+            d['_tool_frame_cache'] = (st, st.revision, frame, local)
         else:
             d.pop('_tool_frame_cache', None)
 

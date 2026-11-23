@@ -44,7 +44,7 @@ LOCAL_MASK = (1 << 40) - 1
 #: with a deep copy of the Python state.
 STORE_SIDE = ("_store", "_objmap", "_attr_table", "_attr_own", "_bulk",
               "_py_base", "_pos_cache", "_face_cache", "_frame_parent",
-              "_tool_frame_cache", "_planned_points")
+              "_tool_frame_cache", "_planned_points", "_instance_definition")
 
 
 def enabled() -> bool:
@@ -119,6 +119,11 @@ class _MFace(Face):
 
 
 # ---- Views ----------------------------------------------------------------
+
+def _attribute_owner(mesh):
+    """The facade holding this definition's face attribute rows."""
+    return mesh.__dict__.get("_instance_definition", mesh).__dict__
+
 
 def _store_of(m):
     """The live store of a store-backed mesh, else None."""
@@ -199,7 +204,10 @@ class VertexView(_ViewMixin, Vertex):
 
     @position.setter
     def position(self, value):
-        self._obj().position = value
+        if self._m.__dict__.get("_instance_definition") is not None:
+            self._m.place_vertex(self, value)
+        else:
+            self._obj().position = value
 
     @property
     def edges(self):
@@ -552,7 +560,8 @@ class FaceView(_ViewMixin, Face):
         st = _store_of(m)
         if st is None:
             return self._obj().attrs
-        own = m.__dict__["_attr_own"]
+        attrs = _attribute_owner(m)
+        own = attrs["_attr_own"]
         d = own.get(self.key)
         if d is None:
             try:
@@ -563,7 +572,7 @@ class FaceView(_ViewMixin, Face):
             # write into it (or into a texture dict inside) stays this
             # face's, and the next read hands back the same object.
             d = own[self.key] = _copy_attrs(
-                m.__dict__["_attr_table"][idx]) if idx >= 0 else {}
+                attrs["_attr_table"][idx]) if idx >= 0 else {}
         return d
 
     @attrs.setter
@@ -572,7 +581,7 @@ class FaceView(_ViewMixin, Face):
         if _store_of(m) is None:
             self._obj().attrs = value
             return
-        m.__dict__["_attr_own"][self.key] = value
+        _attribute_owner(m)["_attr_own"][self.key] = value
 
     def reverse_rings(self) -> None:
         """``turn_face_over``'s ``loop.reverse()`` and holes' ``reverse()``
@@ -718,7 +727,23 @@ class _MutList(list):
     remove = _fwd("remove")
     pop = _fwd("pop")
     clear = _fwd("clear")
-    reverse = _fwd("reverse")
+    def reverse(self):
+        face = self._owner
+        if isinstance(face, FaceView):
+            path = self._path
+            ring = None
+            if path == ("loop",):
+                ring = 0
+            elif path[0] == "hole_loops" and len(path) == 2:
+                ring = path[1] + 1
+            store = _store_of(face._m)
+            if store is not None and ring is not None:
+                store.reverse_ring(face.key, ring)
+                list.reverse(self)
+                return
+        self._real().reverse()
+        list.reverse(self)
+
     __setitem__ = _fwd("__setitem__")
     __delitem__ = _fwd("__delitem__")
 
@@ -1308,9 +1333,6 @@ class StoreMesh(Mesh):
 
     def _probe_neighbours(self, k, position):
         p = _xyz(position)
-        origin = self._store.frame_origin
-        if any(origin):
-            k = tuple(round((v + o) * _mesh._KEY_SCALE) for v, o in zip(p, origin))
         hit = self._store.probe(tuple(k), p)
         return None if hit is None else VertexView(self, hit)
 
@@ -1466,7 +1488,7 @@ class StoreMesh(Mesh):
         store's snapshot, O(chunks). The per-face attrs dicts are taken as
         they stand at the revert (the record undoes geometry, LIFO, as
         history uses it)."""
-        d = self.__dict__
+        d = _attribute_owner(self)
         return StoreState(self._store.snapshot(), d["_attr_own"],
                           d["_attr_table"], self)
 
@@ -1700,12 +1722,13 @@ class StoreMesh(Mesh):
 
     def clear(self) -> None:
         self._store.clear()
-        self._attr_own.clear()
-        self._attr_table = []
+        attrs = _attribute_owner(self)
+        attrs["_attr_own"].clear()
+        attrs["_attr_table"] = []
         self._dirty()
 
     def capture_state(self):
-        d = self.__dict__
+        d = _attribute_owner(self)
         return StoreState(self._store.snapshot(),
                           {k: dict(v) for k, v in d["_attr_own"].items()},
                           d["_attr_table"], self)
@@ -1714,6 +1737,8 @@ class StoreMesh(Mesh):
         if isinstance(snap, StoreState):
             _restore_store_state(self, snap)
             return
+        if self.__dict__.get("_instance_definition") is not None:
+            raise _fallback()("cannot restore an object graph into an occurrence view")
         # A Python snapshot: the mesh becomes those objects again.
         _log_object_fallback("restore object snapshot")
         _to_python_lists(self)
@@ -1721,7 +1746,7 @@ class StoreMesh(Mesh):
 
     # -- bulk construction straight into the store
     def bulk_weld(self, pos):
-        if self._store.revision == 0 and not any(self._store.counts()) and not any(self._store.frame_origin):
+        if self._store.revision == 0 and not any(self._store.counts()) and self._store._model_frame:
             return bulk_weld(self, pos)
         return Mesh.bulk_weld(self, pos)
 
@@ -1802,6 +1827,12 @@ class StoreMesh(Mesh):
     # -- copies
     def __deepcopy__(self, memo):
         from copy import deepcopy
+        definition = self.__dict__.get("_instance_definition")
+        if definition is not None:
+            store = self._store
+            new = instance_view(deepcopy(definition, memo), store.frame_matrix, store.frame_origin)
+            memo[id(self)] = new
+            return new
         new = StoreMesh.__new__(StoreMesh)
         memo[id(self)] = new
         d = self.__dict__
@@ -1829,6 +1860,8 @@ class StoreMesh(Mesh):
         docstring); a no-op once done."""
         if self.__class__ is not StoreMesh:
             return
+        if self.__dict__.get("_instance_definition") is not None:
+            raise _fallback()("this occurrence edit requires a store-backed operation")
         if self.__dict__.get("_resident_edit"):
             raise _fallback()("face edit requires unsupported mesh topology")
         _log_object_fallback("materialise")
@@ -1991,7 +2024,7 @@ def _to_python_lists(m) -> None:
 def _restore_store_state(m, snap: StoreState) -> None:
     """``m.restore_state(snap)`` for a store snapshot: ``m`` is store-backed
     afterwards. Same lineage: the store goes back to it, keys kept. Another
-    store's snapshot (``Scene.share_back``) is adopted under a fresh
+    store's snapshot is adopted under a fresh
     namespace: new keys (design decision 3)."""
     d = m.__dict__
     st = snap.owner if snap.mesh is m else d.get("_store")
@@ -2010,7 +2043,7 @@ def _restore_store_state(m, snap: StoreState) -> None:
         own = {(ns << 40) | (k & LOCAL_MASK): dict(v)
                for k, v in snap.own.items()}
     else:
-        held = d.get("_attr_own") or {}
+        held = _attribute_owner(m).get("_attr_own") or {}
         st.restore(snap.snap)
         own = {k: dict(v) for k, v in snap.own.items()}
         # The restore kept the newer elements as tombstones (restore_tail
@@ -2020,6 +2053,10 @@ def _restore_store_state(m, snap: StoreState) -> None:
                 own[k] = v
     d["_attr_table"] = snap.table
     d["_attr_own"] = own
+    definition = d.get("_instance_definition")
+    if definition is not None:
+        definition._attr_own = own
+        definition._attr_table = snap.table
     d.setdefault("_objmap", {})
     for name in ("vertices", "edges", "faces", "_registry", "_displaced",
                  "_bulk"):
@@ -2027,6 +2064,23 @@ def _restore_store_state(m, snap: StoreState) -> None:
     m.__class__ = StoreMesh
     m._chunk_dirty = True
     m._mut_serial += 1
+
+
+def instance_view(mesh, matrix, origin=(0., 0., 0.)):
+    """An occurrence facade over the definition store, with the same element keys."""
+    from core.mesh import DeferredMesh
+    if isinstance(mesh, DeferredMesh):
+        mesh._materialize()
+    if type(mesh) is not StoreMesh:
+        return None
+    try:
+        view = mesh._store._instance_view(mesh, matrix, origin)
+    except ValueError:  # a singular placement has no world-to-definition inverse
+        return None
+    result = Mesh()
+    become_store(result, view, mesh._attr_table, mesh._attr_own)
+    result._instance_definition = mesh
+    return result
 
 
 def empty_store_mesh():
@@ -2550,8 +2604,9 @@ def face_attrs(m):
     each distinct attribute row, and every face that has its own dict —
     without giving the others one."""
     st = m.__dict__["_store"]
-    own = m.__dict__["_attr_own"]
-    table = m.__dict__["_attr_table"]
+    attrs = _attribute_owner(m)
+    own = attrs["_attr_own"]
+    table = attrs["_attr_table"]
     fa = st.arrays()["face_attr"]
     keys = st.keys("face") if own else None
     seen = set()
@@ -2576,8 +2631,9 @@ def attr_columns(m, overrides=None):
     d = m.__dict__
     st = d["_store"]
     fa = st.arrays()["face_attr"].copy()
-    table = list(d["_attr_table"])
-    own = d["_attr_own"]
+    attrs = _attribute_owner(m)
+    table = list(attrs["_attr_table"])
+    own = attrs["_attr_own"]
     if own or overrides:
         keys = st.keys("face")
         for i, k in enumerate(keys):
