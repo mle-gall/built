@@ -57,6 +57,29 @@ pub(crate) fn plan_scene_command<'py>(
         return Ok(None);
     };
     let command = match verb {
+        "duplicate" => {
+            let suffix: String = py
+                .import("core.i18n")?
+                .call_method1("tr", (" (copy)",))?
+                .extract()?;
+            let base = format!("{}{suffix}", view.getattr("name")?.extract::<String>()?);
+            let taken: HashSet<String> = saved
+                .iter()
+                .map(|v| v.getattr("name")?.extract())
+                .collect::<PyResult<_>>()?;
+            let mut name = base.clone();
+            let mut n = 2;
+            while taken.contains(&name) {
+                name = format!("{base} {n}");
+                n += 1;
+            }
+            let copy = recording
+                .getattr("SavedView")?
+                .call_method1("from_dict", (view.call_method0("to_dict")?,))?;
+            copy.setattr("name", name)?;
+            let next = saved.iter().position(|v| v.is(view)).unwrap() + 1;
+            history.call_method1("AddSceneCommand", (copy, next))?
+        }
         "delete" => history.call_method1("DeleteScenesCommand", (targets,))?,
         "update" => history.call_method1("UpdateSceneCommand", (view, camera()?, style))?,
         "rename" => {

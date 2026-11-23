@@ -247,18 +247,6 @@ def test_the_menu_runs_the_window_s_scene_actions(win):
     assert "Add folder" in texts
 
 
-def test_duplicate_from_the_menu_goes_right_after_and_undoes(win):
-    panel = _scenes(win, "A", "B")
-    panel.select_view(_view(win, "A"))
-    win._scene_actions["scene_duplicate"].trigger()
-    assert _names(win) == ["A", "A (copy)", "B"]
-    assert panel.current_view().name == "A (copy)"
-    win.viewport.history.undo()
-    panel.refresh()
-    assert _names(win) == ["A", "B"]
-    assert _rows(panel) == ["A", "B"]
-
-
 # ---- Folders ----------------------------------------------------------------
 
 def test_a_folder_holds_scenes_and_shows_them_inside(win):

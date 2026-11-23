@@ -303,6 +303,16 @@ class ShellScenes:
         self._touch()
         return view
 
+    def duplicate_view(self, view):
+        from core.protocol.commands import edit_saved_scene
+        vp = self._vp()
+        result = edit_saved_scene(vp.history, "duplicate", views=[view])
+        if result["ok"]:
+            copy = vp.scene.saved_views[result["index"]]
+            self._win._scene_tabs.mark_view(copy)
+            self._touch()
+            return copy
+
     def update_view(self, view):
         from core.protocol.commands import edit_saved_scene
         vp = self._vp()

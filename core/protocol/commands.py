@@ -437,10 +437,11 @@ def edit_saved_scene(history, verb, **args):
     from ingetrazo_core import plan_scene_command
     before = history.revision
     command = plan_scene_command(history.scene, verb, **args)
-    if command is not None:
-        history.execute(command)
+    if command is None:
+        return {"ok": False, "step": None, "error": None, "rejected": None}
+    history.execute(command)
     result = _answer(history, before)
-    if result["ok"] and verb == "add":
+    if result["ok"] and verb in ("add", "duplicate"):
         result["index"] = history.scene.saved_views.index(command.view)
     return result
 

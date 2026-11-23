@@ -5151,6 +5151,16 @@ class ScenesPanel(QWidget):
     def _on_update(self) -> None:
         self.update_view(self.current_view())
 
+    def duplicate_view(self, view):
+        from core.protocol.commands import edit_saved_scene
+        self._begin_own()
+        result = edit_saved_scene(self._history(), "duplicate", views=[view])
+        if result["ok"]:
+            copy = self._scene().saved_views[result["index"]]
+            self.select_view(copy)
+            self._touch()
+            return copy
+
     def update_view(self, view) -> None:
         """Keep the current view in the scene ``view``, as one undo step
         (the bar, the right-click menus, Camera ▸ Scenes)."""

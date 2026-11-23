@@ -1250,6 +1250,7 @@ impl Ui {
                                 let mut rows: Vec<(&str, String)> = vec![("scene:camera", "Camera inspector…".into()), ("scene:add", "Add scene from this view".into())];
                                 if let Some(c) = &current {
                                     rows.push(("scene:update", format!("Update “{c}” from this view")));
+                                    rows.push(("scene:duplicate", format!("Duplicate “{c}”")));
                                     rows.push(("scene:rename", format!("Rename “{c}”…")));
                                     rows.push(("scene:up", "Move earlier".into()));
                                     rows.push(("scene:down", "Move later".into()));

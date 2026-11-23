@@ -133,3 +133,20 @@ def test_stale_scene_in_a_batch_leaves_every_target_alone(menu):
     result = edit_saved_scene(win.viewport.history, "delete", views=[local, SavedView(local.name)])
     assert not result["ok"]
     assert list(win.viewport.scene.saved_views) == [local]
+
+
+def test_duplicate_from_the_menu_goes_right_after_and_undoes(menu):
+    actions, win, _ = menu
+    a, b = (actions.add_scene() for _ in range(2))
+    actions.rename_view(a, "A")
+    actions.rename_view(b, "B")
+    first = actions.duplicate_view(a)
+    scene = win.viewport.scene
+    assert list(scene.saved_views) == [a, first, b] and first.name == "A (copy)"
+    assert win._scene_tabs.marked_view() is first
+    assert first.distance == a.distance and first.folder == a.folder
+    second = actions.duplicate_view(a)
+    assert second.name == "A (copy) 2"
+    win.viewport.history.undo()
+    win.viewport.history.undo()
+    assert list(scene.saved_views) == [a, b]

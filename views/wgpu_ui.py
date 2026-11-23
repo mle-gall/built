@@ -2934,13 +2934,15 @@ def _run(win, actions, source_view=None) -> None:
                 elif _core(vp, "edit_visibility_set", verb=operation, key=key)["ok"]:
                     vp.notify_scene_changed()
                     view.update()
-            elif arg in ("scene:add", "scene:update", "scene:up", "scene:down", "scene:delete", "scene:rename"):
+            elif arg in ("scene:add", "scene:update", "scene:up", "scene:down", "scene:delete", "scene:rename", "scene:duplicate"):
                 panel = getattr(getattr(win, "scenes_dock", None), "panel", None) or getattr(win.tray, "scenes", None)
                 row = getattr(getattr(win, "_scene_tabs", None), "tabs", None)
                 marked = row.marked_view() if row is not None else None
                 if panel is not None:
                     if arg == "scene:add":
                         panel.add_scene()
+                    elif marked is not None and arg == "scene:duplicate":
+                        panel.duplicate_view(marked)
                     elif marked is not None and arg == "scene:update":
                         panel.update_view(marked)
                         win.viewport.flash_status(f"Updated “{marked.name}” from the view")
