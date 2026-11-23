@@ -113,6 +113,7 @@ if __name__ == "__main__":
     stamp = plist.stat().st_mtime_ns if plist.exists() else None
     with tempfile.TemporaryDirectory() as settings:
         os.environ.update(HOME=settings, CFFIXED_USER_HOME=settings, BUILT_SETTINGS_DIR=settings,
-                          XDG_CONFIG_HOME=settings, BUILT_GALLERY=str(int(args.prefix == "gallery")))
+                          XDG_CONFIG_HOME=settings)
+        os.environ.pop("BUILT_GALLERY", None)
         capture(args.prefix, dest)
     assert stamp == (plist.stat().st_mtime_ns if plist.exists() else None)

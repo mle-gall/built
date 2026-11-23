@@ -44,6 +44,6 @@ A surface may introduce a custom atom, molecule or organism when it serves the i
 
 ## Verification
 
-Run `cargo test --manifest-path rust/ingetrazo_render/Cargo.toml --lib` for the colour policy and neutral-surface tests. The policy scans Rust sources under `src/ui*`. Only `src/ui/tokens.rs` may construct chrome colours. Renderer modules outside that tree and shaders are exempt. Material values and image pixels are data: hex input is decoded by the token module, and texture uploads retain their original bytes.
+Run `cargo test --manifest-path rust/ingetrazo_render/Cargo.toml --lib` for the colour policy and neutral-surface tests. The policy scans Rust sources under `src/ui*` and `src/inspector`. Only `src/ui/tokens.rs` may construct chrome colours. Renderer modules outside that tree and shaders are exempt. Material values and image pixels are data: hex input is decoded by the token module, and texture uploads retain their original bytes.
 
 After building the native module and shell, run `built --gallery` or `.venv/bin/python main.py --gallery`. Run `scripts/design_system_gallery.sh` to write both host captures to `build/design-system/gallery-*.png`. The capture uses an isolated settings directory and reads back the application framebuffer.

@@ -71,6 +71,7 @@ fn chrome_colors_come_from_tokens() {
             .unwrap()
             .to_string_lossy()
             .starts_with("ui")
+            || path.ends_with("inspector")
         {
             check_source(&path, &src.join("ui/tokens.rs"), &mut failures);
         }

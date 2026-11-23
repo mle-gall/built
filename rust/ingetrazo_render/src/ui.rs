@@ -2271,7 +2271,8 @@ impl Ui {
             focused: true,
             ..Default::default()
         };
-        raw.viewports.entry(egui::ViewportId::ROOT).or_default().native_pixels_per_point = Some(scale);
+        let zoom = if self.gallery.is_some() { gallery::Gallery::fit(&mut raw, screen) } else { 1.0 };
+        raw.viewports.entry(egui::ViewportId::ROOT).or_default().native_pixels_per_point = Some(scale * zoom);
         let ctx = self.ctx.clone();
         let start = self.home.shown;
         let out = ctx.run(raw, |ctx| {
@@ -2359,7 +2360,7 @@ impl Ui {
             .map(|d| d.as_secs_f64() * 1000.);
         self.ime_rect = out.platform_output.ime.map(|ime| {
             let r = ime.cursor_rect;
-            (r.min.x, r.min.y, r.width().max(1.0), r.height().max(1.0))
+            (r.min.x * zoom, r.min.y * zoom, (r.width() * zoom).max(1.0), (r.height() * zoom).max(1.0))
         });
         let jobs = ctx.tessellate(out.shapes, out.pixels_per_point);
         for (id, delta) in &out.textures_delta.set {

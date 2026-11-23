@@ -32,6 +32,26 @@ impl Default for Gallery {
 }
 
 impl Gallery {
+    /// The Qt viewport shares its window with native panes. Fit the entire
+    /// reference board into the remaining space and map input into board points.
+    pub(super) fn fit(raw: &mut egui::RawInput, screen: Rect) -> f32 {
+        let zoom = (screen.width() / 1280.)
+            .min(screen.height() / 740.)
+            .clamp(0.01, 1.);
+        if zoom < 1. {
+            raw.screen_rect = Some(Rect::from_min_size(screen.min, screen.size() / zoom));
+            for event in &mut raw.events {
+                match event {
+                    egui::Event::PointerMoved(p) | egui::Event::PointerButton { pos: p, .. } => {
+                        *p = *p / zoom
+                    }
+                    _ => {}
+                }
+            }
+        }
+        zoom
+    }
+
     pub(super) fn show(&mut self, ctx: &egui::Context) {
         egui::CentralPanel::default()
             .frame(egui::Frame::new().fill(SHEET).inner_margin(12))
