@@ -824,6 +824,12 @@ def _units(env) -> list:
     return [("units", tr("Units of this model"), shown), ("unitsnew", tr("New documents"), beyond)]
 
 
+def _dimension_font(env):
+    from views.font_picker import annotation
+    chrome_sheet.close(env.win)
+    annotation(env.win)
+
+
 def _dimensions(env) -> list:
     from core import units
 
@@ -864,6 +870,8 @@ def _dimensions(env) -> list:
             options=[(c, units.unit_label(c)) for c in units.UNIT_CHOICES]),
         Row("dim_show_unit", "check", tr("Show unit"), lambda env: bool(style(env).get("show_unit", True)),
             put("show_unit", bool), tip=tr("«1.30» instead of «1.30 m»")),
+        Row("dim_family", "button", tr("Font family…"), g("font_family", ""),
+            press=_dimension_font),
         Row("dim_font", "number", tr("Font size"), lambda env: int(style(env).get("font_size", 9)),
             put("font_size", int), lo=6, hi=28, suffix="pt", words="text"),
         Row("dim_color", "color", tr("Colour"), color, put("color", to_rgb), words="color"),

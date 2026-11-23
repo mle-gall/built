@@ -100,6 +100,7 @@ impl Row {
 
 pub(super) struct Gallery {
     cells: Vec<Cell>,
+    font_picker: Option<FontPicker>,
     dock_filter: String,
     dock_tab: usize,
 }
@@ -118,6 +119,7 @@ impl Default for Gallery {
                     }
                 })
                 .collect(),
+            font_picker: None,
             dock_filter: String::new(),
             dock_tab: 0,
         }
@@ -192,6 +194,9 @@ impl Gallery {
                     let w = board.max.x - x;
                     let y = self.molecules(ui, pos2(x, top), w);
                     self.organisms(ui, pos2(x, y + SPACE_S), w, board.max.y);
+                    if let Some(picker) = &mut self.font_picker {
+                        if picker.popup(ctx).is_some() { self.font_picker = None; }
+                    }
                 });
             });
     }
@@ -433,7 +438,17 @@ impl Gallery {
         rects.push(Rect::from_min_max(pos2(x, y), pos2(at.x + w, bottom)));
         put(ui, rects[0], down(), |ui| self.dock(ui));
         put(ui, rects[1], down(), |ui| Self::inspector(ui));
-        put(ui, rects[2], down(), |ui| Self::menu(ui));
+        put(ui, rects[2], down(), |ui| {
+            Self::menu(ui);
+            if quiet(ui, "Font picker…").clicked() {
+                self.font_picker = Some(FontPicker::new(FontChoice {
+                    title: "Sheet text".into(), text: "Ground floor".into(), font: "Helvetica".into(),
+                    bold: false, italic: false, height: 14., thickness: None,
+                    minimum: 4., maximum: 96., unit: " pt".into(), editable: true,
+                    recent: vec!["Helvetica".into()], favourites: vec!["Georgia".into()],
+                }));
+            }
+        });
         put(ui, rects[3], down(), |ui| Self::feedback(ui));
     }
 

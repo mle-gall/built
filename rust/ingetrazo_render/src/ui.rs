@@ -29,6 +29,8 @@ pub mod large_sheet;
 
 pub mod tokens;
 pub mod kit;
+#[cfg(target_os = "macos")]
+mod system_fonts;
 mod gallery;
 use tokens::*;
 use kit::*;
@@ -62,8 +64,10 @@ pub struct Ui {
     background_plugins: std::collections::HashMap<String, plugins::Panels>,
     pub panels: crate::inspector::Panels,
     ctx: egui::Context,
+    pub font_picker: Option<FontPicker>,
     gallery: Option<gallery::Gallery>,
     painter: egui_wgpu::Renderer,
+    free_after_frame: Vec<egui::TextureId>,
     start: Instant,
     events: Vec<egui::Event>,
     modifiers: egui::Modifiers,
@@ -237,8 +241,10 @@ impl Ui {
         Self {
             panels: Default::default(),
             ctx,
+            font_picker: None,
             gallery: (std::env::var("BUILT_GALLERY").as_deref() == Ok("1")).then(gallery::Gallery::default),
             painter,
+            free_after_frame: Vec::new(),
             glass,
             start: Instant::now(),
             events: Vec::new(),
@@ -487,7 +493,7 @@ impl Ui {
     /// Keyboard ownership: the chrome takes a key only while one of its
     /// fields has focus, or Escape while one of its popups is open.
     pub fn claims_key(&self, name: &str) -> bool {
-        if self.gallery.is_some() { return true; }
+        if self.gallery.is_some() || self.font_picker.is_some() { return true; }
         if name == "Escape" && (self.strip.menus_open() || self.plugin_popup_open() || self.panels.data["terrain"].is_object()) { return true; }
         // The large sheet owns every key while it is up (Python keeps the
         // window's ⌘ shortcuts, views/chrome_sheet.py).
@@ -500,7 +506,7 @@ impl Ui {
             || self.ctx.wants_keyboard_input()
     }
     pub fn key(&mut self, name: &str, pressed: bool, mods: u8) -> bool {
-        if self.gallery.is_some() {
+        if self.gallery.is_some() || self.font_picker.is_some() {
             if let Some(key) = egui::Key::from_name(name) {
                 self.events.push(egui::Event::Key { key, physical_key: None, pressed, repeat: false, modifiers: mods_from(mods) });
             }
@@ -596,6 +602,12 @@ impl Ui {
     }
     pub fn ime_rect(&self) -> Option<(f32, f32, f32, f32)> { self.ime_rect }
     pub fn text(&mut self, text: String) -> bool {
+        if let Some(picker) = &mut self.font_picker {
+            if !self.ctx.wants_keyboard_input() {
+                picker.type_filter(&text);
+                return true;
+            }
+        }
         if self.lsheet.open && self.sheet.is_none() && self.dialog.is_none() && !self.cmd_open
             && !self.ctx.wants_keyboard_input() {
             // Type anywhere on the large sheet: it goes to its search.
@@ -636,7 +648,7 @@ impl Ui {
     fn over_chrome(&self, pos: Pos2) -> bool {
         // A choice or colour picker can extend beyond its parent panel.
         // Its next outside click dismisses it before the model takes input.
-        self.plugin_popup_open() || self.hit.iter().any(|r| r.contains(pos))
+        self.font_picker.is_some() || self.plugin_popup_open() || self.hit.iter().any(|r| r.contains(pos))
             || self.ctx.layer_id_at(pos).is_some_and(|layer| self.panels.popup_layers.contains(&layer.id))
     }
     /// Is (x, y) on the interactive chrome (a right-click there is the
@@ -2287,6 +2299,14 @@ impl Ui {
             self.dialog_popup(ctx, screen);
             self.jobs_chip(ctx, screen);
             self.sheet_popup(ctx, screen);
+            if let Some(picker) = &mut self.font_picker {
+                if let Some(apply) = picker.popup(ctx) {
+                    let payload = if apply { serde_json::to_string(&picker.choice).unwrap() } else { String::new() };
+                    self.actions.push(format!("font:{payload}"));
+                    self.font_picker = None;
+                    ctx.memory_mut(|m| m.stop_text_input());
+                }
+            }
         });
         let work = !self.review;
         // The model's own areas are not drawn in the Sheets workspace: their
@@ -2356,8 +2376,10 @@ impl Ui {
                 .forget_lifetime();
             self.painter.render(&mut pass, &jobs, &screen_desc);
         }
-        for id in &out.textures_delta.free {
-            self.painter.free_texture(id);
+        // The caller submits this encoder after paint returns. Textures
+        // released during this pass can still occur in its draw commands.
+        for id in std::mem::replace(&mut self.free_after_frame, out.textures_delta.free) {
+            self.painter.free_texture(&id);
         }
         self.frame_ms = begin.elapsed().as_secs_f64() * 1000.;
     }

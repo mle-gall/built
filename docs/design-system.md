@@ -89,6 +89,8 @@ A surface may introduce a custom atom, molecule or organism when it serves the i
 5. Add a row to the molecule matrix in `ui/gallery.rs` with its applicable states: rest, hover, pressed, selected, focus and disabled. Add an organism to the organisms band. Use real-looking content, such as file names, IFC fields and units.
 6. Test the interaction or layout through a real caller. Run the renderer library tests and inspect a fresh gallery capture.
 
+The Font picker in the gallery's organisms band opens the same compact popover used by 3D Text, sheet text and the shared dimension and label style. The gallery example includes a recent family and a starred family. Typing filters the installed families, arrows move the selection, Enter applies and Escape cancels.
+
 ## Verification
 
 Run `cargo test --manifest-path rust/ingetrazo_render/Cargo.toml --lib` for these tests:

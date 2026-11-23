@@ -2330,6 +2330,11 @@ impl Renderer {
         if let Some(ui) = self.ui.as_mut() { ui.set_dialog(seq, title, note, width, fields, buttons); }
     }
     fn ui_dialog_open(&self) -> bool { self.ui.as_ref().is_some_and(|ui| ui.dialog_open()) }
+    fn ui_font_picker(&mut self, draft: &str) -> PyResult<()> {
+        let choice = serde_json::from_str(draft).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        if let Some(ui) = &mut self.ui { ui.font_picker = Some(ui::kit::FontPicker::new(choice)); }
+        Ok(())
+    }
     fn ui_set_form(&mut self, title: String, fields: Vec<ui::FormField>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_form(title, fields); }
     }

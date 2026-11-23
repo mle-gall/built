@@ -12048,9 +12048,10 @@ class Viewport(QOpenGLWidget):
         default_ink = QColor(col[0], col[1], col[2])
         sel_ink = QColor(243, 115, 41)
         selection = self.scene.selection
-        font = QFont()
+        font = QFont(style.get("font_family", ""))
         font.setPointSize(int(style.get("font_size", 9)))
-        font.setBold(True)
+        font.setBold(style.get("font_bold", True))
+        font.setItalic(style.get("font_italic", False))
         painter.setFont(font)
         fm = painter.fontMetrics()
         for lab in labels:
@@ -12091,9 +12092,10 @@ class Viewport(QOpenGLWidget):
         default_ink = QColor(col[0], col[1], col[2])
         sel_ink = QColor(243, 115, 41)  # selection orange
         selection = self.scene.selection
-        font = QFont()
+        font = QFont(style.get("font_family", ""))
         font.setPointSize(int(style.get("font_size", 9)))
-        font.setBold(True)
+        font.setBold(style.get("font_bold", True))
+        font.setItalic(style.get("font_italic", False))
         # A groups preview (Move/Rotate) moves no geometry until the commit:
         # the dimensions held by the movers' vertices are drawn where the
         # commit will put them, or they lagged behind the whole drag (#621).
@@ -16831,9 +16833,10 @@ class Viewport(QOpenGLWidget):
         if not labels:
             return None
         style = getattr(self.scene, "dimension_style", {})
-        font = QFont()
+        font = QFont(style.get("font_family", ""))
         font.setPointSize(int(style.get("font_size", 9)))
-        font.setBold(True)
+        font.setBold(style.get("font_bold", True))
+        font.setItalic(style.get("font_italic", False))
         # Measured on THIS widget, as the painter that draws the labels
         # does: bare QFontMetrics(font) reads the primary screen's DPI, and
         # on a scaled display the glyph box it gave missed the letters
