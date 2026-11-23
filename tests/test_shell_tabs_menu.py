@@ -325,7 +325,11 @@ def test_each_kind_gets_the_rows_docs_context_menu_lists(host, kinds, kind):
 
 def test_the_menus_carry_the_expected_verbs(host, kinds):
     from views import context_menu as cm
+    from PySide6.QtWidgets import QApplication
     scene = host.viewport.scene
+    # A model copied by an earlier test would add "Paste here" to empty space.
+    QApplication.clipboard().clear()
+    host.viewport.clipboard = None
 
     def rows(kind):
         scene.select(kinds[kind])
