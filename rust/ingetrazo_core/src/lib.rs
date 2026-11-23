@@ -34,6 +34,7 @@ mod file_groups;
 mod group_geometry;
 mod structure;
 mod presentation;
+mod placement_edits;
 mod file_styles;
 mod file_annotations;
 mod instances;
@@ -192,6 +193,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<file_json::FileMatrix>()?;
     m.add_class::<group_geometry::GroupGeometry>()?;
     presentation::register(m)?;
+    placement_edits::register(m)?;
     m.add_class::<structure::StructurePlacements>()?;
     m.add_function(wrap_pyfunction!(structure::structure_lineage, m)?)?;
     m.add_function(wrap_pyfunction!(structure::structure_targets, m)?)?;

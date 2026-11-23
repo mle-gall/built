@@ -3,7 +3,7 @@
 """Model editing commands and their Python reference inverses."""
 from __future__ import annotations
 
-from ingetrazo_core import presentation as _presentation
+from ingetrazo_core import placement_edits as _placements, presentation as _presentation
 
 from abc import ABC, abstractmethod
 from collections import Counter
@@ -4746,6 +4746,10 @@ class GroupToComponentCommand(Command):
         self._old_name = None
 
     def do(self, scene) -> None:
+        if _doc.ENABLED:
+            self._previous = _placements.convert_component(self.group, self._name)
+            scene.version += 1
+            return
         from ingetrazo_core import Matrix4 as QMatrix4x4
         self._old_name = self.group.name
         self._old_xform = self.group.xform
@@ -4760,6 +4764,10 @@ class GroupToComponentCommand(Command):
         scene.version += 1
 
     def undo(self, scene) -> None:
+        if _doc.ENABLED:
+            _placements.restore_component(self.group, self._previous)
+            scene.version += 1
+            return
         self.group.xform = self._old_xform
         self.group.component = self._old_component
         self.group.name = self._old_name
@@ -4807,29 +4815,33 @@ class InsertGroupCommand(Command):
 
     def do(self, scene) -> None:
         ctx = self._target(scene)
-        if ctx is not None:
-            owner = ctx.children
-            frame = ctx.xform
-            if getattr(scene.mesh, "_instance_definition", None) is not None:
-                frame = scene.mesh._store.tool_placement()
-            if frame is not None:
-                inv, ok = frame.inverted()
-                if ok:
-                    from core.group import transformed_mesh
-                    if self.group.xform is not None:
-                        self.group.xform = inv * self.group.xform
-                    elif getattr(scene.mesh, "_instance_definition", None) is not None:
-                        self.group.component = False
-                        self.group.xform = inv
-                    else:
-                        self.group.mesh = transformed_mesh(self.group.mesh, inv)
-                        self._baked = True
-                        from core.group import carry_axes
-                        carry_axes(self.group, inv)
+        if _doc.ENABLED:
+            self._owner, baked = _placements.insert_placement(scene.groups, ctx, scene.mesh, self.group)
+            self._baked |= baked
         else:
-            owner = scene.groups
-        owner.append(self.group)
-        self._owner = owner
+            if ctx is not None:
+                owner = ctx.children
+                frame = ctx.xform
+                if getattr(scene.mesh, "_instance_definition", None) is not None:
+                    frame = scene.mesh._store.tool_placement()
+                if frame is not None:
+                    inv, ok = frame.inverted()
+                    if ok:
+                        from core.group import transformed_mesh
+                        if self.group.xform is not None:
+                            self.group.xform = inv * self.group.xform
+                        elif getattr(scene.mesh, "_instance_definition", None) is not None:
+                            self.group.component = False
+                            self.group.xform = inv
+                        else:
+                            self.group.mesh = transformed_mesh(self.group.mesh, inv)
+                            self._baked = True
+                            from core.group import carry_axes
+                            carry_axes(self.group, inv)
+            else:
+                owner = scene.groups
+            owner.append(self.group)
+            self._owner = owner
         if self.attachment is not None:
             from core.annotation_anchor import TextPlacementAnchor
             self._sign_anchor = TextPlacementAnchor.create(
@@ -4923,30 +4935,37 @@ class MakeNestedGroupCommand(Command):
             self.container = self._inner.group
         elif self.container is None:
             self.container = Group(Mesh(), name=self.name)
-        if self.container not in scene.groups:
-            scene.groups.append(self.container)
-        self._xform0 = getattr(self.container, "xform", None)
-        self._indices = sorted(
-            ((scene.groups.index(g), g) for g in self.groups),
-            key=lambda pair: pair[0])
-        for _i, g in self._indices:
-            scene.groups.remove(g)
-            scene.selection.discard(g)
-        # In document order, not selection order: a selection is a set, and
-        # the children of a group are a list somebody will read.
-        self.container.adopt([g for _i, g in self._indices])
-        # A GROUP of groups: ``adopt`` gives it a matrix, which does not
-        # make it a component (issue #90, @fafecm).
-        self.container.component = False
+        if _doc.ENABLED:
+            self._xform0, self._indices = _placements.nest(
+                scene.groups, self.container, self.groups, scene.selection.discard)
+        else:
+            if self.container not in scene.groups:
+                scene.groups.append(self.container)
+            self._xform0 = getattr(self.container, "xform", None)
+            self._indices = sorted(
+                ((scene.groups.index(g), g) for g in self.groups),
+                key=lambda pair: pair[0])
+            for _i, g in self._indices:
+                scene.groups.remove(g)
+                scene.selection.discard(g)
+            # In document order, not selection order: a selection is a set, and
+            # the children of a group are a list somebody will read.
+            self.container.adopt([g for _i, g in self._indices])
+            # A GROUP of groups: ``adopt`` gives it a matrix, which does not
+            # make it a component (issue #90, @fafecm).
+            self.container.component = False
         scene.selection.clear()
         scene.selection.add(self.container)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        self.container.children = []
-        self.container.xform = self._xform0
-        for idx, g in self._indices:
-            scene.groups.insert(min(idx, len(scene.groups)), g)
+        if _doc.ENABLED:
+            _placements.unnest(scene.groups, self.container, self._xform0, self._indices)
+        else:
+            self.container.children = []
+            self.container.xform = self._xform0
+            for idx, g in self._indices:
+                scene.groups.insert(min(idx, len(scene.groups)), g)
         if self._inner is not None:
             self._inner.undo(scene)        # loose geometry back, group gone
         elif self.container in scene.groups:
@@ -5067,6 +5086,15 @@ class ReparentGroupsCommand(Command):
         scene.version += 1
 
     def do(self, scene) -> None:
+        if _doc.ENABLED:
+            self._target_state, self._moves = _placements.reparent(
+                scene.groups, self.groups, self.target, scene.selection.discard)
+            if _doc.ENABLED:
+                _dirty_placements([m[0] for m in self._moves])
+            else:
+                _dirty_group_chunks(scene)
+            scene.version += 1
+            return
         from ingetrazo_core import Matrix4 as QMatrix4x4
         from core import outliner
         from core.group import transformed_mesh
@@ -5105,6 +5133,12 @@ class ReparentGroupsCommand(Command):
         scene.version += 1
 
     def undo(self, scene) -> None:
+        if _doc.ENABLED:
+            _placements.restore_parent(scene.groups, self.target, self._target_state, self._moves)
+            scene.selection.clear()
+            _dirty_group_chunks(scene)
+            scene.version += 1
+            return
         target = self.target
         for g, old, index, xform, mesh in reversed(self._moves):
             (target.children if target is not None
@@ -5717,6 +5751,10 @@ class SplitIntoPiecesCommand(Command):
                        for src, keys in [origin_of(p.mesh)] if src is not None]
 
     def do(self, scene) -> None:
+        if _doc.ENABLED:
+            self.before, self._emptied = _placements.split_placement(self.group, self.pieces, self._emptied)
+            scene.version += 1
+            return
         g = self.group
         self.before = (g.mesh, list(g.children), g.xform, g.exploded)
         if self._emptied is None:
@@ -5732,6 +5770,10 @@ class SplitIntoPiecesCommand(Command):
         scene.version += 1
 
     def undo(self, scene) -> None:
+        if _doc.ENABLED:
+            _placements.restore_split(self.group, self.before)
+            scene.version += 1
+            return
         g = self.group
         g.mesh, g.children, g.xform, g.exploded = self.before
         scene.version += 1
