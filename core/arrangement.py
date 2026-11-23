@@ -179,6 +179,10 @@ def _build_graph(segments_2d):
     """Split all segments at intersections and return ``(coords, adjacency)``:
     ``coords`` maps a vertex key to its (x, y); ``adjacency`` maps a key to the
     set of neighbour keys (undirected, deduplicated, no self-loops)."""
+    from core import doc_model
+    if doc_model.ENABLED:
+        from ingetrazo_core import plane_split_graph
+        return plane_split_graph(segments_2d)
     n = len(segments_2d)
     split_pts = [list(seg) for seg in segments_2d]  # seed with endpoints
     for i, near in enumerate(_box_neighbours(segments_2d)):
@@ -296,6 +300,12 @@ def _arrange(segments_3d, origin, normal):
 
 def _classify(loops, coords) -> list:
 
+    from core import doc_model
+    if doc_model.ENABLED:
+        from ingetrazo_core import plane_nesting
+        rings = [[coords[k] for k in loop] for loop in loops]
+        return [(rings[i], [rings[j] for j in holes])
+                for i, holes in plane_nesting(rings, True)]
     # Split into CCW faces and CW cycles (holes / the unbounded outer).
     faces = []   # (loop_xy, area)
     holes = []   # (loop_xy, area)
@@ -361,6 +371,10 @@ def planar_arrangement(segments_3d, origin: QVector3D, normal: QVector3D) -> lis
     """Rebuild minimal faces from coplanar ``segments_3d`` (list of
     ``(QVector3D, QVector3D)``). Returns ``[(outer_loop, [hole_loops]), …]`` with
     every loop a list of ``QVector3D`` on the plane."""
+    from core import doc_model
+    if doc_model.ENABLED:
+        from ingetrazo_core import arrange_plane
+        return arrange_plane(segments_3d, origin, plane_basis(normal), False)[1]
     _coords, _adj, faces_xy, to3d = _arrange(segments_3d, origin, normal)
     return [
         ([to3d(p) for p in outer], [[to3d(p) for p in h] for h in holes])
@@ -372,6 +386,10 @@ def planar_rebuild(segments_3d, origin: QVector3D, normal: QVector3D):
     """Full planar rebuild: returns ``(edges_3d, faces_3d)`` where ``edges_3d`` is
     the complete split edge set (so nothing is lost, including spurs) and
     ``faces_3d`` is ``[(outer, [holes])]`` — exactly what the command re-adds."""
+    from core import doc_model
+    if doc_model.ENABLED:
+        from ingetrazo_core import arrange_plane
+        return arrange_plane(segments_3d, origin, plane_basis(normal), True)
     coords, full_adj, faces_xy, to3d = _arrange(segments_3d, origin, normal)
     edges = []
     seen = set()
@@ -422,6 +440,10 @@ def coplanar_plane(points, tol: float = 1e-4):
 def _interior_point(loop: list):
     """A point safely inside the polygon ``loop`` (average of a triangle fan
     vertex that tests inside), good enough for containment nesting."""
+    from core import doc_model
+    if doc_model.ENABLED:
+        from ingetrazo_core import plane_interior_point
+        return plane_interior_point(loop)
     n = len(loop)
     cx = sum(p[0] for p in loop) / n
     cy = sum(p[1] for p in loop) / n
@@ -448,6 +470,10 @@ def scan_interior_point(outer: list, holes=()):
     the region in spans; the middle of the widest span (measured against
     the band's height too) is as far from every boundary as such a simple
     probe gets, whatever the shape — a C, an L, a ring."""
+    from core import doc_model
+    if doc_model.ENABLED:
+        from ingetrazo_core import plane_scan_point
+        return plane_scan_point(outer, holes)
     loops = [outer, *holes]
     ys = sorted({p[1] for lp in loops for p in lp})
     best = None

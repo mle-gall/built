@@ -220,6 +220,10 @@ def _region_test_point(outer_xy, holes_xy):
     samples the region's *material*, not a void. The plain centroid of an annular
     region (a cap with a skylight) falls in the hole, which would misread it as
     outside the solid; this nudges in from an outer edge instead when needed."""
+    from core import doc_model
+    if doc_model.ENABLED:
+        from ingetrazo_core import plane_region_point
+        return plane_region_point(outer_xy, holes_xy)
     p = _interior_point(outer_xy)
     # Verified, not assumed: for a C-shaped region (a door cut through the
     # bottom ring of a wall) the old point could fall in the notch, the
@@ -273,6 +277,10 @@ def _union_outline(solid_regions_xy, keep_segs=None) -> list:
     with a visible ridge, as users expect. The test is geometric (midpoint on
     segment): the arrangement splits edges at crossings, so an endpoint-pair
     match would lose the crease on the split-off pieces."""
+    from core import doc_model
+    if doc_model.ENABLED:
+        from ingetrazo_core import trace_plane_outline
+        return _nest_outlines(trace_plane_outline(solid_regions_xy, keep_segs or ()))
     dir_count: dict = defaultdict(int)
     coords: dict = {}
     for outer, holes in solid_regions_xy:
@@ -382,6 +390,11 @@ def _union_outline(solid_regions_xy, keep_segs=None) -> list:
 
 
 def _nest_outlines(loops):
+    from core import doc_model
+    if doc_model.ENABLED:
+        from ingetrazo_core import plane_nesting
+        return [(loops[i], [loops[j] for j in holes])
+                for i, holes in plane_nesting(loops, False)]
     # Classify: CCW loops are outer faces, CW loops are holes; nest each hole in
     # the smallest outer that contains it.
     outers = [lp for lp in loops if _signed_area(lp) > _area_floor(lp)]

@@ -334,3 +334,22 @@ def test_cap_coverage_counts_a_fresh_face_outside_the_seeded_scope():
     assert object_cap_coverage([old], {fresh}, None, origin, normal,
                                plane_basis(normal), probes, 1e-4) == [
         (True, 1, 2), (False, 0, 2), (False, 0, 0)]
+
+
+def test_collinear_outline_turns_use_the_runtime_grid_key_order():
+    from core.cap_rebuild import _union_outline
+
+    for x in (0.0, float(2**51)):
+        a, b, c = (x, 0.), (x + 1, 0.), (x, 1.)
+        d, e = (x + 2, 0.), (x + 1, 2.)
+        def cell(p):
+            return tuple(round(v / 1e-4) for v in p)
+        # At a, b and d make exactly the same angle. The original stable
+        # angular sort retains the order of their cells in the neighbour set.
+        neighbours = set()
+        for p in (b, c, d, e):
+            neighbours.add(cell(p))
+        tied = [k for k in neighbours if k in (cell(b), cell(d))]
+        expected = [([a, b, c], []), ([a, d, e], [])] if tied[-1] == cell(b) else [
+            ([a, b, c, a, d, e], [])]
+        assert _union_outline([([a, b, c], []), ([a, d, e], [])]) == expected

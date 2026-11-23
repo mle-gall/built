@@ -60,6 +60,15 @@ mod panic_log;
 #[pymodule]
 fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(push_command::rebuild_push_planes, m)?)?;
+    m.add_function(wrap_pyfunction!(store::arrangement::arrange_plane, m)?)?;
+    m.add_function(wrap_pyfunction!(store::arrangement::plane_split_graph, m)?)?;
+    m.add_function(wrap_pyfunction!(store::arrangement::plane_segment_parameter, m)?)?;
+    m.add_function(wrap_pyfunction!(store::arrangement::plane_intersections, m)?)?;
+    m.add_function(wrap_pyfunction!(store::planar::plane_region_point, m)?)?;
+    m.add_function(wrap_pyfunction!(store::planar::plane_nesting, m)?)?;
+    m.add_function(wrap_pyfunction!(store::planar::plane_interior_point, m)?)?;
+    m.add_function(wrap_pyfunction!(store::planar::plane_scan_point, m)?)?;
+    m.add_function(wrap_pyfunction!(store::planar::trace_plane_outline, m)?)?;
     m.add_function(wrap_pyfunction!(store::plane_regions::rebuild_region_faces, m)?)?;
     m.add_function(wrap_pyfunction!(store::plane_repair::object_cap_coverage, m)?)?;
     m.add_function(wrap_pyfunction!(store::plane_repair::shadowed_push_faces, m)?)?;
