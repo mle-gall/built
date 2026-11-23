@@ -151,7 +151,8 @@ def _unshift(snap, off):
     snap = dict(snap)
     snap["edges"] = sorted(sorted((un(a), un(b))) for a, b in snap["edges"])
     for k in ("start", "first"):
-        snap[k] = un(snap[k])
+        if k in snap:
+            snap[k] = un(snap[k])
     snap["lines"] = [[un(a), un(b)] for a, b in snap["lines"]]
     return snap
 
@@ -297,12 +298,136 @@ def run_select(steps):
     return out
 
 
-def record():
+# ---- Rectangle ------------------------------------------------------------
+
+class RectView(LineView):
+    """A Line view that also keeps what the tool flashed."""
+
+    def __init__(self, far=False):
+        super().__init__(far)
+        self.flashed = []
+
+    def flash_status(self, text, *a, **k):
+        self.flashed.append(text)
+
+
+def _rect_snapshot(view, tool):
+    snap = _line_snapshot_base(view, tool)
+    label = tool.value_label()
+    snap.update(label=None if label is None else [label[0], _pt(label[1])],
+                plane_lock=tool.plane_lock,
+                work_plane=None if tool.work_plane is None else [_pt(p) for p in tool.work_plane],
+                flashed=list(view.flashed))
+    view.flashed.clear()
+    return snap
+
+
+def _line_snapshot_base(view, tool):
+    mesh = view.scene.mesh
+    edges = sorted(sorted((_pt(e.a), _pt(e.b))) for e in mesh.edges)
+    return {"edges": edges, "faces": len(mesh.faces), "undo": len(view.history.undo_stack),
+            "start": _pt(tool.start_point),
+            "lines": [[_pt(a), _pt(b)] for a, b in tool.rubber_band_lines()]}
+
+
+RECT_SCENARIOS = {
+    "two_corners": [("click", (0, 0, 0)), ("hover", (2, 1, 0)), ("click", (2, 1, 0))],
+    "square_cue_snaps_the_far_corner": [
+        ("click", (0, 0, 0)), ("hover", (2, 2.05, 0)), ("click", (2, 2.05, 0))],
+    "shift_square_lock": [
+        ("click", (0, 0, 0)), ("hover", (2, 2.02, 0), "shift"), ("hover", (3, 1, 0), "shift"),
+        ("click", (3, 1, 0), "shift")],
+    "down_arrow_square_lock": [
+        ("click", (0, 0, 0)), ("hover", (2, 2.03, 0)), ("key", "down"), ("hover", (3, 1, 0)),
+        ("click", (3, 1, 0))],
+    "from_the_centre_with_ctrl": [
+        ("key", "ctrl"), ("key_release", "ctrl", True), ("click", (1, 1, 0)), ("hover", (2, 1.5, 0)),
+        ("click", (2, 1.5, 0))],
+    "ctrl_in_a_chord_takes_itself_back": [
+        ("key", "ctrl"), ("key_release", "ctrl", False), ("click", (0, 0, 0)), ("hover", (1, 2, 0)),
+        ("click", (1, 2, 0))],
+    "typed_width_and_height": [
+        ("click", (0, 0, 0)), ("hover", (-1, 1, 0)), ("value", (3.0, 2.0))],
+    "a_lone_value_sets_the_side_being_stretched": [
+        ("click", (0, 0, 0)), ("hover", (1, 0.5, 0)), ("hover", (2, 0.5, 0)), ("value", 4.0),
+        ("click", (5, 5, 0)), ("hover", (5.2, 6, 0)), ("hover", (5.2, 7, 0)), ("value", 3.0)],
+    "retype_after_drawing": [
+        ("click", (0, 0, 0)), ("hover", (2, 1, 0)), ("click", (2, 1, 0)), ("value", (4.0, 3.0)),
+        ("value", 5.0), ("value", (1.0, 1.0))],
+    "a_flat_rectangle_draws_nothing": [
+        ("click", (0, 0, 0)), ("hover", (2, 0, 0)), ("click", (2, 0, 0))],
+    "plane_lock_after_the_first_corner": [
+        ("click", (0, 0, 0)), ("key", "right"), ("hover", (0, 2, 1)), ("click", (0, 2, 1))],
+    "cancel_mid_rectangle": [
+        ("click", (0, 0, 0)), ("hover", (1, 1.5, 0)), ("cancel",), ("hover", (2, 2, 0)),
+        ("click", (3, 3, 0)), ("hover", (4, 5, 0)), ("click", (4, 5, 0))],
+    "typed_far_from_the_origin": [
+        ("click", (0.01, 0.02, 0)), ("hover", (0.03, 0.05, 0)), ("value", (0.022345678912, 0.038912345678))],
+}
+
+_KEYS = {"down": "Key_Down", "right": "Key_Right", "ctrl": "Key_Control"}
+
+
+def run_rect(steps, far=False):
+    from ingetrazo_core import Vec3
+    from PySide6.QtCore import QPointF, Qt
+    from tools.base import ToolContext
+    from tools.rectangle import RectangleTool
+    view = RectView(far=far)
+    off = view.offset
+    tool = RectangleTool()
+    tool.on_activate(view)
+
+    def at(p):
+        return Vec3(*(float(v) + o for v, o in zip(p, off)))
+
+    out = []
+    for step in steps:
+        kind = step[0]
+        result = None
+        if kind in ("click", "hover"):
+            mods = Qt.ShiftModifier if len(step) > 2 and step[2] == "shift" else Qt.NoModifier
+            ctx = ToolContext(view, at(step[1]), QPointF(0, 0), mods, _Snap("on_face"))
+            (tool.on_click if kind == "click" else tool.on_hover)(ctx)
+        elif kind == "value":
+            v = step[1]
+            result = bool(tool.on_value(view, tuple(map(float, v)) if isinstance(v, (list, tuple)) else float(v)))
+        elif kind == "key":
+            result = bool(tool.on_key(view, getattr(Qt, _KEYS[step[1]]), Qt.NoModifier))
+        elif kind == "key_release":
+            tapped = step[2]
+            view.ctrl_tapped = lambda: tapped
+            result = bool(tool.on_key_release(view, getattr(Qt, _KEYS[step[1]])))
+        elif kind == "cancel":
+            tool.on_cancel(view)
+        snap = _rect_snapshot(view, tool)
+        if far:
+            snap = _unshift(snap, off)
+            if snap["label"] is not None:
+                snap["label"][1] = [_r(v - o) for v, o in zip(snap["label"][1], off)]
+            snap["work_plane"] = None if snap["work_plane"] is None else [
+                [_r(v - o) for v, o in zip(snap["work_plane"][0], off)], snap["work_plane"][1]]
+        snap["result"] = result
+        out.append(snap)
+    return out
+
+
+def rect_cases():
+    for name, steps in RECT_SCENARIOS.items():
+        yield name, steps, name == "typed_far_from_the_origin"
+
+
+def record(which=("line", "select", "rectangle")):
     FIXTURES.mkdir(parents=True, exist_ok=True)
-    line = {name: run_line(steps, far) for name, steps, far in line_cases()}
-    (FIXTURES / "line.json").write_text(json.dumps(line, indent=1) + "\n")
-    select = {name: run_select(steps) for name, steps in SELECT_SCENARIOS.items()}
-    (FIXTURES / "select.json").write_text(json.dumps(select, indent=1) + "\n")
+    if "line" in which:
+        line = {name: run_line(steps, far) for name, steps, far in line_cases()}
+        (FIXTURES / "line.json").write_text(json.dumps(line, indent=1) + "\n")
+    if "select" in which:
+        select = {name: run_select(steps) for name, steps in SELECT_SCENARIOS.items()}
+        (FIXTURES / "select.json").write_text(json.dumps(select, indent=1) + "\n")
+    if "rectangle" in which:
+        rect = {name: run_rect(steps, far) for name, steps, far in rect_cases()}
+        (FIXTURES / "rectangle.json").write_text(json.dumps(rect, indent=1) + "\n")
 
 
 def load(tool):
@@ -310,7 +435,7 @@ def load(tool):
 
 
 if __name__ == "__main__":
-    if sys.argv[1:] == ["record"]:
+    if sys.argv[1:2] == ["record"]:
         os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
         sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-        record()
+        record(tuple(sys.argv[2:]) or ("line", "select", "rectangle"))

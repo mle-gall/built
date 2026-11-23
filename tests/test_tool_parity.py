@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """The tools replay the scenarios recorded from the Python tools before
 they moved to Rust (docs/rust-tools.md §11, tests/tool_parity.py)."""
+import json
+
 import pytest
 
 from tests import tool_parity as tp
@@ -25,3 +27,17 @@ def test_line_matches_the_recorded_python_tool(name):
 def test_select_matches_the_recorded_python_tool(name):
     got = tp.run_select(tp.SELECT_SCENARIOS[name])
     assert got == SELECT[name]
+
+
+RECT = tp.load("rectangle")
+
+
+@pytest.mark.parametrize("name", sorted(tp.RECT_SCENARIOS))
+def test_rectangle_matches_the_recorded_python_tool(name):
+    far = name == "typed_far_from_the_origin"
+    got = tp.run_rect(tp.RECT_SCENARIOS[name], far=far)
+    want = RECT[name]
+    assert len(got) == len(want)
+    for i, (g, w) in enumerate(zip(got, want)):
+        g = json.loads(json.dumps(g))
+        assert g == w, f"step {i}: {tp.RECT_SCENARIOS[name][i]}"
