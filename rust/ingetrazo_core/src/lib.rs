@@ -60,6 +60,10 @@ mod panic_log;
 #[pymodule]
 fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(push_command::rebuild_push_planes, m)?)?;
+    m.add_function(wrap_pyfunction!(store::plane_regions::rebuild_region_faces, m)?)?;
+    m.add_function(wrap_pyfunction!(store::plane_repair::plane_fingerprint, m)?)?;
+    m.add_function(wrap_pyfunction!(store::plane_repair::install_rebuilt_plane, m)?)?;
+    m.add_function(wrap_pyfunction!(store::plane_repair::prune_object_plane, m)?)?;
     m.add_function(wrap_pyfunction!(store::intersection_edit::partition_intersections, m)?)?;
     m.add_function(wrap_pyfunction!(object_merge::revert_recorded_union, m)?)?;
     m.add_function(wrap_pyfunction!(object_merge::merge_seeded_edges, m)?)?;

@@ -6,7 +6,7 @@ type Point = [f64; 2];
 type Cell = [i64; 2];
 pub type Region = (Vec<Point>, Vec<Vec<Point>>);
 
-fn on_segment(p: Point, [a, b]: [Point; 2], tol: f64) -> bool {
+pub(super) fn on_segment(p: Point, [a, b]: [Point; 2], tol: f64) -> bool {
     let (x, y) = (b[0] - a[0], b[1] - a[1]);
     let (px, py) = (p[0] - a[0], p[1] - a[1]);
     let dot = px * x + py * y;

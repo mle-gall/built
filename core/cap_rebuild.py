@@ -593,6 +593,22 @@ def rebuild_plane(mesh, origin: QVector3D, normal: QVector3D,
                      winding_mask(skin_polys, p), winding_mask(fresh_polys, p))
                     for _, _, p in samples]
 
+    from core import doc_model
+    if doc_model.ENABLED:
+        from ingetrazo_core import rebuild_region_faces
+
+        def region_outlines(regions, creases):
+            if native:
+                loops = mesh._store.snapshot().trace_cap_outlines(regions, creases, _TOL)
+                if loops is not None:
+                    return _nest_outlines(loops)
+            return _union_outline(regions, creases)
+
+        return rebuild_region_faces(
+            origin, normal, (u, v), samples, coverage, plane_edges, keep_mode, removing,
+            op, cache, _SAMPLE_OFF, _ON_PLANE, _TOL / 2, ray_parity_outside, rng,
+            packed, region_outlines)
+
     # Group boundary regions by which side holds the material — each group is
     # unioned separately because its faces wind the other way (outward points
     # toward the empty side). Partition and sheet regions form extra groups.
@@ -794,6 +810,14 @@ def apply_rebuild(mesh, origin: QVector3D, normal: QVector3D,
     normal = normal.normalized()
     rebuilt = rebuild_plane(mesh, origin, normal, fresh, keep_mode, removing,
                             op, cache)
+    from core import doc_model
+    if doc_model.ENABLED:
+        from ingetrazo_core import install_rebuilt_plane
+        changed = install_rebuilt_plane(mesh, origin, normal, rebuilt, cache, _ON_PLANE,
+                                        _replace_plane_store, _region_test_point, plane_basis)
+        if changed and prune:
+            prune_plane_debris(mesh, origin, normal)
+        return changed
     if rebuilt is None:
         return False
     scope = cache.scope(mesh) if cache is not None else None
@@ -859,6 +883,24 @@ def apply_rebuild(mesh, origin: QVector3D, normal: QVector3D,
     return True
 
 
+def _replace_plane_store(mesh, old, rebuilt):
+    from core.store_mesh import FaceView, StoreMesh, _fallback
+    if isinstance(mesh, StoreMesh):
+        from core.topology import _maximal_holes
+        caps = []
+        for outer, holes, interior in rebuilt:
+            rings = [outer, *(_maximal_holes(holes) if len(holes) > 1 else holes)]
+            caps.append(([[p.toTuple() for p in ring] for ring in rings], interior))
+        try:
+            keys, _change = mesh._store.replace_plane_faces([f.key for f in old], caps)
+        except _fallback():
+            pass  # Replay through remove_face/add_face below.
+        else:
+            mesh._dirty()
+            return [FaceView(mesh, k) for k in keys]
+    return None
+
+
 def prune_plane_debris(mesh, origin: QVector3D, normal: QVector3D) -> None:
     """Drop edges that lie fully on the plane and face nothing — the interior
     seams a union dissolved. Perimeter edges still border a wall, so they keep
@@ -872,6 +914,10 @@ def prune_plane_debris(mesh, origin: QVector3D, normal: QVector3D) -> None:
         if any(change.removed.values()):
             mesh._dirty()
         return
+    from core import doc_model
+    if doc_model.ENABLED:
+        from ingetrazo_core import prune_object_plane
+        return prune_object_plane(mesh, origin, normal, _ON_PLANE)
     for e in list(mesh.edges):
         if (not e.faces
                 and _on_plane(e.a, origin, normal)
