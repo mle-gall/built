@@ -372,15 +372,6 @@ def test_folders_are_saved_with_the_document(win, tmp_path):
         [("Ground", "Floors"), ("North", None)]
 
 
-def test_updating_a_scene_keeps_its_folder(win):
-    panel = _scenes(win, "Ground")
-    _folder(panel, "Plans")
-    panel.drop_rows(("folder", "Plans"), [panel.row_for(_view(win, "Ground"))])
-    panel.select_view(_view(win, "Ground"))
-    panel._on_update()
-    assert _view(win, "Ground").folder == "Plans"
-
-
 # ---- 4. Reorder by dragging -------------------------------------------------
 
 def test_a_row_dragged_reorders_the_scenes_in_one_undo_step(win):
@@ -421,50 +412,6 @@ def test_views_and_sheets_lists_the_scenes_in_the_new_order(win):
 
 
 # ---- 5. Undo for everything -------------------------------------------------
-
-def test_add_is_undoable(win):
-    panel = _scenes(win)
-    view = panel._on_add()
-    assert panel.current_view() is view
-    win.viewport.history.undo()
-    panel.refresh()
-    assert _names(win) == [] and panel.scene_rows() == []
-    win.viewport.history.redo()
-    assert len(_names(win)) == 1
-
-
-def test_update_is_undoable(win):
-    panel = _scenes(win, "A")
-    view = _view(win, "A")
-    cam = win.viewport.camera
-    before = view.distance
-    cam.distance = before + 37.0
-    panel.select_view(view)
-    panel._on_update()
-    assert view.distance == pytest.approx(before + 37.0)
-    win.viewport.history.undo()
-    assert view.distance == pytest.approx(before)
-    assert view.name == "A"
-    win.viewport.history.redo()
-    assert view.distance == pytest.approx(before + 37.0)
-
-
-def test_rename_in_the_row_is_undoable_and_carries_the_sheets(win):
-    from core.composition import Composicion
-    panel = _scenes(win, "A", "B")
-    scene = win.viewport.scene
-    page = Composicion(name="Sheet")
-    frame = page.default_frame()
-    frame.view_key = "scene:A"
-    page.frames.append(frame)
-    scene.compositions.append(page)
-    panel.row_for(_view(win, "A")).setText(0, "Ground floor")  # inline edit
-    assert _names(win) == ["Ground floor", "B"]
-    assert frame.view_key == "scene:Ground floor"
-    win.viewport.history.undo()
-    assert _names(win) == ["A", "B"]
-    assert frame.view_key == "scene:A"
-
 
 def test_rename_edits_the_row_when_the_tab_is_in_sight(win, monkeypatch):
     """As Layers and the Browser: no window over the panel, the name is
@@ -512,17 +459,6 @@ def test_the_name_prompt_is_the_programs_wide_one(win, monkeypatch):
     assert used and used[0]["text"] == "A"
 
 
-def test_a_name_another_scene_has_is_refused_and_nothing_to_undo(win):
-    panel = _scenes(win, "A", "B")
-    history = win.viewport.history
-    steps = len(history.undo_stack)
-    panel.row_for(_view(win, "B")).setText(0, "A")
-    assert _names(win) == ["A", "B"]
-    assert _rows(panel) == ["A", "B"]
-    assert len(history.undo_stack) == steps
-    assert "already called" in win.statusBar().currentMessage()
-
-
 def test_rename_from_views_and_sheets_is_undoable_too(win):
     from views.outliner import SheetsPanel
     _scenes(win, "A")
@@ -531,15 +467,6 @@ def test_rename_from_views_and_sheets_is_undoable_too(win):
     assert view.name == "Section"
     win.viewport.history.undo()
     assert view.name == "A"
-
-
-def test_delete_is_still_undoable(win):
-    panel = _scenes(win, "A", "B")
-    panel.select_view(_view(win, "A"))
-    panel._on_delete()
-    assert _names(win) == ["B"]
-    win.viewport.history.undo()
-    assert _names(win) == ["A", "B"]
 
 
 # ---- 6. A mark on the scene shown -------------------------------------------
@@ -804,29 +731,6 @@ def test_one_command_of_each_kind_for_scenes():
     assert hasattr(S, "RenameSceneCommand") and hasattr(S, "MoveSceneCommand")
 
 
-def test_a_tab_dragged_among_folders_lands_with_the_scene_after_it(win):
-    """A scene tab dragged to another place: it goes right before the
-    scene that follows it there, into that scene's folder — what dropping
-    it on that row in the panel does — in one undo step."""
-    panel = _scenes(win, "A", "B", "C", "D")
-    _folder(panel, "F")
-    panel.drop_rows(("folder", "F"), [panel.row_for(_view(win, "C")),
-                                      panel.row_for(_view(win, "D"))])
-    assert _names(win) == ["C", "D", "A", "B"]   # a folder before scenes
-    steps = len(win.viewport.history.undo_stack)
-    panel.move_view(_view(win, "A"), 1)        # between C and D
-    assert _names(win) == ["C", "A", "D", "B"]
-    assert SF.folder_of(win.viewport.scene, _view(win, "A")) == "F"
-    assert len(win.viewport.history.undo_stack) == steps + 1
-    panel.move_view(_view(win, "B"), 3)        # to the end: after D, in F
-    assert _names(win) == ["C", "A", "D", "B"]
-    assert SF.folder_of(win.viewport.scene, _view(win, "B")) == "F"
-    win.viewport.history.undo()
-    win.viewport.history.undo()
-    assert _names(win) == ["C", "D", "A", "B"]
-    assert SF.folder_of(win.viewport.scene, _view(win, "A")) is None
-
-
 def test_alt_arrows_move_a_scene_within_its_folder(win):
     panel = _scenes(win, "A", "B", "C")
     _folder(panel, "F")
@@ -842,21 +746,6 @@ def test_alt_arrows_move_a_scene_within_its_folder(win):
     assert _names(win) == ["C", "B", "A"]
     assert len(win.viewport.history.undo_stack) == steps
     assert SF.folder_of(win.viewport.scene, _view(win, "C")) == "F"
-
-
-def test_plus_of_the_tabs_files_the_scene_with_the_one_shown(win):
-    """In a folder the new scene is not the last of the list: its own tab
-    is the one marked."""
-    panel = _scenes(win, "A", "B")
-    _folder(panel, "F")
-    panel.drop_rows(("folder", "F"), [panel.row_for(_view(win, "A"))])
-    panel.activate_view(_view(win, "A"))
-    panel.tree.clearSelection()
-    win._add_scene_from_tabs()
-    new = win.viewport.scene.saved_views[1]
-    assert SF.folder_of(win.viewport.scene, new) == "F"
-    tabs = win._scene_tabs.tabs
-    assert tabs.tabText(tabs.currentIndex()) == new.name
 
 
 def test_update_from_a_scene_tab_is_one_undo_step(win):

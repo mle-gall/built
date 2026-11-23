@@ -954,16 +954,16 @@ impl Ui {
                             if let Some(r) = menu_button(ui, &work, self.menu.as_ref().is_some_and(|m| m.0 == "work")) {
                                 open = Some(("work", r));
                             }
-                            if let Some(scenes) = self.tabs.get(1).filter(|g| !g.is_empty()) {
+                            if let Some(scenes) = self.tabs.get(1).filter(|_| self.tabs[0].iter().any(|row| row.0 == "model" && row.4 == 1)) {
                                 let cur = scenes.iter().position(|i| i.4 == 1);
                                 let prev = (String::new(), "‹".to_owned(), "Previous scene (⇞)".to_owned(), String::new(), -1i8, true);
-                                if item_button(ui, &prev, None) { clicked = Some("scene:prev".into()); }
+                                if !scenes.is_empty() && item_button(ui, &prev, None) { clicked = Some("scene:prev".into()); }
                                 let name = cur.map_or("Scenes".to_owned(), |i| scenes[i].1.clone());
                                 if let Some(r) = menu_button(ui, &name, self.menu.as_ref().is_some_and(|m| m.0 == "scenes")) {
                                     open = Some(("scenes", r));
                                 }
                                 let next = (String::new(), "›".to_owned(), "Next scene (⇟)".to_owned(), String::new(), -1i8, true);
-                                if item_button(ui, &next, None) { clicked = Some("scene:next".into()); }
+                                if !scenes.is_empty() && item_button(ui, &next, None) { clicked = Some("scene:next".into()); }
                             }
                         });
                         groups.push(left.response.rect);
@@ -1200,6 +1200,7 @@ impl Ui {
     fn bar_menu(&mut self, ctx: &egui::Context) {
         let Some((kind, anchor)) = self.menu.clone() else { return };
         let mut clicked: Option<String> = None;
+        let mut submenu = None;
         egui::Area::new(egui::Id::new("menu"))
             .fixed_pos(pos2(anchor.min.x, anchor.max.y + 8.0))
             .order(egui::Order::Foreground)
@@ -1258,12 +1259,38 @@ impl Ui {
                                         clicked = Some(format!("tab:{id}"));
                                     }
                                 }
+                                ui.add_space(SPACE_XS);
+                                caption_at(ui, "Visibility sets", 12.0);
+                                if let Some(sets) = self.tabs.get(2) {
+                                    for set in sets {
+                                        if menu_row(ui, set) { submenu = Some(set.0.clone()); }
+                                    }
+                                }
+                                if menu_row(ui, &("".into(), "Save current visibility…".into(), "".into(), "".into(), -1, true)) {
+                                    clicked = Some("tab:visibility:save".into());
+                                }
+                            }
+                        }
+                        set if set.starts_with("visibility:apply:") => {
+                            if let Some(row) = self.tabs.get(2).and_then(|rows| rows.iter().find(|r| r.0 == set)) {
+                                caption_at(ui, &row.1, 12.0);
+                                let id = &set["visibility:apply:".len()..];
+                                for (verb, label) in [("apply", "Apply"), ("update", "Update from current visibility"),
+                                                       ("rename", "Rename…"), ("delete", "Delete…")] {
+                                    if menu_row(ui, &("".into(), label.into(), "".into(), "".into(), -1, true)) {
+                                        clicked = Some(format!("tab:visibility:{verb}:{id}"));
+                                    }
+                                }
+                            }
+                            if menu_row(ui, &("".into(), "Back to scenes".into(), "".into(), "".into(), -1, true)) {
+                                submenu = Some("scenes".to_owned());
                             }
                         }
                         _ => {}
                     }
                 });
             });
+        if let Some(next) = submenu { self.menu = Some((next, anchor)); }
         if let Some(a) = clicked {
             self.menu = None;
             self.actions.push(a);

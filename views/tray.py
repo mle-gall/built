@@ -5504,14 +5504,14 @@ class ScenesPanel(QWidget):
     def rename(self, view, name: str) -> bool:
         """Rename ``view`` undoably; a name another scene has is refused
         with the Browser's message."""
-        from core.saved_views import RenameSceneCommand
-        history = self._history()
+        from core.protocol.commands import edit_saved_scene
         self._begin_own()
-        history.execute(RenameSceneCommand(view, name))
-        if history.last_rejected is not None:
-            self._window.statusBar().showMessage(tr(
-                "Another scene is already called «{name}»",
-                name=name.strip()), 3500)
+        result = edit_saved_scene(self._history(), "rename", views=[view], name=name)
+        if not result["ok"]:
+            if result["rejected"]:
+                self._window.statusBar().showMessage(tr(
+                    "Another scene is already called «{name}»",
+                    name=name.strip()), 3500)
             return False
         self.refresh()
         self._touch()
@@ -5586,21 +5586,15 @@ class ScenesPanel(QWidget):
     def _on_add(self, folder=_CONTEXT):
         """A scene from the current view, in the folder picked (or
         ``folder``); it becomes the current row. The new scene."""
-        from core.history import AddSceneCommand
-        from core.saved_views import SavedView
-        scene = self._scene()
+        from core.protocol.commands import edit_saved_scene
         if folder is ScenesPanel._CONTEXT:
             folder = self._context_folder()
-        base = tr("Scene")
-        n = 1
-        taken = {v.name for v in scene.saved_views}
-        while f"{base} {n}" in taken:
-            n += 1
         camera, style = self._live_view()
-        view = SavedView.capture(f"{base} {n}", scene, camera, style)
-        view.folder = folder
         self._begin_own()
-        self._history().execute(AddSceneCommand(view))
+        result = edit_saved_scene(self._history(), "add", name=tr("Scene"), camera=camera, style=style, folder=folder)
+        if not result["ok"]:
+            return None
+        view = self._scene().saved_views[result["index"]]
         self.select_view(view)
         self._touch()
         return view
@@ -5613,10 +5607,11 @@ class ScenesPanel(QWidget):
         (the bar, the right-click menus, Camera ▸ Scenes)."""
         if view is None:
             return
-        from core.history import UpdateSceneCommand
+        from core.protocol.commands import edit_saved_scene
         self._begin_own()
-        self._history().execute(
-            UpdateSceneCommand(view, *self._live_view()))
+        camera, style = self._live_view()
+        if not edit_saved_scene(self._history(), "update", views=[view], camera=camera, style=style)["ok"]:
+            return
         self._touch()
         self.refresh()                     # its picture is drawn again
         self._window.statusBar().showMessage(
@@ -5649,21 +5644,12 @@ class ScenesPanel(QWidget):
         as one undo step. Folders keep together: it lands right before the
         scene that comes after it there, in that scene's folder — what a
         drop on that row does; at the end, after the scene before it."""
-        from core import scene_folders as SF
-        scene = self._scene()
-        if view is None or not any(v is view for v in scene.saved_views):
-            return
-        order = [v for v in scene.saved_views if v is not view]
-        index = max(0, min(int(index), len(order)))
-        if index < len(order):
-            nxt = order[index]
-            folder, before = SF.folder_of(scene, nxt), nxt
-        else:
-            prev = order[-1] if order else None
-            folder = SF.folder_of(scene, prev) if prev is not None else None
-            before = None
-        self._tree_change(
-            SF.FolderEdit.move_rows([view], [], folder, before))
+        from core.protocol.commands import edit_saved_scene
+        self._begin_own()
+        if edit_saved_scene(self._history(), "move", views=[view], index=index)["ok"]:
+            self._shape = None
+            self.refresh()
+            self._touch()
 
     def _on_move(self, step: int) -> None:
         """One place up or down for the current scene, among the scenes of
@@ -5706,12 +5692,10 @@ class ScenesPanel(QWidget):
 
     def delete_views(self, views) -> None:
         """Delete these scenes, as one undo step (Delete, the menus)."""
-        views = [v for v in views if v is not None]
-        if not views:
-            return
-        from core.history import DeleteScenesCommand
+        from core.protocol.commands import edit_saved_scene
         self._begin_own()
-        self._history().execute(DeleteScenesCommand(views))
+        if not edit_saved_scene(self._history(), "delete", views=views)["ok"]:
+            return
         self.refresh()
         self._touch()
 

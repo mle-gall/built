@@ -388,11 +388,16 @@ def _tabs(view, win) -> None:
             ("sheet", sheet, "Sheets (⌃Tab)", "", 1 if on_sheets else 0, True)]
     scenes = [] if on_sheets else [(f"scene:{i}", v.name, "Scene", "", 1 if v is marked else 0, True)
                                    for i, v in enumerate(views)]
-    tabs = [work, scenes]
+    from ingetrazo_core import visibility_set_rows
+    version = getattr(scene, "content_version", 0)
+    cached = getattr(view, "_ui_visibility_cache", None)
+    if cached is None or cached[0] is not scene or cached[1] != version:
+        view._ui_visibility_cache = (scene, version, visibility_set_rows(scene))
+    tabs = [work, scenes, view._ui_visibility_cache[2] if not on_sheets else []]
     if tabs != getattr(view, "_ui_tabs", None):
         view._ui_tabs = tabs
-        view._ui_scene_views = views
         view.renderer.ui_set_tabs(tabs)
+    view._ui_scene_views = views
 
 
 def _sheet_and_jobs(view, win) -> None:
@@ -2236,6 +2241,12 @@ def _tree_action(win, view, action) -> None:
                 elif what == "lib":
                     from views import wgpu_library
                     wgpu_library.confirmed(win, view, arg, extra)
+                elif what == "visibility_set":
+                    document, operation, key = arg
+                    if document is scene:
+                        if _core(vp, "edit_visibility_set", verb=operation, key=key, name=extra)["ok"]:
+                            vp.notify_scene_changed()
+                            view.update()
                 elif what == "scene_rename" and extra.strip():
                     panel = getattr(getattr(win, "scenes_dock", None), "panel", None) or getattr(win.tray, "scenes", None)
                     if panel is not None:
@@ -2934,6 +2945,20 @@ def _run(win, actions, source_view=None) -> None:
                 win._show_model()
             elif arg == "sheet":
                 win._to_sheets()
+            elif arg.startswith("visibility:"):
+                operation, _, key = arg[len("visibility:"):].partition(":")
+                vp = win.viewport
+                if operation in ("save", "rename", "delete"):
+                    labels = getattr(view, "_ui_visibility_cache", (None, None, []))[2]
+                    label = next((r[1] for r in labels if r[0] == f"visibility:apply:{key}"), "")
+                    title = {"save": "Save visibility set", "rename": "Rename visibility set",
+                             "delete": f"Delete “{label}”?"}[operation]
+                    body = "" if operation == "delete" else f"{ED}edit{ED}name{ED}{label}"
+                    view._ui_pending = ("visibility_set", (vp.scene, operation, key))
+                    view.renderer.ui_set_prompt(title, body, [("yes", operation.capitalize()), ("no", "Cancel")])
+                elif _core(vp, "edit_visibility_set", verb=operation, key=key)["ok"]:
+                    vp.notify_scene_changed()
+                    view.update()
             elif arg in ("scene:add", "scene:update", "scene:up", "scene:down", "scene:delete", "scene:rename"):
                 panel = getattr(getattr(win, "scenes_dock", None), "panel", None) or getattr(win.tray, "scenes", None)
                 row = getattr(getattr(win, "_scene_tabs", None), "tabs", None)

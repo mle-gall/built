@@ -41,6 +41,8 @@ mod presentation;
 mod object_replay;
 mod object_drawing;
 mod planar_edits;
+mod visibility_sets;
+mod scene_commands;
 mod scene_tree;
 mod structure_bootstrap;
 mod placement_edits;
@@ -239,6 +241,9 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(link_subset::link_selection_sources, m)?)?;
     m.add_function(wrap_pyfunction!(project_tree::project_name_matches, m)?)?;
     m.add_function(wrap_pyfunction!(project_tree::project_item_matches, m)?)?;
+    m.add_function(wrap_pyfunction!(visibility_sets::visibility_set_rows, m)?)?;
+    m.add_function(wrap_pyfunction!(visibility_sets::visibility_set_command, m)?)?;
+    m.add_function(wrap_pyfunction!(scene_commands::plan_scene_command, m)?)?;
     m.add_class::<project_sheets::ProjectSheets>()?;
     m.add_function(wrap_pyfunction!(project_tree::project_context_rows, m)?)?;
     m.add_function(wrap_pyfunction!(structure::file_created_placement, m)?)?;

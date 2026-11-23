@@ -290,72 +290,46 @@ class ShellScenes:
     finish_view = activate_view = show_view
 
     def add_scene(self):
-        from core.history import AddSceneCommand
-        from core.saved_views import SavedView
         from core.i18n import tr
+        from core.protocol.commands import edit_saved_scene
         vp = self._vp()
-        scene = vp.scene
-        taken = {v.name for v in scene.saved_views}
-        n = 1
-        while f"{tr('Scene')} {n}" in taken:
-            n += 1
-        view = SavedView.capture(f"{tr('Scene')} {n}", scene, vp.camera, self._win.active_style())
-        vp.history.execute(AddSceneCommand(view))
+        marked = self._win._scene_tabs.marked_view()
+        result = edit_saved_scene(vp.history, "add", name=tr("Scene"), camera=vp.camera,
+                                  style=self._win.active_style(), folder=getattr(marked, "folder", None))
+        if not result["ok"]:
+            return None
+        view = vp.scene.saved_views[result["index"]]
         self._win._scene_tabs.mark_view(view)
         self._touch()
         return view
 
     def update_view(self, view):
-        if view is None:
-            return
-        from core.history import UpdateSceneCommand
+        from core.protocol.commands import edit_saved_scene
         vp = self._vp()
-        vp.history.execute(UpdateSceneCommand(view, vp.camera, self._win.active_style()))
-        self._touch()
+        if edit_saved_scene(vp.history, "update", views=[view], camera=vp.camera,
+                            style=self._win.active_style())["ok"]:
+            self._touch()
 
     def rename_view(self, view, name):
-        name = (name or "").strip()
-        if view is None or not name or name == view.name:
-            return False
-        from core.saved_views import RenameSceneCommand
-        history = self._vp().history
-        history.execute(RenameSceneCommand(view, name))
-        if history.last_rejected is not None:
+        from core.protocol.commands import edit_saved_scene
+        result = edit_saved_scene(self._vp().history, "rename", views=[view], name=name or "")
+        if result["ok"]:
+            self._touch()
+        elif result["rejected"]:
             self._win.statusBar().showMessage(f"Another scene is already called «{name}»", 3500)
-            return False
-        self._touch()
-        return True
+        return result["ok"]
 
     def delete_views(self, views):
-        views = [v for v in views if v is not None]
-        if not views:
-            return
-        from core.history import DeleteScenesCommand
-        self._vp().history.execute(DeleteScenesCommand(views))
-        if self._win._scene_tabs.marked_view() in views:
-            self._win._scene_tabs.mark_view(None)
-        self._touch()
+        from core.protocol.commands import edit_saved_scene
+        if edit_saved_scene(self._vp().history, "delete", views=views)["ok"]:
+            if self._win._scene_tabs.marked_view() in views:
+                self._win._scene_tabs.mark_view(None)
+            self._touch()
 
     def move_view(self, view, index):
-        from core import scene_folders as SF
-        from core.history import SceneTreeCommand
-        vp = self._vp()
-        scene = vp.scene
-        if view is None or not any(v is view for v in scene.saved_views):
-            return
-        order = [v for v in scene.saved_views if v is not view]
-        index = max(0, min(int(index), len(order)))
-        if index < len(order):
-            nxt = order[index]
-            folder, before = SF.folder_of(scene, nxt), nxt
-        else:
-            prev = order[-1] if order else None
-            folder = SF.folder_of(scene, prev) if prev is not None else None
-            before = None
-
-        edit = SF.FolderEdit.move_rows([view], [], folder, before)
-        vp.history.execute(SceneTreeCommand(edit))
-        self._touch()
+        from core.protocol.commands import edit_saved_scene
+        if edit_saved_scene(self._vp().history, "move", views=[view], index=index)["ok"]:
+            self._touch()
 
 
 class _Tray:
