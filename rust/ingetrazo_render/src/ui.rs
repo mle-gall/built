@@ -6,7 +6,7 @@
 use std::sync::Arc;
 use std::time::Instant;
 
-use egui::{pos2, vec2, Color32, CornerRadius, Margin, Pos2, Rect, Sense, Shadow, Stroke, Vec2};
+use egui::{pos2, vec2, Color32, CornerRadius, Margin, Pos2, Rect, Sense, Stroke, Vec2};
 
 /// Small widgets shared by the dock and the forms (segmented, tabs).
 mod widgets;
@@ -229,29 +229,7 @@ pub struct Column {
 impl Ui {
     pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat) -> Self {
         let ctx = egui::Context::default();
-        ctx.style_mut(|s| {
-            s.interaction.tooltip_delay = 0.25;
-            s.visuals = egui::Visuals::dark();
-            s.animation_time = MOTION_QUICK;
-            s.visuals.window_fill = POPOVER;
-            s.visuals.panel_fill = PANEL;
-            s.visuals.override_text_color = Some(INK);
-            s.visuals.popup_shadow = Shadow { offset: [0, 4], blur: 12, spread: 0, color: POP_SHADOW };
-            s.visuals.window_stroke = Stroke::new(1.0_f32, EDGE);
-            s.visuals.window_corner_radius = CornerRadius::same(6);
-            s.spacing.item_spacing = vec2(2.0, 2.0);
-            s.visuals.extreme_bg_color = FIELD;
-            s.visuals.widgets.inactive.bg_stroke = Stroke::new(1.0_f32, EDGE);
-            s.visuals.widgets.hovered.bg_stroke = Stroke::new(1.0_f32, HOVER_EDGE);
-            s.visuals.widgets.inactive.corner_radius = CornerRadius::same(R_ROW);
-            s.visuals.widgets.hovered.corner_radius = CornerRadius::same(R_ROW);
-            s.visuals.widgets.active.corner_radius = CornerRadius::same(R_ROW);
-            s.visuals.selection.stroke = Stroke::new(1.0_f32, ACCENT);
-            s.visuals.selection.bg_fill = ACTIVE;
-            s.visuals.window_corner_radius = CornerRadius::same(R_CONTROL);
-            s.spacing.button_padding = vec2(8.0, 5.0);
-            s.visuals.text_cursor.stroke = Stroke::new(1.5_f32, BRIGHT);
-        });
+        ctx.style_mut(kit::install_style);
         let mut painter = egui_wgpu::Renderer::new(device, format, None, 1, false);
         let (glass, resources) = crate::glass::Glass::new(device, format);
         painter.callback_resources.insert(resources);
@@ -1915,9 +1893,9 @@ impl Ui {
                             }
                             if title == "Export details" && native_export { continue; }
                             if title.starts_with("Export") {
-                                egui::CollapsingHeader::new(egui::RichText::new(title.to_uppercase()).font(strong(10.0)).color(FAINT))
-                                    .id_salt(title).default_open(false)
-                                    .show(ui, |ui| inspector_rows(ui, rows, &mut col.edits, &mut actions));
+                                ui.add_space(4.0);
+                                kit::disclosure(ui, title, title, false,
+                                    |ui| inspector_rows(ui, rows, &mut col.edits, &mut actions));
                             } else {
                                 ui.add_space(8.0);
                                 caption(ui, title);
@@ -2464,7 +2442,7 @@ fn inspector_rows(ui: &mut egui::Ui, rows: &[(String, String)], edits: &mut std:
             ui.horizontal(|ui| {
                 ui.add_space(8.0);
                 let (lr, _) = ui.allocate_exact_size(vec2(88.0, 24.0), Sense::hover());
-                ui.painter().text(lr.left_center(), egui::Align2::LEFT_CENTER, label, egui::FontId::proportional(11.5), DIM);
+                ui.painter().text(lr.left_center(), egui::Align2::LEFT_CENTER, label, meta(), DIM);
                 let w = (ui.available_width() - 8.0).max(60.0);
                 if let Some(i) = widgets::segmented(ui, &labels, at, w) {
                     if i != at { actions.push(format!("edit\u{1f}{id}\u{1f}{}", labels[i])); }
@@ -2479,7 +2457,7 @@ fn inspector_rows(ui: &mut egui::Ui, rows: &[(String, String)], edits: &mut std:
             ui.horizontal(|ui| {
                 ui.add_space(8.0);
                 let (lr, _) = ui.allocate_exact_size(vec2(88.0, 24.0), Sense::hover());
-                ui.painter().text(lr.left_center(), egui::Align2::LEFT_CENTER, label, egui::FontId::proportional(11.5), DIM);
+                ui.painter().text(lr.left_center(), egui::Align2::LEFT_CENTER, label, meta(), DIM);
                 let (r, resp) = ui.allocate_exact_size(vec2((ui.available_width() - 8.0).max(60.0), 24.0), Sense::click());
                 paint_state(ui, r, state_of(&resp, false, true), R_ROW);
                 let sw = Rect::from_min_size(r.min + vec2(3.0, 3.0), vec2(36.0, 18.0));
@@ -2527,7 +2505,7 @@ fn inspector_rows(ui: &mut egui::Ui, rows: &[(String, String)], edits: &mut std:
             ui.horizontal(|ui| {
                 ui.add_space(8.0);
                 let (lr, _) = ui.allocate_exact_size(vec2(88.0, 24.0), Sense::hover());
-                ui.painter().text(lr.left_center(), egui::Align2::LEFT_CENTER, label, egui::FontId::proportional(11.5), DIM);
+                ui.painter().text(lr.left_center(), egui::Align2::LEFT_CENTER, label, meta(), DIM);
                 // desired_width is the text's width: leave room for the field's
                 // own margins, or the panel grows a little every frame.
                 let w = (ui.available_width() - 8.0 - 12.0 - 4.0).max(40.0);
@@ -2540,12 +2518,12 @@ fn inspector_rows(ui: &mut egui::Ui, rows: &[(String, String)], edits: &mut std:
             continue;
         }
         // Value right-aligned; the label takes what is left, cut short.
-        let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 18.0), Sense::hover());
-        let v = ui.painter().layout_no_wrap(value.clone(), egui::FontId::proportional(12.0), INK);
+        let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), PROP_H), Sense::hover());
+        let v = ui.painter().layout_no_wrap(value.clone(), body(), INK);
         let vw = v.size().x.min(r.width() * 0.6);
         ui.painter().galley(pos2(r.max.x - 8.0 - vw, r.center().y - v.size().y / 2.0), v, INK);
         let mut job = egui::text::LayoutJob::single_section(label.clone(), egui::TextFormat {
-            font_id: egui::FontId::proportional(11.5), color: DIM, ..Default::default() });
+            font_id: meta(), color: DIM, ..Default::default() });
         job.wrap.max_width = (r.width() - vw - 26.0).max(20.0);
         job.wrap.max_rows = 1;
         job.wrap.break_anywhere = true;

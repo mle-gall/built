@@ -13,9 +13,16 @@ palette! {
     FAINT = Color32::from_rgb(0x85, 0x8C, 0x94);
     OFF = Color32::from_rgb(0x5C, 0x63, 0x6A);
     ACCENT = Color32::from_rgb(0x6A, 0xA5, 0xFF);
-    ACTIVE = Color32::from_rgba_premultiplied(25, 40, 61, 61);
+    // Selected: accent at 14 % (was 24 % plus an outline; design pass 2026-11-23).
+    ACTIVE = Color32::from_rgba_premultiplied(15, 23, 36, 36);
     ACCENT_LINE = Color32::from_rgba_premultiplied(58, 91, 140, 140);
     HOVER = Color32::from_rgba_premultiplied(18, 18, 18, 18);
+    // The rest fill of buttons and chips (a neutral wash, no outline).
+    CONTROL = Color32::from_rgba_premultiplied(18, 18, 18, 18);
+    // A visible track on glass: progress bars, switches.
+    TRACK = Color32::from_rgba_premultiplied(28, 28, 28, 28);
+    // The raised segment of a segmented control.
+    THUMB = Color32::from_rgba_premultiplied(41, 41, 41, 41);
     PRESS = Color32::from_rgba_premultiplied(31, 31, 31, 31);
     EDGE = Color32::from_rgba_premultiplied(20, 20, 20, 20);
     FIELD = Color32::from_rgba_premultiplied(0, 0, 0, 71);
@@ -67,8 +74,23 @@ palette! {
 // window's edges and 8 from its neighbours.
 // Rounded squares, not circles (Maxence 2026-11-22: "buttons can remain
 // rounded squares … reduce the radii, it's a bit too much").
-pub const R_CONTROL: u8 = 8; // 28-pt controls, tabs, chips
-pub const R_ROW: u8 = 6; // menu and tree rows, fields
+// Radii follow height (design pass 2026-11-23): 24-pt controls and rows 6,
+// 28-pt buttons, tool buttons and tiles 8, marks inside a control 4.
+pub const R_CONTROL: u8 = 8; // 28-pt buttons, tool buttons, tiles
+pub const R_ROW: u8 = 6; // rows and every 24-pt control: fields, chips, tracks
+pub const R_INSET: u8 = 4; // a thumb, swatch or mark inside a control
+// Heights: every inline control is CONTROL_H so a row of them shares one
+// baseline; sheet buttons are BUTTON_H; tree, list and menu rows ROW_H.
+pub const CONTROL_H: f32 = 24.0;
+pub const BUTTON_H: f32 = 28.0;
+pub const ROW_H: f32 = 24.0;
+// A label-and-value row (inspector properties): denser than a control row.
+pub const PROP_H: f32 = 20.0;
+// Focus: a 1-pt ring 1 pt outside the control, never a fill.
+pub const FOCUS_RING_W: f32 = 1.0;
+pub const FOCUS_GAP: f32 = 1.0;
+// The selected row's leading marker.
+pub const MARKER_W: f32 = 2.0;
 pub const BAR_H: f32 = 36.0;
 pub const EDGE_GAP: f32 = 12.0;
 // The frame: bars docked to the window's edges, side panes floating 8 in.
@@ -78,18 +100,30 @@ pub const GUT: f32 = 8.0;
 pub const DOCK_W: f32 = 300.0;
 pub const DOCK_MIN_W: f32 = 260.0;
 pub const DOCK_MAX_W: f32 = 560.0;
+// Type scale (design pass 2026-11-23): four sizes. Meta 11 for labels,
+// captions, counts and shortcuts; body 12 for values and controls; title 13
+// semibold for a panel's subject; heading 16 semibold for a sheet. Weight
+// and ink, not more sizes, make the rest of the hierarchy.
+pub const TYPE_META: f32 = 11.0;
+pub const TYPE_BODY: f32 = 12.0;
+pub const TYPE_TITLE: f32 = 13.0;
+pub const TYPE_HEADING: f32 = 16.0;
 // Type roles (Inter 400 / 500 / 600 when bundled, else the system font).
 pub fn body() -> egui::FontId {
-    egui::FontId::proportional(12.0)
+    egui::FontId::proportional(TYPE_BODY)
 }
 pub fn meta() -> egui::FontId {
-    egui::FontId::proportional(11.0)
+    egui::FontId::proportional(TYPE_META)
 }
 pub fn strong(size: f32) -> egui::FontId {
     egui::FontId::new(size, egui::FontFamily::Name("medium".into()))
 }
+/// A section label: meta size, medium weight, sentence case, DIM ink.
+pub fn caption_font() -> egui::FontId {
+    strong(TYPE_META)
+}
 pub fn title() -> egui::FontId {
-    egui::FontId::new(13.0, egui::FontFamily::Name("semibold".into()))
+    egui::FontId::new(TYPE_TITLE, egui::FontFamily::Name("semibold".into()))
 }
 pub fn title_font() -> egui::FontId {
     title()
@@ -104,9 +138,12 @@ pub fn parse_hex(s: &str) -> Option<Color32> {
     Some(Color32::from_rgb((v >> 16) as u8, (v >> 8) as u8, v as u8))
 }
 
-/// Glass surfaces (council 2026-11-22): Panel for data (tree, inspector),
-/// Raised for menus, Pill for compact chrome (palette, rows, bars).
-#[derive(Clone, Copy)]
+/// Glass surfaces, lowest to highest (design pass 2026-11-23: each level
+/// has its own tint, opacity and shadow; higher is lighter and casts more):
+/// Bar for docked bars (opaque, flat), Panel for data (tree, inspector),
+/// Pill for compact floating chrome (palette, capsule), Raised for menus,
+/// popovers and toasts.
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Surface {
     Panel,
     Raised,
@@ -114,17 +151,37 @@ pub enum Surface {
     Bar,
 }
 impl Surface {
+    pub const ALL: [Surface; 4] = [Surface::Bar, Surface::Panel, Surface::Pill, Surface::Raised];
+    pub fn name(self) -> &'static str {
+        match self {
+            Surface::Bar => "Bar",
+            Surface::Panel => "Panel",
+            Surface::Pill => "Pill",
+            Surface::Raised => "Raised",
+        }
+    }
+    /// The graphite each level settles to, as an sRGB grey.
+    pub fn grey(self) -> u8 {
+        match self {
+            Surface::Bar => 31,
+            Surface::Panel => 33,
+            Surface::Pill => 36,
+            Surface::Raised => 44,
+        }
+    }
     pub(crate) fn look(self) -> crate::glass::Look {
         // (tint mix, saturation, peak, lit rim, quiet rim, top, inner shadow)
         let (mix, sat, peak, lit, quiet, top, inner) = match self {
-            Surface::Panel => (0.72, 0.30, 0.080, 0.20, 0.045, 0.022, 0.12),
-            Surface::Raised => (0.82, 0.16, 0.065, 0.23, 0.055, 0.030, 0.14),
-            Surface::Pill => (0.61, 0.45, 0.085, 0.20, 0.045, 0.022, 0.10),
-            // Docked bars: quieter rim, no glow (their outer edges are the window's).
-            Surface::Bar => (0.70, 0.35, 0.080, 0.06, 0.03, 0.0, 0.0),
+            // Docked bars: nearly opaque, no rim or glow (their outer edges are the window's).
+            Surface::Bar => (0.90, 0.30, 0.060, 0.05, 0.03, 0.0, 0.0),
+            Surface::Panel => (0.80, 0.30, 0.075, 0.18, 0.045, 0.020, 0.12),
+            Surface::Pill => (0.70, 0.40, 0.085, 0.22, 0.05, 0.024, 0.10),
+            Surface::Raised => (0.90, 0.16, 0.065, 0.28, 0.07, 0.036, 0.14),
         };
+        let g = Color32::from_gray(self.grey());
+        let lin = egui::Rgba::from(g);
         crate::glass::Look {
-            tint: [0.01764, 0.01764, 0.01764, mix],
+            tint: [lin.r(), lin.g(), lin.b(), mix],
             saturation: sat,
             rim: [lit, quiet],
             rim_width: 1.25,
@@ -143,10 +200,10 @@ impl Surface {
     }
     pub fn shadow(self) -> Shadow {
         let (y, blur, alpha) = match self {
-            Surface::Panel => (8, 24, 100),
-            Surface::Raised => (12, 32, 128),
-            Surface::Pill => (4, 14, 90),
             Surface::Bar => (0, 0, 0),
+            Surface::Panel => (6, 20, 90),
+            Surface::Pill => (4, 14, 100),
+            Surface::Raised => (12, 32, 150),
         };
         Shadow {
             offset: [0, y],
@@ -157,9 +214,20 @@ impl Surface {
     }
 }
 
-pub const SPACE: [f32; 5] = [4., 8., 12., 16., 24.];
+pub const SPACE: [f32; 5] = [SPACE_XS, SPACE_S, SPACE_M, SPACE_L, SPACE_XL];
+/// Between a label and its control, or items that belong together.
+pub const SPACE_XS: f32 = 4.;
+/// Between items in a group (rows of controls, chips in a row).
+pub const SPACE_S: f32 = 8.;
+/// Between groups; a panel's inner padding.
+pub const SPACE_M: f32 = 12.;
+/// Between sections.
+pub const SPACE_L: f32 = 16.;
+/// Between a sheet's regions.
+pub const SPACE_XL: f32 = 24.;
 pub const MOTION_QUICK: f32 = 0.12;
 pub const MOTION_FADE: f32 = 0.20;
+/// A sheet heading: 16 semibold (was 18 before the design pass).
 pub fn heading() -> egui::FontId {
-    egui::FontId::new(18., egui::FontFamily::Name("semibold".into()))
+    egui::FontId::new(TYPE_HEADING, egui::FontFamily::Name("semibold".into()))
 }
