@@ -2422,6 +2422,7 @@ impl Ui {
                 let free = self.page_free(ctx, screen);
                 self.page.tool = self.sheets.active.clone();
                 self.page.paint(ctx, screen, free);
+                self.free_after_frame.append(&mut self.page.freed);
                 self.sheets_frame(ctx, screen, retract);
             } else {
                 if retract < 1.0 {

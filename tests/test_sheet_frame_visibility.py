@@ -3,7 +3,7 @@
 """What a sheet frame shows (ingetrazo_core sheets::visibility) is what the
 composer showed by applying the frame's saved view to the live scene and
 reading the rows (SavedView.apply_state + views/wgpu_scene's placement
-walk), without touching the scene: tags, nested tag folders, Hide on
+walk), without touching the scene: tags, tags that do not print, nested tag folders, Hide on
 groups and nested placements, the view's hidden objects and folders."""
 from __future__ import annotations
 
@@ -28,8 +28,8 @@ def _scene():
     from core.scene import Scene
     s = Scene()
     for name, folder in (("Muros", "Arq"), ("Losa", "Arq"), ("Mobiliario", "Int"), ("Ejes", None),
-                         ("Rejas", "Int")):
-        s.layers.append(Layer(name, folder=folder))
+                         ("Rejas", "Int"), ("Notas", None)):
+        s.layers.append(Layer(name, folder=folder, printable=name != "Notas"))
     s.layer_folders = ["Arq", "Int", "Det"]
     s.folder_parents = {"Int": "Arq"}
     s.folder_visibility = {"Det": False}
@@ -41,7 +41,7 @@ def _scene():
             m.add_face([p[i] for i in loop])
         return m
     groups = []
-    for i, tag in enumerate(("Muros", "Losa", "Mobiliario", "Ejes", "Rejas", None)):
+    for i, tag in enumerate(("Muros", "Losa", "Mobiliario", "Ejes", "Rejas", None, "Notas")):
         g = Group(box(3 * i), f"g{i}")
         g.layer = tag
         groups.append(g)
@@ -66,11 +66,14 @@ def _scene():
 
 
 def _reference(scene, view):
-    """The composer's way: apply the view, walk the placements."""
+    """The composer's way: apply the view, leave out what does not print,
+    walk the placements."""
     from types import SimpleNamespace
+    from core.layers import hide_unprinted
     from views.wgpu_scene import _placement_records, _placement_state
     if view is not None:
         view.apply_state(scene)
+    hide_unprinted(scene)
     vp = SimpleNamespace(scene=scene)
     state = _placement_state(scene)
     return {id(g): bool(flags & 1) for g, _, _, flags in _placement_records(scene, scene.groups, vp, state)}

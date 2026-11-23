@@ -306,6 +306,118 @@ fn bind(
         entries: &entries,
     })
 }
+impl Renderer {
+    /// The offscreen pass behind ``render_image`` and ``page_frame_render``:
+    /// the pixels read back, or (``keep``) the rendered texture itself.
+    #[allow(clippy::too_many_arguments)]
+    fn render_offscreen(&mut self, width: u32, height: u32, view: Vec<f32>,
+                        projection: Vec<f32>, style: &Bound<'_, PyAny>, instances: Option<PyReadonlyArray1<'_, u8>>,
+                        far_clip: bool, sharp_shadows: bool, keep: bool) -> PyResult<(Vec<u8>, Option<wgpu::Texture>)> {
+        if width == 0 || height == 0 || width > self.device.limits().max_texture_dimension_2d
+            || height > self.device.limits().max_texture_dimension_2d {
+            return Err(PyValueError::new_err("invalid offscreen dimensions"));
+        }
+        if view.len() != 16 || projection.len() != 16 {
+            return Err(PyValueError::new_err("camera matrices need 16 floats"));
+        }
+        let temporary_rows = instances.as_ref().map(|v| v.as_slice()).transpose()?;
+        if let Some(rows) = temporary_rows {
+            if self.scene.as_ref().map(|s| s.rows.len()) != Some(rows.len()) {
+                return Err(PyValueError::new_err("capture rows must match resident instances"));
+            }
+            let s = self.scene.as_ref().unwrap();
+            if rows.chunks_exact(80).zip(s.rows.chunks_exact(80)).any(|(a, b)| a[..72] != b[..72]) {
+                return Err(PyValueError::new_err("capture rows may only change visibility and tint"));
+            }
+        }
+        let shadow_size = if sharp_shadows {
+            sun::EXPORT_SIZE.min(self.device.limits().max_texture_dimension_2d)
+        } else {
+            sun::LIVE_SIZE
+        };
+        let format = self.config.format.remove_srgb_suffix();
+        let mut aa = antialias::Antialias::new(self.samples.count(), &self.device, format, &self.look.buffer, width, height);
+        let mut transparency = xray::Xray::new(&self.device, format, width, height);
+        aa.bind_textures(&self.device, &self.textures);
+        transparency.bind_textures(&self.device, &self.textures);
+        if let Some(s) = &self.scene {
+            aa.bind_scene(&self.device, &self.camera, &s.inst, &s.survivors,
+                          &self.look.buffer, &s.edge_records, &s.viewpoints);
+            transparency.bind_scene(&self.device, &self.camera, &s.inst, &s.survivors, &self.look.buffer);
+        }
+        let old_size = (self.config.width, self.config.height);
+        let old_camera = self.camera_data.clone();
+        let old_style = self.look.data;
+        let old_flags = (self.style, self.edges, self.textures_enabled, self.ids_dirty,
+                         self.stable_frames, self.pick_pending, self.capture_next);
+        let old_capture = self.captured.take();
+        // Keep the original resources alive until the transaction has completed.
+        let old_aa = std::mem::replace(&mut self.aa, aa);
+        let old_transparency = std::mem::replace(&mut self.transparency, transparency);
+        let old_sun = std::mem::replace(&mut self.sun, sun::Sun::new(self.samples.clone(), &self.device, format, shadow_size));
+        let old_ao = std::mem::replace(&mut self.ao, ao::AmbientOcclusion::new(self.samples.clone(), &self.device, format));
+        let old_overlay = std::mem::replace(&mut self.overlay, overlay::Overlay::new(&self.device, self.config.format));
+        let old_color = std::mem::replace(&mut self.offscreen, texture(&self.device, width, height, self.config.format));
+        let old_depth = std::mem::replace(&mut self.depth, texture(&self.device, width, height, wgpu::TextureFormat::Depth32Float));
+        let old_ids = std::mem::replace(&mut self.ids, texture(&self.device, width, height, wgpu::TextureFormat::R32Uint));
+        self.config.width = width;
+        self.config.height = height;
+        if let (Some(rows), Some(s)) = (temporary_rows, &self.scene) {
+            self.queue.write_buffer(&s.inst, 0, rows);
+        }
+        // Scaffolding (edit box, guides) never belongs in a sheet capture.
+        let lines_enabled = std::mem::replace(&mut self.lines.enabled, false);
+        let result = (|| {
+            self.set_style(style)?;
+            self.set_camera(view, projection, far_clip)?;
+            if keep {
+                self.capture_next = false;
+                self.render(false)?;
+                return Ok(Vec::new());
+            }
+            self.capture_next = true;
+            self.render(false)?;
+            let mut pixels = self.captured.take().unwrap_or_default();
+            if self.look.data[3][3] < 0. {
+                // PNG and QImage RGBA8888 expect unassociated color.
+                for pixel in pixels.chunks_exact_mut(4) {
+                    let alpha = u32::from(pixel[3]);
+                    if alpha > 0 && alpha < 255 {
+                        for channel in &mut pixel[..3] {
+                            *channel = ((u32::from(*channel) * 255 + alpha / 2) / alpha).min(255) as u8;
+                        }
+                    }
+                }
+            }
+            Ok(pixels)
+        })();
+        if temporary_rows.is_some() {
+            if let Some(s) = &self.scene { self.queue.write_buffer(&s.inst, 0, &s.rows); }
+        }
+        self.config.width = old_size.0;
+        self.config.height = old_size.1;
+        self.aa = old_aa;
+        self.transparency = old_transparency;
+        self.ao = old_ao;
+        self.sun = old_sun;
+        self.overlay = old_overlay;
+        self.lines.enabled = lines_enabled;
+        let rendered = std::mem::replace(&mut self.offscreen, old_color);
+        self.depth = old_depth;
+        self.ids = old_ids;
+        self.look.data = old_style;
+        self.queue.write_buffer(&self.look.buffer, 0, bytemuck::cast_slice(&old_style));
+        if !old_camera.is_empty() {
+            self.queue.write_buffer(&self.camera, 0, bytemuck::cast_slice(&old_camera));
+        }
+        self.camera_data = old_camera;
+        (self.style, self.edges, self.textures_enabled, self.ids_dirty,
+         self.stable_frames, self.pick_pending, self.capture_next) = old_flags;
+        self.captured = old_capture;
+        result.map(|pixels| (pixels, keep.then_some(rendered)))
+    }
+}
+
 #[pymethods]
 impl Renderer {
     #[new]
@@ -1425,103 +1537,21 @@ impl Renderer {
     fn render_image(&mut self, width: u32, height: u32, view: Vec<f32>,
                     projection: Vec<f32>, style: &Bound<'_, PyAny>, instances: Option<PyReadonlyArray1<'_, u8>>,
                     far_clip: bool, sharp_shadows: bool) -> PyResult<Vec<u8>> {
-        if width == 0 || height == 0 || width > self.device.limits().max_texture_dimension_2d
-            || height > self.device.limits().max_texture_dimension_2d {
-            return Err(PyValueError::new_err("invalid offscreen dimensions"));
+        Ok(self.render_offscreen(width, height, view, projection, style, instances, far_clip, sharp_shadows, false)?.0)
+    }
+    /// A sheet frame's picture rendered straight into a texture of the
+    /// Sheets page (no read-back): as ``render_image``, kept under the
+    /// frame's ``key`` for the page to draw (docs/rust-sheets.md step 4).
+    #[pyo3(signature = (key, width, height, view, projection, style, instances=None, far_clip=false, sharp_shadows=false))]
+    #[allow(clippy::too_many_arguments)]
+    fn page_frame_render(&mut self, key: u64, width: u32, height: u32, view: Vec<f32>,
+                         projection: Vec<f32>, style: &Bound<'_, PyAny>, instances: Option<PyReadonlyArray1<'_, u8>>,
+                         far_clip: bool, sharp_shadows: bool) -> PyResult<()> {
+        let (_, texture) = self.render_offscreen(width, height, view, projection, style, instances, far_clip, sharp_shadows, true)?;
+        if let (Some(t), Some(ui)) = (texture, self.ui.as_mut()) {
+            ui.page_native_image(&self.device, key, t);
         }
-        if view.len() != 16 || projection.len() != 16 {
-            return Err(PyValueError::new_err("camera matrices need 16 floats"));
-        }
-        let temporary_rows = instances.as_ref().map(|v| v.as_slice()).transpose()?;
-        if let Some(rows) = temporary_rows {
-            if self.scene.as_ref().map(|s| s.rows.len()) != Some(rows.len()) {
-                return Err(PyValueError::new_err("capture rows must match resident instances"));
-            }
-            let s = self.scene.as_ref().unwrap();
-            if rows.chunks_exact(80).zip(s.rows.chunks_exact(80)).any(|(a, b)| a[..72] != b[..72]) {
-                return Err(PyValueError::new_err("capture rows may only change visibility and tint"));
-            }
-        }
-        let shadow_size = if sharp_shadows {
-            sun::EXPORT_SIZE.min(self.device.limits().max_texture_dimension_2d)
-        } else {
-            sun::LIVE_SIZE
-        };
-        let format = self.config.format.remove_srgb_suffix();
-        let mut aa = antialias::Antialias::new(self.samples.count(), &self.device, format, &self.look.buffer, width, height);
-        let mut transparency = xray::Xray::new(&self.device, format, width, height);
-        aa.bind_textures(&self.device, &self.textures);
-        transparency.bind_textures(&self.device, &self.textures);
-        if let Some(s) = &self.scene {
-            aa.bind_scene(&self.device, &self.camera, &s.inst, &s.survivors,
-                          &self.look.buffer, &s.edge_records, &s.viewpoints);
-            transparency.bind_scene(&self.device, &self.camera, &s.inst, &s.survivors, &self.look.buffer);
-        }
-        let old_size = (self.config.width, self.config.height);
-        let old_camera = self.camera_data.clone();
-        let old_style = self.look.data;
-        let old_flags = (self.style, self.edges, self.textures_enabled, self.ids_dirty,
-                         self.stable_frames, self.pick_pending, self.capture_next);
-        let old_capture = self.captured.take();
-        // Keep the original resources alive until the transaction has completed.
-        let old_aa = std::mem::replace(&mut self.aa, aa);
-        let old_transparency = std::mem::replace(&mut self.transparency, transparency);
-        let old_sun = std::mem::replace(&mut self.sun, sun::Sun::new(self.samples.clone(), &self.device, format, shadow_size));
-        let old_ao = std::mem::replace(&mut self.ao, ao::AmbientOcclusion::new(self.samples.clone(), &self.device, format));
-        let old_overlay = std::mem::replace(&mut self.overlay, overlay::Overlay::new(&self.device, self.config.format));
-        let old_color = std::mem::replace(&mut self.offscreen, texture(&self.device, width, height, self.config.format));
-        let old_depth = std::mem::replace(&mut self.depth, texture(&self.device, width, height, wgpu::TextureFormat::Depth32Float));
-        let old_ids = std::mem::replace(&mut self.ids, texture(&self.device, width, height, wgpu::TextureFormat::R32Uint));
-        self.config.width = width;
-        self.config.height = height;
-        if let (Some(rows), Some(s)) = (temporary_rows, &self.scene) {
-            self.queue.write_buffer(&s.inst, 0, rows);
-        }
-        // Scaffolding (edit box, guides) never belongs in a sheet capture.
-        let lines_enabled = std::mem::replace(&mut self.lines.enabled, false);
-        let result = (|| {
-            self.set_style(style)?;
-            self.set_camera(view, projection, far_clip)?;
-            self.capture_next = true;
-            self.render(false)?;
-            let mut pixels = self.captured.take().unwrap_or_default();
-            if self.look.data[3][3] < 0. {
-                // PNG and QImage RGBA8888 expect unassociated color.
-                for pixel in pixels.chunks_exact_mut(4) {
-                    let alpha = u32::from(pixel[3]);
-                    if alpha > 0 && alpha < 255 {
-                        for channel in &mut pixel[..3] {
-                            *channel = ((u32::from(*channel) * 255 + alpha / 2) / alpha).min(255) as u8;
-                        }
-                    }
-                }
-            }
-            Ok(pixels)
-        })();
-        if temporary_rows.is_some() {
-            if let Some(s) = &self.scene { self.queue.write_buffer(&s.inst, 0, &s.rows); }
-        }
-        self.config.width = old_size.0;
-        self.config.height = old_size.1;
-        self.aa = old_aa;
-        self.transparency = old_transparency;
-        self.ao = old_ao;
-        self.sun = old_sun;
-        self.overlay = old_overlay;
-        self.lines.enabled = lines_enabled;
-        self.offscreen = old_color;
-        self.depth = old_depth;
-        self.ids = old_ids;
-        self.look.data = old_style;
-        self.queue.write_buffer(&self.look.buffer, 0, bytemuck::cast_slice(&old_style));
-        if !old_camera.is_empty() {
-            self.queue.write_buffer(&self.camera, 0, bytemuck::cast_slice(&old_camera));
-        }
-        self.camera_data = old_camera;
-        (self.style, self.edges, self.textures_enabled, self.ids_dirty,
-         self.stable_frames, self.pick_pending, self.capture_next) = old_flags;
-        self.captured = old_capture;
-        result
+        Ok(())
     }
     fn set_edges(&mut self, enabled: bool) {
         self.ids_dirty |= self.edges != enabled;
@@ -2112,13 +2142,6 @@ impl Renderer {
         }
         let segs = (0..a.nrows()).map(|i| [a[[i, 0]], a[[i, 1]], a[[i, 2]], a[[i, 3]]]).collect();
         if let Some(ui) = self.ui.as_mut() { ui.page.set_lines(key, segs, kinds); }
-        Ok(())
-    }
-    /// A frame's picture, straight RGBA ``width`` × ``height``.
-    fn page_frame_image(&mut self, key: u64, width: usize, height: usize,
-                        rgba: PyReadonlyArray1<'_, u8>) -> PyResult<()> {
-        let bytes = rgba.as_slice()?;
-        if let Some(ui) = self.ui.as_mut() { ui.page_image(key, width, height, bytes); }
         Ok(())
     }
     fn page_frame_forget(&mut self, key: u64) {

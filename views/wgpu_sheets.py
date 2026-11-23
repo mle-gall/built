@@ -4,9 +4,10 @@
   sheet records out of the document (``sheet_page_json``) and the renderer
   paints them under the chrome (``ingetrazo_render`` ui/page.rs), with
   zoom, pan, picking, moving and resizing items and placing a view. Frames
-  show the composer's frame content: the vector pass (the Rust HLR drawing,
-  ``hlr_cache``) as line sets, the other styles as pictures
-  (``render_cache``). No QPainter, no uploaded page image.
+  show the vector pass (the Rust HLR drawing, ``hlr_cache``) as line
+  sets; the other styles are rendered by the renderer straight into a page
+  texture (views/wgpu_sheet_frames.py: the camera and visibility from
+  Rust, the live scene untouched). No QPainter, no read-back.
 * **Edits** come back as actions (``sheets:rects``, ``sheets:place``,
   ``sheets:select``), one per gesture, and run through the sheet's history
   (``EditItemCommand``, ``place_tool``), so undo, auto-render and the dock
@@ -29,7 +30,7 @@ import re
 from pathlib import Path
 
 from PySide6.QtCore import QEvent, Qt
-from PySide6.QtGui import QImage, QKeySequence
+from PySide6.QtGui import QKeySequence
 
 SEP = "\x1f"
 ED = "\x1d"
@@ -342,9 +343,11 @@ class Workspace:
         return {"views": views, "styles": styles}
 
     def _send_contents(self, renderer) -> None:
-        """Each frame's content as the composer has it: the vector pass's
-        lines (paper mm in the frame) or the render, sent when it changed. A
-        frame without any is rendered, one per turn."""
+        """Each frame's content: a shaded frame rendered by the renderer
+        straight into its page texture (views/wgpu_sheet_frames.py), the
+        vector pass's lines (paper mm in the frame) as the composer has
+        them. A frame without any is done, one per turn."""
+        from views import wgpu_sheet_frames
         comp = self.composer
         serial = self._page                # tried again once the sheet changed
         rendered = False
@@ -352,38 +355,42 @@ class Workspace:
         for frame in list(comp.comp.frames):
             key = frame._doc_key
             fid = id(frame)
+            if not (frame.style == "vectorial" and not comp.frame_is_perspective(frame)):
+                if renderer.page_has_content(key) or self._tried.get(key) == serial:
+                    continue
+                if rendered:
+                    self._more = True          # the next turn renders it
+                    continue
+                self._tried[key] = serial
+                rendered = True
+                try:
+                    wgpu_sheet_frames.render(self.view, frame, key)
+                except Exception:  # noqa: BLE001 — a view that cannot render stays empty
+                    import traceback
+                    traceback.print_exc()
+                continue
             lines = comp.hlr_cache.get(fid)
-            image = comp.render_cache.get(fid)
-            have = lines if lines is not None else image
-            if have is None and self._tried.get(key) != serial and rendered:
-                self._more = True              # the next turn renders it
-            if have is None and not rendered and self._tried.get(key) != serial:
+            if lines is None and self._tried.get(key) != serial:
+                if rendered:
+                    self._more = True          # the next turn draws it
+                    continue
                 self._tried[key] = serial
                 rendered = True
                 try:
                     comp.render_frame(frame)
-                except Exception:  # noqa: BLE001 — a view that cannot render stays empty
+                except Exception:  # noqa: BLE001 — a view that cannot draw stays empty
                     import traceback
                     traceback.print_exc()
-                lines, image = comp.hlr_cache.get(fid), comp.render_cache.get(fid)
-                have = lines if lines is not None else image
-            if have is None or self._content.get(key) is have:
+                lines = comp.hlr_cache.get(fid)
+            if lines is None or self._content.get(key) is lines:
                 continue
-            self._content[key] = have
-            if lines is not None:
-                import numpy as np
-                kinds = comp.hlr_kinds.get(fid)
-                segs = np.ascontiguousarray(np.asarray(lines, dtype=np.float32).reshape(-1, 4))
-                kinds = (np.zeros(len(segs), dtype=np.uint8) if kinds is None
-                         else np.ascontiguousarray(np.asarray(kinds, dtype=np.uint8)))
-                renderer.page_frame_lines(key, segs, kinds)
-            elif isinstance(image, QImage) and not image.isNull():
-                import numpy as np
-                rgba = image.convertToFormat(QImage.Format_RGBA8888)
-                w, h = rgba.width(), rgba.height()
-                pixels = np.frombuffer(rgba.constBits(), dtype=np.uint8,
-                                       count=rgba.bytesPerLine() * h).reshape(h, -1)[:, :w * 4]
-                renderer.page_frame_image(key, w, h, pixels.copy().reshape(-1))
+            self._content[key] = lines
+            import numpy as np
+            kinds = comp.hlr_kinds.get(fid)
+            segs = np.ascontiguousarray(np.asarray(lines, dtype=np.float32).reshape(-1, 4))
+            kinds = (np.zeros(len(segs), dtype=np.uint8) if kinds is None
+                     else np.ascontiguousarray(np.asarray(kinds, dtype=np.uint8)))
+            renderer.page_frame_lines(key, segs, kinds)
 
     def _models(self) -> dict:
         comp = self.composer.comp
@@ -410,6 +417,18 @@ class Workspace:
             comp._stale.add(id(model))
             comp.hlr_cache.pop(id(model), None)
             comp.render_cache.pop(id(model), None)
+            self._content.pop(model._doc_key, None)
+            self._tried.pop(model._doc_key, None)
+            renderer = getattr(self.view, "renderer", None)
+            if renderer is not None:
+                renderer.page_frame_forget(model._doc_key)
+
+    def _refresh_all(self) -> None:
+        """Update all views: every frame worked out again from the model."""
+        self.composer._invalidate_geometry_caches()
+        for frame in list(self.composer.comp.frames):
+            self._forget_render(frame)
+        self._touch()
 
     def _edit(self, edits) -> None:
         """``[(model, {field: value})]`` from the page or the inspector."""
@@ -603,7 +622,7 @@ class Workspace:
         cluster = [[item("Fit page", self.fit, "Fit the page in the window", "zoom_extents")]]
         menu = [("Zoom", [item("Fit page", self.fit), item("Fit width", lambda: self.fit(True)),
                           *[item(f"{p}%", lambda p=p: self.zoom_to(str(p))) for p in (50, 100, 200, 400)]]),
-                ("Sheet", [item("Update all views", comp.refresh_all_frames),
+                ("Sheet", [item("Update all views", self._refresh_all),
                            item("Auto-render views", lambda: comp.auto_check.toggle(),
                                 checked=int(bool(comp._auto_render))),
                            item("Open in classic sheet editor…", self.open_classic),

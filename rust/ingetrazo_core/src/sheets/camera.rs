@@ -443,7 +443,7 @@ fn base_cam(base: Option<&Bound<'_, PyDict>>) -> PyResult<Cam> {
 /// (a SavedView record) or None, ``base`` the camera it starts from (see
 /// ``base_cam``), ``bounds`` the model's ``(lo, hi)``. Returns view and
 /// projection (16 values each, column-major as ``QMatrix4x4.data()``),
-/// eye, target, up and the camera's fields.
+/// eye, target, up and the camera's fields (lens included).
 #[pyfunction]
 #[pyo3(signature = (frame, view=None, base=None, bounds=None))]
 pub fn sheet_frame_camera<'py>(py: Python<'py>, frame: &Bound<'py, PyAny>, view: Option<Bound<'py, PyAny>>,
@@ -469,5 +469,11 @@ pub fn sheet_frame_camera<'py>(py: Python<'py>, frame: &Bound<'py, PyAny>, view:
     out.set_item("aspect", c.aspect)?;
     out.set_item("yaw", c.yaw)?;
     out.set_item("pitch", c.pitch)?;
+    out.set_item("two_point", c.two_point)?;
+    out.set_item("shift_x", c.shift_x)?;
+    out.set_item("shift_y", c.shift_y)?;
+    out.set_item("roll_deg", c.roll_deg)?;
+    out.set_item("clip_near", c.clip_near)?;
+    out.set_item("clip_far", c.clip_far)?;
     Ok(out)
 }

@@ -889,8 +889,16 @@ class MetalView(ViewNavigation):
             painter.end()
 
     def render_image(self, width_px, height_px=None, overlays=False,
-                     sharp_shadows=False, *, transparent=False, annotations_only=False):
-        """R3c-2a: render sheet targets using this view's resident scene."""
+                     sharp_shadows=False, *, transparent=False, annotations_only=False,
+                     page_key=None, scene=None, style=None, camera=None, rows=None,
+                     edge_px=None, profile_px=None):
+        """R3c-2a: render sheet targets using this view's resident scene.
+
+        A sheet frame (views/wgpu_sheet_frames.py) passes what it shows
+        instead of the live state: ``scene`` (a read-only facade), ``style``,
+        ``camera(origin)`` and ``rows()`` (resident rows with the frame's
+        visibility), and ``page_key``, the page texture the picture goes to:
+        then nothing is read back and None is returned."""
         from copy import copy
         from PySide6.QtGui import QImage
         from views.wgpu_style import style_payload
@@ -911,10 +919,16 @@ class MetalView(ViewNavigation):
             self._sync_scene_camera()
         if self.renderer is None or self._scene_dirty:
             self._upload(force=True)
-        camera = copy(self.camera if self.packed.model_translations is not None else source.camera)
-        camera.aspect = width_px / height_px
+        translated = self.packed.model_translations is not None
+        if camera is not None:
+            camera = camera(self.packed.origin if translated else None)
+        else:
+            camera = copy(self.camera if translated else source.camera)
+            camera.aspect = width_px / height_px
         view, projection = camera.view_matrix(), camera.projection_matrix()
-        payload = style_payload(source.scene, source._effective_style(),
+        shown = source.scene if scene is None else scene
+        look = source._effective_style() if style is None else style
+        payload = style_payload(shown, look,
                                 horizon=self._horizon(projection * view, camera),
                                 edit_rest_fade=getattr(source, 'edit_rest_fade', .75),
                                 soft_shadows=getattr(source, '_soft_shadows', 0),
@@ -922,15 +936,19 @@ class MetalView(ViewNavigation):
         from views.wgpu_references import sync as sync_references
         sync_references(self, payload)
         payload['transparent_background'] = transparent
-        payload['edge_width'] = float(getattr(source, '_export_edge_px', 1))
-        payload['profile_width'] = float(getattr(source, '_export_profile_px', 1))
+        payload['edge_width'] = float(getattr(source, '_export_edge_px', 1) if edge_px is None else edge_px)
+        payload['profile_width'] = float(getattr(source, '_export_profile_px', 1)
+                                         if profile_px is None else profile_px)
         from views.wgpu_sections import capture_rows, geometry
-        rows = capture_rows(self.packed, source.scene, getattr(source, 'view_tint', None))
+        if rows is not None:
+            rows = rows()
+        else:
+            rows = capture_rows(self.packed, source.scene, getattr(source, 'view_tint', None))
         from views.wgpu_edit_context import rest_rows
         mode = getattr(source, 'edit_rest_mode', 'fade')
         rows['info'][:, 2] &= np.uint32(~192 & 0xffffffff)
-        if mode in ('fade', 'hide'):
-            rows['info'][rest_rows(self.packed.groups, source.scene.edit_group), 2] |= (
+        if mode in ('fade', 'hide') and shown.edit_group is not None:
+            rows['info'][rest_rows(self.packed.groups, shown.edit_group), 2] |= (
                 64 | (128 if mode == 'hide' else 0))
         from views.wgpu_billboards import Billboards
         from views.wgpu_axes import axes_state
@@ -947,19 +965,22 @@ class MetalView(ViewNavigation):
         resident_world = self.packed.instances['world'][billboard_ids].copy()
         old_axes = getattr(self, '_axes_state', None) or axes_state(source.scene, self.camera, source, self.packed.origin)
         previous = getattr(self, '_section_uploaded', np.empty(0, np.uint8))
-        data = geometry(self, source.scene, source._effective_style(), camera, height_px, rows)
+        data = geometry(self, shown, look, camera, height_px, rows)
         try:
             if billboard_ids:
                 self.renderer.set_instance_world(billboard_ids, rows['world'][billboard_ids].reshape(-1))
-            self.renderer.set_axes(*axes_state(source.scene, camera, source, self.packed.origin))
+            self.renderer.set_axes(*axes_state(shown, camera, source, self.packed.origin))
             self.renderer.set_section_geometry(data)
-            pixels = bytes(self.renderer.render_image(
-                width_px, height_px, tuple(view.data()), tuple(projection.data()), payload,
-                rows.view(np.uint8).reshape(-1) if len(rows) else None,
-                **({'sharp_shadows': True} if sharp_shadows and payload['shadows'] else {}),
-                # A far clip set by hand; otherwise reverse-Z reaches to
-                # infinity (stand-in renderers need not know the flag).
-                **({'far_clip': True} if getattr(camera, 'clip_far', None) is not None else {})))
+            args = (width_px, height_px, tuple(view.data()), tuple(projection.data()), payload,
+                    rows.view(np.uint8).reshape(-1) if len(rows) else None)
+            options = {**({'sharp_shadows': True} if sharp_shadows and payload['shadows'] else {}),
+                       # A far clip set by hand; otherwise reverse-Z reaches to
+                       # infinity (stand-in renderers need not know the flag).
+                       **({'far_clip': True} if getattr(camera, 'clip_far', None) is not None else {})}
+            if page_key is not None:
+                self.renderer.page_frame_render(page_key, *args, **options)
+                return None
+            pixels = bytes(self.renderer.render_image(*args, **options))
         finally:
             if billboard_ids:
                 self.renderer.set_instance_world(billboard_ids, resident_world.reshape(-1))

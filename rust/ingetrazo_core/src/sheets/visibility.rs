@@ -10,7 +10,9 @@
 //! Hide (its own flag, or the view's hidden objects when it lists them),
 //! or its tag hidden (the view's hidden tags when it shows a scene, else
 //! the tag's own switch), or a folder of its tag switched off (the view's
-//! when it lists folders, else the document's), or a parent hidden.
+//! when it lists folders, else the document's), or a parent hidden. A tag
+//! set not to print (`printable` False) stays out of every sheet, as
+//! `core.layers.hide_unprinted` left it.
 
 use crate::doc::{self, value::Value, Data, Key};
 use pyo3::prelude::*;
@@ -83,23 +85,26 @@ pub fn hidden(root: Key, roots: &[Key], view: &ViewState) -> PyResult<HashMap<Ke
         }
         true
     };
-    let mut tags: HashMap<&str, (bool, Option<&str>)> = HashMap::new();
+    let printable = doc::attr_id("printable").ok();
+    let mut tags: HashMap<&str, (bool, bool, Option<&str>)> = HashMap::new();
     for &t in &rn.tags {
-        if let Some(Data::Tag(tag)) = d.node(t).map(|n| &n.data) {
+        let Some(node) = d.node(t) else { continue };
+        if let Data::Tag(tag) = &node.data {
             if let Some(k) = tag.key.as_deref() {
-                tags.insert(k, (tag.visible, tag.folder.as_deref()));
+                let prints = !matches!(printable.and_then(|a| node.attr(a)), Some(Value::Bool(false)));
+                tags.insert(k, (tag.visible, prints, tag.folder.as_deref()));
             }
         }
     }
     let tag_visible = |key: &str| -> bool {
         match tags.get(key) {
             None => true,
-            Some((on, folder)) => {
+            Some((visible, prints, folder)) => {
                 let on = match &view.hidden_tags {
                     Some(off) => !off.contains(key),
-                    None => *on,
+                    None => *visible,
                 };
-                on && folder_visible(folder.unwrap_or(""))
+                on && *prints && folder_visible(folder.unwrap_or(""))
             }
         }
     };

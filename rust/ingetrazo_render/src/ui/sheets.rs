@@ -656,9 +656,13 @@ impl Ui {
         self.page.pointer(kind, pos2(x, y), button, mods, &mut self.actions);
         self.page.cursor
     }
-    pub fn page_image(&mut self, key: u64, w: usize, h: usize, rgba: &[u8]) {
-        let ctx = self.ctx.clone();
-        self.page.set_image(&ctx, key, w, h, rgba);
+    /// A frame rendered into ``texture`` (lib.rs ``page_frame_render``),
+    /// drawn by the page as it is: no read-back, no upload.
+    pub fn page_native_image(&mut self, device: &wgpu::Device, key: u64, texture: wgpu::Texture) {
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let id = self.painter.register_native_texture(device, &view, wgpu::FilterMode::Linear);
+        self.page.set_native(key, texture, id);
+        self.ctx.request_repaint();
     }
     pub fn page_command(&mut self, name: &str) -> bool {
         self.page.command(name, &mut self.actions)

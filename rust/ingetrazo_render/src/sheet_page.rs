@@ -124,7 +124,11 @@ pub struct Page {
     fit: Option<bool>,
     zoom_to: Option<f32>,
     lines: HashMap<u64, Lines>,
-    images: HashMap<u64, egui::TextureHandle>,
+    /// Frames rendered on the GPU straight into a texture (no read-back):
+    /// the texture kept alive and its id with the UI painter.
+    natives: HashMap<u64, (wgpu::Texture, egui::TextureId)>,
+    /// Native ids replaced or dropped, for the UI to free after a frame.
+    pub freed: Vec<egui::TextureId>,
     pub selection: Vec<u64>,
     hover: Option<u64>,
     drag: Option<Drag>,
@@ -187,37 +191,41 @@ impl Page {
         let keys: Vec<u64> = doc.items.iter().map(|i| i.key).collect();
         self.selection.retain(|k| keys.contains(k));
         self.lines.retain(|k, _| keys.contains(k));
-        self.images.retain(|k, _| keys.contains(k));
+        let gone: Vec<u64> = self.natives.keys().filter(|k| !keys.contains(k)).copied().collect();
+        for k in gone {
+            self.drop_native(k);
+        }
         self.raw = text;
         self.doc = Some(doc);
     }
     pub fn clear(&mut self) {
-        *self = Page { tool: std::mem::take(&mut self.tool), ..Default::default() };
+        let mut freed = std::mem::take(&mut self.freed);
+        freed.extend(self.natives.drain().map(|(_, (_, id))| id));
+        *self = Page { tool: std::mem::take(&mut self.tool), freed, ..Default::default() };
+    }
+    fn drop_native(&mut self, key: u64) {
+        if let Some((_, id)) = self.natives.remove(&key) {
+            self.freed.push(id);
+        }
+    }
+    /// A frame's picture as a GPU texture already registered with the UI
+    /// painter (``id``); the one it replaces is freed after the next frame.
+    pub fn set_native(&mut self, key: u64, texture: wgpu::Texture, id: egui::TextureId) {
+        self.lines.remove(&key);
+        if let Some((_, old)) = self.natives.insert(key, (texture, id)) {
+            self.freed.push(old);
+        }
     }
     pub fn set_lines(&mut self, key: u64, segs: Vec<[f32; 4]>, kinds: Vec<u8>) {
-        self.images.remove(&key);
+        self.drop_native(key);
         self.lines.insert(key, Lines { segs, kinds });
-    }
-    pub fn set_image(&mut self, ctx: &egui::Context, key: u64, w: usize, h: usize, rgba: &[u8]) {
-        if w == 0 || h == 0 || rgba.len() != w * h * 4 {
-            return;
-        }
-        self.lines.remove(&key);
-        let image = egui::ColorImage::from_rgba_unmultiplied([w, h], rgba);
-        match self.images.get_mut(&key) {
-            Some(t) => t.set(image, egui::TextureOptions::LINEAR),
-            None => {
-                let t = ctx.load_texture(format!("page-frame-{key}"), image, egui::TextureOptions::LINEAR);
-                self.images.insert(key, t);
-            }
-        }
     }
     pub fn forget_content(&mut self, key: u64) {
         self.lines.remove(&key);
-        self.images.remove(&key);
+        self.drop_native(key);
     }
     pub fn has_content(&self, key: u64) -> bool {
-        self.lines.contains_key(&key) || self.images.contains_key(&key)
+        self.lines.contains_key(&key) || self.natives.contains_key(&key)
     }
     pub fn set_selection(&mut self, keys: Vec<u64>) {
         self.selection = keys;
@@ -753,8 +761,8 @@ impl Page {
         let f = &item.data["frame"];
         let z = self.zoom;
         let inner = painter.with_clip_rect(rect.intersect(painter.clip_rect()));
-        if let Some(t) = self.images.get(&item.key) {
-            inner.image(t.id(), rect, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
+        if let Some(&(_, id)) = self.natives.get(&item.key) {
+            inner.image(id, rect, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
         } else if let Some(lines) = self.lines.get(&item.key) {
             let pens: Vec<f32> = f["pens"].as_array().map(|a| a.iter().map(|p| p.as_f64().unwrap_or(0.18) as f32).collect())
                 .unwrap_or_else(|| vec![0.18, 0.35, 0.5, 0.18]);
