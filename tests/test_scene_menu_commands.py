@@ -171,7 +171,8 @@ def test_scene_folder_menu_keeps_reference_order_history_and_document_identity(m
     edit("file", dest=parent, name=c.name)
     scenes, folders = scene_tree.menu_rows(scene, b)
     assert [(r[1], r[3], r[4]) for r in scenes] == [(b.name, child, 1), (c.name, parent, 0), (a.name, "", 0)]
-    assert [(r[0], r[2]) for r in folders] == [("", ""), (parent, ""), (child, parent)]
+    assert (folders[0][0], folders[0][2], folders[0][3]) == ("", str(scene.content_version), owner)
+    assert [(r[0], r[2]) for r in folders[1:]] == [(parent, ""), (child, parent)]
     with pytest.raises(ValueError):
         edit("move", parent, child)
     with pytest.raises(ValueError):
