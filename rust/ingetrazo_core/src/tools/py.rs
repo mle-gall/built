@@ -297,6 +297,9 @@ fn reply<'py>(py: Python<'py>, r: &Reply) -> PyResult<Bound<'py, PyDict>> {
 #[pyclass(unsendable, module = "ingetrazo_core")]
 pub struct ToolMachine {
     tool: Box<dyn Tool>,
+    /// Moves on every event and set: what the adapter caches state by.
+    #[pyo3(get)]
+    serial: u64,
 }
 
 #[pymethods]
@@ -304,7 +307,7 @@ impl ToolMachine {
     #[new]
     fn new(kind: &str) -> PyResult<Self> {
         new_tool(kind)
-            .map(|tool| ToolMachine { tool })
+            .map(|tool| ToolMachine { tool, serial: 0 })
             .ok_or_else(|| PyValueError::new_err(format!("no Rust tool {kind:?}")))
     }
 
@@ -330,6 +333,7 @@ impl ToolMachine {
     fn event<'py>(&mut self, py: Python<'py>, ev: &Bound<'py, PyDict>, host: &Bound<'py, PyAny>)
         -> PyResult<Bound<'py, PyDict>> {
         let ev = event(ev)?;
+        self.serial += 1;
         let mut h = PyHost { obj: host, err: None };
         let r = self.tool.event(&ev, &mut h);
         if let Some(e) = h.err {
@@ -342,10 +346,17 @@ impl ToolMachine {
 
     /// Set a `state()` field; False when the tool has no such field.
     fn set(&mut self, key: &str, value: &Bound<'_, PyAny>) -> PyResult<bool> {
+        self.serial += 1;
         Ok(self.tool.set(key, &py_to_json(value)?))
     }
 
     fn state<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> { json_to_py(py, &self.tool.state()) }
+
+    /// One `state()` field (None when absent): what the inference reads
+    /// on every pointer move, without building the rest.
+    fn get<'py>(&self, py: Python<'py>, key: &str) -> PyResult<Bound<'py, PyAny>> {
+        json_to_py(py, self.tool.state().get(key).unwrap_or(&serde_json::Value::Null))
+    }
 
     /// `{lines: [(a, b, style)], faces: [[p]], box: ((x0, y0, x1, y1), crossing) | None,
     /// value: (at, label) | None}`.

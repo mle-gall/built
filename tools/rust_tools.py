@@ -35,10 +35,6 @@ def selection_mode(modifiers) -> str:
     return select_mode(_mods(modifiers))
 
 
-def _vec(p):
-    return None if p is None else Vec3(*p)
-
-
 def _tuple(p):
     return None if p is None else (p.toTuple() if hasattr(p, "toTuple") else tuple(p))
 
@@ -207,6 +203,8 @@ class RustTool(Tool):
     def __init__(self):
         self._machine = ToolMachine(self.kind)
         self._handles = _Handles()
+        self._seen = (-1, None)
+        self._points = {}
 
     def __init_subclass__(cls, **kw):
         super().__init_subclass__(**kw)
@@ -267,7 +265,29 @@ class RustTool(Tool):
 
     # ---- what the inference and the painters read -------------------------
     def _state(self, key):
-        return self._machine.state().get(key)
+        # The inference reads several fields per pointer move: one state
+        # snapshot per machine serial.
+        serial, fields = self._seen
+        if serial != self._machine.serial:
+            fields = {}
+            self._seen = (self._machine.serial, fields)
+        try:
+            return fields[key]
+        except KeyError:
+            value = fields[key] = self._machine.get(key)
+            return value
+
+    def _point(self, key):
+        """The point as a Vec3 that stays the same object while the value
+        does: the snap frame tells the chain's start from its first point
+        by identity."""
+        value = self._state(key)
+        if value is None:
+            return None
+        held = self._points.get(key)
+        if held is None or held[0] != value:
+            held = self._points[key] = (value, Vec3(*value))
+        return held[1]
 
     def rubber_band_lines(self):
         return [(Vec3(*a), Vec3(*b)) for a, b, _style in self._machine.preview()["lines"]]
@@ -278,7 +298,7 @@ class RustTool(Tool):
 
 def _point_property(key):
     def get(self):
-        return _vec(self._state(key))
+        return self._point(key)
 
     def put(self, value):
         self._machine.set(key, _tuple(value))
@@ -292,7 +312,18 @@ class LineTool(RustTool):
 
     start_point = _point_property("start_point")
     hover_point = _point_property("hover_point")
-    chain_first_point = _point_property("chain_first_point")
+
+    @property
+    def chain_first_point(self):
+        # One vertex placed: the first point IS the start (the snap frame
+        # offers no ``close`` onto the segment's own start).
+        if len(self._state("chain_vertices") or ()) <= 1:
+            return self.start_point
+        return self._point("chain_first_point")
+
+    @chain_first_point.setter
+    def chain_first_point(self, value):
+        self._machine.set("chain_first_point", _tuple(value))
 
     @property
     def chain_vertices(self):
