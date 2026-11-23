@@ -74,6 +74,12 @@ class Host:
         #: Set by the window handle's startSystemMove (the chrome's empty
         #: top strip); Rust starts the native window drag and clears it.
         self.window_drag_requested = False
+        #: Windows this one asks Rust for (app_shell.windows): tokens that
+        #: come back in :meth:`adopt` on the new window's host.
+        self.window_requests = []
+        #: This window should come to the front (a file already open here
+        #: was opened from another window, the ›› n menu).
+        self.focus_requested = False
         from app_shell.document import ShellViewport
         from app_shell.view import ShellView
         from app_shell.window import ShellWindow
@@ -92,6 +98,8 @@ class Host:
         viewport.set_active_tool(None)
         modal.install(self)
         files.install(self.window)
+        from app_shell import windows
+        windows.register(self)
         guard = qt_host.widget_guard()
         if guard is not None:
             guard.on_blocked = lambda title: self.not_here(f"“{title}”")
@@ -289,7 +297,34 @@ class Host:
                 recent = [p for p in self.window._recent_paths() if Path(p).exists()]
             except Exception:
                 recent = []
-        return {"exit": bool(self.quit_now), "ime_area": self._ime_area, "recent": recent}
+        new_window = self.window_requests.pop(0) if self.window_requests else None
+        focus, self.focus_requested = self.focus_requested, False
+        return {"exit": bool(self.quit_now), "ime_area": self._ime_area, "recent": recent,
+                "new_window": new_window, "focus": bool(focus)}
+
+    def adopt(self, token):
+        """This new window was asked for by ``token`` (app_shell.windows):
+        the start page for New Window, or the project moved here."""
+        from app_shell import files, windows
+        self._front()
+        what = windows.take(token)
+        if what is None:
+            return False
+        kind, payload = what
+        if kind == "move":
+            src, doc = payload
+            ok = bool(self._guard("move project", windows.transfer, src, doc, self))
+        else:
+            ok = True
+            self._guard("new window", files.cold_start, self.window)
+        self.request_frame()
+        return ok
+
+    def _front(self):
+        """This window is the one being used: questions it asks show here
+        (app_shell.modal), as do the projects of the shared menu bar."""
+        from app_shell import modal
+        modal._HOST = self
 
     def _qt_timers_pending(self):
         view = self.view
@@ -341,6 +376,7 @@ class Host:
         """A file from the command line, Finder (Open With, a double-click,
         the Dock), a drop on the window, or another `built` handing over."""
         from app_shell import files
+        self._front()
         t0 = time.perf_counter()
         ok = bool(self._guard("open", files.open_path, self.window, Path(path)))
         self.open_ms = {"total": (time.perf_counter() - t0) * 1000}
@@ -359,6 +395,7 @@ class Host:
         way (the sheet asked, through the modal pump)."""
         from app_shell import files
         from views import chrome_dialogs as cd
+        self._front()
         if cd.modal(self.window):
             return False
         ok = self._guard("close", files.request_close, self.window)
@@ -379,6 +416,8 @@ class Host:
     def pointer(self, kind, x, y, button=0, held=0, modifiers=0):
         from app_shell.events import ContextMenuEvent, MouseEvent
         qt_host.INPUT.update(modifiers=int(modifiers), buttons=int(held), pos=(x, y))
+        if kind == "press":
+            self._front()
         view = self.view
         if kind == "leave":
             return self._guard("leave", view.leaveEvent, None)
@@ -418,6 +457,8 @@ class Host:
         from views import chrome_dialogs as cd
         qt_host.INPUT["modifiers"] = int(modifiers)
         view = self.view
+        if pressed:
+            self._front()
         if self._modal():
             if cd.current_sheet(self.window) is None and cd._form_up(self.window):
                 # A form on the chrome (views/chrome_forms.py): its fields
@@ -517,6 +558,8 @@ class Host:
         self.request_frame()
 
     def focus(self, on):
+        if on:
+            self._front()
         if not on:
             self._guard("focus out", self.view.focusOutEvent, None)
 
@@ -524,6 +567,7 @@ class Host:
     def menu(self, action):
         """A menu command from the Rust menu bar (rust/built_app/src/menu.rs)."""
         w = self.window
+        self._front()
         if self._modal():
             return None                 # a question or a job holds the window
         kind, _, arg = action.partition(":")
@@ -552,6 +596,8 @@ class Host:
         return out
 
     def close(self):
+        from app_shell import windows
+        windows.unregister(self)
         for doc in list(self.window._documents):
             view = doc.stand_in
             if view is not None:
@@ -560,7 +606,9 @@ class Host:
     # ---- diagnostics -----------------------------------------------------
     def state(self):
         """A few facts for scripted runs and the smoke test."""
+        from app_shell import windows
         from app_shell.window import BORROWED
+        from views import wgpu_tabs
         scene = self.viewport.scene
         mesh = scene.mesh
         tool = self.viewport.active_tool
@@ -576,6 +624,11 @@ class Host:
             "tool": type(tool).__name__ if tool is not None else None,
             "status": win.statusBar().currentMessage(),
             "documents": [d.display_name() for d in win._documents],
+            "windows": len(windows.hosts()),
+            "link_tabs": [d.display_name() for d in win._documents
+                          if wgpu_tabs.link_host(win, d)[0] is not None],
+            "tab_rects": self._tab_rects(),
+            "context_menu": self._context_rows(),
             "active": win._documents.index(win._doc) if win._doc in win._documents else -1,
             "dirty": bool(win._is_dirty()),
             "start_page": bool(getattr(win.__dict__.get("_start_page"), "wanted", False)),
@@ -590,6 +643,20 @@ class Host:
             "clipboard": bool(getattr(self.viewport, "clipboard", None)),
             "pasteboard": self._pasteboard_types(),
         }
+
+    def _tab_rects(self):
+        """The project tabs as the chrome last laid them out (scripted runs)."""
+        renderer = getattr(self.view, "renderer", None)
+        if renderer is None or not hasattr(renderer, "ui_project_tab_rects"):
+            return []
+        return [list(r) if r is not None else None for r in renderer.ui_project_tab_rects()]
+
+    def _context_rows(self):
+        """The right-click menu's rows on screen, or [] (scripted runs)."""
+        renderer = getattr(self.view, "renderer", None)
+        if renderer is None or not hasattr(renderer, "ui_context_menu_rows"):
+            return []
+        return list(renderer.ui_context_menu_rows())
 
     @staticmethod
     def _pasteboard_types():

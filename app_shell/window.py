@@ -608,6 +608,14 @@ class ShellWindow(QObject):
             except Exception:  # noqa: BLE001
                 pass
         renderer = getattr(getattr(old, "stand_in", None), "renderer", None)
+        if old is not None and not closing and renderer is not None:
+            # Its tab's picture on hover, as it is left: the one renderer
+            # goes to the project in front (views/wgpu_tabs.py).
+            from views import wgpu_tabs
+            try:
+                wgpu_tabs.remember_picture(old)
+            except Exception:  # noqa: BLE001 — a missing picture only
+                pass
         if old is not None and old.stand_in is not None:
             old.stand_in.renderer = None
         self._doc = doc
@@ -712,6 +720,10 @@ class ShellWindow(QObject):
         name = getattr(tool, "name", key)
         hint = getattr(tool, "description", "") or ""
         self._status.showMessage(f"{name} — {hint}" if hint else name)
+        # What Repeat (⇧R, the right-click's first row) runs again, as
+        # MainWindow._activate_tool records it.
+        if key not in ("select", "texture_position", "change_axes", "scale_manager"):
+            self._remember_command(name, lambda k=key: self._activate_tool(k))
 
     def _show_model(self):
         from views import wgpu_sheets
@@ -722,13 +734,32 @@ class ShellWindow(QObject):
         from views import wgpu_sheets
         wgpu_sheets.to_sheets(self)
 
-    def show_viewport_context_menu(self, *args, **kwargs):
-        # The viewport's right-click menu waits for its design review
-        # (build/shell-design/); until then the selection bar and the
-        # tree's row menus carry the verbs.
-        self._status.showMessage(
-            "Right-click menu: not in the native app yet — use the selection bar, "
-            "the tree's row menu, or File ▸ Open in Classic App", 4000)
+    def show_viewport_context_menu(self, global_pos=None, locked_image=None, locked_group=None):
+        """The right-click menu (views/context_menu.py). With the chrome on,
+        WgpuView.contextMenuEvent hands it to the chrome before this is
+        reached; without a surface (headless) the menu is only built, for
+        the scripted runs and tests that read it."""
+        from views import context_menu
+        view = self.view
+        menu = context_menu.build(self, view, locked_image=locked_image, locked_group=locked_group)
+        px = getattr(self.viewport, "_context_pixel", None) or (0.0, 0.0)
+        menu.at = (float(px[0]), float(px[1]))
+        if view is not None:
+            view._ctx_menu = menu
+            context_menu.send(view, menu)
+        return menu
+
+    def close_document(self, doc=None, ask: bool = True) -> bool:
+        from app_shell import files
+        return files.close_document(self, doc)
+
+    def close_documents(self, docs) -> bool:
+        """Close these projects one by one, each asking about its own
+        changes; a Cancel stops there."""
+        for doc in list(docs):
+            if doc in self._documents and not self.close_document(doc):
+                return False
+        return True
 
     # ---- the title and the dirty mark ----------------------------------
     def _doc_is_dirty(self, doc) -> bool:

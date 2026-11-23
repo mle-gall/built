@@ -267,11 +267,19 @@ def test_a_qt_dialog_the_borrowed_code_shows_is_refused_not_waited_for(host):
     assert "Classic App" in st["status"]
 
 
-def test_right_click_says_where_the_verbs_are(host, tmp_path):
+def test_right_click_builds_the_menu_for_what_was_hit(host, tmp_path):
+    """The native app's right-click menu (docs/context-menu.md): what is
+    under the pointer is selected first, and the menu is that kind's. The
+    per-kind menus are tests/test_shell_tabs_menu.py's."""
+    from views import context_menu
     host.open_path(_copy(tmp_path))
     host.pointer("press", 600, 400, 2, 2, 0)
     host.pointer("release", 600, 400, 2, 0, 0)
-    assert "Classic App" in host.state()["status"]
+    menu = host.view._ctx_menu
+    scene = host.viewport.scene
+    assert menu.kind == context_menu.kind_of(scene, scene.selection)
+    assert menu.labels()[0].startswith("Repeat")
+    assert host.errors == []
 
 
 def test_qt_timers_started_from_python_wake_the_loop(host):

@@ -17,6 +17,10 @@ mod start;
 mod sheets;
 mod activity;
 pub use activity::ActivityRow;
+/// Project tabs in the top bar (views/wgpu_tabs.py).
+mod tabs;
+/// The viewport right-click menu (views/context_menu.py, docs/context-menu.md).
+mod context_menu;
 
 // ---- Design tokens (council 2026-11-22; one place, every component
 // below draws from these). Text on graphite glass, three levels plus off.
@@ -257,6 +261,11 @@ pub struct Ui {
     home: start::Start,
     /// The Sheets workspace: while on, the page replaces the model (ui/sheets.rs).
     sheets: sheets::Sheets,
+    /// The project tabs (ui/tabs.rs): drawn instead of the document ▾
+    /// once Python sends them.
+    strip: tabs::Strip,
+    /// The right-click menu over the model (ui/context_menu.rs).
+    ctx_menu: Option<context_menu::Menu>,
 }
 
 /// A sheet: title, body, tone (question, info, warning, error) and its
@@ -466,6 +475,8 @@ impl Ui {
             cursor_shape: "",
             home: Default::default(),
             sheets: Default::default(),
+            strip: Default::default(),
+            ctx_menu: None,
         }
     }
 
@@ -655,10 +666,12 @@ impl Ui {
     /// Keyboard ownership: the chrome takes a key only while one of its
     /// fields has focus, or Escape while one of its popups is open.
     pub fn claims_key(&self, name: &str) -> bool {
+        if name == "Escape" && self.strip.menus_open() { return true; }
         if self.sheets.shown && !self.home.shown { return self.sheets_claims_key(name); }
         let filing = self.column.as_ref().is_some_and(|c| c.filing.is_some() || c.row_menu.is_some() || !c.mode.is_empty()
             || c.kind_menu.is_some() || c.head_menu.is_some() || c.prompt.is_some());
-        self.sheet.is_some() || self.dialog.is_some() || self.cmd_open || (name == "Escape" && (self.view_open || self.sel_more || self.menu.is_some() || self.form.is_some() || filing))
+        self.sheet.is_some() || self.dialog.is_some() || self.cmd_open || (name == "Escape" && (self.view_open || self.sel_more || self.menu.is_some() || self.form.is_some() || filing
+            || self.ctx_menu.is_some() || self.strip.menus_open()))
             || self.ctx.wants_keyboard_input()
     }
     pub fn key(&mut self, name: &str, pressed: bool, mods: u8) -> bool {
@@ -681,6 +694,10 @@ impl Ui {
                 }
                 _ => {}
             }
+        }
+        if name == "Escape" && (self.ctx_menu.is_some() || self.strip.menus_open()) {
+            if pressed { self.ctx_menu = None; self.strip.close_menus(); }
+            return true;
         }
         if self.sheets.shown && !self.home.shown { return self.sheets_key(name, pressed, mods); }
         if name == "Escape" && (self.view_open || self.sel_more || self.menu.is_some() || self.form.is_some()) {
@@ -774,6 +791,9 @@ impl Ui {
 
     /// Only the interactive chrome takes the pointer; labels pass it through.
     fn over_chrome(&self, pos: Pos2) -> bool { self.hit.iter().any(|r| r.contains(pos)) }
+    /// Is (x, y) on the interactive chrome (a right-click there is the
+    /// chrome's, not the model's)?
+    pub fn over_chrome_at(&self, x: f32, y: f32) -> bool { self.over_chrome(pos2(x, y)) }
 
     /// kind: "move" | "press" | "release" | "leave". Coordinates in logical
     /// points. Returns whether the chrome takes the event (the view must
@@ -801,6 +821,8 @@ impl Ui {
                     self.menu = None;
                     self.cmd_open = false;
                     self.sheets_close_popups();
+                    self.ctx_menu = None;
+                    self.strip.close_menus();
                     if let Some(col) = self.column.as_mut() {
                         col.row_menu = None;
                         col.kind_menu = None;
@@ -916,7 +938,14 @@ impl Ui {
                         ui.spacing_mut().item_spacing = vec2(2.0, 0.0);
                         let left = ui.horizontal(|ui| {
                             ui.spacing_mut().item_spacing = vec2(2.0, 0.0);
-                            if let Some((_, docs)) = &self.projects {
+                            if !self.strip.tabs.is_empty() {
+                                // The project tabs (option B): room is left for
+                                // the scene control and at least 60 pt to drag.
+                                let max_w = (screen.width() - lights - 8.0 - self.top_right_w - 300.0 - 60.0).max(160.0);
+                                let acts = self.strip.show(ui, max_w);
+                                self.actions.extend(acts);
+                                bar_divider(ui);
+                            } else if let Some((_, docs)) = &self.projects {
                                 let cur = docs.iter().find(|d| d.1).or(docs.first());
                                 let label = cur.map_or("Untitled".to_owned(), |d| if d.2 { format!("{} •", d.0) } else { d.0.clone() });
                                 let more = if docs.len() > 1 { format!("  {}", docs.len()) } else { String::new() };
@@ -2317,6 +2346,8 @@ impl Ui {
                 self.bar_menu(ctx);
                 self.view_popup(ctx);
                 self.form_popup(ctx);
+                let acts = self.strip.popups(ctx, &self.icons);
+                self.actions.extend(acts);
             } else {
             self.top_bar(ctx, screen);
             if !self.review {
@@ -2329,6 +2360,9 @@ impl Ui {
             self.bar_menu(ctx);
             self.view_popup(ctx);
             self.form_popup(ctx);
+            let acts = self.strip.popups(ctx, &self.icons);
+            self.actions.extend(acts);
+            self.context_menu(ctx, screen);
             }
             self.command_palette(ctx, screen);
             if !self.review && !start && !self.sheets.shown { self.selection_more(ctx); }
@@ -2355,6 +2389,9 @@ impl Ui {
                      ("color_pick", model && self.column.as_ref().is_some_and(|c| c.color_pick.is_some())),
                      ("jobs", !self.jobs.is_empty() || !self.history.is_empty()),
                      ("dialog", self.dialog.is_some()),
+                     ("tab_menu", !start && self.strip.menu_open()),
+                     ("tab_overflow", !start && self.strip.overflow_open()),
+                     ("ctx_menu", !start && model && self.ctx_menu.is_some()),
                      ("sheet", self.sheet.is_some()),
                      ("lib_menu", work && model && self.library.menu_open()),
                      ("dock_grip", work && model && self.column.is_some()),

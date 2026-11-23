@@ -107,6 +107,7 @@ def command(win, name, *args):
     table = {
         "new": lambda: new_model(win),
         "new_window": lambda: new_window(win),
+        "move_to_window": lambda: move_to_new_window(win, args[0] if args else None),
         "open": lambda: open_dialog(win),
         "home": lambda: show_start(win),
         "close_tab": lambda: close_document(win, args[0] if args else None),
@@ -148,6 +149,12 @@ def command(win, name, *args):
         what, _, path = arg.partition(":")
         ws = wgpu_sheets.workspace_of(win.view)
         return ws._export_to(what, path) if ws is not None else None
+    if kind == "link_source":
+        from views import wgpu_tabs
+        return wgpu_tabs.open_link_source(win, Path(arg))
+    if kind == "ctx_demo":
+        from app_shell import harness
+        return harness.context_menu_for(win, arg)
     if kind == "close_doc":
         docs = win._documents
         return close_document(win, docs[int(arg)] if arg else None)
@@ -177,13 +184,17 @@ def new_model(win) -> None:
 
 
 def new_window(win) -> bool:
-    """File ▸ New Window: another `built` process, its own window on the
-    start page (as the Qt app starts another app for a new window)."""
-    from app_shell import native
-    if native.spawn_self():
-        return True
-    win._host.not_here("New Window")
-    return False
+    """File ▸ New Window (⇧⌘N): a window on the start page, in this process
+    (app_shell.windows; Rust makes it and hands it the token)."""
+    from app_shell import windows
+    windows.request(win._host, "new")
+    return True
+
+
+def move_to_new_window(win, doc=None) -> bool:
+    """Window ▸ Move Project to New Window, and the tab menu's row."""
+    from app_shell import windows
+    return windows.move_to_new_window(win, doc or win._doc) is not None
 
 
 def show_start(win) -> None:
@@ -235,6 +246,16 @@ def open_path(win, path: Path) -> bool:
             win.activate_document(doc)
             win._dismiss_home()
             return True
+    # A file opens only once: open in another window, that window and its
+    # tab come to the front.
+    from app_shell import windows
+    other, doc = windows.find_document(path, exclude=win)
+    if other is not None:
+        other.window.activate_document(doc)
+        other.window._dismiss_home()
+        other.focus_requested = True
+        other.request_frame()
+        return True
     if not path.is_file():
         from views import chrome_dialogs as cd
         cd.warning(win, tr("Open"), tr("{name} is no longer there.", name=path.name))

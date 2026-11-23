@@ -429,6 +429,8 @@ def chrome_frame(view):
     win = _window(view)
     if win is not None:
         _projects(view, win)
+        from views import wgpu_tabs
+        wgpu_tabs.before_frame(view, win)
         _sheet_and_jobs(view, win)
         _chrome_form(view, win)
         from views import wgpu_start
@@ -480,6 +482,8 @@ def before_frame(view) -> None:
     _inspector(view, win)
     _tabs(view, win)
     _projects(view, win)
+    from views import wgpu_tabs
+    wgpu_tabs.before_frame(view, win)
     opts = [(i, label, k, state) for i, label, k, state, _ in _options(view)]
     if opts != getattr(view, "_ui_opts", None):
         view._ui_opts = opts
@@ -2360,7 +2364,9 @@ def _link_action(win, view, g, key) -> None:
         if key == "linkreload":
             links.reload(scene, rec["path"])
         elif key == "linkopen":
-            win.open_path(Path(rec["path"]))
+            # A ⛓ tab right of this project (views/wgpu_tabs.py).
+            from views import wgpu_tabs
+            wgpu_tabs.open_link_source(win, Path(rec["path"]))
             return
         elif key == "linkpack":
             packed = not links.is_packed(scene, rec["path"])
@@ -2586,6 +2592,12 @@ def _run(win, actions) -> None:
                 hits[i].trigger()
         elif kind == "proj":
             _project_action(win, arg)
+        elif kind == "ptab":
+            from views import wgpu_tabs
+            wgpu_tabs.action(win, getattr(getattr(win, "_doc", None), "stand_in", None), arg)
+        elif kind == "ctx":
+            from views import context_menu
+            context_menu.action(win, getattr(getattr(win, "_doc", None), "stand_in", None), arg)
         elif kind == "tab":
             view = getattr(getattr(win, "_doc", None), "stand_in", None)
             if arg == "model":
