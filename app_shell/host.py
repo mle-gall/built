@@ -142,7 +142,7 @@ class Host:
         # What the chrome was last sent for this view is no longer what the
         # renderer shows: the signatures go (the defaults come back), the
         # view's own state (expanded rows, filters, mode) stays.
-        resend = ("_ui_docs", "_ui_tabs", "_ui_opts", "_ui_palette", "_ui_colset",
+        resend = ("_ui_ptabs", "_ui_docs", "_ui_tabs", "_ui_opts", "_ui_palette", "_ui_colset",
                   "_ui_issues", "_ui_cursor_shape", "_ui_was_over")
         for key in [k for k in view.__dict__ if k.startswith("_ui_")]:
             if key.endswith(("_sig", "_sent", "_cv")) or key in resend:
@@ -500,6 +500,11 @@ class Host:
             combo = QKeySequence(int(modifiers) | int(key))
         except Exception:
             return False
+        from ingetrazo_render import view_shortcut
+        from views.view_commands import run
+        command = view_shortcut(combo.toString(QKeySequence.PortableText))
+        if command:
+            return run(self.window, command)
         for action in list(self.window._tool_actions.values()):
             seq = action.shortcut()
             if not seq.isEmpty() and seq.matches(combo) == QKeySequence.ExactMatch:
@@ -588,15 +593,17 @@ class Host:
             self._guard("undo", w._on_undo)
         elif action == "redo":
             self._guard("redo", w._on_redo)
-        elif action == "zoom_extents":
-            self._guard("zoom extents", w._on_zoom_extents)
+        elif action == "zoom_extents" or kind == "view":
+            from views.view_commands import run
+            self._guard("camera command", run, w, "view_" + arg if kind == "view" else action)
+            if kind == "view":
+                bounds = w._extents_bounds()
+                if bounds:
+                    self.viewport.camera.fit_box(*bounds)
         elif kind == "verb" and arg in _VERBS:
             # The ported prompts (views/chrome_forms.py), by name: the
             # window's own MainWindow methods, borrowed.
             self._guard(f"verb {arg}", getattr(w, _VERBS[arg]))
-        elif kind == "view":
-            self.viewport.camera.set_view(arg)
-            self.viewport.camera.fit_box(*w._extents_bounds()) if w._extents_bounds() else None
         else:
             out = self._guard(f"menu {action}", w.run_command, action)
         view = self.view
@@ -634,6 +641,10 @@ class Host:
             "edges": len(getattr(mesh, "edges", ()) or ()),
             "groups": len(getattr(scene, "groups", ()) or ()),
             "selection": len(getattr(scene, "selection", ()) or ()),
+            "cluster": [key for key, _ in getattr(self.renderer, "ui_cluster_buttons", lambda: [])()],
+            "nav_mode": self.viewport.nav_mode,
+            "camera_forward": self.viewport.camera.forward().toTuple(),
+            "camera_eye": self.viewport.camera.eye().toTuple(),
             "tool": type(tool).__name__ if tool is not None else None,
             "status": win.statusBar().currentMessage(),
             "documents": [d.display_name() for d in win._documents],

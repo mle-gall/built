@@ -126,6 +126,7 @@ pub struct Ui {
     view_anchor: Rect,
     sel_more_anchor: Rect,
     top_groups: Vec<Rect>,
+    pub cluster_buttons: Vec<(String, (f32, f32))>,
     top_right_w: f32,
     units: String,
     glass: crate::glass::Glass,
@@ -286,6 +287,7 @@ impl Ui {
             view_anchor: Rect::NOTHING,
             sel_more_anchor: Rect::NOTHING,
             top_groups: Vec::new(),
+            cluster_buttons: Vec::new(),
             top_right_w: 0.0,
             units: "mm".into(),
             sheet: None,
@@ -787,6 +789,7 @@ impl Ui {
         let mut clicked: Option<String> = None;
         let mut open: Option<(&'static str, Rect)> = None;
         let mut groups = Vec::new();
+        self.cluster_buttons.clear();
         let lights = self.projects.as_ref().map_or(86.0, |p| p.0);
         egui::Area::new(egui::Id::new("top"))
             .fixed_pos(Pos2::ZERO)
@@ -846,7 +849,9 @@ impl Ui {
                                 for (gi, group) in self.cluster.iter().enumerate() {
                                     if gi > 0 { bar_divider(ui); }
                                     for item in group {
-                                        if item_button(ui, item, self.icons.get(&item.3)) {
+                                        let response = item_response(ui, item, self.icons.get(&item.3));
+                                        self.cluster_buttons.push((item.0.clone(), response.rect.center().into()));
+                                        if response.clicked() {
                                             clicked = Some(format!("act:{}", item.0));
                                         }
                                     }
@@ -2402,6 +2407,10 @@ fn mods_from(mods: u8) -> egui::Modifiers {
 /// A bar control (top row, options strip): icon 28 × 28 or text, 28 high.
 /// Checked items stay lit (latched toggles), the same way as a current tool.
 fn item_button(ui: &mut egui::Ui, item: &Item, icon: Option<&egui::TextureHandle>) -> bool {
+    item_response(ui, item, icon).clicked()
+}
+
+fn item_response(ui: &mut egui::Ui, item: &Item, icon: Option<&egui::TextureHandle>) -> egui::Response {
     let (_, label, tip, _, checked, enabled) = item;
     let width = match icon {
         Some(_) => 28.0,
@@ -2420,7 +2429,7 @@ fn item_button(ui: &mut egui::Ui, item: &Item, icon: Option<&egui::TextureHandle
         }
     }
     let tip = if tip.is_empty() { label.clone() } else { tip.clone() };
-    resp.on_hover_text(tip).clicked()
+    resp.on_hover_text(tip)
 }
 
 /// A project tab: capsule, name (and • while unsaved), × on the right when

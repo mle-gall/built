@@ -1547,6 +1547,8 @@ class MetalView(ViewNavigation):
             self.last = None
             self._recentre_on(event.position().x(), event.position().y())
             return
+        if event.button() == Qt.LeftButton and getattr(self.source_viewport, 'nav_mode', None):
+            return self.mousePressEvent(event)
         mode = self.tools.sync()
         if mode in ('tape', 'move', 'mesh'):
             self.hover(event.position().x(), event.position().y(), event.modifiers())
@@ -1605,6 +1607,11 @@ class MetalView(ViewNavigation):
         mode = self.tools.sync()
         if event.key() == Qt.Key_Escape:
             self._look_drag = None
+            from ingetrazo_render import leave_navigation
+            win = self.window() if hasattr(self, "window") else None
+            if (self.source_viewport is not None and getattr(win, "viewport", None) is self.source_viewport
+                    and leave_navigation(win)):
+                return
             self.tools._apply_tool_cursor()
         if event.key() == Qt.Key_Escape and mode in ('tape', 'move', 'mesh'):
             self.tools.cancel()

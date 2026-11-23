@@ -52,6 +52,12 @@ struct Args {
 }
 
 impl Args {
+    fn launch_paths(&self) -> Vec<PathBuf> {
+        [self.file.as_deref(), self.script.as_deref(), self.shots.as_deref(),
+         self.root.as_deref(), self.venv.as_deref(), self.settings.as_deref().map(Path::new)]
+            .into_iter().flatten().map(absolute).collect()
+    }
+
     fn temporary_profile(&self) -> bool {
         self.check || self.measure || self.gallery || self.script.is_some()
     }
@@ -105,6 +111,8 @@ fn absolute(p: &Path) -> PathBuf {
 enum UserEvent {
     Menu(String),
     Open(PathBuf),
+    #[cfg(target_os = "macos")]
+    AppKitOpen(PathBuf),
 }
 
 // ---- single instance ------------------------------------------------------
@@ -261,6 +269,11 @@ impl App {
                 }
             }
             w.last_press = if kind == "double" { None } else { Some((now, button, (x, y))) };
+        } else if kind == "move" && w.held != 0 {
+            // A drag cannot be the first click of a double click.
+            if w.last_press.is_some_and(|(_, _, (px, py))| (px - x).hypot(py - y) >= 5.0) {
+                w.last_press = None;
+            }
         } else if kind == "release" {
             w.held &= !button;
         }
@@ -411,7 +424,18 @@ impl App {
         match step {
             Step::Open(p) => self.open(&absolute(Path::new(&p))),
             Step::Wait(ms) => self.resume_at = Some(Instant::now() + Duration::from_millis(ms)),
+            Step::Button(down, x, y, button, mods) =>
+                self.pointer(id, if down { "press" } else { "release" }, x, y, button, mods),
             Step::Move(x, y) => self.pointer(id, "move", x, y, 0, 0),
+            Step::ClickCommand(command) => {
+                if let Some(center) = self.host(id).and_then(|h| h.command_center(&command)) {
+                    self.steps.push_front(Step::Click(center.0, center.1, 1, 0));
+                } else {
+                    eprintln!("[built] no visible top-bar command {command}");
+                    self.exit_code = 1;
+                    event_loop.exit();
+                }
+            }
             Step::Click(x, y, b, m) => {
                 self.pointer(id, "move", x, y, 0, m);
                 self.pointer(id, "press", x, y, b, m);
@@ -782,7 +806,9 @@ impl ApplicationHandler<UserEvent> for App {
     fn user_event(&mut self, event_loop: &ActiveEventLoop, event: UserEvent) {
         match event {
             UserEvent::Menu(cmd) => self.command(event_loop, &cmd),
-            UserEvent::Open(path) => {
+            UserEvent::Open(path) => self.open(&path),
+            #[cfg(target_os = "macos")]
+            UserEvent::AppKitOpen(path) => {
                 if let Some(i) = self.cli_files.iter().position(|p| same_path(p, &path)) {
                     self.cli_files.remove(i);
                     return;
@@ -966,7 +992,8 @@ impl ApplicationHandler<UserEvent> for App {
             ControlFlow::Poll
         } else {
             match (wake, self.resume_at) {
-                (_, Some(at)) => ControlFlow::WaitUntil(at),
+                (Some(ms), Some(at)) => ControlFlow::WaitUntil(at.min(Instant::now() + Duration::from_millis(ms.max(1.0) as u64))),
+                (None, Some(at)) => ControlFlow::WaitUntil(at),
                 (Some(ms), None) => ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(ms.max(1.0) as u64)),
                 (None, None) => ControlFlow::Wait,
             }
@@ -1083,7 +1110,7 @@ fn main() {
             match req {
                 native::AppRequest::Open(paths) => {
                     for path in paths {
-                        let _ = p.send_event(UserEvent::Open(PathBuf::from(path)));
+                        let _ = p.send_event(UserEvent::AppKitOpen(PathBuf::from(path)));
                     }
                 }
                 native::AppRequest::Quit => {
@@ -1115,7 +1142,9 @@ fn main() {
         cli_files: Vec::new(),
         started: false,
     };
-    app.cli_files = app.args.file.iter().chain(&app.args.script).cloned().collect();
+    // AppKit may replay existing paths from argv as open-document events,
+    // including operands of options such as --script and --shots.
+    app.cli_files = app.args.launch_paths();
     if let Err(e) = event_loop.run_app(&mut app) {
         eprintln!("built: {e}");
         app.exit_code = 1;
@@ -1135,6 +1164,13 @@ fn main() {
 #[cfg(test)]
 mod profile_tests {
     use super::*;
+
+    #[test]
+    fn appkit_launch_replays_include_options_and_the_positional_file() {
+        let args = parse_args(["--script", "steps", "--shots", "shots", "--size", "1600x1000",
+                               "--settings", "profile", "model.igz"].map(str::to_owned).into_iter()).unwrap();
+        assert_eq!(args.launch_paths(), ["model.igz", "steps", "shots", "profile"].map(|s| absolute(Path::new(s))));
+    }
 
     #[test]
     fn only_automation_requests_a_temporary_profile() {

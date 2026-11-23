@@ -777,8 +777,6 @@ class Workspace:
                            item("Open in classic sheet editor…", self.open_classic),
                            item("Back to the model", lambda: to_model(comp._window))])]
         self._actions = acts
-        if self.view is not None:
-            self.view._ui_actions = acts
         return cluster, menu
 
     # ---- Actions from the chrome -------------------------------------------------------------
