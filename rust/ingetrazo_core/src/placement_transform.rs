@@ -403,10 +403,143 @@ fn restore_exploded(container: &Obj<'_>, snap: &Obj<'_>) -> PyResult<()> {
     }
     Ok(())
 }
+// A world reframe also moves loose or classic meshes. Its survey datum is
+// owned by the host, so keep both exact mesh states for mixed-command replay.
+fn reframe_mesh(
+    mesh: &Obj<'_>,
+    m: &Obj<'_>,
+    redo: bool,
+    snaps: &Bound<'_, PyDict>,
+) -> PyResult<()> {
+    if !mesh.getattr("vertices")?.is_truthy()? {
+        return Ok(());
+    }
+    let key = mesh.as_ptr() as usize;
+    if let Some(saved) = snaps.get_item(key)? {
+        mesh.call_method1("restore_state", (saved.get_item(usize::from(redo))?,))?;
+    } else {
+        let before = mesh.call_method0("capture_state")?;
+        move_mesh(mesh, m, None)?;
+        mesh.py()
+            .import("core.group")?
+            .call_method1("_remap_uvws", (mesh, m))?;
+        snaps.set_item(key, (before, mesh.call_method0("capture_state")?))?;
+    }
+    Ok(())
+}
+
+#[pyfunction]
+fn reframe_world(
+    scene: &Obj<'_>,
+    m: &Obj<'_>,
+    degrees: f64,
+    redo: bool,
+    snaps: &Bound<'_, PyDict>,
+) -> PyResult<()> {
+    for group in scene.getattr("groups")?.try_iter()? {
+        let group = group?;
+        let pose = group.getattr("xform")?;
+        if pose.is_none() {
+            reframe_mesh(&group.getattr("mesh")?, m, redo, snaps)?;
+        } else {
+            group.setattr("xform", m.mul(pose)?)?;
+        }
+    }
+    reframe_mesh(&scene.getattr("mesh")?, m, redo, snaps)?;
+    // Evaluate all right-hand sides before assigning a record, as two
+    // document fields may expose live vectors referring to the same record.
+    let records: &[(&str, &[(&str, &str)])] = &[
+        (
+            "dimensions",
+            &[("a", "map"), ("b", "map"), ("offset", "mapVector")],
+        ),
+        ("text_labels", &[("anchor", "map"), ("offset", "mapVector")]),
+        ("guides", &[("point", "map")]),
+        (
+            "section_planes",
+            &[("point", "map"), ("normal", "mapVector")],
+        ),
+        (
+            "image_planes",
+            &[("origin", "map"), ("u", "mapVector"), ("v", "mapVector")],
+        ),
+    ];
+    for &(collection, fields) in records {
+        for item in scene.getattr(collection)?.try_iter()? {
+            let item = item?;
+            let mut values = Vec::with_capacity(fields.len());
+            for &(field, map) in fields {
+                values.push((field, m.call_method1(map, (item.getattr(field)?,))?));
+            }
+            for (field, value) in values {
+                item.setattr(field, value)?;
+            }
+            if collection == "guides" && item.hasattr("direction")? {
+                let d = item.getattr("direction")?;
+                if !d.is_none() {
+                    item.setattr("direction", m.call_method1("mapVector", (d,))?)?;
+                }
+            }
+        }
+    }
+    for path in scene.getattr("geo_paths")?.try_iter()? {
+        let path = path?;
+        let points = path
+            .getattr("points")?
+            .try_iter()?
+            .map(|p| m.call_method1("map", (p?,)))
+            .collect::<PyResult<Vec<_>>>()?;
+        path.setattr("points", points)?;
+        if path.hasattr("_surface_tris")? && !path.getattr("_surface_tris")?.is_none() {
+            path.setattr("_surface_tris", scene.py().None())?;
+        }
+    }
+    for point in scene.getattr("geo_points")?.try_iter()? {
+        let point = point?;
+        point.setattr(
+            "position",
+            m.call_method1("map", (point.getattr("position")?,))?,
+        )?;
+    }
+    let turn = degrees.to_radians();
+    for view in scene.getattr("saved_views")?.try_iter()? {
+        let view = view?;
+        let target = m.call_method1("map", (view.getattr("target")?,))?;
+        view.setattr("target", target.call_method0("toTuple")?)?;
+        view.setattr("yaw", view.getattr("yaw")?.add(turn)?)?;
+    }
+    for sheet in scene.getattr("compositions")?.try_iter()? {
+        for item in sheet?.call_method0("all_items")?.try_iter()? {
+            let item = item?;
+            for field in ["a_world", "b_world", "cam_target"] {
+                if !item.hasattr(field)? {
+                    continue;
+                }
+                let old = item.getattr(field)?;
+                if !old.is_truthy()? {
+                    continue;
+                }
+                item.setattr(
+                    field,
+                    xyz(&m.call_method1("map", (old,))?)?.to_array().to_vec(),
+                )?;
+                if field == "cam_target" && item.hasattr("cam_yaw")? {
+                    let yaw = item.getattr("cam_yaw")?;
+                    if !yaw.is_none() {
+                        item.setattr("cam_yaw", yaw.add(turn)?)?;
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let sub = PyModule::new(m.py(), "placement_transform")?;
     sub.add_class::<GroupTransform>()?;
     sub.add_class::<AxesEdit>()?;
+    sub.add_function(wrap_pyfunction!(reframe_world, &sub)?)?;
     sub.add_function(wrap_pyfunction!(shift_group, &sub)?)?;
     sub.add_function(wrap_pyfunction!(flip_groups, &sub)?)?;
     sub.add_function(wrap_pyfunction!(assembled_centres, &sub)?)?;

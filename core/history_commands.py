@@ -4909,6 +4909,10 @@ class StraightenModelCommand(Command):
     def _apply(self, scene, m, turn_deg: float, redo: bool) -> None:
         """Move everything by the rigid ``m`` (``turn_deg`` is its turn about
         Z, for the cameras)."""
+        if _doc.ENABLED:
+            _transform.reframe_world(scene, m, turn_deg, redo, self._snaps)
+            scene.version += 1
+            return
         import math
 
         def pt(v):
