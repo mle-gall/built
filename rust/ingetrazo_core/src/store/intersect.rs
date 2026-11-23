@@ -14,7 +14,8 @@ pub enum Input {
     Placement(WorldRings),
 }
 
-struct Polygon {
+pub(super) struct Polygon {
+    origin: V3,
     bounds: Box3,
     normal: V3,
     distance: f64,
@@ -69,6 +70,7 @@ impl Polygon {
             })
             .collect();
         Some(Self {
+            origin: v3(pos(outer[0])),
             bounds,
             normal,
             distance,
@@ -110,10 +112,8 @@ impl Polygon {
         let dir = normalized(dir, h);
         let add = |a: V3, b: V3| V3(a.0 + b.0, a.1 + b.1, a.2 + b.2);
         let origin = add(
-            self.normal
-                .mul((self.distance - b.distance * c) / den),
-            b.normal
-                .mul((b.distance - self.distance * c) / den),
+            self.normal.mul((self.distance - b.distance * c) / den),
+            b.normal.mul((b.distance - self.distance * c) / den),
         );
         let point = |t: f64| add(origin, dir.mul(t));
         let a = self.intervals(origin, dir, h);
@@ -133,6 +133,86 @@ impl Polygon {
                 j += 2;
             }
         }
+    }
+}
+
+/// A projected materialised face reused for all crossing lines in one edit.
+#[pyo3::pyclass(module = "ingetrazo_core", name = "IntersectionPolygon", frozen)]
+pub(super) struct PyPolygon {
+    poly: Polygon,
+    h: Hypot,
+}
+
+#[pyo3::pymethods]
+impl PyPolygon {
+    #[staticmethod]
+    fn from_rings(rings: WorldRings, hypot: &str) -> pyo3::PyResult<Option<Self>> {
+        let h = crate::hypot_of(hypot)?;
+        Ok(Polygon::from_rings(&rings, |p| p, h).map(|poly| Self { poly, h }))
+    }
+
+    #[getter]
+    fn bounds(&self) -> Box3 {
+        self.poly.bounds
+    }
+
+    #[getter]
+    fn normal(&self) -> [f64; 3] {
+        self.poly.normal.into()
+    }
+
+    fn cross(&self, other: &Self) -> Vec<Segment> {
+        let mut out = Vec::new();
+        self.poly.cross(&other.poly, self.h, &mut out);
+        out
+    }
+
+    fn in_hole(&self, point: [f64; 3]) -> bool {
+        let p = V3(point[0], point[1], point[2]);
+        let xy = [
+            p.dot(self.poly.axes.0, self.h),
+            p.dot(self.poly.axes.1, self.h),
+        ];
+        self.poly
+            .rings
+            .iter()
+            .skip(1)
+            .any(|ring| super::drawing_face::inside(xy, ring, true))
+    }
+
+    fn clip(&self, a: [f64; 3], b: [f64; 3]) -> Vec<Segment> {
+        let (p, q) = (V3(a[0], a[1], a[2]), V3(b[0], b[1], b[2]));
+        let poly = &self.poly;
+        let h = self.h;
+        if [p, q]
+            .iter()
+            .any(|&v| (v - poly.origin).dot(poly.normal, h).abs() > 1e-4)
+        {
+            return vec![];
+        }
+        let delta = q - p;
+        let len = length(delta, h);
+        if len < 1e-5 {
+            return vec![];
+        }
+        let dir = normalized(delta, h);
+        let mut cuts = Vec::new();
+        for span in poly.intervals(p, dir, h).chunks_exact(2) {
+            let lo = span[0].max(0.);
+            let hi = span[1].min(len);
+            if hi - lo < 1e-5 {
+                continue;
+            }
+            let mid = p + dir * ((lo + hi) / 2.);
+            let xy = [mid.dot(poly.axes.0, h), mid.dot(poly.axes.1, h)];
+            if super::drawing_face::inside(xy, &poly.rings[0], true) {
+                cuts.push((
+                    if lo == 0. { a } else { (p + dir * lo).into() },
+                    if hi == len { b } else { (p + dir * hi).into() },
+                ));
+            }
+        }
+        cuts
     }
 }
 

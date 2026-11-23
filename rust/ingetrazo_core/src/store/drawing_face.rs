@@ -13,7 +13,7 @@ fn side(a: XY, b: XY, p: XY) -> f64 {
 fn segments<T>(ring: &[T]) -> impl Iterator<Item = (&T, &T)> {
     ring.iter().zip(ring.iter().cycle().skip(1))
 }
-fn inside(p: XY, poly: &[XY], strict: bool) -> bool {
+pub(super) fn inside(p: XY, poly: &[XY], strict: bool) -> bool {
     let mut result = false;
     for (&b, &a) in segments(poly) {
         let dx = b[0] - a[0];

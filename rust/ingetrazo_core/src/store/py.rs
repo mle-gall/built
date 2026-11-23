@@ -3000,6 +3000,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyMeshStore>()?;
     m.add_class::<PyStoreSnapshot>()?;
     m.add_class::<PyRoundPlan>()?;
+    m.add_class::<super::intersect::PyPolygon>()?;
     m.add_class::<PyChange>()?;
     m.add("StoreFallback", m.py().get_type::<StoreFallback>())?;
     Ok(())

@@ -19,6 +19,7 @@ import math
 
 from ingetrazo_core import Vec3 as QVector3D
 
+from core import doc_model
 from core.history import CompoundCommand
 from core.mesh import element_identity
 from core.triangulate import plane_axes
@@ -30,7 +31,7 @@ _MIN_LEN = 1e-5
 class _Poly:
     """A face in world space, ready for crossing tests."""
 
-    __slots__ = ("rings", "n", "d", "lo", "hi", "u", "v", "rings2d")
+    __slots__ = ("rings", "n", "d", "lo", "hi", "u", "v", "rings2d", "native")
 
     def __init__(self, rings: list, normal: QVector3D) -> None:
         self.rings = rings
@@ -55,6 +56,18 @@ def world_polys(face, xform=None) -> _Poly | None:
     if len(outer) < 3:
         return None
     holes = [[w(p) for p in h] for h in face.holes]
+    if doc_model.ENABLED:
+        from core.store_mesh import _hypot
+        from ingetrazo_core import IntersectionPolygon
+        rings = [outer, *holes]
+        native = IntersectionPolygon.from_rings([[p.toTuple() for p in ring] for ring in rings], _hypot())
+        if native is None:
+            return None
+        poly = _Poly.__new__(_Poly)
+        poly.rings, poly.native = rings, native
+        poly.n = QVector3D(*native.normal)
+        poly.lo, poly.hi = native.bounds
+        return poly
     n = _newell(outer)
     if n.length() < 1e-12:
         return None
@@ -121,6 +134,8 @@ def _overlap(xs: list, ys: list) -> list:
 def cross(a: _Poly, b: _Poly) -> list:
     """The segments where faces ``a`` and ``b`` cross (none when their
     planes are parallel)."""
+    if doc_model.ENABLED:
+        return [(QVector3D(*p), QVector3D(*q)) for p, q in a.native.cross(b.native)]
     direction = QVector3D.crossProduct(a.n, b.n)
     if direction.length() < 1e-9:
         return []
@@ -361,6 +376,13 @@ def _partition_faces(mesh, segments):
             if face.key not in polys:
                 polys[face.key] = world_polys(face)
             poly = polys[face.key]
+            if doc_model.ENABLED:
+                if poly is not None:
+                    cuts = poly.native.clip(a.toTuple(), b.toTuple())
+                    if cuts:
+                        cuts_by_face.setdefault(face, []).extend(
+                            (QVector3D(*p), QVector3D(*q)) for p, q in cuts)
+                continue
             if poly is None or any(abs(QVector3D.dotProduct(p - poly.rings[0][0], poly.n))
                                    > 1e-4 for p in (a, b)):
                 continue
@@ -389,12 +411,16 @@ def _replace_regions(mesh, face, poly, cuts):
     # Arrangement also returns a cell for each existing opening.
     covered = []
     for outer, holes in regions:
-        if poly.rings2d[1:]:
+        if len(poly.rings) > 1:
             mid = _probe(outer, holes, poly.n)
             if mid is None:
                 continue
-            xy = (QVector3D.dotProduct(mid, poly.u), QVector3D.dotProduct(mid, poly.v))
-            if any(_strictly_inside_2d(xy, h) for h in poly.rings2d[1:]):
+            if doc_model.ENABLED:
+                in_hole = poly.native.in_hole(mid.toTuple())
+            else:
+                xy = (QVector3D.dotProduct(mid, poly.u), QVector3D.dotProduct(mid, poly.v))
+                in_hole = any(_strictly_inside_2d(xy, h) for h in poly.rings2d[1:])
+            if in_hole:
                 continue
         if QVector3D.dotProduct(_newell(outer), poly.n) < 0:
             outer.reverse()
