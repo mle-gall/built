@@ -263,15 +263,19 @@ def test_materials_let_go_of_the_meshes_of_the_project_left(win):
     assert not any(hit[0] is m for hit in worn.values())
 
 
-def test_view_preferences_reach_the_tabs_behind(win):
-    from views.preferences_dialog import PreferencesDialog
+def test_view_preferences_reach_the_tabs_behind(win, tmp_path):
+    from PySide6.QtCore import QSettings
+    from views.settings_sheet import Env, SettingsSheet
+
     _edit(win)
     a = win.active_document()
     win._on_new()
-    dlg = PreferencesDialog(win)
-    dlg._invert.setChecked(not a.viewport._invert_wheel)
-    want = dlg._invert.isChecked()
-    dlg.accept()
+    env = Env(win)
+    env.st = QSettings(str(tmp_path / "navigation.ini"), QSettings.IniFormat)
+    want = not a.viewport._invert_wheel
+    row = next(r for _, _, rows in SettingsSheet().groups(env, "navigation") for r in rows
+               if r.id == "invert_wheel")
+    row.put(env, want)
     assert a.viewport._invert_wheel == want
     assert win.viewport._invert_wheel == want
 
