@@ -332,8 +332,48 @@ fn pasteboard_types() -> (Vec<String>, isize) {
     }
 }
 
-/// Start another `built` process (File ▸ New Window): its own window and
-/// interpreter, as the Qt app starts another app for a new window.
+/// macOS window tabs off for this window (shell design: one strip, the
+/// app's own project tabs; AppKit's tab bar would also collide with the
+/// custom 40 pt top bar). The app-wide switch is winit's
+/// `set_allows_automatic_window_tabbing(false)`; this makes sure no
+/// window joins a tab group through "Prefer tabs" in System Settings.
+pub fn no_window_tabs(view: usize) {
+    #[cfg(target_os = "macos")]
+    {
+        use objc2_app_kit::{NSView, NSWindowTabbingMode};
+        if view == 0 || objc2::MainThreadMarker::new().is_none() {
+            return;
+        }
+        let v: &NSView = unsafe { &*(view as *const NSView) };
+        if let Some(window) = v.window() {
+            window.setTabbingMode(NSWindowTabbingMode::Disallowed);
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = view;
+}
+
+/// Whether this window may join a macOS window tab group (`--script`'s
+/// state, tests).
+pub fn window_tabs_allowed(view: usize) -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        use objc2_app_kit::{NSView, NSWindowTabbingMode};
+        if view == 0 {
+            return false;
+        }
+        let v: &NSView = unsafe { &*(view as *const NSView) };
+        v.window().is_some_and(|w| w.tabbingMode() != NSWindowTabbingMode::Disallowed)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = view;
+        false
+    }
+}
+
+/// Start another `built` process: kept for `--new-instance` users. File ▸
+/// New Window makes a window in this process now (app_shell/windows.py).
 #[pyfunction]
 #[pyo3(signature = (args=Vec::new()))]
 fn spawn_self(args: Vec<String>) -> bool {

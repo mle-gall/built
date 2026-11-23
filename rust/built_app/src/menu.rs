@@ -135,7 +135,9 @@ pub fn build() -> muda::Result<Menus> {
         &[&PredefinedMenuItem::minimize(None), &PredefinedMenuItem::maximize(None),
           &PredefinedMenuItem::separator(),
           &item("next_doc", "Next Project", Some("ctrl+Tab")),
-          &item("prev_doc", "Previous Project", Some("ctrl+shift+Tab"))],
+          &item("prev_doc", "Previous Project", Some("ctrl+shift+Tab")),
+          &PredefinedMenuItem::separator(),
+          &item("move_to_window", "Move Project to New Window", None)],
     )?;
     bar.append_items(&[&app, &file, &edit, &view, &tools, &window])?;
     #[cfg(target_os = "macos")]

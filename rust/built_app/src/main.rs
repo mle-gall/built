@@ -148,16 +148,28 @@ struct Timings {
     first_frame: Option<Duration>,
 }
 
-struct App {
-    args: Args,
-    window: Option<Window>,
-    host: Option<python::Host>,
-    _menus: Option<menu::Menus>,
-    modifiers: ModifiersState,
+/// One window: its winit window, its Python host (app_shell.host.Host:
+/// its projects, its renderer) and its own pointer state. Every window
+/// lives in this one process (app_shell/windows.py): ⇧⌘N and the tab
+/// menu's "Move to new window" make another one here.
+struct Win {
+    window: Window,
+    host: python::Host,
+    ns_view: usize,
     cursor: (f64, f64),
     held: u32,
     last_press: Option<(Instant, u32, (f64, f64))>,
     last_key_text: Option<String>,
+}
+
+struct App {
+    args: Args,
+    /// The open windows, oldest first.
+    wins: Vec<(WindowId, Win)>,
+    /// The window in front (menu commands, opened files, script steps).
+    focused: Option<WindowId>,
+    _menus: Option<menu::Menus>,
+    modifiers: ModifiersState,
     steps: VecDeque<Step>,
     resume_at: Option<Instant>,
     frames: u64,
@@ -173,17 +185,39 @@ struct App {
     /// Files given on the command line: AppKit hands them to the Open
     /// With hook too (as odoc), which must not open them a second time.
     cli_files: Vec<PathBuf>,
+    started: bool,
 }
 
 const DOUBLE_CLICK: Duration = Duration::from_millis(500);
 
 impl App {
-    fn scale(&self) -> f64 {
-        self.window.as_ref().map_or(2.0, |w| w.scale_factor())
+    fn win(&self, id: WindowId) -> Option<&Win> {
+        self.wins.iter().find(|(w, _)| *w == id).map(|(_, w)| w)
     }
 
-    fn logical(&self, p: PhysicalPosition<f64>) -> (f64, f64) {
-        let s = self.scale();
+    fn win_mut(&mut self, id: WindowId) -> Option<&mut Win> {
+        self.wins.iter_mut().find(|(w, _)| *w == id).map(|(_, w)| w)
+    }
+
+    /// The window in front, else the newest.
+    fn front(&self) -> Option<WindowId> {
+        self.focused.filter(|id| self.win(*id).is_some()).or_else(|| self.wins.last().map(|(id, _)| *id))
+    }
+
+    fn host(&self, id: WindowId) -> Option<&python::Host> {
+        self.win(id).map(|w| &w.host)
+    }
+
+    fn front_host(&self) -> Option<&python::Host> {
+        self.front().and_then(|id| self.win(id)).map(|w| &w.host)
+    }
+
+    fn scale(&self, id: WindowId) -> f64 {
+        self.win(id).map_or(2.0, |w| w.window.scale_factor())
+    }
+
+    fn logical(&self, id: WindowId, p: PhysicalPosition<f64>) -> (f64, f64) {
+        let s = self.scale(id);
         (p.x / s, p.y / s)
     }
 
@@ -191,92 +225,133 @@ impl App {
         keys::qt_modifiers(self.modifiers)
     }
 
-    fn redraw(&self) {
-        if let Some(w) = &self.window {
-            w.request_redraw();
+    fn redraw(&self, id: WindowId) {
+        if let Some(w) = self.win(id) {
+            w.window.request_redraw();
         }
     }
 
     // ---- dispatch: real and scripted input both come through here -------
-    fn pointer(&mut self, kind: &str, x: f64, y: f64, button: u32, mods: u32) {
-        self.cursor = (x, y);
+    fn pointer(&mut self, id: WindowId, kind: &str, x: f64, y: f64, button: u32, mods: u32) {
+        let Some(w) = self.win_mut(id) else { return };
+        w.cursor = (x, y);
         let mut kind = kind;
         if kind == "press" {
-            self.held |= button;
+            w.held |= button;
             let now = Instant::now();
-            if let Some((t, b, (px, py))) = self.last_press {
+            if let Some((t, b, (px, py))) = w.last_press {
                 if b == button && now - t < DOUBLE_CLICK && (px - x).hypot(py - y) < 5.0 {
                     kind = "double";
                 }
             }
-            self.last_press = if kind == "double" { None } else { Some((now, button, (x, y))) };
+            w.last_press = if kind == "double" { None } else { Some((now, button, (x, y))) };
         } else if kind == "release" {
-            self.held &= !button;
+            w.held &= !button;
         }
-        if let Some(h) = &self.host {
-            h.call("pointer", (kind, x, y, button, self.held, mods));
-        }
-        self.redraw();
+        let held = w.held;
+        w.host.call("pointer", (kind, x, y, button, held, mods));
+        self.redraw(id);
     }
 
-    fn key(&mut self, pressed: bool, code: u32, text: &str, repeat: bool, mods: u32) {
-        if let Some(h) = &self.host {
-            h.call("key", (pressed, code, mods, text, repeat));
+    fn key(&mut self, id: WindowId, pressed: bool, code: u32, text: &str, repeat: bool, mods: u32) {
+        if let Some(w) = self.win(id) {
+            w.host.call("key", (pressed, code, mods, text, repeat));
         }
-        self.redraw();
+        self.redraw(id);
     }
 
     fn command(&mut self, event_loop: &ActiveEventLoop, cmd: &str) {
+        let front = self.front();
         match cmd {
-            // The window's close and Quit ask about unsaved work first
-            // (app_shell.files: the sheet, answered through the modal pump).
-            "close" | "quit" => {
-                let ok = self.host.as_ref().map_or(true, |h| {
-                    h.call0("request_close")
-                        .map(|v| pyo3::Python::attach(|py| v.extract::<bool>(py).unwrap_or(false)))
-                        .unwrap_or(true)
-                });
-                if ok {
-                    event_loop.exit();
+            // Close Window (⇧⌘W): the window in front, after asking about
+            // its unsaved work (app_shell.files: the sheet, answered
+            // through the modal pump). The last window closed ends the app.
+            "close" => {
+                if let Some(id) = front {
+                    self.close_window(event_loop, id);
                 }
             }
+            // Quit asks each window in turn; a Cancel stops there.
+            "quit" => {
+                let ids: Vec<WindowId> = self.wins.iter().map(|(id, _)| *id).collect();
+                for id in ids {
+                    let ok = self.win(id).map_or(true, |w| ask_close(&w.host));
+                    if !ok {
+                        self.focus(id);
+                        return;
+                    }
+                }
+                event_loop.exit();
+            }
             "activate" => {
-                if let Some(w) = &self.window {
-                    w.focus_window();
+                if let Some(id) = front {
+                    self.focus(id);
                 }
             }
             other => {
-                if let Some(h) = &self.host {
+                if let Some(h) = self.front_host() {
                     h.call("menu", (other,));
                 }
             }
         }
-        self.redraw();
+        if let Some(id) = self.front() {
+            self.redraw(id);
+        }
+    }
+
+    fn focus(&mut self, id: WindowId) {
+        if let Some(w) = self.win(id) {
+            w.window.focus_window();
+        }
+        self.focused = Some(id);
+    }
+
+    /// Ask the window's host, then drop the window; the last one ends the app.
+    fn close_window(&mut self, event_loop: &ActiveEventLoop, id: WindowId) {
+        let ok = self.win(id).map_or(true, |w| ask_close(&w.host));
+        if !ok {
+            return;
+        }
+        if let Some(i) = self.wins.iter().position(|(w, _)| *w == id) {
+            let (_, w) = self.wins.remove(i);
+            // The renderer (and its CAMetalLayer) before the window goes.
+            w.host.call0("close");
+            drop(w);
+        }
+        if self.focused == Some(id) {
+            self.focused = self.wins.last().map(|(id, _)| *id);
+        }
+        if self.wins.is_empty() {
+            event_loop.exit();
+        }
     }
 
     fn open(&mut self, path: &Path) {
         let t = Instant::now();
-        let Some(h) = &self.host else {
+        let Some(id) = self.front() else {
             self.pending_opens.push(path.to_path_buf());
             return;
         };
-        h.call("open_path", (path.to_string_lossy().to_string(),));
+        if let Some(w) = self.win(id) {
+            w.host.call("open_path", (path.to_string_lossy().to_string(),));
+        }
         let ms = t.elapsed().as_secs_f64() * 1000.0;
         eprintln!("[built] opened {} in {ms:.0} ms", path.display());
         self.timings.opened.get_or_insert(self.timings.process.elapsed());
-        if let Some(w) = &self.window {
-            w.focus_window();
+        if let Some(w) = self.win(id) {
+            w.window.focus_window();
         }
-        self.redraw();
+        self.redraw(id);
     }
 
     fn capture(&mut self, name: &str) {
-        let Some(h) = &self.host else { return };
-        let Some(rgba) = h.capture() else {
+        let Some(id) = self.front() else { return };
+        let Some(win) = self.win(id) else { return };
+        let Some(rgba) = win.host.capture() else {
             eprintln!("[built] capture {name}: no frame");
             return;
         };
-        let size = self.window.as_ref().map(|w| w.inner_size()).unwrap_or_default();
+        let size = win.window.inner_size();
         let (mut w, mut hgt) = (size.width, size.height);
         if (w as usize) * (hgt as usize) * 4 != rgba.len() && hgt > 0 {
             w = (rgba.len() / 4 / hgt as usize) as u32;
@@ -293,7 +368,20 @@ impl App {
         }
     }
 
+    fn print_state(&self) {
+        if let Some(id) = self.front() {
+            if let Some(w) = self.win(id) {
+                println!("[built] state {}", w.host.state_json());
+                println!("[built] windows {{\"count\": {}, \"front\": {}, \"macos_tabs_allowed\": {}}}",
+                         self.wins.len(),
+                         self.wins.iter().position(|(i, _)| *i == id).map_or(-1, |i| i as i64),
+                         self.wins.iter().any(|(_, w)| native::window_tabs_allowed(w.ns_view)));
+            }
+        }
+    }
+
     /// One scripted step per turn; `wait` lets the loop run normally.
+    /// Steps go to the window in front (a new window takes them over).
     fn run_script(&mut self, event_loop: &ActiveEventLoop) {
         if let Some(at) = self.resume_at {
             if Instant::now() < at {
@@ -303,74 +391,77 @@ impl App {
             self.resume_at = None;
         }
         let Some(step) = self.steps.pop_front() else { return };
+        let Some(id) = self.front() else { return };
         match step {
             Step::Open(p) => self.open(&absolute(Path::new(&p))),
             Step::Wait(ms) => self.resume_at = Some(Instant::now() + Duration::from_millis(ms)),
-            Step::Move(x, y) => self.pointer("move", x, y, 0, 0),
+            Step::Move(x, y) => self.pointer(id, "move", x, y, 0, 0),
             Step::Click(x, y, b, m) => {
-                self.pointer("move", x, y, 0, m);
-                self.pointer("press", x, y, b, m);
-                self.pointer("release", x, y, b, m);
+                self.pointer(id, "move", x, y, 0, m);
+                self.pointer(id, "press", x, y, b, m);
+                self.pointer(id, "release", x, y, b, m);
             }
             Step::Double(x, y, b, m) => {
-                self.last_press = None;
+                if let Some(w) = self.win_mut(id) {
+                    w.last_press = None;
+                }
                 for _ in 0..2 {
-                    self.pointer("press", x, y, b, m);
-                    self.pointer("release", x, y, b, m);
+                    self.pointer(id, "press", x, y, b, m);
+                    self.pointer(id, "release", x, y, b, m);
                 }
             }
             Step::Drag { from, to, button, steps, mods } => {
-                self.pointer("move", from.0, from.1, 0, mods);
-                self.pointer("press", from.0, from.1, button, mods);
+                self.pointer(id, "move", from.0, from.1, 0, mods);
+                self.pointer(id, "press", from.0, from.1, button, mods);
                 for i in 1..=steps {
                     let f = i as f64 / steps as f64;
                     let (x, y) = (from.0 + (to.0 - from.0) * f, from.1 + (to.1 - from.1) * f);
-                    self.pointer("move", x, y, 0, mods);
-                    if let Some(h) = &self.host {
+                    self.pointer(id, "move", x, y, 0, mods);
+                    if let Some(h) = self.host(id) {
                         h.frame();
                     }
                 }
-                self.pointer("release", to.0, to.1, button, mods);
+                self.pointer(id, "release", to.0, to.1, button, mods);
             }
             Step::Key(name, mods) => match keys::qt_key_by_name(&name) {
                 Some((code, text)) => {
                     let text = if mods & (keys::CONTROL | keys::META) != 0 { String::new() } else { text };
-                    self.key(true, code, &text, false, mods);
-                    self.key(false, code, &text, false, mods);
+                    self.key(id, true, code, &text, false, mods);
+                    self.key(id, false, code, &text, false, mods);
                 }
                 None => eprintln!("[built] script: unknown key {name:?}"),
             },
             Step::Type(text) => {
                 for c in text.chars() {
                     let s = c.to_string();
-                    self.key(true, keys::qt_char(c), &s, false, 0);
-                    self.key(false, keys::qt_char(c), &s, false, 0);
+                    self.key(id, true, keys::qt_char(c), &s, false, 0);
+                    self.key(id, false, keys::qt_char(c), &s, false, 0);
                 }
             }
             Step::Menu(cmd) => self.command(event_loop, &cmd),
             Step::Preedit(text) => {
-                if let Some(h) = &self.host {
+                if let Some(h) = self.host(id) {
                     let n = text.chars().count();
                     h.call("preedit", (text, n));
                 }
             }
             Step::Commit(text) => {
-                if let Some(h) = &self.host {
+                if let Some(h) = self.host(id) {
                     h.call("text", (text,));
                 }
             }
             Step::Wheel(x, y, dy, phase) => {
-                if let Some(h) = &self.host {
+                if let Some(h) = self.host(id) {
                     h.call("wheel", (x, y, 0.0, dy, 0.0, dy * 2.0, phase.as_str(), 0u32, 0u32, true));
                 }
             }
             Step::Notch(x, y, n) => {
-                if let Some(h) = &self.host {
+                if let Some(h) = self.host(id) {
                     h.call("wheel", (x, y, 0.0, 0.0, 0.0, n * 120.0, "none", 0u32, 0u32, false));
                 }
             }
             Step::Pinch(x, y, v) => {
-                if let Some(h) = &self.host {
+                if let Some(h) = self.host(id) {
                     h.call("gesture", ("begin", 0.0, x, y));
                     for _ in 0..5 {
                         h.call("gesture", ("zoom", v / 5.0, x, y));
@@ -382,32 +473,29 @@ impl App {
                 self.settle();
                 self.capture(&name);
             }
-            Step::State => {
-                if let Some(h) = &self.host {
-                    println!("[built] state {}", h.state_json());
-                }
-            }
+            Step::State => self.print_state(),
             Step::Quit => event_loop.exit(),
         }
         if self.steps.is_empty() && self.resume_at.is_none() {
-            if let Some(h) = &self.host {
-                println!("[built] state {}", h.state_json());
-            }
+            self.print_state();
             event_loop.exit();
         }
-        self.redraw();
+        if let Some(id) = self.front() {
+            self.redraw(id);
+        }
     }
 
     /// Let deferred work land before a capture: Qt timers, the snap index.
     fn settle(&mut self) {
-        let Some(h) = &self.host else { return };
+        let Some(h) = self.front_host() else { return };
         for _ in 0..4 {
             let _ = h.idle();
             h.frame();
         }
     }
 
-    fn start(&mut self, event_loop: &ActiveEventLoop) -> Result<(), String> {
+    /// A window and its Python host (its own renderer on its NSView).
+    fn make_window(&mut self, event_loop: &ActiveEventLoop) -> Result<WindowId, String> {
         let (w, h) = self.args.size;
         #[allow(unused_mut)]
         let mut attrs = Window::default_attributes()
@@ -426,11 +514,14 @@ impl App {
         }
         let window = event_loop.create_window(attrs).map_err(|e| e.to_string())?;
         window.set_ime_allowed(true);
-        self.timings.window = Some(self.timings.process.elapsed());
+        if self.timings.window.is_none() {
+            self.timings.window = Some(self.timings.process.elapsed());
+        }
         let ns_view = match window.window_handle().map_err(|e| e.to_string())?.as_raw() {
             RawWindowHandle::AppKit(h) => h.ns_view.as_ptr() as usize,
             _ => return Err("not an AppKit window".into()),
         };
+        native::no_window_tabs(ns_view);
         let size = window.inner_size();
         let scale = window.scale_factor();
         let host = python::Host::new(
@@ -445,9 +536,25 @@ impl App {
             "the Python host did not start".to_string()
         })?;
         host.call0("attach_surface").ok_or("the renderer did not start")?;
-        self.timings.host = Some(self.timings.process.elapsed());
-        self.window = Some(window);
-        self.host = Some(host);
+        if self.timings.host.is_none() {
+            self.timings.host = Some(self.timings.process.elapsed());
+        }
+        let id = window.id();
+        self.wins.push((id, Win {
+            window, host, ns_view, cursor: (0.0, 0.0), held: 0, last_press: None, last_key_text: None,
+        }));
+        self.focused = Some(id);
+        Ok(id)
+    }
+
+    fn start(&mut self, event_loop: &ActiveEventLoop) -> Result<(), String> {
+        #[cfg(target_os = "macos")]
+        {
+            // One strip of tabs: the app's own. AppKit's window tabs stay off.
+            use winit::platform::macos::ActiveEventLoopExtMacOS;
+            event_loop.set_allows_automatic_window_tabbing(false);
+        }
+        let id = self.make_window(event_loop)?;
         match menu::build() {
             Ok(m) => self._menus = Some(m),
             Err(e) => eprintln!("[built] menu bar: {e}"),
@@ -458,21 +565,36 @@ impl App {
             // A cold start without a file: the start page (recents, new,
             // templates), and the untitled drawings an earlier session
             // left in its auto-save slots.
-            if let Some(h) = &self.host {
-                h.call0("cold_start");
+            if let Some(w) = self.win(id) {
+                w.host.call0("cold_start");
             }
         }
         for file in files {
             self.open(&file);
         }
-        self.redraw();
+        self.redraw(id);
         Ok(())
+    }
+
+    /// A window Python asked for (app_shell.windows): made here, then its
+    /// host adopts the request (the start page, or a project moved in).
+    fn new_window(&mut self, event_loop: &ActiveEventLoop, token: &str) {
+        match self.make_window(event_loop) {
+            Ok(id) => {
+                if let Some(w) = self.win(id) {
+                    w.host.call("adopt", (token,));
+                    w.window.focus_window();
+                }
+                self.redraw(id);
+            }
+            Err(e) => eprintln!("[built] new window: {e}"),
+        }
     }
 
     fn report_measure(&self) {
         let t = &self.timings;
         let ms = |d: Option<Duration>| d.map_or(-1.0, |d| d.as_secs_f64() * 1000.0);
-        let open_ms = self.host.as_ref().map(|h| h.state_json()).unwrap_or_default();
+        let open_ms = self.front_host().map(|h| h.state_json()).unwrap_or_default();
         println!(
             "[built] measure {{\"python_ready_ms\": {:.0}, \"window_ms\": {:.0}, \"renderer_ms\": {:.0}, \
              \"opened_ms\": {:.0}, \"first_frame_ms\": {:.0}, \"state\": {open_ms}}}",
@@ -483,6 +605,74 @@ impl App {
             ms(t.first_frame)
         );
     }
+
+    /// One window's turn: Python's idle, cursor, title, drag, and what else
+    /// it asks for (a new window, to come to the front).
+    fn turn(&mut self, event_loop: &ActiveEventLoop, id: WindowId) -> Option<f64> {
+        let Some(w) = self.win(id) else { return None };
+        let (wanted, wake_ms, cursor, title, drag) = w.host.idle();
+        let extra = w.host.extras();
+        if extra.exit {
+            event_loop.exit();
+            return None;
+        }
+        if let Some(c) = cursor {
+            if let Some(key) = c.strip_prefix("custom:") {
+                if !self.cursors.contains_key(key) {
+                    if let Some((cw, ch, hx, hy, rgba)) = w.host.custom_cursor(key) {
+                        match CustomCursor::from_rgba(rgba, cw, ch, hx, hy) {
+                            Ok(src) => {
+                                let made = event_loop.create_custom_cursor(src);
+                                self.cursors.insert(key.to_owned(), made);
+                            }
+                            Err(e) => eprintln!("[built] cursor {key}: {e}"),
+                        }
+                    }
+                }
+                if let (Some(w), Some(cur)) = (self.win(id), self.cursors.get(key)) {
+                    w.window.set_cursor(Cursor::Custom(cur.clone()));
+                }
+            } else if let Some(w) = self.win(id) {
+                w.window.set_cursor(cursor_icon(&c));
+            }
+        }
+        if let Some(w) = self.win(id) {
+            if let Some((x, y, cw, ch)) = extra.ime_area {
+                w.window.set_ime_cursor_area(winit::dpi::LogicalPosition::new(x, y), LogicalSize::new(cw, ch));
+            }
+            if wanted {
+                w.window.request_redraw();
+            }
+            if let Some(t) = title {
+                w.window.set_title(&t);
+            }
+            if drag {
+                let _ = w.window.drag_window();
+            }
+        }
+        if let Some(recent) = extra.recent {
+            if self.recent_sig.as_ref() != Some(&recent) {
+                if let Some(m) = &self._menus {
+                    m.set_recent(&recent);
+                }
+                self.recent_sig = Some(recent);
+            }
+        }
+        if extra.focus {
+            self.focus(id);
+        }
+        if let Some(token) = extra.new_window {
+            self.new_window(event_loop, &token);
+        }
+        wake_ms
+    }
+}
+
+/// `Host.request_close()`: True once nothing unsaved stands in the way.
+fn ask_close(host: &python::Host) -> bool {
+    host.call0("request_close")
+        .map(|v| pyo3::Python::attach(|py| v.extract::<bool>(py).unwrap_or(false)))
+        .unwrap_or(true)
 }
 
 fn same_path(a: &Path, b: &Path) -> bool {
@@ -546,9 +736,10 @@ fn phase_name(p: TouchPhase) -> &'static str {
 
 impl ApplicationHandler<UserEvent> for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        if self.window.is_some() {
+        if self.started {
             return;
         }
+        self.started = true;
         if let Err(e) = self.start(event_loop) {
             eprintln!("[built] {e}");
             self.exit_code = 1;
@@ -569,98 +760,100 @@ impl ApplicationHandler<UserEvent> for App {
         }
     }
 
-    fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
+    fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
+        if self.win(id).is_none() {
+            return;
+        }
         match event {
-            WindowEvent::CloseRequested => self.command(event_loop, "close"),
+            WindowEvent::CloseRequested => self.close_window(event_loop, id),
             WindowEvent::Resized(size) => {
-                let s = self.scale();
-                if let Some(h) = &self.host {
-                    h.call("resize", (size.width as f64 / s, size.height as f64 / s, s));
+                let s = self.scale(id);
+                if let Some(w) = self.win(id) {
+                    w.host.call("resize", (size.width as f64 / s, size.height as f64 / s, s));
                 }
-                self.redraw();
+                self.redraw(id);
             }
             WindowEvent::RedrawRequested => {
-                if let Some(h) = &self.host {
-                    if h.frame().is_some() {
-                        self.frames += 1;
-                        if self.timings.first_frame.is_none()
-                            && (self.args.file.is_none() || self.timings.opened.is_some())
-                        {
-                            self.timings.first_frame = Some(self.timings.process.elapsed());
-                            if self.args.measure {
-                                self.report_measure();
-                                event_loop.exit();
-                            }
+                let drew = self.win(id).is_some_and(|w| w.host.frame().is_some());
+                if drew {
+                    self.frames += 1;
+                    if self.timings.first_frame.is_none()
+                        && (self.args.file.is_none() || self.timings.opened.is_some())
+                    {
+                        self.timings.first_frame = Some(self.timings.process.elapsed());
+                        if self.args.measure {
+                            self.report_measure();
+                            event_loop.exit();
                         }
                     }
                 }
             }
             WindowEvent::ModifiersChanged(m) => self.modifiers = m.state(),
             WindowEvent::CursorMoved { position, .. } => {
-                let (x, y) = self.logical(position);
+                let (x, y) = self.logical(id, position);
                 let m = self.mods();
-                self.pointer("move", x, y, 0, m);
+                self.pointer(id, "move", x, y, 0, m);
             }
             WindowEvent::CursorLeft { .. } => {
-                if let Some(h) = &self.host {
-                    h.call("pointer", ("leave", -1.0, -1.0, 0u32, 0u32, 0u32));
+                if let Some(w) = self.win(id) {
+                    w.host.call("pointer", ("leave", -1.0, -1.0, 0u32, 0u32, 0u32));
                 }
             }
             WindowEvent::MouseInput { state, button, .. } => {
                 let bit = mouse_bit(button);
-                let (x, y) = self.cursor;
+                let (x, y) = self.win(id).map_or((0.0, 0.0), |w| w.cursor);
                 let m = self.mods();
                 let kind = if state == ElementState::Pressed { "press" } else { "release" };
-                self.pointer(kind, x, y, bit, m);
+                self.pointer(id, kind, x, y, bit, m);
             }
             WindowEvent::MouseWheel { delta, phase, .. } => {
-                let (x, y) = self.cursor;
                 let m = self.mods();
-                let held = self.held;
-                if let Some(h) = &self.host {
+                let s = self.scale(id);
+                if let Some(w) = self.win(id) {
+                    let (x, y) = w.cursor;
+                    let held = w.held;
                     match delta {
                         MouseScrollDelta::LineDelta(dx, dy) => {
-                            h.call("wheel", (x, y, 0.0, 0.0, dx as f64 * 120.0, dy as f64 * 120.0,
-                                             "none", m, held, false));
+                            w.host.call("wheel", (x, y, 0.0, 0.0, dx as f64 * 120.0, dy as f64 * 120.0,
+                                                  "none", m, held, false));
                         }
                         MouseScrollDelta::PixelDelta(p) => {
-                            let s = self.scale();
                             let (dx, dy) = (p.x / s, p.y / s);
                             // Qt's Cocoa angleDelta for precise deltas: 2× pixels.
-                            h.call("wheel", (x, y, dx, dy, dx * 2.0, dy * 2.0, phase_name(phase),
-                                             m, held, true));
+                            w.host.call("wheel", (x, y, dx, dy, dx * 2.0, dy * 2.0, phase_name(phase),
+                                                  m, held, true));
                         }
                     }
                 }
-                self.redraw();
+                self.redraw(id);
             }
             WindowEvent::PinchGesture { delta, phase, .. } => {
-                let (x, y) = self.cursor;
-                if let Some(h) = &self.host {
+                if let Some(w) = self.win(id) {
+                    let (x, y) = w.cursor;
                     if phase == TouchPhase::Started {
-                        h.call("gesture", ("begin", 0.0, x, y));
+                        w.host.call("gesture", ("begin", 0.0, x, y));
                     }
                     if delta.is_finite() && delta != 0.0 {
-                        h.call("gesture", ("zoom", delta, x, y));
+                        w.host.call("gesture", ("zoom", delta, x, y));
                     }
                     if matches!(phase, TouchPhase::Ended | TouchPhase::Cancelled) {
-                        h.call("gesture", ("end", 0.0, x, y));
+                        w.host.call("gesture", ("end", 0.0, x, y));
                     }
                 }
-                self.redraw();
+                self.redraw(id);
             }
             WindowEvent::RotationGesture { delta, .. } => {
-                let (x, y) = self.cursor;
-                if let Some(h) = &self.host {
-                    h.call("gesture", ("rotate", delta as f64, x, y));
+                if let Some(w) = self.win(id) {
+                    let (x, y) = w.cursor;
+                    w.host.call("gesture", ("rotate", delta as f64, x, y));
                 }
             }
             WindowEvent::DoubleTapGesture { .. } => {
-                let (x, y) = self.cursor;
-                if let Some(h) = &self.host {
-                    h.call("gesture", ("smart_zoom", 0.0, x, y));
+                if let Some(w) = self.win(id) {
+                    let (x, y) = w.cursor;
+                    w.host.call("gesture", ("smart_zoom", 0.0, x, y));
                 }
-                self.redraw();
+                self.redraw(id);
             }
             WindowEvent::KeyboardInput { event, is_synthetic, .. } => {
                 if is_synthetic {
@@ -670,46 +863,55 @@ impl ApplicationHandler<UserEvent> for App {
                 let (code, text) = keys::qt_key(&event.logical_key, event.text.as_deref(), m);
                 let pressed = event.state == ElementState::Pressed;
                 if pressed {
-                    self.last_key_text = Some(text.clone()).filter(|t| !t.is_empty());
+                    if let Some(w) = self.win_mut(id) {
+                        w.last_key_text = Some(text.clone()).filter(|t| !t.is_empty());
+                    }
                 }
                 if code != 0 || !text.is_empty() {
-                    self.key(pressed, code, &text, event.repeat, m);
+                    self.key(id, pressed, code, &text, event.repeat, m);
                 }
             }
             WindowEvent::Ime(Ime::Preedit(text, cursor)) => {
                 // The composition being typed (dead keys, input methods):
                 // shown in the chrome's focused field, or as the value
                 // being typed, until it commits.
-                if let Some(h) = &self.host {
+                if let Some(w) = self.win(id) {
                     let at = cursor.map_or(text.chars().count(), |(a, _)| text[..a.min(text.len())].chars().count());
-                    h.call("preedit", (text, at));
+                    w.host.call("preedit", (text, at));
                 }
-                self.redraw();
+                self.redraw(id);
             }
             WindowEvent::Ime(Ime::Commit(text)) => {
                 // A plain key already delivered its own text; a composed
                 // one (dead keys, input methods) arrives only here.
-                if self.last_key_text.take().as_deref() != Some(text.as_str()) {
-                    if let Some(h) = &self.host {
-                        h.call("text", (text,));
+                let typed = self.win_mut(id).and_then(|w| w.last_key_text.take());
+                if typed.as_deref() != Some(text.as_str()) {
+                    if let Some(w) = self.win(id) {
+                        w.host.call("text", (text,));
                     }
-                    self.redraw();
+                    self.redraw(id);
                 }
             }
             WindowEvent::Focused(on) => {
-                if let Some(h) = &self.host {
-                    h.call("focus", (on,));
+                if on {
+                    self.focused = Some(id);
+                }
+                if let Some(w) = self.win(id) {
+                    w.host.call("focus", (on,));
                 }
             }
-            WindowEvent::DroppedFile(path) => self.open(&path),
+            WindowEvent::DroppedFile(path) => {
+                self.focused = Some(id);
+                self.open(&path)
+            }
             WindowEvent::HoveredFile(path) => {
-                if let Some(h) = &self.host {
-                    h.call("drag_hover", (path.to_string_lossy().to_string(),));
+                if let Some(w) = self.win(id) {
+                    w.host.call("drag_hover", (path.to_string_lossy().to_string(),));
                 }
             }
             WindowEvent::HoveredFileCancelled => {
-                if let Some(h) = &self.host {
-                    h.call("drag_hover", ("",));
+                if let Some(w) = self.win(id) {
+                    w.host.call("drag_hover", ("",));
                 }
             }
             _ => {}
@@ -720,60 +922,18 @@ impl ApplicationHandler<UserEvent> for App {
         if !self.steps.is_empty() || self.resume_at.is_some() {
             self.run_script(event_loop);
         }
-        let Some(h) = &self.host else { return };
-        let (wanted, wake_ms, cursor, title, drag) = h.idle();
-        let extra = h.extras();
-        if extra.exit {
-            event_loop.exit();
-            return;
-        }
-        if let Some(c) = cursor {
-            if let Some(key) = c.strip_prefix("custom:") {
-                if !self.cursors.contains_key(key) {
-                    if let Some((w, hgt, hx, hy, rgba)) = h.custom_cursor(key) {
-                        match CustomCursor::from_rgba(rgba, w, hgt, hx, hy) {
-                            Ok(src) => {
-                                let made = event_loop.create_custom_cursor(src);
-                                self.cursors.insert(key.to_owned(), made);
-                            }
-                            Err(e) => eprintln!("[built] cursor {key}: {e}"),
-                        }
-                    }
-                }
-                if let (Some(w), Some(cur)) = (&self.window, self.cursors.get(key)) {
-                    w.set_cursor(Cursor::Custom(cur.clone()));
-                }
-            } else if let Some(w) = &self.window {
-                w.set_cursor(cursor_icon(&c));
-            }
-        }
-        if let Some(recent) = extra.recent {
-            if self.recent_sig.as_ref() != Some(&recent) {
-                if let Some(m) = &self._menus {
-                    m.set_recent(&recent);
-                }
-                self.recent_sig = Some(recent);
-            }
-        }
-        if let Some(w) = &self.window {
-            if let Some((x, y, cw, ch)) = extra.ime_area {
-                w.set_ime_cursor_area(winit::dpi::LogicalPosition::new(x, y), LogicalSize::new(cw, ch));
-            }
-            if wanted {
-                w.request_redraw();
-            }
-            if let Some(t) = title {
-                w.set_title(&t);
-            }
-            if drag {
-                let _ = w.drag_window();
+        let mut wake: Option<f64> = None;
+        let ids: Vec<WindowId> = self.wins.iter().map(|(id, _)| *id).collect();
+        for id in ids {
+            if let Some(ms) = self.turn(event_loop, id) {
+                wake = Some(wake.map_or(ms, |w: f64| w.min(ms)));
             }
         }
         let scripted = !self.steps.is_empty() && self.resume_at.is_none();
         let flow = if scripted {
             ControlFlow::Poll
         } else {
-            match (wake_ms, self.resume_at) {
+            match (wake, self.resume_at) {
                 (_, Some(at)) => ControlFlow::WaitUntil(at),
                 (Some(ms), None) => ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(ms.max(1.0) as u64)),
                 (None, None) => ControlFlow::Wait,
@@ -899,14 +1059,10 @@ fn main() {
     }
     let mut app = App {
         args,
-        window: None,
-        host: None,
+        wins: Vec::new(),
+        focused: None,
         _menus: None,
         modifiers: ModifiersState::empty(),
-        cursor: (0.0, 0.0),
-        held: 0,
-        last_press: None,
-        last_key_text: None,
         steps: steps.into(),
         resume_at: None,
         frames: 0,
@@ -916,6 +1072,7 @@ fn main() {
         pending_opens: Vec::new(),
         recent_sig: None,
         cli_files: Vec::new(),
+        started: false,
     };
     app.cli_files = app.args.file.clone().into_iter().collect();
     if let Err(e) = event_loop.run_app(&mut app) {
@@ -925,9 +1082,9 @@ fn main() {
     if interactive {
         let _ = std::fs::remove_file(instance_socket());
     }
-    // Drop the renderer (and its CAMetalLayer) before the window goes.
-    if let Some(h) = app.host.take() {
-        h.call0("close");
+    // Drop each renderer (and its CAMetalLayer) before its window goes.
+    for (_, w) in app.wins.drain(..) {
+        w.host.call0("close");
     }
     std::process::exit(app.exit_code);
 }

@@ -86,6 +86,10 @@ pub struct Extras {
     pub exit: bool,
     pub ime_area: Option<(f64, f64, f64, f64)>,
     pub recent: Option<Vec<String>>,
+    /// A window Python asked for (app_shell.windows): its token.
+    pub new_window: Option<String>,
+    /// This window should come to the front.
+    pub focus: bool,
 }
 
 /// The `app_shell.host.Host` for one window.
@@ -212,7 +216,9 @@ impl Host {
             let exit: bool = v.get_item("exit")?.extract()?;
             let ime_area: Option<(f64, f64, f64, f64)> = v.get_item("ime_area")?.extract()?;
             let recent: Option<Vec<String>> = v.get_item("recent")?.extract()?;
-            Ok(Extras { exit, ime_area, recent })
+            let new_window: Option<String> = v.get_item("new_window")?.extract()?;
+            let focus: bool = v.get_item("focus")?.extract()?;
+            Ok(Extras { exit, ime_area, recent, new_window, focus })
         })
         .unwrap_or_else(|e| {
             Python::attach(|py| report(py, e, "extras"));
