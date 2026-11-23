@@ -71,6 +71,8 @@ pub(super) fn cells(node: &Node) -> Result<Vec<String>, String> {
         tag.key.clone().unwrap_or_default(),
         node.attr(attr_id("cut_weight")?).and_then(number).map_or_else(|| "auto".into(), |mm| format!("{mm:.2}")),
         u8::from(tag.locked).to_string(),
+        node.attr(attr_id("hatch_angle")?).and_then(number).unwrap_or(0.).to_string(),
+        node.attr(attr_id("hatch_scale")?).and_then(number).unwrap_or(1.).to_string(),
     ])
 }
 

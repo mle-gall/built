@@ -212,6 +212,7 @@ pub struct Node {
     /// The active column set's cells (Drawing: colour, line type, weight,
     /// print; Export: class, predefined type).
     cells: Vec<String>,
+    hatch: Option<Box<kit::PaperMarks>>,
 }
 
 pub struct Column {
@@ -421,6 +422,7 @@ impl Ui {
             depth: g(&n, 0) as usize, count: g(&n, 1) as u32, problems: g(&n, 2) as u32, active: g(&n, 3) != 0,
             row: g(&n, 4) as u8, eye: g(&n, 5) as i8, lock: g(&n, 6) as i8, expandable: g(&n, 7) != 0,
             expanded: g(&n, 8) != 0, selected: g(&n, 9) as u32, mark: g(&n, 10) as u8,
+            hatch: kit::hatch_override(t.get(5..).unwrap_or_default()).map(Box::new),
             cells: t.get(5..).map(|c| c.to_vec()).unwrap_or_default(),
         }}).collect();
         if col.highlighted.as_ref().is_some_and(|k| !k.starts_with("n:") && !k.starts_with("preview-tag:") &&
@@ -1403,25 +1405,29 @@ impl Ui {
                                   if self.review { 1 } else { 0 }, true);
                     if menu_row(ui, &review) { toggle_review = true; }
                     ui.add_space(SPACE_XS);
-                    for (si, (title, items)) in self.view_menu.iter().enumerate() {
-                        if si > 0 { ui.add_space(SPACE_XS); }
-                        caption_at(ui, title, 12.0);
-                        let icons_only = items.iter().all(|i| self.icons.contains_key(&i.3));
-                        if icons_only {
-                            ui.horizontal_wrapped(|ui| {
-                                for item in items {
-                                    if item_button(ui, item, self.icons.get(&item.3)) { clicked = Some(item.0.clone()); }
-                                }
-                            });
-                        } else {
-                            for item in items {
-                                if menu_row(ui, item) {
-                                    clicked = Some(item.0.clone());
-                                    close = item.4 < 0;
+                    egui::ScrollArea::vertical().id_salt("view command groups")
+                        .max_height((self.screen.bottom() - a.bottom() - 90.).max(ROW_H * 3.))
+                        .show(ui, |ui| {
+                            for (si, (title, items)) in self.view_menu.iter().enumerate() {
+                                if si > 0 { ui.add_space(SPACE_XS); }
+                                caption_at(ui, title, 12.0);
+                                let icons_only = items.iter().all(|i| self.icons.contains_key(&i.3));
+                                if icons_only {
+                                    ui.horizontal_wrapped(|ui| {
+                                        for item in items {
+                                            if item_button(ui, item, self.icons.get(&item.3)) { clicked = Some(item.0.clone()); close = true; }
+                                        }
+                                    });
+                                } else {
+                                    for item in items {
+                                        if menu_row(ui, item) {
+                                            clicked = Some(item.0.clone());
+                                            close = item.4 < 0;
+                                        }
+                                    }
                                 }
                             }
-                        }
-                    }
+                        });
                 });
             });
         if close { self.view_open = false; }
@@ -1684,7 +1690,17 @@ impl Ui {
                         }
                     }
                     // A dock mode with nothing to inspect gives the whole dock to its list.
-                    let room = if !col.mode.is_empty() && col.inspector.is_empty() { ui.available_height() - 44.0 } else { ui.available_height() * 0.6 };
+                    let available = ui.available_height();
+                    let room = if !col.mode.is_empty() && col.inspector.is_empty() {
+                        available - 44.0
+                    } else if col.lens == Lens::Drawing {
+                        available * 0.5
+                    } else if col.lens == Lens::Filing && !col.identity.is_empty() {
+                        // Keep the identity fields and their actions together in short windows.
+                        (available * 0.6).min(available - ROW_H * 12.)
+                    } else {
+                        available * 0.6
+                    };
                     if col.proposal_available && !col.proposal_dismissed && col.lens == Lens::Filing {
                         ui.horizontal(|ui| {
                             if kit::quiet(ui, "Propose kinds…").on_hover_text("Preview a filing structure from these tags").clicked() {
@@ -1706,7 +1722,8 @@ impl Ui {
                         drawing::drop_on(ui, &header, "", &mut actions);
                         room - ROW_H
                     } else { room };
-                    let tree_h = (nodes_len as f32 * ROW_H + SPACE_XS).min(row_room).max(3.0 * ROW_H);
+                    let visible_rows = (row_room / ROW_H).floor().max(3.0);
+                    let tree_h = (nodes_len.max(3) as f32).min(visible_rows) * ROW_H;
                     let mut scroll = egui::ScrollArea::vertical().id_salt("tree").max_height(tree_h).auto_shrink([false, false]);
                     if let Some(key) = col.reveal.take() {
                         let pitch = ROW_H + ui.spacing().item_spacing.y;
@@ -1763,7 +1780,7 @@ impl Ui {
                                             if let Some((a, b)) = slot {
                                                 let sample = Rect::from_min_max(pos2(a,cy-6.),pos2(b,cy+6.));
                                                 if index == 4 {
-                                                    kit::hatch_sample(ui, sample, &cell(4));
+                                                    kit::hatch_sample(ui, sample.expand2(vec2(0., 2.)), &cell(4), n.hatch.as_deref());
                                                 } else {
                                                     kit::line_sample(ui, sample, &cell(2), if index == 1 { cells[1].as_str() } else { "continuous" }, ink_c);
                                                 }
@@ -1871,7 +1888,16 @@ impl Ui {
                                 // is held, a quiet dot on the rows above (after the name).
                                 let marks_w = if file_state.is_some() { 10.0 } else { 0.0 } + if n.mark == 2 { 10.0 } else { 0.0 };
                                 let right = right - marks_w;
-                                let name = if n.active && n.row != 5 { format!("✎ {}", n.name) } else { n.name.clone() };
+                                if n.active && n.row != 5 {
+                                    let icon = Rect::from_center_size(pos2(tx + 6., cy), vec2(12., 12.));
+                                    if let Some(line) = self_icons.get("line") {
+                                        egui::Image::new(line).tint(DIM).paint_at(ui, icon);
+                                    } else {
+                                        ui.painter().line_segment([icon.left_bottom(), icon.right_top()], Stroke::new(1.5_f32, DIM));
+                                    }
+                                    tx += icon.width() + SPACE_XS;
+                                }
+                                let name = n.name.clone();
                                 let full = name.clone();
                                 let g = ui.painter().layout_job(one_line(name, font, ink, right - tx));
                                 let name_w = g.size().x;
@@ -1975,9 +2001,9 @@ impl Ui {
                     let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 1.0), Sense::hover());
                     ui.painter().hline(r.x_range(), r.center().y, Stroke::new(1.0_f32, EDGE));
                     ui.add_space(SPACE_S);
+                    if col.mode.is_empty() && col.lens == Lens::Drawing && col.styles.draw(ui, &mut actions) { return; }
                     egui::ScrollArea::vertical().id_salt("inspector").auto_shrink([false, false]).show(ui, |ui| {
                         ui.spacing_mut().item_spacing = vec2(0.0, SPACE_XS);
-                        if col.mode.is_empty() && col.lens == Lens::Drawing && col.styles.draw(ui, &mut actions) { return; }
                         if col.lens == Lens::Export {
                             if !col.inspector_title.is_empty() { ui.strong(&col.inspector_title); }
                             kit::identity_card(ui, &col.identity, &mut actions);
@@ -2742,8 +2768,8 @@ fn menu_button(ui: &mut egui::Ui, label: &str, open: bool) -> Option<Rect> {
 
 /// A hairline between groups in a bar.
 fn bar_divider(ui: &mut egui::Ui) {
-    let (r, _) = ui.allocate_exact_size(vec2(9.0, 28.0), Sense::hover());
-    ui.painter().vline(r.center().x, r.y_range().shrink(7.0), Stroke::new(1.0_f32, EDGE));
+    let (r, _) = ui.allocate_exact_size(vec2(SPACE_M, BUTTON_H), Sense::hover());
+    ui.painter().vline(r.center().x, r.y_range().shrink(5.), Stroke::new(1.0_f32, OFF));
 }
 
 /// A text command in a bar, 28 high, 8 pt padding.

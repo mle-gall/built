@@ -38,7 +38,7 @@ palette! {
     // (council C8, 2026-11-23).
     DESK = WELL;
     GLASS_BAR = SIDE;
-    POPOVER = PANEL;
+    POPOVER = Color32::from_gray(33);
     SHEET_SCRIM = Color32::from_black_alpha(112);
     SCRIM = Color32::from_black_alpha(72);
     DIVIDER = EDGE;

@@ -255,13 +255,21 @@ def test_lens_action_sends_the_width(ui, monkeypatch):
 
 
 def test_drawing_cells_carry_colour_line_weight_print(ui):
+    import json
     scene, win, view, rows, act = ui
+    family = [0., 0., 0., 0., 1.5, [1., -1.]]
+    scene.hatch_patterns["Paths"] = {"families": [family]}
+    layer = scene.layer("Paths")
+    layer.hatch, layer.hatch_angle, layer.hatch_scale = "pat:Paths", 30., 2.
     view._ui_lens = 1
     view._ui_tree_sig = None
     wu._tree(view, win)
     row = next(t for t, _n in view.renderer.calls["ui_set_tree"][0] if t[0] == "n:" + _key(view, "Paths"))
     assert row[10] == scene.layer("Paths").key
     assert row[11] == "auto"
+    assert row[9] == "pat:Paths"
+    assert [float(v) for v in row[13:15]] == [30., 2.]
+    assert json.loads(row[15]) == [family]
     file_row = next(t for t, _n in view.renderer.calls["ui_set_tree"][0] if t[0] == "n:link:Ride")
     assert file_row[4] == "file:resolved"
 

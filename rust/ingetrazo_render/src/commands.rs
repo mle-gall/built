@@ -18,6 +18,15 @@ enum Target {
 }
 use Target::*;
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Surface {
+    ViewMenu,
+    NavigationBar,
+    DisplayBar,
+    RegistryOnly,
+}
+use Surface::{DisplayBar, NavigationBar, RegistryOnly};
+
 struct Command {
     id: &'static str,
     label: &'static str,
@@ -25,6 +34,7 @@ struct Command {
     shortcuts: &'static [&'static str],
     group: &'static str,
     target: Target,
+    surface: Surface,
 }
 const fn command(
     id: &'static str,
@@ -41,24 +51,32 @@ const fn command(
         shortcuts,
         group,
         target,
+        surface: Surface::ViewMenu,
+    }
+}
+
+impl Command {
+    const fn on(mut self, surface: Surface) -> Self {
+        self.surface = surface;
+        self
     }
 }
 #[rustfmt::skip]
 const COMMANDS: &[Command] = &[
-    command("orbit", "Orbit", "orbit", &["O"], "nav", Nav),
-    command("pan", "Pan", "pan", &["H"], "nav", Nav),
+    command("orbit", "Orbit", "orbit", &["O"], "nav", Nav).on(NavigationBar),
+    command("pan", "Pan", "pan", &["H"], "nav", Nav).on(NavigationBar),
     command("zoom", "Zoom", "zoom", &["Z"], "nav", Nav),
     command("zoom_window", "Zoom Window", "zoom_window", &[], "nav", Nav),
-    command("zoom_extents", "Zoom Extents", "zoom_extents", &["Shift+Z", "F2"], "nav", Method("_on_zoom_extents")),
+    command("zoom_extents", "Zoom Extents", "zoom_extents", &["Shift+Z", "F2"], "nav", Method("_on_zoom_extents")).on(NavigationBar),
     command("zoom_selection", "Zoom Selection", "zoom_selection", &["Ctrl+Alt+Z"], "nav", Method("_on_zoom_selection")),
     command("look_around", "Look Around", "look_around", &[], "walkthrough", Tool),
     command("walk", "Walk", "walk", &[], "walkthrough", Tool),
     command("position_camera", "Position Camera", "position_camera", &[], "walkthrough", Tool),
-    command("xray", "X-ray", "xray", &["Alt+X"], "toggle", Xray),
+    command("xray", "X-ray", "xray", &["Alt+X"], "toggle", Xray).on(DisplayBar),
     command("back_edges", "Back edges", "back_edges", &["K"], "toggle", Flag("_set_style_field", "back_edges")),
-    command("hidden_geometry", "Hidden geometry", "hidden_geometry", &[], "toggle", Flag("_set_hidden_view", "show_hidden_geometry")),
+    command("hidden_geometry", "Hidden geometry", "hidden_geometry", &[], "toggle", Flag("_set_hidden_view", "show_hidden_geometry")).on(DisplayBar),
     command("shadows", "Shadows", "shadows", &[], "toggle", Shadows),
-    command("section_cuts", "Section cuts", "section_cut", &[], "toggle", Flag("_set_section_visibility", "show_section_cuts")),
+    command("section_cuts", "Section cuts", "section_cut", &[], "toggle", Flag("_set_section_visibility", "show_section_cuts")).on(DisplayBar),
     command("view_iso", "Isometric", "view_iso", &["Ctrl+4"], "Views", View("iso")),
     command("view_top", "Top", "view_top", &["Ctrl+1"], "Views", View("top")),
     command("view_front", "Front", "view_front", &["Ctrl+2"], "Views", View("front")),
@@ -76,7 +94,7 @@ const COMMANDS: &[Command] = &[
     command("style_hidden_line", "Hidden line", "", &[], "Style", Style),
     command("style_monochrome", "Monochrome", "", &[], "Style", Style),
     command("style_wireframe", "Wireframe", "", &[], "Style", Style),
-    command("style_xray", "X-ray", "", &[], "Style", Style),
+    command("style_xray", "X-ray", "", &[], "Style", Style).on(RegistryOnly),
     command("section_planes", "Section Planes", "", &[], "Sections", Flag("_set_section_visibility", "show_section_planes")),
     command("section_fill", "Section Fill", "", &[], "Sections", Flag("_set_style_field", "section_fill")),
     command("form-style", "Edit style…", "", &[], "Settings", Chrome),
@@ -132,7 +150,7 @@ pub fn command_chrome(
 ) -> (Vec<Vec<crate::ui::Item>>, Menu) {
     let (active, projection, style, flags, selection) = snapshot;
     let translate = |s: &str| labels.get(s).cloned().unwrap_or_else(|| s.to_owned());
-    let mut cluster = vec![Vec::new(); 3];
+    let mut cluster = vec![Vec::new(); 2];
     let mut menu: Menu = Vec::new();
     for c in COMMANDS {
         let (checked, enabled) = c.state(&active, &projection, &style, &flags, selection);
@@ -141,11 +159,11 @@ pub fn command_chrome(
             .map(|(s, on)| (s.as_str(), *on))
             .unwrap_or((c.shortcuts.first().copied().unwrap_or(""), true));
         let label = translate(c.label);
-        let cluster_group = match c.group {
-            "nav" => Some(0),
-            "walkthrough" => Some(1),
-            "toggle" => Some(2),
-            _ => None,
+        let cluster_group = match c.surface {
+            NavigationBar => Some(0),
+            DisplayBar => Some(1),
+            RegistryOnly => continue,
+            Surface::ViewMenu => None,
         };
         let tip = if cluster_group.is_some() && !shortcut.is_empty() {
             format!("{label}    {shortcut}")
@@ -163,7 +181,12 @@ pub fn command_chrome(
         if let Some(group) = cluster_group {
             cluster[group].push(item);
         } else {
-            let title = translate(c.group);
+            let title = translate(match c.group {
+                "nav" => "Navigation",
+                "walkthrough" => "Walkthrough",
+                "toggle" => "Display",
+                title => title,
+            });
             if menu.last().is_none_or(|(group, _)| *group != title) {
                 menu.push((title, Vec::new()));
             }
@@ -251,6 +274,30 @@ mod tests {
             }
         }
     }
+    #[test]
+    fn chrome_shows_each_command_once_and_keeps_the_xray_shortcut() {
+        let (bar, menu) =
+            command_chrome(Default::default(), Default::default(), Default::default());
+        let ids =
+            |items: &[crate::ui::Item]| items.iter().map(|row| row.0.clone()).collect::<Vec<_>>();
+        assert_eq!(ids(&bar[0]), ["orbit", "pan", "zoom_extents"]);
+        assert_eq!(ids(&bar[1]), ["xray", "hidden_geometry", "section_cuts"]);
+        let all: Vec<_> = bar
+            .iter()
+            .flatten()
+            .chain(menu.iter().flat_map(|(_, rows)| rows))
+            .collect();
+        assert_eq!(all.iter().filter(|item| item.1 == "X-ray").count(), 1);
+        assert_eq!(
+            all.iter().map(|item| &item.0).collect::<HashSet<_>>().len(),
+            all.len()
+        );
+        assert!(menu
+            .iter()
+            .any(|(title, rows)| title == "Walkthrough" && ids(rows).contains(&"walk".into())));
+        assert_eq!(view_shortcut("Alt+X"), Some("xray"));
+    }
+
     #[test]
     fn selection_and_active_camera_modes_drive_state() {
         let state = |id| {

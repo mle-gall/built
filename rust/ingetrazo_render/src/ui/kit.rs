@@ -319,10 +319,15 @@ pub mod molecules {
             paint_state(ui, rect, state, R_CONTROL);
         }
         let x0 = (rect.center().x - (g.size().x + kw) / 2.0).round();
-        leading(ui.painter(), rect, x0, g.clone(), ink);
+        let mut text = ui.painter().clone();
+        if off && ui.is_visible() {
+            // OFF already carries the disabled contrast.
+            text.set_fade_to_color(None);
+        }
+        leading(&text, rect, x0, g.clone(), ink);
         if let Some(k) = k {
             let hint_ink = if off { OFF } else if primary { ON_PRIMARY_HINT } else { INK_2 };
-            leading(ui.painter(), rect, x0 + g.size().x + 8.0, k, hint_ink);
+            leading(&text, rect, x0 + g.size().x + 8.0, k, hint_ink);
         }
         resp.clicked()
     }
@@ -758,6 +763,23 @@ pub mod molecules {
         let x = r.max.x - 8.0 - v.size().x;
         leading(ui.painter(), r, x, v, if off { OFF } else { INK });
     }
+    /// One editable property, with a shared leading label and control baseline.
+    pub fn property_control(
+        ui: &mut egui::Ui, label: &str, control: impl FnOnce(&mut egui::Ui),
+    ) {
+        let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), CONTROL_H), Sense::hover());
+        let column = (r.width() * 0.44).min(160.);
+        let label_left = r.left() + SPACE_S;
+        let text = super::fit(ui, label, meta(), DIM, column - SPACE_S * 2., 1);
+        leading(ui.painter(), r, label_left, text, DIM);
+        let controls = Rect::from_min_max(pos2(r.left() + column, r.top()), r.max);
+        ui.scope_builder(egui::UiBuilder::new().max_rect(controls)
+            .layout(egui::Layout::left_to_right(egui::Align::Center)), |ui| {
+            ui.spacing_mut().item_spacing.x = SPACE_S;
+            control(ui);
+        });
+    }
+
     /// A collapsible section: the caption with a chevron; its open state is
     /// kept per id. Returns the body's value when open.
     pub fn disclosure<R>(
@@ -849,6 +871,7 @@ pub mod organisms {
                     if let Some(on) = visible {
                         let (rect, eye) = ui.allocate_exact_size(vec2(16., PROP_H), Sense::click());
                         paint_eye(ui, rect, *on);
+                        ui.add_space(SPACE_XS);
                         if eye.on_hover_text(format!("Show / hide {value}")).clicked() { actions.push(target.clone()); }
                     }
                     let enabled = !target.is_empty();
@@ -1707,23 +1730,36 @@ pub(super) fn fit(ui: &egui::Ui, text: &str, font: egui::FontId, color: Color32,
     ui.painter().layout_job(job)
 }
 
-/// Contact sheet of the model's standard paper hatch marks at four pixels/mm.
+/// Native samples of the standard cut patterns. The geometry is an 8 × 3 mm
+/// window of core.hatches.hatch_marks, clipped and rounded to 0.01 paper mm.
 pub const HATCH_KEYS: &str = include_str!("assets/hatches.txt");
 
-pub fn hatch_sample(ui: &egui::Ui, rect: Rect, key: &str) {
-    ui.painter().rect_filled(rect, R_INSET, WELL);
-    let Some(index) = HATCH_KEYS.lines().position(|k| k == key) else { return };
-    let id = egui::Id::new("paper hatch samples");
-    let texture = ui.ctx().data(|d| d.get_temp::<egui::TextureHandle>(id)).unwrap_or_else(|| {
-        let image = image::load_from_memory(include_bytes!("assets/hatches.png")).expect("bundled hatch samples").to_rgba8();
-        let texture = ui.ctx().load_texture("paper hatches", egui::ColorImage::from_rgba_unmultiplied(
-            [image.width() as usize,image.height() as usize], image.as_raw()), egui::TextureOptions::LINEAR);
-        ui.ctx().data_mut(|d| d.insert_temp(id,texture.clone()));
-        texture
-    });
-    let height = HATCH_KEYS.lines().count().div_ceil(8) as f32;
-    let uv = Rect::from_min_size(pos2((index%8) as f32/8.,(index/8) as f32/height),vec2(1./8.,1./height));
-    ui.painter().image(texture.id(), rect.shrink(1.), uv, INK_2);
+mod hatch;
+pub(super) use hatch::{hatch_override, PaperMarks};
+
+pub fn hatch_sample(ui: &egui::Ui, rect: Rect, key: &str, custom: Option<&PaperMarks>) {
+    let painter = ui.painter();
+    painter.rect_filled(rect, R_INSET, WELL);
+    let paper = rect.shrink(1.);
+    if key == "solid" {
+        painter.rect_filled(paper, R_INSET, INK_2);
+        return;
+    }
+    let Some(marks) = custom.or_else(|| hatch::standard(key)) else { return };
+    let scale = (paper.width() / 8.).max(paper.height() / 3.);
+    let origin = paper.center() - vec2(4., 1.5) * scale;
+    let pos = |x, y| origin + vec2(x, y) * scale;
+    let painter = painter.with_clip_rect(painter.clip_rect().intersect(paper));
+    let stroke = Stroke::new((0.16 * scale).max(1. / ui.ctx().pixels_per_point()), INK_2);
+    for &[x, y, u, v] in &marks.lines {
+        painter.line_segment([pos(x, y), pos(u, v)], stroke);
+    }
+    for &[x, y] in &marks.dots {
+        painter.circle_filled(pos(x, y), stroke.width * 0.9, INK_2);
+    }
+    for &[x, y, r] in &marks.circles {
+        painter.circle_stroke(pos(x, y), r * scale, stroke);
+    }
 }
 
 pub fn line_sample(ui: &egui::Ui, rect: Rect, mm: &str, pattern: &str, color: Color32) {
@@ -1747,8 +1783,17 @@ pub fn line_sample(ui: &egui::Ui, rect: Rect, mm: &str, pattern: &str, color: Co
 /// Host tag overrides belong to the host tab, including while its source is edited.
 pub fn host_visibility(ui: &mut egui::Ui, host: &str, tags: &[(String, String, bool)], actions: &mut Vec<String>) {
     if host.is_empty() { return; }
-    egui::ComboBox::from_id_salt(("host visibility",host)).selected_text("Host visibility").show_ui(ui, |ui| {
-        ui.set_min_width(204.);
+    let popup_id = ui.make_persistent_id(("host visibility", host));
+    let button = quiet(ui, "Host visibility ▾");
+    if button.clicked() { ui.memory_mut(|m| m.toggle_popup(popup_id)); }
+    if !ui.memory(|m| m.is_popup_open(popup_id)) { return; }
+    // The dock is itself foreground. Keep its rows below the popup on every frame.
+    if ui.layer_id().order == egui::Order::Foreground {
+        ui.ctx().set_sublayer(ui.layer_id(), egui::LayerId::new(egui::Order::Foreground, popup_id));
+    }
+    let content_width = ui.available_width() - ui.spacing().menu_margin.sum().x;
+    egui::popup_below_widget(ui, popup_id, &button, egui::PopupCloseBehavior::CloseOnClickOutside, |ui| {
+        ui.set_width(content_width);
         caption(ui, host);
         let id = ui.make_persistent_id(("host tag search", host));
         let mut filter = ui.data(|d| d.get_temp::<String>(id)).unwrap_or_default();

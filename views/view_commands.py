@@ -27,7 +27,8 @@ def _snapshot(win):
 @lru_cache(maxsize=4)
 def _labels(language):
     from core.i18n import tr
-    return {text: tr(text) for group, _, label, _, _ in entries() for text in (group, label)}
+    labels = {text for group, _, label, _, _ in entries() for text in (group, label)}
+    return {text: tr(text) for text in labels | {"Navigation", "Walkthrough", "Display"}}
 
 
 def sync(view, win):
