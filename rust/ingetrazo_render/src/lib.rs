@@ -18,6 +18,7 @@ mod background;
 mod antialias;
 mod depth_resolve;
 mod depth;
+mod backend;
 mod edges;
 mod faces;
 mod xray;
@@ -25,10 +26,7 @@ mod ao;
 mod resident_readback;
 use numpy::PyReadonlyArray1;
 use pyo3::{exceptions::PyValueError, prelude::*};
-use raw_window_handle::{
-    AppKitDisplayHandle, AppKitWindowHandle, RawDisplayHandle, RawWindowHandle,
-};
-use std::{ptr::NonNull, time::Instant};
+use std::time::Instant;
 use wgpu::util::DeviceExt;
 
 #[repr(C)]
@@ -312,28 +310,19 @@ fn bind(
 #[pymethods]
 impl Renderer {
     #[new]
-    fn new(ns_view_ptr: usize, width: u32, height: u32, scale: f64) -> PyResult<Self> {
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::METAL,
-            ..Default::default()
-        });
-        let ptr = NonNull::new(ns_view_ptr as *mut std::ffi::c_void)
-            .ok_or_else(|| PyValueError::new_err("null NSView"))?;
-        // Qt owns the NSView. Python retains this Renderer only while its widget lives.
-        // wgpu's Metal backend installs/reuses a CAMetalLayer on this AppKit view.
-        let surface = unsafe {
-            instance.create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
-                raw_display_handle: RawDisplayHandle::AppKit(AppKitDisplayHandle::new()),
-                raw_window_handle: RawWindowHandle::AppKit(AppKitWindowHandle::new(ptr)),
-            })
-        }
-        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    #[pyo3(signature = (window, width, height, scale, *, display=0, platform=""))]
+    fn new(window: usize, width: u32, height: u32, scale: f64, display: usize, platform: &str) -> PyResult<Self> {
+        let instance = crate::backend::instance();
+        let surface = backend::surface(&instance, window, display, platform)?;
         let a = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
             compatible_surface: Some(&surface),
             ..Default::default()
         }))
-        .ok_or_else(|| PyValueError::new_err("no Metal adapter"))?;
+        .ok_or_else(|| PyValueError::new_err("no supported GPU backend for this window"))?;
         let optional = wgpu::Features::MULTI_DRAW_INDIRECT | wgpu::Features::TIMESTAMP_QUERY;
+        if !a.features().contains(wgpu::Features::INDIRECT_FIRST_INSTANCE) {
+            return Err(PyValueError::new_err("GPU adapter lacks indirect first-instance drawing"));
+        }
         let features = (a.features() & optional) | wgpu::Features::INDIRECT_FIRST_INSTANCE;
         let (device, queue) = pollster::block_on(a.request_device(
             &wgpu::DeviceDescriptor {
@@ -641,16 +630,9 @@ impl Renderer {
 
     /// Another view of the resident scene on its own NSView: one more
     /// surface and its attachments; the scene is not packed or sent again.
-    fn add_target(&mut self, ns_view_ptr: usize, width: u32, height: u32, scale: f64) -> PyResult<usize> {
-        let ptr = NonNull::new(ns_view_ptr as *mut std::ffi::c_void)
-            .ok_or_else(|| PyValueError::new_err("null NSView"))?;
-        let surface = unsafe {
-            self.instance.create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
-                raw_display_handle: RawDisplayHandle::AppKit(AppKitDisplayHandle::new()),
-                raw_window_handle: RawWindowHandle::AppKit(AppKitWindowHandle::new(ptr)),
-            })
-        }
-        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    #[pyo3(signature = (window, width, height, scale, *, display=0, platform=""))]
+    fn add_target(&mut self, window: usize, width: u32, height: u32, scale: f64, display: usize, platform: &str) -> PyResult<usize> {
+        let surface = backend::surface(&self.instance, window, display, platform)?;
         let w = ((width as f64 * scale) as u32).max(1);
         let h = ((height as f64 * scale) as u32).max(1);
         let mut config = self.config.clone();

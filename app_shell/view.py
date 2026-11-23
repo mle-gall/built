@@ -19,6 +19,9 @@ class ShellView(MetalView, WidgetShim):
         super().__init__()
         self._host = host
 
+    def _window_handles(self):
+        return self._host.ns_view, self._host.surface_handles
+
     def winId(self):
         return self._host.ns_view
 

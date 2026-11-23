@@ -51,10 +51,12 @@ def _log(*parts):
 
 class Host:
     def __init__(self, ns_view: int, width: float, height: float, scale: float,
-                 settings: str | None = None, temporary: bool = False):
+                 settings: str | None = None, temporary: bool = False,
+                 display: int = 0, platform: str = ""):
         t0 = time.perf_counter()
         self.settings_dir = qt_host.start(settings, temporary=temporary)
         self.ns_view = int(ns_view)
+        self.surface_handles = dict(display=display, platform=platform) if platform else {}
         self.width = max(1, int(round(width)))
         self.height = max(1, int(round(height)))
         self.scale = float(scale)
@@ -129,6 +131,11 @@ class Host:
         sent is sent again for it."""
         from PySide6.QtCore import QTimer
         view.renderer = renderer
+        if renderer is not None and hasattr(renderer, 'set_reference_layers'):
+            renderer.set_reference_layers([], [])
+            renderer.set_center_cue(None, 0., (0., 0.), 1.)
+        view._reference_cache = None
+        view._had_center_cue = False
         if getattr(view, "_ui_timer", None) is None:
             view._ui_timer = QTimer(view, singleShot=True)
             view._ui_timer.timeout.connect(view.update)
@@ -687,13 +694,15 @@ def bootstrap(root: str, venv: str | None):
     import site
     ROOT, VENV = root, venv
     if venv:
-        for sp in sorted(Path(venv).glob("lib/python3*/site-packages")):
+        packages = ("Lib/site-packages" if sys.platform == "win32" else "lib/python3*/site-packages")
+        for sp in sorted(Path(venv).glob(packages)):
             site.addsitedir(str(sp))
         # Embedded, sys.executable is the `built` binary: code that runs
         # "sys.executable -m module" (the Metal probe, helpers) would start
         # another app window. It is the venv's Python, as in the Qt app.
-        for name in ("python3", "python"):
-            python = Path(venv) / "bin" / name
+        binaries = ["Scripts/python.exe"] if sys.platform == "win32" else ["bin/python3", "bin/python"]
+        for name in binaries:
+            python = Path(venv) / name
             if python.exists():
                 sys.executable = str(python)
                 break

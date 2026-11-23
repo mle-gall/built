@@ -107,6 +107,7 @@ def win(monkeypatch, tmp_path):
     # recording renderer needing no NSView.
     from PySide6.QtCore import Qt
     from views.wgpu_view import WgpuView
+    monkeypatch.setattr(WgpuView, "_window_handles", lambda self: (1, {}))
     made = WgpuView.__init__
 
     def alien(self, *a, **k):

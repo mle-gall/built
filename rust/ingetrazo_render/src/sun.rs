@@ -442,10 +442,7 @@ mod tests {
     }
     #[test]
     fn sun_validates_on_metal_both_samples() {
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::METAL,
-            ..Default::default()
-        });
+        let instance = crate::backend::instance();
         let Some(a) = pollster::block_on(instance.request_adapter(&Default::default())) else {
             return;
         };

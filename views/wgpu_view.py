@@ -161,6 +161,10 @@ class MetalView(ViewNavigation):
         if peer in peers:
             peers.remove(peer)
 
+    def _window_handles(self):
+        from views.wgpu_surface import window_handles
+        return window_handles(self)
+
     def _wrap_renderer(self):
         from views.wgpu_peer import TargetRenderer
         if (self.peers() and self.renderer is not None
@@ -512,7 +516,9 @@ class MetalView(ViewNavigation):
         if self.renderer is None:
             from core import black_box
             black_box.install_panic_log(ingetrazo_render)
-            self.renderer = ingetrazo_render.Renderer(int(self.winId()), self.width(), self.height(), self.devicePixelRatioF())
+            window, handles = self._window_handles()
+            self.renderer = ingetrazo_render.Renderer(window, self.width(), self.height(),
+                                                       self.devicePixelRatioF(), **handles)
             self._wrap_renderer()
             from views import wgpu_ui
             wgpu_ui.attach(self)

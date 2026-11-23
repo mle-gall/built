@@ -39,11 +39,7 @@ def _probe_local():
         import ingetrazo_render
     except Exception as exc:
         reason = f'render crate unavailable: {exc}'
-        if sys.platform != 'darwin':
-            reason = f'not validated on this platform (Metal only); {reason}'
         return Capability(False, reason)
-    if sys.platform != 'darwin':
-        return Capability(False, 'not validated on this platform (Metal only)')
     try:
         from PySide6.QtWidgets import QApplication, QWidget
         from PySide6.QtCore import Qt
@@ -51,12 +47,14 @@ def _probe_local():
         view = QWidget()
         view.setAttribute(Qt.WidgetAttribute.WA_NativeWindow)
         view.resize(16, 16)
-        renderer = ingetrazo_render.Renderer(int(view.winId()), 16, 16, 1.0)
+        from views.wgpu_surface import window_handles
+        window, handles = window_handles(view)
+        renderer = ingetrazo_render.Renderer(window, 16, 16, 1.0, **handles)
         del renderer
         view.close()
         return Capability(True)
     except BaseException as exc:  # also catches PyO3's PanicException
-        return Capability(False, f'Metal adapter/device unavailable: {exc}')
+        return Capability(False, f'GPU adapter/device unavailable: {exc}')
 
 
 @lru_cache(maxsize=1)
@@ -68,14 +66,14 @@ def capability():
         result = subprocess.run(command, capture_output=True, text=True,
                                 timeout=30, check=False)
         if result.returncode:
-            return Capability(False, f'Metal probe exited with code {result.returncode}')
+            return Capability(False, f'GPU probe exited with code {result.returncode}')
         # Qt/drivers may write diagnostics before our final JSON line.
         data = json.loads(result.stdout.strip().splitlines()[-1])
         return Capability(**data)
     except subprocess.TimeoutExpired:
-        return Capability(False, 'Metal probe timed out')
+        return Capability(False, 'GPU probe timed out')
     except (OSError, ValueError, IndexError, TypeError) as exc:
-        return Capability(False, f'Metal probe failed: {exc}')
+        return Capability(False, f'GPU probe failed: {exc}')
 
 
 def requested(st=None):

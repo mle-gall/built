@@ -101,7 +101,7 @@ def test_adapter_probe(monkeypatch, fails):
         if fails:
             raise ValueError('no Metal adapter')
         return object()
-    monkeypatch.setattr(sys, 'platform', 'darwin')
+    monkeypatch.setattr('views.wgpu_surface.window_handles', lambda widget: (1, {}))
     monkeypatch.setitem(sys.modules, 'ingetrazo_render', SimpleNamespace(Renderer=renderer))
     cap = rs._probe_local()
     assert cap.available is not fails
@@ -111,12 +111,14 @@ def test_adapter_probe(monkeypatch, fails):
 
 
 @pytest.mark.parametrize('platform', ['linux', 'win32'])
-def test_unvalidated_platform(monkeypatch, platform):
+def test_probes_the_native_surface_on_each_platform(monkeypatch, platform):
     import sys
     from types import SimpleNamespace
     monkeypatch.setattr(sys, 'platform', platform)
-    monkeypatch.setitem(sys.modules, 'ingetrazo_render', SimpleNamespace())
-    assert 'not validated' in rs._probe_local().reason
+    monkeypatch.setattr('views.wgpu_surface.window_handles', lambda widget: (1, {}))
+    monkeypatch.setitem(sys.modules, 'ingetrazo_render', SimpleNamespace(Renderer=lambda *args: object()))
+    assert rs._probe_local().available
+
 
 
 @pytest.mark.parametrize('outcome', ['ok', 'crash', 'timeout', 'malformed'])

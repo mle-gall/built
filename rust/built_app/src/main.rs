@@ -18,12 +18,14 @@ mod python;
 mod script;
 
 use std::collections::{HashMap, VecDeque};
+#[cfg(unix)]
 use std::io::{BufRead, BufReader, Write};
+#[cfg(unix)]
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+use raw_window_handle::{HasDisplayHandle, HasWindowHandle, RawDisplayHandle, RawWindowHandle};
 use winit::application::ApplicationHandler;
 use winit::dpi::{LogicalSize, PhysicalPosition};
 use winit::event::{ElementState, Ime, MouseButton, MouseScrollDelta, TouchPhase, WindowEvent};
@@ -79,6 +81,7 @@ fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, String> {
                 std::process::exit(0);
             }
             // Launch Services' process serial number (old macOS, Finder launches).
+            #[cfg(target_os = "macos")]
             s if s.starts_with("-psn_") => {}
             s if s.starts_with('-') => return Err(format!("unknown option {s}")),
             s => a.file = Some(absolute(Path::new(s))),
@@ -105,12 +108,14 @@ enum UserEvent {
 
 // ---- single instance ------------------------------------------------------
 
+#[cfg(unix)]
 fn instance_socket() -> PathBuf {
     let user = std::env::var("USER").unwrap_or_else(|_| "user".into());
     std::env::temp_dir().join(format!("built-shell-{user}.sock"))
 }
 
 /// Hand `file` to a running shell; true when one took it.
+#[cfg(unix)]
 fn forward_to_running(file: Option<&Path>) -> bool {
     let Ok(mut stream) = UnixStream::connect(instance_socket()) else {
         return false;
@@ -119,6 +124,7 @@ fn forward_to_running(file: Option<&Path>) -> bool {
     stream.write_all(format!("{line}\n").as_bytes()).is_ok()
 }
 
+#[cfg(unix)]
 fn listen_for_instances(proxy: EventLoopProxy<UserEvent>) {
     let path = instance_socket();
     let _ = std::fs::remove_file(&path);
@@ -524,15 +530,22 @@ impl App {
         if self.timings.window.is_none() {
             self.timings.window = Some(self.timings.process.elapsed());
         }
-        let ns_view = match window.window_handle().map_err(|e| e.to_string())?.as_raw() {
-            RawWindowHandle::AppKit(h) => h.ns_view.as_ptr() as usize,
-            _ => return Err("not an AppKit window".into()),
+        let window_handle = window.window_handle().map_err(|e| e.to_string())?.as_raw();
+        let display_handle = window.display_handle().map_err(|e| e.to_string())?.as_raw();
+        let (window_id, display, platform) = match (window_handle, display_handle) {
+            (RawWindowHandle::AppKit(w), RawDisplayHandle::AppKit(_)) => (w.ns_view.as_ptr() as usize, 0, "cocoa"),
+            (RawWindowHandle::Win32(w), RawDisplayHandle::Windows(_)) => (w.hwnd.get() as usize, 0, "windows"),
+            (RawWindowHandle::Wayland(w), RawDisplayHandle::Wayland(d)) => (w.surface.as_ptr() as usize, d.display.as_ptr() as usize, "wayland"),
+            (RawWindowHandle::Xlib(w), RawDisplayHandle::Xlib(d)) => (w.window as usize, d.display.ok_or("missing X11 display")?.as_ptr() as usize, "xlib"),
+            (RawWindowHandle::Xcb(w), RawDisplayHandle::Xcb(d)) => (w.window.get() as usize, d.connection.ok_or("missing XCB connection")?.as_ptr() as usize, "xcb"),
+            _ => return Err("no supported GPU surface for this window".into()),
         };
+        let ns_view = if platform == "cocoa" { window_id } else { 0 };
         native::no_window_tabs(ns_view);
         let size = window.inner_size();
         let scale = window.scale_factor();
         let host = python::Host::new(
-            ns_view,
+            (window_id, display, platform),
             size.width as f64 / scale,
             size.height as f64 / scale,
             scale,
@@ -953,7 +966,7 @@ impl ApplicationHandler<UserEvent> for App {
 /// `--check`: start Python and the shell's document headless, open the
 /// file if one is given, print its state, exit 0 when all of it worked.
 fn check(args: &Args) -> i32 {
-    let host = match python::Host::new(0, args.size.0, args.size.1, 2.0, args.settings.as_deref(), args.temporary_profile()) {
+    let host = match python::Host::new((0, 0, ""), args.size.0, args.size.1, 2.0, args.settings.as_deref(), args.temporary_profile()) {
         Ok(h) => h,
         Err(e) => {
             pyo3::Python::attach(|py| python::report(py, e, "Host"));
@@ -992,8 +1005,10 @@ fn main() {
         }
     };
     if args.gallery { std::env::set_var("BUILT_GALLERY", "1"); }
+    #[cfg(unix)]
     let shared_instance = !args.temporary_profile() && args.settings.is_none()
         && std::env::var_os("BUILT_SETTINGS_DIR").is_none() && !args.new_instance;
+    #[cfg(unix)]
     if shared_instance && forward_to_running(args.file.as_deref()) {
         eprintln!("[built] handed over to the running shell");
         return;
@@ -1063,6 +1078,7 @@ fn main() {
             }
         });
     }
+    #[cfg(unix)]
     if shared_instance {
         listen_for_instances(proxy);
     }
@@ -1088,6 +1104,7 @@ fn main() {
         eprintln!("built: {e}");
         app.exit_code = 1;
     }
+    #[cfg(unix)]
     if shared_instance {
         let _ = std::fs::remove_file(instance_socket());
     }

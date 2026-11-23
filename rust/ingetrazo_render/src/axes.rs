@@ -73,9 +73,7 @@ impl Axes {
 mod tests {
     #[test]
     fn axes_validate_on_metal_at_both_sample_counts() {
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::METAL, ..Default::default()
-        });
+        let instance = crate::backend::instance();
         let Some(adapter) = pollster::block_on(instance.request_adapter(&Default::default())) else { return; };
         let (device, queue) = pollster::block_on(adapter.request_device(&Default::default(), None)).unwrap();
         let camera = device.create_buffer(&wgpu::BufferDescriptor { label: None, size: 112,

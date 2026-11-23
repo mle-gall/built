@@ -2,8 +2,8 @@ struct Style { front: vec4f, back: vec4f, edge: vec4f, background: vec4f, sky: v
 @group(0) @binding(0) var<uniform> style: Style;
 struct Out { @builtin(position) position: vec4f, @location(0) y: f32 }
 @vertex fn vs(@builtin(vertex_index) i: u32) -> Out {
- let xy = array<vec2f,3>(vec2f(-1,-1),vec2f(3,-1),vec2f(-1,3));
- var o: Out; o.position = vec4f(xy[i],0,1); o.y = xy[i].y; return o;
+ let xy = vec2f(select(-1., 3., i == 1u), select(-1., 3., i == 2u));
+ var o: Out; o.position = vec4f(xy,0,1); o.y = xy.y; return o;
 }
 fn linear(c: vec3f) -> vec3f { return select(c/12.92,pow((c+0.055)/1.055,vec3f(2.4)),c>vec3f(0.04045)); }
 @fragment fn fs(i: Out) -> @location(0) vec4f {

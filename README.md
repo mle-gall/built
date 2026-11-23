@@ -12,7 +12,7 @@
 
 ## Status
 
-Pre-release. Built is used every day on real as-built projects: linked models of several million faces at survey coordinates. There is no public release yet. macOS on Apple Silicon is the only platform tested. The renderer uses wgpu, so Linux (Vulkan) and Windows (DX12) are within reach but untested.
+Pre-release. Built is used every day on real as-built projects: linked models of several million faces at survey coordinates. There is no public release yet. macOS on Apple Silicon is the only platform tested. The wgpu renderer uses Metal, Vulkan or DX12. Linux and Windows builds are unverified. Set `WGPU_BACKEND` to select a backend explicitly.
 
 ## What it looks like
 
@@ -40,7 +40,7 @@ The command palette is ⌘K or F3. The classic Qt layout is still there with `BU
 
 | Part | Today | Notes |
 |---|---|---|
-| Viewport renderer (`rust/ingetrazo_render`) | **Rust**, wgpu on Metal | GPU culling and indirect draws; the new UI (egui) is drawn in the same frame |
+| Viewport renderer (`rust/ingetrazo_render`) | **Rust**, wgpu | GPU culling and indirect draws; the new UI (egui) is drawn in the same frame |
 | Modelling kernel (`rust/ingetrazo_core`) | **Rust** | Every mesh lives in a Rust store with true f64 coordinates: push/pull, offset, sweep, intersect, fillet, bevel, solids, split, explode, purge |
 | Core protocol | Python over the Rust store | Commands, queries and a change feed keyed by stable element keys. The UI and the agent (MCP) bridge use the same seam. See [`docs/core-protocol.md`](docs/core-protocol.md) |
 | Tools, records, IFC vocabulary | Python | Move to Rust where a measurement on a real model says Python is what costs the time |

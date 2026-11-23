@@ -143,9 +143,10 @@ class WgpuPeerView(WgpuView):
         raw = raw_renderer(primary.renderer)
         if raw is None or not hasattr(raw, "add_target"):
             return False
-        self._target = raw.add_target(int(self.winId()), max(1, self.width()),
+        window, handles = self._window_handles()
+        self._target = raw.add_target(window, max(1, self.width()),
                                       max(1, self.height()),
-                                      self.devicePixelRatioF())
+                                      self.devicePixelRatioF(), **handles)
         self.renderer = TargetRenderer(raw, self._target)
         self._physical_size = None
         # Let the surface go with the widget, not with the Python object.
