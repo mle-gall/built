@@ -179,27 +179,28 @@ def test_editing_into_a_nested_group_keeps_the_tree():
     one. Marco hit the real cost on 2026-09-11, when his plaza's nine groups
     fused into one 17 577-face mesh on a double click.
 
-    What DOES happen on the way in is that the container's own matrix comes
-    down into its children, so the tools can work in world coordinates
-    without anything moving.
+    The edit tools see the container's own geometry in world coordinates
+    while its nested placements keep their geometry and world positions.
     """
-    from ingetrazo_core import Matrix4 as QMatrix4x4
     scene = Scene()
     top, proto = _tree()
     scene.groups.append(top)
+    mid, = top.children
+    leaves = list(mid.children)
     antes = [p.toTuple() for g, m in iter_placements(top)
              for v in g.mesh.vertices
              for p in [m.map(v.position) if m is not None else v.position]]
     scene.begin_group_edit(top)
+    assert scene.edit_group is top
     if scene._edit_stack[-1].get("affine"):
         assert scene.mesh._instance_definition is top.mesh
     else:
         assert scene.mesh is top.mesh
-    assert len(top.children) == 1, "el árbol se horneó al entrar"
-    assert top.children[0].name == "mid"
-    assert top.children[0].children[0].mesh is proto, "y sigue compartiendo malla"
-    if not scene._edit_stack[-1].get("affine"):
         assert top.xform == QMatrix4x4()
+    assert [v.position.toTuple() for v in scene.mesh.vertices] == antes[:len(proto.vertices)]
+    assert list(top.children) == [mid]
+    assert list(mid.children) == leaves
+    assert all(child.mesh is proto for child in leaves)
     despues = [p.toTuple() for g, m in iter_placements(top)
                for v in g.mesh.vertices
                for p in [m.map(v.position) if m is not None else v.position]]

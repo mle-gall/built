@@ -19,12 +19,15 @@ Dos reglas, y la segunda llegó después de usar la primera en obra:
 """
 from __future__ import annotations
 
+import pytest
 from PySide6.QtCore import QPointF, Qt
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
+from core import doc_model
 from core.group import Group, world_mesh
 from core.mesh import Mesh
 from core.orient import is_closed, signed_volume
+from core.store_mesh import StoreMesh
 from tools.base import ToolContext
 from tools.pushpull import PushPullTool
 
@@ -136,40 +139,57 @@ def test_la_cara_de_un_grupo_cerrado_ni_se_sombrea():
 
 # ---- 1. dentro, sí, y llega a todas las copias -----------------------------
 
-def test_dentro_del_componente_el_push_llega_a_todas_las_copias():
+@pytest.mark.parametrize("affine", [False, True], ids=["translated", "mirrored-and-scaled"])
+def test_dentro_del_componente_el_push_llega_a_todas_las_copias(monkeypatch, affine):
     win, vp = _window()
     try:
         scene = vp.scene
         proto, _top, a, b = _instances(scene)
-        vp.begin_group_edit(b)                       # el doble clic del usuario
+        placement = QMatrix4x4(b.xform)
+        if affine:
+            placement.rotate(90, 0, 0, 1)
+            placement.scale(-2, 3, 0.5)
+            b.xform = placement
+        top_center = placement.map(V(0.5, 0.5, 1))
+        ray = (top_center + V(0, 0, 5), V(0, 0, -1))
+        monkeypatch.setattr(vp, "_pixel_to_ray", lambda x, y: ray)
+        live_definition = doc_model.ENABLED and isinstance(proto, StoreMesh)
+        vp.begin_group_edit(b)
         assert scene.edit_group is b
-        if scene._edit_stack[-1].get("affine"):
-            assert b.xform is not None and scene.mesh._instance_definition is proto
+        if live_definition:
+            assert b.xform == placement and scene.mesh._instance_definition is proto
         else:
             assert b.xform is None and scene.mesh is b.mesh
-        cara = next(f for f in scene.mesh.faces
-                    if all(abs(v.z() - 1.0) < 1e-9 for v in f.vertices))
-        assert abs(cara.centroid().x() - 3.5) < 1e-6, "es la copia en el mundo"
+
         pp = PushPullTool()
         vp.active_tool = pp
-        pp.hovered_face = cara
-        pp._hover_group = None                       # dentro, la malla ES la copia
+        pp.on_hover(_ctx(vp))
+        assert pp.hovered_face is not None
+        assert (pp.hovered_face.centroid() - top_center).length() < 1e-6
         pp.on_click(_ctx(vp))
         assert pp.dragging
-        pp.extrusion = 2.0
-        pp._commit(vp)
-        vp.end_group_edit()                          # Esc
+        monkeypatch.setattr(pp, "_infer_reference_distance", lambda ctx: 1.0)
+        pp.on_hover(_ctx(vp))
+        assert pp.on_value(vp, 2.0)
+        assert vp.history.last_error is None and vp.history.last_rejected is None
+        local_volume = 5.0 if affine else 3.0
+        if live_definition:
+            assert b.mesh is a.mesh is proto
+            assert signed_volume(a.mesh) == pytest.approx(local_volume)
+        vp.end_group_edit()
 
-        assert b.mesh is proto and b.xform is not None    # compartida otra vez
-        assert a.mesh is proto
-        assert is_closed(proto) and abs(signed_volume(proto) - 3.0) < 1e-6
-        wa, wb = world_mesh(a), world_mesh(b)
-        assert abs(signed_volume(wa) - 3.0) < 1e-6
-        assert abs(signed_volume(wb) - 3.0) < 1e-6
-        assert abs(max(v.position.x() for v in wb.vertices) - 4.0) < 1e-6
+        assert a.mesh is b.mesh is proto and b.xform == placement
+        assert is_closed(proto)
+        assert signed_volume(world_mesh(a)) == pytest.approx(local_volume)
+        wb = world_mesh(b)
+        assert abs(signed_volume(wb)) == pytest.approx(15.0 if affine else 3.0)
+        cap_height = max(v.position.z() for v in wb.vertices)
+        assert cap_height == pytest.approx(top_center.z() + 2.0)
+        cap = next(f for f in wb.faces if all(abs(v.z() - cap_height) < 1e-6 for v in f.vertices))
+        assert (cap.centroid() - (top_center + V(0, 0, 2))).length() < 1e-6
         assert vp.history.undo()
-        assert abs(signed_volume(proto) - 1.0) < 1e-6
+        assert signed_volume(proto) == pytest.approx(1.0)
         assert vp.history.redo()
-        assert abs(signed_volume(proto) - 3.0) < 1e-6
+        assert signed_volume(proto) == pytest.approx(local_volume)
     finally:
         _close(win)
