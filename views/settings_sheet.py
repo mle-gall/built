@@ -180,7 +180,7 @@ def _pref_page(env, section, bindings):
     groups = _native_groups(page.groups(), put)
     for _, _, rows in groups:
         for row in rows:
-            binding = handlers[row.id]
+            binding = handlers.get(row.id, row)
             row.fmt, row.start, row.restart_value = binding.fmt, binding.start, binding.restart_value
     return groups
 
@@ -302,7 +302,7 @@ def _figure_pick(env):
 
 def _navigation(env) -> list:
     from tools.walkthrough import look_sensitivity
-    from views import trackpad_nav
+    from ingetrazo_render import trackpad_nav
     p = _p()
 
     mouse = [
@@ -314,6 +314,9 @@ def _navigation(env) -> list:
             _set_key("walk/look_sensitivity")),
     ]
     touch = [
+        Binding("touch_slide", _key("nav/touch_slide", "orbit"), _set_key("nav/touch_slide")),
+        Binding("trackpad_inertia", _key("nav/trackpad_inertia", "1", bool), _set_key("nav/trackpad_inertia", bool)),
+        Binding("pinch_sensitivity", _key("nav/pinch_sensitivity", 100, int), _set_key("nav/pinch_sensitivity")),
         Binding("trackpad_slide", lambda env: trackpad_nav.load_slide_mode(),
             lambda env, v: (p.apply_slides(env.win, v, env.st), env.st.sync())),
     ]
@@ -354,7 +357,9 @@ def _display(env) -> list:
         except (TypeError, ValueError):
             return int(round(EDIT_REST_FADE * 100))
 
+    from ingetrazo_render import msaa_levels, apply_msaa
     quality = [
+        Binding("msaa", _key("display/msaa", 4, int), apply_msaa, levels=msaa_levels),
         Binding("soft_shadows", soft_on,
             lambda env, v: put_soft(env, on=v)),
         Binding("soft_level", soft_level,

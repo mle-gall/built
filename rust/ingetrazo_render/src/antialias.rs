@@ -1,6 +1,65 @@
 //! Faces and edges render once to MSAA attachments; color resolves at pass end.
 //! Single-sample IDs are independent; AO uses a fullscreen depth resolve.
+#[derive(Clone)]
+pub struct SampleModes {
+    pub levels: std::rc::Rc<Vec<u32>>,
+    selected: std::rc::Rc<std::cell::Cell<usize>>,
+}
+impl SampleModes {
+    fn new(levels: Vec<u32>) -> Self {
+        let selected = std::cell::Cell::new(levels.len() - 1);
+        Self {
+            levels: levels.into(),
+            selected: selected.into(),
+        }
+    }
+    #[cfg(test)]
+    pub fn test() -> Self {
+        Self::new(vec![1, 4])
+    }
+    pub fn adapter(
+        a: &wgpu::Adapter,
+        format: wgpu::TextureFormat,
+        features: wgpu::Features,
+    ) -> Self {
+        let flags = |f: wgpu::TextureFormat| {
+            if features.contains(wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES) {
+                a.get_texture_format_features(f).flags
+            } else {
+                f.guaranteed_format_features(features).flags
+            }
+        };
+        let color = flags(format);
+        let depth = flags(wgpu::TextureFormat::Depth32Float);
+        Self::new(
+            [1, 2, 4]
+                .into_iter()
+                .filter(|&n| {
+                    n == 1
+                        || (color.contains(wgpu::TextureFormatFeatureFlags::MULTISAMPLE_RESOLVE)
+                            && color.sample_count_supported(n)
+                            && depth.sample_count_supported(n))
+                })
+                .collect(),
+        )
+    }
+    pub fn select(&self, wanted: u32) {
+        self.selected
+            .set(self.levels.iter().rposition(|&n| n <= wanted).unwrap_or(0));
+    }
+    pub fn index(&self, multi: bool) -> usize {
+        if multi {
+            self.selected.get()
+        } else {
+            0
+        }
+    }
+    pub fn count(&self) -> u32 {
+        self.levels[self.selected.get()]
+    }
+}
 pub struct Antialias {
+    pub samples: u32,
     pipelines: Vec<wgpu::RenderPipeline>,
     texture_groups: Vec<wgpu::BindGroup>,
     groups: Vec<(wgpu::BindGroup, wgpu::BindGroup)>,
@@ -10,16 +69,16 @@ pub struct Antialias {
     format: wgpu::TextureFormat,
     depth_resolve: crate::depth_resolve::DepthResolve,
 }
-fn target(d: &wgpu::Device, w: u32, h: u32, format: wgpu::TextureFormat) -> wgpu::Texture {
+fn target(samples: u32, d: &wgpu::Device, w: u32, h: u32, format: wgpu::TextureFormat) -> wgpu::Texture {
     d.create_texture(&wgpu::TextureDescriptor {
-        label: Some("4x MSAA"),
+        label: Some("MSAA"),
         size: wgpu::Extent3d {
             width: w,
             height: h,
             depth_or_array_layers: 1,
         },
         mip_level_count: 1,
-        sample_count: 4,
+        sample_count: samples,
         dimension: wgpu::TextureDimension::D2,
         format,
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
@@ -28,6 +87,7 @@ fn target(d: &wgpu::Device, w: u32, h: u32, format: wgpu::TextureFormat) -> wgpu
 }
 impl Antialias {
     pub fn new(
+        samples: u32,
         d: &wgpu::Device,
         format: wgpu::TextureFormat,
         style: &wgpu::Buffer,
@@ -35,7 +95,7 @@ impl Antialias {
         h: u32,
     ) -> Self {
         let shader = d.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("4x MSAA shading"),
+            label: Some("MSAA shading"),
             source: wgpu::ShaderSource::Wgsl(concat!(include_str!("shading.wgsl"), "\n", include_str!("edges.wgsl")).into()),
         });
         let face_attrs = wgpu::vertex_attr_array![0=>Float32x3,1=>Float32x3,2=>Unorm8x4];
@@ -44,7 +104,7 @@ impl Antialias {
                 let edge = (2..6).contains(&k);
                 let xray = k % 2 == 1;
                 d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                    label: Some("4x MSAA geometry"),
+                    label: Some("MSAA geometry"),
                     layout: None,
                     vertex: wgpu::VertexState {
                         module: &shader,
@@ -97,7 +157,7 @@ impl Antialias {
                         }),
                     }),
                     multisample: wgpu::MultisampleState {
-                        count: 4,
+                        count: samples,
                         ..Default::default()
                     },
                     multiview: None,
@@ -106,12 +166,13 @@ impl Antialias {
             })
             .collect();
         Self {
+            samples,
             pipelines,
             texture_groups: Vec::new(),
             groups: Vec::new(),
-            background: crate::background::Background::new(d, format, style, 4),
-            color: target(d, w, h, format),
-            depth: target(d, w, h, wgpu::TextureFormat::Depth32Float),
+            background: crate::background::Background::new(d, format, style, samples),
+            color: target(samples, d, w, h, format),
+            depth: target(samples, d, w, h, wgpu::TextureFormat::Depth32Float),
             format,
             depth_resolve: crate::depth_resolve::DepthResolve::new(d),
         }
@@ -142,8 +203,8 @@ impl Antialias {
             .collect();
     }
     pub fn resize(&mut self, d: &wgpu::Device, w: u32, h: u32) {
-        self.color = target(d, w, h, self.format);
-        self.depth = target(d, w, h, wgpu::TextureFormat::Depth32Float);
+        self.color = target(self.samples, d, w, h, self.format);
+        self.depth = target(self.samples, d, w, h, wgpu::TextureFormat::Depth32Float);
     }
     pub fn resolve_depth(&self, d: &wgpu::Device, e: &mut wgpu::CommandEncoder, target: &wgpu::TextureView, queries: Option<&wgpu::QuerySet>) {
         self.depth_resolve.draw(d, e, &self.depth.create_view(&Default::default()), target, queries);
@@ -172,7 +233,7 @@ impl Antialias {
             references.draw(e, &color, &depth, Some(resolve));
         }
         let mut pass = e.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("4x MSAA color resolve"),
+            label: Some("MSAA color resolve"),
             color_attachments: &[Some(color_attachment(&color, resolve, sections || edge_only == Some(false)))],
             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                 view: &depth,
@@ -227,10 +288,10 @@ mod tests {
         let style = crate::style::Style::new(&device);
         let camera = device.create_buffer(&wgpu::BufferDescriptor { label: None, size: 112,
             usage: wgpu::BufferUsages::UNIFORM, mapped_at_creation: false });
-        let _sections = crate::sections::Sections::new(&device, wgpu::TextureFormat::Bgra8UnormSrgb, &camera);
+        let _sections = crate::sections::Sections::new(super::SampleModes::test(), &device, wgpu::TextureFormat::Bgra8UnormSrgb, &camera);
 
         let _xray = crate::xray::Xray::new(&device, wgpu::TextureFormat::Bgra8UnormSrgb, 64, 64);
-        let passes = super::Antialias::new(&device, wgpu::TextureFormat::Bgra8UnormSrgb,
+        let passes = super::Antialias::new(4, &device, wgpu::TextureFormat::Bgra8UnormSrgb,
             &style.buffer, 64, 64);
         assert_eq!(passes.color.sample_count(), 4);
         assert_eq!(passes.depth.sample_count(), 4);
@@ -269,3 +330,7 @@ fn color_attachment<'a>(color: &'a wgpu::TextureView, resolve: &'a wgpu::Texture
         ops: wgpu::Operations { load: wgpu::LoadOp::Load,
             store: if preserve { wgpu::StoreOp::Store } else { wgpu::StoreOp::Discard } } }
 }
+
+#[cfg(test)]
+#[path = "antialias_capture.rs"]
+mod capture;

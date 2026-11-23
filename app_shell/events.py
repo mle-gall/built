@@ -166,7 +166,7 @@ class WheelEvent(_Event):
     _type = QEvent.Wheel
 
     def __init__(self, x, y, pixel_dx, pixel_dy, angle_dx, angle_dy, phase="none",
-                 modifiers=0, held=0, inverted=False):
+                 modifiers=0, held=0, inverted=False, touch_screen=False):
         super().__init__()
         self._pos = QPointF(float(x), float(y))
         self._pixel = QPoint(int(round(pixel_dx)), int(round(pixel_dy)))
@@ -176,7 +176,7 @@ class WheelEvent(_Event):
         self._buttons = buttons(held)
         self._inverted = bool(inverted)
         # A notch (no pixel delta) is a mouse wheel; a pixel delta a trackpad.
-        self._device = _Device(mouse=self._pixel.isNull())
+        self._device = _Device(touch_screen=touch_screen, mouse=self._pixel.isNull())
 
     def position(self):
         return QPointF(self._pos)

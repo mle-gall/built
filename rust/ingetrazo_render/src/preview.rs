@@ -1,6 +1,7 @@
 //! Tool-owned triangles/edges and loose-face marks; empty by default.
 use wgpu::util::DeviceExt;
 pub struct Preview {
+    samples: crate::antialias::SampleModes,
     pipelines: Vec<wgpu::RenderPipeline>,
     group: wgpu::BindGroup,
     triangles: Option<wgpu::Buffer>,
@@ -9,7 +10,7 @@ pub struct Preview {
     pub textures: Option<crate::preview_texture::TexturedPreview>,
 }
 impl Preview {
-    pub fn new(
+    pub fn new(samples: crate::antialias::SampleModes,
         d: &wgpu::Device,
         format: wgpu::TextureFormat,
         camera: &wgpu::Buffer,
@@ -40,7 +41,7 @@ impl Preview {
             bind_group_layouts: &[&bindings],
             push_constant_ranges: &[],
         });
-        let pipelines = [1,4].into_iter().flat_map(|samples| [false,true].map(|edge| {
+        let pipelines = samples.levels.iter().copied().flat_map(|samples| [false,true].map(|edge| {
             let constants = [("MARK".to_string(), if marks {1.} else {0.}), ("EDGE".to_string(), if edge {1.} else {0.}), ("GHOST".to_string(), if ghost {1.} else {0.})].into_iter().collect();
             d.create_render_pipeline(&wgpu::RenderPipelineDescriptor { label: Some("depth-tested tool preview"), layout: Some(&layout),
                 vertex: wgpu::VertexState { module: &shader, entry_point: Some("vs"), compilation_options: wgpu::PipelineCompilationOptions { constants: &constants, ..Default::default() },
@@ -55,7 +56,7 @@ impl Preview {
                 multisample: wgpu::MultisampleState { count: samples, ..Default::default() }, multiview: None, cache: None })
         })).collect();
         let group = crate::bind(d, &bindings, &[camera, style]);
-        Self {
+        Self { samples,
             pipelines,
             group,
             triangles: None,
@@ -143,7 +144,7 @@ impl Preview {
         if let Some(textures) = &self.textures { textures.draw(&mut p, resolve.is_some()); }
         for (k, buffer) in [&self.triangles, &self.edges].into_iter().enumerate() {
             if let Some(buffer) = buffer {
-                p.set_pipeline(&self.pipelines[usize::from(resolve.is_some()) * 2 + k]);
+                p.set_pipeline(&self.pipelines[self.samples.index(resolve.is_some()) * 2 + k]);
                 p.set_vertex_buffer(0, buffer.slice(..));
                 p.draw(0..self.counts[k], 0..1);
             }
@@ -163,7 +164,7 @@ mod tests {
         let camera = crate::buffer(&d, &[0; 112], wgpu::BufferUsages::UNIFORM);
         let style = crate::style::Style::new(&d);
         for kind in [0, 1, 2] {
-            let mut preview = super::Preview::new(
+            let mut preview = super::Preview::new(crate::antialias::SampleModes::test(),
                 &d,
                 wgpu::TextureFormat::Bgra8UnormSrgb,
                 &camera,

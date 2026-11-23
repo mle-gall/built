@@ -91,7 +91,7 @@ def test_events_answer_the_qt_calls_the_handlers_make():
     assert w.angleDelta().y() == 240 and w.pixelDelta().isNull()
     assert w.device().type().name == "Mouse"
     slide = WheelEvent(1, 2, 0, -30, 0, -60, phase="move", inverted=True)
-    from views import trackpad_nav
+    from ingetrazo_render import trackpad_nav
     assert trackpad_nav.is_slide(slide)
     g = NativeGestureEvent("zoom", 0.1, 3, 4)
     assert g.gestureType() == Qt.ZoomNativeGesture and g.value() == pytest.approx(0.1)

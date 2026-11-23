@@ -440,12 +440,12 @@ class Host:
         self.request_frame()
 
     def wheel(self, x, y, pixel_dx, pixel_dy, angle_dx, angle_dy, phase="none",
-              modifiers=0, held=0, inverted=True):
+              modifiers=0, held=0, inverted=True, touch_screen=False):
         from app_shell.events import WheelEvent
         qt_host.INPUT["modifiers"] = int(modifiers)
         if self._modal():
             return
-        ev = WheelEvent(x, y, pixel_dx, pixel_dy, angle_dx, angle_dy, phase, modifiers, held, inverted)
+        ev = WheelEvent(x, y, pixel_dx, pixel_dy, angle_dx, angle_dy, phase, modifiers, held, inverted, touch_screen)
         self._guard("wheel", self.view.wheelEvent, ev)
         self.request_frame()
 

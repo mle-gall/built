@@ -15,6 +15,7 @@ pub const LIVE_SIZE: u32 = 2048;
 pub const EXPORT_SIZE: u32 = 8192;
 
 pub struct Sun {
+    samples: crate::antialias::SampleModes,
     pub enabled: bool,
     dirty: bool,
     fitted: Option<[f32; 16]>,
@@ -33,7 +34,7 @@ pub struct Sun {
     sampler: wgpu::Sampler,
 }
 impl Sun {
-    pub fn new(d: &wgpu::Device, format: wgpu::TextureFormat, size: u32) -> Self {
+    pub fn new(samples: crate::antialias::SampleModes, d: &wgpu::Device, format: wgpu::TextureFormat, size: u32) -> Self {
         let shader = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("sun caster"),
             source: wgpu::ShaderSource::Wgsl(concat!(include_str!("shading.wgsl"), "\n@fragment fn shadow_fs(i: Out, @builtin(front_facing) front: bool) { let alpha = face_pixel(i,front).color.a; if (inst[i.id-1u].info.z & 129u) != 0u || alpha < 0.7 { discard; } }").into()) });
         let caster = d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -121,8 +122,7 @@ impl Sun {
             bind_group_layouts: &[&layout],
             push_constant_ranges: &[],
         });
-        let receivers = [1, 4]
-            .into_iter()
+        let receivers = samples.levels.iter().copied()
             .map(|count| {
                 d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                     label: Some("sun and ground shadows"),
@@ -161,7 +161,7 @@ impl Sun {
                 })
             })
             .collect();
-        Self {
+        Self { samples,
             enabled: false,
             dirty: true,
             fitted: None, checked: false, fit_pipeline: None,
@@ -404,7 +404,7 @@ impl Sun {
         data.extend([if self.ground { 1. } else { 0. }, self.soft, across, along]);
         q.write_buffer(&self.uniform, 0, bytemuck::cast_slice(&data));
         let map = self.map.create_view(&Default::default());
-        let pipeline = &self.receivers[usize::from(msaa)];
+        let pipeline = &self.receivers[self.samples.index(msaa)];
         let group = d.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
             layout: &pipeline.get_bind_group_layout(0),
@@ -475,7 +475,7 @@ mod tests {
             return;
         };
         let (d, _) = pollster::block_on(a.request_device(&Default::default(), None)).unwrap();
-        let sun = super::Sun::new(&d, wgpu::TextureFormat::Bgra8UnormSrgb, super::LIVE_SIZE);
+        let sun = super::Sun::new(crate::antialias::SampleModes::test(), &d, wgpu::TextureFormat::Bgra8UnormSrgb, super::LIVE_SIZE);
         assert!(!sun.enabled);
         assert_eq!(sun.receivers.len(), 2);
     }

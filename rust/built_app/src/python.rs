@@ -171,6 +171,24 @@ impl Host {
         })
     }
 
+    /// Exercise the same store and live renderer binding as the Display row.
+    pub fn apply_msaa(&self, count: u32) {
+        Python::attach(|py| {
+            let result = (|| -> PyResult<()> {
+                let win = self.obj.bind(py).getattr("window")?;
+                let env = py.import("views.settings_sheet")?.getattr("Env")?.call1((win,))?;
+                let render = py.import("ingetrazo_render")?;
+                let levels: Vec<u32> = render.call_method1("msaa_levels", (&env,))?.extract()?;
+                if levels.contains(&count) {
+                    render.call_method1("apply_msaa", (env, count))?;
+                    println!("[built] MSAA {count}");
+                }
+                Ok(())
+            })();
+            if let Err(e) = result { report(py, e, "Display anti-aliasing"); }
+        });
+    }
+
     /// The frame as RGBA bytes: request a capture, draw, take it.
     pub fn capture(&self) -> Option<Vec<u8>> {
         Python::attach(|py| -> PyResult<Option<Vec<u8>>> {
@@ -281,4 +299,15 @@ mod tests {
         assert!(state.contains("\"tool\": \"LineTool\""), "{state}");
         assert!(state.contains("\"errors\": 0"), "{state}");
     }
+}
+
+pub fn touch_select() -> bool {
+    Python::attach(|py| -> PyResult<bool> {
+        let store = py.import("PySide6.QtCore")?.getattr("QSettings")?.call0()?;
+        Ok(store
+            .call_method1("value", ("nav/touch_slide", "orbit"))?
+            .extract::<String>()?
+            == "select")
+    })
+    .unwrap_or(false)
 }

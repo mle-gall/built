@@ -305,7 +305,37 @@ impl PreferencePage {
                     }
                 }
                 row.extend(host.clone());
-                rows.push(Value::Object(row));
+                if id == "msaa" {
+                    let levels = row.remove("levels").unwrap_or(json!([1]));
+                    let levels = levels
+                        .as_array()
+                        .ok_or_else(|| PyValueError::new_err("Expected MSAA sample counts"))?;
+                    let options = row["options"].as_array_mut().unwrap();
+                    let mut unavailable = Vec::new();
+                    let reason = translate(&json!("Unsupported by this GPU"))?;
+                    options.retain(|opt| {
+                        if levels.contains(&opt[0]) {
+                            return true;
+                        }
+                        unavailable.push(json!({"id": format!("msaa_unavailable_{}", opt[0]),
+                            "kind":"text","label":opt[1],"value":reason,"enabled":false}));
+                        false
+                    });
+                    let default = levels.last().cloned().unwrap_or(json!(1));
+                    if !levels.contains(&row["value"]) {
+                        let wanted = row["value"].as_u64().unwrap_or(4);
+                        let fallback = levels
+                            .iter()
+                            .rev()
+                            .find(|n| n.as_u64().is_some_and(|v| v <= wanted));
+                        row.insert("value".into(), fallback.cloned().unwrap_or(json!(1)));
+                    }
+                    row.insert("default".into(), default);
+                    rows.push(Value::Object(row));
+                    rows.extend(unavailable);
+                } else {
+                    rows.push(Value::Object(row));
+                }
             }
             result.push(json!([group[0], translate(&group[1])?, rows]));
         }
@@ -568,5 +598,66 @@ impl RestartPreferences {
     }
     fn clear(&mut self) {
         self.changes.clear();
+    }
+}
+
+fn renderer<'py>(env: &Bound<'py, PyAny>) -> Option<Bound<'py, PyAny>> {
+    env.getattr("win")
+        .and_then(|w| w.getattr("view"))
+        .and_then(|v| v.getattr("renderer"))
+        .ok()
+        .filter(|r| !r.is_none())
+}
+#[pyfunction]
+pub fn msaa_levels(env: &Bound<'_, PyAny>) -> PyResult<Vec<u32>> {
+    match renderer(env) {
+        Some(r) => r.call_method0("msaa_levels")?.extract(),
+        None => Ok(vec![1]),
+    }
+}
+#[pyfunction]
+pub fn apply_msaa(env: &Bound<'_, PyAny>, value: u32) -> PyResult<()> {
+    if let Some(r) = renderer(env) {
+        r.call_method1("set_msaa_samples", (value,))?;
+    }
+    for host in env
+        .py()
+        .import("app_shell.windows")?
+        .call_method0("hosts")?
+        .try_iter()?
+    {
+        let host = host?;
+        let r = host.getattr("renderer")?;
+        if !r.is_none() {
+            r.call_method1("set_msaa_samples", (value,))?;
+            host.call_method0("request_frame")?;
+        }
+    }
+    let store = env.getattr("st")?;
+    store.call_method1("setValue", ("display/msaa", value))?;
+    store.call_method0("sync")?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod msaa_tests {
+    use super::*;
+
+    #[test]
+    fn unavailable_sample_count_is_explained_and_cannot_be_selected() {
+        Python::initialize();
+        Python::attach(|py| {
+            let translate = py.import("builtins").unwrap().getattr("str").unwrap();
+            let page = PreferencePage::new("display",
+                r#"{"msaa":{"value":4,"levels":[1,2]}}"#, &translate).unwrap();
+            let rows = &page.groups[0][2];
+            assert_eq!(rows[0]["value"], 2);
+            assert_eq!(rows[0]["default"], 2);
+            assert_eq!(rows[1]["enabled"], false);
+            assert_eq!(rows[1]["label"], "4× MSAA");
+            assert!(!rows[1]["value"].as_str().unwrap().is_empty());
+            assert!(page.edit("msaa", "2").is_ok());
+            assert!(page.edit("msaa", "4").is_err());
+        });
     }
 }

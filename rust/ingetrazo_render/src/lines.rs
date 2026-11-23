@@ -31,7 +31,8 @@ struct Slot {
 }
 
 pub struct Lines {
-    pipelines: [wgpu::RenderPipeline; 2],
+    samples: crate::antialias::SampleModes,
+    pipelines: Vec<wgpu::RenderPipeline>,
     group: wgpu::BindGroup,
     slots: BTreeMap<String, Slot>,
     /// Off for sheet captures (`render_image`): scaffolding is never printed.
@@ -56,7 +57,7 @@ pub fn validate(data: &[u8]) -> Result<u32, &'static str> {
 }
 
 impl Lines {
-    pub fn new(d: &wgpu::Device, format: wgpu::TextureFormat, camera: &wgpu::Buffer) -> Self {
+    pub fn new(samples: crate::antialias::SampleModes, d: &wgpu::Device, format: wgpu::TextureFormat, camera: &wgpu::Buffer) -> Self {
         let shader = d.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("scaffold lines"),
             source: wgpu::ShaderSource::Wgsl(include_str!("lines.wgsl").into()),
@@ -79,7 +80,7 @@ impl Lines {
             bind_group_layouts: &[&bindings],
             push_constant_ranges: &[],
         });
-        let pipelines = [1, 4].map(|samples| {
+        let pipelines = samples.levels.iter().copied().map(|samples| {
             d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some("depth-tested scaffold lines"),
                 layout: Some(&layout),
@@ -120,9 +121,9 @@ impl Lines {
                 multiview: None,
                 cache: None,
             })
-        });
+        }).collect();
         let group = crate::bind(d, &bindings, &[camera]);
-        Self { pipelines, group, slots: BTreeMap::new(), enabled: true }
+        Self { samples, pipelines, group, slots: BTreeMap::new(), enabled: true }
     }
 
     /// Replace one slot's segments. The buffer is reused while it is large
@@ -202,7 +203,7 @@ impl Lines {
             timestamp_writes: None,
             occlusion_query_set: None,
         });
-        p.set_pipeline(&self.pipelines[usize::from(resolve.is_some())]);
+        p.set_pipeline(&self.pipelines[self.samples.index(resolve.is_some())]);
         p.set_bind_group(0, &self.group, &[]);
         for s in self.slots.values().filter(|s| s.count > 0 && s.above_edges == above_edges) {
             p.set_vertex_buffer(0, s.buffer.slice(..u64::from(s.count) * SEGMENT_BYTES as u64));
@@ -255,7 +256,7 @@ mod tests {
         };
         let (d, q) = pollster::block_on(adapter.request_device(&Default::default(), None)).unwrap();
         let camera = crate::buffer(&d, &[0; 112], wgpu::BufferUsages::UNIFORM);
-        let mut lines = super::Lines::new(&d, wgpu::TextureFormat::Bgra8UnormSrgb, &camera);
+        let mut lines = super::Lines::new(crate::antialias::SampleModes::test(), &d, wgpu::TextureFormat::Bgra8UnormSrgb, &camera);
         assert!(!lines.active());
         let one = segment([0.; 3], [1., 0., 0.], [1., 4., 4.]);
         let three = [one.clone(), one.clone(), one.clone()].concat();
