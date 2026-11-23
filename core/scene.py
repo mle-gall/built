@@ -360,7 +360,7 @@ class Scene:
         """(visible, locked) of the layer ``entity`` carries; unknown layer
         names read as the default (visible, unlocked)."""
         name = _layers.layer_of(entity)
-        if name == _layers.DEFAULT_LAYER and self._edit_stack:
+        if name == _layers.DEFAULT_LAYER and self.edit_group is not None:
             name = self._open_group_layer(entity) or name
         ly = self.layer_by_key(name)
         if ly is None:
@@ -378,8 +378,9 @@ class Scene:
                 hasattr(entity, "attrs") or hasattr(entity, "v0")):
             return None
         group_layer = None
-        for level in reversed(self._edit_stack):
-            group_layer = getattr(level["group"], "layer", None)
+        from core.outliner import open_path
+        for group in reversed(open_path(self)):
+            group_layer = getattr(group, "layer", None)
             if group_layer:
                 break
         if not group_layer:
@@ -398,8 +399,9 @@ class Scene:
         nearest enclosing open group's that has one — what they wore with
         the group closed (#1101), as :meth:`_open_group_layer` does for
         the layer. ``None`` outside a group or when nothing is painted."""
-        for level in reversed(self._edit_stack):
-            paint = getattr(level["group"], "material", None)
+        from core.outliner import open_path
+        for group in reversed(open_path(self)):
+            paint = getattr(group, "material", None)
             if paint:
                 return paint
         return None

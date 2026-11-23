@@ -4,12 +4,14 @@
 //! its mesh. Placements and undo records hold the definition itself.
 use pyo3::gc::PyVisit;
 use pyo3::prelude::*;
-use pyo3::sync::PyOnceLock;
+use pyo3::types::{PyWeakrefMethods, PyWeakrefReference};
+use super::FastMap;
 use pyo3::PyTraverseError;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock, Mutex};
 
-static INDEX: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
+type Index = FastMap<usize, (u64, Py<PyWeakrefReference>)>;
+static INDEX: LazyLock<Mutex<Index>> = LazyLock::new(|| Mutex::new(Index::default()));
 static NEXT: AtomicU64 = AtomicU64::new(1);
 
 #[pyclass(frozen, weakref, module = "ingetrazo_core")]
@@ -36,24 +38,41 @@ impl PartialEq for DefinitionRef {
     }
 }
 
+impl Drop for Definition {
+    fn drop(&mut self) {
+        let address = self.geometry.as_ptr() as usize;
+        let weak = {
+            let mut index = INDEX.lock().unwrap();
+            if index.get(&address).is_some_and(|entry| entry.0 == self.key) {
+                index.remove(&address)
+            } else {
+                None
+            }
+        };
+        drop(weak);
+    }
+}
+
 impl DefinitionRef {
     pub fn for_geometry(mesh: &Bound<'_, PyAny>) -> PyResult<Arc<Self>> {
         let py = mesh.py();
-        let index = INDEX.get_or_try_init(py, || -> PyResult<_> {
-            Ok(py.import("weakref")?.getattr("WeakValueDictionary")?.call0()?.unbind())
-        })?.bind(py);
         let address = mesh.as_ptr() as usize;
-        let existing = index.call_method1("get", (address,))?;
-        let definition = if existing.is_none() {
-            let new = Bound::new(py, Definition {
-                key: NEXT.fetch_add(1, Ordering::Relaxed),
-                geometry: mesh.clone().unbind(),
-            })?;
-            index.set_item(address, &new)?;
-            new
-        } else {
-            existing.cast_into::<Definition>()?
+        let lookup = || {
+            let index = INDEX.lock().unwrap();
+            index.get(&address).and_then(|(_, weak)| weak.bind(py).upgrade())
         };
-        Ok(Arc::new(Self(definition.unbind())))
+        if let Some(existing) = lookup() {
+            return Ok(Arc::new(Self(existing.cast_into::<Definition>()?.unbind())));
+        }
+        let key = NEXT.fetch_add(1, Ordering::Relaxed);
+        let new = Bound::new(py, Definition { key, geometry: mesh.clone().unbind() })?;
+        let weak = PyWeakrefReference::new(new.as_any())?;
+        // Allocations above can run a Python finalizer and reenter this lookup.
+        if let Some(existing) = lookup() {
+            return Ok(Arc::new(Self(existing.cast_into::<Definition>()?.unbind())));
+        }
+        let previous = INDEX.lock().unwrap().insert(address, (key, weak.unbind()));
+        drop(previous);
+        Ok(Arc::new(Self(new.unbind())))
     }
 }

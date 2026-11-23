@@ -180,7 +180,8 @@ def saved(scene, work: Path, tag: str) -> dict:
         igz.save_scene(scene, path, backup=False)
         back = Scene()
         igz.load_into(back, path)
-        files[name] = {"members": members(path), "reopened": dump(back)}
+        files[name] = {"members": members(path), "reopened": dump(back),
+                       "file_hash": hashlib.sha256(path.read_bytes()).hexdigest()}
         # Saved again from the reopened document: the same bytes.
         again = work / f"{tag}-again-{name}"
         igz.save_scene(back, again, backup=False)

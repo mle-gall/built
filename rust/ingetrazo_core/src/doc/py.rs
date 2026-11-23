@@ -209,14 +209,15 @@ pub struct DocAttr {
     id: u16,
     name: String,
     track: bool,
+    optional: bool,
 }
 
 #[pymethods]
 impl DocAttr {
     #[new]
-    #[pyo3(signature = (name, track = false))]
-    fn new(name: &str, track: bool) -> PyResult<Self> {
-        Ok(DocAttr { id: attr_id(name).map_err(PyValueError::new_err)?, name: name.to_owned(), track })
+    #[pyo3(signature = (name, track = false, optional = false))]
+    fn new(name: &str, track: bool, optional: bool) -> PyResult<Self> {
+        Ok(DocAttr { id: attr_id(name).map_err(PyValueError::new_err)?, name: name.to_owned(), track, optional })
     }
 
     #[getter]
@@ -232,7 +233,11 @@ impl DocAttr {
     fn __get__<'py>(slf: &Bound<'py, Self>, obj: Option<&Bound<'py, PyAny>>, _owner: Option<&Bound<'py, PyAny>>) -> PyResult<Bound<'py, PyAny>> {
         let Some(obj) = obj.filter(|o| !o.is_none()) else { return Ok(slf.clone().into_any()) };
         let me = slf.get();
-        read_attr(slf.py(), obj, handle_key(obj)?, me.id, me.track)
+        let value = read_attr(slf.py(), obj, handle_key(obj)?, me.id, me.track)?;
+        if me.optional && value.is_none() {
+            return Err(pyo3::exceptions::PyAttributeError::new_err(me.name.clone()));
+        }
+        Ok(value)
     }
 
     fn __set__(&self, obj: &Bound<'_, PyAny>, value: &Bound<'_, PyAny>) -> PyResult<()> {
@@ -759,6 +764,16 @@ impl PyPlacement {
     fn set_definition(slf: &Bound<'_, Self>, def: Option<Py<super::definition::Definition>>) -> PyResult<()> {
         let value = def.map(|d| std::sync::Arc::new(super::DefinitionRef(d)));
         write(slf.py(), slf.as_any(), slf.get().key, Field::Definition, FVal::Definition(value))
+    }
+    #[getter]
+    fn billboard(&self) -> PyResult<bool> {
+        let d = lock();
+        let super::Data::Placement(p) = &d.need(self.key).map_err(err)?.data else { return Ok(false) };
+        Ok(p.billboard)
+    }
+    #[setter]
+    fn set_billboard(slf: &Bound<'_, Self>, v: bool) -> PyResult<()> {
+        write(slf.py(), slf.as_any(), slf.get().key, Field::Billboard, FVal::Bool(v))
     }
     #[getter]
     fn component<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
@@ -2071,7 +2086,7 @@ fn doc_view_changed(py: Python<'_>, key: Key, which: u8, view: &Bound<'_, PyAny>
 
 fn fval_for(f: Field, v: &Bound<'_, PyAny>) -> PyResult<FVal> {
     Ok(match f {
-        Field::Component | Field::Hidden | Field::Locked | Field::Visible => FVal::Bool(v.is_truthy()?),
+        Field::Billboard | Field::Component | Field::Hidden | Field::Locked | Field::Visible => FVal::Bool(v.is_truthy()?),
         Field::Uid | Field::Name | Field::Tag | Field::Key | Field::Folder | Field::Finish => FVal::Str(str_of(v)?),
         Field::Material | Field::Color | Field::Texture | Field::Opacity | Field::Pbr => opt_value(v)?,
         Field::Definition => return Err(PyTypeError::new_err("use the mesh setter")),

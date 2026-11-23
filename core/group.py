@@ -123,9 +123,9 @@ DOC_FIELDS = ("name", "layer", "xform", "children", "hidden", "uid",
               "material", "axes", "component", "locked")
 #: Custom attributes: document values too (slice 2), handed out as tracked
 #: containers that write back when edited in place (core/doc_model.py).
-ATTR_FIELDS = ("billboard", "ifc", "ext", "text3d", "exploded", "explode_offset")
+ATTR_FIELDS = ("ifc", "ext", "text3d", "exploded", "explode_offset")
 if _dm.ENABLED:
-    DOC_FIELDS = DOC_FIELDS + ATTR_FIELDS + ("mesh",)
+    DOC_FIELDS = DOC_FIELDS + ATTR_FIELDS + ("mesh", "billboard", "source_uid")
 _PY_FIELDS = tuple(f for f in GROUP_FIELDS if f not in DOC_FIELDS)
 
 
@@ -148,7 +148,8 @@ class _GroupMethods:
             self.ifc = None
         # Face-me billboard: the group's textured quad rotates
         # around its vertical anchor axis to face the camera every frame.
-        self.billboard = False
+        if py:
+            self.billboard = False
         # 3D text (core/text3d.py): the parameters this container was
         # generated from — text, font, height… — so it can be re-edited and
         # laid out again in place. ``None`` on every other group.
@@ -343,6 +344,7 @@ if _dm.ENABLED:
         Its document fields (``DOC_FIELDS``) live in the Rust document
         (core/doc_model.py); see ``_GroupMethods`` for the rest."""
         __slots__ = _PY_FIELDS
+        source_uid = _dm.NATIVE.DocAttr("source_uid", optional=True)
 
         # copy, deepcopy and pickle: a new handle, then every field.
         def __reduce__(self):
@@ -371,6 +373,7 @@ if _dm.ENABLED:
         def __init__(self, mesh: Mesh | None = None, name: str | None = None,
                      uid: str | None = None) -> None:
             _GroupMethods.__init__(self, mesh, name, uid)
+            self.billboard = False
             self.ifc = self.ext = self.text3d = None
             self.exploded = self.explode_offset = None
             self.layer = None
