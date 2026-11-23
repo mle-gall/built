@@ -95,5 +95,6 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     model::register(m)?;
     page::register(m)?;
     super::display::register(m)?;
+    m.add_function(wrap_pyfunction!(super::camera::sheet_frame_camera, m)?)?;
     Ok(())
 }
