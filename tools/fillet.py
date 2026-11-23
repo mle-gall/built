@@ -107,13 +107,9 @@ class FilletTool(Tool):
             viewport.flash_status(tr(
                 "Click an edge to round or bevel it; type the size and Enter."), 4000)
         self._replan()
-        self._show_panel(viewport)
 
     def on_deactivate(self, viewport) -> None:
         self._reset()
-        panel = getattr(viewport, "_bevel_panel", None)
-        if panel is not None:
-            panel.hide()
         set_hover = getattr(viewport, "set_hover", None)
         if set_hover is not None:
             set_hover(None)
@@ -205,7 +201,6 @@ class FilletTool(Tool):
             r = self._radius_from(ctx.world)
             if r is not None:
                 FilletTool.radius = r
-                self._sync_panel()
             self._replan()
             vp.update()
             return
@@ -287,7 +282,6 @@ class FilletTool(Tool):
         vcb = getattr(window(), "_refresh_vcb", None) if callable(window) else None
         if vcb is not None:
             vcb()
-        self._sync_panel()
 
     def on_key_release(self, viewport, key: int) -> bool:
         if key != Qt.Key_Control:
@@ -315,7 +309,6 @@ class FilletTool(Tool):
         """The panel's Amount: the size, without rounding yet."""
         FilletTool.radius = float(value)
         self._replan()
-        self._sync_panel()
         viewport.update()
 
     def set_shape(self, viewport, shape) -> None:
@@ -330,13 +323,11 @@ class FilletTool(Tool):
             return
         if shape is not None and self._corners_mode():
             viewport.flash_status(tr("Drawn profiles bevel edges only."))
-            self._sync_panel()
             return
         FilletTool.shape = shape
         if isinstance(shape, str):
             viewport.flash_status(tr("Profile {p}", p=tr(self._shape_label())))
         self._replan()
-        self._sync_panel()
         viewport.update()
 
     def set_corners(self, viewport, corners: str) -> None:
@@ -346,7 +337,6 @@ class FilletTool(Tool):
         viewport.flash_status(tr("Corners: {c}", c=tr(
             "Fill (triangle / cap)" if corners == "round" else "No fill (notch)")))
         self._replan()
-        self._sync_panel()
         viewport.update()
 
     def apply_from_panel(self, viewport) -> None:
@@ -356,25 +346,6 @@ class FilletTool(Tool):
                                      "type the size and Enter."), 4000)
             return
         self._commit(viewport)
-
-    # ---- Panel ----------------------------------------------------------------
-    def _show_panel(self, viewport) -> None:
-        from PySide6.QtWidgets import QWidget
-        if not isinstance(viewport, QWidget):
-            return
-        stand_in = getattr(getattr(viewport.window(), "_doc", None), "stand_in", None)
-        if getattr(stand_in, "_ui_attached", False):
-            return
-        panel = getattr(viewport, "_bevel_panel", None)
-        if panel is None:
-            from views.bevel_panel import BevelPanel
-            panel = viewport._bevel_panel = BevelPanel(viewport, self)
-        panel.show_for(self)
-
-    def _sync_panel(self) -> None:
-        panel = getattr(self._viewport, "_bevel_panel", None)
-        if panel is not None and not panel.isHidden() and panel.tool is self:
-            panel.sync()
 
     def _measure_label(self) -> str:
         """English source label of the current measure."""
@@ -399,7 +370,6 @@ class FilletTool(Tool):
                                      m=tr(self._measure_label()),
                                      r=fmt_len_fine(value)), 3000)
             self._replan()
-            self._sync_panel()
             viewport.update()
         return True
 
@@ -410,7 +380,6 @@ class FilletTool(Tool):
         FilletTool.segments = n
         viewport.flash_status(tr("{n} segments", n=n))
         self._replan()
-        self._sync_panel()
         viewport.update()
         return True
 
@@ -423,7 +392,6 @@ class FilletTool(Tool):
         FilletTool.shape = None          # a number is the superellipse
         viewport.flash_status(tr("Profile {p}", p=f"{p:.2f}"))
         self._replan()
-        self._sync_panel()
         viewport.update()
         return True
 
@@ -506,7 +474,6 @@ class FilletTool(Tool):
             said = tr("Bevelled {n} edge(s), {m} {r}.", n=n,
                       m=tr(self._measure_label()), r=fmt_len_fine(r))
         viewport.flash_status(said, 3000)
-        self._sync_panel()
         viewport.update()
 
     # ---- Preview --------------------------------------------------------------

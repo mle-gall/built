@@ -8,8 +8,7 @@ that counts them, explains the colours, and joins (Enter) or cancels
 (:func:`core.edits.join_preview`), so they never promise what it will
 not do.
 
-The panel floats in the view's lower-right corner, built like the
-bevel's (:mod:`views.bevel_panel`): a child of the viewport that never
+The panel floats in the view's lower-right corner: a child of the viewport that never
 covers the rest of the window and eats its own clicks, while the view
 keeps the keyboard — Enter and Esc reach the panel through a filter."""
 from __future__ import annotations

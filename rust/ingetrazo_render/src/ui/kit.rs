@@ -5,6 +5,8 @@
 //! [`paint_state`]: hover and press are neutral washes, selection is a quiet
 //! accent wash (rows add a leading marker), focus is a thin ring outside the
 //! control and never a fill.
+mod bevel_curve;
+pub use bevel_curve::CurveEditor;
 use super::tokens::*;
 use egui::{pos2, vec2, Color32, CornerRadius, Pos2, Rect, Sense, Stroke};
 

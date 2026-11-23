@@ -499,3 +499,47 @@ Host.state = state
         assert x >= 0 and y >= 0 and x + w <= 1280 and y + h <= 800
         assert x + w / 2 == pytest.approx(640, abs=1)
     assert "<image" in drawing.read_text()
+
+
+@pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
+                    reason="requires a built window and BUILT_WINDOW_TESTS=1")
+def test_bevel_inspector_edit_apply_and_leave(tmp_path):
+    from formats.igz import save_scene
+    from tests.test_ifc_export import _tagged_wall_scene
+
+    initial = tmp_path / "wall.built"
+    save_scene(_tagged_wall_scene(), initial)
+    venv = fixture_venv(tmp_path, """from tools.fillet import FilletTool
+from app_shell.host import Host
+FilletTool.shape = "steps"
+FilletTool.radius = 0.01
+state = Host.state
+def bevel_state(self):
+    tool = self.viewport.active_tool
+    return dict(state(self), curve=getattr(tool, "shape", None), picked=len(getattr(tool,"edges",[])),
+                sizing=getattr(tool,"sizing",False), revision=self.viewport.history.revision)
+Host.state = bevel_state
+""")
+    steps = tmp_path / "steps"
+    steps.write_text("wait 650\nkey escape\nmenu select_all\ntool fillet\nwait 500\nstate\n"
+                     "click 1115 466\nclick 1016 490\nwait 400\nstate\n"
+                     "click 1025 466\nclick 1016 490\nwait 400\nstate\n"
+                     "click 1130 490\nwait 300\nstate\nclick 700 781\nwait 500\nstate\n"
+                     "click 752 781\nwait 300\nstate\nquit\n")
+    result = run([str(BIN), "--root", str(ROOT), "--venv", str(venv), "--new-instance",
+                  "--size", "1280x800", "--script", str(steps), str(initial)],
+                 env=dict(os.environ, BUILT_ANSWERS="cmd-d"), capture_output=True, text=True, timeout=60)
+    log = result.stdout + result.stderr
+    assert result.returncode == 0 and "Traceback" not in log, log
+    states = [json.loads(line.removeprefix("[built] state ")) for line in log.splitlines()
+              if line.startswith("[built] state ")]
+    start, corner, smooth, removed, applied, done = states[:6]
+    assert start["curve"] == "steps" and start["picked"] > 0
+    assert isinstance(corner["curve"], list) and not any(p[2] for p in corner["curve"])
+    assert len(smooth["curve"]) == len(corner["curve"])+1 and sum(p[2] for p in smooth["curve"]) == 1
+    assert removed["curve"] == corner["curve"]
+    assert all(not s["sizing"] and s["picked"] == start["picked"] and s["revision"] == start["revision"]
+               for s in (corner,smooth,removed))
+    assert applied["revision"] == start["revision"]+1 and applied["faces"] > start["faces"]
+    assert done["tool"] != "FilletTool" and done["curve"] is None
+    assert all(not s["errors"] and not s["blocked_widgets"] for s in states)
