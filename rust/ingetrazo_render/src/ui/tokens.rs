@@ -36,6 +36,7 @@ palette! {
     WELL = Color32::from_gray(19);
     GLASS_BAR = SIDE;
     POPOVER = PANEL;
+    SHEET_SCRIM = Color32::from_black_alpha(112);
     SCRIM = Color32::from_black_alpha(72);
     DIVIDER = EDGE;
     FOCUS_RING = ACCENT;
@@ -55,7 +56,8 @@ palette! {
     POP_SHADOW = Color32::from_black_alpha(90);
     IMAGE_HOVER = Color32::from_black_alpha(170);
     HOVER_EDGE = Color32::from_rgba_premultiplied(46, 46, 46, 46);
-    ON_PRIMARY_HINT = Color32::from_rgba_premultiplied(150, 150, 150, 150);
+    ON_PRIMARY = SHEET;
+    ON_PRIMARY_HINT = ON_PRIMARY;
     PRIMARY_PRESS = Color32::from_rgb(0x55, 0x8C, 0xE6);
     PRIMARY_HOVER = Color32::from_rgb(0x7A, 0xB0, 0xFF);
     WARNING_PRESS = Color32::from_rgba_premultiplied(54, 40, 16, 56);
@@ -66,9 +68,19 @@ palette! {
 }
 
 /// The sheet shows the blurred scene with neutral colour and no panel rim.
+pub(crate) const SHEET_BLUR: f32 = 1.75;
+pub(crate) const SHEET_VIGNETTE: f32 = 0.42;
+pub(crate) fn sheet_glass() -> crate::glass::Look {
+    let tint = egui::Rgba::from(SHEET);
+    crate::glass::Look {
+        tint: [tint.r(), tint.g(), tint.b(), 0.55], peak: 0.085,
+        saturation: 0.42, rim: [0.06, 0.015], glow: 0.0,
+        vignette: SHEET_VIGNETTE, ..Surface::Panel.look()
+    }
+}
 pub(crate) const SHEET_BACKDROP: crate::glass::Look = crate::glass::Look {
     tint: [0.0; 4], saturation: 0.30, peak: 0.65,
-    rim: [0.0; 2], rim_width: 1.0, glow: 0.0, inner_shadow: 0.0,
+    vignette: SHEET_VIGNETTE, rim: [0.0; 2], rim_width: 1.0, glow: 0.0, inner_shadow: 0.0,
 };
 
 // ---- Design tokens (council 2026-11-22; one place, every component
@@ -193,7 +205,7 @@ impl Surface {
             rim_width: 1.25,
             glow: top,
             peak,
-            inner_shadow: inner,
+            inner_shadow: inner, vignette: 0.0,
         }
     }
     pub fn radius(self) -> u8 {
@@ -240,3 +252,24 @@ pub fn heading() -> egui::FontId {
 
 /// Invisible input backdrop for a compact modal popover.
 pub const CLEAR: Color32 = Color32::TRANSPARENT;
+
+#[cfg(test)]
+mod sheet_contrast {
+    use super::*;
+
+    fn luminance(ink: Color32) -> f32 {
+        let c = egui::Rgba::from(ink);
+        0.2126 * c.r() + 0.7152 * c.g() + 0.0722 * c.b()
+    }
+
+    #[test]
+    fn sheet_text_meets_four_and_a_half_to_one() {
+        let glass = sheet_glass();
+        // White source, centre of the card, including the upper dither bound.
+        let brightest = glass.peak * (1.0 - glass.tint[3]) + glass.tint[0] * glass.tint[3] + 0.5 / 255.0;
+        assert!((luminance(DIM) + 0.05) / (brightest + 0.05) >= 4.5);
+        for fill in [ACCENT, PRIMARY_HOVER, PRIMARY_PRESS] {
+            assert!((luminance(fill) + 0.05) / (luminance(ON_PRIMARY) + 0.05) >= 4.5);
+        }
+    }
+}

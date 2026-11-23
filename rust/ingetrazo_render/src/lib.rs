@@ -2087,6 +2087,12 @@ impl Renderer {
     /// over it. No scene pass runs; the resident scene stays as it is.
     #[pyo3(signature = (present=true))]
     fn render_page(&mut self, present: bool) -> PyResult<(f64, Option<f64>)> {
+        // Large sheets use the resident model even when opened from the
+        // page workspace. Offscreen page exports still draw the page.
+        if present && self.ui_target == self.active && self.scene.is_some()
+            && self.ui.as_ref().is_some_and(ui::Ui::large_sheet_shown) {
+            return self.render(true);
+        }
         let start = Instant::now();
         self.device.poll(wgpu::Maintain::Poll);
         let polled = Instant::now();
@@ -2698,6 +2704,7 @@ fn large_sheet_check(spec: &str) -> String {
 mod surfaces;
 mod release;
 mod units_start;
+mod sheet_host;
 
 /// Start an orthographic ray on the plane through the camera, aligned with the point.
 #[pyfunction]
@@ -2741,6 +2748,8 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(panic_log::install_panic_log, m)?)?;
     m.add_function(wrap_pyfunction!(panic_log::_panic_for_test, m)?)?;
     m.add_class::<ui::operation_form::OperationForm>()?;
+    m.add_function(wrap_pyfunction!(sheet_host::start_backdrop, m)?)?;
+    m.add_function(wrap_pyfunction!(sheet_host::show_delivery_form, m)?)?;
     m.add_class::<units_start::UnitsDraft>()?;
     m.add_class::<release::ReleaseReview>()?;
     m.add_class::<Renderer>()

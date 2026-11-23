@@ -105,6 +105,11 @@ impl Dialog {
         false
     }
 
+    pub(super) fn multiline_focused(&self, focused: Option<egui::Id>) -> bool {
+        self.fields.iter().any(|field| field.8 & MULTILINE != 0
+            && focused == Some(egui::Id::new(("dlg_edit", &self.seq, &field.0))))
+    }
+
     fn button_of(&self, role: u8) -> Option<String> {
         self.buttons.iter().find(|b| b.3 == role).map(|b| b.0.clone())
     }
@@ -146,9 +151,7 @@ impl Ui {
             return true;
         }
         if pressed && name == "Enter" {
-            let multiline = self.ctx.memory(|m| m.focused()).is_some_and(|f| {
-                d.fields.iter().any(|fl| fl.8 & MULTILINE != 0 && egui::Id::new(("dlg_edit", &d.seq, &fl.0)) == f)
-            });
+            let multiline = d.multiline_focused(self.ctx.memory(|m| m.focused()));
             let command = mods & (2 | 8) != 0;
             if !multiline || command {
                 if let Some(id) = d.button_of(1) { self.actions.push(d.act("b", &id, None)); }

@@ -2,9 +2,8 @@
 //! app (docs/ui-patterns.md): the Library, the start page, Settings, and
 //! later the one-off Export, the Extension Manager, About.
 //!
-//! A sheet hangs under the top bar over the dimmed, blurred model. The real
-//! frame (rail, dock, bottom bar) stays drawn behind the dim; the top bar
-//! stays live. Its parts never change from one sheet to the next:
+//! A sheet is centred below the project tabs over a full-window blur.
+//! The model rail, dock and bottom bar retract while it is open. Its parts never change from one sheet to the next:
 //!
 //! ```text
 //! ┌ header: title · tabs · verbs ……………… menus · [search] · × ┐
@@ -45,8 +44,6 @@ use super::*;
 const SEP: char = '\u{1f}';
 /// How long opening and closing take (seconds).
 pub const ANIM_S: f32 = 0.16;
-/// The room between rail and dock a sheet needs to sit there (else it covers both).
-const FRAMED_MIN_W: f32 = 960.0;
 
 // ---- Look: the design system's names only (ui/tokens.rs, ui/kit.rs),
 // in one block. Blue is only the accent: the focused tile, the selected
@@ -55,8 +52,8 @@ const FRAMED_MIN_W: f32 = 960.0;
 const RULE: Color32 = DIVIDER;
 /// A picture's well (no picture yet).
 const PICTURE_WELL: Color32 = WELL;
-/// Behind the sheet: the model blurred as it is, then the scrim.
-const BEHIND: Color32 = SCRIM;
+// Secondary text on glass needs the brighter graphite text token.
+use super::tokens::DIM as FAINT;
 
 // ---- What Python sends ------------------------------------------------------
 
@@ -67,6 +64,7 @@ pub struct Spec {
     pub title: String,
     pub tabs: Vec<Tab>,
     pub default_verb: String,
+    pub backdrop_icon: String,
     pub verbs: Vec<Verb>,
     pub search: Option<Search>,
     pub menus: Vec<HeadMenu>,
@@ -212,6 +210,10 @@ pub struct LargeSheet {
 fn search_id() -> egui::Id { egui::Id::new("lsheet_search") }
 
 impl LargeSheet {
+    pub(super) fn choice_open(&self) -> bool {
+        self.open && self.forms.values().any(|form| form.choice_open.is_some())
+    }
+
     /// A new spec from Python; `None` closes. Returns whether it opened now.
     pub fn set(&mut self, spec: Option<Spec>) -> bool {
         let Some(mut spec) = spec else {
@@ -464,7 +466,7 @@ fn button(ui: &mut egui::Ui, v: &Verb, width: Option<f32>) -> bool {
         return resp.clicked() && v.enabled;
     }
     let primary = v.role == 1;
-    let ink = if !v.enabled { OFF } else if primary { BRIGHT } else { INK };
+    let ink = if !v.enabled { OFF } else if primary { ON_PRIMARY } else { INK };
     let g = ui.painter().layout_no_wrap(v.label.clone(), if primary { strong(TYPE_BODY) } else { body() }, ink);
     let k = (!v.key.is_empty()).then(|| ui.painter().layout_no_wrap(v.key.clone(), meta(),
         if primary { ON_PRIMARY_HINT } else { FAINT }));
@@ -683,6 +685,7 @@ impl Draw<'_> {
         let rows = b.items.len().div_ceil(cols);
         let h = rows as f32 * (cell.y + gap) - if rows > 0 { gap } else { 0.0 };
         let (block, _) = ui.allocate_exact_size(vec2(w, h.max(0.0)), Sense::hover());
+        ui.painter().rect_filled(block, R_ROW, FIELD);
         let clip = ui.clip_rect();
         for (i, it) in b.items.iter().enumerate() {
             let (row, col) = (i / cols, i % cols);
@@ -736,6 +739,7 @@ impl Draw<'_> {
         let w = ui.available_width();
         let h = b.items.len() as f32 * rh;
         let (block, _) = ui.allocate_exact_size(vec2(w, h), Sense::hover());
+        ui.painter().rect_filled(block, R_ROW, FIELD);
         let clip = ui.clip_rect();
         for (i, it) in b.items.iter().enumerate() {
             let r = Rect::from_min_size(block.min + vec2(0.0, i as f32 * rh), vec2(w, rh));
@@ -888,6 +892,17 @@ impl Ui {
                 if self.lsheet.spec.as_ref().is_some_and(|s| s.search.is_some()) { self.lsheet.focus_search = true; }
                 true
             }
+            "Enter" if in_field && self.lsheet.spec.as_ref().is_some_and(|spec| !spec.default_verb.is_empty()) => {
+                if mods & (2 | 8) == 0 && self.lsheet.forms.values().any(|d| d.multiline_focused(focused)) {
+                    return forward(self);
+                }
+                if let Some(spec) = &self.lsheet.spec {
+                    if let Some(verb) = spec.verbs.iter().find(|v| v.enabled && v.id == spec.default_verb) {
+                        self.actions.push(self.lsheet.act("verb", &[&verb.id]));
+                    }
+                }
+                true
+            }
             "Enter" if !in_field => {
                 let id = self.lsheet.focused.clone().or_else(|| self.lsheet.focus_rects.first().map(|f| f.0.clone()));
                 if let Some(id) = id {
@@ -955,25 +970,15 @@ impl Ui {
         let live = self.lsheet.open && !self.lsheet_covered();
         let mut out: Vec<String> = Vec::new();
 
-        // The model behind: blurred under the frame, then everything under
-        // the top bar dimmed.
-        let back = Rect::from_min_max(pos2(0.0, TOP_H), screen.max);
+        let back = Rect::from_min_max(pos2(screen.left(), TOP_H), screen.max);
         let max_w = if spec.width > 0.0 { spec.width } else { 1240.0 };
-        // Fit the card between the rail and dock when there is room.
-        let (free_l, free_r) = if self.review || self.sheets.shown { (0.0, screen.max.x) }
-                               else { (GUT + 72.0 + GUT, self.free_right(ctx, screen) - GUT) };
-        let framed = free_r - free_l >= FRAMED_MIN_W;
-        let (area_l, area_r) = if framed { (free_l, free_r) } else { (24.0, screen.max.x - 24.0) };
-        let w = (area_r - area_l).min(max_w).max(320.0);
-        let x = (area_l + (area_r - area_l - w) / 2.0).max(0.0);
-        // Composite behind every piece of chrome so the gutters all show
-        // the same scene, including when the card changes layout on resize.
+        let inset = (screen.width() * 0.06).clamp(SPACE_XL, 80.0);
+        let w = (screen.width() - inset * 2.0).min(max_w);
+        let h = (back.height() * 0.84).min(760.0);
+        let sheet = Rect::from_center_size(back.center() + vec2(0.0, (1.0 - ease) * 14.0), vec2(w, h));
         let backdrop = ctx.layer_painter(egui::LayerId::background());
-        backdrop.add(crate::glass::pane(back, 0.0, SHEET_BACKDROP));
-
-        let top = TOP_H + 16.0;
-        let bottom = (screen.max.y - BOT_H - 12.0).min(top + 900.0);
-        let sheet = Rect::from_min_max(pos2(x, top + (1.0 - ease) * 14.0), pos2(x + w, bottom + (1.0 - ease) * 14.0));
+        backdrop.add(crate::glass::pane(screen, 0.0, SHEET_BACKDROP));
+        backdrop.rect_filled(screen, CornerRadius::ZERO, SHEET_SCRIM.gamma_multiply(ease));
         self.lsheet.rect = Some(sheet);
         let icons = &self.icons;
         let st = &mut self.lsheet;
@@ -986,7 +991,6 @@ impl Ui {
             .show(ctx, |ui| {
                 ui.multiply_opacity(ease);
                 let (_, scrim) = ui.allocate_exact_size(back.size(), Sense::click_and_drag());
-                ui.painter().rect_filled(back, CornerRadius::ZERO, BEHIND);
                 if scrim.clicked() { st.menu = None; st.head_menu = None; }
                 let side_width = if spec.side.is_empty() { 0.0 } else if spec.side_width > 0.0 { spec.side_width } else { 216.0 };
                 let detail_width = spec.detail.as_ref().map_or(0.0, |d| if d.width > 0.0 { d.width } else { 340.0 });

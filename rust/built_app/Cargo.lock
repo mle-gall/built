@@ -201,6 +201,7 @@ dependencies = [
  "pyo3",
  "raw-window-handle",
  "rfd",
+ "serde_json",
  "winit",
 ]
 

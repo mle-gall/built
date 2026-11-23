@@ -362,6 +362,8 @@ class StartSheet(_sheet_class()):
         win = page.win
         back = can_return(win)
         s = cs.Sheet(self.id, "", closable=back, width=1180)
+        from ingetrazo_render import start_backdrop
+        s.backdrop_icon = start_backdrop(back, last_file(), recent.entries("files"), self.thumb, s)
         s.verb("new", "New model", key="⌘N", primary=True)
         s.menu("template", "From template", [(t[0], t[1]) for t in TEMPLATES], left=True)
         s.verb("openfile", "Open…", key="⌘O")
