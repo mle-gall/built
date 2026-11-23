@@ -147,7 +147,7 @@ fn recognises_literal_font_sizes() {
 fn graphite_surfaces_are_achromatic() {
     use crate::ui::tokens::*;
     for c in [
-        GLASS_BAR, PANEL, SHEET, CARD, CARD_HOVER, WELL, FIELD, SIDE, POPOVER, SCRIM, CONTROL, TRACK,
+        GLASS_BAR, PANEL, SHEET, CARD, CARD_HOVER, WELL, DESK, FIELD, SIDE, POPOVER, SCRIM, CONTROL, TRACK,
         THUMB, HOVER, PRESS,
     ] {
         assert_eq!((c.r(), c.g()), (c.g(), c.b()));

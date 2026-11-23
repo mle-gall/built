@@ -18,7 +18,7 @@ const STATES: [(&str, State); 6] = [
 /// Colour roles, grouped as the docs list them. Tokens not listed here still
 /// appear, under "Other", so a new token is never missing from the sheet.
 const GROUPS: [(&str, &[&str]); 6] = [
-    ("Surfaces", &["SHEET", "SIDE", "CARD", "CARD_HOVER", "WELL", "PANEL", "FIELD", "SCRIM", "SHEET_SCRIM"]),
+    ("Surfaces", &["SHEET", "SIDE", "CARD", "CARD_HOVER", "WELL", "DESK", "PANEL", "FIELD", "SCRIM", "SHEET_SCRIM"]),
     ("Text", &["INK", "INK_2", "DIM", "FAINT", "OFF", "BRIGHT", "ON_PRIMARY"]),
     (
         "Interaction",

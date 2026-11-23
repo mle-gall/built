@@ -551,18 +551,15 @@ fn sheet_rows(ui: &mut egui::Ui, rows: &[(String, String)], edits: &mut std::col
                 });
             }
             "check" => {
-                let on = parts.get(3).copied() == Some("1");
+                // The kit's switch (design system: a control is never filled
+                // with full accent), not a filled checkbox (council C8).
+                let mut on = parts.get(3).copied() == Some("1");
                 ui.horizontal(|ui| {
                     ui.add_space(SPACE_S);
                     label_cell(ui, label);
-                    let (r, resp) = ui.allocate_exact_size(vec2((ui.available_width() - 8.0).max(60.0), CONTROL_H), Sense::click());
-                    paint_state(ui, r, state_of(&resp, false, true), R_ROW);
-                    let b = Rect::from_center_size(pos2(r.min.x + 12.0, r.center().y), vec2(14.0, 14.0));
-                    ui.painter().rect_filled(b, CornerRadius::same(4), if on { ACCENT } else { FIELD });
-                    ui.painter().rect_stroke(b, CornerRadius::same(4), Stroke::new(1.0_f32, if on { ACCENT } else { EDGE }), egui::StrokeKind::Inside);
-                    if on { ui.painter().text(b.center(), egui::Align2::CENTER_CENTER, "✓", meta(), BRIGHT); }
-                    ui.painter().text(pos2(b.max.x + 8.0, r.center().y), egui::Align2::LEFT_CENTER, if on { "On" } else { "Off" }, body(), INK);
-                    if resp.clicked() { out.push(format!("edit{SEP}{id}{SEP}{}", if on { 0 } else { 1 })); }
+                    if toggle(ui, &mut on, "").clicked() {
+                        out.push(format!("edit{SEP}{id}{SEP}{}", u8::from(on)));
+                    }
                 });
             }
             "text" => {

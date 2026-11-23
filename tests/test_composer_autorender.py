@@ -101,6 +101,10 @@ def test_auto_render_rerenders_raster_frames_and_ignores_sheet_edits(
         vector = MarcoVista(view_key="std:front", style="vectorial")
         comp.comp.frames.append(vector)
         comp.auto_check.setChecked(True)
+        # Never drawn: shown, it draws once (it opened blank, council C8).
+        comp._auto_render_stale()
+        assert vector in rendered
+        comp.hlr_cache[id(vector)] = []                 # what that pass left
         rendered.clear()
         comp._stale.clear()
 
