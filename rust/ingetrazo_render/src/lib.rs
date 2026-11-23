@@ -2270,6 +2270,18 @@ impl Renderer {
     fn ui_set_sheet(&mut self, title: String, body: String, tone: String, buttons: Vec<(String, String, String, u8)>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_sheet(title, body, tone, buttons); }
     }
+    fn ui_plugin_panel(&mut self, raw: &str) -> PyResult<()> {
+        if let Some(ui) = self.ui.as_mut() {
+            ui.plugin_panel(raw).map_err(pyo3::exceptions::PyValueError::new_err)?;
+        }
+        Ok(())
+    }
+    fn ui_plugin_open(&mut self, instance: &str) {
+        if let Some(ui) = self.ui.as_mut() { ui.plugin_open(instance); }
+    }
+    fn ui_plugin_reset(&mut self) {
+        if let Some(ui) = self.ui.as_mut() { ui.plugin_reset(); }
+    }
     /// Work in progress: (id, what, phase, fraction or -1, cancellable).
     fn ui_set_jobs(&mut self, jobs: Vec<ui::Job>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_jobs(jobs); }

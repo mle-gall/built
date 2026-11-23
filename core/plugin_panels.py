@@ -1,0 +1,150 @@
+"""Bridge for versioned plugin data. Widget state and layout live in egui."""
+import json
+import uuid
+
+from views.extension_api import ExtensionApp
+
+
+def item(kind, id, label="", **data):
+    return dict(kind=kind, id=id, label=label, **data)
+
+
+def field(id, label, type, value, **data):
+    return item("field", id, label, type=type, value=value, **data)
+
+
+def section(id, title, *items):
+    return dict(id=id, title=title, items=list(items))
+
+
+def install(win, plugins):
+    win._panel_factories = {p.stem: p.panel for p in plugins if p.panel}
+
+
+def open_panel(win, key):
+    from views.chrome_dialogs import view_of
+    view = view_of(win)
+    if not getattr(view, "_ui_attached", False) or not hasattr(view.renderer, "ui_plugin_open"):
+        return False
+    sync(view, win)
+    for binding in getattr(view, "_plugin_bindings", {}).values():
+        if binding.key == key:
+            view.renderer.ui_plugin_open(binding.instance)
+            view.update()
+            return True
+    return False
+
+
+class Binding:
+    def __init__(self, win, key, factory, view):
+        self.key = key
+        self.instance = uuid.uuid4().hex
+        self.document = view._plugin_document
+        self.last_sections = "[]"
+        self.last_event = 0
+        self.scene = win.viewport.scene
+        self.dirty = True
+        self.sent_revision = None
+        self.error = ""
+        self.view = view
+        self.model = factory(ExtensionApp(win, key), self.invalidate)
+        self.id = self.model.id
+        self.title = self.model.title
+        self.slot = self.model.slot
+        if not all(isinstance(v, str) and v.strip() for v in (self.id, self.title)):
+            raise ValueError("A panel requires a nonempty string ID and title")
+
+    def invalidate(self):
+        self.dirty = True
+        try:
+            self.view.update()
+        except RuntimeError:
+            # A render may finish after its document view was closed.
+            pass
+
+    def push(self):
+        revision = self.scene.version
+        if not self.dirty and self.sent_revision == revision:
+            return
+        self.dirty = False
+        self.sent_revision = revision
+        model = self.model
+        envelope = dict(api=getattr(model, "api", 1), plugin=self.key, panel=self.id,
+                        title=self.title, slot=self.slot, instance=self.instance, document=self.document, revision=revision)
+        try:
+            sections = model.sections()
+            clean_sections = json.dumps(sections, allow_nan=False)
+            if self.error:
+                sections = [*sections, section("_error", "Plugin error",
+                            item("log", "_exception", lines=[self.error]))]
+            self.view.renderer.ui_plugin_panel(json.dumps(dict(envelope, sections=sections), allow_nan=False))
+            self.last_sections = clean_sections
+        except (Exception, SystemExit) as exc:
+            envelope.update(api=1, slot=self.slot if self.slot in ("dock", "utility") else "dock",
+                            sections=[*json.loads(self.last_sections), section("_error", "Panel unavailable",
+                                      item("log", "_exception", lines=[str(exc)]),
+                                      item("button", "_retry", "Retry"))])
+            try:
+                self.view.renderer.ui_plugin_panel(json.dumps(envelope))
+            except ValueError:
+                # Even an extension using the reserved error IDs is isolated.
+                envelope["sections"] = envelope["sections"][-1:]
+                self.view.renderer.ui_plugin_panel(json.dumps(envelope))
+
+
+def sync(view, win):
+    if not hasattr(view.renderer, "ui_plugin_panel"):
+        return
+    if "_panel_factories" not in vars(win):
+        return
+    if getattr(view, "_plugin_scene", None) is not win.viewport.scene:
+        view._plugin_scene = win.viewport.scene
+        view._plugin_document = uuid.uuid4().hex
+        view._plugin_bindings = {}
+        for key, factory in win._panel_factories.items():
+            try:
+                binding = Binding(win, key, factory, view)
+            except (Exception, SystemExit):
+                import logging
+                logging.getLogger(__name__).exception("Plugin panel %s failed to load", key)
+                continue
+            view._plugin_bindings[binding.instance] = binding
+        view._ui_plugins_sent = False
+    if not getattr(view, "_ui_plugins_sent", False):
+        view.renderer.ui_plugin_reset()
+        for binding in view._plugin_bindings.values():
+            binding.dirty = True
+            binding.last_event = 0
+        view._ui_plugins_sent = True
+    for binding in view._plugin_bindings.values():
+        binding.push()
+
+
+def dispatch(win, raw):
+    from views.chrome_dialogs import view_of
+    view = view_of(win)
+    event = json.loads(raw)
+    binding = getattr(view, "_plugin_bindings", {}).get(event.get("instance"))
+    if (binding is None or binding.scene is not win.viewport.scene
+            or event.get("revision") != binding.scene.version or event.get("api") != 1
+            or event.get("document") != binding.document
+            or event.get("plugin") != binding.key or event.get("panel") != binding.id
+            or event["event_id"] <= binding.last_event):
+        return
+    binding.last_event = event["event_id"]
+    try:
+        if event["control"] == "_retry":
+            binding.invalidate()
+            return
+        if event["event"] == "browse":
+            from views.filedialogs import file_dialogs
+            path, _ = file_dialogs.getOpenFileName(win, "Choose file")
+            if (not path or binding.scene is not win.viewport.scene
+                    or event["revision"] != binding.scene.version):
+                return
+            event.update(event="commit", value=path)
+        binding.model.event(event["control"], event["event"], event["value"])
+        binding.error = ""
+    except (Exception, SystemExit) as exc:
+        binding.error = str(exc)
+    binding.invalidate()

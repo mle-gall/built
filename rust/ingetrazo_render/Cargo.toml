@@ -19,3 +19,13 @@ egui-wgpu = { version = "0.31.1", default-features = false }
 
 [features]
 extension-module = ["pyo3/extension-module"]
+
+[dependencies.serde]
+version = "1"
+features = ["derive"]
+
+[dependencies.serde_json]
+version = "1"
+
+[dependencies.png]
+version = "0.18"

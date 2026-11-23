@@ -63,6 +63,48 @@ CORE_FILE_SUFFIXES = frozenset({
 })
 
 
+def _make_pick_tool(prompt: str, done, cancelled):
+    """A one-click tool: ``done(point)`` with the SNAPPED point (a post tip,
+    a ceiling, an endpoint), ``cancelled()`` on Esc. Built here and not at
+    module level: a module-level Tool would get its own Extensions-menu
+    entry (core/extensions.py), and the panel is the only way in."""
+    from PySide6.QtCore import Qt
+    from tools.base import Tool
+
+    class _PickPoint(Tool):
+        name = prompt
+        shortcut = None
+        uses_snap = True
+
+        def __init__(self) -> None:
+            self.hover_point = None
+
+        def on_activate(self, viewport) -> None:
+            self.hover_point = None
+
+        def on_deactivate(self, viewport) -> None:
+            self.hover_point = None
+
+        def on_hover(self, ctx) -> None:
+            self.hover_point = ctx.world
+            ctx.viewport.update()
+
+        def on_click(self, ctx) -> None:
+            face = ctx.snap is not None and ctx.snap.kind == "on_face"
+            done(ctx.world, face)
+
+        def on_key(self, viewport, key, modifiers) -> bool:
+            if key == Qt.Key_Escape:
+                cancelled()
+                return True
+            return False
+
+        def rubber_band_lines(self):
+            return []
+
+    return _PickPoint()
+
+
 class ExtensionApp:
     """One plugin's handle on the running application."""
 
@@ -431,6 +473,27 @@ class ExtensionApp:
         vp._ext_pickables.append(
             {"key": self.key, "pick": pick, "on_select": on_select,
              "delete": delete})
+
+    def pick_point(self, prompt, done):
+        """Request a single snapped viewport point. Escape cancels the pick."""
+        vp = self.viewport
+        scene = vp.scene
+        revision = scene.version
+
+        def finish():
+            if self.viewport is vp:
+                self.window._activate_tool("select")
+                vp.setFocus()
+
+        def picked(point, on_face):
+            try:
+                if self.scene is scene and scene.version == revision:
+                    done(point, on_face)
+            finally:
+                finish()
+
+        vp.set_active_tool(_make_pick_tool(prompt, picked, finish))
+        vp.setFocus()
 
     def release_pick(self) -> None:
         """Let go of this extension's selected item, without telling it

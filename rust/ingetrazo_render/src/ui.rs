@@ -16,6 +16,7 @@ mod start;
 /// Sheets, a workspace of the window (views/wgpu_sheets.py).
 mod sheets;
 mod activity;
+mod plugins;
 pub use activity::ActivityRow;
 /// Project tabs in the top bar (views/wgpu_tabs.py).
 mod tabs;
@@ -180,6 +181,7 @@ pub struct Form {
 }
 
 pub struct Ui {
+    plugins: plugins::Panels,
     ctx: egui::Context,
     painter: egui_wgpu::Renderer,
     start: Instant,
@@ -477,6 +479,7 @@ impl Ui {
             link_banner: String::new(),
             library: Default::default(),
             dock_w: DOCK_W,
+            plugins: Default::default(),
             cursor_shape: "",
             home: Default::default(),
             sheets: Default::default(),
@@ -657,6 +660,9 @@ impl Ui {
         self.ctx.memory_mut(|m| m.stop_text_input());
         self.sheet = Some(Sheet { title, body, tone, buttons });
     }
+    pub fn plugin_panel(&mut self, raw: &str) -> Result<(), String> { self.plugins.set(raw) }
+    pub fn plugin_open(&mut self, id: &str) { self.plugins.open(id); }
+    pub fn plugin_reset(&mut self) { self.plugins = Default::default(); }
     pub fn set_jobs(&mut self, jobs: Vec<Job>) { self.jobs = jobs; }
     pub fn set_tabs(&mut self, tabs: Vec<Vec<Item>>) { self.tabs = tabs; }
     pub fn set_delivery(&mut self, active: String, unfiled: u32, problems: u32) {
@@ -712,7 +718,8 @@ impl Ui {
             }
             return true;
         }
-        if self.column.as_ref().is_some_and(|c| c.mode == "Library" && c.prompt.is_none()) && pressed {
+        if !self.plugins.showing && !(self.plugins.utility_open() && self.ctx.wants_keyboard_input())
+            && self.column.as_ref().is_some_and(|c| c.mode == "Library" && c.prompt.is_none()) && pressed {
             if let Some(a) = self.library.key(name) {
                 if !a.is_empty() { self.actions.push(format!("lib:{a}")); }
                 if name == "Enter" { self.ctx.memory_mut(|m| m.stop_text_input()); }
@@ -1534,12 +1541,16 @@ impl Ui {
                     let in_library = col.mode == "Library";
                     ui.horizontal(|ui| {
                         ui.set_min_height(28.0);
-                        let at = if in_library { 1 } else { 0 };
-                        match library::segmented(ui, &["Project", "Library"], at, 150.0) {
-                            Some(0) if in_library || !col.mode.is_empty() => actions.push("mode\u{1f}".into()),
-                            Some(1) if !in_library => actions.push("mode\u{1f}library".into()),
-                            _ => {}
+                        let has_plugins = self.plugins.available();
+                        let at = if self.plugins.showing { 2 } else { usize::from(in_library) };
+                        let labels: &[&str] = if has_plugins { &["Project", "Library", "Plugins"] } else { &["Project", "Library"] };
+                        match library::segmented(ui, labels, at, if has_plugins { 204. } else { 150. }) {
+                            Some(0) => { self.plugins.showing = false; actions.push("mode\u{1f}".into()); }
+                            Some(1) => { self.plugins.showing = false; actions.push("mode\u{1f}library".into()); }
+                            Some(2) => self.plugins.showing = true,
+                            _=>{}
                         }
+                        if self.plugins.showing { return; }
                         if !col.mode.is_empty() && !in_library && library::caption_mode(ui, &col.mode) {
                             actions.push("mode\u{1f}".into());
                         }
@@ -1562,6 +1573,10 @@ impl Ui {
                             }
                         });
                     });
+                    if self.plugins.showing {
+                        self.plugins.dock(ui, &mut cmds);
+                        return;
+                    }
                     if !self.link_banner.is_empty() {
                         ui.add_space(6.0);
                         ui.horizontal_wrapped(|ui| {
@@ -2398,6 +2413,7 @@ impl Ui {
             if !self.review {
                 self.palette(ctx, screen);
                 self.right_column(ctx, screen);
+                self.plugins.utility(ctx, screen, self.dock_w, &mut self.actions);
                 self.bottom_bar(ctx, screen);
                 self.paint_strip(ctx, screen);
             }
@@ -2421,7 +2437,7 @@ impl Ui {
         let model = !(self.sheets.shown && !start);
         let shown = [("top", !start), ("start", start), ("palette", work && model && !self.groups.is_empty()),
                      ("view_menu", self.view_open && !start), ("menu", self.menu.is_some() && !start), ("form", self.form.is_some() && !start),
-                     ("column", work && model && self.column.is_some()), ("bottom", work),
+                     ("plugin_utility", work && model && self.plugins.utility_open()), ("column", work && model && self.column.is_some()), ("bottom", work),
                      ("sel_more", work && model && self.sel_more && self.selection.is_some()),
                      ("paint_strip", work && model && !self.palette_items.is_empty()),
                      ("commands", self.cmd_open),

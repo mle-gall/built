@@ -139,7 +139,11 @@ pub fn build() -> muda::Result<Menus> {
           &PredefinedMenuItem::separator(),
           &item("move_to_window", "Move Project to New Window", None)],
     )?;
-    bar.append_items(&[&app, &file, &edit, &view, &tools, &window])?;
+    let plugins = Submenu::with_items("Plugins", true, &[
+        &item("panel:python_console", "Python Console", Some("CmdOrCtrl+Shift+P")),
+        &item("panel:render_blender", "Blender Render", None),
+    ])?;
+    bar.append_items(&[&app, &file, &edit, &view, &tools, &plugins, &window])?;
     #[cfg(target_os = "macos")]
     {
         bar.init_for_nsapp();
