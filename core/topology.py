@@ -1857,10 +1857,6 @@ def sweep_tjunctions(mesh, seedkeys=None) -> None:
     """
     import numpy as np
     from core.mesh import _STITCH_TOL
-    tol2 = _STITCH_TOL * _STITCH_TOL
-    # Cap on candidate pairs materialised at once, so a model-spanning edge
-    # whose slab holds every vertex can't blow memory: edges run in chunks.
-    pair_cap = 1 << 21
     # ``seedkeys`` are ``core.topology._key`` tuples — the seed positions
     # rounded to the weld tolerance, so they ARE coordinates and bound the
     # operation directly. (Not ``core.mesh._key``, whose integer cell indices
@@ -1900,79 +1896,14 @@ def sweep_tjunctions(mesh, seedkeys=None) -> None:
             vslot = {v.key: i for i, v in enumerate(verts)}
             ends = np.array([(vslot[e.v0.key], vslot[e.v1.key])
                              for e in edges], dtype=np.int64)
-        va, vb = vpos[ends[:, 0]], vpos[ends[:, 1]]
-        elo, ehi = np.minimum(va, vb), np.maximum(va, vb)
-        if seed_lo is None:
-            live = np.ones(len(edges), dtype=bool)
-        else:
-            live = ((ehi >= seed_lo).all(axis=1)
-                    & (elo <= seed_hi).all(axis=1))
-        # Degenerate edges never split.
-        seg_all = vb - va
-        live &= np.einsum("ij,ij->i", seg_all, seg_all) > tol2
-        pick = np.flatnonzero(live)
-        if not len(pick):
+        from ingetrazo_core import MeshStore
+        bounds = None if seed_lo is None else (seed_lo, seed_hi)
+        hits = MeshStore.stitch_junctions(np.ascontiguousarray(vpos, dtype=np.float64),
+                                          np.ascontiguousarray(ends, dtype=np.int64), bounds, _STITCH_TOL)
+        if not hits:
             break
-        # Broad phase over the scoped edges: a splitting vertex sits in the
-        # edge's box, so only that slice of the x-sorted vertices is tested.
-        order = np.argsort(vpos[:, 0], kind="stable")
-        xs = vpos[order, 0]
-        lo = np.searchsorted(xs, elo[pick, 0] - _STITCH_TOL, side="left")
-        counts = np.searchsorted(xs, ehi[pick, 0] + _STITCH_TOL,
-                                 side="right") - lo
-        counts = np.maximum(counts, 0)
-        # Lowest-indexed interior vertex per edge — the scalar sweep walked
-        # ``mesh.vertices`` in order, and which vertex splits first must not
-        # depend on the x-sort. ``len(verts)`` is the "none" sentinel so
-        # ``np.minimum.at`` can reduce into it.
-        best = np.full(len(edges), len(verts), dtype=np.int64)
-        cum = np.cumsum(counts)
-        p0 = 0
-        while p0 < len(pick):
-            base = int(cum[p0] - counts[p0])
-            p1 = max(int(np.searchsorted(cum, base + pair_cap, side="right")),
-                     p0 + 1)
-            block = slice(p0, p1)
-            c = counts[block]
-            total = int(c.sum())
-            p0 = p1
-            if not total:
-                continue
-            eidx = np.repeat(pick[block], c)
-            rank = np.arange(total) - np.repeat(np.cumsum(c) - c, c)
-            vidx = order[np.repeat(lo[block], c) + rank]
-            keep = (vidx != ends[eidx, 0]) & (vidx != ends[eidx, 1])
-            # Narrow the x-slab down the other two axes before projecting.
-            # One axis at a time on 1-D gathers is far cheaper than pulling
-            # the (N, 3) vertex/edge rows the projection needs, and on a dense
-            # model it is what keeps the slab's false positives off that step.
-            for ax in (1, 2):
-                if not keep.any():
-                    break
-                on = eidx[keep]
-                coord = vpos[vidx[keep], ax]
-                keep[keep] = ((coord >= elo[on, ax] - _STITCH_TOL)
-                              & (coord <= ehi[on, ax] + _STITCH_TOL))
-            if not keep.any():
-                continue
-            eidx, vidx = eidx[keep], vidx[keep]
-            seg = seg_all[eidx]
-            rel = vpos[vidx] - va[eidx]
-            l2 = np.einsum("ij,ij->i", seg, seg)
-            t = np.einsum("ij,ij->i", rel, seg) / l2
-            tol_t = _STITCH_TOL / np.sqrt(l2)
-            ok = (t > tol_t) & (t < 1.0 - tol_t)
-            d = rel - seg * t[:, None]
-            ok &= np.einsum("ij,ij->i", d, d) < tol2
-            if ok.any():
-                np.minimum.at(best, eidx[ok], vidx[ok])
-        hits = np.flatnonzero(best < len(verts))
-        if not len(hits):
-            break
-        for i in hits:
-            # Only the split edge is removed and only existing vertices are
-            # reused, so the sweep's arrays stay valid across these splits.
-            mesh.split_edge_at(edges[int(i)], verts[int(best[int(i)])])
+        for edge, vertex in hits:
+            mesh.split_edge_at(edges[edge], verts[vertex])
 
 
 def resolve_tjunctions(mesh, max_iter: int = 1000) -> None:

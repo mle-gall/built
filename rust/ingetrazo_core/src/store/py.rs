@@ -1303,6 +1303,44 @@ impl PyMeshStore {
         Ok(existing.is_none().then(|| self.inner.key(Kind::Edge, edge)))
     }
 
+    #[staticmethod]
+    #[pyo3(signature=(points, edges, bounds, tolerance))]
+    fn stitch_junctions(points: PyReadonlyArray2<'_, f64>, edges: PyReadonlyArray2<'_, i64>,
+                        bounds: Option<[[f64; 3]; 2]>, tolerance: f64) -> PyResult<Vec<(usize,usize)>> {
+        if edges.shape()[1] != 2 { return Err(PyValueError::new_err("edges need two indices")); }
+        let edges = edges.as_slice().map_err(|_| PyValueError::new_err("edges must be contiguous"))?;
+        super::stitch_command::junctions(triples(&points)?, edges.as_chunks::<2>().0, bounds, tolerance)
+            .map_err(PyValueError::new_err)
+    }
+
+    #[pyo3(signature=(seeds, fresh, start, hypot))]
+    fn stitch_region(&self, seeds: Vec<[f64; 3]>, fresh: Option<std::collections::HashSet<u128>>, start: usize, hypot: &str)
+        -> PyResult<Option<(usize, Vec<u128>)>> {
+        Ok(self.inner.stitch_region(seeds, fresh, start, crate::hypot_of(hypot)?))
+    }
+
+    fn cap_passes_wall(&self, face: u128, rim: Vec<[f64; 3]>, normal: [f64; 3], distance: f64) -> PyResult<bool> {
+        Ok(self.inner.cap_passes_wall(live_of(&self.inner, Kind::Face, face)?, &rim, normal, distance))
+    }
+
+    #[staticmethod]
+    fn wall_depths_crossed(walls: Vec<Vec<f64>>, distance: f64) -> bool {
+        super::push_band::passes_wall(&walls, distance)
+    }
+
+    fn push_shape_matches(&self, before: &PyStoreSnapshot) -> bool {
+        use super::commands::cell;
+        let prior = reader(&before.inner);
+        if self.counts() != before.counts() { return false; }
+        let cells = |store: &Store| {
+            let mut rows: Vec<_> = store.live_slots(Kind::Vertex).into_iter()
+                .map(|v| cell(*store.state.vpos.get(v as usize))).collect();
+            rows.sort_unstable();
+            rows
+        };
+        cells(&self.inner) == cells(&prior)
+    }
+
     fn push_band(
         &mut self,
         base: Vec<[f64; 3]>,
@@ -1736,6 +1774,21 @@ impl PyMeshStore {
         Ok((self.inner.key(Kind::Edge, e), ch))
     }
 
+    #[staticmethod]
+    fn project_sweep(profile: super::sweep::Station, path: Vec<[f64;3]>, closed: bool, hypot: &str, compensated: bool)
+        -> PyResult<Option<(Vec<super::sweep::Station>,Vec<[f64;3]>)>> {
+        Ok(super::sweep::projected_stations(profile, &path, closed, crate::hypot_of(hypot)?, compensated))
+    }
+
+    #[staticmethod]
+    fn sweep_polygons(stations: Vec<super::sweep::Station>, closed: bool, start_cap: bool, hypot: &str)
+        -> PyResult<Vec<super::sweep::Station>> {
+        let mut faces = Vec::new();
+        super::sweep::emit_sweep_faces(&stations, closed, crate::hypot_of(hypot)?, None, start_cap,
+            |rings| { faces.push(rings.to_vec()); Ok(()) }).map_err(op_err)?;
+        Ok(faces)
+    }
+
     #[pyo3(signature = (key, path, closed, hypot, compensated=true))]
     fn sweep_stations(&self, key: u128, path: Vec<[f64; 3]>, closed: bool, hypot: &str, compensated: bool)
         -> PyResult<Option<Vec<super::sweep::Station>>> {
@@ -1786,6 +1839,25 @@ impl PyMeshStore {
         -> PyResult<Vec<super::intersect::Segment>> {
         let face = live_of(&self.inner, Kind::Face, key)?;
         Ok(self.inner.offset_outline(face, normal, distance, crate::hypot_of(hypot)?))
+    }
+
+    #[staticmethod]
+    fn offset_segments(points: Vec<[f64;3]>, normal: [f64;3], distance: f64, hypot: &str, closed: bool)
+        -> PyResult<Vec<([f64;3],[f64;3])>> {
+        Ok(super::offset::outline(&points, normal, distance, crate::hypot_of(hypot)?, closed))
+    }
+
+    #[staticmethod]
+    fn keep_offset_outlines(boundary: Vec<[f64;3]>, regions: Vec<super::offset::Ring>, normal: [f64;3], distance: f64, hypot: &str)
+        -> PyResult<Vec<bool>> {
+        let outline = boundary.into_iter().map(super::drawing::vector).collect::<Vec<_>>();
+        Ok(super::offset::keep_outline(&outline, regions, normal, distance, crate::hypot_of(hypot)?))
+    }
+
+    #[staticmethod]
+    fn offset_layout(source: super::offset::Ring, holes: Vec<super::offset::Ring>, regions: Vec<super::offset::Ring>,
+                     normal: [f64;3], distance: f64, hypot: &str) -> PyResult<Option<Vec<super::offset::Region>>> {
+        Ok(super::offset::layout(source, holes, regions, normal, distance, crate::hypot_of(hypot)?))
     }
 
     fn offset_hole_targets(&self, key: u128, regions: Vec<Vec<[f64; 3]>>, normal: [f64; 3],
@@ -1962,6 +2034,204 @@ impl PyMeshStore {
     fn relink_vertices(&mut self, keys: Vec<u128>) -> PyResult<PyChange> {
         let vs: Vec<u32> = keys.iter().map(|&k| any_of(&self.inner, Kind::Vertex, k)).collect::<PyResult<_>>()?;
         Ok(self.op(|s, ch| { s.relink_vertices(&vs, ch); Ok(()) })?.1)
+    }
+
+    fn plan_softening(
+        &self,
+        keys: &Bound<'_, PyAny>,
+        angle: f64,
+        coplanar: bool,
+        harden: bool,
+        smooth: bool,
+        matches: &Bound<'_, PyAny>,
+        hypot: &str,
+    ) -> PyResult<Vec<super::soften::Change<u128>>> {
+        let store = &self.inner;
+        let h = crate::hypot_of(hypot)?;
+        let mut selected = std::collections::HashSet::new();
+        for key in keys.try_iter()? {
+            if let Ok(k) = key?.extract::<u128>() {
+                selected.insert(k);
+            }
+        }
+        let rows = store.live_slots(Kind::Edge).into_iter().filter_map(|e| {
+            let key = store.key(Kind::Edge, e);
+            if !selected.contains(&key) {
+                return None;
+            }
+            let &[a, b] = store.edge_faces(e) else {
+                return None;
+            };
+            let bits = *store.state.eflags.get(e as usize);
+            Some((
+                e,
+                (bits & super::SOFT != 0, bits & super::FLAT != 0),
+                [a, b],
+            ))
+        });
+        let opts = super::soften::Options {
+            angle,
+            coplanar,
+            harden,
+            smooth,
+        };
+        let changes = opts.plan(
+            rows,
+            |a, b| {
+                Ok::<_, PyErr>(
+                    matches.is_none()
+                        || matches
+                            .call1((store.key(Kind::Face, a), store.key(Kind::Face, b)))?
+                            .is_truthy()?,
+                )
+            },
+            |f| Ok(store.face_normal(f, h).into()),
+        )?;
+        Ok(changes
+            .into_iter()
+            .map(|(e, b, a)| (store.key(Kind::Edge, e), b, a))
+            .collect())
+    }
+
+    #[staticmethod]
+    fn plan_object_softening(
+        rows: Vec<super::soften::Edge<i128>>,
+        angle: f64,
+        coplanar: bool,
+        harden: bool,
+        smooth: bool,
+        matches: &Bound<'_, PyAny>,
+        normal: &Bound<'_, PyAny>,
+    ) -> PyResult<Vec<super::soften::Change<i128>>> {
+        let opts = super::soften::Options {
+            angle,
+            coplanar,
+            harden,
+            smooth,
+        };
+        opts.plan(
+            rows,
+            |a, b| Ok(matches.is_none() || matches.call1((a, b))?.is_truthy()?),
+            |f| normal.call1((f,))?.extract(),
+        )
+    }
+
+    fn apply_softening(&mut self, rows: Vec<super::soften::Change<u128>>, after: bool) {
+        for (key, old, new) in rows {
+            let Some(e) = self.inner.slot(Kind::Edge, key) else {
+                continue;
+            };
+            let (soft, flat) = if after { new } else { old };
+            let current = *self.inner.state.eflags.get(e as usize);
+            // Observable store revision advances once per facade field write.
+            let bits = if soft {
+                current | super::SOFT
+            } else {
+                current & !super::SOFT
+            };
+            self.inner.set_edge_flags(e, bits);
+            self.inner.set_edge_flags(
+                e,
+                if flat {
+                    bits | super::FLAT
+                } else {
+                    bits & !super::FLAT
+                },
+            );
+        }
+    }
+
+    #[staticmethod]
+    fn apply_object_softening(
+        edges: &Bound<'_, PyAny>,
+        rows: Vec<super::soften::Change<i128>>,
+        after: bool,
+    ) -> PyResult<()> {
+        let wanted: std::collections::HashMap<_, _> = rows
+            .into_iter()
+            .map(|(k, b, a)| (k, if after { a } else { b }))
+            .collect();
+        for e in edges.try_iter()? {
+            let e = e?;
+            let key: i128 = e.getattr("key")?.extract()?;
+            if let Some(&(soft, flat)) = wanted.get(&key) {
+                e.setattr("soft", soft)?;
+                e.setattr("flat", flat)?;
+            }
+        }
+        Ok(())
+    }
+
+    #[staticmethod]
+    fn bevel_face_curve(
+        origin: [f64; 3],
+        a: [f64; 3],
+        b: [f64; 3],
+        exponent: f64,
+        segments: usize,
+    ) -> PyResult<Vec<[f64; 3]>> {
+        use super::geometry::V3;
+        let v = |[x, y, z]: [f64; 3]| V3(x, y, z);
+        if segments == 0 {
+            return Err(PyValueError::new_err("empty bevel section"));
+        }
+        Ok(
+            super::bevel::face_curve(v(origin), v(a), v(b), exponent, segments)
+                .into_iter()
+                .map(super::fillet::xyz)
+                .collect(),
+        )
+    }
+
+    #[staticmethod]
+    fn bevel_corner(
+        origin: [f64; 3],
+        vectors: Vec<[f64; 3]>,
+        curves: Vec<Vec<[f64; 3]>>,
+        normal: [f64; 3],
+        segments: usize,
+        exponent: f64,
+        hypot: &str,
+        compensated: bool,
+    ) -> PyResult<(Vec<Vec<[f64; 3]>>, Vec<([f64; 3], [f64; 3])>)> {
+        use super::fillet::{xyz, RoundPlan};
+        use super::geometry::V3;
+        let v = |[x, y, z]: [f64; 3]| V3(x, y, z);
+        if segments == 0
+            || curves
+                .iter()
+                .any(|r| r.len().checked_sub(1) != Some(segments))
+        {
+            return Err(PyValueError::new_err("inconsistent bevel sections"));
+        }
+        let vectors: Vec<_> = vectors.into_iter().map(v).collect();
+        let curves: Vec<_> = curves
+            .into_iter()
+            .map(|r| r.into_iter().map(v).collect())
+            .collect();
+        let mut plan = RoundPlan::default();
+        super::bevel::close_corner(
+            &mut plan,
+            v(origin),
+            &vectors,
+            &curves,
+            v(normal),
+            segments,
+            exponent,
+            crate::hypot_of(hypot)?,
+            compensated,
+        )
+        .map_err(|(message, _)| PyValueError::new_err(message))?;
+        Ok((
+            plan.patches
+                .into_iter()
+                .map(|r| r.into_iter().map(xyz).collect())
+                .collect(),
+            plan.soft
+                .into_iter()
+                .map(|(a, b)| (xyz(a), xyz(b)))
+                .collect(),
+        ))
     }
 
     fn plan_vertex_bevel(
@@ -2856,6 +3126,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyMeshStore>()?;
     m.add_class::<PyStoreSnapshot>()?;
     m.add_class::<PyRoundPlan>()?;
+    m.add_class::<super::intersect::PyPolygon>()?;
     m.add_class::<PyChange>()?;
     m.add("StoreFallback", m.py().get_type::<StoreFallback>())?;
     Ok(())

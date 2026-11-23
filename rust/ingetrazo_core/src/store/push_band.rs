@@ -69,3 +69,62 @@ impl Store {
         Ok((bumps, steps))
     }
 }
+
+/// A cap translation cannot cross an intermediate corner of its wall or
+/// flatten a wall with three corners at the far depth.
+pub(super) fn passes_wall(walls: &[Vec<f64>], distance: f64) -> bool {
+    let far = walls
+        .iter()
+        .flatten()
+        .copied()
+        .fold(f64::NEG_INFINITY, f64::max);
+    walls
+        .iter()
+        .flatten()
+        .any(|&t| 1e-6 < t && t < far - 1e-6 && t < -distance + 1e-6)
+        || (-distance > far - 1e-6
+            && walls
+                .iter()
+                .any(|w| w.iter().filter(|&&t| t > far - 1e-6).count() > 2))
+}
+
+impl Store {
+    pub(super) fn cap_passes_wall(
+        &self,
+        face: u32,
+        rim: &[Point],
+        normal: Point,
+        distance: f64,
+    ) -> bool {
+        use super::commands::cell;
+        use super::keys::Kind;
+        use glam::DVec3;
+        use std::collections::HashSet;
+        if distance >= 0. || rim.is_empty() {
+            return false;
+        }
+        let origin = DVec3::from(rim[0]);
+        let normal = DVec3::from(normal);
+        let cells: HashSet<_> = rim.iter().copied().map(cell).collect();
+        let mut walls = Vec::new();
+        for f in self.live_slots(Kind::Face) {
+            if f == face {
+                continue;
+            }
+            let mut touches = false;
+            let mut depths = Vec::new();
+            for v in self.outer_ring(f) {
+                let p = *self.state.vpos.get(v as usize);
+                if cells.contains(&cell(p)) {
+                    touches = true;
+                } else {
+                    depths.push((origin - DVec3::from(p)).dot(normal));
+                }
+            }
+            if touches {
+                walls.push(depths);
+            }
+        }
+        passes_wall(&walls, distance)
+    }
+}

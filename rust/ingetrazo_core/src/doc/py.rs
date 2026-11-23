@@ -2768,6 +2768,8 @@ fn doc_serial() -> u64 {
 }
 
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(super::paint::apply_face_paint, m)?)?;
+    m.add_function(wrap_pyfunction!(super::paint::restore_face_paint, m)?)?;
     m.add_class::<super::definition::Definition>()?;
     m.add_class::<PyPlacement>()?;
     m.add_class::<PyTag>()?;

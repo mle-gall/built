@@ -30,6 +30,8 @@ mod commands;
 mod fold;
 mod landing;
 mod push_band;
+mod soften;
+mod stitch_command;
 mod erase;
 mod drawing_face;
 mod drawing_plane;

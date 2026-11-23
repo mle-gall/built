@@ -114,59 +114,47 @@ class SoftenByAngleCommand(MeshCommand):
                 out.append(mesh)
         return out
 
-    def _wanted(self, edge, normals):
-        """The soft flag ``edge`` should have, or ``None`` to leave it."""
-        if len(edge.faces) != 2:
-            return None
-        if self.harden:
-            return False
-        a, b = edge.faces
-        if a == b:
-            return None
-        if (not self.materials
-                and _smooth_signature(a) != _smooth_signature(b)):
-            return False
-        for f in (a, b):
-            if f.key not in normals:
-                n = f.normal()
-                normals[f.key] = None if n.length() < 1e-12 else n.normalized()
-        na, nb = normals[a.key], normals[b.key]
-        if na is None or nb is None:
-            return None
-        dot = abs(max(-1.0, min(1.0, na.x() * nb.x() + na.y() * nb.y()
-                                + na.z() * nb.z())))
-        angle = math.degrees(math.acos(dot))
-        if angle <= 1e-4:
-            return self.coplanar
-        return angle <= self.angle + 1e-5
-
     def prepare(self) -> list:
+        from core.store_mesh import FaceView, _hypot, _store_of
+        from ingetrazo_core import MeshStore
         changes = []
         for mesh, keys in self.targets.items():
-            normals = {}
-            for edge in mesh.edges:
-                if edge.key not in keys:
-                    continue
-                soft = self._wanted(edge, normals)
-                if soft is None:
-                    continue
-                now = (bool(edge.soft), bool(getattr(edge, "flat", False)))
-                want = (soft, soft and not self.smooth)
-                if now != want:
-                    changes.append((mesh, edge.key, now, want))
+            store = _store_of(mesh)
+            options = (self.angle, self.coplanar, self.harden, self.smooth)
+            if store is not None:
+                def matches(a, b):
+                    return _smooth_signature(FaceView(mesh, a)) == _smooth_signature(FaceView(mesh, b))
+
+                planned = store.plan_softening(set(keys), *options, None if self.materials else matches, _hypot())
+            else:
+                faces = {}
+                rows = []
+                for e in mesh.edges:
+                    if e.key in keys and len(e.faces) == 2:
+                        a, b = e.faces
+                        faces[a.key], faces[b.key] = a, b
+                        rows.append((e.key, (bool(e.soft), bool(getattr(e, "flat", False))), (a.key, b.key)))
+
+                def matches(a, b):
+                    return _smooth_signature(faces[a]) == _smooth_signature(faces[b])
+
+                planned = MeshStore.plan_object_softening(rows, *options, None if self.materials else matches,
+                                                          lambda k: faces[k].normal().toTuple())
+            changes.extend((mesh, key, old, new) for key, old, new in planned)
         return changes
 
     def _apply(self, scene, after: bool) -> None:
-        by_mesh: dict = {}
+        from core.store_mesh import _store_of
+        from ingetrazo_core import MeshStore
+        by_mesh = {}
         for mesh, key, old, new in self.changes:
-            by_mesh.setdefault(id(mesh), (mesh, {}))[1][key] = new if after else old
-        for mesh, flags in by_mesh.values():
-            for edge in mesh.edges:
-                state = flags.get(edge.key)
-                if state is not None:
-                    edge.soft, edge.flat = state
-            # The shading's normals change with the flag: the caches keyed
-            # on the geometry (GL chunk, Metal prototype) rebuild this mesh.
+            by_mesh.setdefault(mesh, []).append((key, old, new))
+        for mesh, rows in by_mesh.items():
+            store = _store_of(mesh)
+            if store is None:
+                MeshStore.apply_object_softening(mesh.edges, rows, after)
+            else:
+                store.apply_softening(rows, after)
             mesh.mark_modified()
         if by_mesh:
             scene.version += 1
