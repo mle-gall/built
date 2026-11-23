@@ -179,7 +179,8 @@ def test_copy_move_array_and_undo(view):
     assert view.scene.groups == [group]
 
 
-def test_context_group_and_locked_target(view):
+def test_context_group_and_locked_target(view, monkeypatch):
+    from views import context_menu
     mesh = Mesh()
     mesh.add_face([QVector3D(), QVector3D(2, 0, 0), QVector3D(0, 2, 0)])
     group = Group(mesh)
@@ -188,7 +189,14 @@ def test_context_group_and_locked_target(view):
     view.set_scene(view.scene)
     view.pick_row = lambda *a: 0
     calls = []
-    view.source_viewport.show_viewport_context_menu = lambda *a, **kw: calls.append(kw)
+    def build(window, view, **targets):
+        calls.append(targets)
+        return context_menu.Menu("group", "Group", "")
+
+    monkeypatch.setattr(context_menu, "build", build)
+    view._ui_attached = True
+    view.renderer = SimpleNamespace(ui_over_chrome=lambda x, y: False,
+                                    ui_set_context_menu=lambda *args: None)
     event = QContextMenuEvent(QContextMenuEvent.Mouse, QPoint(400, 300))
     view.contextMenuEvent(event)
     assert view.scene.selection == {group}

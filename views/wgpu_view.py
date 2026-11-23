@@ -1522,17 +1522,11 @@ class MetalView(ViewNavigation):
         # chrome's: only the verbs for what was hit (docs/context-menu.md).
         # A right-click on the chrome itself is the chrome's own.
         from views import context_menu
-        if context_menu.chrome_menu_available(self):
-            if not self.renderer.ui_over_chrome(float(point.x()), float(point.y())):
-                context_menu.open_at(self, point.x(), point.y())
+        if not context_menu.chrome_menu_available(self):
+            source.flash_status("Built could not draw the context menu.")
             return
-        source._context_pixel = (point.x(), point.y())
-        picked = self.tools._context_pick(point.x(), point.y())
-        under = self.tools.pick_locked_image_plane(point.x(), point.y())
-        window = source.window()
-        window.show_viewport_context_menu(
-            event.globalPos(), locked_image=under if under is not picked else None,
-            locked_group=self.tools.pick_locked_group(point.x(), point.y()))
+        if not self.renderer.ui_over_chrome(float(point.x()), float(point.y())):
+            context_menu.open_at(self, point.x(), point.y())
 
     @_tool_frame
     def mouseDoubleClickEvent(self, event):
