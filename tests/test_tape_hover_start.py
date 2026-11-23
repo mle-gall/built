@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """T over a line starts a guide without a separate first mouse click."""
+from tests.qt_window_lifetime import close_window
 import pytest
 from PySide6.QtCore import QPoint, QPointF, Qt
 from PySide6.QtGui import QMouseEvent
@@ -27,7 +28,7 @@ def setup(monkeypatch):
                         lambda _global: QPoint(round(pointer[0][0]), round(pointer[0][1])))
     yield win, vp, pointer
     win._saved_version = vp.scene.version
-    win.close()
+    close_window(win)
 
 
 def _move(vp, point):

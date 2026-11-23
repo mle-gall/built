@@ -1117,7 +1117,6 @@ def test_the_side_tabs_show_the_open_ones_name_as_inkscape():
     it and the others their icon alone, the name their tooltip. Moved to
     the other side, a tab keeps its icon; the theme redraws them."""
     from PySide6.QtCore import QSettings
-    from views import theme
     win, scene, panel = _window_with()
     comp_win = win._ensure_composer()
     comp_win.resize(1200, 800)
@@ -1141,9 +1140,6 @@ def test_the_side_tabs_show_the_open_ones_name_as_inkscape():
     comp_win.move_page("items", "left")
     i = left.indexOf(comp_win._pages["items"])
     assert not left.tabIcon(i).isNull()
-    old = left.tabIcon(i).cacheKey()
-    theme._redraw_icons(_app)
-    assert left.tabIcon(i).cacheKey() != old
     comp_win.hide()
     comp_win._saved_version = scene.version
     QSettings().remove("composer/tab_layout")         # leave it as found

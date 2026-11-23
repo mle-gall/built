@@ -45,3 +45,11 @@ def test_the_dialog_says_how_to_accept():
     dlg = build_multiline_dialog(None, "Text", "Label text:", "")
     assert "Ctrl+Enter" in dlg.labelText()
     assert dlg.labelText().startswith("Label text:")
+
+
+def test_the_editor_filter_releases_its_unparented_dialog():
+    import weakref
+    dlg = build_multiline_dialog(None, "Text", "Label", "")
+    ref = weakref.ref(dlg)
+    del dlg
+    assert ref() is None

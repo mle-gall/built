@@ -21,9 +21,7 @@ from views import mac_glass, theme  # noqa: E402
 
 @pytest.fixture
 def qapp():
-    a = QApplication.instance()
-    yield a
-    theme.apply_theme(a, theme.DARK)    # the suite's usual chrome
+    return QApplication.instance()
 
 
 def test_off_without_cocoa(qapp):
@@ -50,14 +48,11 @@ def test_entry_points_are_no_ops(qapp):
     w.deleteLater()
 
 
-def test_sheets_format_in_both_themes(qapp):
-    for palette in (theme.dark_palette(), theme.light_palette()):
-        qapp.setPalette(palette)
-        tokens = theme.tokens()
-        for sheet in (mac_glass.WINDOW_SHEET, mac_glass.EDIT_SHEET,
-                      mac_glass.MENU_SHEET):
-            text = sheet.format(**tokens)
-            assert "{" in text and "{{" not in text
+def test_sheets_format_in_the_dark_palette(qapp):
+    tokens = theme.tokens()
+    for sheet in (mac_glass.WINDOW_SHEET, mac_glass.EDIT_SHEET, mac_glass.MENU_SHEET):
+        text = sheet.format(**tokens)
+        assert "{" in text and "{{" not in text
     assert theme.tokens()["tab_close"] == ""      # glass off: no glyph
 
 

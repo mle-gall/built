@@ -123,7 +123,7 @@ def test_old_theme_is_ignored_by_the_default_palette(settings_file):
     from views import theme
     st = _fresh(settings_file)
     st.setValue("General/theme", "light")
-    assert theme.apply_theme(QApplication.instance())
+    theme.install_dark_palette(QApplication.instance())
     with pytest.raises(KeyError):
         Controls(_Win(), "general").row("theme")
 

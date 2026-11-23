@@ -6,6 +6,7 @@ window, so a project saved with the terrain on reopened flat after a
 restart, and what stood on the terrain floated over the map."""
 from __future__ import annotations
 
+from tests.qt_window_lifetime import close_window
 from georef.datum import SceneDatum
 
 
@@ -59,7 +60,7 @@ def test_turning_it_on_is_kept_in_the_document(monkeypatch):
         assert not scene.tile_layer.terrain3d and not win._terrain_on
     finally:
         win._saved_version = win.viewport.scene.version
-        win.close()
+        close_window(win)
 
 
 def test_a_file_saved_in_3d_opens_in_3d(tmp_path, monkeypatch):
@@ -81,7 +82,7 @@ def test_a_file_saved_in_3d_opens_in_3d(tmp_path, monkeypatch):
         assert win.georef_tray.base_map._terrain3d.isChecked()
     finally:
         win._saved_version = win.viewport.scene.version
-        win.close()
+        close_window(win)
 
 
 def test_a_file_saved_flat_opens_flat(tmp_path, monkeypatch):
@@ -96,7 +97,7 @@ def test_a_file_saved_flat_opens_flat(tmp_path, monkeypatch):
         assert not win.georef_tray.base_map._terrain3d.isChecked()
     finally:
         win._saved_version = win.viewport.scene.version
-        win.close()
+        close_window(win)
 
 
 def test_a_new_capture_keeps_the_terrain_as_it_was(monkeypatch):
@@ -113,4 +114,4 @@ def test_a_new_capture_keeps_the_terrain_as_it_was(monkeypatch):
         assert scene.tile_layer.terrain3d and win._terrain_on
     finally:
         win._saved_version = win.viewport.scene.version
-        win.close()
+        close_window(win)

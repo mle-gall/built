@@ -603,40 +603,6 @@ def test_active_pencil_uses_the_interface_accent(win):
     assert has(panel.tree.headerItem().icon(1), blue)
 
 
-def test_row_icons_follow_a_live_theme_switch(win):
-    # #1086: after switching the theme with the app open, the eye, padlock,
-    # isolate and print marks stayed in the previous theme's ink
-    from views import theme
-
-    panel = win.layers_dock.panel
-    win.viewport.scene.layers.append(Layer("A"))     # has an isolate target
-    panel.refresh()
-
-    def lightness(icon):
-        image = icon.pixmap(18, 18).toImage()
-        return [image.pixelColor(x, y).lightness()
-                for y in range(image.height()) for x in range(image.width())
-                if image.pixelColor(x, y).alpha() > 100]
-
-    columns = (2, 3, 6, 10)               # COL_EYE, COL_LOCK, COL_ISOLATE, COL_PRINT
-    try:
-        for mode, other in ((theme.LIGHT, theme.dark_palette()),
-                            (theme.DARK, theme.light_palette())):
-            theme.apply_theme(_app, mode)
-            _app.processEvents()
-            ink = _app.palette().text().color().lightness()
-            old = other.text().color().lightness()
-            row, head = panel.item_for("A"), panel.tree.headerItem()
-            for col in columns:
-                for icon in (row.icon(col), head.icon(col)):
-                    seen = lightness(icon)
-                    # drawn, and every visible pixel in this theme's ink
-                    assert seen, (mode, col)
-                    assert all(abs(v - ink) < abs(v - old) for v in seen), (mode, col)
-    finally:
-        theme.apply_theme(_app, theme.DARK)
-
-
 def test_colour_by_layer_button_sets_the_style(win):
     panel = win.layers_dock.panel
     scene = win.viewport.scene
@@ -1375,41 +1341,6 @@ def test_a_new_layer_keeps_its_name_editor_open(win):
     _app.processEvents()
     assert panel.tree.state() == QAbstractItemView.EditingState
     assert panel.tree.currentItem().text(0) == name
-
-
-def test_the_row_icons_follow_a_theme_switched_live(win):
-    """Light to dark while the app runs: the eye, padlock and target of the
-    rows — and the header's — are drawn again at once in the new ink, not
-    left black until the list happens to rebuild."""
-    from PySide6.QtGui import QColor
-    from views.layers_panel import COL_EYE, COL_LOCK
-    from views.theme import dark_palette, light_palette
-
-    def darkest(icon):
-        img = icon.pixmap(18, 18).toImage()
-        tones = [QColor(img.pixel(x, y)) for x in range(18) for y in range(18)
-                 if QColor.fromRgba(img.pixel(x, y)).alpha() > 200]
-        return max(c.lightness() for c in tones) if tones else None
-
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    scene.layers += [Layer("A")]
-    _app.setPalette(light_palette())
-    _app.processEvents()
-    panel.refresh()
-    item = panel.item_for("A")
-    light = darkest(item.icon(COL_EYE))
-    try:
-        _app.setPalette(dark_palette())
-        _app.processEvents()
-        item = panel.item_for("A")
-        assert darkest(item.icon(COL_EYE)) > light + 60      # light ink now
-        assert darkest(item.icon(COL_LOCK)) > light + 60
-        head = panel.tree.headerItem()
-        assert darkest(head.icon(COL_EYE)) > light + 60
-    finally:
-        _app.setPalette(light_palette())
-        _app.processEvents()
 
 
 def test_the_layer_of_what_is_picked_in_the_model_stands_out(win):
