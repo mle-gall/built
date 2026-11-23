@@ -19,6 +19,10 @@ runs these helpers and keeps the undo.
 """
 from __future__ import annotations
 
+from ingetrazo_core import scene_tree as _tree
+
+FolderEdit = _tree.FolderEdit
+
 
 def folders_of(scene) -> list[str]:
     """The folder names, in order: the ones the document lists, then any a

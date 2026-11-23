@@ -5538,18 +5538,12 @@ class ScenesPanel(QWidget):
         return True
 
     def _tree_change(self, change) -> bool:
-        """Run ``change(scene)`` (helpers of core.scene_folders) as one undo
-        step; whether it changed anything."""
-        from core import scene_folders as SF
+        """Apply a scene-folder edit as one undo step."""
         from core.history import SceneTreeCommand
 
-        def run(scene) -> bool:
-            before = SF.signature(scene)
-            change(scene)
-            return SF.signature(scene) != before
         history = self._history()
         self._begin_own()
-        history.execute(SceneTreeCommand(run))
+        history.execute(SceneTreeCommand(change))
         if history.last_rejected is not None:
             return False
         self._shape = None
@@ -5560,7 +5554,7 @@ class ScenesPanel(QWidget):
     def rename_folder(self, old: str, new: str) -> bool:
         from core import scene_folders as SF
         new = new.strip()
-        if not self._tree_change(lambda s: SF.rename_folder(s, old, new)):
+        if not self._tree_change(SF.FolderEdit.rename(old, new)):
             if new and new != old:
                 self._window.statusBar().showMessage(tr(
                     "Another folder is already called «{name}»", name=new),
@@ -5576,11 +5570,10 @@ class ScenesPanel(QWidget):
         to type over."""
         from core import scene_folders as SF
         parent = self._context_folder()
-        made = []
-        if not self._tree_change(lambda s: made.append(
-                SF.add_folder(s, tr("Folder"), parent))):
+        edit = SF.FolderEdit.add(tr("Folder"), parent)
+        if not self._tree_change(edit):
             return
-        row = self.folder_row(made[0]) if made else None
+        row = self.folder_row(edit.name)
         self._select_row(row)
         if row is not None:
             self.tree.editItem(row, 0)
@@ -5669,8 +5662,7 @@ class ScenesPanel(QWidget):
             folder, before = obj, None
         if folder is not None:
             self._collapsed.discard(folder)
-        self._tree_change(lambda s: SF.move_rows(s, views, folders, folder,
-                                                 before))
+        self._tree_change(SF.FolderEdit.move_rows(views, folders, folder, before))
 
     def move_view(self, view, index: int) -> None:
         """Move ``view`` to ``index`` of the list (a scene tab dragged),
@@ -5691,7 +5683,7 @@ class ScenesPanel(QWidget):
             folder = SF.folder_of(scene, prev) if prev is not None else None
             before = None
         self._tree_change(
-            lambda s: SF.move_rows(s, [view], [], folder, before))
+            SF.FolderEdit.move_rows([view], [], folder, before))
 
     def _on_move(self, step: int) -> None:
         """One place up or down for the current scene, among the scenes of
@@ -5710,7 +5702,7 @@ class ScenesPanel(QWidget):
         rest = [v for v in mates if v is not view]
         before = rest[to] if to < len(rest) else None
         self._tree_change(
-            lambda s: SF.move_rows(s, [view], [], folder, before))
+            SF.FolderEdit.move_rows([view], [], folder, before))
         self.select_view(view)
 
     def delete_row(self) -> None:
@@ -5723,14 +5715,7 @@ class ScenesPanel(QWidget):
             self._on_delete()
             return
         from core import scene_folders as SF
-        views = self.selected_views()
-
-        def change(scene) -> None:
-            for f in folders:
-                SF.delete_folder(scene, f)
-            scene.saved_views[:] = [v for v in scene.saved_views
-                                    if not any(v is d for d in views)]
-        self._tree_change(change)
+        self._tree_change(SF.FolderEdit.delete_rows(self.selected_views(), folders))
 
     def _on_delete(self) -> None:
         views = self.selected_views()
