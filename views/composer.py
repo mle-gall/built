@@ -14649,14 +14649,15 @@ class ComposerWindow(QMainWindow):
         self.addAction(clean)
         self._act_clean_screen = clean
         # F3, the command search of the main window, over this window's
-        # own commands (views/command_search.py).
-        from views.command_search import OBJECT_NAME, open_search
+        # own commands (views/command_palette.py).
+        from views.command_metadata import OBJECT_NAME
+        from views.command_palette import open_search
         search = QAction(tr("Search commands…"), self)
         search.setObjectName(OBJECT_NAME)
         search.setShortcut(QKeySequence("F3"))
         search.triggered.connect(lambda: open_search(self))
         self.addAction(search)
-        from views.command_search import warm_up
+        from views.command_palette import warm_up
         warm_up(self)
 
     def command_search_area(self):

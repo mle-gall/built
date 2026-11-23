@@ -75,7 +75,7 @@ def action_key(action: QAction) -> str:
 @lru_cache(maxsize=4096)
 def _text_key(text: str, _language: str) -> str:
     # Remembered per language: F3 asks for every action's key several
-    # times each time it opens (views/command_search.py).
+    # times each time it opens (views/command_metadata.py).
     return "text:" + _plain(source_of(text))
 
 
@@ -114,18 +114,9 @@ def reserved_reason(seq: QKeySequence):
     key = combo.key()
     mods = combo.keyboardModifiers() & ~Qt.KeypadModifier
     plain = mods in (Qt.NoModifier, Qt.ShiftModifier)
-    if key in (Qt.Key_Escape, Qt.Key_Return, Qt.Key_Enter, Qt.Key_Backspace,
-               Qt.Key_Tab, Qt.Key_Backtab, Qt.Key_Shift, Qt.Key_Control,
-               Qt.Key_Alt, Qt.Key_Meta, Qt.Key_AltGr):
-        return tr("the drawing tools use it (cancel, confirm, edit a value)")
-    if key in (Qt.Key_Left, Qt.Key_Right, Qt.Key_Up, Qt.Key_Down) and plain:
-        return tr("the arrow keys lock an axis while drawing")
-    if plain and (Qt.Key_0 <= key <= Qt.Key_9 or key in (
-            Qt.Key_Period, Qt.Key_Comma, Qt.Key_Semicolon, Qt.Key_Minus,
-            Qt.Key_Slash, Qt.Key_Asterisk, Qt.Key_Apostrophe,
-            Qt.Key_QuoteDbl)):
-        return tr("it types a measure in the value box")
-    return None
+    from ingetrazo_render import shortcut_reserved
+    reason = shortcut_reserved(key.name, plain)
+    return tr(reason) if reason else None
 
 
 def remember_defaults(window) -> None:
@@ -184,6 +175,8 @@ def apply_user_shortcuts(window) -> int:
     n = 0
     for act in collect_actions(window):
         key = action_key(act)
+        if key not in saved:
+            key = act.property("legacyShortcutKey")
         if key in saved:
             seqs = _unique(q for q in _from_text(saved[key])
                            if reserved_reason(q) is None)  # never reserved
@@ -195,12 +188,20 @@ def apply_user_shortcuts(window) -> int:
 def save_shortcut(action: QAction, seqs: list) -> None:
     st = QSettings()
     key = action_key(action)
+    legacy = action.property("legacyShortcutKey")
+    if legacy and legacy != key:
+        st.remove(f"{_GROUP}/{_store_key(legacy)}")
     st.remove(f"{_GROUP}/{key}")               # a pre-escape entry, if any
     if _to_text(seqs) == (action.property(_DEFAULTS) or ""):
         st.remove(f"{_GROUP}/{_store_key(key)}")   # back to the factory keys
     else:
         st.setValue(f"{_GROUP}/{_store_key(key)}", _to_text(seqs))
     st.sync()
+    from app_shell.windows import hosts
+    for host in hosts():
+        peer = vars(host.window).get("_registry_actions", {}).get(key)
+        if peer is not None and peer is not action and peer.shortcuts() != seqs:
+            peer.setShortcuts(seqs)
 
 
 #: What an exported shortcuts file says it is (issue #142).

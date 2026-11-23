@@ -969,6 +969,8 @@ class SettingsSheet(chrome_sheet.Provider):
         if self._actions is None:
             from views.shortcuts import collect_actions, remember_defaults
             try:
+                if sync := getattr(type(self._win), "refresh_commands", None):
+                    sync(self._win)
                 remember_defaults(self._win)
                 self._actions = collect_actions(self._win)
             except Exception:  # noqa: BLE001 — a window with no actions (the shell)
@@ -1009,22 +1011,25 @@ class SettingsSheet(chrome_sheet.Provider):
         any other command that holds them (after asking) — two commands on
         one key both go dead."""
         from PySide6.QtGui import QKeySequence
-        from views.shortcuts import _plain, save_shortcut
-        wanted = {q.toString(QKeySequence.PortableText) for q in seqs}
-        clash = [a for a in self.actions() if a is not act and wanted
-                 & {q.toString(QKeySequence.PortableText) for q in a.shortcuts()}]
+        from ingetrazo_render import shortcut_conflicts
+        from views.shortcuts import _plain, action_key, save_shortcut
+        actions = {action_key(a): a for a in self.actions()}
+        def portable(seqs):
+            return [q.toString(QKeySequence.PortableText) for q in seqs]
+        clash = shortcut_conflicts(action_key(act), set(portable(seqs)),
+                                   [(k, portable(a.shortcuts())) for k, a in actions.items()])
 
         def go():
-            for other in clash:
-                kept = [q for q in other.shortcuts() if q.toString(QKeySequence.PortableText) not in wanted]
-                other.setShortcuts(kept)
-                save_shortcut(other, kept)
+            for key, remaining in clash:
+                kept = [QKeySequence(s) for s in remaining]
+                actions[key].setShortcuts(kept)
+                save_shortcut(actions[key], kept)
             act.setShortcuts(seqs)
             save_shortcut(act, seqs)
             self.state.note = None
             chrome_sheet.refresh(self._win)
         if clash and ask:
-            names = ", ".join(_plain(a.text()) for a in clash)
+            names = ", ".join(_plain(actions[k].text()) for k, _ in clash)
             self._confirm(tr("Keyboard shortcuts"),
                           tr("«{keys}» is already used by: {names}. Give it to «{action}» instead?",
                              keys=_keys_text(seqs), names=names, action=_plain(act.text())),
@@ -1109,12 +1114,17 @@ class SettingsSheet(chrome_sheet.Provider):
         elif verb == "kb_reset_all":
             def reset():
                 from PySide6.QtCore import QSettings
+                from app_shell.windows import hosts
                 from views.shortcuts import _GROUP
                 st = QSettings()
                 st.remove(_GROUP)
                 st.sync()
-                for a in self.actions():
-                    a.setShortcuts(default_shortcuts(a))
+                for action in self.actions():
+                    action.setShortcuts(default_shortcuts(action))
+                for host in hosts():
+                    if host.window is not self._win:
+                        for action in host.window._registry_actions.values():
+                            action.setShortcuts(default_shortcuts(action))
                 chrome_sheet.refresh(self._win)
             self._confirm(tr("Keyboard shortcuts"), tr("Put every action back on its factory shortcut?"),
                           tr("Restore all"), reset)

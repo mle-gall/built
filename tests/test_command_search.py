@@ -9,8 +9,8 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
-from PySide6.QtCore import QSettings, Qt
-from PySide6.QtGui import QAction
+from PySide6.QtCore import QPoint, QSettings, Qt
+from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
@@ -19,7 +19,7 @@ if QApplication.instance() is None:
 
 import core.extensions as extensions                              # noqa: E402
 from core import string_search as ss                             # noqa: E402
-from views import command_search as cs                           # noqa: E402
+from views import command_metadata as cs, command_palette as palette                           # noqa: E402
 
 
 @pytest.fixture
@@ -40,17 +40,18 @@ def _names(win, query):
 
 
 def _box(win, text="", scope=""):
-    box = cs.open_search(win, text, scope)
+    box = palette.open_search(win, text, scope)
     QApplication.processEvents()
     return box
 
 
 def _shown(box):
-    return [c.name for c in box._model.rows]
+    return [r[0] for r in box.renderer.rows()]
 
 
 def _type(box, text):
-    QTest.keyClicks(box._edit, text)
+    QTest.keyClicks(box, text)
+    box.draw()
     QApplication.processEvents()
 
 
@@ -181,7 +182,7 @@ def test_f3_opens_the_box(ventana):
     QApplication.processEvents()
     QTest.keyClick(ventana.viewport.keys_stand_in, Qt.Key_F3)
     QApplication.processEvents()
-    box = getattr(ventana, "_command_search", None)
+    box = getattr(ventana, "_command_canvas", None)
     assert box is not None and box.isVisible()
     box.close()
 
@@ -193,7 +194,7 @@ def test_enter_runs_the_first_match_and_remembers_it(ventana):
     ventana.addAction(act)
     box = _box(ventana)
     _type(box, "frobnicate")
-    QTest.keyClick(box._edit, Qt.Key_Return)
+    QTest.keyClick(box, Qt.Key_Return)
     QApplication.processEvents()                     # the deferred trigger
     assert fired == [1]
     assert not box.isVisible()
@@ -210,8 +211,8 @@ def test_arrows_move_and_skip_disabled_commands(ventana):
         ventana.addAction(act)
     box = _box(ventana)
     _type(box, "zyx")
-    QTest.keyClick(box._edit, Qt.Key_Down)
-    QTest.keyClick(box._edit, Qt.Key_Return)
+    QTest.keyClick(box, Qt.Key_Down)
+    QTest.keyClick(box, Qt.Key_Return)
     QApplication.processEvents()
     assert fired == ["Zyx gamma"]
 
@@ -223,7 +224,7 @@ def test_esc_closes_without_running_anything(ventana):
     ventana.addAction(act)
     box = _box(ventana)
     _type(box, "frob")
-    QTest.keyClick(box._edit, Qt.Key_Escape)
+    QTest.keyClick(box, Qt.Key_Escape)
     QApplication.processEvents()
     assert fired == [] and not box.isVisible()
 
@@ -231,7 +232,7 @@ def test_esc_closes_without_running_anything(ventana):
 def test_no_results_says_so(ventana):
     box = _box(ventana)
     _type(box, "xqzwv")
-    assert box._model.rows == [] and not box._empty.isHidden()
+    assert not _shown(box) and box.renderer.state()[:2] == (True, "xqzwv")
     box.close()
 
 
@@ -239,11 +240,9 @@ def test_one_line_per_command_path_first(ventana):
     """Blender's layout: faded path, then the name; ten rows at a time."""
     box = _box(ventana)
     _type(box, "orient faces")
-    index = box._model.index(0, 0)
-    assert box._model.data(index, Qt.DisplayRole) == "Orient Faces"
-    assert box._model.data(index, cs._PATH_ROLE) == "Edit"
-    row_h = box._list.sizeHintForRow(0)
-    assert box._list.height() >= row_h * cs.VISIBLE_ROWS
+    title, path, _, enabled = box.renderer.rows()[0]
+    assert (title, path, enabled) == ("Orient Faces", "Edit", True)
+    assert box.height() >= 10 * 24
     box.close()
 
 
@@ -251,11 +250,11 @@ def test_a_menu_scope_searches_only_that_menu(ventana):
     box = _box(ventana, "a", "Edit ▸ Unhide")
     assert set(_shown(box)) <= {"All", "Selected", "Last"}
     assert "All" in _shown(box)
-    assert box._edit.text() == "a" and not box._scope_label.isHidden()
+    assert box.renderer.state()[1:3] == ("a", "Edit ▸ Unhide")
     # Backspace in the empty box widens the search to everything.
-    box._edit.clear()
-    QTest.keyClick(box._edit, Qt.Key_Backspace)
-    assert box._scope == "" and box._scope_label.isHidden()
+    QTest.keyClick(box, Qt.Key_Backspace)
+    QTest.keyClick(box, Qt.Key_Backspace)
+    assert box.renderer.state()[1:3] == ("", "")
     assert "Orient Faces" in _shown(box)
     box.close()
 
@@ -267,9 +266,9 @@ def test_a_letter_typed_in_an_open_menu_searches_it(ventana):
     QApplication.processEvents()
     QTest.keyClick(edit, Qt.Key_O)
     QApplication.processEvents()
-    box = ventana._command_search
+    box = ventana._command_canvas
     assert box.isVisible() and not edit.isVisible()
-    assert box._scope == "Edit" and box._edit.text() == "o"
+    assert box.renderer.state()[1:3] == ("o", "Edit")
     assert _shown(box)[0] == "Orient Faces"
     box.close()
 
@@ -281,8 +280,11 @@ def test_change_shortcut_opens_preferences_on_that_command(ventana,
                         lambda shortcut_of=None: opened.append(shortcut_of))
     box = _box(ventana)
     _type(box, "orient faces")
-    act = box._model.rows[0].action
-    box.change_shortcut(act)
+    act = box._ui_cmd_hits[0]
+    QTest.mouseClick(box, Qt.RightButton, pos=QPoint(120, 54))
+    box.draw()
+    QTest.mouseClick(box, Qt.LeftButton, pos=QPoint(155, 70))
+    box.draw()
     QApplication.processEvents()
     assert opened == [act] and not box.isVisible()
 
@@ -310,7 +312,7 @@ _BOX = QSize(560, 330)
 
 
 def _fit(x, y, work=_WORK, screen=_SCREEN, size=_BOX):
-    return cs.fit_box(QPoint(x, y), size, 30, work, screen)
+    return palette.fit_box(QPoint(x, y), size, 30, work, screen)
 
 
 def _inside(inner, outer):
@@ -359,36 +361,42 @@ def test_the_real_box_is_fitted_to_the_modelling_area(ventana,
     def spy(cursor, size, edit_h, work, screen):
         seen.append(work)
         return QRect(work.topLeft(), size)
-    monkeypatch.setattr(cs, "fit_box", spy)
+    monkeypatch.setattr(palette, "fit_box", spy)
     QApplication.processEvents()                 # the layout settled first
     # The viewport in front, under the project tabs (#1066).
     central = ventana.viewport
-    box = cs.open_search(ventana)
+    box = palette.open_search(ventana)
     assert seen == [QRect(central.mapToGlobal(QPoint(0, 0)),
                           central.size())]
-    assert box.geometry().topLeft() == seen[0].topLeft()
+    assert box.mapToGlobal(QPoint()) == seen[0].topLeft()
     box.close()
 
 
 # ---- the sheet composer ----------------------------------------------------------
-def _composer(win):
+def _composer(win, detached=False):
     vp = win.viewport
     if not vp.keys_stand_in._can_create_surface():
         pytest.skip("the composer requires a native GPU surface")
     comp = win._ensure_composer()
     comp.show()
+    if detached and getattr(type(comp), "EMBEDDED", False):
+        comp._ws.open_classic()
+        comp = comp._classic
+    if detached:
+        comp.activateWindow()
+        assert QTest.qWaitForWindowActive(comp, 2500)
     QApplication.processEvents()
     return comp
 
 
 def test_f3_works_in_the_composer_with_its_own_commands(ventana):
-    comp = _composer(ventana)
+    comp = _composer(ventana, detached=True)
     QTest.keyClick(comp, Qt.Key_F1)                  # the warm-up keystroke
     QTest.keyClick(comp, Qt.Key_F3)
     QApplication.processEvents()
-    box = getattr(comp, "_command_search", None)
+    box = getattr(comp, "_command_canvas", None)
     assert box is not None and box.isVisible()
-    names = [c.name for c in box._pool]
+    names = [c.name for c in box._ui_command_pool]
     assert "Chain dimension" in names and "Orient Faces" not in names
     box.close()
     comp.close()
@@ -443,7 +451,7 @@ def test_a_composer_tool_has_a_short_name_and_its_sentence_as_tip(ventana):
 def test_keys_written_in_the_name_go_to_their_column(ventana):
     comp = _composer(ventana)
     cmd = next(c for c in cs.commands(comp) if c.name == "Ungroup")
-    assert cmd.keys == "Ctrl+Shift+G"
+    assert QKeySequence.fromString(cmd.keys, QKeySequence.NativeText) == QKeySequence("Ctrl+Shift+G")
     # Brackets that are not keys stay in the name.
     for text in ("AI Bridge (MCP)", "Português (Brasil)", "IFC (BIM)…",
                  "Rebuild Faces (Planar)"):
@@ -455,12 +463,12 @@ def test_the_composer_box_opens_over_the_sheet_not_the_panel(ventana,
                                                              monkeypatch):
     comp = _composer(ventana)
     seen = []
-    monkeypatch.setattr(cs, "fit_box",
+    monkeypatch.setattr(palette, "fit_box",
                         lambda c, size, e, work, screen: seen.append(work)
                         or QRect(work.topLeft(), size))
     QApplication.processEvents()
     area = comp.command_search_area()
-    cs.open_search(comp).close()
+    palette.open_search(comp).close()
     assert seen == [QRect(area.mapToGlobal(QPoint(0, 0)), area.size())]
     comp.close()
 
@@ -481,10 +489,10 @@ def test_the_description_drops_the_name_and_keys_a_tooltip_repeats():
 def test_the_tooltip_is_name_description_and_keys_wrapped(ventana):
     comp = _composer(ventana)
     cmd = next(c for c in cs.commands(comp) if c.name == "Chain dimension")
-    tip = cs.tooltip_html(cmd)
-    assert "<b>Chain dimension</b>" in tip
-    assert "every click adds the next cota" in tip
-    assert "<table width=" in tip                  # long: wrapped, not cut
+    box = palette.open_search(comp, "chain dimension")
+    assert box.renderer.rows()[0][0] == cmd.name
+    assert "every click adds the next cota" in box.renderer.details()[0][0]
+    box.close()
     comp.close()
 
 
@@ -493,7 +501,7 @@ def test_a_command_run_from_f3_is_the_one_shift_r_repeats(ventana):
     what Shift+R runs again."""
     box = _box(ventana)
     _type(box, "line")
-    QTest.keyClick(box._edit, Qt.Key_Return)
+    QTest.keyClick(box, Qt.Key_Return)
     QApplication.processEvents()                     # the deferred trigger
     assert ventana.viewport.active_tool is ventana._tools["line"]
     ventana._activate_tool("select")
@@ -531,13 +539,13 @@ def test_a_removed_action_leaves_the_cache(ventana):
 
 
 def test_warm_up_works_out_the_commands_before_f3(ventana):
-    ventana._command_search = None
+    ventana._command_canvas = None
     ventana._command_cache = None
-    cs.warm_up(ventana, 0)
+    palette.warm_up(ventana, 0)
     QTest.qWait(50)
     assert ventana._command_cache
     # the box itself waits for F3, as up to 0.5.6.1
-    assert ventana._command_search is None
+    assert ventana._command_canvas is None
 
 
 @pytest.mark.parametrize("platform", ["wayland", "wayland-egl", "xcb",
@@ -553,14 +561,14 @@ def test_warm_up_makes_no_native_popup_ahead_of_f3(ventana, monkeypatch,
     monkeypatch.setattr(QGuiApplication, "platformName",
                         staticmethod(lambda: platform))
     made = []
-    monkeypatch.setattr(cs.CommandSearch, "winId",
+    monkeypatch.setattr(palette._Canvas, "winId",
                         lambda self: made.append(self) or 0)
-    ventana._command_search = None
+    ventana._command_canvas = None
     ventana._command_cache = None
-    cs.warm_up(ventana, 0)
+    palette.warm_up(ventana, 0)
     QTest.qWait(50)
     assert ventana._command_cache
-    assert made == [] and ventana._command_search is None
+    assert made == [] and ventana._command_canvas is None
 
 
 def test_every_command_says_what_it_does(ventana):

@@ -182,4 +182,7 @@ def test_key_note_has_one_owner(clean_env, settings_file):
     clean_env.setenv("GROQ_API_KEY", "gsk_env")
     assert "GROQ_API_KEY" in env_key_note("groq", "")
     assert not env_key_note("groq", "gsk_typed")
-    assert "ai" not in {row.get("id") for row in Controls(QWidget(), "general").wire()["side"]}
+    settings = Controls(QWidget(), "ai")
+    assert "ai" in {row.get("id") for row in settings.wire()["side"]}
+    assert settings.value("ia/api_key") == ""
+    assert "GROQ_API_KEY" not in str(settings.wire())

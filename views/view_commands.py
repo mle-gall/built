@@ -46,7 +46,7 @@ def run(win, key):
     if not bindings.get(key, ("", True))[1]:
         return False
     ran = activate_view_command(win, key, _snapshot(win))
-    if ran and key in bindings:
+    if ran and key in bindings and "_host" not in vars(win):
         win._sync_section_menu()
         win._sync_style_menu()
     return ran

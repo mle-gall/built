@@ -2462,8 +2462,12 @@ impl Renderer {
     fn ui_large_sheet_rect(&self) -> Option<(f32, f32, f32, f32)> {
         self.ui.as_ref().and_then(|ui| ui.large_sheet_rect())
     }
-    fn ui_open_commands(&mut self) {
-        if let Some(ui) = self.ui.as_mut() { ui.open_commands(); }
+    #[pyo3(signature = (text=String::new(), scope=String::new()))]
+    fn ui_open_commands(&mut self, text: String, scope: String) {
+        if let Some(ui) = self.ui.as_mut() { ui.start_commands(text, scope); }
+    }
+    fn ui_set_command_details(&mut self, details: Vec<(String, bool, bool)>) {
+        if let Some(ui) = self.ui.as_mut() { ui.command_details(details); }
     }
     fn ui_set_command_results(&mut self, results: Vec<(String, String, String, bool)>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_command_results(results); }
@@ -2836,6 +2840,11 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<preferences::DeviceReadings>()?;
     m.add_class::<about::AboutReview>()?;
     m.add_class::<release::ReleaseReview>()?;
+    m.add_class::<ui::command_palette::CommandCanvas>()?;
+    m.add_function(wrap_pyfunction!(commands::command_registry, m)?)?;
+    m.add_function(wrap_pyfunction!(commands::command_description, m)?)?;
+    m.add_function(wrap_pyfunction!(commands::shortcut_conflicts, m)?)?;
+    m.add_function(wrap_pyfunction!(commands::shortcut_reserved, m)?)?;
     m.add_class::<Renderer>()
 }
 #[cfg(test)]

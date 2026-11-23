@@ -340,3 +340,53 @@ def test_native_f3_finds_and_runs_a_misspelled_command(tmp_path):
               if line.startswith("[built] state ")]
     assert result.returncode == 0 and [s["large_sheet"] for s in states[:2]] == ["cutlist", ""], log
     assert all(not s["errors"] and not s["blocked_widgets"] for s in states), log
+
+
+@pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists()
+                    or __import__("sys").platform != "darwin", reason="requires the native macOS menu")
+def test_native_menu_search_and_persisted_keyboard_binding(tmp_path):
+    from PySide6.QtCore import QSettings
+    from core.scene import Scene
+    from formats.igz import save_scene
+    from views.shortcuts import _store_key
+    model = tmp_path / "empty.built"
+    save_scene(Scene(), model)
+    profile, home = tmp_path / "profile", tmp_path / "home"
+    config = profile / "IngeTrazo"
+    config.mkdir(parents=True)
+    home.mkdir()
+    settings = QSettings(str(config / "IngeTrazo.ini"), QSettings.IniFormat)
+    settings.setValue("shortcuts/" + _store_key("menu:cutlist"), "Ctrl+Shift+F9")
+    settings.sync()
+    steps = tmp_path / "menu-commands"
+    steps.write_text("wait 800\nkey escape\nkey f9 cmd+shift\nwait 350\nstate\nkey escape\n"
+                     "key f3\nwait 200\ntype new window\nwait 300\nkey enter\nwait 800\nstate\nquit\n")
+    result = run([str(BIN), "--root", str(ROOT), "--venv", str(ROOT / ".venv"), "--new-instance",
+                  "--size", "900x700", "--script", str(steps), str(model)], home=home, settings=profile,
+                 env=dict(os.environ, BUILT_ANSWERS="escape"), capture_output=True, text=True, timeout=60)
+    log = result.stdout + result.stderr
+    states = [json.loads(s.removeprefix("[built] state ")) for s in log.splitlines() if s.startswith("[built] state ")]
+    assert result.returncode == 0 and states[0]["large_sheet"] == "cutlist", log
+    assert states[1]["windows"] == 2 and all(not s["errors"] for s in states), log
+
+
+@pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
+                    reason="requires a built window and BUILT_WINDOW_TESTS=1")
+def test_native_ai_connection_edits_plugin_model(tmp_path):
+    from PySide6.QtCore import QSettings
+
+    home, profile = tmp_path / "home", tmp_path / "settings"
+    home.mkdir()
+    steps = tmp_path / "ai-settings"
+    steps.write_text("wait 650\nmenu prefs\nwait 350\nclick 115 353\nwait 200\n"
+                     "click 620 263\ntype fixture-model\nkey enter\nwait 250\nstate\n"
+                     "key escape\nwait 300\nstate\nquit\n")
+    result = run([str(BIN), "--root", str(ROOT), "--new-instance", "--size", "1000x720",
+                  "--script", str(steps)], home=home, settings=profile, capture_output=True,
+                 text=True, timeout=60)
+    states = [json.loads(s.removeprefix("[built] state ")) for s in result.stdout.splitlines()
+              if s.startswith("[built] state ")]
+    assert result.returncode == 0 and not any(s["errors"] for s in states), result.stderr
+    assert [s["large_sheet"] for s in states[:2]] == ["settings", "start"]
+    store = QSettings(str(profile / "IngeTrazo" / "IngeTrazo.ini"), QSettings.IniFormat)
+    assert store.value("ia/modelo") == "fixture-model"

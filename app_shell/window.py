@@ -465,11 +465,6 @@ class ShellWindow(QObject):
         self._running_extensions = {p.stem for p in plugins}
         self._extension_load_errors = {e.stem: {"error": e.error, "path": str(e.path)} for e in errors}
         from PySide6.QtGui import QAction
-        self._ui_commands = []
-        for sid, label in (("about", "About Built"), ("extensions", "Extension Manager"), ("cutlist", "Cut list")):
-            action = QAction(label, self)
-            action.triggered.connect(lambda checked=False, sid=sid: self.run_command(sid))
-            self._ui_commands.append((label, "Window", "", action))
         from views.main_window import build_tools
         self._tools = build_tools()
         self._act_eyedropper = QAction("Sample material", self)
@@ -516,11 +511,15 @@ class ShellWindow(QObject):
             action.setCheckable(True)
             alternate = getattr(tool, "shortcut_alt", None)
             action.setShortcuts([QKeySequence(s) for s in (shortcut, alternate) if s])
-            action.triggered.connect(lambda checked=False, k=key: self._activate_tool(k))
             self._tool_actions[key] = action
-        from views.shortcuts import remember_defaults, apply_user_shortcuts
-        remember_defaults(self)
-        apply_user_shortcuts(self)
+        self._tool_defaults = [(k, a.text(), [s.toString(QKeySequence.PortableText) for s in a.shortcuts()])
+                              for k, a in self._tool_actions.items()]
+        self._registry_actions = {}
+        self.refresh_commands()
+
+    def refresh_commands(self):
+        from app_shell.command_bindings import refresh
+        refresh(self)
 
     def __getattr__(self, name):
         if name.startswith("__"):
