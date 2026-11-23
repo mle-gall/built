@@ -1117,7 +1117,7 @@ impl Ui {
     pub fn top_empty(&self, x: f32, y: f32) -> bool {
         let p = pos2(x, y);
         !self.dismissible_menu_open() && self.gallery.is_none() && y <= TOP_H && !self.top_groups.iter().any(|r| r.contains(p))
-            && !(!self.lsheet.open && self.ctx.memory(|m| m.area_rect(egui::Id::new("jobs"))).is_some_and(|r| (!self.jobs.is_empty() || !self.history.is_empty()) && r.contains(p)))
+            && !((!self.lsheet.open || !self.jobs.is_empty()) && self.ctx.memory(|m| m.area_rect(egui::Id::new("jobs"))).is_some_and(|r| (!self.jobs.is_empty() || !self.history.is_empty()) && r.contains(p)))
             && !(self.projects.is_none() && x < 86.0)
     }
 
@@ -2455,7 +2455,7 @@ impl Ui {
             self.large_sheet(ctx, screen);
             self.command_palette(ctx, screen);
             self.dialog_popup(ctx, screen);
-            if !sheet_up { self.jobs_chip(ctx, screen); }
+            if !sheet_up || !self.jobs.is_empty() { self.jobs_chip(ctx, screen); }
             self.sheet_popup(ctx, screen);
             if let Some(picker) = &mut self.font_picker {
                 if let Some(apply) = picker.popup(ctx) {
@@ -2480,7 +2480,7 @@ impl Ui {
                      ("head_menu", model && self.column.as_ref().is_some_and(|c| c.head_menu.is_some())),
                      ("prompt", model && self.column.as_ref().is_some_and(|c| c.prompt.is_some())),
                      ("terrain_profile", work && model && self.panels.data["terrain"].is_object()),
-                     ("jobs", !sheet_up && (!self.jobs.is_empty() || !self.history.is_empty())),
+                     ("jobs", !self.jobs.is_empty() || (!sheet_up && !self.history.is_empty())),
                      ("dialog", self.dialog.is_some()),
                      ("tab_menu", self.strip.menu_open()),
                      ("tab_overflow", self.strip.overflow_open()),

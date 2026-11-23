@@ -281,11 +281,15 @@ def offer_recovery(win, path, slot):
     except OSError:
         archived = slot
 
+    def mark_recovered(doc):
+        win._current_path = None
+        win._saved_version = -1
+        win._update_title()
+
     def recover():
         if win.open_path(archived):
-            win._current_path = None
-            win._saved_version = -1
-            win._update_title()
+            from views.document_open import after_open
+            after_open(win, archived, mark_recovered)
 
     _record(win, tr("Auto-saved copy available"), path.name, "info",
             tr("Open copy"), recover)
@@ -715,11 +719,11 @@ class ChromeBar(QObject):
 
     canceled = Signal()
 
-    def __init__(self, win, title: str):
+    def __init__(self, win, title: str, *, exclusive=True):
         super().__init__(win)
         self._value = 0
         self._visible = True
-        self.job = Job(win, title, exclusive=True)
+        self.job = Job(win, title, exclusive=exclusive)
         self.job.update(0.0, "")
 
     # QProgressDialog's vocabulary --------------------------------------

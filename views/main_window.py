@@ -6643,6 +6643,10 @@ class MainWindow(WorksessionMixin, QMainWindow):
         """Esc, escalating like the viewport: release a sticky constraint
         (axis lock / reference) first, then cancel an in-progress action;
         with nothing in progress, clear the selection."""
+        pending = self.__dict__.get("_pending_open")
+        if pending:
+            pending.job.cancel()
+            return
         # A scene glide or a run is stopped first, and alone: the player's
         # filter sits on the viewport, but this window shortcut takes Esc
         # before the viewport ever sees it, so the camera went on to the
@@ -7485,7 +7489,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         refresh.setSingleShot(True)
         resident_version = None
 
-        def rebuild(progress=None):
+        def rebuild(progress=None, prepared=None):
             # ``progress``: the opening document's bar is still up and this
             # is its last stage (MainWindow._open_path_here).
             nonlocal resident_version
@@ -7495,7 +7499,10 @@ class MainWindow(WorksessionMixin, QMainWindow):
                 return
             scene = doc.viewport.scene
             version = scene.version
-            display.set_scene(scene, progress=progress, opening=progress is not None)
+            if prepared is None:
+                display.set_scene(scene, progress=progress, opening=progress is not None)
+            else:
+                display.set_scene(scene, opening=True, prepared=prepared)
             resident_version = version
             doc._resident_scene_ready = True
             if display.packed is not None and not len(display.packed.instances):
@@ -8816,11 +8823,15 @@ class MainWindow(WorksessionMixin, QMainWindow):
             return
         if not self.open_path(Path(chosen)):
             return
-        self._current_path = None                 # a recovered, unsaved copy
-        self._saved_version = -1
-        self._update_title()
-        self.statusBar().showMessage(tr(
-            "Recovered copy loaded — use Save As to keep it."), 6000)
+        from views.document_open import after_open
+
+        def recovered(doc):
+            self._current_path = None
+            self._saved_version = -1
+            self._update_title()
+            self.statusBar().showMessage(tr(
+                "Recovered copy loaded — use Save As to keep it."), 6000)
+        after_open(self, Path(chosen), recovered)
 
     # ---- Recent files -------------------------------------------------------
     _RECENT_MAX = 10
@@ -8832,7 +8843,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             raw = [raw]
         return [str(x) for x in raw if str(x).strip()]
 
-    def _remember_recent(self, path) -> None:
+    def _remember_recent(self, path, doc=None) -> None:
         """Put ``path`` at the top of File ▸ Open Recent (native documents
         only: an import is not a document you reopen)."""
         if path is None or Path(path).suffix.lower() not in built.DOCUMENT_SUFFIXES:
@@ -8841,7 +8852,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         home_recent.remember(path)
         # What the start page shows of it: project, links, problems…
         from views import wgpu_start
-        wgpu_start.note(self, path)
+        wgpu_start.note(self, path, doc=doc)
         key = str(Path(path).resolve())
         recent = [x for x in self._recent_paths() if x != key]
         recent.insert(0, key)
@@ -8934,6 +8945,12 @@ class MainWindow(WorksessionMixin, QMainWindow):
                 self.activate_document(doc)
                 self._dismiss_home()
                 return True
+        if (suffix in built.DOCUMENT_SUFFIXES and self.isVisible()
+                and QApplication.platformName() not in ("offscreen", "minimal")
+                and getattr(self._doc, "_renderer_wgpu", False)):
+            from views.document_open import start
+            return start(self, path, MainWindow._install_open)
+
         previous, created = self._doc, None
         if not self._doc_is_blank():
             created = self._new_document()
@@ -8949,7 +8966,13 @@ class MainWindow(WorksessionMixin, QMainWindow):
             self._refresh_worksession()
         return ok
 
-    def _open_path_here(self, path: Path, suffix: str) -> bool:
+    def _install_open(self, path, bar, result):
+        ok = self._open_path_here(path, path.suffix.lower(), result, bar)
+        if ok and self._session_path and not self._opening_session:
+            self._refresh_worksession()
+        return ok
+
+    def _open_path_here(self, path: Path, suffix: str, prepared=None, bar=None) -> bool:
         """Read ``path`` into the project in front (see :meth:`open_path`)."""
         if suffix == ".rfa":
             return self._import_rfa_path(path)
@@ -8967,7 +8990,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         from core import autosave
         recovered = False
         slot = autosave.pending(path)
-        defer_recovery = slot is not None and _dialogs.live(self) is not None
+        defer_recovery = slot is not None and (prepared is not None or _dialogs.live(self) is not None)
         if slot is not None and not defer_recovery:
             answer = _dialogs.question(
                 self, tr("Recover the auto-saved drawing?"),
@@ -8978,8 +9001,10 @@ class MainWindow(WorksessionMixin, QMainWindow):
             recovered = answer == QMessageBox.Yes
             if not recovered:
                 autosave.clear(path)
-        dlg, cb = self._import_progress(
-            tr("Opening {name}…", name=path.name), monotonic=True)
+        if prepared is None:
+            dlg, cb = self._import_progress(tr("Opening {name}…", name=path.name), monotonic=True)
+        else:
+            dlg, cb = bar, bar.job.update
         self._open_cancelled = False
         dlg.canceled.connect(self._on_open_cancelled)
         dlg.set_cancellable(True)
@@ -9009,9 +9034,14 @@ class MainWindow(WorksessionMixin, QMainWindow):
                 stand_in.blank()        # not the previous model while this one loads
         try:
             try:
-                igz_format.load_into(self.viewport.scene,
-                                     slot if recovered else path,
-                                     progress=lambda f, t: guarded_cb(0.6 * f, t))
+                if prepared is None:
+                    igz_format.load_into(self.viewport.scene, slot if recovered else path,
+                                         progress=lambda f, t: guarded_cb(0.6 * f, t))
+                else:
+                    scene, packed, tracker, tree = prepared
+                    history = self.viewport.history
+                    history.scene = scene
+                    self.viewport.set_document(scene, history)
             except _OpenAborted:
                 dlg.close()
                 if self._open_cancelled and not self._open_aborted:
@@ -9092,7 +9122,8 @@ class MainWindow(WorksessionMixin, QMainWindow):
             # reads the scenes itself and comes up with the document.
             self._refresh_scene_tabs()
             self._update_title()
-            self._doc._after_picture.append(self.settle_heap)
+            if prepared is None:
+                self._doc._after_picture.append(self.settle_heap)
             display = getattr(self._doc, "stand_in", None)
             if (getattr(self._doc, "_renderer_wgpu", False)
                     and getattr(display, "_rebuild", None) is not None):
@@ -9101,7 +9132,10 @@ class MainWindow(WorksessionMixin, QMainWindow):
                 # graphics card — 23 s on the ride with nothing saying so.
                 # That is the last stage of the opening now, under the bar.
                 display._refresh_timer.stop()
-                display._rebuild(progress=lambda f, text: cb(0.6 + 0.38 * f, text))
+                if prepared is None:
+                    display._rebuild(progress=lambda f, text: cb(0.6 + 0.38 * f, text))
+                else:
+                    display._rebuild(progress=cb, prepared=(packed, tracker, tree))
                 # The snap index and the containers' boxes, left for after
                 # the first picture.
                 self._doc._after_picture.extend(getattr(display, "after_open", ()))

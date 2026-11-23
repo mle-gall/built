@@ -74,7 +74,7 @@ impl Ui {
                             {
                                 self.activity_open = !self.activity_open;
                             }
-                            if let Some((id, title, phase, fraction, cancel)) = self.jobs.first() {
+                            if let Some((id, title, _, fraction, cancel)) = self.jobs.first() {
                                 if *cancel && ui.small_button("×").on_hover_text("Cancel").clicked()
                                 {
                                     self.actions.push(format!("job:cancel:{id}"));
@@ -82,12 +82,7 @@ impl Ui {
                                 if *fraction < 0.0 {
                                     ring(ui);
                                 }
-                                let text = if phase.is_empty() {
-                                    title.clone()
-                                } else {
-                                    format!("{title} · {phase}")
-                                };
-                                ui.add(egui::Label::new(text).truncate());
+                                ui.add(egui::Label::new(title).truncate()).on_hover_text(title);
                             } else {
                                 let recent = &self.history[0];
                                 let title = if recent.5 < 0.0 {
@@ -98,7 +93,11 @@ impl Ui {
                                 ui.add(egui::Label::new(title).truncate());
                             }
                         });
-                        if let Some((_, _, _, fraction, _)) = self.jobs.first() {
+                        if let Some((_, _, phase, fraction, _)) = self.jobs.first() {
+                            if !phase.is_empty() {
+                                ui.add(egui::Label::new(egui::RichText::new(phase).small()).truncate())
+                                    .on_hover_text(phase);
+                            }
                             if *fraction >= 0.0 {
                                 ui.add_space(SPACE_XS);
                                 progress_bar(ui, *fraction, 3.0);

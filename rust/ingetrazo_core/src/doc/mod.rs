@@ -1314,20 +1314,26 @@ impl Doc {
             return Ok(());
         }
         let mut bad: Option<(Key, Option<Key>)> = None;
-        for (i, &k) in adding.iter().enumerate() {
-            if adding[..i].contains(&k) {
+        let mut added = FastSet::default();
+        let mut prior_counts = FastMap::default();
+        for &key in old.unwrap_or_default() {
+            *prior_counts.entry(key).or_insert(0usize) += 1;
+        }
+        for &k in adding {
+            if adding.len() > 1 && !added.insert(k) {
                 bad = Some((k, Some(owner)));
                 break;
             }
             let Some(n) = self.node(k) else { continue };
-            let here = old.map_or(0, |o| o.iter().filter(|&&x| x == k).count());
-            let mut others = n.owners.clone();
-            for _ in 0..here {
-                if let Some(j) = others.iter().position(|&o| o == owner) {
-                    others.remove(j);
+            let mut prior = prior_counts.get(&k).copied().unwrap_or(0);
+            if let Some(&other) = n.owners.iter().find(|&&parent| {
+                if parent == owner && prior > 0 {
+                    prior -= 1;
+                    false
+                } else {
+                    true
                 }
-            }
-            if let Some(&other) = others.first() {
+            }) {
                 bad = Some((k, Some(other)));
                 break;
             }

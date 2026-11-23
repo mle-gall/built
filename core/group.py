@@ -13,6 +13,7 @@ Selected as a unit and moved/exploded via the commands in :mod:`core.history`.
 from __future__ import annotations
 
 import copy
+from contextvars import ContextVar
 import itertools
 import os
 import sys
@@ -21,6 +22,7 @@ import uuid
 from core.mesh import Mesh
 
 _counter = itertools.count(1)
+_document_counter = ContextVar("document_group_counter", default=None)
 
 
 # Fresh uids come from a pool filled by one ``os.urandom`` call: one
@@ -100,14 +102,14 @@ def document_name_scope(names):
     so a group created by hand afterwards never reuses one of its
     numbers either."""
     global _counter
-    saved = _counter
     local = itertools.count(_highest_group_number(names) + 1)
-    _counter = local
+    token = _document_counter.set(local)
     try:
         yield
     finally:
         first_unused = next(local)
-        session_next = next(saved)
+        _document_counter.reset(token)
+        session_next = next(_counter)
         _counter = itertools.count(max(first_unused, session_next))
 
 
@@ -138,7 +140,7 @@ class _GroupMethods:
         # tag, shown, unlocked, unpainted, no matrix, no children, a
         # component), so only the name and the uid are written.
         self.mesh = mesh if mesh is not None else Mesh()
-        self.name = name or f"Group {next(_counter)}"
+        self.name = name or f"Group {next(_document_counter.get() or _counter)}"
         # Stable identity that survives save/load — what a scene names when
         # it remembers which objects it hides. Fresh per object; a copy gets
         # its own (see ``copy_group``).

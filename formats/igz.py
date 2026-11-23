@@ -46,6 +46,7 @@ member under ``geom/`` (layout in the JSON, no pickles). Builds that read
 only up to format 2 refuse it with a message instead of opening it empty.
 """
 from __future__ import annotations
+from contextvars import ContextVar, copy_context
 
 from contextlib import contextmanager
 import json
@@ -1419,7 +1420,7 @@ def _write_container(path: Path, doc: str, blobs: dict,
                 write(member, blobs[member], zipfile.ZIP_STORED)
 
 
-def _in_worker(work, pump=None, *, background=False):
+def _in_worker(work, pump=None, *, background=False, cancel=None):
     """``work()`` — in a worker thread while ``pump`` keeps the window
     answering, when given. Reading a 3.3 GB document took 24 s in one call,
     and the desktop flagged IngeTrazo as «not responding» after five (Marco,
@@ -1435,7 +1436,7 @@ def _in_worker(work, pump=None, *, background=False):
             box["data"] = work()
         except BaseException as exc:  # noqa: BLE001 — re-raised below
             box["error"] = exc
-    th = threading.Thread(target=run, daemon=True)
+    th = threading.Thread(target=copy_context().run, args=(run,), daemon=True)
     th.start()
     try:
         if pump is None:
@@ -1444,6 +1445,10 @@ def _in_worker(work, pump=None, *, background=False):
             while th.is_alive():
                 th.join(0.1)
                 pump()
+    except BaseException:
+        if cancel is not None:
+            cancel()
+        raise
     finally:
         # Keep the scratch ranges and archive handles alive when a progress
         # callback cancels the operation before its worker returns.
@@ -1590,14 +1595,14 @@ def _parse_native(raw: bytes):
     if got is None:
         return None
     text, blocks = got
-    was = _saw_nonfinite[0]
+    was = _finite_flag.get()[0]
     try:
         data = _decode_document(text)
         _adopt_native_blocks(data, blocks)
     except Exception:  # noqa: BLE001 — the plain parser says what is wrong
-        _saw_nonfinite[0] = was
+        _finite_flag.get()[0] = was
         return None
-    if _saw_nonfinite[0]:
+    if _finite_flag.get()[0]:
         return None                      # _without_nonfinite reads the tree
     return data
 
@@ -1667,7 +1672,7 @@ def _read_document(path: Path, pump=None, read_progress=None, *, placements=Fals
             elif pump:
                 pump()
         return _in_worker(lambda: reader.parse(fd, offset, packed, method, crc, placements),
-                          pulse if pump or read_progress else None, background=True)
+                          pulse if pump or read_progress else None, background=True, cancel=getattr(reader, "cancel", None))
 
     with path.open('rb') as stream:
         magic = stream.read(len(_ZIP_MAGIC))
@@ -1770,8 +1775,13 @@ def load_into(scene, path: Path, progress=None, *, include_links=True, link_mesh
     # (0.41 s in _rename_tags, 0.48 s in _populate, of 4.1 s; 2026-11-13).
     # Nothing is lost by waiting: the window collects once the document
     # shows (MainWindow.settle_heap).
-    _gc_was_enabled = gc.isenabled()
-    gc.disable()
+    from core import _native
+    staging = getattr(getattr(_native.native, "DocumentOpen", None), "staging", None)
+    _gc_was_enabled = gc.isenabled() and not (staging and staging())
+    if _gc_was_enabled:
+        gc.disable()
+    flag = _finite_flag.set([False])
+    repairs = _repair_count.set([0])
     try:
         reading = (lambda f, phase: progress(0.8 * f, phase)) if progress else None
         linking = (lambda f, phase: progress(0.8 + 0.2 * f, phase)) if progress else None
@@ -1782,6 +1792,8 @@ def load_into(scene, path: Path, progress=None, *, include_links=True, link_mesh
         if progress:
             progress(1.0, "Finishing…")
     finally:
+        _finite_flag.reset(flag)
+        _repair_count.reset(repairs)
         if _gc_was_enabled:
             gc.enable()
 
@@ -1838,10 +1850,12 @@ _dropped_nonfinite = [0]
 #: parser reports them as it reads (``parse_constant``), so a clean
 #: document — nearly every one — skips the per-coordinate check entirely.
 _saw_nonfinite = [False]
+_finite_flag = ContextVar("file_nonfinite", default=_saw_nonfinite)
+_repair_count = ContextVar("file_repairs", default=_dropped_nonfinite)
 
 
 def _note_constant(token: str) -> float:
-    _saw_nonfinite[0] = True
+    _finite_flag.get()[0] = True
     return float(token)
 
 
@@ -1857,7 +1871,7 @@ def _without_nonfinite(payload: dict) -> dict:
     coordinate. One such corner made the WHOLE document unopenable
     («cannot convert float NaN to integer», #185): the rest of the model
     opens, the damaged pieces are left out and counted."""
-    if not _saw_nonfinite[0]:
+    if not _finite_flag.get()[0]:
         return payload
     edges = [r for r in payload.get("edges", [])
              if _finite_points(r.get("a", ()), r.get("b", ()))]
@@ -1868,7 +1882,7 @@ def _without_nonfinite(payload: dict) -> dict:
                + len(payload.get("faces", [])) - len(faces))
     if not dropped:
         return payload
-    _dropped_nonfinite[0] += dropped
+    _repair_count.get()[0] += dropped
     return dict(payload, edges=edges, faces=faces)
 
 
@@ -2034,8 +2048,8 @@ def _load_into_inner(scene, path: Path, progress=None, link_meshes=None) -> None
         if progress is not None:
             progress(frac, text)
 
-    _dropped_nonfinite[0] = 0
-    _saw_nonfinite[0] = False
+    _repair_count.get()[0] = 0
+    _finite_flag.get()[0] = False
 
     from core import _native
     tick(0.05, "Reading the document…")
@@ -2255,7 +2269,7 @@ def _load_into_inner(scene, path: Path, progress=None, link_meshes=None) -> None
         groups, library = _in_worker(
             lambda: reader.build(raw_groups, kept, proto_meshes, read_mesh, is_built),
             (lambda: tick(0.6 + 0.35 * reader.fraction(), "Placing groups…"))
-            if progress else None, background=True)
+            if progress else None, background=True, cancel=getattr(reader, "cancel", None))
         scene.groups = groups
         scene.kept_components = library
     tick(0.96, "Finishing…")
@@ -2397,11 +2411,11 @@ def _load_into_inner(scene, path: Path, progress=None, link_meshes=None) -> None
                                     raw.get("direction") or (),
                                     raw.get("origin") or ())
         if not finite:
-            _dropped_nonfinite[0] += 1
+            _repair_count.get()[0] += 1
             continue
         scene.guides.append(guide_from_dict(raw))
     # What had to be left out, for the window to say so.
-    scene.load_repairs = _dropped_nonfinite[0]
+    scene.load_repairs = _repair_count.get()[0]
 
     from core.image_plane import ImagePlane
     scene.image_planes.clear()
@@ -2863,7 +2877,7 @@ def _load_geometry(mesh, meta, geom: dict) -> None:
         face_bad = np.add.reduceat(ring_bad.astype(np.int64),
                                    np.cumsum(counts) - counts) > 0 \
             if len(counts) else np.zeros(0, dtype=bool)
-        _dropped_nonfinite[0] += int((~keep_e).sum() + face_bad.sum())
+        _repair_count.get()[0] += int((~keep_e).sum() + face_bad.sum())
         edges, flags = edges[keep_e], flags[keep_e]
         curves = curves[keep_e] if curves is not None else None
         layers = layers[keep_e] if layers is not None else None

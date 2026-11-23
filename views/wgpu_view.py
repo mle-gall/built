@@ -209,7 +209,7 @@ class MetalView(ViewNavigation):
             self.tools.cancel()
         super().hideEvent(event)
 
-    def set_scene(self, scene, *, progress=None, opening=False, focus=None):
+    def set_scene(self, scene, *, progress=None, opening=False, focus=None, prepared=None):
         """Make ``scene`` resident. ``progress(fraction, text)`` reports the
         pack; ``opening`` (a document coming in, its bar still up) leaves
         the big containers' edit boxes until after the first picture. The
@@ -271,7 +271,7 @@ class MetalView(ViewNavigation):
                 tracker.journal_valid = False
             tracker.remember_edit_path()
             tracker.observe(getattr(self.source_viewport, 'history', None))
-        delta = (tracker.diff(scene) if tracker is not None and len(self.packed.instances)
+        delta = (tracker.diff(scene) if prepared is None and tracker is not None and len(self.packed.instances)
                  and not repaint and focus is None else None)
         if delta is not None:
             ids, rows = delta
@@ -328,9 +328,13 @@ class MetalView(ViewNavigation):
         if focus is None:
             camera = getattr(self.source_viewport, 'camera', None)
             focus = camera.target.toTuple() if camera else np.add(self.camera.target.toTuple(), old_origin)
-        self.packed = pack_scene(scene, getattr(self.source_viewport, 'view_tint', None),
-                                 progress=progress, focus=focus, previous_origin=old_origin if same_document else (0., 0., 0.),
-                                 previous_pack=self.packed if same_document else None)
+        if prepared is None:
+            self.packed = pack_scene(scene, getattr(self.source_viewport, 'view_tint', None),
+                                     progress=progress, focus=focus, previous_origin=old_origin if same_document else (0., 0., 0.),
+                                     previous_pack=self.packed if same_document else None)
+        else:
+            self.packed = prepared[0]
+            self._ui_tree_model = ((id(scene), scene.content_version), prepared[2])
         remote = {}
         if any(any(o) for o in self.packed.prototype_origins):
             for group, code in zip(self.packed.groups, self.packed.instances['info'][:, 0]):
@@ -348,14 +352,12 @@ class MetalView(ViewNavigation):
         self._scene_dirty = True
         self._selection_signature = None
         self._tint_signature = None
-        self.uid_rows = {}
-        for row, uid in enumerate(self.packed.uids):
-            self.uid_rows.setdefault(uid, []).append(row)
         from views.wgpu_updates import InstanceUpdates
         if tracker is not None and tracker.unsubscribe is not None:
             tracker.unsubscribe()
         self._resident_count = len(self.packed.instances)
-        self._instance_updates = InstanceUpdates(scene, self.packed)
+        self._instance_updates = InstanceUpdates(scene, self.packed) if prepared is None else prepared[1]
+        self.uid_rows = self._instance_updates.uid_rows
         self._instance_updates.observe(getattr(self.source_viewport, 'history', None))
         self._instance_updates.remember_edit_path()
         # Measure the big containers' edit boxes ahead of the first edit
@@ -365,12 +367,13 @@ class MetalView(ViewNavigation):
         # of an empty view on the ride, for boxes nobody had asked for yet
         # (_group_obb still measures one on demand).
         if len(self.packed.instances) > 4096:
-            big = [group for group in scene.groups
-                   if group.children and len(self._rows_for_group(group)) > 4096]
+            containers = [group for group in scene.groups if group.children]
+            def big():
+                return [group for group in containers if len(self._rows_for_group(group)) > 4096]
             if opening:
-                self.after_open.append(lambda: self._measure_boxes_later(scene, big))
+                self.after_open.append(lambda: self._measure_boxes_later(scene, big()) if self.scene is scene else None)
             else:
-                for group in big:
+                for group in big():
                     self._group_obb(group)
         # The batched native build releases the GIL, so it can overlap upload
         # and the first frame. Full repacks also need a fresh index on edits.
@@ -380,7 +383,15 @@ class MetalView(ViewNavigation):
         if self.source_viewport is None and not any(self.packed.origin):
             self.camera.target = QVector3D(*((lo+hi)/2))
             self.camera.distance = max(float(np.linalg.norm(hi-lo))*1.4, 1.)
-        self._prepare_inference()
+        if prepared is None:
+            self._prepare_inference()
+        else:
+            previous = getattr(self, "_inference_future", None)
+            if previous is not None:
+                previous.cancel()
+                self._inference_future = None
+            self.inference_index = None
+            self.after_open.insert(0, lambda: self._prepare_inference() if self.scene is scene else None)
         if progress is not None:
             # The bar's repaint may present a frame, and a frame uploads a
             # dirty pack itself: then it is up already (2.5 s twice on the

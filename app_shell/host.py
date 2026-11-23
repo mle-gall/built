@@ -253,6 +253,11 @@ class Host:
         """Qt's posted events and timers; then what the window should do:
         ``(frame_wanted, wake_in_ms or None, cursor or None, title or None)``."""
         qt_host.pump()
+        pending = self.window.__dict__.get("_pending_open")
+        if pending and time.monotonic() >= pending.next_poll:
+            pending.next_poll = time.monotonic() + 0.032
+            pending.poll()
+            self.request_frame()
         view = self.view
         scene = self.viewport.scene
         # MainWindow._install_wgpu_display's present(): a scene whose
@@ -260,7 +265,7 @@ class Host:
         if view.renderer is not None and (scene is not getattr(view, "scene", None)
                                           or scene.version != getattr(view, "_shell_resident_version", None)):
             self._frame_wanted = True
-        delay = None
+        delay = max(0., (pending.next_poll - time.monotonic()) * 1000) if pending else None
 
         def sooner(ms):
             nonlocal delay
@@ -388,7 +393,8 @@ class Host:
         self._front()
         t0 = time.perf_counter()
         ok = bool(self._guard("open", files.open_path, self.window, Path(path)))
-        self.open_ms = {"total": (time.perf_counter() - t0) * 1000}
+        field = "dispatch" if self.window.__dict__.get("_pending_open") else "total"
+        self.open_ms = {field: (time.perf_counter() - t0) * 1000}
         self.request_frame()
         return ok
 
@@ -462,12 +468,17 @@ class Host:
         value box and the tool may claim it), then the window's shortcuts
         (the tools' letters), else the view's key handler. While a sheet
         or an exclusive job holds the window, only they hear keys."""
+        from PySide6.QtCore import Qt
         from app_shell.events import KeyEvent, ShortcutOverride
         from views import chrome_dialogs as cd
         qt_host.INPUT["modifiers"] = int(modifiers)
         view = self.view
         if pressed:
             self._front()
+        pending = self.window.__dict__.get("_pending_open")
+        if pending and pressed and key == Qt.Key_Escape and not self._modal():
+            pending.job.cancel()
+            return True
         if self._modal():
             if cd.current_sheet(self.window) is None and cd._form_up(self.window):
                 # A form on the chrome (views/chrome_forms.py): its fields
@@ -648,6 +659,8 @@ class Host:
         win = self.window
         guard = qt_host.widget_guard()
         return {
+            "opening": [(j.label, j.fraction, j.phase) for j in win.__dict__.get("_chrome_jobs", ())],
+            "instances": len(self.view.packed.instances) if self.view.packed is not None else 0,
             "path": str(self.path) if self.path else None,
             "version": scene.version,
             "faces": len(getattr(mesh, "faces", ()) or ()),

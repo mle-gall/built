@@ -136,6 +136,24 @@ impl Host {
         })
     }
 
+    pub fn open_fraction(&self) -> Option<f64> {
+        Python::attach(|py| self.obj.bind(py).getattr("window").ok()?
+            .getattr("_pending_open").ok()?.getattr("job").ok()?
+            .getattr("fraction").ok()?.extract().ok())
+    }
+
+    pub fn open_phase(&self) -> Option<String> {
+        Python::attach(|py| self.obj.bind(py).getattr("window").ok()?
+            .getattr("_pending_open").ok()?.getattr("job").ok()?
+            .getattr("phase").ok()?.extract().ok())
+    }
+
+    pub fn opening(&self) -> bool {
+        Python::attach(|py| self.obj.bind(py).getattr("window")
+            .and_then(|win| win.getattr("_open_in_progress"))
+            .and_then(|v| v.extract()).unwrap_or(false))
+    }
+
     /// `Host.idle()`: `(frame_wanted, wake_ms, cursor, title)`.
     pub fn idle(&self) -> (bool, Option<f64>, Option<String>, Option<String>, bool) {
         Python::attach(|py| {
@@ -310,4 +328,16 @@ pub fn touch_select() -> bool {
             == "select")
     })
     .unwrap_or(false)
+}
+
+/// Drain staging and executor threads before Qt static destructors run.
+pub fn shutdown_workers() {
+    pyo3::Python::attach(|py| {
+        let drain = || -> PyResult<()> {
+            py.import("ingetrazo_core")?.getattr("DocumentOpen")?.call_method0("shutdown")?;
+            py.import("threading")?.call_method0("_shutdown")?;
+            Ok(())
+        };
+        if let Err(e) = drain() { report(py, e, "worker shutdown"); }
+    });
 }

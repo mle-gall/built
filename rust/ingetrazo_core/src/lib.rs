@@ -29,6 +29,7 @@ mod igz;
 #[cfg(unix)]
 mod file_archive;
 mod file_json;
+mod file_open;
 mod file_geometry;
 mod file_textures;
 mod file_sheet;
@@ -91,6 +92,7 @@ mod sheets;
 
 #[pymodule]
 fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<file_open::DocumentOpen>()?;
     m.add_class::<command_search::SearchItem>()?;
     m.add_function(wrap_pyfunction!(command_search::damerau_levenshtein, m)?)?;
     m.add_function(wrap_pyfunction!(command_search::rank_commands, m)?)?;
