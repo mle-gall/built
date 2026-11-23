@@ -212,7 +212,10 @@ def test_metal_rebakes_the_smoothed_definition_without_a_repack(monkeypatch):
 def test_dialog_cancel_and_accept_use_one_undo_step():
     from views.main_window import MainWindow
     from views import chrome_forms
+    from PySide6.QtWidgets import QApplication
     win = MainWindow()
+    win.show()
+    QApplication.processEvents()
     try:
         scene = win.viewport.scene
         group = Group(_cylinder(Mesh(), soft=False))
@@ -241,11 +244,14 @@ def test_smoothing_inside_a_component_reaches_its_copies():
     share-back carries the soft flags to every copy, one undo step."""
     from views.main_window import MainWindow
     from views import chrome_forms
+    from PySide6.QtWidgets import QApplication
     mesh = _cylinder(Mesh(), soft=False)
     a, b = Group(mesh, name="a"), Group(mesh, name="b")
     a.xform, b.xform = QMatrix4x4(), QMatrix4x4()
     b.xform.translate(5, 0, 0)
     win = MainWindow()
+    win.show()
+    QApplication.processEvents()
     try:
         vp = win.viewport
         vp.scene.groups.extend([a, b])
@@ -376,7 +382,10 @@ def test_the_dialog_passes_smooth_normals_to_the_command(monkeypatch, tmp_path):
     monkeypatch.setenv("INGETRAZO_AUTOSAVE_DIR", str(tmp_path / "autosave"))
     from views.main_window import MainWindow
     from views import chrome_forms
+    from PySide6.QtWidgets import QApplication
     win = MainWindow()
+    win.show()
+    QApplication.processEvents()
     try:
         scene = win.viewport.scene
         group = Group(_cylinder(Mesh(), soft=False))

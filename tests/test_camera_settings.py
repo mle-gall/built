@@ -350,12 +350,28 @@ def test_export_image_tall_frame(monkeypatch):
     assert img.pixelColor(960, 1077).red() == 255
 
 
-def test_export_image_menu_crops_to_the_frame():
-    """File ▸ Export Image asks for the framed shot."""
-    import inspect
+def test_export_image_menu_crops_to_the_frame(monkeypatch, tmp_path):
+    from unittest.mock import Mock
+    from PySide6.QtGui import QImage
+    from views import chrome_forms
+    from views.filedialogs import file_dialogs
     from views.main_window import MainWindow
-    src = inspect.getsource(MainWindow._on_export_image)
-    assert "crop_to_frame=True" in src
+    win = MainWindow()
+    try:
+        win.show()
+        QApplication.processEvents()
+        image = QImage(16, 9, QImage.Format_RGB32)
+        image.fill(0)
+        render = Mock(return_value=image)
+        monkeypatch.setattr(win._active_view(), "render_image", render)
+        monkeypatch.setattr(file_dialogs, "getSaveFileName",
+                            lambda *args: (str(tmp_path / "frame.png"), ""))
+        win._on_export_image()
+        chrome_forms.current(win).press("ok")
+        render.assert_called_once_with(3840, sharp_shadows=True, transparent=False,
+                                       crop_to_frame=True)
+    finally:
+        win.close()
 
 
 # ---- Basic and advanced ----------------------------------------------------------
