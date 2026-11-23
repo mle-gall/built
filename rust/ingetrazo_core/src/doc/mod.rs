@@ -117,6 +117,18 @@ pub struct Xform {
     pub src: Option<Box<([f64; 16], [f64; 16])>>,
 }
 
+impl Xform {
+    pub fn doubles(&self) -> [f64; 16] {
+        std::array::from_fn(|j| {
+            let current = self.f[j];
+            match &self.src {
+                Some(saved) if saved.1[j] == current => saved.0[j],
+                _ => current,
+            }
+        })
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Kind {
     Root,

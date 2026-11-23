@@ -870,6 +870,22 @@ impl PyPlacement {
         Ok(d.handle_ref(py, key))
     }
 
+    fn _edit_matrix(&self, child: &PyPlacement) -> PyResult<[f64; 16]> {
+        let doc = lock();
+        let super::Data::Root { edit_path } = &doc.need(self.key).map_err(err)?.data else {
+            return Err(PyTypeError::new_err("a scene root owns an edit path"));
+        };
+        let mut world = glam::DMat4::IDENTITY;
+        for key in edit_path.iter().map(|(key, _)| *key).chain([child.key]) {
+            if let super::Data::Placement(p) = &doc.need(key).map_err(err)?.data {
+                if let Some(x) = &p.xform {
+                    world *= glam::DMat4::from_cols_array(&x.doubles());
+                }
+            }
+        }
+        Ok(world.to_cols_array())
+    }
+
     /// The active edit context belongs to the scene root. Its keys are
     /// transient UI state, outside saved data and the undo journal.
     fn _enter_edit(&self, placement: &Bound<'_, PyPlacement>, level: Py<PyAny>) -> PyResult<()> {
@@ -2230,13 +2246,7 @@ fn doc_tree<'py>(
             match &p.xform {
                 Some(x) => {
                     has.push(true);
-                    for j in 0..16 {
-                        let c = x.f[j];
-                        local.push(match &x.src {
-                            Some(b) if b.1[j] == c => b.0[j],
-                            _ => c,
-                        });
-                    }
+                    local.extend(x.doubles());
                 }
                 None => {
                     has.push(false);

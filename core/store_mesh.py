@@ -44,7 +44,7 @@ LOCAL_MASK = (1 << 40) - 1
 #: with a deep copy of the Python state.
 STORE_SIDE = ("_store", "_objmap", "_attr_table", "_attr_own", "_bulk",
               "_py_base", "_pos_cache", "_face_cache", "_frame_parent",
-              "_tool_frame_cache", "_planned_points")
+              "_tool_frame_cache", "_planned_points", "_instance_definition")
 
 
 def enabled() -> bool:
@@ -2044,9 +2044,8 @@ def instance_view(mesh, matrix):
         mesh._materialize()
     if type(mesh) is not StoreMesh:
         return None
-    from formats.built import placement_values
     try:
-        view = mesh._store._instance_view(mesh, placement_values(matrix), (0., 0., 0.))
+        view = mesh._store._instance_view(mesh, matrix, (0., 0., 0.))
     except ValueError:  # a singular placement has no world-to-definition inverse
         return None
     result = Mesh()
