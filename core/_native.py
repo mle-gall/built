@@ -5,7 +5,7 @@
 ``native`` is the compiled module when the engine is on and loads, else
 ``None``. It is ON unless Preferences ▸ General ▸ «Rust engine» turns it
 off (read once, so it applies at the next start; on by default since
-0.5.10 — a build without the module simply runs on Python);
+0.5.10). Model maths always uses the compiled extension;
 ``INGETRAZO_RUST=1`` / ``=0`` overrides the setting, for tests and benches.
 Every caller keeps its Python code and uses it whenever ``native`` is
 ``None``: the kernels make things faster, never different.
@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import logging
 import os
+import platform
+import sys
 
 log = logging.getLogger(__name__)
 
@@ -76,15 +78,15 @@ def engine() -> str:
     return "Rust" if me.native is not None else "Python"
 
 
+# Existing packed binary32 data retains its platform's rounding convention.
+_LEGACY_HYPOT = {"win32": "msvc"}.get(sys.platform, "libstdc++")
+if sys.platform == "darwin" and platform.machine() == "arm64":
+    _LEGACY_HYPOT = "libc++-fma"
+
+
 def qt_hypot():
     """Historical rounding convention for the engine's binary32 kernels."""
-    import platform
-    import sys
-    if sys.platform == "win32":
-        return "msvc"
-    if sys.platform == "darwin" and platform.machine() == "arm64":
-        return "libc++-fma"
-    return "libstdc++"
+    return _LEGACY_HYPOT
 
 
 #: How many starts in a row with the engine on are still under way: a

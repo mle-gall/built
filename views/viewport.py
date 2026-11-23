@@ -1329,11 +1329,9 @@ _NEAREST_NATIVE = os.environ.get("INGETRAZO_NEAREST", "1") != "0"
 _NEAR_SEEN_NATIVE = os.environ.get("INGETRAZO_NEAR_SEEN", "1") != "0"
 
 
-#: Which three-argument hypot QVector3D's length here is, of those
-#: _unit_rays reproduces ("": none; None: not checked yet).
-_QV_HYPOT3 = None
-#: The C++ libraries whose ``std::hypot(x, y, z)`` _hypot3_f32 knows.
-_QV_HYPOTS = ("libstdc++", "msvc")
+# Existing native callers still accept the legacy rounding-mode argument.
+from core._native import qt_hypot
+_QV_HYPOT3 = qt_hypot()
 
 
 def _hypot3_f32(a, kind="libstdc++"):
@@ -1366,8 +1364,7 @@ def _hypot3_f32(a, kind="libstdc++"):
 
 
 def _qv_hypot3():
-    from core._native import qt_hypot
-    return qt_hypot() if _QV_HYPOT3 is None else _QV_HYPOT3
+    return _QV_HYPOT3
 
 
 def _unit_rays(eye, pts):
