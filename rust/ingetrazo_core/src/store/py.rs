@@ -2036,6 +2036,78 @@ impl PyMeshStore {
         Ok(self.op(|s, ch| { s.relink_vertices(&vs, ch); Ok(()) })?.1)
     }
 
+    #[staticmethod]
+    fn bevel_face_curve(
+        origin: [f64; 3],
+        a: [f64; 3],
+        b: [f64; 3],
+        exponent: f64,
+        segments: usize,
+    ) -> PyResult<Vec<[f64; 3]>> {
+        use super::geometry::V3;
+        let v = |[x, y, z]: [f64; 3]| V3(x, y, z);
+        if segments == 0 {
+            return Err(PyValueError::new_err("empty bevel section"));
+        }
+        Ok(
+            super::bevel::face_curve(v(origin), v(a), v(b), exponent, segments)
+                .into_iter()
+                .map(super::fillet::xyz)
+                .collect(),
+        )
+    }
+
+    #[staticmethod]
+    fn bevel_corner(
+        origin: [f64; 3],
+        vectors: Vec<[f64; 3]>,
+        curves: Vec<Vec<[f64; 3]>>,
+        normal: [f64; 3],
+        segments: usize,
+        exponent: f64,
+        hypot: &str,
+        compensated: bool,
+    ) -> PyResult<(Vec<Vec<[f64; 3]>>, Vec<([f64; 3], [f64; 3])>)> {
+        use super::fillet::{xyz, RoundPlan};
+        use super::geometry::V3;
+        let v = |[x, y, z]: [f64; 3]| V3(x, y, z);
+        if segments == 0
+            || curves
+                .iter()
+                .any(|r| r.len().checked_sub(1) != Some(segments))
+        {
+            return Err(PyValueError::new_err("inconsistent bevel sections"));
+        }
+        let vectors: Vec<_> = vectors.into_iter().map(v).collect();
+        let curves: Vec<_> = curves
+            .into_iter()
+            .map(|r| r.into_iter().map(v).collect())
+            .collect();
+        let mut plan = RoundPlan::default();
+        super::bevel::close_corner(
+            &mut plan,
+            v(origin),
+            &vectors,
+            &curves,
+            v(normal),
+            segments,
+            exponent,
+            crate::hypot_of(hypot)?,
+            compensated,
+        )
+        .map_err(|(message, _)| PyValueError::new_err(message))?;
+        Ok((
+            plan.patches
+                .into_iter()
+                .map(|r| r.into_iter().map(xyz).collect())
+                .collect(),
+            plan.soft
+                .into_iter()
+                .map(|(a, b)| (xyz(a), xyz(b)))
+                .collect(),
+        ))
+    }
+
     fn plan_vertex_bevel(
         &self,
         keys: Vec<u128>,

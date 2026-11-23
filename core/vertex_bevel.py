@@ -32,11 +32,16 @@ from ingetrazo_core import Vec3 as QVector3D
 
 from core.fillet import (CIRCULAR, MIN_ANGLE_DEG, PLANE_TOL, FilletPlan,
                          _exponent, _facing, _fmt, _same, _unit)
+from core import doc_model
 from core.i18n import tr
 from core.mesh import edge_flags
 
 
 def _face_curve(origin, ua, ub, r, segments):
+    if doc_model.ENABLED:
+        from ingetrazo_core import MeshStore
+        points = MeshStore.bevel_face_curve(origin.toTuple(), ua.toTuple(), ub.toTuple(), r, segments)
+        return [QVector3D(*p) for p in points]
     """Points from ``origin + ua`` to ``origin + ub``: the corner's curve in
     the face of the two edges ``ua`` and ``ub`` (vectors from the corner
     to the cut points)."""
@@ -189,28 +194,42 @@ def plan_vertex_bevel(mesh, vertices, size: float, segments: int = 8,
         out = QVector3D()
         for f in faces:
             out += f.normal()
-        tips = [v.position + cut[(v.key, e.key)] for e in v.edges]
-        centre = QVector3D()
-        for p in tips:
-            centre += p
-        centre /= float(len(tips))
-        sign = 1.0 if QVector3D.dotProduct(out, v.position - centre) >= 0 else -1.0
-        if len(v.edges) == 3:
-            cap, soft = _three_edge_cap(v, cut, face_curves, r, segments, sign)
-            if cap is None:
-                return tr("Could not close the corner at {p}.",
-                          p=_fmt(v.position))
-            plan.patches.extend(cap)
-            plan.soft.extend(soft)
+        if doc_model.ENABLED:
+            from ingetrazo_core import MeshStore
+            from core.store_mesh import _hypot
+            import sys
+            try:
+                patches, soft = MeshStore.bevel_corner(
+                    v.position.toTuple(), [cut[(v.key, e.key)].toTuple() for e in v.edges],
+                    [[p.toTuple() for p in row] for row in face_curves], out.toTuple(),
+                    segments, r, _hypot(), sys.version_info >= (3, 12))
+            except ValueError as exc:
+                return tr(str(exc), p=_fmt(v.position))
+            plan.patches.extend([QVector3D(*p) for p in row] for row in patches)
+            plan.soft.extend((QVector3D(*a), QVector3D(*b)) for a, b in soft)
         else:
-            if segments > 1:
-                return tr("More than three rounded edges meet at {p}.",
-                          p=_fmt(v.position))
-            poly = _flat_polygon(tips, out)
-            if poly is None:
-                return tr("The corner at {p} is not flat enough to cut.",
-                          p=_fmt(v.position))
-            plan.patches.append(_facing(poly, v.position, sign))
+            tips = [v.position + cut[(v.key, e.key)] for e in v.edges]
+            centre = QVector3D()
+            for p in tips:
+                centre += p
+            centre /= float(len(tips))
+            sign = 1.0 if QVector3D.dotProduct(out, v.position - centre) >= 0 else -1.0
+            if len(v.edges) == 3:
+                cap, soft = _three_edge_cap(v, cut, face_curves, r, segments, sign)
+                if cap is None:
+                    return tr("Could not close the corner at {p}.",
+                              p=_fmt(v.position))
+                plan.patches.extend(cap)
+                plan.soft.extend(soft)
+            else:
+                if segments > 1:
+                    return tr("More than three rounded edges meet at {p}.",
+                              p=_fmt(v.position))
+                poly = _flat_polygon(tips, out)
+                if poly is None:
+                    return tr("The corner at {p} is not flat enough to cut.",
+                              p=_fmt(v.position))
+                plan.patches.append(_facing(poly, v.position, sign))
 
     # Old edges go; the shortened ones keep their flags.
     seen = set()
