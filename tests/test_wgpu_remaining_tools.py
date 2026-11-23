@@ -248,7 +248,34 @@ def test_container_paint_updates_instance_without_bake():
     assert (packed.instances['info'][:, 1] != original['info'][:, 1]).any()
     history.undo()
     updates.apply(*updates.diff(scene))
+    assert not updates.changed
     assert (packed.instances['info'][:, 1] == original['info'][:, 1]).all()
+
+
+def test_face_paint_inside_group_rebakes_mesh():
+    from core.group import Group
+    from core.mesh import Mesh
+    from views.wgpu_scene import pack_scene
+    from views.wgpu_updates import InstanceUpdates
+
+    scene, history, native, _ = prepare(PaintTool())
+    group = Group(Mesh())
+    scene.groups.append(group)
+    scene.begin_group_edit(group)
+    face = scene.mesh.add_face([QVector3D(), QVector3D(2, 0, 0), QVector3D(0, 2, 0)])
+    updates = InstanceUpdates(scene, pack_scene(scene))
+    updates.observe(history)
+    native.pick_face_any = native.pick_face_placement = lambda *args: (face, None)
+    native._pixel_to_ray = lambda *args: (QVector3D(1, 1, 10), QVector3D(0, 0, -1))
+
+    click(native, (1, 1, 0))
+    assert tuple(face.attrs['color']) == PaintTool.current_color
+    updates.apply(*updates.diff(scene))
+    assert [mesh for mesh, _, _ in updates.changed] == [group.mesh]
+    history.undo()
+    updates.apply(*updates.diff(scene))
+    assert [mesh for mesh, _, _ in updates.changed] == [group.mesh]
+    assert 'color' not in face.attrs
 
 
 def test_rotate_placement_preview_cancels_without_document_mutation():

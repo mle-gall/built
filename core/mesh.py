@@ -481,6 +481,11 @@ class Mesh:
         if value:
             self.bump_revision()
 
+    def invalidate_placement_chunks(self) -> None:
+        """Refresh chunks that bake placement state. The mesh itself is unchanged."""
+        self.__dict__["_chunk_dirty_value"] = True
+        self.__dict__["_attrs_dirty_value"] = True
+
     def bump_revision(self) -> None:
         """Advance :attr:`revision` alone: a change readers of the revision
         must see that touched no coordinate — an attribute, a tag, a

@@ -549,7 +549,7 @@ class History:
             return
         touched = rec[0].placements(_RENDER_FIELDS)
         if touched:
-            _dirty_placements(self.scene, touched)
+            _dirty_placements(touched)
 
     def _journalled(self, fn) -> None:
         """Run a command's own undo or redo inside a transaction kept only
@@ -1426,19 +1426,17 @@ def _dirty_group_chunks(scene) -> None:
             pg.mesh._attrs_dirty = True
 
 
-def _dirty_placements(scene, groups) -> None:
+def _dirty_placements(groups) -> None:
     """:func:`_dirty_group_chunks` for the placements ``groups`` and their
     subtrees only: what History does after a step from the placements its
     transaction changed (the tag, Hide, paint: what a chunk bakes), instead
     of every command flagging every mesh — Hide on 200 placements of a
     20,000-placement file walked all of them (≈11 ms)."""
     from core.purge import iter_groups
-    scene.mesh.bump_revision()
     for g in iter_groups(groups):
         mesh = getattr(g, "mesh", None)
         if mesh is not None:
-            mesh._chunk_dirty = True
-            mesh._attrs_dirty = True
+            mesh.invalidate_placement_chunks()
 
 
 #: The placement fields a viewport chunk depends on (see _dirty_placements).
@@ -3771,7 +3769,7 @@ class FlipGroupsCommand(Command):
         return all(getattr(g, "xform", None) is not None for g in self._groups)
 
     def doc_after(self, scene, phase) -> None:
-        _dirty_placements(scene, self._groups)
+        _dirty_placements(self._groups)
         scene.version += 1
 
     def meshes(self):
@@ -3793,7 +3791,7 @@ class FlipGroupsCommand(Command):
             else:
                 _reverse_faces(g.mesh.faces)
         if _doc.ENABLED and self.doc_undo(scene):
-            _dirty_placements(scene, self._groups)
+            _dirty_placements(self._groups)
         else:
             _dirty_group_chunks(scene)
         scene.version += 1
@@ -5719,7 +5717,7 @@ class ReparentGroupsCommand(Command):
             scene.selection.clear()
         else:
             _unselect(scene, [m[0] for m in self._moves])
-        _dirty_placements(scene, [m[0] for m in self._moves])
+        _dirty_placements([m[0] for m in self._moves])
         scene.version += 1
 
     def do(self, scene) -> None:
@@ -5755,7 +5753,7 @@ class ReparentGroupsCommand(Command):
              else scene.groups).append(g)
             scene.selection.discard(g)
         if _doc.ENABLED:
-            _dirty_placements(scene, [m[0] for m in self._moves])
+            _dirty_placements([m[0] for m in self._moves])
         else:
             _dirty_group_chunks(scene)
         scene.version += 1
