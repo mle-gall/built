@@ -183,7 +183,7 @@ def _file_hierarchy(scene, only=None):
     return materials, meshes, roots
 
 
-def save_glb(scene, path, face_me=None, only=None) -> None:
+def save_glb(scene, path, face_me=None, only=None, *, embed_textures=True) -> None:
     """Write the scene as a binary glTF (``.glb``) to ``path``.
 
     ``face_me`` turns the face-me figures toward a camera and brings them
@@ -275,7 +275,7 @@ def save_glb(scene, path, face_me=None, only=None) -> None:
                      "doubleSided": True,
                      "pbrMetallicRoughness": {"metallicFactor": 0.0,
                                               "roughnessFactor": 1.0}}
-        if info.get("map"):
+        if embed_textures and info.get("map"):
             src = info["src"]
             tex_idx = image_index(src)
             if tex_idx is not None:
@@ -304,7 +304,7 @@ def save_glb(scene, path, face_me=None, only=None) -> None:
             mr.update(baseColorFactor=[*info["color"], 1.0],
                       metallicFactor=recipe.get("metallic", 0.0),
                       roughnessFactor=recipe.get("roughness", 1.0))
-            normal, packed, ao = export_maps(recipe)
+            normal, packed, ao = export_maps(recipe) if embed_textures else (None, None, None)
             for target, slot, map_path, factors in (
                 (mr, "metallicRoughnessTexture", packed, {}),
                 (mat, "normalTexture", normal, {"scale": recipe.get("normal_scale", 1.0)}),

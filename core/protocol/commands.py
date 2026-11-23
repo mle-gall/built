@@ -728,7 +728,10 @@ def redo(history):
     return _answer(history, before)
 
 
-COMMANDS = {"follow_me": follow_me, "intersect_faces": intersect_faces,
+from core.deliveries import create_delivery, edit_delivery, delete_delivery, run_delivery
+
+COMMANDS = {"create_delivery": create_delivery, "edit_delivery": edit_delivery,
+            "delete_delivery": delete_delivery, "run_delivery": run_delivery, "follow_me": follow_me, "intersect_faces": intersect_faces,
             "add_edge": add_edge, "add_edges": add_edges,
             "divide_edges": divide_edges, "join_edges": join_edges,
             "move_vertices": move_vertices, "erase": erase,

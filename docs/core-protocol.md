@@ -371,3 +371,43 @@ records already are Rust (`edit::Change`).
   `run_python`); the planned command list is §1.
 - `copies` of a split name faces only; vertices and edges of the piece are
   new keys the feed lists as the piece mesh is first named.
+
+### Document deliveries
+
+A delivery stores an export recipe in the document. The additive JSON object
+`plugin_data.deliveries` maps stable keys to records. IFC deliveries can refer
+to a shared BIM registry `export_profiles` key. Their destination and last
+successful run belong to the individual document.
+
+| Command | Arguments | Result |
+|---|---|---|
+| `create_delivery` | `delivery` record | New key and History step |
+| `edit_delivery` | `key`, `changes` object | Merged record as an undoable edit |
+| `delete_delivery` | `key` | Undoable removal |
+| `run_delivery` | `key` | Job ID in the active Metal window, or the completion step in a synchronous host |
+
+Example input for `create_delivery`:
+
+```json
+{"delivery":{"name":"Client viewer","format":"glb","scope":"visible","destination":"client.glb","options":{"textures":true}}}
+```
+
+Formats are `ifc`, `dxf`, `glb`, `obj`, `dae`, `svg`, `stl`, and `pdf`.
+Model scopes are `whole`, `visible`, `selection`, and `node`. A node scope
+also takes the Project tree key in `node`. A run resolves the current
+membership. DXF and SVG also accept `scenes`. PDF uses `sheets`.
+The optional `options.names` array selects named scenes or sheets in document
+order. Multiple scenes produce numbered sibling files such as `plan-01.dxf`.
+Sheets share a multipage PDF.
+
+IFC accepts `options.profile`. GLB embeds textures by default and accepts
+`textures: false`. STL accepts `unit`. SVG accepts `scale`, `paper` as a pair in mm or `"screen"`, a
+`frame` triple of horizontal pan, vertical pan and zoom, and `faces` with boolean `materials`, `textures`, `as_view`, and
+`shadows`. Omit `faces` for linework alone. A visible SVG delivery can set `picture` and
+`axes` to embed the viewport capture.
+
+Relative destinations resolve against the document directory. Unsaved models
+require an absolute destination. The synchronous Python entry point accepts
+host context through `project_directory`, `camera`, `screen_mm`, the viewport's
+`svg_picture(axes, frame)`, and the composer's `pdf_writer(path, sheets)`. Successful runs stamp `last_run` in UTC.
+Undoing that metadata change leaves exported files on disk.

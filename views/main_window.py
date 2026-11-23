@@ -4314,6 +4314,12 @@ class MainWindow(WorksessionMixin, QMainWindow):
         actions.append(import_menu)
 
 
+        from views import wgpu_ui
+        if wgpu_ui.ENABLED:
+            from views.wgpu_deliveries import export_form
+            delivery_export = QAction(tr("Export…"), self)
+            delivery_export.triggered.connect(lambda: export_form(self, one_off=True))
+            actions.append(delivery_export)
         export_menu = QMenu(tr("Export"), self)
         for label, tip, handler in (
             (tr("IFC (BIM)…"),
