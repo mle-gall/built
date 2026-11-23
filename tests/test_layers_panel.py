@@ -582,7 +582,7 @@ def test_active_column_and_new_layer_option(win, monkeypatch):
     assert L.active_layer(scene) == name
 
 
-def test_active_pencil_follows_the_chosen_accent(win):
+def test_active_pencil_uses_the_interface_accent(win):
     from views import theme
 
     panel = win.layers_dock.panel
@@ -598,15 +598,9 @@ def test_active_pencil_follows_the_chosen_accent(win):
             for y in range(image.height()) for x in range(image.width())
         )
 
-    blue = theme.accent_color("blue")
-    try:
-        theme.save_accent("blue")
-        theme.apply_accent(_app)
-        assert has(item.icon(1), blue)                       # COL_ACTIVE
-        assert has(panel.tree.headerItem().icon(1), blue)
-    finally:
-        theme.save_accent(theme.ORANGE)
-        theme.apply_accent(_app)
+    blue = theme.accent_color()
+    assert has(item.icon(1), blue)                       # COL_ACTIVE
+    assert has(panel.tree.headerItem().icon(1), blue)
 
 
 def test_row_icons_follow_a_live_theme_switch(win):

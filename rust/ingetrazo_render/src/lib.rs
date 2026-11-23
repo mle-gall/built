@@ -195,6 +195,8 @@ struct Renderer {
     ui_scale: f32,
     #[pyo3(get)]
     adapter: String,
+    #[pyo3(get)]
+    backend_label: String,
 }
 fn row_runs(ids: Vec<usize>) -> Vec<(usize, usize)> {
     // The CPU mirror includes flags and overrides for untouched rows. Uploading
@@ -633,6 +635,7 @@ impl Renderer {
             ui: None,
             ui_target: 0,
             ui_scale: scale as f32,
+            backend_label: format!("wgpu ({:?})", a.get_info().backend),
             adapter: format!(
                 "{:?}; multi_draw={}",
                 a.get_info(),
@@ -2713,6 +2716,8 @@ fn large_sheet_check(spec: &str) -> String {
 mod surfaces;
 mod release;
 mod units_start;
+mod preferences;
+mod about;
 mod sheet_host;
 
 /// Start an orthographic ray on the plane through the camera, aligned with the point.
@@ -2760,6 +2765,12 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(sheet_host::start_backdrop, m)?)?;
     m.add_function(wrap_pyfunction!(sheet_host::show_delivery_form, m)?)?;
     m.add_class::<units_start::UnitsDraft>()?;
+    m.add_class::<preferences::PreferencesView>()?;
+    m.add_class::<preferences::RestartPreferences>()?;
+    m.add_class::<preferences::PreferencePage>()?;
+    m.add_class::<preferences::DevicePreferences>()?;
+    m.add_class::<preferences::DeviceReadings>()?;
+    m.add_class::<about::AboutReview>()?;
     m.add_class::<release::ReleaseReview>()?;
     m.add_class::<Renderer>()
 }

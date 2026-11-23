@@ -48,7 +48,7 @@ from core.composition import pen_px
 from core.saved_views import apply_shadow_state, georef_objects
 from PySide6.QtWidgets import QGraphicsLineItem, QGridLayout, QWidget as _QWidget  # noqa: E402
 from views.filedialogs import file_dialogs
-from views.icons import toolbar_icon_px
+from views.icons import DEFAULT_TOOLBAR_ICON_PX
 
 PT_TO_MM = 25.4 / 72.0
 _HANDLE_MM = 3.0          # corner resize handle, in paper mm
@@ -6767,11 +6767,11 @@ class ComposerWindow(QMainWindow):
         tb.toggleViewAction().setStatusTip(tr("Show or hide this toolbar."))
         tb.setObjectName("composer_tools")
         tb.setOrientation(Qt.Vertical)
-        tb.setIconSize(QSize(toolbar_icon_px(), toolbar_icon_px()))
+        tb.setIconSize(QSize(DEFAULT_TOOLBAR_ICON_PX, DEFAULT_TOOLBAR_ICON_PX))
         draw = QToolBar(tr("Draw"), self)
         draw.toggleViewAction().setStatusTip(tr("Show or hide this toolbar."))
         draw.setObjectName("composer_draw")
-        draw.setIconSize(QSize(toolbar_icon_px(), toolbar_icon_px()))
+        draw.setIconSize(QSize(DEFAULT_TOOLBAR_ICON_PX, DEFAULT_TOOLBAR_ICON_PX))
         group = QActionGroup(self)
         group.setExclusive(True)
         self._tool_actions = {}
@@ -7518,7 +7518,7 @@ class ComposerWindow(QMainWindow):
         tb.toggleViewAction().setStatusTip(tr("Show or hide this toolbar."))
         tb.setObjectName("sheet_toolbar")
         tb.setToolButtonStyle(Qt.ToolButtonIconOnly)   # icons, like the tools
-        tb.setIconSize(QSize(toolbar_icon_px(), toolbar_icon_px()))
+        tb.setIconSize(QSize(DEFAULT_TOOLBAR_ICON_PX, DEFAULT_TOOLBAR_ICON_PX))
 
         def act(icon, text, tip, slot):
             a = QAction(tool_icon(icon), text, self)
@@ -10415,7 +10415,7 @@ class ComposerWindow(QMainWindow):
         tb = QToolBar(tr("Arrange"), self)
         tb.toggleViewAction().setStatusTip(tr("Show or hide this toolbar."))
         tb.setObjectName("arrange_toolbar")
-        tb.setIconSize(QSize(toolbar_icon_px(), toolbar_icon_px()))
+        tb.setIconSize(QSize(DEFAULT_TOOLBAR_ICON_PX, DEFAULT_TOOLBAR_ICON_PX))
         from views.icons import tool_icon
         for icon, label, tip, slot in self._arrange_entries():
             act = QAction(tool_icon(icon), label, self)

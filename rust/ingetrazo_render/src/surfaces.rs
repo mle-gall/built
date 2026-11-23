@@ -11,31 +11,6 @@ fn button(id: &str, label: &str) -> Value {
 fn string(v: &Value) -> &str {
     v.as_str().unwrap_or_default()
 }
-fn about(data: &Value) -> Value {
-    let mut blocks = vec![
-        json!({"kind":"text","text":"Built is based on IngeTrazo and distributed under GPL-3.0-or-later."}),
-        json!({"kind":"buttons","align":"left","buttons":[button("license","Read licence ↗"),button("copy","Copy system info")]}),
-        json!({"kind":"caption","text":"System information"}),
-        json!({"kind":"kv","rows":data["facts"]}),
-        json!({"kind":"separator"}),
-        json!({"kind":"caption","text":"Credits"}),
-        json!({"kind":"buttons","align":"left","buttons":[button("upstream","IngeTrazo ↗")]}),
-    ];
-    for paragraph in include_str!("../../../AUTHORS").split("\n\n").skip(1) {
-        let mut lines = paragraph
-            .lines()
-            .filter(|l| !l.trim().is_empty() && !l.chars().all(|c| c == '-'));
-        if let Some(name) = lines.next() {
-            blocks.push(json!({"kind":"caption","text":name.trim()}));
-            let description = lines.map(str::trim).collect::<Vec<_>>().join(" ");
-            if !description.is_empty() {
-                blocks.push(json!({"kind":"text","text":description}));
-            }
-        }
-    }
-    json!({"id":"about","title":"About Built","width":900,"content":{"title":"Built","sub":data["build"],"blocks":blocks}})
-}
-
 #[derive(Deserialize)]
 struct Part {
     uid: String,
@@ -217,7 +192,7 @@ pub fn surface_spec(id: &str, snapshot: &str) -> PyResult<String> {
     let d: Value =
         serde_json::from_str(snapshot).map_err(|e| PyValueError::new_err(e.to_string()))?;
     let spec = match id {
-        "about" => about(&d),
+        "about" => crate::about::sheet(&d, false, |s| Ok(s.to_owned()))?,
         "extensions" => extensions(&d),
         "cutlist" => cutlist(&d)?,
         _ => return Err(PyValueError::new_err("Unknown sheet")),

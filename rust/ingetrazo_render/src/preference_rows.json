@@ -1,0 +1,51 @@
+{
+  "general": [
+    ["look", "Look", [
+      {"id": "language", "kind": "choice", "label": "Language", "restart": "Language", "tip": "Takes effect at the next start."},
+      {"id": "hover_picture", "kind": "check", "label": "Show a picture of the project on hover over its tab", "default": true}
+    ]],
+    ["files", "Files and undo", [
+      {"id": "autosave", "kind": "check", "label": "Auto-save", "default": true},
+      {"id": "autosave_min", "kind": "number", "label": "Every", "lo": 1, "hi": 60, "suffix": "min", "default": 5, "enabled_if": ["autosave", true]},
+      {"id": "backup", "kind": "check", "label": "Keep a backup of the previous save (.bak)", "default": true},
+      {"id": "undo_steps", "kind": "number", "label": "Undo steps", "lo": 0, "hi": 5000, "default": 200, "tip": "Steps kept for Undo. Each one holds a snapshot of the model, so fewer steps mean less memory on a big model; 0 = unlimited."},
+      {"id": "check_updates", "kind": "check", "label": "Check for new versions at startup", "default": true, "tip": "Once a day, Built asks GitHub for the latest version number. Nothing about you or your files is sent."}
+    ]],
+    ["newdoc", "New documents", [
+      {"id": "scale_figure", "kind": "check", "label": "Put the scale figure in new documents", "default": true},
+      {"id": "figure", "kind": "choice", "label": "Scale figure", "default": "ingeniero", "enabled_if": ["scale_figure", true]},
+      {"id": "figure_image", "kind": "path", "label": "Picture", "pick": "open", "visible_if": ["figure", "custom"], "enabled_if": ["scale_figure", true], "tip": "A PNG on a transparent background"},
+      {"id": "figure_height", "kind": "number", "label": "Height", "lo": 0.3, "hi": 3, "decimals": 2, "suffix": "m", "visible_if": ["figure", "custom"], "enabled_if": ["scale_figure", true], "tip": "The height this person stands"},
+      {"id": "figure_name", "kind": "edit", "label": "Name", "visible_if": ["figure", "custom"], "enabled_if": ["scale_figure", true]}
+    ]]
+  ],
+  "navigation": [
+    ["mouse", "Mouse", [
+      {"id": "invert_wheel", "kind": "check", "label": "Invert wheel zoom", "default": false},
+      {"id": "invert_orbit", "kind": "check", "label": "Invert vertical orbit", "default": false},
+      {"id": "look_sens", "kind": "number", "label": "Mouse-look sensitivity", "lo": 1, "hi": 100, "default": 25, "tip": "How fast a drag turns the head in First Person", "words": "first person walk"}
+    ]],
+    ["touch", "Trackpad", [
+      {"id": "trackpad_slide", "kind": "choice", "label": "Two-finger slide on the trackpad", "options": [["orbit", "Orbits the view"], ["pan", "Pans the view"], ["zoom", "Zooms the view"]], "default": "zoom"}
+    ]],
+    ["tools", "Tools", [
+      {"id": "cursor_style", "kind": "choice", "label": "Tool cursor", "options": [["tool", "The tool's icon"], ["crosshair", "Crosshair"], ["arrow", "Arrow"]], "default": "tool"},
+      {"id": "ask_section", "kind": "check", "label": "Ask for a name and symbol when placing a section plane", "default": true}
+    ]]
+  ],
+  "display": [
+    ["quality", "Quality", [
+      {"id": "soft_shadows", "kind": "check", "label": "Soft sun shadows", "default": false, "tip": "Shadow edges that soften away from what casts them, as in daylight. They cost the graphics card more while the sun casts shadows."},
+      {"id": "soft_level", "kind": "choice", "label": "Softness", "options": [[1, "Slight"], [2, "Moderate"], [3, "Strong"]], "default": 2, "enabled_if": ["soft_shadows", true]}
+    ]],
+    ["editing", "Editing a group", [
+      {"id": "rest_mode", "kind": "choice", "label": "Rest of model while editing", "options": [["normal", "Show normally"], ["fade", "Fade"], ["hide", "Hide (fastest)"]], "default": "fade", "words": "group component"},
+      {"id": "rest_fade", "kind": "slider", "label": "Fade intensity", "lo": 0, "hi": 100, "default": 75, "enabled_if": ["rest_mode", "fade"], "tip": "How strongly the rest of the model is washed toward grey while a group or component is open."}
+    ]]
+  ],
+  "import": [
+    ["import", "Import", [
+      {"id": "dxf_unit", "kind": "choice", "label": "Suggested unit for DXF/DWG", "options": [["mm", "Millimetres"], ["cm", "Centimetres"], ["m", "Metres"], ["in", "Inches"], ["ft", "Feet"]], "default": "mm"}
+    ]]
+  ]
+}

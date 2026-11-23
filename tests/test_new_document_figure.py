@@ -55,13 +55,12 @@ def test_switched_off_new_documents_start_empty(figure_setting):
 
 
 def test_the_preference_is_stored(figure_setting):
-    from views.preferences_dialog import PreferencesDialog
+    from tests.preferences_chrome import Controls
     w = _window()
     try:
-        dlg = PreferencesDialog(w)
-        assert dlg._scale_figure.isChecked()
-        dlg._scale_figure.setChecked(False)
-        dlg.accept()
+        ui = Controls(w, "general")
+        assert ui.value("scale_figure")
+        ui.set("scale_figure", False)
         assert QSettings().value("new_document/scale_figure") == "0"
     finally:
         _close(w)

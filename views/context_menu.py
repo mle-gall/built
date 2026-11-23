@@ -610,7 +610,7 @@ def _section(win, view, scene, sel, one):
     one(Verb("secreverse", "Reverse", win._on_reverse_section),
         Verb("secactive", "Active cut", win._on_toggle_active_section, checked=int(bool(p.active))),
         Verb("secalign", "Align view", win._on_align_view_to_section), label="Section")
-    one(Verb("secname", "Name and symbol…", lambda: win.prompt_section_name(p)))
+    one(Verb("secname", "Name and symbol…", lambda: win.prompt_section_name(p, automatic=False)))
     one(_zoom(win))
 
 

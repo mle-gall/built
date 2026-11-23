@@ -27,7 +27,6 @@ import sys
 
 from PySide6.QtCore import QEvent, QObject, QRect, Qt, QTimer
 
-_KEY = "mac_glass"       # a General setting, on by default where supported
 
 
 def supported() -> bool:
@@ -48,29 +47,8 @@ def supported() -> bool:
     return _objc() is not None
 
 
-_enabled: bool | None = None
-
-
 def enabled() -> bool:
-    """Glass on for this run: supported and not turned off in Preferences.
-    Read once — a change applies at the next start, so every window of a
-    run agrees."""
-    global _enabled
-    from PySide6.QtGui import QGuiApplication
-    if QGuiApplication.instance() is None:
-        return False                    # too early to know; not cached
-    if _enabled is None:
-        _enabled = False
-        if supported():
-            from core import general_settings
-            value = general_settings.value(_KEY, True)
-            _enabled = str(value).lower() not in ("false", "0", "no")
-    return _enabled
-
-
-def set_enabled(on: bool) -> None:
-    from core import general_settings
-    general_settings.set_value(_KEY, bool(on))
+    return supported()
 
 
 # ---- a minimal Objective-C bridge -------------------------------------------

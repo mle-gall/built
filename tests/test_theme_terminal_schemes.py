@@ -37,12 +37,9 @@ LABELS = {theme.STUDIO: "Studio", theme.SOLARIZED: "Solarized",
 @pytest.fixture
 def app():
     a = QApplication.instance()
-    before_theme, before_accent = theme.saved_theme(), theme.saved_accent()
     a.setStyleSheet("")
     theme._app_sheet = ""
     yield a
-    theme.save_theme(before_theme)
-    theme.save_accent(before_accent)
     a.setStyleSheet("")
     theme._app_sheet = ""
     theme.apply_theme(a, theme.DARK)
@@ -74,15 +71,11 @@ def test_a_new_theme_applies_its_own_shades(app, mode):
     assert theme.grip_colour() == QColor(colours["grip"])
     assert theme.active_tool_colour() == QColor(colours["active"])
     assert theme.icon_ink() == QColor(extra["ink"])
-    theme.save_theme(mode)
-    assert theme.saved_theme() == mode
 
 
 def test_the_accent_reaches_a_new_themes_sheet(app):
     theme.apply_theme(app, theme.SOLARIZED)
-    theme.save_accent("green")
-    theme.apply_accent(app)
-    assert "46, 160, 67" in app.styleSheet()
+    assert "106, 165, 255" in app.styleSheet()
     assert theme.SOLARIZED_COLOURS["raised"] in app.styleSheet()
 
 
@@ -96,25 +89,11 @@ def test_leaving_a_new_theme_for_dark_leaves_nothing_of_it(app):
     assert theme.icon_ink() == QColor(theme.ICON_INKS[theme.DARK])
 
 
-def test_preferences_offer_every_theme_with_a_translated_name(app):
-    from views.main_window import MainWindow
-    from views.preferences_dialog import PreferencesDialog
-    win = MainWindow()
-    try:
-        dlg = PreferencesDialog(win)
-        offered = [dlg._theme.itemData(i) for i in range(dlg._theme.count())]
-        dlg.deleteLater()
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
-    assert set(offered) == set(theme.THEMES)
-    root = Path(__file__).resolve().parent.parent / "i18n"
-    for path in root.glob("*.json"):
-        if path.name == "en.json":
-            continue
-        cat = json.loads(path.read_text(encoding="utf-8"))
-        for mode, label in LABELS.items():
-            assert cat.get(label), (path.name, label)
+def test_qt_palette_names_are_absent_from_settings(app):
+    from tests.preferences_chrome import Controls
+    from PySide6.QtWidgets import QWidget
+    encoded = json.dumps(Controls(QWidget(), "general").wire())
+    assert "Solarized" not in encoded and "Campbell" not in encoded
 
 
 def test_the_menu_bar_item_under_the_pointer_keeps_a_readable_text(app):

@@ -692,7 +692,7 @@ def main() -> int:
     import os as _os
     app.setDesktopFileName(_os.environ.get("FLATPAK_ID") or "ingetrazo")
     # Light or dark chrome: follows the desktop by default, live
-    # (Preferences ▸ General ▸ Theme pins one). See views/theme.py.
+    # The Qt host starts with the dark palette.
     from views.theme import apply_theme
     apply_theme(app)
     # macOS 26+: menus on the AppKit menu material (views/mac_glass.py).
@@ -802,13 +802,8 @@ def main() -> int:
     from PySide6.QtCore import QTimer
 
     if engine_fell_back:
-        from PySide6.QtWidgets import QMessageBox
         from core.i18n import tr
-        QTimer.singleShot(0, lambda: QMessageBox.information(
-            window, tr("Rust engine"),
-            tr("Built did not open the last time with the Rust engine "
-               "on, so it is back on the Python engine. You can turn it on "
-               "again in Preferences ▸ General.")))
+        window.statusBar().showMessage(tr("After two incomplete starts, this version is using the Python engine."), 8000)
 
     def _after_first_frame():
         if getattr(window, "_closed", False):

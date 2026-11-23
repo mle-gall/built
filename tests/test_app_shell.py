@@ -46,6 +46,25 @@ def test_tool_shortcut_goes_through_shortcut_override(host):
     assert host.errors == []
 
 
+def test_tool_shortcut_restored_in_new_shell(host, tmp_path):
+    from PySide6.QtGui import QKeySequence
+    from app_shell.host import Host
+    from views.shortcuts import save_shortcut
+
+    action = host.window._tool_actions["line"]
+    save_shortcut(action, [QKeySequence("F11")])
+    host.close()
+    reopened = Host(0, 1280, 800, 2.0, settings=str(tmp_path))
+    try:
+        action = reopened.window._tool_actions["line"]
+        assert action.shortcut() == QKeySequence("F11")
+        reopened.key(True, Qt.Key_F11.value, 0, "")
+        assert type(reopened.viewport.active_tool).__name__ == "LineTool"
+        assert not reopened.errors
+    finally:
+        reopened.close()
+
+
 def test_undo_from_the_menu(host):
     host.open(FIXTURE)
     from ingetrazo_core import Vec3 as QVector3D

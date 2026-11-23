@@ -1234,8 +1234,8 @@ class MainWindow(WorksessionMixin, QMainWindow):
         tb.setMovable(True)
         tb.setFloatable(True)
         tb.setAllowedAreas(Qt.AllToolBarAreas)
-        from views.icons import toolbar_icon_px
-        px = toolbar_icon_px()
+        from views.icons import DEFAULT_TOOLBAR_ICON_PX
+        px = DEFAULT_TOOLBAR_ICON_PX
         tb.setIconSize(QSize(px, px))
         tb.setToolButtonStyle(Qt.ToolButtonIconOnly)
         tb.toggleViewAction().setStatusTip(tr("Show or hide this toolbar."))
@@ -1243,20 +1243,6 @@ class MainWindow(WorksessionMixin, QMainWindow):
         from views.icons import style_overflow_button
         style_overflow_button(tb)
         return tb
-
-    def set_toolbar_icon_size(self, px: int) -> None:
-        """Icon size for every toolbar — this window's and the composer's
-        (open now or later: it reads the setting when it builds). From
-        Preferences ▸ General; persisted."""
-        from PySide6.QtCore import QSize
-        from views.icons import save_toolbar_icon_px
-        px = int(px)
-        save_toolbar_icon_px(px)
-        for tb in self.findChildren(QToolBar):
-            tb.setIconSize(QSize(px, px))
-        comp = getattr(self, "_composer", None)
-        if comp is not None and hasattr(comp, "set_toolbar_icon_size"):
-            comp.set_toolbar_icon_size(px)
 
     def _add_tool_button(self, tb: QToolBar, key: str) -> QAction:
         tool = self._tools[key]
@@ -1288,7 +1274,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         self._tool_group = QActionGroup(self)
         self._tool_group.setExclusive(True)
         self.toolbars: dict[str, QToolBar] = {}
-        # Icon size: Preferences ▸ General (views.icons.toolbar_icon_px).
+        # Qt host toolbars use their fixed icon size.
         # (action, icon_key) pairs so programmatic icons can be re-drawn when
         # the palette flips (dark ↔ light) at runtime — see changeEvent below.
         self._icon_actions: list[tuple[QAction, str]] = []
@@ -2741,7 +2727,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         btn.setAutoRaise(True)
         from views import mac_glass
         from views.theme import style as theme_style
-        theme_style(btn,             # {accent_rgb}: Preferences ▸ Accent colour
+        theme_style(btn,             # shared chrome accent
             "QToolButton {{ background: palette(mid); border: none;"
             " border-radius: 4px; }}"
             "QToolButton:hover {{ background: rgb({accent_rgb}); }}"
@@ -3261,7 +3247,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         btn.setCursor(Qt.PointingHandCursor)
         btn.setAutoRaise(True)
         btn.setFixedSize(self._PLUS_PX, self._PLUS_PX)
-        theme_style(btn,             # {accent_rgb}: Preferences ▸ Accent colour
+        theme_style(btn,             # shared chrome accent
             # Opaque: over the tabs cut by the arrows it ends them cleanly.
             "QToolButton {{ border: none; border-radius: 4px;"
             " background: palette(window); font-weight: bold; font-size: 14px; padding: 0 0 2px 0; }}"
@@ -5275,39 +5261,28 @@ class MainWindow(WorksessionMixin, QMainWindow):
         self.viewport.scene.show_axes = bool(on)
         self.viewport.update()
 
-    def prompt_section_name(self, plane) -> None:
-        """The post-placement prompt: name + symbol (cancel keeps
-        the defaults; the placement itself is already committed). «Don't
-        ask again» keeps the defaults from then on — many users never name
-        a section (issue #62, @pacaeiro); Preferences ▸ General turns the
-        prompt back on."""
-        if str(QSettings().value("section/ask_name", "1")) == "0":
+    def prompt_section_name(self, plane, *, automatic=True) -> None:
+        """Ask for the section label. A cancelled placement keeps its defaults."""
+        if automatic and str(QSettings().value("section/ask_name", "1")) == "0":
             return
-        from PySide6.QtWidgets import (QCheckBox, QDialog, QDialogButtonBox,
-                                       QFormLayout, QLineEdit)
-        dlg = QDialog(self)
-        dlg.setWindowTitle(tr("Name Section Plane"))
-        form = QFormLayout(dlg)
-        name_edit = QLineEdit(plane.name)
-        sym_edit = QLineEdit(plane.symbol)
-        sym_edit.setMaxLength(3)
-        form.addRow(tr("Name"), name_edit)
-        form.addRow(tr("Symbol"), sym_edit)
-        no_more = QCheckBox(tr("Don't ask again — keep the default name "
-                               "and symbol (Preferences ▸ General turns "
-                               "this back on)"))
-        form.addRow("", no_more)
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(dlg.accept)
-        buttons.rejected.connect(dlg.reject)
-        form.addRow(buttons)
-        if dlg.exec() == QDialog.Accepted:
-            plane.name = name_edit.text().strip() or plane.name
-            plane.symbol = sym_edit.text().strip() or plane.symbol
-            if no_more.isChecked():
+        from ingetrazo_render import OperationForm
+        from core.history import RenameSectionPlaneCommand
+        from views import chrome_forms
+        vp = self.viewport
+        scene = vp.scene
+
+        def apply(values):
+            if self.viewport is not vp or vp.scene is not scene or plane not in scene.section_planes:
+                return
+            name, symbol = values["name"] or plane.name, values["symbol"] or plane.symbol
+            if (name, symbol) != (plane.name, plane.symbol):
+                vp.history.execute(RenameSectionPlaneCommand(plane, name, symbol))
+                vp.notify_scene_changed()
+            if values["skip"]:
                 QSettings().setValue("section/ask_name", "0")
-            self.viewport.update()
+
+        chrome_forms.show(self, chrome_forms.OperationForm(
+            tr("Name Section Plane"), OperationForm.section(plane.name, plane.symbol, automatic), apply))
 
     def _selected_section_planes(self) -> list:
         from core.section import SectionPlane
@@ -5592,15 +5567,6 @@ class MainWindow(WorksessionMixin, QMainWindow):
     #: Extension menus: «Group them when there are many»).
     EXT_CONTEXT_INLINE = 8
 
-    @staticmethod
-    def extension_menu_mode() -> str:
-        """Preferences ▸ General ▸ Extension menus: ``"auto"`` (group them
-        when there are many — the default), ``"always"`` (the right-click
-        entries always under «Extensions ▸») or ``"flat"`` (each entry as
-        the extension adds it, as before 0.5.9)."""
-        mode = str(_gs.value("ext_menus", "auto") or "auto")
-        return mode if mode in ("auto", "always", "flat") else "auto"
-
     #: More extensions than this at the top of the Extensions menu and
     #: each goes into the submenu of its catalog category.
     EXT_MENU_INLINE = 15
@@ -5617,9 +5583,6 @@ class MainWindow(WorksessionMixin, QMainWindow):
           catalog category — Architecture ▸, Drawing ▸… The tools built
           into IngeTrazo, and any extension the catalog does not know,
           stay at the top."""
-        mode = self.extension_menu_mode()
-        if mode == "flat":
-            return
         menu = getattr(self, "_ext_menu", None)
         owners = self.__dict__.get("_ext_action_owner", {})
         if menu is None or not owners:
@@ -5642,8 +5605,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         catalog = self._extension_catalog()
         mine = [a for a in menu.actions() if owners.get(a) in catalog
                 and catalog[owners[a]][1]]
-        if not mine or (mode != "always"
-                        and len({owners[a] for a in mine}) <= self.EXT_MENU_INLINE):
+        if not mine or len({owners[a] for a in mine}) <= self.EXT_MENU_INLINE:
             return
         from views.extension_manager_dialog import _TAG_LABELS, _tag_label
         order = list(_TAG_LABELS)
@@ -5677,15 +5639,10 @@ class MainWindow(WorksessionMixin, QMainWindow):
         of the right-click menu for the rest of the session and named once
         in the status bar: an extension broken by an update froze every
         right-click for five seconds and nothing said which (#588)."""
-        mode = self.extension_menu_mode()
         bad = self.__dict__.setdefault("_ext_context_off", set())
         fns = [fn for fn in getattr(self, "_ext_context_menus", ())
                if fn not in bad]
         owners = self.__dict__.get("_ext_context_owner", {})
-        if mode == "flat":
-            for fn in fns:
-                self._run_extension_context_entry(fn, menu, sel, owners)
-            return
         items = []                          # (holder, [its entries])
         for fn in fns:
             holder = QMenu(self._extension_name(owners.get(fn, "")), menu)
@@ -5700,7 +5657,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         if not items:
             return
         target = menu
-        if mode == "always" or len(items) > self.EXT_CONTEXT_INLINE:
+        if len(items) > self.EXT_CONTEXT_INLINE:
             target = QMenu(tr("Extensions"), menu)
             menu.addMenu(target)
         for holder, acts in items:
@@ -5835,7 +5792,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             # Rafael, 50:45: «no sé cómo cambiarle el 1 por AA o BB». The
             # prompt only ever appeared the moment a plane was placed.
             menu.addAction(tr("Name and symbol…"),
-                           lambda p=sec_planes[0]: self.prompt_section_name(p))
+                           lambda p=sec_planes[0]: self.prompt_section_name(p, automatic=False))
             menu.addSeparator()
 
         from core.image_plane import ImagePlane
@@ -10265,8 +10222,6 @@ class MainWindow(WorksessionMixin, QMainWindow):
         labels = [tr("Metres"), tr("Centimetres"), tr("Millimetres"),
                   tr("Inches"), tr("Feet")]
         guess = suggest_unit(path)
-        if guess == "m":
-            guess = str(QSettings().value("import/obj_unit", "m") or "m")
         idx = keys.index(guess) if guess in keys else 0
         label, ok = QInputDialog.getItem(
             self, tr("Import OBJ"),
@@ -10275,7 +10230,6 @@ class MainWindow(WorksessionMixin, QMainWindow):
         if not ok:
             return None
         key = keys[labels.index(label)]
-        QSettings().setValue("import/obj_unit", key)
         return OBJ_UNITS[key]
 
     # ---- linked documents (core/links.py) ------------------------------------
@@ -11909,6 +11863,8 @@ class MainWindow(WorksessionMixin, QMainWindow):
         if not self._confirm_quit():
             event.ignore()
             return
+        from views import chrome_sheet
+        chrome_sheet.close(self)
         _forms.close_all(self)
         self._release_check = None
         self.persist_worksession()

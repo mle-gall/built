@@ -461,11 +461,10 @@ def test_preferences_ok_untouched_keeps_the_motion(tmp_path, monkeypatch):
     from PySide6.QtCore import QSettings
     from PySide6.QtWidgets import QApplication, QWidget
     QApplication.instance() or QApplication([])
-    import views.preferences_dialog as prefs_mod
+    from views import chrome_sheet, settings_sheet
     from views import ndof_input
     path = tmp_path / "p.ini"
     mk = lambda: QSettings(str(path), QSettings.IniFormat)   # noqa: E731
-    monkeypatch.setattr(prefs_mod, "QSettings", mk)
     monkeypatch.setattr(ndof_input, "QSettings", mk, raising=False)
     import PySide6.QtCore as QtCore
     monkeypatch.setattr(QtCore, "QSettings", mk)
@@ -490,8 +489,9 @@ def test_preferences_ok_untouched_keeps_the_motion(tmp_path, monkeypatch):
             self._rest_actions = {}
 
     win = _Win()
-    dlg = prefs_mod.PreferencesDialog(win)
-    dlg.accept()
+    settings_sheet.show(win, page="ndof")
+    chrome_sheet.current(win).build(chrome_sheet.Ctx(win, None))
+    chrome_sheet.close(win)
     after = ndof_input.load_settings()
     assert after.sensitivity == before.sensitivity
     for s in _samples():

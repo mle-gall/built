@@ -521,12 +521,20 @@ class ShellWindow(QObject):
         self._shared_components = {}
         self._active_file = None
         self._session_unsaved_doc = None
+        from core.i18n import tr
         for key, tool in self._tools.items():
             shortcut = getattr(tool, "shortcut", "") or ""
             if key == "select":
                 shortcut = "Space"          # bound by MainWindow, not the tool
-            self._tool_actions[key] = ShellAction(
-                getattr(tool, "name", key), shortcut, run=lambda k=key: self._activate_tool(k))
+            action = QAction(tr(getattr(tool, "name", key)), self)
+            action.setCheckable(True)
+            alternate = getattr(tool, "shortcut_alt", None)
+            action.setShortcuts([QKeySequence(s) for s in (shortcut, alternate) if s])
+            action.triggered.connect(lambda checked=False, k=key: self._activate_tool(k))
+            self._tool_actions[key] = action
+        from views.shortcuts import remember_defaults, apply_user_shortcuts
+        remember_defaults(self)
+        apply_user_shortcuts(self)
 
     def __getattr__(self, name):
         if name.startswith("__"):
@@ -579,7 +587,8 @@ class ShellWindow(QObject):
         doc.untitled_no = self._free_untitled_no() if self._documents else 1
         vp = DocumentController(host)
         try:
-            vp.history.max_steps = 200
+            from core import general_settings
+            vp.history.max_steps = int(general_settings.value("undo_steps", 200))
         except Exception:  # noqa: BLE001
             pass
         view = ShellView(host)
@@ -690,9 +699,6 @@ class ShellWindow(QObject):
 
     def window(self):
         return self
-
-    def findChildren(self, *_args, **_kwargs):
-        return []
 
     def windowHandle(self):
         return _WindowHandle(self._host)

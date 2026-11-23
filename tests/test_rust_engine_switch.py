@@ -20,7 +20,7 @@ def fresh(monkeypatch):
         return importlib.reload(_native)
     saved = _native.__dict__.get("native", _native)
     yield make
-    general_settings.set_value(_native.SETTING, "0")
+    general_settings.set_value("rust_engine", "0")
     make()
     if saved is not _native:
         _native.native = saved      # what the rest of the session saw
@@ -30,7 +30,7 @@ def _forget_choice():
     from PySide6.QtCore import QSettings
     st = QSettings()
     for group in ("General/", "general/"):
-        st.remove(group + _native.SETTING)
+        st.remove(group + "rust_engine")
 
 
 def test_on_by_default(fresh, monkeypatch):
@@ -56,16 +56,17 @@ def test_on_by_default_without_the_module_is_python(fresh, monkeypatch):
     assert mod.engine() == "Python"
 
 
-def test_turned_off_in_preferences(fresh, monkeypatch):
+def test_obsolete_engine_preference_is_ignored(fresh, monkeypatch):
     monkeypatch.delenv("INGETRAZO_RUST", raising=False)
-    general_settings.set_value(_native.SETTING, "0")
+    general_settings.set_value("rust_engine", "0")
     mod = fresh()
-    assert mod.native is None
-    assert mod.engine() == "Python"
+    assert mod.native is _native.available()
+    assert mod.wanted()
 
 
 def _reset_guard():
-    general_settings.set_value(_native.SETTING, "0")
+    _native._guard_disabled = False
+    general_settings.set_value("rust_engine", "0")
     general_settings.set_value(_native.STARTING, "0")
     general_settings.set_value(_native.OFF_BY_GUARD, "")
 
@@ -82,7 +83,7 @@ def test_the_start_guard_watches_a_default_start(monkeypatch):
         assert general_settings.value(_native.STARTING) == "1"
         assert _native.start_guard([]) is False     # one that never drew
         assert _native.start_guard([]) is True      # two: back off
-        assert general_settings.value(_native.SETTING) == "0"
+        assert not _native.wanted()
     finally:
         _reset_guard()
 
@@ -91,7 +92,7 @@ def test_preference_turns_it_on(fresh, monkeypatch):
     if _native.available() is None:
         pytest.skip("native module not built")
     monkeypatch.delenv("INGETRAZO_RUST", raising=False)
-    general_settings.set_value(_native.SETTING, "1")
+    general_settings.set_value("rust_engine", "1")
     mod = fresh()
     assert mod.native is not None
     assert mod.engine() == "Rust"
@@ -102,7 +103,7 @@ def test_environment_overrides_preference(fresh, monkeypatch, env, pref, on):
     if on and _native.available() is None:
         pytest.skip("native module not built")
     monkeypatch.setenv("INGETRAZO_RUST", env)
-    general_settings.set_value(_native.SETTING, pref)
+    general_settings.set_value("rust_engine", pref)
     mod = fresh()
     assert (mod.native is not None) is on
 
@@ -114,7 +115,7 @@ def test_two_starts_that_never_drew_turn_the_engine_off(monkeypatch):
     the normal engine, saved, and says so once."""
     monkeypatch.delenv("INGETRAZO_RUST", raising=False)
     try:
-        general_settings.set_value(_native.SETTING, "1")
+        general_settings.set_value("rust_engine", "1")
         general_settings.set_value(_native.STARTING, "0")
         general_settings.set_value(_native.OFF_BY_GUARD, "")
         assert _native.start_guard([]) is False
@@ -124,9 +125,9 @@ def test_two_starts_that_never_drew_turn_the_engine_off(monkeypatch):
         assert _native.start_guard([]) is False    # a good start again
         # ... this one dies before its first frame, and the next one too.
         assert _native.start_guard([]) is False
-        assert general_settings.value(_native.SETTING) == "1"
+        assert _native.wanted()
         assert _native.start_guard([]) is True
-        assert general_settings.value(_native.SETTING) == "0"
+        assert not _native.wanted()
         assert general_settings.value(_native.STARTING) == "0"
         assert _native.start_guard([]) is False    # off now: nothing to say
     finally:
@@ -139,17 +140,17 @@ def test_one_start_that_never_drew_leaves_the_engine_on(monkeypatch):
     The engine stays on, and a start that does draw forgets it."""
     monkeypatch.delenv("INGETRAZO_RUST", raising=False)
     try:
-        general_settings.set_value(_native.SETTING, "1")
+        general_settings.set_value("rust_engine", "1")
         general_settings.set_value(_native.STARTING, "0")
         general_settings.set_value(_native.OFF_BY_GUARD, "")
         assert _native.start_guard([]) is False    # never draws
         assert _native.start_guard([]) is False    # the next start: still on
-        assert general_settings.value(_native.SETTING) == "1"
+        assert _native.wanted()
         _native.start_ok()                         # and this one draws
         assert general_settings.value(_native.STARTING) == "0"
         assert _native.start_guard([]) is False    # one more that never
         assert _native.start_guard([]) is False    # draws: the count began
-        assert general_settings.value(_native.SETTING) == "1"   # again
+        assert _native.wanted()   # again
     finally:
         _reset_guard()
 
@@ -161,7 +162,7 @@ def test_another_version_tries_the_engine_the_guard_turned_off(monkeypatch):
     import core.version
     monkeypatch.delenv("INGETRAZO_RUST", raising=False)
     try:
-        general_settings.set_value(_native.SETTING, "1")
+        general_settings.set_value("rust_engine", "1")
         general_settings.set_value(_native.STARTING, "0")
         general_settings.set_value(_native.OFF_BY_GUARD, "")
         monkeypatch.setattr(core.version, "__version__", "9.9.1")
@@ -170,21 +171,13 @@ def test_another_version_tries_the_engine_the_guard_turned_off(monkeypatch):
         assert _native.start_guard([]) is True     # off, by 9.9.1's guard
         assert general_settings.value(_native.OFF_BY_GUARD) == "9.9.1"
         assert _native.start_guard([]) is False    # same version: stays off
-        assert general_settings.value(_native.SETTING) == "0"
+        assert not _native.wanted()
         monkeypatch.setattr(core.version, "__version__", "9.9.2")
         assert _native.start_guard([]) is False    # the update tries again
-        assert general_settings.value(_native.SETTING) == "1"
+        assert _native.wanted()
         assert general_settings.value(_native.STARTING) == "1"
         assert general_settings.value(_native.OFF_BY_GUARD) == ""
         _native.start_ok()
-        # Off by the guard again, and then the user has their say.
-        assert _native.start_guard([]) is False
-        assert _native.start_guard([]) is False
-        assert _native.start_guard([]) is True
-        _native.chosen_by_user()
-        monkeypatch.setattr(core.version, "__version__", "9.9.3")
-        assert _native.start_guard([]) is False
-        assert general_settings.value(_native.SETTING) == "0"   # theirs
     finally:
         _reset_guard()
 
@@ -192,15 +185,15 @@ def test_another_version_tries_the_engine_the_guard_turned_off(monkeypatch):
 def test_python_engine_flag_wins_for_one_run(monkeypatch):
     monkeypatch.delenv("INGETRAZO_RUST", raising=False)
     try:
-        general_settings.set_value(_native.SETTING, "1")
+        general_settings.set_value("rust_engine", "1")
         assert _native.start_guard(["--python-engine"]) is False
         import os
         assert os.environ["INGETRAZO_RUST"] == "0"
-        assert general_settings.value(_native.SETTING) == "1"   # kept
+        assert general_settings.value("rust_engine") == "1"   # old key is untouched
         assert _native.wanted() is False
     finally:
         monkeypatch.delenv("INGETRAZO_RUST", raising=False)
-        general_settings.set_value(_native.SETTING, "0")
+        general_settings.set_value("rust_engine", "0")
         general_settings.set_value(_native.STARTING, "0")
 
 

@@ -8,18 +8,24 @@ import pytest
 from PySide6.QtWidgets import QApplication
 
 from core.i18n import current_language, set_language
-from views.about_dialog import AboutDialog, system_info
+from views.report_sheets import About, about_review
+from types import SimpleNamespace
 
 _app = QApplication.instance() or QApplication([])
 
 _GL = "NVIDIA Corporation · RTX 9999/PCIe · OpenGL 4.6.0"
 
 
+def system_info(version, gl_line=""):
+    return about_review(version, gl_line).info
+
+
 def test_the_info_names_program_system_python_qt_and_gl():
     text = system_info("9.8.7", _GL)
     assert text.splitlines()[0].startswith("Built 9.8.7")
-    from views.about_dialog import _os_name
-    assert f"OS: {_os_name()} ({platform.machine()})" in text
+    os_line = next(line for line in text.splitlines() if line.startswith("OS: "))
+    assert platform.machine() in os_line
+    assert ("macOS" if platform.system() == "Darwin" else platform.system()) in os_line
     assert f"Python: {platform.python_version()}" in text
     assert "Qt: " in text and "PySide6: " in text
     assert f"OpenGL: {_GL}" in text
@@ -44,18 +50,24 @@ def test_the_info_stays_in_english_whatever_the_interface_language():
 
 def test_the_button_copies_the_info_to_the_clipboard():
     QApplication.clipboard().setText("something else")
-    dlg = AboutDialog(None, "9.8.7", _GL)
-    dlg.copy_button.click()
+    ctx = SimpleNamespace(win=SimpleNamespace())
+    sheet = About()
+    sheet.review = about_review("9.8.7", _GL)
+    sheet.build(ctx)
+    sheet.act(ctx, "verb", ["copy"])
     assert QApplication.clipboard().text() == system_info("9.8.7", _GL)
-    dlg.close()
 
 
 def test_the_button_says_it_copied():
-    dlg = AboutDialog(None, "9.8.7")
-    label = dlg.copy_button.text()
-    dlg.copy_button.click()
-    assert dlg.copy_button.text() != label
-    dlg.close()
+    from core.i18n import tr
+    ctx = SimpleNamespace(win=SimpleNamespace())
+    sheet = About()
+    def label():
+        buttons = [v for b in sheet.build(ctx).wire()["content"]["blocks"] for v in b.get("buttons", [])]
+        return next(v["label"] for v in buttons if v["id"] == "copy")
+    assert label() == tr("Copy to clipboard")
+    sheet.act(ctx, "verb", ["copy"])
+    assert label() == tr("Copied")
 
 
 def test_the_os_line_has_nothing_the_locale_translated(monkeypatch):

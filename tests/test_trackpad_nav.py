@@ -51,7 +51,6 @@ def vp():
     view.resize(400, 300)
     view._touch_slide = "orbit"
     view._trackpad_slide = "zoom"
-    view._trackpad_inertia = True
     view._invert_orbit_y = False
     view._invert_wheel = False
     return view
@@ -176,7 +175,6 @@ def test_the_first_pixels_are_not_lost(vp):
     other = Viewport(None)
     other.resize(400, 300)
     other._touch_slide = "orbit"
-    other._trackpad_inertia = True
     other._invert_orbit_y = False
     finger_slide(other, 6, 0, steps=1)
     assert other.camera.yaw - yaw0 == pytest.approx(turned_in_3)
@@ -258,13 +256,17 @@ def test_momentum_keeps_turning_with_inertia_on(vp):
     assert vp.camera.yaw != yaw1
 
 
-def test_momentum_is_dropped_with_inertia_off(vp):
-    vp._trackpad_inertia = False
-    finger_slide(vp, 10, 0)
-    yaw1 = vp.camera.yaw
-    slide(vp, 6, 0, phase=Qt.ScrollMomentum)
-    slide(vp, 6, 0, phase=Qt.ScrollMomentum)
-    assert vp.camera.yaw == yaw1
+def test_retired_inertia_override_is_ignored(vp):
+    from PySide6.QtCore import QSettings
+    settings = QSettings()
+    settings.setValue("nav/trackpad_inertia", "0")
+    try:
+        finger_slide(vp, 10, 0)
+        yaw = vp.camera.yaw
+        slide(vp, 6, 0, phase=Qt.ScrollMomentum)
+        assert vp.camera.yaw != yaw
+    finally:
+        settings.remove("nav/trackpad_inertia")
 
 
 def test_a_new_slide_picks_its_pivot_again(vp):
@@ -449,7 +451,6 @@ def test_the_metal_view_orbits_and_pinches_too():
     source = Viewport(None)
     source.resize(400, 300)
     source._touch_slide = "orbit"
-    source._trackpad_inertia = True
     v = WgpuView()
     v.resize(400, 300)
     v.source_viewport = source

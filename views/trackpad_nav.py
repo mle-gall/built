@@ -34,8 +34,7 @@ lift (``IDLE_RESET_S`` without events, or an end-of-gesture event).
 The functions take the *view* (a :class:`views.viewport.Viewport` or a
 :class:`views.wgpu_view.WgpuView`) and read what they need from it:
 ``camera``, ``height()``, ``_orbit_pivot_at``, ``_zoom_at`` and the
-``_invert_orbit_y`` / ``_touch_slide`` / ``_trackpad_slide`` /
-``_trackpad_inertia`` preferences, looked up on the view, then on its
+``_invert_orbit_y`` / ``_touch_slide`` / ``_trackpad_slide`` preferences, looked up on the view, then on its
 ``source_viewport``.
 """
 from __future__ import annotations
@@ -78,21 +77,6 @@ def load_slide_mode() -> str:
     from PySide6.QtCore import QSettings
     mode = str(QSettings().value("nav/trackpad_slide", DEFAULT_SLIDE)).lower()
     return mode if mode in SLIDE_MODES else DEFAULT_SLIDE
-
-
-def load_touch_slide() -> str:
-    """A finger's slide on the touch screen."""
-    from PySide6.QtCore import QSettings
-    mode = str(QSettings().value("nav/touch_slide", DEFAULT_TOUCH_SLIDE)).lower()
-    return mode if mode in SLIDE_MODES else DEFAULT_TOUCH_SLIDE
-
-
-def load_inertia() -> bool:
-    """Whether the view keeps turning after the fingers lift (the momentum
-    events macOS sends). On by default: it is what makes a trackpad feel
-    smooth (#248)."""
-    from PySide6.QtCore import QSettings
-    return str(QSettings().value("nav/trackpad_inertia", "1")) != "0"
 
 
 def _pref(view, attr: str, loader):
@@ -226,16 +210,12 @@ def slide(view, ev) -> bool:
         ev.accept()                 # the fingers are pinching, not sliding
         return True
     if is_touch_screen(ev):
-        default = _pref(view, "_touch_slide", load_touch_slide)
+        default = _pref(view, "_touch_slide", lambda: DEFAULT_TOUCH_SLIDE)
     else:
         default = _pref(view, "_trackpad_slide", load_slide_mode)
     mode = slide_mode(ev, default)
     if mode == "zoom":
         return False                # the wheel's zoom, momentum included
-    if (phase == Qt.ScrollMomentum
-            and not _pref(view, "_trackpad_inertia", load_inertia)):
-        ev.accept()
-        return True
     dx, dy = slide_pixels(ev)
     if g.lock is None:
         g.slide_dx += dx

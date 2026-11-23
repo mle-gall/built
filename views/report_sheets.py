@@ -25,39 +25,78 @@ class NativeSheet(chrome_sheet.Sheet):
 def _copy(text):
     if chrome_sheet.in_shell():
         from app_shell import native
-        native.pasteboard_write([("public.utf8-plain-text", text.encode())])
-    else:
-        from PySide6.QtWidgets import QApplication
-        QApplication.clipboard().setText(text)
+        return native.pasteboard_write([("public.utf8-plain-text", text.encode())])
+    from PySide6.QtWidgets import QApplication
+    QApplication.clipboard().setText(text)
+    return True
+
+
+def about_review(version, gl_line="", host=None, renderer=None):
+    import os
+    import platform
+    import sys
+    import PySide6
+    from PySide6.QtCore import qVersion
+    from PySide6.QtGui import QGuiApplication
+    from ingetrazo_render import AboutReview, build_commit
+    from core._native import engine
+    from core.i18n import current_language
+
+    system = platform.system()
+    pretty = ""
+    if system == "Linux":
+        try:
+            pretty = platform.freedesktop_os_release().get("PRETTY_NAME", "")
+        except OSError:
+            pass
+    size = None
+    if host is not None:
+        size = [host.width, host.height, host.scale]
+    elif screen := QGuiApplication.primaryScreen():
+        size = [screen.size().width(), screen.size().height(), screen.devicePixelRatio()]
+    return AboutReview(json.dumps(dict(
+        version=version, flatpak=bool(os.environ.get("FLATPAK_ID")), appimage=bool(os.environ.get("APPIMAGE")),
+        packaged=bool(getattr(sys, "frozen", False) or (chrome_sheet.in_shell() and hasattr(sys, "_MEIPASS"))),
+        system=system, release=platform.release(), machine=platform.machine(), pretty=pretty,
+        os_version=platform.mac_ver()[0] if system == "Darwin" else platform.version(),
+        python=platform.python_version(), qt=qVersion(), pyside=PySide6.__version__, gl=gl_line,
+        renderer=getattr(renderer, "backend_label", "wgpu"), size=size, native=host is not None, language=current_language(), engine=engine(), commit=build_commit)))
 
 
 class About(chrome_sheet.Provider):
     id = "about"
 
+    def __init__(self):
+        self.review = None
+
     def build(self, ctx):
-        from ingetrazo_render import build_commit as commit
-        from core._native import engine
         from core.version import __version__
-        from views.about_dialog import system_info
-        lines = system_info(__version__).splitlines()
-        if chrome_sheet.in_shell():
-            host = ctx.win._host
-            # The embedded Qt platform supplies a synthetic offscreen screen.
-            lines = [line for line in lines if not line.startswith("Screen:")]
-            lines.append(f"Window: {host.width}x{host.height} @ {host.scale:g}x")
-        lines.extend([f"Engine: {engine()}", "Renderer: Metal (wgpu)", f"Commit: {commit}"])
-        self.info = "\n".join(lines)
-        facts = [[*line.split(": ", 1), ""] for line in lines[1:]]
-        return NativeSheet(self.id, dict(build=f"{lines[0]} · {commit}", facts=facts))
+        from core.i18n import tr
+        if self.review is None:
+            self.review = about_review(__version__, host=ctx.win._host if chrome_sheet.in_shell() else None,
+                                       renderer=getattr(getattr(ctx, "view", None), "renderer", None))
+        return NativeSheet(self.id, spec=self.review.sheet(tr))
+
+    def signature(self, ctx):
+        return self.review.copied() if self.review else False
 
     def act(self, ctx, verb, args):
-        if verb == "verb":
-            if args[0] == "copy":
-                _copy(self.info)
-            elif args[0] in ("license", "upstream"):
-                import webbrowser
-                webbrowser.open({"license": "https://www.gnu.org/licenses/gpl-3.0.html",
-                                 "upstream": "https://github.com/ingelibre/ingetrazo"}[args[0]])
+        if verb != "verb" or not args or self.review is None:
+            return
+        action = self.review.action(args[0])
+        if action is None:
+            return
+        kind, value = action
+        if kind == "copy":
+            from PySide6.QtCore import QTimer
+            if not _copy(value):
+                return
+            self.review.acknowledge()
+            QTimer.singleShot(1510, lambda: chrome_sheet.refresh(ctx.win)
+                              if chrome_sheet.current(ctx.win) is self else None)
+        elif kind == "open":
+            import webbrowser
+            webbrowser.open(value)
 
 
 class CutList(chrome_sheet.Provider):

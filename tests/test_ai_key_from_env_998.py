@@ -12,6 +12,7 @@ import sys
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest  # noqa: E402
+from tests.preferences_chrome import settings_file
 from PySide6.QtCore import QSettings  # noqa: E402
 from PySide6.QtWidgets import QApplication, QWidget  # noqa: E402
 
@@ -175,31 +176,10 @@ def test_missing_key_hint_names_the_variable(clean_env):
         None, "gemini", "")
 
 
-def test_preferences_shows_the_same_note(clean_env, tmp_path):
-    import views.preferences_dialog as prefs_mod
-    path = tmp_path / "prefs.ini"
-    clean_env.setattr(prefs_mod, "QSettings",
-                      lambda: QSettings(str(path), QSettings.IniFormat))
+def test_key_note_has_one_owner(clean_env, settings_file):
+    from plugins.ai_assistant import env_key_note
+    from tests.preferences_chrome import Controls
     clean_env.setenv("GROQ_API_KEY", "gsk_env")
-
-    class _Win(QWidget):
-        def __init__(self):
-            super().__init__()
-
-            class _VP:
-                edit_rest_mode = "fade"
-
-                def set_edit_rest_mode(self, mode):
-                    self.edit_rest_mode = mode
-
-            self.viewport = _VP()
-            self._rest_actions = {}
-
-    win = _Win()
-    dlg = prefs_mod.PreferencesDialog(win)
-    dlg._provider.setCurrentIndex(dlg._provider.findData("groq"))
-    dlg._api_key.setText("")
-    assert "GROQ_API_KEY" in dlg._key_env.text()
-    assert not dlg._key_env.isHidden()
-    dlg._api_key.setText("gsk_typed")
-    assert dlg._key_env.isHidden()
+    assert "GROQ_API_KEY" in env_key_note("groq", "")
+    assert not env_key_note("groq", "gsk_typed")
+    assert "ai" not in {row.get("id") for row in Controls(QWidget(), "general").wire()["side"]}

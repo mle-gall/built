@@ -89,7 +89,8 @@ class Host:
         self.window = ShellWindow(self)
         viewport = DocumentController(self)
         try:
-            viewport.history.max_steps = 200
+            from core import general_settings
+            viewport.history.max_steps = int(general_settings.value("undo_steps", 200))
         except Exception:
             pass
         view = ShellView(self)
@@ -97,6 +98,7 @@ class Host:
         view.camera = viewport.camera
         viewport.keys_stand_in = view
         self.window.bind(viewport, view)
+        self._device = None
         viewport.set_active_tool(None)
         modal.install(self)
         files.install(self.window)
@@ -505,9 +507,9 @@ class Host:
         command = view_shortcut(combo.toString(QKeySequence.PortableText))
         if command:
             return run(self.window, command)
-        for action in list(self.window._tool_actions.values()):
-            seq = action.shortcut()
-            if not seq.isEmpty() and seq.matches(combo) == QKeySequence.ExactMatch:
+        from PySide6.QtGui import QAction
+        for action in self.window.findChildren(QAction):
+            if action.isEnabled() and any(seq.matches(combo) == QKeySequence.ExactMatch for seq in action.shortcuts()):
                 action.trigger()
                 return True
         return False
@@ -572,6 +574,15 @@ class Host:
     def focus(self, on):
         if on:
             self._front()
+            from views.ndof_input import shared_input
+            if self._device is None and (device := shared_input()).backend_name:
+                self._device = device
+                device.motion.connect(self.window._on_ndof_motion)
+                device.button.connect(self.window._on_ndof_button)
+        elif self._device is not None:
+            self._device.motion.disconnect(self.window._on_ndof_motion)
+            self._device.button.disconnect(self.window._on_ndof_button)
+            self._device = None
         if not on:
             self._guard("focus out", self.view.focusOutEvent, None)
 
@@ -614,7 +625,10 @@ class Host:
 
     def close(self):
         from app_shell import windows
-        from views import chrome_forms
+        from views import chrome_forms, chrome_sheet
+        if self._device is not None:
+            self.focus(False)
+        chrome_sheet.close(self.window)
         chrome_forms.close_all(self.window)
         self.window._release_check = None
         windows.unregister(self)

@@ -32,7 +32,7 @@ def _switches_theme(path: str) -> bool:
         text = Path(path).read_text(encoding="utf-8")
     except OSError:
         return False
-    return "apply_theme(" in text or "apply_accent(" in text
+    return "apply_theme(" in text
 
 
 def main() -> int:

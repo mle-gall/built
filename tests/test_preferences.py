@@ -22,18 +22,7 @@ elif not isinstance(_inst, QApplication):
     pytest.skip("a non-widget QGuiApplication is already active",
                 allow_module_level=True)
 
-import views.preferences_dialog as prefs_mod  # noqa: E402
-from views.preferences_dialog import PreferencesDialog  # noqa: E402
-
-
-@pytest.fixture
-def settings_file(tmp_path, monkeypatch):
-    """Point the dialog's QSettings at a throwaway INI file."""
-    path = tmp_path / "prefs.ini"
-    monkeypatch.setattr(
-        prefs_mod, "QSettings",
-        lambda: QSettings(str(path), QSettings.IniFormat))
-    return path
+from tests.preferences_chrome import Controls, settings_file
 
 
 class _Win(QWidget):
@@ -62,60 +51,48 @@ def _fresh(path):
 
 def test_ok_writes_the_settings(settings_file):
     win = _Win()
-    dlg = PreferencesDialog(win)
-    dlg._obj_unit.setCurrentIndex(dlg._obj_unit.findData("cm"))
-    dlg._dxf_unit.setCurrentIndex(dlg._dxf_unit.findData("m"))
-    dlg._coord.setCurrentIndex(dlg._coord.findData("utm"))
-    dlg._model.setText("llama-3.3-70b")
-    dlg._shots.setChecked(False)
-    dlg._autosave_min.setValue(10)
-    dlg._backup.setChecked(False)
-    dlg._invert.setChecked(True)
-    dlg._invert_orbit.setChecked(True)
-    dlg._look_sens.setValue(40)
-    dlg._msaa.setCurrentIndex(dlg._msaa.findData(8))
-    dlg.accept()
+    ui = Controls(win, "import")
+    ui.select("import").set("dxf_unit", "m")
+    ui.select("general").set("autosave_min", 10)
+    ui.select("general").set("backup", False)
+    ui.select("navigation").set("invert_wheel", True)
+    ui.select("navigation").set("invert_orbit", True)
+    ui.select("navigation").set("look_sens", 40)
     st = _fresh(settings_file)
-    assert st.value("import/obj_unit") == "cm"
+    assert st.value("import/obj_unit") is None
     assert st.value("import/dxf_unit") == "m"
-    assert st.value("georef/coord_mode") == "utm"
-    assert st.value("ia/modelo") == "llama-3.3-70b"
-    assert st.value("ia/capturas") == "0"
+    assert st.value("georef/coord_mode") is None
     assert st.value("General/autosave") == "1"
     assert int(st.value("General/autosave_min")) == 10
     assert st.value("General/backup") == "0"
     assert st.value("nav/invert_wheel") == "1"
     assert st.value("nav/invert_orbit_y") == "1"
     assert int(st.value("walk/look_sensitivity")) == 40
-    assert int(st.value("display/msaa")) == 8
+    assert st.value("display/msaa") is None
     # The live pieces reach the viewport immediately.
     assert win.viewport._invert_wheel is True
     assert win.viewport._invert_orbit_y is True
-    assert win.viewport._msaa == 8
-    assert win.viewport._fbo_size is None   # next paint rebuilds the FBO
 
 
 def test_cancel_touches_nothing(settings_file):
     win = _Win()
-    dlg = PreferencesDialog(win)
-    dlg._obj_unit.setCurrentIndex(dlg._obj_unit.findData("ft"))
-    dlg._rest_fade.setValue(21)
-    dlg.reject()
-    st = _fresh(settings_file)
-    assert st.value("import/obj_unit") is None      # never written
+    ui = Controls(win, "import")
+    ui.wire()
+    ui.select("display").wire()
+    ui.sheet.closed(ui.ctx)
+    assert _fresh(settings_file).value("import/obj_unit") is None
     assert win.viewport.edit_rest_mode == "fade"
     assert win.viewport.edit_rest_fade == 0.75
 
 
 def test_rest_mode_applies_through_the_viewport(settings_file):
     win = _Win()
-    dlg = PreferencesDialog(win)
-    assert dlg._rest.currentData() == "fade"        # mirrors the viewport
-    assert dlg._rest_fade.value() == 75
-    dlg._rest_fade.setValue(42)
-    dlg._rest.setCurrentIndex(dlg._rest.findData("hide"))
-    assert not dlg._rest_fade.isEnabled()
-    dlg.accept()
+    ui = Controls(win, "display")
+    assert ui.value("rest_mode") == "fade"        # mirrors the viewport
+    assert ui.value("rest_fade") == 75
+    ui.set("rest_fade", 42)
+    ui.set("rest_mode", "hide")
+    assert not ui.enabled("rest_fade")
     assert win.viewport.edit_rest_mode == "hide"
     assert win.viewport.edit_rest_fade == 0.42
 
@@ -126,82 +103,38 @@ def test_dialog_reloads_saved_values(settings_file):
     st.setValue("ia/proveedor", "auto")
     st.sync()
     win = _Win()                 # referenced: see the theme test below
-    dlg = PreferencesDialog(win)
-    assert dlg._dxf_unit.currentData() == "in"
-    assert dlg._provider.currentData() == "auto"
+    ui = Controls(win, "import")
+    assert ui.value("dxf_unit") == "in"
+    assert st.value("ia/proveedor") == "auto"
 
 
-def test_toolbar_icon_size_lives_in_preferences_and_reaches_every_toolbar(settings_file):
-    """Marco, 2026-09-14: the icon size belongs in Preferences, and it must
-    size the sheet composer's toolbars too. One setting (ui/toolbar_icon_px),
-    the old «large icons» toggle migrated, applied live through the window."""
-    import views.icons as icons_mod
-    from views.icons import save_toolbar_icon_px, toolbar_icon_px
-
-    # the dialog and the helper read the same throwaway settings file
-    st_factory = prefs_mod.QSettings
-    monkeypatch = pytest.MonkeyPatch()
-    monkeypatch.setattr(icons_mod, "QSettings", st_factory, raising=False)
-    try:
-        # migration: the retired toggle reads as 32 px until a size is saved
-        st = _fresh(settings_file)
-        st.setValue("ui/large_toolbar_icons", "1")
-        st.sync()
-        import PySide6.QtCore as qc
-        monkeypatch.setattr(qc, "QSettings", st_factory)
-        assert toolbar_icon_px() == 32
-
-        win = _Win()
-        seen = []
-        win.set_toolbar_icon_size = lambda px: (seen.append(px), save_toolbar_icon_px(px))
-        dlg = PreferencesDialog(win)
-        assert dlg._icon_px.currentData() == 32
-        dlg._icon_px.setCurrentIndex(dlg._icon_px.findData(40))
-        dlg.accept()
-        assert seen == [40]
-        st = _fresh(settings_file)
-        assert int(st.value("ui/toolbar_icon_px")) == 40
-        assert st.value("ui/large_toolbar_icons") is None     # migrated away
-        assert toolbar_icon_px() == 40
-    finally:
-        monkeypatch.undo()
+def test_toolbar_sizes_are_fixed_even_with_old_keys(settings_file):
+    from views.icons import DEFAULT_TOOLBAR_ICON_PX
+    st = _fresh(settings_file)
+    st.setValue("ui/toolbar_icon_px", 40)
+    st.setValue("ui/large_toolbar_icons", "1")
+    with pytest.raises(KeyError):
+        Controls(_Win(), "general").row("icon_px")
+    assert DEFAULT_TOOLBAR_ICON_PX == 24
+    assert st.value("ui/large_toolbar_icons") == "1"
 
 
-def test_theme_choice_applies_at_once(settings_file):
+def test_old_theme_is_ignored_by_the_default_palette(settings_file):
     from views import theme
-    app = QApplication.instance()
-    before = theme.saved_theme()
-    try:
-        # Keep the parent referenced: a bare ``_Win()`` is collected at
-        # once and takes the dialog (its child, tabs and all) with it —
-        # the use-after-free behind the suite's exit segfault.
-        win = _Win()
-        dlg = PreferencesDialog(win)
-        dlg._theme.setCurrentIndex(dlg._theme.findData(theme.LIGHT))
-        dlg.accept()
-        assert theme.saved_theme() == theme.LIGHT
-        assert app.palette().window().color().lightness() > 128
-    finally:
-        theme.save_theme(before)
-        theme.apply_theme(app, theme.DARK)
+    st = _fresh(settings_file)
+    st.setValue("General/theme", "light")
+    assert theme.apply_theme(QApplication.instance())
+    with pytest.raises(KeyError):
+        Controls(_Win(), "general").row("theme")
 
 
-def test_slate_is_offered_and_applies(settings_file):
-    from views import theme
-    app = QApplication.instance()
-    before = theme.saved_theme()
-    try:
-        win = _Win()
-        dlg = PreferencesDialog(win)
-        assert dlg._theme.findData(theme.SLATE) >= 0
-        dlg._theme.setCurrentIndex(dlg._theme.findData(theme.SLATE))
-        dlg.accept()
-        assert theme.saved_theme() == theme.SLATE
-        assert "QPushButton" in app.styleSheet()
-    finally:
-        theme.save_theme(before)
-        theme.apply_theme(app, theme.DARK)
-    assert app.styleSheet() == ""
+def test_restore_leaves_retired_appearance_keys_intact(settings_file):
+    st = _fresh(settings_file)
+    st.setValue("General/theme", "slate")
+    st.setValue("General/accent", "orange")
+    Controls(_Win(), "general").restore()
+    assert st.value("General/theme") == "slate"
+    assert st.value("General/accent") == "orange"
 
 
 def test_the_3d_mouse_page_shows_the_device_live(settings_file, monkeypatch):
@@ -215,15 +148,23 @@ def test_the_3d_mouse_page_shows_the_device_live(settings_file, monkeypatch):
     monkeypatch.setattr(ndof_input, "_shared", dev)
     monkeypatch.setattr(type(dev), "backend_name",
                         property(lambda self: "rawinput"))
-    dlg = PreferencesDialog(_Win())
+    from views import chrome_sheet, settings_sheet
+    win = _Win()
+    settings_sheet.show(win, page="ndof")
+    sheet = chrome_sheet.current(win)
+    context = chrome_sheet.Ctx(win, None)
+    sheet.build(context)
+    readings = sheet._readings
     dev.raw.emit((12, -340, 0, 0, 0, 7))
     dev.motion.emit(NdofSample(forward=0.97), 0.01)
-    assert "Y  -340" in dlg._ndof_raw.text()
-    assert "RZ    +7" in dlg._ndof_raw.text()
-    assert "+0.97" in dlg._ndof_read.text()
-    dlg.reject()
+    from tests.test_settings_sheet import fields
+    rows = fields(sheet.build(context).wire())
+    assert "Y  -340" in rows["ndof_raw"][3]
+    assert "RZ    +7" in rows["ndof_raw"][3]
+    assert "+0.97" in rows["ndof_read"][3]
+    chrome_sheet.close(win)
     dev.raw.emit((0, 0, 0, 0, 0, 0))             # closed: no longer listens
-    assert "Y  -340" in dlg._ndof_raw.text()
+    assert "Y  -340" in readings.text(str)[0]
 
 
 def test_the_tool_cursor_is_chosen_in_preferences(settings_file):
@@ -233,33 +174,15 @@ def test_the_tool_cursor_is_chosen_in_preferences(settings_file):
     win = _Win()
     applied = []
     win.viewport._apply_tool_cursor = lambda: applied.append(True)
-    dlg = PreferencesDialog(win)
-    assert dlg._cursor_style.currentData() == "tool"
-    dlg._cursor_style.setCurrentIndex(dlg._cursor_style.findData("crosshair"))
-    dlg.accept()
+    ui = Controls(win, "general")
+    ui.select("navigation")
+    assert ui.value("cursor_style") == "tool"
+    ui.set("cursor_style", "crosshair")
     assert _fresh(settings_file).value("General/cursor_style") == "crosshair"
     assert applied == [True]
-    assert PreferencesDialog(win)._cursor_style.currentData() == "crosshair"
+    assert Controls(win, "navigation").value("cursor_style") == "crosshair"
 
 
-def test_the_graphics_server_is_asked_only_where_there_is_a_choice(
-        settings_file, monkeypatch):
-    """Wayland or X11: Linux. On Windows the row spoke of KDE (#1179)."""
-    from PySide6.QtWidgets import QLabel
-    assert prefs_mod.graphics_server_applies("linux")
-    assert not prefs_mod.graphics_server_applies("win32")
-    assert not prefs_mod.graphics_server_applies("darwin")
-
-    def rows(dlg):
-        return [w.text() for w in dlg.findChildren(QLabel)]
-
-    monkeypatch.setattr(prefs_mod, "graphics_server_applies", lambda: True)
-    dlg = PreferencesDialog(_Win())
-    assert "Graphics server:" in rows(dlg)
-    dlg.close()
-    monkeypatch.setattr(prefs_mod, "graphics_server_applies", lambda: False)
-    dlg = PreferencesDialog(_Win())
-    assert "Graphics server:" not in rows(dlg)
-    assert dlg._platform.isHidden()
-    dlg.accept()                       # saving still goes through the box
-    assert _fresh(settings_file).value("general/platform", "auto") == "auto"
+def test_no_display_server_switch_in_native_settings(settings_file):
+    side = Controls(_Win(), "general").wire()["side"]
+    assert all(row.get("id") != "engine" for row in side)

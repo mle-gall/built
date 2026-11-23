@@ -3,6 +3,11 @@ use super::dialog::{Field, DISABLED};
 use pyo3::{prelude::*, types::PyDict};
 
 enum Options {
+    Section {
+        name: String,
+        symbol: String,
+        skip: Option<bool>,
+    },
     Soften {
         smooth: bool,
         coplanar: bool,
@@ -81,6 +86,18 @@ impl OperationForm {
     }
 
     #[staticmethod]
+    fn section(name: String, symbol: String, automatic: bool) -> Self {
+        Self {
+            options: Options::Section {
+                name,
+                symbol,
+                skip: automatic.then_some(false),
+            },
+            number: String::new(),
+        }
+    }
+
+    #[staticmethod]
     fn image(suffix: &str) -> Self {
         Self {
             options: Options::Image {
@@ -93,6 +110,37 @@ impl OperationForm {
 
     fn rows(&self) -> Vec<Field> {
         match self.options {
+            Options::Section {
+                ref name,
+                ref symbol,
+                skip,
+            } => {
+                let edit = |id: &str, label: &str, value: &String| {
+                    (
+                        id.into(),
+                        "edit".into(),
+                        label.into(),
+                        value.clone(),
+                        0.,
+                        0.,
+                        0.,
+                        vec![],
+                        0,
+                        String::new(),
+                    )
+                };
+                let mut rows = vec![edit("name", "Name", name), edit("symbol", "Symbol", symbol)];
+                if let Some(checked) = skip {
+                    rows.push(check(
+                        "skip",
+                        "Don't ask again — keep the default name and symbol",
+                        checked,
+                        0,
+                        "",
+                    ));
+                }
+                rows
+            }
             Options::Soften {
                 smooth,
                 coplanar,
@@ -166,6 +214,12 @@ impl OperationForm {
     fn receive(&mut self, id: &str, raw: &str) {
         let on = raw == "1";
         match &mut self.options {
+            Options::Section { name, symbol, skip } => match id {
+                "name" => *name = raw.into(),
+                "symbol" => *symbol = raw.chars().take(3).collect(),
+                "skip" if skip.is_some() => *skip = Some(on),
+                _ => (),
+            },
             Options::Soften {
                 smooth,
                 coplanar,
@@ -207,6 +261,15 @@ impl OperationForm {
     fn values(&self, py: Python<'_>) -> PyResult<Py<PyDict>> {
         let values = PyDict::new(py);
         match self.options {
+            Options::Section {
+                ref name,
+                ref symbol,
+                skip,
+            } => {
+                values.set_item("name", name.trim())?;
+                values.set_item("symbol", symbol.trim())?;
+                values.set_item("skip", skip.unwrap_or(false))?;
+            }
             Options::Soften {
                 smooth,
                 coplanar,
@@ -268,6 +331,18 @@ mod tests {
         assert!(model.invalid_range().is_some());
         model.receive("harden", "1");
         assert_eq!(model.invalid_range(), None);
+    }
+
+    #[test]
+    fn section_symbols_hold_three_characters_and_only_placement_offers_to_skip() {
+        let mut placement = OperationForm::section("Section 1".into(), "A".into(), true);
+        placement.receive("symbol", "É三四5");
+        placement.receive("skip", "1");
+        assert_eq!(placement.rows()[1].3, "É三四");
+        assert_eq!(placement.rows()[2].4, 1.);
+        let mut rename = OperationForm::section("Section 1".into(), "A".into(), false);
+        rename.receive("skip", "1");
+        assert_eq!(rename.rows().len(), 2);
     }
 
     #[test]
