@@ -528,17 +528,17 @@ fn segment_distances<'py>(py: Python<'py>, ax: PyReadonlyArray1<'py, f64>,
 
 /// Smooth normals and lighting mask in triangle-corner order.
 #[pyfunction]
-fn smooth_corner_normals<'py>(py: Python<'py>, pos: PyReadonlyArray2<'_, f32>,
-    normal: PyReadonlyArray2<'_, f32>, unit: PyReadonlyArray2<'_, f32>,
+fn smooth_corner_normals<'py>(py: Python<'py>, pos: PyReadonlyArray2<'_, f64>,
+    normal: PyReadonlyArray2<'_, f64>, unit: PyReadonlyArray2<'_, f64>,
     corners: PyReadonlyArray1<'_, i64>, sizes: PyReadonlyArray1<'_, i64>,
     counts: PyReadonlyArray1<'_, i64>, edges: PyReadonlyArray2<'_, i64>,
     soft: PyReadonlyArray1<'_, bool>, starts: PyReadonlyArray1<'_, i64>,
     adjacent: PyReadonlyArray1<'_, i64>, tris: PyReadonlyArray2<'_, i64>,
     faces: PyReadonlyArray1<'_, i64>, hypot: &str)
-    -> PyResult<(Bound<'py, PyArray2<f32>>, Bound<'py, PyArray1<bool>>)> {
+    -> PyResult<(Bound<'py, PyArray2<f64>>, Bound<'py, PyArray1<bool>>)> {
     let h = hypot_of(hypot)?;
-    let vectors = |a: PyReadonlyArray2<'_, f32>| -> Vec<facegeom::V3> {
-        a.as_array().outer_iter().map(|v| facegeom::V3(v[0],v[1],v[2])).collect()
+    let vectors = |a: PyReadonlyArray2<'_, f64>| -> Vec<store::geometry::V3> {
+        a.as_array().outer_iter().map(|v| store::geometry::V3(v[0],v[1],v[2])).collect()
     };
     let (p, n, u) = (vectors(pos), vectors(normal), vectors(unit));
     let e: Vec<[i64;2]> = edges.as_array().outer_iter().map(|r| [r[0],r[1]]).collect();
@@ -553,7 +553,7 @@ fn smooth_corner_normals<'py>(py: Python<'py>, pos: PyReadonlyArray2<'_, f32>,
             let got = fans.get(&(v as usize, f));
             let value = got.copied().unwrap_or(n[f]);
             out.push(vec![value.0,value.1,value.2]);
-            mask.push(got.map_or(false, |v| v.dot(u[f],h) as f64 <= 0.99999));
+            mask.push(got.map_or(false, |v| v.dot(u[f],h) <= 0.99999));
         }
     }
     Ok((PyArray2::from_vec2(py, &out)?, PyArray1::from_vec(py, mask)))
