@@ -140,6 +140,7 @@ pub struct Block {
     pub cells: Vec<Vec<String>>,
     pub fields: Vec<dialog::Field>,
     pub spans: Vec<kit::ProseSpan>,
+    pub credits: Vec<kit::CreditRow>,
     pub buttons: Vec<Verb>,
     /// tiles: the picture's side; picture: its height.
     pub size: f32,
@@ -508,6 +509,9 @@ impl Draw<'_> {
                     let color = if b.tone.is_empty() { DIM } else { tone(&b.tone) };
                     ui.add(egui::Label::new(egui::RichText::new(&b.text).font(body()).color(color)).wrap());
                     ui.add_space(SPACE_XS);
+                }
+                "credits" => {
+                    if let Some(id) = kit::credits_roll(ui, &b.id, &b.credits, ROW_H * 8.) { self.out.push(format!("verb{SEP}{id}")); }
                 }
                 "prose" => {
                     if let Some(id) = kit::prose(ui, &b.spans) { self.out.push(format!("verb{SEP}{id}")); }

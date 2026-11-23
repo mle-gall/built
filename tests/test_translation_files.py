@@ -108,9 +108,9 @@ def test_contributor_lines_have_translations():
     source list itself: a new CONTRIBUTORS line without its es.json
     entry fails here, and the completeness test above then carries
     the entry to every other catalog."""
-    from views.about_dialog import CONTRIBUTORS
+    from ingetrazo_render import AboutReview
     source = json.loads((_I18N_DIR / "es.json").read_text(encoding="utf-8"))
-    missing = [role for _name, role, _link in CONTRIBUTORS
+    missing = [role for _name, role, _link, _starred in AboutReview.contributors()
                if role not in source]
     assert not missing, (
         f"{len(missing)} contributor lines have no translation entry: "

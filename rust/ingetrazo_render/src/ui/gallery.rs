@@ -366,7 +366,15 @@ impl Gallery {
                 ProseSpan { text: "Release notes".into(), link: "notes".into(), ..Default::default() },
             ]);
         });
-        y + CONTROL_H + SPACE_S
+        y += CONTROL_H + SPACE_S;
+        let height = ROW_H * 2.;
+        let r = Rect::from_min_size(pos2(at.x + name_w, y), vec2(w - name_w, height));
+        ui.painter().text(pos2(at.x, y + CONTROL_H / 2.), Align2::LEFT_CENTER, "Credits", meta(), INK_2);
+        put(ui, r, across(), |ui| {
+            credits_roll(ui, "gallery", &[CreditRow { name: "Marco Sumari Tellez".into(),
+                role: "Civil Engineer — Arequipa, Peru".into(), ..Default::default() }], height);
+        });
+        y + height + SPACE_S
     }
 
     fn molecule(ui: &mut egui::Ui, row: Row, st: State, cell: &mut Cell) {

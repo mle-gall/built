@@ -64,6 +64,8 @@ Token names are unchanged, so other branches rebase cleanly. The following value
 | Molecules: data | `list_row`, `tree_slots`, `paint_tile` / `paint_card`, `prop_row`, `caption`, `disclosure`, `status_chip` / `badge`, `empty_state`, `progress_bar` | Reuse the row hit area and reserve slots for counts and eye/lock controls. Show label and value pairs, collapse a section such as Export details, report a state and explain an empty result in context. |
 | Organisms | `Glass` (`glass`, `popover`, `activity_capsule`), `menu` with `menu_row` and `menu_separator`, `sheet_frame`, `tree`, `toast` / `toast_stack` | Assemble a workspace, browse a hierarchy or show choices anchored to a control. Keep data and action dispatch in the owning surface. Show active work in the capsule, using a ring for unknown duration and `progress_bar` for measured progress. Stack at most three transient results. |
 
+The About sheet uses `credits_roll` for contributor names, linked profiles and translated roles. The band pauses under the pointer and accepts wheel movement in either direction. The gallery includes a sample credit.
+
 ### States
 
 | State | Look |

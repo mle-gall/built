@@ -60,26 +60,31 @@ quit
     assert image.width() == 3520 and image.height() > 0, log
 
 
+def fixture_venv(tmp_path, code):
+    import site
+    import sys
+    venv = tmp_path / "venv"
+    packages = venv / "lib" / f"python{sys.version_info.major}.{sys.version_info.minor}" / "site-packages"
+    packages.mkdir(parents=True)
+    (packages / "window_fixture.py").write_text(code)
+    (packages / "fixture.pth").write_text("\n".join(site.getsitepackages()) +
+        f"\nimport site; site.addsitedir({site.getsitepackages()[0]!r}); import window_fixture\n")
+    return venv
+
+
 @pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
                     reason="requires a built window and BUILT_WINDOW_TESTS=1")
 def test_native_release_review(tmp_path):
     """Install a release backend fixture in the embedded interpreter only."""
-    import site
-    import sys
     from core.scene import Scene
     from formats.igz import save_scene
-
-    packages = tmp_path / "venv" / "lib" / f"python{sys.version_info.major}.{sys.version_info.minor}" / "site-packages"
-    packages.mkdir(parents=True)
     opened = tmp_path / "download-url"
     release_url = "https://example.invalid/releases/test"
-    (packages / "release_fixture.py").write_text(
+    venv = fixture_venv(tmp_path,
         "from core import desktop_open, update_check\n"
         "from pathlib import Path\n"
         f"update_check.fetch_latest = lambda: update_check.Release('999', '2026-01-01', '## Fixed', {release_url!r})\n"
         f"desktop_open.open_url = lambda url: Path({str(opened)!r}).write_text(url)\n")
-    (packages / "fixture.pth").write_text("\n".join(site.getsitepackages()) +
-        f"\nimport site; site.addsitedir({site.getsitepackages()[0]!r}); import release_fixture\n")
     model = tmp_path / "blank.igz"
     save_scene(Scene(), model)
     steps = tmp_path / "steps.txt"
@@ -87,7 +92,7 @@ def test_native_release_review(tmp_path):
                      "wait 200\nmenu select_all\nstate\nquit\n")
     home = tmp_path / "home"
     home.mkdir()
-    result = run([str(BIN), "--root", str(ROOT), "--venv", str(tmp_path / "venv"),
+    result = run([str(BIN), "--root", str(ROOT), "--venv", str(venv),
                   "--new-instance", "--script", str(steps), str(model)],
                  env=dict(os.environ, BUILT_ANSWERS="escape"), home=home, settings=tmp_path / "profile",
                  capture_output=True, text=True, timeout=90)
@@ -159,3 +164,26 @@ def test_native_settings_device_preferences(tmp_path):
     assert not any(s["errors"] or s["blocked_widgets"] for s in states), log
     settings = QSettings(str(profile / "IngeTrazo" / "IngeTrazo.ini"), QSettings.IniFormat)
     assert settings.value("ndof/enabled") == "0"
+
+
+@pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
+                    reason="requires a built window and BUILT_WINDOW_TESTS=1")
+def test_native_about_copies_diagnostics(tmp_path):
+    copied = tmp_path / "copied.txt"
+    venv = fixture_venv(tmp_path,
+        "import built_shell\nfrom pathlib import Path\n"
+        f"built_shell.pasteboard_write = lambda items: Path({str(copied)!r}).write_bytes(items[0][1])\n")
+    home = tmp_path / "home"
+    home.mkdir()
+    steps = tmp_path / "steps"
+    steps.write_text("wait 600\nmenu about\nwait 350\nstate\nclick 310 226\nwait 250\n"
+                     "key escape\nwait 300\nstate\nquit\n")
+    result = run([str(BIN), "--root", str(ROOT), "--new-instance", "--venv", str(venv),
+                  "--size", "1000x720", "--script", str(steps)],
+                 home=home, settings=tmp_path / "profile", capture_output=True, text=True, timeout=90)
+    log = result.stdout + result.stderr
+    states = [json.loads(line.removeprefix("[built] state ")) for line in log.splitlines()
+              if line.startswith("[built] state ")]
+    assert result.returncode == 0 and [s["large_sheet"] for s in states[:2]] == ["about", "start"], log
+    assert not any(s["errors"] or s["blocked_widgets"] for s in states), log
+    assert copied.exists() and "Window: 1000x720" in copied.read_text(), log

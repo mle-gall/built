@@ -2691,6 +2691,7 @@ mod surfaces;
 mod release;
 mod units_start;
 mod preferences;
+mod about;
 
 /// Start an orthographic ray on the plane through the camera, aligned with the point.
 #[pyfunction]
@@ -2718,6 +2719,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<preferences::PreferencePage>()?;
     m.add_class::<preferences::DevicePreferences>()?;
     m.add_class::<preferences::DeviceReadings>()?;
+    m.add_class::<about::AboutReview>()?;
     m.add_class::<release::ReleaseReview>()?;
     m.add_class::<Renderer>()
 }

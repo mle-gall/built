@@ -1227,6 +1227,101 @@ pub fn prose(ui: &mut egui::Ui, spans: &[ProseSpan]) -> Option<String> {
     clicked
 }
 
+
+#[derive(serde::Deserialize, Default, Clone, Debug, PartialEq)]
+#[serde(default)]
+pub struct CreditRow {
+    pub name: String,
+    pub role: String,
+    pub verb: String,
+    pub starred: bool,
+}
+
+#[derive(Clone, Default)]
+struct CreditsRoll {
+    offset: f32,
+}
+
+impl CreditsRoll {
+    fn advance(&mut self, seconds: f32, hovered: bool, wheel: f32, span: f32) {
+        if span > 0. {
+            let movement = if hovered { -wheel } else { seconds / 0.045 };
+            self.offset = (self.offset + movement).rem_euclid(span);
+        }
+    }
+}
+
+/// Loop the credits in a clipped band. Hovering pauses the roll and gives
+/// the wheel to the band until the pointer leaves it.
+pub fn credits_roll(ui: &mut egui::Ui, id: &str, rows: &[CreditRow], height: f32) -> Option<String> {
+    let (band, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), height), egui::Sense::hover());
+    if rows.is_empty() || !ui.is_rect_visible(band) { return None; }
+    let painter = ui.painter().with_clip_rect(band.intersect(ui.clip_rect()));
+    let mut span = 0.;
+    let layouts: Vec<_> = rows.iter().map(|row| {
+        let offset = span;
+        let name = if row.starred { format!("★ {}", row.name) } else { row.name.clone() };
+        let name = painter.layout(name, strong(TYPE_BODY), if row.verb.is_empty() { INK } else { ACCENT }, band.width());
+        let role = painter.layout(row.role.clone(), body(), INK_2, band.width());
+        span += name.size().y + role.size().y + SPACE_M;
+        (row, offset, name, role)
+    }).collect();
+    let key = ui.make_persistent_id(("credits", id));
+    let hovered = ui.rect_contains_pointer(band);
+    let (dt,wheel) = ui.input_mut(|i| (i.stable_dt.min(0.1), if hovered { std::mem::take(&mut i.smooth_scroll_delta.y) } else { 0. }));
+    let offset = ui.data_mut(|data| {
+        let roll = data.get_temp_mut_or_default::<CreditsRoll>(key);
+        if span > height { roll.advance(dt,hovered,wheel,span); }
+        roll.offset
+    });
+    let mut clicked = None;
+    let copies = if span > height { 2 } else { 1 };
+    for copy in 0..copies {
+        for (row, y, name, role) in &layouts {
+            let pos = band.left_top() + egui::vec2(0., y - offset + copy as f32 * span);
+            let name_box = egui::Rect::from_min_size(pos, name.size());
+            let role_box = egui::Rect::from_min_size(name_box.left_bottom(), role.size());
+            if !band.intersects(name_box.union(role_box)) {continue;}
+            painter.galley(pos,name.clone(),INK);
+            painter.galley(role_box.min,role.clone(),INK_2);
+            if !row.verb.is_empty() && band.intersects(name_box) {
+                let hit = ui.interact(name_box.intersect(band), key.with((&row.verb,copy)), egui::Sense::click()).on_hover_cursor(egui::CursorIcon::PointingHand);
+                hit.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Link,true,&row.name));
+                if hit.hovered() || hit.has_focus() { painter.line_segment([name_box.left_bottom(), name_box.right_bottom()],egui::Stroke::new(1.,ACCENT)); }
+                if hit.clicked() {clicked=Some(row.verb.clone());}
+            }
+        }
+    }
+    if !hovered && span > height {ui.ctx().request_repaint_after(std::time::Duration::from_millis(45));}
+    clicked
+}
+
+#[cfg(test)]
+mod credits_tests {
+    use super::CreditsRoll;
+
+    #[test]
+    fn automatic_credits_move_and_wrap_in_the_band() {
+        let mut roll = CreditsRoll::default();
+        roll.advance(0.045,false,0.,5.);
+        assert_eq!(roll.offset,1.);
+        for _ in 0..5 {roll.advance(0.045,false,0.,5.);}
+        assert_eq!(roll.offset,1.);
+    }
+    #[test]
+    fn hover_pauses_and_allows_scrolling_in_both_directions() {
+        let mut roll = CreditsRoll::default();
+        roll.advance(1.,true,0.,100.);
+        assert_eq!(roll.offset,0.);
+        roll.advance(1.,true,-24.,100.);
+        assert_eq!(roll.offset,24.);
+        roll.advance(1.,true,24.,100.);
+        assert_eq!(roll.offset,0.);
+        roll.advance(0.045,false,0.,100.);
+        assert_eq!(roll.offset,1.);
+    }
+}
+
 #[cfg(test)]
 mod font_picker_tests {
     use super::*;
