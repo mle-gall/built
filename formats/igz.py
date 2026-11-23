@@ -764,7 +764,7 @@ def _save_scene(scene, path, *, backup, confirm_loss=None, compatibility=False, 
         project.sync_files(scene, path)
         links.refresh_paths(scene, path)
     native_document = built.is_built(path) and not compatibility
-    if native_document or compatibility or _live_element_count(scene) > _LARGE_DOCUMENT:
+    if native_document or compatibility or _large_document(scene):
         with SaveStream(built=native_document, compatibility=compatibility, destination=path) as stream:
             return _prepare_and_write(scene, path, backup, stream, confirm_loss, progress)
     return _prepare_and_write(scene, path, backup, None, progress=progress)
@@ -813,7 +813,7 @@ def prepare_scene_steps(scene, mesh_steps=None, *, stream=None, large=None, prog
     # Decided BEFORE anything is serialized: a large document writes its
     # big meshes as binary blocks (format 3) and never builds their JSON.
     if large is None:
-        large = mesh_steps is not None or _live_element_count(scene) > _LARGE_DOCUMENT
+        large = mesh_steps is not None or _large_document(scene)
     geom = stream if stream is not None else ({} if large else None)
     placements = built.export_placements(scene) if getattr(stream, "compatibility", False) else None
 
@@ -1286,6 +1286,13 @@ def _write_prepared(prepared, path, background, stream, meter=None):
     else:
         _write_atomic(path, doc.encode("utf-8") if isinstance(doc, str) else doc)
     return {"embedded": len(blobs), "missing": missing}
+
+
+def _large_document(scene):
+    classify = getattr(native_io(), "igz_large_document", None)
+    if classify and getattr(scene, "_root", None) is not None:
+        return classify(scene.mesh, scene.groups, scene.kept_components, _LARGE_DOCUMENT)
+    return _live_element_count(scene) > _LARGE_DOCUMENT
 
 
 def _live_element_count(scene) -> int:

@@ -2592,6 +2592,77 @@ fn doc_walk<'py>(py: Python<'py>, roots: &Bound<'py, PyAny>) -> PyResult<Bound<'
     PyList::new(py, hs)
 }
 
+/// The reference IGZ writer chooses its format from the live edge and face
+/// count, including linked trees. A deferred face count is already known,
+/// even when welding the edges would require building an entire render plan.
+#[pyfunction]
+fn igz_large_document(
+    py: Python<'_>,
+    loose: &Bound<'_, PyAny>,
+    roots: &Bound<'_, PyAny>,
+    kept: &Bound<'_, PyAny>,
+    limit: i64,
+) -> PyResult<bool> {
+    let mut stack: Vec<Key> = keys_of(roots)?.into_iter().map(|m| m.0).collect();
+    stack.extend(keys_of(kept)?.into_iter().map(|m| m.0));
+    let geometry = {
+        let doc = lock();
+        let mut nodes = super::FastSet::default();
+        let mut definitions = super::FastSet::default();
+        // Count the loose mesh independently, as the original writer does.
+        let mut meshes = vec![loose.clone().unbind()];
+        while let Some(key) = stack.pop() {
+            if !nodes.insert(key) {
+                continue;
+            }
+            let node = doc.need(key).map_err(err)?;
+            if let super::Data::Placement(placement) = &node.data {
+                if let Some(d) = &placement.definition {
+                    let mesh = &d.0.get().geometry;
+                    if definitions.insert(mesh.as_ptr() as usize) {
+                        meshes.push(mesh.clone_ref(py));
+                    }
+                }
+            }
+            stack.extend(node.children.iter().copied());
+        }
+        meshes
+    };
+    let deferred = py.import("core.mesh")?.getattr("DeferredMesh")?;
+    let entity_count = py.import("core.lazy_mesh")?.getattr("entity_count")?;
+    let exact_count =
+        |mesh: &Py<PyAny>| -> PyResult<i64> { entity_count.call1((mesh,))?.extract() };
+    let mut count = 0i64;
+    let mut pending = Vec::new();
+    for mesh in geometry {
+        let lower = if mesh.bind(py).get_type().is(&deferred) {
+            let state = mesh.bind(py).getattr("__dict__")?.cast_into::<PyDict>()?;
+            match state.get_item("_deferred_source")? {
+                Some(src) if !src.is_none() => Some(src.get_item("counts")?.len()? as i64),
+                _ => None,
+            }
+        } else {
+            None
+        };
+        if let Some(faces) = lower {
+            count += faces;
+            pending.push((mesh, faces));
+        } else {
+            count += exact_count(&mesh)?;
+        }
+        if count > limit {
+            return Ok(true);
+        }
+    }
+    for (mesh, faces) in pending {
+        count += exact_count(&mesh)? - faces;
+        if count > limit {
+            return Ok(true);
+        }
+    }
+    Ok(count > limit)
+}
+
 /// The placements under `roots` as `model_placements` walks them (pre-order,
 /// a shared subtree once per occurrence): `(handles, parent, local, has,
 /// hidden)` — `parent[i]` the index of the placement holding `i` (-1 for a
@@ -2724,6 +2795,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<DocRecord>()?;
     m.add_class::<DocAttr>()?;
     m.add_function(wrap_pyfunction!(doc_walk, m)?)?;
+    m.add_function(wrap_pyfunction!(igz_large_document, m)?)?;
     m.add_function(wrap_pyfunction!(doc_tree, m)?)?;
     m.add_function(wrap_pyfunction!(doc_get_many, m)?)?;
     m.add_function(wrap_pyfunction!(doc_serial, m)?)?;
