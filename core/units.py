@@ -50,54 +50,11 @@ class Unit:
     aliases: tuple = ()
 
 
-_TABLE = (
-    # length — base: metre
-    ("mm", "length", 1e-3, "mm",
-     ("mm", "millimetre", "millimetres", "millimeter", "millimeters",
-      "milímetro", "milímetros", "milimetro", "milimetros")),
-    ("cm", "length", 1e-2, "cm",
-     ("cm", "centimetre", "centimetres", "centimeter", "centimeters",
-      "centímetro", "centímetros", "centimetro", "centimetros")),
-    ("m", "length", 1.0, "m",
-     ("m", "metre", "metres", "meter", "meters", "metro", "metros")),
-    ("km", "length", 1e3, "km",
-     ("km", "kilometre", "kilometres", "kilometer", "kilometers",
-      "kilómetro", "kilómetros", "kilometro", "kilometros")),
-    ("in", "length", IN_M, '"',
-     ('"', "in", "inch", "inches", "pulgada", "pulgadas")),
-    ("ft", "length", FT_M, "'",
-     ("'", "ft", "foot", "feet", "pie", "pies")),
-    ("yd", "length", 0.9144, "yd", ("yd", "yard", "yards", "yarda", "yardas")),
-    ("mi", "length", 1609.344, "mi", ("mi", "mile", "miles", "milla", "millas")),
-    ("us-ft", "length", 1200.0 / 3937.0, "ft (US)", ("us-ft", "usft", "survey-ft")),
-    # area — base: square metre
-    ("mm2", "area", 1e-6, "mm²", ("mm2", "mm²", "mm^2")),
-    ("cm2", "area", 1e-4, "cm²", ("cm2", "cm²", "cm^2")),
-    ("m2", "area", 1.0, "m²", ("m2", "m²", "m^2")),
-    ("ha", "area", 1e4, "ha", ("ha", "hectare", "hectares", "hectárea", "hectáreas",
-                               "hectarea", "hectareas")),
-    ("in2", "area", IN_M ** 2, "in²", ("in2", "in²", "in^2")),
-    ("ft2", "area", FT_M ** 2, "ft²", ("ft2", "ft²", "ft^2")),
-    ("yd2", "area", 0.9144 ** 2, "yd²", ("yd2", "yd²", "yd^2")),
-    ("acre", "area", 4046.8564224, "acre", ("acre", "acres", "ac")),
-    # volume — base: cubic metre
-    ("cm3", "volume", 1e-6, "cm³", ("cm3", "cm³", "cm^3", "cc")),
-    ("l", "volume", 1e-3, "L", ("l", "litre", "litres", "liter", "liters",
-                                "litro", "litros")),
-    ("m3", "volume", 1.0, "m³", ("m3", "m³", "m^3")),
-    ("in3", "volume", IN_M ** 3, "in³", ("in3", "in³", "in^3")),
-    ("ft3", "volume", FT_M ** 3, "ft³", ("ft3", "ft³", "ft^3")),
-    ("yd3", "volume", 0.9144 ** 3, "yd³", ("yd3", "yd³", "yd^3")),
-    ("gal", "volume", 3.785411784e-3, "gal", ("gal", "gallon", "gallons",
-                                              "galón", "galones", "galon")),
-    # angle — base: radian
-    ("deg", "angle", math.pi / 180.0, "°", ("°", "deg", "degree", "degrees",
-                                            "grado", "grados")),
-    ("rad", "angle", 1.0, "rad", ("rad", "radian", "radians", "radián",
-                                  "radianes")),
-    ("grad", "angle", math.pi / 200.0, "gon", ("gon", "grad", "gradian",
-                                               "gradians")),
-)
+#: The rows live in Rust (``rust/ingetrazo_core/src/units.rs``), the one
+#: owner of the table; the parser reads the same rows there.
+from ingetrazo_core import units_table as _units_table
+_TABLE = tuple((code, kind, factor, symbol, tuple(aliases))
+               for code, kind, factor, symbol, aliases in _units_table())
 
 #: ``code`` → :class:`Unit`.
 UNITS = {row[0]: Unit(*row) for row in _TABLE}
@@ -757,37 +714,11 @@ class Parsed:
         return tr(self.error)
 
 
-#: A number as it is typed: ``2``, ``2.5``, ``.5``, ``3/4``, and a mixed
-#: number ``1 1/2`` or ``1-1/2``.
-_QTY = r"(?:\d+[ -]+\d+/\d+|\d+/\d+|\d+(?:\.\d*)?|\.\d+)"
-#: A unit word: letters (``mm``, ``pies``, ``m²``, ``m2``, ``m^2``) or a mark.
-_WORD = r"(?:[^\W\d_]+(?:\^?[23](?![\d./]))?|[°'\"])"
-_TERM = re.compile(rf"({_QTY})\s*({_WORD})?\s*")
-_FEET_INCHES = re.compile(
-    rf"(?P<ft>{_QTY})\s*(?:'|ft|feet|foot|pies?)\s*(?:-\s*)?"
-    rf"(?:(?P<inch>{_QTY})\s*(?:\"|in|inch|inches|pulgadas?)?)?")
-_HYPHEN_FEET = re.compile(
-    r"(?P<ft>\d+)-(?P<inch>\d+(?:\.\d+)?(?:[ -]+\d+/\d+)?)")
-
-
 def _number(text: str):
-    """The value of a :data:`_QTY` match, or None (a zero denominator, a
-    number too big for a model)."""
-    m = re.fullmatch(r"(?:(\d+)[ -]+)?(?:(\d+)/(\d+)|(\d+(?:\.\d*)?|\.\d+))",
-                     text.strip())
-    if m is None:
-        return None
-    if m.group(2) is not None:
-        if int(m.group(3)) == 0:
-            return None
-        v = int(m.group(2)) / int(m.group(3))
-    else:
-        if m.group(1) is not None:
-            return None                  # «1-2» is two numbers, not one
-        v = float(m.group(4))
-    if m.group(1) is not None:
-        v += int(m.group(1))
-    return v if math.isfinite(v) and abs(v) <= MAX_TYPED else None
+    """``2``, ``2.5``, ``.5``, ``3/4``, ``1 1/2``, ``1-1/2`` → the number,
+    or None (a zero denominator, ``1-2``, past :data:`MAX_TYPED`)."""
+    from ingetrazo_core import typed_number
+    return typed_number(text) if isinstance(text, str) else None
 
 
 def _bare_factor(kind: str, unit: str | None) -> float:
@@ -804,279 +735,60 @@ def _bare_factor(kind: str, unit: str | None) -> float:
     return UNITS[unit].factor
 
 
-#: After a whole unit, a bare number is the next one down: «1m 20» is
-#: 1.20 m, «5ft 3» is 5'3".
-_NEXT_DOWN = {"m": "cm", "ft": "in"}
-
-#: Typographic marks people paste from documents — or that a keyboard with
-#: smart quotes types (issue #189: «1 ⅜", 1 3/16”» on a Mac) — read as the
-#: plain ones.
-_TYPOGRAPHIC = {"″": '"', "”": '"', "“": '"', "′": "'", "’": "'", "‘": "'"}
-_MARKS = str.maketrans({",": ".", **_TYPOGRAPHIC})
-
 #: The fraction characters (½, ⅜…) as the digits a field reads.
-VULGAR_FRACTIONS = {
-    "½": "1/2", "⅓": "1/3", "⅔": "2/3", "¼": "1/4", "¾": "3/4",
-    "⅕": "1/5", "⅖": "2/5", "⅗": "3/5", "⅘": "4/5", "⅙": "1/6", "⅚": "5/6",
-    "⅐": "1/7", "⅛": "1/8", "⅜": "3/8", "⅝": "5/8", "⅞": "7/8", "⅑": "1/9",
-    "⅒": "1/10",
-}
+from ingetrazo_core import vulgar_fractions as _vulgar
+VULGAR_FRACTIONS = dict(_vulgar())
 
 
 def plain_marks(text: str) -> str:
     """``text`` with typographic quotes as ``"`` / ``'`` and fraction
-    characters as digits: ``1⅜”`` → ``1 3/8"`` (a whole number before the
-    fraction keeps it apart, as a mixed number)."""
-    out = []
-    for ch in text:
-        frac = VULGAR_FRACTIONS.get(ch)
-        if frac is not None:
-            if out and out[-1][-1:].isdigit():
-                out.append(" ")
-            out.append(frac)
-        else:
-            out.append(_TYPOGRAPHIC.get(ch, ch))
-    return "".join(out)
+    characters as digits: ``1⅜”`` → ``1 3/8"``."""
+    from ingetrazo_core import plain_marks as native
+    return native(text)
+
+
+def typed_context(kind: str = "length", unit: str | None = None) -> tuple:
+    """``(bare, hyphen_feet)``: what a bare number means in a ``kind``
+    field of ``unit`` (or the document's), and whether ``5-3 1/2`` reads
+    as feet-inches there — the settings the Rust parser takes."""
+    return _bare_factor(kind, unit), (unit or model_unit()) in _IMPERIAL_FORMS
 
 
 def parse(text: str, kind: str = "length", unit: str | None = None) -> Parsed:
     """Read a typed ``kind`` (length, area, volume, angle) → its value in
-    the base unit, or an error.
+    the base unit, or an error (``rust/ingetrazo_core/src/units.rs``).
 
     Tolerant the way people type: ``1,20`` and ``1.20`` mean the same,
     spaces are free (``  5 cm ``), units in Spanish or English (``120cm``,
     ``2 metros``, ``3 pies``), ``1m 20`` is 1.20 m, and the imperial
     marks: ``5'``, ``5'3``, ``5' 3 1/2"``, ``3'-6 1/2"``, ``63"`` — plus
-    ``5-3 1/2`` (feet-inches) when the field is imperial. A number without
-    a unit is in ``unit`` (a code of the table or a form of
-    :data:`UNIT_CHOICES`), or the document's when ``unit`` is None. A unit
+    ``5-3 1/2`` (feet-inches) when the field is imperial. A calculation
+    after ``=`` (#630): ``=1.25*2+2.45/2``, ``=2*45cm``. A number without
+    a unit is in ``unit``, or the document's when ``unit`` is None. A unit
     of another kind is refused with a message: ``5 m²`` is not a length."""
-    raw = plain_marks(text) if isinstance(text, str) else ""
-    if raw.lstrip().startswith("="):
-        return parse_expression(raw, kind, unit)
-    offset = len(raw) - len(raw.lstrip())
-    t = re.sub(r"\s+", " ", raw.strip().lower().translate(_MARKS))
-    if not t:
-        return Parsed(error="Type a value")
-    sign = 1.0
-    if t[0] in "+-":
-        sign = -1.0 if t[0] == "-" else 1.0
-        t = t[1:].lstrip()
-        offset += 1
-    if not t:
-        return Parsed(error="Type a number", position=offset)
-
-    def done(v):
-        if v is None:
-            return Parsed(error="Not a number", position=offset)
-        return Parsed(value=sign * v)
-
-    if kind == "length":
-        m = _FEET_INCHES.fullmatch(t)
-        if m is not None:
-            ft = _number(m.group("ft"))
-            inch = _number(m.group("inch")) if m.group("inch") else 0.0
-            if ft is None or inch is None:
-                return done(None)
-            return done(ft * FT_M + inch * IN_M)
-        m = _HYPHEN_FEET.fullmatch(t)
-        if m is not None and (unit or model_unit()) in _IMPERIAL_FORMS:
-            ft, inch = _number(m.group("ft")), _number(m.group("inch"))
-            return done(None if ft is None or inch is None
-                        else ft * FT_M + inch * IN_M)
-
-    terms = []
-    pos = 0
-    while pos < len(t):
-        m = _TERM.match(t, pos)
-        if m is None or m.end() == pos:
-            return Parsed(error="Not a number", position=offset + pos)
-        where = m.start(2) if m.group(2) else m.start(1)
-        terms.append((m.group(1), m.group(2), offset + where))
-        pos = m.end()
-
-    total = 0.0
-    previous = None
-    for i, (num_txt, word, where) in enumerate(terms):
-        num = _number(num_txt)
-        if num is None:
-            return Parsed(error="Not a number", position=where)
-        if word is None:
-            if len(terms) == 1:
-                return done(num * _bare_factor(kind, unit))
-            down = _NEXT_DOWN.get(previous)
-            if i != len(terms) - 1 or down is None:
-                return Parsed(error="Type one value", position=where)
-            total += num * UNITS[down].factor
-            break
-        row = _ALIASES.get(word)
-        if row is None:
-            return Parsed(error="Unknown unit: {unit}", position=where,
-                          word=word)
-        if row.kind != kind:
-            return Parsed(error=_EXPECTED[kind], position=where, word=word)
-        total += num * row.factor
-        previous = row.code
-    return Parsed(value=sign * total)
-
-
-#: A fraction that carries its unit is ONE measurement inside a calculation:
-#: ``=3/4"+1"`` adds three quarters of an inch, it does not divide 3 by 4".
-_EXPR_FRACTION = re.compile(r"\d+(?: +\d+)?/\d+ *(?:[^\W\d_]+|[\"'°])")
-
-
-class _ExprError(Exception):
-    def __init__(self, message: str, position: int, word: str = "") -> None:
-        super().__init__(message)
-        self.word = word
-        self.message, self.position = message, position
-
-
-def _expr_tokens(text: str, base: int) -> list:
-    """``(kind, text, position)``: an operator or a parenthesis, or ``"q"``
-    with one measurement as typed (``1.20m``, ``5'3"``, ``45``)."""
-    tokens = []
-    i = 0
-    while i < len(text):
-        c = text[i]
-        if c.isspace():
-            i += 1
-            continue
-        if c in "+-*/()":
-            tokens.append((c, c, base + i))
-            i += 1
-            continue
-        m = _EXPR_FRACTION.match(text, i)
-        if m is not None:
-            tokens.append(("q", m.group(0), base + i))
-            i = m.end()
-            continue
-        j = i
-        while j < len(text) and text[j] not in "+-*/()":
-            j += 1
-        tokens.append(("q", text[i:j].rstrip(), base + i))
-        i = j
-    return tokens
+    from ingetrazo_core import parse_measurement
+    if not isinstance(text, str):
+        text = ""
+    value, error, position, word, explicit = parse_measurement(
+        text, kind, *typed_context(kind, unit))
+    return Parsed(value=value, error=error, position=position, word=word,
+                  explicit_measurement=explicit)
 
 
 def parse_expression(text: str, kind: str = "length",
                      unit: str | None = None) -> Parsed:
-    """A calculation typed after ``=`` (#630): ``=1.25*2+2.45/2``,
-    ``=(3-0.15*2)/4``, ``=1.20m+35cm``, ``=2*45cm``.
+    """A calculation typed after ``=`` (#630); see :func:`parse`."""
+    text = text if isinstance(text, str) else ""
+    return parse(text if text.lstrip().startswith("=") else "=" + text, kind, unit)
 
-    ``+ - * /`` and parentheses, with the usual precedence. Each measurement
-    may carry its unit, as in :func:`parse`; a number without one is in the
-    field's unit — unless it multiplies or divides a measurement, where it
-    is the plain number it reads as (``=2*45cm`` is 90 cm, not 2 m × 45
-    cm). Two measurements cannot be multiplied (that is an area, not a
-    length), and a measurement divided by another is a plain number. Read
-    by a small parser of its own: nothing typed is ever run as code."""
-    raw = plain_marks(text) if isinstance(text, str) else ""
-    start = len(raw) - len(raw.lstrip())
-    body = raw.strip()[1:].translate(_MARKS)
-    end = start + len(raw.strip())
-    tokens = _expr_tokens(body, start + 1)
-    if not tokens:
-        return Parsed(error="Type a calculation after =", position=start + 1)
-    pos = 0
 
-    def peek():
-        return tokens[pos] if pos < len(tokens) else None
-
-    def take():
-        nonlocal pos
-        pos += 1
-        return tokens[pos - 1]
-
-    def measurement(txt, where):
-        if not re.search(r"[^\d\s./]", txt):
-            v = _number(txt)
-            if v is None:
-                raise _ExprError("Not a number", where)
-            return v, "bare"
-        if "=" in txt:
-            raise _ExprError("Not a number", where)
-        r = parse(txt, kind, unit)
-        if not r.ok:
-            raise _ExprError(r.error, where + r.position, r.word)
-        return r.value, "unit"
-
-    def as_unit(v, dimension):
-        return v * _bare_factor(kind, unit) if dimension == "bare" else v
-
-    def factor():
-        tok = peek()
-        if tok is None:
-            raise _ExprError("A number is missing", end)
-        if tok[0] in "+-":
-            take()
-            v, has_unit = factor()
-            return (-v if tok[0] == "-" else v), has_unit
-        if tok[0] == "(":
-            take()
-            v = expression()
-            close = peek()
-            if close is None or close[0] != ")":
-                raise _ExprError("A parenthesis is not closed", tok[2])
-            take()
-            return v
-        if tok[0] == "q":
-            take()
-            return measurement(tok[1], tok[2])
-        raise _ExprError("A number is missing", tok[2])
-
-    def term():
-        a, au = factor()
-        while peek() is not None and peek()[0] in "*/":
-            op = take()
-            b, bu = factor()
-            if op[0] == "*":
-                if au == bu == "unit":
-                    raise _ExprError(
-                        "Two measurements can't be multiplied: one must be "
-                        "a plain number", op[2])
-                a *= b
-                if bu != "bare" and au != "unit":
-                    au = bu
-            else:
-                if b == 0:
-                    raise _ExprError("Division by zero", op[2])
-                if bu == "unit" and au != "unit":
-                    raise _ExprError(
-                        "A plain number can't be divided by a measurement",
-                        op[2])
-                a /= b
-                if bu == "unit" or (bu == "scalar" and au == "bare"):
-                    au = "scalar"
-        return a, au
-
-    def expression():
-        a, au = term()
-        while peek() is not None and peek()[0] in "+-":
-            op = take()
-            b, bu = term()
-            if au != bu:
-                if "unit" in (au, bu):
-                    a, b, au = as_unit(a, au), as_unit(b, bu), "unit"
-                else:
-                    au = "scalar"
-            a = a + b if op[0] == "+" else a - b
-        return a, au
-
-    try:
-        value, has_unit = expression()
-        tok = peek()
-        if tok is not None:
-            raise _ExprError("A parenthesis closes nothing" if tok[0] == ")"
-                             else "An operator is missing", tok[2])
-    except _ExprError as e:
-        return Parsed(error=e.message, position=e.position, word=e.word)
-    except (ValueError, OverflowError, RecursionError):
-        return Parsed(error="Not a number", position=start)
-    value = as_unit(value, has_unit)
-    if not math.isfinite(value) or abs(value) > MAX_TYPED:
-        return Parsed(error="Not a number", position=start)
-    return Parsed(value=value, explicit_measurement=has_unit == "unit")
+def parse_value_box(buffer: str, comma_lists: bool = False):
+    """The value box's reading (rust ``parse_value_buffer``): a float, a
+    tuple of 2 or 3, ``("array", n, "x" | "/"[, step])``, ``("radius",
+    r)``, ``("profile", p)``, ``("segments", n)``, ``("ratio", degrees)``,
+    or None."""
+    from ingetrazo_core import parse_value_buffer
+    return parse_value_buffer(buffer, bool(comma_lists), *typed_context("length"))
 
 
 def is_expression(text: str) -> bool:

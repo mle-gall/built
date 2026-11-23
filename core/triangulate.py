@@ -27,20 +27,11 @@ _EPS = 1e-9
 
 
 def plane_axes(normal: QVector3D) -> tuple[QVector3D, QVector3D]:
-    """Two orthonormal in-plane axes derived from a plane normal.
-
-    ``u`` is world +X projected onto the plane (or +Y when the normal is
-    nearly +X, to avoid the degenerate projection); ``v = normal × u``.
-    """
-    n = normal.normalized()
-    ref = QVector3D(1.0, 0.0, 0.0)
-    u = ref - n * QVector3D.dotProduct(ref, n)
-    if u.length() < 0.1:
-        ref = QVector3D(0.0, 1.0, 0.0)
-        u = ref - n * QVector3D.dotProduct(ref, n)
-    u = u.normalized()
-    v = QVector3D.crossProduct(n, u).normalized()
-    return u, v
+    """Two orthonormal in-plane axes derived from a plane normal: world +X
+    projected onto the plane (+Y when the normal is nearly +X), and
+    ``v = normal × u`` (``ingetrazo_core.drawing_plane_axes``)."""
+    from ingetrazo_core import drawing_plane_axes
+    return drawing_plane_axes(normal)
 
 
 def _cross3(o: Point2, a: Point2, b: Point2) -> float:

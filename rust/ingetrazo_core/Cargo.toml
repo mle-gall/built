@@ -19,6 +19,7 @@ crc32fast = "1.4"
 zmij = "1.0.23"
 flate2 = "1.1"
 i_overlay = "9.1"
+regex = "1.12"
 
 [profile.release]
 opt-level = 3

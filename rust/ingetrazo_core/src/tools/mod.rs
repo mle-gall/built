@@ -8,6 +8,7 @@
 
 pub mod gesture;
 pub mod line;
+pub mod plane;
 pub mod preview;
 pub mod py;
 pub mod select;
