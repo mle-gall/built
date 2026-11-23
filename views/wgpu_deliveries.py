@@ -36,10 +36,8 @@ def dock(view, scene, model):
     rows = [([k, r["name"], r["format"].upper(), r["scope"].capitalize() + (" model" if r["scope"] == "whole" else ""), ""],
              [0, 0, 0, int(k == key), 1, -1, -1, 0, 0, 0]) for k, r in values.items()]
     view.renderer.ui_set_tree(rows, 0)
-    view.renderer.ui_set_colset(2)
-    view.renderer.ui_set_mode("")
+    view.renderer.ui_set_mode("Deliveries")
     if key is None:
-        view.renderer.ui_set_inspector("No deliveries yet", [])
         return
     from views.wgpu_ui import _problem_rules
     from core import structure

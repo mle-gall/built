@@ -32,6 +32,10 @@ def test_an_unreadable_skp_is_reported_and_nothing_else_runs(monkeypatch, tmp_pa
     # `flatpak info` where Flatpak exists): that is not the .skp import.
     import core.render_blender as rb
     monkeypatch.setattr(rb, "find_blender", lambda *a, **k: None)
+    # The GPU probe runs once per process (cached); stub it so this test
+    # does not depend on being the first window of its batch.
+    import core.renderer_settings as rs
+    monkeypatch.setattr(rs, "capability", lambda: rs.Capability(True))
     import subprocess
     monkeypatch.setattr(subprocess, "run",
                         lambda *a, **k: pytest.fail("ran an external program"))

@@ -16,14 +16,7 @@ from views.ifc_picker import ClassPicker
 from views.object_record import ClassificationRows, SystemMembership
 
 
-def execute(viewport, command):
-    if isinstance(command, CompoundCommand) and not command.commands:
-        return
-    viewport.history.execute(command)
-    error = viewport.history.last_error or viewport.history.last_rejected
-    if error:
-        raise ValueError(error)
-    viewport.refresh_after_edit()
+from views.tree_navigation import execute
 
 
 def update_node(viewport, key, **fields):

@@ -314,6 +314,16 @@ def build(win, view=None, sel=None, *, locked_image=None, locked_group=None) -> 
     builder = _BUILDERS.get(kind)
     if builder is not None:
         builder(win, view, scene, sel, one)
+    if sel and view is not None:
+        from views import wgpu_ui
+        from PySide6.QtGui import QKeySequence
+        reveal = Verb("revealselection", "Reveal selection", lambda: wgpu_ui._tree_action(win, view, "revealselection" + wgpu_ui.SEP),
+                      QKeySequence("Ctrl+Shift+J").toString(QKeySequence.NativeText))
+        zoom = next((r for r in rows if any(v.id == "zoom" for v in r.verbs)), None)
+        if zoom:
+            zoom.verbs.append(reveal)
+        else:
+            one(reveal)
     menu.rows = [r for r in rows if r.verbs]
     return menu
 
@@ -679,7 +689,7 @@ def open_at(view, x, y) -> Optional[Menu]:
     locked_image = under if under is not picked else None
     locked_group = tools.pick_locked_group(x, y)
     from ingetrazo_render import context_targets
-    sel = context_targets(picked is not None, win.viewport.scene.selection)
+    sel = context_targets(picked is not None, source.scene.selection)
     menu = build(win, view, sel=sel, locked_image=locked_image, locked_group=locked_group)
     menu.at = (float(x), float(y))
     view._ctx_menu = menu

@@ -19,14 +19,17 @@ const PLAN_DEPTH: f32 = 2.0;
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Cols {
     pub colset: u8,
+    pub flags: Option<(f32, f32)>,
     /// The name's right end.
     pub name_right: f32,
     // Drawing: print, weight, line type (may hide), colour swatch.
     pub print: Option<(f32, f32)>,
     pub weight: Option<(f32, f32)>,
+    pub hatch: Option<(f32, f32)>,
     pub line: Option<(f32, f32)>,
     pub swatch: Option<(f32, f32)>,
     // Export: class (and type), quantity.
+    pub checks: Option<(f32, f32)>,
     pub class: Option<(f32, f32)>,
     pub qty: Option<(f32, f32)>,
     // Filing: the item count's right edge.
@@ -41,22 +44,27 @@ impl Cols {
         let mut c = Cols { colset, name_right: right - 8.0, count_right: edge - 40.0, ..Default::default() };
         match colset {
             1 => {
-                let print = (edge - 26.0, edge);
-                let weight = (print.0 - 40.0, print.0 - 4.0);
-                let line = (weight.0 - 64.0, weight.0 - 6.0);
-                let with_line = room(line.0 - 28.0) >= MIN_NAME;
-                let before = if with_line { line.0 } else { weight.0 };
-                let swatch = (before - 22.0, before - 8.0);
-                c.print = Some(print);
-                c.weight = Some(weight);
-                c.line = with_line.then_some(line);
-                c.swatch = Some(swatch);
-                c.name_right = swatch.0 - 8.0;
+                // Eye and lock stay at the right edge in Drawing. Other cells
+                // disappear from the left before they take the name's room.
+                c.flags = Some((edge - 40.0, edge));
+                let mut end = edge - 44.0;
+                for (cell, width) in [(&mut c.swatch, 18.0), (&mut c.line, 56.0),
+                                       (&mut c.hatch, 42.0), (&mut c.weight, 32.0), (&mut c.print, 28.0)] {
+                    if room(end - width - 8.0) >= MIN_NAME {
+                        *cell = Some((end - width, end));
+                        end -= width + 6.0;
+                    }
+                }
+                c.name_right = end - 4.0;
             }
             2 => {
-                let qty = (edge - 64.0, edge);
-                let wide = room(qty.0 - 108.0) >= MIN_NAME;
-                let class = (qty.0 - if wide { 100.0 } else { 70.0 }, qty.0 - 8.0);
+                let end = if right - left >= 340.0 {
+                    c.checks = Some((edge - 36.0, edge));
+                    edge - 42.0
+                } else { edge };
+                let qty = (end - 50.0, end);
+                let class_width = (room(qty.0) - MIN_NAME - 8.0).clamp(24.0, 100.0);
+                let class = (qty.0 - class_width, qty.0 - 8.0);
                 c.qty = Some(qty);
                 c.class = Some(class);
                 c.name_right = class.0 - 8.0;
@@ -67,8 +75,8 @@ impl Cols {
     }
 
     /// The header row: "Name" over the names, each column's title over it.
-    pub fn header(&self, ui: &mut egui::Ui, left: f32) {
-        let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), super::ROW_H), egui::Sense::hover());
+    pub fn header(&self, ui: &mut egui::Ui, left: f32) -> egui::Response {
+        let (r, response) = ui.allocate_exact_size(vec2(ui.available_width(), super::ROW_H), egui::Sense::hover());
         let p = ui.painter();
         let cy = r.center().y;
         let font = super::meta();
@@ -78,18 +86,22 @@ impl Cols {
         at(left + 8.0, "Name", egui::Align2::LEFT_CENTER);
         match self.colset {
             1 => {
+                if let Some((a, b)) = self.flags { at((a + b) / 2.0, "State", egui::Align2::CENTER_CENTER); }
+                if let Some((_, b)) = self.hatch { at(b, "Hatch", egui::Align2::RIGHT_CENTER); }
                 if let Some((_, b)) = self.print { at(b, "Print", egui::Align2::RIGHT_CENTER); }
                 if let Some((_, b)) = self.weight { at(b, "Wt", egui::Align2::RIGHT_CENTER); }
                 if let Some((_, b)) = self.line { at(b, "Line", egui::Align2::RIGHT_CENTER); }
                 if let Some((a, b)) = self.swatch { at((a + b) / 2.0, "Col.", egui::Align2::CENTER_CENTER); }
             }
             2 => {
+                if let Some((_, b)) = self.checks { at(b, "Checks", egui::Align2::RIGHT_CENTER); }
                 if let Some((a, _)) = self.class { at(a, "Class", egui::Align2::LEFT_CENTER); }
                 if let Some((_, b)) = self.qty { at(b, "Quantity", egui::Align2::RIGHT_CENTER); }
             }
             _ => at(self.count_right, "Items", egui::Align2::RIGHT_CENTER),
         }
         p.hline(r.x_range(), r.max.y - 0.5, Stroke::new(1.0_f32, EDGE));
+        response
     }
 }
 

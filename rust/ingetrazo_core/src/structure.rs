@@ -489,6 +489,84 @@ pub(crate) fn resync_filing<'py>(
     Ok((api.call_method1("CompoundCommand", (commands,))?, report))
 }
 
+/// Apply the active node's recipe to a newly placed occurrence, in the same
+/// history transaction as creation. Return the inverse for direct replay.
+#[pyfunction]
+pub(crate) fn file_created_placement<'py>(
+    scene: &Obj<'py>,
+    group: &Obj<'py>,
+) -> PyResult<Option<Obj<'py>>> {
+    let py = scene.py();
+    let data = scene.getattr("plugin_data")?;
+    if !data.contains("bim_registry")? && !data.contains("project")? {
+        return Ok(None);
+    }
+    let api = py.import("core.structure")?;
+    let registry = api.getattr("bim_registry")?.call_method1("get", (scene,))?;
+    let section = get(&registry, "structure")?;
+    if !section.is_truthy()? {
+        return Ok(None);
+    }
+    let key = get(&section, "active")?;
+    if !key.is_truthy()? {
+        return Ok(None);
+    }
+    let groups = PyList::new(py, [group])?;
+    let batches = PyDict::new(py);
+    batches.set_item(&key, groups)?;
+    check_filing_paths(scene, &registry, batches.as_any())?;
+    let steps = plan_filing(scene, vec![group.clone()], &registry, &key, &empty(py))?;
+    let command = api.call_method1("CompoundCommand", (steps,))?;
+    command.call_method1("do", (scene,))?;
+    Ok(Some(command))
+}
+
+/// Plan a change to the authored tree and rederive every affected placement
+/// against the same detached registry before entering History.
+#[pyfunction]
+pub(crate) fn plan_node_edit<'py>(
+    scene: &Obj<'py>,
+    key: &str,
+    field: &str,
+    value: &str,
+) -> PyResult<Obj<'py>> {
+    let py = scene.py();
+    let api = py.import("core.structure")?;
+    let registry = api.getattr("bim_registry")?.call_method1("get", (scene,))?;
+    let nodes = api.call_method1("_nodes", (&registry,))?;
+    let node = nodes.get_item(key)?;
+    if key.starts_with("link:") || node.contains("source")? {
+        return Err(PyValueError::new_err("Linked structure is read-only"));
+    }
+    if field == "active" {
+        registry.get_item("structure")?.set_item("active", key)?;
+        return api.call_method1("SetRegistryCommand", (&registry,));
+    }
+    match field {
+        "name" if !value.trim().is_empty() => node.set_item("name", value.trim())?,
+        "parent" if value.is_empty() => node.set_item("parent", py.None())?,
+        "parent" => {
+            let target = nodes.get_item(value)?;
+            let lineage = structure_lineage(&nodes, PyString::new(py, value).as_any())?;
+            if value.starts_with("link:")
+                || target.contains("source")?
+                || lineage.iter().any(|ancestor| ancestor == key)
+            {
+                return Err(PyValueError::new_err(
+                    "Choose an editable parent outside this branch",
+                ));
+            }
+            node.set_item("parent", value)?;
+        }
+        _ => return Err(PyValueError::new_err("Invalid node edit")),
+    }
+    let keys = PyList::new(py, [key])?;
+    let (sync, _) = resync_filing(scene, &registry, keys.as_any())?;
+    let mut steps = vec![api.call_method1("SetRegistryCommand", (&registry,))?];
+    steps.extend(list(&sync.getattr("commands")?)?);
+    api.call_method1("CompoundCommand", (steps,))
+}
+
 #[pyfunction]
 pub(crate) fn apply_structure_bootstrap<'py>(
     scene: &Obj<'py>,

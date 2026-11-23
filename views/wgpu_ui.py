@@ -157,11 +157,8 @@ def attach(view) -> None:
 #: columns never crush the names (tree C). Filing keeps the user's own
 #: width ("ui/dock_width").
 WIDE_DOCK = 390.0
-#: Column sets that widen the dock (by index: 0 Filing, 1 Drawing, 2
-#: Deliver). The decision named Drawing and Export; Export became Deliver
-#: (ui/deliveries), a list of deliveries with no columns, so it keeps the
-#: user's width like Filing.
-WIDE_COLSETS = (1,)
+#: Drawing and Export reserve room for their columns.
+WIDE_COLSETS = (1, 2)
 
 
 def dock_width(colset, settings=None) -> float:
@@ -846,6 +843,7 @@ def _tree_model(view, scene, cv):
     rebuilds the rows from it without walking every placement again."""
     from collections import Counter, defaultdict
     from core import bim_registry, link_structure, structure
+    from ingetrazo_core import source_direct_count
     cached = view.__dict__.get("_ui_tree_model")
     key = (id(scene), cv)
     if cached is not None and cached[0] == key:
@@ -873,13 +871,16 @@ def _tree_model(view, scene, cv):
         parent = tree.nodes[k]["parent"]
         counts[parent] += counts[k]
         problems[parent] += problems[k]
+    for k, copies in tree.links.items():
+        if not counts[k]:
+            counts[k] = source_direct_count(copies)
     model = dict(tree=tree, registry=registry, recipes=recipes, counts=counts, problems=problems,
                  to_fix=to_fix, node_layers=node_layers, order=order)
     view._ui_tree_model = (key, model)
     return model
 
 
-def _tree(view, win) -> None:
+def _tree(view, win, *, discover=False):
     """The Project tree as display rows (council 2026-11-22, R1–R8): nodes;
     under an expanded node its filed items, one row per placement, copies of
     a component grouped by definition; an item's contents on expand, with
@@ -893,29 +894,36 @@ def _tree(view, win) -> None:
     exp = view.__dict__.setdefault("_ui_exp", set())
     pages = view.__dict__.setdefault("_ui_pages", {})
     flt = view.__dict__.get("_ui_filter", "")
-    colset = view.__dict__.get("_ui_colset", 0)
+    if discover:
+        flt = ""
+    colset = 0 if discover else view.__dict__.get("_ui_colset", 0)
     sel_ids = {id(e) for e in scene.selection}
     # Problems (watertight) and the Export cells (quantities) read geometry.
     geometric = view.__dict__.get("_ui_mode") == "problems" or colset == 2
     cv = scene.content_version if geometric else _tree_version(view, win, scene)
-    sig = (id(scene), cv, tuple(sorted(exp)), tuple(sorted(pages.items())), flt, len(sel_ids),
+    sig = (id(scene), id(scene.edit_group), scene.mesh.revision, cv, tuple(sorted(exp)), tuple(sorted(pages.items())), flt, len(sel_ids),
            hash(frozenset(sel_ids)), colset, getattr(view, "_ui_layer_rev", 0))
-    if sig == getattr(view, "_ui_tree_sig", None):
+    if not discover and sig == getattr(view, "_ui_tree_sig", None):
         return
-    first = getattr(view, "_ui_tree_sig", None) is None
-    view._ui_tree_sig = sig
-    mode = view.__dict__.get("_ui_mode", "")
+    first = not hasattr(view, "_ui_tree")
+    if not discover:
+        view._ui_tree_sig = sig
+    mode = "" if discover else view.__dict__.get("_ui_mode", "")
     from collections import Counter, defaultdict
     from core import links, structure
     from core import layers as L
+    from ingetrazo_core import project_context_rows, project_item_matches, source_placement_rows
     model = _tree_model(view, scene, cv)
-    if colset == 2 and not mode:
+    if mode == "deliveries":
         from views import wgpu_deliveries
         wgpu_deliveries.dock(view, scene, model)
         return
     tree, registry, recipes = model["tree"], model["registry"], model["recipes"]
     counts, problems, to_fix = model["counts"], model["problems"], model["to_fix"]
     node_layers, order = model["node_layers"], model["order"]
+    if discover:
+        from ingetrazo_core import reveal_branches
+        exp = reveal_branches(scene, tree)
     nodes, children, direct, unfiled = tree.nodes, tree.children, tree.direct, tree.unfiled
     node_of = tree.member
     depth = dict(order)
@@ -959,14 +967,6 @@ def _tree(view, win) -> None:
 
     def main_layer(key):
         if nodes[key]["kind"] == "host":
-            stack = [key]
-            while stack:
-                k = stack.pop(0)
-                if node_layers[k]:
-                    ly = scene.layer(node_layers[k].most_common(1)[0][0])
-                    if ly is not None:
-                        return ly
-                stack.extend(children.get(k, ()))
             return _layer(scene, recipes.get(key, {}).get("tag"))
         ts = node_tags(key)
         return scene.layer(ts[0]) if ts else None
@@ -1008,27 +1008,22 @@ def _tree(view, win) -> None:
         return "component" if getattr(g, "is_component", lambda: False)() else "group"
 
     def item_hits(g, key):
-        for t in tokens:
-            neg = t.startswith("-")
-            t = t.lstrip("-")
-            ok = {"is:hidden": bool(getattr(g, "hidden", False)), "is:locked": bool(getattr(g, "locked", False)),
-                  "is:component": item_kind(g) == "component", "is:section": item_kind(g) == "section",
-                  "is:link": item_kind(g) == "link", "is:image": item_kind(g) == "image",
-                  "has:problem": id(g) in to_fix_set}.get(t, True)
-            if ok == neg:
-                return False
-        text = (g.name or "").lower()
-        return all(w in text for w in words) if words else bool(tokens)
+        return project_item_matches(scene, g, item_kind(g), flt, id(g) in to_fix_set or g in unfiled_set)
 
+    unfiled_set = set(unfiled) if flt else set()
     to_fix_set = set(map(id, to_fix))
     filtering = bool(words or tokens)
     show_nodes, show_items = set(), defaultdict(list)
+    file_hit_by_key = {}
     if filtering:
         for key in order:
             hit_node = bool(words) and not tokens and all(
                 w in (nodes[key]["name"] + " " + kind_of(recipes[key].get("class"))).lower() for w in words)
             members = [g for g in direct[key] if item_hits(g, key)]
-            if hit_node or members:
+            file_hit = nodes[key]["kind"] == "link" and any(
+                project_item_matches(scene, g, "link", flt, links.link_state(scene, nodes[key]["path"]) in ("missing", "modified")) for g in tree.links.get(key, ()))
+            file_hit_by_key[key] = file_hit
+            if hit_node or members or file_hit:
                 show_items[key] = members
                 k = key
                 while k is not None:
@@ -1041,11 +1036,7 @@ def _tree(view, win) -> None:
         # The active column set's cells for a node (its tag's layer) or an item.
         if colset == 1 and key is not None:
             ly = main_layer(key)
-            if ly is None:
-                return []
-            colr = "#%02x%02x%02x" % tuple(int(max(0, min(1, c)) * 255) for c in ly.color[:3]) if ly.color else ""
-            w = "auto" if ly.lineweight is None else f"{ly.lineweight:.2f}"
-            return [colr, (ly.linetype or "continuous").replace("_", " "), w, "1" if ly.printable else "0"]
+            return ly._drawing_cells() if ly is not None else []
         if colset == 2:
             if key is not None:
                 r = recipes.get(key, {})
@@ -1099,7 +1090,7 @@ def _tree(view, win) -> None:
                 singles.extend(gs)
         entries += [("one", g.name or "", [g]) for g in singles]
         entries.sort(key=lambda e: natural(e[1]))
-        cap = pages.get(key, ROW_CAP)
+        cap = len(entries) if discover else pages.get(key, ROW_CAP)
         for n, (what, name, gs) in enumerate(entries):
             if n >= cap:
                 more(key, cap, len(entries), d)
@@ -1110,7 +1101,7 @@ def _tree(view, win) -> None:
                 add(dk, name or "Component", "", f"×{len(gs)}", "component", d, 0,
                     sum(1 for g in gs if id(g) in to_fix_set), False, 1, -1, -1, True, dk in exp, sel)
                 if dk in exp or filtering:
-                    dcap = pages.get(dk, ROW_CAP)
+                    dcap = len(gs) if discover else pages.get(dk, ROW_CAP)
                     for g in gs[:dcap]:
                         add_item(g, key, d + 1)
                     if len(gs) > dcap:
@@ -1126,7 +1117,7 @@ def _tree(view, win) -> None:
             0 if getattr(g, "hidden", False) else 1, int(bool(getattr(g, "locked", False))),
             bool(kids), ik in exp, int(id(g) in sel_ids), cells(g=g))
         if kids and ik in exp:
-            cap = pages.get(ik, ROW_CAP)
+            cap = len(kids) if discover else pages.get(ik, ROW_CAP)
             for c in kids[:cap]:
                 where = node_of.get(id(c))
                 if where is not None and where != key and where in nodes:
@@ -1168,7 +1159,7 @@ def _tree(view, win) -> None:
         elif node["kind"] == "linked":
             kind = TIP + TIPS["Linked files"]
         elif node["kind"] in ("tag", "tagfolder"):
-            kind = _kind_tip("Tag" if node["kind"] == "tag" else "", source=source)
+            kind = _kind_tip("Drawing only" if node["kind"] == "tag" else "", source=source)
         elif cls is None and children.get(key):
             kind = _kind_tip("", source=source)
         else:
@@ -1177,25 +1168,38 @@ def _tree(view, win) -> None:
         expanded = filtering or nk in exp
         eye, lock = layer_state(key)
         add(nk, name, kind, badge, icon, d, counts[key], problems[key], key == active, 0, eye, lock,
-            bool(children.get(key)) or bool(direct[key]), expanded, selected[key], cells(key=key))
+            bool(children.get(key)) or bool(direct[key]) or len(tree.links.get(key, ())) > 1, expanded, selected[key], cells(key=key))
         if not expanded:
             hidden_below = d
             continue
+        if node["kind"] == "link" and (not filtering or file_hit_by_key.get(key)):
+            rows.extend(source_placement_rows(scene, tree.links.get(key, ()), d+1))
         members = show_items[key] if filtering else direct[key]
         if members:
             add_items(members, key, d + 1)
-    if unfiled and not filtering:
+    loose_items = [g for g in unfiled if item_hits(g, "")] if filtering else unfiled
+    if loose_items:
         uk = "n:"
-        add(uk, "Unfiled", "", "", "", 0, len(unfiled), len(unfiled), False, 0, -1, -1, True, uk in exp,
+        add(uk, "Unfiled", "", "", "", 0, len(loose_items), len(loose_items), False, 0, -1, -1, True, filtering or uk in exp,
             sum(1 for g in unfiled if id(g) in sel_ids))
-        if uk in exp:
-            add_items(unfiled, "", 1)
+        if filtering or uk in exp:
+            add_items(loose_items, "", 1)
     if mode == "problems":
         host = structure._nodes(registry)
         host_of = {i: k for i, k in node_of.items() if k in host}
         rows = _problem_rows(view, scene, registry, host, {k: recipes[k] for k in host if k in recipes},
                              unfiled, host_of, exp, sel_ids)
     if mode != "problems":
+        context = project_context_rows(scene, flt, exp)
+        if scene.edit_group is not None:
+            rows = context
+        else:
+            if tree._host_roots < 0:
+                rows[:0] = scene._root._drawing_preview(exp, flt, bool(tree.links))
+            rows.extend(context)
+        if discover:
+            from ingetrazo_core import reveal_selection
+            return reveal_selection(rows)
         mark_selection(rows)
     else:
         # Problems lists items under rules: a selected item is lit itself.
@@ -1205,6 +1209,12 @@ def _tree(view, win) -> None:
                          active=active, node_of=node_of, nodes=nodes, tree=tree, counts=counts,
                          node_layers={k: list(c) for k, c in node_layers.items()})
     view.renderer.ui_set_tree(rows, len(unfiled))
+    if hasattr(view.renderer, "ui_set_proposal_available"):
+        view.renderer.ui_set_proposal_available(not mode and tree._host_roots < 0 and scene.edit_group is None)
+    if not view.__dict__.get("_ui_sort_loaded") and hasattr(view.renderer, "ui_set_tree_sort"):
+        from PySide6.QtCore import QSettings
+        view.renderer.ui_set_tree_sort(max(0, QSettings().value("ui/project_tree_sort", 0, type=int)))
+        view._ui_sort_loaded = True
     view.renderer.ui_set_colset(colset)
     view.renderer.ui_set_mode({"problems": "Problems", "library": "Library"}.get(mode, ""))
     view.renderer.ui_set_issues(bool(view.__dict__.get("_ui_issues", False)))
@@ -1345,13 +1355,13 @@ def _problem_rules(scene, registry, nodes, recipes, unfiled):
     rules.append(("Needs attention", "class", "Missing IFC class", unclassified))
     for spec, gs in sorted(ids.items()):
         rules.append(("Blocks export", "ids:" + spec, f"IDS: {spec}", gs))
-    from core import links
+    from core import links, link_structure
     stale, states = [], {}
     for g in links.linked_groups(scene):
         rec = links.link_of(g)
         path = rec["path"]
         if path not in states:
-            states[path] = links.link_state(scene, path)
+            states[path] = link_structure.file_state(scene, path)
         if states[path] in ("missing", "modified"):
             stale.append(g)
     rules.append(("Needs attention", "links", "Linked file changed or missing", stale))
@@ -1731,7 +1741,7 @@ def _tree_action(win, view, action) -> None:
     from core import layers as L
     from core.group import Group
     from core.history import CompoundCommand, MakeUniqueCommand, SetRegistryCommand
-    from views.structure_recipe import execute, update_node
+    from views.tree_navigation import execute
     if SEP not in action:
         # The inspector's chips and the delivery counts: "verb:arg".
         verb, _, key = action.partition(":")
@@ -1874,7 +1884,40 @@ def _tree_action(win, view, action) -> None:
         view.update()
 
     try:
-        if verb == "toggle":
+        if verb == "revealselection":
+            plan = _tree(view, win, discover=True) if scene.selection else None
+            if plan:
+                target, ancestors, limits = plan
+                exp.update(ancestors)
+                pages = view.__dict__.setdefault("_ui_pages", {})
+                for page, limit in limits:
+                    pages[page] = max(pages.get(page, ROW_CAP), limit)
+                view._ui_mode = view._ui_filter = ""
+                view.renderer.ui_reveal_row(target)
+                rebuild()
+            elif scene.selection:
+                vp.flash_status("This selection has no occurrence in the Project tree")
+        elif verb in ("eye", "lock") and rk == "geometry:loose":
+            _core(vp, "edit_loose_geometry", field=verb)
+            scene.select(e for e in list(scene.selection) if scene.entity_selectable(e))
+            vp.notify_scene_changed()
+            rebuild()
+        elif verb in ("eye", "lock") and kind == "preview-tag":
+            layer = scene.layer_by_key(ident)
+            if layer is not None:
+                _core(vp, "set_tag_state", tags=[ident], **({"visible": not layer.visible} if verb == "eye" else {"locked": not layer.locked}))
+                vp.notify_scene_changed()
+                rebuild()
+        elif verb == "eye" and kind == "preview-folder":
+            _core(vp, "set_tag_state", folders=[ident], visible=not L.folder_visible(scene, ident, ancestors=False))
+            vp.notify_scene_changed()
+            rebuild()
+        elif verb == "item" and rk == "geometry:loose":
+            from itertools import chain
+            _select(win, chain(scene.mesh.faces, scene.mesh.edges))
+        elif verb == "item" and kind == "section":
+            _select(win, [p for p in scene.section_planes if str(p.uid) == ident])
+        elif verb == "toggle":
             if rk.startswith(("r:", "c:inmodel", "c:compmodel")):
                 # Rules start open when short: remember a collapse explicitly.
                 if rk in exp:
@@ -1911,30 +1954,19 @@ def _tree_action(win, view, action) -> None:
         elif verb == "filter":
             view._ui_filter = rk
             rebuild()
+        elif verb == "sort":
+            from PySide6.QtCore import QSettings
+            QSettings().setValue("ui/project_tree_sort", int(rk))
         elif verb == "colset":
             view._ui_colset = int(rk or 0)
             apply_dock_width(view)
             rebuild()
-        elif verb in ("print", "color", "linetype", "weight") and node:
-            panel = getattr(getattr(win, "layers_dock", None), "panel", None)
-            ts = tags(node)
-            if panel is not None and ts:
-                if verb == "print":
-                    layer = scene.layer(ts[0])
-                    panel.set_printable(ts, not bool(getattr(layer, "printable", True)))
-                elif verb == "color":
-                    rgb = None
-                    if extra.startswith("#") and len(extra) == 7:
-                        v = int(extra[1:], 16)
-                        rgb = ((v >> 16 & 255) / 255.0, (v >> 8 & 255) / 255.0, (v & 255) / 255.0)
-                    panel.set_color(ts, rgb)
-                elif verb == "linetype":
-                    panel.set_style(ts, linetype=extra)
-                else:
-                    panel.set_style(ts, lineweight=None if extra == "auto" else float(extra))
-                view._ui_layer_rev = getattr(view, "_ui_layer_rev", 0) + 1
+        elif verb in ("print", "color", "linetype", "weight", "hatch") and node and not linked:
+            layer = _layer(scene, data["recipes"][node].get("tag"))
+            if layer is not None:
+                _core(vp, "edit_tag", tags=[layer.key], field=verb, value=extra)
                 rebuild()
-                vp.update()
+                vp.notify_scene_changed()
         elif verb == "measure":
             _measure(view, win)
             rebuild()
@@ -1965,18 +1997,19 @@ def _tree_action(win, view, action) -> None:
             from core.desktop_open import reveal
             if tnode.get("path"):
                 reveal(tnode["path"])
-        elif verb in ("linkopen", "linkreload", "linkunlink") and linked:
+        elif verb in ("linkopen", "linkreload", "linkunlink", "linkrelink", "linkresettags") and linked:
             gs = placements()
             if not gs:
                 return
             if verb != "linkopen" and tnode.get("via"):
                 vp.flash_status(f"{tnode.get('name')} comes inside {tnode['via']}: reload or unlink {tnode['via']}")
                 return
-            if verb == "linkunlink":
-                _select(win, gs[:1])
-                unlink = getattr(win, "_on_make_unique", None)
-                if unlink is not None:
-                    unlink()
+            if verb == "linkresettags":
+                _core(vp, "reset_link_tags", path=tnode["path"])
+                vp.notify_scene_changed()
+            elif verb == "linkunlink":
+                _core(vp, "unlink_placements", placements=[tree.address(g) for g in gs])
+                vp.notify_scene_changed()
             else:
                 _link_action(win, view, gs[0], verb)
             rebuild()
@@ -2005,9 +2038,13 @@ def _tree_action(win, view, action) -> None:
         elif verb == "isolate":
             _isolate(win, [tree.row_id(g) if tree else g.uid for g in shown()])
         elif verb == "open":
+            from core.outliner import path_to
+            from views.tree_navigation import open_to
             g = item()
             if g is not None:
-                vp.begin_group_edit(g)
+                parents = path_to(scene.groups, g)
+                if parents is not None:
+                    open_to(vp, [*parents, g])
         elif verb == "zoom":
             _select(win, shown())
             win._on_zoom_selection()
@@ -2057,22 +2094,34 @@ def _tree_action(win, view, action) -> None:
         elif verb == "fileto":
             _select(win, members())
             _file_to(win, len(members()))
+        elif verb == "parent" and node:
+            _core(vp, "edit_structure_node", node=node, field="parent", value=extra)
+            vp.notify_scene_changed()
+            rebuild()
         elif verb == "rename":
             if node:
-                update_node(vp, node, name=extra)
+                _core(vp, "edit_structure_node", node=node, field="name", value=extra)
+                vp.notify_scene_changed()
+                rebuild()
             elif item() is not None:
                 _core(vp, "rename_placement", placement=address(item()), name=extra)
                 vp.update()
+        elif verb == "fileitem" and (group := item()) is not None:
+            _core(vp, "file_placements", placements=[address(group)], node=extra)
+            vp.notify_scene_changed()
+            rebuild()
         elif verb in ("file", "filehere"):
             key = node if verb == "filehere" else ident if kind == "n" else rk
             uids = [address(g) for g in scene.selection if isinstance(g, Group)]
             if uids and key:
-                execute(vp, structure.file(scene, uids, key))
+                _core(vp, "file_placements", placements=uids, node=key)
+                vp.notify_scene_changed()
+                rebuild()
                 vp.flash_status(f"Filed {len(uids)} to " + " › ".join(structure.path(bim_registry.get(scene), key)))
         elif verb == "active":
-            registry = bim_registry.get(scene)
-            registry.setdefault("structure", {})["active"] = node
-            execute(vp, SetRegistryCommand(registry))
+            _core(vp, "edit_structure_node", node=node, field="active", value="")
+            vp.notify_scene_changed()
+            rebuild()
         elif verb == "kind" and node:
             cls = next((c for c, k in KINDS.items() if k == extra and c), None)
             recipe = dict(structure._nodes(bim_registry.get(scene)).get(node, {}).get("recipe", {}))
@@ -2141,7 +2190,9 @@ def _tree_action(win, view, action) -> None:
         elif verb == "edit":
             what, _, arg = rk.partition(":")
             if what == "nodename":
-                update_node(vp, arg, name=extra)
+                _core(vp, "edit_structure_node", node=arg, field="name", value=extra)
+                vp.notify_scene_changed()
+                rebuild()
             elif what in ("predef", "objtype"):
                 recipe = dict(structure._nodes(bim_registry.get(scene))[arg].get("recipe", {}))
                 field = "predefined_type" if what == "predef" else "object_type"
@@ -2198,7 +2249,7 @@ def _core(vp, command, /, **args):
 def _delete_node(vp, key) -> None:
     from core import bim_registry, structure
     from core.history import CompoundCommand, SetRegistryCommand
-    from views.structure_recipe import execute
+    from views.tree_navigation import execute
     scene = vp.scene
     registry = bim_registry.get(scene)
     section = registry["structure"]
@@ -2231,7 +2282,7 @@ def _inspector(view, win) -> None:
     picked in the tree, one item, several, or loose geometry. Fields edit in
     place; IFC stays under Export details."""
     scene = win.viewport.scene
-    if view.__dict__.get("_ui_colset") == 2 and not view.__dict__.get("_ui_mode"):
+    if view.__dict__.get("_ui_mode") == "deliveries" and getattr(view, "_delivery_key", None):
         view._ui_insp_sig = None
         return
     sel = list(scene.selection)
@@ -2239,7 +2290,7 @@ def _inspector(view, win) -> None:
     sel_sig = (len(sel), id(sel[0]) if sel else 0, id(sel[-1]) if sel else 0)
     node_focus = focus[0] if focus and focus[1] == sel_sig else None
     sig = (id(scene), scene.content_version, sel_sig, node_focus, getattr(view, "_ui_tree_sig", None) is not None,
-           view.__dict__.get("_ui_mat_focus"), view.__dict__.get("_ui_mode"),
+           view.__dict__.get("_ui_mat_focus"), view.__dict__.get("_ui_mode"), view.__dict__.get("_ui_colset"),
            _current_material_name(), _active_tool_id(win))
     if sig == getattr(view, "_ui_insp_sig", None):
         return
@@ -2274,6 +2325,12 @@ def _inspector(view, win) -> None:
         sections = [("Node", rows),
                     ("Actions", [(f"kindmenu:{node_focus}", "Change kind…"), (f"active:{node_focus}", "Draw into"),
                                  (f"isolate:{node_focus}", "Isolate"), (f"cutlist:{node_focus}", "Cut list…")])]
+        if view.__dict__.get("_ui_colset") == 1:
+            from core import hatches, layers
+            sections.append(("Drawing", [("node", "n:" + node_focus),
+                                         *(("hatch", k) for k in hatches.HATCH_ORDER),
+                                         *(("line", k) for k in layers.LINETYPES),
+                                         *(("line", layers.CUSTOM_LINETYPE + k) for k in scene.line_types)]))
         if missing:
             sections.append(("Actions", [(f"nodestatus:{node_focus}:" + v, "All " + v.lower()) for v in STATUS_CHOICES]))
         export = [("IFC class", str(recipe.get("class") or "none (drawing only)")),
@@ -2455,9 +2512,13 @@ def _linked_inspector(view, win, data, key):
         # The file verbs first (views/verbs.py), then what any row offers.
         from views import verbs
         labels = {"linkopen": "Open source", "linkreload": "Reload" if state != "modified" else "Reload changes",
-                  "linkunlink": "Unlink", "linkfinder": "Show in Finder"}
-        acts = [("lnk:" + v + ":" + key, labels[v]) for v in verbs.file_verbs(not top)]
-        acts.append(("lnk:contents:" + key, "Select contents"))
+                  "linkunlink": "Unlink", "linkfinder": "Show in Finder", "linkrelink": "Locate…"}
+        acts = [("lnk:" + v + ":" + key, labels[v]) for v in verbs.file_verbs(not top)
+                if state != "missing" or v in ("linkunlink", "linkrelink")]
+        if overrides and top:
+            acts.append(("lnk:linkresettags:" + key, "Show tags as the source has them"))
+        if state != "missing":
+            acts.append(("lnk:contents:" + key, "Select contents"))
         if not copies:
             acts += [("isolate:" + key, "Isolate"), ("lnk:eye:" + key, "Hide" if visible else "Show")]
         return Path(path).name or node["name"], [("Linked file", rows), ("Actions", acts)]
@@ -2467,7 +2528,7 @@ def _linked_inspector(view, win, data, key):
     layer = scene.layer(ts[0]) if ts else None
     visible = L.effective_visible(scene, layer) if layer is not None else True
     cls = node["recipe"].get("class")
-    rows = [("Name", node["name"]), ("Kind", "Tag" if kind == "tag" else "Tag folder" if kind == "tagfolder"
+    rows = [("Name", node["name"]), ("Kind", "Drawing only" if kind == "tag" else "Tag folder" if kind == "tagfolder"
                                        else kind_of(cls) if cls or not tree.children.get(key) else "Group of nodes"),
             ("From", Path(path).name + " — read-only here"), ("Items", str(count)),
             ("Visibility", "Shown" if visible else "Hidden")]
@@ -2501,10 +2562,8 @@ def _link_action(win, view, g, key) -> None:
             reveal(rec["path"])
             return
         if key == "linkunlink":
-            vp.scene.select([g])
-            unlink = getattr(win, "_on_make_unique", None)
-            if unlink is not None:
-                unlink()
+            _core(vp, "unlink_placements", placements=[scene.occurrence_path(g)])
+            vp.notify_scene_changed()
             view._ui_insp_sig = None
             view._ui_tree_sig = None
             return
@@ -2602,7 +2661,7 @@ def _set_status(win, groups, value) -> None:
     from copy import deepcopy
     from core.history import CompoundCommand, SetRecordCommand
     from core.ifc_tables import common_pset
-    from views.structure_recipe import execute
+    from views.tree_navigation import execute
     commands = []
     for g in groups:
         rec = g.ifc or {}
@@ -2813,9 +2872,8 @@ def _run(win, actions, source_view=None) -> None:
             view = getattr(getattr(win, "_doc", None), "stand_in", None)
             data = getattr(view, "_ui_tree", None) or {}
             if arg in ("unfiled", "problems"):
-                view._ui_mode = "problems"
-                view._ui_tree_sig = None
-                view.update()
+                from views import wgpu_library
+                wgpu_library.set_mode(view, win, "problems")
             elif arg == "active" and data.get("active"):
                 _select(win, _tree_groups(view, data["active"]))
             else:
@@ -3075,6 +3133,10 @@ def _problem_key(view, event) -> int:
     return {Qt.Key_BracketRight: 1, Qt.Key_BracketLeft: -1}.get(event.key(), 0)
 
 
+def _reveal_shortcut(event):
+    return event.key() == Qt.Key_J and _mods(event) == 12
+
+
 def claims_key(view, event) -> bool:
     """ShortcutOverride: does the chrome own this key (a focused field, or
     Escape while its popup is open)? Then no window shortcut fires."""
@@ -3087,7 +3149,7 @@ def claims_key(view, event) -> bool:
         return large or _opens_commands(event)
     if event.key() == Qt.Key_Escape:
         return True  # Reserve it for the chrome and viewport Escape router.
-    if _problem_key(view, event):
+    if _reveal_shortcut(event) or _problem_key(view, event):
         return True
     if _opens_commands(event):
         return True
@@ -3112,6 +3174,10 @@ def key(view, event, pressed: bool) -> bool:
         return False
     from views import wgpu_sheets
     sheets = wgpu_sheets.shown(view)
+    if not sheets and _reveal_shortcut(event):
+        if pressed:
+            _tree_action(view.window(), view, "revealselection" + SEP)
+        return True
     step = 0 if sheets else _problem_key(view, event)
     if step:
         if pressed:

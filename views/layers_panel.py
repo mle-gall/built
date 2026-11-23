@@ -33,7 +33,7 @@ from PySide6.QtWidgets import (QAbstractItemView, QApplication, QDialog,
 from core import layers as L
 from core.i18n import tr
 from core.outliner import natural_key  # noqa: F401 — the Browser's too
-from views.outliner import node_icon
+from views.tree_icons import isolate_icon, row_icon
 from views.side_tree import SideTree, StayOpenMenu, _HeaderButton
 
 (COL_NAME, COL_ACTIVE, COL_EYE, COL_LOCK, COL_COLOR, COL_COUNT,
@@ -2887,12 +2887,11 @@ class LayersPanel(QWidget):
     def _header_icons(self) -> None:
         """The header's pencil, eye, padlock and target, in the palette's
         ink."""
-        from views.layers_toolbar import isolate_icon
         hi = self.tree.headerItem()
         self._drawn_ink = QApplication.palette().text().color().rgba()
         hi.setIcon(COL_ACTIVE, _pencil_icon(True))
-        hi.setIcon(COL_EYE, node_icon("eye"))
-        hi.setIcon(COL_LOCK, node_icon("lock"))
+        hi.setIcon(COL_EYE, row_icon("eye"))
+        hi.setIcon(COL_LOCK, row_icon("lock"))
         hi.setIcon(COL_ISOLATE, isolate_icon(False))
 
     def changeEvent(self, event) -> None:
@@ -2963,7 +2962,7 @@ class LayersPanel(QWidget):
             item = _Row([L.folder_label(scene, name)])
             item.setData(COL_NAME, Qt.UserRole, (KIND_FOLDER, name))
             item.setData(COL_NAME, ROLE_ORDER, order)
-            item.setIcon(COL_NAME, node_icon("folder"))
+            item.setIcon(COL_NAME, row_icon("folder"))
             item.setFlags(item.flags() | Qt.ItemIsEditable)
             folders[name] = item
         for name, item in folders.items():
@@ -3038,11 +3037,10 @@ class LayersPanel(QWidget):
     def refresh_icons(self) -> None:
         """Repaint the marks drawn in the palette's ink and accent after the
         theme or accent changes: the header's and every row's (#1086)."""
-        from views.layers_toolbar import isolate_icon
         hi = self.tree.headerItem()
         hi.setIcon(COL_ACTIVE, _pencil_icon(True))
-        hi.setIcon(COL_EYE, node_icon("eye"))
-        hi.setIcon(COL_LOCK, node_icon("lock"))
+        hi.setIcon(COL_EYE, row_icon("eye"))
+        hi.setIcon(COL_LOCK, row_icon("lock"))
         hi.setIcon(COL_ISOLATE, isolate_icon(False))
         hi.setIcon(COL_PRINT, printer_icon(True))
         scene = self._scene()
@@ -3284,10 +3282,10 @@ class LayersPanel(QWidget):
         item.setIcon(COL_ACTIVE, _pencil_icon(active))
         item.setToolTip(COL_ACTIVE, tr("Active layer") if active
                         else tr("Make this the active layer"))
-        item.setIcon(COL_EYE, node_icon("eye" if ly.visible else "eye_off"))
+        item.setIcon(COL_EYE, row_icon("eye" if ly.visible else "eye_off"))
         item.setData(COL_EYE, Qt.UserRole + 1, int(ly.visible))
         self._dim_eye(item, not L.folder_visible(self._scene(), ly.folder))
-        item.setIcon(COL_LOCK, node_icon("lock" if ly.locked else "lock_open"))
+        item.setIcon(COL_LOCK, row_icon("lock" if ly.locked else "lock_open"))
         item.setData(COL_LOCK, Qt.UserRole + 1, int(ly.locked))
         item.setIcon(COL_COLOR, layer_swatch(ly))
         item.setToolTip(COL_COLOR, tr("Click to pick the layer's colour"))
@@ -3344,7 +3342,6 @@ class LayersPanel(QWidget):
         item.setToolTip(COL_OPACITY, tr("Opaque") if not clear else
                         f"{tr('Transparency')} {clear} %")
         if ly.key != L.DEFAULT_LAYER:               # always on: no target
-            from views.layers_toolbar import isolate_icon
             alone = ly.key in self._alone
             item.setIcon(COL_ISOLATE, isolate_icon(alone))
             item.setToolTip(COL_ISOLATE, tr(
@@ -3370,8 +3367,8 @@ class LayersPanel(QWidget):
         key = self._key(item)[1]
         shown = L.folder_visible(scene, key, ancestors=False)
         locked = bool(layers) and all(ly.locked for ly in layers)
-        item.setIcon(COL_EYE, node_icon("eye" if shown else "eye_off"))
-        item.setIcon(COL_LOCK, node_icon("lock" if locked else "lock_open"))
+        item.setIcon(COL_EYE, row_icon("eye" if shown else "eye_off"))
+        item.setIcon(COL_LOCK, row_icon("lock" if locked else "lock_open"))
         # Read by «Sort by visible / locked», as a layer row's are.
         item.setData(COL_EYE, Qt.UserRole + 1, int(shown))
         item.setData(COL_LOCK, Qt.UserRole + 1, int(locked))
@@ -3380,7 +3377,6 @@ class LayersPanel(QWidget):
         printed = (not layers
                    or any(getattr(ly, "printable", True) for ly in layers))
         item.setIcon(COL_PRINT, printer_icon(printed))
-        from views.layers_toolbar import isolate_icon
         names = {ly.key for ly in layers} - {L.DEFAULT_LAYER}
         alone = bool(names) and names == self._alone
         item.setIcon(COL_ISOLATE, isolate_icon(alone))

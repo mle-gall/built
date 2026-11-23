@@ -55,6 +55,8 @@ space, where **Paste here** is spatial. Camera items are left out, because
 the top bar's navigation cluster shows them all. The exception, again, is
 **Zoom extents** on empty space.
 
+Reveal selection shares the navigation row with Zoom to. It opens the branches needed to show the selected occurrence in the Project tree. Its shortcut is ⇧⌘J on macOS and Ctrl+Shift+J elsewhere.
+
 ## The table
 
 `|` separates segments of one row. *(if …)* marks a row that appears only
@@ -70,7 +72,7 @@ Isolate is left out: it shows placements, and loose geometry has none.
 | header | `Face` · `12.00 m²` · loose geometry · Model *(or the group being edited)*; with several: `n faces` | `Edge` · `4.00 m` · loose geometry · …; with several: `n edges` | `n items` · `a faces, b edges` |
 | 1 | Repeat … | Repeat … | Repeat … |
 | 2 | Hide | Hide | Hide |
-| 3 | Zoom to | Zoom to | Zoom to |
+| 3 | Zoom to \| Reveal selection | Zoom to \| Reveal selection | Zoom to \| Reveal selection |
 | 4 | Make group \| Make component… | Make group \| Make component… | Make group \| Make component… |
 | 5 | Reverse faces \| Orient faces | Make faces *(if they close a loop)* | Reverse faces \| Orient faces |
 | 6 | Intersect: Model \| Selection \| Context | Divide… | Intersect: Model \| Selection \| Context |
@@ -91,9 +93,9 @@ Isolate is left out: it shows placements, and loose geometry has none.
 | 2 | Open for editing | Open for editing | Hide |
 | 3 | Rename… | Rename… | Isolate |
 | 4 | Hide | Hide | Lock *(Unlock when all are locked)* |
-| 5 | Isolate | Isolate | Zoom to |
+| 5 | Isolate | Isolate | Zoom to \| Reveal selection |
 | 6 | Lock *(Unlock when locked)* | Lock *(Unlock when locked)* | File to… |
-| 7 | Zoom to | Zoom to | Make group \| Make component… |
+| 7 | Zoom to \| Reveal selection | Zoom to \| Reveal selection | Make group \| Make component… |
 | 8 | File to… | File to… | Merge groups \| Explode |
 | 9 | Explode \| Make component… | Select instances \| Make unique | Make unique *(if components)* |
 | 10 | Split into pieces | Explode \| Replace component… *(Replace when another definition fits)* | Intersect: Model \| Selection \| Context |
@@ -109,10 +111,10 @@ Isolate is left out: it shows placements, and loose geometry has none.
 | header | `n items` · `g groups, f faces, e edges` | `leaf.built ↗` · Linked file · read-only · path | `Stringer-02` · in leaf.built ↗ · read-only | `Dimension` · `4.00 m` / `Text` · “first words” | `Guide line` / `Guide point` | `Nothing here` · Model *(or the group being edited)* |
 | 1 | Repeat … | Repeat … *(greyed)* | Repeat … *(greyed)* | Repeat … | Repeat … | Repeat … |
 | 2 | Hide | Select contents | Select its linked file | Edit text… | Delete guide | Paste here *(if something is copied)* |
-| 3 | Isolate | Hide | Isolate | Zoom to | Delete all guides | Select all |
-| 4 | Zoom to | Isolate | Zoom to | | Zoom to | Unhide all |
+| 3 | Isolate | Hide | Isolate | Zoom to \| Reveal selection | Delete all guides | Select all |
+| 4 | Zoom to \| Reveal selection | Isolate | Zoom to \| Reveal selection | | Zoom to \| Reveal selection | Unhide all |
 | 5 | File to… | Lock *(the placement's own padlock)* | Open source | | | Show all *(if isolated)* |
-| 6 | Make group \| Make component… | Zoom to | Reload | | | Zoom extents |
+| 6 | Make group \| Make component… | Zoom to \| Reveal selection | Reload | | | Zoom extents |
 | 7 | Reverse faces \| Orient faces *(if faces)* | Open source | | | | Delete all guides *(if any)* |
 | 8 | Intersect: Model \| Selection \| Context | Reload | | | | |
 | 9 | Soften / Smooth edges… | Include nested files *(check)* | | | | |
@@ -128,9 +130,9 @@ have a home.
 
 | Kind | Rows after Repeat |
 |---|---|
-| Section plane | Section: Reverse \| Active cut \| Align view · Name and symbol… · Zoom to |
-| Image | Image: Size… \| Opacity… · Explode image · Lock *(check)* · Zoom to |
-| Geo path | Terrain profile · Terrain surface: Flat \| Draped \| None *(closed)* · Convert path to geometry · Open / close path |
+| Section plane | Section: Reverse \| Active cut \| Align view · Name and symbol… · Zoom to \| Reveal selection |
+| Image | Image: Size… \| Opacity… · Explode image · Lock *(check)* · Zoom to \| Reveal selection |
+| Geo path | Terrain profile · Terrain surface: Flat \| Draped \| None *(closed)* · Convert path to geometry · Open / close path · Reveal selection |
 | Locked group or image under the pointer | Unlock “name” (Image: Unlock “name” \| Delete) on the second row, before the selection's own rows |
 
 ### Where the old More items went
@@ -162,7 +164,7 @@ depend on it.
 | Lock / unlock | Lock (Unlock when locked) |
 | Select instances | Select instances (components) |
 | Make unique | Make unique (components) |
-| Zoom to | Zoom to |
+| Zoom to \| Reveal selection | Zoom to \| Reveal selection |
 | File to… | File to… |
 
 A linked row's tree menu (Select, Select contents, Isolate, Zoom to,
