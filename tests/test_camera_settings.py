@@ -293,13 +293,12 @@ def _fake_view(monkeypatch, w=1000, h=500):
     red exactly where the camera frame lies, so a crop can be checked
     without a graphics card."""
     from PySide6.QtGui import QColor, QImage, QPainter
-    from views import document_interaction as V
-    cls = ControllerSurface
+    from views.document_controller import DocumentController
+    cls = DocumentController
     vp = cls.__new__(cls)
     monkeypatch.setattr(cls, "width", lambda self: w)
     monkeypatch.setattr(cls, "height", lambda self: h)
     monkeypatch.setattr(cls, "update", lambda self: None)
-    vp._gl = vp._program = object()
     vp.camera = OrbitCamera()
     real = cls.render_image
     rendered = []
@@ -694,8 +693,8 @@ def test_the_window_picks_the_sensor():
 
 def _type(vp, text):
     from PySide6.QtTest import QTest
-    QTest.keyClicks(vp, text)
-    QTest.keyClick(vp, Qt.Key_Return)
+    QTest.keyClicks(vp.keys_stand_in, text)
+    QTest.keyClick(vp.keys_stand_in, Qt.Key_Return)
 
 
 def test_typing_the_lens_with_zoom_on():
@@ -810,17 +809,17 @@ def test_from_24_to_35_typing_with_a_space_and_capitals():
         cam.fov_deg = cam.fov_for_focal(24.0)
         win._nav_actions["zoom"].trigger()          # the toolbar button
         vp.setFocus()
-        QTest.keyClicks(vp, "35 MM")
+        QTest.keyClicks(vp.keys_stand_in, "35 MM")
         assert vp.nav_mode == "zoom"                # the space did not leave
         assert vp._value_buffer.lower() == "35 mm"
-        QTest.keyClick(vp, Qt.Key_Return)
+        QTest.keyClick(vp.keys_stand_in, Qt.Key_Return)
         assert cam.focal_mm == pytest.approx(35.0, abs=0.01)
-        QTest.keyClicks(vp, "533mm")
-        QTest.keyClick(vp, Qt.Key_Return)
+        QTest.keyClicks(vp.keys_stand_in, "533mm")
+        QTest.keyClick(vp.keys_stand_in, Qt.Key_Return)
         assert cam.focal_mm == pytest.approx(533.0, abs=0.1)
         assert cam.fov_deg == pytest.approx(2.58, abs=0.01)
-        QTest.keyClicks(vp, "60deg")
-        QTest.keyClick(vp, Qt.Key_Return)
+        QTest.keyClicks(vp.keys_stand_in, "60deg")
+        QTest.keyClick(vp.keys_stand_in, Qt.Key_Return)
         assert cam.fov_deg == pytest.approx(60.0)
         assert vp.nav_mode == "zoom"
     finally:
@@ -845,20 +844,20 @@ def test_after_picking_a_scene_z_then_35mm_works():
         item = panel.row_for(a)                      # the Scenes tree (#1297)
         panel.tree.setFocus()
         panel._on_activate(item)                     # a double-click
-        assert QApplication.focusWidget() is vp
+        assert QApplication.focusWidget() is vp.keys_stand_in
         cam.fov_deg = cam.fov_for_focal(24.0)
-        QTest.keyClick(vp, Qt.Key_Z)
-        QTest.keyClicks(vp, "35mm")
-        QTest.keyClick(vp, Qt.Key_Return)
+        QTest.keyClick(vp.keys_stand_in, Qt.Key_Z)
+        QTest.keyClicks(vp.keys_stand_in, "35mm")
+        QTest.keyClick(vp.keys_stand_in, Qt.Key_Return)
         assert vp.nav_mode == "zoom"
         assert cam.focal_mm == pytest.approx(35.0, abs=0.01)
         # Zoom from its button, the keyboard elsewhere: it comes back.
         panel.tree.setFocus()
         win._activate_nav("zoom")
-        assert QApplication.focusWidget() is vp
+        assert QApplication.focusWidget() is vp.keys_stand_in
         # Camera Settings opens without taking the keyboard.
         win._show_camera_settings()
-        assert QApplication.focusWidget() is vp
+        assert QApplication.focusWidget() is vp.keys_stand_in
         win._camera_settings.close()
     finally:
         win._saved_version = win.viewport.scene.version

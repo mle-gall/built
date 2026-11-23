@@ -90,21 +90,30 @@ def container_own(vp):
 LAYOUTS = [plain, component, nested_plain, nested_component, container_own]
 
 
-@pytest.fixture
-def win():
+@pytest.fixture(scope="module")
+def window():
     from views.main_window import MainWindow
-    w = MainWindow()
-    w.show()
-    for _ in range(10):
-        _app.processEvents()
-    vp = w.viewport
-    if not vp.keys_stand_in._can_create_surface():
-        w.close()
+    if QApplication.platformName() in ("offscreen", "minimal"):
         pytest.skip("no native GPU surface")
-    vp.scene.guides.clear()
-    yield w
-    w._saved_version = vp.scene.version
-    w.close()
+    window = MainWindow()
+    window.show()
+    _app.processEvents()
+    yield window
+    window._saved_version = window.viewport.scene.version
+    window.close()
+    window.deleteLater()
+
+
+@pytest.fixture
+def win(window):
+    from PySide6.QtCore import QCoreApplication, QEvent
+    previous = window.active_document()
+    window._new_document()
+    window.close_document(previous, ask=False)
+    QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+    _app.processEvents()
+    window.viewport.scene.guides.clear()
+    return window
 
 
 def _pixel(vp):
@@ -359,20 +368,23 @@ def test_turned_translucent_inside_it_stays_on_screen_when_left(win):
 
 
 def test_copies_outside_still_draw_instanced(win):
-    """Only the open mesh leaves the instanced path, and only while open."""
+    """Opening one child preserves the other child's resident placement."""
     vp = win.viewport
     _open(vp, nested_plain)
     top = vp.scene.groups[-1]
-    sibling = next(g for g in vp._placements()
-                   if g.mesh is top.children[1].mesh)
-    assert vp._instanced_eligible(sibling)
-    opened = next(g for g in vp._placements() if g.mesh is vp.scene.mesh)
-    assert not vp._instanced_eligible(opened)
+    sibling = top.children[1]
+
+    def sibling_row():
+        packed = vp.keys_stand_in.packed
+        i = packed.groups.index(sibling)
+        return packed.instances[i].copy()
+
+    before = sibling_row()
     vp.end_group_edit()
     _pixel(vp)
-    closed = next(g for g in vp._placements()
-                  if g.mesh is top.children[0].mesh)
-    assert vp._instanced_eligible(closed)
+    after = sibling_row()
+    assert (before["world"] == after["world"]).all()
+    assert before["info"][0] == after["info"][0]
 
 
 def test_leaving_a_nested_component_counts_its_copies(win, monkeypatch):

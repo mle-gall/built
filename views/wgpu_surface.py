@@ -3,7 +3,8 @@ from PySide6.QtGui import QGuiApplication
 
 
 def window_handles(widget):
-    platform = QGuiApplication.platformName()
+    # Use the QPA that owns the WId when constructing an unsafe native handle.
+    platform = QGuiApplication.instance().property('platformName')
     window = int(widget.winId())
     if platform in ('cocoa', 'windows'):
         return window, {}

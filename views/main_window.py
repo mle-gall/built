@@ -7724,7 +7724,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             # ``progress``: the opening document's bar is still up and this
             # is its last stage (MainWindow._open_path_here).
             nonlocal resident_version
-            if doc.viewport is None:
+            if doc.viewport is None or getattr(display, "_closed", False):
                 return
             if getattr(self, "_opening_document", False) and progress is None:
                 return
@@ -7733,14 +7733,15 @@ class MainWindow(WorksessionMixin, QMainWindow):
             display.set_scene(scene, progress=progress, opening=progress is not None)
             resident_version = version
             doc._resident_scene_ready = True
-            if not len(display.packed.instances):
+            if display.packed is not None and not len(display.packed.instances):
                 self._document_first_frame(doc)
         refresh.timeout.connect(lambda: rebuild())
         display._rebuild = rebuild
         doc.viewport.sceneVersionChanged.connect(lambda *_: refresh.start(0))
         display._refresh_timer = refresh
         def present():
-            if doc.viewport is None or not display._presentable():
+            if (doc.viewport is None or getattr(display, "_closed", False)
+                    or not display._presentable()):
                 return
             # Outliner and editing commands can request a paint on the hidden
             # GL viewport. Its paint would normally announce the new version.

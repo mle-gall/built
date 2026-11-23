@@ -29,11 +29,13 @@ SCRIPT = textwrap.dedent(r"""
     repo, work, page, recover = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3] == "1", sys.argv[4] == "1"
     sys.path.insert(0, str(repo))
     os.chdir(repo)
-    from PySide6.QtCore import QSettings, QTimer
+    from PySide6.QtCore import QCoreApplication, QSettings, QTimer
     QSettings.setDefaultFormat(QSettings.IniFormat)
     for scope in (QSettings.UserScope, QSettings.SystemScope):
         QSettings.setPath(QSettings.IniFormat, scope, str(work / "settings"))
-    st = QSettings(QSettings.IniFormat, QSettings.UserScope, "IngeTrazo", "IngeTrazo")
+    QCoreApplication.setOrganizationName("IngeTrazo")
+    QCoreApplication.setApplicationName("IngeTrazo")
+    st = QSettings()
     assert st.fileName().startswith(str(work)), st.fileName()
     last, other = work / "last.igz", work / "other.igz"
     st.setValue("home/recent_files", json.dumps([{"path": str(last), "pinned": False},
@@ -68,6 +70,7 @@ SCRIPT = textwrap.dedent(r"""
         return QMessageBox.Yes if recover else QMessageBox.No
     mw._dialogs.question = question
     import main as M
+    M._gpu_available = lambda interactive: True  # this subprocess tests document recovery offscreen
     def report():
         from PySide6.QtWidgets import QApplication
         win = next(w for w in QApplication.topLevelWidgets() if isinstance(w, mw.MainWindow))

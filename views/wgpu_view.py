@@ -1724,6 +1724,10 @@ class MetalView(ViewNavigation):
 
     def closeEvent(self, event):
         self._closed = True
+        for name in ('_refresh_timer', '_repaint_timer', '_resize_timer', '_settle_timer'):
+            timer = getattr(self, name, None)
+            if timer is not None:
+                timer.stop()
         tracker = getattr(self, '_instance_updates', None)
         if tracker is not None and tracker.unsubscribe is not None:
             tracker.unsubscribe()
@@ -1740,4 +1744,4 @@ class WgpuView(MetalView, QWidget):
     """Qt presentation surface for a document."""
 
     def _can_create_surface(self):
-        return QApplication.platformName() not in ('offscreen', 'minimal')
+        return self.testAttribute(Qt.WA_PaintOnScreen)
