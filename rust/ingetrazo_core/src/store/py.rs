@@ -1303,6 +1303,67 @@ impl PyMeshStore {
         Ok(existing.is_none().then(|| self.inner.key(Kind::Edge, edge)))
     }
 
+    fn weld_landing(
+        &mut self,
+        moving: Vec<u128>,
+    ) -> PyResult<Option<(bool, usize, Vec<(u128, u128)>)>> {
+        let moving = moving
+            .into_iter()
+            .filter_map(|k| self.inner.slot(Kind::Vertex, k))
+            .collect();
+        match self.inner.weld_landing(&moving) {
+            Err(OpError::Fallback(_)) => Ok(None),
+            result => result.map_err(op_err),
+        }
+    }
+
+    /// The selected transform carries a texture only when every outer and
+    /// inner corner of its face belongs to that transform.
+    fn carried_faces(&self, candidates: Vec<u128>, moving: Vec<u128>) -> PyResult<Vec<u128>> {
+        let vertices: std::collections::HashSet<_> = moving
+            .into_iter()
+            .filter_map(|k| self.inner.slot(Kind::Vertex, k))
+            .collect();
+        let candidates = self.drawing_candidates(Kind::Face, Some(candidates))?;
+        Ok(candidates
+            .into_iter()
+            .filter(|&f| {
+                self.inner
+                    .face_rings(f)
+                    .iter()
+                    .flatten()
+                    .all(|v| vertices.contains(v))
+            })
+            .map(|f| self.inner.key(Kind::Face, f))
+            .collect())
+    }
+
+    fn pretransform_face_normal(
+        &self,
+        key: u128,
+        inverse: [f64; 16],
+        hypot: &str,
+    ) -> PyResult<Option<[f64; 3]>> {
+        let f = live_of(&self.inner, Kind::Face, key)?;
+        let ring = self.inner.outer_ring(f);
+        if ring.len() < 3 {
+            return Ok(None);
+        }
+        let matrix = glam::DMat4::from_cols_array(&inverse);
+        let points = ring
+            .iter()
+            .map(|&v| {
+                let q = matrix
+                    * glam::DVec3::from_array(*self.inner.state.vpos.get(v as usize)).extend(1.);
+                super::drawing::vector((q.truncate() / q.w).to_array())
+            })
+            .collect::<Vec<_>>();
+        let indices = (0..points.len() as u32).collect::<Vec<_>>();
+        let (normal, length) =
+            super::geometry::face_normal_length(&points, &indices, crate::hypot_of(hypot)?);
+        Ok((length >= 1e-9).then(|| normal.into()))
+    }
+
     fn move_without_join(&mut self, source: Vec<[f64; 3]>, delta: [f64; 3]) -> Option<usize> {
         self.inner.move_without_join(&source, delta)
     }

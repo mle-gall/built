@@ -382,7 +382,7 @@ def geometry_steps():
     from core.history import (MakeGroupCommand, ExplodeGroupCommand, SetFaceColorCommand,
                               AddEdgeCommand, DeleteEdgesCommand, DeleteFaceCommand,
                               ExplodeCurvesCommand, TagCurveCommand, PruneOrphanEdgesCommand,
-                              AddFaceCommand, EraseSelectionCommand, SnapshotCompound)
+                              AddFaceCommand, EraseSelectionCommand, MoveVerticesCommand, SnapshotCompound)
     from core.protocol import commands
 
     scene = Scene()
@@ -467,6 +467,23 @@ def geometry_steps():
     out.append(state())
     assert h.redo() and edge not in mesh.edges
     out.append(state())
+    # Compare welding a box into a ramp and carrying both rings of a textured panel.
+    box(mesh, x=200.)
+    outer = rectangle(300, 0, 4, 4)
+    hole = rectangle(301, 1, 1, 1)
+    panel = mesh.add_face(outer, [hole])
+    panel.attrs["texture"] = {"path": "tile.png", "sw": .3, "sh": .7, "rot": 12.}
+    for cmd in (MoveVerticesCommand([QVector3D(201, 0, 1), QVector3D(201, 1, 1)],
+                                    QVector3D(0, 0, -1)),
+                MoveVerticesCommand(outer + hole, QVector3D(.3, .7, .2), carry_textures=True)):
+        h.execute(cmd)
+        assert not h.last_error and not h.last_rejected
+        assert cmd.welded == (not cmd.carry_textures)
+        out.append(state())
+        assert h.undo()
+        out.append(state())
+        assert h.redo()
+        out.append(state())
     return out
 
 
