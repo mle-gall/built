@@ -4915,79 +4915,9 @@ class StraightenModelCommand(Command):
     def _apply(self, scene, m, turn_deg: float, redo: bool) -> None:
         """Move everything by the rigid ``m`` (``turn_deg`` is its turn about
         Z, for the cameras)."""
-        if _doc.ENABLED:
-            _transform.reframe_world(scene, m, turn_deg, redo, self._snaps)
-            scene.version += 1
-            return
-        import math
-
-        def pt(v):
-            return m.map(QVector3D(*v) if isinstance(v, (list, tuple))
-                         else QVector3D(v))
-
-        def vec(v):
-            return m.mapVector(QVector3D(v))
-
-        for g in scene.groups:
-            if g.xform is not None:          # instances compose — O(1)
-                g.xform = m * g.xform
-            else:
-                self._transform_mesh(g.mesh, m, redo)
-        self._transform_mesh(scene.mesh, m, redo)
-        for d in scene.dimensions:
-            d.a, d.b, d.offset = pt(d.a), pt(d.b), vec(d.offset)
-        for t in scene.text_labels:
-            t.anchor, t.offset = pt(t.anchor), vec(t.offset)
-        for gd in scene.guides:
-            gd.point = pt(gd.point)
-            if getattr(gd, "direction", None) is not None:
-                gd.direction = vec(gd.direction)
-        for sp in scene.section_planes:
-            sp.point, sp.normal = pt(sp.point), vec(sp.normal)
-        for im in scene.image_planes:
-            im.origin, im.u, im.v = pt(im.origin), vec(im.u), vec(im.v)
-        for gp in scene.geo_paths:
-            gp.points = [pt(q) for q in gp.points]
-            if getattr(gp, "_surface_tris", None) is not None:
-                gp._surface_tris = None
-        for gpt in scene.geo_points:
-            gpt.position = pt(gpt.position)
-        turn = math.radians(turn_deg)
-        for sv in scene.saved_views:
-            q = pt(sv.target)
-            sv.target = (q.x(), q.y(), q.z())
-            sv.yaw = sv.yaw + turn
-        for comp in scene.compositions:
-            for it in comp.all_items():
-                for attr in ("a_world", "b_world"):
-                    w = getattr(it, attr, None)
-                    if w:
-                        q = pt(w)
-                        setattr(it, attr, [q.x(), q.y(), q.z()])
-                ct = getattr(it, "cam_target", None)
-                if ct:
-                    q = pt(ct)
-                    it.cam_target = [q.x(), q.y(), q.z()]
-                    if getattr(it, "cam_yaw", None) is not None:
-                        it.cam_yaw = it.cam_yaw + turn
+        _transform.reframe_world(scene, m, turn_deg, redo, self._snaps)
         scene.version += 1
 
-    def _transform_mesh(self, mesh, m, redo: bool) -> None:
-        """Classic (world-coordinate) meshes: move the vertices the first
-        time, snapshot both states, and replay the snapshots after that so
-        undo/redo are exact."""
-        from core.group import _remap_uvws
-        if not mesh.vertices:
-            return
-        snap = self._snaps.get(id(mesh))
-        if snap is not None:
-            mesh.restore_state(snap[1] if redo else snap[0])
-            return
-        before = mesh.capture_state()
-        for v in list(mesh.vertices):
-            mesh.move_vertex(v, m.map(v.position) - v.position)
-        _remap_uvws(mesh, m)
-        self._snaps[id(mesh)] = (before, mesh.capture_state())
 
 
 def group_owner_list(scene, group):
