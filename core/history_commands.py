@@ -3,6 +3,7 @@
 """Model editing commands and their Python reference inverses."""
 from __future__ import annotations
 
+from ingetrazo_core import object_replay as _replay
 from ingetrazo_core import (definition_edits as _definitions, placement_edits as _placements,
                             presentation as _presentation, placement_transform as _transform,
                             reference_layers as _references)
@@ -252,14 +253,23 @@ class AddEdgeCommand(MeshCommand):
                     m.mark_modified()
                 scene.version += 1
                 return
-        _reference.draw_edge(self, scene)
+        if _doc.ENABLED:
+            _replay.draw_edge(self, m)
+            scene.version += 1
+        else:
+            _reference.draw_edge(self, scene)
 
     def doc_after(self, scene, phase):
         if phase == "undo" and self._owned:
             scene.selection.discard(self.edge)
         scene.version += 1
 
-    undo = _reference.undo_draw_edge
+    def undo(self, scene):
+        if not _doc.ENABLED:
+            return _reference.undo_draw_edge(self, scene)
+        if _replay.undo_edge(self, scene.mesh):
+            scene.selection.discard(self.edge)
+            scene.version += 1
 
 
 class RemoveGeometryCommand(MeshCommand):
@@ -1938,15 +1948,25 @@ class ExplodeCurvesCommand(MeshCommand):
         if self._journal_geometry and type(scene.mesh) is StoreMesh:
             ids = {e.curve for e in self.edges if getattr(e, "curve", None) is not None}
             if not all(type(i) is int and 0 <= i < 2**63 for i in ids):
-                return _reference.explode_curves(self, scene)
+                return self._explode(scene)
             self.curves = scene.mesh._store.explode_curves(ids)
             scene.mesh._chunk_dirty = True
             scene.mesh._mut_serial += 1
             scene.version += 1
             return
-        _reference.explode_curves(self, scene)
+        self._explode(scene)
 
-    undo = _reference.undo_explode_curves
+    def _explode(self, scene):
+        if not _doc.ENABLED:
+            return _reference.explode_curves(self, scene)
+        self.curves, self._ids = _replay.explode_curves(scene.mesh, self.edges)
+        scene.version += 1
+
+    def undo(self, scene):
+        if not _doc.ENABLED:
+            return _reference.undo_explode_curves(self, scene)
+        _replay.restore_curves(scene.mesh, self._ids)
+        scene.version += 1
 
 
 class AddSceneCommand(Command):

@@ -1272,6 +1272,10 @@ class Mesh:
 
         Used by the stitch pass, whose splits/merges/collapses interact too much
         for a clean per-op inverse — restoring the whole touched mesh is robust."""
+        from core import doc_model
+        if doc_model.ENABLED:
+            from ingetrazo_core import object_replay
+            return object_replay.capture(self)
         return {
             "vertices": list(self.vertices),
             "edges": list(self.edges),
@@ -1302,6 +1306,10 @@ class Mesh:
             from core import store_mesh
             store_mesh._restore_store_state(self, snap)
             return
+        from core import doc_model
+        if doc_model.ENABLED:
+            from ingetrazo_core import object_replay
+            return object_replay.restore(self, snap)
         self._chunk_dirty = True
         # The faces' attrs come back too, and a repaint moves no vertex: a
         # bake that took this for a move kept the old material on screen.

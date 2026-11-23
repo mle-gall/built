@@ -34,6 +34,7 @@ mod file_groups;
 mod group_geometry;
 mod structure;
 mod presentation;
+mod object_replay;
 mod placement_edits;
 mod placement_transform;
 mod reference_layers;
@@ -196,6 +197,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<file_json::FileMatrix>()?;
     m.add_class::<group_geometry::GroupGeometry>()?;
     presentation::register(m)?;
+    object_replay::register(m)?;
     placement_edits::register(m)?;
     placement_transform::register(m)?;
     reference_layers::register(m)?;
