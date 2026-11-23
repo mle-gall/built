@@ -116,7 +116,7 @@ def test_progress_event_during_open_does_not_autosave_partial_document():
 def test_macos_suite_resolves_autosave_under_its_private_data_dir():
     import os
     assert autosave._app_data_base().resolve().is_relative_to(
-        Path(os.environ["XDG_DATA_HOME"]).resolve())
+        Path(os.environ["CFFIXED_USER_HOME"]).resolve())
 
 
 def test_autosave_dir_follows_process_appdata_on_windows(tmp_path,
