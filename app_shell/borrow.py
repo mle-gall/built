@@ -1,23 +1,10 @@
-"""Run a Qt widget class's Python methods on an object that is no widget.
-
-``views.viewport.Viewport`` (a QOpenGLWidget) is the document controller the
-tools talk to, and ``views.wgpu_view.WgpuView`` (a QWidget) drives the
-renderer. Neither can exist without a QApplication and widgets. Their
-methods are plain Python, though: :func:`borrow` copies them onto a QObject
-subclass that supplies the handful of widget calls they make
-(:class:`WidgetShim`). Zero-argument ``super()`` inside a copied method
-names the class it was written in, so each copy gets a fresh ``__class__``
-cell pointing at the new class (closures of decorators included).
-
-What the copies ask of the widget and the shim does not have is recorded
-in :data:`MISSING`: the inventory of widget API the shell still lacks.
-"""
+"""Native window services and adapters for the remaining Qt menu callbacks."""
 from __future__ import annotations
 
 import types
 from collections import Counter
 
-from PySide6.QtCore import QObject, QPoint, QPointF, QRect, QSize, Qt, Signal
+from PySide6.QtCore import QObject, QPoint, QPointF, QRect, QSize, Qt
 
 #: Widget attributes the copied code looked up and the shim did not have.
 MISSING: Counter = Counter()
@@ -56,34 +43,6 @@ def _rebind(fn, cls, depth=0):
     out.__dict__.update(fn.__dict__)
     out.__qualname__ = fn.__qualname__
     out.__doc__ = fn.__doc__
-    return out
-
-
-def borrow(source: type, target: type, skip=()) -> None:
-    """Copy ``source``'s own methods, properties and constants onto
-    ``target``, leaving what ``target`` defines itself."""
-    for name, value in vars(source).items():
-        if name in skip or name in vars(target) or (name.startswith("__") and name.endswith("__")):
-            continue
-        if isinstance(value, Signal):
-            continue                    # declared on the target's class body
-        if isinstance(value, types.FunctionType):
-            value = _rebind(value, target)
-        elif isinstance(value, property):
-            value = property(_rebind(value.fget, target), _rebind(value.fset, target),
-                             _rebind(value.fdel, target), value.__doc__)
-        elif isinstance(value, (staticmethod, classmethod)):
-            value = type(value)(_rebind(value.__func__, target))
-        setattr(target, name, value)
-
-
-def signals_of(source: type) -> dict:
-    """``source``'s Qt signals, re-declared for a class body."""
-    out = {}
-    for klass in reversed(source.__mro__):
-        for name, value in vars(klass).items():
-            if isinstance(value, Signal) and not name.startswith("_"):
-                out[name] = value
     return out
 
 
