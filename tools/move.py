@@ -371,6 +371,10 @@ class _MoveCopiesCommand(CompoundCommand):
         self._before_selection = None
         self._context = None
 
+    def doc_undo(self, scene) -> bool:
+        # Selection is outside the document journal. Replay this wrapper.
+        return False
+
     def do(self, scene) -> None:
         before = set(scene.selection)
         scene.selection = set(before)
