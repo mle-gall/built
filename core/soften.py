@@ -18,7 +18,7 @@ from __future__ import annotations
 import math
 
 from core.group import Group
-from core.history import Command
+from core.history import MeshCommand
 from core.mesh import Edge, Face
 
 
@@ -72,7 +72,7 @@ def _smooth_signature(face):
     return _smooth_sig(face.attrs)
 
 
-class SoftenByAngleCommand(Command):
+class SoftenByAngleCommand(MeshCommand):
     """Soften the edges of ``targets`` (``{mesh: {edge keys}}``) whose two
     faces meet at ``angle`` degrees or less; harden the sharper ones.
 
@@ -101,6 +101,9 @@ class SoftenByAngleCommand(Command):
         self.materials = bool(materials)
         self.smooth = bool(smooth)
         self.changes = None
+
+    def geometry_meshes(self, scene):
+        return self.targets
 
     def meshes(self) -> list:
         """The meshes this command changes."""

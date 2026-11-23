@@ -1818,7 +1818,7 @@ impl PyMeshStore {
         Ok(())
     }
 
-    fn snapshot(&self) -> PyStoreSnapshot {
+    pub(crate) fn snapshot(&self) -> PyStoreSnapshot {
         PyStoreSnapshot { inner: self.inner.snapshot(), definition: None }
     }
 
@@ -1916,6 +1916,10 @@ fn reader(snap: &Snapshot) -> Store {
 
 #[pymethods]
 impl PyStoreSnapshot {
+    pub(crate) fn canonical(&self) -> Self {
+        Self { inner: self.definition.as_deref().unwrap_or(&self.inner).clone(), definition: None }
+    }
+
     fn cap_scope(&self, py: Python<'_>, seeds: Vec<u128>) -> (Vec<(u128, u32)>, Vec<u128>) {
         let store = reader(&self.inner);
         py.detach(|| store.cap_scope(&seeds))

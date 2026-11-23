@@ -22,6 +22,7 @@
 
 mod assembly;
 mod definition;
+mod geometry;
 use definition::DefinitionRef;
 use std::sync::Arc;
 pub mod py;

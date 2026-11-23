@@ -372,6 +372,54 @@ def shared_assembly(work):
     return result
 
 
+def geometry_steps():
+    """Compare the loose mesh, feed and replay at each command boundary."""
+    from core.history import MakeGroupCommand, ExplodeGroupCommand, SetFaceColorCommand
+    from core.protocol import commands
+
+    scene = Scene()
+    mesh = scene.mesh
+    box(mesh)
+    h = History(scene)
+    out = []
+    def state():
+        return {
+            "vertices": [v.position_tuple() for v in mesh.vertices],
+            "faces": [[list(v.toTuple()) for v in f.vertices] for f in mesh.faces],
+            "paint": [dict(f.attrs) for f in mesh.faces],
+            "group_faces": [len(g.mesh.faces) for g in scene.groups],
+            "feed": [({k: len(v) for k, v in m.created.items()},
+                      {k: len(v) for k, v in m.removed.items()},
+                      {k: len(v) for k, v in m.modified.items()}) for m in h.feed.last.meshes],
+        }
+
+    for edit in (lambda: h.execute(SetFaceColorCommand([mesh.faces[1]], [0., .5, 1.])),
+                 lambda: commands.push_pull(h, mesh.faces[1].key, .25),
+                 lambda: commands.move_vertices(h, [mesh.vertices[0].key], [.1, 0., 0.]),
+                 lambda: h.execute(MakeGroupCommand(list(mesh.faces), list(mesh.edges))),
+                 lambda: h.execute(ExplodeGroupCommand(scene.groups[0]))):
+        edit()
+        assert not h.last_error and not h.last_rejected
+        out.append(state())
+        ids = [f.key for f in mesh.faces]
+        assert h.undo()
+        out.append(state())
+        assert h.redo()
+        assert ids == [f.key for f in mesh.faces]
+        out.append(state())
+    # A vertical face crosses the box. Cut only the selected loose context.
+    cutter = mesh.add_face([QVector3D(.5, -1, -1), QVector3D(.5, 2, -1),
+                            QVector3D(.5, 2, 2), QVector3D(.5, -1, 2)])
+    assert commands.intersect_faces(h, "context", [cutter.key])["ok"]
+    keys = [edge.key for edge in mesh.edges]
+    out.append(state())
+    assert h.undo()
+    out.append(state())
+    assert h.redo() and keys == [edge.key for edge in mesh.edges]
+    out.append(state())
+    return out
+
+
 def main(work: Path):
     initial_scene = build()
     # The prototype table in existing files interns geometry. Two entries
@@ -460,7 +508,7 @@ def main(work: Path):
     import numpy as np
     np.testing.assert_allclose(sorted(positions), sorted(p.toTuple() for p in endpoints), atol=1e-6)
     shared = shared_assembly(work)
-    print(json.dumps({"shared": shared, "rotated_edit": positions, "engine": doc_model.engine(), "states": states,
+    print(json.dumps({"geometry": geometry_steps(), "shared": shared, "rotated_edit": positions, "engine": doc_model.engine(), "states": states,
                       "feed": steps, "initial": initial,
                       "final": saved(scene, work, "final")}))
 

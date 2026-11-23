@@ -625,14 +625,25 @@ class Scene:
                 frame = active_mesh._store.tool_placement()
                 if group.axes is not None:
                     frame = frame * group.axes
-        share = None
+        share = entry_transaction = None
         if active_mesh is None and (group.children or group.xform is not None):
             from core.reference_edit import enter
-            share, parts = enter(self, group, frame)
+            from core.store_mesh import StoreMesh
+            # A singular placement needs the compatibility world copy. Keep
+            # the placement swaps on entry so its History step can replay them.
+            depth = _dm.begin() if _dm.ENABLED and type(entry_mesh) is StoreMesh else 0
+            try:
+                share, parts = enter(self, group, frame)
+                if depth:
+                    entry_transaction = _dm.commit()
+            except Exception:
+                if depth:
+                    _dm.rollback()
+                raise
         if not self._edit_stack:
             self._loose_mesh = anterior
         level = {"group": group, "mesh": anterior, "affine": active_mesh is not None, "session": object(),
-                 "share": share,
+                 "share": share, "entry_transaction": entry_transaction,
                  "frame": frame, "definition": definition, "parts": parts,
                  "world_copy": group.mesh if entry_mesh is not group.mesh else None}
         if _dm.ENABLED:

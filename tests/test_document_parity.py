@@ -139,3 +139,8 @@ def test_a_tag_made_by_a_command_keeps_its_uid(runs):
 
     assert len(set(uids(rs))) == 1
     assert len(set(uids(py))) > 1
+
+
+def test_geometry_history_agrees(runs):
+    python, rust = runs
+    assert norm(rust["geometry"]) == norm(python["geometry"])
