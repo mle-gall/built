@@ -19,6 +19,7 @@ import os
 import re
 import subprocess
 import sys
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -43,6 +44,17 @@ def run(tmp_path, doc):
     out = subprocess.run([sys.executable, str(SCENARIO), str(work)], env=env,
                          capture_output=True, text=True, timeout=300, cwd=ROOT)
     assert out.returncode == 0, out.stderr[-4000:]
+    if doc:
+        # Exact accepted bytes from the integration base. Final and shared
+        # saves can carry different auto-generated UIDs in the two engines.
+        with zipfile.ZipFile(ROOT / "tests/fixtures/document-parity.zip") as archive:
+            for name in archive.namelist():
+                if not name.startswith("python/") or name.endswith(".json"):
+                    continue
+                filename = name.split("/", 1)[1]
+                native = "rust/" + filename
+                expected = native if native in archive.namelist() else name
+                assert (work / filename).read_bytes() == archive.read(expected), filename
     return json.loads(out.stdout)
 
 
