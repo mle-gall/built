@@ -48,9 +48,14 @@ struct Args {
     gallery: bool,
 }
 
-fn parse_args() -> Result<Args, String> {
+impl Args {
+    fn temporary_profile(&self) -> bool {
+        self.check || self.measure || self.gallery || self.script.is_some()
+    }
+}
+
+fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, String> {
     let mut a = Args { size: (1280., 800.), ..Default::default() };
-    let mut it = std::env::args().skip(1);
     while let Some(arg) = it.next() {
         let mut value = |name: &str| it.next().ok_or(format!("{name} needs a value"));
         match arg.as_str() {
@@ -531,7 +536,7 @@ impl App {
             size.width as f64 / scale,
             size.height as f64 / scale,
             scale,
-            self.args.settings.as_deref(),
+            self.args.settings.as_deref(), self.args.temporary_profile(),
         )
         .map_err(|e| {
             pyo3::Python::attach(|py| python::report(py, e, "Host"));
@@ -948,7 +953,7 @@ impl ApplicationHandler<UserEvent> for App {
 /// `--check`: start Python and the shell's document headless, open the
 /// file if one is given, print its state, exit 0 when all of it worked.
 fn check(args: &Args) -> i32 {
-    let host = match python::Host::new(0, args.size.0, args.size.1, 2.0, args.settings.as_deref()) {
+    let host = match python::Host::new(0, args.size.0, args.size.1, 2.0, args.settings.as_deref(), args.temporary_profile()) {
         Ok(h) => h,
         Err(e) => {
             pyo3::Python::attach(|py| python::report(py, e, "Host"));
@@ -979,7 +984,7 @@ fn main() {
         std::process::exit(1);
     }
     let process = Instant::now();
-    let args = match parse_args() {
+    let args = match parse_args(std::env::args().skip(1)) {
         Ok(a) => a,
         Err(e) => {
             eprintln!("built: {e}");
@@ -987,8 +992,9 @@ fn main() {
         }
     };
     if args.gallery { std::env::set_var("BUILT_GALLERY", "1"); }
-    let interactive = !args.check && args.script.is_none() && !args.measure;
-    if interactive && !args.new_instance && forward_to_running(args.file.as_deref()) {
+    let shared_instance = !args.temporary_profile() && args.settings.is_none()
+        && std::env::var_os("BUILT_SETTINGS_DIR").is_none() && !args.new_instance;
+    if shared_instance && forward_to_running(args.file.as_deref()) {
         eprintln!("[built] handed over to the running shell");
         return;
     }
@@ -1057,7 +1063,7 @@ fn main() {
             }
         });
     }
-    if interactive {
+    if shared_instance {
         listen_for_instances(proxy);
     }
     let mut app = App {
@@ -1082,7 +1088,7 @@ fn main() {
         eprintln!("built: {e}");
         app.exit_code = 1;
     }
-    if interactive {
+    if shared_instance {
         let _ = std::fs::remove_file(instance_socket());
     }
     // Drop each renderer (and its CAMetalLayer) before its window goes.
@@ -1090,4 +1096,22 @@ fn main() {
         w.host.call0("close");
     }
     std::process::exit(app.exit_code);
+}
+
+
+#[cfg(test)]
+mod profile_tests {
+    use super::*;
+
+    #[test]
+    fn only_automation_requests_a_temporary_profile() {
+        let temporary = |args: &[&str]| {
+            parse_args(args.iter().map(|s| s.to_string())).unwrap().temporary_profile()
+        };
+        assert!(!temporary(&[]));
+        assert!(!temporary(&["--new-instance", "drawing.built"]));
+        for args in [&["--script", "steps"][..], &["--check"], &["--measure"], &["--gallery"]] {
+            assert!(temporary(args));
+        }
+    }
 }

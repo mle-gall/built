@@ -1,9 +1,8 @@
 """Headless Qt for the shell: value types, painting and timers, no widgets.
 
 ``start`` must run before anything imports ``views`` or ``core`` modules that
-read QSettings at import time. It points QSettings and the app's data dir at
-a throwaway directory unless ``BUILT_SETTINGS_DIR`` names one, so a shell
-run never touches the user's preferences or autosave slots.
+read QSettings at import time. Interactive launches share the classic app's
+profile. Automation and tests use isolated settings.
 
 The application object is an offscreen ``QApplication`` (no window ever
 reaches AppKit; winit owns the screen). It used to be a QGuiApplication,
@@ -32,27 +31,29 @@ def settings_dir() -> str | None:
     return _SETTINGS_DIR
 
 
-def start(settings: str | None = None) -> str:
+def start(settings: str | None = None, *, temporary: bool = False) -> str | None:
     """Create the offscreen QApplication once; return the settings dir."""
     global _APP, _SETTINGS_DIR
+    profile = settings or os.environ.get("BUILT_SETTINGS_DIR")
+    if not profile and not temporary and ("pytest" in sys.modules or "PYTEST_CURRENT_TEST" in os.environ):
+        raise RuntimeError("pytest must supply an isolated shell profile")
     if _APP is not None:
         return _SETTINGS_DIR
     # Offscreen: Qt opens no window and never talks to AppKit; winit does.
     os.environ["QT_QPA_PLATFORM"] = "offscreen"
-    _SETTINGS_DIR = settings or os.environ.get("BUILT_SETTINGS_DIR") or tempfile.mkdtemp(
-        prefix="built-shell-settings-")
-    os.makedirs(_SETTINGS_DIR, exist_ok=True)
-    data = os.path.join(_SETTINGS_DIR, "data")
-    os.makedirs(data, exist_ok=True)
-    os.environ["XDG_DATA_HOME"] = data
     from PySide6.QtCore import QCoreApplication, QSettings, QStandardPaths
     from PySide6.QtWidgets import QApplication
-    QSettings.setDefaultFormat(QSettings.IniFormat)
-    for scope in (QSettings.UserScope, QSettings.SystemScope):
-        QSettings.setPath(QSettings.IniFormat, scope, _SETTINGS_DIR)
-    # Autosave and caches resolve AppDataLocation through QStandardPaths:
-    # test mode sends them under ~/.qttest instead of the real app folders.
-    QStandardPaths.setTestModeEnabled(True)
+    if temporary and not profile:
+        profile = tempfile.mkdtemp(prefix="built-shell-settings-")
+    _SETTINGS_DIR = profile
+    if profile:
+        data = os.path.join(profile, "data")
+        os.makedirs(data, exist_ok=True)
+        os.environ["XDG_DATA_HOME"] = data
+        QSettings.setDefaultFormat(QSettings.IniFormat)
+        for scope in (QSettings.UserScope, QSettings.SystemScope):
+            QSettings.setPath(QSettings.IniFormat, scope, profile)
+    QStandardPaths.setTestModeEnabled(bool(profile))
     QCoreApplication.setOrganizationName("IngeTrazo")
     QCoreApplication.setApplicationName("IngeTrazo")
     _APP = QApplication.instance() or QApplication([sys.argv[0] if sys.argv else "built"])

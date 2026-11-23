@@ -51,9 +51,9 @@ def _log(*parts):
 
 class Host:
     def __init__(self, ns_view: int, width: float, height: float, scale: float,
-                 settings: str | None = None):
+                 settings: str | None = None, temporary: bool = False):
         t0 = time.perf_counter()
-        self.settings_dir = qt_host.start(settings)
+        self.settings_dir = qt_host.start(settings, temporary=temporary)
         self.ns_view = int(ns_view)
         self.width = max(1, int(round(width)))
         self.height = max(1, int(round(height)))

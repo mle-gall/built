@@ -37,46 +37,6 @@ from PySide6.QtGui import QKeySequence
 from app_shell.borrow import MISSING, _rebind
 
 
-def build_tools() -> dict:
-    """MainWindow's tool registry (views/main_window.py ``self._tools``)."""
-    from tools.arc import ArcTool, CenterArcTool, PieTool, ThreePointArcTool
-    from tools.circle import CircleTool, PolygonTool
-    from tools.dimension import DimensionTool
-    from tools.eraser import EraserTool
-    from tools.fillet import FilletTool
-    from tools.flip import FlipTool
-    from tools.followme import FollowMeTool
-    from tools.freehand import FreehandTool
-    from tools.line import LineTool
-    from tools.move import MoveTool
-    from tools.offset import OffsetTool
-    from tools.paint import PaintTool
-    from tools.protractor import ProtractorTool
-    from tools.pushpull import PushPullTool
-    from tools.rectangle import RectangleTool
-    from tools.rotate import RotateTool
-    from tools.rotated_rectangle import RotatedRectangleTool
-    from tools.scale import ScaleTool
-    from tools.select import SelectTool
-    from tools.tape import TapeMeasureTool
-    from tools.text import TextTool
-    tools = {
-        "select": SelectTool(), "line": LineTool(), "freehand": FreehandTool(),
-        "rectangle": RectangleTool(), "rotated_rect": RotatedRectangleTool(),
-        "circle": CircleTool(), "polygon": PolygonTool(), "arc": ArcTool(),
-        "arc3": ThreePointArcTool(), "center_arc": CenterArcTool(), "pie": PieTool(),
-        "pushpull": PushPullTool(), "offset": OffsetTool(), "move": MoveTool(),
-        "rotate": RotateTool(), "scale": ScaleTool(), "flip": FlipTool(),
-        "followme": FollowMeTool(), "fillet": FilletTool(), "paint": PaintTool(),
-        "dimension": DimensionTool(), "eraser": EraserTool(), "tape": TapeMeasureTool(),
-        "protractor": ProtractorTool(), "text": TextTool(),
-    }
-    for key, tool in tools.items():
-        if not getattr(tool, "icon", None):
-            tool.icon = key
-    return tools
-
-
 class ShellAction:
     """The QAction surface the chrome reads."""
 
@@ -491,7 +451,17 @@ class ShellWindow(QObject):
             action = QAction(label, self)
             action.triggered.connect(lambda checked=False, sid=sid: self.run_command(sid))
             self._ui_commands.append((label, "Window", "", action))
+        from views.main_window import build_tools
         self._tools = build_tools()
+        self._act_eyedropper = QAction("Sample material", self)
+        self._act_eyedropper.setCheckable(True)
+        self._act_eyedropper.toggled.connect(self._on_toggle_eyedropper)
+        self._act_bridge = ShellAction("Bridge", run=self._on_bridge, checkable=False)
+        self._act_make_faces = ShellAction("Make Faces", run=self._on_make_faces, checkable=False)
+        self._act_3dtext = QAction("3D Text", self)
+        self._act_3dtext.setToolTip("Open in classic app")
+        self._act_3dtext.setEnabled(False)  # The font picker lives in a Qt dialog.
+
         self._tool_actions = {}
         self._nav_actions = {}
         self._status = ShellStatusBar(host)

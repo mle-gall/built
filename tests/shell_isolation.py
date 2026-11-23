@@ -6,7 +6,7 @@ import os
 
 import pytest
 
-_ENV = ("QT_QPA_PLATFORM", "XDG_DATA_HOME", "BUILT_ANSWERS")
+_ENV = ("QT_QPA_PLATFORM", "XDG_DATA_HOME", "BUILT_ANSWERS", "BUILT_SETTINGS_DIR")
 
 _PATCHED = {
     "views.chrome_dialogs": ("live", "QEventLoop", "_shell_installed"),
@@ -19,8 +19,9 @@ _MISSING = object()
 
 
 @pytest.fixture(autouse=True, scope="module")
-def restore_shell_patches():
+def restore_shell_patches(tmp_path_factory):
     env = {k: os.environ.get(k) for k in _ENV}
+    os.environ["BUILT_SETTINGS_DIR"] = str(tmp_path_factory.mktemp("shell-settings"))
     from PySide6.QtCore import QCoreApplication, QSettings, QStandardPaths, QTimer
     from PySide6.QtGui import QCursor, QGuiApplication
     qt = [(QGuiApplication, a, QGuiApplication.__dict__.get(a, _MISSING))
@@ -56,6 +57,7 @@ def restore_shell_patches():
             app.removeEventFilter(guard.filter)
         qt_host._GUARD = None
         qt_host._APP = None
+        qt_host._SETTINGS_DIR = None
     except Exception:  # noqa: BLE001
         pass
     QCoreApplication.setOrganizationName(names[0])

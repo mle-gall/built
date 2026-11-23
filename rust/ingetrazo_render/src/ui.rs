@@ -34,6 +34,7 @@ use tokens::*;
 use kit::*;
 
 struct Tool {
+    enabled: bool,
     id: String,
     label: String,
     key: String,
@@ -329,7 +330,7 @@ impl Ui {
     }
 
     /// ``groups``: per group, (id, label, shortcut, icon width, height, RGBA).
-    pub fn set_tools(&mut self, groups: Vec<Vec<(String, String, String, usize, usize, Vec<u8>)>>) {
+    pub fn set_tools(&mut self, groups: Vec<Vec<(String, String, String, usize, usize, Vec<u8>)>>, disabled: &[String]) {
         self.groups = groups
             .into_iter()
             .map(|g| {
@@ -339,7 +340,7 @@ impl Ui {
                             let image = egui::ColorImage::from_rgba_unmultiplied([w, h], &rgba);
                             self.ctx.load_texture(&id, image, egui::TextureOptions::LINEAR)
                         });
-                        Tool { id, label, key, icon }
+                        Tool { enabled: !disabled.contains(&id), id, label, key, icon }
                     })
                     .collect()
             })
@@ -2564,8 +2565,8 @@ fn text_button(ui: &mut egui::Ui, label: &str, key: &str, enabled: bool) -> bool
 /// A palette tool: 30 × 30 cell, glyph about 18 pt (the icon art carries
 /// its own margin), idle INK_2, hover INK, current white on accent.
 fn tool_button(ui: &mut egui::Ui, tool: &Tool, active: bool) -> bool {
-    let (rect, resp) = ui.allocate_exact_size(vec2(30.0, 30.0), Sense::click());
-    let st = state_of(&resp, active, true);
+    let (rect, resp) = ui.allocate_exact_size(vec2(30.0, 30.0), if tool.enabled { Sense::click() } else { Sense::hover() });
+    let st = state_of(&resp, active, tool.enabled);
     paint_state(ui, rect, st, R_CONTROL);
     let tint = ink_of(st);
     match &tool.icon {
@@ -2577,6 +2578,6 @@ fn tool_button(ui: &mut egui::Ui, tool: &Tool, active: bool) -> bool {
             ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, letter, meta(), tint);
         }
     }
-    let tip = if tool.key.is_empty() { tool.label.clone() } else { format!("{}    {}", tool.label, tool.key) };
+    let tip = if !tool.enabled { format!("{} — Open in classic app", tool.label) } else if tool.key.is_empty() { tool.label.clone() } else { format!("{}    {}", tool.label, tool.key) };
     resp.on_hover_text(tip).clicked()
 }
