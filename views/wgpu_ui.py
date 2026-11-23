@@ -624,6 +624,9 @@ def _cursor_value(view, win) -> None:
     at = view._world_to_pixel(label[1]) if label is not None else None
     history = getattr(getattr(win, "viewport", None), "history", None)
     revision = int(getattr(history, "revision", 0) or 0)
+    if tool is None and getattr(view.source_viewport, "nav_mode", None) == "zoom":
+        _lens_value(view, tools, revision)
+        return
     if at is None:
         view.renderer.ui_set_cursor_value("", "", False, 0.0, 0.0, None, revision)
         return
@@ -633,6 +636,24 @@ def _cursor_value(view, win) -> None:
     x, y = xy(at)
     view.renderer.ui_set_cursor_value(tr(caption), label[0], label[2], x, y - 22.0,
                                       xy(start) if start is not None else None, revision)
+
+
+def _lens_value(view, tools, revision) -> None:
+    """Zoom takes the lens typed in the value field (35mm, 60deg; viewport
+    ``_handle_zoom_value_key``): the same field, by the cursor, reading the
+    focal length the view has now. The lens is what the value acts on, so it
+    is part of the revision Rust reads a commit from."""
+    from core.i18n import tr
+    pos = getattr(view, "_cursor_pos", None)
+    cam = view.source_viewport.camera
+    if pos is None:
+        view.renderer.ui_set_cursor_value("", "", False, 0.0, 0.0, None, revision)
+        return
+    buffer = str(getattr(tools, "value_buffer", "") or "")
+    text = buffer or (f"{cam.focal_mm:.0f} mm" if cam.perspective else "—")
+    lens = (revision << 20) ^ int(round(cam.fov_deg * 1000))
+    view.renderer.ui_set_cursor_value(tr("Field of view"), text, bool(buffer),
+                                      float(pos.x()), float(pos.y()) - 40.0, None, lens)
 
 
 def _summary(sel) -> str:
