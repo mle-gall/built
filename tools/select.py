@@ -37,31 +37,16 @@ from georef.geopath import GeoPath
 
 
 def _seg_rect_mask(ax, ay, bx, by, ok, rect, crossing):
-    """Vectorized rect test for N screen segments: window mode = both
+    """The rectangle test of N screen segments: window mode = both
     endpoints inside; crossing mode = an endpoint inside or the segment
-    intersecting one of the four borders. NumPy twin of _pt_in_rect /
-    _seg_rect_overlap for import-scale meshes."""
+    through one of the four borders (``ingetrazo_core.seg_rect_mask``)."""
     import numpy as np
-    x0, y0, x1, y1 = rect
-    in_a = ok & (ax >= x0) & (ax <= x1) & (ay >= y0) & (ay <= y1)
-    in_b = ok & (bx >= x0) & (bx <= x1) & (by >= y0) & (by <= y1)
-    if not crossing:
-        return in_a & in_b
-    cross = in_a | in_b
-    todo = ok & ~cross
-    if todo.any():
-        for px, py, qx, qy in ((x0, y0, x1, y0), (x1, y0, x1, y1),
-                               (x1, y1, x0, y1), (x0, y1, x0, y0)):
-            d1 = (qx - px) * (ay - py) - (qy - py) * (ax - px)
-            d2 = (qx - px) * (by - py) - (qy - py) * (bx - px)
-            d3 = (bx - ax) * (py - ay) - (by - ay) * (px - ax)
-            d4 = (bx - ax) * (qy - ay) - (by - ay) * (qx - ax)
-            hit = todo & (d1 * d2 < 0) & (d3 * d4 < 0)
-            cross |= hit
-            todo &= ~hit
-            if not todo.any():
-                break
-    return cross
+    from ingetrazo_core import seg_rect_mask
+    f = lambda a: np.ascontiguousarray(a, dtype=np.float64).reshape(-1)
+    n = len(f(ax))
+    return seg_rect_mask(f(ax), f(ay), f(bx), f(by),
+                         np.ascontiguousarray(np.broadcast_to(ok, (n,)), dtype=bool),
+                         tuple(map(float, rect)), bool(crossing))
 
 
 def _box_loose_fast(viewport, rect, crossing):
@@ -119,94 +104,37 @@ def _box_loose_fast(viewport, rect, crossing):
 
 
 def _box_loose_arrays(viewport, rect, crossing):
-    """The loose mesh's box test from the store's dense arrays, for a view
-    without the GL caches (the Metal view): one projection of every vertex,
-    vectorised edge and face tests, and element views made only for what
-    the box takes. Returns (edges, faces), or None when the loose mesh is
-    not store-backed (the per-entity walk then runs)."""
-    project = getattr(viewport, "_project_px", None)
+    """The loose mesh's box catch from the store's dense arrays
+    (``ingetrazo_core.box_mesh_arrays``): element views made only for
+    what the box takes. Returns (edges, faces), or None when the loose
+    mesh is not store-backed or the view cannot project."""
+    camera_px = getattr(viewport, "_camera_px", None)
     scene = viewport.scene
     mesh = getattr(scene, "mesh", None)
-    if project is None or mesh is None:
+    if camera_px is None or mesh is None:
         return None
     from core.store_mesh import StoreMesh
     if mesh.__class__ is not StoreMesh:
         return None
     import numpy as np
+    from ingetrazo_core import box_mesh_arrays
     try:
         a = mesh.__dict__["_store"].arrays()
-        pos = np.asarray(a["pos"], dtype=float).reshape(-1, 3)
-        if not len(pos):
-            return [], []
-        xs, ys, ok = project(pos)
+        mvp, w, h = camera_px()
     except Exception:  # noqa: BLE001 — a stub viewport: the walk answers
         return None
-    x0, y0, x1, y1 = rect
-    inside = ok & (xs >= x0) & (xs <= x1) & (ys >= y0) & (ys <= y1)
-    ends = np.asarray(a["edges"], dtype=np.int64).reshape(-1, 2)
-    ea, eb = ends[:, 0], ends[:, 1]
-    # The walk skips what has an end behind the eye, in both modes.
-    emask = _seg_rect_mask(xs[ea], ys[ea], xs[eb], ys[eb], ok[ea] & ok[eb],
-                           rect, crossing)
-    corners = np.asarray(a["corners"], dtype=np.int64)
-    sizes = np.asarray(a["ring_sizes"], dtype=np.int64)
-    counts = np.asarray(a["ring_counts"], dtype=np.int64)
-    fmask = np.zeros(len(counts), dtype=bool)
-    if len(corners) and len(counts):
-        # Corners per face, then each face's first corner.
-        ring_face = np.repeat(np.arange(len(counts)), counts)
-        per_face = np.bincount(ring_face, weights=sizes,
-                               minlength=len(counts)).astype(np.int64)
-        starts = np.concatenate(([0], np.cumsum(per_face)[:-1]))
-        live = per_face > 0
-        s = starts[live]
-        face_ok = np.zeros(len(counts), dtype=bool)
-        face_ok[live] = np.logical_and.reduceat(ok[corners], s)
-        if not crossing:
-            hit = np.zeros(len(counts), dtype=bool)
-            hit[live] = np.logical_and.reduceat(inside[corners], s)
-        else:
-            # Each ring's sides: corner i to the next corner of its ring.
-            nxt = np.arange(len(corners)) + 1
-            ring_end = np.cumsum(sizes)
-            nxt[ring_end - 1] = ring_end - sizes
-            ca, cb = corners, corners[nxt]
-            side = _seg_rect_mask(xs[ca], ys[ca], xs[cb], ys[cb],
-                                  ok[ca] & ok[cb], rect, True)
-            hit = np.zeros(len(counts), dtype=bool)
-            hit[live] = np.logical_or.reduceat(side, s)
-        fmask = hit & face_ok
+    rows = lambda key, n, t: np.ascontiguousarray(a[key], dtype=t).reshape(-1, n) if n else \
+        np.ascontiguousarray(a[key], dtype=t).reshape(-1)
+    emask, fmask = box_mesh_arrays(rows("pos", 3, np.float64), rows("edges", 2, np.int64),
+                                   rows("corners", 0, np.int64), rows("ring_sizes", 0, np.int64),
+                                   rows("ring_counts", 0, np.int64), mvp, w, h,
+                                   tuple(map(float, rect)), bool(crossing))
     sel = scene.entity_selectable
-    edges = []
     seq = mesh.edges
-    for i in np.flatnonzero(emask):
-        e = seq[int(i)]
-        if sel(e):
-            edges.append(e)
-    faces = []
+    edges = [e for e in (seq[int(i)] for i in emask) if sel(e)]
     seq = mesh.faces
-    for i in np.flatnonzero(fmask):
-        f = seq[int(i)]
-        if sel(f):
-            faces.append(f)
+    faces = [f for f in (seq[int(i)] for i in fmask) if sel(f)]
     return edges, faces
-
-
-# Points (or segment ends) one exact test of a packed instance projects at
-# once: bounded scratch whatever the prototype's or the scene's size.
-_PACKED_BATCH = 1 << 18
-
-#: The eight corners of a box from its (lo, hi): which coordinates take hi.
-_BOX_CORNERS = None
-
-
-def _box_corner_mask():
-    global _BOX_CORNERS
-    if _BOX_CORNERS is None:
-        import numpy as np
-        _BOX_CORNERS = np.array([[x, y, z] for x in (0, 1) for y in (0, 1)
-                                 for z in (0, 1)], dtype=bool)
-    return _BOX_CORNERS
 
 
 def _packed_view(viewport):
@@ -217,7 +145,7 @@ def _packed_view(viewport):
     view = getattr(viewport, "view", None)
     packed = getattr(view, "packed", None)
     if (packed is None or getattr(packed, "groups", None) is None
-            or getattr(viewport, "_project_px", None) is None):
+            or getattr(viewport, "_camera_px", None) is None):
         return None
     import numpy as np
     if not isinstance(getattr(packed, "instances", None), np.ndarray):
@@ -225,76 +153,20 @@ def _packed_view(viewport):
     return packed
 
 
-def _packed_world(points, world):
-    """``points`` (K, 3) placed by each of ``world`` (R, 4, 4) — Qt's
-    column-major matrices as packed, so a row vector times the 3×3 plus
-    the last row — as (R, K, 3) float64."""
-    import numpy as np
-    w = world.astype(np.float64)
-    return (np.einsum("kj,rji->rki", points, w[:, :3, :3])
-            + w[:, None, 3, :3])
-
-
-def _packed_rows_exact(viewport, packed, code, world, rect, crossing):
-    """Exact box test of the instances of prototype ``code`` placed by
-    ``world`` (R, 4, 4): per instance, every triangle corner and edge end
-    inside (window), or one inside or a side or edge crossing the box
-    (crossing). Projects at most ``_PACKED_BATCH`` points at a time."""
+def _packed_points(packed):
+    """``points(code)``: a packed prototype's triangle corners and edge
+    ends, ``((K, 3), (M, 3))`` float64, for the native box catch."""
     import numpy as np
     pos = packed.vertices["pos"]
-    c, e = packed.commands[code], packed.edge_commands[code]
-    first, count, base = int(c["first"]), int(c["count"]), int(c["base"])
-    tri = pos[base + packed.indices[first:first + count].astype(np.int64)]
-    first, count, base = int(e["first"]), int(e["count"]), int(e["base"])
-    edg = pos[base + packed.indices[first:first + count].astype(np.int64)]
-    points = np.concatenate((tri, edg)).astype(np.float64)
-    n_rows = len(world)
-    if not len(points):
-        return np.zeros(n_rows, dtype=bool)
-    x0, y0, x1, y1 = rect
-    result = np.ones(n_rows, dtype=bool) if not crossing \
-        else np.zeros(n_rows, dtype=bool)
 
-    def chunks(k):
-        """(row slice, point slice) pairs of at most _PACKED_BATCH points."""
-        rows_at = max(1, _PACKED_BATCH // max(1, k))
-        step = min(k, _PACKED_BATCH)
-        for r in range(0, n_rows, rows_at):
-            for p in range(0, k, step):
-                yield slice(r, min(n_rows, r + rows_at)), slice(p, p + step)
-
-    for rs, ps in chunks(len(points)):
-        todo = result[rs] if not crossing else ~result[rs]
-        if not todo.any():
-            continue
-        placed = _packed_world(points[ps], world[rs])
-        xs, ys, ok = viewport._project_px(placed.reshape(-1, 3))
-        shape = placed.shape[:2]
-        xs, ys, ok = xs.reshape(shape), ys.reshape(shape), ok.reshape(shape)
-        inside = ok & (xs >= x0) & (xs <= x1) & (ys >= y0) & (ys <= y1)
-        if crossing:
-            result[rs] |= inside.any(axis=1)
-        else:
-            result[rs] &= inside.all(axis=1)
-    if not crossing or result.all():
-        return result
-    # Crossing, no point inside: a triangle side or an edge through the box.
-    sides_a = np.concatenate((tri[0::3], tri[1::3], tri[2::3], edg[0::2]))
-    sides_b = np.concatenate((tri[1::3], tri[2::3], tri[0::3], edg[1::2]))
-    sides_a = sides_a.astype(np.float64)
-    sides_b = sides_b.astype(np.float64)
-    for rs, ps in chunks(2 * len(sides_a)):
-        sl = slice(ps.start // 2, ps.stop // 2)
-        todo = ~result[rs]
-        if not todo.any() or sl.start >= len(sides_a):
-            continue
-        wa = _packed_world(sides_a[sl], world[rs])
-        wb = _packed_world(sides_b[sl], world[rs])
-        ax, ay, oka = viewport._project_px(wa.reshape(-1, 3))
-        bx, by, okb = viewport._project_px(wb.reshape(-1, 3))
-        cross = _seg_rect_mask(ax, ay, bx, by, oka & okb, rect, True)
-        result[rs] |= cross.reshape(wa.shape[:2]).any(axis=1)
-    return result
+    def points(code):
+        out = []
+        for cmd in (packed.commands[code], packed.edge_commands[code]):
+            first, count, base = int(cmd["first"]), int(cmd["count"]), int(cmd["base"])
+            idx = base + packed.indices[first:first + count].astype(np.int64)
+            out.append(np.ascontiguousarray(pos[idx], dtype=np.float64).reshape(-1, 3))
+        return tuple(out)
+    return points
 
 
 def _box_groups_packed(viewport, candidates, rect, crossing):
@@ -329,57 +201,25 @@ def _box_groups_packed(viewport, candidates, rect, crossing):
     rows = np.flatnonzero(owner >= 0)
     tested = {id(candidates[i]) for i in np.unique(owner[rows])}
     info = packed.instances["info"]
-    # What the view does not draw (hidden objects, tags off) takes no part.
-    rows = rows[(info[rows, 2] & 1) == 0]
-    hits: set = set()
     if not len(rows):
-        return hits, tested
+        return set(), tested
+    import numpy as np
+    from ingetrazo_core import box_packed_rows
     codes = info[rows, 0].astype(np.int64)
-    world = packed.instances["world"][rows]
-    lo = packed.bounds[codes, 0, :3].astype(np.float64)
-    hi = packed.bounds[codes, 1, :3].astype(np.float64)
-    mask = _box_corner_mask()
-    corners = np.where(mask[None], hi[:, None, :], lo[:, None, :])
-    w = world.astype(np.float64)
-    placed = (np.einsum("nkj,nji->nki", corners, w[:, :3, :3])
-              + w[:, None, 3, :3])
-    xs, ys, ok = viewport._project_px(placed.reshape(-1, 3))
-    xs, ys, ok = (xs.reshape(-1, 8), ys.reshape(-1, 8), ok.reshape(-1, 8))
-    x0, y0, x1, y1 = rect
-    front = ok.all(axis=1)
-    inside = front & ((xs >= x0) & (xs <= x1)
-                      & (ys >= y0) & (ys <= y1)).all(axis=1)
-    out = front & ((xs < x0).all(axis=1) | (xs > x1).all(axis=1)
-                   | (ys < y0).all(axis=1) | (ys > y1).all(axis=1))
-    unsure = ~inside & ~out
-    row_owner = owner[rows]
-    n = len(candidates)
-    if crossing:
-        hit = np.zeros(n, dtype=bool)
-        hit[row_owner[inside]] = True
-    else:
-        present = np.zeros(n, dtype=bool)
-        present[row_owner] = True
-        hit = present.copy()
-        hit[row_owner[out]] = False
-    # The straddling instances, prototype by prototype, skipping those
-    # whose object is already decided.
-    todo = np.flatnonzero(unsure)
-    if len(todo):
-        order = todo[np.argsort(codes[todo], kind="stable")]
-        bounds = np.flatnonzero(np.diff(codes[order])) + 1
-        for group_rows in np.split(order, bounds):
-            live = group_rows[hit[row_owner[group_rows]] == (not crossing)]
-            if not len(live):
-                continue
-            res = _packed_rows_exact(viewport, packed, int(codes[live[0]]),
-                                     world[live], rect, crossing)
-            if crossing:
-                hit[row_owner[live[res]]] = True
-            else:
-                hit[row_owner[live[~res]]] = False
-    hits = {id(candidates[i]) for i in np.flatnonzero(hit)}
-    return hits, tested
+    # What the view does not draw (hidden objects, tags off) takes no part.
+    drawn = (info[rows, 2] & 1) == 0
+    used = np.unique(codes)
+    lo = np.zeros((len(packed.commands), 3))
+    hi = np.zeros((len(packed.commands), 3))
+    lo[used] = packed.bounds[used, 0, :3]
+    hi[used] = packed.bounds[used, 1, :3]
+    mvp, w, h = viewport._camera_px()
+    caught = box_packed_rows(
+        np.ascontiguousarray(packed.instances["world"][rows], dtype=np.float64).reshape(-1, 16),
+        codes, np.ascontiguousarray(owner[rows]), np.ascontiguousarray(drawn),
+        lo, hi, len(candidates), mvp, w, h, tuple(map(float, rect)), bool(crossing),
+        _packed_points(packed))
+    return {id(candidates[int(i)]) for i in caught}, tested
 
 
 # Bound temporary triangle/edge arrays and camera projections independently
@@ -614,139 +454,74 @@ def describe_pick(entity) -> str:
 CYCLE_PX = 4.0
 
 
-def linework(viewport, screen_x: float, screen_y: float) -> list:
-    """``[(entity, pixels)]``, nearest first: the visible lines within
-    the pick threshold — a loose edge, or an object made of lines only
-    — that a click takes BEFORE the face under the cursor, whoever owns
-    that face, as a thin line is the more deliberate target. A loose
-    edge wins a tie. Empty on a viewport without the linework picks."""
-    found = []
-    pick_edge = getattr(viewport, "pick_linework_edge", None)
-    if pick_edge is not None:
-        edge, d = pick_edge(screen_x, screen_y)
-        if edge is not None:
-            found.append((edge, d))
-    pick_groups = getattr(viewport, "pick_linework_groups", None)
-    if pick_groups is not None:
-        found.extend(pick_groups(screen_x, screen_y))
-    found.sort(key=lambda hit: hit[1])
-    return found
+def _one(name, **kw):
+    """A query answered by one viewport pick (``None`` or the entity)."""
+    def query(viewport, x, y):
+        fn = getattr(viewport, name, None)
+        hit = fn(x, y, **kw) if fn is not None else None
+        return [] if hit is None else [(hit, 0.0)]
+    return query
 
 
-def pick(viewport, screen_x: float, screen_y: float, lines: bool = True):
-    """The visible line under the cursor first (:func:`linework`),
-    then a group (picked as a unit), then the edge under the cursor
-    (screen-space priority), then a dimension annotation, then the
-    front face; last, an object of lines only whose box holds the
-    cursor. ``lines=False``: what the click takes once the lines
-    are passed over (the next candidates of a repeated click)."""
-    pick_label = getattr(viewport, "pick_text_label", None)
-    if pick_label is not None:
-        # The text block overdraws all geometry, so a click on the glyphs
-        # is unambiguous — it outranks every 3D pick. The label's thin
-        # leader line keeps its normal (post-edge) priority below.
-        label = pick_label(screen_x, screen_y, rect_only=True)
-        if label is not None:
-            return label
-    has_linework = hasattr(viewport, "pick_linework_edge")
-    if lines and has_linework:
-        # A line on a group's face (loose, or grouped as a hatch), or a
-        # hair above or below it, outranks the object behind; only a
-        # line the user can see — one hidden behind the faces leaves
-        # the object as the pick.
-        found = linework(viewport, screen_x, screen_y)
-        if found:
-            return found[0][0]
-    group = viewport.pick_group(screen_x, screen_y)
-    if has_linework:
-        edge = None     # linework answered for the visible edges
-    else:
-        # Only an edge the user can SEE takes the click (issue #71): the
-        # hidden seams of a smooth surface, or edges behind the model,
-        # left a cylinder's side all but unclickable.
-        pick_visible = getattr(viewport, "pick_visible_edge", None)
-        edge = (pick_visible or viewport.pick_edge)(screen_x, screen_y)
-    if group is not None and edge is not None:
-        point = getattr(viewport, "edge_point_under_cursor", None)
-        occluded = getattr(viewport, "_is_occluded", None)
-        if point is not None and occluded is not None:
-            p = point(edge, screen_x, screen_y)
-            if p is not None and not occluded(p):
-                return edge
-    if group is not None:
-        return group
-    if edge is not None:
-        return edge
-    rest = pick_rest(viewport, screen_x, screen_y)
-    if rest is not None:
-        return rest
-    # Between the lines of a hatch with nothing else under the cursor:
-    # the object of lines whose box holds it (the smallest).
-    around = getattr(viewport, "linework_groups_around", None)
-    boxes = around(screen_x, screen_y) if around is not None else ()
-    return boxes[0] if boxes else None
+def _linework_edge(viewport, x, y):
+    fn = getattr(viewport, "pick_linework_edge", None)
+    edge, d = fn(x, y) if fn is not None else (None, 0.0)
+    return [] if edge is None else [(edge, d)]
 
 
-def pick_rest(viewport, screen_x: float, screen_y: float):
-    """:func:`pick` past the lines and the groups: a dimension, a
-    label, a geo path, a section plane, a guide, the front face, a
-    reference image."""
-    dim = viewport.pick_dimension(screen_x, screen_y)
-    if dim is not None:
-        return dim
-    pick_label = getattr(viewport, "pick_text_label", None)
-    label = pick_label(screen_x, screen_y) if pick_label else None
-    if label is not None:
-        return label
-    path = viewport.pick_geopath(screen_x, screen_y)
-    if path is not None:
-        return path
-    # Section planes pick by their frame, above guides.
-    pick_sec = getattr(viewport, "pick_section_plane", None)
-    sec = pick_sec(screen_x, screen_y) if pick_sec else None
-    if sec is not None:
-        return sec
-    # Guides select the usual way (click + Delete / right-click). Real
-    # geometry outranks them; a guide crossing a face still beats the face
-    # (a thin line is the more deliberate target).
-    pick_guide = getattr(viewport, "pick_guide", None)
-    guide = pick_guide(screen_x, screen_y) if pick_guide else None
-    if guide is not None:
-        return guide
-    face = viewport.pick_face(screen_x, screen_y)
-    if face is not None:
-        # Unless a picture lies in front of it (#426).
-        in_front = getattr(viewport, "image_in_front_of", None)
-        image = in_front(face, screen_x, screen_y) if in_front else None
-        return image if image is not None else face
-    # A reference image is the last candidate: it is an underlay, so
-    # anything drawn on top of it must win the click. Only bare picture
-    # selects the picture — which is how you then move or resize it.
-    pick_image = getattr(viewport, "pick_image_plane", None)
-    return pick_image(screen_x, screen_y) if pick_image else None
+def _visible_edge(viewport, x, y):
+    # Only an edge the user can SEE takes the click (issue #71).
+    fn = getattr(viewport, "pick_visible_edge", None) or getattr(viewport, "pick_edge", None)
+    hit = fn(x, y) if fn is not None else None
+    return [] if hit is None else [(hit, 0.0)]
 
 
-def candidates(viewport, screen_x: float, screen_y: float) -> list:
-    """Everything a click at ``(x, y)`` may select, in the order
-    repeated clicks there go through them: what a click takes
-    (:func:`pick`), the other lines within reach, what the click
-    takes past the lines (the face's object, the face), the objects
-    of lines whose box holds the cursor. Each once."""
-    found: list = []
+def _many(name):
+    def query(viewport, x, y):
+        fn = getattr(viewport, name, None)
+        found = fn(x, y) if fn is not None else ()
+        return [h if isinstance(h, tuple) else (h, 0.0) for h in found]
+    return query
 
-    def add(entity):
-        if entity is not None and all(entity != e for e in found):
-            found.append(entity)
-    add(pick(viewport, screen_x, screen_y))
-    for entity, _d in linework(viewport, screen_x, screen_y):
-        add(entity)
-    add(pick(viewport, screen_x, screen_y, lines=False))
-    add(viewport.pick_group(screen_x, screen_y))
-    add(pick_rest(viewport, screen_x, screen_y))
-    around = getattr(viewport, "linework_groups_around", None)
-    for entity in (around(screen_x, screen_y) if around else ()):
-        add(entity)
-    return found
+
+#: What lies under a pixel, one kind at a time, for the Select machine's
+#: cascade (``rust/ingetrazo_core/src/tools/select.rs``, ``pick``): the
+#: viewport's picks, until each moves to native picking.
+QUERIES = {
+    "label_block": _one("pick_text_label", rect_only=True),
+    "linework_edge": _linework_edge,
+    "linework_groups": _many("pick_linework_groups"),
+    "group": _one("pick_group"),
+    "visible_edge": _visible_edge,
+    "dimension": _one("pick_dimension"),
+    "text_label": _one("pick_text_label"),
+    "geopath": _one("pick_geopath"),
+    "section_plane": _one("pick_section_plane"),
+    "guide": _one("pick_guide"),
+    "face": _one("pick_face"),
+    "image_plane": _one("pick_image_plane"),
+    "groups_around": _many("linework_groups_around"),
+}
+
+
+def has(viewport, what) -> bool:
+    return what == "linework" and hasattr(viewport, "pick_linework_edge")
+
+
+def edge_clear(viewport, edge, x, y) -> bool:
+    """The edge's point under the cursor is in plain sight."""
+    point = getattr(viewport, "edge_point_under_cursor", None)
+    occluded = getattr(viewport, "_is_occluded", None)
+    if point is None or occluded is None:
+        return False
+    p = point(edge, x, y)
+    return p is not None and not occluded(p)
+
+
+def image_in_front(viewport, face, x, y):
+    """A picture lying in front of ``face`` at the pixel (#426)."""
+    in_front = getattr(viewport, "image_in_front_of", None)
+    return in_front(face, x, y) if in_front is not None else None
 
 
 def pick_kind(entity) -> str:

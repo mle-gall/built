@@ -40,7 +40,8 @@ def _hover_over(entity, monkeypatch):
     target = entity(scene)
     tool = SelectTool()
     from tools import select
-    monkeypatch.setattr(select, "pick", lambda _vp, _x, _y, **_kw: target)
+    kind = "face" if select.pick_kind(target) == "face" else "visible_edge"
+    monkeypatch.setattr(select, "QUERIES", {kind: lambda _vp, _x, _y: [(target, 0.0)]})
     tool.on_hover(ToolContext(viewport=vp, world=QVector3D(),
                               screen=QPointF(10, 10),
                               modifiers=Qt.NoModifier, snap=None))

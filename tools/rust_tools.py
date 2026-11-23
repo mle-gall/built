@@ -92,13 +92,24 @@ class _Host:
         from tools import select
         return self._id(entity), select.pick_kind(entity)
 
-    def pick(self, x, y):
+    def query(self, what, x, y):
         from tools import select
-        return self._pick(select.pick(self.vp, x, y))
+        fn = select.QUERIES.get(what)
+        if fn is None:
+            return []
+        return [(self._id(e), select.pick_kind(e), float(d)) for e, d in fn(self.vp, x, y)]
 
-    def candidates(self, x, y):
+    def has(self, what):
         from tools import select
-        return [self._pick(e) for e in select.candidates(self.vp, x, y)]
+        return select.has(self.vp, what)
+
+    def edge_clear(self, ident, x, y):
+        from tools import select
+        return select.edge_clear(self.vp, self.handles.get(ident), x, y)
+
+    def image_in_front(self, ident, x, y):
+        from tools import select
+        return self._pick(select.image_in_front(self.vp, self.handles.get(ident), x, y))
 
     def extension_at(self, x, y):
         pick_item = getattr(self.vp, "pick_extension_item", None)
@@ -367,6 +378,12 @@ class SelectTool(RustTool):
     def pressed(self) -> bool:
         """A press is held that its release will answer (not a triple)."""
         return bool(self._state("pressed"))
+
+    def pick_at(self, viewport, x, y, lines=True):
+        """What a click at ``(x, y)`` takes (the machine's cascade)."""
+        from ingetrazo_core import select_pick
+        hit = select_pick(_Host(viewport, self._handles), float(x), float(y), bool(lines))
+        return None if hit is None else self._handles.get(hit)
 
     def press(self, viewport, x, y, modifiers, t):
         return self._px(viewport, "press", x, y, modifiers, t)

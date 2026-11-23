@@ -230,17 +230,20 @@ class MeshToolAccess:
         if hit is not None and hit[0] is mesh and hit[1] == key:
             return hit[2]
         faces, owner, pts = [], [], []
-        for face in mesh.faces:
-            if getattr(face, 'hidden', False):
-                continue
-            tris = face.triangulate()
+        shown = [f for f in mesh.faces if not getattr(f, 'hidden', False)]
+        from core._native import qt_hypot
+        if store is not None and qt_hypot():
+            # One crossing for the whole mesh: the store's own triangulation.
+            rows = store.snapshot().triangles_by_face([f.key for f in shown], qt_hypot())
+        else:
+            rows = [[tuple(p.toTuple() for p in t) for t in f.triangulate()] for f in shown]
+        for face, tris in zip(shown, rows):
             if not tris:
                 continue
             k = len(faces)
             faces.append(face)
-            for a, b, c in tris:
-                owner.append(k)
-                pts.append((a.toTuple(), b.toTuple(), c.toTuple()))
+            owner.extend([k] * len(tris))
+            pts.extend(tris)
         arr = np.asarray(pts, dtype=np.float64).reshape(-1, 3, 3)
         v0 = np.ascontiguousarray(arr[:, 0])
         value = (faces, np.asarray(owner, np.int64), v0,
@@ -363,7 +366,35 @@ class MeshToolAccess:
     def _pick_loose_edge(self, x, y, hidden):
         """``(edge, pixels)`` of the nearest selectable loose edge within
         :attr:`EDGE_PICK_PX` that ``hidden`` does not hide, else ``(None,
-        inf)``."""
+        inf)``. The store's segments near the cursor come from Rust,
+        nearest first (``ingetrazo_core.nearest_segments_px``); the
+        tag, hidden-geometry and occlusion rules read the first few."""
+        mesh = self.scene.mesh
+        st = mesh.__dict__.get('_store')
+        if st is None:
+            return self._pick_loose_edge_walk(x, y, hidden)
+        from ingetrazo_core import nearest_segments_px
+        arrays = st.arrays()
+        pos = np.ascontiguousarray(arrays['pos'], dtype=np.float64).reshape(-1, 3)
+        ends = np.asarray(arrays['edges'], dtype=np.int64).reshape(-1, 2)
+        if not len(ends):
+            return None, float('inf')
+        idx, dist, t = nearest_segments_px(
+            np.ascontiguousarray(pos[ends[:, 0]]), np.ascontiguousarray(pos[ends[:, 1]]),
+            *self._camera_px(), float(x), float(y), self.EDGE_PICK_PX)
+        edges = mesh.edges
+        reveal = self.scene.show_hidden_geometry
+        for i, d, k in zip(idx.tolist(), dist.tolist(), t.tolist()):
+            edge = edges[i]
+            if not self.scene.entity_selectable(edge) or (
+                    (getattr(edge, 'hidden', False) or getattr(edge, 'soft', False)) and not reveal):
+                continue
+            if not hidden(edge.a + (edge.b-edge.a)*float(k)):
+                return edge, float(d)
+        return None, float('inf')
+
+    def _pick_loose_edge_walk(self, x, y, hidden):
+        """:meth:`_pick_loose_edge` for a mesh without a store."""
         best, distance = None, self.EDGE_PICK_PX
         for edge in self.scene.mesh.edges:
             if not self.scene.entity_selectable(edge) or (
@@ -471,14 +502,14 @@ class MeshToolAccess:
         return _boxes_around(rows, lo[rows, 0], lo[rows, 1], hi[rows, 0],
                              hi[rows, 1], x, y, owner, self.scene)
 
+    def _camera_px(self):
+        m = self.view.camera.projection_matrix() * self.view.camera.view_matrix()
+        return list(m.data()), float(self.view.width()), float(self.view.height())
+
     def _project_px(self, pts):
-        matrix = np.asarray((self.view.camera.projection_matrix() *
-                             self.view.camera.view_matrix()).data()).reshape(4, 4).T
-        clip = pts @ matrix[:, :3].T + matrix[:, 3]
-        ok = clip[:, 3] > 0
-        w = np.where(ok, clip[:, 3], 1.)
-        return ((clip[:, 0]/w*.5+.5)*self.view.width(),
-                (1.-(clip[:, 1]/w*.5+.5))*self.view.height(), ok)
+        from ingetrazo_core import project_px
+        return project_px(np.ascontiguousarray(pts, dtype=np.float64).reshape(-1, 3),
+                          *self._camera_px())
 
     def _clear_annotation_segment(self, a, b):
         """Whether every viewing ray to this segment ends before resident geometry."""

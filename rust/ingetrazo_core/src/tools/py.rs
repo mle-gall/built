@@ -213,14 +213,29 @@ impl ToolHost for PyHost<'_, '_> {
             }
         }
     }
-    fn pick(&mut self, px: [f64; 2]) -> Option<Pick> {
-        let v = self.call("pick", self.px(px));
-        self.pick_of(v)
+    fn query(&mut self, what: &str, px: [f64; 2]) -> Vec<(Pick, f64)> {
+        let mut args = vec![self.s(what)];
+        args.extend(self.px(px));
+        let Some(list) = self.call("query", args) else { return vec![] };
+        let rows: Vec<(u64, String, f64)> = self.take(Some(list)).unwrap_or_default();
+        rows.into_iter().map(|(id, kind, d)| (Pick { id, kind: PickKind::parse(&kind) }, d)).collect()
     }
-    fn candidates(&mut self, px: [f64; 2]) -> Vec<Pick> {
-        let Some(list) = self.call("candidates", self.px(px)) else { return vec![] };
-        let items: Vec<Bound<PyAny>> = self.take(Some(list)).unwrap_or_default();
-        items.into_iter().filter_map(|x| self.pick_of(Some(x))).collect()
+    fn has(&mut self, what: &str) -> bool {
+        let args = vec![self.s(what)];
+        let v = self.call("has", args);
+        self.take(v).unwrap_or(false)
+    }
+    fn edge_clear(&mut self, edge: u64, px: [f64; 2]) -> bool {
+        let mut args = vec![self.u(edge)];
+        args.extend(self.px(px));
+        let v = self.call("edge_clear", args);
+        self.take(v).unwrap_or(false)
+    }
+    fn image_in_front(&mut self, face: u64, px: [f64; 2]) -> Option<Pick> {
+        let mut args = vec![self.u(face)];
+        args.extend(self.px(px));
+        let v = self.call("image_in_front", args);
+        self.pick_of(v)
     }
     fn extension_at(&mut self, px: [f64; 2]) -> Option<u64> {
         let v = self.call("extension_at", self.px(px));
@@ -384,4 +399,17 @@ impl ToolMachine {
 #[pyfunction]
 pub fn select_mode(modifiers: u32) -> &'static str {
     SelectMode::from_mods(Mods::from_qt(modifiers)).name()
+}
+
+/// What a click at `(x, y)` takes, by the Select machine's cascade, asking
+/// `host` (the adapter's) for each kind: the picked handle or None.
+#[pyfunction]
+#[pyo3(signature = (host, x, y, lines=true))]
+pub fn select_pick(host: &Bound<'_, PyAny>, x: f64, y: f64, lines: bool) -> PyResult<Option<u64>> {
+    let mut h = PyHost { obj: host, err: None };
+    let hit = super::select::pick(&mut h, [x, y], lines);
+    if let Some(e) = h.err {
+        return Err(e);
+    }
+    Ok(hit.map(|p| p.id))
 }

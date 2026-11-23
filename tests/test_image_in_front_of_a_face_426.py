@@ -7,7 +7,6 @@ face far behind it: with the top of a box hidden, the bottom took every
 click meant for the picture lying inside, and it could not be selected at
 all. A face on the image's plane (traced on it) still wins."""
 from __future__ import annotations
-from tools import select as _select_queries
 
 import os
 
@@ -49,7 +48,7 @@ def _setup(tmp_path, image_z):
 def _pick_centre(vp):
     from tools.rust_tools import SelectTool
     sx, sy = vp.width() / 2, vp.height() / 2
-    return _select_queries.pick(vp, sx, sy)
+    return SelectTool().pick_at(vp, sx, sy)
 
 
 def test_an_image_inside_a_box_with_its_top_hidden_is_picked(tmp_path):

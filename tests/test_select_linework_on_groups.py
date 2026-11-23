@@ -43,7 +43,6 @@ from core.mesh import Edge, Mesh
 from core.scene import Scene
 from tools.base import ToolContext
 from tools.rust_tools import SelectTool
-from tools import select as _select_queries
 
 app = QApplication.instance() or QApplication([])
 V = QVector3D
@@ -206,11 +205,11 @@ def test_a_line_on_a_grouped_face_takes_the_click(make, kind, dz, angle):
         tool = SelectTool()
         on = view.pixel(V(2, 2.0, dz))
         for px in (on, (on[0], on[1] + 4)):          # on it, 4 px off it
-            picked = _select_queries.pick(view.picks, *px)
+            picked = SelectTool().pick_at(view.picks, *px)
             assert any(picked == t for t in targets), (px, picked)
         # The face away from the lines still selects the slab's object.
         away = view.pixel(V(2, 0.5, 0))
-        assert _select_queries.pick(view.picks, *away) is slab
+        assert SelectTool().pick_at(view.picks, *away) is slab
     finally:
         view.close()
 
@@ -223,7 +222,7 @@ def test_a_line_well_under_the_face_does_not_steal_the_click(make, kind):
     try:
         _aim(view, "top")
         px = view.pixel(V(2, 2.0, -0.05))
-        assert _select_queries.pick(view.picks, *px) is slab
+        assert SelectTool().pick_at(view.picks, *px) is slab
     finally:
         view.close()
 
@@ -236,9 +235,9 @@ def test_between_the_lines_of_a_hatch_in_the_air_its_box_picks_it(make):
         _aim(view, "top")
         tool = SelectTool()
         between = view.pixel(V(2, 1.75, 0))
-        assert _select_queries.pick(view.picks, *between) is hatch
+        assert SelectTool().pick_at(view.picks, *between) is hatch
         outside = view.pixel(V(3.6, 3.6, 0))
-        assert _select_queries.pick(view.picks, *outside) is None
+        assert SelectTool().pick_at(view.picks, *outside) is None
     finally:
         view.close()
 
@@ -347,7 +346,7 @@ def test_inside_an_open_group_its_hatch_beats_its_slab(make):
         assert scene.edit_group is outer
         tool = SelectTool()
         on = view.pixel(V(2, 2.0, 0))
-        assert _select_queries.pick(view.picks, on[0], on[1] + 3) is hatch
-        assert _select_queries.pick(view.picks, *view.pixel(V(2, 0.5, 0))) is slab
+        assert SelectTool().pick_at(view.picks, on[0], on[1] + 3) is hatch
+        assert SelectTool().pick_at(view.picks, *view.pixel(V(2, 0.5, 0))) is slab
     finally:
         view.close()

@@ -1296,32 +1296,14 @@ def _slab_near(t):
 
 def _moller_trumbore(o, d, v0, e1, e2):
     """Möller–Trumbore of the ray ``o`` + t·``d`` against triangles (v0, e1,
-    e2) (N, 3): ``(t, hit)``, with the thresholds of :func:`_ray_triangle`.
-    The pick index's pass and the lazy placements' (#158) run this one, so
-    the same triangle gives the same t whichever holds it."""
+    e2) (N, 3): ``(t, hit)``, with the thresholds of :func:`_ray_triangle`
+    (``ingetrazo_core.ray_triangles``, rust/ingetrazo_core/src/pick.rs)."""
     import numpy as np
-    p = np.cross(d, e2)
-    det = np.einsum("ij,ij->i", e1, p)
-    ok = np.abs(det) > 1e-6
-    small = ~ok & (det != 0.0)
-    if small.any():
-        # det is (e1 × e2)·d: it shrinks with the triangle's area, so a
-        # 1 mm square met head-on fell under the 1e-6 meant for grazing
-        # rays and could not be picked (#1294). Read those as the angle
-        # between the ray and the triangle's plane instead.
-        at = np.nonzero(small)[0]
-        scale = (np.linalg.norm(np.cross(e1[at], e2[at]), axis=1)
-                 * float(np.linalg.norm(d)))
-        ok[at] = np.abs(det[at]) > 1e-6 * scale
-    inv = np.where(ok, 1.0 / np.where(ok, det, 1.0), 0.0)
-    s = o - v0
-    u = np.einsum("ij,ij->i", s, p) * inv
-    q = np.cross(s, e1)
-    v = (q @ d) * inv
-    t = np.einsum("ij,ij->i", e2, q) * inv
-    hit = (ok & (u >= -_BARY_EPS) & (u <= 1.0 + _BARY_EPS) & (v >= -_BARY_EPS) & (u + v <= 1.0 + _BARY_EPS)
-           & (t > 1e-6))
-    return t, hit
+    from ingetrazo_core import ray_triangles
+    as_rows = lambda a: np.ascontiguousarray(a, dtype=np.float64).reshape(-1, 3)
+    o, d = np.asarray(o, dtype=np.float64), np.asarray(d, dtype=np.float64)
+    return ray_triangles(tuple(map(float, o)), tuple(map(float, d)),
+                         as_rows(v0), as_rows(e1), as_rows(e2))
 
 
 #: How the rest of the model reads while a group is open for editing.
@@ -8261,22 +8243,20 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         m = self.camera.projection_matrix() * self.camera.view_matrix()
         return np.array(m.data(), dtype=np.float64).reshape(4, 4, order="F")
 
+    def _camera_px(self):
+        """``(mvp, width, height)``: what the native pick kernels project
+        with (``mvp`` column-major, as ``Matrix4.data()``)."""
+        m = self.camera.projection_matrix() * self.camera.view_matrix()
+        return list(m.data()), float(self.width()), float(self.height())
+
     def _project_px(self, pts):
         """Batch world points (N, 3) → ``(px, py, in_front)`` arrays — the
-        exact math of :meth:`_world_to_pixel`, vectorised."""
+        exact math of :meth:`_world_to_pixel` (``ingetrazo_core.project_px``)."""
         import numpy as np
-        M = self._np_mvp()
-        # Term by term, as _instance_chunk bakes (and core/instances.rs
-        # projects the corners it does not bake): a BLAS product sums in an
-        # order of its own.
-        clip = (pts[:, 0:1] * M[:, 0] + pts[:, 1:2] * M[:, 1]
-                + pts[:, 2:3] * M[:, 2] + M[:, 3])
-        w = clip[:, 3]
-        ok = w > 0
-        safe = np.where(ok, w, 1.0)
-        px = (clip[:, 0] / safe * 0.5 + 0.5) * self.width()
-        py = (1.0 - (clip[:, 1] / safe * 0.5 + 0.5)) * self.height()
-        return px, py, ok
+        from ingetrazo_core import project_px
+        return project_px(np.ascontiguousarray(pts, dtype=np.float64).reshape(-1, 3),
+                          list(self._np_mvp().reshape(-1, order="F")),
+                          float(self.width()), float(self.height()))
 
     @staticmethod
     def _frustum_planes(mvp):

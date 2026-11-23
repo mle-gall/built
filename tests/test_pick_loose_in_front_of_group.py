@@ -24,7 +24,6 @@ if QApplication.instance() is None:
 from core.group import Group  # noqa: E402
 from core.mesh import Mesh  # noqa: E402
 from tools.rust_tools import SelectTool  # noqa: E402
-from tools import select as _select_queries
 from tests.controller_surface import ControllerSurface as Viewport
 
 
@@ -66,11 +65,11 @@ def test_a_loose_face_in_front_of_a_group_is_what_gets_picked():
     lid = _loose_lid(vp)
     px = vp._world_to_pixel(V(3, 3, 1))
     assert vp.pick_group(*px) is None, "the group behind the face won"
-    assert _select_queries.pick(vp, *px) == lid
+    assert SelectTool().pick_at(vp, *px) == lid
     # beside the lid nothing hides the group: it still takes the click
     beside = vp._world_to_pixel(V(5, 5, 0))
     assert vp.pick_group(*beside) is g
-    assert _select_queries.pick(vp, *beside) is g
+    assert SelectTool().pick_at(vp, *beside) is g
 
 
 def test_a_group_in_front_of_a_loose_face_still_wins():
@@ -83,7 +82,7 @@ def test_a_group_in_front_of_a_loose_face_still_wins():
     vp.scene.version += 1
     px = vp._world_to_pixel(V(3, 3, 1))
     assert vp.pick_group(*px) is g
-    assert _select_queries.pick(vp, *px) is g
+    assert SelectTool().pick_at(vp, *px) is g
 
 
 def test_right_click_keeps_a_selection_with_a_group_behind_it():
@@ -108,8 +107,8 @@ def test_a_loose_face_drawn_on_a_group_face_takes_the_click():
     disc = _loose_lid(vp, z=0.0)        # drawn on the group's face
     px = vp._world_to_pixel(V(3, 3, 0))
     assert vp.pick_group(*px) is None, "the group under the face won"
-    assert _select_queries.pick(vp, *px) == disc
+    assert SelectTool().pick_at(vp, *px) == disc
     # off the drawn face the wall is still the pick
     beside = vp._world_to_pixel(V(5, 5, 0))
     assert vp.pick_group(*beside) is g
-    assert _select_queries.pick(vp, *beside) is g
+    assert SelectTool().pick_at(vp, *beside) is g
