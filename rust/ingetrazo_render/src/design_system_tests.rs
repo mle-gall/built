@@ -86,8 +86,29 @@ fn chrome_colors_come_from_tokens() {
 fn graphite_surfaces_are_achromatic() {
     use crate::ui::tokens::*;
     for c in [
-        GLASS_BAR, PANEL, SHEET, CARD, CARD_HOVER, WELL, FIELD, SIDE, POPOVER, SCRIM,
+        GLASS_BAR, PANEL, SHEET, CARD, CARD_HOVER, WELL, FIELD, SIDE, POPOVER, SCRIM, CONTROL, TRACK,
+        THUMB, HOVER, PRESS,
     ] {
         assert_eq!((c.r(), c.g()), (c.g(), c.b()));
     }
+}
+
+#[test]
+fn glass_levels_lighten_and_lift_with_elevation() {
+    use crate::ui::tokens::Surface;
+    let levels = Surface::ALL;
+    for pair in levels.windows(2) {
+        assert!(pair[0].grey() < pair[1].grey(), "{:?} vs {:?}", pair[0], pair[1]);
+        assert!(pair[0].shadow().color.a() < pair[1].shadow().color.a());
+    }
+}
+
+#[test]
+fn type_scale_has_four_sizes() {
+    use crate::ui::tokens::*;
+    let sizes = [meta().size, body().size, title().size, heading().size, caption_font().size];
+    let mut distinct: Vec<f32> = sizes.to_vec();
+    distinct.sort_by(f32::total_cmp);
+    distinct.dedup();
+    assert_eq!(distinct, [TYPE_META, TYPE_BODY, TYPE_TITLE, TYPE_HEADING]);
 }

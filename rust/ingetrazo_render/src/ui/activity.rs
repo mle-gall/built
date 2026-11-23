@@ -100,11 +100,8 @@ impl Ui {
                         });
                         if let Some((_, _, _, fraction, _)) = self.jobs.first() {
                             if *fraction >= 0.0 {
-                                ui.add(
-                                    progress(*fraction)
-                                        .desired_height(3.0)
-                                        ,
-                                );
+                                ui.add_space(2.0);
+                                progress_bar(ui, *fraction, 3.0);
                             }
                         }
                     });
