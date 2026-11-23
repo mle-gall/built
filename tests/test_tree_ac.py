@@ -623,7 +623,8 @@ def test_open_occurrence_scopes_tree_and_exports_keep_the_inspector(ui):
     act("node", "n:" + key)
     filing = [r["key"] for r in rows()]
     act("colset", "2")
-    assert [r["key"] for r in rows()] == filing
+    assert [r["key"] for r in rows() if r["key"].startswith("n:")] == [k for k in filing if k.startswith("n:")]
+    filing = [r["key"] for r in rows()]
     wu._inspector(view, win)
     assert "Node" in dict(view.renderer.calls["ui_set_inspector"][1])
     scene.begin_group_edit(g)
@@ -639,7 +640,7 @@ def test_open_occurrence_scopes_tree_and_exports_keep_the_inspector(ui):
     assert [r["key"] for r in rows()] == filing
     assert "Ride.igz" in [r["name"] for r in act("filter", "is:link")]
     act("mode", "deliveries")
-    assert view.renderer.calls["ui_set_mode"] == ("Deliveries",)
+    assert view.renderer.calls["ui_set_mode"] == ("",) and view._ui_colset == 2
     act("mode", "")
     assert view.renderer.calls["ui_set_mode"] == ("",)
 

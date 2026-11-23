@@ -26,6 +26,7 @@ mod context_menu;
 mod tree_cols;
 mod tree_order;
 mod drawing;
+mod export;
 /// The large sheet over the dimmed model: Library, start page, Settings
 /// (views/chrome_sheet.py, docs/ui-patterns.md).
 pub mod large_sheet;
@@ -1701,7 +1702,9 @@ impl Ui {
                             });
                         break 'tree;
                     }
-                    if col.colset == 1 {
+                    if col.colset == 2 {
+                        export::strip(ui,&self.panels.data["readiness"],&mut cmds);
+                    } else if col.colset == 1 {
                         ui.horizontal(|ui| {
                             kit::caption_plain(ui, "Style for all views");
                             egui::ComboBox::from_id_salt("drawing_visibility").selected_text("Visibility set").show_ui(ui, |ui| {
@@ -1848,33 +1851,13 @@ impl Ui {
                                             ui.painter().rect_stroke(sw, CornerRadius::same(R_INSET), Stroke::new(1.0, EDGE), egui::StrokeKind::Inside);
                                         }
                                     } else if col.colset == 2 {
-                                        // Quantity at the edge, the export class (and type) before it.
-                                        if let Some((_, end)) = cols.checks {
-                                            let ink = if n.problems > 0 { WARN } else { FAINT };
-                                            ui.painter().text(pos2(end, cy), egui::Align2::RIGHT_CENTER, n.problems.to_string(), meta(), ink);
+                                        let right = rect.right() - SPACE_S;
+                                        cells_left = right - 78.;
+                                        if n.row == 0 {
+                                            let (label,ink) = if n.problems>0 {(format!("{} to fix", n.problems),WARN)} else { (String::new(),DIM) };
+                                            ui.painter().text(pos2(right,cy), egui::Align2::RIGHT_CENTER,label,meta(),ink);
                                         }
-                                        let qty = cell(2);
-                                        let (qa, qb) = cols.qty.unwrap_or((warn_col - 64.0, warn_col));
-                                        if !qty.is_empty() {
-                                            let mut job = egui::text::LayoutJob::single_section(qty, egui::TextFormat {
-                                                font_id: meta(), color: if n.row == 0 { INK_2 } else { DIM }, ..Default::default() });
-                                            job.wrap.max_width = qb - qa;
-                                            job.wrap.max_rows = 1;
-                                            job.wrap.break_anywhere = true;
-                                            let g = ui.painter().layout_job(job);
-                                            ui.painter().galley(pos2(qb - g.size().x, cy - g.size().y / 2.0), g, DIM);
-                                        }
-                                        let text = if cell(1).is_empty() { cell(0) } else { format!("{} · {}", cell(0), cell(1)) };
-                                        let text = text.strip_prefix("Ifc").map(|t| t.to_string()).unwrap_or(text);
-                                        let (ca, cb) = cols.class.unwrap_or((qa - 100.0, qa - 8.0));
-                                        let mut job = egui::text::LayoutJob::single_section(text, egui::TextFormat {
-                                            font_id: meta(), color: FAINT, ..Default::default() });
-                                        job.wrap.max_width = cb - ca;
-                                        job.wrap.max_rows = 1;
-                                        job.wrap.break_anywhere = true;
-                                        let g = ui.painter().layout_job(job);
-                                        cells_left = ca;
-                                        ui.painter().galley(pos2(ca, cy - g.size().y / 2.0), g, FAINT);
+
                                     }
                                 }
                                 let warn_col = if col.colset != 0 { rect.max.x + 1000.0 } else { warn_col };
@@ -2024,6 +2007,8 @@ impl Ui {
                                         actions.push(format!("lock\u{1f}{}", n.key));
                                     } else if col.colset == 1 && n.cells.len() >= 7 && !linked && col.filing.is_none() {
                                         col.styles.pick(n, ui.input(|i| i.modifiers.command || i.modifiers.shift));
+                                    } else if n.row == 9 {
+                                        actions.push(format!("toggle\u{1f}{}",n.key));
                                     } else if n.row == 6 {
                                         continue;
                                     } else if col.filing.is_some() {
@@ -2059,6 +2044,24 @@ impl Ui {
                     egui::ScrollArea::vertical().id_salt("inspector").auto_shrink([false, false]).show(ui, |ui| {
                         ui.spacing_mut().item_spacing = vec2(0.0, SPACE_XS);
                         if col.mode.is_empty() && col.colset == 1 && col.styles.draw(ui, &mut actions) { return; }
+                        if col.colset == 2 {
+                            if !col.inspector_title.is_empty() { ui.strong(&col.inspector_title); }
+                            kit::identity_card(ui, &col.identity, &mut actions);
+                            export::checklist(ui,&self.panels.data["readiness"],col.highlighted.as_deref(),&mut actions);
+                            self.panels.assembly_problems(ui, &mut cmds);
+                            if self.panels.has_records() {
+                                ui.collapsing("Export details", |ui| self.panels.export(ui,&mut cmds));
+                            }
+                            // Retain the solid provider's fault-specific repairs.
+                            for (title,rows) in &col.inspector {
+                                if title=="Actions" {
+                                    for (id,label) in rows.iter().filter(|(id,_)|id.starts_with("solidfault:") || id=="solidrepair") {
+                                        if kit::quiet(ui,label).clicked() { actions.push(format!("insp:{id}")); }
+                                    }
+                                }
+                            }
+                            return;
+                        }
                         if col.inspector_title.is_empty() {
                             ui.horizontal(|ui| { ui.add_space(SPACE_S); empty_state(ui, "Nothing selected"); });
                             return;

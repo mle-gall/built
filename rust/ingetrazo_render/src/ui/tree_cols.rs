@@ -94,9 +94,7 @@ impl Cols {
                 if let Some((a, b)) = self.swatch { at((a + b) / 2.0, "Col.", egui::Align2::CENTER_CENTER); }
             }
             2 => {
-                if let Some((_, b)) = self.checks { at(b, "Checks", egui::Align2::RIGHT_CENTER); }
-                if let Some((a, _)) = self.class { at(a, "Class", egui::Align2::LEFT_CENTER); }
-                if let Some((_, b)) = self.qty { at(b, "Quantity", egui::Align2::RIGHT_CENTER); }
+                at(r.right()-8., "Readiness", egui::Align2::RIGHT_CENTER);
             }
             _ => at(self.count_right, "Items", egui::Align2::RIGHT_CENTER),
         }

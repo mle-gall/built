@@ -172,7 +172,7 @@ def test_the_dock_has_no_library_place_any_more(monkeypatch):
     L.set_mode(view, win, "problems")
     L.set_mode(view, win, "library")                    # the old switch, ⌘K, the strip: the sheet
     assert opened == [None]
-    assert view._ui_mode == "problems"                  # the dock stays where it was
+    assert view._ui_colset == 2 and view._ui_mode == ""
     L.set_mode(view, win, "")
     assert view._ui_mode == ""
 

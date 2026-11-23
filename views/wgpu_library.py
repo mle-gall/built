@@ -1196,6 +1196,11 @@ def set_mode(view, win, mode) -> None:
     if mode == "library":
         open_library(win)
         return
+    if mode in ("problems", "deliveries"):
+        from views.wgpu_ui import apply_dock_width
+        view._ui_colset = 2
+        apply_dock_width(view)
+        mode = ""
     view._ui_mode = mode
     view._ui_mat_focus = None
     view._ui_rules_cache = None

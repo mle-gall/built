@@ -1047,29 +1047,7 @@ def _tree(view, win, *, discover=False):
         if colset == 1 and key is not None:
             ly = main_layer(key)
             return ly._drawing_cells() if ly is not None else []
-        if colset == 2:
-            if key is not None:
-                r = recipes.get(key, {})
-                return [str(r.get("class") or "—"), str(r.get("predefined_type") or ""), _qty_text(node_qty(key))]
-            if g is not None:
-                rec = g.ifc or {}
-                return [str(rec.get("class") or "inherits"), str(rec.get("predefined_type") or ""),
-                        _qty_text(_group_qty(view, g))]
         return []
-
-    if colset == 2:
-        _measure(view, win, auto=True)
-    qty_memo = {}
-
-    def node_qty(key):
-        # The node's measured quantities, its sub-nodes' included, per unit.
-        if key not in qty_memo:
-            total = defaultdict(float)
-            for g in tree.members(key):
-                for unit, v in _group_qty(view, g).items():
-                    total[unit] += v
-            qty_memo[key] = dict(total)
-        return qty_memo[key]
 
     def add(key, name, kind, badge, icon, d, count, probs, act, row, eye, lock, expandable, expanded, sel, extra=()):
         rows.append(([key, name, kind, badge, icon, *extra],
@@ -1205,6 +1183,17 @@ def _tree(view, win, *, discover=False):
         if discover:
             from ingetrazo_core import reveal_selection
             return reveal_selection(rows)
+        if colset == 2:
+            from core import deliveries
+            from ingetrazo_core import export_readiness
+            cache_key = (id(scene), scene.content_version)
+            cache = getattr(view, "_ui_rules_cache", None)
+            if not cache or cache[0] != cache_key:
+                cache = cache_key, _problem_rules(scene, registry, structure._nodes(registry), recipes, unfiled)
+                view._ui_rules_cache = cache
+            rows, readiness = export_readiness(scene, tree, deliveries.records(scene), getattr(view, "_delivery_key", "") or "",
+                                               cache[1], exp, rows)
+            view.renderer.ui_panel_set("readiness", readiness)
         mark_selection(rows)
     else:
         # Problems lists items under rules: a selected item is lit itself.
@@ -1742,7 +1731,7 @@ def _tree_action(win, view, action) -> None:
             _measure(view, win)
             view._ui_tree_sig = None
         elif verb == "insp" and (key == "solidrepair" or key.startswith("solidfault:")):
-            active = key.startswith("solidfault:active/") and getattr(view, "_ui_mode", "") == "problems"
+            active = key.startswith("solidfault:active/") and view.__dict__.get("_ui_colset") == 2
             if not active and len(groups) != 1:
                 return
             out = _core(vp, "repair_solid", placement=None if active else vp.scene.occurrence_path(groups[0]),
@@ -1974,6 +1963,21 @@ def _tree_action(win, view, action) -> None:
         elif verb == "sort":
             from PySide6.QtCore import QSettings
             QSettings().setValue("ui/project_tree_sort", int(rk))
+        elif verb == "item" and kind == "exportitem":
+            import json
+            group = scene.resolve_occurrence(json.loads(ident))
+            if group is not None:
+                _select(win, [group])
+                win._on_zoom_selection()
+        elif verb == "exportshow":
+            import json
+            _select(win, filter(None, (scene.resolve_occurrence(path) for path in json.loads(rk))))
+            win._on_zoom_selection()
+        elif verb == "exportstatus":
+            import json
+            _core(vp, "patch_record_field", **json.loads(rk))
+            vp.notify_scene_changed()
+            rebuild()
         elif verb == "drawingpatch":
             import json
             targets, patch = json.loads(rk)
@@ -2350,7 +2354,7 @@ def _inspector(view, win) -> None:
     from core.section import SectionPlane
     from ingetrazo_core import section_inspector, selection_identity
     section_key = node_focus or (f"section:{sel[0].uid}" if len(sel) == 1 and isinstance(sel[0], SectionPlane) else "")
-    if node_focus == "solid:active" and view.__dict__.get("_ui_mode") == "problems":
+    if node_focus == "solid:active" and view.__dict__.get("_ui_colset") == 2:
         from ingetrazo_core import solid_inspector_sections
         view.renderer.ui_set_inspector(scene.edit_group.name if scene.edit_group else "Loose geometry",
                                        solid_inspector_sections(scene, None, True))
@@ -2455,7 +2459,7 @@ def _inspector(view, win) -> None:
                 sections.append(("Parts", prow))
             sections.append(("Actions", [("cutlist", "Cut list…")]))
         from ingetrazo_core import solid_inspector_sections
-        solid = solid_inspector_sections(scene, g, view.__dict__.get("_ui_mode") == "problems")
+        solid = solid_inspector_sections(scene, g, view.__dict__.get("_ui_colset") == 2)
         if solid and not verbs.offers(sel_kind, "repair"):
             solid = [s_ for s_ in solid if s_[0] != "Actions"]
         if solid:
