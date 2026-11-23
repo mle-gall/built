@@ -370,3 +370,30 @@ mod tests {
         assert_eq!(format_scale(0.5), "2:1");
     }
 }
+
+/// The fields a kind's look is made of: what Copy style takes and Paste
+/// style gives (views/composer.py `STYLE_FIELDS`).
+pub fn style_fields(kind: &str) -> &'static [&'static str] {
+    match kind {
+        "dimension" => &["text_mm", "decimals", "units", "show_unit", "ends", "stroke_mm", "color", "offset_mm",
+                         "text_color", "text_bg", "text_bg_opacity"],
+        "text" => &["size_pt", "bold", "italic", "underline", "family", "color", "align", "bg_color", "bg_opacity"],
+        "shape" => &["stroke_mm", "color", "fill", "fill_color", "radius_mm"],
+        "image" => &["opacity", "shape", "radius_mm", "feather_mm", "fit", "border", "border_mm", "border_color"],
+        "frame" => &["style", "scale_n", "rot_deg", "show_title", "annotations", "annot_text_mm", "km_marks",
+                     "km_step_m", "grid_m", "shadows", "sun_hour", "section_marks", "border", "border_mm",
+                     "border_color", "title_style", "title_scale", "title_align", "title_pos", "title_mm",
+                     "pen_cut_mm", "pen_profile_mm", "pen_edge_mm", "pen_hatch_mm", "profiles", "hidden_lines",
+                     "layer_colours", "cut_fill", "cut_fill_color", "cut_fill_by_layer", "cut_hatch_mm"],
+        "radial" => &["text_mm", "decimals", "units", "show_unit", "ends", "stroke_mm", "color", "text_color",
+                      "offset_mm", "text_bg", "text_bg_opacity", "centre_mark"],
+        "angular" => &["text_mm", "decimals", "ends", "stroke_mm", "color", "offset_mm", "text_color", "text_bg",
+                       "text_bg_opacity"],
+        "label" => &["size_pt", "bold", "italic", "underline", "color", "bg_color", "bg_opacity", "arrow", "stroke_mm"],
+        "level" => &["symbol", "text", "units", "decimals", "size_mm", "line_mm", "stroke_mm", "color", "datum_m"],
+        "callout" => &["shape", "size_mm", "stroke_mm", "color"],
+        "titleblock" => &["corner", "radius_mm", "layout", "double_border", "fill_color", "label_color", "text_color",
+                          "line_color", "label_mm", "border_mm", "line_mm"],
+        _ => &[],
+    }
+}
