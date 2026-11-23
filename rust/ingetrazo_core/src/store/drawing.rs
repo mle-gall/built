@@ -72,6 +72,36 @@ impl Store {
         (count <= cap).then(|| [point(o), point(n)])
     }
 
+    /// Stamp untagged edges whose two ends lie on one path segment. This
+    /// includes sub-edges created when another stroke crossed the path.
+    pub fn tag_curve_path(&mut self, path: &[Point], closed: bool, id: i64) -> bool {
+        use glam::DVec3;
+        use super::command_delete::cell;
+        if path.len() < 2 { return false; }
+        let segments: Vec<_> = path.iter().zip(path.iter().cycle().skip(1))
+            .take(path.len() - usize::from(!closed))
+            .map(|(&a, &b)| {
+                let start = DVec3::from_array(a);
+                let delta = DVec3::from_array(b) - start;
+                (start, delta, delta.length())
+            }).collect();
+        let mut tagged = false;
+        for edge in self.live_slots(Kind::Edge) {
+            if *self.state.ecurve.get(edge as usize) >= 0 { continue; }
+            let ends = self.state.ends.get(edge as usize)
+                .map(|v| DVec3::from_array(*self.state.vpos.get(v as usize)));
+            if segments.iter().any(|&(a, ab, length)| ends.iter().all(|&p| {
+                if length < 1e-4 { return cell(p.to_array()) == cell(a.to_array()); }
+                let t = (p - a).dot(ab) / (length * length);
+                (-1e-4..=1. + 1e-4).contains(&t) && (p - (a + ab * t)).length() < 1e-4
+            })) {
+                self.set_edge_curve(edge, id);
+                tagged = true;
+            }
+        }
+        tagged
+    }
+
     pub fn curve_keys(&self, curve: i64) -> Vec<u128> {
         self.state.order[1]
             .live(&self.state.slots[1])

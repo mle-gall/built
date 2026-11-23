@@ -9,7 +9,7 @@ type Cell = [u64; 3];
 /// Bits of Python's round(x, 4), canonicalising signed zero. When the
 /// multiplication itself can change a rounding decision, round the original
 /// binary64 value directly to four decimal places.
-fn cell(point: Point) -> Cell {
+pub(super) fn cell(point: Point) -> Cell {
     point.map(|x| {
         let scaled = x * 10000.;
         let rounded = if scaled.abs() >= (1u64 << 52) as f64 || scaled.fract().abs() == 0.5 {

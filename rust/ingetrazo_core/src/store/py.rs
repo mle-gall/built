@@ -1228,6 +1228,15 @@ impl PyMeshStore {
         ))
     }
 
+    fn prune_orphan_edges(&mut self, points: Vec<[f64; 3]>, edges: Option<Vec<u128>>,
+                          faces: Option<Vec<u128>>) -> PyResult<Vec<u128>> {
+        let removed = self.orphaned_edges_at(points, edges, faces)?;
+        for &edge in &removed {
+            self.remove_edge(edge)?;
+        }
+        Ok(removed)
+    }
+
     fn loop_inside_face(
         &self,
         face: u128,
@@ -1292,6 +1301,10 @@ impl PyMeshStore {
             self.inner.set_edge_layer(edge, (layer != default_layer).then_some(layer));
         }
         Ok(existing.is_none().then(|| self.inner.key(Kind::Edge, edge)))
+    }
+
+    fn tag_curve_path(&mut self, points: Vec<[f64; 3]>, closed: bool, id: i64) -> bool {
+        self.inner.tag_curve_path(&points, closed, id)
     }
 
     fn explode_curves(&mut self, ids: std::collections::HashSet<i64>) -> usize {

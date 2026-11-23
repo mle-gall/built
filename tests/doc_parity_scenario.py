@@ -381,7 +381,8 @@ def geometry_steps():
     """Compare the loose mesh, feed and replay at each command boundary."""
     from core.history import (MakeGroupCommand, ExplodeGroupCommand, SetFaceColorCommand,
                               AddEdgeCommand, DeleteEdgesCommand, DeleteFaceCommand,
-                              ExplodeCurvesCommand)
+                              ExplodeCurvesCommand, TagCurveCommand, PruneOrphanEdgesCommand,
+                              SnapshotCompound)
     from core.protocol import commands
 
     scene = Scene()
@@ -404,6 +405,10 @@ def geometry_steps():
     for edit in (lambda: h.execute(AddEdgeCommand(QVector3D(4, 0, 0), QVector3D(4, 1, 0),
                                                   curve=17, soft=True, layer="Ink")),
                  lambda: h.execute(ExplodeCurvesCommand([mesh.edges[-1]])),
+                 lambda: h.execute(SnapshotCompound([TagCurveCommand(
+                     [QVector3D(4, 0, 0), QVector3D(4, 1, 0)], closed=False)], heal=False)),
+                 lambda: h.execute(PruneOrphanEdgesCommand([QVector3D(4, 0, 0)])),
+                 lambda: h.execute(AddEdgeCommand(QVector3D(8, 0, 0), QVector3D(8, 1, 0))),
                  lambda: h.execute(DeleteEdgesCommand([mesh.edges[-1]])),
                  lambda: h.execute(SetFaceColorCommand([mesh.faces[1]], [0., .5, 1.])),
                  lambda: commands.push_pull(h, mesh.faces[1].key, .25),

@@ -647,7 +647,17 @@ class TagCurveCommand(MeshCommand):
         self.closed = closed
 
     def do(self, scene) -> None:
-        scene.mesh.tag_curve(self.pts, self.closed)
+        from core import mesh as mesh_api
+        from core.store_mesh import StoreMesh
+        mesh = scene.mesh
+        if self._journal_geometry and type(mesh) is StoreMesh:
+            mesh._chunk_dirty = True
+            mesh._mut_serial += 1
+            if mesh._store.tag_curve_path([p.toTuple() for p in self.pts], self.closed,
+                                          mesh_api._CURVE_COUNTER):
+                mesh.next_curve_id()
+        else:
+            mesh.tag_curve(self.pts, self.closed)
 
     def undo(self, scene) -> None:
         pass
@@ -3917,11 +3927,20 @@ class PruneOrphanEdgesCommand(MeshCommand):
         faces = push_scans.faces_near_points_rings(scene.mesh, keys)
         from core.store_mesh import StoreMesh, EdgeView
         if type(scene.mesh) is StoreMesh:
-            keys = scene.mesh._store.orphaned_edges_at(
+            store = scene.mesh._store
+            prune = store.prune_orphan_edges if self._journal_geometry else store.orphaned_edges_at
+            keys = prune(
                 [v.toTuple() for v in self.vertices],
                 None if edges is None else [e.key for e in edges],
                 None if faces is None else [f.key for f in faces])
             self.removed = [EdgeView(scene.mesh, k) for k in keys]
+            if self._journal_geometry:
+                if keys:
+                    scene.mesh._dirty(len(keys))
+                    for edge in self.removed:
+                        scene.selection.discard(edge)
+                    scene.version += 1
+                return
         else:
             self.removed = orphaned_edges_at(
                 scene.edges if edges is None else edges,
@@ -4368,6 +4387,23 @@ class SnapshotImport(Command):
         scene.version += 1
 
 
+def _run_snapshot_parts(parent, scene):
+    # These drawing operations edit only the mesh already enlisted by the
+    # enclosing snapshot. Other parts can have additional geometry owners.
+    covered = (AddEdgeCommand, DeleteEdgesCommand, DeleteFaceCommand, TagCurveCommand,
+               ExplodeCurvesCommand, PruneOrphanEdgesCommand, MoveVerticesCommand)
+    for part in parent.inner:
+        if not parent._journal_geometry or type(part) not in covered:
+            part.do(scene)
+            continue
+        previous = part._journal_geometry
+        part._journal_geometry = True
+        try:
+            part.do(scene)
+        finally:
+            part._journal_geometry = previous
+
+
 class SnapshotCompound(MeshCommand):
     """Run a list of sub-commands under one identity-preserving snapshot, undone
     by restoring it.
@@ -4399,8 +4435,7 @@ class SnapshotCompound(MeshCommand):
             # align the faces the draw MADE, never the ones already there
             # (a Reverse Faces undone by the next rectangle).
             footprint = winding_footprint(scene.mesh) if self._heal else None
-            for cmd in self.inner:
-                cmd.do(scene)
+            _run_snapshot_parts(self, scene)
             if self._heal:
                 for f in heal_overlapping_faces(scene.mesh, footprint=footprint):
                     scene.selection.discard(f)
@@ -4439,8 +4474,7 @@ class MeshSnapshotCommand(MeshCommand):
     def do(self, scene) -> None:
         self.snapshot = self._reference_snapshot(scene.mesh)
         before = set(scene.mesh.faces)
-        for cmd in self.inner:
-            cmd.do(scene)
+        _run_snapshot_parts(self, scene)
         new_faces = set(scene.mesh.faces) - before
         run_stitch(scene.mesh, {_key(p) for p in self.seed}, new_faces)
         scene.version += 1
