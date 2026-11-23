@@ -238,12 +238,9 @@ during the step (the definition after `share_back`) has new keys: its
 record names every old key removed and every new key created, not
 `replaced`.
 
-**Document level** is compared before and after the step. Root placements
-are compared by identity; a uid both removed and created (a group replaced
-by its copy, which keeps the uid) is reported as modified. Tags and materials
-are compared by value. Nested placements a known command touches are named
-from the command (`InsertGroupCommand` / `DeleteGroupCommand` with undo
-reversed, `MoveGroupCommand`, `HideCommand`, `AssignLayerCommand`).
+**Document changes.** The journal identifies changes to placements, tags
+and materials. Commands can supplement it with affected placement UIDs,
+including the placements sharing an edited definition.
 Geometry-only commands (`keeps_rows`, and the snapshot / move / draw / erase
 commands) change no placement. Explode names the group removed and its
 lifted children created (undo: the reverse); Split into Pieces the group
@@ -254,11 +251,8 @@ placement that shows its definition, nested and hidden ones included, on
 execute, undo and redo.
 Any other command sets `complete = False`.
 
-**With the Rust document** (`core/doc_model.py`, docs/rust-document-model.md,
-the default whenever the engine is built; `INGETRAZO_DOC=0` keeps the
-comparison above), every step runs inside a document transaction and the
-document level comes from its journal instead of a before/after walk: root
-placements created / removed are the net edits of the scene root's list
+Every step runs inside a Rust document transaction. The journal supplies the
+document portion of each feed record. Root placements created / removed are the net edits of the scene root's list
 (same identity rule, same `modified` for a uid both removed and created);
 `modified` adds every placement whose fields or child list the step wrote
 (so it can name more than the command knowledge above, never fewer); tags
