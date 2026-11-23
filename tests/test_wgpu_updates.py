@@ -587,7 +587,8 @@ def test_component_edit_deep_in_nested_groups_rewrites_one_row(monkeypatch):
     model (2 s on the ride) and the last append copied the resident arrays
     (0.5-1.4 s). The swap is one row from the edit path, a rebake that keeps
     its size goes back in place, and leaving shares back without a walk."""
-    from core.history import History, MoveVerticesCommand, ReshareInstanceCommand
+    from core.history import History, MoveVerticesCommand
+    from core.reference_edit import ReshareInstanceCommand
     scene, leaf, inner, root, proto = _nested_component_scene()
     updates = InstanceUpdates(scene, pack_scene(scene))
     history = History(scene)
@@ -624,7 +625,7 @@ def test_component_edit_deep_in_nested_groups_rewrites_one_row(monkeypatch):
     assert len(updates.packed.vertices) == size
     assert_matches_fresh_pack(updates, scene)
 
-    share = scene.take_edit_share()
+    share = scene._edit_stack[-1].pop("share", None)
     scene.end_group_edit()
     if share is not None:
         group, definition, xform, _ = share

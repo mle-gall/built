@@ -81,15 +81,23 @@ impl InstanceStore {
             return Ok(attr);
         }
         Ok(Bound::new(slf.py(), InstanceMethod {
-            view: slf.clone().unbind(), method: attr.unbind()
+            view: slf.clone().unbind(), method: attr.unbind(),
+            action: match name {
+                "snapshot" => InstanceAction::Snapshot,
+                "restore" => InstanceAction::Restore,
+                _ => InstanceAction::Forward,
+            },
         })?.into_any())
     }
 }
+
+enum InstanceAction { Snapshot, Restore, Forward }
 
 #[pyclass(frozen)]
 struct InstanceMethod {
     view: Py<InstanceStore>,
     method: Py<PyAny>,
+    action: InstanceAction,
 }
 
 #[pymethods]
@@ -100,6 +108,11 @@ impl InstanceMethod {
         let view = self.view.bind(py);
         InstanceStore::refresh(view)?;
         let start = view.as_super().try_borrow()?.inner.revision;
+        if matches!(self.action, InstanceAction::Snapshot) && args.is_empty() && kwargs.is_none() {
+            let mut saved = view.as_super().try_borrow()?.snapshot();
+            saved.definition = Some(Box::new(view.get().definition.bind(py).try_borrow()?.inner.snapshot()));
+            return Ok(Bound::new(py, saved)?.into_any());
+        }
         let result = self.method.bind(py).call(args, kwargs);
         let current = view.as_super().try_borrow()?;
         if current.inner.revision != start {
@@ -107,7 +120,17 @@ impl InstanceMethod {
             if definition.inner.revision != start {
                 return Err(PyValueError::new_err("definition changed during an occurrence edit"));
             }
-            definition._publish_frame(&current)?;
+            let snapshot = if matches!(self.action, InstanceAction::Restore) {
+                args.get_item(0).ok().or_else(|| kwargs.and_then(|kw| kw.get_item("snapshot").ok().flatten()))
+            } else { None };
+            let exact = snapshot.as_ref().and_then(|arg| arg.cast::<PyStoreSnapshot>().ok())
+                .and_then(|snap| snap.get().definition.as_ref())
+                .filter(|snap| snap.lineage == definition.inner.lineage);
+            if let Some(snap) = exact {
+                definition.inner.restore(snap, None).map_err(PyValueError::new_err)?;
+            } else {
+                definition._publish_frame(&current)?;
+            }
             drop(definition);
             view.get().mesh.bind(py).call_method0("mark_modified")?;
         }
@@ -284,6 +307,7 @@ fn p3(p: (f64, f64, f64)) -> [f64; 3] {
 #[pyclass(module = "ingetrazo_core", name = "StoreSnapshot", frozen)]
 pub struct PyStoreSnapshot {
     pub inner: Snapshot,
+    definition: Option<Box<Snapshot>>,
 }
 
 fn kind_of(s: &str) -> PyResult<Kind> {
@@ -1729,6 +1753,15 @@ impl PyMeshStore {
         self.inner.state.frame.matrix()
     }
 
+    fn tool_placement(&self) -> Option<crate::math::Matrix4> {
+        let frame = &self.inner.state.frame;
+        let mut matrix = frame.matrix()?;
+        for (value, origin) in matrix[12..15].iter_mut().zip(frame.origin) {
+            *value -= origin;
+        }
+        Some(crate::math::Matrix4::from(glam::DMat4::from_cols_array(&matrix)))
+    }
+
     fn _convert_point(&self, target: &PyMeshStore, point: [f64; 3]) -> [f64; 3] {
         self.inner.state.frame.convert(point, &target.inner.state.frame)
     }
@@ -1774,7 +1807,7 @@ impl PyMeshStore {
     }
 
     fn snapshot(&self) -> PyStoreSnapshot {
-        PyStoreSnapshot { inner: self.inner.snapshot() }
+        PyStoreSnapshot { inner: self.inner.snapshot(), definition: None }
     }
 
     /// `restore_state`. A snapshot of ANOTHER store needs `namespace` (a

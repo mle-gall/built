@@ -26,7 +26,8 @@ from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 from PySide6.QtWidgets import QApplication
 
 from core.group import Group, transformed_mesh, world_mesh
-from core.history import FlipFacesCommand, History, ReshareInstanceCommand
+from core.history import FlipFacesCommand, History
+from core.reference_edit import ReshareInstanceCommand
 from core.mesh import Mesh
 from core.scene import Scene
 from tests.test_chunk_stale_materials import _stub
@@ -93,7 +94,7 @@ def _reverse_inside_and_leave(scene, history, group, face_index):
     """What the viewport does: reverse on the world copy, one share-back."""
     scene.begin_group_edit(group)
     history.execute(FlipFacesCommand([scene.mesh.faces[face_index]]))
-    grp, proto, xform, _state = scene.take_edit_share()
+    grp, proto, xform, _state = scene._edit_stack[-1].pop("share", None)
     scene.end_group_edit()
     history.execute(ReshareInstanceCommand(grp, proto, xform, grp.mesh, []))
 

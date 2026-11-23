@@ -274,7 +274,7 @@ def test_an_assembly_placed_once_has_nothing_to_share_back():
     scene = Scene()
     scene.groups.append(a)
     scene.begin_group_edit(a)
-    assert scene._edit_share is None
+    assert (scene._edit_stack[-1].get("share") if scene._edit_stack else None) is None
     scene.end_group_edit()
 
 
@@ -288,7 +288,7 @@ def test_a_plain_group_of_parts_keeps_baking_on_the_way_in():
     scene = Scene()
     scene.groups.append(g)
     scene.begin_group_edit(g)
-    assert scene._edit_share is None
+    assert (scene._edit_stack[-1].get("share") if scene._edit_stack else None) is None
     direct = scene.mesh.__dict__.get("_instance_definition") is g.mesh
     scene.end_group_edit()
     assert g.xform == (_at(5.0, 90.0) if direct else QMatrix4x4())

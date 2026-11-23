@@ -163,6 +163,7 @@ class MeshToolAccess:
         if group is self.scene.edit_group and group is not None:
             # The editing mesh is in world coordinates even if the retained
             # GPU row still draws its local-space definition.
+            mesh = self.scene.mesh
             matrix = QMatrix4x4()
         return mesh, group, matrix
 

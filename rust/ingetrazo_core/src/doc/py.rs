@@ -872,20 +872,32 @@ impl PyPlacement {
         Ok(d.handle_ref(py, key))
     }
 
-    fn _definition_uids(&self, mesh: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
+    /// Persisted address of this occurrence, including its instance ancestors.
+    fn _occurrence_path(&self, placement: &PyPlacement) -> Option<Vec<String>> {
         let d = lock();
-        let mut stack = d.need(self.key).map_err(err)?.children.clone();
-        let mut seen = super::FastSet::default();
+        let mut k = placement.key;
+        if super::assembly::root_of(&d, k, false) != Some(self.key) { return None; }
+        let mut path = Vec::new();
+        while k != self.key {
+            let n = d.node(k)?;
+            let super::Data::Placement(p) = &n.data else { return None };
+            path.push(p.uid.clone()?);
+            k = *n.owners.first()?;
+        }
+        path.reverse();
+        Some(path)
+    }
+
+    fn _definition_uids(&self, mesh: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
+        let definition = super::definition::DefinitionRef::for_geometry(mesh)?;
+        let d = lock();
         let mut uids = Vec::new();
-        while let Some(key) = stack.pop() {
-            if !seen.insert(key) { continue; }
-            let n = d.need(key).map_err(err)?;
-            if let super::Data::Placement(p) = &n.data {
-                if p.definition.as_ref().is_some_and(|def| def.0.get().geometry.as_ptr() == mesh.as_ptr()) {
+        for &key in definition.0.get().placements.lock().unwrap().iter() {
+            if super::assembly::root_of(&d, key, false) == Some(self.key) {
+                if let super::Data::Placement(p) = &d.need(key).map_err(err)?.data {
                     uids.extend(p.uid.iter().cloned());
                 }
             }
-            stack.extend_from_slice(&n.children);
         }
         uids.sort_unstable();
         Ok(uids)

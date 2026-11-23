@@ -1,18 +1,85 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! A legacy geometry ID can describe several assemblies. Match the ordered
 //! child definitions and their local placements before sharing a layout.
-use super::{lock, Data, Doc, FastMap, FastSet, Field, Key, ListId, Trash};
+use super::{lock, Data, Doc, FVal, FastMap, FastSet, Field, Key, ListId, Trash};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use std::sync::{Arc, Mutex};
 
+// Slot IDs remain stable when a member is moved to a different parent.
+// Only the member's definition and placement belong to the assembly.
+// UIDs, records, tags and visibility live on its projected occurrence.
+#[derive(Clone)]
+struct Member {
+    slot: Key,
+    source: Key,
+    children: Vec<Key>,
+    fields: [(Field, FVal); 4],
+}
+
 #[derive(Default)]
 pub struct Assembly {
-    // A slot ID survives reordering. Occurrences map it to their own
-    // placement keys (and thus their persisted UIDs, tags and records).
     root: Key,
-    slots: Vec<Key>,
+    geometry: u64,
+    children: Vec<Key>,
+    members: Vec<Member>,
     occurrences: FastMap<Key, FastMap<Key, Key>>,
+}
+
+fn topology(doc: &Doc, owner: Key, reverse: &FastMap<Key, Key>) -> (Vec<Key>, Vec<Member>) {
+    let slot = |k: Key| *reverse.get(&k).unwrap_or(&k);
+    let children = &doc.node(owner).unwrap().children;
+    let mut stack = children.clone();
+    let mut members = Vec::new();
+    let mut seen = FastSet::default();
+    while let Some(key) = stack.pop() {
+        if !seen.insert(key) {
+            continue;
+        }
+        let n = doc.node(key).expect("attached member");
+        let fields = [
+            Field::Definition,
+            Field::Xform,
+            Field::Axes,
+            Field::Component,
+        ]
+        .map(|field| (field, n.get(field).expect("placement field")));
+        members.push(Member {
+            slot: slot(key),
+            source: key,
+            children: n.children.iter().copied().map(slot).collect(),
+            fields,
+        });
+        stack.extend(&n.children);
+    }
+    (children.iter().copied().map(slot).collect(), members)
+}
+
+fn map_tree(
+    doc: &Doc,
+    original: Key,
+    occurrence: Key,
+    reverse: &FastMap<Key, Key>,
+    projection: &mut FastMap<Key, Key>,
+) {
+    let mut stack = vec![(original, occurrence)];
+    let mut seen = FastSet::default();
+    while let Some((src, dst)) = stack.pop() {
+        if !seen.insert(src) {
+            continue;
+        }
+        projection
+            .entry(*reverse.get(&src).unwrap_or(&src))
+            .or_insert(dst);
+        stack.extend(
+            doc.node(src)
+                .unwrap()
+                .children
+                .iter()
+                .copied()
+                .zip(doc.node(dst).unwrap().children.iter().copied()),
+        );
+    }
 }
 
 fn linked(doc: &Doc, key: Key, ext: u16) -> bool {
@@ -20,14 +87,18 @@ fn linked(doc: &Doc, key: Key, ext: u16) -> bool {
         if pairs.iter().any(|(k, _)| matches!(k, super::Value::Str(name) if name == "link")))
 }
 
-fn root_of(doc: &Doc, mut key: Key) -> Option<Key> {
-    let mut seen = FastSet::default();
-    while seen.insert(key) {
-        let n = doc.node(key)?;
-        if n.kind == super::Kind::Root {
-            return Some(key);
+pub(super) fn root_of(doc: &Doc, mut key: Key, exclude_links: bool) -> Option<Key> {
+    let ext = super::attr_id("ext").ok()?;
+    for _ in 0..doc.slots.len() {
+        if exclude_links && linked(doc, key, ext) {
+            return None;
         }
-        key = *n.owners.first()?;
+        let parent = *doc.node(key)?.owners.first()?;
+        let n = doc.node(parent)?;
+        if n.kind == super::Kind::Root {
+            return (!n.kept.contains(&key)).then_some(parent);
+        }
+        key = parent;
     }
     None
 }
@@ -67,37 +138,44 @@ pub fn bind(doc: &mut Doc, root: Key, owner: Key) -> Option<Arc<Mutex<Assembly>>
         return None;
     }
     let ext = super::attr_id("ext").ok()?;
-    let existing = node.assembly.clone().filter(|layout| layout.lock().unwrap().root == root);
-    let reverse: FastMap<Key, Key> = existing.as_ref().and_then(|a| {
-        let layout = a.lock().unwrap();
-        Some(layout.occurrences.get(&owner)?.iter().map(|(&slot, &child)| (child, slot)).collect())
-    }).unwrap_or_default();
-    let slots: Vec<Key> = node.children.iter().map(|k| *reverse.get(k).unwrap_or(k)).collect();
+    let geometry = data.definition.as_ref()?.0.get().key;
+    let existing = node.assembly.clone().filter(|shared| {
+        let layout = shared.lock().unwrap();
+        layout.root == root && layout.geometry == geometry
+    });
+    let reverse: FastMap<Key, Key> = existing
+        .as_ref()
+        .and_then(|a| {
+            let layout = a.lock().unwrap();
+            Some(
+                layout
+                    .occurrences
+                    .get(&owner)?
+                    .iter()
+                    .map(|(&slot, &child)| (child, slot))
+                    .collect(),
+            )
+        })
+        .unwrap_or_default();
+
     let mut occurrences: FastMap<Key, FastMap<Key, Key>> = FastMap::default();
-    let mut stack = doc.node(root)?.children.clone();
-    let mut seen = FastSet::default();
-    while let Some(k) = stack.pop() {
-        if !seen.insert(k) {
-            continue;
-        }
+    let placed = data.definition.as_ref()?.0.get().placements.lock().unwrap();
+    for &k in placed.iter() {
         let n = doc.node(k)?;
-        if linked(doc, k, ext) {
+        if root_of(doc, k, true) != Some(root) {
             continue;
         }
         if matches!(&n.data, Data::Placement(p) if p.xform.is_some() && p.definition == data.definition)
             && equivalent(doc, owner, k, ext)
         {
-            occurrences.insert(
-                k,
-                slots
-                    .iter()
-                    .copied()
-                    .zip(n.children.iter().copied())
-                    .collect(),
-            );
+            let mut projection = FastMap::default();
+            for (&src, &dst) in node.children.iter().zip(&n.children) {
+                map_tree(doc, src, dst, &reverse, &mut projection);
+            }
+            occurrences.insert(k, projection);
         }
-        stack.extend_from_slice(&n.children);
     }
+    drop(placed);
     if occurrences.len() < 2 || !occurrences.contains_key(&owner) {
         return None;
     }
@@ -106,7 +184,8 @@ pub fn bind(doc: &mut Doc, root: Key, owner: Key) -> Option<Arc<Mutex<Assembly>>
     {
         let mut layout = assembly.lock().unwrap();
         layout.root = root;
-        layout.slots = slots;
+        layout.geometry = geometry;
+        (layout.children, layout.members) = topology(doc, owner, &reverse);
         for (parent, map) in occurrences {
             layout.occurrences.entry(parent).or_default().extend(map);
         }
@@ -122,7 +201,7 @@ pub fn bind(doc: &mut Doc, root: Key, owner: Key) -> Option<Arc<Mutex<Assembly>>
 /// of its own attributes. List changes use the ordinary document journal.
 pub fn sync(py: Python<'_>, owner: Key) -> PyResult<()> {
     let mut trash = Trash::default();
-    let (assembly, children, slots, peers) = {
+    let (assembly, children, members, peers) = {
         let doc = lock();
         let Some(n) = doc.node(owner) else {
             return Ok(());
@@ -130,27 +209,15 @@ pub fn sync(py: Python<'_>, owner: Key) -> PyResult<()> {
         let Some(shared) = n.assembly.as_ref() else {
             return Ok(());
         };
-        let layout = shared.lock().unwrap();
-        if root_of(&doc, owner) != Some(layout.root) {
+        let mut layout = shared.lock().unwrap();
+        if root_of(&doc, owner, true) != Some(layout.root) {
             return Ok(());
         }
         let Some(projection) = layout.occurrences.get(&owner) else {
             return Ok(());
         };
         let reverse: FastMap<_, _> = projection.iter().map(|(&s, &k)| (k, s)).collect();
-        let slots: Vec<_> = n
-            .children
-            .iter()
-            .map(|k| *reverse.get(k).unwrap_or(k))
-            .collect();
-        let children: Vec<_> = n
-            .children
-            .iter()
-            .map(|&k| {
-                doc.handle_ref(py, k)
-                    .ok_or_else(|| PyValueError::new_err("detached assembly child"))
-            })
-            .collect::<PyResult<_>>()?;
+        (layout.children, layout.members) = topology(&doc, owner, &reverse);
         let mut peers: Vec<_> = layout
             .occurrences
             .iter()
@@ -159,7 +226,7 @@ pub fn sync(py: Python<'_>, owner: Key) -> PyResult<()> {
                 let peer = doc.node(k)?;
                 // An unlinked, made-unique, deleted or scoped instance can
                 // outlive this session in a History step.
-                if root_of(&doc, k) != Some(layout.root)
+                if root_of(&doc, k, true) != Some(layout.root)
                     || !Arc::ptr_eq(peer.assembly.as_ref()?, shared)
                     || peer.get(Field::Definition).ok()? != n.get(Field::Definition).ok()?
                 {
@@ -169,75 +236,90 @@ pub fn sync(py: Python<'_>, owner: Key) -> PyResult<()> {
             })
             .collect();
         peers.sort_unstable_by_key(|(key, _)| *key);
-        (shared.clone(), children, slots, peers)
+        (
+            shared.clone(),
+            layout.children.clone(),
+            layout.members.clone(),
+            peers,
+        )
     };
+    let reverse = members
+        .iter()
+        .map(|member| (member.source, member.slot))
+        .collect();
     let mut bindings = Vec::new();
     for (parent, mut map) in peers {
+        // Pin new branches until their parent lists own them.
         let mut created = Vec::new();
-        let mut keys = Vec::new();
-        for (&slot, child) in slots.iter().zip(&children) {
-            if !map
-                .get(&slot)
-                .is_some_and(|&key| lock().node(key).is_some())
+        for member in &members {
+            if map
+                .get(&member.slot)
+                .is_some_and(|&k| lock().node(k).is_some())
             {
-                let g = py.import("core.group")?.getattr("copy_group")?.call1((
-                    child,
-                    py.None(),
-                    true,
-                ))?;
-                g.setattr("mesh", child.bind(py).getattr("mesh")?)?;
-                let k = g.getattr("_doc_key")?.extract()?;
-                map.insert(slot, k);
-                created.push(g);
+                continue;
             }
-            keys.push(map[&slot]);
+            let child = lock()
+                .handle_ref(py, member.source)
+                .ok_or_else(|| PyValueError::new_err("detached assembly member"))?;
+            let g =
+                py.import("core.group")?
+                    .getattr("copy_group")?
+                    .call1((&child, py.None(), true))?;
+            let key = g.cast::<super::py::PyPlacement>()?.get().key;
+            {
+                let mut doc = lock();
+                doc.set_handle(key, g.as_ptr());
+                map_tree(&doc, member.source, key, &reverse, &mut map);
+            }
+            created.push(g);
         }
-        {
-            let mut doc = lock();
-            for g in &created {
-                let k = g.cast::<super::py::PyPlacement>()?.get().key;
-                doc.set_handle(k, g.as_ptr());
-            }
-            for (src, &dst) in children.iter().zip(&keys) {
-                let src = src.bind(py).cast::<super::py::PyPlacement>()?.get().key;
-                for field in [
-                    Field::Definition,
-                    Field::Xform,
-                    Field::Axes,
-                    Field::Component,
-                ] {
-                    let value = doc
-                        .need(src)
-                        .and_then(|n| n.get(field))
+        let mut doc = lock();
+        for member in &members {
+            let dst = map[&member.slot];
+            for (field, value) in &member.fields {
+                if doc
+                    .need(dst)
+                    .and_then(|n| n.get(*field))
+                    .map_err(PyValueError::new_err)?
+                    != *value
+                {
+                    doc.write(py, dst, *field, value.clone(), &mut trash)
                         .map_err(PyValueError::new_err)?;
-                    if doc
-                        .need(dst)
-                        .and_then(|n| n.get(field))
-                        .map_err(PyValueError::new_err)?
-                        != value
-                    {
-                        doc.write(py, dst, field, value, &mut trash)
-                            .map_err(PyValueError::new_err)?;
-                    }
                 }
             }
-            if doc.need(parent).map_err(PyValueError::new_err)?.children != keys {
-                doc.list_replace(py, parent, ListId::Children, keys, &mut trash)
-                    .map_err(PyValueError::new_err)?;
-            }
+            replace_children(py, &mut doc, dst, &member.children, &map, &mut trash)?;
         }
+        replace_children(py, &mut doc, parent, &children, &map, &mut trash)?;
         bindings.push((parent, map));
     }
     let mut layout = assembly.lock().unwrap();
-    layout.slots.clone_from(&slots);
-    let projection = layout.occurrences.get_mut(&owner).unwrap();
-    for (slot, child) in slots.into_iter().zip(children.iter()) {
-        projection.insert(
-            slot,
-            child.bind(py).cast::<super::py::PyPlacement>()?.get().key,
-        );
-    }
+    layout
+        .occurrences
+        .get_mut(&owner)
+        .unwrap()
+        .extend(members.iter().map(|m| (m.slot, m.source)));
     layout.occurrences.extend(bindings);
+    Ok(())
+}
+
+fn replace_children(
+    py: Python<'_>,
+    doc: &mut Doc,
+    parent: Key,
+    slots: &[Key],
+    map: &FastMap<Key, Key>,
+    trash: &mut Trash,
+) -> PyResult<()> {
+    let keys: Vec<_> = slots.iter().map(|k| map[k]).collect();
+    if doc.need(parent).map_err(PyValueError::new_err)?.children != keys {
+        for &k in &keys {
+            if doc.node(k).unwrap().owners.iter().any(|&p| p != parent) {
+                doc.detach(py, k, trash).map_err(PyValueError::new_err)?;
+            }
+        }
+        doc.list_replace(py, parent, ListId::Children, keys, trash)
+            .map_err(PyValueError::new_err)?;
+    }
     Ok(())
 }
 
@@ -289,23 +371,31 @@ pub fn index(doc: &mut Doc, root: Key) {
         }
     }
     for parents in groups.into_values().filter(|parents| parents.len() > 1) {
-        let slots = doc.node(parents[0]).unwrap().children.clone();
+        let first = parents[0];
+        let reverse = FastMap::default();
+        let (children, members) = topology(doc, first, &reverse);
+        let source = doc.node(first).unwrap();
+        let Data::Placement(data) = &source.data else {
+            continue;
+        };
+        let Some(geometry) = &data.definition else {
+            continue;
+        };
         let occurrences = parents
             .iter()
             .map(|&k| {
-                (
-                    k,
-                    slots
-                        .iter()
-                        .copied()
-                        .zip(doc.node(k).unwrap().children.iter().copied())
-                        .collect(),
-                )
+                let mut map = FastMap::default();
+                for (&src, &dst) in source.children.iter().zip(&doc.node(k).unwrap().children) {
+                    map_tree(doc, src, dst, &reverse, &mut map);
+                }
+                (k, map)
             })
             .collect();
         let shared = Arc::new(Mutex::new(Assembly {
             root,
-            slots,
+            geometry: geometry.0.get().key,
+            children,
+            members,
             occurrences,
         }));
         for k in parents {
@@ -320,11 +410,13 @@ pub fn prepare(doc: &mut Doc, owner: Key) {
     if doc.replaying || doc.projecting || doc.dirty_assemblies.contains(&owner) {
         return;
     }
-    if !doc.node(owner).is_some_and(|n| !n.owners.is_empty()
-        && matches!(&n.data, Data::Placement(p) if p.component && p.xform.is_some())) {
+    if !doc.node(owner).is_some_and(|n| {
+        !n.owners.is_empty()
+            && matches!(&n.data, Data::Placement(p) if p.component && p.xform.is_some())
+    }) {
         return;
     }
-    if let Some(root) = root_of(doc, owner) {
+    if let Some(root) = root_of(doc, owner, true) {
         bind(doc, root, owner);
     }
 }

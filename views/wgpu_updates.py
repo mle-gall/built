@@ -141,7 +141,6 @@ class InstanceUpdates:
                                       SetRegistryCommand, InsertGroupCommand, DeleteGroupCommand,
                                       SnapshotMutation, SnapshotCompound, MoveVerticesCommand, AddEdgeCommand,
                                       AddFaceCommand, EraseSelectionCommand, HideCommand, AssignLayerCommand,
-                                      ReshareInstanceCommand, ReshareAssemblyCommand,
                                       AddGuideCommand, ChangeGuideCommand,
                                       DeleteGuidesCommand, MoveGuidesCommand, RotateGuidesCommand,
                                       AddDimensionCommand, AddTextLabelCommand)
@@ -155,9 +154,10 @@ class InstanceUpdates:
                     if target is None:
                         faces = set(command._faces)
                         mesh = self.scene.mesh
-                        if not faces.issubset(set(mesh.faces)) or id(mesh) not in self.meshes:
+                        definition = getattr(mesh, "_instance_definition", mesh)
+                        if not faces.issubset(set(mesh.faces)) or id(definition) not in self.meshes:
                             return False
-                        target = material_targets[command] = id(mesh)
+                        target = material_targets[command] = id(definition)
                     # Undo may occur after leaving the group's edit context.
                     self.pending_materials.add(target)
                     return True
@@ -200,7 +200,7 @@ class InstanceUpdates:
                 if isinstance(command, SoftenByAngleCommand):
                     # Soft flags only: each mesh's prototypes rebake, smooth.
                     return all(edited(mesh) for mesh in command.meshes())
-                if isinstance(command, ReshareInstanceCommand):
+                if getattr(command, "reference_instance", False):
                     # Leaving an edited instance: back on the definition,
                     # which every copy shows (all its variants rebake).
                     if not self.queue_swap(command.group):
@@ -209,7 +209,7 @@ class InstanceUpdates:
                     if old is not None and old[2] >= 0:
                         self.pending_meshes.add(id(command.proto))
                     return True
-                if isinstance(command, ReshareAssemblyCommand):
+                if getattr(command, "reference_assembly", False):
                     # Leaving an edited assembly: its row goes back on the
                     # definition and its parts' matrices come back up, which
                     # leaves every world matrix where it was. What ran inside
@@ -220,7 +220,7 @@ class InstanceUpdates:
                     if not self.queue_swap(command.group):
                         return False
                     for inner in command.inner:
-                        if isinstance(inner, (ReshareInstanceCommand, ReshareAssemblyCommand)):
+                        if getattr(inner, "reference_instance", False) or getattr(inner, "reference_assembly", False):
                             if not visit(inner):
                                 return False
                         elif not _edits_world_copy_only(inner):

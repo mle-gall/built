@@ -816,6 +816,7 @@ impl Doc {
         }
         if let Data::Placement(p) = &mut node.data {
             if let Some(def) = p.definition.take() {
+                def.0.get().placements.lock().unwrap().remove(&k);
                 trash.1.push(def);
             }
         }
@@ -1034,11 +1035,20 @@ impl Doc {
 
     /// Write a field; cached views of the old value go to `trash`.
     fn assembly_changed(&mut self, owner: Key) {
-        if !self.replaying && !self.projecting && self.node(owner).is_some_and(|n| n.assembly.is_some())
-            && !self.dirty_assemblies.contains(&owner) {
-            self.dirty_assemblies.push(owner);
+        if self.replaying || self.projecting { return; }
+        let mut current = Some(owner);
+        let mut remaining = self.slots.len();
+        while let Some(k) = current {
+            let Some(n) = self.node(k) else { break };
+            if remaining == 0 { break; }
+            remaining -= 1;
+            current = n.owners.first().copied();
+            if n.assembly.is_some() && !self.dirty_assemblies.contains(&k) {
+                self.dirty_assemblies.push(k);
+            }
         }
     }
+
     pub fn write(&mut self, py: Python<'_>, k: Key, f: Field, v: FVal, trash: &mut Trash) -> Result<FVal, String> {
         let layout_parent = if matches!(f, Field::Definition | Field::Xform | Field::Axes | Field::Component) {
             self.node(k).and_then(|n| n.owners.first().copied())
@@ -1068,8 +1078,16 @@ impl Doc {
         if let Some((a, view, val)) = refill {
             self.refills.push((k, a, view, val));
         }
-        if let FVal::Definition(Some(def)) = &old {
-            trash.1.push(def.clone());
+        if let FVal::Definition(previous) = &old {
+            if let Some(def) = previous {
+                def.0.get().placements.lock().unwrap().remove(&k);
+                trash.1.push(def.clone());
+            }
+            if let Data::Placement(p) = &self.node(k).unwrap().data {
+                if let Some(def) = &p.definition {
+                    def.0.get().placements.lock().unwrap().insert(k);
+                }
+            }
         }
         if let Some(parent) = layout_parent {
             self.assembly_changed(parent);
@@ -1387,6 +1405,7 @@ impl Doc {
                 }
                 if let Data::Placement(p) = &mut n.data {
                     if let Some(def) = p.definition.take() {
+                        def.0.get().placements.lock().unwrap().remove(&k);
                         trash.1.push(def);
                     }
                 }

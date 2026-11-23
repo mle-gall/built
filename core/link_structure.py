@@ -40,7 +40,8 @@ read-only (``structure.file`` refuses linked structure anyway).
 """
 from __future__ import annotations
 
-from collections import defaultdict
+from collections import Counter, defaultdict
+import json
 
 from core import links, structure
 
@@ -49,6 +50,11 @@ LINKED_NAME = links.LINKED_FOLDER
 #: A file row's states (dot colours in the dock): found, changed on disk
 #: since it was read, not found, or packed into this document.
 STATES = ("resolved", "modified", "missing", "packed")
+
+
+def row_id(address):
+    """Encode an occurrence address for native controls that echo a string."""
+    return address if isinstance(address, str) else "@" + json.dumps(address, separators=(",", ":"))
 
 
 def mount_key(stems) -> str:
@@ -137,6 +143,9 @@ class Tree:
         self.alias = {}
         self._host(registry)
         placements = list(walk(scene))
+        counts = Counter(g.uid for g, *_ in placements)
+        self._qualified = {uid for uid, count in counts.items() if count > 1}
+
         files = {}
         for g, chain, inner, root in placements:
             if inner != chain:
@@ -178,6 +187,15 @@ class Tree:
             self.children.setdefault(n["parent"], []).append(k)
         for sib in self.children.values():
             sib.sort(key=lambda k: (self.nodes[k]["order"], self.nodes[k]["name"].casefold()))
+
+    def address(self, group):
+        """Keep legacy row UIDs when they identify a single occurrence."""
+        if group.uid in self._qualified or group.uid.startswith("@["):
+            return self.scene.occurrence_path(group)
+        return group.uid
+
+    def row_id(self, group):
+        return row_id(self.address(group))
 
     # -- the host ----------------------------------------------------------
     def _host(self, registry):

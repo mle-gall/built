@@ -3769,8 +3769,7 @@ def _edit_local_transform(scene, group, transform):
     if scene.edit_group is not None and group in scene.edit_group.children:
         view = scene.mesh.__dict__.get("_instance_definition")
         if view is not None:
-            from formats.built import placement
-            parent = placement(scene.mesh._store.frame_matrix)
+            parent = scene.mesh._store.tool_placement()
             inverse, ok = parent.inverted()
             if ok:
                 return inverse * transform * parent
@@ -4789,8 +4788,7 @@ class MakeGroupCommand(Command):
             from core.axes import frame_matrix
             group.axes = frame_matrix(corner, *rot)
         if scene.__dict__.get("_groups_owner") is not None and getattr(scene.mesh, "_instance_definition", None) is not None:
-            from formats.built import placement
-            inverse, _ = placement(scene.mesh._store.frame_matrix).inverted()
+            inverse, _ = scene.mesh._store.tool_placement().inverted()
             if group.xform is None:
                 from core.group import carry_axes, transformed_mesh
                 group.mesh = transformed_mesh(group.mesh, inverse)
@@ -4830,153 +4828,6 @@ class MakeGroupCommand(Command):
             scene.groups.remove(self.group)
         scene.selection.discard(self.group)
         scene.mesh.restore_state(self.snapshot)
-        scene.version += 1
-
-
-class ReshareInstanceCommand(Command):
-    """Leaving a component instance edited in place: the session's edits go
-    into the shared definition, so every copy shows them.
-
-    The commands run inside the session are absorbed into this one — the
-    whole edit undoes as one step, back to the definition as it was, with
-    the instance shared again. Redo replays it from the edited copy."""
-
-    def __init__(self, group, proto, xform, edited, inner=()) -> None:
-        self.group = group
-        self.proto = proto
-        self.xform = xform
-        self.edited = edited
-        self.inner = list(inner)
-        self._before = None
-        self._after = None
-
-    def do(self, scene) -> None:
-        if self._before is None:
-            self._before = self.proto.capture_state()
-            scene.share_back(self.group, self.proto, self.xform, self.edited)
-            self._after = self.proto.capture_state()
-        else:
-            # Redo: the definition as the first run left it, so its
-            # elements keep the keys that run gave them (the change feed
-            # publishes the same step again). share_back would copy the
-            # edited instance once more, under fresh keys.
-            self.proto.restore_state(self._after)
-            self.proto.note_rewound()
-            self.group.mesh = self.proto
-            self.group.xform = self.xform
-        scene.version += 1
-
-    def undo(self, scene) -> None:
-        self.proto.restore_state(self._before)
-        self.proto.note_rewound()
-        self.group.mesh = self.proto
-        self.group.xform = self.xform
-        scene.version += 1
-
-
-class ReshareAssemblyCommand(Command):
-    """Leaving an assembly edited in place: a component holding other
-    components, placed more than once. Its own geometry goes back into the
-    definition its copies share, and its matrix comes back up out of its
-    parts.
-
-    The commands run inside are folded in, one step either way, and stay
-    what they are: they were recorded with the matrix down in the parts,
-    where the tools work. Undo puts it back down, undoes them there, and
-    returns the parts to the frame they entered with, bit for bit. Redo
-    replays them the same way. A snapshot of the definition alone cannot
-    do it: deleting, moving or exploding a part changes the parts, not the
-    definition."""
-
-    def __init__(self, group, proto, xform, edited, state0, parts,
-                 inner=()) -> None:
-        from ingetrazo_core import Matrix4 as QMatrix4x4
-        self.group = group
-        self.proto = proto
-        self.xform = QMatrix4x4(xform)
-        self.edited = edited
-        self.state0 = state0
-        self.parts = parts            # on entry, matrix up: Scene.parts_record
-        self.inner = list(inner)
-        self._framed = None           # on leaving, matrix down
-        self._edited = None           # the world copy on leaving
-        self._left = None             # on leaving, matrix up
-        self._entered = None          # on entry, matrix down (set by undo)
-        self._before = None           # the definition before / after
-        self._after = None
-        self.shared = False
-
-    @staticmethod
-    def _in_mesh(scene, cmd, fn) -> None:
-        """As History does: each command against the mesh it ran on."""
-        target = getattr(cmd, "_history_mesh", None)
-        if target is None or target is scene.mesh:
-            fn()
-            return
-        target._mut_serial += 1
-        current = scene.mesh
-        scene.mesh = target
-        try:
-            fn()
-        finally:
-            scene.mesh = current
-
-    def _frame(self, record, state) -> None:
-        """The matrix down in the parts and the world copy in place: how
-        the session stood."""
-        from ingetrazo_core import Matrix4 as QMatrix4x4
-        from core.scene import Scene
-        self.edited.restore_state(state)
-        self.group.mesh = self.edited
-        self.group.xform = QMatrix4x4()
-        Scene.put_parts(self.group, record)
-
-    def _unframe(self, record) -> None:
-        from ingetrazo_core import Matrix4 as QMatrix4x4
-        from core.scene import Scene
-        self.group.mesh = self.proto
-        self.group.xform = QMatrix4x4(self.xform)
-        Scene.put_parts(self.group, record)
-
-    def do(self, scene) -> None:
-        from core.scene import Scene
-        refresh = getattr(scene, "_refresh_dimension_holds", None)
-        if refresh is not None:
-            refresh()
-        if self._framed is None:                 # leaving, the first time
-            self._framed = Scene.parts_record(self.group)
-            self._edited = self.edited.capture_state()
-            self._before = self.proto.capture_state()
-            self.shared = self._edited != self.state0
-            if self.shared:
-                scene.share_back(self.group, self.proto, self.xform,
-                                 self.edited, parts=self.parts)
-            else:
-                scene.restore_sharing(self.group, self.proto, self.xform,
-                                      parts=self.parts)
-            self._after = self.proto.capture_state()
-            self._left = Scene.parts_record(self.group)
-        else:
-            self._frame(self._entered, self.state0)
-            for cmd in self.inner:
-                self._in_mesh(scene, cmd, lambda cmd=cmd: cmd.do(scene))
-            self.proto.restore_state(self._after)
-            self.proto.note_rewound()
-            self._unframe(self._left)
-        scene.version += 1
-
-    def undo(self, scene) -> None:
-        from core.scene import Scene
-        refresh = getattr(scene, "_refresh_dimension_holds", None)
-        if refresh is not None:
-            refresh()
-        self._frame(self._framed, self._edited)
-        self.proto.restore_state(self._before)
-        self.proto.note_rewound()
-        for cmd in reversed(self.inner):
-            self._in_mesh(scene, cmd, lambda cmd=cmd: cmd.undo(scene))
-        self._entered = Scene.parts_record(self.group)
-        self._unframe(self.parts)
         scene.version += 1
 
 
@@ -5554,8 +5405,7 @@ class InsertGroupCommand(Command):
             owner = ctx.children
             frame = ctx.xform
             if getattr(scene.mesh, "_instance_definition", None) is not None:
-                from formats.built import placement
-                frame = placement(scene.mesh._store.frame_matrix)
+                frame = scene.mesh._store.tool_placement()
             if frame is not None:
                 inv, ok = frame.inverted()
                 if ok:
@@ -6083,8 +5933,7 @@ class ExplodeGroupCommand(Command):
         if not self._replay(scene, m):
             transform = P
             if m.__dict__.get("_instance_definition") is not None:
-                from formats.built import placement
-                parent = placement(m._store.frame_matrix)
+                parent = m._store.tool_placement()
                 transform = parent * P if P is not None else parent
             self._geometry(scene, m, g, transform, paint)
             if _doc.ENABLED and self._after is None:

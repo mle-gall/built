@@ -301,7 +301,7 @@ def shared_assembly(work):
         group = Group(geometry, uid=label)
         children = []
         for name in (("beam",) if label == "Annex" else ("beam", "post")):
-            child = Group(part, name=name, uid=f"{label}-{name}")
+            child = Group(part, name=name, uid=name if name == "beam" else f"{label}-{name}")
             child.xform = QMatrix4x4()
             child.ifc = {"name": f"{label} {name}"}
             children.append(child)
@@ -310,10 +310,14 @@ def shared_assembly(work):
     west, east, annex = scene.groups
     target = east.children[0]
     path = [east.uid, target.uid]
+    from core.link_structure import Tree
+    tree = Tree(scene, {})
+    assert tree.address(west.children[0]) == [west.uid, "beam"]
+    assert tree.address(target) == path and tree.row_id(west.children[0]) != tree.row_id(target)
     h = History(scene)
     commands.hide(h, [path])
     commands.set_tag(h, [path], "Steel")
-    assert scene.resolve_occurrence(path) is target
+    assert scene.occurrence_path(target) == path and scene.resolve_occurrence(path) is target
     assert not west.children[0].hidden and west.children[0].layer is None
     assert h.undo() and h.redo()
     result = saved(scene, work, "shared")
@@ -438,7 +442,7 @@ def main(work: Path):
     framed.mesh.add_edge(*(transform.map(p) for p in endpoints))
     if doc_model.ENABLED:
         assert first.mesh is second.mesh and len(second.mesh.edges) == 1
-        assert framed.take_edit_share() is None
+        assert framed._edit_stack[-1].pop("share", None) is None
     framed.end_group_edit()
     positions = [v.position_tuple() for v in second.mesh.vertices]
     import numpy as np

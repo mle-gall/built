@@ -27,6 +27,12 @@ def _assembly(scene):
     return editing if editing is not None and editing.children else group
 
 
+def _record_address(scene, group):
+    from core.link_structure import row_id
+    path = scene.occurrence_path(group)
+    return row_id(path) if path and (len(path) > 1 or group.uid.startswith("@[")) else group.uid
+
+
 def _selection(view, win):
     scene = win.viewport.scene
     sel = list(scene.selection)
@@ -53,7 +59,10 @@ def _selection(view, win):
         if delivery.get("format") == "ifc":
             profile = delivery.get("options", {}).get("profile")
             schema = registry.get("export_profiles", {}).get(profile, {}).get("schema", schema)
-        records = [occurrence(g, registry, bool(links.linked_ancestor(g))) for g in groups]
+        for g in groups:
+            record = occurrence(g, registry, bool(links.linked_ancestor(g)))
+            record["uid"] = _record_address(scene, g)
+            records.append(record)
     g = _assembly(scene) if not focused else None
     parts = None
     if g is not None:
@@ -214,12 +223,13 @@ def action(win, view, payload):
     try:
         if surface == "record":
             placements, path, value, *kind = v
-            if not set(placements).issubset({getattr(g, "uid", None) for g in vp.scene.selection}):
+            targets = {_record_address(vp.scene, g): g for g in vp.scene.selection if isinstance(g, Group)}
+            if not set(placements).issubset(targets):
                 return
             commands.run(
                 vp.history,
                 "patch_record_field",
-                placements=placements,
+                placements=[vp.scene.occurrence_path(targets[uid]) for uid in placements],
                 path=path,
                 value=value,
                 property_kind=kind[0] if kind else None,
@@ -266,11 +276,11 @@ def action(win, view, payload):
             if verb == "visible":
                 child = next((c for c in g.children if c.uid == v[1]), None)
                 if child and not child.locked and not links.linked_ancestor(child):
-                    commands.run(vp.history, "unhide" if v[2] else "hide", placements=[child.uid])
+                    commands.run(vp.history, "unhide" if v[2] else "hide", placements=[vp.scene.occurrence_path(child)])
             elif verb == "split":
-                commands.run(vp.history, "split_into_pieces", placement=uid)
+                commands.run(vp.history, "split_into_pieces", placement=vp.scene.occurrence_path(g))
             elif verb == "explode":
-                commands.run(vp.history, "explode_view", placement=uid, factor=v[1], mode=v[2])
+                commands.run(vp.history, "explode_view", placement=vp.scene.occurrence_path(g), factor=v[1], mode=v[2])
             vp.notify_scene_changed()
         elif surface == "bevel":
             _bevel(view, verb, v)

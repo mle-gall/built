@@ -175,8 +175,7 @@ def _command_meshes(cmd, scene, phase) -> list:
 def _reshared_definition(cmd):
     """The shared definition a Reshare step writes (leaving an edited
     component instance or assembly): the mesh every copy shows."""
-    from core.history import ReshareAssemblyCommand, ReshareInstanceCommand
-    if isinstance(cmd, (ReshareInstanceCommand, ReshareAssemblyCommand)):
+    if getattr(cmd, "reference_instance", False) or getattr(cmd, "reference_assembly", False):
         return cmd.proto
     return None
 
@@ -374,7 +373,7 @@ def _known_placements(cmd, phase, step, scene=None, journalled=False) -> bool:
         step.placements["removed" if undo else "created"].extend(
             p.uid for p in cmd.pieces)
         return True
-    if isinstance(cmd, H.ReshareInstanceCommand) and scene is not None:
+    if getattr(cmd, "reference_instance", False) and scene is not None:
         # The edited instance goes back on the definition (undo: the
         # definition goes back as it was): every placement showing it.
         modified = step.placements["modified"]

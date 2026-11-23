@@ -8,7 +8,8 @@ from __future__ import annotations
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core.group import Group, world_mesh
-from core.history import History, ReshareInstanceCommand, SnapshotMutation
+from core.history import History, SnapshotMutation
+from core.reference_edit import ReshareInstanceCommand
 from core.mesh import Mesh
 from core.scene import Scene
 
@@ -73,7 +74,7 @@ def test_reshare_command_undoes_the_whole_session_in_one_step():
     hist.execute(SnapshotMutation(lambda s: s.mesh.add_face(
         [V(10, 0, 2), V(11, 0, 2), V(11, 1, 2), V(10, 1, 2)])))
     assert len(scene.mesh.faces) == 3
-    share = scene.take_edit_share()
+    share = scene._edit_stack[-1].pop("share", None)
     if scene.mesh.__dict__.get("_instance_definition") is proto:
         assert share is None
         scene.end_group_edit()
@@ -113,9 +114,9 @@ def test_a_group_with_nested_placements_keeps_them():
     b.adopt([child])
     scene.begin_group_edit(b)
     if scene.mesh.__dict__.get("_instance_definition") is proto:
-        assert scene._edit_share is None
+        assert (scene._edit_stack[-1].get("share") if scene._edit_stack else None) is None
     else:
-        assert scene._edit_share is not None
+        assert (scene._edit_stack[-1].get("share") if scene._edit_stack else None) is not None
     assert b.children == [child], "los hijos se hornearon al entrar"
     assert len(child.mesh.faces) == 1
     scene.end_group_edit()

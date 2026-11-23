@@ -23,7 +23,8 @@ from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 from core import mesh as M
 from core import store_mesh as S
 from core.group import Group
-from core.history import History, ReshareInstanceCommand, SplitIntoPiecesCommand
+from core.history import History, SplitIntoPiecesCommand
+from core.reference_edit import ReshareInstanceCommand
 from core.pieces import split_into_pieces
 from core.protocol import commands as C
 from core.protocol.keys import mesh_key
@@ -94,7 +95,7 @@ def _edit_and_leave(sc, h, group):
     mark = len(h.undo_stack)
     r = C.run(h, "push_pull", face=str(sc.mesh.faces[0].key), distance=0.8)
     assert r["ok"], r
-    share = sc.take_edit_share()
+    share = sc._edit_stack[-1].pop("share", None)
     if share is None:
         sc.end_group_edit()
         return
