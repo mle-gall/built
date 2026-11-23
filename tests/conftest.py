@@ -145,6 +145,46 @@ def _process_environment():
 
 
 @pytest.fixture(autouse=True)
+def _process_qt_and_units():
+    """Process-wide state a test can change in passing, put back after it:
+
+    - the application and organization names, which name the settings file
+      (a test that cleared them sent every later test on its worker to
+      «Unknown Organization/Python.ini»);
+    - the scene whose units the formatters and the value field read
+      (``core.units.bind_scene``): every window binds its own, so the last
+      one's inches were how test_vcb_comma_lists read «200,100»."""
+    from PySide6.QtCore import QCoreApplication
+    from core import units
+    names = (QCoreApplication.organizationName(), QCoreApplication.organizationDomain(),
+             QCoreApplication.applicationName())
+    bound = units._SCENE
+    yield
+    units._SCENE = bound
+    if names != (QCoreApplication.organizationName(), QCoreApplication.organizationDomain(),
+                 QCoreApplication.applicationName()):
+        QCoreApplication.setOrganizationName(names[0])
+        QCoreApplication.setOrganizationDomain(names[1])
+        QCoreApplication.setApplicationName(names[2])
+
+
+@pytest.fixture(autouse=True)
+def _paint_tool_choice():
+    """The Paint tool's chosen material lives on the class
+    (``PaintTool.current_*``: colour, texture, opacity, material, library
+    revision), as the app keeps it across documents. Tests set it directly;
+    under pytest-xdist the next file on the worker painted with it
+    (test_pool_water, test_library_paint_selection: no opacity)."""
+    from tools.paint import PaintTool
+    before = {k: v for k, v in vars(PaintTool).items() if k.startswith("current_")}
+    yield
+    for key in [k for k in vars(PaintTool) if k.startswith("current_") and k not in before]:
+        delattr(PaintTool, key)
+    for key, value in before.items():
+        setattr(PaintTool, key, value)
+
+
+@pytest.fixture(autouse=True)
 def _world_drawing_axes():
     """The drawing axes are process-wide (core.axes, issue #44): a test that
     leaves a turned group open must not tilt the next one's inferences."""

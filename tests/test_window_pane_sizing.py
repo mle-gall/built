@@ -92,7 +92,13 @@ def test_metal_resize_burst_configures_only_final_size():
         view.paintEvent(None)
         view.draw_frame.assert_not_called()
         del view.draw_frame
-        assert _wait_for(lambda: view.renderer.resize.called)
+        # One debounce armed for the whole burst; what it runs when it fires
+        # configures the final size once. (Fired here rather than waited
+        # for: on a loaded machine under pytest-xdist the 80 ms timer came
+        # later than any wall-clock wait.)
+        assert view._resize_timer.isActive() and view._resize_timer.isSingleShot()
+        view._resize_timer.stop()
+        view._resize_timer.timeout.emit()
         view.renderer.resize.assert_called_once_with(359, 200, view.devicePixelRatioF())
         assert view._pick_frame_dirty
         view._finish_resize()
