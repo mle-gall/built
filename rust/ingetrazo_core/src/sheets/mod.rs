@@ -18,6 +18,7 @@ pub mod paint;
 pub mod model;
 pub mod page;
 pub mod py;
+pub mod profile;
 pub mod pymath;
 pub mod svg;
 pub mod visibility;

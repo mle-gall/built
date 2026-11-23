@@ -232,3 +232,32 @@ def drawing(source, frame):
     out[:, 0::2] = (segs[:, 0::2] + half_w) * k
     out[:, 1::2] = (half_h - segs[:, 1::2]) * k
     return out, np.asarray(d.kinds, np.int8)
+
+
+class Ground:
+    """The samplers terrain profiles read (georef service): the DEM over the
+    scene's datum, or the survey when it shows. ``changed`` is called when
+    tiles land, for the page to be sent again."""
+
+    def __init__(self, changed):
+        self._changed = changed
+        self._dem = self._survey = None
+
+    def profiles(self, comp, scene):
+        """``{item key: (profile, path name, message)}`` (sheets::profile)."""
+        if not comp.perfiles:
+            return None
+        datum = getattr(scene, "georef", None)
+        if self._dem is None or self._dem.datum is not datum:
+            from georef.dem import DEMSampler
+            self._dem = DEMSampler(datum)
+            self._dem.changed.connect(self._changed)
+        survey = getattr(scene, "photo_mesh", None)
+        sampler = None
+        if datum is not None and survey is not None and getattr(survey, "visible", False):
+            if (self._survey is None or self._survey.mesh is not survey
+                    or self._survey.datum is not datum):
+                from georef.photomesh import PhotoMeshSampler
+                self._survey = PhotoMeshSampler(survey, datum)
+            sampler = self._survey
+        return NATIVE.sheet_terrain_profiles(comp, scene, self._dem, sampler)

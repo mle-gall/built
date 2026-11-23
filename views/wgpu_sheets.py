@@ -239,6 +239,7 @@ class Workspace:
         self._sent = {}
         self._page = None               # the snapshot the page has
         self._content = {}              # frame key → the fields its content was made from
+        self._ground = None             # the samplers terrain profiles read
         self._tried = {}                # frame key → the page a render was tried on
         self._more = False              # frames still to render after this turn
         self._selection = None          # the keys the page and the composer agree on
@@ -327,8 +328,11 @@ class Workspace:
     def _send_page(self, renderer) -> None:
         import ingetrazo_core as NATIVE
         comp = self.composer
-        # Terrain profiles: the composer samples the ground under their path.
-        profiles = {m._doc_key: comp.profile_for(m) for m in comp.comp.perfiles} or None
+        # Terrain profiles: the ground under their path (sheets::profile).
+        if self._ground is None:
+            from views.wgpu_sheet_frames import Ground
+            self._ground = Ground(self._touch)
+        profiles = self._ground.profiles(comp.comp, comp._scene())
         page = NATIVE.sheet_page_json(comp.comp, profiles, self._choices())
         if page != self._page:
             self._page = page

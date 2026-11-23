@@ -98,5 +98,6 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(super::camera::sheet_frame_camera, m)?)?;
     m.add_function(wrap_pyfunction!(super::visibility::sheet_frame_hidden, m)?)?;
     m.add_function(wrap_pyfunction!(super::geometry::sheet_frame_geometry, m)?)?;
+    m.add_function(wrap_pyfunction!(super::profile::sheet_terrain_profiles, m)?)?;
     Ok(())
 }
