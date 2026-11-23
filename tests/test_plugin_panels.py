@@ -100,3 +100,19 @@ def test_pick_callback_only_for_original_revision(window):
     tool.on_click(SimpleNamespace(world=None, snap=None))
     done.assert_not_called()
     assert vp.active_tool is not tool
+
+
+def test_classic_plugin_entry_points(window, monkeypatch):
+    from views import wgpu_ui
+    monkeypatch.setattr(wgpu_ui, "ENABLED", False)
+    python_console.PythonConsoleTool().on_activate(window.viewport)
+    assert isinstance(window._python_console, python_console.PythonConsoleDialog)
+    window._python_console.close()
+
+    app = ExtensionApp(window, "render_blender")
+    panels = []
+    monkeypatch.setattr(app, "add_panel", lambda title, panel, **kw: panels.append(panel))
+    monkeypatch.setattr(app, "add_menu_action", lambda *a, **kw: None)
+    render_blender.setup(app)
+    assert len(panels) == 1 and isinstance(panels[0], render_blender.RenderPanel)
+    panels[0].deleteLater()

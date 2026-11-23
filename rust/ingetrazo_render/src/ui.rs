@@ -677,7 +677,7 @@ impl Ui {
     /// Keyboard ownership: the chrome takes a key only while one of its
     /// fields has focus, or Escape while one of its popups is open.
     pub fn claims_key(&self, name: &str) -> bool {
-        if name == "Escape" && self.strip.menus_open() { return true; }
+        if name == "Escape" && (self.strip.menus_open() || self.plugin_popup_open()) { return true; }
         if self.sheets.shown && !self.home.shown { return self.sheets_claims_key(name); }
         let filing = self.column.as_ref().is_some_and(|c| c.filing.is_some() || c.row_menu.is_some() || !c.mode.is_empty()
             || c.kind_menu.is_some() || c.head_menu.is_some() || c.prompt.is_some());
@@ -690,6 +690,10 @@ impl Ui {
         // reaches what is under it.
         if self.sheet.is_some() { return true; }
         if self.dialog.is_some() { return self.dialog_key(name, pressed, mods); }
+        if name == "Escape" && self.plugin_popup_open() {
+            if pressed { self.ctx.memory_mut(|m| m.close_popup()); }
+            return true;
+        }
         if self.cmd_open && pressed {
             match name {
                 "Escape" => { self.cmd_open = false; self.ctx.memory_mut(|m| m.stop_text_input()); return true; }
@@ -802,7 +806,15 @@ impl Ui {
     pub fn repaint_after_ms(&self) -> Option<f64> { self.repaint_ms }
 
     /// Only the interactive chrome takes the pointer; labels pass it through.
-    fn over_chrome(&self, pos: Pos2) -> bool { self.hit.iter().any(|r| r.contains(pos)) }
+    fn plugin_popup_open(&self) -> bool {
+        (self.plugins.showing || self.plugins.utility_open()) && self.ctx.memory(|m| m.any_popup_open())
+    }
+
+    fn over_chrome(&self, pos: Pos2) -> bool {
+        // A choice or colour picker can extend beyond its parent panel.
+        // Its next outside click dismisses it before the model takes input.
+        self.plugin_popup_open() || self.hit.iter().any(|r| r.contains(pos))
+    }
     /// Is (x, y) on the interactive chrome (a right-click there is the
     /// chrome's, not the model's)?
     pub fn over_chrome_at(&self, x: f32, y: f32) -> bool { self.over_chrome(pos2(x, y)) }
