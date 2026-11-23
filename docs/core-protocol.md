@@ -112,7 +112,7 @@ lists are the contract to build to):
 | Placement (group, component instance, nested part) | `Group.uid` (a string) | saved with the document; a copy gets its own; linked parts derive theirs from the source |
 | Tag | `Layer.key` (`docs/tags-by-key`: names are labels) | saved |
 | Material | its name in `scene.materials` | saved; a rename is a remove plus a create until materials get keys as tags did |
-| Mesh | `"m<n>"`, given the first time the protocol names a mesh (`core.protocol.keys.mesh_key`) | this session; a mesh is one geometry object (the loose model, a definition shared by instances, a group's own mesh, the world copy an open instance is edited in) |
+| Mesh | `"m<n>"`, given the first time the protocol names a mesh (`core.protocol.keys.mesh_key`) | this session. The loose model and each geometry definition have a key. An active native occurrence view uses its definition’s key. |
 | Element | `(mesh key, element key)`. The element key is the int every `Vertex` / `Edge` / `Face` already carries | this session; unique across meshes in the process; kept across undo / redo, remove / relink and the store's restores; a deep copy is new elements with new keys |
 
 Element keys of a store-backed mesh encode `namespace << 40 | kind << 38 |
@@ -122,8 +122,8 @@ decimal string**: store keys pass 2^53, and a JavaScript client (MCP hosts
 are) would round them. Python callers use ints. `from_json_key` takes both.
 
 Mesh references accepted by queries (`resolve_mesh`): omitted or `"active"`
-(the open mesh), `"loose"`, a mesh key, or a placement uid (the mesh that
-placement draws).
+(the open mesh), `"loose"`, a mesh key, a placement UID, or an occurrence UID path
+(the definition drawn by that placement).
 
 Never persisted: mesh keys and element keys (persisting element keys is
 `.igz` format 4, out of scope). A consumer that outlives the session keys
@@ -435,4 +435,11 @@ The narrow query `core.protocol.records.occurrence` returns field paths, typed v
 
 Nested placement addresses for hide, unhide, lock, rename and tag assignment
 can be supplied as arrays of UIDs from the scene root to the target. A string
-keeps the existing UID lookup. Change records keep the persisted placement UID.
+keeps the existing UID lookup. Record commands' `placements` may also
+contain UID paths. A mesh reference may be a UID path to its definition.
+In a native affine edit context, `active` resolves the store in tool
+coordinates and the definition mesh key resolves it in definition coordinates.
+Change records keep the persisted placement UID and existing fields.
+
+A link subset’s `select.uids` accepts source UIDs and root-to-child UID paths.
+The subset retains the selected occurrence’s fields and world transform.
