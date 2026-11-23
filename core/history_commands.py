@@ -6548,21 +6548,8 @@ class SetStructureNodeCommand(Command):
         self.key = key
 
     def do(self, scene):
-        if _doc.ENABLED:
-            from ingetrazo_core import set_structure_nodes
-            self.before = set_structure_nodes(self.targets, self.key)
-            scene.version += 1
-            return
-        from copy import deepcopy
-        self.before = []
-        for group in self.targets:
-            ext = dict(group.ext or {})
-            self.before.append((group.ext is None, 'structure' in ext, deepcopy(ext.get('structure'))))
-            if self.key is None:
-                ext.pop('structure', None)
-            else:
-                ext['structure'] = {'node': self.key}
-            group.ext = ext or None
+        from ingetrazo_core import set_structure_nodes
+        self.before = set_structure_nodes(self.targets, self.key)
         scene.version += 1
 
     def bind_transaction(self, txn):
@@ -6570,19 +6557,8 @@ class SetStructureNodeCommand(Command):
         self.before = None
 
     def undo(self, scene):
-        if _doc.ENABLED:
-            from ingetrazo_core import restore_structure_nodes
-            restore_structure_nodes(self.targets, self.before)
-            scene.version += 1
-            return
-        from copy import deepcopy
-        for group, (was_none, had_key, value) in zip(self.targets, self.before):
-            ext = dict(group.ext or {})
-            if had_key:
-                ext['structure'] = deepcopy(value)
-            else:
-                ext.pop('structure', None)
-            group.ext = None if was_none and not ext else ext
+        from ingetrazo_core import restore_structure_nodes
+        restore_structure_nodes(self.targets, self.before)
         scene.version += 1
 
 
