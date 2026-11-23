@@ -238,6 +238,22 @@ class AddEdgeCommand(MeshCommand):
 
     def do(self, scene) -> None:
         m = scene.mesh
+        if self._journal_geometry and type(self.soft) in (bool, type(None)) and (
+                self.curve is None or type(self.curve) is int) and (
+                self.layer is None or isinstance(self.layer, str)):
+            from core.layers import DEFAULT_LAYER
+            from core.store_mesh import EdgeView, StoreMesh
+            if type(m) is StoreMesh:
+                key = m._store.draw_command_edge(m._input_point(self.a), m._input_point(self.b),
+                                                 self.soft, self.curve, self.layer, DEFAULT_LAYER)
+                self._owned = key is not None
+                self.edge = EdgeView(m, key) if self._owned else None
+                if self._owned:
+                    m._dirty(1)
+                elif any(v is not None for v in (self.soft, self.curve, self.layer)):
+                    m.mark_modified()
+                scene.version += 1
+                return
         if self._owned and self.edge is not None:
             if getattr(self, "_made_vertices", ()):
                 m.relink_vertices(self._made_vertices)
@@ -2547,6 +2563,13 @@ class ExplodeCurvesCommand(MeshCommand):
     def do(self, scene) -> None:
         ids = {e.curve for e in self.edges
                if getattr(e, "curve", None) is not None}
+        from core.store_mesh import StoreMesh
+        if self._journal_geometry and type(scene.mesh) is StoreMesh and all(type(i) is int and 0 <= i < 2**63 for i in ids):
+            self.curves = scene.mesh._store.explode_curves(ids)
+            scene.mesh._chunk_dirty = True
+            scene.mesh._mut_serial += 1
+            scene.version += 1
+            return
         self.curves = len(ids)
         self._ids = [(e, e.curve) for e in scene.mesh.edges
                      if e.curve in ids]

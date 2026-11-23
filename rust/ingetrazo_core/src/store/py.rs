@@ -1253,6 +1253,41 @@ impl PyMeshStore {
         self.inner.curve_keys(curve)
     }
 
+    /// Draw an edge, stamping optional attributes even on a coincident edge.
+    /// Only a new edge belongs to the command. Keep each attribute write's
+    /// revision for consumers of the protocol mesh record.
+    #[pyo3(signature = (a, b, soft, curve, layer, default_layer))]
+    fn draw_command_edge(&mut self, a: [f64; 3], b: [f64; 3], soft: Option<bool>,
+                         curve: Option<i64>, layer: Option<&str>, default_layer: &str)
+        -> PyResult<Option<u128>> {
+        let existing = self.inner.lookup(a).zip(self.inner.lookup(b))
+            .and_then(|(v, w)| self.inner.find_edge(v, w));
+        let edge = match existing {
+            Some(e) => e,
+            None => self.op(|s, ch| s.add_edge(a, b, ch))?.0,
+        };
+        if let Some(soft) = soft {
+            let flags = *self.inner.state.eflags.get(edge as usize);
+            self.inner.set_edge_flags(edge, if soft { flags | super::SOFT } else { flags & !super::SOFT });
+        }
+        if let Some(curve) = curve {
+            self.inner.set_edge_curve(edge, curve);
+        }
+        if let Some(layer) = layer {
+            self.inner.set_edge_layer(edge, (layer != default_layer).then_some(layer));
+        }
+        Ok(existing.is_none().then(|| self.inner.key(Kind::Edge, edge)))
+    }
+
+    fn explode_curves(&mut self, ids: std::collections::HashSet<i64>) -> usize {
+        for e in self.inner.state.order[1].live(&self.inner.state.slots[1]) {
+            if ids.contains(self.inner.state.ecurve.get(e as usize)) {
+                self.inner.set_edge_curve(e, -1);
+            }
+        }
+        ids.len()
+    }
+
     /// `Mesh.add_edge(a, b)`: `(key, change)`.
     fn add_edge(&mut self, a: (f64, f64, f64), b: (f64, f64, f64)) -> PyResult<(u128, PyChange)> {
         let (e, ch) = self.op(|s, ch| s.add_edge(p3(a), p3(b), ch))?;
