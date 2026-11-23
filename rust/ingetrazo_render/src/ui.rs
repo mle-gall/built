@@ -23,6 +23,7 @@ mod tabs;
 mod context_menu;
 
 mod tree_cols;
+mod tree_order;
 mod drawing;
 /// The large sheet over the dimmed model: Library, start page, Settings
 /// (views/chrome_sheet.py, docs/ui-patterns.md).
@@ -170,6 +171,7 @@ pub type Job = (String, String, String, f32, bool);
 
 /// One tree row as Python sends it, in display order (Python owns
 /// expansion and filtering; the dock only draws and reports).
+#[derive(Default)]
 pub struct Node {
     key: String,
     depth: usize,
@@ -200,6 +202,8 @@ pub struct Node {
 
 pub struct Column {
     nodes: Vec<Node>,
+    sort: tree_order::Sort,
+    ordered: Vec<usize>,
     unfiled: u32,
     expanded: std::collections::HashSet<String>,
     filter: String,
@@ -367,7 +371,7 @@ impl Ui {
     /// row, eye, lock, expandable, expanded, selected]).
     pub fn set_tree(&mut self, rows: Vec<(Vec<String>, Vec<i64>)>, unfiled: u32) {
         let col = self.column.get_or_insert_with(|| Column {
-            nodes: Vec::new(), unfiled: 0, expanded: Default::default(), filter: String::new(),
+            nodes: Vec::new(), sort: Default::default(), ordered: Vec::new(), unfiled: 0, expanded: Default::default(), filter: String::new(),
             filing: None, focus_filter: false, row_menu: None, renaming: None, focus_rename: false, head_menu: None,
             kind_menu: None, kinds: Vec::new(), prompt: None, colset: 0, color_pick: None, edits: Default::default(), mode: String::new(), issues: false,
             inspector_title: String::new(),
@@ -388,6 +392,7 @@ impl Ui {
             expanded: g(&n, 8) != 0, selected: g(&n, 9) as u32, mark: g(&n, 10) as u8,
             cells: t.get(5..).map(|c| c.to_vec()).unwrap_or_default(),
         }}).collect();
+        col.ordered = col.sort.order(&col.nodes);
         col.unfiled = unfiled;
     }
     pub fn set_mode(&mut self, mode: String) {
@@ -401,6 +406,14 @@ impl Ui {
     pub fn cursor_shape(&self) -> &'static str { self.cursor_shape }
     pub fn set_issues(&mut self, on: bool) {
         if let Some(col) = self.column.as_mut() { col.issues = on; }
+    }
+    pub fn set_tree_sort(&mut self, index: usize) {
+        if let (Some(col), Some(&(sort, _))) = (self.column.as_mut(), tree_order::Sort::OPTIONS.get(index)) {
+            if col.sort != sort {
+                col.sort = sort;
+                col.ordered = sort.order(&col.nodes);
+            }
+        }
     }
     pub fn set_colset(&mut self, colset: u8) {
         if let Some(col) = self.column.as_mut() { col.colset = colset.min(2); }
@@ -1529,7 +1542,7 @@ impl Ui {
                     // Rows, as Python sends them (it owns expansion and filtering).
                     if enter {
                         if col.filing.is_some() {
-                            if let Some(n) = col.nodes.iter().find(|n| n.row == 0) {
+                            if let Some(n) = col.ordered.iter().map(|&i| &col.nodes[i]).find(|n| n.row == 0 && n.key.len() > 2 && !n.key.starts_with("n:link:")) {
                                 actions.push(format!("file\u{1f}{}", n.key));
                                 col.filing = None;
                                 col.filter.clear();
@@ -1566,7 +1579,8 @@ impl Ui {
                     egui::ScrollArea::vertical().id_salt("tree").max_height(tree_h).auto_shrink([false, false])
                         .show_rows(ui, ROW_H, nodes_len, |ui, range| {
                             for i in range {
-                                let n = &col.nodes[i];
+                                let index = if col.mode.is_empty() { col.ordered[i] } else { i };
+                                let n = &col.nodes[index];
                                 let editable = n.row == 0 && n.key.starts_with("n:") && n.key.len() > 2 && !n.key.starts_with("n:link:");
                                 let sense = if editable { Sense::click_and_drag() } else { Sense::click() };
                                 let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ROW_H), sense);
@@ -2012,6 +2026,21 @@ impl Ui {
                     glass(Surface::Raised).inner_margin(Margin::same(6)).show(ui, |ui| {
                         ui.set_width(220.0);
                         ui.spacing_mut().item_spacing = vec2(0.0, 1.0);
+                        if col.mode.is_empty() && col.colset != 2 {
+                            let options = tree_order::Sort::OPTIONS;
+                            let old = options.iter().position(|(sort, _)| *sort == col.sort).unwrap_or(0);
+                            let mut index = old;
+                            ui.horizontal(|ui| {
+                                kit::caption_plain(ui, "Sort by");
+                                kit::choice(ui, "project_sort", &mut index, &options.map(|(_, label)| label));
+                            });
+                            if index != old {
+                                col.sort = options[index].0;
+                                col.ordered = col.sort.order(&col.nodes);
+                                actions.push(format!("sort\u{1f}{index}"));
+                                close = true;
+                            }
+                        }
                         for (id, label) in [("new", "New node"), ("propose", "Propose structure from tags…"),
                                             ("expandall", "Expand all"), ("collapseall", "Collapse all"), ("showall", "Show all"),
                                             ("measure", "Measure quantities"), ("exportcsv", "Export quantities CSV…")] {

@@ -1272,6 +1272,10 @@ def _tree(view, win) -> None:
                          active=active, node_of=node_of, nodes=nodes, tree=tree, counts=counts,
                          node_layers={k: list(c) for k, c in node_layers.items()})
     view.renderer.ui_set_tree(rows, len(unfiled))
+    if not view.__dict__.get("_ui_sort_loaded") and hasattr(view.renderer, "ui_set_tree_sort"):
+        from PySide6.QtCore import QSettings
+        view.renderer.ui_set_tree_sort(max(0, QSettings().value("ui/project_tree_sort", 0, type=int)))
+        view._ui_sort_loaded = True
     view.renderer.ui_set_colset(colset)
     view.renderer.ui_set_mode({"problems": "Problems", "library": "Library"}.get(mode, ""))
     view.renderer.ui_set_issues(bool(view.__dict__.get("_ui_issues", False)))
@@ -1978,6 +1982,9 @@ def _tree_action(win, view, action) -> None:
         elif verb == "filter":
             view._ui_filter = rk
             rebuild()
+        elif verb == "sort":
+            from PySide6.QtCore import QSettings
+            QSettings().setValue("ui/project_tree_sort", int(rk))
         elif verb == "colset":
             view._ui_colset = int(rk or 0)
             apply_dock_width(view)

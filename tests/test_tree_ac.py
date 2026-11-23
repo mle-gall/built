@@ -530,3 +530,21 @@ def test_created_placement_inherits_the_active_node_in_its_creation_step(ui, sit
     assert h.undo() and group not in scene.groups
     assert h.redo() and group in scene.groups
     assert structure.node_of(group) == dest and group.layer == scene.layer("Fences").key
+
+
+def test_sort_choice_is_restored_on_a_new_project_view(ui):
+    from PySide6.QtCore import QSettings
+    scene, win, _, _, act = ui
+    settings = QSettings()
+    key = "ui/project_tree_sort"
+    old = settings.value(key)
+    try:
+        act("sort", "2")
+        view = _View()
+        wu._tree(view, win)
+        assert view.renderer.calls["ui_set_tree_sort"] == (2,)
+    finally:
+        if old is None:
+            settings.remove(key)
+        else:
+            settings.setValue(key, old)
