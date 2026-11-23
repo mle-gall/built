@@ -1302,6 +1302,7 @@ impl Ui {
                                 ui.painter().hline(r.x_range().shrink(6.0), r.center().y, Stroke::new(1.0_f32, EDGE));
                                 let mut rows: Vec<(&str, String)> = vec![("scene:camera", "Camera inspector…".into()), ("scene:add", "Add scene from this view".into())];
                                 if let Some(c) = &current {
+                                    rows.push(("scene:editcamera", format!("Edit camera of “{c}”…")));
                                     rows.push(("scene:update", format!("Update “{c}” from this view")));
                                     rows.push(("scene:duplicate", format!("Duplicate “{c}”")));
                                     rows.push(("scene:rename", format!("Rename “{c}”…")));

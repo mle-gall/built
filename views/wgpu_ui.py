@@ -2544,6 +2544,10 @@ def _run(win, actions, source_view=None) -> None:
             from views import wgpu_sheets
             wgpu_sheets.action(win, arg)
             continue
+        if (kind, arg) == ("tab", "scene:editcamera"):
+            from views.inspector_bridge import _marked
+            win.edit_scene_camera(_marked(win))
+            continue
         if kind == "panel" or (kind, arg) in (("act", "camera"), ("tab", "scene:camera")):
             from views import inspector_bridge
             inspector_bridge.action(win, win._doc.stand_in, arg if kind == "panel" else '["camera.open",null]')

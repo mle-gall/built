@@ -1873,7 +1873,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         camera_menu.addAction(self._act_field_of_view)
         # Camera Settings: the camera by the numbers — eye and target,
         # focal length, roll, frame shift, clipping and the picture's frame
-        # (views/camera_panel.py). A tool window that stays open.
+        # The native sidebar follows the active camera.
         self._act_camera_settings = QAction(
             tool_icon("camera_settings"), tr("Camera Settings…"), self)
         self._icon_actions.append((self._act_camera_settings,
@@ -7301,35 +7301,14 @@ class MainWindow(WorksessionMixin, QMainWindow):
                           float(cam.fov_deg), lo, hi, 1, done=apply, suffix="°")
 
     def _show_camera_settings(self):
-        """Camera ▸ Camera Settings…: one window, kept, raised if open —
-        on the live view (it stops editing a scene, if it was)."""
-        view = getattr(self._doc, "stand_in", None)
-        if getattr(view, "_ui_attached", False):
-            from views.inspector_bridge import action
-            action(self, view, '["camera.open",null]')
-            return None
-        dlg = getattr(self, "_camera_settings", None)
-        if dlg is None:
-            from views.camera_panel import CameraSettingsDialog
-            dlg = self._camera_settings = CameraSettingsDialog(self)
-        dlg.stop_editing_scene()
-        dlg.present()               # whole, in the middle of the screen
-        return dlg
+        from views.inspector_bridge import open_camera
+        return open_camera(self)
 
-    def edit_scene_camera(self, view) -> None:
-        """A scene's right-click ▸ Camera Settings…: show the scene and
-        open the camera settings on it — what is changed there is kept in
-        the scene."""
-        if view is None:
-            return
-        self.tray.scenes.show_view(view)
-        row = getattr(self, "_scene_tabs", None)
-        if row is not None:
-            row.mark_view(view)
-        dlg = self._show_camera_settings()
-        if dlg is not None:
-            dlg.refresh()
-            dlg.edit_scene(view)
+    def edit_scene_camera(self, view):
+        from views.inspector_bridge import open_camera
+        if view is not None:
+            self.tray.scenes.show_view(view)
+            return open_camera(self, view)
 
     def _reset_camera_home(self) -> None:
         """A new drawing opens on the default view (iso, 20 m out), not on
@@ -7737,6 +7716,8 @@ class MainWindow(WorksessionMixin, QMainWindow):
         self._enter_document(doc)
 
     def _leave_document(self, doc, picture: bool = True) -> None:
+        from views.inspector_bridge import leave_camera
+        leave_camera(doc)
         vp = doc.viewport
         if vp is None:
             return
