@@ -236,6 +236,7 @@ pub struct Column {
     issues: bool,
     /// The inspector's editable fields: id → text being typed.
     edits: std::collections::HashMap<String, String>,
+    identity: Vec<(String, String, String, Option<bool>)>,
     inspector_title: String,
     inspector: Vec<(String, Vec<(String, String)>)>,
     highlighted: Option<String>,
@@ -381,6 +382,7 @@ impl Ui {
             nodes: Vec::new(), reveal: None, proposal_available: false, sort: Default::default(), ordered: Vec::new(), unfiled: 0, expanded: Default::default(), filter: String::new(),
             filing: None, focus_filter: false, row_menu: None, renaming: None, focus_rename: false, head_menu: None,
             kind_menu: None, kinds: Vec::new(), prompt: None, colset: 0, color_pick: None, edits: Default::default(), mode: String::new(), issues: false,
+            identity: Vec::new(),
             inspector_title: String::new(),
             inspector: Vec::new(), highlighted: None,
         });
@@ -455,6 +457,9 @@ impl Ui {
             col.prompt = (!title.is_empty()).then_some((title, body, buttons));
         }
     }
+    pub fn set_identity(&mut self, rows: Vec<(String, String, String, Option<bool>)>) {
+        if let Some(col) = self.column.as_mut() { col.identity = rows; }
+    }
     pub fn show_inspector(&mut self) { self.review = false; }
     pub fn set_inspector(&mut self, title: String, sections: Vec<(String, Vec<(String, String)>)>) {
         if let Some(col) = self.column.as_mut() {
@@ -463,6 +468,7 @@ impl Ui {
             }
             col.inspector_title = title;
             col.inspector = sections;
+            col.identity.clear();
         }
     }
     /// "File to…": the tree takes the next pick; the filter gets the keys.
@@ -1989,11 +1995,6 @@ impl Ui {
                     ui.add_space(SPACE_S);
                     egui::ScrollArea::vertical().id_salt("inspector").auto_shrink([false, false]).show(ui, |ui| {
                         ui.spacing_mut().item_spacing = vec2(0.0, SPACE_XS);
-                        if col.mode.is_empty() {
-                            self.panels.inspector(ui, &mut cmds);
-                        } else if col.mode == "Problems" {
-                            self.panels.assembly_problems(ui, &mut cmds);
-                        }
                         if col.inspector_title.is_empty() {
                             ui.horizontal(|ui| { ui.add_space(SPACE_S); empty_state(ui, "Nothing selected"); });
                             return;
@@ -2016,6 +2017,12 @@ impl Ui {
                             job.wrap.break_anywhere = true;
                             let g = ui.painter().layout_job(job);
                             ui.painter().galley(pos2(r.min.x + 8.0, r.center().y - g.size().y / 2.0), g, INK);
+                        }
+                        kit::identity_card(ui, &col.identity, &mut actions);
+                        if col.mode.is_empty() {
+                            self.panels.inspector(ui, &mut cmds);
+                        } else if col.mode == "Problems" {
+                            self.panels.assembly_problems(ui, &mut cmds);
                         }
                         // The selection's actions: the selection bar's job, in its one home.
                         if let Some((_, acts)) = &selection {

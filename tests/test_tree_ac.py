@@ -332,7 +332,10 @@ def test_read_only_inspector_has_no_editable_name_and_no_edits(ui):
         title, sections = view.renderer.calls["ui_set_inspector"]
         item = dict(dict(sections)["Item"])
         assert not item["Name"].startswith(wu.ED), "a linked part's name must not be editable"
-        assert item["Filed in"].startswith("Ride.igz")
+        identity = {label: (text, action) for label, text, action, _ in view.renderer.calls["ui_set_identity"][0]}
+        assert identity["Filed in"][0].startswith("Ride.igz")
+        assert identity["File"] == ("Ride.igz", "insp:linkfile")
+        assert identity["Kind"][0] == "Member"
         acts = [i for name, a in sections if name == "Actions" for i, _l in a]
         assert not any(a.startswith(("status:", "solidrepair")) for a in acts)
         assert "linkfile" in acts and "linkopen" in acts
@@ -726,3 +729,29 @@ def test_source_visibility_restored_from_the_file_inspector_undoes(ui):
     assert scene.layer(tag).visible and not links.registry(scene)[source]["overrides"]
     assert win.viewport.history.undo() and not scene.layer(tag).visible
     assert links.registry(scene)[source]["overrides"][tag] is False
+
+
+def test_identity_separates_physical_parent_filing_and_surface_material(tmp_path):
+    from core.group import Group
+    from core.mesh import Mesh
+    from core.scene import Scene
+    from ingetrazo_core import Vec3, selection_identity
+    from core.link_structure import Tree
+    from core import bim_registry
+
+    mesh = Mesh()
+    mesh.add_face([Vec3(0, 0, 0), Vec3(1, 0, 0), Vec3(0, 1, 0)])
+    mesh.faces[0].attrs["mat"] = "Concrete"
+    wall = Group(mesh, "W-03")
+    parent = Group(name="Core block")
+    parent.children = [wall]
+    scene = Scene()
+    scene.groups.append(parent)
+    tree = Tree(scene, bim_registry.get(scene))
+    scene.select([wall])
+    rows = selection_identity(scene, {"tree": tree}, str(tmp_path / "Plaza.built"), wu.KINDS)
+    assert [label for label, *_ in rows] == ["Kind", "Filed in", "Tag", "Inside", "Material", "File"]
+    card = {label: (value, action) for label, value, action, _ in rows}
+    assert card["Inside"] == ("Plaza.built › Core block", f"open{wu.SEP}i:{tree.row_id(parent)}")
+    assert card["Material"] == ("Concrete · 1 face", "insp:lib:edit:m:Concrete")
+    assert card["Filed in"] == ("—", "")

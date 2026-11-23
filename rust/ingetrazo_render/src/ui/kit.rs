@@ -787,6 +787,36 @@ pub use molecules::*;
 pub mod organisms {
     use super::*;
     use egui::{Margin, Shadow};
+    /// Selection addresses share a fixed label column; the full path remains
+    /// available on hover even in the narrow Filing lens.
+    pub fn identity_card(ui: &mut egui::Ui, rows: &[(String, String, String, Option<bool>)], actions: &mut Vec<String>) {
+        if rows.is_empty() { return; }
+        egui::Frame::NONE.fill(CARD).corner_radius(R_ROW).inner_margin(Margin::same(SPACE_XS as i8)).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.spacing_mut().item_spacing.y = 0.;
+            for (label, value, target, visible) in rows {
+                ui.horizontal(|ui| {
+                    ui.add_space(SPACE_S);
+                    ui.add_sized([62., PROP_H], egui::Label::new(egui::RichText::new(label).font(meta()).color(DIM))
+                        .halign(egui::Align::Min));
+                    if let Some(on) = visible {
+                        let (rect, eye) = ui.allocate_exact_size(vec2(16., PROP_H), Sense::click());
+                        paint_eye(ui, rect, *on);
+                        if eye.on_hover_text(format!("Show / hide {value}")).clicked() { actions.push(target.clone()); }
+                    }
+                    let enabled = !target.is_empty();
+                    let text = egui::RichText::new(value).font(body()).color(if enabled { ACCENT } else { INK_2 });
+                    let response = ui.add(egui::Label::new(text).truncate().sense(if enabled { Sense::click() } else { Sense::hover() }));
+                    if response.clicked() { actions.push(target.clone()); }
+                    if enabled {
+                        let tip = if label == "Tag" { format!("Show / hide {value}") } else { value.clone() };
+                        response.on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text(tip);
+                    }
+                });
+            }
+        });
+    }
+
     /// A glass surface with egui content on it: shadow, then the blurred model
     /// through the rounded shape (glass.rs), then the content. Built like an
     /// egui Frame so call sites read the same.

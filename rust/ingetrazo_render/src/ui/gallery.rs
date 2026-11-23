@@ -556,9 +556,11 @@ impl Gallery {
                 ui.painter().text(r.left_center() + vec2(8., 0.), Align2::LEFT_CENTER, "Walls", title(), INK);
                 ui.painter().text(r.right_center() - vec2(8., 0.), Align2::RIGHT_CENTER, "Wall · 6 items", meta(), DIM);
                 ui.add_space(SPACE_XS);
-                caption(ui, "Node");
-                prop_row(ui, "Layer", "A-WALL");
-                prop_row(ui, "Area", "84.6 m²");
+                identity_card(ui, &[
+                    ("Kind".into(), "Wall".into(), "reveal".into(), None),
+                    ("Filed in".into(), "Building › Walls".into(), "reveal".into(), None),
+                    ("Tag".into(), "A-WALL".into(), "eye".into(), Some(true)),
+                ], &mut Vec::new());
                 ui.add_space(SPACE_XS);
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing = vec2(SPACE_XS, 0.);

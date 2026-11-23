@@ -2328,6 +2328,9 @@ impl Renderer {
     fn ui_show_inspector(&mut self) {
         if let Some(ui) = self.ui.as_mut() { ui.show_inspector(); }
     }
+    fn ui_set_identity(&mut self, rows: Vec<(String, String, String, Option<bool>)>) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_identity(rows); }
+    }
     fn ui_set_inspector(&mut self, title: String, sections: Vec<(String, Vec<(String, String)>)>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_inspector(title, sections); }
     }

@@ -1859,7 +1859,10 @@ def _tree_action(win, view, action) -> None:
         view.update()
 
     try:
-        if verb == "revealselection":
+        if verb == "documentroot":
+            from views.tree_navigation import open_to
+            open_to(vp, [])
+        elif verb in ("revealselection", "revealnode"):
             plan = _tree(view, win, discover=True) if scene.selection else None
             if plan:
                 target, ancestors, limits = plan
@@ -1868,7 +1871,7 @@ def _tree_action(win, view, action) -> None:
                 for page, limit in limits:
                     pages[page] = max(pages.get(page, ROW_CAP), limit)
                 view._ui_mode = view._ui_filter = ""
-                view.renderer.ui_reveal_row(target)
+                view.renderer.ui_reveal_row(rk if verb == "revealnode" else target)
                 rebuild()
             elif scene.selection:
                 vp.flash_status("This selection has no occurrence in the Project tree")
@@ -2321,8 +2324,10 @@ def _inspector(view, win) -> None:
     focus = getattr(view, "_ui_insp_node", None)
     sel_sig = (len(sel), id(sel[0]) if sel else 0, id(sel[-1]) if sel else 0)
     node_focus = focus[0] if focus and focus[1] == sel_sig else None
+    filename = str(getattr(win, "_current_path", "") or "")
     sig = (id(scene), scene.content_version, sel_sig, node_focus, getattr(view, "_ui_tree_sig", None) is not None,
            view.__dict__.get("_ui_mat_focus"), view.__dict__.get("_ui_mode"), view.__dict__.get("_ui_colset"),
+           filename, frozenset(map(id, sel)),
            _current_material_name(), _active_tool_id(win), scene.show_section_planes, scene.show_section_cuts,
            scene.display_style.section_fill, view.__dict__.get("_ui_sheet_revision"))
     if sig == getattr(view, "_ui_insp_sig", None):
@@ -2341,7 +2346,7 @@ def _inspector(view, win) -> None:
             view.renderer.ui_set_inspector(*got)
             return
     from core.section import SectionPlane
-    from ingetrazo_core import section_inspector
+    from ingetrazo_core import section_inspector, selection_identity
     section_key = node_focus or (f"section:{sel[0].uid}" if len(sel) == 1 and isinstance(sel[0], SectionPlane) else "")
     if node_focus == "solid:active" and view.__dict__.get("_ui_mode") == "problems":
         from ingetrazo_core import solid_inspector_sections
@@ -2357,6 +2362,8 @@ def _inspector(view, win) -> None:
         section = section_inspector(scene, section_key)
         if section is not None:
             view.renderer.ui_set_inspector(*section)
+            if not node_focus and sel:
+                view.renderer.ui_set_identity(selection_identity(scene, data, filename, KINDS))
             return
     if node_focus is not None and node_focus in (data.get("nodes") or {}) \
             and data["nodes"][node_focus].get("kind") != "host":
@@ -2406,6 +2413,7 @@ def _inspector(view, win) -> None:
     if not sel:
         view.renderer.ui_set_inspector("", [])
         return
+    identity = selection_identity(scene, data, filename, KINDS)
     groups = [g for g in sel if isinstance(g, Group)]
     from views import verbs
     sel_kind = verbs.kind_of(scene, sel)
@@ -2414,18 +2422,9 @@ def _inspector(view, win) -> None:
         rec = g.ifc or {}
         key = data.get("node_of", {}).get(id(g)) or structure.node_of(g)
         filed_ok = key in nodes
-        filed = (" › ".join(structure.path(registry, key)) if filed_ok
-                 else "Its source's nodes" if links.link_of(g) else "Not filed")
         recipe = data.get("recipes", {}).get(key, {})
-        kind = (kind_of(rec.get("class") or recipe.get("class")) if (rec or recipe)
-                else "From its node, once filed" if not filed_ok else "Drawing only")
-        if sel_kind == "linked_part":
-            holder = links.linked_ancestor(g)
-            src = str((links.link_of(holder) or {}).get("path", "")).rsplit("/", 1)[-1]
-            filed = data.get("nodes", {}).get(key, {}).get("name") if key in data.get("nodes", {}) else filed
-            filed = f"{src} › {filed}" if filed and filed != src.rsplit(".", 1)[0] else src
         name_cell = _edit(f"groupname:{g.uid}", g.name or "") if verbs.name_editable(sel_kind) else (g.name or "")
-        rows = [("Name", name_cell), ("Filed in", filed), ("Kind", kind)]
+        rows = [("Name", name_cell)]
         if verbs.read_only(sel_kind):
             rows.append(("Edits", "Read-only here"))
         if g.is_component():
@@ -2482,6 +2481,7 @@ def _inspector(view, win) -> None:
                   ("Tag", str(getattr(g, "layer", None) or "—"))]
         sections.append(("Export details", export))
         view.renderer.ui_set_inspector(g.name or "Group", sections)
+        view.renderer.ui_set_identity(identity)
         return
     kinds = Counter()
     unfiled = 0
@@ -2518,6 +2518,7 @@ def _inspector(view, win) -> None:
     if groups:
         sections.append(("Export details", []))
     view.renderer.ui_set_inspector(f"{len(sel)} selected", sections)
+    view.renderer.ui_set_identity(identity)
 
 
 def _linked_inspector(view, win, data, key):
