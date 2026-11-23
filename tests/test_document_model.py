@@ -53,6 +53,22 @@ def test_shared_child_append_rolls_back_if_occurrence_copy_fails(monkeypatch):
     assert peer.children[1].mesh is addition.mesh
 
 
+def test_copy_of_open_document_edits_its_copied_definition():
+    from copy import deepcopy
+    from ingetrazo_core import Matrix4, Vec3
+
+    scene = Scene()
+    g = Group()
+    g.xform = Matrix4()
+    g.xform.translate(12, 3, 0)
+    scene.groups.append(g)
+    scene.begin_group_edit(g)
+    other = deepcopy(scene)
+    other.mesh.add_edge(Vec3(12, 3, 0), Vec3(14, 3, 0))
+    assert other.groups[0].mesh.vertex_at(Vec3(2, 0, 0)) is not None
+    assert not g.mesh.edges
+
+
 def placements():
     gc.collect()
     return N.doc_stats()["placements"]

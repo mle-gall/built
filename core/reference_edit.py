@@ -3,6 +3,8 @@
 
 The native occurrence store and its history never enter these sessions.
 """
+from ingetrazo_core import Matrix4, Vec3
+
 from core.history import Command
 
 
@@ -25,12 +27,10 @@ def enter(scene, group, frame):
             # definition its copies share. The session edits a world
             # copy, and leaving shares it back and returns the matrix
             # up out of the parts, as for a component with no parts.
-            from ingetrazo_core import Matrix4 as QMatrix4x4
             if group.mesh is proto:
                 from core.group import transformed_mesh
-                group.mesh = transformed_mesh(proto, QMatrix4x4())
-            share = (group, proto, QMatrix4x4(xform),
-                                group.mesh.capture_state())
+                group.mesh = transformed_mesh(proto, Matrix4())
+            share = (group, proto, Matrix4(xform), group.mesh.capture_state())
         if frame is not None:
             # Its matrix went down into the children and its mesh is in
             # world coordinates now: the axes stay, as world axes.
@@ -45,8 +45,7 @@ def enter(scene, group, frame):
         proto, xform = group.mesh, group.xform
         group.mesh = transformed_mesh(proto, xform)
         group.xform = None
-        share = (group, proto, xform,
-                            group.mesh.capture_state())
+        share = (group, proto, xform, group.mesh.capture_state())
     return share, parts
 
 
@@ -64,21 +63,20 @@ def _bake_container_xform(group) -> None:
     tree is exactly that), and walking those vertices would drag every
     placement with it.
     """
-    from ingetrazo_core import Matrix4 as QMatrix4x4
     xform = getattr(group, "xform", None)
-    if xform is None or xform == QMatrix4x4():
+    if xform is None or xform == Matrix4():
         return
     from core.explode import rotate_offsets
     from core.group import transformed_mesh
     for child in group.children:
         child.xform = xform * (child.xform if child.xform is not None
-                               else QMatrix4x4())
+                               else Matrix4())
     # An exploded view's offsets live in the container's frame, which
     # has just become the world's.
     rotate_offsets(group, xform)
     if group.mesh.vertices:
         group.mesh = transformed_mesh(group.mesh, xform)
-    group.xform = QMatrix4x4()
+    group.xform = Matrix4()
 
 
 def _mesh_placed_elsewhere(scene, group) -> bool:
@@ -93,21 +91,19 @@ def parts_record(group) -> tuple:
     """An assembly's axes and its parts' matrices and offsets, copied,
     to put back bit for bit: a round trip through the inverse matrix
     drifts in the last digits."""
-    from ingetrazo_core import Matrix4 as QMatrix4x4
     axes = getattr(group, "axes", None)
-    return (None if axes is None else QMatrix4x4(axes),
-            [(c, None if c.xform is None else QMatrix4x4(c.xform),
+    return (None if axes is None else Matrix4(axes),
+            [(c, None if c.xform is None else Matrix4(c.xform),
               c.explode_offset) for c in group.children])
 
 def put_parts(group, record) -> None:
     """Put back what :meth:`parts_record` copied. The list of parts is
     not touched: the commands that changed it undo that themselves."""
-    from ingetrazo_core import Matrix4 as QMatrix4x4
     axes, parts = record
     for child, xform, offset in parts:
-        child.xform = None if xform is None else QMatrix4x4(xform)
+        child.xform = None if xform is None else Matrix4(xform)
         child.explode_offset = offset
-    group.axes = None if axes is None else QMatrix4x4(axes)
+    group.axes = None if axes is None else Matrix4(axes)
 
 def _unbake_container_xform(group, xform, parts=None) -> None:
     """Undo :meth:`_bake_container_xform` on leaving an assembly: its
@@ -119,7 +115,6 @@ def _unbake_container_xform(group, xform, parts=None) -> None:
     ``parts`` is :meth:`parts_record` on entry: a part the session left
     where it was gets its entry matrix back bit for bit, instead of a
     round trip through the inverse that drifts in the last digits."""
-    from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
     if (not getattr(group, "children", None) or xform is None
             or group.xform == xform):
         return
@@ -130,16 +125,16 @@ def _unbake_container_xform(group, xform, parts=None) -> None:
     entry = {id(c): (m, o) for c, m, o in entry}
     for child in group.children:
         was = entry.get(id(child))
-        now = child.xform if child.xform is not None else QMatrix4x4()
+        now = child.xform if child.xform is not None else Matrix4()
         if was is not None:
-            m0 = was[0] if was[0] is not None else QMatrix4x4()
+            m0 = was[0] if was[0] is not None else Matrix4()
             if xform * m0 == now:
-                child.xform = None if was[0] is None else QMatrix4x4(m0)
+                child.xform = None if was[0] is None else Matrix4(m0)
             else:
                 child.xform = inverse * now
             o0, o = was[1], child.explode_offset
             if o0 and o:
-                v = xform.mapVector(QVector3D(*o0))
+                v = xform.mapVector(Vec3(*o0))
                 turned = (v.x(), v.y(), v.z())
                 child.explode_offset = (o0 if turned == tuple(o) else
                                         _turned(inverse, o))
@@ -152,11 +147,10 @@ def _unbake_container_xform(group, xform, parts=None) -> None:
             if child.explode_offset:
                 child.explode_offset = _turned(
                     inverse, child.explode_offset)
-    group.axes = None if axes is None else QMatrix4x4(axes)
+    group.axes = None if axes is None else Matrix4(axes)
 
 def _turned(m, offset) -> tuple:
-    from ingetrazo_core import Vec3 as QVector3D
-    v = m.mapVector(QVector3D(*offset))
+    v = m.mapVector(Vec3(*offset))
     return (v.x(), v.y(), v.z())
 
 def restore_sharing(group, proto, xform, parts=None) -> None:
@@ -253,10 +247,9 @@ class ReshareAssemblyCommand(Command):
 
     def __init__(self, group, proto, xform, edited, state0, parts,
                  inner=()) -> None:
-        from ingetrazo_core import Matrix4 as QMatrix4x4
         self.group = group
         self.proto = proto
-        self.xform = QMatrix4x4(xform)
+        self.xform = Matrix4(xform)
         self.edited = edited
         self.state0 = state0
         self.parts = parts            # on entry, matrix up: parts_record
@@ -287,16 +280,14 @@ class ReshareAssemblyCommand(Command):
     def _frame(self, record, state) -> None:
         """The matrix down in the parts and the world copy in place: how
         the session stood."""
-        from ingetrazo_core import Matrix4 as QMatrix4x4
         self.edited.restore_state(state)
         self.group.mesh = self.edited
-        self.group.xform = QMatrix4x4()
+        self.group.xform = Matrix4()
         put_parts(self.group, record)
 
     def _unframe(self, record) -> None:
-        from ingetrazo_core import Matrix4 as QMatrix4x4
         self.group.mesh = self.proto
-        self.group.xform = QMatrix4x4(self.xform)
+        self.group.xform = Matrix4(self.xform)
         put_parts(self.group, record)
 
     def do(self, scene) -> None:
@@ -310,10 +301,10 @@ class ReshareAssemblyCommand(Command):
             self.shared = self._edited != self.state0
             if self.shared:
                 share_back(self.group, self.proto, self.xform,
-                                 self.edited, parts=self.parts)
+                           self.edited, parts=self.parts)
             else:
                 restore_sharing(self.group, self.proto, self.xform,
-                                      parts=self.parts)
+                                parts=self.parts)
             self._after = self.proto.capture_state()
             self._left = parts_record(self.group)
         else:

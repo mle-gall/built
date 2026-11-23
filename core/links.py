@@ -241,10 +241,11 @@ def load_source(path, select=None, *, include_nested=True, link_meshes=None):
 
             visit(groups, QMatrix4x4())
             counts = Counter(group.uid for group, _ in selected)
+            repeated = src.repeated_uids() if requested_paths else set()
             groups, mesh = [], Mesh()
             for group, world in selected:
                 part = detached(group)
-                if group in requested_paths or counts[group.uid] > 1:
+                if counts[group.uid] > 1 or (group in requested_paths and group.uid in repeated):
                     # Two equal leaf UIDs can become siblings in a flat subset.
                     part.uid = row_id(src.occurrence_path(group))
                 part.xform = world

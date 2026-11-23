@@ -1296,9 +1296,8 @@ class Mesh:
     def restore_state(self, snap: dict) -> None:
         """Restore a :meth:`capture_state` snapshot. Objects created since are
         dropped; captured ones are re-listed with their fields reset.
-        A store-backed mesh's snapshot (``core.store_mesh.StoreState``, a
-        Scene.share_back of an edited instance) makes this mesh
-        store-backed."""
+        A store snapshot (``core.store_mesh.StoreState``) restores this mesh
+        to its store representation."""
         if not isinstance(snap, dict):
             from core import store_mesh
             store_mesh._restore_store_state(self, snap)

@@ -731,7 +731,11 @@ class _MutList(list):
         face = self._owner
         if isinstance(face, FaceView):
             path = self._path
-            ring = 0 if path == ("loop",) else path[1] + 1 if len(path) == 2 else None
+            ring = None
+            if path == ("loop",):
+                ring = 0
+            elif path[0] == "hole_loops" and len(path) == 2:
+                ring = path[1] + 1
             store = _store_of(face._m)
             if store is not None and ring is not None:
                 store.reverse_ring(face.key, ring)
@@ -1823,6 +1827,12 @@ class StoreMesh(Mesh):
     # -- copies
     def __deepcopy__(self, memo):
         from copy import deepcopy
+        definition = self.__dict__.get("_instance_definition")
+        if definition is not None:
+            store = self._store
+            new = instance_view(deepcopy(definition, memo), store.frame_matrix, store.frame_origin)
+            memo[id(self)] = new
+            return new
         new = StoreMesh.__new__(StoreMesh)
         memo[id(self)] = new
         d = self.__dict__
@@ -2056,7 +2066,7 @@ def _restore_store_state(m, snap: StoreState) -> None:
     m._mut_serial += 1
 
 
-def instance_view(mesh, matrix):
+def instance_view(mesh, matrix, origin=(0., 0., 0.)):
     """An occurrence facade over the definition store, with the same element keys."""
     from core.mesh import DeferredMesh
     if isinstance(mesh, DeferredMesh):
@@ -2064,7 +2074,7 @@ def instance_view(mesh, matrix):
     if type(mesh) is not StoreMesh:
         return None
     try:
-        view = mesh._store._instance_view(mesh, matrix, (0., 0., 0.))
+        view = mesh._store._instance_view(mesh, matrix, origin)
     except ValueError:  # a singular placement has no world-to-definition inverse
         return None
     result = Mesh()
