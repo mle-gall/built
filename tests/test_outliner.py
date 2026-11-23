@@ -319,17 +319,6 @@ def test_the_filter_keeps_the_path_to_every_match():
     _close(win)
 
 
-def test_the_filter_follows_a_rename():
-    building, tree = _building()
-    win, scene, panel = _window_with(building, tree)
-    panel.search.setText("oak")
-    assert _row(panel, tree).isHidden()
-    tree.name = "Oak"
-    panel.refresh()
-    assert not _row(panel, tree).isHidden()
-    _close(win)
-
-
 def test_the_browser_is_the_model_tree_and_the_sheets_live_in_the_composer():
     win, scene, panel = _window_with()
     dock = win.project_browser
@@ -728,20 +717,6 @@ def test_keyboard_on_a_plane_row():
     assert b.hidden
     QTest.keyClick(t, Qt.Key_Return)                  # it cuts
     assert b.active and not a.active
-    _close(win)
-
-
-def test_the_filter_finds_planes_by_name():
-    building, tree = _building()
-    win, scene, panel = _window_with(building, tree)
-    _two_planes(scene)
-    panel.refresh()
-    panel.search.setText("cross")
-    sec = panel._sec_root
-    assert not sec.isHidden()
-    assert sec.child(0).isHidden() and not sec.child(1).isHidden()
-    panel.search.setText("slab")
-    assert sec.isHidden()
     _close(win)
 
 

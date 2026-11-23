@@ -228,6 +228,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(project_tree::source_state, m)?)?;
     m.add_function(wrap_pyfunction!(project_tree::source_direct_count, m)?)?;
     m.add_function(wrap_pyfunction!(project_tree::source_placement_rows, m)?)?;
+    m.add_function(wrap_pyfunction!(project_tree::project_name_matches, m)?)?;
     m.add_function(wrap_pyfunction!(project_tree::project_item_matches, m)?)?;
     m.add_function(wrap_pyfunction!(project_tree::project_context_rows, m)?)?;
     m.add_function(wrap_pyfunction!(structure::file_created_placement, m)?)?;

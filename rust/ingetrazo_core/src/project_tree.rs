@@ -4,6 +4,52 @@ use pyo3::prelude::*;
 use std::collections::HashSet;
 type Row = (Vec<String>, Vec<i64>);
 
+/// Plain text matches anywhere. A wildcard pattern matches the whole field,
+/// and a question mark consumes one Unicode character.
+pub(crate) fn text_matches(text: &str, token: &str) -> bool {
+    if !token.contains(['*', '?']) {
+        return text.contains(token);
+    }
+    let mut pattern = token.chars();
+    let mut text = text.chars();
+    let mut star = None;
+    while let Some(ch) = text.clone().next() {
+        match pattern.clone().next() {
+            Some('*') => {
+                pattern.next();
+                star = Some((pattern.clone(), text.clone()));
+            }
+            Some(p) if p == '?' || p == ch => {
+                pattern.next();
+                text.next();
+            }
+            _ => {
+                let Some((after_star, matched)) = &mut star else {
+                    return false;
+                };
+                if matched.next().is_none() {
+                    return false;
+                }
+                pattern = after_star.clone();
+                text = matched.clone();
+            }
+        }
+    }
+    pattern.all(|ch| ch == '*')
+}
+
+#[pyfunction]
+pub(crate) fn project_name_matches(name: &str, kind: &str, words: Vec<String>) -> bool {
+    let name = name.to_lowercase();
+    let kind = kind.to_lowercase();
+    words.iter().all(|word| {
+        let (negative, token) = word
+            .strip_prefix('-')
+            .map_or((false, word.as_str()), |s| (true, s));
+        negative != (text_matches(&name, token) || text_matches(&kind, token))
+    })
+}
+
 #[pyfunction]
 pub(crate) fn project_item_matches(
     scene: &Bound<'_, PyAny>,
@@ -36,7 +82,27 @@ pub(crate) fn project_item_matches(
             "is:section" => kind == "section",
             "is:link" => kind == "link",
             "has:problem" => problem,
-            _ => name.contains(token),
+            _ => {
+                let mut matched = text_matches(&name, token) || text_matches(kind, token);
+                if !matched {
+                    if let Ok(record) = entity.getattr("ifc") {
+                        if !record.is_none() {
+                            let class = record
+                                .call_method1("get", ("class",))?
+                                .extract::<Option<String>>()?;
+                            matched = class.is_some_and(|s| text_matches(&s.to_lowercase(), token));
+                        }
+                    }
+                    if !matched {
+                        if let Ok(tag) = entity.getattr("layer") {
+                            matched = tag
+                                .extract::<Option<String>>()?
+                                .is_some_and(|s| text_matches(&s.to_lowercase(), token));
+                        }
+                    }
+                }
+                matched
+            }
         };
         if hit == negative {
             return Ok(false);
@@ -164,7 +230,7 @@ fn loose(scene: &Bound<'_, PyAny>, depth: usize, query: &str) -> PyResult<Option
         let hit = match token {
             "is:hidden" => r.1[5] == 0,
             "is:locked" => r.1[6] == 1,
-            _ => "loose geometry".contains(token),
+            _ => text_matches("loose geometry", token),
         };
         neg != hit
     });

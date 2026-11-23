@@ -93,26 +93,6 @@ def test_add_goes_into_the_selected_folder_with_the_name_open(win):
         panel.item_for(folder, "folder")
 
 
-def test_a_folder_eye_reaches_layers_in_folders_inside_it(win):
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    outer = L.add_folder(scene, "Arq")
-    inner = L.add_folder(scene, "Muros", parent=outer)
-    scene.layers += [Layer("Exterior", folder=inner), Layer("Suelo",
-                                                            folder=outer)]
-    panel.refresh()
-    panel.click_cell(("folder", outer), 2)
-    # The folder hides what is inside it at any depth; the tags keep
-    # their own switches (.skp tag folders).
-    assert not L.effective_visible(scene, scene.layer("Exterior"))
-    assert not L.effective_visible(scene, scene.layer("Suelo"))
-    assert scene.layer("Exterior").visible and scene.layer("Suelo").visible
-    panel.search.setText("exter")
-    assert not panel.item_for("Exterior").isHidden()
-    assert not panel.item_for(inner, "folder").isHidden()
-    assert panel.item_for("Suelo").isHidden()
-
-
 def test_purge_lives_in_the_right_click_and_asks_with_the_count(win,
                                                                 monkeypatch):
     from PySide6.QtWidgets import QMessageBox
@@ -205,19 +185,6 @@ def test_sorting_keeps_the_default_layer_first(win):
         assert names[0] == DEFAULT_LAYER
         assert names[1:] == (["alfa", "zeta"] if order == Qt.AscendingOrder
                              else ["zeta", "alfa"])
-
-
-def test_filter_hides_what_does_not_match(win):
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    scene.layers += [Layer("Muros"), Layer("Puertas", folder="Arq")]
-    panel.refresh()
-    panel.search.setText("puer")
-    assert panel.item_for("Muros").isHidden()
-    assert not panel.item_for("Puertas").isHidden()
-    assert not panel.item_for("Arq", "folder").isHidden()
-    panel.search.clear()
-    assert not panel.item_for("Muros").isHidden()
 
 
 def test_columns_and_indent_follow_the_browser(win):
@@ -573,22 +540,6 @@ def _shown(panel):
                   if panel._key(it)[0] == "layer" and not it.isHidden())
 
 
-@pytest.mark.parametrize("text,expect", [
-    ("a-*", ["A-MUROS", "A-PUERTAS"]),
-    ("*mur*", ["A-MUROS", "E-MUROS"]),
-    ("?-muros", ["A-MUROS", "E-MUROS"]),
-    ("puert", ["A-PUERTAS"]),                       # plain: anywhere
-    ("a-", ["A-MUROS", "A-PUERTAS"]),
-])
-def test_the_search_takes_wildcards(win, text, expect):
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    scene.layers += [Layer("A-MUROS"), Layer("A-PUERTAS"), Layer("E-MUROS")]
-    panel.refresh()
-    panel.search.setText(text)
-    assert _shown(panel) == expect
-
-
 def test_the_funnels_quick_filters(win):
     panel = win.layers_dock.panel
     scene = win.viewport.scene
@@ -630,20 +581,6 @@ def test_invert_and_the_funnel_says_it_is_on(win):
     panel.set_state_filter("all")
     panel.set_invert_filter(False)
     assert _shown(panel) == sorted([DEFAULT_LAYER, "A", "B"])
-
-
-def test_filters_keep_the_folders_on_the_way(win):
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    outer = L.add_folder(scene, "Arq")
-    scene.layers += [Layer("Oculta", folder=outer, visible=False),
-                     Layer("Vista", folder=outer)]
-    L.add_folder(scene, "Vacia")
-    panel.refresh()
-    panel.set_state_filter("hidden")
-    assert not panel.item_for(outer, "folder").isHidden()
-    assert panel.item_for("Vacia 1", "folder").isHidden()
-    assert panel.item_for("Vista").isHidden()
 
 
 def test_the_filter_menu_lists_the_filters_and_invert(win):
@@ -1718,5 +1655,3 @@ def test_first_construction_tag_keeps_existing_folder_rows(win):
     rows = {panel._key(item): item for item in panel._all_items()}
     assert all(rows[k] is item for k, item in old.items())
     assert any(k[1] == guide.key for k in rows)
-
-

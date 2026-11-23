@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Drawing styles and the read-only projection of unstructured host tags.
 use super::{attr_id, lock, value::Value, Data, Doc, FVal, Field, Key, Node, Trash};
+use crate::project_tree::text_matches;
 use std::collections::{HashMap, HashSet};
 
 fn labels<'a>(root: &'a Node, name: &str) -> Result<HashMap<&'a str, &'a str>, String> {
@@ -169,7 +170,8 @@ pub(super) fn preview(
             Visit::Folder(f, depth, inherited) => {
                 let id = format!("preview-folder:{f}");
                 let name = names.get(f).copied().unwrap_or(f);
-                let matches = inherited || name.to_lowercase().contains(&query);
+                let matches = inherited
+                    || (!query.contains(':') && text_matches(&name.to_lowercase(), &query));
                 let open = !query.is_empty() || expanded.contains(&id);
                 if !matches {
                     stack.push(Visit::End(result.len()));
@@ -214,8 +216,8 @@ pub(super) fn preview(
                             _ if token.contains(':') => false,
                             _ => {
                                 inherited
-                                    || name.to_lowercase().contains(token)
-                                    || "drawing only".contains(token)
+                                    || text_matches(&name.to_lowercase(), token)
+                                    || text_matches("drawing only", token)
                             }
                         };
                         hit != neg

@@ -989,7 +989,7 @@ def _tree(view, win, *, discover=False):
     from collections import Counter, defaultdict
     from core import links, structure
     from core import layers as L
-    from ingetrazo_core import project_context_rows, project_item_matches, source_placement_rows
+    from ingetrazo_core import project_context_rows, project_item_matches, project_name_matches, source_placement_rows
     model = _tree_model(view, scene, cv)
     if mode == "deliveries":
         from views import wgpu_deliveries
@@ -1094,8 +1094,8 @@ def _tree(view, win, *, discover=False):
     file_hit_by_key = {}
     if filtering:
         for key in order:
-            hit_node = bool(words) and not tokens and all(
-                w in (nodes[key]["name"] + " " + kind_of(recipes[key].get("class"))).lower() for w in words)
+            hit_node = bool(words) and not tokens and project_name_matches(
+                nodes[key]["name"], kind_of(recipes[key].get("class")), words)
             members = [g for g in direct[key] if item_hits(g, key)]
             file_hit = nodes[key]["kind"] == "link" and any(
                 project_item_matches(scene, g, "link", flt, links.link_state(scene, nodes[key]["path"]) in ("missing", "modified")) for g in tree.links.get(key, ()))
