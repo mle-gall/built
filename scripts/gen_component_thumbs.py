@@ -65,7 +65,7 @@ def snap(i: int = 0) -> None:
     cam.yaw = math.radians(-50.0)
     cam.pitch = math.radians(12.0)
     pad = 0.08 * max(hi.x() - lo.x(), hi.y() - lo.y(), hi.z() - lo.z(), 0.5)
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     cam.fit_to(QVector3D(lo.x() - pad, lo.y() - pad, lo.z() - pad),
                QVector3D(hi.x() + pad, hi.y() + pad, hi.z() + pad))
     image = viewport.render_image(320)

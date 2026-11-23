@@ -309,7 +309,7 @@ def _face_centroid(mesh, i):
     """``mesh.faces[i].centroid()``, read from a lazy mesh's plan without
     building it: picking the points built every mesh of a big document,
     so its gestures ran on a model nobody opening it would have."""
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     from core import lazy_mesh
     plan = lazy_mesh.plan_of(mesh)
     if plan is None:

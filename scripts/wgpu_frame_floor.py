@@ -6,7 +6,7 @@ import time
 import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from PySide6.QtCore import QTimer
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 from PySide6.QtWidgets import QApplication
 from core.mesh import Mesh
 from core.group import Group

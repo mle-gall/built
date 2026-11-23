@@ -21,7 +21,7 @@ import tracemalloc
 from types import SimpleNamespace
 
 import numpy as np
-from PySide6.QtGui import QMatrix4x4
+from ingetrazo_core import Matrix4 as QMatrix4x4
 
 
 def main() -> None:

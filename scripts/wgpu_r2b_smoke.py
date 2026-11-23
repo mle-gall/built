@@ -3,7 +3,7 @@ from pathlib import Path
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from PySide6.QtWidgets import QApplication
-from PySide6.QtGui import QVector3D, QMatrix4x4
+from ingetrazo_core import Vec3 as QVector3D, Matrix4 as QMatrix4x4
 from core.mesh import Mesh
 from core.group import Group
 from core.scene import Scene

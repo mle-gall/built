@@ -9,7 +9,6 @@ from pathlib import Path
 from types import SimpleNamespace
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from PySide6.QtWidgets import QApplication
-from PySide6.QtGui import QVector3D
 from PySide6.QtCore import QPointF, Qt
 from core.scene import Scene
 from core.group import iter_placements

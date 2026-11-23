@@ -15,7 +15,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 os.environ['INGETRAZO_RUST'] = '1'
 os.environ['INGETRAZO_TEXTURE_CACHE'] = str(Path('.look-tmp/textures').resolve())
 from PySide6.QtCore import QTimer, Qt
-from PySide6.QtGui import QImage, QPainter, QVector3D
+from PySide6.QtGui import QImage, QPainter
+from ingetrazo_core import Vec3 as QVector3D
 from PySide6.QtWidgets import QApplication
 from core.scene import Scene
 from formats.igz import load_into

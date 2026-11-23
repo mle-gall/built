@@ -36,7 +36,7 @@ def fingerprint(scene) -> dict:
     group breakdown. Deliberately parser-agnostic (no identity, no ordering)."""
     from formats.meshexport import world_faces
 
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
 
     faces = list(world_faces(scene))
     tris = 0

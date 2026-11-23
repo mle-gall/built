@@ -20,7 +20,8 @@ os.environ["INGETRAZO_WGPU"] = "1"
 os.environ["INGETRAZO_RUST"] = "1"
 from scripts.open_path_probe import rss_now_mb, rss_peak_mb
 from PySide6.QtCore import QSettings, Qt, QPointF, QEvent
-from PySide6.QtGui import QVector3D, QMatrix4x4, QMouseEvent
+from PySide6.QtGui import QMouseEvent
+from ingetrazo_core import Vec3 as QVector3D, Matrix4 as QMatrix4x4
 from PySide6.QtWidgets import QApplication
 
 folder = Path(tempfile.mkdtemp(prefix="composite-tools-probe-"))

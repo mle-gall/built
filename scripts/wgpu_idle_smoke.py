@@ -4,7 +4,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import QTimer
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 from PySide6.QtTest import QTest
 from core.scene import Scene
 from core.group import Group

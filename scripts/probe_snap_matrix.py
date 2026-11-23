@@ -40,7 +40,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 from PySide6.QtCore import QPointF                         # noqa: E402
-from PySide6.QtGui import QVector3D                        # noqa: E402
+from ingetrazo_core import Vec3 as QVector3D                        # noqa: E402
 from PySide6.QtWidgets import QApplication                 # noqa: E402
 
 #: Every standard view plus four obliques. The obliques matter: pacaeiro's
@@ -164,7 +164,7 @@ def _build_scene(vp, kind: str) -> None:
 
 
 def _turn() -> "QMatrix4x4":
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     m = QMatrix4x4()
     m.rotate(30.0, 0.0, 0.0, 1.0)
     m.rotate(20.0, 1.0, 0.0, 0.0)
