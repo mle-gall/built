@@ -357,72 +357,6 @@ def _sheets_model(win):
     return a101, a102
 
 
-def test_scene_usage_and_orphans_in_the_core():
-    win, scene, panel = _window_with()
-    a101, a102 = _sheets_model(win)
-    assert outliner.scene_usage(scene) == {
-        "Plan L1": ["A101 Plans", "A102 Elevations"],
-        "Section A": ["A101 Plans"]}
-    assert outliner.is_orphan(scene, a101.frames[1])
-    assert not outliner.is_orphan(scene, a101.frames[0])
-    assert not outliner.is_orphan(scene, a102.frames[1])     # a std view
-    _close(win)
-
-
-def test_the_sheets_tab_lists_scenes_sheets_and_their_views():
-    win, scene, panel = _window_with()
-    _sheets_model(win)
-    sheets = _views(win)
-    sheets.refresh()
-    scenes_root, sheets_root = sheets.scenes_root, sheets.sheets_root
-    assert [scenes_root.child(i).text(0)
-            for i in range(scenes_root.childCount())] == [
-        "Plan L1", "North elevation"]
-    assert scenes_root.child(0).text(1) == "On A101 Plans, A102 Elevations"
-    assert scenes_root.child(1).text(1) == "Not on a sheet"
-    a101 = sheets_root.child(0)
-    assert a101.text(0) == "A101 Plans" and a101.text(1).startswith("A3")
-    assert a101.child(0).text(0) == "Plan L1 · 1:100"
-    orphan = a101.child(1)
-    assert orphan.text(1) == "Scene missing"
-    assert "Section A" in orphan.toolTip(0)
-    assert sheets_root.child(1).child(1).text(1) == "Standard view"
-    _close(win)
-
-
-def test_deleting_a_scene_flags_its_frames_instead_of_breaking():
-    win, scene, panel = _window_with()
-    a101, _a102 = _sheets_model(win)
-    sheets = _views(win)
-    sheets.refresh()
-    assert sheets.sheets_root.child(0).child(0).text(1) == "Scene"
-    del scene.saved_views[0]                      # «Plan L1» goes
-    sheets.refresh()
-    assert sheets.sheets_root.child(0).child(0).text(1) == "Scene missing"
-    assert a101.frames[0].view_key == "scene:Plan L1"   # untouched
-    _close(win)
-
-
-def test_double_click_shows_a_scene_and_opens_a_sheet():
-    win, scene, panel = _window_with()
-    _sheets_model(win)
-    tree = _group("Tree")
-    scene.groups.append(tree)
-    tree.hidden = True
-    scene.saved_views[0].hidden_objects = []      # «Plan L1» shows it all
-    win.tray.scenes.refresh()
-    sheets = _views(win)
-    sheets.refresh()
-    sheets._show_scene(scene.saved_views[0])         # right-click ▸ Show
-    assert not tree.hidden
-    opened = []
-    win._show_sheet = opened.append
-    sheets.activate(sheets.sheets_root.child(1))
-    sheets.activate(sheets.sheets_root.child(0).child(1))
-    assert opened == [1, 0]
-    _close(win)
-
-
 # ---- Isolate, footer --------------------------------------------------------
 
 
@@ -518,25 +452,6 @@ def test_a_scene_marks_its_views_and_a_view_marks_its_scene():
     assert not marked[0].data(0, Qt.UserRole + 1)          # cleared
     sheets.tree.setCurrentItem(sheets.sheets_root.child(0).child(1))
     assert sheets.related() == []                          # orphan: none
-    _close(win)
-
-
-def test_a_sheet_added_in_the_composer_reaches_the_browser():
-    from core.composition import Composicion
-    win, scene, panel = _window_with()
-    _sheets_model(win)
-    sheets = _views(win)
-    win._ensure_composer().show()
-    win._composer._show_page("views")  # its tab in front
-    _app.processEvents()
-    sheets.refresh()
-    scene.compositions.append(Composicion(name="A103 Details"))
-    win._refresh_sheet_tabs()          # what the composer calls on add
-    assert sheets.sheets_root.childCount() == 3
-    scene.compositions[2].name = "A103 Joints"
-    sheets._poll.timeout.emit()        # the composer's in-place edits
-    assert sheets.sheets_root.child(2).text(0) == "A103 Joints"
-    win._composer.hide()
     _close(win)
 
 

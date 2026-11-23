@@ -1940,7 +1940,7 @@ impl Ui {
                                         actions.push(format!("{verb}\u{1f}{}", n.key));
                                     }
                                 }
-                                if resp.double_clicked() && n.row < 6 && col.filing.is_none() {
+                                if resp.double_clicked() && (n.row < 6 || n.row == 8) && col.filing.is_none() {
                                     let verb = if n.row == 0 { "isolate" } else { "open" };
                                     actions.push(format!("{verb}\u{1f}{}", n.key));
                                 }

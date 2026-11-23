@@ -214,7 +214,7 @@ pub(crate) fn vector_changed(key: Key, attr: u16, address: usize, xyz: [f64; 3])
     })
 }
 
-fn handle_key(obj: &Bound<'_, PyAny>) -> PyResult<Key> {
+pub(crate) fn handle_key(obj: &Bound<'_, PyAny>) -> PyResult<Key> {
     if let Ok(r) = obj.cast::<DocRecord>() {
         return Ok(r.get().key);
     }

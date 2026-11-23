@@ -898,11 +898,16 @@ def _tree(view, win, *, discover=False):
         flt = ""
     colset = 0 if discover else view.__dict__.get("_ui_colset", 0)
     sel_ids = {id(e) for e in scene.selection}
+    from ingetrazo_core import ProjectSheets
+    catalog = view.__dict__.get("_ui_sheet_catalog")
+    if catalog is None:
+        catalog = view._ui_sheet_catalog = ProjectSheets()
+    sheet_revision = view._ui_sheet_revision = catalog.refresh(scene)
     # Problems (watertight) and the Export cells (quantities) read geometry.
     geometric = view.__dict__.get("_ui_mode") == "problems" or colset == 2
     cv = scene.content_version if geometric else _tree_version(view, win, scene)
     sig = (id(scene), id(scene.edit_group), scene.mesh.revision, cv, tuple(sorted(exp)), tuple(sorted(pages.items())), flt, len(sel_ids),
-           hash(frozenset(sel_ids)), colset, getattr(view, "_ui_layer_rev", 0), scene.show_section_planes)
+           hash(frozenset(sel_ids)), colset, getattr(view, "_ui_layer_rev", 0), scene.show_section_planes, sheet_revision)
     if not discover and sig == getattr(view, "_ui_tree_sig", None):
         return
     first = not hasattr(view, "_ui_tree")
@@ -1197,6 +1202,7 @@ def _tree(view, win, *, discover=False):
             if tree._host_roots < 0:
                 rows[:0] = scene._root._drawing_preview(exp, flt, bool(tree.links))
             rows.extend(context)
+            rows.extend(catalog.rows(flt, exp))
         if discover:
             from ingetrazo_core import reveal_selection
             return reveal_selection(rows)
@@ -1750,6 +1756,8 @@ def _tree_action(win, view, action) -> None:
         groups = [e for e in sel if isinstance(e, Group)]
         if verb == "insp" and key.startswith("delivery:"):
             _run(win, ["deliver:" + key[9:]])
+        elif verb == "insp" and key.startswith("opensheetrow:"):
+            _tree_action(win, view, SEP.join(("open", key.partition(":")[2])))
         elif verb == "insp" and key.startswith("sectionview:"):
             from views import view_commands
             view_commands.run(win, key.partition(":")[2])
@@ -1904,6 +1912,17 @@ def _tree_action(win, view, action) -> None:
                 rebuild()
             elif scene.selection:
                 vp.flash_status("This selection has no occurrence in the Project tree")
+        elif verb == "item" and kind in ("sheet-page", "sheet-frame", "saved-scene", "sheet-pages", "saved-scenes"):
+            _select(win, [])
+            view._ui_insp_node = (rk, (0, 0, 0))
+        elif verb == "open" and kind in ("sheet-page", "sheet-frame", "saved-scene"):
+            target = view._ui_sheet_catalog.target(scene, rk)
+            if target is not None:
+                family, index = target
+                if family == "sheet":
+                    win._show_sheet(index)
+                else:
+                    win.tray.scenes.activate_view(scene.saved_views[index])
         elif verb == "linkselection":
             from ingetrazo_core import link_selection_sources
             from views.chrome_forms import ask_choice
@@ -2335,7 +2354,7 @@ def _inspector(view, win) -> None:
     sig = (id(scene), scene.content_version, sel_sig, node_focus, getattr(view, "_ui_tree_sig", None) is not None,
            view.__dict__.get("_ui_mat_focus"), view.__dict__.get("_ui_mode"), view.__dict__.get("_ui_colset"),
            _current_material_name(), _active_tool_id(win), scene.show_section_planes, scene.show_section_cuts,
-           scene.display_style.section_fill)
+           scene.display_style.section_fill, view.__dict__.get("_ui_sheet_revision"))
     if sig == getattr(view, "_ui_insp_sig", None):
         return
     view._ui_insp_sig = sig
@@ -2354,6 +2373,11 @@ def _inspector(view, win) -> None:
     from core.section import SectionPlane
     from ingetrazo_core import section_inspector
     section_key = node_focus or (f"section:{sel[0].uid}" if len(sel) == 1 and isinstance(sel[0], SectionPlane) else "")
+    if node_focus and node_focus.startswith(("sheet-page:", "sheet-frame:", "saved-scene:")):
+        sheet = view._ui_sheet_catalog.inspector(node_focus)
+        if sheet is not None:
+            view.renderer.ui_set_inspector(*sheet)
+            return
     if section_key.startswith(("section:", "sections:")):
         section = section_inspector(scene, section_key)
         if section is not None:
