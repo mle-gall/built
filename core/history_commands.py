@@ -3,6 +3,7 @@
 """Model editing commands and their Python reference inverses."""
 from __future__ import annotations
 
+from ingetrazo_core import planar_edits as _planar
 from ingetrazo_core import object_replay as _replay, object_drawing as _drawing
 from ingetrazo_core import (definition_edits as _definitions, placement_edits as _placements,
                             presentation as _presentation, placement_transform as _transform,
@@ -5159,45 +5160,49 @@ class RebuildPlanarFacesCommand(MeshCommand):
                          for f in mesh.faces if f.attrs]
         edges, faces = planar_rebuild(segments, origin, normal)
 
-        near_flagged = _segment_grid([(fa, fb) for fa, fb, _ in flagged])
-
-        scene.selection.clear()
-        if type(mesh) is StoreMesh:
-            mesh._store.drawing_clear()
-            mesh._attr_own.clear()
-            mesh._bump()
+        if _doc.ENABLED:
+            scene.selection.clear()
+            _planar.install_flat(mesh, type(mesh) is StoreMesh, edges, faces, flagged, old_attrs)
         else:
-            mesh.clear()
-        for a, b in edges:
-            if mesh.vertex(a) == mesh.vertex(b):
-                # Shorter than the weld: the arrangement keys points on a
-                # 0.1 mm grid, so two ends a hair apart across a cell line
-                # stay two -- the mesh welds them into one. Raising here
-                # rolled the whole draw back on an exploded DWG plan (#491).
-                continue
-            e = mesh.add_edge(a, b)
-            for i in near_flagged(e.a):
-                fa, fb, flags = flagged[i]
-                if _point_on_seg_incl(e.a, fa, fb) and _point_on_seg_incl(e.b, fa, fb):
-                    stamp_edge_flags(e, flags)
-                    break
-        for outer, holes in faces:
-            outer = _welded_loop(mesh, outer)
-            if outer is None:
-                continue
-            holes = [h for h in (_welded_loop(mesh, h) for h in holes) if h]
-            f = mesh.add_face(outer, holes or None)
-            if f is None or not old_attrs:
-                continue
-            tris = f.triangulate()
-            if not tris:
-                continue
-            probe = (tris[0][0] + tris[0][1] + tris[0][2]) / 3.0
-            for old_tris, attrs in old_attrs:
-                if any(_point_in_tri(probe, t0, t1, t2)
-                       for t0, t1, t2 in old_tris):
-                    f.attrs.update(attrs)
-                    break
+            near_flagged = _segment_grid([(fa, fb) for fa, fb, _ in flagged])
+
+            scene.selection.clear()
+            if type(mesh) is StoreMesh:
+                mesh._store.drawing_clear()
+                mesh._attr_own.clear()
+                mesh._bump()
+            else:
+                mesh.clear()
+            for a, b in edges:
+                if mesh.vertex(a) == mesh.vertex(b):
+                    # Shorter than the weld: the arrangement keys points on a
+                    # 0.1 mm grid, so two ends a hair apart across a cell line
+                    # stay two -- the mesh welds them into one. Raising here
+                    # rolled the whole draw back on an exploded DWG plan (#491).
+                    continue
+                e = mesh.add_edge(a, b)
+                for i in near_flagged(e.a):
+                    fa, fb, flags = flagged[i]
+                    if _point_on_seg_incl(e.a, fa, fb) and _point_on_seg_incl(e.b, fa, fb):
+                        stamp_edge_flags(e, flags)
+                        break
+            for outer, holes in faces:
+                outer = _welded_loop(mesh, outer)
+                if outer is None:
+                    continue
+                holes = [h for h in (_welded_loop(mesh, h) for h in holes) if h]
+                f = mesh.add_face(outer, holes or None)
+                if f is None or not old_attrs:
+                    continue
+                tris = f.triangulate()
+                if not tris:
+                    continue
+                probe = (tris[0][0] + tris[0][1] + tris[0][2]) / 3.0
+                for old_tris, attrs in old_attrs:
+                    if any(_point_in_tri(probe, t0, t1, t2)
+                           for t0, t1, t2 in old_tris):
+                        f.attrs.update(attrs)
+                        break
         if native and (self.snapshot.own or self.snapshot.table):
             own = {k: bool(attrs) for k, attrs in self.snapshot.own.items()}
             rows = [i + 1 for i, attrs in enumerate(self.snapshot.table) if attrs]
@@ -5330,22 +5335,35 @@ class RebuildPlaneFacesCommand(MeshCommand):
             rings = [[[p.toTuple() for p in ring] for ring in (outer, *(holes or ()))]
                      for outer, holes in regions]
             keys, owners = mesh._store.drawing_coverage(o, n, rings, hypot)
-            from core.triangulate import _newell
-            keep, unchanged = [], set()
-            for i, owner, normal in owners:
-                outer, holes = regions[i]
-                if QVector3D.dotProduct(_newell(outer), QVector3D(*normal)) < 0:
-                    outer = list(reversed(outer))
-                    holes = [list(reversed(h)) for h in (holes or [])]
-                face = FaceView(mesh, owner)
-                if owner not in unchanged and _region_is_face(face, outer, holes):
-                    unchanged.add(owner)        # comes out as it was: kept
-                    continue
-                keep.append((outer, holes or None, dict(face.attrs)))
-            keys = [k for k in keys if k not in unchanged]
-            mesh._store.remove_drawing_faces(keys)
-            mesh._dirty(len(keys))
-            self._restore_regions(scene, keep, flagged, len(unchanged))
+            if _doc.ENABLED:
+                self.rebuilt = _planar.store_regions(mesh, regions, keys, owners, flagged)
+                scene.selection.clear()
+                scene.version += 1
+                return
+            else:
+                from core.triangulate import _newell
+                keep, unchanged = [], set()
+                for i, owner, normal in owners:
+                    outer, holes = regions[i]
+                    if QVector3D.dotProduct(_newell(outer), QVector3D(*normal)) < 0:
+                        outer = list(reversed(outer))
+                        holes = [list(reversed(h)) for h in (holes or [])]
+                    face = FaceView(mesh, owner)
+                    if owner not in unchanged and _region_is_face(face, outer, holes):
+                        unchanged.add(owner)        # comes out as it was: kept
+                        continue
+                    keep.append((outer, holes or None, dict(face.attrs)))
+                keys = [k for k in keys if k not in unchanged]
+                mesh._store.remove_drawing_faces(keys)
+                mesh._dirty(len(keys))
+                self._restore_regions(scene, keep, flagged, len(unchanged))
+                return
+        if _doc.ENABLED:
+            count = _planar.rebuild_scoped(self, mesh)
+            if count is not None:
+                self.rebuilt = count
+                scene.selection.clear()
+                scene.version += 1
             return
         if self.faces is not None:
             live = set(map(element_identity, mesh.faces))

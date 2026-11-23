@@ -36,6 +36,7 @@ mod structure;
 mod presentation;
 mod object_replay;
 mod object_drawing;
+mod planar_edits;
 mod placement_edits;
 mod placement_transform;
 mod reference_layers;
@@ -200,6 +201,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     presentation::register(m)?;
     object_replay::register(m)?;
     object_drawing::register(m)?;
+    planar_edits::register(m)?;
     placement_edits::register(m)?;
     placement_transform::register(m)?;
     reference_layers::register(m)?;

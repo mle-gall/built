@@ -38,7 +38,7 @@ mod soften;
 mod stitch_command;
 mod erase;
 mod drawing_face;
-mod drawing_plane;
+pub(crate) mod drawing_plane;
 mod drawing_edges;
 pub mod edit;
 pub(crate) mod geometry;
