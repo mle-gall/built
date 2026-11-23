@@ -1581,7 +1581,7 @@ class MetalView(ViewNavigation):
             if wgpu_sheets.gesture(self, event):    # pinch on the sheet
                 return True
             # Pinch, smart zoom: a trackpad's, or the touch screen's (#248).
-            from views import trackpad_nav
+            from ingetrazo_render import trackpad_nav
             if trackpad_nav.native_gesture(self, event):
                 return True
         if event.type() == QEvent.ShortcutOverride:

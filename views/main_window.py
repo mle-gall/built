@@ -9719,15 +9719,18 @@ class MainWindow(WorksessionMixin, QMainWindow):
         buttons.accepted.connect(dlg.accept)
         buttons.rejected.connect(dlg.reject)
         form.addRow(buttons)
-        if dlg.exec() != QDialog.Accepted:
-            return None
-        text = text_edit.text().strip()
-        if not text:
-            return None
-        return text_params(
-            text, font_box.currentFont().family(), bold_check.isChecked(),
-            italic_check.isChecked(), height_spin.value(),
-            depth_spin.value())
+        try:
+            if dlg.exec() != QDialog.Accepted:
+                return None
+            text = text_edit.text().strip()
+            if not text:
+                return None
+            return text_params(
+                text, font_box.currentFont().family(), bold_check.isChecked(),
+                italic_check.isChecked(), height_spin.value(),
+                depth_spin.value())
+        finally:
+            dlg.deleteLater()
 
     @_repeatable("3D Text")
     def _on_insert_3d_text(self) -> None:

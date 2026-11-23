@@ -9,6 +9,7 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from tests.qt_window_lifetime import close_window
 import pytest  # noqa: E402
 from PySide6.QtWidgets import (QApplication, QDialog,  # noqa: E402
                                QDoubleSpinBox)
@@ -38,7 +39,7 @@ def _run_dialog(monkeypatch, unit, typed, params=None):
         out = win._text3d_dialog(params)
     finally:
         win._saved_version = win.viewport.scene.version
-        win.close()
+        close_window(win)
     return seen["boxes"], out
 
 
@@ -80,4 +81,4 @@ def test_classic_insert_uses_qt_font_control(monkeypatch):
         assert seen and seen[0]
     finally:
         win._saved_version = win.viewport.scene.version
-        win.close()
+        close_window(win)

@@ -70,14 +70,15 @@ pub fn preview_materials<'py>(
 }
 
 pub struct TexturedPreview {
-    pipelines: [wgpu::RenderPipeline; 2],
+    samples: crate::antialias::SampleModes,
+    pipelines: Vec<wgpu::RenderPipeline>,
     sampler: wgpu::Sampler,
     images: HashMap<String, wgpu::BindGroup>,
     runs: Vec<(String, wgpu::Buffer, u32)>,
 }
 
 impl TexturedPreview {
-    pub fn new(
+    pub fn new(samples: crate::antialias::SampleModes,
         device: &wgpu::Device,
         format: wgpu::TextureFormat,
         scene: &wgpu::BindGroupLayout,
@@ -112,7 +113,7 @@ impl TexturedPreview {
             label: Some("textured tool preview"),
             source: wgpu::ShaderSource::Wgsl(include_str!("preview.wgsl").into()),
         });
-        let pipelines = [1, 4].map(|count| {
+        let pipelines = samples.levels.iter().copied().map(|count| {
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some("textured preview"),
                 layout: Some(&layout),
@@ -151,7 +152,7 @@ impl TexturedPreview {
                 multiview: None,
                 cache: None,
             })
-        });
+        }).collect();
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             address_mode_u: wgpu::AddressMode::Repeat,
             address_mode_v: wgpu::AddressMode::Repeat,
@@ -159,7 +160,7 @@ impl TexturedPreview {
             mag_filter: wgpu::FilterMode::Linear,
             ..Default::default()
         });
-        Self {
+        Self { samples,
             pipelines,
             sampler,
             images: HashMap::new(),
@@ -263,7 +264,7 @@ impl TexturedPreview {
         !self.runs.is_empty()
     }
     pub fn draw<'a>(&'a self, pass: &mut wgpu::RenderPass<'a>, msaa: bool) {
-        pass.set_pipeline(&self.pipelines[usize::from(msaa)]);
+        pass.set_pipeline(&self.pipelines[self.samples.index(msaa)]);
         for (path, vertices, count) in &self.runs {
             pass.set_bind_group(1, &self.images[path], &[]);
             pass.set_vertex_buffer(0, vertices.slice(..));

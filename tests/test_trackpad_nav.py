@@ -19,7 +19,7 @@ from PySide6.QtGui import (QInputDevice, QNativeGestureEvent,
                            QPointingDevice, QWheelEvent)
 from PySide6.QtWidgets import QApplication
 
-from views import trackpad_nav
+from ingetrazo_render import trackpad_nav
 
 _app = QApplication.instance() or QApplication([])
 
@@ -256,7 +256,7 @@ def test_momentum_keeps_turning_with_inertia_on(vp):
     assert vp.camera.yaw != yaw1
 
 
-def test_retired_inertia_override_is_ignored(vp):
+def test_inertia_off_drops_momentum(vp):
     from PySide6.QtCore import QSettings
     settings = QSettings()
     settings.setValue("nav/trackpad_inertia", "0")
@@ -264,7 +264,7 @@ def test_retired_inertia_override_is_ignored(vp):
         finger_slide(vp, 10, 0)
         yaw = vp.camera.yaw
         slide(vp, 6, 0, phase=Qt.ScrollMomentum)
-        assert vp.camera.yaw != yaw
+        assert vp.camera.yaw == yaw
     finally:
         settings.remove("nav/trackpad_inertia")
 
@@ -364,10 +364,11 @@ def test_lifting_the_fingers_frees_the_gesture(vp):
     assert vp.camera.yaw != yaw0
 
 
-def test_a_rotation_is_taken_and_changes_nothing(vp):
+def test_a_rotation_orbits(vp):
     p0 = pose(vp)
     gesture(vp, Qt.RotateNativeGesture, 15.0)
-    assert pose(vp) == p0
+    assert vp.camera.yaw != p0[0]
+    assert vp.camera.distance == pytest.approx(p0[2])
 
 
 # ---- smart zoom (two-finger double tap) ------------------------------------

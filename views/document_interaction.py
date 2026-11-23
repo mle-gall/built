@@ -2213,7 +2213,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         self.scene.hide_similar_components = _load_hide_similar()
         self._invert_wheel = _load_invert_wheel()
         self._invert_orbit_y = _load_invert_orbit_y()
-        from views import trackpad_nav
+        from ingetrazo_render import trackpad_nav
         self._trackpad_slide = trackpad_nav.load_slide_mode()
         self._msaa = 4
         self._soft_shadows = _load_soft_shadows()
@@ -13995,7 +13995,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         self._input_serial = getattr(self, "_input_serial", 0) + 1
         # A finger slide (trackpad, or the touch screen) orbits or pans
         # instead, by preference; it says so by taking the event.
-        from views import trackpad_nav
+        from ingetrazo_render import trackpad_nav
         if trackpad_nav.slide(self, ev):
             self.update()
             return
@@ -14050,7 +14050,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     def event(self, ev) -> bool:
         if ev.type() == QEvent.NativeGesture:
             # Pinch, smart zoom: a trackpad's, or the touch screen's (#248).
-            from views import trackpad_nav
+            from ingetrazo_render import trackpad_nav
             if trackpad_nav.native_gesture(self, ev):
                 return True
         if (ev.type() in (QEvent.ShortcutOverride, QEvent.KeyPress)

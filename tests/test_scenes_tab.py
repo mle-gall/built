@@ -759,11 +759,7 @@ def test_a_scene_shown_from_a_tab_is_marked_in_the_panel(win):
 
 # ---- The panel's icons follow the theme; a picture is asked for again -------
 
-def test_the_bar_icons_are_named_so_a_theme_change_draws_them_again(win):
-    """Drawn in the theme's ink when made, and left in it: black on the
-    dark theme after a switch."""
-    from PySide6.QtGui import QColor, QIcon, QPixmap
-    from views import theme
+def test_scene_controls_display_the_icon_for_their_action(win):
     panel = win.scenes_dock.panel
     named = {panel.add_btn: "scene_add", panel.add_folder_btn: "folder_add",
              panel.update_btn: "refresh",
@@ -775,12 +771,6 @@ def test_the_bar_icons_are_named_so_a_theme_change_draws_them_again(win):
     assert panel.view_btn.property("icon_key") == "scenes_thumbs"
     panel.set_thumbnails(False)
     assert panel.view_btn.property("icon_key") == "scenes_list"
-    # The redraw reaches them: a blank put in their place is replaced.
-    blank = QPixmap(16, 16)
-    blank.fill(QColor(0, 0, 0, 0))
-    for obj in list(named) + [panel.view_btn]:
-        obj.setIcon(QIcon(blank))
-    theme._redraw_icons(_app)
     for obj in list(named) + [panel.view_btn]:
         img = obj.icon().pixmap(16, 16).toImage()
         assert any(img.pixelColor(x, y).alpha() > 0

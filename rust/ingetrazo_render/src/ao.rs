@@ -1,6 +1,7 @@
 //! Depth-based horizon AO. No geometry or picking state is owned by this pass.
 use pyo3::{exceptions::PyValueError, prelude::*, types::PyDict};
 pub struct AmbientOcclusion {
+    samples: crate::antialias::SampleModes,
     pub enabled: bool,
     settings: [f32; 4],
     proj: glam::Mat4,
@@ -29,7 +30,7 @@ fn target(d: &wgpu::Device, w: u32, h: u32, format: wgpu::TextureFormat) -> wgpu
     })
 }
 impl AmbientOcclusion {
-    pub fn new(d: &wgpu::Device, format: wgpu::TextureFormat) -> Self {
+    pub fn new(samples: crate::antialias::SampleModes, d: &wgpu::Device, format: wgpu::TextureFormat) -> Self {
         let uniform = d.create_buffer(&wgpu::BufferDescriptor {
             label: Some("AO parameters"),
             size: 144,
@@ -73,8 +74,7 @@ impl AmbientOcclusion {
             label: Some("horizon AO"),
             source: wgpu::ShaderSource::Wgsl(include_str!("ao.wgsl").into()),
         });
-        let pipelines = ["horizon", "blur1", "blur2", "apply", "apply"]
-            .iter()
+        let pipelines = ["horizon", "blur1", "blur2"].into_iter().chain(samples.levels.iter().map(|_| "apply"))
             .enumerate()
             .map(|(i, entry)| {
                 d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -118,7 +118,7 @@ impl AmbientOcclusion {
                     primitive: Default::default(),
                     depth_stencil: None,
                     multisample: wgpu::MultisampleState {
-                        count: if i == 4 { 4 } else { 1 },
+                        count: if i >= 3 { samples.levels[i - 3] } else { 1 },
                         ..Default::default()
                     },
                     multiview: None,
@@ -126,7 +126,7 @@ impl AmbientOcclusion {
                 })
             })
             .collect();
-        Self {
+        Self { samples,
             enabled: false,
             settings: [0.5, 1., 16., 2.],
             proj: glam::Mat4::IDENTITY,
@@ -217,7 +217,7 @@ impl AmbientOcclusion {
             (0, &b, &a),
             (1, &a, &b),
             (2, &b, &a),
-            (if msaa { 4 } else { 3 }, &a, output),
+            (3 + self.samples.index(msaa), &a, output),
         ] {
             let group = d.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("AO inputs"),
@@ -280,7 +280,7 @@ mod tests {
             return;
         };
         let (d, _) = pollster::block_on(adapter.request_device(&Default::default(), None)).unwrap();
-        let _ao = super::AmbientOcclusion::new(&d, wgpu::TextureFormat::Bgra8UnormSrgb);
+        let _ao = super::AmbientOcclusion::new(crate::antialias::SampleModes::test(), &d, wgpu::TextureFormat::Bgra8UnormSrgb);
     }
     #[test]
     fn synthetic_depth_plane_and_corner() {
@@ -290,7 +290,7 @@ mod tests {
             return;
         };
         let (d, q) = pollster::block_on(adapter.request_device(&Default::default(), None)).unwrap();
-        let mut ao = super::AmbientOcclusion::new(&d, wgpu::TextureFormat::Rgba8Unorm);
+        let mut ao = super::AmbientOcclusion::new(crate::antialias::SampleModes::test(), &d, wgpu::TextureFormat::Rgba8Unorm);
         ao.settings = [0.5, 1., 32., 1.];
         ao.camera(crate::depth::projection(&glam::Mat4::orthographic_rh_gl(-1., 1., -1., 1., 0.1, 4.).to_cols_array(), false));
         let scene = crate::texture(&d, 64, 64, wgpu::TextureFormat::Rgba8Unorm);
