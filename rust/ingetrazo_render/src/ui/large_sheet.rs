@@ -45,17 +45,12 @@ use super::*;
 const SEP: char = '\u{1f}';
 /// How long opening and closing take (seconds).
 pub const ANIM_S: f32 = 0.16;
-const HEAD_H: f32 = 52.0;
 /// The room between rail and dock a sheet needs to sit there (else it covers both).
 const FRAMED_MIN_W: f32 = 960.0;
-const FOOT_H: f32 = 32.0;
-const PAD: f32 = 14.0;
 
 // ---- Look: the design system's names only (ui/tokens.rs, ui/kit.rs),
 // in one block. Blue is only the accent: the focused tile, the selected
 // row, the primary button, links. No colour is made here.
-/// The sheet is the dock's glass panel (Surface::Panel), not a fill of its own.
-const SHEET_GLASS: Surface = Surface::Panel;
 /// The side list and the panes are set apart by dividers only.
 const RULE: Color32 = DIVIDER;
 /// A picture's well (no picture yet).
@@ -446,22 +441,22 @@ fn button(ui: &mut egui::Ui, v: &Verb, width: Option<f32>) -> bool {
     if v.role == 3 {
         let g = ui.painter().layout_no_wrap(v.label.clone(), body(), INK);
         let sense = if v.enabled { Sense::click() } else { Sense::hover() };
-        let (r, resp) = ui.allocate_exact_size(vec2(width.unwrap_or(g.size().x + 16.0), 28.0), sense);
+        let (r, resp) = ui.allocate_exact_size(vec2(width.unwrap_or(g.size().x + SPACE_L), BUTTON_H), sense);
         paint_state(ui, r, state_of(&resp, false, v.enabled), R_CONTROL);
-        ui.painter().galley(pos2(r.center().x - g.size().x / 2.0, r.center().y - g.size().y / 2.0), g,
+        centered(ui.painter(), r, g,
                             if v.enabled { ACCENT } else { OFF });
         let resp = if v.tip.is_empty() { resp } else { resp.on_hover_text(&v.tip) };
         return resp.clicked() && v.enabled;
     }
     let primary = v.role == 1;
     let ink = if !v.enabled { OFF } else if primary { BRIGHT } else { INK };
-    let g = ui.painter().layout_no_wrap(v.label.clone(), if primary { strong(12.0) } else { body() }, ink);
+    let g = ui.painter().layout_no_wrap(v.label.clone(), if primary { strong(TYPE_BODY) } else { body() }, ink);
     let k = (!v.key.is_empty()).then(|| ui.painter().layout_no_wrap(v.key.clone(), meta(),
         if primary { ON_PRIMARY_HINT } else { FAINT }));
     let kw = k.as_ref().map_or(0.0, |k| k.size().x + 8.0);
     let w = width.unwrap_or((g.size().x + kw + 22.0).max(56.0));
     let sense = if v.enabled { Sense::click() } else { Sense::hover() };
-    let (rect, resp) = ui.allocate_exact_size(vec2(w, 28.0), sense);
+    let (rect, resp) = ui.allocate_exact_size(vec2(w, BUTTON_H), sense);
     let cr = CornerRadius::same(R_CONTROL);
     if primary && v.enabled {
         let fill = if resp.is_pointer_button_down_on() { PRIMARY_PRESS } else if resp.hovered() { PRIMARY_HOVER } else { ACCENT };
@@ -496,7 +491,7 @@ impl Draw<'_> {
         for (i, b) in blocks.iter().enumerate() {
             match b.kind.as_str() {
                 "caption" => {
-                    ui.add_space(if i == 0 { 2.0 } else { 10.0 });
+                    ui.add_space(if i == 0 { SPACE_XS } else { SPACE_M });
                     ui.horizontal(|ui| {
                         caption_plain(ui, &b.text);
                         if !b.right.is_empty() {
@@ -505,18 +500,18 @@ impl Draw<'_> {
                             });
                         }
                     });
-                    ui.add_space(4.0);
+                    ui.add_space(SPACE_XS);
                 }
                 "text" => {
                     let color = if b.tone.is_empty() { DIM } else { tone(&b.tone) };
                     ui.add(egui::Label::new(egui::RichText::new(&b.text).font(body()).color(color)).wrap());
-                    ui.add_space(4.0);
+                    ui.add_space(SPACE_XS);
                 }
                 "separator" => {
-                    ui.add_space(6.0);
+                    ui.add_space(SPACE_S);
                     let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 1.0), Sense::hover());
                     ui.painter().hline(r.x_range(), r.center().y, Stroke::new(1.0_f32, RULE));
-                    ui.add_space(6.0);
+                    ui.add_space(SPACE_S);
                 }
                 "heading" => self.heading(ui, b),
                 "picture" => {
@@ -524,14 +519,14 @@ impl Draw<'_> {
                     let h = if b.size > 0.0 { b.size } else { (w * 0.45).clamp(80.0, 260.0) };
                     let (r, _) = ui.allocate_exact_size(vec2(w, h), Sense::hover());
                     picture(ui, r, self.icons.get(&b.icon), &b.hex, 10);
-                    ui.add_space(10.0);
+                    ui.add_space(SPACE_M);
                 }
                 "table" => {
                     let columns = b.cells.first().map_or(1, |r| r.len().max(1));
-                    let column_width = (ui.available_width() / columns as f32 - 18.0).max(55.0);
+                    let column_width = (ui.available_width() / columns as f32 - SPACE_L).max(55.0);
                     egui::ScrollArea::horizontal().show(ui, |ui| {
                         egui::Grid::new((self.pane, i)).min_col_width(column_width)
-                            .spacing(vec2(18.0, 8.0)).show(ui, |ui| {
+                            .spacing(vec2(SPACE_L, SPACE_S)).show(ui, |ui| {
                             for (n, row) in b.cells.iter().enumerate() {
                                 let mut bounds = Rect::NOTHING;
                                 let id = n.to_string();
@@ -549,17 +544,17 @@ impl Draw<'_> {
                 }
                 "kv" => {
                     for (label, value, t) in &b.rows {
-                        let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 24.0), Sense::hover());
+                        let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), PROP_H), Sense::hover());
                         let v = fit(ui, value, body(), tone(t), r.width() * 0.62, 1);
-                        ui.painter().galley(pos2(r.max.x - v.size().x, r.center().y - v.size().y / 2.0), v, INK);
-                        let l = fit(ui, label, body(), DIM, r.width() * 0.36, 1);
-                        ui.painter().galley(pos2(r.min.x, r.center().y - l.size().y / 2.0), l, DIM);
+                        leading(ui.painter(), r, r.max.x - v.size().x, v, tone(t));
+                        let l = fit(ui, label, meta(), DIM, r.width() * 0.36, 1);
+                        leading(ui.painter(), r, r.min.x, l, DIM);
                         if t == "warn" || t == "error" || t == "ok" {
                             let vw = ui.painter().layout_no_wrap(value.clone(), body(), INK).size().x.min(r.width() * 0.62);
                             paint_dot(ui, pos2(r.max.x - vw - 9.0, r.center().y), t);
                         }
                     }
-                    ui.add_space(4.0);
+                    ui.add_space(SPACE_XS);
                 }
                 "buttons" => self.buttons(ui, b),
                 "tiles" => self.tiles(ui, b),
@@ -569,13 +564,13 @@ impl Draw<'_> {
                     if let Some(d) = self.st.forms.get_mut(&key) {
                         let out = &mut *self.out;
                         ui.scope(|ui| {
-                            ui.spacing_mut().item_spacing = vec2(0.0, 4.0);
+                            ui.spacing_mut().item_spacing = vec2(0.0, SPACE_XS);
                             // Label and control stay together on a wide sheet.
                             ui.set_max_width(ui.available_width().min(680.0));
                             dialog::fields(ui, d, out);
                         });
                     }
-                    ui.add_space(6.0);
+                    ui.add_space(SPACE_S);
                 }
                 _ => {}
             }
@@ -584,7 +579,7 @@ impl Draw<'_> {
 
     fn heading(&mut self, ui: &mut egui::Ui, b: &Block) {
         let w = ui.available_width();
-        let (r, _) = ui.allocate_exact_size(vec2(w, 24.0), Sense::hover());
+        let (r, _) = ui.allocate_exact_size(vec2(w, ROW_H), Sense::hover());
         let right = (!b.right.is_empty()).then(|| fit(ui, &b.right, meta(), FAINT, w * 0.45, 1));
         let rw = right.as_ref().map_or(0.0, |g| g.size().x + 10.0);
         let mut x = r.min.x;
@@ -593,9 +588,9 @@ impl Draw<'_> {
             picture(ui, sw, self.icons.get(&b.icon), &b.hex, 4);
             x += 28.0;
         }
-        let t = fit(ui, &b.text, strong(15.0), INK, r.max.x - x - rw, 1);
+        let t = fit(ui, &b.text, heading(), INK, r.max.x - x - rw, 1);
         let tw = t.size().x;
-        ui.painter().galley(pos2(x, r.center().y - t.size().y / 2.0), t, INK);
+        leading(ui.painter(), r, x, t, INK);
         if b.tone == "accent" {
             ui.painter().text(pos2(x + tw + 8.0, r.center().y), egui::Align2::LEFT_CENTER, "★", meta(), ACCENT);
         }
@@ -607,29 +602,29 @@ impl Draw<'_> {
             let (r, _) = ui.allocate_exact_size(vec2(w, g.size().y + 2.0), Sense::hover());
             ui.painter().galley(r.min, g, FAINT);
         }
-        ui.add_space(6.0);
+        ui.add_space(SPACE_S);
     }
 
     fn buttons(&mut self, ui: &mut egui::Ui, b: &Block) {
         let w = ui.available_width();
-        ui.add_space(4.0);
+        ui.add_space(SPACE_XS);
         if b.align == "fill" {
             for v in &b.buttons {
                 if button(ui, v, Some(w)) { self.out.push(format!("verb{SEP}{}", v.id)); }
-                ui.add_space(6.0);
+                ui.add_space(SPACE_S);
             }
             return;
         }
         let layout = if b.align == "left" { egui::Layout::left_to_right(egui::Align::Center) }
                      else { egui::Layout::right_to_left(egui::Align::Center) };
-        ui.allocate_ui_with_layout(vec2(w, 28.0), layout, |ui| {
-            ui.spacing_mut().item_spacing = vec2(6.0, 0.0);
+        ui.allocate_ui_with_layout(vec2(w, BUTTON_H), layout, |ui| {
+            ui.spacing_mut().item_spacing = vec2(SPACE_S, 0.0);
             let order: Vec<&Verb> = if b.align == "left" { b.buttons.iter().collect() } else { b.buttons.iter().rev().collect() };
             for v in order {
                 if button(ui, v, None) { self.out.push(format!("verb{SEP}{}", v.id)); }
             }
         });
-        ui.add_space(6.0);
+        ui.add_space(SPACE_S);
     }
 
     /// Report a click / double-click / right-click on an item.
@@ -713,12 +708,12 @@ impl Draw<'_> {
             let resp = if it.tip.is_empty() { resp } else { resp.on_hover_text(&it.tip) };
             self.item_input(&resp, it);
         }
-        ui.add_space(8.0);
+        ui.add_space(SPACE_S);
     }
 
     fn rows(&mut self, ui: &mut egui::Ui, b: &Block) {
         let thumbs = b.items.iter().any(|i| !i.icon.is_empty() || !i.hex.is_empty()) || b.tone == "thumbs";
-        let rh = if thumbs { 40.0 } else if b.items.iter().any(|i| !i.sub.is_empty()) { 36.0 } else { 26.0 };
+        let rh = if thumbs { 40.0 } else if b.items.iter().any(|i| !i.sub.is_empty()) { 36.0 } else { ROW_H };
         let w = ui.available_width();
         let h = b.items.len() as f32 * rh;
         let (block, _) = ui.allocate_exact_size(vec2(w, h), Sense::hover());
@@ -788,7 +783,7 @@ impl Draw<'_> {
             let resp = if it.tip.is_empty() { resp } else { resp.on_hover_text(&it.tip) };
             self.item_input(&resp, it);
         }
-        ui.add_space(6.0);
+        ui.add_space(SPACE_S);
     }
 }
 
@@ -974,61 +969,39 @@ impl Ui {
                 let _ = all;
                 ui.painter().rect_filled(dim, CornerRadius::ZERO, BEHIND.gamma_multiply(ease));
                 if scrim.clicked() { st.menu = None; st.head_menu = None; }
-                // The dock's glass: its shadow, the blurred model through
-                // its tint, its rim (ui.rs Glass, Surface::Panel).
-                let cr = CornerRadius::same(SHEET_GLASS.radius());
-                ui.painter().add(SHEET_GLASS.shadow().as_shape(sheet, cr));
-                ui.painter().add(crate::glass::pane(sheet, SHEET_GLASS.radius() as f32, SHEET_GLASS.look()));
-                // Take every click inside the sheet (gaps between widgets too).
-                let _ = ui.interact(sheet, egui::Id::new("lsheet_body"), Sense::click());
-
-                let head = Rect::from_min_size(sheet.min, vec2(sheet.width(), HEAD_H));
-                let foot_h = if spec.footer.is_some() { FOOT_H } else { 0.0 };
-                let body_r = Rect::from_min_max(pos2(sheet.min.x, head.max.y), pos2(sheet.max.x, sheet.max.y - foot_h));
-                ui.painter().hline(sheet.x_range(), head.max.y - 0.5, Stroke::new(1.0_f32, RULE));
-                Self::lsheet_header(ui, &spec, st, head, &mut out);
-                if let Some(f) = &spec.footer {
-                    let fr = Rect::from_min_max(pos2(sheet.min.x, sheet.max.y - FOOT_H), sheet.max);
-                    ui.painter().hline(sheet.x_range(), fr.min.y + 0.5, Stroke::new(1.0_f32, RULE));
-                    Self::lsheet_footer(ui, f, fr, &mut out);
+                let side_width = if spec.side.is_empty() { 0.0 } else if spec.side_width > 0.0 { spec.side_width } else { 216.0 };
+                let detail_width = spec.detail.as_ref().map_or(0.0, |d| if d.width > 0.0 { d.width } else { 340.0 });
+                let frame = sheet_frame(ui, sheet, side_width, detail_width, spec.footer.is_some());
+                Self::lsheet_header(ui, &spec, st, frame.header, &mut out);
+                if let (Some(f), Some(rect)) = (&spec.footer, frame.footer) {
+                    Self::lsheet_footer(ui, f, rect, &mut out);
                 }
-                // Side | content | detail.
-                let side_w = if spec.side.is_empty() { 0.0 } else if spec.side_width > 0.0 { spec.side_width } else { 216.0 };
-                let detail_w = spec.detail.as_ref().map_or(0.0, |d| if d.width > 0.0 { d.width } else { 340.0 })
-                    .min((body_r.width() - side_w) * 0.5);
-                let side_r = Rect::from_min_max(body_r.min, pos2(body_r.min.x + side_w, body_r.max.y));
-                let detail_r = Rect::from_min_max(pos2(body_r.max.x - detail_w, body_r.min.y), body_r.max);
-                let content_r = Rect::from_min_max(pos2(side_r.max.x, body_r.min.y), pos2(detail_r.min.x, body_r.max.y));
-                if side_w > 0.0 {
-                    ui.painter().vline(side_r.max.x - 0.5, side_r.y_range(), Stroke::new(1.0_f32, RULE));
-                    Self::lsheet_side(ui, &spec.side, side_r, &mut out);
-                }
-                if detail_w > 0.0 {
-                    ui.painter().vline(detail_r.min.x + 0.5, detail_r.y_range(), Stroke::new(1.0_f32, RULE));
+                if let Some(side) = frame.side {
+                    Self::lsheet_side(ui, &spec.side, side, &mut out);
                 }
                 // Content.
                 {
                     let mut d = Draw { st: &mut *st, icons, out: &mut out, focusable: true, pane: "c", rects: Vec::new() };
-                    let inner = content_r.shrink2(vec2(PAD, 10.0));
+                    let inner = frame.content.shrink(SPACE_M);
                     ui.scope_builder(egui::UiBuilder::new().max_rect(inner).layout(egui::Layout::top_down(egui::Align::Min)), |ui| {
                         ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
                         if !spec.content.title.is_empty() {
-                            let (r, _) = ui.allocate_exact_size(vec2(inner.width(), 26.0), Sense::hover());
-                            let t = ui.painter().layout_no_wrap(spec.content.title.clone(), strong(13.0), INK);
+                            let (r, _) = ui.allocate_exact_size(vec2(inner.width(), ROW_H), Sense::hover());
+                            let t = ui.painter().layout_no_wrap(spec.content.title.clone(), title_font(), INK);
                             let tw = t.size().x;
-                            ui.painter().galley(pos2(r.min.x, r.center().y - t.size().y / 2.0), t, INK);
+                            leading(ui.painter(), r, r.min.x, t, INK);
                             if !spec.content.sub.is_empty() {
                                 ui.painter().text(pos2(r.min.x + tw + 8.0, r.center().y), egui::Align2::LEFT_CENTER,
                                                   &spec.content.sub, meta(), FAINT);
                             }
-                            ui.add_space(6.0);
+                            ui.add_space(SPACE_S);
                         }
                         egui::ScrollArea::vertical().id_salt(("lsheet_content", &spec.id)).auto_shrink([false, false])
                             .show(ui, |ui| {
                                 ui.set_width(ui.available_width());
                                 ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
                                 if spec.content.blocks.is_empty() && !spec.content.empty.is_empty() {
-                                    ui.add_space(24.0);
+                                    ui.add_space(SPACE_XL);
                                     ui.add(egui::Label::new(egui::RichText::new(&spec.content.empty).font(body()).color(FAINT)).wrap());
                                 }
                                 d.blocks(ui, &spec.content.blocks);
@@ -1037,9 +1010,9 @@ impl Ui {
                     rects = std::mem::take(&mut d.rects);
                 }
                 // Detail.
-                if let Some(detail) = spec.detail.as_ref().filter(|_| detail_w > 0.0) {
+                if let (Some(detail), Some(rect)) = (&spec.detail, frame.detail) {
                     let mut d = Draw { st: &mut *st, icons, out: &mut out, focusable: false, pane: "d", rects: Vec::new() };
-                    let inner = detail_r.shrink2(vec2(PAD, 12.0));
+                    let inner = rect.shrink(SPACE_M);
                     ui.scope_builder(egui::UiBuilder::new().max_rect(inner).layout(egui::Layout::top_down(egui::Align::Min)), |ui| {
                         ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
                         egui::ScrollArea::vertical().id_salt(("lsheet_detail", &spec.id)).auto_shrink([false, false])
@@ -1047,11 +1020,11 @@ impl Ui {
                                 ui.set_width(ui.available_width());
                                 ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
                                 if !detail.title.is_empty() {
-                                    ui.label(egui::RichText::new(&detail.title).font(strong(13.0)).color(INK));
-                                    ui.add_space(6.0);
+                                    ui.label(egui::RichText::new(&detail.title).font(title_font()).color(INK));
+                                    ui.add_space(SPACE_S);
                                 }
                                 if detail.blocks.is_empty() && !detail.empty.is_empty() {
-                                    ui.add_space(24.0);
+                                    ui.add_space(SPACE_XL);
                                     ui.add(egui::Label::new(egui::RichText::new(&detail.empty).font(body()).color(FAINT)).wrap());
                                 }
                                 d.blocks(ui, &detail.blocks);
@@ -1148,43 +1121,20 @@ impl Ui {
     }
 
     fn lsheet_header(ui: &mut egui::Ui, spec: &Spec, st: &mut LargeSheet, head: Rect, out: &mut Vec<String>) {
-        let inner = head.shrink2(vec2(PAD, 12.0));
+        let inner = head.shrink(SPACE_M);
         ui.scope_builder(egui::UiBuilder::new().max_rect(inner).layout(egui::Layout::left_to_right(egui::Align::Center)), |ui| {
-            ui.spacing_mut().item_spacing = vec2(6.0, 0.0);
+            ui.spacing_mut().item_spacing = vec2(SPACE_S, 0.0);
             if !spec.title.is_empty() {
-                ui.label(egui::RichText::new(&spec.title).font(strong(15.0)).color(INK));
-                ui.add_space(10.0);
+                ui.label(egui::RichText::new(&spec.title).font(heading()).color(INK));
+                ui.add_space(SPACE_M);
             }
             if !spec.tabs.is_empty() {
-                // Segmented: each tab its label and count.
-                let labels: Vec<String> = spec.tabs.iter().map(|t| if t.count.is_empty() { t.label.clone() } else { format!("{}  {}", t.label, t.count) }).collect();
-                let widths: Vec<f32> = labels.iter().map(|l| ui.painter().layout_no_wrap(l.clone(), strong(12.0), INK).size().x + 28.0).collect();
-                let total: f32 = widths.iter().sum::<f32>() + 4.0;
-                let (track, _) = ui.allocate_exact_size(vec2(total, 28.0), Sense::hover());
-                ui.painter().rect_filled(track, CornerRadius::same(R_CONTROL), FIELD);
-                let mut x = track.min.x + 2.0;
-                for (i, t) in spec.tabs.iter().enumerate() {
-                    let r = Rect::from_min_size(pos2(x, track.min.y + 2.0), vec2(widths[i], 24.0));
-                    x += widths[i];
-                    let sense = if t.enabled { Sense::click() } else { Sense::hover() };
-                    let resp = ui.interact(r, egui::Id::new(("lsheet_tab", &t.id)), sense);
-                    if t.on {
-                        ui.painter().rect_filled(r, CornerRadius::same(R_ROW), PRESS);
-                        ui.painter().rect_stroke(r, CornerRadius::same(R_ROW), Stroke::new(1.0_f32, RULE), egui::StrokeKind::Inside);
-                    } else if resp.hovered() {
-                        ui.painter().rect_filled(r, CornerRadius::same(R_ROW), HOVER);
-                    }
-                    let ink = if !t.enabled { OFF } else if t.on { INK } else { DIM };
-                    let mut job = egui::text::LayoutJob::default();
-                    job.append(&t.label, 0.0, egui::TextFormat { font_id: if t.on { strong(12.0) } else { body() }, color: ink, ..Default::default() });
-                    if !t.count.is_empty() {
-                        job.append(&t.count, 8.0, egui::TextFormat { font_id: meta(), color: FAINT, ..Default::default() });
-                    }
-                    let g = ui.painter().layout_job(job);
-                    ui.painter().galley(r.center() - g.size() / 2.0, g, ink);
-                    if resp.clicked() && !t.on { out.push(format!("tab{SEP}{}", t.id)); }
+                let tabs: Vec<_> = spec.tabs.iter().map(|t| (t.label.clone(), t.count.clone(), t.enabled)).collect();
+                let current = spec.tabs.iter().position(|t| t.on).unwrap_or(tabs.len());
+                if let Some(i) = inline_underline_tabs(ui, &tabs, current) {
+                    if i != current { out.push(format!("tab{SEP}{}", spec.tabs[i].id)); }
                 }
-                ui.add_space(8.0);
+                ui.add_space(SPACE_S);
             }
             for v in &spec.verbs {
                 if button(ui, v, None) { out.push(format!("verb{SEP}{}", v.id)); }
@@ -1196,9 +1146,9 @@ impl Ui {
                 }
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.spacing_mut().item_spacing = vec2(6.0, 0.0);
+                ui.spacing_mut().item_spacing = vec2(SPACE_S, 0.0);
                 if spec.closable {
-                    let (xr, resp) = ui.allocate_exact_size(vec2(28.0, 28.0), Sense::click());
+                    let (xr, resp) = ui.allocate_exact_size(Vec2::splat(CONTROL_H), Sense::click());
                     paint_state(ui, xr, state_of(&resp, false, true), R_CONTROL);
                     let c = xr.center();
                     let k = 4.5;
@@ -1209,7 +1159,7 @@ impl Ui {
                 }
                 if let Some(s) = &spec.search {
                     let sw = (inner.width() * 0.30).clamp(200.0, 320.0);
-                    let (fr, _) = ui.allocate_exact_size(vec2(sw, 28.0), Sense::hover());
+                    let (fr, _) = ui.allocate_exact_size(vec2(sw, CONTROL_H), Sense::hover());
                     let focused = ui.memory(|m| m.has_focus(search_id()));
                     ui.painter().rect_filled(fr, CornerRadius::same(R_CONTROL), FIELD);
                     ui.painter().rect_stroke(fr, CornerRadius::same(R_CONTROL),
@@ -1231,7 +1181,7 @@ impl Ui {
                         ui.painter().text(pos2(fr.max.x - 8.0, fr.center().y), egui::Align2::RIGHT_CENTER, &s.key, meta(), FAINT);
                     }
                 }
-                if spec.search.is_some() { ui.add_space(4.0); }
+                if spec.search.is_some() { ui.add_space(SPACE_XS); }
                 for m in spec.menus.iter().rev().filter(|m| !m.left) {
                     let open = st.head_menu.as_ref().is_some_and(|h| h.0 == m.id);
                     if let Some(r) = menu_button(ui, &m.label, open) {
@@ -1243,7 +1193,7 @@ impl Ui {
     }
 
     fn lsheet_footer(ui: &mut egui::Ui, f: &Footer, fr: Rect, out: &mut Vec<String>) {
-        let inner = fr.shrink2(vec2(PAD, 2.0));
+        let inner = fr.shrink2(vec2(SPACE_M, 2.0));
         ui.scope_builder(egui::UiBuilder::new().max_rect(inner).layout(egui::Layout::left_to_right(egui::Align::Center)), |ui| {
             ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
             for (i, l) in f.links.iter().enumerate() {
@@ -1263,20 +1213,18 @@ impl Ui {
     }
 
     fn lsheet_side(ui: &mut egui::Ui, side: &[Item], side_r: Rect, out: &mut Vec<String>) {
-        let inner = side_r.shrink2(vec2(8.0, 10.0));
+        let inner = side_r.shrink2(vec2(SPACE_S, SPACE_M));
         ui.scope_builder(egui::UiBuilder::new().max_rect(inner).layout(egui::Layout::top_down(egui::Align::Min)), |ui| {
             egui::ScrollArea::vertical().id_salt("lsheet_side").auto_shrink([false, false]).show(ui, |ui| {
                 ui.spacing_mut().item_spacing = vec2(0.0, 1.0);
-                let w = ui.available_width();
                 for (i, it) in side.iter().enumerate() {
                     if it.kind == "caption" {
-                        ui.add_space(if i == 0 { 2.0 } else { 12.0 });
-                        ui.horizontal(|ui| { ui.add_space(8.0); caption_plain(ui, &it.label); });
-                        ui.add_space(3.0);
+                        ui.add_space(if i == 0 { SPACE_XS } else { SPACE_M });
+                        ui.horizontal(|ui| { ui.add_space(SPACE_S); caption_plain(ui, &it.label); });
+                        ui.add_space(SPACE_XS);
                         continue;
                     }
-                    let (r, resp) = ui.allocate_exact_size(vec2(w, 26.0), Sense::click());
-                    paint_state(ui, r, state_of(&resp, it.on, true), R_ROW);
+                    let (r, resp) = list_row(ui, ROW_H, it.on);
                     let mut x = r.min.x + 8.0 + it.depth as f32 * 14.0;
                     let chev = Rect::from_min_size(pos2(x - 2.0, r.min.y), vec2(14.0, r.height()));
                     if it.fold >= 0 {
@@ -1293,7 +1241,7 @@ impl Ui {
                     }
                     let count_w = if it.right.is_empty() { 0.0 } else { 30.0 };
                     let ink = if it.on { BRIGHT } else if it.dim { FAINT } else { INK };
-                    let g = fit(ui, &it.label, if it.on { strong(12.0) } else { body() }, ink, r.max.x - x - 8.0 - count_w, 1);
+                    let g = fit(ui, &it.label, if it.on { strong(TYPE_BODY) } else { body() }, ink, r.max.x - x - 8.0 - count_w, 1);
                     ui.painter().galley(pos2(x, r.center().y - g.size().y / 2.0), g, ink);
                     if !it.right.is_empty() {
                         ui.painter().text(pos2(r.max.x - 8.0, r.center().y), egui::Align2::RIGHT_CENTER, &it.right, meta(), FAINT);

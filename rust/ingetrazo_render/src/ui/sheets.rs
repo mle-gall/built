@@ -83,8 +83,8 @@ impl Sheets {
             let mut answer: Option<String> = None;
             egui::Frame::new().fill(FIELD).corner_radius(CornerRadius::same(R_CONTROL)).inner_margin(Margin::same(10)).show(ui, |ui| {
                 ui.set_width(ui.available_width());
-                ui.spacing_mut().item_spacing = vec2(0.0, 6.0);
-                ui.label(egui::RichText::new(ptitle.as_str()).font(strong(12.5)).color(INK));
+                ui.spacing_mut().item_spacing = vec2(0.0, SPACE_S);
+                ui.label(egui::RichText::new(ptitle.as_str()).font(title_font()).color(INK));
                 if !pbody.is_empty() { ui.label(egui::RichText::new(pbody.as_str()).font(body()).color(DIM)); }
                 let mut enter = false;
                 if let Some(text) = field.as_mut() {
@@ -94,14 +94,14 @@ impl Sheets {
                     enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
                 }
                 ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing = vec2(6.0, 0.0);
+                    ui.spacing_mut().item_spacing = vec2(SPACE_S, 0.0);
                     for (bi, (id, label)) in buttons.iter().enumerate() {
                         if sheet_button(ui, label, "", if bi == 0 { 1 } else { 0 }) { answer = Some(id.clone()); }
                     }
                 });
                 if enter { answer = buttons.first().map(|b| b.0.clone()); }
             });
-            ui.add_space(8.0);
+            ui.add_space(SPACE_S);
             if let Some(id) = answer {
                 let text = field.clone().unwrap_or_default();
                 out.push(format!("answer{SEP}{id}{SEP}{text}"));
@@ -118,7 +118,7 @@ impl Sheets {
         // Header: the place's name, New sheet, the current sheet's menu.
         ui.horizontal(|ui| {
             ui.set_min_height(28.0);
-            ui.add_space(8.0);
+            ui.add_space(SPACE_S);
             ui.label(egui::RichText::new("Sheets").font(title()).color(INK));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let cur = s.list.iter().position(|r| r.2);
@@ -131,7 +131,7 @@ impl Sheets {
                 if item_button(ui, &add, None) { out.push("add".into()); }
             });
         });
-        ui.add_space(6.0);
+        ui.add_space(SPACE_S);
         let list_h = (s.list.len() as f32 * 26.0).min(max_h).max(26.0);
         egui::ScrollArea::vertical().id_salt("sheets_list").max_height(list_h).auto_shrink([false, true]).show(ui, |ui| {
             for (i, (name, cap, current)) in s.list.iter().enumerate() {
@@ -148,13 +148,13 @@ impl Sheets {
                     }
                     continue;
                 }
-                let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 26.0), Sense::click());
+                let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), CONTROL_H), Sense::click());
                 paint_state(ui, r, state_of(&resp, *current, true), R_ROW);
                 let c = ui.painter().layout_no_wrap(cap.clone(), meta(), FAINT);
                 let cw = c.size().x.min(r.width() * 0.5);
                 ui.painter().galley(pos2(r.max.x - 8.0 - cw, r.center().y - c.size().y / 2.0), c, FAINT);
                 let mut job = egui::text::LayoutJob::single_section(name.clone(), egui::TextFormat {
-                    font_id: if *current { strong(12.0) } else { body() },
+                    font_id: if *current { strong(TYPE_BODY) } else { body() },
                     color: if *current { BRIGHT } else { INK }, ..Default::default() });
                 job.wrap.max_width = (r.width() - cw - 26.0).max(20.0);
                 job.wrap.max_rows = 1;
@@ -179,12 +179,12 @@ impl Sheets {
     fn exports_place(&mut self, ui: &mut egui::Ui, out: &mut Vec<String>) {
         let s = self;
         if !s.exports.is_empty() {
-            ui.add_space(8.0);
+            ui.add_space(SPACE_S);
             caption(ui, "Export");
-            ui.add_space(4.0);
+            ui.add_space(SPACE_XS);
             ui.horizontal_wrapped(|ui| {
-                ui.spacing_mut().item_spacing = vec2(4.0, 4.0);
-                ui.add_space(6.0);
+                ui.spacing_mut().item_spacing = vec2(SPACE_XS, SPACE_XS);
+                ui.add_space(SPACE_S);
                 for (id, label, enabled) in &s.exports {
                     let item = (id.clone(), label.clone(), String::new(), String::new(), -1i8, *enabled);
                     if item_button(ui, &item, None) { out.push(format!("export{SEP}{id}")); }
@@ -200,15 +200,15 @@ impl Sheets {
         if !s.title.is_empty() {
             ui.horizontal(|ui| {
                 ui.set_min_height(26.0);
-                ui.add_space(8.0);
+                ui.add_space(SPACE_S);
                 ui.label(egui::RichText::new(&s.title).font(title()).color(INK));
             });
         }
         egui::ScrollArea::vertical().id_salt("sheets_inspector").auto_shrink([false, false]).show(ui, |ui| {
-            ui.spacing_mut().item_spacing = vec2(0.0, 2.0);
+            ui.spacing_mut().item_spacing = vec2(0.0, SPACE_XS);
             for (si, (caption_text, rows)) in s.inspector.iter().enumerate() {
-                if si > 0 { ui.add_space(6.0); }
-                if !caption_text.is_empty() { caption(ui, caption_text); ui.add_space(2.0); }
+                if si > 0 { ui.add_space(SPACE_S); }
+                if !caption_text.is_empty() { caption(ui, caption_text); ui.add_space(SPACE_XS); }
                 sheet_rows(ui, rows, &mut s.edits, &mut s.pick, out);
             }
         });
@@ -336,7 +336,7 @@ impl Ui {
             .show(ctx, |ui| {
                 frame().corner_radius(CornerRadius::same(12)).inner_margin(Margin::same(4)).show(ui, |ui| {
                     ui.set_min_height(room - 8.0);
-                    ui.spacing_mut().item_spacing = vec2(2.0, 2.0);
+                    ui.spacing_mut().item_spacing = vec2(SPACE_XS, SPACE_XS);
                     for (gi, group) in groups.iter().enumerate() {
                         if gi > 0 {
                             let (r, _) = ui.allocate_exact_size(vec2(cols as f32 * 32.0 - 2.0, 7.0), Sense::hover());
@@ -383,7 +383,7 @@ impl Ui {
                     let list_h = ui.available_height() * 0.34;
                     s.list_place(ui, &mut out, list_h);
                     s.exports_place(ui, &mut out);
-                    ui.add_space(8.0);
+                    ui.add_space(SPACE_S);
                     let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 9.0), Sense::hover());
                     ui.painter().hline(r.x_range(), r.center().y, Stroke::new(1.0_f32, EDGE));
                     s.item_place(ui, &mut out);
@@ -467,7 +467,7 @@ impl Ui {
                     ui.set_height(BOT_H - 8.0);
                     ui.spacing_mut().interact_size.y = 28.0;
                     ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing = vec2(2.0, 0.0);
+                        ui.spacing_mut().item_spacing = vec2(SPACE_XS, 0.0);
                         for (text, tip) in [(&s.paper, "Paper"), (&s.scale, "Scale of the selected view")] {
                             if text.is_empty() { continue; }
                             let g = ui.painter().layout_no_wrap(text.clone(), meta(), DIM);
@@ -476,15 +476,15 @@ impl Ui {
                             resp.on_hover_text(tip);
                         }
                         bar_divider(ui);
-                        ui.add_space(6.0);
+                        ui.add_space(SPACE_S);
                         if let Some(tex) = &tool_icon {
                             let (r, _) = ui.allocate_exact_size(vec2(22.0, 28.0), Sense::hover());
                             egui::Image::new(tex).tint(INK).paint_at(ui, Rect::from_center_size(r.center(), vec2(22.0, 22.0)));
-                            ui.add_space(4.0);
+                            ui.add_space(SPACE_XS);
                         }
                         if !s.tool.is_empty() {
-                            ui.label(egui::RichText::new(&s.tool).font(strong(12.0)).color(INK));
-                            ui.add_space(6.0);
+                            ui.label(egui::RichText::new(&s.tool).font(strong(TYPE_BODY)).color(INK));
+                            ui.add_space(SPACE_S);
                         }
                         // The right end: the cursor on the paper, then the zoom field.
                         let cursor = ui.painter().layout_no_wrap(s.cursor.clone(), meta(), FAINT);
@@ -531,9 +531,9 @@ impl Ui {
 fn sheet_rows(ui: &mut egui::Ui, rows: &[(String, String)], edits: &mut std::collections::HashMap<String, String>,
               pick: &mut Option<(String, Vec<String>, usize, Rect)>, out: &mut Vec<String>) {
     let label_cell = |ui: &mut egui::Ui, label: &str| {
-        let (lr, _) = ui.allocate_exact_size(vec2(88.0, 24.0), Sense::hover());
+        let (lr, _) = ui.allocate_exact_size(vec2(88.0, CONTROL_H), Sense::hover());
         let mut job = egui::text::LayoutJob::single_section(label.to_owned(), egui::TextFormat {
-            font_id: egui::FontId::proportional(11.5), color: DIM, ..Default::default() });
+            font_id: meta(), color: DIM, ..Default::default() });
         job.wrap.max_width = 86.0;
         job.wrap.max_rows = 1;
         job.wrap.break_anywhere = true;
@@ -550,9 +550,9 @@ fn sheet_rows(ui: &mut egui::Ui, rows: &[(String, String)], edits: &mut std::col
                 let options: Vec<String> = parts.get(3).copied().unwrap_or_default().split('|').map(str::to_owned).collect();
                 let at = parts.get(4).and_then(|a| a.parse::<usize>().ok()).unwrap_or(0);
                 ui.horizontal(|ui| {
-                    ui.add_space(8.0);
+                    ui.add_space(SPACE_S);
                     label_cell(ui, label);
-                    let (r, resp) = ui.allocate_exact_size(vec2((ui.available_width() - 8.0).max(60.0), 24.0), Sense::click());
+                    let (r, resp) = ui.allocate_exact_size(vec2((ui.available_width() - 8.0).max(60.0), CONTROL_H), Sense::click());
                     let open = pick.as_ref().is_some_and(|p| p.0 == id);
                     ui.painter().rect_filled(r, CornerRadius::same(R_ROW), FIELD);
                     paint_state(ui, r, state_of(&resp, open, true), R_ROW);
@@ -573,9 +573,9 @@ fn sheet_rows(ui: &mut egui::Ui, rows: &[(String, String)], edits: &mut std::col
             "check" => {
                 let on = parts.get(3).copied() == Some("1");
                 ui.horizontal(|ui| {
-                    ui.add_space(8.0);
+                    ui.add_space(SPACE_S);
                     label_cell(ui, label);
-                    let (r, resp) = ui.allocate_exact_size(vec2((ui.available_width() - 8.0).max(60.0), 24.0), Sense::click());
+                    let (r, resp) = ui.allocate_exact_size(vec2((ui.available_width() - 8.0).max(60.0), CONTROL_H), Sense::click());
                     paint_state(ui, r, state_of(&resp, false, true), R_ROW);
                     let b = Rect::from_center_size(pos2(r.min.x + 12.0, r.center().y), vec2(14.0, 14.0));
                     ui.painter().rect_filled(b, CornerRadius::same(4), if on { ACCENT } else { FIELD });
@@ -589,11 +589,11 @@ fn sheet_rows(ui: &mut egui::Ui, rows: &[(String, String)], edits: &mut std::col
                 let text = parts.get(3).copied().unwrap_or_default();
                 let buf = edits.entry(id.to_owned()).or_insert_with(|| text.to_owned());
                 ui.horizontal(|ui| {
-                    ui.add_space(8.0);
+                    ui.add_space(SPACE_S);
                     label_cell(ui, label);
                 });
                 ui.horizontal(|ui| {
-                    ui.add_space(8.0);
+                    ui.add_space(SPACE_S);
                     let w = (ui.available_width() - 8.0 - 12.0 - 4.0).max(40.0);
                     let r = ui.add(egui::TextEdit::multiline(buf).font(body()).margin(Margin::symmetric(6, 4))
                         .desired_width(w).desired_rows(3));
@@ -605,9 +605,9 @@ fn sheet_rows(ui: &mut egui::Ui, rows: &[(String, String)], edits: &mut std::col
                 if buf.as_str() != text {
                     let pending = buf.clone();
                     ui.horizontal(|ui| {
-                        ui.add_space(8.0);
+                        ui.add_space(SPACE_S);
                         if chip_button(ui, "Apply  ⌘↩") { out.push(format!("edit{SEP}{id}{SEP}{pending}")); }
-                        ui.add_space(4.0);
+                        ui.add_space(SPACE_XS);
                         if chip_button(ui, "Revert") { edits.remove(id); }
                     });
                 }
@@ -621,10 +621,10 @@ fn sheet_rows(ui: &mut egui::Ui, rows: &[(String, String)], edits: &mut std::col
         }
     }
     if !buttons.is_empty() {
-        ui.add_space(4.0);
+        ui.add_space(SPACE_XS);
         ui.horizontal_wrapped(|ui| {
-            ui.spacing_mut().item_spacing = vec2(4.0, 4.0);
-            ui.add_space(8.0);
+            ui.spacing_mut().item_spacing = vec2(SPACE_XS, SPACE_XS);
+            ui.add_space(SPACE_S);
             for (id, label) in buttons {
                 if chip_button(ui, &label) { out.push(format!("button{SEP}{id}")); }
             }

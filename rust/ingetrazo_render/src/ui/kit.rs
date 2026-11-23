@@ -25,7 +25,7 @@ pub fn install_style(s: &mut egui::Style) {
     };
     s.visuals.window_stroke = Stroke::new(1.0_f32, EDGE);
     s.visuals.window_corner_radius = CornerRadius::same(R_CONTROL);
-    s.spacing.item_spacing = vec2(2.0, 2.0);
+    s.spacing.item_spacing = vec2(SPACE_XS, SPACE_XS);
     s.spacing.button_padding = vec2(8.0, 4.0);
     s.spacing.interact_size.y = CONTROL_H;
     s.visuals.extreme_bg_color = FIELD;
@@ -106,12 +106,12 @@ pub mod atoms {
     /// places its label through here so a row of controls shares a baseline.
     pub fn centered(painter: &egui::Painter, rect: Rect, galley: std::sync::Arc<egui::Galley>, ink: Color32) {
         let at = rect.center() - galley.size() / 2.0;
-        painter.galley(pos2(at.x.round(), at.y.round()), galley, ink);
+        painter.galley_with_override_text_color(pos2(at.x.round(), at.y.round()), galley, ink);
     }
     /// Text at a control's leading edge, vertically centred like [`centered`].
     pub fn leading(painter: &egui::Painter, rect: Rect, x: f32, galley: std::sync::Arc<egui::Galley>, ink: Color32) {
         let y = rect.center().y - galley.size().y / 2.0;
-        painter.galley(pos2(x.round(), y.round()), galley, ink);
+        painter.galley_with_override_text_color(pos2(x.round(), y.round()), galley, ink);
     }
     /// Keyboard focus: a thin accent ring just outside the control.
     pub fn paint_focus(ui: &egui::Ui, rect: Rect, radius: u8) {
@@ -436,10 +436,15 @@ pub mod molecules {
         tabs: &[(String, String, bool)],
         at: usize,
     ) -> Option<usize> {
-        let width = ui.available_width();
-        let (row, _) = ui.allocate_exact_size(vec2(width, CONTROL_H), Sense::hover());
-        ui.painter()
-            .hline(row.x_range(), row.max.y - 0.5, Stroke::new(1.0_f32, DIVIDER));
+        draw_underline_tabs(ui, tabs, at, false)
+    }
+
+    /// A sheet header shares the row with verbs and search.
+    pub fn inline_underline_tabs(ui: &mut egui::Ui, tabs: &[(String, String, bool)], at: usize) -> Option<usize> {
+        draw_underline_tabs(ui, tabs, at, true)
+    }
+
+    fn draw_underline_tabs(ui: &mut egui::Ui, tabs: &[(String, String, bool)], at: usize, inline: bool) -> Option<usize> {
         let forced = specimen_state(ui);
         let first_other = (0..tabs.len()).find(|&i| i != at && tabs[i].2);
         // Measure every label in the current tab's weight so the row does not
@@ -458,6 +463,9 @@ pub mod molecules {
             .map(|(l, c)| l + c.as_ref().map_or(0.0, |c| c.size().x + 4.0) + 16.0)
             .sum();
         // Too wide: drop the counts of the tabs that are not current.
+        let width = if inline { natural.min(ui.available_width()) } else { ui.available_width() };
+        let (row, _) = ui.allocate_exact_size(vec2(width, CONTROL_H), Sense::hover());
+        ui.painter().hline(row.x_range(), row.max.y - 0.5, Stroke::new(1.0_f32, DIVIDER));
         let squeeze = natural > width;
         let mut x = row.min.x;
         let mut hit = None;
@@ -835,26 +843,47 @@ pub mod organisms {
         }
     }
 
-    pub fn sheet_frame(
-        ui: &mut egui::Ui,
-        title: &str,
-        side: impl FnOnce(&mut egui::Ui),
-        content: impl FnOnce(&mut egui::Ui),
-        detail: impl FnOnce(&mut egui::Ui),
-    ) {
-        egui::Frame::new()
-            .fill(SHEET)
-            .inner_margin(8)
-            .corner_radius(R_CONTROL)
-            .show(ui, |ui| {
-                ui.label(egui::RichText::new(title).font(heading()).color(INK));
-                ui.separator();
-                ui.columns(3, |panes| {
-                    side(&mut panes[0]);
-                    content(&mut panes[1]);
-                    detail(&mut panes[2]);
-                });
-            });
+    /// Regions of a large glass sheet. Callers supply each region's content
+    /// and keep ownership of their focus, scrolling and commands.
+    pub struct SheetFrame {
+        pub header: Rect,
+        pub side: Option<Rect>,
+        pub content: Rect,
+        pub detail: Option<Rect>,
+        pub footer: Option<Rect>,
+    }
+
+    pub fn sheet_frame(ui: &mut egui::Ui, rect: Rect, side_width: f32, detail_width: f32, footer: bool) -> SheetFrame {
+        let glass = Surface::Panel;
+        let radius = glass.radius();
+        let p = ui.painter();
+        p.add(glass.shadow().as_shape(rect, CornerRadius::same(radius)));
+        p.add(crate::glass::pane(rect, radius as f32, glass.look()));
+        let rule = Stroke::new(1.0_f32, DIVIDER);
+        let header = Rect::from_min_size(rect.min, vec2(rect.width(), BUTTON_H + 2.0 * SPACE_M));
+        p.hline(rect.x_range(), header.bottom() - 0.5, rule);
+        let footer = footer.then(|| {
+            let top = rect.bottom() - CONTROL_H - 2.0 * SPACE_XS;
+            p.hline(rect.x_range(), top + 0.5, rule);
+            Rect::from_min_max(pos2(rect.left(), top), rect.max)
+        });
+        let bottom = footer.map_or(rect.bottom(), |r| r.top());
+        let mut content = Rect::from_min_max(pos2(rect.left(), header.bottom()), pos2(rect.right(), bottom));
+        let side = (side_width > 0.0).then(|| {
+            let side = Rect::from_min_size(content.min, vec2(side_width.min(content.width()), content.height()));
+            content.min.x = side.right();
+            p.vline(side.right() - 0.5, side.y_range(), rule);
+            side
+        });
+        let detail = (detail_width > 0.0).then(|| {
+            let x = content.right() - detail_width.min(content.width() * 0.5);
+            let detail = Rect::from_min_max(pos2(x, content.top()), content.max);
+            content.max.x = x;
+            p.vline(x + 0.5, detail.y_range(), rule);
+            detail
+        });
+        ui.interact(rect, ui.id().with("sheet_body"), Sense::click());
+        SheetFrame { header, side, content, detail, footer }
     }
     pub fn tree(ui: &mut egui::Ui, id: impl std::hash::Hash, rows: impl FnOnce(&mut egui::Ui)) {
         egui::ScrollArea::vertical().id_salt(id).show(ui, rows);

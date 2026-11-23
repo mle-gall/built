@@ -69,8 +69,8 @@ impl Ui {
                     ui.set_width(WIDTH);
                     ui.spacing_mut().item_spacing = vec2(0.0, 1.0);
                     // The header: what was hit, and where it is filed.
-                    ui.add_space(2.0);
-                    let title = ui.painter().layout_no_wrap(menu.title.clone(), strong(12.0), INK);
+                    ui.add_space(SPACE_XS);
+                    let title = ui.painter().layout_no_wrap(menu.title.clone(), strong(TYPE_BODY), INK);
                     let mut job = egui::text::LayoutJob::single_section(menu.subtitle.clone(), egui::TextFormat {
                         font_id: meta(), color: FAINT, ..Default::default() });
                     job.wrap = egui::text::TextWrapping { max_width: WIDTH - 24.0, max_rows: 1, break_anywhere: true,
@@ -115,7 +115,7 @@ fn divider(ui: &mut egui::Ui) {
 /// A family of verbs on one row: its name, then each verb as a segment
 /// sharing the rest of the width. Returns the verb clicked.
 fn segment_row(ui: &mut egui::Ui, family: &str, segs: &[Seg]) -> Option<String> {
-    let (row, _) = ui.allocate_exact_size(vec2(ui.available_width(), 24.0), Sense::hover());
+    let (row, _) = ui.allocate_exact_size(vec2(ui.available_width(), ROW_H), Sense::hover());
     // A family ("Intersect") names the row and its segments are its
     // options, centred; without one ("Make group | Make component…") each
     // segment is a verb of its own, read from the left like a row.

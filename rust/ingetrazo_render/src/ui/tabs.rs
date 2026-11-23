@@ -67,7 +67,7 @@ impl Strip {
         let n = self.tabs.len();
         let natural: Vec<f32> = self.tabs.iter().map(|t| {
             // Measured in the font it is drawn in (the front tab's is medium).
-            let font = if t.2 { strong(12.0) } else { body() };
+            let font = if t.2 { strong(TYPE_BODY) } else { body() };
             let w = ui.painter().layout_no_wrap(t.1.clone(), font, INK).size().x;
             w + PAD_L + PAD_R + if t.4 { LINK_W } else { 0.0 }
         }).collect();
@@ -98,7 +98,7 @@ impl Strip {
         for &i in &shown {
             let (id, name, front, dirty, link, _tip, _pic) = &self.tabs[i];
             let _ = id;
-            let (rect, resp) = ui.allocate_exact_size(vec2(widths[i], 28.0), Sense::click());
+            let (rect, resp) = ui.allocate_exact_size(vec2(widths[i], CONTROL_H), Sense::click());
             self.rects[i] = Some(rect);
             let hovered = resp.hovered();
             if hovered {
@@ -112,7 +112,7 @@ impl Strip {
                 x += LINK_W;
             }
             let mut job = egui::text::LayoutJob::single_section(name.clone(), egui::TextFormat {
-                font_id: if *front { strong(12.0) } else { body() }, color: ink, ..Default::default() });
+                font_id: if *front { strong(TYPE_BODY) } else { body() }, color: ink, ..Default::default() });
             job.wrap = egui::text::TextWrapping { max_width: (rect.max.x - PAD_R - x).max(8.0), max_rows: 1,
                                                   break_anywhere: true, overflow_character: Some('…') };
             let g = ui.painter().layout_job(job);
@@ -149,7 +149,7 @@ impl Strip {
         // every open project is one list away.
         if !self.hidden.is_empty() || !self.elsewhere.is_empty() {
             let label = format!("›› {}", self.hidden.len() + self.elsewhere.len());
-            let (rect, resp) = ui.allocate_exact_size(vec2(MORE_W, 28.0), Sense::click());
+            let (rect, resp) = ui.allocate_exact_size(vec2(MORE_W, CONTROL_H), Sense::click());
             let st = state_of(&resp, self.overflow.is_some(), true);
             paint_state(ui, rect, st, R_CONTROL);
             ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, label, body(), DIM);
@@ -164,10 +164,10 @@ impl Strip {
             self.last_hover = now;
         }
         let plus = (String::new(), "+".to_owned(), "New project (⌘N)".to_owned(), String::new(), -1i8, true);
-        let (rect, resp) = ui.allocate_exact_size(vec2(PLUS_W, 28.0), Sense::click());
+        let (rect, resp) = ui.allocate_exact_size(vec2(PLUS_W, CONTROL_H), Sense::click());
         let st = state_of(&resp, false, true);
         paint_state(ui, rect, st, R_CONTROL);
-        ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, &plus.1, strong(15.0), DIM);
+        ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, &plus.1, heading(), DIM);
         if resp.on_hover_text(&plus.2).clicked() { out.push("ptab:new".into()); }
         out
     }
@@ -192,9 +192,9 @@ impl Strip {
                                     let h = if s.x > 0.0 { PICTURE_W * s.y / s.x } else { PICTURE_W * 0.6 };
                                     let (r, _) = ui.allocate_exact_size(vec2(PICTURE_W, h), Sense::hover());
                                     egui::Image::new(tex).corner_radius(CornerRadius::same(R_ROW)).paint_at(ui, r);
-                                    ui.add_space(6.0);
+                                    ui.add_space(SPACE_S);
                                 }
-                                ui.label(egui::RichText::new(name).font(strong(12.0)).color(INK));
+                                ui.label(egui::RichText::new(name).font(strong(TYPE_BODY)).color(INK));
                                 for line in tip.lines() {
                                     ui.label(egui::RichText::new(line).font(meta()).color(DIM));
                                 }
@@ -264,7 +264,7 @@ impl Strip {
                             }
                         }
                         if !self.elsewhere.is_empty() {
-                            ui.add_space(4.0);
+                            ui.add_space(SPACE_XS);
                             caption_at(ui, "Other windows", 12.0);
                             for (id, name, window) in &self.elsewhere {
                                 let item = (id.clone(), name.clone(), window.clone(), "check".to_owned(), 0, true);

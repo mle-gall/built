@@ -13,7 +13,7 @@ use std::collections::HashMap;
 
 use egui::{pos2, vec2, Color32, CornerRadius, Margin, Rect, Sense, Stroke};
 
-use super::{SCRIM, SWATCH_FALLBACK, body, caption_at, chip_button, glass, menu_row, meta, parse_hex, sheet_button, title_font,
+use super::{SPACE_XS, SPACE_S, SPACE_M, CONTROL_H, SCRIM, SWATCH_FALLBACK, body, caption_at, chip_button, glass, menu_row, meta, parse_hex, sheet_button, title_font,
             Surface, Ui, ACCENT, DIM, EDGE, FAINT, FIELD, GUT, HOVER, INK, OFF, R_ROW, TOP_H};
 
 /// One field: (id, kind, label, text, value, min, max, options, flags, tip).
@@ -168,14 +168,14 @@ impl Ui {
                 ui.scope_builder(egui::UiBuilder::new().max_rect(at), |ui| {
                     glass(Surface::Raised).inner_margin(Margin::same(14)).show(ui, |ui| {
                         ui.set_width(w - 28.0);
-                        ui.spacing_mut().item_spacing = vec2(0.0, 4.0);
+                        ui.spacing_mut().item_spacing = vec2(0.0, SPACE_XS);
                         ui.add(egui::Label::new(egui::RichText::new(&d.title).font(title_font()).color(INK)).wrap());
                         if !d.note.is_empty() {
                             ui.add(egui::Label::new(egui::RichText::new(&d.note).font(body()).color(DIM)).wrap());
                         }
                         let pages: Vec<String> = d.fields.iter().filter(|f| f.1 == "page").map(|f| f.2.clone()).collect();
                         if pages.len() > 1 {
-                            ui.add_space(6.0);
+                            ui.add_space(SPACE_S);
                             let labels: Vec<&str> = pages.iter().map(String::as_str).collect();
                             if let Some(i) = super::widgets::segmented(ui, &labels, d.page, ui.available_width()) {
                                 if i != d.page {
@@ -186,14 +186,14 @@ impl Ui {
                                 }
                             }
                         }
-                        ui.add_space(8.0);
+                        ui.add_space(SPACE_S);
                         egui::ScrollArea::vertical().max_height(max_body).auto_shrink([false, true]).show(ui, |ui| {
                             ui.set_width(ui.available_width());
                             fields(ui, d, &mut out);
                         });
-                        ui.add_space(12.0);
+                        ui.add_space(SPACE_M);
                         ui.horizontal(|ui| {
-                            ui.spacing_mut().item_spacing = vec2(6.0, 0.0);
+                            ui.spacing_mut().item_spacing = vec2(SPACE_S, 0.0);
                             for (id, label, hint, role) in d.buttons.iter().filter(|b| b.3 == 2) {
                                 if sheet_button(ui, label, hint, *role) { out.push(d.act("b", id, None)); }
                             }
@@ -241,7 +241,7 @@ pub(super) fn fields(ui: &mut egui::Ui, d: &mut Dialog, out: &mut Vec<String>) {
         let enabled = flags & DISABLED == 0;
         let full = flags & FULL != 0;
         match kind {
-            "caption" => { ui.add_space(6.0); caption_at(ui, label, 4.0); }
+            "caption" => { ui.add_space(SPACE_S); caption_at(ui, label, 4.0); }
             "text" => {
                 egui::Frame::NONE.inner_margin(Margin { left: 4, right: 4, top: 0, bottom: 2 }).show(ui, |ui| {
                     ui.add(egui::Label::new(egui::RichText::new(if text.is_empty() { label } else { text })
@@ -269,7 +269,7 @@ pub(super) fn fields(ui: &mut egui::Ui, d: &mut Dialog, out: &mut Vec<String>) {
                         .password(flags & PASSWORD != 0).clip_text(true);
                     let output = ui.add_enabled_ui(enabled, |ui| edit.show(ui)).inner;
                     if !suffix.is_empty() {
-                        ui.add_space(6.0);
+                        ui.add_space(SPACE_S);
                         ui.label(egui::RichText::new(&suffix).font(body()).color(DIM));
                     }
                     let resp = output.response.clone();
@@ -361,7 +361,7 @@ pub(super) fn fields(ui: &mut egui::Ui, d: &mut Dialog, out: &mut Vec<String>) {
                     let knob = pos2(track.min.x + t * track.width(), track.center().y);
                     ui.painter().circle_filled(knob, if resp.hovered() || resp.dragged() { 7.0 } else { 6.0 },
                                                if enabled { INK } else { OFF });
-                    ui.add_space(6.0);
+                    ui.add_space(SPACE_S);
                     ui.label(egui::RichText::new(text).font(body()).color(INK));
                 });
             }
@@ -410,7 +410,7 @@ pub(super) fn fields(ui: &mut egui::Ui, d: &mut Dialog, out: &mut Vec<String>) {
                     let choose = options.first().cloned().unwrap_or_else(|| "Choose…".to_owned());
                     let cw = ui.painter().layout_no_wrap(choose.clone(), meta(), INK).size().x + 28.0;
                     let w = (ui.available_width() - cw - 8.0).max(40.0);
-                    let (r, _) = ui.allocate_exact_size(vec2(w, 26.0), Sense::hover());
+                    let (r, _) = ui.allocate_exact_size(vec2(w, CONTROL_H), Sense::hover());
                     ui.painter().rect_filled(r, CornerRadius::same(R_ROW), FIELD);
                     let mut job = egui::text::LayoutJob::single_section(
                         if text.is_empty() { "—".to_owned() } else { text.clone() },
@@ -420,7 +420,7 @@ pub(super) fn fields(ui: &mut egui::Ui, d: &mut Dialog, out: &mut Vec<String>) {
                     job.wrap.break_anywhere = true;
                     let g = ui.painter().layout_job(job);
                     ui.painter().galley(pos2(r.min.x + 6.0, r.center().y - g.size().y / 2.0), g, INK);
-                    ui.add_space(6.0);
+                    ui.add_space(SPACE_S);
                     if enabled && chip_button(ui, &choose) { out.push(format!("{prefix}\u{1f}b\u{1f}{id}")); }
                 });
             }
@@ -430,7 +430,7 @@ pub(super) fn fields(ui: &mut egui::Ui, d: &mut Dialog, out: &mut Vec<String>) {
                     let clicked = chip_button(ui, label);
                     if clicked && enabled { out.push(format!("{prefix}\u{1f}b\u{1f}{id}")); }
                     if !text.is_empty() {
-                        ui.add_space(8.0);
+                        ui.add_space(SPACE_S);
                         ui.label(egui::RichText::new(text).font(meta()).color(FAINT));
                     }
                 });

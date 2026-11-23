@@ -737,7 +737,7 @@ impl Ui {
             .show(ctx, |ui| {
                 frame().corner_radius(CornerRadius::same(12)).inner_margin(Margin::same(4)).show(ui, |ui| {
                     ui.set_min_height(room - 8.0);
-                    ui.spacing_mut().item_spacing = vec2(2.0, 2.0);
+                    ui.spacing_mut().item_spacing = vec2(SPACE_XS, SPACE_XS);
                     for (gi, group) in self.groups.iter().enumerate() {
                         if gi > 0 {
                             let (r, _) = ui.allocate_exact_size(vec2(cols as f32 * 32.0 - 2.0, 7.0), Sense::hover());
@@ -782,9 +782,9 @@ impl Ui {
                     ui.set_height(TOP_H - 12.0);
                     ui.spacing_mut().interact_size.y = 28.0;
                     ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing = vec2(2.0, 0.0);
+                        ui.spacing_mut().item_spacing = vec2(SPACE_XS, 0.0);
                         let left = ui.horizontal(|ui| {
-                            ui.spacing_mut().item_spacing = vec2(2.0, 0.0);
+                            ui.spacing_mut().item_spacing = vec2(SPACE_XS, 0.0);
                             if !self.strip.tabs.is_empty() {
                                 // The project tabs (option B): room is left for
                                 // the scene control and at least 60 pt to drag.
@@ -827,7 +827,7 @@ impl Ui {
                         ui.add_space((ui.available_width() - self.top_right_w).max(0.0));
                         {
                             let right = ui.horizontal(|ui| {
-                                ui.spacing_mut().item_spacing = vec2(2.0, 0.0);
+                                ui.spacing_mut().item_spacing = vec2(SPACE_XS, 0.0);
                                 for (gi, group) in self.cluster.iter().enumerate() {
                                     if gi > 0 { bar_divider(ui); }
                                     for item in group {
@@ -892,21 +892,21 @@ impl Ui {
                     ui.set_height(BOT_H - 8.0);
                     ui.spacing_mut().interact_size.y = 28.0;
                     ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing = vec2(2.0, 0.0);
+                        ui.spacing_mut().item_spacing = vec2(SPACE_XS, 0.0);
                         let (r, _) = ui.allocate_exact_size(vec2(56.0, 28.0), Sense::hover());
                         ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, &self.units, meta(), FAINT);
                         bar_divider(ui);
-                        ui.add_space(6.0);
+                        ui.add_space(SPACE_S);
                         let icon = self.groups.iter().flatten().find(|t| t.id == self.active).and_then(|t| t.icon.clone())
                             .or_else(|| self.icons.get(&self.active).cloned());
                         if let Some(tex) = icon {
                             let (r, _) = ui.allocate_exact_size(vec2(22.0, 28.0), Sense::hover());
                             egui::Image::new(&tex).tint(INK).paint_at(ui, Rect::from_center_size(r.center(), vec2(22.0, 22.0)));
-                            ui.add_space(4.0);
+                            ui.add_space(SPACE_XS);
                         }
                         if !self.status.is_empty() {
-                            ui.label(egui::RichText::new(&self.status).font(strong(12.0)).color(INK));
-                            ui.add_space(6.0);
+                            ui.label(egui::RichText::new(&self.status).font(strong(TYPE_BODY)).color(INK));
+                            ui.add_space(SPACE_S);
                         }
                         if self.active == "fillet" && self.panels.data["bevel"].is_object() {
                             self.panels.bevel(ui, &mut self.actions);
@@ -915,7 +915,7 @@ impl Ui {
                         for (id, label, key, state) in &self.options {
                             if *state == 2 {
                                 ui.label(egui::RichText::new(label).font(meta()).color(WARN));
-                                ui.add_space(6.0);
+                                ui.add_space(SPACE_S);
                                 continue;
                             }
                             let text = if key.is_empty() { label.clone() } else { format!("{label}  {key}") };
@@ -923,7 +923,7 @@ impl Ui {
                             if item_button(ui, &item, None) { clicked = Some(format!("opt:{id}")); }
                         }
                         if !self.options.is_empty() { bar_divider(ui); }
-                        ui.add_space(6.0);
+                        ui.add_space(SPACE_S);
                         let dock_w = if self.review { 0.0 } else { self.dock_w };
                         let room = (ui.available_width() - dock_w - 8.0).max(40.0);
                         let mut job = egui::text::LayoutJob::single_section(self.hint.clone(), egui::TextFormat {
@@ -964,15 +964,15 @@ impl Ui {
             .show(ctx, |ui| {
                 glass(Surface::Pill).inner_margin(Margin::same(4)).show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing = vec2(4.0, 0.0);
+                        ui.spacing_mut().item_spacing = vec2(SPACE_XS, 0.0);
                         for (id, name, hex, icon, active) in &self.palette_items {
                             // "-": a rule between the model's and the recent ones;
                             // no id: the current material's name.
                             if id == "-" { bar_divider(ui); continue; }
                             if id.is_empty() {
-                                ui.add_space(4.0);
+                                ui.add_space(SPACE_XS);
                                 ui.label(egui::RichText::new(name).font(body()).color(INK));
-                                ui.add_space(4.0);
+                                ui.add_space(SPACE_XS);
                                 continue;
                             }
                             let (r, resp) = ui.allocate_exact_size(vec2(28.0, 28.0), Sense::click());
@@ -1015,14 +1015,14 @@ impl Ui {
                     ui.set_max_width(520.0);
                     let r = ui.add(kit::field(&mut self.cmd_query)
                         .hint_text(egui::RichText::new("Search commands").color(FAINT))
-                        .font(egui::FontId::proportional(14.0)).margin(Margin::symmetric(10, 7))
+                        .font(body()).margin(Margin::symmetric(10, 7))
                         .desired_width(520.0 - 20.0 - 4.0).clip_text(true));
                     if self.cmd_focus { r.request_focus(); self.cmd_focus = false; }
                     if r.changed() { changed = true; self.cmd_at = 0; }
-                    ui.add_space(6.0);
+                    ui.add_space(SPACE_S);
                     ui.spacing_mut().item_spacing = vec2(0.0, 1.0);
                     for (i, (label, path, key, enabled)) in self.cmd_results.iter().enumerate() {
-                        let (rect, resp) = ui.allocate_exact_size(vec2(520.0 - 16.0, 26.0), Sense::click());
+                        let (rect, resp) = ui.allocate_exact_size(vec2(520.0 - 16.0, CONTROL_H), Sense::click());
                         if i == self.cmd_at { ui.painter().rect_filled(rect, CornerRadius::same(R_ROW), ACTIVE); }
                         else if resp.hovered() { ui.painter().rect_filled(rect, CornerRadius::same(R_ROW), HOVER); }
                         let ink = if *enabled { INK } else { OFF };
@@ -1067,7 +1067,7 @@ impl Ui {
                                         clicked = Some(format!("proj:{i}"));
                                     }
                                 }
-                                ui.add_space(4.0);
+                                ui.add_space(SPACE_XS);
                                 if menu_row(ui, &(String::new(), "New project".into(), "⌘N".into(), "check".into(), -1, true)) {
                                     clicked = Some("proj:new".into());
                                 }
@@ -1134,13 +1134,13 @@ impl Ui {
             .show(ctx, |ui| {
                 glass(Surface::Raised).inner_margin(Margin::same(6)).show(ui, |ui| {
                     ui.set_width(236.0);
-                    ui.spacing_mut().item_spacing = vec2(2.0, 2.0);
+                    ui.spacing_mut().item_spacing = vec2(SPACE_XS, SPACE_XS);
                     let review = (String::new(), "Review — hide the panels".to_owned(), String::new(), "check".to_owned(),
                                   if self.review { 1 } else { 0 }, true);
                     if menu_row(ui, &review) { toggle_review = true; }
-                    ui.add_space(4.0);
+                    ui.add_space(SPACE_XS);
                     for (si, (title, items)) in self.view_menu.iter().enumerate() {
-                        if si > 0 { ui.add_space(4.0); }
+                        if si > 0 { ui.add_space(SPACE_XS); }
                         caption_at(ui, title, 12.0);
                         let icons_only = items.iter().all(|i| self.icons.contains_key(&i.3));
                         if icons_only {
@@ -1184,10 +1184,10 @@ impl Ui {
             .show(ctx, |ui| {
                 glass(Surface::Raised).inner_margin(Margin::same(8)).show(ui, |ui| {
                     ui.set_width(272.0);
-                    ui.spacing_mut().item_spacing = vec2(0.0, 2.0);
+                    ui.spacing_mut().item_spacing = vec2(0.0, SPACE_XS);
                     let (hr, _) = ui.allocate_exact_size(vec2(ui.available_width(), 26.0), Sense::hover());
                     ui.painter().text(hr.left_center() + vec2(6.0, 0.0), egui::Align2::LEFT_CENTER, title.as_str(),
-                        strong(13.0), INK);
+                        title_font(), INK);
                     let xr = Rect::from_center_size(hr.right_center() - vec2(12.0, 0.0), vec2(22.0, 22.0));
                     let xresp = ui.interact(xr, ui.id().with("form_close"), Sense::click());
                     if xresp.hovered() { ui.painter().rect_filled(xr, CornerRadius::same(R_ROW as u8), HOVER); }
@@ -1197,7 +1197,7 @@ impl Ui {
                     for (i, f) in fields.iter_mut().enumerate() {
                         let (id, kind, label, text) = (f.0.clone(), f.1.clone(), f.2.clone(), f.3.clone());
                         match kind.as_str() {
-                            "caption" => { ui.add_space(4.0); caption_at(ui, &label, 6.0); }
+                            "caption" => { ui.add_space(SPACE_XS); caption_at(ui, &label, 6.0); }
                             "text" => {
                                 egui::Frame::NONE.inner_margin(Margin { left: 6, right: 6, top: 2, bottom: 2 }).show(ui, |ui| {
                                     ui.label(egui::RichText::new(&text).font(meta()).color(FAINT));
@@ -1232,7 +1232,7 @@ impl Ui {
                                 ui.painter().circle_filled(knob, if resp.hovered() || resp.dragged() { 7.0 } else { 6.0 }, INK);
                             }
                             "choice" => {
-                                let (r, resp) = ui.allocate_exact_size(vec2(w, 26.0), Sense::click());
+                                let (r, resp) = ui.allocate_exact_size(vec2(w, CONTROL_H), Sense::click());
                                 if resp.hovered() { ui.painter().rect_filled(r, CornerRadius::same(R_ROW as u8), HOVER); }
                                 ui.painter().text(r.left_center() + vec2(6.0, 0.0), egui::Align2::LEFT_CENTER, &label, body(), DIM);
                                 let open = *choice_open == Some(i);
@@ -1253,7 +1253,7 @@ impl Ui {
                                 }
                             }
                             "color" => {
-                                let (r, resp) = ui.allocate_exact_size(vec2(w, 26.0), Sense::click());
+                                let (r, resp) = ui.allocate_exact_size(vec2(w, CONTROL_H), Sense::click());
                                 if resp.hovered() { ui.painter().rect_filled(r, CornerRadius::same(R_ROW as u8), HOVER); }
                                 ui.painter().text(r.left_center() + vec2(6.0, 0.0), egui::Align2::LEFT_CENTER, &label, body(), DIM);
                                 let sw = Rect::from_center_size(r.right_center() - vec2(22.0, 0.0), vec2(32.0, 16.0));
@@ -1262,9 +1262,9 @@ impl Ui {
                                 if resp.clicked() { out.push(format!("form:{id}:pick")); }
                             }
                             "button" => {
-                                ui.add_space(4.0);
+                                ui.add_space(SPACE_XS);
                                 ui.horizontal(|ui| {
-                                    ui.add_space(6.0);
+                                    ui.add_space(SPACE_S);
                                     if chip_button(ui, &label) { out.push(format!("form:{id}:")); }
                                 });
                             }
@@ -1370,7 +1370,6 @@ impl Ui {
         let Some(col) = self.column.as_mut() else { return };
         #[allow(non_snake_case)]
         let W: f32 = self.dock_w.min((screen.width() * 0.45).max(DOCK_MIN_W));
-        const ROW: f32 = 22.0;
         let height = (bottom - top).max(200.0);
         let mut actions: Vec<String> = Vec::new();
         egui::Area::new(egui::Id::new("column"))
@@ -1403,9 +1402,9 @@ impl Ui {
                                 _ => {}
                             }
                         } else {
-                            ui.add_space(4.0);
+                            ui.add_space(SPACE_XS);
                             let (pr, presp) = ui.allocate_exact_size(vec2(58.0, 28.0), Sense::click());
-                            ui.painter().text(pr.left_center(), egui::Align2::LEFT_CENTER, "Project", strong(13.0), INK);
+                            ui.painter().text(pr.left_center(), egui::Align2::LEFT_CENTER, "Project", title_font(), INK);
                             if presp.clicked() && !col.mode.is_empty() { actions.push("mode\u{1f}".into()); }
                         }
                         if self.plugins.showing { return; }
@@ -1436,14 +1435,14 @@ impl Ui {
                         return;
                     }
                     if !self.link_banner.is_empty() {
-                        ui.add_space(6.0);
+                        ui.add_space(SPACE_S);
                         ui.horizontal_wrapped(|ui| {
                             ui.label(egui::RichText::new(&self.link_banner).font(body()).color(WARN));
                             if ui.small_button("Locate…").clicked() { cmds.push("linkbanner:locate".into()); }
                             if ui.small_button("×").on_hover_text("Dismiss").clicked() { cmds.push("linkbanner:close".into()); }
                         });
                     }
-                    ui.add_space(6.0);
+                    ui.add_space(SPACE_S);
                     if col.mode.is_empty() {
                         // Column sets: second-level tabs over the same rows.
                         let sets: Vec<(String, String, bool)> = ["Filing", "Drawing", "Deliver"].iter()
@@ -1455,7 +1454,7 @@ impl Ui {
                             }
                         }
                     }
-                    ui.add_space(6.0);
+                    ui.add_space(SPACE_S);
                     // The Library takes the tree's place (the tree code below
                     // stays as it was, in a block it can leave).
                     'tree: {
@@ -1464,7 +1463,7 @@ impl Ui {
                             caption(ui, "Deliveries");
                             if chip_button(ui, "+ New delivery") { cmds.push("deliver:new".into()); }
                         });
-                        ui.add_space(6.0);
+                        ui.add_space(SPACE_S);
                         egui::ScrollArea::vertical().id_salt("deliveries")
                             .max_height(ui.available_height() * 0.42).show(ui, |ui| {
                                 for n in &col.nodes {
@@ -1472,8 +1471,8 @@ impl Ui {
                                         let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width() - 56.0, 40.0), Sense::click());
                                         paint_state(ui, r, state_of(&resp, n.active, true), R_ROW);
                                         ui.painter().text(pos2(r.min.x + 6.0, r.center().y), egui::Align2::LEFT_CENTER,
-                                            &n.kind, strong(10.0), ACCENT);
-                                        for (label, y, font, color) in [(&n.name, 12.0, strong(12.0), INK), (&n.badge, 28.0, meta(), DIM)] {
+                                            &n.kind, caption_font(), ACCENT);
+                                        for (label, y, font, color) in [(&n.name, 12.0, strong(TYPE_BODY), INK), (&n.badge, 28.0, meta(), DIM)] {
                                             let mut line = egui::text::LayoutJob::simple_singleline(label.clone(), font, color);
                                             line.wrap.max_width = (r.width() - 50.0).max(12.0);
                                             line.wrap.max_rows = 1;
@@ -1492,17 +1491,17 @@ impl Ui {
                         let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 36.0), Sense::hover());
                         ui.painter().rect_filled(r, CornerRadius::same(R_ROW), ACTIVE);
                         ui.painter().text(pos2(r.min.x + 8.0, r.min.y + 11.0), egui::Align2::LEFT_CENTER,
-                            format!("File {what} to…"), strong(11.5), BRIGHT);
+                            format!("File {what} to…"), caption_font(), BRIGHT);
                         ui.painter().text(pos2(r.min.x + 8.0, r.max.y - 10.0), egui::Align2::LEFT_CENTER,
                             "Click a node, or type a name and Enter", meta(), INK_2);
-                        ui.add_space(4.0);
+                        ui.add_space(SPACE_XS);
                     }
                     let edit = kit::field(&mut col.filter)
                         .hint_text(egui::RichText::new(if col.filing.is_some() { "Node name or kind" }
                             else if col.mode == "Problems" { "Filter problems" } else { "Filter nodes" }).color(FAINT))
                         .margin(Margin::symmetric(8, 5))
                         .desired_width((W - 20.0 - 16.0 - 4.0).max(40.0))
-                        .font(egui::FontId::proportional(12.0));
+                        .font(body());
                     let resp = ui.add(edit);
                     if col.focus_filter {
                         resp.request_focus();
@@ -1512,7 +1511,7 @@ impl Ui {
                     if resp.changed() {
                         actions.push(format!("filter\u{1f}{}", col.filter));
                     }
-                    ui.add_space(4.0);
+                    ui.add_space(SPACE_XS);
                     // Rows, as Python sends them (it owns expansion and filtering).
                     if enter {
                         if col.filing.is_some() {
@@ -1526,16 +1525,15 @@ impl Ui {
                     }
                     // A dock mode with nothing to inspect gives the whole dock to its list.
                     let room = if !col.mode.is_empty() && col.inspector.is_empty() { ui.available_height() - 44.0 } else { ui.available_height() * 0.6 };
-                    let tree_h = ((col.nodes.len().max(1) as f32) * ROW + 4.0).min(room).max(66.0);
                     if col.nodes.is_empty() {
-                        ui.add_space(6.0);
+                        ui.add_space(SPACE_S);
                         ui.horizontal_wrapped(|ui| {
-                            ui.add_space(8.0);
+                            ui.add_space(SPACE_S);
                             ui.label(egui::RichText::new("No project structure yet.").font(body()).color(DIM));
                         });
-                        ui.add_space(6.0);
+                        ui.add_space(SPACE_S);
                         ui.horizontal(|ui| {
-                            ui.add_space(8.0);
+                            ui.add_space(SPACE_S);
                             if chip_button(ui, "Propose from tags…") { actions.push("propose\u{1f}".into()); }
                             if chip_button(ui, "New node") { actions.push("new\u{1f}".into()); }
                         });
@@ -1545,15 +1543,16 @@ impl Ui {
                     // header and every row, names never crushed.
                     let row_left = ui.cursor().min.x;
                     let cols = tree_cols::Cols::plan(col.colset, row_left, row_left + ui.available_width());
-                    let tree_h = if col.mode.is_empty() && nodes_len > 0 {
+                    let row_room = if col.mode.is_empty() && nodes_len > 0 {
                         cols.header(ui, row_left);
-                        (tree_h - 18.0).max(48.0)
-                    } else { tree_h };
+                        room - ROW_H
+                    } else { room };
+                    let tree_h = (nodes_len as f32 * ROW_H + SPACE_XS).min(row_room).max(3.0 * ROW_H);
                     egui::ScrollArea::vertical().id_salt("tree").max_height(tree_h).auto_shrink([false, false])
-                        .show_rows(ui, ROW, nodes_len, |ui, range| {
+                        .show_rows(ui, ROW_H, nodes_len, |ui, range| {
                             for i in range {
                                 let n = &col.nodes[i];
-                                let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ROW), Sense::click());
+                                let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ROW_H), Sense::click());
                                 // Items in the selection are lit like a picked row; nodes count them.
                                 let lit = col.highlighted.as_deref() == Some(n.key.as_str()) || n.mark == 1;
                                 let file_state = if n.row == 0 { tree_cols::file_state(&n.icon) } else { None };
@@ -1569,7 +1568,7 @@ impl Ui {
                                 }
                                 let cy = rect.center().y;
                                 let x0 = rect.min.x + 4.0 + n.depth as f32 * 14.0;
-                                let tri = Rect::from_min_size(pos2(x0, rect.min.y), vec2(14.0, ROW));
+                                let tri = Rect::from_min_size(pos2(x0, rect.min.y), vec2(14.0, ROW_H));
                                 if n.expandable {
                                     ui.painter().text(tri.center(), egui::Align2::CENTER_CENTER, if n.expanded { "▾" } else { "▸" },
                                         meta(), if n.row == 0 { FAINT } else { OFF });
@@ -1705,7 +1704,7 @@ impl Ui {
                                 }
                                 let (ink, font) = match n.row {
                                     0 => (if lit || n.active { BRIGHT } else { INK },
-                                          if n.active || file_state.is_some() { strong(12.0) } else { body() }),
+                                          if n.active || file_state.is_some() { strong(TYPE_BODY) } else { body() }),
                                     3 | 4 => (FAINT, meta()),
                                     _ => (if lit { BRIGHT } else { INK_2 }, body()),
                                 };
@@ -1808,17 +1807,17 @@ impl Ui {
                     // A delivery owns the inspector even when geometry is selected.
                     let selection = if col.colset == 2 && col.mode.is_empty() { None } else { selection.as_ref() };
                     // Inspector.
-                    ui.add_space(6.0);
+                    ui.add_space(SPACE_S);
                     let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 1.0), Sense::hover());
                     ui.painter().hline(r.x_range(), r.center().y, Stroke::new(1.0_f32, EDGE));
-                    ui.add_space(6.0);
+                    ui.add_space(SPACE_S);
                     egui::ScrollArea::vertical().id_salt("inspector").auto_shrink([false, false]).show(ui, |ui| {
-                        ui.spacing_mut().item_spacing = vec2(0.0, 3.0);
+                        ui.spacing_mut().item_spacing = vec2(0.0, SPACE_XS);
                         if col.mode.is_empty() && col.colset != 2 {
                             self.panels.inspector(ui, &mut cmds);
                         }
                         if col.inspector_title.is_empty() {
-                            ui.horizontal(|ui| { ui.add_space(8.0); empty_state(ui, "Nothing selected"); });
+                            ui.horizontal(|ui| { ui.add_space(SPACE_S); empty_state(ui, "Nothing selected"); });
                             return;
                         }
                         {
@@ -1842,9 +1841,9 @@ impl Ui {
                         }
                         // The selection's actions: the selection bar's job, in its one home.
                         if let Some((_, acts)) = &selection {
-                            ui.add_space(6.0);
+                            ui.add_space(SPACE_S);
                             egui::Frame::NONE.inner_margin(Margin { left: 8, ..Default::default() }).show(ui, |ui| ui.horizontal_wrapped(|ui| {
-                                ui.spacing_mut().item_spacing = vec2(6.0, 6.0);
+                                ui.spacing_mut().item_spacing = vec2(SPACE_S, SPACE_S);
                                 for (id, label, _key, enabled, more) in acts {
                                     if !*more && *enabled && chip_button(ui, label) { cmds.push(format!("cmd:{id}")); }
                                 }
@@ -1857,7 +1856,7 @@ impl Ui {
                                 }
                             }));
                         }
-                        ui.add_space(4.0);
+                        ui.add_space(SPACE_XS);
                         let native_export = self.panels.has_records() && col.mode.is_empty() && col.colset != 2;
                         if native_export {
                             ui.collapsing("Export details", |ui| self.panels.export(ui, &mut cmds));
@@ -1865,7 +1864,7 @@ impl Ui {
                         let sections = col.inspector.clone();
                         for (title, rows) in &sections {
                             if title == "Pre-run checks" {
-                                ui.add_space(6.0);
+                                ui.add_space(SPACE_S);
                                 for (label, count) in rows {
                                     if amber_button(ui, &format!("⚠ {count} {label} · Show")) {
                                         cmds.push("deliver:problems".into());
@@ -1875,9 +1874,9 @@ impl Ui {
                             }
                             if title == "Actions" {
                                 // What to do next, as commands: (id, label).
-                                ui.add_space(6.0);
+                                ui.add_space(SPACE_S);
                                 egui::Frame::NONE.inner_margin(Margin { left: 8, ..Default::default() }).show(ui, |ui| ui.horizontal_wrapped(|ui| {
-                                                                        ui.spacing_mut().item_spacing = vec2(6.0, 6.0);
+                                                                        ui.spacing_mut().item_spacing = vec2(SPACE_S, SPACE_S);
                                     for (id, label) in rows {
                                         let at = ui.cursor().min;
                                         if chip_button(ui, label) {
@@ -1893,11 +1892,11 @@ impl Ui {
                             }
                             if title == "Export details" && native_export { continue; }
                             if title.starts_with("Export") {
-                                ui.add_space(4.0);
+                                ui.add_space(SPACE_XS);
                                 kit::disclosure(ui, title, title, false,
                                     |ui| inspector_rows(ui, rows, &mut col.edits, &mut actions));
                             } else {
-                                ui.add_space(8.0);
+                                ui.add_space(SPACE_S);
                                 caption(ui, title);
                                 inspector_rows(ui, rows, &mut col.edits, &mut actions);
                             }
@@ -2001,7 +2000,7 @@ impl Ui {
                 .show(ctx, |ui| {
                     glass(Surface::Raised).inner_margin(Margin::same(10)).show(ui, |ui| {
                         egui::widgets::color_picker::color_picker_color32(ui, &mut c, egui::widgets::color_picker::Alpha::Opaque);
-                        ui.add_space(6.0);
+                        ui.add_space(SPACE_S);
                         ui.horizontal(|ui| {
                             if chip_button(ui, "Apply") {
                                 actions.push(format!("color\u{1f}{key}\u{1f}#{:02x}{:02x}{:02x}", c.r(), c.g(), c.b()));
@@ -2048,7 +2047,7 @@ impl Ui {
                     glass(Surface::Raised).inner_margin(Margin::same(14)).show(ui, |ui| {
                         ui.set_width(W - 40.0);
                         ui.label(egui::RichText::new(&title).font(title_font()).color(INK));
-                        ui.add_space(6.0);
+                        ui.add_space(SPACE_S);
                         // A body written "\u{1d}edit\u{1d}<id>\u{1d}<text>" is a field to type in.
                         let field = body_text.strip_prefix("\u{1d}edit\u{1d}").map(|r| {
                             let (id, text) = r.split_once('\u{1d}').unwrap_or((r, ""));
@@ -2064,10 +2063,10 @@ impl Ui {
                         } else {
                             ui.label(egui::RichText::new(&body_text).font(body()).color(DIM));
                         }
-                        ui.add_space(10.0);
+                        ui.add_space(SPACE_M);
                         let typed = field.as_ref().map(|(id, _)| col.edits.get(&format!("prompt:{id}")).cloned().unwrap_or_default());
                         ui.horizontal(|ui| {
-                            ui.spacing_mut().item_spacing = vec2(6.0, 0.0);
+                            ui.spacing_mut().item_spacing = vec2(SPACE_S, 0.0);
                             for (i, (id, label)) in buttons.iter().enumerate() {
                                 if chip_button(ui, label) || (enter && i == 0) {
                                     match &typed {
@@ -2144,7 +2143,7 @@ impl Ui {
                         ui.set_width(w - 28.0);
                         ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
                         ui.horizontal(|ui| {
-                            ui.spacing_mut().item_spacing = vec2(8.0, 0.0);
+                            ui.spacing_mut().item_spacing = vec2(SPACE_S, 0.0);
                             let (glyph, ink) = match sheet.tone.as_str() {
                                 "error" => ("!", ERROR),
                                 "warning" => ("!", WARN),
@@ -2153,11 +2152,11 @@ impl Ui {
                             };
                             let (r, _) = ui.allocate_exact_size(vec2(20.0, 20.0), Sense::hover());
                             ui.painter().circle_stroke(r.center(), 8.5, Stroke::new(1.4_f32, ink));
-                            ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, glyph, strong(11.0), ink);
+                            ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, glyph, caption_font(), ink);
                             ui.add(egui::Label::new(egui::RichText::new(&sheet.title).font(title_font()).color(INK)).wrap());
                         });
                         if !sheet.body.is_empty() {
-                            ui.add_space(8.0);
+                            ui.add_space(SPACE_S);
                             ui.horizontal(|ui| {
                                 ui.add_space(28.0);
                                 ui.add(egui::Label::new(egui::RichText::new(&sheet.body).font(body()).color(DIM)).wrap());
@@ -2173,9 +2172,9 @@ impl Ui {
                                 }
                             });
                         }
-                        ui.add_space(14.0);
+                        ui.add_space(SPACE_L);
                         ui.horizontal(|ui| {
-                            ui.spacing_mut().item_spacing = vec2(6.0, 0.0);
+                            ui.spacing_mut().item_spacing = vec2(SPACE_S, 0.0);
                             for (id, label, hint, role) in sheet.buttons.iter().filter(|b| b.3 == 2) {
                                 if sheet_button(ui, label, hint, *role) { clicked = Some(id.clone()); }
                             }
@@ -2214,12 +2213,12 @@ impl Ui {
                 glass(Surface::Raised).stroke(Stroke::new(1.0_f32, edge)).corner_radius(CornerRadius::same(R_CONTROL))
                     .inner_margin(Margin::symmetric(10, 6)).show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing = vec2(8.0, 0.0);
+                        ui.spacing_mut().item_spacing = vec2(SPACE_S, 0.0);
                         if !caption.is_empty() {
                             ui.label(egui::RichText::new(caption).font(meta()).color(FAINT));
                         }
                         let shown = if *typing { format!("{value}▏") } else { value.clone() };
-                        ui.label(egui::RichText::new(shown).font(strong(13.0))
+                        ui.label(egui::RichText::new(shown).font(title_font())
                             .color(if *typing { BRIGHT } else { INK }));
                     });
                 });
@@ -2440,8 +2439,8 @@ fn inspector_rows(ui: &mut egui::Ui, rows: &[(String, String)], edits: &mut std:
             let labels: Vec<&str> = parts.get(1).copied().unwrap_or_default().split('|').collect();
             let at = parts.get(2).and_then(|a| a.parse::<usize>().ok()).unwrap_or(0);
             ui.horizontal(|ui| {
-                ui.add_space(8.0);
-                let (lr, _) = ui.allocate_exact_size(vec2(88.0, 24.0), Sense::hover());
+                ui.add_space(SPACE_S);
+                let (lr, _) = ui.allocate_exact_size(vec2(88.0, CONTROL_H), Sense::hover());
                 ui.painter().text(lr.left_center(), egui::Align2::LEFT_CENTER, label, meta(), DIM);
                 let w = (ui.available_width() - 8.0).max(60.0);
                 if let Some(i) = widgets::segmented(ui, &labels, at, w) {
@@ -2455,10 +2454,10 @@ fn inspector_rows(ui: &mut egui::Ui, rows: &[(String, String)], edits: &mut std:
             let (id, hex) = rest.split_once('\u{1d}').unwrap_or((rest, ""));
             let mut swatch_rect = Rect::NOTHING;
             ui.horizontal(|ui| {
-                ui.add_space(8.0);
-                let (lr, _) = ui.allocate_exact_size(vec2(88.0, 24.0), Sense::hover());
+                ui.add_space(SPACE_S);
+                let (lr, _) = ui.allocate_exact_size(vec2(88.0, CONTROL_H), Sense::hover());
                 ui.painter().text(lr.left_center(), egui::Align2::LEFT_CENTER, label, meta(), DIM);
-                let (r, resp) = ui.allocate_exact_size(vec2((ui.available_width() - 8.0).max(60.0), 24.0), Sense::click());
+                let (r, resp) = ui.allocate_exact_size(vec2((ui.available_width() - 8.0).max(60.0), CONTROL_H), Sense::click());
                 paint_state(ui, r, state_of(&resp, false, true), R_ROW);
                 let sw = Rect::from_min_size(r.min + vec2(3.0, 3.0), vec2(36.0, 18.0));
                 ui.painter().rect_filled(sw, CornerRadius::same(4), parse_hex(hex).unwrap_or(SWATCH_FALLBACK));
@@ -2480,7 +2479,7 @@ fn inspector_rows(ui: &mut egui::Ui, rows: &[(String, String)], edits: &mut std:
                     .show(ui.ctx(), |ui| {
                         glass(Surface::Raised).inner_margin(Margin::same(10)).show(ui, |ui| {
                             egui::widgets::color_picker::color_picker_color32(ui, &mut c, egui::widgets::color_picker::Alpha::Opaque);
-                            ui.add_space(6.0);
+                            ui.add_space(SPACE_S);
                             ui.horizontal(|ui| {
                                 if chip_button(ui, "Apply") {
                                     actions.push(format!("edit\u{1f}{id}\u{1f}#{:02x}{:02x}{:02x}", c.r(), c.g(), c.b()));
@@ -2503,8 +2502,8 @@ fn inspector_rows(ui: &mut egui::Ui, rows: &[(String, String)], edits: &mut std:
             let (id, text) = rest.split_once('\u{1d}').unwrap_or((rest, ""));
             let buf = edits.entry(id.to_owned()).or_insert_with(|| text.to_owned());
             ui.horizontal(|ui| {
-                ui.add_space(8.0);
-                let (lr, _) = ui.allocate_exact_size(vec2(88.0, 24.0), Sense::hover());
+                ui.add_space(SPACE_S);
+                let (lr, _) = ui.allocate_exact_size(vec2(88.0, CONTROL_H), Sense::hover());
                 ui.painter().text(lr.left_center(), egui::Align2::LEFT_CENTER, label, meta(), DIM);
                 // desired_width is the text's width: leave room for the field's
                 // own margins, or the panel grows a little every frame.

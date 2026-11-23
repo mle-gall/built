@@ -510,7 +510,7 @@ impl Gallery {
                 ui.add_space(SPACE_XS);
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing = vec2(SPACE_XS, 0.);
-                    ui.add_space(8.);
+                    ui.add_space(SPACE_S);
                     chip_button(ui, "Measure");
                     amber_button(ui, "2 issues · Show");
                 });
@@ -573,16 +573,16 @@ impl Gallery {
                     ui.label(egui::RichText::new("45 %").font(meta()).color(DIM));
                 });
             });
-            ui.add_space(2.);
+            ui.add_space(SPACE_XS);
             progress_bar(ui, 0.45, 3.);
-            ui.add_space(3.);
+            ui.add_space(SPACE_XS);
         });
         toast(ui, 1., |ui| {
             ui.set_width(ui.available_width());
             ui.spacing_mut().item_spacing = vec2(SPACE_XS, 0.);
             ui.horizontal(|ui| {
                 dot(ui.painter(), ui.cursor().min + vec2(3., CONTROL_H / 2.), DONE);
-                ui.add_space(10.);
+                ui.add_space(SPACE_M);
                 ui.label(egui::RichText::new("Drawings exported").font(strong(TYPE_BODY)).color(INK));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     quiet(ui, "Show");

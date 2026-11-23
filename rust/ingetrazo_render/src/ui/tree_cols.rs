@@ -68,10 +68,10 @@ impl Cols {
 
     /// The header row: "Name" over the names, each column's title over it.
     pub fn header(&self, ui: &mut egui::Ui, left: f32) {
-        let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 18.0), egui::Sense::hover());
+        let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), super::ROW_H), egui::Sense::hover());
         let p = ui.painter();
         let cy = r.center().y;
-        let font = egui::FontId::proportional(10.0);
+        let font = super::meta();
         let at = |x: f32, text: &str, align: egui::Align2| {
             p.text(pos2(x, cy), align, text, font.clone(), FAINT);
         };
