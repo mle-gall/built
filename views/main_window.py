@@ -7191,6 +7191,11 @@ class MainWindow(WorksessionMixin, QMainWindow):
 
     def _on_terrain_profile(self) -> None:
         """Show the profile dock and profile the current selection (Track G)."""
+        view = getattr(self._doc, "stand_in", None)
+        if getattr(view, "_ui_attached", False):
+            from views.inspector_bridge import action
+            action(self, view, '["terrain.open",null]')
+            return
         self.profile_dock.show()
         self.profile_dock.raise_()
         self.profile_dock.compute_from_selection()
@@ -7538,6 +7543,11 @@ class MainWindow(WorksessionMixin, QMainWindow):
     def _show_camera_settings(self):
         """Camera ▸ Camera Settings…: one window, kept, raised if open —
         on the live view (it stops editing a scene, if it was)."""
+        view = getattr(self._doc, "stand_in", None)
+        if getattr(view, "_ui_attached", False):
+            from views.inspector_bridge import action
+            action(self, view, '["camera.open",null]')
+            return None
         dlg = getattr(self, "_camera_settings", None)
         if dlg is None:
             from views.camera_panel import CameraSettingsDialog
@@ -7557,8 +7567,9 @@ class MainWindow(WorksessionMixin, QMainWindow):
         if row is not None:
             row.mark_view(view)
         dlg = self._show_camera_settings()
-        dlg.refresh()
-        dlg.edit_scene(view)
+        if dlg is not None:
+            dlg.refresh()
+            dlg.edit_scene(view)
 
     def _reset_camera_home(self) -> None:
         """A new drawing opens on the default view (iso, 20 m out), not on

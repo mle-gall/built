@@ -184,6 +184,7 @@ pub struct Ui {
     plugins: plugins::Panels,
     plugin_document: String,
     background_plugins: std::collections::HashMap<String, plugins::Panels>,
+    pub panels: crate::inspector::Panels,
     ctx: egui::Context,
     painter: egui_wgpu::Renderer,
     start: Instant,
@@ -429,6 +430,7 @@ impl Ui {
         let (glass, resources) = crate::glass::Glass::new(device, format);
         painter.callback_resources.insert(resources);
         Self {
+            panels: Default::default(),
             ctx,
             painter,
             glass,
@@ -691,7 +693,7 @@ impl Ui {
     /// Keyboard ownership: the chrome takes a key only while one of its
     /// fields has focus, or Escape while one of its popups is open.
     pub fn claims_key(&self, name: &str) -> bool {
-        if name == "Escape" && (self.strip.menus_open() || self.plugin_popup_open()) { return true; }
+        if name == "Escape" && (self.strip.menus_open() || self.plugin_popup_open() || self.panels.data["terrain"].is_object()) { return true; }
         if self.sheets.shown && !self.home.shown { return self.sheets_claims_key(name); }
         let filing = self.column.as_ref().is_some_and(|c| c.filing.is_some() || c.row_menu.is_some() || !c.mode.is_empty()
             || c.kind_menu.is_some() || c.head_menu.is_some() || c.prompt.is_some());
@@ -729,6 +731,10 @@ impl Ui {
             return true;
         }
         if self.sheets.shown && !self.home.shown { return self.sheets_key(name, pressed, mods); }
+        if name == "Escape" && self.panels.data["terrain"].is_object() && !self.ctx.wants_keyboard_input() {
+            if pressed { self.actions.push(r#"panel:["terrain.close",null]"#.into()); }
+            return true;
+        }
         if name == "Escape" && (self.view_open || self.sel_more || self.menu.is_some() || self.form.is_some()) {
             if pressed {
                 if self.form.take().is_some() { self.actions.push("form:close".into()); }
@@ -828,6 +834,7 @@ impl Ui {
         // A choice or colour picker can extend beyond its parent panel.
         // Its next outside click dismisses it before the model takes input.
         self.plugin_popup_open() || self.hit.iter().any(|r| r.contains(pos))
+            || self.ctx.layer_id_at(pos).is_some_and(|layer| self.panels.popup_layers.contains(&layer.id))
     }
     /// Is (x, y) on the interactive chrome (a right-click there is the
     /// chrome's, not the model's)?
@@ -1099,6 +1106,10 @@ impl Ui {
                             ui.label(egui::RichText::new(&self.status).font(strong(12.0)).color(INK));
                             ui.add_space(6.0);
                         }
+                        if self.active == "fillet" && self.panels.data["bevel"].is_object() {
+                            self.panels.bevel(ui, &mut self.actions);
+                            return;
+                        }
                         for (id, label, key, state) in &self.options {
                             if *state == 2 {
                                 ui.label(egui::RichText::new(label).font(meta()).color(WARN));
@@ -1273,7 +1284,7 @@ impl Ui {
                                 // Managing scenes, under the list (council: one place).
                                 let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 7.0), Sense::hover());
                                 ui.painter().hline(r.x_range().shrink(6.0), r.center().y, Stroke::new(1.0_f32, EDGE));
-                                let mut rows: Vec<(&str, String)> = vec![("scene:add", "Add scene from this view".into())];
+                                let mut rows: Vec<(&str, String)> = vec![("scene:camera", "Camera inspector…".into()), ("scene:add", "Add scene from this view".into())];
                                 if let Some(c) = &current {
                                     rows.push(("scene:update", format!("Update “{c}” from this view")));
                                     rows.push(("scene:rename", format!("Rename “{c}”…")));
@@ -1565,6 +1576,10 @@ impl Ui {
                     // switch, Project's mode (Problems) with its way back,
                     // then the issues toggle and the structure menu.
                     let in_library = col.mode == "Library";
+                    if self.panels.data["camera"].is_object() {
+                        egui::ScrollArea::vertical().id_salt("camera inspector").show(ui, |ui| self.panels.camera(ui,&mut cmds));
+                        return;
+                    }
                     ui.horizontal(|ui| {
                         ui.set_min_height(28.0);
                         let has_plugins = self.plugins.available();
@@ -1990,6 +2005,9 @@ impl Ui {
                     ui.add_space(6.0);
                     egui::ScrollArea::vertical().id_salt("inspector").auto_shrink([false, false]).show(ui, |ui| {
                         ui.spacing_mut().item_spacing = vec2(0.0, 3.0);
+                        if col.mode.is_empty() && col.colset != 2 {
+                            self.panels.inspector(ui, &mut cmds);
+                        }
                         if col.inspector_title.is_empty() {
                             let empty = if in_library { "Pick an item to see and edit it here" } else { "Nothing selected" };
                             ui.horizontal(|ui| { ui.add_space(8.0); ui.label(egui::RichText::new(empty).font(body()).color(FAINT)); });
@@ -2032,6 +2050,10 @@ impl Ui {
                             }));
                         }
                         ui.add_space(4.0);
+                        let native_export = self.panels.has_records() && col.mode.is_empty() && col.colset != 2;
+                        if native_export {
+                            ui.collapsing("Export details", |ui| self.panels.export(ui, &mut cmds));
+                        }
                         let sections = col.inspector.clone();
                         for (title, rows) in &sections {
                             if title == "Pre-run checks" {
@@ -2061,6 +2083,7 @@ impl Ui {
                                 }));
                                 continue;
                             }
+                            if title == "Export details" && native_export { continue; }
                             if title.starts_with("Export") {
                                 egui::CollapsingHeader::new(egui::RichText::new(title.to_uppercase()).font(strong(10.0)).color(FAINT))
                                     .id_salt(title).default_open(false)
@@ -2435,6 +2458,7 @@ impl Ui {
                 let acts = self.strip.popups(ctx, &self.icons);
                 self.actions.extend(acts);
             } else {
+            self.panels.popup_layers.clear();
             self.top_bar(ctx, screen);
             if !self.review {
                 self.palette(ctx, screen);
@@ -2442,6 +2466,11 @@ impl Ui {
                 self.plugins.utility(ctx, screen, self.dock_w, &mut self.actions);
                 self.bottom_bar(ctx, screen);
                 self.paint_strip(ctx, screen);
+                if self.panels.data["terrain"].is_object() {
+                    let bounds = Rect::from_min_max(pos2(12.,0.),pos2(self.free_right(ctx,screen)-8.,screen.bottom()-BOT_H-4.));
+                    self.panels.terrain.draw(ctx,bounds,&self.panels.data["terrain"],&self.panels.data["projected"],&mut self.actions);
+                }
+                self.panels.frame_guide(ctx, screen);
             }
             self.cursor_value(ctx, screen);
             self.bar_menu(ctx);
@@ -2474,6 +2503,7 @@ impl Ui {
                      ("prompt", model && self.column.as_ref().is_some_and(|c| c.prompt.is_some())),
                      ("pick_menu", model && self.column.as_ref().is_some_and(|c| c.pick.is_some())),
                      ("color_pick", model && self.column.as_ref().is_some_and(|c| c.color_pick.is_some())),
+                     ("terrain_profile", work && model && self.panels.data["terrain"].is_object()),
                      ("jobs", !self.jobs.is_empty() || !self.history.is_empty()),
                      ("dialog", self.dialog.is_some()),
                      ("tab_menu", !start && self.strip.menu_open()),

@@ -423,3 +423,12 @@ require an absolute destination. The synchronous Python entry point accepts
 host context through `project_directory`, `camera`, `screen_mm`, the viewport's
 `svg_picture(axes, frame)`, and the composer's `pdf_writer(path, sheets)`. Successful runs stamp `last_run` in UTC.
 Undoing that metadata change leaves exported files on disk.
+
+### IFC inspector commands
+
+| Command | Arguments | Result |
+| --- | --- | --- |
+| `patch_record_field` | `placements` (UIDs), `path`, `value`, optional `schema` (default IFC4) and `property_kind` | Validates the effective record of every target, then applies one undoable step. A scalar path such as `["description"]` edits an occurrence field. `["psets", set, property]` edits one typed value, preserving siblings and GUIDs. A null property value restores its filing or type default. Creating a property requires its kind. `["classifications", system, code]` edits the occurrence's reference name. Linked targets and filing-owned identity fields reject the patch. |
+| `set_filing_rule` | `node`, `recipe`, `expected` (previous local recipe) | Checks the expected rule and registry, then writes the local overrides and resynchronises members, including descendants, in one history step. |
+
+The narrow query `core.protocol.records.occurrence` returns field paths, typed values, ownership and editability. The native inspector groups these by path and previews the explicit UID list for a mixed selection. `core.protocol.records.filing_rule` without a history previews the affected UID count and fields.

@@ -362,6 +362,9 @@ class FilletTool(Tool):
         from PySide6.QtWidgets import QWidget
         if not isinstance(viewport, QWidget):
             return
+        stand_in = getattr(getattr(viewport.window(), "_doc", None), "stand_in", None)
+        if getattr(stand_in, "_ui_attached", False):
+            return
         panel = getattr(viewport, "_bevel_panel", None)
         if panel is None:
             from views.bevel_panel import BevelPanel

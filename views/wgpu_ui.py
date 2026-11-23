@@ -532,6 +532,8 @@ def before_frame(view) -> None:
     from views import wgpu_library
     wgpu_library.before_frame(view, win)
     _inspector(view, win)
+    from views import inspector_bridge
+    inspector_bridge.sync(view, win)
     _tabs(view, win)
     _projects(view, win)
     from views import wgpu_tabs
@@ -636,7 +638,7 @@ def _cluster(view, win) -> None:
     cluster = [*[r for r in nav if r], [i for i in toggles if i]]
     menu = []
     views = [item(a, icon=f"view_{k}") for k, a in getattr(win, "_view_actions", {}).items()]
-    menu.append(("Views", [i for i in views if i]))
+    menu.append(("Views", [*[i for i in views if i], ("camera", "Camera inspector…", "", "", -1, True)]))
     menu.append(("Projection", [item(a) for a in getattr(win, "_projection_actions", {}).values()]))
     if not hasattr(view, "_ui_style_menu"):
         view._ui_style_menu = next((m for m in win.findChildren(QMenu)
@@ -2120,7 +2122,8 @@ def _tree_action(win, view, action) -> None:
                 recipe["class"] = cls
             else:
                 recipe.pop("class", None)
-            update_node(vp, node, recipe=recipe)
+            _core(vp, "set_filing_rule", node=node, recipe=recipe, expected=structure._nodes(bim_registry.get(scene))[node].get("recipe", {}))
+            vp.refresh_after_edit()
         elif verb in ("new", "newchild"):
             registry = bim_registry.get(scene)
             nodes = registry.setdefault("structure", {}).setdefault("nodes", {})
@@ -2188,7 +2191,8 @@ def _tree_action(win, view, action) -> None:
                     recipe[field] = extra.strip()
                 else:
                     recipe.pop(field, None)
-                update_node(vp, arg, recipe=recipe)
+                _core(vp, "set_filing_rule", node=arg, recipe=recipe, expected=structure._nodes(bim_registry.get(scene))[arg].get("recipe", {}))
+                vp.refresh_after_edit()
             elif what == "segments":
                 from core.curve_segments import MAX_SEGMENTS
                 sel = list(scene.selection)
@@ -2379,7 +2383,8 @@ def _inspector(view, win) -> None:
             prow = [(n, f"×{k}") for n, k in parts.most_common(8)]
             if len(parts) > 8:
                 prow.append(("…", f"{len(parts) - 8} more kinds"))
-            sections.append(("Parts", prow))
+            if not hasattr(view.renderer, "ui_panel_set"):
+                sections.append(("Parts", prow))
             sections.append(("Actions", [("cutlist", "Copy cut list")]))
         solid = _solid_section(g)
         if solid and not verbs.offers(sel_kind, "repair"):
@@ -2441,6 +2446,8 @@ def _inspector(view, win) -> None:
     if missing and verbs.offers(sel_kind, "status"):
         sections.append(("Status", [("Missing on", f"{missing} items")]))
         sections.append(("Actions", [("status:" + v, "All " + v.lower()) for v in STATUS_CHOICES]))
+    if groups:
+        sections.append(("Export details", []))
     view.renderer.ui_set_inspector(f"{len(sel)} selected", sections)
 
 
@@ -2739,6 +2746,10 @@ def _run(win, actions) -> None:
         if kind == "sheets":
             from views import wgpu_sheets
             wgpu_sheets.action(win, arg)
+            continue
+        if kind == "panel" or (kind, arg) in (("act", "camera"), ("tab", "scene:camera")):
+            from views import inspector_bridge
+            inspector_bridge.action(win, win._doc.stand_in, arg if kind == "panel" else '["camera.open",null]')
             continue
         if kind == "tool":
             view = getattr(getattr(win, "_doc", None), "stand_in", None)
