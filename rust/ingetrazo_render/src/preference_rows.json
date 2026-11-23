@@ -26,7 +26,10 @@
       {"id": "look_sens", "kind": "number", "label": "Mouse-look sensitivity", "lo": 1, "hi": 100, "default": 25, "tip": "How fast a drag turns the head in First Person", "words": "first person walk"}
     ]],
     ["touch", "Trackpad", [
-      {"id": "trackpad_slide", "kind": "choice", "label": "Two-finger slide on the trackpad", "options": [["orbit", "Orbits the view"], ["pan", "Pans the view"], ["zoom", "Zooms the view"]], "default": "zoom"}
+      {"id": "trackpad_slide", "kind": "choice", "label": "Two-finger slide on the trackpad", "options": [["orbit", "Orbits the view"], ["pan", "Pans the view"]], "default": "orbit"},
+      {"id": "trackpad_inertia", "kind": "check", "label": "Trackpad inertia", "default": true},
+      {"id": "touch_slide", "kind": "choice", "label": "Touchscreen one-finger slide", "options": [["orbit", "Orbit"], ["pan", "Pan"], ["select", "Select"]], "default": "orbit"},
+      {"id": "pinch_sensitivity", "kind": "slider", "label": "Pinch sensitivity", "words": "zoom", "lo": 10, "hi": 300, "default": 100, "suffix": "%"}
     ]],
     ["tools", "Tools", [
       {"id": "cursor_style", "kind": "choice", "label": "Tool cursor", "options": [["tool", "The tool's icon"], ["crosshair", "Crosshair"], ["arrow", "Arrow"]], "default": "tool"},
@@ -35,6 +38,7 @@
   ],
   "display": [
     ["quality", "Quality", [
+      {"id": "msaa", "kind": "choice", "label": "Anti-aliasing", "options": [[1, "Off"], [2, "2× MSAA"], [4, "4× MSAA"]], "default": 4},
       {"id": "soft_shadows", "kind": "check", "label": "Soft sun shadows", "default": false, "tip": "Shadow edges that soften away from what casts them, as in daylight. They cost the graphics card more while the sun casts shadows."},
       {"id": "soft_level", "kind": "choice", "label": "Softness", "options": [[1, "Slight"], [2, "Moderate"], [3, "Strong"]], "default": 2, "enabled_if": ["soft_shadows", true]}
     ]],

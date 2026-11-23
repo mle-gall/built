@@ -129,7 +129,7 @@ def test_side_picks_a_section(win):
     got = fields(sheet)
     assert {"invert_wheel", "invert_orbit", "look_sens", "trackpad_slide",
             "cursor_style", "ask_section"} <= set(got)
-    assert "trackpad_inertia" not in got
+    assert {"touch_slide", "trackpad_inertia", "pinch_sensitivity"} <= set(got)
     # Field ids are unique in the whole sheet.
     ids = [r[0] for b in sheet["content"]["blocks"] if b["kind"] == "fields" for r in b["fields"]]
     assert len(ids) == len(set(ids))
@@ -158,7 +158,7 @@ def test_search_lists_hits_from_every_section_with_their_names(win):
     assert "3D mouse" in sections            # «Pan and zoom only», the axes' Zoom
     assert len(sections) >= 2
     got = fields(sheet)
-    assert "invert_wheel" in got and "trackpad_slide" in got and "ndof_lock" in got
+    assert "invert_wheel" in got and "pinch_sensitivity" in got and "ndof_lock" in got
     # The side says how many rows each section holds, none of them picked.
     counts = {r["id"]: r.get("right", "") for r in sheet["side"] if r.get("kind") != "caption"}
     assert counts["navigation"] and counts["ndof"]

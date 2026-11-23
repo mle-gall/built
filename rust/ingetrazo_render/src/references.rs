@@ -21,6 +21,7 @@ struct Layer {
     writes_depth: bool,
 }
 pub struct References {
+    samples: crate::antialias::SampleModes,
     layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
     pipelines: Vec<wgpu::RenderPipeline>,
@@ -28,7 +29,7 @@ pub struct References {
     order: Vec<String>,
 }
 impl References {
-    pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat) -> Self {
+    pub fn new(samples: crate::antialias::SampleModes, device: &wgpu::Device, format: wgpu::TextureFormat) -> Self {
         use wgpu::{BindingType as B, ShaderStages as S};
         let uniform = B::Buffer {
             ty: wgpu::BufferBindingType::Uniform,
@@ -71,7 +72,7 @@ impl References {
             source: wgpu::ShaderSource::Wgsl(include_str!("references.wgsl").into()),
         });
         let mut pipelines = Vec::new();
-        for count in [1, 4] {
+        for count in samples.levels.iter().copied() {
             for writes_depth in [false, true] {
                 pipelines.push(
                     device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -124,7 +125,7 @@ impl References {
             min_filter: wgpu::FilterMode::Linear,
             ..Default::default()
         });
-        Self {
+        Self { samples,
             layout,
             sampler,
             pipelines,
@@ -278,7 +279,7 @@ impl References {
             let layer = &self.layers[key];
             pass.set_pipeline(
                 &self.pipelines
-                    [2 * usize::from(resolve.is_some()) + usize::from(layer.writes_depth)],
+                    [2 * self.samples.index(resolve.is_some()) + usize::from(layer.writes_depth)],
             );
             pass.set_bind_group(0, &layer.group, &[]);
             pass.set_vertex_buffer(0, layer.vertices.slice(..));

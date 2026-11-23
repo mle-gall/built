@@ -12,8 +12,9 @@ impl DepthResolve {
 }
 @fragment fn fs(@builtin(position) p: vec4f) -> @builtin(frag_depth) f32 {
  let xy = vec2i(p.xy);
- return max(max(textureLoad(source,xy,0),textureLoad(source,xy,1)),
-            max(textureLoad(source,xy,2),textureLoad(source,xy,3)));
+ var nearest = textureLoad(source,xy,0);
+ for (var i = 1u; i < textureNumSamples(source); i++) { nearest = max(nearest, textureLoad(source,xy,i32(i))); }
+ return nearest;
 }"#.into()),
         });
         Self { pipeline: device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {

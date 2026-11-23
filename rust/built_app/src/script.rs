@@ -19,8 +19,13 @@
 //! commit か                     # what it commits
 //! tool pushpull                 # a menu command (tool:<key>, undo, view:iso...)
 //! wheel 400 300 -40 [phase]     # pixel delta (trackpad slide)
+//! pan2 400 300 20 8 [phase]   # two-finger slide in logical pixels
+//! rotate 400 300 15            # orbit by gesture rotation in degrees
+//! touch-slide 400 300 20 8     # one-finger drag in logical pixels
+//! smart-zoom 400 300           # two-finger double tap
 //! notch 400 300 1               # mouse-wheel notches
 //! pinch 400 300 0.1             # trackpad pinch (begin, zoom, end)
+//! msaa off                      # change Display quality (off, 2, 4)
 //! capture name                  # build/shell-shots/<name>.png
 //! state                         # print Host.state() as JSON
 //! quit
@@ -46,6 +51,11 @@ pub enum Step {
     Wheel(f64, f64, f64, String),
     Notch(f64, f64, f64),
     Pinch(f64, f64, f64),
+    Pan2(f64, f64, f64, f64, String),
+    TouchSlide(f64, f64, f64, f64),
+    Rotate(f64, f64, f64),
+    SmartZoom(f64, f64),
+    Msaa(u32),
     Capture(String),
     State,
     Quit,
@@ -141,7 +151,35 @@ pub fn parse(text: &str) -> Result<Vec<Step>, String> {
                 w.get(4).unwrap_or(&"move").to_string(),
             ),
             "notch" => Step::Notch(num(w.get(1), line)?, num(w.get(2), line)?, num(w.get(3), line)?),
+            "pan2" => Step::Pan2(
+                num(w.get(1), line)?,
+                num(w.get(2), line)?,
+                num(w.get(3), line)?,
+                num(w.get(4), line)?,
+                w.get(5).unwrap_or(&"move").to_string(),
+            ),
+            "touch-slide" => Step::TouchSlide(
+                num(w.get(1), line)?,
+                num(w.get(2), line)?,
+                num(w.get(3), line)?,
+                num(w.get(4), line)?,
+            ),
+            "smart-zoom" => Step::SmartZoom(num(w.get(1), line)?, num(w.get(2), line)?),
+            "rotate" => Step::Rotate(
+                num(w.get(1), line)?,
+                num(w.get(2), line)?,
+                num(w.get(3), line)?,
+            ),
             "pinch" => Step::Pinch(num(w.get(1), line)?, num(w.get(2), line)?, num(w.get(3), line)?),
+            "msaa" => {
+                let count = match w.get(1).copied() {
+                    Some("off") => 1,
+                    Some("2") => 2,
+                    Some("4") => 4,
+                    _ => return Err(format!("line {line}: expected msaa off, 2 or 4")),
+                };
+                Step::Msaa(count)
+            }
             "capture" => Step::Capture(rest(1)),
             "state" => Step::State,
             "quit" => Step::Quit,

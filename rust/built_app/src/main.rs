@@ -12,6 +12,7 @@
 //! ```
 
 mod keys;
+mod gestures;
 #[cfg(target_os = "macos")]
 mod menu;
 mod native;
@@ -182,6 +183,8 @@ struct Win {
     held: u32,
     last_press: Option<(Instant, u32, (f64, f64))>,
     last_key_text: Option<String>,
+    contact: Option<(u64, (f64, f64), bool)>,
+    second_contact: Option<(u64, (f64, f64))>,
 }
 
 struct App {
@@ -518,6 +521,29 @@ impl App {
                     h.call("gesture", ("end", 0.0, x, y));
                 }
             }
+            Step::Pan2(x, y, dx, dy, phase) => {
+                self.slide(id, (x, y), (dx, dy), &phase, false, true)
+            }
+            Step::SmartZoom(x, y) => {
+                if let Some(h) = self.host(id) {
+                    h.call("gesture", ("smart_zoom", 0., x, y));
+                }
+            }
+            Step::Rotate(x, y, angle) => {
+                if let Some(h) = self.host(id) {
+                    h.call("gesture", ("rotate", angle, x, y));
+                }
+            }
+            Step::TouchSlide(x, y, dx, dy) => {
+                self.touch(id, 0, TouchPhase::Started, (x, y));
+                self.touch(id, 0, TouchPhase::Moved, (x + dx, y + dy));
+                self.touch(id, 0, TouchPhase::Ended, (x + dx, y + dy));
+            }
+            Step::Msaa(count) => {
+                if let Some(host) = self.host(id) {
+                    host.apply_msaa(count);
+                }
+            }
             Step::Capture(name) => {
                 self.settle();
                 self.capture(&name);
@@ -599,6 +625,7 @@ impl App {
         let id = window.id();
         self.wins.push((id, Win {
             window, host, ns_view, cursor: (0.0, 0.0), held: 0, last_press: None, last_key_text: None,
+            contact: None, second_contact: None,
         }));
         self.focused = Some(id);
         Ok(id)
@@ -889,11 +916,38 @@ impl ApplicationHandler<UserEvent> for App {
                         }
                         MouseScrollDelta::PixelDelta(p) => {
                             let (dx, dy) = (p.x / s, p.y / s);
-                            // Qt's Cocoa angleDelta for precise deltas: 2× pixels.
-                            w.host.call("wheel", (x, y, dx, dy, dx * 2.0, dy * 2.0, phase_name(phase),
-                                                  m, held, true));
+                            let (momentum, touch, natural) = native::scroll_source();
+                            if touch && !momentum {
+                                let (dx, dy) = if natural { (dx, dy) } else { (-dx, -dy) };
+                                let anchor = w.contact.map_or((x, y), |(_, p, _)| p);
+                                if w.contact.is_none() {
+                                    self.touch(id, u64::MAX, TouchPhase::Started, (x, y));
+                                }
+                                self.touch(id, u64::MAX, phase, (anchor.0 + dx, anchor.1 + dy));
+                            } else if !touch {
+                                let phase = if momentum { "momentum" } else { phase_name(phase) };
+                                self.slide(id, (x, y), (dx, dy), phase, false, natural);
+                            }
                         }
                     }
+                }
+                self.redraw(id);
+            }
+            WindowEvent::Touch(t) => {
+                self.touch(id, t.id, t.phase, self.logical(id, t.location));
+                self.redraw(id);
+            }
+            WindowEvent::PanGesture { delta, phase, .. } => {
+                let scale = self.scale(id);
+                if let Some(w) = self.win(id) {
+                    self.slide(
+                        id,
+                        w.cursor,
+                        (delta.x as f64 / scale, delta.y as f64 / scale),
+                        phase_name(phase),
+                        false,
+                        true,
+                    );
                 }
                 self.redraw(id);
             }
@@ -917,6 +971,7 @@ impl ApplicationHandler<UserEvent> for App {
                     let (x, y) = w.cursor;
                     w.host.call("gesture", ("rotate", delta as f64, x, y));
                 }
+                self.redraw(id);
             }
             WindowEvent::DoubleTapGesture { .. } => {
                 if let Some(w) = self.win(id) {

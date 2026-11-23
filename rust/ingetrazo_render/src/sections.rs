@@ -1,6 +1,7 @@
 //! Cached closed-ring polygons, using the same topology as the GL viewport.
 use wgpu::util::DeviceExt;
 pub struct Sections {
+    samples: crate::antialias::SampleModes,
     pipelines: Vec<wgpu::RenderPipeline>,
     group: wgpu::BindGroup,
     vertices: Option<wgpu::Buffer>,
@@ -8,7 +9,7 @@ pub struct Sections {
     bounds: [glam::Vec3; 2],
 }
 impl Sections {
-    pub fn new(d: &wgpu::Device, format: wgpu::TextureFormat, camera: &wgpu::Buffer) -> Self {
+    pub fn new(samples: crate::antialias::SampleModes, d: &wgpu::Device, format: wgpu::TextureFormat, camera: &wgpu::Buffer) -> Self {
         let shader = d.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("section polygons"),
             source: wgpu::ShaderSource::Wgsl(include_str!("sections.wgsl").into()),
@@ -20,7 +21,7 @@ impl Sections {
         });
         let layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: None,
             bind_group_layouts: &[&bind_layout], push_constant_ranges: &[] });
-        let pipelines: Vec<_> = [1, 4].into_iter().map(|count| d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        let pipelines: Vec<_> = samples.levels.iter().copied().map(|count| d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("section polygons"), layout: Some(&layout),
             vertex: wgpu::VertexState { module: &shader, entry_point: Some("vs"),
                 compilation_options: Default::default(), buffers: &[wgpu::VertexBufferLayout {
@@ -38,7 +39,7 @@ impl Sections {
             label: None, layout: &pipelines[0].get_bind_group_layout(0),
             entries: &[wgpu::BindGroupEntry { binding: 0, resource: camera.as_entire_binding() }],
         });
-        Self { pipelines, group, vertices: None, count: 0, bounds: [glam::Vec3::ZERO; 2] }
+        Self { samples, pipelines, group, vertices: None, count: 0, bounds: [glam::Vec3::ZERO; 2] }
     }
     pub fn upload(&mut self, d: &wgpu::Device, data: &[u8]) {
         self.count = (data.len()/24) as u32;
@@ -66,7 +67,7 @@ impl Sections {
         if let Some([x, y, width, height]) = scissor(self.bounds, camera) {
             pass.set_scissor_rect(x, y, width, height);
         }
-        pass.set_pipeline(&self.pipelines[usize::from(resolve.is_some())]);
+        pass.set_pipeline(&self.pipelines[self.samples.index(resolve.is_some())]);
         pass.set_bind_group(0, &self.group, &[]);
         pass.set_vertex_buffer(0, vertices.slice(..));
         pass.draw(0..self.count, 0..1);

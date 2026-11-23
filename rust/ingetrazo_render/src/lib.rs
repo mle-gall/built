@@ -19,6 +19,7 @@ mod textures;
 mod style;
 mod background;
 mod antialias;
+mod navigation;
 mod depth_resolve;
 mod depth;
 mod backend;
@@ -129,6 +130,7 @@ struct Renderer {
     material_transparency: bool,
     texture_groups: Vec<wgpu::BindGroup>,
     ao: ao::AmbientOcclusion,
+    samples: antialias::SampleModes,
     antialias: bool,
     ids_dirty: bool,
     camera_data: Vec<f32>,
@@ -240,22 +242,6 @@ fn model_color_view(target: &wgpu::Texture) -> wgpu::TextureView {
     })
 }
 
-fn multisampled(d: &wgpu::Device, w: u32, h: u32, format: wgpu::TextureFormat) -> wgpu::Texture {
-    d.create_texture(&wgpu::TextureDescriptor {
-        label: Some("4x color resolve"),
-        size: wgpu::Extent3d {
-            width: w,
-            height: h,
-            depth_or_array_layers: 1,
-        },
-        mip_level_count: 1,
-        sample_count: 4,
-        dimension: wgpu::TextureDimension::D2,
-        format,
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-        view_formats: &[],
-    })
-}
 fn buffer(d: &wgpu::Device, bytes: &[u8], usage: wgpu::BufferUsages) -> wgpu::Buffer {
     d.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: None,
@@ -333,7 +319,7 @@ impl Renderer {
             ..Default::default()
         }))
         .ok_or_else(|| PyValueError::new_err("no supported GPU backend for this window"))?;
-        let optional = wgpu::Features::MULTI_DRAW_INDIRECT | wgpu::Features::TIMESTAMP_QUERY;
+        let optional = wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES | wgpu::Features::MULTI_DRAW_INDIRECT | wgpu::Features::TIMESTAMP_QUERY;
         if !a.features().contains(wgpu::Features::INDIRECT_FIRST_INSTANCE) {
             return Err(PyValueError::new_err("GPU adapter lacks indirect first-instance drawing"));
         }
@@ -534,12 +520,15 @@ impl Renderer {
             &[0; 256],
             wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
         );
-        let sun = sun::Sun::new(&device, format, sun::LIVE_SIZE);
+        let samples = antialias::SampleModes::adapter(&a, format, features);
+        let requested = Python::attach(|py| navigation::setting(py,"display/msaa","4"))?;
+        samples.select(requested.parse().unwrap_or(4));
+        let sun = sun::Sun::new(samples.clone(), &device, format, sun::LIVE_SIZE);
         let look = style::Style::new(&device);
-        let preview = preview::Preview::new(&device, format, &camera, &look.buffer, 0);
-        let face_marks = preview::Preview::new(&device, format, &camera, &look.buffer, 1);
-        let ghost_geometry = preview::Preview::new(&device, format, &camera, &look.buffer, 2);
-        let ghost_objects = preview::Preview::new(&device, format, &camera, &look.buffer, 2);
+        let preview = preview::Preview::new(samples.clone(), &device, format, &camera, &look.buffer, 0);
+        let face_marks = preview::Preview::new(samples.clone(), &device, format, &camera, &look.buffer, 1);
+        let ghost_geometry = preview::Preview::new(samples.clone(), &device, format, &camera, &look.buffer, 2);
+        let ghost_objects = preview::Preview::new(samples.clone(), &device, format, &camera, &look.buffer, 2);
         let background = background::Background::new(&device, format, &look.buffer, 1);
         let look_groups = [&draw, &xray, &edge, &xray_edge, &profile_top].iter().map(|p|
             bind(&device, &p.get_bind_group_layout(1), &[&look.buffer])).collect();
@@ -558,15 +547,15 @@ impl Renderer {
             depth_stencil: Some(wgpu::DepthStencilState { format: wgpu::TextureFormat::Depth32Float, depth_write_enabled: false, depth_compare: depth::compare(wgpu::CompareFunction::LessEqual), stencil: Default::default(), bias: depth::bias(bias) }),
             multisample: Default::default(), multiview: None, cache: None,
         });
-        let mut aa = antialias::Antialias::new(&device, format, &look.buffer, w, h);
+        let mut aa = antialias::Antialias::new(samples.count(), &device, format, &look.buffer, w, h);
         aa.bind_textures(&device, &textures);
         let mut transparency = xray::Xray::new(&device, format, w, h);
         transparency.bind_textures(&device, &textures);
         Ok(Self {
             instance, targets: vec![None], active: 0, alive: vec![true], scene_epoch: 0,
             textures, texture_groups, textures_enabled: true, material_transparency: true,
-            ao: ao::AmbientOcclusion::new(&device, format),
-            antialias: true,
+            ao: ao::AmbientOcclusion::new(samples.clone(), &device, format),
+            samples: samples.clone(), antialias: true,
             ids_dirty: true,
             camera_data: Vec::new(),
             stable_frames: 0,
@@ -578,15 +567,15 @@ impl Renderer {
             face_marks,
             ghost_geometry,
             ghost_objects,
-            references: references::References::new(&device, format),
+            references: references::References::new(samples.clone(), &device, format),
             sun,
             capture_next: false,
             captured: None,
             overlay: overlay::Overlay::new(&device, config.format),
             page: overlay::Overlay::new(&device, config.format),
-            axes: axes::Axes::new(&device, format, &camera),
-            sections: sections::Sections::new(&device, format, &camera),
-            lines: lines::Lines::new(&device, format, &camera),
+            axes: axes::Axes::new(samples.clone(), &device, format, &camera),
+            sections: sections::Sections::new(samples.clone(), &device, format, &camera),
+            lines: lines::Lines::new(samples.clone(), &device, format, &camera),
             depth: texture(&device, w, h, wgpu::TextureFormat::Depth32Float),
             offscreen: texture(&device, w, h, config.format),
             ids: texture(&device, w, h, wgpu::TextureFormat::R32Uint),
@@ -658,7 +647,7 @@ impl Renderer {
         surface.configure(&self.device, &config);
         let format = config.format.remove_srgb_suffix();
         let d = &self.device;
-        let mut aa = antialias::Antialias::new(d, format, &self.look.buffer, w, h);
+        let mut aa = antialias::Antialias::new(self.samples.count(), d, format, &self.look.buffer, w, h);
         aa.bind_textures(d, &self.textures);
         let mut transparency = xray::Xray::new(d, format, w, h);
         transparency.bind_textures(d, &self.textures);
@@ -672,13 +661,13 @@ impl Renderer {
             offscreen: texture(d, w, h, self.config.format),
             ids: texture(d, w, h, wgpu::TextureFormat::R32Uint),
             aa, transparency,
-            ao: ao::AmbientOcclusion::new(d, format),
+            ao: ao::AmbientOcclusion::new(self.samples.clone(), d, format),
             overlay: overlay::Overlay::new(d, self.config.format),
-            axes: axes::Axes::new(d, format, &self.camera),
-            lines: lines::Lines::new(d, format, &self.camera),
-            preview: preview::Preview::new(d, format, &self.camera, &self.look.buffer, 0),
-            face_marks: preview::Preview::new(d, format, &self.camera, &self.look.buffer, 1),
-            sections: sections::Sections::new(d, format, &self.camera),
+            axes: axes::Axes::new(self.samples.clone(), d, format, &self.camera),
+            lines: lines::Lines::new(self.samples.clone(), d, format, &self.camera),
+            preview: preview::Preview::new(self.samples.clone(), d, format, &self.camera, &self.look.buffer, 0),
+            face_marks: preview::Preview::new(self.samples.clone(), d, format, &self.camera, &self.look.buffer, 1),
+            sections: sections::Sections::new(self.samples.clone(), d, format, &self.camera),
             camera_data: Vec::new(),
             look_data: self.look.data,
             sun: self.sun.settings(),
@@ -718,6 +707,7 @@ impl Renderer {
             self.queue.write_buffer(&self.camera, 0, bytemuck::cast_slice(&self.camera_data));
         }
         // The scene's buffers may have been replaced or grown since.
+        self.refresh_msaa();
         self.aa.bind_textures(&self.device, &self.textures);
         self.transparency.bind_textures(&self.device, &self.textures);
         if let Some(s) = &self.scene {
@@ -743,7 +733,7 @@ impl Renderer {
     #[getter]
     fn target_count(&self) -> usize { self.alive.iter().filter(|a| **a).count() }
     /// Bytes of every view's own attachments (surface not included): depth,
-    /// colour and ID targets, 4× multisampled colour and depth, X-ray
+    /// colour and ID targets, multisampled colour and depth, X-ray
     /// accumulation — what one more view costs, apart from the scene.
     #[getter]
     fn target_memory(&self) -> u64 {
@@ -1307,7 +1297,7 @@ impl Renderer {
             let loader = load.ok_or_else(|| PyValueError::new_err("preview image loader required"))?;
             let format = self.config.format.remove_srgb_suffix();
             let layout = self.preview.layout();
-            self.preview.textures.get_or_insert_with(|| preview_texture::TexturedPreview::new(&self.device, format, &layout))
+            self.preview.textures.get_or_insert_with(|| preview_texture::TexturedPreview::new(self.samples.clone(), &self.device, format, &layout))
                 .upload(&self.device, &self.queue, runs, loader)?;
         }
         self.preview.upload_validated(&self.device, triangles, edges);
@@ -1409,6 +1399,11 @@ impl Renderer {
         self.ghost_objects.upload(&self.device,&objects,&object_edges).map_err(PyValueError::new_err)?;
         Ok(())
     }
+    fn msaa_levels(&self) -> Vec<u32> { self.samples.levels.to_vec() }
+    fn set_msaa_samples(&mut self, requested: u32) {
+        self.samples.select(requested);
+        self.refresh_msaa();
+    }
     fn set_antialias(&mut self, enabled: bool) { self.antialias = enabled; }
     #[getter]
     fn needs_shadow_fit(&self) -> bool {
@@ -1453,7 +1448,7 @@ impl Renderer {
             sun::LIVE_SIZE
         };
         let format = self.config.format.remove_srgb_suffix();
-        let mut aa = antialias::Antialias::new(&self.device, format, &self.look.buffer, width, height);
+        let mut aa = antialias::Antialias::new(self.samples.count(), &self.device, format, &self.look.buffer, width, height);
         let mut transparency = xray::Xray::new(&self.device, format, width, height);
         aa.bind_textures(&self.device, &self.textures);
         transparency.bind_textures(&self.device, &self.textures);
@@ -1471,8 +1466,8 @@ impl Renderer {
         // Keep the original resources alive until the transaction has completed.
         let old_aa = std::mem::replace(&mut self.aa, aa);
         let old_transparency = std::mem::replace(&mut self.transparency, transparency);
-        let old_sun = std::mem::replace(&mut self.sun, sun::Sun::new(&self.device, format, shadow_size));
-        let old_ao = std::mem::replace(&mut self.ao, ao::AmbientOcclusion::new(&self.device, format));
+        let old_sun = std::mem::replace(&mut self.sun, sun::Sun::new(self.samples.clone(), &self.device, format, shadow_size));
+        let old_ao = std::mem::replace(&mut self.ao, ao::AmbientOcclusion::new(self.samples.clone(), &self.device, format));
         let old_overlay = std::mem::replace(&mut self.overlay, overlay::Overlay::new(&self.device, self.config.format));
         let old_color = std::mem::replace(&mut self.offscreen, texture(&self.device, width, height, self.config.format));
         let old_depth = std::mem::replace(&mut self.depth, texture(&self.device, width, height, wgpu::TextureFormat::Depth32Float));
@@ -1786,7 +1781,7 @@ impl Renderer {
             pass.set_bind_group(0, &s.compute, &[]);
             pass.dispatch_workgroups(s.n.div_ceil(64), 1, 1);
         }
-        let plan = PassPlan::new(self.antialias, self.style, self.look.data[6][2] != 0., self.ao.active(self.style));
+        let plan = PassPlan::new(self.antialias && self.samples.count() > 1, self.style, self.look.data[6][2] != 0., self.ao.active(self.style));
         let msaa = plan.msaa && !self.pick_pending;
         self.stable_frames = self.stable_frames.saturating_add(1);
         let color_only = !msaa && !self.edges && self.style != 4 && !plan.ao && !plan.xray;
@@ -2689,6 +2684,33 @@ impl Renderer {
     }
 }
 impl Renderer {
+    fn refresh_msaa(&mut self) {
+        let count = self.samples.count();
+        if self.aa.samples == count {
+            return;
+        }
+        let mut aa = antialias::Antialias::new(
+            count,
+            &self.device,
+            self.config.format.remove_srgb_suffix(),
+            &self.look.buffer,
+            self.config.width,
+            self.config.height,
+        );
+        aa.bind_textures(&self.device, &self.textures);
+        if let Some(s) = &self.scene {
+            aa.bind_scene(
+                &self.device,
+                &self.camera,
+                &s.inst,
+                &s.survivors,
+                &self.look.buffer,
+                &s.edge_records,
+                &s.viewpoints,
+            );
+        }
+        self.aa = aa;
+    }
     fn swap_live(&mut self, t: &mut Target) {
         use std::mem::swap;
         swap(&mut self.surface, &mut t.surface);
@@ -2781,6 +2803,9 @@ fn context_targets(hit: bool, selection: &Bound<'_, PyAny>) -> PyResult<Vec<Py<P
 
 #[pymodule]
 pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    navigation::register(m)?;
+    m.add_function(wrap_pyfunction!(preferences::msaa_levels,m)?)?;
+    m.add_function(wrap_pyfunction!(preferences::apply_msaa,m)?)?;
     m.add_function(wrap_pyfunction!(commands::view_commands, m)?)?;
     m.add_function(wrap_pyfunction!(commands::run_view_command, m)?)?;
     m.add_function(wrap_pyfunction!(commands::command_chrome, m)?)?;

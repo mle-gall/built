@@ -558,3 +558,26 @@ mod tests {
         }
     }
 }
+
+
+/// winit folds Cocoa momentum into ordinary scroll phases. Read the active
+/// scroll event while dispatching it, without installing a global input tap.
+pub fn scroll_source() -> (bool, bool, bool) {
+    #[cfg(target_os = "macos")]
+    if let Some(mtm) = objc2::MainThreadMarker::new() {
+        use objc2_app_kit::{NSApplication, NSEventType, NSTouchType};
+        if let Some(e) = NSApplication::sharedApplication(mtm).currentEvent() {
+            if e.r#type() == NSEventType::ScrollWheel {
+                return (
+                    !e.momentumPhase().is_empty(),
+                    e.allTouches().iter().any(|t| t.r#type() == NSTouchType::Direct)
+                    // Qt maps Cocoa device 0 to primary pointer 1. On the
+                    // macOS 27 touchscreen the emulated slide uses this ID.
+                    || (objc2::available!(macos = 27.0) && e.hasPreciseScrollingDeltas() && e.deviceID() <= 1),
+                    e.isDirectionInvertedFromDevice(),
+                );
+            }
+        }
+    }
+    (false, false, true)
+}
