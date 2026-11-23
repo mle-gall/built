@@ -70,7 +70,6 @@ def win(monkeypatch):
     w = MainWindow(defer_extensions=True)
     view = View(w)
     w._doc.stand_in = view
-    monkeypatch.setattr(cs, "available", lambda _w: True)
     monkeypatch.setattr(cs, "_view", lambda _w: view)
     monkeypatch.setattr("views.wgpu_ui._window", lambda v: w)
     sc = w.viewport.scene

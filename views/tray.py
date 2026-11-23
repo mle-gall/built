@@ -1690,26 +1690,13 @@ class PartsPanel(QWidget):
         self._split_btn.setToolTip(tr(
             "Regroup the component by the solids that do not touch"))
         self._split_btn.clicked.connect(self._on_split)
-        self._copy_btn = QPushButton(tr("Copy cut list"))
-        self._copy_btn.setToolTip(tr(
-            "Copy the parts as a table (quantity, parts, material, length, "
-            "width, thickness) — pastes into a spreadsheet"))
-        from views import chrome_sheet
-        if chrome_sheet.available(self._window):
-            self._copy_btn.setText(tr("Cut list…"))
-            self._copy_btn.setToolTip(tr("Open the cut-list report"))
-            self._copy_btn.clicked.connect(self._window._on_cut_list)
-        else:
-            self._copy_btn.clicked.connect(self._on_copy)
+        self._copy_btn = QPushButton(tr("Cut list…"))
+        self._copy_btn.setToolTip(tr("Open the cut-list report"))
+        self._copy_btn.clicked.connect(self._window._on_cut_list)
         row.addWidget(self._split_btn)
         row.addStretch(1)
         row.addWidget(self._copy_btn)
         lay.addLayout(row)
-        self._by_material, by_material_row = _wrapping_check(
-            tr("Count identical parts only when the material matches too"))
-        self._by_material.setChecked(True)
-        lay.addWidget(by_material_row)
-
         # Exploded view (core/explode.py): the parts pulled apart from the
         # assembly's centre. Dragging previews live and lands as ONE undo
         # step on release.
@@ -1906,7 +1893,6 @@ class PartsPanel(QWidget):
             self._explode_mode.blockSignals(False)
         self._reassemble_btn.setEnabled(bool(state))
         self._copy_btn.setEnabled(bool(kids))
-        self._by_material.parentWidget().setVisible(bool(kids))
         self._split_btn.setEnabled(cont is not None
                                    and not getattr(cont, "billboard", False))
         fit_rows(self.tree, max_rows=14)
@@ -2093,20 +2079,6 @@ class PartsPanel(QWidget):
 
     def _on_reassemble(self) -> None:
         self._run_explode(0.0)
-
-    def _on_copy(self) -> None:
-        from PySide6.QtGui import QGuiApplication
-        from core.parts import cut_list, cut_list_text
-        from core.units import fmt_len_fine
-        lines = cut_list(self._rows,
-                         by_material=self._by_material.isChecked())
-        text = cut_list_text(lines, fmt_len_fine, [
-            tr("Qty"), tr("Parts"), tr("Material"), tr("Length"),
-            tr("Width"), tr("Thickness")], surface=tr("surface"))
-        QGuiApplication.clipboard().setText(text)
-        self._window.viewport.flash_status(tr(
-            "Cut list copied: {n} lines, {parts} parts", n=len(lines),
-            parts=sum(ln["qty"] for ln in lines)), 4000)
 
 
 class MaterialsPanel(QWidget):

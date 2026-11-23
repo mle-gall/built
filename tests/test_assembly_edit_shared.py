@@ -571,7 +571,7 @@ def test_metal_follows_a_part_deleted_in_an_assembly_without_a_repack(
 def test_a_linked_assembly_stays_read_only(tmp_path, monkeypatch):
     """Parts of a linked file are edited in their own document: going into
     a copy of a link, or a part of it, offers the file and enters nothing."""
-    from PySide6.QtWidgets import QMessageBox
+    from views import chrome_dialogs
     from core import links
     from formats import igz
     src = Scene()
@@ -590,8 +590,11 @@ def test_a_linked_assembly_stays_read_only(tmp_path, monkeypatch):
         scene.groups.extend([link, copy])
         scene.version += 1
         asked = []
-        monkeypatch.setattr(QMessageBox, "exec",
-                            lambda box: asked.append(box.text()) or 0)
+        def cancel(parent, title, text, buttons, **options):
+            asked.append(title)
+            return options["cancel"]
+
+        monkeypatch.setattr(chrome_dialogs, "ask", cancel)
         before = _matrices(scene.groups)
         meshes = [g.mesh for g, _m in scene.placements()]
         steps = len(vp.history.undo_stack)
@@ -599,7 +602,7 @@ def test_a_linked_assembly_stays_read_only(tmp_path, monkeypatch):
         for g in list(iter_groups([link, copy])):
             vp.begin_group_edit(g)
             assert scene.edit_group is None
-        assert asked
+        assert asked and all(path.name in title for title in asked)
         assert _matrices(scene.groups) == before
         assert [g.mesh for g, _m in scene.placements()] == meshes
         assert len(vp.history.undo_stack) == steps

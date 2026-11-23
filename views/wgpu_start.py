@@ -177,7 +177,7 @@ class Page:
             self.load()
             chrome_sheet.refresh(win)
             return True
-        chrome_sheet.present(win, self.sheet)
+        chrome_sheet.open(win, self.sheet)
         self.wanted = True
         self.drawn = False
         self.focused = False
@@ -280,7 +280,7 @@ class Page:
             # Another sheet took the window (Settings from the footer): the
             # page waits under it and comes back when that one closes.
             if chrome_sheet.current(win) is None:
-                chrome_sheet.present(win, self.sheet)
+                chrome_sheet.open(win, self.sheet)
             return
         if not self.focused:
             # Keys come to the view; never focus from inside a frame (a

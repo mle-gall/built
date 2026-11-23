@@ -55,7 +55,7 @@ key but the window's ⌘ shortcuts (⌘K, ⌘O, ⌘W, ⌘Q…). Esc closes the
 innermost thing (a menu, a field, the search text), then the sheet; the
 model's view gets the keyboard back.
 
-The host can install a provider offscreen with :func:`present`. Interactive
+The host can install a provider offscreen with :func:`open`. Interactive
 hosts release an undrawn sheet and report the missing frame.
 """
 from __future__ import annotations
@@ -315,19 +315,6 @@ def in_shell() -> bool:
     return "built_shell" in sys.builtin_module_names
 
 
-def available(win) -> bool:
-    """The chrome can draw a sheet on ``win``: the egui chrome is on and a
-    Metal view will draw it (always in the ``built`` shell)."""
-    from views import chrome_dialogs
-    if in_shell() or getattr(chrome_dialogs, "_shell_installed", False):
-        # The native shell (or its host under test): its chrome always draws.
-        return _view(win) is not None
-    from PySide6.QtGui import QGuiApplication
-    if QGuiApplication.platformName() in ("offscreen", "minimal"):
-        return False
-    return True
-
-
 def shown(win) -> bool:
     st = _state(win)
     return st is not None and not st.closing
@@ -339,16 +326,7 @@ def current(win):
     return st.provider if st is not None and not st.closing else None
 
 
-def open(win, provider, *, search=None, focus=None) -> bool:  # noqa: A001 — reads as chrome_sheet.open
-    """Put ``provider``'s sheet up (replacing another). ``search``: text
-    typed into the search field at once; ``focus``: the item focused.
-    False when the chrome cannot draw it: the caller shows its fallback."""
-    if not available(win):
-        return False
-    return present(win, provider, search=search, focus=focus)
-
-
-def present(win, provider, *, search=None, focus=None):
+def open(win, provider, *, search=None, focus=None):  # noqa: A001
     """Install the sheet model for the next frame, including offscreen hosts."""
     old = _state(win)
     if old is not None and old.provider is provider and not old.closing:

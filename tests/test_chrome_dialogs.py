@@ -1,8 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """The Built chrome's sheet and jobs (views/chrome_dialogs.py) stand in for
-Qt's message boxes and progress dialogs when the egui UI is on screen, and
-answer synchronously as QMessageBox.exec() did; with the UI off, headless,
-or no frame to draw them, Qt asks as before.
+Qt's message boxes and progress dialogs. Blocking questions cancel on a
+missing frame. Notices and progress can be read from the offscreen model.
 
 Offscreen there is no Metal frame: ``live`` is replaced by a stand-in view
 and the test plays the chrome (marks the sheet drawn, clicks or types)."""

@@ -1490,5 +1490,5 @@ def show(win, page=None, shortcut_of=None) -> bool:
     sheet._win = win
     sheet.goto(page, shortcut_of)
     focus = sheet.kb_focus if shortcut_of is not None else None
-    return chrome_sheet.present(win, sheet, search="" if cur is sheet or page or shortcut_of else None,
+    return chrome_sheet.open(win, sheet, search="" if cur is sheet or page or shortcut_of else None,
                              focus=focus)

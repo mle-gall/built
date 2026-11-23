@@ -4,8 +4,7 @@ their two groups, the search across every section, changes applied at
 once (QSettings for Built, the document for This model), the 3D mouse and
 keyboard sections, and offscreen command dispatch.
 
-Offscreen there is no Metal frame: ``chrome_sheet.available`` is forced
-and a stand-in renderer records what the sheet sends."""
+A stand-in renderer records the sheet sent by the offscreen host."""
 from __future__ import annotations
 
 import json
@@ -67,7 +66,6 @@ def win(monkeypatch):
     from views.main_window import MainWindow
     w = MainWindow(defer_extensions=True)
     view = FakeView()
-    monkeypatch.setattr(cs, "available", lambda _w: True)
     monkeypatch.setattr(cs, "_view", lambda _w: view)
     w._fake_view = view
     yield w

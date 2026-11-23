@@ -291,12 +291,6 @@ class Form:
 
 
 # ---- On the window -------------------------------------------------------------
-def available(parent) -> bool:
-    """The chrome can show a form for ``parent`` now."""
-    from views import chrome_dialogs
-    return chrome_dialogs.live(parent) is not None
-
-
 def forms(win) -> list:
     return win.__dict__.setdefault("_chrome_forms", [])
 

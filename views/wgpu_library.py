@@ -1327,7 +1327,7 @@ def open_library(win, type_id=None, search=None, scope=None) -> bool:
     if scope:
         st["scope"] = scope
     st["filter"] = search or ""
-    return _chrome_sheet().present(win, _sheet_provider(view), search=search)
+    return _chrome_sheet().open(win, _sheet_provider(view), search=search)
 
 
 def set_mode(view, win, mode) -> None:
