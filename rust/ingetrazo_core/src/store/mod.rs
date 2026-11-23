@@ -21,6 +21,7 @@
 pub mod access;
 pub mod bevel;
 pub mod fillet;
+mod fillet_incidence;
 pub mod build;
 mod changes;
 pub mod cow;

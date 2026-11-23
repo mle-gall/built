@@ -329,32 +329,20 @@ def test_a_turned_squashed_box_takes_the_flat_cut():
 
 
 def test_caps_that_do_not_meet_get_a_centre_face(explicit_store_meshes):
-    """When the bottom points part (the sections' heights differ), a
-    centre face joins them and every new side is shared by two faces.
-
-    The Python planner's own corner patch is spied on and fed, so the box
-    is an object mesh: a store mesh plans its corners natively
-    (test_store_fillet compares the two)."""
-    from core import fillet as F
-    from core.fillet import _corner_cut, _key
-    # Catch a box corner's inputs from a plan, then deepen one section.
-    captured = {}
-    real = F._corner_patch
-
-    def spy(group, sections, *a, **k):
-        captured["g"], captured["s"] = group, sections
-        return real(group, sections, *a, **k)
-    F._corner_patch = spy
-    try:
-        m2 = box()
-        plan_fillet(m2, list(m2.vertex_at(QVector3D(0, 0, 0)).edges), 0.2, 3)
-    finally:
-        F._corner_patch = real
-    group, sections = captured["g"], captured["s"]
-    group[0].c_off = group[0].c_off * 1.5
-    v = m2.vertex_at(QVector3D(0, 0, 0))
-    faces = _corner_cut(group, sections, v)
-    assert faces is not None and len(faces) == 4
+    """A sheared box has three distinct bottoms. Every new side of its
+    centre face must meet a cap, and the caps must meet the three strips."""
+    from core.fillet import _key
+    mesh = box()
+    tip = mesh.vertices[0]
+    for vertex in mesh.vertices:
+        x, y, z = vertex.position.toTuple()
+        vertex.position = QVector3D(x + 0.01 * z, y, z)
+    plan = plan_fillet(mesh, list(tip.edges), 0.2, 3, corners="cut")
+    assert not isinstance(plan, str), plan
+    faces = plan.patches
+    assert len(faces) == 4
+    sections = [arc for arc in plan.curves if (arc[0] - tip.position).length() < .5]
+    assert len(sections) == 3
     sides: dict = {}
     for loop in faces:
         for i, p in enumerate(loop):

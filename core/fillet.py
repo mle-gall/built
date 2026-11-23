@@ -319,6 +319,9 @@ def plan_fillet(mesh, edges, radius: float, segments: int = 8,
                 store.plan_fillet, [e.key for e in edges], radius, segments,
                 profile, measure, corners, "custom" if isinstance(shape, tuple) else shape or "",
                 shape if isinstance(shape, tuple) else [], hypot, vertices=False)
+    from core import doc_model
+    if doc_model.ENABLED:
+        return _object_fillet(edges, FilletPlan(radius, segments, profile, measure, corners, shape))
     if shape is not None:
         outline = bevel_profiles.sample(shape, segments)
     rounds: dict[int, _EdgeRound] = {}
@@ -1189,7 +1192,38 @@ def _corner_patch(group, sections, radius, segments, profile=None,
     return tris, soft
 
 
-def _store_round_plan(mesh, plan, planner, *args, vertices):
+def _object_fillet(selected, plan):
+    """Pass just the incident geometry, keeping distinct handles at coincident points."""
+    from ingetrazo_core import MeshStore
+
+    ends = dict.fromkeys(v for e in selected for v in (e.v0, e.v1))
+    around = {v: list(v.faces()) for v in ends}
+    disks = {v: list(v.edges) for v in ends}
+    edges = dict.fromkeys(selected)
+    for disk in disks.values():
+        edges.update(dict.fromkeys(e for e in disk if e.faces))
+    faces = dict.fromkeys(f for fs in around.values() for f in fs)
+    faces.update(dict.fromkeys(f for e in edges for f in e.faces))
+    vertices = dict.fromkeys(v for e in edges for v in (e.v0, e.v1))
+    vertices.update(dict.fromkeys(v for f in faces for r in (f.loop, *f.hole_loops) for v in r))
+    vi = {v: i for i, v in enumerate(vertices)}
+    ei = {e: i for i, e in enumerate(edges)}
+    fi = {f: i for i, f in enumerate(faces)}
+    shape = plan.shape
+    outline = bevel_profiles.sample(shape, plan.segments) if shape else []
+    return _store_round_plan(
+        None, plan, MeshStore.plan_object_fillet,
+        [(v.position.toTuple(), [ei[e] for e in disks.get(v, ()) if e in ei],
+          [fi[f] for f in around.get(v, ())]) for v in vertices],
+        [((vi[e.v0], vi[e.v1]), [fi[f] for f in e.faces]) for e in edges],
+        [([[vi[v] for v in r] for r in (f.loop, *f.hole_loops)], f.normal().toTuple())
+         for f in faces], len(selected), plan.radius, plan.segments, plan.profile,
+        plan.measure, plan.corners == "cut", outline,
+        isinstance(shape, tuple) or shape in bevel_profiles.ASYMMETRIC, shape == "steps",
+        vertices=False, handles=(list(edges), list(faces)))
+
+
+def _store_round_plan(mesh, plan, planner, *args, vertices, handles=None):
     """Adapt a native preview to the same FilletPlan the tools display."""
     from core.store_mesh import EdgeView, FaceView
     try:
@@ -1203,18 +1237,25 @@ def _store_round_plan(mesh, plan, planner, *args, vertices):
     def vectors(points):
         return [QVector3D(*p) for p in points]
 
-    plan._store_plan = native
+    if handles is None:
+        plan._store_plan = native
+        def edge_at(key):
+            return EdgeView(mesh, key)
+        def face_at(key):
+            return FaceView(mesh, key)
+    else:
+        edge_at, face_at = (rows.__getitem__ for rows in handles)
     plan.strips = [vectors(r) for r in native.strips]
     plan.patches = [vectors(r) for r in native.patches]
     plan.curves = [vectors(r) for r in native.curves]
     plan.soft = [tuple(vectors(pair)) for pair in native.soft]
-    plan.removed_edges = [EdgeView(mesh, k) for k in native.edges]
-    plan.removed_faces = [FaceView(mesh, k) for k in native.faces]
+    plan.removed_edges = [edge_at(k) for k in native.edges]
+    plan.removed_faces = [face_at(k) for k in native.faces]
     for face, rings in zip(plan.removed_faces, native.rebuilt):
         plan.rebuilt.append((vectors(rings[0]), [vectors(h) for h in rings[1:]],
                              dict(face.attrs), face.interior))
-    sources = [FaceView(mesh, k) for k in native.materials]
-    plan.flags = [(QVector3D(*a), QVector3D(*b), edge_flags(EdgeView(mesh, k)))
+    sources = [face_at(k) for k in native.materials]
+    plan.flags = [(QVector3D(*a), QVector3D(*b), edge_flags(edge_at(k)))
                   for k, a, b in native.flags]
     if not vertices:
         material = _shared_attrs(*sources)
