@@ -195,6 +195,33 @@ pub fn igz_json_loads<'py>(py: Python<'py>, raw: &[u8]) -> PyResult<Option<Bound
     parsed.map(|v| v.to_py(py)).transpose()
 }
 
+/// Both codecs choose the shortest round-tripping decimal with even ties.
+/// CPython switches to an exponent one decade earlier and pads e-06..e-09.
+fn file_float(output: &mut Vec<u8>, n: f64) {
+    let mut buf = zmij::Buffer::new();
+    let token = buf.format_finite(n.abs());
+    if n.is_sign_negative() {
+        output.push(b'-');
+    }
+    if let Some(digits) = token.strip_prefix("0.0000") {
+        output.push(digits.as_bytes()[0]);
+        if digits.len() > 1 {
+            output.push(b'.');
+            output.extend_from_slice(&digits.as_bytes()[1..]);
+        }
+        output.extend_from_slice(b"e-05");
+    } else if let Some((mantissa, exponent)) = token.split_once("e-") {
+        output.extend_from_slice(mantissa.as_bytes());
+        output.extend_from_slice(b"e-");
+        if exponent.len() == 1 {
+            output.push(b'0');
+        }
+        output.extend_from_slice(exponent.as_bytes());
+    } else {
+        output.extend_from_slice(token.as_bytes());
+    }
+}
+
 struct Encoder<'py> {
     py: Python<'py>,
     sink: Bound<'py, PyAny>,
@@ -262,12 +289,7 @@ impl Encoder<'_> {
             if !f.value().is_finite() {
                 return Err(PyValueError::new_err("non-finite number"));
             }
-            self.buffer.extend_from_slice(
-                PyFloat::new(self.py, f.value())
-                    .repr()?
-                    .to_str()?
-                    .as_bytes(),
-            );
+            file_float(&mut self.buffer, f.value());
         } else if v.is_exact_instance_of::<PyInt>() {
             self.buffer.extend_from_slice(v.str()?.to_str()?.as_bytes());
         } else if let Ok(d) = v.cast::<PyDict>() {

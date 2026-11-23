@@ -28,6 +28,11 @@ mod igz;
 mod file_archive;
 mod file_json;
 mod file_geometry;
+mod file_textures;
+mod file_sheet;
+mod file_groups;
+mod file_styles;
+mod file_annotations;
 mod instances;
 mod jsondoc;
 mod occlusion;
@@ -123,9 +128,21 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(file_archive::igz_read_member, m)?)?;
     #[cfg(target_os = "macos")]
     m.add_class::<file_archive::DocumentReader>()?;
+    #[cfg(target_os = "macos")]
+    m.add_class::<file_archive::ArchiveProgress>()?;
+    m.add_function(wrap_pyfunction!(file_annotations::igz_load_annotations, m)?)?;
+    m.add_function(wrap_pyfunction!(file_annotations::igz_archive_annotations, m)?)?;
+    m.add_function(wrap_pyfunction!(file_styles::igz_archive_layer, m)?)?;
+    m.add_function(wrap_pyfunction!(file_styles::igz_load_layer, m)?)?;
+    m.add_function(wrap_pyfunction!(file_styles::igz_archive_material, m)?)?;
+    m.add_function(wrap_pyfunction!(file_styles::igz_load_material, m)?)?;
+    m.add_function(wrap_pyfunction!(file_sheet::igz_load_sheet, m)?)?;
+    m.add_function(wrap_pyfunction!(file_sheet::igz_archive_sheet, m)?)?;
+    m.add_function(wrap_pyfunction!(file_textures::igz_texture_references, m)?)?;
     m.add_function(wrap_pyfunction!(file_json::igz_json_loads, m)?)?;
     m.add_function(wrap_pyfunction!(file_json::igz_encode_json, m)?)?;
     m.add_class::<file_json::FileMatrix>()?;
+    m.add_class::<file_groups::FileGroups>()?;
     m.add_function(wrap_pyfunction!(igz::igz_read_geometry, m)?)?;
     // Unit tests link without libpython; this line made the test binary
     // keep the store's PyO3 glue (and its Python symbols) alive.

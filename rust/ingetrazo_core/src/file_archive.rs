@@ -201,14 +201,50 @@ impl Entry<'_> {
     }
 }
 
-#[pyfunction(signature = (fd, members, fast, limit=2_147_483_647))]
+#[pyclass(frozen)]
+pub struct ArchiveProgress {
+    total: std::sync::atomic::AtomicU64,
+    written: std::sync::atomic::AtomicU64,
+}
+
+#[pymethods]
+impl ArchiveProgress {
+    #[new]
+    fn new() -> Self {
+        Self {
+            total: 0.into(),
+            written: 0.into(),
+        }
+    }
+
+    fn fraction(&self) -> f64 {
+        use std::sync::atomic::Ordering::Relaxed;
+        (self.written.load(Relaxed) as f64 / self.total.load(Relaxed).max(1) as f64).min(1.0)
+    }
+}
+
+#[pyfunction(signature = (fd, members, fast, limit=2_147_483_647, meter=None))]
 pub fn igz_write_zip(
     py: Python<'_>,
     fd: i32,
     members: Vec<Member>,
     fast: bool,
     limit: u64,
+    meter: Option<Py<ArchiveProgress>>,
 ) -> PyResult<bool> {
+    let meter = meter.as_ref().map(Py::get);
+    if let Some(meter) = meter {
+        let size = members
+            .iter()
+            .map(|(_, _, b, r)| {
+                b.as_ref()
+                    .map_or_else(|| r.map_or(0, |(_, _, n)| n), |b| b.len() as u64)
+            })
+            .sum();
+        meter
+            .total
+            .store(size, std::sync::atomic::Ordering::Relaxed);
+    }
     py.detach(|| -> io::Result<bool> {
         if members
             .iter()
@@ -246,6 +282,11 @@ pub fn igz_write_zip(
             };
             let mut write = |chunk: &[u8]| -> io::Result<()> {
                 crc.update(chunk);
+                if let Some(meter) = meter {
+                    meter
+                        .written
+                        .fetch_add(chunk.len() as u64, std::sync::atomic::Ordering::Relaxed);
+                }
                 e.size += chunk.len() as u64;
                 if let Some(c) = codec.as_mut() {
                     c.push(chunk, false, &mut output, &mut dest)

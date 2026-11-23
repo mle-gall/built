@@ -250,3 +250,22 @@ def test_an_engine_failure_falls_back_to_python(tmp_path, binary, engine,
     back = Scene()
     igz.load_into(back, path)
     assert _canonical(back) == _canonical(py)
+
+
+def test_open_geometry_uses_original_archive_after_atomic_replace(tmp_path, binary):
+    import os
+    from formats.native_io import DocumentArchive, native_io
+
+    if not hasattr(native_io(), "igz_read_member"):
+        pytest.skip("native descriptor reader unavailable")
+    path = _document(tmp_path)
+    with DocumentArchive(path) as archive:
+        payload = json.loads(archive.read("document.json"))["scene"]
+        old = {name: archive.read(name) for name in archive.namelist()
+               if name.startswith("geom/")}
+        replacement = tmp_path / "replacement"
+        replacement.write_bytes(b"replacement")
+        os.replace(replacement, path)
+        members = igz._read_geometry_members(archive, path, payload)
+    assert members == old
+    assert len(members.checked) == len(old)

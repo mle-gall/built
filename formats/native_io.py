@@ -9,7 +9,7 @@ def native_io():
     if os.environ.get("INGETRAZO_RUST_IO") == "0":
         return None
     module = _native.available()
-    return module if hasattr(module, "FileMatrix") else None
+    return module if hasattr(module, "FileGroups") else None
 
 
 class DocumentArchive(zipfile.ZipFile):

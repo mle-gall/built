@@ -299,6 +299,35 @@ fn inflate_into(raw: &[u8], method: u32, crc: u32, out: &mut [u8]) -> bool {
     crc32fast::hash(out) == crc
 }
 
+/// Bound positional reads to the compressed range approved by ZipFile.open.
+#[cfg(unix)]
+fn read_member_at(file: &File, offset: u64, entry: &Entry, out: &mut [u8]) -> bool {
+    use std::os::unix::fs::FileExt;
+
+    struct Source<'a> {
+        file: &'a File,
+        offset: u64,
+    }
+    impl Read for Source<'_> {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            let n = self.file.read_at(buf, self.offset)?;
+            self.offset = self.offset.checked_add(n as u64)
+                .ok_or_else(|| std::io::Error::other("invalid ZIP offset"))?;
+            Ok(n)
+        }
+    }
+    let mut source = Source { file, offset }.take(entry.2);
+    let valid = match entry.1 {
+        0 => entry.2 == entry.3 && source.read_exact(out).is_ok(),
+        8 => {
+            let mut decoder = flate2::bufread::DeflateDecoder::new(std::io::BufReader::new(source));
+            decoder.read_exact(out).is_ok() && matches!(decoder.read(&mut [0]), Ok(0))
+        }
+        _ => false,
+    };
+    valid && crc32fast::hash(out) == entry.4
+}
+
 /// The `geom/` members of the `.igz` at `path`, read and inflated in
 /// parallel, each checked against its block's layout when one is given.
 ///
@@ -310,17 +339,38 @@ fn inflate_into(raw: &[u8], method: u32, crc: u32, out: &mut [u8]) -> bool {
 /// Returns, per member, ``(bytes or None, checked)``: ``None`` where Python
 /// must read the member itself, and ``checked`` true only when
 /// `_geometry_arrays` would accept the block as it stands.
-#[pyfunction(signature = (path, entries, checks, built_format=false))]
+#[pyfunction(signature = (path, entries, checks, built_format=false, member_offsets=None, fd=None))]
 pub fn igz_read_geometry<'py>(
     py: Python<'py>,
     path: std::path::PathBuf,
     entries: Vec<Entry>,
     checks: Vec<Option<(Bound<'py, PyAny>, i64, i64)>>,
     built_format: bool,
+    member_offsets: Option<Vec<u64>>,
+    fd: Option<i32>,
 ) -> PyResult<Vec<(Option<Bound<'py, PyBytes>>, bool)>> {
     if checks.len() != entries.len() {
         return Err(PyValueError::new_err("entries and checks differ in length"));
     }
+    #[cfg(unix)]
+    let archive = if let (Some(fd), Some(offsets)) = (fd, member_offsets) {
+        if offsets.len() != entries.len() {
+            return Err(PyValueError::new_err("member offsets and entries differ in length"));
+        }
+        // The caller holds ZipFile open throughout this call. Clone the
+        // descriptor so every worker reads the original inode after a rename.
+        use std::os::fd::FromRawFd;
+        unsafe extern "C" { fn dup(fd: i32) -> i32; }
+        let copy = unsafe { dup(fd) };
+        if copy < 0 {
+            return Err(std::io::Error::last_os_error().into());
+        }
+        Some((unsafe { File::from_raw_fd(copy) }, offsets))
+    } else {
+        None
+    };
+    #[cfg(not(unix))]
+    let _ = (member_offsets, fd);
     let parsed: Vec<Option<Check>> = checks
         .iter()
         .map(|c| c.as_ref().and_then(|(l, a, n)| parse_check(l, *a, *n, built_format)))
@@ -352,6 +402,19 @@ pub fn igz_read_geometry<'py>(
         .collect();
 
     let results: Vec<(bool, bool)> = py.detach(|| {
+        #[cfg(unix)]
+        if let Some((file, offsets)) = &archive {
+            return entries.par_iter().enumerate().map(|(i, entry)| {
+                let Some((ptr, size)) = targets[i] else {return (false, false)};
+                // Each task owns the only reference to its output buffer
+                // until the completed bytes objects are returned to Python.
+                let out = unsafe { std::slice::from_raw_parts_mut(ptr as *mut u8, size) };
+                if !read_member_at(file, offsets[i], entry, out) {
+                    return (false, false);
+                }
+                (true, parsed[i].as_ref().is_some_and(|c| block_ok(out, c)))
+            }).collect();
+        }
         // One pass over the file in offset order (cheap, sequential I/O),
         // then the CPU work spread over the cores.
         let mut raws: Vec<Option<Vec<u8>>> = vec![None; entries.len()];

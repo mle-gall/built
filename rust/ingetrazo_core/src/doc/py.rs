@@ -252,6 +252,20 @@ impl DocRecord {
         Self { key: lock().alloc(Kind::Record) }
     }
 
+    fn _load_file_view(slf: &Bound<'_, Self>, raw: &Bound<'_, PyDict>) -> PyResult<bool> {
+        super::file_view::load(raw, |name, value| {
+            let attr = attr_id(name).map_err(err)?;
+            let v = (!matches!(value, Value::None)).then_some(value);
+            write(slf.py(), slf.as_any(), slf.get().key, Field::Attr(attr), FVal::Val(v))
+        })
+    }
+
+    fn _file_view<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyDict>> {
+        super::file_view::archive(slf.py(), |name| {
+            read_attr(slf.py(), slf.as_any(), slf.get().key, attr_id(name).map_err(err)?, false)
+        })
+    }
+
     fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
         traverse_node(self.key, &visit)
     }

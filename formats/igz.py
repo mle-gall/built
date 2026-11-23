@@ -192,6 +192,10 @@ def _pack_textures(payload, *, blobs=None, resolved=None) -> tuple[dict, int]:
             blobs[member] = data
         return member
 
+    io = native_io()
+    if io is not None:
+        io.igz_texture_references(payload, _member_for, True)
+        return blobs, missing
     for parent, key in _texture_slots(payload):
         # Rewrite a copy, never the dict itself: the payload may still share
         # it with the live scene (a group's paint went in through a shallow
@@ -249,6 +253,10 @@ def _unpack_textures(payload, archive) -> None:
             unpacked[member] = out
         return out or None
 
+    io = native_io()
+    if io is not None:
+        io.igz_texture_references(payload, _restore, False)
+        return
     for tex in _texture_entries(payload):
         base_member = tex.pop("base_embed", None)
         if base_member and not tex.get("base"):
@@ -783,8 +791,13 @@ def _prepare_and_write(scene, path, backup, stream, confirm_loss=None, progress=
     backup_failed = backup and not _backup_previous(path)
     if progress:
         progress(0.76, "Writing the document…")
-    stats = _in_worker(lambda: write_prepared(prepared, path, stream=stream),
-                       (lambda: progress(0.76, "Writing the document…")) if progress else None)
+    meter_type = getattr(native_io(), "ArchiveProgress", None)
+    meter = meter_type() if progress and meter_type else None
+    def pulse():
+        fraction = meter.fraction() if meter is not None else 0.0
+        progress(0.76 + 0.23 * fraction, "Writing the document…")
+    stats = _in_worker(lambda: write_prepared(prepared, path, stream=stream, meter=meter),
+                       pulse if progress else None, background=native_io() is not None)
     if progress:
         progress(1.0, "Saved")
     if backup_failed:
@@ -930,7 +943,10 @@ def prepare_scene_steps(scene, mesh_steps=None, *, stream=None, large=None, prog
             payload["protos"] = protos
     layers = getattr(scene, "layers", None)
     if layers is not None:
-        payload["layers"] = [ly.to_dict() for ly in layers]
+        from core.layers import Layer
+        encode = getattr(native_io(), "igz_archive_layer", None)
+        payload["layers"] = [encode(ly) if encode and type(ly) is Layer else ly.to_dict()
+                             for ly in layers]
     # Older readers ignore both keys: new objects simply go to the default
     # layer there, and the layers show as one flat list.
     if getattr(scene, "active_layer", None):
@@ -976,7 +992,11 @@ def prepare_scene_steps(scene, mesh_steps=None, *, stream=None, large=None, prog
             for n, p in patterns.items() if isinstance(p, dict)}
     views = getattr(scene, "saved_views", None)
     if views:
-        payload["saved_views"] = [v.to_dict() for v in views]
+        from core.saved_views import SavedView
+        io = native_io()
+        payload["saved_views"] = [
+            v._file_view() if io and type(v) is SavedView and hasattr(v, "_file_view")
+            else v.to_dict() for v in views]
     # The Scenes tab's folders (#1158). Older readers ignore both keys and
     # the "folder" of each scene: the scenes show as one flat list there.
     from core import scene_folders as SF
@@ -989,9 +1009,16 @@ def prepare_scene_steps(scene, mesh_steps=None, *, stream=None, large=None, prog
             payload["scene_folder_parents"] = parents
     comps = getattr(scene, "compositions", None)
     if comps:
-        payload["compositions"] = [c.to_dict() for c in comps]
+        from core.composition import Composicion
+        archive_sheet = getattr(native_io(), "igz_archive_sheet", None)
+        payload["compositions"] = [
+            archive_sheet(c) if archive_sheet and type(c) is Composicion else c.to_dict()
+            for c in comps]
     dims = getattr(scene, "dimensions", None)
-    if dims:
+    archive_annotations = getattr(native_io(), "igz_archive_annotations", None)
+    if dims and archive_annotations and all(type(d) is Dimension for d in dims):
+        payload["dimensions"] = archive_annotations(dims, False)
+    elif dims:
         payload["dimensions"] = [
             {"a": [d.a.x(), d.a.y(), d.a.z()],
              "b": [d.b.x(), d.b.y(), d.b.z()],
@@ -1005,7 +1032,10 @@ def prepare_scene_steps(scene, mesh_steps=None, *, stream=None, large=None, prog
         ]
     mats = getattr(scene, "materials", None)
     if mats:
-        payload["materials"] = [m.to_dict() for m in mats.values()]
+        from core.materials import Material
+        encode = getattr(native_io(), "igz_archive_material", None)
+        payload["materials"] = [encode(m) if encode and type(m) is Material else m.to_dict()
+                                for m in mats.values()]
     style = getattr(scene, "dimension_style", None)
     if style:
         payload["dimension_style"] = dict(style)
@@ -1113,7 +1143,11 @@ def prepare_scene_steps(scene, mesh_steps=None, *, stream=None, large=None, prog
         payload["text_placement_anchors"] = signs
     labels = getattr(scene, "text_labels", None)
     if labels:
-        payload["text_labels"] = [t.to_dict() for t in labels]
+        from core.textlabel import TextLabel
+        if archive_annotations and all(type(t) is TextLabel for t in labels):
+            payload["text_labels"] = archive_annotations(labels, True)
+        else:
+            payload["text_labels"] = [t.to_dict() for t in labels]
     guides = getattr(scene, "guides", None)
     if guides:
         # A guide at NaN is left out instead of refusing the save (#723):
@@ -1170,15 +1204,15 @@ def _spool_json(value, stream):
         raise NonFiniteDocumentError(_non_finite_where(value)) from None
 
 
-def write_prepared(prepared, path: Path, background=False, *, stream=None) -> dict:
+def write_prepared(prepared, path: Path, background=False, *, stream=None, meter=None) -> dict:
     """Encode and write a detached payload. Never reads the live scene."""
     if background:
         with SaveStream(built=built.is_built(path)) as scratch:
-            return _write_prepared(prepared, path, background, scratch)
-    return _write_prepared(prepared, path, background, stream)
+            return _write_prepared(prepared, path, background, scratch, meter)
+    return _write_prepared(prepared, path, background, stream, meter)
 
 
-def _write_prepared(prepared, path, background, stream):
+def _write_prepared(prepared, path, background, stream, meter=None):
     payload, geom, large, survey_blobs = prepared
     if background:
         geom = stream
@@ -1232,7 +1266,8 @@ def _write_prepared(prepared, path, background, stream):
         # Refuse, and leave the file on disk as it was.
         raise NonFiniteDocumentError(_non_finite_where(payload)) from None
     if container:
-        _write_container(path, doc, blobs, fast=large, deflated=geom)
+        options = {"meter": meter} if meter is not None else {}
+        _write_container(path, doc, blobs, fast=large, deflated=geom, **options)
     else:
         _write_atomic(path, doc.encode("utf-8") if isinstance(doc, str) else doc)
     return {"embedded": len(blobs), "missing": missing}
@@ -1314,7 +1349,7 @@ def _write_atomic(path: Path, data: bytes | Fragment) -> None:
 
 
 def _write_container(path: Path, doc: str, blobs: dict,
-                     fast: bool = False, deflated: dict | None = None) -> None:
+                     fast: bool = False, deflated: dict | None = None, *, meter=None) -> None:
     """The ZIP shape: ``document.json`` deflated, images stored as-is (PNG/JPG
     are already compressed — deflating them again costs time for nothing).
     ``fast`` deflates at level 1 (see ``_LARGE_DOCUMENT``). ``deflated``
@@ -1338,7 +1373,8 @@ def _write_container(path: Path, doc: str, blobs: dict,
                 member(name, deflated[name], True)
             for name in sorted(blobs):
                 member(name, blobs[name], False)
-            if writer(target.fileno(), members, fast):
+            options = {"meter": meter} if meter is not None else {}
+            if writer(target.fileno(), members, fast, **options):
                 return
         with zipfile.ZipFile(target, "w") as zf:
             def write(member, data, compression):
@@ -1361,15 +1397,15 @@ def _write_container(path: Path, doc: str, blobs: dict,
                 write(member, blobs[member], zipfile.ZIP_STORED)
 
 
-def _in_worker(work, pump=None):
+def _in_worker(work, pump=None, *, background=False):
     """``work()`` — in a worker thread while ``pump`` keeps the window
     answering, when given. Reading a 3.3 GB document took 24 s in one call,
     and the desktop flagged IngeTrazo as «not responding» after five (Marco,
     01-10, the model of #158); the JSON parser and zlib let the main thread
     in."""
-    if pump is None:
-        return work()
     import threading
+    if pump is None and (not background or threading.current_thread() is not threading.main_thread()):
+        return work()
     box: dict = {}
 
     def run():
@@ -1380,9 +1416,12 @@ def _in_worker(work, pump=None):
     th = threading.Thread(target=run, daemon=True)
     th.start()
     try:
-        while th.is_alive():
-            th.join(0.1)
-            pump()
+        if pump is None:
+            th.join()
+        else:
+            while th.is_alive():
+                th.join(0.1)
+                pump()
     finally:
         # Keep the scratch ranges and archive handles alive when a progress
         # callback cancels the operation before its worker returns.
@@ -1609,7 +1648,7 @@ def _read_document(path: Path, pump=None, read_progress=None, *, placements=Fals
             elif pump:
                 pump()
         return _in_worker(lambda: reader.parse(fd, offset, packed, method, crc, placements),
-                          pulse if pump or read_progress else None)
+                          pulse if pump or read_progress else None, background=True)
 
     with path.open('rb') as stream:
         magic = stream.read(len(_ZIP_MAGIC))
@@ -1715,16 +1754,20 @@ def load_into(scene, path: Path, progress=None, *, include_links=True, link_mesh
     _gc_was_enabled = gc.isenabled()
     gc.disable()
     try:
-        _load_into_inner(scene, path, progress, link_meshes)
-        _load_links(scene, path, include_links)
+        reading = (lambda f, phase: progress(0.8 * f, phase)) if progress else None
+        linking = (lambda f, phase: progress(0.8 + 0.2 * f, phase)) if progress else None
+        _load_into_inner(scene, path, reading, link_meshes)
+        _load_links(scene, path, include_links, linking)
         if getattr(scene, "_root", None) is not None:
             scene._root._index_assemblies()
+        if progress:
+            progress(1.0, "Finishing…")
     finally:
         if _gc_was_enabled:
             gc.enable()
 
 
-def _load_links(scene, path: Path, include_links: bool) -> None:
+def _load_links(scene, path: Path, include_links: bool, progress=None) -> None:
     """The second half of :func:`load_into`: the project file and the
     linked sources of the document just read."""
     # Linked files: the copies are filled in from their sources. A source
@@ -1754,8 +1797,24 @@ def _load_links(scene, path: Path, include_links: bool) -> None:
             return kept
         scene.groups = local_groups(scene.groups)
     elif links.linked_groups(scene):
+        # A cancelled open must propagate through nested link readers, which
+        # normally turn source errors into recoverable missing-link entries.
+        class Interrupted(BaseException):
+            pass
+
+        def report(fraction, phase):
+            try:
+                progress(fraction, phase)
+            except Exception as exc:
+                raise Interrupted from exc
+
         try:
-            links.resolve(scene, Path(path))
+            if progress:
+                links.resolve(scene, Path(path), progress=report)
+            else:
+                links.resolve(scene, Path(path))
+        except Interrupted as stop:
+            raise stop.__cause__
         except Exception as exc:  # noqa: BLE001 — never fail the open
             scene.link_errors = {"": str(exc)}
 
@@ -1910,7 +1969,18 @@ def _read_geometry_native(native, archive, path, payload, names, out):
         checks.append(check)
     if not todo:
         return
-    results = native(str(path), entries, checks, built_format=out.built_format)
+    options = {"built_format": out.built_format}
+    if isinstance(archive, DocumentArchive):
+        offsets = []
+        for name, _ in todo:
+            with archive.open(name) as member:
+                offset = getattr(member, "_orig_compress_start", None)
+                if offset is None:
+                    break
+                offsets.append(offset)
+        if len(offsets) == len(todo):
+            options.update(fd=archive.fp.fileno(), member_offsets=offsets)
+    results = native(str(path), entries, checks, **options)
     for (n, meta), (blob, ok) in zip(todo, results):
         if blob is None:
             continue                   # read by zipfile, which decides
@@ -1978,8 +2048,9 @@ def _load_into_inner(scene, path: Path, progress=None, link_meshes=None) -> None
     def read_materials():
         from core.materials import Material
         materials = {}
+        decode = getattr(native_io(), "igz_load_material", None)
         for raw in payload.get("materials", []):
-            mat = Material.from_dict(raw)
+            mat = decode(raw, Material) if decode else Material.from_dict(raw)
             if mat.name:
                 materials[mat.name] = mat
         if link_meshes is not None:
@@ -2008,7 +2079,8 @@ def _load_into_inner(scene, path: Path, progress=None, link_meshes=None) -> None
             tick(0.25, "Reading geometry…")
             geom = _in_worker(
                 lambda: _read_geometry_members(archive, path, payload, skip, built_format=is_built),
-                (lambda: tick(0.25, "Reading geometry…")) if progress is not None else None)
+                (lambda: tick(0.25, "Reading geometry…")) if progress is not None else None,
+                background=isinstance(archive, DocumentArchive))
             # Rebuilt here, while the archive is still open — it closes below
             # and the survey's blobs live inside it.
             survey = _unpack_photo_mesh(payload, archive)
@@ -2067,7 +2139,8 @@ def _load_into_inner(scene, path: Path, progress=None, link_meshes=None) -> None
     raw_layers = payload.get("layers")
     if raw_layers:
         from core.layers import DEFAULT_LAYER, Layer
-        scene.layers = [Layer.from_dict(r) for r in raw_layers]
+        decode = getattr(native_io(), "igz_load_layer", None)
+        scene.layers = [decode(r, Layer) if decode else Layer.from_dict(r) for r in raw_layers]
         if not any(ly.key == DEFAULT_LAYER for ly in scene.layers):
             scene.layers.insert(0, Layer(DEFAULT_LAYER))
     active = payload.get("active_layer")
@@ -2126,8 +2199,16 @@ def _load_into_inner(scene, path: Path, progress=None, link_meshes=None) -> None
 
     scene.mesh = read_mesh(scene.mesh, payload, ("loose",))
     from core.saved_views import SavedView
-    scene.saved_views = [SavedView.from_dict(r)
-                         for r in payload.get("saved_views", [])]
+    views = []
+    native_views = native_io() is not None and hasattr(SavedView, "_load_file_view")
+    for raw in payload.get("saved_views", []):
+        if native_views and isinstance(raw, dict):
+            view = SavedView.__new__(SavedView)
+            if view._load_file_view(raw):
+                views.append(view)
+                continue
+        views.append(SavedView.from_dict(raw))
+    scene.saved_views = views
     raw_sf = payload.get("scene_folders")
     if isinstance(raw_sf, list):
         scene.scene_folders = [f for f in raw_sf if isinstance(f, str) and f]
@@ -2138,11 +2219,12 @@ def _load_into_inner(scene, path: Path, progress=None, link_meshes=None) -> None
             if isinstance(f, str) and isinstance(p, str)}
     from core.composition import Composicion
     scene.compositions = []
+    load_sheet = getattr(native_io(), "igz_load_sheet", None) or Composicion.from_dict
     for r in payload.get("compositions", []):
         # A sheet this version cannot rebuild must not take the model down
         # with it: keep the others, log the one that failed.
         try:
-            scene.compositions.append(Composicion.from_dict(r))
+            scene.compositions.append(load_sheet(r))
         except Exception as exc:  # noqa: BLE001
             import logging
             logging.getLogger(__name__).warning(
@@ -2160,14 +2242,10 @@ def _load_into_inner(scene, path: Path, progress=None, link_meshes=None) -> None
             tick(0.35 + 0.25 * k / max(1, len(raw_protos)),
                  "Building geometry…")
             last = _time.monotonic()
-    names: list = []
-
     io = native_io()
 
     def _group_from(raw, depth=0):
         name = raw.get("name") or None
-        if name:
-            names.append(name)
         # The stored uid goes in at construction: a fresh one drawn only to
         # be overwritten cost one random uid per group of the document. Older
         # documents without one get a fresh uid, as before.
@@ -2176,12 +2254,7 @@ def _load_into_inner(scene, path: Path, progress=None, link_meshes=None) -> None
             from ingetrazo_core import Matrix4 as QMatrix4x4
             group = Group(proto_meshes[int(raw["proto"])], name=name,
                           uid=uid)
-            values = raw["xform"]
-            if (io is not None and getattr(group, "_doc_key", 0)
-                    and (isinstance(values, io.FileMatrix) or (isinstance(values, list)
-                         and len(values) == 16 and all(isinstance(v, (int, float)) for v in values)))):
-                group._load_file_xform(values, is_built)
-            elif is_built:
+            if is_built:
                 group.xform = built.placement(raw["xform"])
             else:
                 vals = [float(x) for x in raw["xform"]]
@@ -2196,25 +2269,22 @@ def _load_into_inner(scene, path: Path, progress=None, link_meshes=None) -> None
                                       for col in range(4)])
         if raw.get("ifc"):
             group.ifc = dict(raw["ifc"])
-        if io is not None and getattr(group, "_doc_key", 0):
-            group._load_file_fields(raw)
-        else:
-            if raw.get("layer"):
-                group.layer = raw["layer"]
-            if raw.get("billboard"):
-                group.billboard = raw["billboard"]   # True | "mesh"
-            if isinstance(raw.get("text3d"), dict):
-                group.text3d = dict(raw["text3d"])
-            if isinstance(raw.get("ext"), dict):
-                group.ext = raw["ext"]
-            if raw.get("hidden"):
-                group.hidden = True
-            if raw.get("locked"):
-                group.locked = True
-            if isinstance(raw.get("material"), dict):
-                group.material = dict(raw["material"])
-            if isinstance(raw.get("exploded"), dict):
-                group.exploded = dict(raw["exploded"])
+        if raw.get("layer"):
+            group.layer = raw["layer"]
+        if raw.get("billboard"):
+            group.billboard = raw["billboard"]   # True | "mesh"
+        if isinstance(raw.get("text3d"), dict):
+            group.text3d = dict(raw["text3d"])
+        if isinstance(raw.get("ext"), dict):
+            group.ext = raw["ext"]
+        if raw.get("hidden"):
+            group.hidden = True
+        if raw.get("locked"):
+            group.locked = True
+        if isinstance(raw.get("material"), dict):
+            group.material = dict(raw["material"])
+        if isinstance(raw.get("exploded"), dict):
+            group.exploded = dict(raw["exploded"])
         off = raw.get("explode_offset")
         if isinstance(off, list) and len(off) == 3:
             group.explode_offset = tuple(float(v) for v in off)
@@ -2254,40 +2324,55 @@ def _load_into_inner(scene, path: Path, progress=None, link_meshes=None) -> None
     from core.group import document_name_scope
     raw_groups = payload.get("groups", []) or []
     with document_name_scope(stored_names):
-        for i, raw in enumerate(raw_groups):
-            if i % 50 == 0:
-                tick(0.6 + 0.35 * i / max(1, len(raw_groups)),
-                     "Placing groups…")
-            scene.groups.append(_group_from(raw))
-        scene.kept_components = [
-            t for t in (_group_from(raw) for raw in
-                        payload.get("kept_components", []) or []
-                        if isinstance(raw, dict))
-            if t.is_component()]
+        group_reader = getattr(io, "FileGroups", None)
+        if group_reader and getattr(scene, "_root", None) is not None:
+            kept = payload.get("kept_components") or []
+            reader = group_reader(len(raw_groups) + len(kept))
+            groups, library = _in_worker(
+                lambda: reader.build(raw_groups, kept, proto_meshes, read_mesh, is_built),
+                (lambda: tick(0.6 + 0.35 * reader.fraction(), "Placing groups…"))
+                if progress else None, background=True)
+            scene.groups = groups
+            scene.kept_components = library
+        else:
+            for i, raw in enumerate(raw_groups):
+                if i % 50 == 0:
+                    tick(0.6 + 0.35 * i / max(1, len(raw_groups)),
+                         "Placing groups…")
+                scene.groups.append(_group_from(raw))
+            scene.kept_components = [
+                t for t in (_group_from(raw) for raw in
+                            payload.get("kept_components", []) or []
+                            if isinstance(raw, dict))
+                if t.is_component()]
     tick(0.96, "Finishing…")
-    if names:
+    if stored_names:
         from core.group import reserve_group_names
-        reserve_group_names(names)   # new groups never reuse a stored "Group N"
+        reserve_group_names(stored_names)   # new groups never reuse a stored "Group N"
 
     # Until #765 every open-and-save doubled the dimensions: a file can hold
     # each one 128 times over (1024 entries for 8, reported). The copies
     # are identical entry for entry, so an entry equal to one already read
     # is dropped; two dimensions that differ in anything both stay.
-    seen_dims: set = set()
-    for raw in payload.get("dimensions", []):
-        key = json.dumps(raw, sort_keys=True, default=str)
-        if key in seen_dims:
-            continue
-        seen_dims.add(key)
-        dim = Dimension(
-            QVector3D(*raw["a"]), QVector3D(*raw["b"]),
-            QVector3D(*raw["offset"]), layer=raw.get("layer") or None,
-            text=raw.get("text") or None, axis=raw.get("axis") or None)
-        from core.annotation_anchor import Attachment
-        for field, pos in (("attachment_a", dim.a), ("attachment_b", dim.b)):
-            setattr(dim, field, Attachment.restore(scene, raw.get(field), pos))
-        dim.bind(scene)         # the vertex at that spot is the one snapped to
-        scene.dimensions.append(dim)
+    load_annotations = getattr(native_io(), "igz_load_annotations", None)
+    if load_annotations:
+        load_annotations(scene, payload, False)
+    else:
+        seen_dims: set = set()
+        for raw in payload.get("dimensions", []):
+            key = json.dumps(raw, sort_keys=True, default=str)
+            if key in seen_dims:
+                continue
+            seen_dims.add(key)
+            dim = Dimension(
+                QVector3D(*raw["a"]), QVector3D(*raw["b"]),
+                QVector3D(*raw["offset"]), layer=raw.get("layer") or None,
+                text=raw.get("text") or None, axis=raw.get("axis") or None)
+            from core.annotation_anchor import Attachment
+            for field, pos in (("attachment_a", dim.a), ("attachment_b", dim.b)):
+                setattr(dim, field, Attachment.restore(scene, raw.get(field), pos))
+            dim.bind(scene)         # the vertex at that spot is the one snapped to
+            scene.dimensions.append(dim)
 
     # A document from before the ends could be chosen drew oblique ticks:
     # it keeps them. Only a NEW document is born with arrows.
@@ -2373,9 +2458,12 @@ def _load_into_inner(scene, path: Path, progress=None, link_meshes=None) -> None
         if anchor is not None:
             scene.text_placement_anchors.append(anchor)
 
-    from core.textlabel import TextLabel
-    for raw in payload.get("text_labels", []):
-        scene.text_labels.append(TextLabel.from_dict(raw, scene))
+    if load_annotations:
+        load_annotations(scene, payload, True)
+    else:
+        from core.textlabel import TextLabel
+        for raw in payload.get("text_labels", []):
+            scene.text_labels.append(TextLabel.from_dict(raw, scene))
 
     from core.guide import guide_from_dict
     scene.guides.clear()
