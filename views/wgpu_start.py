@@ -116,11 +116,7 @@ def available() -> bool:
         return False
     if QGuiApplication.platformName() in ("offscreen", "minimal"):
         return False
-    try:
-        from core import renderer_settings
-        return bool(renderer_settings.wanted())
-    except Exception:  # noqa: BLE001 — no renderer setting: no chrome
-        return False
+    return True
 
 
 def _view(win):

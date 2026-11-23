@@ -1,28 +1,13 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""Choose each document's renderer and detect starts that never presented.
-
-The guard covers renderer creation/presentation only. Loading a document is
-not a renderer failure, and environment-selected benchmark runs leave saved
-preferences untouched.
-"""
-import logging
-import os
+"""Probe the GPU backend in a child before starting the window."""
 import json
 import platform
 import subprocess
 import sys
 from dataclasses import dataclass
 from functools import lru_cache
-from PySide6.QtCore import QSettings, qVersion
-from core import general_settings as settings
-
-SETTING = 'viewport_renderer'
-STARTING = 'viewport_renderer_starting'
-DEFAULT_RENDERER = 'opengl'
-# Compatibility for callers outside the application. Selection uses the constant above.
-DEFAULT = DEFAULT_RENDERER
-_checked = False
+from PySide6.QtCore import qVersion
 
 
 @dataclass(frozen=True)
@@ -60,7 +45,7 @@ def _probe_local():
 @lru_cache(maxsize=1)
 def capability():
     """Probe once, before window construction, with a bounded crash boundary."""
-    command = ([sys.executable, '--probe-metal'] if getattr(sys, 'frozen', False)
+    command = ([sys.executable, '--probe-gpu'] if getattr(sys, 'frozen', False)
                else [sys.executable, '-m', 'core.renderer_settings'])
     try:
         result = subprocess.run(command, capture_output=True, text=True,
@@ -76,68 +61,14 @@ def capability():
         return Capability(False, f'GPU probe failed: {exc}')
 
 
-def requested(st=None):
-    override = os.environ.get('INGETRAZO_WGPU')
-    if override in ('0', '1'):
-        return 'wgpu' if override == '1' else 'opengl'
-    return settings.value(SETTING, DEFAULT_RENDERER, st)
-
-
-def wanted(st=None):
-    """Preference → environment → capability → persisted start recovery."""
-    start_guard(st)
-    return requested(st) == 'wgpu' and capability().available
-
-
-def status_text(metal=None, st=None):
-    if metal is None:
-        metal = wanted(st)
-    if metal:
-        return 'Metal (wgpu)'
+def status_text():
     cap = capability()
-    if not cap.available:
-        return f'OpenGL — Metal unavailable: {cap.reason}'
-    return 'OpenGL'
+    return 'wgpu' if cap.available else f'No supported GPU backend: {cap.reason}'
 
 
 def probe_main():
     from dataclasses import asdict
     print(json.dumps(asdict(_probe_local())), flush=True)
-
-
-def start_guard(st=None):
-    """Recover once per process, before choosing any document renderer."""
-    global _checked
-    if _checked or os.environ.get('INGETRAZO_WGPU') in ('0', '1'):
-        return False
-    _checked = True
-    st = st if st is not None else QSettings()
-    pending = str(settings.value(STARTING, '0', st)) == '1'
-    if pending:
-        settings.set_value(SETTING, 'opengl', st)
-        settings.set_value(STARTING, '0', st)
-        st.sync()
-        logging.getLogger(__name__).warning(
-            'The last Metal renderer start never presented a frame; using OpenGL.')
-    return pending
-
-
-def arm(st=None):
-    """Call after loading, immediately before creating/presenting Metal."""
-    if os.environ.get('INGETRAZO_WGPU') in ('0', '1'):
-        return
-    st = st if st is not None else QSettings()
-    settings.set_value(STARTING, '1', st)
-    st.sync()
-
-
-def first_frame(st=None):
-    """A successful presentation, not an elapsed-time deadline, clears it."""
-    if os.environ.get('INGETRAZO_WGPU') in ('0', '1'):
-        return
-    st = st if st is not None else QSettings()
-    settings.set_value(STARTING, '0', st)
-    st.sync()
 
 
 if __name__ == '__main__':

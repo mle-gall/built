@@ -676,13 +676,13 @@ class Host:
     def missing(self):
         """Qt widget/window API the borrowed code asked for and the shell
         lacks (probes of the code's own lazily set attributes left out)."""
-        from PySide6.QtOpenGLWidgets import QOpenGLWidget
+        from PySide6.QtWidgets import QWidget
         from PySide6.QtWidgets import QMainWindow
         from views.view_host import MISSING
         out = {}
         for name, n in MISSING.most_common():
             bare = name.split(".", 1)[-1]
-            if hasattr(QOpenGLWidget, bare) or hasattr(QMainWindow, bare):
+            if hasattr(QWidget, bare) or hasattr(QMainWindow, bare):
                 out[name] = n
         return out
 

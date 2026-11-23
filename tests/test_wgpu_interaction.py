@@ -217,20 +217,17 @@ def test_worker_warms_first_hover_for_the_captured_camera(view):
 def test_idle_document_edits_refresh_native_view(monkeypatch):
     from PySide6.QtTest import QTest
     from PySide6.QtWidgets import QStackedWidget
-    from core import renderer_settings
     from core.history import HideCommand, DeleteGroupCommand
     from views.main_window import MainWindow
-    from views.viewport import Viewport
+    from views.document_controller import DocumentController
 
     # Exercise the document timers and real packed rows without a GPU.
     stack = QStackedWidget()
-    viewport = Viewport(stack)
-    stack.addWidget(viewport)
+    viewport = DocumentController.for_widget(WgpuView(stack))
     doc = SimpleNamespace(viewport=viewport)
     stack._doc_stack = stack
     stack._doc = doc
     stack._document_first_frame = lambda *_: None
-    monkeypatch.setattr(renderer_settings, 'arm', lambda: None)
     monkeypatch.setattr(WgpuView, '_upload', lambda self: None)
     mesh = Mesh()
     mesh.add_edge(QVector3D(), QVector3D(1, 0, 0))

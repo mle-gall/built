@@ -108,8 +108,9 @@ class MetalView(ViewNavigation):
             QCoreApplication.setAttribute(Qt.AA_DontCreateNativeWidgetSiblings)
         self._resize_timer = QTimer(self, singleShot=True, interval=80)
         self._resize_timer.timeout.connect(self._finish_resize)
-        for attr in (Qt.WA_NativeWindow, Qt.WA_PaintOnScreen, Qt.WA_NoSystemBackground):
-            self.setAttribute(attr)
+        if QApplication.platformName() not in ('offscreen', 'minimal'):
+            for attr in (Qt.WA_NativeWindow, Qt.WA_PaintOnScreen, Qt.WA_NoSystemBackground):
+                self.setAttribute(attr)
         self.camera = OrbitCamera()
         self.source_viewport = None
         self.setFocusPolicy(Qt.StrongFocus)
@@ -160,6 +161,9 @@ class MetalView(ViewNavigation):
         peers = self.__dict__.get('_peers', [])
         if peer in peers:
             peers.remove(peer)
+
+    def _can_create_surface(self):
+        return True
 
     def _window_handles(self):
         from views.wgpu_surface import window_handles
@@ -509,6 +513,8 @@ class MetalView(ViewNavigation):
         return packed
 
     def _upload(self, force=False):
+        if self.renderer is None and not force and not self._can_create_surface():
+            return
         if self.packed is None or not (force or self._presentable()):
             return
         import ingetrazo_render
@@ -1720,4 +1726,7 @@ class MetalView(ViewNavigation):
 
 
 class WgpuView(MetalView, QWidget):
-    """Qt presentation surface for the shared Metal view."""
+    """Qt presentation surface for a document."""
+
+    def _can_create_surface(self):
+        return QApplication.platformName() not in ('offscreen', 'minimal')

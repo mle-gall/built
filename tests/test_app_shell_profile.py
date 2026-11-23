@@ -64,7 +64,7 @@ def test_native_and_classic_share_normal_profile(tmp_path):
         from PySide6.QtCore import QSettings, QStandardPaths
         assert QSettings("BuiltProfileProbe", "Probe").value("home") == str(Path.home())
         def exchange():
-            from core import recent, general_settings, renderer_settings
+            from core import recent, general_settings
             st = QSettings()
             assert st.format() == QSettings.NativeFormat
             assert Path(st.fileName()) == Path.home() / "Library/Preferences/com.ingetrazo.IngeTrazo.plist"
@@ -73,8 +73,8 @@ def test_native_and_classic_share_normal_profile(tmp_path):
                 path = Path(QStandardPaths.writableLocation(loc)).resolve()
                 assert path.is_relative_to(Path.home().resolve() / "Library"), path
             assert recent.entries()[0]["path"] == sys.argv[2]
-            assert renderer_settings.requested() == sys.argv[4]
-            general_settings.set_value(renderer_settings.SETTING, sys.argv[5])
+            assert general_settings.value("test_profile", "opengl") == sys.argv[4]
+            general_settings.set_value("test_profile", sys.argv[5])
             st.setValue("recent_files", [sys.argv[3]])
             st.sync()
             assert st.status() == QSettings.NoError

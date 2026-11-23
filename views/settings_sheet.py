@@ -654,15 +654,6 @@ def _engine(env) -> list:
                     "intersections, snapping) with the native engine. Takes effect at the next start.")
                  if rust_ok else tr("This build of Built does not carry the Rust engine."))),
     ]
-    if not chrome_sheet.in_shell():
-        rows += [
-            Row("renderer", "choice", tr("Viewport renderer"),
-                _gkey(renderer_settings.SETTING, renderer_settings.DEFAULT_RENDERER),
-                _set_gkey(renderer_settings.SETTING),
-                options=[("opengl", tr("OpenGL")), ("wgpu", tr("Metal via wgpu (experimental)"))],
-                default=renderer_settings.DEFAULT_RENDERER,
-                tip=tr("Applies to documents opened after this change.")),
-        ]
     if p.graphics_server_applies():
         rows.append(Row("platform", "choice", tr("Graphics server"), _gkey("platform", AUTO),
                         _set_gkey("platform"),
@@ -673,7 +664,7 @@ def _engine(env) -> list:
 
     def status(env):
         try:
-            return renderer_settings.status_text(st=env.st)
+            return renderer_settings.status_text()
         except Exception:  # noqa: BLE001
             return ""
 

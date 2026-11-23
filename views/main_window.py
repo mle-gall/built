@@ -95,7 +95,6 @@ from tools.rectangle import RectangleTool
 from tools.select import SelectTool
 from views.tray import BimTray, GeorefTray, Tray, style_slider
 from views.icons import tool_icon
-from views.viewport import Viewport
 
 
 IGZ_FILE_FILTER = built.DOCUMENT_FILTER + ";;All files (*)"
@@ -748,10 +747,6 @@ class MainWindow(WorksessionMixin, QMainWindow):
         # native window.
         from views import mac_glass
         mac_glass.install(self)
-        from core import renderer_settings
-        if renderer_settings.start_guard():
-            self.statusBar().showMessage(tr(
-                "The last Metal renderer start never presented a frame; using OpenGL."), 15000)
         self._choose_document_renderer(self._doc)
 
     def showEvent(self, event) -> None:  # noqa: N802 — Qt override
@@ -4126,43 +4121,6 @@ class MainWindow(WorksessionMixin, QMainWindow):
         tool = self._tools[key]
         self._remember_command(tool.name, lambda: tool.on_activate(self.viewport))
         tool.on_activate(self.viewport)
-
-    def _on_gl_ready(self, info: dict) -> None:
-        """A viewport drawn on the CPU is the usual reason a Windows machine
-        reports IngeTrazo as unusably slow; say so where the user looks."""
-        if not info.get("supported", True):
-            # Queued: initializeGL is still on the stack, and a modal loop
-            # would run with that context current.
-            QTimer.singleShot(0, self, lambda: self._warn_gl_unsupported(info))
-            return
-        if info.get("software"):
-            self.statusBar().showMessage(tr(
-                "Built is drawing with the software renderer ({renderer}): "
-                "the viewport will be slow. Update the graphics driver, or "
-                "assign Built to the high-performance GPU in Windows "
-                "graphics settings.", renderer=info.get("renderer", "")), 30000)
-        elif QCoreApplication.instance().property("gpu_pref") == "set":
-            # First run on Windows: the preference was just written, and
-            # Windows applies it to the next process, not this one.
-            self.statusBar().showMessage(tr(
-                "Built asked Windows for the high-performance GPU; it "
-                "applies the next time you open the program."), 20000)
-
-    def _warn_gl_unsupported(self, info: dict) -> None:
-        """The context is below OpenGL 3.3, so the viewport draws nothing
-        (issue #751): name what Qt got and what fixes it. Once: a
-        viewport moved into MultiView gets a new context and asks again."""
-        if getattr(self, "_gl_unsupported_shown", False):
-            return
-        self._gl_unsupported_shown = True
-        _dialogs.critical(self, tr("OpenGL 3.3 not available"), tr(
-            "Built needs OpenGL 3.3, but this computer only offers "
-            "OpenGL {version} ({renderer}). The viewport stays empty.\n\n"
-            "Update the graphics driver from the NVIDIA, AMD or Intel "
-            "website. On a laptop with two graphics chips, assign Built "
-            "to the high-performance GPU (Windows: Settings ▸ System ▸ "
-            "Display ▸ Graphics) and start it again.",
-            version=info.get("version", ""), renderer=info.get("renderer", "")))
 
     def _on_command_search(self) -> None:
         from views.command_search import open_search
@@ -7705,11 +7663,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             self._renderer_label = QLabel(self)
             self.statusBar().addPermanentWidget(self._renderer_label)
         from core import renderer_settings
-        metal = getattr(doc, "_renderer_wgpu", False)
-        # Only a requested Metal renderer needs a fallback diagnostic.
-        label = (renderer_settings.status_text(metal)
-                 if metal or renderer_settings.requested() == "wgpu" else "OpenGL")
-        self._renderer_label.setText(label)
+        self._renderer_label.setText(renderer_settings.status_text())
 
     def _document_first_frame(self, doc):
         """Release optional work only after the renderer reports presentation.
@@ -7718,7 +7672,6 @@ class MainWindow(WorksessionMixin, QMainWindow):
         baked unused smooth streams and serialized caches for the hidden GL
         viewport under Metal. Do not run that duplicate whole-scene pass.
         """
-        from core import renderer_settings
         if doc is None or doc.viewport is None:
             return
         if getattr(self, "_opening_document", False):
@@ -7735,14 +7688,8 @@ class MainWindow(WorksessionMixin, QMainWindow):
             from core import _native
             _native.start_ok()
             self._engine_frame_seen = True
-        if getattr(doc, "_renderer_starting", False):
-            doc._renderer_starting = False
-            renderer_settings.first_frame()
         if not getattr(doc, "_awaiting_picture", False):
             return
-        if (not getattr(doc, "_renderer_wgpu", False)
-                and doc.viewport._edges_version != doc.viewport.scene.version):
-            return  # a queued swap of the old GL image is not this model
         doc._awaiting_picture = False
         self._drain_document_startup(doc)
 
@@ -7796,9 +7743,6 @@ class MainWindow(WorksessionMixin, QMainWindow):
                 return
             if getattr(self, "_opening_document", False) and progress is None:
                 return
-            from core import renderer_settings
-            renderer_settings.arm()
-            doc._renderer_starting = True
             scene = doc.viewport.scene
             version = scene.version
             display.set_scene(scene, progress=progress, opening=progress is not None)
@@ -7839,13 +7783,9 @@ class MainWindow(WorksessionMixin, QMainWindow):
     def _make_viewport(self):
         """A viewport for a project, set up the way the window's first one
         always was."""
-        from core import renderer_settings
-        if renderer_settings.wanted():
-            from views.document_controller import DocumentController
-            from views.wgpu_view import WgpuView
-            vp = DocumentController.for_widget(WgpuView(self._doc_stack))
-        else:
-            vp = Viewport(self._doc_stack)
+        from views.document_controller import DocumentController
+        from views.wgpu_view import WgpuView
+        vp = DocumentController.for_widget(WgpuView(self._doc_stack))
         try:                                        # issue #56
             vp.history.max_steps = int(_gs.value("undo_steps", 200))
         except (TypeError, ValueError):
@@ -7861,8 +7801,6 @@ class MainWindow(WorksessionMixin, QMainWindow):
                 "_ext_pickables": getattr(vp, "_ext_pickables", [])}
         for name, value in shared.items():
             setattr(vp, name, value)
-        if not self._documents or self._documents[0].viewport is None:
-            vp.glReady.connect(self._on_gl_ready)   # once: the first one
         return vp
 
     def _wire_viewport(self, vp) -> None:
@@ -7879,9 +7817,6 @@ class MainWindow(WorksessionMixin, QMainWindow):
                 else:
                     fn(*args)
             return dispatch
-        if vp.keys_stand_in is None:
-            vp.frameSwapped.connect(lambda: self._document_first_frame(
-                next((d for d in self._documents if d.viewport is vp), None)))
         vp.projectionChanged.connect(live(self._sync_projection_buttons))
         vp.smartZoomRequested.connect(live(self._on_smart_zoom))
         for name in ("tray", "bim_tray", "georef_tray", "project_browser",
@@ -8340,15 +8275,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         if (getattr(doc, "_renderer_wgpu", False)
                 and isinstance(doc.stand_in, WgpuView)):
             return self._make_metal_grid(doc)
-        if doc.stand_in is not None:
-            return None
-        from views.multi_view import ViewGrid
-        self._before_viewport_moves(doc.viewport)
-        grid = ViewGrid(doc.viewport)
-        grid.setObjectName("view_grid")
-        doc.view_grid = grid
-        self._put_in_slot(doc, None, grid)
-        return grid
+        return None
 
     def _make_metal_grid(self, doc):
         """Under Metal: the native view moves into the grid's window cell
@@ -8367,27 +8294,6 @@ class MainWindow(WorksessionMixin, QMainWindow):
         if doc is self._doc:
             stack.setCurrentWidget(grid)
         return grid
-
-    @staticmethod
-    def _before_viewport_moves(vp) -> None:
-        """A viewport that changes parent gets a new GL context: its
-        buffers are made again there, but it still remembers having
-        uploaded the geometry and would skip it — the view came out blank.
-        Forget the uploads (while the old context is still valid); the
-        geometry and the undo history are not touched — nor the document's
-        bakes and the pick index: redoing them cost seconds, and the extra
-        views that come next share a lazy mesh's bake only while this one
-        still holds it (#1092)."""
-        vp.forget_uploads()
-        vp._vbo_parts.clear()
-        vp._edges_version = -1
-        if vp.isValid():
-            vp.makeCurrent()
-            try:
-                vp._scene_fbo = None
-            finally:
-                vp.doneCurrent()
-        vp.update()
 
     def _pick_view_layout(self) -> None:
         self._light_views_button()          # the click toggled it
@@ -8433,7 +8339,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         doc = self.__dict__.get("_doc")
         if row is None or doc is None or doc.viewport is None:
             return
-        if Viewport.painting:
+        if getattr(doc.stand_in, "_drawing_frame", False):
             # Reached from inside paintGL (the Scenes panel follows
             # sceneVersionChanged): the row coming or going resizes the
             # view in the middle of its frame, and macOS crashed on the
@@ -8866,7 +8772,6 @@ class MainWindow(WorksessionMixin, QMainWindow):
         if vp is not None:
             try:
                 vp.set_active_tool(None)
-                vp.release_gl_textures()
             except Exception:  # noqa: BLE001 — never block closing on cleanup
                 pass
             vp.clipboard = None
@@ -8887,7 +8792,6 @@ class MainWindow(WorksessionMixin, QMainWindow):
             for extra in grid.extras():
                 try:
                     extra.set_active_tool(None)
-                    extra.release_gl_textures()
                 except Exception:  # noqa: BLE001 — never block closing
                     pass
             grid.deleteLater()
@@ -9279,9 +9183,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
                 self._dismiss_home()
                 return True
         previous, created = self._doc, None
-        from core import renderer_settings
-        if (not self._doc_is_blank() or renderer_settings.wanted() !=
-                getattr(self._doc, "_renderer_wgpu", False)):
+        if not self._doc_is_blank():
             created = self._new_document()
         ok = self._open_path_here(path, suffix)
         if not ok and created is not None and created in self._documents \
@@ -12264,13 +12166,6 @@ class MainWindow(WorksessionMixin, QMainWindow):
         # them down leaks each with a "Texture has not been destroyed"
         # warning; the context's aboutToBeDestroyed hook alone fires too late
         # on app exit, when the Python side is already coming apart.
-        extras = [vp for doc in self._documents if doc.view_grid is not None
-                  for vp in doc.view_grid.extras()]
-        for vp in self.all_viewports() + extras:
-            try:
-                vp.release_gl_textures()
-            except Exception:  # noqa: BLE001 — never block quitting on cleanup
-                pass
         for doc in self._documents:
             if doc.composer is not None:
                 doc.composer.close()

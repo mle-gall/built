@@ -161,7 +161,7 @@ class WgpuPeerView(WgpuView):
         return super().draw_frame()
 
     def _upload(self, force=False):
-        if self.isVisible() or force:
+        if (self.isVisible() and self._can_create_surface()) or force:
             if self.primary._scene_dirty or self.primary.renderer is None:
                 self.primary._upload(force=True)
             self._attach()
