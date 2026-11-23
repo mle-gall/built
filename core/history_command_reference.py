@@ -529,3 +529,9 @@ def carried_faces(mesh, moving: set) -> list:
         if all(v.key in moving for lp in loops for v in lp):
             out.append(f)
     return out
+
+
+def restore_mesh_before(self, scene):
+    if self._before is not None:
+        scene.mesh.restore_state(self._before)
+        scene.version += 1

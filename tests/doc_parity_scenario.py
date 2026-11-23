@@ -377,7 +377,7 @@ def shared_assembly(work):
     return result
 
 
-def geometry_steps():
+def geometry_steps(work):
     """Compare the loose mesh, feed and replay at each command boundary."""
     from core.history import (MakeGroupCommand, ExplodeGroupCommand, SetFaceColorCommand,
                               AddEdgeCommand, DeleteEdgesCommand, DeleteFaceCommand,
@@ -386,6 +386,9 @@ def geometry_steps():
     from core.protocol import commands
 
     scene = Scene()
+    # Commands in the preceding scenario consume generated UIDs differently
+    # on redo. This independent document needs the same initial tag identity.
+    scene.layers[0].uid = "geometry-default-tag"
     mesh = scene.mesh
     box(mesh)
     h = History(scene)
@@ -494,7 +497,26 @@ def geometry_steps():
     out.append(state())
     assert h.redo() and warp not in mesh.faces
     out.append(state())
-    return out
+    from core.history import FlipVerticesCommand, RotateVerticesCommand, ScaleVerticesCommand
+    panel = mesh.add_face(rectangle(500, 0, 2, 2))
+    panel.attrs["texture"] = {"path": "fabric.png", "sw": .7, "sh": .3}
+    pivot, axis = QVector3D(500, 0, 0), QVector3D(0, 0, 1)
+    for transform in (lambda pts: RotateVerticesCommand(pts, pivot, axis, 30., carry_textures=True),
+                      lambda pts: ScaleVerticesCommand(pts, pivot, (1.25, .5, 1.)),
+                      lambda pts: FlipVerticesCommand(pts, pivot, QVector3D(1, 0, 0), [panel])):
+        h.execute(transform(panel.vertices))
+        assert not h.last_error and not h.last_rejected
+        out.append(state())
+        assert h.undo()
+        out.append(state())
+        assert h.redo()
+        out.append(state())
+    archives = {}
+    for ext in ("igz", "built"):
+        path = work / f"edited-geometry.{ext}"
+        igz.save_scene(scene, path, backup=False)
+        archives[ext] = hashlib.sha256(path.read_bytes()).hexdigest()
+    return {"states": out, "archive_hashes": archives}
 
 
 def anchor_steps(work):
@@ -717,7 +739,7 @@ def main(work: Path):
     import numpy as np
     np.testing.assert_allclose(sorted(positions), sorted(p.toTuple() for p in endpoints), atol=1e-6)
     shared = shared_assembly(work)
-    print(json.dumps({"geometry": geometry_steps(), "shared": shared, "rotated_edit": positions, "engine": doc_model.engine(), "states": states,
+    print(json.dumps({"geometry": geometry_steps(work), "shared": shared, "rotated_edit": positions, "engine": doc_model.engine(), "states": states,
                       "feed": steps, "initial": initial,
                       "final": saved(scene, work, "final")}))
 

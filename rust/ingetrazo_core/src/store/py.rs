@@ -1379,7 +1379,7 @@ impl PyMeshStore {
         if faces.is_empty() {
             return Ok(Some((0, vec![])));
         }
-        let moved = moved.into_iter().map(super::commands::cell).collect();
+        let moved = moved.into_iter().map(super::commands::supplied_cell).collect();
         let mut work = self.inner.clone();
         let mut copies = Vec::new();
         let mut dirty = 0;
@@ -1421,6 +1421,11 @@ impl PyMeshStore {
         }
         self.inner = work;
         Ok(Some((dirty, copies)))
+    }
+
+    fn transform_vertices(&mut self, source: Vec<[f64; 3]>, matrix: [f64; 16], collect: bool)
+        -> (usize, Vec<u128>) {
+        self.inner.transform_vertices(&source, matrix, collect)
     }
 
     fn move_without_join(&mut self, source: Vec<[f64; 3]>, delta: [f64; 3]) -> Option<usize> {

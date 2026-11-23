@@ -6,6 +6,11 @@ use std::collections::HashSet;
 type Point = [f64; 3];
 pub(super) type Cell = [u64; 3];
 
+/// A position key supplied by a caller has already been rounded.
+pub(super) fn supplied_cell(p: Point) -> Cell {
+    p.map(|x| if x == 0. { 0 } else { x.to_bits() })
+}
+
 /// Bits of Python's round(x, 4), canonicalising signed zero. When the
 /// multiplication itself can change a rounding decision, round the original
 /// binary64 value directly to four decimal places.
@@ -34,6 +39,34 @@ fn segment(a: Cell, b: Cell) -> [Cell; 2] {
 }
 
 impl Store {
+    /// Apply an affine point transform in mesh order. The facade moves by
+    /// a delta, including its float32 rounding for older meshes.
+    pub(super) fn transform_vertices(
+        &mut self,
+        source: &[[f64; 3]],
+        matrix: [f64; 16],
+        collect: bool,
+    ) -> (usize, Vec<u128>) {
+        let source: HashSet<_> = source.iter().copied().map(supplied_cell).collect();
+        let matrix = glam::DMat4::from_cols_array(&matrix);
+        let mut count = 0;
+        let mut keys = Vec::new();
+        for v in self.live_slots(Kind::Vertex) {
+            let point = *self.state.vpos.get(v as usize);
+            if !source.contains(&cell(point)) {
+                continue;
+            }
+            let p = glam::DVec3::from_array(point);
+            let q = matrix * p.extend(1.);
+            self.move_vertex(v, (q.truncate() / q.w - p).to_array());
+            count += 1;
+            if collect {
+                keys.push(self.key(Kind::Vertex, v));
+            }
+        }
+        (count, keys)
+    }
+
     /// Move the selected position cells together. A landing needs the weld
     /// and defect checks. Detect it before writing so that path can take over.
     pub fn move_without_join(&mut self, source: &[Point], delta: Point) -> Option<usize> {

@@ -264,10 +264,7 @@ class RemoveGeometryCommand(MeshCommand):
     keeps_rows = True
     _before = None
 
-    def undo(self, scene):
-        if self._before is not None:
-            scene.mesh.restore_state(self._before)
-            scene.version += 1
+    undo = _reference.restore_mesh_before
 
     def doc_after(self, scene, phase):
         _discard_removed_selection(scene)
@@ -3129,10 +3126,7 @@ class MoveVerticesCommand(MeshCommand):
                     "undone.", defect=defect_names()[worse[0]]))
         self._after = self._reference_snapshot(scene.mesh)
 
-    def undo(self, scene) -> None:
-        if self._before is not None:
-            scene.mesh.restore_state(self._before)
-            scene.version += 1
+    undo = _reference.restore_mesh_before
 
 
 def rotation_matrix(center: QVector3D, axis: QVector3D, degrees: float):
@@ -3149,9 +3143,26 @@ def rotate_points(scene, keys: set, matrix) -> None:
     """Rotate every shared vertex whose position key is in ``keys`` by the
     rigid ``matrix`` (the rotation twin of :func:`translate_points`). Shared
     by :class:`RotateVerticesCommand` and the Rotate tool's live preview."""
-    moving = [v for v in scene.mesh.vertices if _key(v.position) in keys]
-    for v in moving:
-        scene.mesh.move_vertex(v, matrix.map(v.position) - v.position)
+    _map_selected_vertices(scene, keys, matrix, carry_textures=False)
+
+
+def _map_selected_vertices(scene, keys, matrix, carry_textures):
+    from core.store_mesh import StoreMesh
+    from ingetrazo_core import Matrix4
+    mesh = scene.mesh
+    if _doc.ENABLED and type(mesh) is StoreMesh and type(matrix) is Matrix4:
+        count, ids = mesh._store.transform_vertices(list(keys), matrix.data(), carry_textures)
+        if count:
+            mesh._dirty(count)
+        carried = _carried_faces(mesh, ids) if carry_textures else []
+    else:
+        moving = [v for v in mesh.vertices if _key(v.position) in keys]
+        carried = _carried_faces(mesh, {v.key for v in moving}) if carry_textures else []
+        for v in moving:
+            mesh.move_vertex(v, matrix.map(v.position) - v.position)
+    if carried:
+        from core.group import _remap_uvws
+        _remap_uvws(mesh, matrix, carried)
     scene.version += 1
 
 
@@ -3251,7 +3262,31 @@ class FlipGroupsCommand(MeshCommand):
         self._flip(scene)
 
 
-class FlipVerticesCommand(MeshCommand):
+class VertexTransformCommand(MeshCommand):
+    """Apply a matrix to loose vertices, then fold the faces they warped."""
+    _before = _after = None
+    carry_textures = False
+
+    @abstractmethod
+    def matrix(self):
+        """Transform about the tool's chosen axes and origin."""
+
+    def do(self, scene) -> None:
+        if self._after is not None:
+            scene.mesh.restore_state(self._after)
+            scene.version += 1
+            return
+        self._before = self._reference_snapshot(scene.mesh)
+        _map_selected_vertices(scene, {_key(p) for p in self.src}, self.matrix(), self.carry_textures)
+        if faces := getattr(self, "_faces", ()):
+            _reverse_faces(f for f in faces if isinstance(f, Face) or hasattr(f, "loop"))
+        fold_nonplanar_faces(scene.mesh)
+        self._after = self._reference_snapshot(scene.mesh)
+
+    undo = _reference.restore_mesh_before
+
+
+class FlipVerticesCommand(VertexTransformCommand):
     """Mirror loose positions about an axis plane and re-reverse the fully
     selected faces' windings (their normals would flip inward otherwise).
     Snapshot undo, the exact mirror of RotateVerticesCommand."""
@@ -3262,28 +3297,12 @@ class FlipVerticesCommand(MeshCommand):
         self.centre = QVector3D(centre)
         self.axis = QVector3D(axis)
         self._faces = list(faces)
-        self._before: Optional[dict] = None
-        self._after: Optional[dict] = None
 
-    def do(self, scene) -> None:
-        if self._after is not None:  # redo
-            scene.mesh.restore_state(self._after)
-            scene.version += 1
-            return
-        self._before = self._reference_snapshot(scene.mesh)
-        m = mirror_matrix(self.centre, self.axis)
-        rotate_points(scene, {_key(p) for p in self.src}, m)
-        _reverse_faces(f for f in self._faces if isinstance(f, Face) or hasattr(f, "loop"))
-        fold_nonplanar_faces(scene.mesh)
-        self._after = self._reference_snapshot(scene.mesh)
-
-    def undo(self, scene) -> None:
-        if self._before is not None:
-            scene.mesh.restore_state(self._before)
-            scene.version += 1
+    def matrix(self):
+        return mirror_matrix(self.centre, self.axis)
 
 
-class RotateVerticesCommand(MeshCommand):
+class RotateVerticesCommand(VertexTransformCommand):
     """Rotate every shared vertex at a set of positions around ``axis``
     through ``center`` by ``degrees``, then **autofold** (a partial rotation
     can warp attached faces out of plane, same as Move). Undo/redo restore
@@ -3299,32 +3318,9 @@ class RotateVerticesCommand(MeshCommand):
         self.degrees = degrees
         #: As in MoveVerticesCommand: a face turned whole turns its image.
         self.carry_textures = carry_textures
-        self._before: Optional[dict] = None
-        self._after: Optional[dict] = None
 
-    def do(self, scene) -> None:
-        if self._after is not None:  # redo
-            scene.mesh.restore_state(self._after)
-            scene.version += 1
-            return
-        self._before = self._reference_snapshot(scene.mesh)
-        m = rotation_matrix(self.center, self.axis, self.degrees)
-        keys = {_key(p) for p in self.src}
-        carried = (_carried_faces(
-            scene.mesh, {v.key for v in scene.mesh.vertices
-                         if _key(v.position) in keys})
-            if self.carry_textures else [])
-        rotate_points(scene, keys, m)
-        if carried:
-            from core.group import _remap_uvws
-            _remap_uvws(scene.mesh, m, carried)
-        fold_nonplanar_faces(scene.mesh)
-        self._after = self._reference_snapshot(scene.mesh)
-
-    def undo(self, scene) -> None:
-        if self._before is not None:
-            scene.mesh.restore_state(self._before)
-            scene.version += 1
+    def matrix(self):
+        return rotation_matrix(self.center, self.axis, self.degrees)
 
 
 class GroupTransformCommand(MeshCommand):
@@ -3432,7 +3428,7 @@ def invert_scale_factor(factor):
     return inv(float(factor))
 
 
-class ScaleVerticesCommand(MeshCommand):
+class ScaleVerticesCommand(VertexTransformCommand):
     """Uniformly scale every shared vertex at a set of positions about
     ``center`` by ``factor``, then autofold (scaling a subset of connected
     geometry can warp attached faces). Snapshot undo/redo — the mirror of
@@ -3444,24 +3440,9 @@ class ScaleVerticesCommand(MeshCommand):
         self.center = QVector3D(center)
         self.factor = factor
         self.axes = axes
-        self._before: Optional[dict] = None
-        self._after: Optional[dict] = None
 
-    def do(self, scene) -> None:
-        if self._after is not None:  # redo
-            scene.mesh.restore_state(self._after)
-            scene.version += 1
-            return
-        self._before = self._reference_snapshot(scene.mesh)
-        m = scale_matrix(self.center, self.factor, self.axes)
-        rotate_points(scene, {_key(p) for p in self.src}, m)  # generic mapper
-        fold_nonplanar_faces(scene.mesh)
-        self._after = self._reference_snapshot(scene.mesh)
-
-    def undo(self, scene) -> None:
-        if self._before is not None:
-            scene.mesh.restore_state(self._before)
-            scene.version += 1
+    def matrix(self):
+        return scale_matrix(self.center, self.factor, self.axes)
 
 
 class ScaleGroupCommand(GroupTransformCommand):
