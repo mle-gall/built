@@ -12,7 +12,6 @@ _PATCHED = {
     "views.chrome_dialogs": ("live", "QEventLoop", "_shell_installed"),
     "views.filedialogs": ("QFileDialog",),
     "core.renderer_settings": ("capability", "status_text", "_shell_installed"),
-    "views.wgpu_start": ("available", "_qt_home", "_shell_installed"),
     "app_shell.modal": ("_HOST",),
 }
 _MISSING = object()

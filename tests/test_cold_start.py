@@ -48,10 +48,6 @@ SCRIPT = textwrap.dedent(r"""
     slots = work / "autosave"
     autosave.autosave_dir = lambda: slots
     from views import wgpu_start
-    if page:
-        # The page as on a Mac with the chrome (offscreen here: no Metal
-        # frame comes, and the watchdog hands over to the Qt dialog).
-        wgpu_start.available = lambda: True
     from views import main_window as mw
     opened, asked = [], []
     real_open = mw.MainWindow.open_path
@@ -76,9 +72,8 @@ SCRIPT = textwrap.dedent(r"""
         win = next(w for w in QApplication.topLevelWidgets() if isinstance(w, mw.MainWindow))
         docs = [dict(path=str(d.path) if d.path else None,
                      names=[getattr(g, "name", "") for g in d.viewport.scene.groups]) for d in win.documents()]
-        home = getattr(win, "_home", None)
         out = dict(opened=opened, asked=asked, docs=docs,
-                   page=wgpu_start.shown(win), qt_home=bool(home is not None and home.isVisible()),
+                   page=wgpu_start.shown(win),
                    slots=sorted(p.name for p in slots.iterdir()))
         (work / "report.json").write_text(json.dumps(out))
         os._exit(0)
@@ -115,7 +110,7 @@ def cold_start(tmp_path, page=False, recover=False, untitled_slot=False):
     script = tmp_path / "cold.py"
     script.write_text(SCRIPT)
     env = dict(os.environ, QT_QPA_PLATFORM="offscreen", HOME=str(work / "home"),
-               XDG_DATA_HOME=str(work / "home"), COLD_MS="3000", BUILT_START="1")
+               XDG_DATA_HOME=str(work / "home"), COLD_MS="3000", BUILT_START="1" if page else "0")
     run = subprocess.run([sys.executable, str(script), str(REPO), str(work),
                           "1" if page else "0", "1" if recover else "0"],
                          cwd=str(tmp_path), env=env, capture_output=True, text=True, timeout=120)
@@ -124,13 +119,13 @@ def cold_start(tmp_path, page=False, recover=False, untitled_slot=False):
     return json.loads(report.read_text())
 
 
-@pytest.mark.parametrize("page", [False, True], ids=["qt-home", "start-page"])
+@pytest.mark.parametrize("page", [False, True], ids=["model", "start-page"])
 def test_a_cold_start_without_a_file_opens_nothing(tmp_path, page):
     r = cold_start(tmp_path, page=page)
     assert r["opened"] == []
     assert r["asked"] == []
     assert [d["path"] for d in r["docs"]] == [None]      # the blank untitled only
-    assert r["page"] or r["qt_home"]                     # something to choose from
+    assert r["page"] == page
 
 
 def test_a_cold_start_still_offers_the_crash_recovery(tmp_path):

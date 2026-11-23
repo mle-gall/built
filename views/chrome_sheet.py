@@ -352,6 +352,11 @@ def open(win, provider, *, search=None, focus=None) -> bool:  # noqa: A001 — r
     False when the chrome cannot draw it: the caller shows its fallback."""
     if not available(win):
         return False
+    return present(win, provider, search=search, focus=focus)
+
+
+def present(win, provider, *, search=None, focus=None):
+    """Install the sheet model for the next frame, including offscreen hosts."""
     old = _state(win)
     if old is not None and old.provider is provider and not old.closing:
         if search is not None:

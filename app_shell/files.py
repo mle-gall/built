@@ -86,12 +86,6 @@ def install(win) -> None:
         renderer_settings.capability = lambda: renderer_settings.Capability(True)
         renderer_settings.status_text = lambda: "wgpu (native app)"
         renderer_settings._shell_installed = True
-    from views import wgpu_start
-    if not getattr(wgpu_start, "_shell_installed", False):
-        wgpu_start.available = lambda: True
-        wgpu_start._qt_home = lambda w: w.statusBar().showMessage(
-            "The start page could not be drawn", 4000)
-        wgpu_start._shell_installed = True
 
 
 # ---- commands ------------------------------------------------------------------

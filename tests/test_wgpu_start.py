@@ -80,14 +80,10 @@ def win(monkeypatch, tmp_path):
     p = w.__dict__.get("_start_page")
     if p is not None and p.dog is not None:
         p.dog.stop()
-    home = getattr(w, "_home", None)
-    if home is not None:
-        home.close()
     w.close()
 
 
 def on(monkeypatch):
-    monkeypatch.setattr(ws, "available", lambda: True)
     monkeypatch.setattr(cs, "available", lambda w: True)
 
 
@@ -147,25 +143,16 @@ def act(win, verb, *args):
 
 
 # ---- Shown or not ------------------------------------------------------------
-def test_headless_and_ui_off_keep_the_qt_dialog(win, monkeypatch):
-    # Offscreen (this run): the chrome cannot draw it.
-    assert not ws.available()
+def test_offscreen_opens_start_sheet(win):
     win.show_home()
-    assert not ws.shown(win)
-    assert win._home.isVisible()
-    win._home.close()
-    # BUILT_UI=0 on a real screen: the same, and the sheet cannot open either.
-    monkeypatch.setattr("views.wgpu_ui.ENABLED", False)
-    monkeypatch.setattr("PySide6.QtGui.QGuiApplication.platformName", staticmethod(lambda: "cocoa"))
-    assert not ws.available()
-    assert not cs.available(win)
+    assert frame(win).sheet()["id"] == "start"
 
 
 def test_the_window_opens_on_it_only_without_a_file(monkeypatch):
     on(monkeypatch)
     assert ws.wants_at_start(False)
     assert not ws.wants_at_start(True)
-    monkeypatch.setattr(ws, "available", lambda: False)
+    monkeypatch.setenv("BUILT_START", "0")
     assert not ws.wants_at_start(False)
 
 
@@ -440,13 +427,13 @@ def test_settings_from_the_footer_goes_over_it_and_the_page_comes_back(win, monk
     assert sheet(win)["id"] == "start"                  # …and the page is back under it
 
 
-def test_no_frame_drawn_falls_back_to_the_qt_dialog(win, monkeypatch):
+def test_missing_frame_closes_start_with_a_message(win, monkeypatch):
     on(monkeypatch)
     monkeypatch.setattr(ws, "_view", lambda _w: None)
     ws.show(win)
     ws.page(win)._watchdog()
     assert not ws.shown(win)
-    assert win._home is not None
+    assert "could not draw" in win.statusBar().currentMessage()
 
 
 def test_note_remembers_what_the_window_knows(win, tmp_path):
