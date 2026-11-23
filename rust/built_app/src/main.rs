@@ -45,6 +45,7 @@ struct Args {
     new_instance: bool,
     measure: bool,
     check: bool,
+    gallery: bool,
 }
 
 fn parse_args() -> Result<Args, String> {
@@ -63,12 +64,13 @@ fn parse_args() -> Result<Args, String> {
                 let (w, h) = v.split_once('x').ok_or("--size WxH")?;
                 a.size = (w.parse().map_err(|_| "--size WxH")?, h.parse().map_err(|_| "--size WxH")?);
             }
+            "--gallery" => { a.gallery = true; a.new_instance = true; },
             "--new-instance" => a.new_instance = true,
             "--measure" => a.measure = true,
             "--check" => a.check = true,
             "-h" | "--help" => {
                 println!("built [file] [--script f] [--shots dir] [--settings dir] [--root dir] \
-                          [--venv dir] [--size WxH] [--new-instance] [--measure] [--check]");
+                          [--venv dir] [--size WxH] [--new-instance] [--gallery] [--measure] [--check]");
                 std::process::exit(0);
             }
             // Launch Services' process serial number (old macOS, Finder launches).
@@ -984,6 +986,7 @@ fn main() {
             std::process::exit(2);
         }
     };
+    if args.gallery { std::env::set_var("BUILT_GALLERY", "1"); }
     let interactive = !args.check && args.script.is_none() && !args.measure;
     if interactive && !args.new_instance && forward_to_running(args.file.as_deref()) {
         eprintln!("[built] handed over to the running shell");

@@ -357,7 +357,7 @@ fn draw_item(
                     } => {
                         let mut v = *value;
                         if ui
-                            .add(egui::DragValue::new(&mut v).range(*min..=*max).suffix(unit))
+                            .add(super::kit::number(&mut v, unit).range(*min..=*max))
                             .changed()
                         {
                             event = Some(("commit", json!(v)))
@@ -386,7 +386,7 @@ fn draw_item(
                         }
                         let draft = drafts.entry(key.clone()).or_insert_with(|| value.clone());
                         let r = ui.add(
-                            egui::TextEdit::singleline(draft).desired_width(ui.available_width()),
+                            super::kit::field(draft).desired_width(ui.available_width()),
                         );
                         if r.lost_focus() && draft != value {
                             event = Some(("commit", json!(draft)))
@@ -469,7 +469,7 @@ fn draw_item(
         }
         Widget::Progress { fraction } => {
             ui.add(
-                egui::ProgressBar::new(fraction.unwrap_or_default())
+                super::kit::progress(fraction.unwrap_or_default())
                     .animate(fraction.is_none())
                     .text(&i.label),
             );

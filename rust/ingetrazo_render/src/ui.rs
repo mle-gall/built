@@ -25,138 +25,11 @@ mod context_menu;
 
 mod tree_cols;
 
-// ---- Design tokens (council 2026-11-22; one place, every component
-// below draws from these). Text on graphite glass, three levels plus off.
-const INK: Color32 = Color32::from_rgb(0xEE, 0xF1, 0xF4);        // primary text, active icons
-const INK_2: Color32 = Color32::from_rgb(0xC9, 0xCF, 0xD6);      // idle icons
-const DIM: Color32 = Color32::from_rgb(0xA2, 0xA9, 0xB1);        // counts, keys, secondary text
-const FAINT: Color32 = Color32::from_rgb(0x85, 0x8C, 0x94);      // captions, placeholders, shortcuts
-const OFF: Color32 = Color32::from_rgb(0x5C, 0x63, 0x6A);        // disabled
-const ACCENT: Color32 = Color32::from_rgb(0x6A, 0xA5, 0xFF);
-const ACTIVE: Color32 = Color32::from_rgba_premultiplied(25, 40, 61, 61);    // accent @ 24 %
-const ACCENT_LINE: Color32 = Color32::from_rgba_premultiplied(58, 91, 140, 140); // accent @ 55 %
-const HOVER: Color32 = Color32::from_rgba_premultiplied(18, 18, 18, 18);     // white @ 7 %
-const PRESS: Color32 = Color32::from_rgba_premultiplied(31, 31, 31, 31);     // white @ 12 %
-const EDGE: Color32 = Color32::from_rgba_premultiplied(20, 20, 20, 20);      // hairline, white @ 8 %
-const FIELD: Color32 = Color32::from_rgba_premultiplied(0, 0, 0, 71);        // inset field, black @ 28 %
-const WARN: Color32 = Color32::from_rgb(0xF5, 0xB8, 0x4A);
-const WARN_FILL: Color32 = Color32::from_rgba_premultiplied(34, 26, 10, 36);  // warn @ 14 %
-const PANEL: Color32 = Color32::from_rgba_premultiplied(29, 31, 36, 245);    // tooltips (opaque)
-// Geometry (Maxence 2026-11-22: "padding issues, rectangular buttons"):
-// round controls, capsule bars, concentric radii. A bar is 28-pt controls
-// in 4 pt of padding = 36 high, radius 18; menus pad 6 (radius 14, rows 8);
-// the column pads 10 (radius 18, rows 8). Everything sits 12 from the
-// window's edges and 8 from its neighbours.
-// Rounded squares, not circles (Maxence 2026-11-22: "buttons can remain
-// rounded squares … reduce the radii, it's a bit too much").
-const R_CONTROL: u8 = 8;    // 28-pt controls, tabs, chips
-const R_ROW: u8 = 6;        // menu and tree rows, fields
-const BAR_H: f32 = 36.0;
-const EDGE_GAP: f32 = 12.0;
-// The frame: bars docked to the window's edges, side panes floating 8 in.
-const TOP_H: f32 = 40.0;
-const BOT_H: f32 = 36.0;
-const GUT: f32 = 8.0;
-const DOCK_W: f32 = 300.0;
-const DOCK_MIN_W: f32 = 260.0;
-const DOCK_MAX_W: f32 = 560.0;
-// Type roles (Inter 400 / 500 / 600 when bundled, else the system font).
-fn body() -> egui::FontId { egui::FontId::proportional(12.0) }
-fn meta() -> egui::FontId { egui::FontId::proportional(11.0) }
-fn strong(size: f32) -> egui::FontId { egui::FontId::new(size, egui::FontFamily::Name("medium".into())) }
-fn title() -> egui::FontId { egui::FontId::new(13.0, egui::FontFamily::Name("semibold".into())) }
-fn title_font() -> egui::FontId { title() }
-
-fn parse_hex(s: &str) -> Option<Color32> {
-    let h = s.strip_prefix('#')?;
-    if h.len() != 6 { return None; }
-    let v = u32::from_str_radix(h, 16).ok()?;
-    Some(Color32::from_rgb((v >> 16) as u8, (v >> 8) as u8, v as u8))
-}
-
-/// The visibility eye: open, or closed with a slash.
-fn paint_eye(ui: &egui::Ui, r: Rect, on: bool) {
-    let c = r.center();
-    let col = if on { DIM } else { WARN };
-    let pts: Vec<Pos2> = (0..=16).map(|i| {
-        let t = std::f32::consts::PI * i as f32 / 16.0;
-        pos2(c.x - 6.0 * t.cos(), c.y - 3.6 * t.sin())
-    }).chain((0..=16).map(|i| {
-        let t = std::f32::consts::PI * i as f32 / 16.0;
-        pos2(c.x + 6.0 * t.cos(), c.y + 3.6 * t.sin())
-    })).collect();
-    ui.painter().add(egui::Shape::closed_line(pts, Stroke::new(1.2_f32, col)));
-    ui.painter().circle_filled(c, 1.8, col);
-    if !on {
-        ui.painter().line_segment([c + vec2(-6.0, 5.0), c + vec2(6.0, -5.0)], Stroke::new(1.3_f32, col));
-    }
-}
-
-/// The lock: shackle closed when locked, open when not.
-fn paint_lock(ui: &egui::Ui, r: Rect, on: bool) {
-    let c = r.center();
-    let col = if on { INK } else { FAINT };
-    let body = Rect::from_center_size(c + vec2(0.0, 2.0), vec2(9.0, 7.0));
-    ui.painter().rect_filled(body, CornerRadius::same(2), col);
-    let shackle = Rect::from_center_size(c + vec2(if on { 0.0 } else { 2.5 }, -2.5), vec2(6.0, 7.0));
-    ui.painter().rect_stroke(shackle, CornerRadius::same(3), Stroke::new(1.3_f32, col), egui::StrokeKind::Middle);
-    ui.painter().rect_filled(body, CornerRadius::same(2), col);
-}
-
-/// The one state painter: every control's fill and line come from here.
-#[derive(Clone, Copy, PartialEq)]
-enum State { Idle, Hover, Press, On, Off }
-fn state_of(resp: &egui::Response, on: bool, enabled: bool) -> State {
-    if !enabled { State::Off }
-    else if on { State::On }
-    else if resp.is_pointer_button_down_on() { State::Press }
-    else if resp.hovered() { State::Hover }
-    else { State::Idle }
-}
-fn paint_state(ui: &egui::Ui, rect: Rect, st: State, radius: u8) {
-    let r = CornerRadius::same(radius);
-    match st {
-        State::Hover => { ui.painter().rect_filled(rect, r, HOVER); }
-        State::Press => { ui.painter().rect_filled(rect, r, PRESS); }
-        State::On => {
-            ui.painter().rect_filled(rect, r, ACTIVE);
-            ui.painter().rect_stroke(rect.shrink(0.25), r, Stroke::new(0.5_f32, ACCENT_LINE), egui::StrokeKind::Inside);
-        }
-        _ => {}
-    }
-}
-fn ink_of(st: State) -> Color32 {
-    match st { State::Off => OFF, State::On => Color32::WHITE, State::Idle => INK_2, _ => INK }
-}
-
-/// Glass surfaces (council 2026-11-22): Panel for data (tree, inspector),
-/// Raised for menus, Pill for compact chrome (palette, rows, bars).
-#[derive(Clone, Copy)]
-enum Surface { Panel, Raised, Pill, Bar }
-impl Surface {
-    fn look(self) -> crate::glass::Look {
-        // (tint mix, saturation, peak, lit rim, quiet rim, top, inner shadow)
-        let (mix, sat, peak, lit, quiet, top, inner) = match self {
-            Surface::Panel => (0.72, 0.30, 0.080, 0.20, 0.045, 0.022, 0.12),
-            Surface::Raised => (0.82, 0.16, 0.065, 0.23, 0.055, 0.030, 0.14),
-            Surface::Pill => (0.61, 0.45, 0.085, 0.20, 0.045, 0.022, 0.10),
-            // Docked bars: quieter rim, no glow (their outer edges are the window's).
-            Surface::Bar => (0.70, 0.35, 0.080, 0.06, 0.03, 0.0, 0.0),
-        };
-        crate::glass::Look { tint: [0.01444, 0.01764, 0.02315, mix], saturation: sat, rim: [lit, quiet],
-                             rim_width: 1.25, glow: top, peak, inner_shadow: inner }
-    }
-    fn radius(self) -> u8 { match self { Surface::Panel => 14, Surface::Raised => 12, Surface::Pill => 12, Surface::Bar => 0 } }
-    fn shadow(self) -> Shadow {
-        let (y, blur, alpha) = match self {
-            Surface::Panel => (8, 24, 100),
-            Surface::Raised => (12, 32, 128),
-            Surface::Pill => (4, 14, 90),
-            Surface::Bar => (0, 0, 0),
-        };
-        Shadow { offset: [0, y], blur, spread: 0, color: Color32::from_black_alpha(alpha) }
-    }
-}
+pub mod tokens;
+pub mod kit;
+mod gallery;
+use tokens::*;
+use kit::*;
 
 struct Tool {
     id: String,
@@ -186,6 +59,7 @@ pub struct Ui {
     background_plugins: std::collections::HashMap<String, plugins::Panels>,
     pub panels: crate::inspector::Panels,
     ctx: egui::Context,
+    gallery: Option<gallery::Gallery>,
     painter: egui_wgpu::Renderer,
     start: Instant,
     events: Vec<egui::Event>,
@@ -352,71 +226,23 @@ pub struct Column {
     highlighted: Option<String>,
 }
 
-/// A glass surface with egui content on it: shadow, then the blurred model
-/// through the rounded shape (glass.rs), then the content. Built like an
-/// egui Frame so call sites read the same.
-struct Glass {
-    surface: Surface,
-    margin: Margin,
-    radius: u8,
-    accent: Option<Color32>,
-}
-fn frame() -> Glass { glass(Surface::Pill) }
-fn glass(surface: Surface) -> Glass {
-    Glass { surface, margin: Margin::same(4), radius: surface.radius(), accent: None }
-}
-impl Glass {
-    fn inner_margin(mut self, m: Margin) -> Self { self.margin = m; self }
-    fn corner_radius(mut self, r: CornerRadius) -> Self { self.radius = r.nw; self }
-    /// An accent outline (a field being typed into).
-    fn stroke(mut self, s: Stroke) -> Self { if s.color != EDGE { self.accent = Some(s.color); } self }
-    fn show<R>(self, ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui) -> R) -> egui::InnerResponse<R> {
-        let shadow_at = ui.painter().add(egui::Shape::Noop);
-        let glass_at = ui.painter().add(egui::Shape::Noop);
-        let mut f = egui::Frame::new().inner_margin(self.margin).corner_radius(CornerRadius::same(self.radius));
-        if let Some(c) = self.accent {
-            f = f.stroke(Stroke::new(1.0_f32, c));
-        }
-        let inner = f.show(ui, add);
-        let rect = inner.response.rect;
-        let contact = Shadow { offset: [0, 1], blur: 2, spread: 0, color: Color32::from_black_alpha(115) };
-        ui.painter().set(shadow_at, egui::Shape::Vec(vec![
-            egui::Shape::Rect(self.surface.shadow().as_shape(rect, CornerRadius::same(self.radius))),
-            egui::Shape::Rect(contact.as_shape(rect, CornerRadius::same(self.radius))),
-        ]));
-        ui.painter().set(glass_at, crate::glass::pane(rect, self.radius as f32, self.surface.look()));
-        inner
-    }
-}
-
-/// A section caption: small, spaced capitals, faint.
-fn caption(ui: &mut egui::Ui, text: &str) { caption_at(ui, text, 8.0) }
-/// A caption lined up with the text of the rows under it (8 in the column, 12 in menus).
-fn caption_at(ui: &mut egui::Ui, text: &str, pad: f32) {
-    ui.horizontal(|ui| { ui.add_space(pad); caption_plain(ui, text); });
-}
-fn caption_plain(ui: &mut egui::Ui, text: &str) {
-    let job = egui::text::LayoutJob::single_section(text.to_uppercase(), egui::TextFormat {
-        font_id: strong(10.0), color: FAINT, extra_letter_spacing: 0.6, ..Default::default() });
-    ui.label(job);
-}
-
 impl Ui {
     pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat) -> Self {
         let ctx = egui::Context::default();
         ctx.style_mut(|s| {
             s.interaction.tooltip_delay = 0.25;
             s.visuals = egui::Visuals::dark();
-            s.visuals.window_fill = PANEL;
+            s.animation_time = MOTION_QUICK;
+            s.visuals.window_fill = POPOVER;
             s.visuals.panel_fill = PANEL;
             s.visuals.override_text_color = Some(INK);
-            s.visuals.popup_shadow = Shadow { offset: [0, 4], blur: 12, spread: 0, color: Color32::from_black_alpha(90) };
+            s.visuals.popup_shadow = Shadow { offset: [0, 4], blur: 12, spread: 0, color: POP_SHADOW };
             s.visuals.window_stroke = Stroke::new(1.0_f32, EDGE);
             s.visuals.window_corner_radius = CornerRadius::same(6);
             s.spacing.item_spacing = vec2(2.0, 2.0);
             s.visuals.extreme_bg_color = FIELD;
             s.visuals.widgets.inactive.bg_stroke = Stroke::new(1.0_f32, EDGE);
-            s.visuals.widgets.hovered.bg_stroke = Stroke::new(1.0_f32, Color32::from_rgba_premultiplied(46, 46, 46, 46));
+            s.visuals.widgets.hovered.bg_stroke = Stroke::new(1.0_f32, HOVER_EDGE);
             s.visuals.widgets.inactive.corner_radius = CornerRadius::same(R_ROW);
             s.visuals.widgets.hovered.corner_radius = CornerRadius::same(R_ROW);
             s.visuals.widgets.active.corner_radius = CornerRadius::same(R_ROW);
@@ -424,7 +250,7 @@ impl Ui {
             s.visuals.selection.bg_fill = ACTIVE;
             s.visuals.window_corner_radius = CornerRadius::same(R_CONTROL);
             s.spacing.button_padding = vec2(8.0, 5.0);
-            s.visuals.text_cursor.stroke = Stroke::new(1.5_f32, Color32::WHITE);
+            s.visuals.text_cursor.stroke = Stroke::new(1.5_f32, BRIGHT);
         });
         let mut painter = egui_wgpu::Renderer::new(device, format, None, 1, false);
         let (glass, resources) = crate::glass::Glass::new(device, format);
@@ -432,6 +258,7 @@ impl Ui {
         Self {
             panels: Default::default(),
             ctx,
+            gallery: (std::env::var("BUILT_GALLERY").as_deref() == Ok("1")).then(gallery::Gallery::default),
             painter,
             glass,
             start: Instant::now(),
@@ -693,6 +520,7 @@ impl Ui {
     /// Keyboard ownership: the chrome takes a key only while one of its
     /// fields has focus, or Escape while one of its popups is open.
     pub fn claims_key(&self, name: &str) -> bool {
+        if self.gallery.is_some() { return true; }
         if name == "Escape" && (self.strip.menus_open() || self.plugin_popup_open() || self.panels.data["terrain"].is_object()) { return true; }
         if self.sheets.shown && !self.home.shown { return self.sheets_claims_key(name); }
         let filing = self.column.as_ref().is_some_and(|c| c.filing.is_some() || c.row_menu.is_some() || !c.mode.is_empty()
@@ -702,6 +530,12 @@ impl Ui {
             || self.ctx.wants_keyboard_input()
     }
     pub fn key(&mut self, name: &str, pressed: bool, mods: u8) -> bool {
+        if self.gallery.is_some() {
+            if let Some(key) = egui::Key::from_name(name) {
+                self.events.push(egui::Event::Key { key, physical_key: None, pressed, repeat: false, modifiers: mods_from(mods) });
+            }
+            return true;
+        }
         // The sheet's keys are answered in Python (Enter, Esc, ⌘D); none
         // reaches what is under it.
         if self.sheet.is_some() { return true; }
@@ -1072,7 +906,7 @@ impl Ui {
     /// the window, as a title bar does)?
     pub fn top_empty(&self, x: f32, y: f32) -> bool {
         let p = pos2(x, y);
-        y <= TOP_H && !self.top_groups.iter().any(|r| r.contains(p))
+        self.gallery.is_none() && y <= TOP_H && !self.top_groups.iter().any(|r| r.contains(p))
             && !self.ctx.memory(|m| m.area_rect(egui::Id::new("jobs"))).is_some_and(|r| (!self.jobs.is_empty() || !self.history.is_empty()) && r.contains(p))
             && !(self.projects.is_none() && x < 86.0)
     }
@@ -1202,7 +1036,7 @@ impl Ui {
                 glass(Surface::Raised).inner_margin(Margin::same(8)).show(ui, |ui| {
                     ui.set_width(520.0);
                     ui.set_max_width(520.0);
-                    let r = ui.add(egui::TextEdit::singleline(&mut self.cmd_query)
+                    let r = ui.add(kit::field(&mut self.cmd_query)
                         .hint_text(egui::RichText::new("Search commands").color(FAINT))
                         .font(egui::FontId::proportional(14.0)).margin(Margin::symmetric(10, 7))
                         .desired_width(520.0 - 20.0 - 4.0).clip_text(true));
@@ -1680,12 +1514,12 @@ impl Ui {
                         let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 36.0), Sense::hover());
                         ui.painter().rect_filled(r, CornerRadius::same(R_ROW), ACTIVE);
                         ui.painter().text(pos2(r.min.x + 8.0, r.min.y + 11.0), egui::Align2::LEFT_CENTER,
-                            format!("File {what} to…"), strong(11.5), Color32::WHITE);
+                            format!("File {what} to…"), strong(11.5), BRIGHT);
                         ui.painter().text(pos2(r.min.x + 8.0, r.max.y - 10.0), egui::Align2::LEFT_CENTER,
                             "Click a node, or type a name and Enter", meta(), INK_2);
                         ui.add_space(4.0);
                     }
-                    let edit = egui::TextEdit::singleline(&mut col.filter)
+                    let edit = kit::field(&mut col.filter)
                         .hint_text(egui::RichText::new(if col.filing.is_some() { "Node name or kind" }
                             else if col.mode == "Problems" { "Filter problems" } else { "Filter nodes" }).color(FAINT))
                         .margin(Margin::symmetric(8, 5))
@@ -1835,11 +1669,8 @@ impl Ui {
                                     let g = ui.painter().layout_no_wrap(n.count.to_string(), meta(), DIM);
                                     ui.painter().galley(pos2(count_col - g.size().x, cy - g.size().y / 2.0), g, DIM);
                                 }
-                                let lock_r = Rect::from_center_size(pos2(count_col - 44.0, cy), vec2(16.0, 16.0));
-                                let eye_r = Rect::from_center_size(pos2(count_col - 64.0, cy), vec2(16.0, 16.0));
                                 let show_ctl = resp.hovered() || n.eye == 0 || n.lock == 1;
-                                if n.eye >= 0 && show_ctl { paint_eye(ui, eye_r, n.eye == 1); }
-                                if n.lock >= 0 && show_ctl { paint_lock(ui, lock_r, n.lock == 1); }
+                                let (eye_r, lock_r) = tree_slots(ui, count_col, cy, n.eye, n.lock, show_ctl);
                                 // A row with no eye or lock (problems, library) keeps its width for the name.
                                 let bare = n.eye < 0 && n.lock < 0 && n.problems == 0;
                                 let right = if col.colset == 1 { cols.name_right } else if col.colset == 2 { cells_left.min(cols.name_right) - 8.0 }
@@ -1863,7 +1694,7 @@ impl Ui {
                                     tx += 22.0;
                                 } else if file_state.is_some() {
                                     // A linked file is a different kind of row: a page icon.
-                                    tree_cols::paint_file(ui.painter(), pos2(tx + 6.0, cy), if lit { Color32::WHITE } else { DIM });
+                                    tree_cols::paint_file(ui.painter(), pos2(tx + 6.0, cy), if lit { BRIGHT } else { DIM });
                                     tx += 16.0;
                                 } else if n.row != 0 && n.row != 4 {
                                     let glyph = match n.icon.as_str() { "component" => "◇", "section" => "⊟", "image" => "▨", "link" => "⛓", _ => "▢" };
@@ -1882,7 +1713,7 @@ impl Ui {
                                 let renaming_here = col.renaming.as_ref().is_some_and(|(k, _)| *k == n.key);
                                 if renaming_here {
                                     let buf = &mut col.renaming.as_mut().unwrap().1;
-                                    let field = egui::TextEdit::singleline(buf).font(body()).margin(Margin::symmetric(4, 1))
+                                    let field = kit::field(buf).font(body()).margin(Margin::symmetric(4, 1))
                                         .desired_width((right - tx - 16.0).max(30.0)).clip_text(true);
                                     let r = ui.put(Rect::from_min_max(pos2(tx - 4.0, rect.min.y + 1.0), pos2(right, rect.max.y - 1.0)), field);
                                     r.request_focus();
@@ -1895,10 +1726,10 @@ impl Ui {
                                     continue;
                                 }
                                 let (ink, font) = match n.row {
-                                    0 => (if lit || n.active { Color32::WHITE } else { INK },
+                                    0 => (if lit || n.active { BRIGHT } else { INK },
                                           if n.active || file_state.is_some() { strong(12.0) } else { body() }),
                                     3 | 4 => (FAINT, meta()),
-                                    _ => (if lit { Color32::WHITE } else { INK_2 }, body()),
+                                    _ => (if lit { BRIGHT } else { INK_2 }, body()),
                                 };
                                 // The selection is marked once (tree A): lit where it
                                 // is held, a quiet dot on the rows above (after the name).
@@ -1917,7 +1748,7 @@ impl Ui {
                                 let mut kx = tx + name_w + 8.0;
                                 if let Some(state) = file_state {
                                     let c = pos2(kx + 2.0, cy);
-                                    ui.painter().circle_filled(c, 3.0, tree_cols::state_color(state));
+                                    dot(ui.painter(), c, tree_cols::state_color(state));
                                     let tip = match state { "resolved" => "Up to date", "modified" => "Changed on disk: reload to see the changes",
                                         "missing" => "Not found: relink it", _ => "Packed in this file" };
                                     ui.interact(Rect::from_center_size(c, vec2(10.0, 10.0)), ui.id().with(("file_dot", i)), Sense::hover())
@@ -1957,7 +1788,7 @@ impl Ui {
                                         match *what {
                                             "print" => actions.push(format!("print\u{1f}{}", n.key)),
                                             "color" => {
-                                                let c = parse_hex(&n.cells.first().cloned().unwrap_or_default()).unwrap_or(Color32::GRAY);
+                                                let c = parse_hex(&n.cells.first().cloned().unwrap_or_default()).unwrap_or(SWATCH_FALLBACK);
                                                 col.color_pick = Some((n.key.clone(), c, pos2(r.min.x - 210.0, r.max.y + 4.0)));
                                             }
                                             "linetype" => col.pick = Some(("linetype".into(), n.key.clone(),
@@ -2010,7 +1841,7 @@ impl Ui {
                         }
                         if col.inspector_title.is_empty() {
                             let empty = if in_library { "Pick an item to see and edit it here" } else { "Nothing selected" };
-                            ui.horizontal(|ui| { ui.add_space(8.0); ui.label(egui::RichText::new(empty).font(body()).color(FAINT)); });
+                            ui.horizontal(|ui| { ui.add_space(8.0); empty_state(ui, empty); });
                             return;
                         }
                         {
@@ -2249,7 +2080,7 @@ impl Ui {
                         let mut enter = false;
                         if let Some((id, text)) = &field {
                             let buf = col.edits.entry(format!("prompt:{id}")).or_insert_with(|| text.clone());
-                            let r = ui.add(egui::TextEdit::singleline(buf).font(body()).margin(Margin::symmetric(6, 4))
+                            let r = ui.add(kit::field(buf).font(body()).margin(Margin::symmetric(6, 4))
                                 .desired_width((W - 40.0 - 40.0).max(60.0)).clip_text(true));
                             r.request_focus();
                             enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
@@ -2333,7 +2164,7 @@ impl Ui {
                 // The scrim: every click under the sheet is the sheet's.
                 let (all, _) = ui.allocate_exact_size(screen.size(), Sense::click_and_drag());
                 ui.painter().rect_filled(Rect::from_min_max(pos2(all.min.x, TOP_H), all.max), CornerRadius::ZERO,
-                                         Color32::from_black_alpha(72));
+                                         SCRIM);
                 let at = Rect::from_min_size(pos2(x, TOP_H), vec2(w, screen.height() - TOP_H - 56.0));
                 ui.scope_builder(egui::UiBuilder::new().max_rect(at), |ui| {
                     glass(Surface::Raised).inner_margin(Margin::same(14)).show(ui, |ui| {
@@ -2342,7 +2173,7 @@ impl Ui {
                         ui.horizontal(|ui| {
                             ui.spacing_mut().item_spacing = vec2(8.0, 0.0);
                             let (glyph, ink) = match sheet.tone.as_str() {
-                                "error" => ("!", activity::ERROR),
+                                "error" => ("!", ERROR),
                                 "warning" => ("!", WARN),
                                 "info" => ("i", ACCENT),
                                 _ => ("?", ACCENT),
@@ -2416,7 +2247,7 @@ impl Ui {
                         }
                         let shown = if *typing { format!("{value}▏") } else { value.clone() };
                         ui.label(egui::RichText::new(shown).font(strong(13.0))
-                            .color(if *typing { Color32::WHITE } else { INK }));
+                            .color(if *typing { BRIGHT } else { INK }));
                     });
                 });
             });
@@ -2440,10 +2271,12 @@ impl Ui {
             focused: true,
             ..Default::default()
         };
-        raw.viewports.entry(egui::ViewportId::ROOT).or_default().native_pixels_per_point = Some(scale);
+        let zoom = if self.gallery.is_some() { gallery::Gallery::fit(&mut raw, screen) } else { 1.0 };
+        raw.viewports.entry(egui::ViewportId::ROOT).or_default().native_pixels_per_point = Some(scale * zoom);
         let ctx = self.ctx.clone();
         let start = self.home.shown;
         let out = ctx.run(raw, |ctx| {
+            if let Some(page) = &mut self.gallery { page.show(ctx); return; }
             if start {
                 // The whole window: only the palette, the jobs and the sheet over it.
                 self.top_groups.clear();
@@ -2518,6 +2351,7 @@ impl Ui {
             .filter(|(_, on)| *on)
             .filter_map(|(n, _)| ctx.memory(|m| m.area_rect(egui::Id::new(*n))))
             .collect();
+        if self.gallery.is_some() { self.hit = vec![screen]; }
         self.repaint_ms = out
             .viewport_output
             .get(&egui::ViewportId::ROOT)
@@ -2526,7 +2360,7 @@ impl Ui {
             .map(|d| d.as_secs_f64() * 1000.);
         self.ime_rect = out.platform_output.ime.map(|ime| {
             let r = ime.cursor_rect;
-            (r.min.x, r.min.y, r.width().max(1.0), r.height().max(1.0))
+            (r.min.x * zoom, r.min.y * zoom, (r.width() * zoom).max(1.0), (r.height() * zoom).max(1.0))
         });
         let jobs = ctx.tessellate(out.shapes, out.pixels_per_point);
         for (id, delta) in &out.textures_delta.set {
@@ -2596,30 +2430,6 @@ fn item_button(ui: &mut egui::Ui, item: &Item, icon: Option<&egui::TextureHandle
     resp.on_hover_text(tip).clicked()
 }
 
-fn menu_row(ui: &mut egui::Ui, item: &Item) -> bool {
-    menu_row_resp(ui, item).0.clicked()
-}
-
-/// A menu row, 24 high: optional check lane (only when the menu has checks:
-/// the caller marks that with item.3 == "check"), label, shortcut or › right.
-fn menu_row_resp(ui: &mut egui::Ui, item: &Item) -> (egui::Response, Rect) {
-    let (_, label, tip, lane, checked, enabled) = item;
-    let sense = if *enabled { Sense::click() } else { Sense::hover() };
-    let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 24.0), sense);
-    let st = state_of(&resp, false, *enabled);
-    paint_state(ui, rect, st, R_ROW);
-    let ink = if *enabled { INK } else { OFF };
-    let x = if lane == "check" || *checked >= 0 { 28.0 } else { 12.0 };
-    if *checked == 1 {
-        ui.painter().text(pos2(rect.min.x + 14.0, rect.center().y), egui::Align2::CENTER_CENTER, "✓", body(), ACCENT);
-    }
-    ui.painter().text(pos2(rect.min.x + x, rect.center().y), egui::Align2::LEFT_CENTER, label, body(), ink);
-    if !tip.is_empty() {
-        ui.painter().text(pos2(rect.max.x - 12.0, rect.center().y), egui::Align2::RIGHT_CENTER, tip, meta(), FAINT);
-    }
-    (resp, rect)
-}
-
 /// A project tab: capsule, name (and • while unsaved), × on the right when
 /// current or hovered. Some(true): close clicked; Some(false): tab clicked.
 fn doc_tab(ui: &mut egui::Ui, name: &str, active: bool, dirty: bool) -> Option<bool> {
@@ -2628,7 +2438,7 @@ fn doc_tab(ui: &mut egui::Ui, name: &str, active: bool, dirty: bool) -> Option<b
     let (rect, resp) = ui.allocate_exact_size(vec2(g.size().x + 12.0 + 26.0, 28.0), Sense::click());
     let st = state_of(&resp, active, true);
     paint_state(ui, rect, st, R_CONTROL);
-    let ink = if active { Color32::WHITE } else if resp.hovered() { INK } else { INK_2 };
+    let ink = if active { BRIGHT } else if resp.hovered() { INK } else { INK_2 };
     ui.painter().galley(pos2(rect.min.x + 12.0, rect.center().y - g.size().y / 2.0), g, ink);
     let x = Rect::from_center_size(pos2(rect.max.x - 14.0, rect.center().y), vec2(18.0, 18.0));
     let over_x = resp.hover_pos().is_some_and(|p| x.contains(p));
@@ -2682,7 +2492,7 @@ fn inspector_rows(ui: &mut egui::Ui, rows: &[(String, String)], edits: &mut std:
                 let (r, resp) = ui.allocate_exact_size(vec2((ui.available_width() - 8.0).max(60.0), 24.0), Sense::click());
                 paint_state(ui, r, state_of(&resp, false, true), R_ROW);
                 let sw = Rect::from_min_size(r.min + vec2(3.0, 3.0), vec2(36.0, 18.0));
-                ui.painter().rect_filled(sw, CornerRadius::same(4), parse_hex(hex).unwrap_or(Color32::GRAY));
+                ui.painter().rect_filled(sw, CornerRadius::same(4), parse_hex(hex).unwrap_or(SWATCH_FALLBACK));
                 ui.painter().rect_stroke(sw, CornerRadius::same(4), Stroke::new(1.0_f32, EDGE), egui::StrokeKind::Inside);
                 ui.painter().text(pos2(sw.max.x + 8.0, r.center().y), egui::Align2::LEFT_CENTER, hex.to_uppercase(), body(), INK);
                 swatch_rect = r;
@@ -2692,7 +2502,7 @@ fn inspector_rows(ui: &mut egui::Ui, rows: &[(String, String)], edits: &mut std:
                 }
             });
             if edits.get("\u{1d}pick").map(String::as_str) == Some(id) {
-                let mut c = edits.get("\u{1d}pickc").and_then(|h| parse_hex(h)).unwrap_or(Color32::GRAY);
+                let mut c = edits.get("\u{1d}pickc").and_then(|h| parse_hex(h)).unwrap_or(SWATCH_FALLBACK);
                 let mut done = false;
                 egui::Area::new(egui::Id::new("insp_color"))
                     .pivot(egui::Align2::RIGHT_TOP)
@@ -2730,7 +2540,7 @@ fn inspector_rows(ui: &mut egui::Ui, rows: &[(String, String)], edits: &mut std:
                 // desired_width is the text's width: leave room for the field's
                 // own margins, or the panel grows a little every frame.
                 let w = (ui.available_width() - 8.0 - 12.0 - 4.0).max(40.0);
-                let r = ui.add(egui::TextEdit::singleline(buf).font(body()).margin(Margin::symmetric(6, 3))
+                let r = ui.add(kit::field(buf).font(body()).margin(Margin::symmetric(6, 3))
                     .desired_width(w).clip_text(true));
                 if r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) && buf.as_str() != text {
                     actions.push(format!("edit\u{1f}{id}\u{1f}{buf}"));
@@ -2768,60 +2578,6 @@ fn menu_button(ui: &mut egui::Ui, label: &str, open: bool) -> Option<Rect> {
 fn bar_divider(ui: &mut egui::Ui) {
     let (r, _) = ui.allocate_exact_size(vec2(9.0, 28.0), Sense::hover());
     ui.painter().vline(r.center().x, r.y_range().shrink(7.0), Stroke::new(1.0_f32, EDGE));
-}
-
-/// A small command chip (inspector next steps): neutral wash, 22 high.
-fn chip_button(ui: &mut egui::Ui, label: &str) -> bool {
-    let g = ui.painter().layout_no_wrap(label.to_owned(), meta(), INK);
-    let (rect, resp) = ui.allocate_exact_size(vec2(g.size().x + 20.0, 24.0), Sense::click());
-    let st = state_of(&resp, false, true);
-    ui.painter().rect_filled(rect, CornerRadius::same(R_CONTROL), HOVER);
-    paint_state(ui, rect, st, R_CONTROL);
-    ui.painter().rect_stroke(rect, CornerRadius::same(R_CONTROL), Stroke::new(1.0_f32, EDGE), egui::StrokeKind::Inside);
-    ui.painter().galley(rect.center() - g.size() / 2.0, g, INK);
-    resp.clicked()
-}
-
-/// A sheet button, 28 high: the default in accent, the rest a neutral
-/// wash; the key that answers it in faint type after the label.
-fn sheet_button(ui: &mut egui::Ui, label: &str, hint: &str, role: u8) -> bool {
-    let primary = role == 1;
-    let ink = if primary { Color32::WHITE } else { INK };
-    let g = ui.painter().layout_no_wrap(label.to_owned(), strong(12.0), ink);
-    let k = (!hint.is_empty()).then(|| ui.painter().layout_no_wrap(hint.to_owned(), meta(),
-        if primary { Color32::from_rgba_unmultiplied(255, 255, 255, 150) } else { FAINT }));
-    let kw = k.as_ref().map_or(0.0, |k| k.size().x + 8.0);
-    let (rect, resp) = ui.allocate_exact_size(vec2((g.size().x + kw + 24.0).max(72.0), 28.0), Sense::click());
-    let r = CornerRadius::same(R_CONTROL);
-    if primary {
-        let fill = if resp.is_pointer_button_down_on() { Color32::from_rgb(0x55, 0x8C, 0xE6) }
-                   else if resp.hovered() { Color32::from_rgb(0x7A, 0xB0, 0xFF) } else { ACCENT };
-        ui.painter().rect_filled(rect, r, fill);
-    } else {
-        ui.painter().rect_filled(rect, r, HOVER);
-        paint_state(ui, rect, state_of(&resp, false, true), R_CONTROL);
-        ui.painter().rect_stroke(rect, r, Stroke::new(1.0_f32, EDGE), egui::StrokeKind::Inside);
-    }
-    let x0 = rect.center().x - (g.size().x + kw) / 2.0;
-    ui.painter().galley(pos2(x0, rect.center().y - g.size().y / 2.0), g.clone(), ink);
-    if let Some(k) = k {
-        ui.painter().galley(pos2(x0 + g.size().x + 8.0, rect.center().y - k.size().y / 2.0), k, ink);
-    }
-    resp.clicked()
-}
-
-/// A warning chip: amber text on an amber wash, no outline.
-fn amber_button(ui: &mut egui::Ui, label: &str) -> bool {
-    let g = ui.painter().layout_no_wrap(label.to_owned(), strong(11.0), WARN);
-    let (rect, resp) = ui.allocate_exact_size(vec2(g.size().x + 20.0, 24.0), Sense::click());
-    let fill = if resp.is_pointer_button_down_on() {
-        Color32::from_rgba_premultiplied(54, 40, 16, 56)
-    } else if resp.hovered() {
-        Color32::from_rgba_premultiplied(44, 33, 13, 46)
-    } else { WARN_FILL };
-    ui.painter().rect_filled(rect, CornerRadius::same(R_CONTROL), fill);
-    ui.painter().galley(rect.center() - g.size() / 2.0, g, WARN);
-    resp.clicked()
 }
 
 /// A text command in a bar, 28 high, 8 pt padding.

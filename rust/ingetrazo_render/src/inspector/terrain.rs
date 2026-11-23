@@ -1,5 +1,6 @@
 use super::{label, send};
-use egui::{pos2, vec2, Color32, Rect, Stroke};
+use crate::ui::tokens;
+use egui::{pos2, vec2, Rect, Stroke};
 use serde_json::Value;
 
 #[derive(Default)]
@@ -70,9 +71,9 @@ impl Terrain {
                     self.plot = Some(r);
                     let chart = Rect::from_min_max(r.min + vec2(51., 10.), r.max - vec2(20., 18.));
                     let painter = ui.painter();
-                    let ink = Color32::from_gray(180);
-                    let grid = Stroke::new(1.0_f32, Color32::from_white_alpha(28));
-                    let font = egui::FontId::proportional(10.);
+                    let ink = tokens::DIM;
+                    let grid = Stroke::new(1.0_f32, tokens::DIVIDER);
+                    let font = tokens::meta();
                     for i in 0..=4 {
                         let t = i as f32 / 4.;
                         let x = egui::lerp(chart.x_range(), t);
@@ -111,7 +112,7 @@ impl Terrain {
                         if let (Some(a), Some(b)) = (w[0].1, w[1].1) {
                             ui.painter().line_segment(
                                 [xy((w[0].0, a)), xy((w[1].0, b))],
-                                Stroke::new(2.0_f32, Color32::LIGHT_BLUE),
+                                Stroke::new(2.0_f32, tokens::INK_2),
                             );
                         }
                     }
@@ -142,13 +143,13 @@ impl Terrain {
                         ui.painter().vline(
                             x,
                             chart.y_range(),
-                            Stroke::new(1.0_f32, Color32::WHITE),
+                            Stroke::new(1.0_f32, tokens::INK),
                         );
                         if let Some(p) = pixel(i) {
                             ctx.debug_painter().circle_stroke(
                                 p,
                                 6.,
-                                Stroke::new(2.0_f32, Color32::YELLOW),
+                                Stroke::new(2.0_f32, tokens::FOCUS_RING),
                             );
                         }
                         ui.label(format!(

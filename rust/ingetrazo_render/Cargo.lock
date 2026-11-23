@@ -483,6 +483,7 @@ dependencies = [
  "numpy",
  "png",
  "pollster",
+ "proc-macro2",
  "pyo3",
  "raw-window-handle",
  "serde",

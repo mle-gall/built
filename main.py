@@ -626,6 +626,9 @@ def _run_cli(argv: list[str]) -> int:
 def main() -> int:
     # HTTPS from Python (the AI assistant) must find a CA bundle: the macOS
     # package asked for one where only the build machine had it (#198).
+    if "--gallery" in sys.argv[1:]:
+        os.environ.update(BUILT_GALLERY="1", BUILT_UI="1", INGETRAZO_WGPU="1")
+        sys.argv[sys.argv.index("--gallery")] = "--new-window"
     from core.tls import ensure_once
     ensure_once()
     if "--check" in sys.argv[1:]:

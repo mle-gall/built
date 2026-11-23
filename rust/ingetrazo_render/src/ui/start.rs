@@ -95,11 +95,6 @@ const PAD: f32 = 28.0;
 
 // Page surfaces: the document area's graphite (#16191D) and one step up
 // for the side column and cards. Opaque: the page is not over a model.
-const PAGE: Color32 = Color32::from_rgb(0x16, 0x19, 0x1D);
-const SIDE: Color32 = Color32::from_rgb(0x1B, 0x1F, 0x24);
-const CARD: Color32 = Color32::from_rgb(0x1E, 0x22, 0x28);
-const CARD_HOVER: Color32 = Color32::from_rgb(0x24, 0x29, 0x30);
-const WELL: Color32 = Color32::from_rgb(0x10, 0x12, 0x15);
 
 impl Start {
     fn words(&self) -> Vec<String> {
@@ -249,7 +244,7 @@ fn paint_thumb(ui: &egui::Ui, r: Rect, tex: Option<&egui::TextureHandle>, missin
         // A box in two-point view, drawn in the off ink.
         let c = r.center();
         let s = (r.height() * 0.18).min(22.0);
-        let ink = Stroke::new(1.2_f32, if missing { Color32::from_rgb(0x4A, 0x50, 0x57) } else { OFF });
+        let ink = Stroke::new(1.2_f32, if missing { OFF } else { OFF });
         let top = [c + vec2(0.0, -s * 1.1), c + vec2(s * 1.3, -s * 0.45), c + vec2(0.0, s * 0.2), c + vec2(-s * 1.3, -s * 0.45)];
         let down = vec2(0.0, s * 1.2);
         ui.painter().add(egui::Shape::closed_line(top.to_vec(), ink));
@@ -263,25 +258,13 @@ fn paint_thumb(ui: &egui::Ui, r: Rect, tex: Option<&egui::TextureHandle>, missin
     ui.painter().rect_stroke(r, cr, Stroke::new(1.0_f32, EDGE), egui::StrokeKind::Inside);
 }
 
-/// The focus ring and hover wash of a card.
-fn paint_card(ui: &egui::Ui, r: Rect, hovered: bool, focused: bool) {
-    let cr = CornerRadius::same(10);
-    ui.painter().rect_filled(r, cr, if hovered { CARD_HOVER } else { CARD });
-    if focused {
-        ui.painter().rect_filled(r, cr, ACTIVE);
-        ui.painter().rect_stroke(r, cr, Stroke::new(1.5_f32, ACCENT_LINE), egui::StrokeKind::Inside);
-    } else {
-        ui.painter().rect_stroke(r, cr, Stroke::new(1.0_f32, EDGE), egui::StrokeKind::Inside);
-    }
-}
-
 /// The pin at a card's corner: shown pinned (★) or on hover (☆). True: it was clicked.
 fn pin_star(ui: &egui::Ui, at: Pos2, pinned: bool, card: &egui::Response) -> (bool, bool) {
     let r = Rect::from_center_size(at, vec2(22.0, 22.0));
     let over = card.hover_pos().is_some_and(|p| r.contains(p));
     if pinned || card.hovered() {
-        ui.painter().circle_filled(r.center(), 11.0, if over { Color32::from_rgba_premultiplied(0, 0, 0, 170) }
-                                                         else { Color32::from_rgba_premultiplied(0, 0, 0, 120) });
+        ui.painter().circle_filled(r.center(), 11.0, if over { IMAGE_HOVER }
+                                                         else { IMAGE_BACK });
         let ink = if pinned { ACCENT } else if over { INK } else { DIM };
         ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, if pinned { "★" } else { "☆" }, body(), ink);
     }
@@ -295,8 +278,8 @@ fn forget_x(ui: &egui::Ui, at: Pos2, card: &egui::Response) -> bool {
     let r = Rect::from_center_size(at, vec2(22.0, 22.0));
     if !card.hovered() { return false; }
     let over = card.hover_pos().is_some_and(|p| r.contains(p));
-    ui.painter().circle_filled(r.center(), 11.0, if over { Color32::from_rgba_premultiplied(0, 0, 0, 170) }
-                                                 else { Color32::from_rgba_premultiplied(0, 0, 0, 120) });
+    ui.painter().circle_filled(r.center(), 11.0, if over { IMAGE_HOVER }
+                                                 else { IMAGE_BACK });
     let (c, k) = (r.center(), 3.5);
     let pen = Stroke::new(1.3_f32, if over { INK } else { DIM });
     ui.painter().line_segment([c + vec2(-k, -k), c + vec2(k, k)], pen);
@@ -406,7 +389,7 @@ impl Ui {
             .fade_in(false)
             .show(ctx, |ui| {
                 let (all, _) = ui.allocate_exact_size(screen.size(), Sense::click());
-                ui.painter().rect_filled(all, CornerRadius::ZERO, PAGE);
+                ui.painter().rect_filled(all, CornerRadius::ZERO, SHEET);
                 let side = Rect::from_min_max(all.min, pos2(all.min.x + SIDE_W, all.max.y));
                 ui.painter().rect_filled(side, CornerRadius::ZERO, SIDE);
                 ui.painter().vline(side.max.x - 0.5, side.y_range(), Stroke::new(1.0_f32, EDGE));
@@ -427,7 +410,7 @@ impl Ui {
                         let on = id == current;
                         paint_state(ui, r, state_of(&resp, on, true), R_ROW);
                         ui.painter().text(pos2(r.min.x + 10.0, r.center().y), egui::Align2::LEFT_CENTER, &label,
-                                          if on { strong(12.0) } else { body() }, if on { Color32::WHITE } else { INK });
+                                          if on { strong(12.0) } else { body() }, if on { BRIGHT } else { INK });
                         if let Some(n) = n.filter(|n| *n > 0) {
                             ui.painter().text(pos2(r.max.x - 10.0, r.center().y), egui::Align2::RIGHT_CENTER, n.to_string(), meta(), FAINT);
                         }

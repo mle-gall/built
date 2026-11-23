@@ -3,6 +3,7 @@ mod records;
 mod rule;
 mod terrain;
 
+use crate::ui::{kit, tokens};
 use egui::{DragValue, Ui};
 use serde_json::{json, Value};
 pub use terrain::{plot_png, Terrain};
@@ -57,7 +58,7 @@ fn number(
         ui.label(name);
         let mut n = val.as_f64().unwrap_or_default();
         if ui
-            .add(DragValue::new(&mut n).range(range).speed(0.05))
+            .add(kit::number(&mut n, "").range(range).speed(0.05))
             .changed()
         {
             send(out, key, json!(n));
@@ -240,7 +241,7 @@ impl Panels {
                 for pair in pts.windows(2) {
                     ui.painter().line_segment(
                         [xy(&pair[0]), xy(&pair[1])],
-                        egui::Stroke::new(1.5_f32, egui::Color32::LIGHT_BLUE),
+                        egui::Stroke::new(1.5_f32, tokens::INK_2),
                     );
                 }
                 for p in pts.iter_mut().take(end).skip(1) {
@@ -285,7 +286,7 @@ impl Panels {
         let w = screen.width().min(screen.height() * aspect as f32);
         let frame = egui::Rect::from_center_size(screen.center(), egui::vec2(w, w / aspect as f32));
         let painter = ctx.layer_painter(egui::LayerId::background());
-        let shade = egui::Color32::from_black_alpha(70);
+        let shade = tokens::SCRIM;
         for rect in [
             egui::Rect::from_min_max(screen.min, egui::pos2(frame.left(), screen.bottom())),
             egui::Rect::from_min_max(egui::pos2(frame.right(), screen.top()), screen.max),
@@ -297,7 +298,7 @@ impl Panels {
         painter.rect_stroke(
             frame.shrink(1.),
             0.,
-            egui::Stroke::new(1.0_f32, egui::Color32::WHITE),
+            egui::Stroke::new(1.0_f32, tokens::INK),
             egui::StrokeKind::Inside,
         );
     }

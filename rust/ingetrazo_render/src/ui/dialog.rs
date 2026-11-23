@@ -13,7 +13,7 @@ use std::collections::HashMap;
 
 use egui::{pos2, vec2, Color32, CornerRadius, Margin, Rect, Sense, Stroke};
 
-use super::{body, caption_at, chip_button, glass, menu_row, meta, parse_hex, sheet_button, title_font,
+use super::{SCRIM, SWATCH_FALLBACK, body, caption_at, chip_button, glass, menu_row, meta, parse_hex, sheet_button, title_font,
             Surface, Ui, ACCENT, DIM, EDGE, FAINT, FIELD, GUT, HOVER, INK, OFF, R_ROW, TOP_H};
 
 /// One field: (id, kind, label, text, value, min, max, options, flags, tip).
@@ -160,7 +160,7 @@ impl Ui {
             .show(ctx, |ui| {
                 let (all, _) = ui.allocate_exact_size(screen.size(), Sense::click_and_drag());
                 ui.painter().rect_filled(Rect::from_min_max(pos2(all.min.x, TOP_H), all.max), CornerRadius::ZERO,
-                                         Color32::from_black_alpha(72));
+                                         SCRIM);
                 let at = Rect::from_min_size(pos2(x, top), vec2(w, screen.height() - top - GUT));
                 ui.scope_builder(egui::UiBuilder::new().max_rect(at), |ui| {
                     glass(Surface::Raised).inner_margin(Margin::same(14)).show(ui, |ui| {
@@ -259,7 +259,7 @@ fn fields(ui: &mut egui::Ui, d: &mut Dialog, out: &mut Vec<String>) {
                     let edit = if multiline {
                         egui::TextEdit::multiline(buf).desired_rows(4)
                     } else {
-                        egui::TextEdit::singleline(buf)
+                        super::kit::field(buf)
                     };
                     let edit = edit.id(tid).font(body()).margin(Margin::symmetric(6, 4)).desired_width(w)
                         .password(flags & PASSWORD != 0).clip_text(true);
@@ -369,14 +369,14 @@ fn fields(ui: &mut egui::Ui, d: &mut Dialog, out: &mut Vec<String>) {
                                                            if enabled { Sense::click() } else { Sense::hover() });
                     if resp.hovered() { ui.painter().rect_filled(r, CornerRadius::same(R_ROW), HOVER); }
                     let sw = Rect::from_min_size(r.min + vec2(4.0, 4.0), vec2(36.0, 18.0));
-                    ui.painter().rect_filled(sw, CornerRadius::same(4), parse_hex(text).unwrap_or(Color32::GRAY));
+                    ui.painter().rect_filled(sw, CornerRadius::same(4), parse_hex(text).unwrap_or(SWATCH_FALLBACK));
                     ui.painter().rect_stroke(sw, CornerRadius::same(4), Stroke::new(1.0_f32, EDGE), egui::StrokeKind::Inside);
                     ui.painter().text(pos2(sw.max.x + 8.0, r.center().y), egui::Align2::LEFT_CENTER,
                                       text.to_uppercase(), body(), INK);
                     if resp.clicked() { open_now = true; }
                 });
                 if open_now {
-                    d.color_open = Some((id.clone(), parse_hex(text).unwrap_or(Color32::GRAY)));
+                    d.color_open = Some((id.clone(), parse_hex(text).unwrap_or(SWATCH_FALLBACK)));
                 }
                 let mut done = None;
                 if let Some((cid, c)) = d.color_open.as_mut().filter(|(cid, _)| cid == id) {

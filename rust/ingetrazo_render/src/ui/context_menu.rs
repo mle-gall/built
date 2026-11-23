@@ -133,7 +133,7 @@ fn segment_row(ui: &mut egui::Ui, family: &str, segs: &[Seg]) -> Option<String> 
         let resp = ui.interact(r, ui.id().with(("seg", id)), sense);
         let st = state_of(&resp, *checked == 1, *enabled);
         paint_state(ui, r, st, R_ROW);
-        let ink = if !*enabled { OFF } else if *checked == 1 { Color32::WHITE } else { INK };
+        let ink = if !*enabled { OFF } else if *checked == 1 { BRIGHT } else { INK };
         let g = ui.painter().layout_no_wrap(label.clone(), body(), ink);
         let g = if g.size().x > r.width() - 6.0 {
             let mut job = egui::text::LayoutJob::single_section(label.clone(), egui::TextFormat {
