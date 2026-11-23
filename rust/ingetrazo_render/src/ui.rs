@@ -27,6 +27,7 @@ mod tree_cols;
 
 pub mod tokens;
 pub mod kit;
+mod gallery;
 use tokens::*;
 use kit::*;
 
@@ -58,6 +59,7 @@ pub struct Ui {
     background_plugins: std::collections::HashMap<String, plugins::Panels>,
     pub panels: crate::inspector::Panels,
     ctx: egui::Context,
+    gallery: Option<gallery::Gallery>,
     painter: egui_wgpu::Renderer,
     start: Instant,
     events: Vec<egui::Event>,
@@ -255,6 +257,7 @@ impl Ui {
         Self {
             panels: Default::default(),
             ctx,
+            gallery: (std::env::var("BUILT_GALLERY").as_deref() == Ok("1")).then(gallery::Gallery::default),
             painter,
             glass,
             start: Instant::now(),
@@ -516,6 +519,7 @@ impl Ui {
     /// Keyboard ownership: the chrome takes a key only while one of its
     /// fields has focus, or Escape while one of its popups is open.
     pub fn claims_key(&self, name: &str) -> bool {
+        if self.gallery.is_some() { return true; }
         if name == "Escape" && (self.strip.menus_open() || self.plugin_popup_open() || self.panels.data["terrain"].is_object()) { return true; }
         if self.sheets.shown && !self.home.shown { return self.sheets_claims_key(name); }
         let filing = self.column.as_ref().is_some_and(|c| c.filing.is_some() || c.row_menu.is_some() || !c.mode.is_empty()
@@ -525,6 +529,12 @@ impl Ui {
             || self.ctx.wants_keyboard_input()
     }
     pub fn key(&mut self, name: &str, pressed: bool, mods: u8) -> bool {
+        if self.gallery.is_some() {
+            if let Some(key) = egui::Key::from_name(name) {
+                self.events.push(egui::Event::Key { key, physical_key: None, pressed, repeat: false, modifiers: mods_from(mods) });
+            }
+            return true;
+        }
         // The sheet's keys are answered in Python (Enter, Esc, ⌘D); none
         // reaches what is under it.
         if self.sheet.is_some() { return true; }
@@ -2264,6 +2274,7 @@ impl Ui {
         let ctx = self.ctx.clone();
         let start = self.home.shown;
         let out = ctx.run(raw, |ctx| {
+            if let Some(page) = &mut self.gallery { page.show(ctx); return; }
             if start {
                 // The whole window: only the palette, the jobs and the sheet over it.
                 self.top_groups.clear();
@@ -2338,6 +2349,7 @@ impl Ui {
             .filter(|(_, on)| *on)
             .filter_map(|(n, _)| ctx.memory(|m| m.area_rect(egui::Id::new(*n))))
             .collect();
+        if self.gallery.is_some() { self.hit = vec![screen]; }
         self.repaint_ms = out
             .viewport_output
             .get(&egui::ViewportId::ROOT)

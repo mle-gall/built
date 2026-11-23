@@ -2,7 +2,7 @@
 mod timing;
 mod panic_log;
 mod overlay;
-mod ui;
+pub mod ui;
 mod inspector;
 mod glass;
 mod axes;
@@ -2986,3 +2986,6 @@ fn ghost_mesh(s:&Scene, resident:&resident_readback::Readback, vertices:&[u8], i
     }
     Ok((triangles,lines))
 }
+
+#[cfg(test)]
+mod design_system_tests;
