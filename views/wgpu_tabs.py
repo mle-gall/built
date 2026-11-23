@@ -292,14 +292,47 @@ def menu(win, what, doc, docs) -> None:
         QSettings().setValue("tabs/hover_picture", "0" if pictures_on() else "1")
 
 
-def open_link_source(win, path) -> bool:
+def source_context(win):
+    doc = getattr(win, "_doc", None)
+    host = getattr(doc, "link_host", None)
+    if host is None or host not in _docs(win):
+        return None, None
+    from core import links
+    scene = host.viewport.scene
+    mount = scene.resolve_occurrence(doc.link_mount) if getattr(doc, "link_mount", None) else None
+    if mount is None or Path((links.link_of(mount) or {}).get("path", "")) != doc.path:
+        return None, None
+    return host, mount
+
+
+def sync_host_context(view, win):
+    doc = getattr(win, "_doc", None)
+    host = getattr(doc, "link_host", None)
+    scene = host.viewport.scene if host is not None and host in _docs(win) else None
+    origin = tuple(getattr(getattr(view, "packed", None), "origin", (0., 0., 0.)))
+    sig = (id(scene), scene.content_version, host.viewport.history.revision, origin) if scene is not None else ()
+    if view.__dict__.get("_ui_host_sig") == sig:
+        return
+    host, mount = source_context(win)
+    view.renderer.ui_set_host_context(host.display_name() if host else "", origin, scene if mount else None, mount)
+    view._ui_host_sig = sig
+
+
+def open_link_source(win, path, mount=None) -> bool:
     """"Open source": the linked file in a tab of its own, right of the
     project it is linked into (a ⛓ tab), or its tab brought to the front."""
     host = getattr(win, "_doc", None)
     ok = win.open_path(Path(path))
     doc = getattr(win, "_doc", None)
     if ok and doc is not None and doc is not host and host is not None:
+        from core import links
+        scene = host.viewport.scene
+        if mount is None:
+            mount = next(iter(links.linked_groups(scene, path)), None)
         doc.link_host = host
+        doc.link_mount = scene.occurrence_path(mount) if mount is not None else None
+        if getattr(win, "view", None) is not None:
+            win.view._ui_host_sig = None
     return bool(ok)
 
 

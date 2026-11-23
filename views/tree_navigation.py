@@ -22,6 +22,8 @@ def open_to(viewport, path) -> bool:
         viewport.end_one_group_edit()
     for g in path[same:]:
         viewport.begin_group_edit(g)
+        if scene.edit_group is not g:
+            return False
     return outliner.open_path(scene) == list(path)
 
 

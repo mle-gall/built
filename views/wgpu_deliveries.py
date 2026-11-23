@@ -1,4 +1,4 @@
-"""Deliver dock, one-off export form, and the window's serial export queue."""
+"""Saved deliveries, one-off export form, and the window's serial export queue."""
 from collections import deque
 from pathlib import Path
 
@@ -25,56 +25,6 @@ def bind(win):
         return enqueue(window, key, record).id
 
     history.delivery_runner = submit
-
-
-def dock(view, scene, model):
-    values = deliveries.records(scene)
-    key = getattr(view, "_delivery_key", None)
-    if key not in values:
-        key = next(iter(values), None)
-    view._delivery_key = key
-    rows = [([k, r["name"], r["format"].upper(), r["scope"].capitalize() + (" model" if r["scope"] == "whole" else ""), ""],
-             [0, 0, 0, int(k == key), 1, -1, -1, 0, 0, 0]) for k, r in values.items()]
-    view.renderer.ui_set_tree(rows, 0)
-    view.renderer.ui_set_mode("Deliveries")
-    if key is None:
-        return
-    from views.wgpu_ui import _problem_rules
-    from core import structure
-    tree = model["tree"]
-    nodes = structure._nodes(model["registry"])
-    cache_key = (id(scene), scene.content_version)
-    cache = getattr(view, "_ui_rules_cache", None)
-    if not cache or cache[0] != cache_key:
-        cache = cache_key, _problem_rules(scene, model["registry"], nodes, model["recipes"], tree.unfiled)
-        view._ui_rules_cache = cache
-    r = values[key]
-    checks = []
-    eligible = None
-    if r["scope"] == "node":
-        eligible = set(tree.members(r.get("node")))
-    elif r["scope"] == "selection":
-        eligible = set(scene.selection)
-    for severity, rule, label, groups in cache[1]:
-        if severity == "Info":
-            continue
-        count = sum(1 for group in groups if (eligible is None or group in eligible)
-                    and (r["scope"] != "visible" or scene.entity_visible(group)))
-        if count:
-            if rule == "unfiled":
-                label = "unfiled object" if count == 1 else "unfiled objects"
-            elif rule == "solid":
-                label = "open solid" if count == 1 else "open solids"
-            checks.append((label, str(count)))
-    details = [("Format", r["format"].upper()), ("Scope", tree.nodes.get(r.get("node"), {}).get("name", r["scope"])),
-               ("Destination", r["destination"]), ("Last run", r.get("last_run") or "Never")]
-    details.extend((k.title(), str(v)) for k, v in r["options"].items())
-    actions = [("delivery:edit", "Edit…"), ("delivery:delete", "Delete")]
-    sections = [("Delivery", details)]
-    if checks:
-        sections.append(("Pre-run checks", checks))
-    sections.append(("Actions", actions))
-    view.renderer.ui_set_inspector(r["name"], sections)
 
 
 def export_form(win, key=None, one_off=False):

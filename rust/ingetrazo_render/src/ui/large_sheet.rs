@@ -870,12 +870,11 @@ impl Ui {
         if self.lsheet.set(Some(spec)) {
             // One float at a time: the sheet closes the menus under it.
             self.view_open = false;
-            self.sel_more = false;
             self.menu = None;
             self.cmd_open = false;
             if self.form.take().is_some() { self.actions.push("form:close".into()); }
             if let Some(col) = self.column.as_mut() {
-                col.row_menu = None; col.kind_menu = None; col.head_menu = None; col.color_pick = None;
+                col.row_menu = None; col.kind_menu = None; col.head_menu = None;
             }
             self.ctx.memory_mut(|m| m.stop_text_input());
         }

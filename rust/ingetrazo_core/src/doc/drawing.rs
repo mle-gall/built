@@ -68,6 +68,9 @@ pub(super) fn cells(node: &Node) -> Result<Vec<String>, String> {
         weight,
         u8::from(print).to_string(),
         string("hatch", "")?,
+        tag.key.clone().unwrap_or_default(),
+        node.attr(attr_id("cut_weight")?).and_then(number).map_or_else(|| "auto".into(), |mm| format!("{mm:.2}")),
+        u8::from(tag.locked).to_string(),
     ])
 }
 
@@ -116,9 +119,7 @@ pub(super) fn preview(
         let Some(key) = tag.key.as_deref() else {
             continue;
         };
-        if key == "Layer 0" {
-            continue;
-        }
+
         let folder = tag.folder.as_deref().unwrap_or("");
         if !folder.is_empty() {
             folders.push(folder);
@@ -126,7 +127,7 @@ pub(super) fn preview(
         leaves
             .entry(folder)
             .or_default()
-            .push((key, tag.name.as_deref().unwrap_or(key), id));
+            .push((key, if key == "Layer 0" { "Untagged" } else { tag.name.as_deref().unwrap_or(key) }, id));
     }
     let mut known = HashSet::new();
     folders.retain(|f| known.insert(*f));
@@ -217,7 +218,7 @@ pub(super) fn preview(
                             _ => {
                                 inherited
                                     || text_matches(&name.to_lowercase(), token)
-                                    || text_matches("drawing only", token)
+                                    || text_matches("tag", token)
                             }
                         };
                         hit != neg
@@ -226,7 +227,7 @@ pub(super) fn preview(
                         let mut text = vec![
                             format!("preview-tag:{key}"),
                             name.into(),
-                            "Drawing only".into(),
+                            String::new(),
                             String::new(),
                             String::new(),
                         ];
@@ -295,6 +296,7 @@ impl TagEdit {
 }
 
 fn drawing_value(py: Python<'_>, field: &str, input: &str) -> PyResult<(Field, FVal)> {
+    if field == "lock" && matches!(input, "0" | "1") { return Ok((Field::Locked, FVal::Bool(input == "1"))); }
     let (field, value) = match field {
         "color" if input.is_empty() => ("color", Value::None),
         "color" => {
@@ -313,14 +315,14 @@ fn drawing_value(py: Python<'_>, field: &str, input: &str) -> PyResult<(Field, F
                 ),
             )
         }
-        "weight" if input == "auto" => ("lineweight", Value::None),
-        "weight" => {
+        "weight" | "cut_weight" if input == "auto" => (if field=="weight" {"lineweight"} else {"cut_weight"}, Value::None),
+        "weight" | "cut_weight" => {
             let mm = input
                 .parse::<f64>()
                 .ok()
                 .filter(|n| n.is_finite() && *n > 0.0)
                 .ok_or_else(|| PyValueError::new_err("expected a positive pen width in mm"))?;
-            ("lineweight", Value::Float(mm))
+            (if field=="weight" {"lineweight"} else {"cut_weight"}, Value::Float(mm))
         }
         "linetype"
             if py
@@ -357,6 +359,15 @@ pub(super) fn prepare(
     field: &str,
     input: &str,
 ) -> PyResult<Option<TagEdit>> {
+    if field == "style" {
+        let patch: std::collections::BTreeMap<String,String> = serde_json::from_str(input).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let mut combined = TagEdit {changes: Vec::new()};
+        for (name, v) in patch {
+            if name == "style" { return Err(PyValueError::new_err("Nested style patch")); }
+            if let Some(edit) = prepare(py,owner,tags.clone(),&name,&v)? { combined.changes.extend(edit.changes); }
+        }
+        return Ok((!combined.changes.is_empty()).then_some(combined));
+    }
     let (prop, value) = drawing_value(py, field, input)?;
     let hatch_kinds = if field == "hatch" {
         let module = py.import("core.hatches")?;

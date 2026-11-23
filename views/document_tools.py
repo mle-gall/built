@@ -134,7 +134,7 @@ class DocumentTools:
         # A linked document (core/links.py) is edited in its own file: going
         # into it offers to open that file instead.
         from core import links
-        linked = links.linked_ancestor(group)
+        linked = links.linked_ancestor(group) or next((p for p in reversed(path) if links.is_linked(p)), None)
         if linked is not None:
             self._offer_link_source(linked)
             return

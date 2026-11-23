@@ -5,7 +5,7 @@
 
 use super::*;
 
-pub use super::kit::{segmented, underline_tabs};
+pub use super::kit::segmented;
 
 /// Under Project, its mode (Problems) with a way back. Used by
 /// `Ui::right_column`.

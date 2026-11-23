@@ -5,9 +5,8 @@ Ride (which links Ride stairs and Ride facilities) and Show building.
 
 A: linked files are typed root rows (file icon, state dot), a file's single
 top node is merged into its row, nested files sit at the root once each
-"via" their parent, the selection is marked once. C: column sets widen the
-dock, and the inspector offers only the verbs that apply to the selection's
-kind (views/verbs.py)."""
+"via" their parent, the selection is marked once. The lenses keep the filing roots while changing the rows
+and inspector for the current task."""
 from __future__ import annotations
 
 import os
@@ -210,11 +209,12 @@ def test_mark_selection_counts_paged_out_items_on_the_node():
         ("m:a", 1, 4, 0),      # "Show more": two more past the page
         ("n:b", 0, 0, 0),
     )]
-    wu.mark_selection(rows)
+    from ingetrazo_core import mark_filing_selection
+    rows = mark_filing_selection(rows)
     assert [r[1][10] for r in rows] == [1, 1, 0, 0]
 
 
-# ---- C: column sets ---------------------------------------------------------------
+# ---- Project lenses and inspector
 
 @pytest.fixture
 def settings(tmp_path):
@@ -229,12 +229,12 @@ def test_drawing_and_export_widen_the_dock_and_filing_keeps_the_users_width(ui, 
     settings.setValue("ui/dock_width", 320.0)
     seen = []
     view.renderer.ui_set_dock_width = seen.append
-    for colset in (1, 2, 0):
-        view._ui_colset = colset
+    for lens in (1, 2, 0):
+        view._ui_lens = lens
         wu.apply_dock_width(view, settings)
     assert seen == [wu.WIDE_DOCK, wu.WIDE_DOCK, 320.0]
     # A width dragged in Drawing is kept for Drawing only.
-    view._ui_colset = 1
+    view._ui_lens = 1
     wu.keep_dock_width(view, "430", settings)
     assert float(settings.value("ui/dock_width")) == 320.0
     assert wu.dock_width(1, settings) == 430.0 and wu.dock_width(0, settings) == 320.0
@@ -243,24 +243,25 @@ def test_drawing_and_export_widen_the_dock_and_filing_keeps_the_users_width(ui, 
     assert wu.dock_width(1, settings) == 480.0
 
 
-def test_colset_action_sends_the_width(ui, monkeypatch):
+def test_lens_action_sends_the_width(ui, monkeypatch):
     scene, win, view, rows, act = ui
     seen = []
     view.renderer.ui_set_dock_width = seen.append
-    monkeypatch.setattr(wu, "dock_width", lambda colset, settings=None: 390.0 if colset == 1 else 300.0)
-    act("colset", "1")
-    act("colset", "0")
+    monkeypatch.setattr(wu, "dock_width", lambda lens, settings=None: 390.0 if lens == 1 else 300.0)
+    act("lens", "1")
+    act("lens", "0")
     assert seen == [390.0, 300.0]
-    assert view.renderer.calls["ui_set_colset"] == (0,)
+    assert view.renderer.calls["ui_set_lens"] == (0,)
 
 
 def test_drawing_cells_carry_colour_line_weight_print(ui):
     scene, win, view, rows, act = ui
-    view._ui_colset = 1
+    view._ui_lens = 1
     view._ui_tree_sig = None
     wu._tree(view, win)
     row = next(t for t, _n in view.renderer.calls["ui_set_tree"][0] if t[0] == "n:" + _key(view, "Paths"))
-    assert len(row) == 10  # key, name, kind, badge, icon + colour, line, weight, print, hatch
+    assert row[10] == scene.layer("Paths").key
+    assert row[11] == "auto"
     file_row = next(t for t, _n in view.renderer.calls["ui_set_tree"][0] if t[0] == "n:link:Ride")
     assert file_row[4] == "file:resolved"
 
@@ -332,7 +333,10 @@ def test_read_only_inspector_has_no_editable_name_and_no_edits(ui):
         title, sections = view.renderer.calls["ui_set_inspector"]
         item = dict(dict(sections)["Item"])
         assert not item["Name"].startswith(wu.ED), "a linked part's name must not be editable"
-        assert item["Filed in"].startswith("Ride.igz")
+        identity = {label: (text, action) for label, text, action, _ in view.renderer.calls["ui_set_identity"][0]}
+        assert identity["Filed in"][0].startswith("Ride.igz")
+        assert identity["File"] == ("Ride.igz", "insp:linkfile")
+        assert identity["Kind"][0] == "Member"
         acts = [i for name, a in sections if name == "Actions" for i, _l in a]
         assert not any(a.startswith(("status:", "solidrepair")) for a in acts)
         assert "linkfile" in acts and "linkopen" in acts
@@ -362,7 +366,7 @@ def test_rows_stay_fast_on_the_bigger_fixture(ui):
 def test_drawing_cell_edits_run_without_a_layer_panel_and_undo(ui):
     from core.protocol import commands
     scene, win, view, _, act = ui
-    view._ui_colset = 1
+    view._ui_lens = 1
     node = "n:" + _key(view, "Paths")
     tag = scene.layer("Paths")
     for verb, value, attr, expected in [
@@ -434,11 +438,11 @@ def test_unstructured_host_shows_read_only_drawing_rows_without_writing():
 
     assert ("preview-folder:site", "Site works", "", 0) in preview()
     assert ("preview-folder:empty", "empty", "", 0) in preview()
-    assert ("preview-tag:Grid", "Grid", "Drawing only", 0) in preview()
+    assert ("preview-tag:Grid", "Grid", "", 0) in preview()
     assert not any(row[1] == "Paths" for row in preview())
     wu._tree_action(win, view, wu.SEP.join(("filter", "paths")))
     assert preview() == [("preview-folder:site", "Site works", "", 0),
-                         ("preview-tag:Paths", "Paths", "Drawing only", 1)]
+                         ("preview-tag:Paths", "Paths", "", 1)]
     assert (scene.version, bim_registry.get(scene), dict(scene.layer_folder_uids)) == before
     assert not win.viewport.history.undo_stack
 
@@ -485,16 +489,14 @@ def test_isolating_another_node_then_show_all_restores_the_view(ui):
     assert not win.viewport._view_expression
 
 
-def test_switching_column_sets_updates_the_focused_node_inspector(ui):
-    scene, win, view, rows, act = ui
+def test_drawing_lens_sends_native_style_fields_and_catalog(ui):
+    _, _, view, _, act = ui
     key = "n:" + _key(view, "Paths")
-    act("node", key)
-    wu._inspector(view, win)
-    assert "Drawing" not in dict(view.renderer.calls["ui_set_inspector"][1])
-    act("colset", "1")
-    wu._inspector(view, win)
-    catalog = dict(view.renderer.calls["ui_set_inspector"][1])["Drawing"]
-    assert catalog[0] == ("node", key) and ("hatch", "brick_flemish") in catalog
+    act("lens","1")
+    rows = view.renderer.calls["ui_set_tree"][0]
+    cells = next(text[5:] for text, _ in rows if text[0] == key)
+    assert cells[5] and cells[6] == "auto"
+    assert "dashed" in view.renderer.calls["ui_set_style_catalog"][1]
 
 
 @pytest.mark.parametrize("operation", ["group", "insert", "paste", "link", "group_selection"])
@@ -618,19 +620,25 @@ def test_open_occurrence_scopes_tree_and_exports_keep_the_inspector(ui):
     g = view._ui_tree["direct"][key][0]
     act("node", "n:" + key)
     filing = [r["key"] for r in rows()]
-    act("colset", "2")
-    assert [r["key"] for r in rows()] == filing
+    act("lens", "2")
+    assert [r["key"] for r in rows() if r["key"].startswith("n:")] == [k for k in filing if k.startswith("n:")]
+    filing = [r["key"] for r in rows()]
     wu._inspector(view, win)
     assert "Node" in dict(view.renderer.calls["ui_set_inspector"][1])
     scene.begin_group_edit(g)
     scoped = rows()
-    assert scoped[0]["key"] == "context:open" and g.name in scoped[0]["name"]
-    assert [r["key"] for r in scoped[1:]] == ["geometry:loose"]
+    assert scoped[0]["key"] == "context:fold" and g.name in scoped[0]["name"]
+    assert [r["key"] for r in scoped[1:]] == ["geometry:loose", *filing]
+    assert view.renderer.calls["ui_set_edit_path"][0][-1][0] == g.name
+    assert [r["key"] for r in act("toggle", "context:fold")] == ["context:fold", *filing]
+    ride = next(n for t, n in view.renderer.calls["ui_set_tree"][0] if t[0] == "n:link:Ride")
+    assert ride[11] == 1
+    assert scene.edit_group is g
     scene.end_group_edit()
     assert [r["key"] for r in rows()] == filing
     assert "Ride.igz" in [r["name"] for r in act("filter", "is:link")]
     act("mode", "deliveries")
-    assert view.renderer.calls["ui_set_mode"] == ("Deliveries",)
+    assert view.renderer.calls["ui_set_mode"] == ("",) and view._ui_lens == 2
     act("mode", "")
     assert view.renderer.calls["ui_set_mode"] == ("",)
 
@@ -726,3 +734,76 @@ def test_source_visibility_restored_from_the_file_inspector_undoes(ui):
     assert scene.layer(tag).visible and not links.registry(scene)[source]["overrides"]
     assert win.viewport.history.undo() and not scene.layer(tag).visible
     assert links.registry(scene)[source]["overrides"][tag] is False
+
+
+def test_identity_separates_physical_parent_filing_and_surface_material(tmp_path):
+    from core.group import Group
+    from core.mesh import Mesh
+    from core.scene import Scene
+    from ingetrazo_core import Vec3, selection_identity
+    from core.link_structure import Tree
+    from core import bim_registry
+
+    mesh = Mesh()
+    mesh.add_face([Vec3(0, 0, 0), Vec3(1, 0, 0), Vec3(0, 1, 0)])
+    mesh.faces[0].attrs["mat"] = "Concrete"
+    wall = Group(mesh, "W-03")
+    parent = Group(name="Core block")
+    parent.children = [wall]
+    scene = Scene()
+    scene.groups.append(parent)
+    tree = Tree(scene, bim_registry.get(scene))
+    scene.select([wall])
+    rows = selection_identity(scene, {"tree": tree}, str(tmp_path / "Plaza.built"), wu.KINDS)
+    assert [label for label, *_ in rows] == ["Kind", "Filed in", "Tag", "Inside", "Material", "File"]
+    card = {label: (value, action) for label, value, action, _ in rows}
+    assert card["Inside"] == ("Plaza.built › Core block", f"open{wu.SEP}i:{tree.row_id(parent)}")
+    assert card["Material"] == ("Concrete · 1 face", "insp:lib:edit:m:Concrete")
+    assert card["Filed in"] == ("—", "")
+
+
+def test_bulk_drawing_patch_validates_every_field_and_undoes_as_one_edit():
+    import json
+    from core.layers import Layer
+    from core.protocol import commands
+    from core.scene import Scene
+    scene = Scene()
+    a, b = Layer("Walls"), Layer("Floors")
+    scene.layers.extend((a, b))
+    history = _Win(scene).viewport.history
+    before = [(tag.lineweight, tag.hatch, tag.cut_weight) for tag in (a, b)]
+    def apply(fields):
+        return commands.run(history, "edit_tag", tags=[a.key, b.key, a.key],
+                            field="style", value=json.dumps(fields))
+    with pytest.raises(ValueError):
+        apply({"hatch": "grid", "weight": "-1"})
+    assert [(tag.lineweight, tag.hatch, tag.cut_weight) for tag in (a, b)] == before
+    assert apply({"hatch": "brick", "weight": "0.50", "cut_weight": "0.70"})["ok"]
+    assert all((tag.lineweight, tag.hatch, tag.cut_weight) == (.5, "brick", .7) for tag in (a, b))
+    assert history.undo()
+    assert [(tag.lineweight, tag.hatch, tag.cut_weight) for tag in (a, b)] == before
+
+
+def test_promoting_one_tag_files_only_its_members_and_undoes():
+    from core import bim_registry, structure
+    from core.group import Group
+    from core.layers import Layer
+    from core.protocol import commands
+    from core.scene import Scene
+    scene = Scene()
+    scene.layer_folders = ["Building"]
+    walls = Layer("Walls", folder="Building")
+    scene.layers.extend([walls, Layer("Floors", folder="Building")])
+    wall, floor = Group(name="W-03"), Group(name="F-02")
+    wall.layer, floor.layer = "Walls", "Floors"
+    scene.groups.extend([wall, floor])
+    history = _Win(scene).viewport.history
+    key = "layer:" + walls.uid
+    assert commands.run(history, "promote_tag", tag="Walls", ifc_class="IfcWall")["ok"]
+    nodes = structure._nodes(bim_registry.get(scene))
+    assert {n["name"] for n in nodes.values()} == {"Building", "Walls"}
+    assert nodes[key]["recipe"] == {"class": "IfcWall", "tag": "Walls"}
+    assert structure.node_of(wall) == key and not structure.node_of(floor)
+    assert history.undo() and not structure._nodes(bim_registry.get(scene))
+    assert not structure.node_of(wall)
+    assert history.redo() and structure.node_of(wall) == key

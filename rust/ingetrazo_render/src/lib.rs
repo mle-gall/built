@@ -4,6 +4,7 @@ mod panic_log;
 mod overlay;
 mod commands;
 pub mod ui;
+mod host_context;
 mod inspector;
 mod glass;
 mod axes;
@@ -154,6 +155,7 @@ struct Renderer {
     face_marks: preview::Preview,
     sun: sun::Sun,
     references: references::References,
+    host_context: preview::Preview,
     ghost_geometry: preview::Preview,
     ghost_objects: preview::Preview,
     surface: wgpu::Surface<'static>,
@@ -527,6 +529,7 @@ impl Renderer {
         let look = style::Style::new(&device);
         let preview = preview::Preview::new(samples.clone(), &device, format, &camera, &look.buffer, 0);
         let face_marks = preview::Preview::new(samples.clone(), &device, format, &camera, &look.buffer, 1);
+        let host_context = preview::Preview::new(samples.clone(), &device, format, &camera, &look.buffer, 2);
         let ghost_geometry = preview::Preview::new(samples.clone(), &device, format, &camera, &look.buffer, 2);
         let ghost_objects = preview::Preview::new(samples.clone(), &device, format, &camera, &look.buffer, 2);
         let background = background::Background::new(&device, format, &look.buffer, 1);
@@ -565,6 +568,7 @@ impl Renderer {
             transparency,
             preview,
             face_marks,
+            host_context,
             ghost_geometry,
             ghost_objects,
             references: references::References::new(samples.clone(), &device, format),
@@ -1901,7 +1905,7 @@ impl Renderer {
             drop(pass);
             }
             if msaa && !self.pick_pending {
-                self.aa.draw(&mut e, &color, s, self.style, self.edges, self.look.data[6][0] > 0., self.multi, self.queries.as_ref(), Some(edge_only), self.references.active() || self.sections.count > 0 || self.preview.active() || self.face_marks.active() || self.ghost_geometry.active() || self.ghost_objects.active() || self.lines.active_layer(true) || (self.look.data[9][0] > 0. && self.material_transparency), &self.axes, &self.references);
+                self.aa.draw(&mut e, &color, s, self.style, self.edges, self.look.data[6][0] > 0., self.multi, self.queries.as_ref(), Some(edge_only), self.references.active() || self.sections.count > 0 || self.preview.active() || self.face_marks.active() || self.ghost_geometry.active() || self.ghost_objects.active() || self.host_context.active() || self.lines.active_layer(true) || (self.look.data[9][0] > 0. && self.material_transparency), &self.axes, &self.references);
             }
             if !edge_only && self.sun.enabled && self.style != 1 && self.style != 4 {
                 if msaa { self.aa.resolve_depth(&self.device, &mut e, &depth, None); }
@@ -1940,7 +1944,7 @@ impl Renderer {
             self.preview.draw(&mut e, &color, &depth, None);
             self.face_marks.draw(&mut e, &color, &depth, None);
         }
-        for (enabled,ghost) in [(self.look.data[9][2]>0.,&self.ghost_geometry),(self.look.data[9][3]>0.,&self.ghost_objects)] {
+        for (enabled,ghost) in [(self.host_context.active(), &self.host_context), (self.look.data[9][2]>0.,&self.ghost_geometry),(self.look.data[9][3]>0.,&self.ghost_objects)] {
             if enabled {
                 if msaa { ghost.draw(&mut e,&self.aa.color_view(),&self.aa.depth_view(),Some(&color)); }
                 else { ghost.draw(&mut e,&color,&depth,None); }
@@ -2328,6 +2332,30 @@ impl Renderer {
     fn ui_show_inspector(&mut self) {
         if let Some(ui) = self.ui.as_mut() { ui.show_inspector(); }
     }
+    fn ui_set_catalog_info(&mut self, filename: String, tree: &Bound<'_,PyAny>, counts: &Bound<'_,PyAny>) -> PyResult<()> {
+        if let Some(ui)=self.ui.as_mut() { ui.set_catalog_info(filename,tree,counts)?; }
+        Ok(())
+    }
+    fn ui_set_style_catalog(&mut self, owner: usize, lines: Vec<String>) {
+        if let Some(ui)=self.ui.as_mut() { ui.style_catalog(owner,lines); }
+    }
+    #[pyo3(signature=(name, origin, scene=None, mount=None))]
+    fn ui_set_host_context(&mut self, name: String, origin: [f64; 3], scene: Option<&Bound<'_, PyAny>>, mount: Option<&Bound<'_, PyAny>>) -> PyResult<()> {
+        let (edges,tags) = match (scene,mount) {
+            (Some(scene),Some(mount)) => host_context::snapshot(scene,mount,origin)?,
+            _ => (Vec::new(),Vec::new()),
+        };
+        self.host_context.upload(&self.device,&[],&edges).map_err(PyValueError::new_err)?;
+        if let Some(ui) = self.ui.as_mut() { ui.set_host_context(name,tags); }
+        self.stable_frames = 0;
+        Ok(())
+    }
+    fn ui_set_edit_path(&mut self, path: Vec<(String, String)>) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_edit_path(path); }
+    }
+    fn ui_set_identity(&mut self, rows: Vec<(String, String, String, Option<bool>)>) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_identity(rows); }
+    }
     fn ui_set_inspector(&mut self, title: String, sections: Vec<(String, Vec<(String, String)>)>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_inspector(title, sections); }
     }
@@ -2420,8 +2448,13 @@ impl Renderer {
     fn ui_set_tree_sort(&mut self, sort: usize) {
         if let Some(ui) = self.ui.as_mut() { ui.set_tree_sort(sort); }
     }
-    fn ui_set_colset(&mut self, colset: u8) {
-        if let Some(ui) = self.ui.as_mut() { ui.set_colset(colset); }
+    #[pyo3(signature=(node, placements))]
+    fn ui_set_export_focus(&mut self, node: Option<String>, placements: Vec<Vec<String>>) {
+        if let Some(ui)=self.ui.as_mut() {ui.set_export_focus(node,placements);}
+    }
+    fn ui_step_issue(&mut self, step: i32) { if let Some(ui) = self.ui.as_mut() { ui.step_issue(step); } }
+    fn ui_set_lens(&mut self, lens: u8) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_lens(lens); }
     }
     fn ui_set_dock_width(&mut self, width: f32) {
         if let Some(ui) = self.ui.as_mut() { ui.set_dock_width(width); }

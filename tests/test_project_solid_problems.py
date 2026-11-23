@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Solid defects reached via Problems and fixed in the Project inspector."""
+"""Solid defects reached via Export and fixed in the Project inspector."""
+import json
+
 import pytest
 
 from core.group import Group
@@ -17,15 +19,21 @@ def project():
     scene = Scene()
     win, view = _Win(scene), _View()
     win._on_zoom_selection = lambda: None
-    view._ui_mode = "problems"
+    view._ui_lens = 2
     return scene, win, view
 
 
 def inspect(project, key):
     scene, win, view = project
     wgpu_ui._tree(view, win)
-    rows, _ = view.renderer.calls["ui_set_tree"]
-    assert any(t[0] == key for t, n in rows)
+    panel, payload = view.renderer.calls["ui_panel_set"]
+    checks = json.loads(payload)["checks"]["*"]
+    if key.startswith("i:"):
+        entries = next(r[1] for code, r in checks.items() if code.startswith("solid/"))
+        path = next(entry["path"] for entry in entries if entry["path"][-1] == key[2:])
+        key = "exportitem:" + json.dumps(path)
+    else:
+        assert "active-solid" in checks
     wgpu_ui._tree_action(win, view, wgpu_ui.SEP.join(["item", key]))
     wgpu_ui._inspector(view, win)
     return view.renderer.calls["ui_set_inspector"]
@@ -111,3 +119,37 @@ def test_locked_target_rejects_a_fault_from_before_the_lock(project):
     key = action[0].removeprefix("solidfault:")
     assert not run(win.viewport.history, "repair_solid", placement=scene.occurrence_path(broken), fault=key)["ok"]
     assert "Actions" not in dict(solid_inspector_sections(scene, broken))
+
+
+def test_scoped_status_fix_updates_readiness_and_undo(project, tmp_path):
+    from core.deliveries import create_delivery
+    scene, win, view = project
+    scene.plugin_data["bim_registry"] = {"structure": {"nodes": {
+        "walls": {"name": "Walls", "parent": None, "recipe": {"class": "IfcWall"}}
+    }}}
+    walls = [Group(name="North"), Group(name="South")]
+    for g in walls:
+        g.ifc = {"class": "IfcWall"}
+        g.ext = {"structure": {"node": "walls"}}
+    scene.groups.extend([*walls, Group(name="Outside")])
+    history = win.viewport.history
+    create_delivery(history, dict(name="Walls IFC", format="ifc", scope="node", node="walls",
+                                  destination=str(tmp_path / "walls.ifc")))
+
+    def report():
+        wgpu_ui._tree(view, win)
+        return json.loads(view.renderer.calls["ui_panel_set"][1])
+
+    initial = report()
+    assert (initial["ready"], initial["total"]) == (0, 2)
+    entries = initial["checks"]["n:walls"]["status/Pset_WallCommon"][1]
+    paths = [item["path"] for item in entries]
+    target = scene.resolve_occurrence(paths[0])
+    wgpu_ui._tree_action(win, view, "eye" + wgpu_ui.SEP + "exportitem:" + json.dumps(paths[0]))
+    assert target.hidden and history.undo() and not target.hidden
+    before = len(history.undo_stack)
+    args = dict(placements=paths, path=["psets", entries[0]["fix"], "Status"],
+                value="EXISTING", property_kind="label")
+    wgpu_ui._tree_action(win, view, "exportstatus" + wgpu_ui.SEP + json.dumps(args))
+    assert len(history.undo_stack) == before + 1 and report()["ready"] == 2
+    assert history.undo() and report()["ready"] == 0

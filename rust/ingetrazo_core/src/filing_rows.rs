@@ -1,0 +1,652 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+//! Present the existing filing/linked-file membership index as one paged catalogue.
+use crate::project_tree::{
+    project_item_matches, project_name_matches, row, source_placement_rows, Row,
+};
+use pyo3::prelude::*;
+use std::{
+    cmp::Ordering,
+    collections::{HashMap, HashSet},
+    path::Path,
+};
+
+type Obj<'py> = Bound<'py, PyAny>;
+fn text(o: &Obj<'_>) -> PyResult<String> {
+    Ok(o.extract::<Option<String>>()?.unwrap_or_default())
+}
+fn id(o: &Obj<'_>) -> usize {
+    o.as_ptr() as usize
+}
+fn natural(a: &str, b: &str) -> Ordering {
+    let (mut a, mut b) = (a.as_bytes(), b.as_bytes());
+    while let (Some(x), Some(y)) = (a.first(), b.first()) {
+        if x.is_ascii_digit() && y.is_ascii_digit() {
+            let na = a.iter().take_while(|c| c.is_ascii_digit()).count();
+            let nb = b.iter().take_while(|c| c.is_ascii_digit()).count();
+            let za = a[..na].iter().take_while(|&&c| c == b'0').count();
+            let zb = b[..nb].iter().take_while(|&&c| c == b'0').count();
+            let order = (na - za).cmp(&(nb - zb)).then(a[za..na].cmp(&b[zb..nb]));
+            if !order.is_eq() {
+                return order;
+            }
+            a = &a[na..];
+            b = &b[nb..];
+        } else {
+            if x != y {
+                return x.cmp(y);
+            }
+            a = &a[1..];
+            b = &b[1..];
+        }
+    }
+    a.len().cmp(&b.len())
+}
+
+struct Catalogue<'py> {
+    scene: Obj<'py>,
+    tree: Obj<'py>,
+    nodes: Obj<'py>,
+    member: Obj<'py>,
+    links: Obj<'py>,
+    expanded: HashSet<String>,
+    pages: HashMap<String, usize>,
+    cap: usize,
+    discover: bool,
+    selected: HashSet<usize>,
+    bad: HashSet<usize>,
+    unfiled: HashSet<usize>,
+    filter: String,
+}
+impl<'py> Catalogue<'py> {
+    fn cap(&self, key: &str) -> usize {
+        if self.discover {
+            usize::MAX
+        } else {
+            self.pages.get(key).copied().unwrap_or(self.cap)
+        }
+    }
+    fn kind(&self, g: &Obj<'py>) -> PyResult<&'static str> {
+        Ok(
+            if self.links.call_method1("is_linked", (g,))?.is_truthy()? {
+                "link"
+            } else if g.call_method0("is_component")?.is_truthy()? {
+                "component"
+            } else {
+                "group"
+            },
+        )
+    }
+    fn hits(&self, g: &Obj<'py>) -> PyResult<bool> {
+        project_item_matches(
+            &self.scene,
+            g,
+            self.kind(g)?,
+            &self.filter,
+            self.bad.contains(&id(g)) || self.unfiled.contains(&id(g)),
+        )
+    }
+    fn more(&self, rows: &mut Vec<Row>, key: &str, depth: usize, left: usize) {
+        rows.push(row(
+            format!("m:{key}"),
+            format!("Show {} more ({left} not shown)", left.min(self.cap)),
+            "",
+            "",
+            depth,
+            4,
+            0,
+            0,
+        ));
+    }
+    fn item(
+        &self,
+        rows: &mut Vec<Row>,
+        g: &Obj<'py>,
+        node: &str,
+        d: usize,
+        nested: bool,
+    ) -> PyResult<()> {
+        let key: String = self.tree.call_method1("row_id", (g,))?.extract()?;
+        let name = text(&g.getattr("name")?)?;
+        let name = if name.is_empty() {
+            "Group".into()
+        } else {
+            name
+        };
+        let selected = usize::from(self.selected.contains(&id(g)));
+        let kind = self.kind(g)?;
+        if nested {
+            if let Some(k) = self
+                .member
+                .call_method1("get", (id(g),))?
+                .extract::<Option<String>>()?
+            {
+                if k != node && self.nodes.contains(&k)? {
+                    let mut jump = row(format!("g:{key}"), name, "", kind, d, 3, 0, selected);
+                    jump.1[5] = i64::from(!g.getattr("hidden")?.is_truthy()?);
+                    jump.0[3] = format!("→ {}", text(&self.nodes.get_item(k)?.get_item("name")?)?);
+                    rows.push(jump);
+                    return Ok(());
+                }
+            }
+        }
+        let key = format!("{}:{key}", if nested { "c" } else { "i" });
+        let kids = g.getattr("children")?;
+        let open = self.expanded.contains(&key);
+        let mut r = row(
+            key.clone(),
+            name,
+            "",
+            kind,
+            d,
+            if nested { 2 } else { 1 },
+            0,
+            selected,
+        );
+        if kind == "link" {
+            r.0[3] = "⛓".into();
+        }
+        r.1[2] = self.bad.contains(&id(g)) as i64;
+        r.1[5] = (!g.getattr("hidden")?.is_truthy()?) as i64;
+        r.1[6] = g.getattr("locked")?.is_truthy()? as i64;
+        r.1[7] = kids.is_truthy()? as i64;
+        r.1[8] = open as i64;
+        rows.push(r);
+        if open {
+            let max = self.cap(&key);
+            for child in kids.try_iter()?.take(max) {
+                self.item(rows, &child?, node, d + 1, true)?;
+            }
+            if kids.len()? > max {
+                self.more(rows, &key, d + 1, kids.len()? - max);
+            }
+        }
+        Ok(())
+    }
+    fn items(
+        &self,
+        rows: &mut Vec<Row>,
+        groups: Vec<Obj<'py>>,
+        node: &str,
+        d: usize,
+    ) -> PyResult<()> {
+        let mut entries: Vec<(String, Vec<Obj<'py>>)> = Vec::new();
+        let mut definitions = HashMap::<(String, usize), usize>::new();
+        for g in groups {
+            let name = text(&g.getattr("name")?)?;
+            if g.call_method0("is_component")?.is_truthy()?
+                && !self.links.call_method1("is_linked", (&g,))?.is_truthy()?
+            {
+                let identity = (name.clone(), id(&g.getattr("mesh")?));
+                if let Some(&index) = definitions.get(&identity) {
+                    entries[index].1.push(g);
+                    continue;
+                }
+                definitions.insert(identity, entries.len());
+            }
+            entries.push((name, vec![g]));
+        }
+        let mut entries: Vec<_> = entries
+            .into_iter()
+            .map(|(name, groups)| (name.to_lowercase(), name, groups))
+            .collect();
+        entries.sort_by(|a, b| natural(&a.0, &b.0));
+        let total = entries.len();
+        let max = self.cap(node);
+        for (_, name, mut gs) in entries.into_iter().take(max) {
+            if gs.len() == 1 {
+                self.item(rows, &gs.pop().unwrap(), node, d, false)?;
+                continue;
+            }
+            let key = format!("d:{node}:{}", id(&gs[0].getattr("mesh")?));
+            let selected = gs.iter().filter(|g| self.selected.contains(&id(g))).count();
+            let mut r = row(
+                key.clone(),
+                if name.is_empty() {
+                    "Component".into()
+                } else {
+                    name
+                },
+                "",
+                "component",
+                d,
+                1,
+                0,
+                selected,
+            );
+            r.1[5] = i64::from(!gs[0].getattr("hidden")?.is_truthy()?);
+            r.0[3] = format!("×{}", gs.len());
+            r.1[2] = gs.iter().filter(|g| self.bad.contains(&id(g))).count() as i64;
+            let open = self.expanded.contains(&key);
+            r.1[7] = 1;
+            r.1[8] = open as i64;
+            rows.push(r);
+            if open || !self.filter.is_empty() {
+                let max = self.cap(&key);
+                for g in gs.iter().take(max) {
+                    self.item(rows, g, node, d + 1, false)?;
+                }
+                if gs.len() > max {
+                    self.more(rows, &key, d + 1, gs.len() - max);
+                }
+            }
+        }
+        if total > max {
+            self.more(rows, node, d, total - max);
+        }
+        Ok(())
+    }
+}
+
+fn layer<'py>(scene: &Obj<'py>, tag: &Obj<'py>) -> PyResult<Obj<'py>> {
+    let Some(name) = tag.extract::<Option<String>>()? else {
+        return Ok(scene.py().None().into_bound(scene.py()));
+    };
+    let mut ly = scene.call_method1("layer", (&name,))?;
+    if ly.is_none() {
+        if let Some((_, tail)) = name.rsplit_once('/') {
+            ly = scene.call_method1("layer", (tail,))?;
+        }
+    }
+    Ok(ly)
+}
+fn controls<'py>(
+    c: &Catalogue<'py>,
+    model: &Obj<'py>,
+    key: &str,
+    node: &Obj<'py>,
+    drawing: bool,
+) -> PyResult<(i64, i64, Vec<String>)> {
+    let py = c.scene.py();
+    let layers = py.import("core.layers")?;
+    let kind: String = node.get_item("kind")?.extract()?;
+    if kind == "link" {
+        let folders = node.get_item("folders")?;
+        let mut eye = true;
+        for f in folders.try_iter()? {
+            eye &= layers
+                .call_method1("folder_visible", (&c.scene, f?))?
+                .is_truthy()?;
+        }
+        let tags = c.tree.call_method1("file_tags", (key,))?;
+        let mut locked = tags.is_truthy()?;
+        for tag in tags.try_iter()? {
+            locked &= c
+                .scene
+                .call_method1("layer", (tag?,))?
+                .getattr("locked")?
+                .is_truthy()?;
+        }
+        return Ok((eye as i64, locked as i64, vec![]));
+    }
+    let main = if kind == "host" {
+        layer(
+            &c.scene,
+            &node.get_item("recipe")?.call_method1("get", ("tag",))?,
+        )?
+    } else {
+        layer(&c.scene, &node.get_item("tag")?)?
+    };
+    let styles = if drawing && !main.is_none() {
+        main.call_method0("_drawing_cells")?.extract()?
+    } else {
+        Vec::new()
+    };
+    let mut ly = main;
+    if ly.is_none() {
+        let node_layers = model.get_item("node_layers")?;
+        for k in c.tree.call_method1("subtree", (key,))?.try_iter()? {
+            let k = k?;
+            let tags = node_layers.get_item(&k)?;
+            if let Some(t) = tags.try_iter()?.next() {
+                ly = layer(&c.scene, &t?)?;
+            }
+            if ly.is_none() {
+                let child = c.nodes.get_item(&k)?;
+                ly = layer(
+                    &c.scene,
+                    &child.get_item("recipe")?.call_method1("get", ("tag",))?,
+                )?;
+            }
+            if !ly.is_none() {
+                break;
+            }
+        }
+    }
+    let lock = if ly.is_none() {
+        -1
+    } else {
+        ly.getattr("locked")?.is_truthy()? as i64
+    };
+    let eye = if kind == "tagfolder" {
+        layers
+            .call_method1("folder_visible", (&c.scene, node.get_item("folder")?))?
+            .is_truthy()? as i64
+    } else if ly.is_none() {
+        -1
+    } else {
+        layers
+            .call_method1("effective_visible", (&c.scene, &ly))?
+            .is_truthy()? as i64
+    };
+    Ok((eye, lock, styles))
+}
+
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn filing_rows<'py>(
+    scene: Obj<'py>,
+    model: Obj<'py>,
+    expanded: HashSet<String>,
+    pages: HashMap<String, usize>,
+    filter: String,
+    discover: bool,
+    cap: usize,
+    lens: u8,
+    selected: HashSet<usize>,
+    active: Option<String>,
+    kinds: Obj<'py>,
+    tips: HashMap<String, String>,
+    states: HashMap<String, String>,
+) -> PyResult<Vec<Row>> {
+    let tree = model.get_item("tree")?;
+    let nodes = tree.getattr("nodes")?;
+    let direct = tree.getattr("direct")?;
+    let unfiled: Vec<Obj<'py>> = tree.getattr("unfiled")?.extract()?;
+    let order: Vec<(String, usize)> = model.get_item("order")?.extract()?;
+    let cls_name = |cls: &Obj<'py>| -> PyResult<String> {
+        if let Some(s) = kinds
+            .call_method1("get", (cls,))?
+            .extract::<Option<String>>()?
+        {
+            return Ok(s);
+        }
+        Ok(text(cls)?.trim_start_matches("Ifc").to_string())
+    };
+    let py = scene.py();
+    let c = Catalogue {
+        scene,
+        tree: tree.clone(),
+        nodes: nodes.clone(),
+        member: tree.getattr("member")?,
+        links: py.import("core.links")?.into_any(),
+        expanded,
+        pages,
+        cap,
+        discover,
+        selected,
+        unfiled: unfiled.iter().map(id).collect(),
+        bad: model
+            .get_item("to_fix")?
+            .extract::<Vec<Obj<'py>>>()?
+            .iter()
+            .map(id)
+            .collect(),
+        filter,
+    };
+    let mut selected = HashMap::<String, usize>::new();
+    for &g in &c.selected {
+        if let Some(k) = c
+            .member
+            .call_method1("get", (g,))?
+            .extract::<Option<String>>()?
+        {
+            *selected.entry(k).or_default() += 1;
+        }
+    }
+    for (key, _) in order.iter().rev() {
+        if let Some(&n) = selected.get(key) {
+            if let Some(parent) = nodes
+                .get_item(key)?
+                .get_item("parent")?
+                .extract::<Option<String>>()?
+            {
+                *selected.entry(parent).or_default() += n;
+            }
+        }
+    }
+    let mounted = tree.getattr("links")?;
+    let copies = |key: &str| -> PyResult<Vec<Obj<'py>>> {
+        Ok(mounted
+            .call_method1("get", (key,))?
+            .extract::<Option<Vec<Obj<'py>>>>()?
+            .unwrap_or_default())
+    };
+    let filtering = !c.filter.trim().is_empty();
+    let words: Vec<String> = c
+        .filter
+        .to_lowercase()
+        .split_whitespace()
+        .map(str::to_owned)
+        .collect();
+    let mut visible = HashSet::new();
+    let mut members = HashMap::new();
+    let mut matching_files = HashSet::new();
+    if filtering {
+        for (key, _) in &order {
+            let node = nodes.get_item(key)?;
+            let cls = node.get_item("recipe")?.call_method1("get", ("class",))?;
+            let named = !words.iter().any(|w| w.contains(':'))
+                && project_name_matches(
+                    &text(&node.get_item("name")?)?,
+                    &cls_name(&cls)?,
+                    words.clone(),
+                );
+            let mut hits = Vec::new();
+            for g in direct.get_item(key)?.try_iter()? {
+                let g = g?;
+                if c.hits(&g)? {
+                    hits.push(g);
+                }
+            }
+            if text(&node.get_item("kind")?)? == "link" {
+                let state: String = c
+                    .links
+                    .call_method1("link_state", (&c.scene, node.get_item("path")?))?
+                    .extract()?;
+                for g in copies(key)? {
+                    if project_item_matches(
+                        &c.scene,
+                        &g,
+                        "link",
+                        &c.filter,
+                        matches!(state.as_str(), "missing" | "modified"),
+                    )? {
+                        matching_files.insert(key.clone());
+                        break;
+                    }
+                }
+            }
+            if named || !hits.is_empty() || matching_files.contains(key) {
+                let mut k = Some(key.clone());
+                while let Some(current) = k {
+                    if !visible.insert(current.clone()) {
+                        break;
+                    }
+                    k = nodes.get_item(&current)?.get_item("parent")?.extract()?;
+                }
+                members.insert(key.clone(), hits);
+            }
+        }
+    }
+    let mut rows = Vec::new();
+    let mut folded = None;
+    let counts = model.get_item("counts")?;
+    let problems = model.get_item("problems")?;
+    let children = tree.getattr("children")?;
+    for (key, depth) in order {
+        if filtering && !visible.contains(&key) || folded.is_some_and(|d| depth > d) {
+            continue;
+        }
+        let node = nodes.get_item(&key)?;
+        let kind = text(&node.get_item("kind")?)?;
+        let kids = children.get_item(&key)?.is_truthy()?;
+        let path = text(&node.get_item("path")?)?;
+        let mut name = text(&node.get_item("name")?)?;
+        let mut icon = String::new();
+        let mut badge = String::new();
+        let cls = node.get_item("recipe")?.call_method1("get", ("class",))?;
+        let label = if kind == "link" {
+            let state: String = c
+                .links
+                .call_method1("link_state", (&c.scene, &path))?
+                .extract()?;
+            let via = node
+                .call_method1("get", ("via",))?
+                .extract::<Option<String>>()?;
+            if let Some(v) = via {
+                badge = format!("via {v}");
+            }
+            name = Path::new(&path)
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or(&name)
+                .to_owned();
+            icon = format!("file:{state}");
+            let mut tip = format!(
+                "\x1e{}\n\n{}",
+                tips["Reference"].replace("{path}", &path),
+                states.get(&state).unwrap_or(&state)
+            );
+            if let Some(merged) = node
+                .call_method1("get", ("merged",))?
+                .extract::<Option<String>>()?
+            {
+                tip.push_str(&format!(
+                    "\n\nIts one top node «{merged}» is shown as this row."
+                ));
+            }
+            tip
+        } else {
+            let mut label = if kind == "tagfolder" || cls.is_none() && kids {
+                String::new()
+            } else {
+                cls_name(&cls)?
+            };
+            let mut help = tips.get(&label).cloned().unwrap_or_default();
+            if !path.is_empty() {
+                if !help.is_empty() {
+                    help.push_str("\n\n");
+                }
+                help.push_str(&format!(
+                    "From {} — read-only here.",
+                    Path::new(&path)
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                ));
+            }
+            if !help.is_empty() {
+                label.push('\x1e');
+                label.push_str(&help);
+            }
+            label
+        };
+        let rk = format!("n:{key}");
+        let open = filtering || c.expanded.contains(&rk);
+        let placed = copies(&key)?;
+        let groups = direct.get_item(&key)?;
+        let mut r = row(
+            rk,
+            name,
+            &label,
+            &icon,
+            depth,
+            0,
+            counts.get_item(&key)?.extract()?,
+            selected.get(&key).copied().unwrap_or(0),
+        );
+        let (eye, lock, style) = controls(&c, &model, &key, &node, lens == 1)?;
+        r.0[3] = badge;
+        r.0.extend(style);
+        r.1[2] = problems.get_item(&key)?.extract()?;
+        r.1[3] = (Some(&key) == active.as_ref()) as i64;
+        r.1[5] = eye;
+        r.1[6] = lock;
+        r.1[7] = (kids || groups.is_truthy()? || placed.len() > 1) as i64;
+        r.1[8] = open as i64;
+        rows.push(r);
+        folded = (!open).then_some(depth);
+        if open {
+            if kind == "link" && (!filtering || matching_files.contains(&key)) {
+                rows.extend(source_placement_rows(&c.scene, placed, depth + 1)?);
+            }
+            let items = if filtering {
+                members.remove(&key).unwrap_or_default()
+            } else {
+                groups.extract()?
+            };
+            c.items(&mut rows, items, &key, depth + 1)?;
+        }
+    }
+    let mut loose = Vec::new();
+    for g in unfiled {
+        if !filtering || c.hits(&g)? {
+            loose.push(g);
+        }
+    }
+    if !loose.is_empty() {
+        let open = filtering || c.expanded.contains("n:");
+        let mut r = row(
+            "n:".into(),
+            "Not filed".into(),
+            "",
+            "",
+            0,
+            0,
+            loose.len(),
+            loose.iter().filter(|g| c.selected.contains(&id(g))).count(),
+        );
+        r.1[5] = i64::from(!loose[0].getattr("hidden")?.is_truthy()?);
+        r.1[2] = loose.len() as i64;
+        r.1[7] = 1;
+        r.1[8] = open as i64;
+        rows.push(r);
+        if open {
+            c.items(&mut rows, loose, "", 1)?;
+        }
+    }
+    Ok(rows)
+}
+
+/// Attribute selection to the deepest displayed occurrence or its paged
+/// parent. An ancestor of a selected row gets the quiet partial mark.
+#[pyfunction]
+pub(crate) fn mark_filing_selection(mut rows: Vec<Row>) -> Vec<Row> {
+    let mut below = HashMap::<i64, i64>::new();
+    for (_, flags) in rows.iter_mut().rev() {
+        if flags.len() < 11 {
+            flags.resize(11, 0);
+        }
+        let depth = flags[0];
+        let children = below.remove(&(depth + 1)).unwrap_or(0);
+        below.retain(|&level, _| level <= depth);
+        let count = flags[9].max(0);
+        let placement = matches!(flags[4], 1..=3 | 7 | 10);
+        flags[10] = i64::from(if placement {
+            count > 0
+        } else {
+            count > children
+        });
+        *below.entry(depth).or_default() += if placement {
+            count + children
+        } else {
+            count.max(children)
+        };
+    }
+    let mut parents = Vec::<usize>::new();
+    for i in 0..rows.len() {
+        let depth = rows[i].1[0];
+        while parents.last().is_some_and(|&j| rows[j].1[0] >= depth) {
+            parents.pop();
+        }
+        if rows[i].1[10] == 1 {
+            for &j in &parents {
+                if rows[j].1[10] == 0 {
+                    rows[j].1[10] = 2;
+                }
+            }
+        }
+        parents.push(i);
+    }
+    rows
+}

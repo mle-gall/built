@@ -7,12 +7,13 @@ Both hosts bind the Rust view registry to their document controller.
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer, QSize
 from PySide6.QtGui import QImage, QKeySequence
 
 # Inter 400/500/600 (SIL OFL, resources/fonts/inter); the system font if missing.
-FONT = str(__import__("pathlib").Path(__file__).resolve().parents[1] / "resources" / "fonts" / "inter")
+FONT = str(Path(__file__).resolve().parents[1] / "resources" / "fonts" / "inter")
 if not os.path.isdir(FONT):
     FONT = "/System/Library/Fonts/SFNS.ttf"
 _ICON_PX = 48
@@ -153,16 +154,14 @@ def attach(view) -> None:
         view.source_viewport._chrome_owns_labels = True
 
 
-#: The dock's width for the wide column sets: about 390 pt so the headed
-#: columns never crush the names (tree C). Filing keeps the user's own
-#: width ("ui/dock_width").
-WIDE_DOCK = 390.0
+#: Drawing and Export have room for previews and a readiness checklist.
+WIDE_DOCK = 430.0
 #: Drawing and Export reserve room for their columns.
-WIDE_COLSETS = (1, 2)
+WIDE_LENSES = (1, 2)
 
 
-def dock_width(colset, settings=None) -> float:
-    """The dock width for column set ``colset``: the user's width for
+def dock_width(lens, settings=None) -> float:
+    """The dock width for lens ``lens``: the user's width for
     Filing; for the wide sets the width last dragged there, at least
     ``WIDE_DOCK`` and never narrower than the user's own."""
     from PySide6.QtCore import QSettings
@@ -171,7 +170,7 @@ def dock_width(colset, settings=None) -> float:
         own = float(st.value("ui/dock_width", 300.0))
     except (TypeError, ValueError):
         own = 300.0
-    if colset not in WIDE_COLSETS:
+    if lens not in WIDE_LENSES:
         return own
     try:
         wide = float(st.value("ui/dock_width_wide", WIDE_DOCK))
@@ -184,7 +183,7 @@ def apply_dock_width(view, settings=None) -> None:
     renderer = getattr(view, "renderer", None)
     if renderer is None or not hasattr(renderer, "ui_set_dock_width"):
         return
-    renderer.ui_set_dock_width(dock_width(view.__dict__.get("_ui_colset", 0), settings))
+    renderer.ui_set_dock_width(dock_width(view.__dict__.get("_ui_lens", 0), settings))
 
 
 def keep_dock_width(view, arg, settings=None) -> None:
@@ -196,8 +195,8 @@ def keep_dock_width(view, arg, settings=None) -> None:
         w = float(arg or 300)
     except ValueError:
         return
-    colset = view.__dict__.get("_ui_colset", 0) if view is not None else 0
-    st.setValue("ui/dock_width_wide" if colset in WIDE_COLSETS else "ui/dock_width", w)
+    lens = view.__dict__.get("_ui_lens", 0) if view is not None else 0
+    st.setValue("ui/dock_width_wide" if lens in WIDE_LENSES else "ui/dock_width", w)
 
 
 def _send_tools(view, win) -> None:
@@ -533,6 +532,7 @@ def before_frame(view) -> None:
     _tabs(view, win)
     _projects(view, win)
     from views import wgpu_tabs
+    wgpu_tabs.sync_host_context(view, win)
     wgpu_tabs.before_frame(view, win)
     opts = [(i, label, k, state) for i, label, k, state, _ in _options(view)]
     if opts != getattr(view, "_ui_opts", None):
@@ -827,14 +827,6 @@ TIPS = {
 }
 
 
-def _kind_tip(kind, path=None, source=None) -> str:
-    """The row's kind with its tooltip, as ui.rs takes them."""
-    tip = TIPS.get(kind, "").format(path=path or "its file")
-    if source:
-        tip = (tip + "\n\n" if tip else "") + f"From {source} — read-only here."
-    return f"{kind}{TIP}{tip}" if tip else kind
-
-
 def _tree_model(view, scene, cv):
     """The tree's nodes and memberships (core/link_structure.py), kept
     until the model changes: a click that only changes the selection
@@ -879,13 +871,7 @@ def _tree_model(view, scene, cv):
 
 
 def _tree(view, win, *, discover=False):
-    """The Project tree as display rows (council 2026-11-22, R1–R8): nodes;
-    under an expanded node its filed items, one row per placement, copies of
-    a component grouped by definition; an item's contents on expand, with
-    parts filed elsewhere as dimmed rows pointing to their node. Linked
-    files sit under «Linked files», each with its own structure below it
-    (core/link_structure.py). Item lists are paged. Python owns expansion
-    and filtering; the dock only draws."""
+    """Bind the membership index, revision and disclosure state to the native sidebar providers."""
     scene = getattr(win.viewport, "scene", None)
     if scene is None:
         return
@@ -894,385 +880,92 @@ def _tree(view, win, *, discover=False):
     flt = view.__dict__.get("_ui_filter", "")
     if discover:
         flt = ""
-    colset = 0 if discover else view.__dict__.get("_ui_colset", 0)
+    lens = 0 if discover else view.__dict__.get("_ui_lens", 0)
     sel_ids = {id(e) for e in scene.selection}
     from ingetrazo_core import ProjectSheets
     catalog = view.__dict__.get("_ui_sheet_catalog")
     if catalog is None:
         catalog = view._ui_sheet_catalog = ProjectSheets()
     sheet_revision = view._ui_sheet_revision = catalog.refresh(scene)
-    # Problems (watertight) and the Export cells (quantities) read geometry.
-    geometric = view.__dict__.get("_ui_mode") == "problems" or colset == 2
+    # Watertight checks in Export must follow mesh edits.
+    geometric = lens == 2
     cv = scene.content_version if geometric else _tree_version(view, win, scene)
     sig = (id(scene), id(scene.edit_group), scene.mesh.revision, cv, tuple(sorted(exp)), tuple(sorted(pages.items())), flt, len(sel_ids),
-           hash(frozenset(sel_ids)), colset, getattr(view, "_ui_layer_rev", 0), scene.show_section_planes, sheet_revision)
+           hash(frozenset(sel_ids)), lens, getattr(view, "_ui_layer_rev", 0), scene.show_section_planes, sheet_revision)
     if not discover and sig == getattr(view, "_ui_tree_sig", None):
         return
     first = not hasattr(view, "_ui_tree")
     if not discover:
         view._ui_tree_sig = sig
     mode = "" if discover else view.__dict__.get("_ui_mode", "")
-    from collections import Counter, defaultdict
-    from core import links, structure
+    from core import structure
     from core import layers as L
-    from ingetrazo_core import project_context_rows, project_item_matches, project_name_matches, source_placement_rows
+    from ingetrazo_core import filing_rows, mark_filing_selection, project_sidebar
     model = _tree_model(view, scene, cv)
-    if mode == "deliveries":
-        from views import wgpu_deliveries
-        wgpu_deliveries.dock(view, scene, model)
-        return
     tree, registry, recipes = model["tree"], model["registry"], model["recipes"]
-    counts, problems, to_fix = model["counts"], model["problems"], model["to_fix"]
+    counts, to_fix = model["counts"], model["to_fix"]
     node_layers, order = model["node_layers"], model["order"]
     if discover:
         from ingetrazo_core import reveal_branches
         exp = reveal_branches(scene, tree)
     nodes, children, direct, unfiled = tree.nodes, tree.children, tree.direct, tree.unfiled
     node_of = tree.member
-    depth = dict(order)
-    order = [k for k, _d in order]
-    selected = Counter(node_of[id(e)] for e in scene.selection if id(e) in node_of)
-    for key in reversed(order):
-        selected[nodes[key]["parent"]] += selected[key]
     active = registry.get("structure", {}).get("active")
     if first:
         # The host's own top nodes open; files stay folded (each is a root).
-        exp.update(f"n:{k}" for k in order if not nodes[k]["parent"] and nodes[k]["kind"] == "host")
+        exp.update(f"n:{k}" for k, _ in order if not nodes[k]["parent"] and nodes[k]["kind"] == "host")
         k = active
         while k in nodes and nodes[k]["parent"]:
             k = nodes[k]["parent"]
             exp.add(f"n:{k}")
-    paths = {}
-
-    def node_path(key):
-        if key not in paths:
-            paths[key] = " › ".join(structure.path(registry, key))
-        return paths[key]
-
-    tag_memo = {}
-
-    def node_tags(key):
-        # The tags a row's eye and lock act on: those its items (and its
-        # sub-nodes' items) carry, and the tags its recipes name.
-        if key not in tag_memo:
-            out = []
-            for k in tree.subtree(key):
-                out.extend(node_layers[k])
-                n = nodes[k]
-                if n["kind"] == "host":
-                    ly = _layer(scene, n["recipe"].get("tag"))
-                    if ly is not None:
-                        out.append(ly.key)
-                elif n["tag"]:
-                    out.append(n["tag"])
-            tag_memo[key] = list(dict.fromkeys(out))
-        return tag_memo[key]
-
-    def main_layer(key):
-        if nodes[key]["kind"] == "host":
-            return _layer(scene, recipes.get(key, {}).get("tag"))
-        ts = node_tags(key)
-        return scene.layer(ts[0]) if ts else None
-
-    def layer_state(key):
-        n = nodes[key]
-        if n["kind"] in ("link", "linked"):
-            bases = list(n.get("folders") or [n["folder"]]) if n["kind"] == "link" else [
-                nodes[c]["folder"] for c in children.get(key, ()) if nodes[c]["kind"] == "link"]
-            if not bases:
-                return -1, -1
-            ts = tree.file_tags(key)
-            eye = int(all(L.folder_visible(scene, b) for b in bases))
-            lock = int(bool(ts) and all(bool(getattr(scene.layer(t), "locked", False)) for t in ts))
-            return eye, lock
-        if n["kind"] == "tagfolder":
-            ts = node_tags(key)
-            return int(L.folder_visible(scene, n["folder"])), \
-                int(bool(ts) and bool(getattr(scene.layer(ts[0]), "locked", False)))
-        layer = main_layer(key)
-        if layer is None:
-            return -1, -1
-        visible = L.effective_visible(scene, layer) if n["kind"] != "host" else bool(getattr(layer, "visible", True))
-        return int(visible), int(bool(getattr(layer, "locked", False)))
-
-    # --- filtering: words match names and kinds; tokens test items ---------
-    words, tokens = [], []
-    for part in flt.lower().split():
-        (tokens if ":" in part else words).append(part)
-
-    def item_kind(g):
-        if links.is_linked(g):
-            return "link"
-        name = type(g).__name__
-        if "Section" in name:
-            return "section"
-        if "Image" in name:
-            return "image"
-        return "component" if getattr(g, "is_component", lambda: False)() else "group"
-
-    def item_hits(g, key):
-        return project_item_matches(scene, g, item_kind(g), flt, id(g) in to_fix_set or g in unfiled_set)
-
-    unfiled_set = set(unfiled) if flt else set()
-    to_fix_set = set(map(id, to_fix))
-    filtering = bool(words or tokens)
-    show_nodes, show_items = set(), defaultdict(list)
-    file_hit_by_key = {}
-    if filtering:
-        for key in order:
-            hit_node = bool(words) and not tokens and project_name_matches(
-                nodes[key]["name"], kind_of(recipes[key].get("class")), words)
-            members = [g for g in direct[key] if item_hits(g, key)]
-            file_hit = nodes[key]["kind"] == "link" and any(
-                project_item_matches(scene, g, "link", flt, links.link_state(scene, nodes[key]["path"]) in ("missing", "modified")) for g in tree.links.get(key, ()))
-            file_hit_by_key[key] = file_hit
-            if hit_node or members or file_hit:
-                show_items[key] = members
-                k = key
-                while k is not None:
-                    show_nodes.add(k)
-                    k = nodes[k]["parent"] if k in nodes else None
-
-    rows = []
-
-    def cells(key=None, g=None):
-        # The active column set's cells for a node (its tag's layer) or an item.
-        if colset == 1 and key is not None:
-            ly = main_layer(key)
-            return ly._drawing_cells() if ly is not None else []
-        if colset == 2:
-            if key is not None:
-                r = recipes.get(key, {})
-                return [str(r.get("class") or "—"), str(r.get("predefined_type") or ""), _qty_text(node_qty(key))]
-            if g is not None:
-                rec = g.ifc or {}
-                return [str(rec.get("class") or "inherits"), str(rec.get("predefined_type") or ""),
-                        _qty_text(_group_qty(view, g))]
-        return []
-
-    if colset == 2:
-        _measure(view, win, auto=True)
-    qty_memo = {}
-
-    def node_qty(key):
-        # The node's measured quantities, its sub-nodes' included, per unit.
-        if key not in qty_memo:
-            total = defaultdict(float)
-            for g in tree.members(key):
-                for unit, v in _group_qty(view, g).items():
-                    total[unit] += v
-            qty_memo[key] = dict(total)
-        return qty_memo[key]
-
-    def add(key, name, kind, badge, icon, d, count, probs, act, row, eye, lock, expandable, expanded, sel, extra=()):
-        rows.append(([key, name, kind, badge, icon, *extra],
-                     [d, count, probs, int(act), row, eye, lock, int(expandable), int(expanded), sel, 0]))
-
-    def more(key, shown, total, d):
-        # The page's end: one row that shows the next page when clicked.
-        left = total - shown
-        add(f"m:{key}", f"Show {min(ROW_CAP, left)} more ({left} not shown)", "", "", "", d, 0, 0, False,
-            4, -1, -1, False, False, 0)
-
-    import re
-    natural = lambda t: [int(p) if p.isdigit() else p for p in re.split(r"(\d+)", (t or "").lower())]
-
-    def add_items(groups, key, d):
-        by_def = defaultdict(list)
-        singles = []
-        for g in groups:
-            if getattr(g, "is_component", lambda: False)() and not links.is_linked(g):
-                by_def[(g.name, id(g.mesh))].append(g)
-            else:
-                singles.append(g)
-        entries = []
-        for (name, mid), gs in by_def.items():
-            if len(gs) > 1:
-                entries.append(("def", name, gs))
-            else:
-                singles.extend(gs)
-        entries += [("one", g.name or "", [g]) for g in singles]
-        entries.sort(key=lambda e: natural(e[1]))
-        cap = len(entries) if discover else pages.get(key, ROW_CAP)
-        for n, (what, name, gs) in enumerate(entries):
-            if n >= cap:
-                more(key, cap, len(entries), d)
-                break
-            if what == "def":
-                dk = f"d:{key}:{id(gs[0].mesh)}"
-                sel = sum(1 for g in gs if id(g) in sel_ids)
-                add(dk, name or "Component", "", f"×{len(gs)}", "component", d, 0,
-                    sum(1 for g in gs if id(g) in to_fix_set), False, 1, -1, -1, True, dk in exp, sel)
-                if dk in exp or filtering:
-                    dcap = len(gs) if discover else pages.get(dk, ROW_CAP)
-                    for g in gs[:dcap]:
-                        add_item(g, key, d + 1)
-                    if len(gs) > dcap:
-                        more(dk, dcap, len(gs), d + 1)
-            else:
-                add_item(gs[0], key, d)
-
-    def add_item(g, key, d, row=1):
-        ik = f"{'i' if row == 1 else 'c'}:{tree.row_id(g)}"
-        kids = list(getattr(g, "children", None) or [])
-        badge = "⛓" if links.is_linked(g) else ""
-        add(ik, g.name or "Group", "", badge, item_kind(g), d, 0, int(id(g) in to_fix_set), False, row,
-            0 if getattr(g, "hidden", False) else 1, int(bool(getattr(g, "locked", False))),
-            bool(kids), ik in exp, int(id(g) in sel_ids), cells(g=g))
-        if kids and ik in exp:
-            cap = len(kids) if discover else pages.get(ik, ROW_CAP)
-            for c in kids[:cap]:
-                where = node_of.get(id(c))
-                if where is not None and where != key and where in nodes:
-                    add(f"g:{tree.row_id(c)}", c.name or "Group", "", f"→ {nodes[where]['name']}", item_kind(c), d + 1,
-                        0, 0, False, 3, -1, -1, False, False, int(id(c) in sel_ids))
-                else:
-                    add_item(c, key, d + 1, row=2)
-            if len(kids) > cap:
-                more(ik, cap, len(kids), d + 1)
-
-    hidden_below = None
-    for key in order:
-        if filtering and key not in show_nodes:
-            continue
-        d = depth[key]
-        if hidden_below is not None:
-            if d > hidden_below:
-                continue
-            hidden_below = None
-        node = nodes[key]
-        name = node["name"]
-        cls = recipes[key].get("class")
-        source = links.stem(node["path"]) + ".igz" if node["path"] else None
-        badge, icon = "", ""
-        if node["kind"] == "link":
-            # A file row (tree A): the file's name, a file icon with its
-            # state, and "via <file>" for a file another file places.
-            from pathlib import Path
-            from core.link_structure import file_state
-            state = file_state(scene, node["path"], nested=bool(node.get("via")))
-            name = Path(node["path"]).name if node["path"] else name
-            icon = f"file:{state}"
-            badge = f"via {node['via']}" if node.get("via") else ""
-            tip = TIPS["Reference"].format(path=node["path"] or "its file")
-            tip += "\n\n" + FILE_STATES.get(state, state)
-            if node.get("merged"):
-                tip += f"\n\nIts one top node «{node['merged']}» is shown as this row."
-            kind = TIP + tip
-        elif node["kind"] == "linked":
-            kind = TIP + TIPS["Linked files"]
-        elif node["kind"] in ("tag", "tagfolder"):
-            kind = _kind_tip("Drawing only" if node["kind"] == "tag" else "", source=source)
-        elif cls is None and children.get(key):
-            kind = _kind_tip("", source=source)
-        else:
-            kind = _kind_tip(kind_of(cls), source=source)
-        nk = f"n:{key}"
-        expanded = filtering or nk in exp
-        eye, lock = layer_state(key)
-        add(nk, name, kind, badge, icon, d, counts[key], problems[key], key == active, 0, eye, lock,
-            bool(children.get(key)) or bool(direct[key]) or len(tree.links.get(key, ())) > 1, expanded, selected[key], cells(key=key))
-        if not expanded:
-            hidden_below = d
-            continue
-        if node["kind"] == "link" and (not filtering or file_hit_by_key.get(key)):
-            rows.extend(source_placement_rows(scene, tree.links.get(key, ()), d+1))
-        members = show_items[key] if filtering else direct[key]
-        if members:
-            add_items(members, key, d + 1)
-    loose_items = [g for g in unfiled if item_hits(g, "")] if filtering else unfiled
-    if loose_items:
-        uk = "n:"
-        add(uk, "Unfiled", "", "", "", 0, len(loose_items), len(loose_items), False, 0, -1, -1, True, filtering or uk in exp,
-            sum(1 for g in unfiled if id(g) in sel_ids))
-        if filtering or uk in exp:
-            add_items(loose_items, "", 1)
-    if mode == "problems":
-        host = structure._nodes(registry)
-        host_of = {i: k for i, k in node_of.items() if k in host}
-        rows = _problem_rows(view, scene, registry, host, {k: recipes[k] for k in host if k in recipes},
-                             unfiled, host_of, exp, sel_ids)
-    if mode != "problems":
-        context = project_context_rows(scene, flt, exp)
-        if scene.edit_group is not None:
-            rows = context
-        else:
-            if tree._host_roots < 0:
-                rows[:0] = scene._root._drawing_preview(exp, flt, bool(tree.links))
-            rows.extend(context)
-            rows.extend(catalog.rows(flt, exp))
-        if discover:
-            from ingetrazo_core import reveal_selection
-            return reveal_selection(rows)
-        mark_selection(rows)
-    else:
-        # Problems lists items under rules: a selected item is lit itself.
-        for _t, ints in rows:
-            ints[10:] = [1 if ints[4] != 0 and ints[9] > 0 else 0]
+    rows = filing_rows(scene, model, exp, pages, flt, discover, ROW_CAP, lens, sel_ids,
+                       active, KINDS, TIPS, FILE_STATES)
+    rows, path_bar = project_sidebar(scene, tree, rows, flt, exp, str(getattr(win, "_current_path", "") or ""))
+    rows.extend(catalog.rows(flt, exp))
+    if discover:
+        from ingetrazo_core import reveal_selection
+        return reveal_selection(rows)
+    if lens == 2:
+        from core import deliveries
+        from ingetrazo_core import export_readiness
+        records = deliveries.records(scene)
+        delivery = records.get(getattr(view, "_delivery_key", None)) or next(iter(records.values()), {})
+        profile = delivery.get("options", {}).get("profile", "") if delivery else None
+        cache_key = (id(scene), scene.content_version, profile)
+        cache = getattr(view, "_ui_rules_cache", None)
+        if not cache or cache[0] != cache_key:
+            cache = cache_key, _problem_rules(scene, registry, structure._nodes(registry), recipes, unfiled, profile)
+            view._ui_rules_cache = cache
+        rows, readiness = export_readiness(scene, tree, records, getattr(view, "_delivery_key", "") or "",
+                                           cache[1], exp, rows)
+        view.renderer.ui_panel_set("readiness", readiness)
+    rows = mark_filing_selection(rows)
     view._ui_tree = dict(direct=direct, children=children, unfiled=unfiled, recipes=recipes, to_fix=to_fix,
                          active=active, node_of=node_of, nodes=nodes, tree=tree, counts=counts,
                          node_layers={k: list(c) for k, c in node_layers.items()})
     view.renderer.ui_set_tree(rows, len(unfiled))
+    view.renderer.ui_set_catalog_info(Path(str(getattr(win, "_current_path", "") or "")).name, tree, counts)
+    view.renderer.ui_set_edit_path(path_bar)
     if hasattr(view.renderer, "ui_set_proposal_available"):
-        view.renderer.ui_set_proposal_available(not mode and tree._host_roots < 0 and scene.edit_group is None)
+        view.renderer.ui_set_proposal_available(not mode and tree._host_roots < 0)
     if not view.__dict__.get("_ui_sort_loaded") and hasattr(view.renderer, "ui_set_tree_sort"):
         from PySide6.QtCore import QSettings
         view.renderer.ui_set_tree_sort(max(0, QSettings().value("ui/project_tree_sort", 0, type=int)))
         view._ui_sort_loaded = True
-    view.renderer.ui_set_colset(colset)
-    view.renderer.ui_set_mode({"problems": "Problems", "library": "Library"}.get(mode, ""))
+    view.renderer.ui_set_style_catalog(id(scene), [*L.LINETYPES, *(L.CUSTOM_LINETYPE + key for key in scene.line_types)])
+    view.renderer.ui_set_lens(lens)
+    view.renderer.ui_set_mode({"library": "Library"}.get(mode, ""))
     view.renderer.ui_set_issues(bool(view.__dict__.get("_ui_issues", False)))
     if not getattr(view, "_ui_kinds_sent", False):
         view.renderer.ui_set_kinds(sorted(set(KINDS.values()) - {"Level", "Building", "Site"}))
         view._ui_kinds_sent = True
-    path = node_path(active) if active in structure._nodes(registry) else ""
+    path = " › ".join(structure.path(registry, active)) if active in structure._nodes(registry) else ""
     view.renderer.ui_set_delivery(path, len(unfiled), len(to_fix))
 
 
 #: A file row's state, in words (its dot's tooltip and the inspector).
 FILE_STATES = {"resolved": "Up to date", "modified": "Changed on disk — reload to see the changes",
                "missing": "Not found — relink it", "packed": "Packed in this file"}
-
-
-def mark_selection(rows) -> None:
-    """Mark the selection once (tree A): the deepest shown row holding a
-    selected thing is lit (mark 1); the rows above it get a quiet partial
-    mark (2), never a count each. A node holds its selection itself when
-    it counts more selected things than the rows shown under it — folded,
-    or past a page's end. Rows are ``(texts, ints)`` with ints[0] the
-    depth, ints[4] the row type, ints[9] the selected count and ints[10]
-    the mark (written here)."""
-    n = len(rows)
-    covered = [0] * n
-    holds = [False] * n
-    # Children come after their parent: walk backwards, summing what each
-    # row's shown children cover.
-    below = {}          # depth → running sum of the current run of children at that depth
-    for i in range(n - 1, -1, -1):
-        ints = rows[i][1]
-        d, row, sel = ints[0], ints[4], max(0, ints[9])
-        kids = below.pop(d + 1, 0)
-        for deeper in [k for k in below if k > d + 1]:
-            below.pop(deeper)
-        if row in (1, 2, 3):
-            # An item stands for itself; its parts are rows of their own.
-            holds[i] = sel > 0
-            covered[i] = sel + kids
-        else:
-            holds[i] = sel > kids
-            covered[i] = max(sel, kids)
-        below[d] = below.get(d, 0) + covered[i]
-    stack = []          # (depth, index) of the open ancestors
-    partial = set()
-    for i in range(n):
-        d = rows[i][1][0]
-        while stack and stack[-1][0] >= d:
-            stack.pop()
-        if holds[i]:
-            partial.update(j for _d, j in stack)
-        stack.append((d, i))
-    for i in range(n):
-        rows[i][1][10] = 1 if holds[i] else 2 if i in partial else 0
 
 
 #: Steps that change only geometry inside meshes (the feed's own
@@ -1313,29 +1006,15 @@ def _tree_version(view, win, scene) -> int:
     return cv
 
 
-def _problem_rows(view, scene, registry, nodes, recipes, unfiled, node_of, exp, sel_ids):
-    """The one problems list (council 2026-11-22): severity → rule → item.
-    Picking a rule selects its items, so the bulk fix is the inspector's;
-    picking an item frames it. Scan meshes and drawing-only nodes are not
-    held to a record."""
-    from core import structure
-    from core.structure_ids import load_requirements, requirement_hits
-    cache = getattr(view, "_ui_rules_cache", None)
-    if cache is not None and cache[0] == (id(scene), scene.content_version):
-        rules = cache[1]
-    else:
-        rules = _problem_rules(scene, registry, nodes, recipes, unfiled)
-        view._ui_rules_cache = ((id(scene), scene.content_version), rules)
-    return _problem_rows_from(view, rules, nodes, node_of, exp, sel_ids, scene)
-
-
-def _problem_rules(scene, registry, nodes, recipes, unfiled):
+def _problem_rules(scene, registry, nodes, recipes, unfiled, profile=None):
     from core import structure
     from core.structure_ids import load_requirements, requirement_hits
     rules = []          # (severity, rule id, label, [groups])
     rules.append(("Blocks export", "unfiled", "Not filed", list(unfiled)))
     try:
-        requirements = load_requirements(scene, registry)
+        profiles = registry.get("export_profiles", {})
+        checked = registry if profile is None else {**registry, "export_profiles": {profile: profiles.get(profile, {})}}
+        requirements = load_requirements(scene, checked)
     except Exception:
         requirements = []
     ids = {}
@@ -1375,36 +1054,8 @@ def _problem_rules(scene, registry, nodes, recipes, unfiled):
     rules.append(("Needs attention", "status", "Status missing", missing))
     rules.append(("Info", "hidden", "Hidden items in exported nodes", hidden))
     if not requirements:
-        rules.append(("Info", "noids", "No IDS checklist in the export profiles: not checked", []))
+        rules.append(("Info", "noids", "No IDS checklist in the selected profile", []))
     return rules
-
-
-def _problem_rows_from(view, rules, nodes, node_of, exp, sel_ids, scene):
-    view._ui_rules = {rid: gs for _sev, rid, _l, gs in rules}
-    rows, order = [], []
-    for sev in ("Blocks export", "Needs attention", "Info"):
-        these = [r for r in rules if r[0] == sev and (r[3] or r[1] in ("noids", "solidcut"))]
-        if not these:
-            continue
-        total = sum(len(r[3]) for r in these)
-        rows.append(([f"s:{sev}", sev, "", "", ""], [0, total, total if sev != "Info" else 0, 0, 0, -1, -1, 0, 1, 0]))
-        for _sev, rid, label, gs in these:
-            rk = f"r:{rid}"
-            open_ = rk in exp or (len(gs) <= 40 and f"-{rk}" not in exp)
-            rows.append(([rk, label, "", "", ""], [1, len(gs), 0, 0, 0, -1, -1, int(bool(gs)), int(open_ and bool(gs)), 0]))
-            if open_:
-                for g in gs[:ROW_CAP]:
-                    if g is None and rid == "solid":
-                        rows.append((["solid:active", scene.edit_group.name if scene.edit_group else "Loose geometry", "", "", ""],
-                                     [2, 0, 0, 0, 1, -1, -1, 0, 0, 0]))
-                        continue
-                    where = node_of.get(id(g))
-                    badge = nodes[where]["name"] if where in nodes else ""
-                    rows.append(([f"i:{g.uid}", g.name or "Group", "", badge, "group"],
-                                 [2, 0, 0, 0, 1, -1, -1, 0, 0, int(id(g) in sel_ids)]))
-                    order.append(g)
-    view._ui_problem_order = order
-    return rows
 
 
 def _tex_icon(view, path) -> str:
@@ -1635,19 +1286,6 @@ def _export_csv(win) -> None:
     win.viewport.flash_status(f"Quantities exported to {path}")
 
 
-def _problem_step(win, view, step) -> None:
-    """⌘] / ⌘[: select and frame the next or previous problem."""
-    order = getattr(view, "_ui_problem_order", [])
-    if not order:
-        return
-    cur = getattr(view, "_ui_problem_at", -1)
-    cur = (cur + step) % len(order)
-    view._ui_problem_at = cur
-    _select(win, [order[cur]])
-    win._on_zoom_selection()
-    view._ui_tree_sig = None
-
-
 def _layer(scene, tag):
     """The tag (layer) a node's recipe names: by key, else by label, else by
     the last part of a folder path."""
@@ -1739,7 +1377,7 @@ def _tree_action(win, view, action) -> None:
             _measure(view, win)
             view._ui_tree_sig = None
         elif verb == "insp" and (key == "solidrepair" or key.startswith("solidfault:")):
-            active = key.startswith("solidfault:active/") and getattr(view, "_ui_mode", "") == "problems"
+            active = key.startswith("solidfault:active/") and view.__dict__.get("_ui_lens") == 2
             if not active and len(groups) != 1:
                 return
             out = _core(vp, "repair_solid", placement=None if active else vp.scene.occurrence_path(groups[0]),
@@ -1778,6 +1416,10 @@ def _tree_action(win, view, action) -> None:
     node = ident if kind == "n" else None
 
     def item():
+        if kind == "exportitem":
+            import json
+            path = json.loads(ident)
+            return scene.resolve_occurrence(path) if path else None
         return _group_by_uid(win, ident) if kind in ("i", "c", "g") else None
 
     def copies():
@@ -1852,7 +1494,17 @@ def _tree_action(win, view, action) -> None:
         view.update()
 
     try:
-        if verb == "revealselection":
+        if verb == "hosteye":
+            from views import wgpu_tabs
+            host, mount = wgpu_tabs.source_context(win)
+            if mount is not None:
+                _core(host.viewport, "set_tag_state", tags=[rk], visible=extra == "1")
+                host.viewport.notify_scene_changed()
+                view.update()
+        elif verb == "documentroot":
+            from views.tree_navigation import open_to
+            open_to(vp, [])
+        elif verb in ("revealselection", "revealnode"):
             plan = _tree(view, win, discover=True) if scene.selection else None
             if plan:
                 target, ancestors, limits = plan
@@ -1861,7 +1513,7 @@ def _tree_action(win, view, action) -> None:
                 for page, limit in limits:
                     pages[page] = max(pages.get(page, ROW_CAP), limit)
                 view._ui_mode = view._ui_filter = ""
-                view.renderer.ui_reveal_row(target)
+                view.renderer.ui_reveal_row(rk if verb == "revealnode" else target)
                 rebuild()
             elif scene.selection:
                 vp.flash_status("This selection has no occurrence in the Project tree")
@@ -1951,25 +1603,34 @@ def _tree_action(win, view, action) -> None:
             _select(win, [])
             view._ui_insp_node = (rk, (0, 0, 0))
             rebuild()
-        elif verb == "node" and kind == "r":
-            _select(win, [g for g in getattr(view, "_ui_rules", {}).get(ident, []) if g is not None])
-            rebuild()
-        elif verb == "item" and view.__dict__.get("_ui_mode") == "problems":
-            g = item()
-            if g is not None:
-                order = getattr(view, "_ui_problem_order", [])
-                view._ui_problem_at = next((i for i, o in enumerate(order) if o is g), -1)
-                _select(win, [g])
-                win._on_zoom_selection()
-            rebuild()
         elif verb == "filter":
             view._ui_filter = rk
             rebuild()
         elif verb == "sort":
             from PySide6.QtCore import QSettings
             QSettings().setValue("ui/project_tree_sort", int(rk))
-        elif verb == "colset":
-            view._ui_colset = int(rk or 0)
+        elif verb == "item" and kind == "exportitem":
+            group = item()
+            if group is not None:
+                _select(win, [group])
+                win._on_zoom_selection()
+        elif verb == "exportshow":
+            import json
+            _select(win, filter(None, (scene.resolve_occurrence(path) for path in json.loads(rk))))
+            win._on_zoom_selection()
+        elif verb == "exportstatus":
+            import json
+            _core(vp, "patch_record_field", **json.loads(rk))
+            vp.notify_scene_changed()
+            rebuild()
+        elif verb == "drawingpatch":
+            import json
+            targets, patch = json.loads(rk)
+            _core(vp, "edit_tag", tags=targets, field="style", value=json.dumps(patch))
+            rebuild()
+            vp.notify_scene_changed()
+        elif verb == "lens":
+            view._ui_lens = int(rk or 0)
             apply_dock_width(view)
             rebuild()
         elif verb in ("print", "color", "linetype", "weight", "hatch") and node and not linked:
@@ -2136,6 +1797,18 @@ def _tree_action(win, view, action) -> None:
             _core(vp, "edit_structure_node", node=node, field="active", value="")
             vp.notify_scene_changed()
             rebuild()
+        elif verb == "kind" and kind == "preview-tag":
+            cls = next((c for c, label in KINDS.items() if c and label == extra), None)
+            if cls:
+                _core(vp, "promote_tag", tag=ident, ifc_class=cls)
+                vp.notify_scene_changed()
+                rebuild()
+        elif verb in ("tagselect","tagisolate") and kind == "preview-tag":
+            matches = [g for g in data["unfiled"] if (g.layer or L.DEFAULT_LAYER) == ident]
+            if verb == "tagselect":
+                _select(win, matches)
+            else:
+                _isolate(win, matches)
         elif verb == "kind" and node:
             cls = next((c for c, k in KINDS.items() if k == extra and c), None)
             recipe = dict(structure._nodes(bim_registry.get(scene)).get(node, {}).get("recipe", {}))
@@ -2307,15 +1980,14 @@ def _inspector(view, win) -> None:
     picked in the tree, one item, several, or loose geometry. Fields edit in
     place; IFC stays under Export details."""
     scene = win.viewport.scene
-    if view.__dict__.get("_ui_mode") == "deliveries" and getattr(view, "_delivery_key", None):
-        view._ui_insp_sig = None
-        return
     sel = list(scene.selection)
     focus = getattr(view, "_ui_insp_node", None)
     sel_sig = (len(sel), id(sel[0]) if sel else 0, id(sel[-1]) if sel else 0)
     node_focus = focus[0] if focus and focus[1] == sel_sig else None
+    filename = str(getattr(win, "_current_path", "") or "")
     sig = (id(scene), scene.content_version, sel_sig, node_focus, getattr(view, "_ui_tree_sig", None) is not None,
-           view.__dict__.get("_ui_mat_focus"), view.__dict__.get("_ui_mode"), view.__dict__.get("_ui_colset"),
+           view.__dict__.get("_ui_mat_focus"), view.__dict__.get("_ui_mode"), view.__dict__.get("_ui_lens"),
+           filename, frozenset(map(id, sel)),
            _current_material_name(), _active_tool_id(win), scene.show_section_planes, scene.show_section_cuts,
            scene.display_style.section_fill, view.__dict__.get("_ui_sheet_revision"))
     if sig == getattr(view, "_ui_insp_sig", None):
@@ -2324,6 +1996,10 @@ def _inspector(view, win) -> None:
     from collections import Counter
     from core import bim_registry, links, structure
     from core.group import Group
+    if view.__dict__.get("_ui_lens") == 2:
+        focused_row = "n:" + node_focus if node_focus and node_focus != "solid:active" else None
+        paths = [] if node_focus else [scene.occurrence_path(g) for g in sel if isinstance(g, Group)]
+        view.renderer.ui_set_export_focus(focused_row, paths)
     registry = bim_registry.get(scene)
     nodes = structure._nodes(registry)
     data = getattr(view, "_ui_tree", None) or {}
@@ -2334,9 +2010,9 @@ def _inspector(view, win) -> None:
             view.renderer.ui_set_inspector(*got)
             return
     from core.section import SectionPlane
-    from ingetrazo_core import section_inspector
+    from ingetrazo_core import section_inspector, selection_identity
     section_key = node_focus or (f"section:{sel[0].uid}" if len(sel) == 1 and isinstance(sel[0], SectionPlane) else "")
-    if node_focus == "solid:active" and view.__dict__.get("_ui_mode") == "problems":
+    if node_focus == "solid:active" and view.__dict__.get("_ui_lens") == 2:
         from ingetrazo_core import solid_inspector_sections
         view.renderer.ui_set_inspector(scene.edit_group.name if scene.edit_group else "Loose geometry",
                                        solid_inspector_sections(scene, None, True))
@@ -2350,6 +2026,8 @@ def _inspector(view, win) -> None:
         section = section_inspector(scene, section_key)
         if section is not None:
             view.renderer.ui_set_inspector(*section)
+            if not node_focus and sel:
+                view.renderer.ui_set_identity(selection_identity(scene, data, filename, KINDS))
             return
     if node_focus is not None and node_focus in (data.get("nodes") or {}) \
             and data["nodes"][node_focus].get("kind") != "host":
@@ -2369,12 +2047,6 @@ def _inspector(view, win) -> None:
         sections = [("Node", rows),
                     ("Actions", [(f"kindmenu:{node_focus}", "Change kind…"), (f"active:{node_focus}", "Draw into"),
                                  (f"isolate:{node_focus}", "Isolate"), (f"cutlist:{node_focus}", "Cut list…")])]
-        if view.__dict__.get("_ui_colset") == 1:
-            from core import hatches, layers
-            sections.append(("Drawing", [("node", "n:" + node_focus),
-                                         *(("hatch", k) for k in hatches.HATCH_ORDER),
-                                         *(("line", k) for k in layers.LINETYPES),
-                                         *(("line", layers.CUSTOM_LINETYPE + k) for k in scene.line_types)]))
         if missing:
             sections.append(("Actions", [(f"nodestatus:{node_focus}:" + v, "All " + v.lower()) for v in STATUS_CHOICES]))
         export = [("IFC class", str(recipe.get("class") or "none (drawing only)")),
@@ -2399,6 +2071,7 @@ def _inspector(view, win) -> None:
     if not sel:
         view.renderer.ui_set_inspector("", [])
         return
+    identity = selection_identity(scene, data, filename, KINDS)
     groups = [g for g in sel if isinstance(g, Group)]
     from views import verbs
     sel_kind = verbs.kind_of(scene, sel)
@@ -2407,18 +2080,9 @@ def _inspector(view, win) -> None:
         rec = g.ifc or {}
         key = data.get("node_of", {}).get(id(g)) or structure.node_of(g)
         filed_ok = key in nodes
-        filed = (" › ".join(structure.path(registry, key)) if filed_ok
-                 else "Its source's nodes" if links.link_of(g) else "Not filed")
         recipe = data.get("recipes", {}).get(key, {})
-        kind = (kind_of(rec.get("class") or recipe.get("class")) if (rec or recipe)
-                else "From its node, once filed" if not filed_ok else "Drawing only")
-        if sel_kind == "linked_part":
-            holder = links.linked_ancestor(g)
-            src = str((links.link_of(holder) or {}).get("path", "")).rsplit("/", 1)[-1]
-            filed = data.get("nodes", {}).get(key, {}).get("name") if key in data.get("nodes", {}) else filed
-            filed = f"{src} › {filed}" if filed and filed != src.rsplit(".", 1)[0] else src
         name_cell = _edit(f"groupname:{g.uid}", g.name or "") if verbs.name_editable(sel_kind) else (g.name or "")
-        rows = [("Name", name_cell), ("Filed in", filed), ("Kind", kind)]
+        rows = [("Name", name_cell)]
         if verbs.read_only(sel_kind):
             rows.append(("Edits", "Read-only here"))
         if g.is_component():
@@ -2436,18 +2100,18 @@ def _inspector(view, win) -> None:
         if rec.get("class") and verbs.offers(sel_kind, "status"):
             sections.append(("Actions", [("status:" + v, v.capitalize()) for v in STATUS_CHOICES]))
         if sel_kind == "linked_part":
-            sections.append(("Actions", [("linkfile", "Select its linked file"), ("linkopen", "Open source")]))
+            sections.append(("Actions", [("linkfile", "Select its linked file"), ("linkopen", "Edit source")]))
         kids = list(getattr(g, "children", None) or [])
         if kids:
             parts = Counter(c.name or "Part" for c in kids)
             prow = [(n, f"×{k}") for n, k in parts.most_common(8)]
             if len(parts) > 8:
                 prow.append(("…", f"{len(parts) - 8} more kinds"))
-            if view.__dict__.get("_ui_mode") != "problems" or not hasattr(view.renderer, "ui_panel_set"):
+            if view.__dict__.get("_ui_lens") != 2 or not hasattr(view.renderer, "ui_panel_set"):
                 sections.append(("Parts", prow))
             sections.append(("Actions", [("cutlist", "Cut list…")]))
         from ingetrazo_core import solid_inspector_sections
-        solid = solid_inspector_sections(scene, g, view.__dict__.get("_ui_mode") == "problems")
+        solid = solid_inspector_sections(scene, g, view.__dict__.get("_ui_lens") == 2)
         if solid and not verbs.offers(sel_kind, "repair"):
             solid = [s_ for s_ in solid if s_[0] != "Actions"]
         if solid:
@@ -2460,7 +2124,7 @@ def _inspector(view, win) -> None:
             sections.append(("Linked file", [("Source", str(link.get("path", "")).rsplit("/", 1)[-1]),
                                              ("Status", LINK_STATES.get(state, state)), *link_subset_rows(g),
                                              ("Nested links", "included" if nested else "source only")]))
-            acts = [("linkopen", "Open source"), ("linkreload", "Reload" if state != "modified" else "Reload changes"),
+            acts = [("linkopen", "Edit source"), ("linkreload", "Reload" if state != "modified" else "Reload changes"),
                     ("linkunlink", "Unlink"), ("linkfinder", "Show in Finder")]
             sections.append(("Actions", acts))
             sections.append(("Actions", [("linkrelink", "Relink…"),
@@ -2475,6 +2139,7 @@ def _inspector(view, win) -> None:
                   ("Tag", str(getattr(g, "layer", None) or "—"))]
         sections.append(("Export details", export))
         view.renderer.ui_set_inspector(g.name or "Group", sections)
+        view.renderer.ui_set_identity(identity)
         return
     kinds = Counter()
     unfiled = 0
@@ -2511,6 +2176,7 @@ def _inspector(view, win) -> None:
     if groups:
         sections.append(("Export details", []))
     view.renderer.ui_set_inspector(f"{len(sel)} selected", sections)
+    view.renderer.ui_set_identity(identity)
 
 
 def _linked_inspector(view, win, data, key):
@@ -2557,7 +2223,7 @@ def _linked_inspector(view, win, data, key):
             rows.append(("Top node", node["merged"]))
         # The file verbs first (views/verbs.py), then what any row offers.
         from views import verbs
-        labels = {"linkopen": "Open source", "linkreload": "Reload" if state != "modified" else "Reload changes",
+        labels = {"linkopen": "Edit source", "linkreload": "Reload" if state != "modified" else "Reload changes",
                   "linkunlink": "Unlink", "linkfinder": "Show in Finder", "linkrelink": "Locate…"}
         acts = [("lnk:" + v + ":" + key, labels[v]) for v in verbs.file_verbs(not top)
                 if state != "missing" or v in ("linkunlink", "linkrelink")]
@@ -2645,7 +2311,7 @@ def _link_action(win, view, g, key) -> None:
         elif key == "linkopen":
             # A ⛓ tab right of this project (views/wgpu_tabs.py).
             from views import wgpu_tabs
-            wgpu_tabs.open_link_source(win, Path(rec["path"]))
+            wgpu_tabs.open_link_source(win, Path(rec["path"]), g)
             return
         elif key == "linkpack":
             packed = not links.is_packed(scene, rec["path"])
@@ -3211,7 +2877,7 @@ def _command_query(view, win, query) -> None:
 
 
 def _problem_key(view, event) -> int:
-    if view.__dict__.get("_ui_mode") != "problems" or not (event.modifiers() & Qt.ControlModifier):
+    if view.__dict__.get("_ui_lens") != 2 or not (event.modifiers() & Qt.ControlModifier):
         return 0
     return {Qt.Key_BracketRight: 1, Qt.Key_BracketLeft: -1}.get(event.key(), 0)
 
@@ -3264,7 +2930,7 @@ def key(view, event, pressed: bool) -> bool:
     step = 0 if sheets else _problem_key(view, event)
     if step:
         if pressed:
-            _problem_step(view.window(), view, step)
+            view.renderer.ui_step_issue(step)
             view.update()
         return True
     name = _KEYS.get(event.key(), "")

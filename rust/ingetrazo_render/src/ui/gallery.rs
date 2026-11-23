@@ -597,15 +597,17 @@ impl Gallery {
                 ui.spacing_mut().item_spacing = vec2(0., SPACE_XS);
                 let w = ui.available_width();
                 ui.set_width(w);
-                // The dock's header as it ships: Project | Plugins (the Library
-                // is a large sheet now, not a dock place), then the lenses.
-                segmented(ui, &["Project", "Plugins"], 0, w);
-                if let Some(i) = underline_tabs(
-                    ui,
-                    &[("Filing".into(), String::new(), true), ("Drawing".into(), String::new(), true), ("Export".into(), "2".into(), true)],
-                    self.dock_tab,
-                ) {
-                    self.dock_tab = i;
+                // The dock's header as it ships (sidebar A): the three lenses.
+                if let Some(index) = segmented(ui, &["Filing", "Drawing", "Export"], self.dock_tab, w) {
+                    self.dock_tab = index;
+                }
+                tag_inspector(ui,"preview-tag:Walls","Walls",24,&[],&mut Vec::new());
+                host_visibility(ui,"Plaza.built",&[("Survey".into(),"Survey".into(),true)], &mut Vec::new());
+                path_bar(ui, &[("Plaza.built".into(), String::new()), ("Core block".into(), String::new())], &mut Vec::new());
+                caption(ui, "Line samples");
+                {
+                    let (r, _) = ui.allocate_exact_size(vec2(w.min(160.), 14.), Sense::hover());
+                    line_sample(ui, r, "0.35", "dashed", INK);
                 }
                 ui.add(search(&mut self.dock_filter, "Filter nodes").desired_width(w));
                 ui.spacing_mut().item_spacing = vec2(0., 0.);
@@ -658,10 +660,14 @@ impl Gallery {
                 ui.painter().text(r.left_center() + vec2(8., 0.), Align2::LEFT_CENTER, "Walls", title(), INK);
                 ui.painter().text(r.right_center() - vec2(8., 0.), Align2::RIGHT_CENTER, "Wall · 6 items", meta(), DIM);
                 ui.add_space(SPACE_XS);
-                caption(ui, "Node");
-                prop_row(ui, "Layer", "A-WALL");
-                prop_row(ui, "Area", "84.6 m²");
+                identity_card(ui, &[
+                    ("Kind".into(), "Wall".into(), "reveal".into(), None),
+                    ("Filed in".into(), "Building › Walls".into(), "reveal".into(), None),
+                    ("Tag".into(), "A-WALL".into(), "eye".into(), Some(true)),
+                ], &mut Vec::new());
                 ui.add_space(SPACE_XS);
+                let (sample, _) = ui.allocate_exact_size(vec2(44., 16.), Sense::hover());
+                hatch_sample(ui, sample, "brick");
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing = vec2(SPACE_XS, 0.);
                     ui.add_space(SPACE_S);

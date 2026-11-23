@@ -820,6 +820,50 @@ pub use molecules::*;
 pub mod organisms {
     use super::*;
     use egui::{Margin, Shadow};
+    pub fn path_bar(ui: &mut egui::Ui, path: &[(String, String)], actions: &mut Vec<String>) {
+        if path.len() < 2 { return; }
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing.x=SPACE_XS;
+            if quiet(ui, "↑").on_hover_text("Up one level").clicked() {
+                actions.push(path[path.len()-2].1.clone());
+            }
+            for (index, (label, action)) in path.iter().enumerate() {
+                if index > 0 { ui.label(egui::RichText::new("›").color(FAINT)); }
+                if ui.link(label).clicked() { actions.push(action.clone()); }
+            }
+        });
+    }
+
+    /// Selection addresses share a fixed label column; the full path remains
+    /// available on hover even in the narrow Filing lens.
+    pub fn identity_card(ui: &mut egui::Ui, rows: &[(String, String, String, Option<bool>)], actions: &mut Vec<String>) {
+        if rows.is_empty() { return; }
+        egui::Frame::NONE.fill(CARD).corner_radius(R_ROW).inner_margin(Margin::same(SPACE_XS as i8)).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.spacing_mut().item_spacing.y = 0.;
+            for (label, value, target, visible) in rows {
+                ui.horizontal(|ui| {
+                    ui.add_space(SPACE_S);
+                    ui.add_sized([62., PROP_H], egui::Label::new(egui::RichText::new(label).font(meta()).color(DIM))
+                        .halign(egui::Align::Min));
+                    if let Some(on) = visible {
+                        let (rect, eye) = ui.allocate_exact_size(vec2(16., PROP_H), Sense::click());
+                        paint_eye(ui, rect, *on);
+                        if eye.on_hover_text(format!("Show / hide {value}")).clicked() { actions.push(target.clone()); }
+                    }
+                    let enabled = !target.is_empty();
+                    let text = egui::RichText::new(value).font(body()).color(if enabled { ACCENT } else { INK_2 });
+                    let response = ui.add(egui::Label::new(text).truncate().sense(if enabled { Sense::click() } else { Sense::hover() }));
+                    if response.clicked() { actions.push(target.clone()); }
+                    if enabled {
+                        let tip = if label == "Tag" { format!("Show / hide {value}") } else { value.clone() };
+                        response.on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text(tip);
+                    }
+                });
+            }
+        });
+    }
+
     /// A glass surface with egui content on it: shadow, then the blurred model
     /// through the rounded shape (glass.rs), then the content. Built like an
     /// egui Frame so call sites read the same.
@@ -1661,4 +1705,87 @@ pub(super) fn fit(ui: &egui::Ui, text: &str, font: egui::FontId, color: Color32,
     job.wrap.max_rows = rows;
     job.wrap.break_anywhere = rows == 1;
     ui.painter().layout_job(job)
+}
+
+/// Contact sheet of the model's standard paper hatch marks at four pixels/mm.
+pub const HATCH_KEYS: &str = include_str!("assets/hatches.txt");
+
+pub fn hatch_sample(ui: &egui::Ui, rect: Rect, key: &str) {
+    ui.painter().rect_filled(rect, R_INSET, WELL);
+    let Some(index) = HATCH_KEYS.lines().position(|k| k == key) else { return };
+    let id = egui::Id::new("paper hatch samples");
+    let texture = ui.ctx().data(|d| d.get_temp::<egui::TextureHandle>(id)).unwrap_or_else(|| {
+        let image = image::load_from_memory(include_bytes!("assets/hatches.png")).expect("bundled hatch samples").to_rgba8();
+        let texture = ui.ctx().load_texture("paper hatches", egui::ColorImage::from_rgba_unmultiplied(
+            [image.width() as usize,image.height() as usize], image.as_raw()), egui::TextureOptions::LINEAR);
+        ui.ctx().data_mut(|d| d.insert_temp(id,texture.clone()));
+        texture
+    });
+    let height = HATCH_KEYS.lines().count().div_ceil(8) as f32;
+    let uv = Rect::from_min_size(pos2((index%8) as f32/8.,(index/8) as f32/height),vec2(1./8.,1./height));
+    ui.painter().image(texture.id(), rect.shrink(1.), uv, INK_2);
+}
+
+pub fn line_sample(ui: &egui::Ui, rect: Rect, mm: &str, pattern: &str, color: Color32) {
+    let width = (mm.parse::<f32>().unwrap_or(0.18)*3.8).clamp(0.7, 5.);
+    let dash: &[f32] = match pattern {
+        "dotted" => &[1.,3.], "dashed_short" => &[3.,2.], "dashed_long" => &[12.,4.],
+        "dashed" => &[7.,3.], "dashdot" | "center" => &[9.,3.,1.,3.],
+        "dashdotdot" | "phantom" | "border" => &[8.,2.,1.,2.,1.,2.], _ => &[],
+    };
+    let y=rect.center().y;
+    let stroke=Stroke::new(width,color);
+    if dash.is_empty() { ui.painter().hline(rect.x_range(),y,stroke); return; }
+    let mut x=rect.left();
+    for run in dash.chunks_exact(2).cycle() {
+        ui.painter().hline(x..=(x+run[0]).min(rect.right()),y,stroke);
+        x+=run[0]+run[1];
+        if x>=rect.right() { break; }
+    }
+}
+
+/// Host tag overrides belong to the host tab, including while its source is edited.
+pub fn host_visibility(ui: &mut egui::Ui, host: &str, tags: &[(String, String, bool)], actions: &mut Vec<String>) {
+    if host.is_empty() { return; }
+    egui::ComboBox::from_id_salt(("host visibility",host)).selected_text("Host visibility").show_ui(ui, |ui| {
+        ui.set_min_width(204.);
+        caption(ui, host);
+        let id = ui.make_persistent_id(("host tag search", host));
+        let mut filter = ui.data(|d| d.get_temp::<String>(id)).unwrap_or_default();
+        ui.add(search(&mut filter, "Filter host tags"));
+        ui.data_mut(|d| d.insert_temp(id, filter.clone()));
+        let word = filter.to_lowercase();
+        egui::ScrollArea::vertical().max_height(280.).show(ui, |ui| {
+            for (key,label,visible) in tags {
+                if !label.to_lowercase().contains(&word) { continue; }
+                let (rect,resp) = ui.allocate_exact_size(vec2(ui.available_width(),ROW_H), Sense::click());
+                paint_state(ui,rect,state_of(&resp,false,true),R_ROW);
+                paint_eye(ui,Rect::from_center_size(pos2(rect.left()+12.,rect.center().y),vec2(16.,16.)),*visible);
+                ui.painter().text(rect.left_center()+vec2(26.,0.),egui::Align2::LEFT_CENTER,label,body(),INK);
+                if resp.clicked() { actions.push(format!("hosteye\u{1f}{key}\u{1f}{}",u8::from(!visible))); }
+            }
+        });
+        if quiet(ui,"Done").clicked() { ui.memory_mut(|m| m.close_popup()); }
+    });
+}
+
+pub fn tag_inspector(ui:&mut egui::Ui, key:&str, name:&str, count:u32, cells:&[String], actions:&mut Vec<String>) -> Option<Pos2> {
+    ui.strong(name);
+    caption_plain(ui,&format!("Tag · {count} items"));
+    let mut menu=None;
+    ui.horizontal_wrapped(|ui|{
+        ui.spacing_mut().item_spacing.x=SPACE_XS;
+        for (verb,label) in [("tagselect","Select items"),("tagisolate","Isolate")] {
+            if quiet(ui,label).clicked(){actions.push(format!("{verb}\x1f{key}"));}
+        }
+        if key!="preview-tag:Layer 0" {
+            let button=quiet(ui,"Give it a kind…");
+            if button.clicked(){menu=Some(button.rect.left_bottom());}
+        }
+    });
+    if cells.len()>=5 {
+        prop_row(ui,"Line",&format!("{} · {}",cells[1],if cells[2]=="auto" {"Automatic".into()}else{format!("{} mm",cells[2])}));
+        prop_row(ui,"Colour",if cells[0].is_empty(){"By material"}else{&cells[0]});
+    }
+    menu
 }
