@@ -102,9 +102,9 @@ def test_ingetrazo_window_places_and_packs_a_late_bar():
         assert win.toolBarArea(late) == Qt.LeftToolBarArea
         assert late.height() <= late.sizeHint().height() + 2
     finally:
+        win._saved_version = win.viewport.scene.version
+        win.close()
         if old is None:
             settings.remove('ui/window_state')
         else:
             settings.setValue('ui/window_state', old)
-        win._saved_version = win.viewport.scene.version
-        win.close()
