@@ -74,7 +74,10 @@ def _tool_frame(method):
     return handle
 
 
-class WgpuView(QWidget):
+from views.view_navigation import ViewNavigation
+
+
+class MetalView(ViewNavigation):
     frameReady = Signal(float, object, float)
     _ZOOM_OUT_STEP = 0.05
 
@@ -975,14 +978,6 @@ class WgpuView(QWidget):
         row = self.renderer.pick(int(x*scale), int(y*scale))
         return row if self.resolve(row) is not None else None
 
-    def _pixel_to_ray(self, x, y):
-        from views.viewport import Viewport
-        return Viewport._pixel_to_ray(self, x, y)
-
-    def _world_to_pixel(self, point):
-        from views.viewport import Viewport
-        return Viewport._world_to_pixel(self, point)
-
     @_tool_frame
     def hover(self, x, y, modifiers=Qt.NoModifier):
         from views.wgpu_inference import snap
@@ -1357,8 +1352,7 @@ class WgpuView(QWidget):
         self._last_double = None
         if (not self._drag_nav and callable(getattr(self.tools.tool, 'on_look', None))
                 and event.button() in (Qt.LeftButton, Qt.RightButton)):
-            from views.viewport import Viewport
-            Viewport._begin_look(self, event)
+            self._begin_look(event)
             return
         if not self._drag_nav and event.button() == Qt.LeftButton and mode in ('tape', 'move', 'mesh'):
             self.hover(self.press.x(), self.press.y(), event.modifiers())
@@ -1369,9 +1363,8 @@ class WgpuView(QWidget):
     @_tool_frame
     def mouseMoveEvent(self, event):
         if getattr(self, '_look_drag', None) is not None:
-            from views.viewport import Viewport
             if event.buttons():
-                Viewport._look_move(self, event)
+                self._look_move(event)
                 return
             self._look_drag = None
             self.tools._apply_tool_cursor()
@@ -1417,10 +1410,6 @@ class WgpuView(QWidget):
     def active_tool(self):
         return self.tools.tool
 
-    def _can_warp_pointer(self):
-        from views.viewport import Viewport
-        return Viewport._can_warp_pointer()
-
     @_tool_frame
     def focusOutEvent(self, event):
         # As GL's: the walking keys' releases will land elsewhere, but the
@@ -1454,8 +1443,7 @@ class WgpuView(QWidget):
         mode = getattr(self.source_viewport, 'nav_mode', None)
         if self._drag_nav:
             if mode == 'zoom_window':
-                from views.viewport import Viewport
-                Viewport._zoom_to_box(self, self.press, event.position())
+                self._zoom_to_box(self.press, event.position())
         elif event.button() == Qt.LeftButton and self.tools.sync() == 'select':
             from tools.select import SelectTool
             from tools.base import ToolContext
@@ -1640,10 +1628,6 @@ class WgpuView(QWidget):
         if self.source_viewport is not None:
             self.source_viewport.keyReleaseEvent(event)
 
-    def _project_to_lock_line(self, start, direction, x, y):
-        from views.viewport import Viewport
-        return Viewport._project_to_lock_line(self, start, direction, x, y)
-
     def _depth_world_at(self, x, y):
         from views.wgpu_inference import surface, packed_surface
         row = self.pick_row(x, y)
@@ -1667,22 +1651,6 @@ class WgpuView(QWidget):
         seen, point = self._depth_world_at(x, y)
         return point if seen == 'hit' else None
 
-    def _depth_of(self, point):
-        from views.viewport import Viewport
-        return Viewport._depth_of(self, point)
-
-    def _point_at_centre_depth(self, x, y):
-        from views.viewport import Viewport
-        return Viewport._point_at_centre_depth(self, x, y)
-
-    def _recentre_on(self, x, y):
-        from views.viewport import Viewport
-        Viewport._recentre_on(self, x, y)
-
-    def _world_under_cursor(self, x, y):
-        from views.viewport import Viewport
-        return Viewport._world_under_cursor(self, x, y)
-
     def _orbit_pivot_at(self, x, y):
         from views.viewport import _ray_aabb_span
         seen, point = self._depth_world_at(x, y)
@@ -1694,15 +1662,6 @@ class WgpuView(QWidget):
         if span is not None:
             return origin + direction*((span[0]+span[1])*.5)
         return QVector3D(self.camera.target)
-
-    def _zoom_out_step(self):
-        from views.viewport import Viewport
-        return Viewport._zoom_out_step(self)
-
-    def _zoom_at(self, steps, pos):
-        from views.viewport import Viewport
-        self._invert_wheel = getattr(self.source_viewport, '_invert_wheel', False)
-        return Viewport._zoom_at(self, steps, pos)
 
     @_tool_frame
     def wheelEvent(self, event):
@@ -1740,3 +1699,7 @@ class WgpuView(QWidget):
         if hasattr(self, '_inference_worker'):
             self._inference_worker.shutdown(wait=False, cancel_futures=True)
         super().closeEvent(event)
+
+
+class WgpuView(MetalView, QWidget):
+    """Qt presentation surface for the shared Metal view."""
