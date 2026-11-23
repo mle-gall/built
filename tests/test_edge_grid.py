@@ -99,7 +99,7 @@ class _StubVP:
 
 @pytest.mark.parametrize("density", ["sparse", "dense"])
 def test_viewport_readers_see_what_the_full_pass_sees(density):
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     rng = np.random.default_rng(5)
     n = 60000
     assert n >= Viewport.GEDGE_GRID_MIN
@@ -137,8 +137,8 @@ def test_viewport_readers_see_what_the_full_pass_sees(density):
 def test_the_kill_switch_runs_the_full_pass(monkeypatch):
     # INGETRAZO_NO_SNAP_FAST=1: every edge measured, no grid built — the
     # escape hatch's answer is the old one, exactly.
-    import views.viewport as vv
-    from views.viewport import Viewport
+    import views.document_interaction as vv
+    from tests.controller_surface import ControllerSurface as Viewport
     monkeypatch.setattr(vv, "_NO_SNAP_FAST", True)
     rng = np.random.default_rng(9)
     proj = _segments(rng, Viewport.GEDGE_GRID_MIN + 1)

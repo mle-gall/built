@@ -72,7 +72,18 @@ class NativeTools(MeshToolAccess):
         self.ids = np.empty(0, np.int64)
         self.original = None
         self.groups = []
-        self.value_buffer = ""
+        self._value_buffer = ""
+
+    @property
+    def value_buffer(self):
+        return getattr(self.view.source_viewport, '_value_buffer', self._value_buffer)
+
+    @value_buffer.setter
+    def value_buffer(self, value):
+        self._value_buffer = value
+        source = self.view.source_viewport
+        if hasattr(source, '_value_buffer'):
+            source._value_buffer = value
 
     @property
     def scene(self):
@@ -102,7 +113,8 @@ class NativeTools(MeshToolAccess):
                 return self._resume(parked)
             # Another tool after the camera mode: the parked one is
             # cancelled here as any switch cancels it.
-            self.__dict__.update(parked)
+            for name, value in parked.items():
+                setattr(self, name, value)
         preview = getattr(self.view, '_texture_preview', None)
         if preview is not None:
             preview.restore()
@@ -110,7 +122,9 @@ class NativeTools(MeshToolAccess):
             self.tool._leave(self)
         self.cancel()
         self.tool = tool
-        self.mode = TOOL_DISPATCH.get(type(tool).__name__, 'select' if tool is None else 'inert')
+        from tools.base import Tool
+        default = 'select' if tool is None else ('mesh' if isinstance(tool, Tool) else 'inert')
+        self.mode = TOOL_DISPATCH.get(type(tool).__name__, default)
         if self.mode == 'move':
             # Share MoveTool's copy toggle, numeric values and array window.
             self.mode = 'mesh'
@@ -122,8 +136,22 @@ class NativeTools(MeshToolAccess):
         if hasattr(self.view, 'setCursor'):
             self._apply_tool_cursor()
         if self.mode == 'inert':
-            source.flash_status('not yet available on the Metal renderer')
+            source.flash_status('Unsupported document tool')
         return self.mode
+
+    def pick_up(self):
+        """Synchronize an explicitly chosen tool and adopt a hovered Tape origin."""
+        if self.sync() != 'tape':
+            return
+        from PySide6.QtWidgets import QWidget
+        source = self.view.source_viewport
+        if isinstance(self.view, QWidget):
+            started = self.tool.start_from_hover(source)
+        else:
+            pos = getattr(self.view, '_cursor_pos', None)
+            started = pos is not None and self.tool.start_from_hover(source, pos.toPoint())
+        if started:
+            self.start_point = self.tool.start_point
 
     #: What a camera mode parks of the tool it suspends (GL's
     #: ``DocumentInteraction.suspended_tool``) and gives back when that tool resumes:
@@ -148,7 +176,8 @@ class NativeTools(MeshToolAccess):
         return self.mode
 
     def _resume(self, parked):
-        self.__dict__.update(parked)
+        for name, value in parked.items():
+            setattr(self, name, value)
         self._set_value_buffer(self.value_buffer)
         if hasattr(self.tool, '_viewport'):
             self.tool._viewport = self
@@ -235,7 +264,7 @@ class NativeTools(MeshToolAccess):
 
     def key(self, event):
         if self.mode == 'mesh':
-            from views.viewport import DocumentInteraction
+            from views.document_interaction import DocumentInteraction
             self._value_buffer = self.value_buffer
             if DocumentInteraction._handle_value_key(self, event):
                 self.value_buffer = self._value_buffer
@@ -248,7 +277,7 @@ class NativeTools(MeshToolAccess):
         return False
 
     def _current_token_tail(self):
-        from views.viewport import DocumentInteraction
+        from views.document_interaction import DocumentInteraction
         return DocumentInteraction._current_token_tail(self)
 
     def _array_pending(self):
@@ -266,7 +295,7 @@ class NativeTools(MeshToolAccess):
             signal.emit(value)
 
     def _parse_value_buffer(self, *args, **kwargs):
-        from views.viewport import DocumentInteraction
+        from views.document_interaction import DocumentInteraction
         return DocumentInteraction._parse_value_buffer(*args, **kwargs)
 
     def write_rows(self, rows):
@@ -358,11 +387,11 @@ class NativeTools(MeshToolAccess):
 
     def pick_guide(self, x, y):
         # These shared projection-only pickers never read GL caches.
-        from views.viewport import DocumentInteraction
+        from views.document_interaction import DocumentInteraction
         return DocumentInteraction.pick_guide(self, x, y) if self.scene is not None else None
 
     def pick_axis(self, x, y):
-        from views.viewport import DocumentInteraction
+        from views.document_interaction import DocumentInteraction
         return DocumentInteraction.pick_axis(self, x, y) if self.scene is not None else None
 
     def width(self):

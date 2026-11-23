@@ -96,10 +96,6 @@ def win(monkeypatch, tmp_path):
     from PySide6.QtCore import QSettings
     QSettings.setPath(QSettings.IniFormat, QSettings.UserScope, str(tmp_path))
     import ingetrazo_render  # noqa: F401 — the real module, its class swapped
-    from core import renderer_settings
-    monkeypatch.setattr(renderer_settings, "wanted", lambda st=None: True)
-    monkeypatch.setattr(renderer_settings, "arm", lambda st=None: None)
-    monkeypatch.setattr(renderer_settings, "first_frame", lambda st=None: None)
     monkeypatch.setattr(ingetrazo_render, "Renderer", FakeRenderer)
     FakeRenderer.instances.clear()
     # Qt's offscreen platform cannot move a native child window to another
@@ -107,6 +103,8 @@ def win(monkeypatch, tmp_path):
     # recording renderer needing no NSView.
     from PySide6.QtCore import Qt
     from views.wgpu_view import WgpuView
+    monkeypatch.setattr(WgpuView, "_window_handles", lambda self: (1, {}))
+    monkeypatch.setattr(WgpuView, "_can_create_surface", lambda self: True)
     made = WgpuView.__init__
 
     def alien(self, *a, **k):

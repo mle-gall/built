@@ -55,7 +55,7 @@ def _plain(v):
 
 
 def _entries(vp):
-    from views.viewport import _paint_of
+    from views.document_interaction import _paint_of
     out = []
     for g in vp._placements():
         paint = _paint_of(vp, g)

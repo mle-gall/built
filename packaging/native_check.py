@@ -12,8 +12,7 @@ def check():
         module = importlib.import_module(name)
         if name == 'ifcopenshell':
             module.file(schema='IFC4')
-    for rel in ('resources/shaders/basic.vert', 'resources/shaders/basic.frag',
-                'resources/textures/library.json', 'resources/components/components.json',
+    for rel in ('resources/textures/library.json', 'resources/components/components.json',
                 'i18n/es.json', 'resources/icons/ingetrazo_256.png'):
         if not (root / rel).is_file():
             raise FileNotFoundError(root / rel)

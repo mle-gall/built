@@ -63,11 +63,9 @@ _ALLOWED = {
     ("views/outliner.py", "toggle_isolated"): "groups",
     ("views/tray.py", "_component_steps"): "groups",
     ("views/tray.py", "refresh"): "groups",
-    ("views/viewport.py", "_cat_kept"): "cached arrays",
-    ("views/viewport.py", "_epoch_only_matrices"): "draw-record tuples",
-    ("views/viewport.py", "_epoch_kept_tops"): "draw-record tuples",
-    ("views/viewport.py", "_inst_draw_chunks"): "cached buffers",
-    ("views/viewport.py", "_upload_vbo"): "cached byte buffers",
+    ("views/document_interaction.py", "_cat_kept"): "cached arrays",
+    ("views/document_interaction.py", "_epoch_only_matrices"): "draw-record tuples",
+    ("views/document_interaction.py", "_epoch_kept_tops"): "draw-record tuples",
 }
 
 

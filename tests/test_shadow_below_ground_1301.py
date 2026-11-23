@@ -63,39 +63,3 @@ def test_parallel_judges_by_the_view_direction():
                        perspective=False).sees_from_below(CATCHER_Z)
     assert _camera(-30.0, target_z=50.0,
                    perspective=False).sees_from_below(CATCHER_Z)
-
-
-def test_catcher_pass_draws_nothing_from_below():
-    from views.viewport import Viewport
-
-    def no_draw(*_a, **_k):
-        raise AssertionError("the catcher pass went on to draw")
-
-    fake = SimpleNamespace(
-        camera=_camera(-30.0),
-        _base_map_showing=lambda: False,
-        _terrain_showing=lambda: False,
-        _photo_showing=lambda: False,
-        scene=SimpleNamespace(bounds=no_draw),
-    )
-    Viewport._draw_shadow_ground(fake, style=None)   # returns early
-
-
-def test_catcher_pass_still_draws_from_above():
-    from views.viewport import Viewport
-
-    reached = []
-
-    def bounds():
-        reached.append(True)
-        return None, None                  # empty scene: nothing to draw
-
-    fake = SimpleNamespace(
-        camera=_camera(30.0),
-        _base_map_showing=lambda: False,
-        _terrain_showing=lambda: False,
-        _photo_showing=lambda: False,
-        scene=SimpleNamespace(bounds=bounds),
-    )
-    Viewport._draw_shadow_ground(fake, style=None)
-    assert reached

@@ -1102,21 +1102,15 @@ class ViewGrid(QWidget):
 
     # ---- the extra viewports -------------------------------------------------
     def _make_extras(self) -> None:
-        from views.viewport import Viewport
         main = self.main
         for cell in self.cells:
             if cell.viewport is not None:
                 continue
-            display = None
-            if self.metal:
-                from views.document_controller import DocumentController
-                from views.wgpu_peer import WgpuPeerView
-                display = WgpuPeerView(self.display, cell)
-                display.setMinimumSize(80, 60)
-                vp = DocumentController.for_widget(display)
-            else:
-                vp = Viewport(cell)
-                vp.setMinimumSize(80, 60)
+            from views.document_controller import DocumentController
+            from views.wgpu_peer import WgpuPeerView
+            display = WgpuPeerView(self.display, cell)
+            display.setMinimumSize(80, 60)
+            vp = DocumentController.for_widget(display)
             # What extensions registered: one list per window, as in
             # MainWindow._make_viewport.
             for name in ("_ext_overlays", "_ext_snap_providers",

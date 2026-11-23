@@ -154,9 +154,9 @@ def _fired(win, key, press_only=False):
         action.triggered.connect(
             lambda _c=False, n=action.text(): names.append(n))
     if press_only:
-        QTest.keyPress(win.viewport, key)
+        QTest.keyPress(win.viewport.keys_stand_in, key)
     else:
-        QTest.keyClick(win.viewport, key)
+        QTest.keyClick(win.viewport.keys_stand_in, key)
     _app.processEvents()
     return names
 
@@ -164,7 +164,7 @@ def _fired(win, key, press_only=False):
 def _warm_up(win):
     """The first keystroke a freshly shown offscreen window gets is dropped
     before the shortcut map sees it (tests/test_shortcuts.py)."""
-    QTest.keyClick(win.viewport, Qt.Key_F1)
+    QTest.keyClick(win.viewport.keys_stand_in, Qt.Key_F1)
     _app.processEvents()
 
 
@@ -174,7 +174,7 @@ def test_wasd_move_you_instead_of_switching_tools(win):
     for key in (Qt.Key_W, Qt.Key_A, Qt.Key_S, Qt.Key_D, Qt.Key_Q, Qt.Key_E):
         assert _fired(win, key, press_only=True) == []
         assert key in tool.held
-        QTest.keyRelease(win.viewport, key)
+        QTest.keyRelease(win.viewport.keys_stand_in, key)
         assert key not in tool.held
     assert win.viewport.active_tool is tool
     assert not tool.moving
@@ -183,9 +183,9 @@ def test_wasd_move_you_instead_of_switching_tools(win):
 def test_holding_a_key_runs_the_timer(win):
     tool = _tool(win)
     _warm_up(win)
-    QTest.keyPress(win.viewport, Qt.Key_W)
+    QTest.keyPress(win.viewport.keys_stand_in, Qt.Key_W)
     assert tool.moving and tool._timer.isActive()
-    QTest.keyRelease(win.viewport, Qt.Key_W)
+    QTest.keyRelease(win.viewport.keys_stand_in, Qt.Key_W)
     assert not tool._timer.isActive()
 
 
@@ -206,7 +206,7 @@ def test_ctrl_shortcuts_still_work_in_first_person(win):
     for action in win.findChildren(QAction):
         action.triggered.connect(
             lambda _c=False, n=action.text(): names.append(n))
-    QTest.keyClick(win.viewport, Qt.Key_A, Qt.ControlModifier)
+    QTest.keyClick(win.viewport.keys_stand_in, Qt.Key_A, Qt.ControlModifier)
     _app.processEvents()
     assert Qt.Key_A not in tool.held
     assert "Select All" in names
@@ -215,7 +215,7 @@ def test_ctrl_shortcuts_still_work_in_first_person(win):
 def test_losing_focus_stops_you(win):
     tool = _tool(win)
     _warm_up(win)
-    QTest.keyPress(win.viewport, Qt.Key_W)
+    QTest.keyPress(win.viewport.keys_stand_in, Qt.Key_W)
     assert tool.moving
     tool.on_focus_out(win.viewport)
     assert not tool.moving and not tool._timer.isActive()
@@ -224,7 +224,7 @@ def test_losing_focus_stops_you(win):
 def test_leaving_the_tool_stops_you(win):
     tool = _tool(win)
     _warm_up(win)
-    QTest.keyPress(win.viewport, Qt.Key_W)
+    QTest.keyPress(win.viewport.keys_stand_in, Qt.Key_W)
     win._activate_tool("select")
     assert not tool.moving and not tool._timer.isActive()
 
@@ -237,13 +237,13 @@ def test_a_drag_turns_the_head_and_keeps_the_eye(win, button):
     _tool(win)
     eye = vp.camera.eye()
     c = QPoint(600, 400)
-    QTest.mousePress(vp, button, Qt.NoModifier, c)
-    QTest.mouseMove(vp, QPoint(900, 400))                # drag right…
+    QTest.mousePress(vp.keys_stand_in, button, Qt.NoModifier, c)
+    QTest.mouseMove(vp.keys_stand_in, QPoint(900, 400))                # drag right…
     f = vp.camera.forward()
     assert f.x() > 0.1                                   # …looks right (east)
-    QTest.mouseMove(vp, QPoint(900, 200))                # drag up…
+    QTest.mouseMove(vp.keys_stand_in, QPoint(900, 200))                # drag up…
     assert vp.camera.forward().z() > f.z() + 0.1        # …looks up
-    QTest.mouseRelease(vp, button, Qt.NoModifier, QPoint(900, 200))
+    QTest.mouseRelease(vp.keys_stand_in, button, Qt.NoModifier, QPoint(900, 200))
     assert (vp.camera.eye() - eye).length() < 1e-4
     assert vp._look_drag is None
 

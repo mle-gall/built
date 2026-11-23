@@ -10,9 +10,10 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-import views.viewport as viewport_mod
+import views.document_interaction as viewport_mod
 from core import _native
-from views.viewport import Viewport, _px_near
+from views.document_interaction import _px_near
+from tests.controller_surface import ControllerSurface as Viewport
 
 mod = _native.native
 pytestmark = pytest.mark.skipif(mod is None, reason="native module not built")

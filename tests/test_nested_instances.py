@@ -17,7 +17,7 @@ from core.group import (Group, copy_group, iter_placements,  # noqa: E402
                         world_mesh)
 from core.mesh import Mesh  # noqa: E402
 from core.scene import Scene  # noqa: E402
-from views.viewport import Viewport  # noqa: E402
+from tests.controller_surface import ControllerSurface as Viewport
 
 
 def _unit_quad(mesh, z=0.0):

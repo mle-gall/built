@@ -100,7 +100,7 @@ def test_rectangle_maps_to_selection(view):
 
 
 def test_camera_projection_matches_gl(view):
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     point = QVector3D(5, 4, 0)
     assert view._world_to_pixel(point) == Viewport._world_to_pixel(view, point)
     assert view._pixel_to_ray(240, 180) == Viewport._pixel_to_ray(view, 240, 180)
@@ -109,7 +109,7 @@ def test_camera_projection_matches_gl(view):
 @pytest.mark.parametrize('modifiers', [Qt.NoModifier, Qt.ShiftModifier])
 def test_middle_gesture_matches_gl(view, modifiers):
     import copy
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     gl = Viewport()
     gl.resize(view.size())
     gl.scene = view.scene
@@ -142,7 +142,7 @@ def test_edit_context_does_not_duplicate_group_geometry(view):
 
 @pytest.mark.parametrize('point', [(4, 3, 0), (5, 3, 0), (5, 4, 0)])
 def test_snap_matches_gl_viewport(view, point):
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     gl = Viewport()
     gl.resize(view.size())
     gl.scene = view.scene
@@ -160,7 +160,7 @@ def test_wheel_and_window_match_gl(view):
     import copy
     from PySide6.QtCore import QPoint
     from PySide6.QtGui import QWheelEvent
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     gl = Viewport()
     gl.resize(view.size())
     gl.scene = view.scene
@@ -217,20 +217,17 @@ def test_worker_warms_first_hover_for_the_captured_camera(view):
 def test_idle_document_edits_refresh_native_view(monkeypatch):
     from PySide6.QtTest import QTest
     from PySide6.QtWidgets import QStackedWidget
-    from core import renderer_settings
     from core.history import HideCommand, DeleteGroupCommand
     from views.main_window import MainWindow
-    from views.viewport import Viewport
+    from views.document_controller import DocumentController
 
     # Exercise the document timers and real packed rows without a GPU.
     stack = QStackedWidget()
-    viewport = Viewport(stack)
-    stack.addWidget(viewport)
+    viewport = DocumentController.for_widget(WgpuView(stack))
     doc = SimpleNamespace(viewport=viewport)
     stack._doc_stack = stack
     stack._doc = doc
     stack._document_first_frame = lambda *_: None
-    monkeypatch.setattr(renderer_settings, 'arm', lambda: None)
     monkeypatch.setattr(WgpuView, '_upload', lambda self: None)
     mesh = Mesh()
     mesh.add_edge(QVector3D(), QVector3D(1, 0, 0))

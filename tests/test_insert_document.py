@@ -242,7 +242,7 @@ def test_un_face_me_colocado_por_matriz_se_dibuja_donde_esta_colocado():
     """El torito dentro del arco llega al dibujo como proxy con la matriz
     del arco; leyendo la malla cruda salía en el origen del archivo."""
     from ingetrazo_core import Vec3 as Q
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
 
     class _Cam:
         perspective = False

@@ -20,7 +20,7 @@ _app = QGuiApplication.instance() or QGuiApplication([])
 
 from core.layers import Layer
 from core.scene import Scene
-from views.viewport import _ghost_edge_points
+from views.document_interaction import _ghost_edge_points
 
 
 def _box(mesh):

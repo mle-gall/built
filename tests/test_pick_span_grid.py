@@ -20,8 +20,9 @@ import numpy as np
 import pytest
 from ingetrazo_core import Vec3 as QVector3D
 
-import views.viewport as vv
-from views.viewport import Viewport, _split_chunk_spans
+import views.document_interaction as vv
+from views.document_interaction import _split_chunk_spans
+from tests.controller_surface import ControllerSurface as Viewport
 
 
 def _chunk(rng, n, kind):

@@ -19,7 +19,7 @@ from tools.scale import ScaleTool  # noqa: E402
 
 
 def _viewport():
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport(None)
     vp.resize(400, 400)
     cam = vp.camera

@@ -287,7 +287,7 @@ def test_the_points_near_the_cursor_are_numpys():
     """``_px_near`` (the native candidates, measured by NumPy) finds the
     same indices in the same order, with the same distances, as one
     ``np.hypot`` pass — points behind the eye, not finite, on the radius."""
-    from views.viewport import _px_near
+    from views.document_interaction import _px_near
     rng = np.random.default_rng(158)
     for _ in range(40):
         n = int(rng.integers(5000, 60000))
@@ -319,7 +319,8 @@ def test_a_face_the_static_engine_does_not_hold_is_still_hit(pair):
     visible (selectable while hidden geometry shows) goes over the spans
     as before, and meets them."""
     from types import SimpleNamespace
-    from views.viewport import Viewport, _moller_trumbore
+    from views.document_interaction import _moller_trumbore
+    from tests.controller_surface import ControllerSurface as Viewport
     va, _vb = pair
     _set_view(va, VIEWS[0])
     idx0 = va._pick_index(near="skip")
@@ -359,7 +360,7 @@ def test_rays_the_static_engine_leaves_open_are_settled_as_before(pair,
     doubts) go through the spans alone, the others skip them; forced
     doubts on a random part of the rays give the same answers, the same
     as all of them through the spans."""
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     va, vb = pair
     real = Viewport._static_occluders
     share = {"p": 0.0}

@@ -67,8 +67,8 @@ def viewport():
     _app.processEvents()
     try:
         vp = win.viewport
-        if not vp.isValid() or getattr(vp, '_gl', None) is None:
-            pytest.skip('requires OpenGL')
+        if not vp.keys_stand_in._can_create_surface():
+            pytest.skip('requires a GPU presentation surface')
         yield vp
     finally:
         win._saved_version = win.viewport.scene.version
@@ -109,47 +109,3 @@ def test_smooth_gpu_cylinder_is_invariant_under_one_panel_rotation(viewport):
     vp.scene.version += 1
     b = pixels(vp.render_image(400, 300, overlays=False))
     assert np.percentile(np.abs(a-b), 99) <= 2
-
-
-def test_identical_prototype_batching_preserves_smooth_mirrored_render(viewport, monkeypatch):
-    vp = viewport
-    for i in range(6):
-        g = Group(_cylinder(Mesh()), f'independent tube {i}')
-        g.xform = QMatrix4x4()
-        g.xform.translate((i % 3) * 3 - 3, (i // 3) * 3, 0)
-        g.xform.rotate(20 * i, 1, 0, 0)
-        if i % 2:
-            g.xform.scale(-1, 1, 1)
-        vp.scene.groups.append(g)
-    vp.camera.target, vp.camera.distance = V(0, 1.5, 1), 16.
-    vp.scene.version += 1
-    combined = pixels(vp.render_image(600, 400, overlays=False))
-    assert len(vp._frame_instanced) == 2
-    monkeypatch.setattr(vp, '_inst_draw_codes', lambda p: (p[4], p[5], p[7]))
-    vp._inst_frame_memo = {}
-    vp.scene.version += 1
-    separate = pixels(vp.render_image(600, 400, overlays=False))
-    assert len(vp._frame_instanced) == 6
-    assert np.percentile(np.abs(combined - separate), 99.9) <= 2
-
-
-def test_command_chunks_match_one_continuous_pass(viewport, monkeypatch):
-    vp = viewport
-    for i in range(48):
-        g = Group(_cylinder(Mesh()), f'tube {i}')
-        g.xform = QMatrix4x4()
-        g.xform.translate((i % 8) * 3, (i // 8) * 3, 0)
-        g.material = {'color': [0.2 + i / 100, 0.4, 0.7]}
-        vp.scene.groups.append(g)
-    vp.camera.target, vp.camera.distance = V(10, 7, 1), 40.
-    vp.scene.version += 1
-    chunks = pixels(vp.render_image(600, 400, overlays=False))
-    assert len(vp._inst_draw_chunks(vp._frame_instanced)) >= 3
-    if vp._gl_replay() is not None:
-        assert vp._lean_faces_rec_merged is not None
-    monkeypatch.setattr(vp, '_draw_instanced_faces_lean', vp._draw_instanced_faces_chunk)
-    monkeypatch.setattr(vp, '_draw_instanced_edges_lean', vp._draw_instanced_edges_chunk)
-    vp._lean_faces_rec = vp._lean_edges_rec = None
-    vp.scene.version += 1
-    continuous = pixels(vp.render_image(600, 400, overlays=False))
-    assert np.percentile(np.abs(chunks-continuous), 99.99) <= 2

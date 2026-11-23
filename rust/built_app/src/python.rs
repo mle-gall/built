@@ -103,10 +103,11 @@ pub fn report(py: Python<'_>, err: PyErr, what: &str) {
 }
 
 impl Host {
-    pub fn new(ns_view: usize, width: f64, height: f64, scale: f64, settings: Option<&str>, temporary: bool) -> PyResult<Host> {
+    pub fn new(surface: (usize, usize, &str), width: f64, height: f64, scale: f64, settings: Option<&str>, temporary: bool) -> PyResult<Host> {
         Python::attach(|py| {
             let cls = py.import("app_shell.host")?.getattr("Host")?;
-            let obj = cls.call1((ns_view, width, height, scale, settings, temporary))?;
+            let (window, display, platform) = surface;
+            let obj = cls.call1((window, width, height, scale, settings, temporary, display, platform))?;
             Ok(Host { obj: obj.unbind() })
         })
     }
@@ -259,7 +260,7 @@ mod tests {
         });
         assert!(builtin.unwrap(), "ingetrazo_render is registered as a built-in module");
         let settings = std::env::temp_dir().join("built-shell-cargo-test");
-        let host = Host::new(0, 1280.0, 800.0, 2.0, Some(&settings.to_string_lossy()), true).expect("host");
+        let host = Host::new((0, 0, ""), 1280.0, 800.0, 2.0, Some(&settings.to_string_lossy()), true).expect("host");
         let fixture = layout.root.join("tests/fixtures/shell/slab-and-cube.igz");
         let opened = host.call("open", (fixture.to_string_lossy().to_string(),)).unwrap();
         assert!(Python::attach(|py| opened.extract::<bool>(py).unwrap()));

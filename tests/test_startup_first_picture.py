@@ -9,7 +9,6 @@ from views.main_window import MainWindow
 
 
 def test_open_does_not_prepare_before_picture(tmp_path, monkeypatch):
-    monkeypatch.setenv('INGETRAZO_WGPU', '0')
     path = tmp_path/'empty.igz'
     igz.save_scene(Scene(), path)
     win = MainWindow(defer_extensions=True)
@@ -21,12 +20,13 @@ def test_open_does_not_prepare_before_picture(tmp_path, monkeypatch):
         assert win.open_path(path)
         assert order == []
         assert win._doc._awaiting_picture
-        win.viewport.frameSwapped.emit()  # stale swap, no loaded chunks yet
+        win._doc._resident_scene_ready = False
+        win._doc.stand_in.frameReady.emit(0., None, 0.)
         assert win._doc._awaiting_picture
         assert order == []
         order.append('frame')
-        win.viewport._edges_version = win.viewport.scene.version
-        win.viewport.frameSwapped.emit()
+        win._doc._resident_scene_ready = True
+        win._doc.stand_in.frameReady.emit(0., None, 0.)
         assert not win._doc._awaiting_picture
         # Use a bounded Qt loop to drain paced jobs without needing a GL driver.
         # The jobs run one per 16 ms slice and the georef syncs between
@@ -49,11 +49,11 @@ def test_open_does_not_prepare_before_picture(tmp_path, monkeypatch):
 
 def test_previous_metal_frame_cannot_release_loaded_document(monkeypatch):
     from types import SimpleNamespace
-    from core import renderer_settings
+    from core import _native
     doc = SimpleNamespace(viewport=object(), _renderer_wgpu=True, _resident_scene_ready=False,
                           _awaiting_picture=True, _renderer_starting=True)
     calls = []
-    monkeypatch.setattr(renderer_settings, 'first_frame', lambda: calls.append('guard'))
+    monkeypatch.setattr(_native, 'start_ok', lambda: calls.append('guard'))
     host = SimpleNamespace(_drain_document_startup=lambda d: calls.append('work'))
     MainWindow._document_first_frame(host, doc)
     assert calls == []

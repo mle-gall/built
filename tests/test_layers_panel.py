@@ -349,7 +349,7 @@ def test_no_look_means_no_change():
 def test_viewport_paint_follows_the_style_and_the_layers():
     from types import SimpleNamespace
     from core.style import Style
-    from views.viewport import _paint_of
+    from views.document_interaction import _paint_of
     scene = Scene()
     scene.layers += [Layer("A", color=(1, 0, 0))]
     g = Group(Mesh(), name="g")
@@ -1389,9 +1389,9 @@ def test_back_in_the_drawing_the_picked_rows_let_go(win):
     panel.refresh()
     panel.tree.selectAll()
     assert panel.tree.selectedItems()
-    panel._on_focus_changed(win.viewport, panel.search)     # still in here
+    panel._on_focus_changed(win.viewport.keys_stand_in, panel.search)     # still in here
     assert panel.tree.selectedItems()
-    panel._on_focus_changed(panel.tree, win.viewport)       # to the model
+    panel._on_focus_changed(panel.tree, win.viewport.keys_stand_in)       # to the model
     assert not panel.tree.selectedItems()
     # A real focus change does it too.
     panel.tree.selectAll()
@@ -1400,7 +1400,7 @@ def test_back_in_the_drawing_the_picked_rows_let_go(win):
     _app.processEvents()
     win.viewport.setFocus()
     _app.processEvents()
-    if QApplication.focusWidget() is win.viewport:
+    if QApplication.focusWidget() is win.viewport.keys_stand_in:
         assert not panel.tree.selectedItems()
 
 
@@ -1601,11 +1601,11 @@ def test_leaving_a_new_name_for_the_model_leaves_nothing_selected(win):
     _app.processEvents()
     panel.add_layer()
     _app.processEvents()
-    QTest.mouseClick(win.viewport, Qt.LeftButton, Qt.NoModifier,
+    QTest.mouseClick(win.viewport.keys_stand_in, Qt.LeftButton, Qt.NoModifier,
                      QPoint(300, 300))
     for _ in range(3):
         _app.processEvents()
-    if QApplication.focusWidget() is win.viewport:
+    if QApplication.focusWidget() is win.viewport.keys_stand_in:
         assert panel.tree.selectedItems() == []
     # Left with Enter instead (still in the panel): selected, as before.
     panel._just_made = None

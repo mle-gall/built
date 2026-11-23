@@ -149,7 +149,7 @@ def test_views_and_canvas_are_not_mirrored(rtl_app):
     win = MainWindow()
     try:
         assert win.isRightToLeft()
-        assert win.viewport.layoutDirection() == Qt.LeftToRight
+        assert win.viewport.keys_stand_in.layoutDirection() == Qt.LeftToRight
         assert win._vcb_value.layoutDirection() == Qt.LeftToRight
         comp = win._ensure_composer()
         assert comp._canvas_area.layoutDirection() == Qt.LeftToRight

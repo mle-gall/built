@@ -61,7 +61,7 @@ def test_one_view_by_default_and_nothing_made(win):
     assert button.isCheckable() and not button.isChecked()
     assert not button.icon().isNull()
     assert win._doc.view_grid is None          # nothing made until asked
-    assert win._doc.slot_widget() is win.viewport
+    assert win._doc.slot_widget() is win.viewport.keys_stand_in
 
 
 @pytest.mark.parametrize("key, cells", [
@@ -76,7 +76,7 @@ def test_each_layout_shows_its_views_in_the_tabs_slot(win, key, cells):
     assert _shown(win) == cells
     grid = _grid(win)
     assert win._doc.slot_widget() is grid       # the tab's slot
-    assert win.viewport.parentWidget() is grid.cells[1]
+    assert win.viewport.keys_stand_in.parentWidget() is grid.cells[1]
     for vp in grid.extras():
         assert vp.scene is win.viewport.scene
         assert vp.history is win.viewport.history
@@ -154,7 +154,7 @@ def test_an_extension_still_sees_the_viewport_of_the_project_in_front(win):
     _dirty(win)
     win.set_view_layout("four")               # the first project: a grid
     win._new_document()
-    assert win.centralWidget() is win.viewport  # the one in front
+    assert win.centralWidget() is win.viewport.keys_stand_in  # the one in front
 
 
 def test_an_extra_view_picks_up_the_windows_tool(win):
@@ -162,7 +162,7 @@ def test_an_extra_view_picks_up_the_windows_tool(win):
     win.set_view_layout("four")
     win._activate_tool("line")
     top = _grid(win).extras()[0]
-    QApplication.sendEvent(top, QEnterEvent(QPointF(5, 5), QPointF(5, 5),
+    QApplication.sendEvent(top.keys_stand_in, QEnterEvent(QPointF(5, 5), QPointF(5, 5),
                                             QPointF(5, 5)))
     assert top.active_tool is win.viewport.active_tool
 
@@ -315,7 +315,7 @@ def test_each_view_keeps_its_style_in_the_project_state(win):
 
 
 def _enter(vp):
-    QApplication.sendEvent(vp, QEnterEvent(QPointF(5, 5), QPointF(5, 5),
+    QApplication.sendEvent(vp.keys_stand_in, QEnterEvent(QPointF(5, 5), QPointF(5, 5),
                                            QPointF(5, 5)))
 
 
@@ -329,17 +329,17 @@ def test_an_extra_view_shows_the_nav_modes_pointer(win):
     win._activate_tool("select")
     for vp in _grid(win).extras():
         _enter(vp)
-        assert vp.cursor().shape() != Qt.BitmapCursor   # the arrow
+        assert vp.keys_stand_in.cursor().shape() != Qt.BitmapCursor   # the arrow
     win._activate_nav("zoom_window")
     for vp in _grid(win).extras():
         _enter(vp)
         assert vp.nav_mode == "zoom_window"
-        assert vp.cursor().shape() == Qt.BitmapCursor, "the magnifier"
+        assert vp.keys_stand_in.cursor().shape() == Qt.BitmapCursor, "the magnifier"
     win._activate_tool("select")
     for vp in _grid(win).extras():
         _enter(vp)
         assert vp.nav_mode is None
-        assert vp.cursor().shape() != Qt.BitmapCursor, "the arrow again"
+        assert vp.keys_stand_in.cursor().shape() != Qt.BitmapCursor, "the arrow again"
 
 
 def test_a_views_name_is_a_small_label_over_its_corner(win):
@@ -353,7 +353,7 @@ def test_a_views_name_is_a_small_label_over_its_corner(win):
     assert header.geometry().topLeft().x() == header.MARGIN
     from PySide6.QtCore import QEvent
     from PySide6.QtGui import QFocusEvent
-    QApplication.sendEvent(cell.viewport, QFocusEvent(QEvent.FocusIn))
+    QApplication.sendEvent(cell.surface(), QFocusEvent(QEvent.FocusIn))
     assert grid.active_cell() is cell
 
 
@@ -889,7 +889,7 @@ def test_the_pointer_coming_into_a_view_brings_the_preview(win):
     from PySide6.QtCore import QEvent
     grid = _four(win)
     vp = grid.cells[2].viewport
-    QApplication.sendEvent(vp, QEvent(QEvent.Enter))
+    QApplication.sendEvent(vp.keys_stand_in, QEvent(QEvent.Enter))
     assert _previews(grid) == [2]
 
 
@@ -915,25 +915,6 @@ def test_a_layout_without_that_view_hands_over_the_preview(win):
     win.set_view_layout("two")
     QApplication.processEvents()
     assert _previews(grid) == [1], "the window's own"
-
-
-def test_a_view_without_the_preview_draws_with_no_tool_and_gives_it_back(
-        win, monkeypatch):
-    grid = _four(win)
-    win._activate_tool("line")
-    vp = grid.cells[0].viewport
-    tool = grid.main.active_tool
-    vp.active_tool = tool
-    seen = []
-    monkeypatch.setattr(type(vp), "_paint_frame",
-                        lambda self: seen.append(self.active_tool))
-    vp.tool_preview = False
-    vp.paintGL()
-    assert seen == [None] and vp.active_tool is tool
-    vp.tool_preview = True
-    vp.paintGL()
-    assert seen == [None, tool]
-    win._activate_tool("select")
 
 
 def test_a_maximized_view_has_no_square(win):
@@ -984,7 +965,7 @@ def test_the_moved_viewport_is_shown_in_its_cell(win):
     win.show()
     win.set_view_layout("four")
     QApplication.processEvents()
-    assert win.viewport.isVisibleTo(win)
+    assert win.viewport.keys_stand_in.isVisibleTo(win)
 
 
 def test_one_view_first_then_by_use(win):
@@ -1092,7 +1073,7 @@ def test_quitting_hands_back_the_extra_views_textures(win, monkeypatch):
     win.set_view_layout("four")
     gone = []
     for vp in _grid(win).extras():
-        monkeypatch.setattr(vp, "release_gl_textures",
+        monkeypatch.setattr(vp.keys_stand_in, "release",
                             lambda v=vp: gone.append(v))
     extras = _grid(win).extras()
     win.close()

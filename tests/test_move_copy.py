@@ -181,7 +181,7 @@ def test_a_group_copies_as_a_sibling_and_arrays():
 
 
 def test_the_value_box_understands_the_array_forms():
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     parse = Viewport._parse_value_buffer
     assert parse("3x") == ("array", 3, "x")
     assert parse("3X") == ("array", 3, "x")
@@ -223,7 +223,7 @@ def test_count_and_spacing_typed_during_the_ctrl_drag():
 
 
 def test_the_value_box_reads_count_times_spacing():
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     parse = Viewport._parse_value_buffer
     assert parse("5x10m") == ("array", 5, "x", 10.0)
     assert parse("5x10") == ("array", 5, "x", 10.0)

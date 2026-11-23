@@ -99,7 +99,7 @@ def test_the_viewport_drops_the_moving_edges_from_the_snap_scene():
         app = QApplication([])
     elif not isinstance(app, QApplication):
         pytest.skip("another Qt application flavour is already running")
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport(None)
     vp.resize(1000, 600)
     vp.camera.set_aspect(1000, 600)

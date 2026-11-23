@@ -84,8 +84,7 @@ def install(win) -> None:
     from core import renderer_settings
     if not getattr(renderer_settings, "_shell_installed", False):
         renderer_settings.capability = lambda: renderer_settings.Capability(True)
-        renderer_settings.wanted = lambda st=None: True
-        renderer_settings.status_text = lambda metal=None, st=None: "Metal (native app)"
+        renderer_settings.status_text = lambda: "wgpu (native app)"
         renderer_settings._shell_installed = True
     from views import wgpu_start
     if not getattr(wgpu_start, "_shell_installed", False):

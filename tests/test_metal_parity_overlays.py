@@ -16,7 +16,8 @@ from core.textlabel import TextLabel
 from core.guide import Guide
 from core.section import SectionPlane
 from core.snap import SnapResult
-from views.viewport import Viewport, _guide_vertices, shown_guides
+from views.document_interaction import _guide_vertices, shown_guides
+from tests.controller_surface import ControllerSurface as Viewport
 from views.wgpu_overlay import draw_snap_indicator, pixels, rasterize, selection_rectangle
 from views.wgpu_annotations import (
     AnnotationLayout, composite_annotations, draw_annotations, draw_tool_overlays,
@@ -82,13 +83,13 @@ def test_rectangle_matches_gl(style, dpr):
     a, b = (30, 20), (280, 80)
     if style == "crossing":
         a, b = b, a
-    ns = SimpleNamespace(_box_active=True, _box_start=QPointF(*a), _box_cur=QPointF(*b),
-                         BOX_DRAG_THRESHOLD_PX=6, _zoom_box_active=True,
-                         _zoom_box_start=QPointF(*a), _zoom_box_cur=QPointF(*b))
-    method = Viewport._draw_zoom_box if style == "zoom" else Viewport._draw_selection_box
-    expected = painted(lambda p: method(ns, p), dpr=dpr)
-    actual = rasterize([selection_rectangle(a, b, zoom=style == "zoom")], 360, 100, dpr)
-    equal(actual, expected)
+    box = selection_rectangle(a, b, zoom=style == "zoom")
+    actual = rasterize([box], 360, 100, dpr)
+    color = {"window": "#3366c7", "crossing": "#289e5c", "zoom": "#f37329"}[style]
+    assert box.color == color
+    assert box.pen_style == (Qt.SolidLine if style == "window" else Qt.DashLine)
+    assert actual.pixelColor(40 * dpr, 40 * dpr).alpha() == (26 if style == "zoom" else 28)
+    assert actual.pixelColor(10 * dpr, 40 * dpr).alpha() == 0
 
 
 def fixture():

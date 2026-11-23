@@ -17,7 +17,7 @@ import numpy as np  # noqa: E402
 import pytest  # noqa: E402
 
 from core import _native  # noqa: E402
-from views import viewport as V  # noqa: E402
+from views import document_interaction as V  # noqa: E402
 
 H = float.fromhex
 

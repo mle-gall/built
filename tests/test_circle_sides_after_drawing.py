@@ -19,7 +19,7 @@ from tools.circle import CircleTool, PolygonTool
 @pytest.fixture(scope="module")
 def viewport():
     QApplication.instance() or QApplication([])
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport(None)
     vp.resize(1000, 700)
     vp.camera.set_aspect(1000, 700)

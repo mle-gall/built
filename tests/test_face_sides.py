@@ -258,7 +258,7 @@ def test_la_huella_del_trozo_ve_el_reves_la_opacidad_y_el_mapa():
     bueno. El reverso, la translucidez y un mapa posicionado también son
     lo que el trozo hornea."""
     from core.mesh import Mesh
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     m = Mesh()
     f = _quad(m)
     f.attrs["texture"] = {"path": "muro.png", "sw": 1, "sh": 1}
@@ -290,7 +290,7 @@ def test_los_trozos_se_distinguen_por_numero_de_construccion_no_por_id():
     inst.xform = QMatrix4x4()
     scene.groups.append(inst)
     vp = _bind(_VP(scene))
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     for name in ("_proto_base_chunk", "_normal_of", "_tris_of", "_area_of",
                  "_newell_of"):
         setattr(vp, name, getattr(Viewport, name).__get__(vp))
@@ -320,7 +320,7 @@ def test_el_tinte_del_reves_viaja_con_la_instancia_al_moverla():
     from core.group import Group
     from core.mesh import Mesh
     from tests.test_pick_index import _VP, _bind
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     scene = Scene()
     proto = Mesh()
     f = _quad(proto)
@@ -359,7 +359,7 @@ def test_una_instancia_espejada_conserva_el_frente_de_sus_caras():
     from core.group import Group
     from core.mesh import Mesh
     from tests.test_pick_index import _VP, _bind
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     scene = Scene()
     proto = Mesh()
     f = _quad(proto)                              # normal +Z, giro antihorario

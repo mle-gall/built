@@ -14,6 +14,7 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from tests.controller_surface import live_image
 import pytest
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 from PySide6.QtWidgets import QApplication
@@ -89,25 +90,34 @@ def container_own(vp):
 LAYOUTS = [plain, component, nested_plain, nested_component, container_own]
 
 
-@pytest.fixture
-def win():
+@pytest.fixture(scope="module")
+def window():
     from views.main_window import MainWindow
-    w = MainWindow()
-    w.show()
-    for _ in range(10):
-        _app.processEvents()
-    vp = w.viewport
-    if getattr(vp, "_gl", None) is None or not vp.isValid():
-        w.close()
-        pytest.skip("no OpenGL context")
-    vp.scene.guides.clear()
-    yield w
-    w._saved_version = vp.scene.version
-    w.close()
+    if QApplication.platformName() in ("offscreen", "minimal"):
+        pytest.skip("no native GPU surface")
+    window = MainWindow()
+    window.show()
+    _app.processEvents()
+    yield window
+    window._saved_version = window.viewport.scene.version
+    window.close()
+    window.deleteLater()
+
+
+@pytest.fixture
+def win(window):
+    from PySide6.QtCore import QCoreApplication, QEvent
+    previous = window.active_document()
+    window._new_document()
+    window.close_document(previous, ask=False)
+    QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+    _app.processEvents()
+    window.viewport.scene.guides.clear()
+    return window
 
 
 def _pixel(vp):
-    img = vp.grabFramebuffer()
+    img = live_image(vp)
     c = img.pixelColor(img.width() // 2 + 15, img.height() // 2 + 15)
     return (c.red(), c.green(), c.blue())
 
@@ -192,7 +202,7 @@ def test_a_paint_stays_on_screen_after_leaving_the_groups(win, layout):
     old material (the letters of the plaza, 04-11)."""
     vp = win.viewport
     _open(vp, layout)
-    img = vp.grabFramebuffer()
+    img = live_image(vp)
     x = (img.width() // 2 + 15) * vp.width() // img.width()
     y = (img.height() // 2 + 15) * vp.height() // img.height()
     face = vp.pick_face_any(x, y)[0]
@@ -358,20 +368,23 @@ def test_turned_translucent_inside_it_stays_on_screen_when_left(win):
 
 
 def test_copies_outside_still_draw_instanced(win):
-    """Only the open mesh leaves the instanced path, and only while open."""
+    """Opening one child preserves the other child's resident placement."""
     vp = win.viewport
     _open(vp, nested_plain)
     top = vp.scene.groups[-1]
-    sibling = next(g for g in vp._placements()
-                   if g.mesh is top.children[1].mesh)
-    assert vp._instanced_eligible(sibling)
-    opened = next(g for g in vp._placements() if g.mesh is vp.scene.mesh)
-    assert not vp._instanced_eligible(opened)
+    sibling = top.children[1]
+
+    def sibling_row():
+        packed = vp.keys_stand_in.packed
+        i = packed.groups.index(sibling)
+        return packed.instances[i].copy()
+
+    before = sibling_row()
     vp.end_group_edit()
     _pixel(vp)
-    closed = next(g for g in vp._placements()
-                  if g.mesh is top.children[0].mesh)
-    assert vp._instanced_eligible(closed)
+    after = sibling_row()
+    assert (before["world"] == after["world"]).all()
+    assert before["info"][0] == after["info"][0]
 
 
 def test_leaving_a_nested_component_counts_its_copies(win, monkeypatch):

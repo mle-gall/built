@@ -242,21 +242,6 @@ def test_the_tool_cursor_is_chosen_in_preferences(settings_file):
     assert PreferencesDialog(win)._cursor_style.currentData() == "crosshair"
 
 
-def test_renderer_choice_round_trips_in_general(settings_file):
-    from core import general_settings, renderer_settings
-    win = _Win()
-    dlg = PreferencesDialog(win)
-    assert dlg._renderer.currentData() == 'opengl'
-    dlg._renderer.setCurrentIndex(dlg._renderer.findData('wgpu'))
-    dlg.accept()
-    assert general_settings.value(renderer_settings.SETTING, None,
-                                  _fresh(settings_file)) == 'wgpu'
-    reopened = PreferencesDialog(win)
-    assert reopened._renderer.currentData() == 'wgpu'
-    reopened.close()
-    win.close()
-
-
 def test_the_graphics_server_is_asked_only_where_there_is_a_choice(
         settings_file, monkeypatch):
     """Wayland or X11: Linux. On Windows the row spoke of KDE (#1179)."""

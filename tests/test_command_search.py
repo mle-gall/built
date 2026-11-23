@@ -164,9 +164,9 @@ def test_a_hidden_action_is_not_offered(ventana):
 
 # ---- the box ----------------------------------------------------------------------
 def test_f3_opens_the_box(ventana):
-    QTest.keyClick(ventana.viewport, Qt.Key_F1)      # the warm-up keystroke
+    QTest.keyClick(ventana.viewport.keys_stand_in, Qt.Key_F1)      # the warm-up keystroke
     QApplication.processEvents()
-    QTest.keyClick(ventana.viewport, Qt.Key_F3)
+    QTest.keyClick(ventana.viewport.keys_stand_in, Qt.Key_F3)
     QApplication.processEvents()
     box = getattr(ventana, "_command_search", None)
     assert box is not None and box.isVisible()
@@ -360,8 +360,8 @@ def test_the_real_box_is_fitted_to_the_modelling_area(ventana,
 # ---- the sheet composer ----------------------------------------------------------
 def _composer(win):
     vp = win.viewport
-    if getattr(vp, "_gl", None) is None or not vp.isValid():
-        pytest.skip("no OpenGL here: the composer renders its views")
+    if not vp.keys_stand_in._can_create_surface():
+        pytest.skip("the composer requires a native GPU surface")
     comp = win._ensure_composer()
     comp.show()
     QApplication.processEvents()

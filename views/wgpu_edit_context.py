@@ -13,7 +13,7 @@ def rest_rows(groups, context):
 
 
 def box_primitives(view):
-    from views.viewport import DocumentInteraction, _box_edge_vertices
+    from views.document_interaction import DocumentInteraction, _box_edge_vertices
     from views.wgpu_overlay import Primitive
     source = view.source_viewport
     if source is None or source.plano_style is not None or source.style_override is not None:
@@ -57,7 +57,7 @@ def selection_box_segments(view):
     cached per group and document version: a selection change reuses
     them, an edit (move, scale, geometry) measures again."""
     from core.group import Group, oriented_box_corners
-    from views.viewport import DocumentInteraction, _box_edge_vertices
+    from views.document_interaction import DocumentInteraction, _box_edge_vertices
     source = view.source_viewport
     if source is None or source.plano_style is not None or source.style_override is not None:
         return _NO_BOXES
@@ -107,7 +107,7 @@ def selection_box_vertices(view):
 def selection_box_primitives(view):
     """The same boxes as overlay lines, for a renderer without native
     preview edges (no depth test there)."""
-    from views.viewport import DocumentInteraction
+    from views.document_interaction import DocumentInteraction
     from views.wgpu_overlay import Primitive
     _, segments = selection_box_segments(view)
     scale = view.devicePixelRatioF()
@@ -132,7 +132,7 @@ def billboard_outline_primitives(view):
     extent is cached per figure content, so this is four projections per
     selected figure per frame; nothing when no figure is selected."""
     from core.group import Group
-    from views.viewport import DocumentInteraction
+    from views.document_interaction import DocumentInteraction
     from views.wgpu_overlay import Primitive
     source = view.source_viewport
     quad_of = getattr(source, '_billboard_quad', None)

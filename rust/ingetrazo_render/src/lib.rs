@@ -9,6 +9,7 @@ mod axes;
 mod sections;
 mod preview;
 mod lines;
+mod references;
 mod sun;
 mod textures;
 // R-look: isolated style and background passes.
@@ -17,6 +18,7 @@ mod background;
 mod antialias;
 mod depth_resolve;
 mod depth;
+mod backend;
 mod edges;
 mod faces;
 mod xray;
@@ -24,10 +26,7 @@ mod ao;
 mod resident_readback;
 use numpy::PyReadonlyArray1;
 use pyo3::{exceptions::PyValueError, prelude::*};
-use raw_window_handle::{
-    AppKitDisplayHandle, AppKitWindowHandle, RawDisplayHandle, RawWindowHandle,
-};
-use std::{ptr::NonNull, time::Instant};
+use std::time::Instant;
 use wgpu::util::DeviceExt;
 
 #[repr(C)]
@@ -148,6 +147,7 @@ struct Renderer {
     lines: lines::Lines,
     face_marks: preview::Preview,
     sun: sun::Sun,
+    references: references::References,
     ghost_geometry: preview::Preview,
     ghost_objects: preview::Preview,
     surface: wgpu::Surface<'static>,
@@ -310,28 +310,19 @@ fn bind(
 #[pymethods]
 impl Renderer {
     #[new]
-    fn new(ns_view_ptr: usize, width: u32, height: u32, scale: f64) -> PyResult<Self> {
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::METAL,
-            ..Default::default()
-        });
-        let ptr = NonNull::new(ns_view_ptr as *mut std::ffi::c_void)
-            .ok_or_else(|| PyValueError::new_err("null NSView"))?;
-        // Qt owns the NSView. Python retains this Renderer only while its widget lives.
-        // wgpu's Metal backend installs/reuses a CAMetalLayer on this AppKit view.
-        let surface = unsafe {
-            instance.create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
-                raw_display_handle: RawDisplayHandle::AppKit(AppKitDisplayHandle::new()),
-                raw_window_handle: RawWindowHandle::AppKit(AppKitWindowHandle::new(ptr)),
-            })
-        }
-        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    #[pyo3(signature = (window, width, height, scale, *, display=0, platform=""))]
+    fn new(window: usize, width: u32, height: u32, scale: f64, display: usize, platform: &str) -> PyResult<Self> {
+        let instance = crate::backend::instance();
+        let surface = backend::surface(&instance, window, display, platform)?;
         let a = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
             compatible_surface: Some(&surface),
             ..Default::default()
         }))
-        .ok_or_else(|| PyValueError::new_err("no Metal adapter"))?;
+        .ok_or_else(|| PyValueError::new_err("no supported GPU backend for this window"))?;
         let optional = wgpu::Features::MULTI_DRAW_INDIRECT | wgpu::Features::TIMESTAMP_QUERY;
+        if !a.features().contains(wgpu::Features::INDIRECT_FIRST_INSTANCE) {
+            return Err(PyValueError::new_err("GPU adapter lacks indirect first-instance drawing"));
+        }
         let features = (a.features() & optional) | wgpu::Features::INDIRECT_FIRST_INSTANCE;
         let (device, queue) = pollster::block_on(a.request_device(
             &wgpu::DeviceDescriptor {
@@ -527,7 +518,7 @@ impl Renderer {
             &[0; 256],
             wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
         );
-        let sun = sun::Sun::new(&device, format);
+        let sun = sun::Sun::new(&device, format, sun::LIVE_SIZE);
         let look = style::Style::new(&device);
         let preview = preview::Preview::new(&device, format, &camera, &look.buffer, 0);
         let face_marks = preview::Preview::new(&device, format, &camera, &look.buffer, 1);
@@ -571,6 +562,7 @@ impl Renderer {
             face_marks,
             ghost_geometry,
             ghost_objects,
+            references: references::References::new(&device, format),
             sun,
             capture_next: false,
             captured: None,
@@ -638,16 +630,9 @@ impl Renderer {
 
     /// Another view of the resident scene on its own NSView: one more
     /// surface and its attachments; the scene is not packed or sent again.
-    fn add_target(&mut self, ns_view_ptr: usize, width: u32, height: u32, scale: f64) -> PyResult<usize> {
-        let ptr = NonNull::new(ns_view_ptr as *mut std::ffi::c_void)
-            .ok_or_else(|| PyValueError::new_err("null NSView"))?;
-        let surface = unsafe {
-            self.instance.create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
-                raw_display_handle: RawDisplayHandle::AppKit(AppKitDisplayHandle::new()),
-                raw_window_handle: RawWindowHandle::AppKit(AppKitWindowHandle::new(ptr)),
-            })
-        }
-        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    #[pyo3(signature = (window, width, height, scale, *, display=0, platform=""))]
+    fn add_target(&mut self, window: usize, width: u32, height: u32, scale: f64, display: usize, platform: &str) -> PyResult<usize> {
+        let surface = backend::surface(&self.instance, window, display, platform)?;
         let w = ((width as f64 * scale) as u32).max(1);
         let h = ((height as f64 * scale) as u32).max(1);
         let mut config = self.config.clone();
@@ -1258,6 +1243,12 @@ impl Renderer {
     }
     /// Pack classification avoids OIT and depth resolves for opaque scenes.
     fn set_material_transparency(&mut self, enabled: bool) { self.material_transparency = enabled; }
+    fn set_reference_layers(&mut self, order: Vec<String>, updates: Vec<references::Upload<'_>>) -> PyResult<()> {
+        self.references.replace(&self.device, &self.queue, &self.camera, order, updates)
+    }
+
+    fn max_texture_size(&self) -> u32 { self.device.limits().max_texture_dimension_2d }
+
     /// World-space tool feedback, cleared on commit/cancel.
     fn set_preview_mesh(&mut self, triangles: PyReadonlyArray1<'_, u8>, edges: PyReadonlyArray1<'_, u8>) -> PyResult<()> {
         self.preview.upload(&self.device, triangles.as_slice()?, edges.as_slice()?).map_err(PyValueError::new_err)
@@ -1366,10 +1357,10 @@ impl Renderer {
     }
     /// Render with resident geometry and textures into isolated sheet targets.
     /// Surface configuration and interactive attachments are never replaced.
-    #[pyo3(signature = (width, height, view, projection, style, instances=None, far_clip=false))]
+    #[pyo3(signature = (width, height, view, projection, style, instances=None, far_clip=false, sharp_shadows=false))]
     fn render_image(&mut self, width: u32, height: u32, view: Vec<f32>,
                     projection: Vec<f32>, style: &Bound<'_, PyAny>, instances: Option<PyReadonlyArray1<'_, u8>>,
-                    far_clip: bool) -> PyResult<Vec<u8>> {
+                    far_clip: bool, sharp_shadows: bool) -> PyResult<Vec<u8>> {
         if width == 0 || height == 0 || width > self.device.limits().max_texture_dimension_2d
             || height > self.device.limits().max_texture_dimension_2d {
             return Err(PyValueError::new_err("invalid offscreen dimensions"));
@@ -1387,6 +1378,11 @@ impl Renderer {
                 return Err(PyValueError::new_err("capture rows may only change visibility and tint"));
             }
         }
+        let shadow_size = if sharp_shadows {
+            sun::EXPORT_SIZE.min(self.device.limits().max_texture_dimension_2d)
+        } else {
+            sun::LIVE_SIZE
+        };
         let format = self.config.format;
         let mut aa = antialias::Antialias::new(&self.device, format, &self.look.buffer, width, height);
         let mut transparency = xray::Xray::new(&self.device, format, width, height);
@@ -1406,7 +1402,7 @@ impl Renderer {
         // Keep the original resources alive until the transaction has completed.
         let old_aa = std::mem::replace(&mut self.aa, aa);
         let old_transparency = std::mem::replace(&mut self.transparency, transparency);
-        let old_sun = std::mem::replace(&mut self.sun, sun::Sun::new(&self.device, format));
+        let old_sun = std::mem::replace(&mut self.sun, sun::Sun::new(&self.device, format, shadow_size));
         let old_ao = std::mem::replace(&mut self.ao, ao::AmbientOcclusion::new(&self.device, format));
         let old_overlay = std::mem::replace(&mut self.overlay, overlay::Overlay::new(&self.device, format));
         let old_color = std::mem::replace(&mut self.offscreen, texture(&self.device, width, height, format));
@@ -1712,6 +1708,7 @@ impl Renderer {
         let color_only = !msaa && !self.edges && self.style != 4 && !plan.ao && !plan.xray;
         let draw_ids = if color_only { needs_settled_ids(self.pick_pending, self.ids_dirty, self.stable_frames) }
             else { needs_id_pass(msaa, self.pick_pending, self.ids_dirty, self.stable_frames) };
+        if !msaa { self.references.draw(&mut e, &color, &depth, None); }
         if plan.xray { self.transparency.draw(&mut e, &color, None, s, self.multi, tq); }
 
         let ao_active = plan.ao;
@@ -1751,7 +1748,7 @@ impl Renderer {
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                     view: &depth,
                     depth_ops: Some(wgpu::Operations {
-                        load: if edge_only { wgpu::LoadOp::Load } else { wgpu::LoadOp::Clear(depth::CLEAR) },
+                        load: if edge_only || self.references.active() { wgpu::LoadOp::Load } else { wgpu::LoadOp::Clear(depth::CLEAR) },
                         store: wgpu::StoreOp::Store,
                     }),
                     stencil_ops: None,
@@ -1825,7 +1822,7 @@ impl Renderer {
             drop(pass);
             }
             if msaa && !self.pick_pending {
-                self.aa.draw(&mut e, &color, s, self.style, self.edges, self.look.data[6][0] > 0., self.multi, self.queries.as_ref(), Some(edge_only), self.sections.count > 0 || self.preview.active() || self.face_marks.active() || self.ghost_geometry.active() || self.ghost_objects.active() || self.lines.active_layer(true) || (self.look.data[9][0] > 0. && self.material_transparency), &self.axes);
+                self.aa.draw(&mut e, &color, s, self.style, self.edges, self.look.data[6][0] > 0., self.multi, self.queries.as_ref(), Some(edge_only), self.references.active() || self.sections.count > 0 || self.preview.active() || self.face_marks.active() || self.ghost_geometry.active() || self.ghost_objects.active() || self.lines.active_layer(true) || (self.look.data[9][0] > 0. && self.material_transparency), &self.axes, &self.references);
             }
             if !edge_only && self.sun.enabled && self.style != 1 && self.style != 4 {
                 if msaa { self.aa.resolve_depth(&self.device, &mut e, &depth, None); }
@@ -1990,6 +1987,11 @@ impl Renderer {
     }
     fn take_capture(&mut self) -> Option<Vec<u8>> {
         self.captured.take()
+    }
+    #[pyo3(signature = (center, radius, cursor, scale))]
+    fn set_center_cue(&mut self, center: Option<[f32; 3]>, radius: f32, cursor: [f32; 2], scale: f32) {
+        self.overlay.center_cue(&self.queue, &self.camera_data,
+            [self.config.width, self.config.height], center, radius, cursor, scale);
     }
     fn set_overlay(
         &mut self,

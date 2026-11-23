@@ -21,7 +21,7 @@ _app = QApplication.instance() or QApplication([])
 
 def _setup(tmp_path, image_z):
     from core.image_plane import ImagePlane
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport(None)
     vp.resize(400, 300)
     scene = vp.scene

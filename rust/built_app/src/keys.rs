@@ -11,6 +11,11 @@ pub const CONTROL: u32 = 0x0400_0000;
 pub const ALT: u32 = 0x0800_0000;
 pub const META: u32 = 0x1000_0000;
 
+#[cfg(target_os = "macos")]
+const SYSTEM_MODIFIERS: (u32, u32) = (CONTROL, META);
+#[cfg(not(target_os = "macos"))]
+const SYSTEM_MODIFIERS: (u32, u32) = (META, CONTROL);
+
 /// Qt's modifier mask for winit's modifier state.
 pub fn qt_modifiers(m: ModifiersState) -> u32 {
     let mut out = 0;
@@ -18,13 +23,13 @@ pub fn qt_modifiers(m: ModifiersState) -> u32 {
         out |= SHIFT;
     }
     if m.super_key() {
-        out |= CONTROL;
+        out |= SYSTEM_MODIFIERS.0;
     }
     if m.alt_key() {
         out |= ALT;
     }
     if m.control_key() {
-        out |= META;
+        out |= SYSTEM_MODIFIERS.1;
     }
     out
 }
@@ -52,8 +57,8 @@ pub fn qt_named(key: NamedKey) -> u32 {
         PageDown => 0x0100_0017,
         Shift => 0x0100_0020,
         // ⌘ is Qt's Key_Control on the Mac, Control its Key_Meta.
-        Super | Meta => 0x0100_0021,
-        Control => 0x0100_0022,
+        Super | Meta => if cfg!(target_os = "macos") { 0x0100_0021 } else { 0x0100_0022 },
+        Control => if cfg!(target_os = "macos") { 0x0100_0022 } else { 0x0100_0021 },
         Alt => 0x0100_0023,
         CapsLock => 0x0100_0024,
         NumLock => 0x0100_0025,
@@ -162,9 +167,9 @@ pub fn qt_modifiers_by_name(names: &str) -> u32 {
         .split('+')
         .map(|n| match n.trim().to_ascii_lowercase().as_str() {
             "shift" => SHIFT,
-            "cmd" | "command" | "super" => CONTROL,
+            "cmd" | "command" | "super" => SYSTEM_MODIFIERS.0,
             "alt" | "option" => ALT,
-            "ctrl" | "control" => META,
+            "ctrl" | "control" => SYSTEM_MODIFIERS.1,
             _ => 0,
         })
         .fold(0, |a, b| a | b)
@@ -176,9 +181,9 @@ mod tests {
     use winit::keyboard::SmolStr;
 
     #[test]
-    fn command_is_qt_control_on_the_mac() {
-        assert_eq!(qt_modifiers(ModifiersState::SUPER), CONTROL);
-        assert_eq!(qt_modifiers(ModifiersState::CONTROL), META);
+    fn platform_modifiers_match_qt() {
+        assert_eq!(qt_modifiers(ModifiersState::SUPER), if cfg!(target_os = "macos") { CONTROL } else { META });
+        assert_eq!(qt_modifiers(ModifiersState::CONTROL), if cfg!(target_os = "macos") { META } else { CONTROL });
         assert_eq!(qt_modifiers(ModifiersState::SHIFT | ModifiersState::ALT), SHIFT | ALT);
     }
 
@@ -195,7 +200,7 @@ mod tests {
         assert_eq!(qt_key(&Key::Named(NamedKey::Escape), None, 0), (0x0100_0000, "\u{1b}".into()));
         assert_eq!(qt_key(&Key::Named(NamedKey::Enter), None, 0), (0x0100_0004, "\r".into()));
         assert_eq!(qt_key(&Key::Named(NamedKey::ArrowUp), None, 0).0, 0x0100_0013);
-        assert_eq!(qt_key(&Key::Named(NamedKey::Super), None, 0).0, 0x0100_0021);
+        assert_eq!(qt_key(&Key::Named(NamedKey::Super), None, 0).0, if cfg!(target_os = "macos") { 0x0100_0021 } else { 0x0100_0022 });
     }
 
     #[test]

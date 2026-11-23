@@ -50,7 +50,7 @@ def _scaffold_shown(view):
 def edit_box(view):
     """``(key, segments)``: the twelve dashed edges of the open group's box,
     GL's ``_draw_scaffold`` dash (window pixels from the field of view)."""
-    from views.viewport import _box_edge_vertices
+    from views.document_interaction import _box_edge_vertices
     box = view._edit_group_box_corners() if _scaffold_shown(view) else None
     if box is None:
         return None, EMPTY
@@ -64,7 +64,7 @@ def guides(view):
     """``(key, segments)``: GL's world-space guide dashes, keyed as GL keys
     its guide cache (camera distance, target and eye; the guides; which
     are selected), so a hover repaint reuses the upload."""
-    from views.viewport import shown_guides
+    from views.document_interaction import shown_guides
     scene, camera = view.scene, view.camera
     on_screen = shown_guides(scene) if _scaffold_shown(view) else []
     if not on_screen:

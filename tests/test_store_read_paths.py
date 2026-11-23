@@ -128,7 +128,7 @@ class _Viewport:
         return None
 
     def set_hover(self, entity, placement=None):
-        from views.viewport import Viewport
+        from tests.controller_surface import ControllerSurface as Viewport
         Viewport.set_hover(self, entity, placement)
 
     def update(self):

@@ -99,7 +99,7 @@ def _stub(distance, diag, perspective=True):
 
 
 def test_zoom_out_step_is_as_before_away_from_a_close_up():
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     step = Viewport._zoom_out_step
     assert step(_stub(0.005, 0.0)) == 0.05           # empty scene: 5 cm
     assert step(_stub(0.02, 0.01)) == pytest.approx(0.05)
@@ -110,7 +110,7 @@ def test_zoom_out_step_is_as_before_away_from_a_close_up():
 
 
 def test_one_notch_out_keeps_the_small_part_in_sight():
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     cam = _framed_part()
     for _ in range(60):
         cam.zoom_to(1.0, V(0, 0, 0))
@@ -121,7 +121,7 @@ def test_one_notch_out_keeps_the_small_part_in_sight():
 
 
 def test_preview_cut_follows_the_near_plane_only_up_close():
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     clip = Viewport._clip_w
     assert clip(_stub(20.0, 1.0)) == pytest.approx(1e-3)       # as always
     assert clip(_stub(0.02, 1.0)) == pytest.approx(4e-4)

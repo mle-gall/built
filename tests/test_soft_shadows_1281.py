@@ -9,13 +9,11 @@ bigger map soften alike."""
 from __future__ import annotations
 
 import os
-from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
 from PySide6.QtCore import QSettings
-from PySide6.QtGui import QVector2D
 from ingetrazo_core import Vec3 as V
 from PySide6.QtWidgets import QApplication, QWidget
 
@@ -28,11 +26,9 @@ elif not isinstance(_inst, QApplication):
 
 import views.preferences_dialog as prefs_mod  # noqa: E402
 from views.preferences_dialog import PreferencesDialog  # noqa: E402
-from views.viewport import (SOFT_SHADOW_SPREAD, Viewport,  # noqa: E402
-                            _load_soft_shadows)
+from views.document_interaction import SOFT_SHADOW_SPREAD, _load_soft_shadows
+from tests.controller_surface import ControllerSurface as Viewport
 
-FRAG = (Path(__file__).resolve().parent.parent
-        / "resources" / "shaders" / "basic.frag")
 
 
 @pytest.fixture
@@ -160,56 +156,6 @@ def test_the_footprint_of_the_map_comes_off_the_light_matrix():
     assert along == pytest.approx(3.0 * r, rel=1e-5)
 
 
-class _Program:
-    def __init__(self):
-        self.set = {}
-
-    def setUniformValue1f(self, loc, value):
-        self.set[loc] = value
-
-    def setUniformValue(self, loc, value):
-        self.set[loc] = value
-
-
-class _Stand:
-    """Only what the uniforms read."""
-    _loc_shadow_soft = "soft"
-    _loc_shadow_world = "world"
-    _shadow_footprint = staticmethod(Viewport._shadow_footprint)
-
-    def __init__(self, level):
-        self._soft_shadows = level
-        self._program = _Program()
-        self._shadow_vp = Viewport._light_vp(
-            (0.0, 0.0, 1.0), V(0, 0, 0), V(10, 10, 3))
-
-
-def test_off_sends_zero_and_the_shader_keeps_the_crisp_map():
-    stand = _Stand(0)
-    Viewport._set_soft_shadow_uniforms(stand)
-    assert stand._program.set == {"soft": 0.0}
-
-
-@pytest.mark.parametrize("level", sorted(SOFT_SHADOW_SPREAD))
-def test_a_level_sends_its_spread_and_the_footprint(level):
-    stand = _Stand(level)
-    Viewport._set_soft_shadow_uniforms(stand)
-    assert stand._program.set["soft"] == SOFT_SHADOW_SPREAD[level]
-    world = stand._program.set["world"]
-    assert isinstance(world, QVector2D)
-    assert world.x() > 0.0 and world.y() > 0.0
-
-
 def test_the_levels_grow():
     spreads = [SOFT_SHADOW_SPREAD[k] for k in sorted(SOFT_SHADOW_SPREAD)]
     assert spreads == sorted(spreads) and len(set(spreads)) == 3
-
-
-def test_the_shader_branches_on_the_spread():
-    """Off, the fragment shader runs the 3x3 PCF it always ran: the soft
-    path is behind ``u_shadow_soft > 0``."""
-    src = FRAG.read_text(encoding="utf-8")
-    assert "uniform float u_shadow_soft;" in src
-    assert "uniform vec2 u_shadow_world;" in src
-    assert "if (u_shadow_soft > 0.0) {" in src
-    assert "soft_shadow_light(uvz, grad, bias, texel)" in src

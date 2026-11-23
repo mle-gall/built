@@ -273,7 +273,7 @@ def test_wheel_notches_do_not_zoom_while_the_cap_moves_the_view(monkeypatch):
     from PySide6.QtGui import QWheelEvent
     from PySide6.QtWidgets import QApplication
     from views import ndof_input
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport(None)
     vp.resize(400, 300)
 

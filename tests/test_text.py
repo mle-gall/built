@@ -273,7 +273,7 @@ def test_text_block_sits_away_from_the_anchor():
     """The leader ends at the NEAR edge of the text block, so the
     block goes right when the anchor is on the left and LEFT when the
     leader arrives from the right — never under the words."""
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     x = Viewport._text_block_x
     assert x((100.0, 50.0), (20.0, 50.0), 80.0) == 106.0      # anchor left
     assert x((100.0, 50.0), (300.0, 50.0), 80.0) == 14.0      # anchor right
@@ -285,7 +285,7 @@ def test_pick_text_label_hits_the_drawn_block():
     words are LEFT of the leader end, and a click there (not to the right,
     where the block used to be) picks the label."""
     from PySide6.QtGui import QFont, QFontMetrics
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
 
     scene = Scene()
     lab = TextLabel(QVector3D(3, 0, 0), QVector3D(-2, 0, 0), "Pileta")

@@ -20,7 +20,7 @@ from PySide6.QtWidgets import QApplication  # noqa: E402
 if QApplication.instance() is None:
     QApplication([])
 
-from views.viewport import Viewport  # noqa: E402
+from tests.controller_surface import ControllerSurface as Viewport
 
 
 def _vp(view):

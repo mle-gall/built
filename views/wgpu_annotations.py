@@ -38,7 +38,7 @@ from PySide6.QtCore import QPointF, Qt
 from PySide6.QtGui import QColor, QPainter, QPen
 from ingetrazo_core import Vec3 as QVector3D
 
-from views.viewport import DocumentInteraction, _guide_vertices, shown_guides
+from views.document_interaction import DocumentInteraction, _guide_vertices, shown_guides
 
 
 class AnnotationLayout:
@@ -185,6 +185,7 @@ def draw_annotations(painter, scene, camera, logical_size, *, annotations_only=F
             layout._draw_geo_surfaces(painter)
             layout._draw_geo_paths(painter)
             layout._draw_geo_points(painter)
+            DocumentInteraction._draw_image_outlines(layout, painter)
         layout._draw_dimensions(painter)
         layout._draw_text_labels(painter)
     finally:

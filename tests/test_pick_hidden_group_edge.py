@@ -21,7 +21,7 @@ if QApplication.instance() is None:
 from core.group import Group  # noqa: E402
 from core.mesh import Face, Mesh  # noqa: E402
 from tools.select import SelectTool  # noqa: E402
-from views.viewport import Viewport  # noqa: E402
+from tests.controller_surface import ControllerSurface as Viewport
 
 
 def V(x, y, z=0.0):

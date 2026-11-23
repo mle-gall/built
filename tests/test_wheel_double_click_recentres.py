@@ -9,6 +9,7 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from tests.controller_surface import live_image
 import pytest
 from PySide6.QtCore import QEvent, QPointF, Qt
 from PySide6.QtGui import QMouseEvent
@@ -65,7 +66,7 @@ def _view(vp, perspective=True):
     cam.perspective = perspective
     cam.target = V(0, 0, 0)
     cam.distance = 10.0
-    vp.grabFramebuffer()
+    live_image(vp)
 
 
 @pytest.fixture
@@ -76,9 +77,9 @@ def win():
     for _ in range(10):
         _app.processEvents()
     vp = w.viewport
-    if getattr(vp, "_gl", None) is None or not vp.isValid():
+    if not vp.keys_stand_in._can_create_surface():
         w.close()
-        pytest.skip("no OpenGL context on this platform")
+        pytest.skip("the Qt platform has no native GPU surface")
     yield w
     w._saved_version = w.viewport.scene.version
     w.close()
@@ -103,7 +104,7 @@ def test_the_point_under_the_cursor_goes_to_the_centre(win, perspective):
     x, y = _off_centre(vp)
     seen = vp._depth_world_at(x, y)
     if seen is None or seen[0] != "hit":
-        pytest.skip("this GL context gives no trustworthy depth read-back")
+        pytest.skip("surface has no reliable background depth")
     point = seen[1]
     yaw, pitch = vp.camera.yaw, vp.camera.pitch
     distance = vp.camera.distance
@@ -124,11 +125,11 @@ def test_a_slanted_view_keeps_the_depth_of_the_point(win):
     _wall(vp)
     _view(vp)
     vp.camera.yaw += math.radians(35)
-    vp.grabFramebuffer()
+    live_image(vp)
     x, y = _off_centre(vp)
     seen = vp._depth_world_at(x, y)
     if seen is None or seen[0] != "hit":
-        pytest.skip("this GL context gives no trustworthy depth read-back")
+        pytest.skip("surface has no reliable background depth")
     depth = vp._depth_of(seen[1])
     assert abs(depth - vp.camera.distance) > 0.1       # the case in question
     eye_depth_axis = vp.camera.forward()
@@ -143,11 +144,11 @@ def test_a_parallel_view_keeps_its_zoom_whatever_the_depth(win):
     _wall(vp)
     _view(vp, perspective=False)
     vp.camera.yaw += math.radians(35)
-    vp.grabFramebuffer()
+    live_image(vp)
     x, y = _off_centre(vp)
     seen = vp._depth_world_at(x, y)
     if seen is None or seen[0] != "hit":
-        pytest.skip("this GL context gives no trustworthy depth read-back")
+        pytest.skip("surface has no reliable background depth")
     assert abs(vp._depth_of(seen[1]) - vp.camera.distance) > 0.1
     distance = vp.camera.distance
     _double_click(vp, x, y)
@@ -163,10 +164,10 @@ def test_on_empty_sky_it_slides_to_the_point_keeping_the_zoom(win, perspective):
     _wall(vp)
     _view(vp, perspective)
     vp.camera.distance = 400.0                         # the wall, a small patch
-    vp.grabFramebuffer()
+    live_image(vp)
     seen = vp._depth_world_at(30, 30)
     if seen != ("background", None):
-        pytest.skip("this GL context gives no trustworthy depth read-back")
+        pytest.skip("surface has no reliable background depth")
     target, distance = V(vp.camera.target), vp.camera.distance
     yaw, pitch = vp.camera.yaw, vp.camera.pitch
     _double_click(vp, 30, 30)
@@ -264,7 +265,7 @@ def test_it_works_in_a_navigation_mode_too(win):
     seen = vp._depth_world_at(x, y)
     if seen is None or seen[0] != "hit":
         vp.nav_mode = None
-        pytest.skip("this GL context gives no trustworthy depth read-back")
+        pytest.skip("surface has no reliable background depth")
     _double_click(vp, x, y)
     assert (vp.camera.target - seen[1]).length() < 1e-4
     assert vp.nav_mode == "orbit"

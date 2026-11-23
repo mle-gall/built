@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 
 from core import malloc_arenas
-from views.viewport import _PickWarm
+from views.document_interaction import _PickWarm
 
 
 class _Mod:

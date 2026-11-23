@@ -81,7 +81,7 @@ class _Visor:
         self._pick = (None, None)
         self.snap_threshold_px = 9.0
         self.active_tool = None
-        from views.viewport import Viewport
+        from tests.controller_surface import ControllerSurface as Viewport
         for m in ("_update_center_ref", "_center_of_edge", "_center_of_face",
                   "_valid_center_ref", "_snap_scene", "_selection_box_points",
                   "_billboard_snap_edges", "_billboard_placements",
@@ -224,7 +224,7 @@ def test_un_circulo_diminuto_en_pantalla_no_ofrece_centro():
     círculo» (Marco, 2026-09-12). La distancia a la que asoma el punto es
     una parte del tamaño del círculo en pantalla, con tope; y un círculo
     de menos de 12 px no ofrece centro ni al punto ni al snap."""
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     scene = Scene()
     pts = _circle_pts(3.0, 2.0, 1.5)
     f = scene.mesh.add_face(pts)

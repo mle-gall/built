@@ -15,7 +15,7 @@ from formats import built
 from pathlib import Path
 
 # Frozen subprocess entry: no settings, logs, engine guard or application window.
-if __name__ == '__main__' and '--probe-metal' in sys.argv:
+if __name__ == '__main__' and '--probe-gpu' in sys.argv:
     from core.renderer_settings import probe_main
     probe_main()
     sys.exit(0)
@@ -46,16 +46,8 @@ elif sys.stderr is not None:
 # (core/black_box.py) — a force-quit hang left nothing (2026-11-18).
 from core import black_box
 
-# Native Wayland is the default. Known cosmetic tradeoff (2026-07-12): the
-# compositor interleaves stale GL viewport frames under fast zoom bursts (a
-# brief ghost/double image; flawless under XWayland, but XWayland degrades
-# mixed-DPI multi-monitor setups — the audience's common rig). Escape hatch
-# if the ghost bothers you: run with QT_QPA_PLATFORM=xcb. Re-test the ghost
-# when Mutter/Qt update; no app-side workaround cured it (see CLAUDE.md).
-
 from PySide6.QtCore import (QEvent, QLibraryInfo, QSettings, Qt,
                             QTranslator)
-from PySide6.QtGui import QSurfaceFormat
 from PySide6.QtWidgets import QApplication
 
 from core import i18n
@@ -177,23 +169,17 @@ def _install_qt_translator(lang: str) -> None:
 from views.main_window import MainWindow
 
 
-def _configure_surface_format() -> None:
-    """Request an OpenGL 3.3 Core context with an explicit 24-bit depth buffer.
-
-    Without this, hidden-line removal silently degrades: some platforms hand
-    QOpenGLWidget a context with no (or 16-bit) depth buffer, and faces stop
-    occluding back-facing edges.
-    """
-    fmt = QSurfaceFormat()
-    fmt.setVersion(3, 3)
-    fmt.setProfile(QSurfaceFormat.CoreProfile)
-    fmt.setDepthBufferSize(24)
-    fmt.setStencilBufferSize(8)
-    # NO setSamples here: MSAA lives in the viewport's offscreen scene FBO
-    # (whose blit to the widget is the resolve). A multisampled widget/window
-    # surface never antialiased the blitted scene, and its extra resolve step
-    # interleaved stale frames on Wayland — the "ghost image" during fast zoom.
-    QSurfaceFormat.setDefaultFormat(fmt)
+def _gpu_available(interactive):
+    from core.renderer_settings import capability
+    result = capability()
+    if result.available:
+        return True
+    message = f"Built could not start a supported GPU backend. {result.reason}"
+    print(message, file=sys.stderr)
+    if interactive and QApplication.platformName() not in ("offscreen", "minimal"):
+        from PySide6.QtWidgets import QMessageBox
+        QMessageBox.critical(None, "Built", message)
+    return False
 
 
 def _open_document_in(window, doc: "Path") -> None:
@@ -324,8 +310,6 @@ def _self_check() -> int:
     problems: list[str] = []
     # Only files something actually reads at runtime.
     for label, path in (
-        ("vertex shader", root / "resources" / "shaders" / "basic.vert"),
-        ("fragment shader", root / "resources" / "shaders" / "basic.frag"),
         ("translations", root / "i18n" / "es.json"),
         ("texture library", root / "resources" / "textures" / "library.json"),
         ("components", root / "resources" / "components" / "components.json"),
@@ -557,10 +541,9 @@ def _run_cli(argv: list[str]) -> int:
     run Export all sheets (PDF) on it — every sheet, one PDF, each page
     at its own paper size — with no window on screen.
 
-    The sheets' views are GL renders, so the main window is still built
-    and "shown" (that is what gives the viewport its GL context), but with
-    ``WA_DontShowOnScreen``: nothing reaches the desktop. No single
-    instance either: a running IngeTrazo is neither asked nor disturbed."""
+    A native wgpu surface renders the sheet views. WA_DontShowOnScreen
+    keeps the export window off the desktop. A running Built instance
+    is independent of this export."""
     _attach_console()
     args = _parse_cli(argv)
     src = args.input_file.resolve()
@@ -569,20 +552,17 @@ def _run_cli(argv: list[str]) -> int:
         return 2
     out = (args.output_file or src.with_suffix(".pdf")).resolve()
 
-    _configure_surface_format()
     app = _App(sys.argv[:1])
     app.setApplicationName("IngeTrazo")
     app.setApplicationDisplayName("Built")
     app.setOrganizationName("IngeTrazo")
+    if not _gpu_available(interactive=False):
+        return 1
     _init_language()
     window = MainWindow(defer_extensions=True)
     window.setAttribute(Qt.WA_DontShowOnScreen, True)
     window.show()
     app.processEvents()
-    if getattr(window.viewport, "_gl", None) is None:
-        print("ingetrazo: no OpenGL context — the sheets' views will come "
-              "out empty", file=sys.stderr)
-
     # Opening must not stop to ask: no progress bar on screen, and an
     # auto-saved copy of the document is left alone (open_path would ask
     # whether to recover it, and «no» deletes it) — the file on disk is
@@ -627,7 +607,7 @@ def main() -> int:
     # HTTPS from Python (the AI assistant) must find a CA bundle: the macOS
     # package asked for one where only the build machine had it (#198).
     if "--gallery" in sys.argv[1:]:
-        os.environ.update(BUILT_GALLERY="1", BUILT_UI="1", INGETRAZO_WGPU="1")
+        os.environ.update(BUILT_GALLERY="1", BUILT_UI="1")
         sys.argv[sys.argv.index("--gallery")] = "--new-window"
     from core.tls import ensure_once
     ensure_once()
@@ -669,7 +649,6 @@ def main() -> int:
         platform_forced = apply_platform_preference()
     except Exception:
         platform_forced = None
-    _configure_surface_format()
     app = _App(sys.argv)
     app.setProperty("platform_forced", platform_forced)
     app.setApplicationName("IngeTrazo")
@@ -685,18 +664,8 @@ def main() -> int:
         print(json.dumps(prepare_file(sys.argv[index + 1])), flush=True)
         return 0
     app.setProperty("gpu_pref", gpu_pref)
-    # A driver that cannot serve the format we just asked for takes the
-    # whole app down with it, window included — and Qt's own
-    # "wayland;xcb" list never retries, because it is spent before the
-    # first context. Ask for less, or come back under XCB; the call does
-    # not return when it restarts us. See core/gl_fallback.py.
-    from core.gl_fallback import ensure_gl_context
-    gl_fallback = ensure_gl_context(app)
-    app.setProperty("gl_fallback", gl_fallback)
-    if gl_fallback == "failed":
-        print("Built: no OpenGL 3.3 context on this machine — the "
-              "viewport will not draw. Send ingetrazo-gl.txt from the log "
-              "folder.", file=sys.stderr)
+    if not _gpu_available(interactive=True):
+        return 1
     # Application icon (window title bar, task bar / dock). Generated by
     # scripts/gen_app_icon.py; the QIcon picks the right size per context.
     from PySide6.QtGui import QIcon
@@ -732,8 +701,6 @@ def main() -> int:
     # drew its first frame, this one goes back to the normal engine (and
     # says so below); --python-engine does it for one run.
     from core import _native
-    from core import renderer_settings
-    renderer_settings.capability()
     engine_fell_back = _native.start_guard(sys.argv[1:])
     # The extensions' setup waits until the window is on screen (#440).
     window = MainWindow(defer_extensions=True)
@@ -831,25 +798,6 @@ def main() -> int:
     window.show()
     from PySide6.QtCore import QTimer
 
-    def _first_frame_drawn():
-        # This start reached the screen: the engine guard is satisfied.
-        try:
-            window.viewport.frameSwapped.disconnect(_first_frame_drawn)
-        except (RuntimeError, TypeError):
-            pass
-        _native.start_ok()
-    window.viewport.frameSwapped.connect(_first_frame_drawn)
-    # Under the Metal renderer the GL viewport never swaps a frame, so the
-    # guard stayed armed and turned the Rust engine off at the next start
-    # (the first review sessions of the wgpu view did exactly that). That
-    # renderer has a guard of its own (core.renderer_settings): the engine
-    # guard is satisfied as soon as the window is up.
-    try:
-        from core import renderer_settings
-        if renderer_settings.wanted():
-            QTimer.singleShot(0, _first_frame_drawn)
-    except Exception:  # noqa: BLE001 — never stop a start over this
-        pass
     if engine_fell_back:
         from PySide6.QtWidgets import QMessageBox
         from core.i18n import tr

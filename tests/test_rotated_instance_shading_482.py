@@ -50,7 +50,7 @@ def _tones(raw):
 
 
 def test_the_cpu_chunk_of_a_turned_copy_matches_the_plain_group():
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport(None)
     proto = _box()
     inst = Group(proto, "copia")
@@ -83,8 +83,8 @@ def test_the_gpu_pass_lights_a_turned_copy_like_the_plain_group():
     _app.processEvents()
     vp = win.viewport
     try:
-        if getattr(vp, "_gl", None) is None or not vp.isValid():
-            pytest.skip("no OpenGL context on this platform")
+        if not vp.keys_stand_in._can_create_surface():
+            pytest.skip("the Qt platform has no native GPU surface")
         scene = vp.scene
         scene.groups[:] = []
         cam = vp.camera

@@ -9,6 +9,7 @@ from __future__ import annotations
 import math
 import sys
 
+from tests.controller_surface import live_image
 import pytest
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 from PySide6.QtWidgets import QApplication
@@ -107,7 +108,7 @@ def _baking(monkeypatch):
     # What the index bakes for a ray: with the experimental engine a ray
     # bakes nothing (it answers for the lazy placements itself), so these
     # watch the path that runs without it.
-    import views.viewport as vpm
+    import views.document_interaction as vpm
     monkeypatch.setattr(vpm, "_LAZY_NATIVE", False)
 
 
@@ -212,13 +213,13 @@ def test_with_a_frame_on_screen_the_depth_cull_changes_no_answer(vp):
     win.show()
     for _ in range(10):
         QApplication.processEvents()
-    if getattr(vp, "_gl", None) is None or not vp.isValid():
-        pytest.skip("no OpenGL context on this platform")
+    if not vp.keys_stand_in._can_create_surface():
+        pytest.skip("the Qt platform has no native GPU surface")
     vp.camera.set_view("iso") if hasattr(vp.camera, "set_view") else None
     vp.camera.fit_to(V(-2, -2, 0), V(18, 12, 1))
-    vp.grabFramebuffer()
+    live_image(vp)
     if vp._depth_world_at(10, 10) is None:
-        pytest.skip("this GL context gives no depth read-back")
+        pytest.skip("no depth readback from this surface")
     pts = [_centre(vp, f"C{i}{j}") for i in range(6) for j in range(4)]
     _lazy(vp, False)
     full = _answers(vp, pts)

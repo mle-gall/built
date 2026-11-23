@@ -11,6 +11,7 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from tests.controller_surface import live_image
 import pytest  # noqa: E402
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 from PySide6.QtWidgets import QApplication  # noqa: E402
@@ -131,7 +132,7 @@ def test_the_checkmark_follows_the_document():
 def _reddish_near(vp, p, radius=3):
     vp.update()
     _app.processEvents()
-    img = vp.grabFramebuffer()
+    img = live_image(vp)
     x, y = vp._world_to_pixel(p)
     r = img.devicePixelRatio()
     cx, cy = int(x * r), int(y * r)
@@ -147,8 +148,8 @@ def test_hiding_drops_the_world_axes_but_an_open_group_keeps_its_own():
     w = _window()
     vp = w.viewport
     try:
-        if getattr(vp, "_gl", None) is None or not vp.isValid():
-            pytest.skip("no OpenGL context on this platform")
+        if not vp.keys_stand_in._can_create_surface():
+            pytest.skip("the Qt platform has no native GPU surface")
         sc = vp.scene
         sc.groups.clear()
         comp = Group(_square(-6, -1), name="caja")

@@ -11,7 +11,7 @@ from core.group import Group
 from core.history import History, LockCommand
 from core.mesh import Mesh
 from tools.line import LineTool
-from views.viewport import Viewport
+from tests.controller_surface import ControllerSurface as Viewport
 
 
 @pytest.fixture(params=["group", "component", "nested", "lazy", "native_lazy"])
@@ -117,7 +117,7 @@ def test_native_candidates_keep_locked_references_out_of_editable_picks(monkeypa
     from types import SimpleNamespace
     from core.layers import Layer
     from core.scene import Scene
-    from views import viewport as viewport_module
+    from views import document_interaction as viewport_module
 
     scene = Scene()
     groups = [Group(Mesh(), name) for name in

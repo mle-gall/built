@@ -6,7 +6,8 @@ from __future__ import annotations
 
 import pytest
 
-from views.viewport import Viewport, _parse_length_field
+from views.document_interaction import _parse_length_field
+from tests.controller_surface import ControllerSurface as Viewport
 
 IN = 0.0254
 FT = 0.3048

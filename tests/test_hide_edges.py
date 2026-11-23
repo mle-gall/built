@@ -74,7 +74,7 @@ def test_fingerprint_sees_hidden_edges():
     """A hide toggle inside a group must invalidate its cached chunk — the
     fingerprint carries an index-sensitive hidden term (a count would call
     "hide A, undo, hide B" unchanged and serve the stale VBO)."""
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     scene, _ = _square()
     mesh = scene.mesh
     fp0 = Viewport._mesh_fingerprint(mesh)

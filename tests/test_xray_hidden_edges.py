@@ -30,10 +30,10 @@ def _viewport():
     win.show()
     _app.processEvents()
     vp = win.viewport
-    if getattr(vp, "_gl", None) is None or not vp.isValid():
+    if not vp.keys_stand_in._can_create_surface():
         win._saved_version = vp.scene.version   # not left shown (see
         win.close()                             # test_guides_behind_geometry)
-        pytest.skip("no OpenGL context on this platform")
+        pytest.skip("the Qt platform has no native GPU surface")
     return win, vp
 
 

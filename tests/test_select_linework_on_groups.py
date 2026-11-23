@@ -92,7 +92,7 @@ def build(kind, dz=0.0, slab=True):
 
 
 def _gl(scene):
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport()
     vp.resize(800, 600)
     vp.scene = scene

@@ -11,7 +11,7 @@ _ENV = ("QT_QPA_PLATFORM", "XDG_DATA_HOME", "BUILT_ANSWERS", "BUILT_SETTINGS_DIR
 _PATCHED = {
     "views.chrome_dialogs": ("live", "QEventLoop", "_shell_installed"),
     "views.filedialogs": ("QFileDialog",),
-    "core.renderer_settings": ("capability", "wanted", "status_text", "_shell_installed"),
+    "core.renderer_settings": ("capability", "status_text", "_shell_installed"),
     "views.wgpu_start": ("available", "_qt_home", "_shell_installed"),
     "app_shell.modal": ("_HOST",),
 }

@@ -73,7 +73,7 @@ def test_pie_closes_the_wedge_with_a_face():
 
 
 def test_arc_radius_suffix_parses_and_commits():
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     kind, r = Viewport._parse_value_buffer("2r")
     assert kind == "radius" and r == 2.0
     assert Viewport._parse_value_buffer("2.5r") == ("radius", 2.5)

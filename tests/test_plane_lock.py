@@ -22,7 +22,7 @@ from tools.circle import CircleTool, PolygonTool
 from tools.line import LineTool
 from tools.rectangle import RectangleTool
 from tools.rotated_rectangle import RotatedRectangleTool
-from views.viewport import Viewport
+from tests.controller_surface import ControllerSurface as Viewport
 
 
 def V(x, y, z=0.0):

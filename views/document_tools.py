@@ -253,6 +253,8 @@ class DocumentTools:
             self._leave_group_edit(todos=False)
         level = self.scene._edit_stack[-1] if self.scene._edit_stack else {}
         share = level.pop("share", None)
+        closing_group = self.scene.edit_group
+        updated_component = None
         before = _context_stamp(self)
         if todos:
             self.scene.end_group_edit()
@@ -260,7 +262,11 @@ class DocumentTools:
             self.scene.end_one_group_edit()
         if share is None and "session" in level:
             from core.history import OccurrenceCommands
-            OccurrenceCommands.fold(self.history, level["session"])
+            session = level["session"]
+            if (closing_group.is_component()
+                    and OccurrenceCommands.group_start(self.history, session) < len(self.history.undo_stack)):
+                updated_component = closing_group, closing_group.mesh
+            OccurrenceCommands.fold(self.history, session)
         _ctx_changed(self, before)
         self._hover_entity = None
         self._edges_version = -1     # the rest comes back
@@ -269,13 +275,15 @@ class DocumentTools:
             group, proto = share[:2]
             shared = record_leave(self.history, level, share)
             if shared:
-                copies = sum(1 for g, _m in self.scene.placements()
-                             if g.mesh is proto)
-                self.flash_status(tr(
-                    "Component '{name}' updated on its {n} copies",
-                    name=group.name, n=copies), 4000)
-            else:
-                self.flash_status(tr("Left the group"), 2000)
+                updated_component = group, proto
+        if updated_component is not None:
+            group, proto = updated_component
+            copies = sum(1 for g, _m in self.scene.placements() if g.mesh is proto)
+            self.flash_status(tr(
+                "Component '{name}' updated on its {n} copies",
+                name=group.name, n=copies), 4000)
+        elif share is not None:
+            self.flash_status(tr("Left the group"), 2000)
         elif self.scene.edit_group is not None:
             # Stepping up into another container: say so, or it reads as a
             # click that did nothing (everything around is still faded).

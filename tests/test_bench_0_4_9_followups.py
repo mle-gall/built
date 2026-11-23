@@ -66,7 +66,7 @@ def test_a_vertical_face_looks_at_the_eye_that_drew_it():
 
 
 def test_line_closing_a_wall_in_front_of_the_camera_shows_its_front():
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     from tools.line import LineTool
     vp = Viewport(None)
     vp.resize(800, 600)
@@ -108,7 +108,7 @@ def test_switching_the_hidden_view_off_deselects_the_ghost():
 # ---- the Tape says it is on an axis --------------------------------------
 
 def test_tape_and_line_show_on_axis_before_their_first_click():
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     from tools.line import LineTool
     from tools.tape import TapeMeasureTool
     vp = Viewport(None)

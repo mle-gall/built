@@ -22,8 +22,8 @@ from PySide6.QtWidgets import QApplication  # noqa: E402
 
 _app = QApplication.instance() or QApplication([])
 
-from views.viewport import (Viewport, _moller_trumbore,  # noqa: E402
-                            _ray_triangle)
+from views.document_interaction import _moller_trumbore, _ray_triangle
+from tests.controller_surface import ControllerSurface as Viewport
 
 
 def _vp(side):

@@ -387,13 +387,13 @@ def prepare_file(path):
     import time
     from core.scene import Scene
     from formats.igz import load_into
-    from views.viewport import Viewport
+    from views.document_controller import DocumentController
     start = time.perf_counter()
     signature()                     # surface cache setup errors in this CLI
     scene = Scene()
     load_into(scene, Path(path))
     read = time.perf_counter()
-    vp = Viewport()
+    vp = DocumentController()
     vp.scene = scene
     vp.prepare_drawing()
     prepared = time.perf_counter()

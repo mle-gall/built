@@ -13,7 +13,7 @@ from PySide6.QtWidgets import QApplication
 
 _app = QApplication.instance() or QApplication([])
 
-from views.viewport import Viewport  # noqa: E402
+from tests.controller_surface import ControllerSurface as Viewport
 
 
 def _parse(text, lists=False):
@@ -52,8 +52,8 @@ def test_typing_200_comma_100_in_the_rectangle_draws_200_by_100():
         real = tool.on_value
         tool.on_value = lambda v, value: (got.append(value), real(v, value))[1]
         vp.setFocus()
-        QTest.keyClicks(vp, "200,100")
-        QTest.keyClick(vp, Qt.Key_Return)
+        QTest.keyClicks(vp.keys_stand_in, "200,100")
+        QTest.keyClick(vp.keys_stand_in, Qt.Key_Return)
         assert got, "Enter did not reach the tool"
         assert got[-1] == pytest.approx((200.0, 100.0))
     finally:
@@ -70,7 +70,7 @@ def _typed(tool_name, keys):
         vp = win.viewport
         win._activate_tool(tool_name)
         vp.setFocus()
-        QTest.keyClicks(vp, keys)
+        QTest.keyClicks(vp.keys_stand_in, keys)
         return vp._value_buffer
     finally:
         win._saved_version = win.viewport.scene.version
@@ -141,12 +141,12 @@ def test_typing_typographic_inches_in_the_rectangle():
         from PySide6.QtGui import QKeyEvent
         for ch in "1⅜”, 1 3/16”":
             if ch.isascii():
-                QTest.keyClicks(vp, ch)
+                QTest.keyClicks(vp.keys_stand_in, ch)
             else:
                 for kind in (QEvent.KeyPress, QEvent.KeyRelease):
-                    QApplication.sendEvent(vp, QKeyEvent(
+                    QApplication.sendEvent(vp.keys_stand_in, QKeyEvent(
                         kind, Qt.Key_unknown, Qt.NoModifier, ch))
-        QTest.keyClick(vp, Qt.Key_Return)
+        QTest.keyClick(vp.keys_stand_in, Qt.Key_Return)
         assert got, "Enter did not reach the tool"
         assert got[-1] == pytest.approx((1.375 * 0.0254, 1.1875 * 0.0254))
     finally:

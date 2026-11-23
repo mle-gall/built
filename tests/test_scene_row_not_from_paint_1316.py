@@ -16,7 +16,6 @@ from PySide6.QtWidgets import QApplication
 if QApplication.instance() is None:
     QApplication(sys.argv[:1])
 
-from views.viewport import Viewport  # noqa: E402
 
 
 @pytest.fixture
@@ -40,13 +39,13 @@ def test_the_row_waits_for_the_frame_to_be_out(win):
     row = win._scene_tabs
     assert row.isHidden()
     _add_scene(win)
-    Viewport.painting += 1                 # as from inside paintGL
+    win._doc.stand_in._drawing_frame = True
     try:
         win.tray.scenes.refresh()
         win.tray.scenes.refresh()          # a burst…
         assert row.isHidden()              # …never from inside the paint
     finally:
-        Viewport.painting -= 1
+        win._doc.stand_in._drawing_frame = False
     QApplication.processEvents()
     assert not row.isHidden()              # the next turn shows it
     assert row.tabs.count() == 1
@@ -58,16 +57,18 @@ def test_outside_a_paint_the_row_follows_at_once(win):
     assert not win._scene_tabs.isHidden()
 
 
-def test_paintgl_counts_itself_even_when_it_raises(win, monkeypatch):
-    vp = win.viewport
+def test_frame_guard_is_released_even_when_presentation_raises(win, monkeypatch):
+    display = win._doc.stand_in
     seen = []
 
-    def frame(self):
-        seen.append(Viewport.painting)
+    def frame():
+        seen.append(display._drawing_frame)
         raise RuntimeError("a broken frame")
 
-    monkeypatch.setattr(Viewport, "_paint_frame", frame)
+    monkeypatch.setattr(display, "renderer", object())
+    monkeypatch.setattr(display, "_present_frame", frame)
+    display._resize_timer.stop()
     with pytest.raises(RuntimeError):
-        vp.paintGL()
-    assert seen == [1]
-    assert Viewport.painting == 0
+        display.draw_frame()
+    assert seen == [True]
+    assert not display._drawing_frame

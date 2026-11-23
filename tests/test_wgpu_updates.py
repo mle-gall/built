@@ -385,7 +385,7 @@ def test_tool_change_signal_reports_unsupported_tool_without_mouse_input():
     source.measurementChanged.emit('')
     app.processEvents()
     assert view.tools.mode == 'inert'
-    assert messages == ['not yet available on the Metal renderer']
+    assert messages == ['Unsupported document tool']
     view.close()
 
 

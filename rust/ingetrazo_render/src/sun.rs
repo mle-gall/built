@@ -8,6 +8,9 @@ pub struct Settings {
     darkness: f32,
     ground: bool,
 }
+pub const LIVE_SIZE: u32 = 2048;
+pub const EXPORT_SIZE: u32 = 8192;
+
 pub struct Sun {
     pub enabled: bool,
     dirty: bool,
@@ -24,7 +27,7 @@ pub struct Sun {
     sampler: wgpu::Sampler,
 }
 impl Sun {
-    pub fn new(d: &wgpu::Device, format: wgpu::TextureFormat) -> Self {
+    pub fn new(d: &wgpu::Device, format: wgpu::TextureFormat, size: u32) -> Self {
         let shader = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("sun caster"),
             source: wgpu::ShaderSource::Wgsl(concat!(include_str!("shading.wgsl"), "\n@fragment fn shadow_fs(i: Out, @builtin(front_facing) front: bool) { let alpha = face_pixel(i,front).color.a; if (inst[i.id-1u].info.z & 129u) != 0u || alpha < 0.7 { discard; } }").into()) });
         let caster = d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -160,7 +163,7 @@ impl Sun {
             darkness: 0.55,
             ground: true,
             soft: 0.,
-            map: crate::texture(d, 2048, 2048, wgpu::TextureFormat::Depth32Float),
+            map: crate::texture(d, size, size, wgpu::TextureFormat::Depth32Float),
             caster,
             receivers,
             uniform: crate::buffer(
@@ -275,7 +278,7 @@ impl Sun {
         let mut camera = (conversion * glam::Mat4::from_cols_array(&self.matrix))
             .to_cols_array()
             .to_vec();
-        camera.extend([2048., 2048., 0., 0.]);
+        camera.extend([self.map.width() as f32, self.map.height() as f32, 0., 0.]);
         camera.extend([0., 0., 1., 0.]);
         let camera = crate::buffer(
             d,
@@ -439,15 +442,12 @@ mod tests {
     }
     #[test]
     fn sun_validates_on_metal_both_samples() {
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::METAL,
-            ..Default::default()
-        });
+        let instance = crate::backend::instance();
         let Some(a) = pollster::block_on(instance.request_adapter(&Default::default())) else {
             return;
         };
         let (d, _) = pollster::block_on(a.request_device(&Default::default(), None)).unwrap();
-        let sun = super::Sun::new(&d, wgpu::TextureFormat::Bgra8UnormSrgb);
+        let sun = super::Sun::new(&d, wgpu::TextureFormat::Bgra8UnormSrgb, super::LIVE_SIZE);
         assert!(!sun.enabled);
         assert_eq!(sun.receivers.len(), 2);
     }

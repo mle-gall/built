@@ -56,7 +56,7 @@ def _matrix(rng):
 
 def _bake(proto, xf):
     """The placement as ``Viewport._instance_chunk`` bakes it."""
-    from views.viewport import _placed_maps
+    from views.document_interaction import _placed_maps
     v0, e1, e2, edges = proto
     _L, tv, tp = _placed_maps(xf)
     ends = tp(edges.reshape(-1, 3)).astype(np.float32).astype(np.float64)
@@ -114,7 +114,7 @@ def _scene(seed, P, big=False):
 @pytest.mark.parametrize("seed,big", [(s, False) for s in range(6)]
                          + [(s, True) for s in range(100, 103)])
 def test_corners_near_are_the_baked_ends_at_their_pixels(seed, big):
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     rng, bakes, iset = _scene(seed, 40 if big else 120, big)
     P = len(bakes)
     found_any = 0
@@ -222,7 +222,7 @@ def test_first_clear_is_occluded_asked_in_turn(seed):
     """``first_clear`` over points in order: the first both sets call seen,
     the ones in doubt before it — what ``occluded`` gives each point on the
     ray ``_unit_rays`` builds to it, a repeat as its first, the eye seen."""
-    from views.viewport import _qv_hypot3, _unit_rays
+    from views.document_interaction import _qv_hypot3, _unit_rays
     if not hasattr(mod.InstanceSet, "first_clear") or not _qv_hypot3():
         pytest.skip("no first_clear, or rays not reproducible here")
     rng, bakes, iset = _scene(300 + seed, 120)
@@ -381,7 +381,7 @@ def test_placements_without_a_box_hide_as_baked_and_empty_ones_cost_nothing(
 def test_corners_the_frame_hides_are_left_out_as_python_leaves_them(seed):
     """``corners_near`` with the frame's depth limits drops exactly the
     corners ``Viewport._depth_hidden`` would drop from its full answer."""
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     rng, bakes, iset = _scene(200 + seed, 120)
     P = len(bakes)
     cand = np.arange(P, dtype=np.int64)
@@ -421,7 +421,7 @@ def test_boxes_behind_the_frame_are_left_out_whole(seed, limits):
     branches: what ``corners_near`` leaves out, box by box, is exactly what
     ``_depth_hidden`` drops corner by corner — the same corners, in the
     same order, coordinates and pixels."""
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     rng, bakes, iset = _scene(500 + seed, 40, big=True)
     cand = np.arange(len(bakes), dtype=np.int64)
     dropped = kept = 0
@@ -465,7 +465,7 @@ def test_edges_near_are_the_baked_edges_at_their_distances(seed, big):
     the distance ``segment_distances`` measures on ``_project_px``'s pixels,
     bit for bit, the nearest ``cap`` of them, nearest first."""
     from core.edge_grid import segment_distances
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     rng, bakes, iset = _scene(300 + seed, 40 if big else 120, big)
     P = len(bakes)
     found = 0
@@ -508,7 +508,7 @@ def test_edges_near_breaks_ties_like_the_walk_over_many_twins(seed):
     the parallel batches must keep the ones the walk nearest first kept:
     the first by candidate, then by edge."""
     from core.edge_grid import segment_distances
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     rng = np.random.default_rng(900 + seed)
     protos = [_proto(rng, False) for _ in range(3)]
     spots = [_matrix(rng) for _ in range(12)]
@@ -565,7 +565,7 @@ def test_edges_near_breaks_ties_like_the_walk_over_many_twins(seed):
 def test_boxes_near_px_is_the_numpy_footprint(seed):
     """``boxes_near_px`` keeps the boxes ``_placements_under_px`` keeps:
     near the pixel, crossing the eye plane, or not finite."""
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     if not hasattr(mod, "boxes_near_px"):
         pytest.skip("older module")
     rng = np.random.default_rng(700 + seed)

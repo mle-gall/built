@@ -33,7 +33,7 @@ def _finite(p) -> bool:
 
 def _move(vp, w):
     px, py = vp._world_to_pixel(w)
-    QTest.mouseMove(vp, QPointF(px, py).toPoint())
+    QTest.mouseMove(vp.keys_stand_in, QPointF(px, py).toPoint())
     vp._last_mouse_pos = QPointF(px, py)
     vp._refresh_snap()
     _app.processEvents()
@@ -49,8 +49,8 @@ def _click(vp, px, py):
 
 def _type(vp, text):
     for ch in text:
-        QTest.keyClick(vp, ch)
-    QTest.keyClick(vp, Qt.Key_Return)
+        QTest.keyClick(vp.keys_stand_in, ch)
+    QTest.keyClick(vp.keys_stand_in, Qt.Key_Return)
     _app.processEvents()
 
 

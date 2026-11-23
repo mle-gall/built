@@ -308,7 +308,7 @@ def test_smooth_normals_off_hides_the_lines_and_keeps_the_facets():
     assert chunk["vcol"] == facets                    # flat-shaded
     assert len(chunk["edges"]) < len(lines)           # the seams' lines gone
     # The disk cache's key tells soft only from soft and smooth.
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     soft_only = Viewport._mesh_fingerprint(group.mesh)
     # The same edges with «Smooth normals» on: soft and smooth now.
     hist.execute(SoftenByAngleCommand(selected_edges(scene), 40))

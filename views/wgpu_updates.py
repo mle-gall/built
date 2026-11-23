@@ -379,7 +379,7 @@ class InstanceUpdates:
         if local and (loose is None or loose[1] != scene.loose_mesh._mut_serial):
             placements.append((None, None, None, 0))
         from types import SimpleNamespace
-        from views.viewport import _paint_of
+        from views.document_interaction import _paint_of
         vp = SimpleNamespace(scene=scene)
         roots = self.pending if local else scene.groups
         placements.extend(_placement_records(scene, roots, vp, state))

@@ -81,7 +81,7 @@ def _pulsar(win, tecla, modificador=Qt.NoModifier) -> list[str]:
     for action in win.findChildren(QAction):
         conexiones.append(action.triggered.connect(
             lambda _c=False, n=action.text(): disparos.append(n)))
-    QTest.keyClick(win.viewport, tecla, modificador)
+    QTest.keyClick(win.viewport.keys_stand_in, tecla, modificador)
     QApplication.processEvents()
     return disparos
 
@@ -89,7 +89,7 @@ def _pulsar(win, tecla, modificador=Qt.NoModifier) -> list[str]:
 def _calentar(win) -> None:
     """The first keystroke a freshly shown offscreen window gets is dropped
     before the shortcut map sees it; spend it on a key nobody claims."""
-    QTest.keyClick(win.viewport, Qt.Key_F1)
+    QTest.keyClick(win.viewport.keys_stand_in, Qt.Key_F1)
     QApplication.processEvents()
 
 
@@ -280,11 +280,11 @@ def test_ctrl_h_oculta_la_seleccion_y_ctrl_mayus_h_lo_devuelve_todo(ventana):
 
     for caja in cajas[:2]:                  # dos ocultaciones separadas
         vp.scene.select([caja])
-        QTest.keyClick(vp, Qt.Key_H, Qt.ControlModifier)
+        QTest.keyClick(vp.keys_stand_in, Qt.Key_H, Qt.ControlModifier)
         QApplication.processEvents()
     assert [c.hidden for c in cajas] == [True, True, False]
 
-    QTest.keyClick(vp, Qt.Key_H, Qt.ControlModifier | Qt.ShiftModifier)
+    QTest.keyClick(vp.keys_stand_in, Qt.Key_H, Qt.ControlModifier | Qt.ShiftModifier)
     QApplication.processEvents()
     assert not any(c.hidden for c in cajas)
     vp.history.undo()                       # Mostrar todo es un solo paso

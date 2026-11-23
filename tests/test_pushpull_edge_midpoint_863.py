@@ -23,7 +23,7 @@ if QApplication.instance() is None:
     QApplication([])
 
 from tools.pushpull import PushPullTool  # noqa: E402
-from views.viewport import Viewport  # noqa: E402
+from tests.controller_surface import ControllerSurface as Viewport
 
 from types import SimpleNamespace
 

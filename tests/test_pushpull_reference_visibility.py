@@ -27,7 +27,7 @@ if QApplication.instance() is None:
 from core.section import SectionPlane  # noqa: E402
 from core.style import Style  # noqa: E402
 from tools.pushpull import PushPullTool  # noqa: E402
-from views.viewport import Viewport  # noqa: E402
+from tests.controller_surface import ControllerSurface as Viewport
 
 from types import SimpleNamespace
 
@@ -130,7 +130,7 @@ def test_a_corner_on_the_cut_side_of_a_section_plane_is_not_a_reference():
 
 
 def test_an_edge_reference_hidden_behind_geometry_is_skipped():
-    from views.viewport import _SnapEdge
+    from views.document_interaction import _SnapEdge
     vp = _vp()
     base = _scene_with_reference_vertex(vp)
     _add_lid(vp)

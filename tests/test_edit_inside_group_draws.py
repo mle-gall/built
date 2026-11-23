@@ -27,24 +27,9 @@ def _box_group():
 
 
 def _uploaded_edges(vp):
-    """Run the edge sync, returning the number of edges it sent."""
-    sent = {}
-
-    def fake_upload(_vbo, slot, parts, empty=24):
-        data = b"".join(parts)
-        sent[slot] = len(data)
-        return len(data)
-    vp._upload_vbo = fake_upload
-    # No GL here: the buffers the sync hands to the fake upload are names.
-    import re
-    import views.viewport as vpmod
-    src = open(vpmod.__file__, encoding="utf-8").read()
-    for name in set(re.findall(r"self\.(_\w+_vbo)\b", src)):
-        if not hasattr(vp, name):
-            setattr(vp, name, None)
-    vp._tick = getattr(vp, "_tick", 0) + 1
-    vp._sync_edges()
-    return sent["edges"] // 24
+    from views.wgpu_scene import pack_scene
+    packed = pack_scene(vp.scene)
+    return sum(int(cmd['count']) for cmd in packed.edge_commands) // 2
 
 
 @pytest.mark.parametrize("component", [False, True])
@@ -110,7 +95,7 @@ def test_empty_click_leaves_only_beyond_the_dotted_box(monkeypatch, component):
     # Find a pixel in the NEW gutter: inside the dotted frame but outside
     # the old, tight frame that coincided with the cube's solid edges.
     from core.group import oriented_box_corners
-    from views.viewport import _point_in_screen_hull
+    from views.document_interaction import _point_in_screen_hull
     tight_px = [vp._world_to_pixel(c)
                 for c in oriented_box_corners(*vp._group_obb(group))]
     tight_px = [p for p in tight_px if p is not None]
@@ -146,7 +131,7 @@ def test_the_edit_box_is_world_edges_on_its_twelve_edges():
     whole edges; the dash pattern is the shader's (u_stipple 4), so zooming
     into a large group costs nothing extra per frame."""
     from core.group import oriented_box_corners
-    from views.viewport import _box_edge_vertices
+    from views.document_interaction import _box_edge_vertices
     corners = oriented_box_corners((V(1, 0, 0), V(0, 1, 0), V(0, 0, 1)),
                                    (0.0, 0.0, 0.0), (1.0, 1.0, 1.0))
     pts = list(_box_edge_vertices(corners))

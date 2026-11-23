@@ -180,7 +180,7 @@ def test_offset_value_label_and_vcb():
 
 
 def test_offset_viewport_measurement_text():
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     from tools.offset import OffsetTool
     vp = Viewport.__new__(Viewport)
     tool = OffsetTool()
@@ -282,7 +282,8 @@ def test_offset_snaps_only_during_the_drag():
     from PySide6.QtCore import QPointF, Qt
     from views.status_hints import hint_for
     from tools.offset import OffsetTool
-    from views.viewport import Viewport, _HoverEvent
+    from views.document_interaction import _HoverEvent
+    from tests.controller_surface import ControllerSurface as Viewport
 
     vp = Viewport(None)
     vp.resize(1000, 600)

@@ -23,7 +23,7 @@ def viewport():
         app = QApplication([])
     elif not isinstance(app, QApplication):
         pytest.skip("another Qt application flavour is already running")
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     return Viewport(None)
 
 

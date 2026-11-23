@@ -107,7 +107,7 @@ def _local(p):
 def test_gl_down_takes_the_hovered_edge_else_the_last_referenced_one():
     from types import SimpleNamespace
     from tools.line import LineTool
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport()
     vp.active_tool = LineTool()
     hovered = SimpleNamespace(a=V(0, 0, 0), b=V(1, 1, 0))

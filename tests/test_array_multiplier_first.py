@@ -57,8 +57,8 @@ def _move_copy(win, vp, face):
 
 
 def _type(vp, text):
-    QTest.keyClicks(vp, text)
-    QTest.keyClick(vp, Qt.Key_Return)
+    QTest.keyClicks(vp.keys_stand_in, text)
+    QTest.keyClick(vp.keys_stand_in, Qt.Key_Return)
     QApplication.processEvents()
 
 
@@ -94,7 +94,7 @@ def test_bare_x_without_a_copy_is_still_the_text_tool():
     try:
         win._activate_tool("move")
         move = vp.active_tool
-        QTest.keyClick(vp, Qt.Key_X)
+        QTest.keyClick(vp.keys_stand_in, Qt.Key_X)
         QApplication.processEvents()
         assert vp.active_tool is not move
         assert type(vp.active_tool).__name__ == "TextTool"
@@ -108,7 +108,7 @@ def test_once_the_array_window_closes_x_is_text_again():
         tool = _move_copy(win, vp, face)
         tool.on_click(_ctx(vp, 5, 5))                   # a click ends the window
         assert not tool.array_pending(vp)
-        QTest.keyClick(vp, Qt.Key_X)
+        QTest.keyClick(vp.keys_stand_in, Qt.Key_X)
         QApplication.processEvents()
         assert type(vp.active_tool).__name__ == "TextTool"
     finally:
@@ -123,11 +123,11 @@ def test_esc_right_after_a_copy_closes_the_array_window():
     try:
         tool = _move_copy(win, vp, face)
         assert tool.array_pending(vp)
-        QTest.keyClick(vp, Qt.Key_Escape)
+        QTest.keyClick(vp.keys_stand_in, Qt.Key_Escape)
         QApplication.processEvents()
         assert not tool.array_pending(vp)
         assert vp.scene.selection                       # still selected
-        QTest.keyClick(vp, Qt.Key_X)
+        QTest.keyClick(vp.keys_stand_in, Qt.Key_X)
         QApplication.processEvents()
         assert type(vp.active_tool).__name__ == "TextTool"
     finally:
@@ -141,7 +141,7 @@ def test_x_then_esc_esc_then_x_is_text():
     try:
         _move_copy(win, vp, face)
         for key in (Qt.Key_X, Qt.Key_Escape, Qt.Key_Escape, Qt.Key_X):
-            QTest.keyClick(vp, key)
+            QTest.keyClick(vp.keys_stand_in, key)
             QApplication.processEvents()
         assert type(vp.active_tool).__name__ == "TextTool"
         assert _xs(vp) == [0.0, 2.0]                    # the copy stays

@@ -68,9 +68,11 @@ def scene(tmp_path, monkeypatch):
         w, h = vp.width(), vp.height()
         vp.camera.set_aspect(w, h)
         c = (vp.camera.projection_matrix() * vp.camera.view_matrix()).map(p)
-        QTest.mouseClick(vp, Qt.LeftButton, Qt.NoModifier,
-                         QPoint(round((c.x() + 1) / 2 * w),
-                                round((1 - c.y()) / 2 * h)))
+        from PySide6.QtCore import QPointF, QEvent
+        from PySide6.QtGui import QMouseEvent
+        pos = QPointF(round((c.x() + 1) / 2 * w), round((1 - c.y()) / 2 * h))
+        vp._dispatch_tool_click(QMouseEvent(QEvent.MouseButtonPress, pos, pos,
+                                            Qt.LeftButton, Qt.LeftButton, Qt.NoModifier))
         QApplication.processEvents()
 
     for p in (V(1, 1, 0), V(5, 1, 0), V(9, 1, 0)):

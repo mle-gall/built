@@ -292,7 +292,7 @@ def test_dragged_guide_stays_out_of_the_snap():
 
 
 def test_viewport_snap_scene_skips_the_dragged_guide():
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     scene = Scene()
     moving = Guide(V(0, 1), V(1, 0))
     still = Guide(V(3, 3))                          # a guide point

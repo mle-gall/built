@@ -24,7 +24,7 @@ from core.snap import SnapResult  # noqa: E402
 from formats import igz  # noqa: E402
 from tools.base import ToolContext  # noqa: E402
 from tools.tape import TapeMeasureTool  # noqa: E402
-from views.viewport import _guide_vertices  # noqa: E402
+from views.document_interaction import _guide_vertices
 
 
 def V(x, y, z=0.0):
@@ -90,7 +90,7 @@ def test_the_second_click_places_the_axis_guide_too():
 def test_the_real_viewport_finds_the_axis_under_the_cursor():
     from PySide6.QtWidgets import QApplication
     QApplication.instance() or QApplication([])
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport(None)
     vp.resize(1000, 600)
     vp.camera.set_aspect(1000, 600)
@@ -111,7 +111,7 @@ def test_the_axis_cue_rule_lives_in_the_engine():
     (``pick_axis``) stays a viewport service the engine calls."""
     from PySide6.QtWidgets import QApplication
     QApplication.instance() or QApplication([])
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
 
     class _AxisSourceTool:
         axis_source = True
@@ -154,7 +154,7 @@ def test_supported_drawing_tools_snap_to_a_visible_axis_at_first_point():
     from tools.circle import CircleTool
     from tools.line import LineTool
     from tools.rectangle import RectangleTool
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
 
     vp = Viewport(None)
     vp.resize(1000, 600)

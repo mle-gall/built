@@ -11,9 +11,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-import views.viewport as viewport_mod
+import views.document_interaction as viewport_mod
 from core import _native
-from views.viewport import _nearest_within
+from views.document_interaction import _nearest_within
 
 mod = _native.native
 pytestmark = pytest.mark.skipif(

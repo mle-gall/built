@@ -121,7 +121,7 @@ def draw_snap_indicator(painter, snap, project, clip_line, *, labels=True,
     Colors come from SnapResult, including group/context and guide overrides.
     No marker or guide is painted for axis/axis_inference snaps.
     """
-    from views.viewport import DocumentInteraction
+    from views.document_interaction import DocumentInteraction
     from core.i18n import tr
     # Axis-lock and inference state is conveyed by the coloured rubber
     # band; no badge follows the cursor along the lock line. Only the

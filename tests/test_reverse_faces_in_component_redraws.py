@@ -21,6 +21,7 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
+from tests.controller_surface import live_image
 import pytest
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 from PySide6.QtWidgets import QApplication
@@ -30,7 +31,8 @@ from core.history import FlipFacesCommand, History
 from core.mesh import Mesh
 from core.scene import Scene
 from tests.test_chunk_stale_materials import _stub
-from views.viewport import Viewport, _proto_wrapper
+from views.document_interaction import _proto_wrapper
+from tests.controller_surface import ControllerSurface as Viewport
 
 _app = QApplication.instance() or QApplication([])
 
@@ -388,7 +390,7 @@ def _pixel(vp, p):
     vp.update()
     for _ in range(6):
         _app.processEvents()
-    img = vp.grabFramebuffer()
+    img = live_image(vp)
     dpr = img.width() / max(vp.width(), 1)
     x, y = vp._world_to_pixel(p)
     c = img.pixelColor(int(x * dpr), int(y * dpr))
@@ -411,8 +413,8 @@ def test_inside_and_outside_show_the_same_colour(xform, centre):
         for _ in range(10):
             _app.processEvents()
         vp = win.viewport
-        if getattr(vp, "_gl", None) is None or not vp.isValid():
-            pytest.skip("no OpenGL context on this platform")
+        if not vp.keys_stand_in._can_create_surface():
+            pytest.skip("the Qt platform has no native GPU surface")
         scene = vp.scene
         scene.guides.clear()
         proto = _square()

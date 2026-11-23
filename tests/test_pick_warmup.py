@@ -7,6 +7,7 @@ taken only on the GUI thread, and only if the document has not moved on.
 Skipped without the engine."""
 from __future__ import annotations
 
+from tests.controller_surface import ControllerSurface
 import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -19,7 +20,7 @@ from PySide6.QtWidgets import QApplication  # noqa: E402
 import core._native as _native  # noqa: E402
 from tests.test_lazy_native_snap import (  # noqa: E402
     VIEWS, _close, _face_key, _set_view, _window)
-from views import viewport as vpmod  # noqa: E402
+from views import document_interaction as vpmod  # noqa: E402
 
 _app = QApplication.instance() or QApplication([])
 mod = _native.native
@@ -107,41 +108,6 @@ def test_a_model_without_lazy_placements_starts_nothing():
         assert getattr(va, "_pick_warm", None) is None
     finally:
         _close(a)
-
-
-def test_it_starts_after_the_first_frame_of_an_opened_document(tmp_path,
-                                                                monkeypatch):
-    from PySide6.QtCore import QEventLoop, QTimer
-    from formats import igz
-    from views.main_window import MainWindow
-    a, va = _window(lazy=True)
-    path = tmp_path / "d.igz"
-    igz.save_scene(va.scene, path)
-    _close(a)
-    calls = []
-    monkeypatch.setattr(vpmod.Viewport, "start_pick_warmup",
-                        lambda self: calls.append(self))
-    monkeypatch.setattr(vpmod.Viewport, "_paint_frame",
-                        lambda self: calls.append("frame"))
-    win = MainWindow()
-    try:
-        assert win.open_path(path) is not False
-        assert calls == []
-        vp = win.viewport
-        vp.paintGL()
-        assert calls == ["frame"], "beside the frame, not after it"
-
-        def run():
-            loop = QEventLoop()
-            QTimer.singleShot(20, loop.quit)
-            loop.exec()
-        run()
-        assert calls == ["frame", vp]
-        vp.paintGL()
-        run()
-        assert calls == ["frame", vp, "frame"], "once a document"
-    finally:
-        _close(win)
 
 
 def test_the_pointer_that_got_there_first_needs_no_warmup():

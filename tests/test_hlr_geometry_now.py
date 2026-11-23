@@ -148,7 +148,7 @@ def test_copies_not_baked_yet_come_out_as_their_bakes():
             g.xform = m
             scene.groups.append(g)
         scene.version += 1
-        import views.viewport as VP
+        import views.document_interaction as VP
         calls = []
         real = VP._batch_instances
         VP._batch_instances = lambda base, xfs, *a: (calls.append(len(xfs)),

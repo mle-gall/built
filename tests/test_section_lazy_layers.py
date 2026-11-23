@@ -84,7 +84,7 @@ def test_the_cut_tags_its_chords_from_the_document(lazy, tmp_path):
     from types import SimpleNamespace
 
     from views.array_bake import DeferredFaces, LazyPairs, PickEntities
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     group = _layered_group(tmp_path)
     group.layer = "Mobiliario"                       # the object's own
     ents = PickEntities()

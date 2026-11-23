@@ -12,7 +12,7 @@ from core.layers import Layer
 from core.materials import effective_attrs
 from core.mesh import Mesh
 from core.scene import Scene
-from views.viewport import _paint_of
+from views.document_interaction import _paint_of
 from views.wgpu_scene import (pack_scene, _source_arrays, _texture_array, COMMAND,
                               OBJECT_HIDDEN, VISIBILITY_FILTERED)
 

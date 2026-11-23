@@ -1,6 +1,6 @@
-"""Document editing over a Metal window supplied by either application."""
+"""Document editing over a wgpu window supplied by either application."""
 from views.view_host import WidgetShim
-from views.viewport import DocumentInteraction
+from views.document_interaction import DocumentInteraction
 
 
 class DocumentController(DocumentInteraction, WidgetShim):
@@ -11,6 +11,8 @@ class DocumentController(DocumentInteraction, WidgetShim):
 
     @classmethod
     def for_widget(cls, display):
+        from views.rtl import keep_ltr
+        keep_ltr(display)
         controller = cls(QtViewHost(display))
         controller.setParent(display)
         controller.keys_stand_in = display
@@ -18,11 +20,83 @@ class DocumentController(DocumentInteraction, WidgetShim):
         display.camera = controller.camera
         return controller
 
+    def resize(self, *size):
+        self.keys_stand_in.resize(*size)
+
+    def setUpdatesEnabled(self, enabled):
+        if isinstance(self._host, QtViewHost):
+            self._host.display.setUpdatesEnabled(enabled)
+        else:
+            self._updates_enabled = enabled
+
+    def updatesEnabled(self):
+        if isinstance(self._host, QtViewHost):
+            return self._host.display.updatesEnabled()
+        return getattr(self, '_updates_enabled', True)
+
+    def setFocus(self, *args):
+        display = getattr(self, 'keys_stand_in', None)
+        if isinstance(self._host, QtViewHost) and display is not None:
+            display.setFocus(*args)
+        else:
+            super().setFocus(*args)
+
+    def mapTo(self, target, point):
+        if isinstance(self._host, QtViewHost):
+            return self._host.display.mapTo(target, point)
+        return super().mapTo(target, point)
+
+    def cursor(self):
+        if isinstance(self._host, QtViewHost):
+            return self._host.display.cursor()
+        return super().cursor()
+
     def mapToGlobal(self, point):
         return self.keys_stand_in.mapToGlobal(point)
 
     def mapFromGlobal(self, point):
         return self.keys_stand_in.mapFromGlobal(point)
+
+    def reset_texture_cache(self):
+        self.reset_document_caches()
+        self._reference_revision = getattr(self, "_reference_revision", 0) + 1
+        self.update()
+
+    def _depth_world_at(self, x, y):
+        display = self.keys_stand_in
+        if display is None or display.renderer is None:
+            return None
+        painted = getattr(display, '_last_camera', None)
+        camera = display.camera
+        if painted is None or painted[0] != (tuple(camera.view_matrix().data()),
+                                            tuple(camera.projection_matrix().data())):
+            return None
+        if not (0 <= x < display.width() and 0 <= y < display.height()):
+            return None
+        kind, point = display._depth_world_at(x, y)
+        return ('background', None) if kind == 'miss' else (kind, point)
+
+    def upload_terrain(self, terrain):
+        self._reference_revision = getattr(self, '_reference_revision', 0) + 1
+        self.update()
+
+    def upload_photo_mesh(self, mesh, images=None):
+        if mesh is not None and images is not None:
+            mesh.images = images
+        self._reference_revision = getattr(self, '_reference_revision', 0) + 1
+        self.update()
+
+    def release_photo_textures(self):
+        self._reference_revision = getattr(self, '_reference_revision', 0) + 1
+        self.update()
+
+    def max_texture_size(self):
+        renderer = getattr(self.keys_stand_in, 'renderer', None)
+        return renderer.max_texture_size() if renderer is not None else 4096
+
+    def _photo_showing(self):
+        mesh = getattr(self.scene, 'photo_mesh', None)
+        return bool(mesh and mesh.visible and mesh.triangle_count and self.scene.entity_visible(mesh))
 
     def render_image(self, width_px, height_px=None, overlays=True, annotations_only=False,
                      sharp_shadows=False, transparent=False, crop_to_frame=False):
@@ -35,7 +109,7 @@ class DocumentController(DocumentInteraction, WidgetShim):
 
 
 class QtViewHost:
-    """Window services used by tools attached to a Qt Metal surface."""
+    """Window services used by tools attached to a Qt wgpu surface."""
 
     def __init__(self, display):
         self.display = display

@@ -11,7 +11,7 @@ from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import History, MakeGroupCommand
 from core.scene import Scene
-from views.viewport import Viewport
+from tests.controller_surface import ControllerSurface as Viewport
 
 
 def V(x, y, z=0.0):

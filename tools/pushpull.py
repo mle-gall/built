@@ -1786,7 +1786,7 @@ class PushPullTool(Tool):
         push" reports, #270). X-ray and wireframe show everything:
         ``_is_occluded`` is already False there, and the cut hides its side
         in every style — the same rule the snaps follow."""
-        from views.viewport import _active_cut
+        from views.document_interaction import _active_cut
         sp = _active_cut(vp.scene)
         if sp is not None and sp.side(world) > 1e-6:
             return True
@@ -1936,7 +1936,7 @@ class PushPullTool(Tool):
         # any vertex -- the nearest one on screen wins -- and a guide LINE
         # is tried right after, like an edge. They live in ``scene.guides``,
         # outside the mesh, so the vertex scan above never saw them.
-        from views.viewport import shown_guides
+        from views.document_interaction import shown_guides
         guides = shown_guides(vp.scene)
         for g in guides:
             if getattr(g, "direction", None) is not None:

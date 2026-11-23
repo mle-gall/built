@@ -28,8 +28,8 @@ if QApplication.instance() is None:
     QApplication([])
 
 from core.snap import compute_snap  # noqa: E402
-from views import viewport as viewport_mod  # noqa: E402
-from views.viewport import Viewport  # noqa: E402
+from views import document_interaction as viewport_mod  # noqa: E402
+from tests.controller_surface import ControllerSurface as Viewport
 
 
 def _w2p(p):

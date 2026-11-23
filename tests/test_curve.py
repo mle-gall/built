@@ -327,7 +327,7 @@ def test_paste_keeps_curve_identity():
     # remap curve ids to fresh ones.
     from tools.circle import CircleTool
     from tools.paste import PasteTool
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
 
     scene = Scene()
     vp = _Vp(scene)

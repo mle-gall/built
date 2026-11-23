@@ -72,7 +72,7 @@ def test_the_accent_still_repaints_what_carries_an_icon_key():
     act = QAction(tool_icon("line"), "probe", win)
     act.setProperty("icon_key", "line")
     win.addAction(act)
-    btn = QToolButton(win.viewport)
+    btn = QToolButton(win.viewport.keys_stand_in)
     btn.setIcon(tool_icon("line"))
     btn.setProperty("icon_key", "line")
 

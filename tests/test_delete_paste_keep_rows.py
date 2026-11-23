@@ -102,14 +102,6 @@ def _look(vp):
         cam.projection_matrix() * cam.view_matrix())
 
 
-def _pool(vp):
-    vp._gather_instanced()
-    _k, groups, lo, hi, codes, protos, mats, by_code = vp._inst_pool
-    return ([id(g) for g in groups], lo.tolist(), hi.tolist(),
-            [(id(protos[c][0]), protos[c][2]) for c in codes.tolist()],
-            mats.tolist(), by_code.tolist())
-
-
 def _fresh(vp, fn, *names):
     keep = {n: getattr(vp, n, None) for n in names}
     for n in names:
@@ -119,14 +111,6 @@ def _fresh(vp, fn, *names):
     finally:
         for n, v in keep.items():
             setattr(vp, n, v)
-
-
-def _sil(vp, eye):
-    groups = [g for g in vp._placements()
-              if vp.scene.entity_visible(g)]
-    raw, rest = vp._instanced_silhouettes(groups, eye, None)
-    a = np.frombuffer(raw, np.float32).reshape(-1, 6)
-    return sorted(map(tuple, np.round(a, 4))), [id(g) for g in rest]
 
 
 def _lazy(vp):
@@ -151,83 +135,6 @@ def _steps(vp, gs, box, plain):
     for _ in range(5):
         h.undo()
         yield "undo"
-
-
-def test_the_instanced_pool_keeps_the_rows_of_what_stayed():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        vp, gs, box, plain, glass = _scene(win)
-        _look(vp)
-        _pool(vp)
-        calls = []
-        real = vp._placement_bbox
-        vp._placement_bbox = lambda g: (calls.append(id(g)), real(g))[1]
-        for what in _steps(vp, gs, box, plain):
-            calls.clear()
-            got = _pool(vp)
-            worked = len(calls)
-            assert got == _fresh(vp, lambda: _pool(vp), "_inst_pool"), what
-            # Only the placements of what came or went were worked out.
-            assert worked <= 3, (what, worked)
-    finally:
-        _close(win)
-
-
-def test_the_silhouette_table_keeps_the_prototypes_that_did_not_change():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        vp, gs, box, plain, glass = _scene(win)
-        eye = V(25, -18, 9)
-        _sil(vp, eye)
-        for what in _steps(vp, gs, box, plain):
-            before = {t["uid"]: t for t in vp._sil_table[1]}
-            got = _sil(vp, eye)
-            assert got == _fresh(vp, lambda: _sil(vp, eye), "_sil_table"), what
-            after = {t["uid"]: t for t in vp._sil_table[1]}
-            # A prototype none of whose placements came or went keeps its
-            # entry, and the outline worked out for it.
-            assert after.keys() == before.keys()
-    finally:
-        _close(win)
-
-
-def test_a_copy_deleted_and_one_pasted_at_once_reads_as_made_afresh():
-    from core.group import copy_group
-    from core.history import (CompoundCommand, DeleteGroupCommand,
-                              InsertGroupCommand)
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        vp, gs, box, plain, glass = _scene(win)
-        eye = V(25, -18, 9)
-        _sil(vp, eye)
-        vp.history.execute(CompoundCommand([
-            DeleteGroupCommand(gs[0]),
-            InsertGroupCommand(copy_group(gs[2], V(2.0, -7.0, 0.0)))]))
-        got = _sil(vp, eye)
-        assert got == _fresh(vp, lambda: _sil(vp, eye), "_sil_table")
-    finally:
-        _close(win)
-
-
-def test_a_prototype_untouched_by_a_delete_keeps_its_entry():
-    from core.history import DeleteGroupCommand
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        vp, gs, box, plain, glass = _scene(win)
-        eye = V(25, -18, 9)
-        _sil(vp, eye)
-        by = {t["uid"]: t for t in vp._sil_table[1]}
-        vp.history.execute(DeleteGroupCommand(gs[3]))          # a 7-sided one
-        _sil(vp, eye)
-        kept = [t for t in vp._sil_table[1] if by.get(t["uid"]) is t]
-        assert len(kept) == 1 and gs[0].mesh is not gs[3].mesh
-        assert any(g.mesh is gs[0].mesh for g in kept[0]["groups"])
-    finally:
-        _close(win)
 
 
 def test_the_lists_and_the_lazy_table_read_as_made_afresh():
@@ -272,90 +179,9 @@ def test_an_object_kept_is_one_whose_whole_subtree_reads_the_same():
         _close(win)
 
 
-def _show(win):
-    win.show()
-    for _ in range(10):
-        _app.processEvents()
-    vp = win.viewport
-    if getattr(vp, "_gl", None) is None or not vp.isValid():
-        pytest.skip("no OpenGL context on this platform")
-    return vp
-
-
 def _pump(n=6):
     for _ in range(n):
         _app.processEvents()
-
-
-def _faces_bytes(vp):
-    """The faces buffer as the parts say, opaque block and runs, without
-    the room between them."""
-    parts = vp._vbo_parts["faces"][0]
-    raw = b"".join(parts)
-    end = vp._faces_count * 24
-    room = (vp._face_room_at or end) - end
-    return raw[:end], raw[end + room:]
-
-
-def test_a_deleted_object_leaves_zeros_its_undo_fills_and_a_paste_comes_last():
-    from core.group import copy_group
-    from core.history import DeleteGroupCommand, InsertGroupCommand
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        vp = _show(win)
-        sc = vp.scene
-        sc.show_axes = False
-        vp2, gs, box, plain, glass = _scene(win)
-        vp.camera.set_view("top")
-        vp.camera.perspective = False
-        vp.camera.fit_to(V(-8, -10, 0), V(24, 12, 3))
-        _pump()
-        vp.grabFramebuffer()
-        sizes = list(vp._vbo_parts["faces"][2])
-        opaque, runs = _faces_bytes(vp)
-
-        def colour(img, x, y):
-            dpr = img.width() / max(vp.width(), 1)
-            px = vp._world_to_pixel(V(x, y, 0))
-            c = img.pixelColor(int(px[0] * dpr), int(px[1] * dpr))
-            return c.redF(), c.greenF(), c.blueF()
-
-        img = vp.grabFramebuffer()
-        sky = colour(img, -6.0, 10.0)
-        assert colour(img, -3.5, 2.5) != sky             # S1 is drawn
-        vp.history.execute(DeleteGroupCommand(plain[1]))
-        vp.history.execute(DeleteGroupCommand(glass))
-        _pump()
-        img = vp.grabFramebuffer()
-        assert vp._vbo_parts["faces"][2] == sizes        # zeros in its place
-        assert np.allclose(colour(img, -3.5, 2.5), sky, atol=0.02)
-        assert np.allclose(colour(img, -6.5, 0.5), sky, atol=0.02)   # glass
-        assert colour(img, -3.5, 0.5) != sky             # S0 stays
-        vp.history.undo()
-        vp.history.undo()
-        _pump()
-        vp.grabFramebuffer()
-        assert vp._vbo_parts["faces"][2] == sizes
-        assert _faces_bytes(vp) == (opaque, runs)        # as it was
-        pasted = copy_group(plain[0], V(0.0, -6.0, 0.0))
-        vp.history.execute(InsertGroupCommand(pasted))
-        _pump()
-        img = vp.grabFramebuffer()
-        assert colour(img, -3.5, -5.5) != sky            # the copy is drawn
-        got = _faces_bytes(vp)
-        # The same buffer, part for part, as one laid out afresh.
-        vp._slot_layout = None
-        vp._face_room_at = None
-        vp._vbo_parts.clear()
-        vp._edges_version = -1
-        vp._edges_content_key = None
-        vp._edge_groups_cache = None
-        _pump()
-        vp.grabFramebuffer()
-        assert _faces_bytes(vp) == got
-    finally:
-        _close(win)
 
 
 def test_the_browser_takes_rows_out_and_puts_them_in_as_a_rebuild_would():

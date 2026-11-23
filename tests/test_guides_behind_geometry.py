@@ -21,12 +21,13 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
 import pytest
+from tests.controller_surface import live_image
 from PySide6.QtGui import QImage
 from ingetrazo_core import Vec3 as QVector3D
 from PySide6.QtWidgets import QApplication
 
 from core.guide import Guide
-from views.viewport import _guide_vertices
+from views.document_interaction import _guide_vertices
 
 _app = QApplication.instance() or QApplication([])
 V = QVector3D
@@ -94,7 +95,7 @@ def test_pick_guide_picks_a_guide_circle():
     from types import SimpleNamespace
     from core.guide import GuideCircle
     from core.scene import Scene
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
 
     scene = Scene()
     g = GuideCircle(V(0, 0, 0), V(0, 0, 1), 2.0)
@@ -115,7 +116,7 @@ def test_a_small_guide_circle_still_gets_enough_dashes():
     """A circle smaller than one dash period must not collapse to a single
     camera-sized dash: its dashes shrink so the ring stays visibly dashed."""
     from core.guide import GuideCircle
-    from views.viewport import _MIN_CIRCLE_DASHES
+    from views.document_interaction import _MIN_CIRCLE_DASHES
     coords, spans = _guide_vertices(
         [GuideCircle(V(0, 0, 0), V(0, 0, 1), 0.02)], spacing=1.0)
     assert len(spans) == 1
@@ -131,13 +132,13 @@ def _viewport():
     win.show()
     _app.processEvents()
     vp = win.viewport
-    if getattr(vp, "_gl", None) is None or not vp.isValid():
+    if not vp.keys_stand_in._can_create_surface():
         # Closed before skipping: a shown window left behind took the
         # keyboard from the next test's own (CI's batch 5, no OpenGL:
         # Join Segments' Esc never reached its viewport).
         win._saved_version = vp.scene.version
         win.close()
-        pytest.skip("no OpenGL context on this platform")
+        pytest.skip("the Qt platform has no native GPU surface")
     return win, vp
 
 
@@ -180,15 +181,15 @@ def test_a_wall_hides_the_guide_behind_it():
     win, vp = _scene_looking_down_minus_y()
     try:
         assert vp.camera.eye().y() > 0          # the eye really is on +Y
-        bare = _pixels(vp.render_image(300, 300, overlays=False))
+        bare = _pixels(live_image(vp))
 
         vp.scene.guides[:] = [Guide(V(0, 4, 0), V(1, 0, 0))]     # in front
         shown = _changed(bare, _pixels(
-            vp.render_image(300, 300, overlays=False)))
+            live_image(vp)))
 
         vp.scene.guides[:] = [Guide(V(0, -4, 0), V(1, 0, 0))]    # behind
         hidden = _changed(bare, _pixels(
-            vp.render_image(300, 300, overlays=False)))
+            live_image(vp)))
 
         assert shown > 50, "a guide in front of the wall must be drawn"
         assert hidden == 0, (

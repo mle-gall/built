@@ -156,25 +156,11 @@ def test_the_extent_follows_the_figure_not_the_model(monkeypatch):
         _close(win)
 
 
-class _Stop(Exception):
-    pass
-
-
-def _stop_after_the_purge(vp):
-    """The purge of dead hover/selection refs runs first in _sync_edges;
-    stop there (the buffers need GL, and a lazy group without a source
-    cannot be baked)."""
-    def stop():
-        raise _Stop
-    vp._sync_content_key = stop
-
-
 def test_a_selection_inside_a_group_leaves_unbuilt_groups_alone():
     win = _window()
     vp = win.viewport
     try:
         import pytest
-        _stop_after_the_purge(vp)
         builds = []
 
         def build(mesh):
@@ -189,14 +175,12 @@ def test_a_selection_inside_a_group_leaves_unbuilt_groups_alone():
         vp.scene.version += 1
         face = box.mesh.faces[0]
         vp.scene.select([face])
-        with pytest.raises(_Stop):
-            vp._sync_edges()
+        vp.notify_scene_changed()
         assert face in vp.scene.selection, "a live selection was dropped"
         # a face of a group that is not open is not alive here
         stray = Mesh().add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0)])
         vp.scene.select([face, stray])
-        with pytest.raises(_Stop):
-            vp._sync_edges()
+        vp.notify_scene_changed()
         assert face in vp.scene.selection
         assert stray not in vp.scene.selection
         assert not builds, "checking the selection built a lazy group"

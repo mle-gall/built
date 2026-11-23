@@ -199,6 +199,10 @@ class _Keys(QObject):
         self._panel = panel
 
     def eventFilter(self, obj, ev) -> bool:
+        if ev.type() == QEvent.ShortcutOverride and ev.key() in (
+                Qt.Key_Return, Qt.Key_Enter, Qt.Key_Escape):
+            ev.accept()
+            return True
         if ev.type() == QEvent.Resize:
             self._panel.place()
         elif ev.type() == QEvent.KeyPress:

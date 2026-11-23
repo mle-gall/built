@@ -151,7 +151,7 @@ def test_the_probes_either_side_are_baked_before_any_is_asked(monkeypatch):
     # One at a time, each probe that met a new lazy placement rebuilt the
     # index for the next (#158): all are baked first, then asked.
     # The baking path (with the experimental engine nothing is baked).
-    import views.viewport as vpm
+    import views.document_interaction as vpm
     monkeypatch.setattr(vpm, "_LAZY_NATIVE", False)
     win, vp = _sunk_copies_window()
     try:

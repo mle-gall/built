@@ -3,11 +3,11 @@ from types import SimpleNamespace
 from ingetrazo_core import Matrix4 as QMatrix4x4
 from core.group import Group
 from core.mesh import Mesh
-from views.viewport import Viewport
+from tests.controller_surface import ControllerSurface as Viewport
 
 
 def test_bounds_survive_before_instance_pool_is_published(monkeypatch):
-    import views.viewport as module
+    import views.document_interaction as module
     monkeypatch.setattr(module, '_paint_of', lambda *_: None)
     groups = [Group(Mesh(), str(i)) for i in range(600)]
     for i, group in enumerate(groups):

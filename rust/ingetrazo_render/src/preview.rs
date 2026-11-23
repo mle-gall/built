@@ -141,10 +141,7 @@ impl Preview {
 mod tests {
     #[test]
     fn preview_and_marks_validate_on_metal_both_samples() {
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::METAL,
-            ..Default::default()
-        });
+        let instance = crate::backend::instance();
         let Some(adapter) = pollster::block_on(instance.request_adapter(&Default::default()))
         else {
             return;

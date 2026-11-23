@@ -71,7 +71,7 @@ def test_paste_keeps_face_attrs_and_reanchors_texture():
     # textura" report): the clipboard now carries attrs, and a positioned
     # texture's world-anchored uvw map is re-fitted to the paste offset so
     # the image lands ON the pasted face instead of staying behind.
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     scene = Scene()
     vp = _VP(scene, History(scene), None)
     f = scene.mesh.add_face([V(0, 0), V(2, 0), V(2, 2), V(0, 2)])
@@ -110,7 +110,7 @@ def _make_group(scene, x0=0.0):
 
 
 def _copy(vp):
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     return Viewport.copy_selection(vp)
 
 
@@ -312,7 +312,7 @@ def test_paste_stamps_once_and_returns_to_select():
 
 
 def test_cut_group_removes_it_and_paste_restores():
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     scene = Scene()
     vp = _VP(scene, History(scene), None)
     vp.copy_selection = lambda: Viewport.copy_selection(vp)
@@ -335,7 +335,7 @@ def test_preview_faces_survive_viewport_memo_helpers():
     # preview — nothing followed the cursor (user report). Duck-typed now.
     from core.geometry import Face as PreviewFace
     from core.scene import Scene
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
 
     class _MemoVP:
         def __init__(self):

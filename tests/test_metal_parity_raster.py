@@ -1,11 +1,9 @@
-"""P2 style contract and optional unshown-host Metal raster acceptance.
+"""wgpu frame checks on an unshown native window.
 
-Default pytest uses Qt offscreen and skips native NSView tests. Run this file
-with QT_QPA_PLATFORM=cocoa on macOS to execute GPU checks; no widget is shown.
+Use a native Qt platform (for example QT_QPA_PLATFORM=cocoa on macOS).
 """
 import importlib.util
 import os
-import sys
 import numpy as np
 import pytest
 from core.scene import Scene
@@ -29,7 +27,7 @@ def test_payload_defaults_and_hidden_controls():
 
 def test_sun_matches_gl_and_can_be_disabled(monkeypatch):
     from ingetrazo_core import Vec3 as QVector3D
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     scene = Scene()
     scene.loose_mesh.add_face([QVector3D(0,0,0), QVector3D(1,0,0), QVector3D(0,1,1)])
     scene.shadows.enabled = True
@@ -57,14 +55,17 @@ def test_native_api_available():
 
 @pytest.fixture
 def native():
-    if not HAS_RENDERER or sys.platform != 'darwin' or os.environ.get('QT_QPA_PLATFORM') != 'cocoa':
-        pytest.skip('Metal raster checks require release crate and unshown Cocoa NSView')
+    from PySide6.QtWidgets import QApplication
+    if not HAS_RENDERER or QApplication.platformName() in ('offscreen', 'minimal'):
+        pytest.skip('requires the render crate and a native Qt surface')
     from PySide6.QtCore import Qt
     from PySide6.QtWidgets import QWidget
     from ingetrazo_core import Matrix4 as QMatrix4x4
     from ingetrazo_render import Renderer
     host = QWidget(); host.setAttribute(Qt.WA_DontShowOnScreen); host.resize(64,64)
-    renderer = Renderer(int(host.winId()),64,64,1.)
+    from views.wgpu_surface import window_handles
+    window, handles = window_handles(host)
+    renderer = Renderer(window, 64, 64, 1., **handles)
     view=QMatrix4x4(); view.translate(0,0,-3)
     proj=QMatrix4x4(); proj.ortho(-1,1,-1,1,.1,10)
     renderer.set_camera(list(view.data()),list(proj.data()))
@@ -283,6 +284,7 @@ def audit_handoff():
     """
     from pathlib import Path
     import runpy
+    import sys
     import views.wgpu_view as module
     from views.wgpu_scene import PackedScene
     original_pack = module.pack_scene
@@ -476,3 +478,147 @@ def test_transparent_export_preserves_the_interactive_background(native, antiali
     assert rgba[0, 0, 3] == 0
     assert rgba[32, 32, 3] == 255
     np.testing.assert_array_equal(capture(native), live)
+
+
+def test_export_shadow_map_resolves_the_ground_shadow_edge(native):
+    from ingetrazo_core import Matrix4
+
+    vertices, indices, bounds, commands, rows = synthetic_pack(alpha=255)
+    vertices["pos"][:, :2] *= .45
+    vertices["pos"][:, 2] += .75
+    bounds[0, 0, :3] = [-.36, -.36, .35]
+    bounds[0, 1, :3] = [.36, .36, .75]
+    native.set_scene(tuple(x.view(np.uint8).ravel() for x in
+                           (vertices, indices, bounds, commands)), rows.view(np.uint8).ravel())
+    view = Matrix4()
+    view.translate(0, 0, -3)
+    projection = Matrix4()
+    projection.ortho(-1, 1, -1, 1, .1, 10)
+    light = Matrix4()
+    light.ortho(-64, 64, -64, 64, -4, 4)
+    light.rotate(30, 0, 1, 0)
+    style = dict(shadows=True, shadow_matrix=light.data(), sun_direction=(-.5,0,.866),
+                 ground_shadows=True, shadow_darkness=.15, edges=False, sky=False,
+                 background=(1.,1.,1.))
+    def frame(sharp):
+        pixels = native.render_image(256, 256, view.data(), projection.data(), style,
+                                     sharp_shadows=sharp)
+        return np.frombuffer(bytes(pixels), np.uint8).reshape(256, 256, 4)
+
+    normal = frame(False)
+    sharp = frame(True)
+    # Count penumbra pixels on the white ground beside the elevated red quad.
+    def transition(image):
+        r, g, b = image[128, :, :3].T
+        return np.count_nonzero((r == g) & (g == b) & (r > 65) & (r < 245))
+    assert 0 < transition(sharp) < transition(normal)
+    np.testing.assert_array_equal(normal, frame(False))
+
+
+@pytest.mark.parametrize('layer', ['image', 'map', 'terrain', 'photo'])
+@pytest.mark.parametrize('aa', [False, True])
+def test_reference_imagery_in_live_and_export_frames(native, layer, aa, tmp_path):
+    from types import SimpleNamespace
+    from PySide6.QtGui import QColor, QImage
+    from ingetrazo_core import Vec3, Matrix4
+    from core.image_plane import ImagePlane
+    from georef.datum import SceneDatum
+    from georef.tiles import TileLayer, PRESETS
+    from georef.terrain import TerrainObject
+    from georef.photomesh import PhotoMesh, PhotoMaterial
+    from views.wgpu_references import sync
+
+    v, i, b, c, rows = synthetic_pack()
+    rows['info'][:, 2] = 1
+    native.set_scene(tuple(a.view(np.uint8).ravel() for a in (v, i, b, c)),
+                     rows.view(np.uint8).ravel())
+    style = dict(sky=False, edges=False, profiles=False)
+    native.set_style(style)
+    native.set_antialias(aa)
+    baseline = capture(native)
+    scene = Scene()
+    adapter = SimpleNamespace(scene=scene, renderer=native, source_viewport=None,
+                              packed=SimpleNamespace(origin=(0., 0., 0.)))
+    adapter._shared = adapter
+    image = QImage(8, 8, QImage.Format_RGBA8888)
+    image.fill(QColor(20, 225, 60))
+    positions = [(-.8, -.8, 0.), (.8, -.8, 0.), (.8, .8, .1), (-.8, .8, .1)]
+    uvs = [(0, 1), (1, 1), (1, 0), (0, 0)]
+    triangles = [(0, 1, 2), (0, 2, 3)]
+    if layer == 'image':
+        for y in range(4):
+            for x in range(8):
+                image.setPixelColor(x, y, QColor(230, 55, 10))
+        path = tmp_path / 'plan.png'
+        assert image.save(str(path))
+        scene.image_planes.append(ImagePlane(str(path), Vec3(-.8, -.8, 0.),
+                                             Vec3(1.6, 0, 0), Vec3(0, 1.6, 0)))
+    elif layer == 'map':
+        scene.georef = SceneDatum(-12.1, -77.05)
+        tiles = scene.tile_layer = TileLayer(next(iter(PRESETS.values())), radius_m=4)
+        for x, y in tiles.flat_tiles(scene.georef):
+            tiles.images[(x, y, tiles.zoom)] = image
+    elif layer == 'terrain':
+        terrain = scene.terrain = TerrainObject([Vec3(*p) for p in positions],
+                                                uvs, triangles, (0, 0, 1, 1, 16))
+        terrain.texture_image = image
+    else:
+        survey = scene.photo_mesh = PhotoMesh(np.array(positions), np.array(uvs),
+                                              np.array(triangles), [PhotoMaterial('scan', None, 0, 2)])
+        survey.images[0] = image
+    sync(adapter, style)
+    live = capture(native)
+    view = Matrix4()
+    view.translate(0, 0, -3)
+    projection = Matrix4()
+    projection.ortho(-1, 1, -1, 1, .1, 10)
+    pixels = native.render_image(64, 64, view.data(), projection.data(), style)
+    export = np.frombuffer(bytes(pixels), np.uint8).reshape(64, 64, 4)
+    for frame in (live, export):
+        green = frame[46, 32, :3].astype(int)
+        assert green[1] > 180 and green[0] < 40, green
+        if layer == 'image':
+            assert frame[18, 32, 0] > 200
+    if layer == 'image':
+        scene.image_planes.clear()
+    else:
+        {'terrain': scene.terrain, 'map': scene.tile_layer,
+         'photo': scene.photo_mesh}[layer].visible = False
+    sync(adapter, style)
+    np.testing.assert_array_equal(capture(native), baseline)
+
+
+def test_acquired_center_cue_projected_into_live_frame(native):
+    upload(native, 255)
+    native.set_style(dict(sky=False))
+    native.set_overlay(64, 64, np.zeros(64 * 64 * 4, np.uint8))
+    baseline = capture(native)
+    native.set_center_cue((0, 0, 0), .9, (45, 32), 1.)
+    near = capture(native)
+    np.testing.assert_allclose(near[32, 32, :3], (41, 158, 92), atol=2)
+    assert np.all(near[32, 37, :3] > baseline[32, 37, :3] - 1.) or near[32, 37, 2] > 100
+    for center, radius, cursor in [((0, 0, 0), .9, (52, 32)),
+                                   ((0, 0, 0), .1, (32, 32)),
+                                   (None, .9, (32, 32))]:
+        native.set_center_cue(center, radius, cursor, 1.)
+        np.testing.assert_array_equal(capture(native), baseline)
+
+
+@pytest.mark.parametrize("antialias", [False, True])
+def test_model_behind_reference_only_hidden_by_opaque_imagery(native, antialias):
+    upload(native, alpha=255)
+    native.set_antialias(antialias)
+    native.set_style(dict(sky=False, edges=False))
+    original = capture(native)
+    corners = [(-.8, -.8), (.8, -.8), (.8, .8), (-.8, .8)]
+    vertices = np.array([(x, y, .25, 0., 0.) for x, y in
+                         [corners[i] for i in (0, 1, 2, 0, 2, 3)]], np.float32).ravel()
+    green = np.array([20, 225, 60, 255], np.uint8)
+    def frame(opacity, depth):
+        layer = ('reference', vertices, 1, 1, green, opacity, (0., 0., 0., 0.), depth)
+        native.set_reference_layers(['reference'], [layer])
+        return capture(native)[32, 32]
+    np.testing.assert_allclose(frame(1., True)[:3], green[:3], atol=2)
+    # Flat tiles and faded images leave geometry visible behind their plane.
+    np.testing.assert_array_equal(frame(1., False), original[32, 32])
+    np.testing.assert_array_equal(frame(.5, False), original[32, 32])

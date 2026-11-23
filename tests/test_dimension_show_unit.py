@@ -47,7 +47,7 @@ def test_not_a_number_stays_a_dash():
 
 def test_model_dimension_style_hides_the_unit():
     from core.scene import Scene
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     style = Scene().dimension_style
     assert style["show_unit"] is True                 # new documents: as before
     assert Viewport._format_dim_value(1.3, style) == "1.30 m"
@@ -59,7 +59,7 @@ def test_model_dimension_style_hides_the_unit():
 
 
 def test_style_without_the_key_shows_the_unit():
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     assert Viewport._format_dim_value(1.3, {"units": "m", "decimals": 2}) \
         == "1.30 m"
 

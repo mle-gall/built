@@ -311,6 +311,7 @@ impl Ui {
         let mut fonts = egui::FontDefinitions::default();
         // Inter lacks the arrows, checks and pencil the chrome uses: the
         // system faces stand behind it (egui's own fallbacks are not built in).
+        #[cfg(target_os = "macos")]
         for (key, path) in [("sys", "/System/Library/Fonts/SFNS.ttf"),
                             ("symbols", "/System/Library/Fonts/Apple Symbols.ttf")] {
             if let Ok(bytes) = std::fs::read(path) {

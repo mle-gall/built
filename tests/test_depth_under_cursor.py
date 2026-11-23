@@ -10,6 +10,7 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from tests.controller_surface import live_image
 import pytest
 from ingetrazo_core import Vec3 as V
 from PySide6.QtWidgets import QApplication
@@ -33,16 +34,16 @@ def win():
     for _ in range(10):
         _app.processEvents()
     vp = w.viewport
-    if getattr(vp, "_gl", None) is None or not vp.isValid():
+    if not vp.keys_stand_in._can_create_surface():
         w.close()
-        pytest.skip("no OpenGL context on this platform")
+        pytest.skip("the Qt platform has no native GPU surface")
     vp.scene.guides.clear()
     _box(vp.scene, -1, -1, 0, 1, 1, 2)                   # front face at y = -1
     vp.scene.version += 1
     vp.camera.set_view("front")                           # looking toward +Y
     vp.camera.perspective = False
     vp.camera.fit_to(V(-3, -1, -1), V(3, 1, 3))
-    vp.grabFramebuffer()                                  # a frame on screen
+    live_image(vp)                                  # a frame on screen
     # The corner is empty sky: a GL that reads it as anything but the
     # background gives no depth to trust. The offscreen software platform
     # sometimes hands back a buffer from another pass — a «hit» 10 km away
@@ -51,7 +52,7 @@ def win():
     if vp._depth_world_at(10, 10) != ("background", None):
         w._saved_version = vp.scene.version
         w.close()
-        pytest.skip("this GL context gives no trustworthy depth read-back")
+        pytest.skip("surface has no reliable background depth")
     yield w
     w._saved_version = vp.scene.version
     w.close()

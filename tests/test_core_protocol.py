@@ -472,7 +472,7 @@ def test_resegment_curve_and_repair_solid():
     from PySide6.QtCore import QPointF, Qt
     from tools.base import ToolContext
     from tools.circle import CircleTool
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     from core.protocol.keys import to_json_key
     vp = Viewport(None)
     vp.flash_status = lambda *a, **k: None

@@ -222,7 +222,7 @@ def test_vcb_zero_rejected():
 # ---- VCB parser: units + sign --------------------------------------------------
 
 def test_parse_value_buffer_units_and_sign():
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     parse = Viewport._parse_value_buffer
     assert parse("2") == 2.0
     assert parse("-2") == -2.0

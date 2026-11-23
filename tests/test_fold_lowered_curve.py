@@ -130,7 +130,8 @@ def test_the_move_tool_on_screen_lowers_the_arc():
     if QApplication.instance() is None:
         QApplication([])
     from tools.move import MoveTool
-    from views.viewport import Viewport, _HoverEvent
+    from views.document_interaction import _HoverEvent
+    from tests.controller_surface import ControllerSurface as Viewport
 
     vp = Viewport(None)
     vp.resize(1400, 850)

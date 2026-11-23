@@ -68,7 +68,7 @@ def test_the_vectorised_face_pick_is_the_walk(view):
     """``pick_face_placement`` names the face the per-face Python walk
     named, in loose geometry and through a component's matrix, a face a
     tool is moving left out."""
-    from views.viewport import _ray_triangle
+    from views.document_interaction import _ray_triangle
     m = view.scene.mesh
     _box(m, (0, 0, 0), (2, 2, 2))
     proto = Mesh()

@@ -81,9 +81,9 @@ def _press(widget, mods):
 
 def test_ctrl_s_saves_the_model_with_the_panel_open(win):
     w, _field, hits = win
-    _press(w.viewport, Qt.ControlModifier)
+    _press(w.viewport.keys_stand_in, Qt.ControlModifier)
     assert hits.calls == ["model"]
-    _press(w.viewport, Qt.ControlModifier | Qt.ShiftModifier)
+    _press(w.viewport.keys_stand_in, Qt.ControlModifier | Qt.ShiftModifier)
     assert hits.calls == ["model", "model as"]
 
 
@@ -97,5 +97,5 @@ def test_inside_the_panel_the_key_is_the_panels(win):
 def test_a_hidden_panel_leaves_the_key_to_the_window(win):
     w, field, hits = win
     field.parentWidget().hide()
-    _press(w.viewport, Qt.ControlModifier)
+    _press(w.viewport.keys_stand_in, Qt.ControlModifier)
     assert hits.calls == ["model"]

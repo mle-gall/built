@@ -56,6 +56,8 @@ def _tool_frame(method):
     from functools import wraps
     @wraps(method)
     def handle(view, *args, **kwargs):
+        if getattr(view, '_closed', False):
+            return None
         if args and _ui_claims(view, method.__name__, args[0]):
             return None
         remote = getattr(getattr(view, 'packed', None), 'model_translations', None) is not None
@@ -108,8 +110,9 @@ class MetalView(ViewNavigation):
             QCoreApplication.setAttribute(Qt.AA_DontCreateNativeWidgetSiblings)
         self._resize_timer = QTimer(self, singleShot=True, interval=80)
         self._resize_timer.timeout.connect(self._finish_resize)
-        for attr in (Qt.WA_NativeWindow, Qt.WA_PaintOnScreen, Qt.WA_NoSystemBackground):
-            self.setAttribute(attr)
+        if QApplication.platformName() not in ('offscreen', 'minimal'):
+            for attr in (Qt.WA_NativeWindow, Qt.WA_PaintOnScreen, Qt.WA_NoSystemBackground):
+                self.setAttribute(attr)
         self.camera = OrbitCamera()
         self.source_viewport = None
         self.setFocusPolicy(Qt.StrongFocus)
@@ -161,6 +164,13 @@ class MetalView(ViewNavigation):
         if peer in peers:
             peers.remove(peer)
 
+    def _can_create_surface(self):
+        return True
+
+    def _window_handles(self):
+        from views.wgpu_surface import window_handles
+        return window_handles(self)
+
     def _wrap_renderer(self):
         from views.wgpu_peer import TargetRenderer
         if (self.peers() and self.renderer is not None
@@ -198,7 +208,8 @@ class MetalView(ViewNavigation):
 
     @_tool_frame
     def hideEvent(self, event):
-        self.tools.cancel()
+        if not getattr(self, '_closed', False):
+            self.tools.cancel()
         super().hideEvent(event)
 
     def set_scene(self, scene, *, progress=None, opening=False, focus=None):
@@ -415,6 +426,8 @@ class MetalView(ViewNavigation):
         """One container box per idle slice, from a few seconds after the
         document is on screen; a box measured on demand meanwhile is kept."""
         pending = list(groups)
+        if not pending:
+            return
 
         def step():
             if getattr(self, '_closed', False) or self.scene is not scene:
@@ -505,6 +518,8 @@ class MetalView(ViewNavigation):
         return packed
 
     def _upload(self, force=False):
+        if self.renderer is None and not force and not self._can_create_surface():
+            return
         if self.packed is None or not (force or self._presentable()):
             return
         import ingetrazo_render
@@ -512,7 +527,9 @@ class MetalView(ViewNavigation):
         if self.renderer is None:
             from core import black_box
             black_box.install_panic_log(ingetrazo_render)
-            self.renderer = ingetrazo_render.Renderer(int(self.winId()), self.width(), self.height(), self.devicePixelRatioF())
+            window, handles = self._window_handles()
+            self.renderer = ingetrazo_render.Renderer(window, self.width(), self.height(),
+                                                       self.devicePixelRatioF(), **handles)
             self._wrap_renderer()
             from views import wgpu_ui
             wgpu_ui.attach(self)
@@ -718,6 +735,8 @@ class MetalView(ViewNavigation):
                 if len(colors) == getattr(self, '_resident_count', None):
                     self.renderer.set_overrides(colors)
                     self._tint_signature = signature
+        from views.wgpu_references import sync as sync_references
+        sync_references(self, getattr(self, '_frame_style', None) or {})
         future = getattr(self, '_inference_future', None)
         if future is not None and future.done():
             self.inference_index = future.result()
@@ -790,6 +809,18 @@ class MetalView(ViewNavigation):
             edit_box = self._edit_box_primitives()
         primitives = (edit_box + boxes
                       + billboard_outline_primitives(self) + self.overlay_primitives)
+        if hasattr(self.renderer, 'set_center_cue'):
+            ref = getattr(self.source_viewport, '_center_ref', None)
+            cursor = getattr(self, '_cue_cursor', None)
+            cue = (ref is not None and cursor is not None and preview_here
+                   and getattr(self.tools.tool, 'uses_snap', False)
+                   and getattr(self.last_snap, 'kind', None) != 'center')
+            ref = self.source_viewport._valid_center_ref() if cue else None
+            if ref is not None or getattr(self, '_had_center_cue', False):
+                self.renderer.set_center_cue(ref[0].toTuple() if ref else None,
+                                             ref[1] if ref else 0., cursor or (0., 0.),
+                                             self.devicePixelRatioF())
+                self._had_center_cue = ref is not None
         if annotations or primitives or section_widgets or getattr(self, "_had_overlay", False):
             from views.wgpu_overlay import rasterize, pixels
             before = time.perf_counter()
@@ -823,7 +854,7 @@ class MetalView(ViewNavigation):
         if (source is None or packed is None or not len(packed.instances)
                 or self.tools.mode == 'mesh' or getattr(self, 'preview_faces', None)):
             return
-        from views.viewport import DocumentInteraction
+        from views.document_interaction import DocumentInteraction
         try:
             refused = DocumentInteraction._depth_fit_refused(source)
         except Exception:
@@ -837,7 +868,7 @@ class MetalView(ViewNavigation):
         """R3c-2a: reuse GL's frame, brackets and symbols at Metal's size."""
         from types import SimpleNamespace
         from PySide6.QtGui import QPainter
-        from views.viewport import DocumentInteraction
+        from views.document_interaction import DocumentInteraction
         context = SimpleNamespace(scene=self.scene, camera=self.camera,
                                   width=self.width, height=self.height)
         context.section_plane_frame = lambda sp: DocumentInteraction.section_plane_frame(context, sp)
@@ -864,21 +895,15 @@ class MetalView(ViewNavigation):
         width_px, height_px = int(width_px), int(height_px)
         if width_px <= 0 or height_px <= 0:
             raise ValueError("Image dimensions must be positive")
+        if hasattr(self._shared, '_content_token'):
+            self._shared.set_scene(source.scene)
         if self.packed is None:
             self.packed = pack_scene(source.scene, getattr(source, 'view_tint', None),
                                      focus=source.camera.target.toTuple())
         if self.packed.model_translations is not None:
             self._sync_scene_camera()
-        if self.renderer is None:
-            import ingetrazo_render
-            from core import black_box
-            black_box.install_panic_log(ingetrazo_render)
-            self.renderer = ingetrazo_render.Renderer(
-                int(self.winId()), max(1, self.width()), max(1, self.height()), 1.)
-            self.packed.upload(self.renderer)
-            self._scene_dirty = False
-        elif self._scene_dirty:
-            self._upload()
+        if self.renderer is None or self._scene_dirty:
+            self._upload(force=True)
         camera = copy(self.camera if self.packed.model_translations is not None else source.camera)
         camera.aspect = width_px / height_px
         view, projection = camera.view_matrix(), camera.projection_matrix()
@@ -887,6 +912,8 @@ class MetalView(ViewNavigation):
                                 edit_rest_fade=getattr(source, 'edit_rest_fade', .75),
                                 soft_shadows=getattr(source, '_soft_shadows', 0),
                                 camera=camera)
+        from views.wgpu_references import sync as sync_references
+        sync_references(self, payload)
         payload['transparent_background'] = transparent
         payload['edge_width'] = float(getattr(source, '_export_edge_px', 1))
         payload['profile_width'] = float(getattr(source, '_export_profile_px', 1))
@@ -905,7 +932,8 @@ class MetalView(ViewNavigation):
         billboards = getattr(self, '_billboards', None)
         if billboards is not None:
             rows['world'][billboards.ids] = billboards.base
-        Billboards(capture).update(camera)
+        if billboards is not None:
+            Billboards(capture, billboards.ids).update(camera)
         # Capture rows may change tint/visibility only. Install the camera-facing
         # matrices through the resident API, restoring them even on failure.
         billboard_ids = [] if billboards is None else billboards.ids.tolist()
@@ -920,7 +948,8 @@ class MetalView(ViewNavigation):
             self.renderer.set_section_geometry(data)
             pixels = bytes(self.renderer.render_image(
                 width_px, height_px, tuple(view.data()), tuple(projection.data()), payload,
-                rows.view(np.uint8).reshape(-1),
+                rows.view(np.uint8).reshape(-1) if len(rows) else None,
+                **({'sharp_shadows': True} if sharp_shadows and payload['shadows'] else {}),
                 # A far clip set by hand; otherwise reverse-Z reaches to
                 # infinity (stand-in renderers need not know the flag).
                 **({'far_clip': True} if getattr(camera, 'clip_far', None) is not None else {})))
@@ -987,6 +1016,7 @@ class MetalView(ViewNavigation):
         start = time.perf_counter()
         self.tools.sync()
         # Select's priority walk already queries the row for its group pick.
+        self._cue_cursor = (x, y)
         self.hovered_row = None
         selecting = self.tools.mode == 'select' and not getattr(self.source_viewport, 'nav_mode', None)
         if not selecting or self.source_viewport is None:
@@ -1080,7 +1110,7 @@ class MetalView(ViewNavigation):
             inference._dwell_on(point)
         self.sync_selection()
         self.hover_ms = (time.perf_counter()-start)*1000
-        from views.viewport import _PERF, _plog
+        from views.document_interaction import _PERF, _plog
         if _PERF:
             _plog("hover", self.hover_ms, extra="renderer=wgpu id-local", floor=0.)
         self.update()
@@ -1113,7 +1143,7 @@ class MetalView(ViewNavigation):
         hidden_geometry(self)
 
     def _group_obb(self, group):
-        from views.viewport import DocumentInteraction
+        from views.document_interaction import DocumentInteraction
         shared = self._shared.__dict__
         boxes = shared.setdefault('_container_boxes', {})
         if group not in boxes:
@@ -1145,11 +1175,11 @@ class MetalView(ViewNavigation):
                 self._container_box_rows[group] = rows
 
     def _edit_group_box_corners(self):
-        from views.viewport import DocumentInteraction
+        from views.document_interaction import DocumentInteraction
         return DocumentInteraction._edit_group_box_corners(self)
 
     def edit_group_box_contains_pixel(self, x, y):
-        from views.viewport import DocumentInteraction
+        from views.document_interaction import DocumentInteraction
         return DocumentInteraction.edit_group_box_contains_pixel(self, x, y)
 
     def _leave_edit_on_empty_click(self, x, y, modifiers):
@@ -1395,7 +1425,7 @@ class MetalView(ViewNavigation):
             self.tools.hover(event)
         elif event.buttons() & Qt.LeftButton and (self.tools.mode == 'select' or mode == 'zoom_window'):
             from views import wgpu_overlay
-            from views.viewport import DocumentInteraction
+            from views.document_interaction import DocumentInteraction
             zoom = mode == 'zoom_window'
             # GL shows a selection box only past the drag threshold (a
             # click that jitters a pixel is no box); Zoom Window at once.
@@ -1534,7 +1564,7 @@ class MetalView(ViewNavigation):
         self.update()
 
     def _is_triple_click(self, event):
-        from views.viewport import DocumentInteraction
+        from views.document_interaction import DocumentInteraction
         return DocumentInteraction._is_triple_click(self, event)
 
     def event(self, event):
@@ -1553,7 +1583,7 @@ class MetalView(ViewNavigation):
                 return True
         if event.type() == QEvent.ShortcutOverride and hasattr(self, 'tools'):
             mode = self.tools.sync()
-            from views.viewport import DocumentInteraction
+            from views.document_interaction import DocumentInteraction
             target = self.tools if mode == 'mesh' else self.source_viewport
             if target is not None:
                 buffer = self.tools.value_buffer if mode == 'mesh' else target._value_buffer
@@ -1654,7 +1684,7 @@ class MetalView(ViewNavigation):
         return point if seen == 'hit' else None
 
     def _orbit_pivot_at(self, x, y):
-        from views.viewport import _ray_aabb_span
+        from views.document_interaction import _ray_aabb_span
         seen, point = self._depth_world_at(x, y)
         if seen == 'hit':
             return point
@@ -1667,7 +1697,7 @@ class MetalView(ViewNavigation):
 
     @_tool_frame
     def wheelEvent(self, event):
-        from views.viewport import DocumentInteraction
+        from views.document_interaction import DocumentInteraction
         self._invert_wheel = getattr(self.source_viewport, '_invert_wheel', False)
         DocumentInteraction.wheelEvent(self, event)
         self.update()
@@ -1694,6 +1724,10 @@ class MetalView(ViewNavigation):
 
     def closeEvent(self, event):
         self._closed = True
+        for name in ('_refresh_timer', '_repaint_timer', '_resize_timer', '_settle_timer'):
+            timer = getattr(self, name, None)
+            if timer is not None:
+                timer.stop()
         tracker = getattr(self, '_instance_updates', None)
         if tracker is not None and tracker.unsubscribe is not None:
             tracker.unsubscribe()
@@ -1701,7 +1735,13 @@ class MetalView(ViewNavigation):
         if hasattr(self, '_inference_worker'):
             self._inference_worker.shutdown(wait=False, cancel_futures=True)
         super().closeEvent(event)
+        self._instance_updates = self._inference_future = self.inference_index = None
+        self.source_viewport = self._tool_source = self.scene = self.packed = None
+        self._billboards = self._reference_cache = None
 
 
 class WgpuView(MetalView, QWidget):
-    """Qt presentation surface for the shared Metal view."""
+    """Qt presentation surface for a document."""
+
+    def _can_create_surface(self):
+        return self.testAttribute(Qt.WA_PaintOnScreen)

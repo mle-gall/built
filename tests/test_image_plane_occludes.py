@@ -41,8 +41,8 @@ def test_a_box_below_an_opaque_image_does_not_paint_over_it(tmp_path):
         win.show()
         _app.processEvents()
         vp = win.viewport
-        if getattr(vp, "_gl", None) is None or not vp.isValid():
-            pytest.skip("no OpenGL context on this platform")
+        if not vp.keys_stand_in._can_create_surface():
+            pytest.skip("the Qt platform has no native GPU surface")
         scene = vp.scene
         V = QVector3D
         pic = QImage(8, 8, QImage.Format_RGBA8888)

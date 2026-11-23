@@ -58,7 +58,7 @@ def test_altgr_still_types(vp):
 
 
 def test_an_absurd_number_is_refused(vp):
-    from views.viewport import _parse_number
+    from views.document_interaction import _parse_number
     assert _parse_number("111111111111111111111112111") is None   # ~1e26
     assert _parse_number("8900000") == 8900000.0         # a UTM northing
     # Typed and committed, it never reaches the tool.

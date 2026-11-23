@@ -726,7 +726,7 @@ class ShellWindow(QObject):
             return
         self.viewport.set_active_tool(tool)
         display = self._doc.stand_in
-        display.tools.sync()
+        display.tools.pick_up()
         display.set_scene(self.viewport.scene)
         display.update()
         for k, action in self._tool_actions.items():

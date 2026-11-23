@@ -153,7 +153,7 @@ def _offscreen_vp():
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PySide6.QtWidgets import QApplication
     QApplication.instance() or QApplication([])
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport(None)
     vp.resize(1000, 600)
     vp.camera.set_aspect(1000, 600)
@@ -220,7 +220,7 @@ def test_a_groups_face_offers_its_centre_where_the_group_stands():
 def test_face_center_is_named_everywhere_it_must_be():
     from core.inference import InferenceEngine
     from tools.scale import ScaleTool
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     import json
     import pathlib
     assert "face_center" in Viewport._SNAP_LABELS

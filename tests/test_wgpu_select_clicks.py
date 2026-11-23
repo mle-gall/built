@@ -45,7 +45,7 @@ class _Renderer:
 
 @pytest.fixture
 def view():
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     from tools.select import SelectTool
     scene = Scene()
     mesh = Mesh()

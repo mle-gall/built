@@ -217,7 +217,7 @@ def test_pack_never_builds_plan_and_calls_native_once(tmp_path, monkeypatch):
 
 def test_memoised_placement_state_matches_viewport():
     from types import SimpleNamespace
-    from views.viewport import _paint_of
+    from views.document_interaction import _paint_of
     from views.wgpu_scene import _placement_state
     groups = [Group(triangle()) for _ in range(12)]
     for i, g in enumerate(groups):

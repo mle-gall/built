@@ -39,7 +39,7 @@ def win():
 def _top(win):
     cell = next(c for c in win._doc.view_grid.cells if c.view == "top")
     vp = cell.viewport
-    QTest.mouseClick(vp, Qt.LeftButton, Qt.NoModifier,
+    QTest.mouseClick(vp.keys_stand_in, Qt.LeftButton, Qt.NoModifier,
                      QPoint(vp.width() - 6, vp.height() - 6))
     QApplication.processEvents()
     assert vp is not win.viewport           # not the window's own view

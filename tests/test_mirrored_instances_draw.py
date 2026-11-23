@@ -18,6 +18,7 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from tests.controller_surface import live_image
 import pytest
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 from PySide6.QtWidgets import QApplication
@@ -37,8 +38,8 @@ def test_a_mirrored_placement_draws_instanced_with_its_front_colour():
         for _ in range(10):
             _app.processEvents()
         vp = win.viewport
-        if getattr(vp, "_gl", None) is None or not vp.isValid():
-            pytest.skip("no OpenGL context on this platform")
+        if not vp.keys_stand_in._can_create_surface():
+            pytest.skip("the Qt platform has no native GPU surface")
         sc = vp.scene
         sc.guides.clear()
         proto = Mesh()
@@ -60,11 +61,11 @@ def test_a_mirrored_placement_draws_instanced_with_its_front_colour():
         vp.camera.fit_to(V(-4, -2, 0), V(4, 2, 0))
         for _ in range(5):
             _app.processEvents()
-        img = vp.grabFramebuffer()
-        lotes = getattr(vp, "_frame_instanced", {}) or {}
-        assert any(k[2] for k in lotes), "the mirrored placement is instanced"
-        assert not any(id(g) in getattr(vp, "_inst_chunks", {}) for g in sc.groups), \
-            "and no placement was baked to world coordinates"
+        img = live_image(vp)
+        packed = vp.keys_stand_in.packed
+        placements = [i for i, group in enumerate(packed.groups) if group is not None and group.mesh is proto]
+        assert len(placements) == 2
+        assert len(set(packed.instances['info'][placements, 0])) == 1
         dpr = img.width() / max(vp.width(), 1)
         for x in (-2.0, 2.0):
             px = vp._world_to_pixel(V(x, 0.5, 0))     # off the red axis
@@ -90,96 +91,6 @@ def _prisma(n=12, r=1.0, h=2.0):
         if abs(e.a.z() - e.b.z()) > 1e-9:
             e.soft = True
     return m
-
-
-def _baked_silhouette(vp, g, eye):
-    import numpy as np
-    ch = vp._group_chunk(g)
-    e_np = np.array([eye.x(), eye.y(), eye.z()])
-    s0 = np.einsum("ij,ij->i", ch["soft_n0"], ch["soft_c0"] - e_np)
-    s1 = np.einsum("ij,ij->i", ch["soft_n1"], ch["soft_c1"] - e_np)
-    mask = ch["soft_single"] | ((s0 < 0) != (s1 < 0))
-    return ch["soft_pts"].reshape(-1, 6)[mask]
-
-
-def test_a_placements_silhouette_in_local_space_matches_the_baked_one():
-    """Same edges as baking the placement to world coordinates — rotated,
-    mirrored and non-uniformly scaled — without baking it."""
-    import numpy as np
-    from core.group import Group
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        vp = win.viewport
-        proto = _prisma()
-        mats = []
-        for sx, ang, sz in ((1, 0, 1), (-1, 30, 1), (1, 75, 2.5), (-1, 200, 0.4)):
-            m = QMatrix4x4()
-            m.translate(3.0 * len(mats), 1.0, 0.5)
-            m.rotate(ang, 0.3, 0.2, 1.0)
-            m.scale(sx, 1.3, sz)
-            mats.append(m)
-        gs = []
-        for m in mats:
-            g = Group(proto, name="Columna")
-            g.xform = m
-            vp.scene.groups.append(g)
-            gs.append(g)
-        vp.scene.version += 1
-        for eye in (V(20, -15, 8), V(-6, 9, 3), V(4, 1, 30)):
-            for g in gs:
-                got = np.frombuffer(vp._instance_silhouette(g, eye, None),
-                                    np.float32).reshape(-1, 6)
-                ref = _baked_silhouette(vp, g, eye)
-                assert len(got) == len(ref) > 0
-                key = lambda a: sorted(map(tuple, np.round(a, 3)))
-                assert key(got) == key(ref)
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
-
-
-def test_the_batched_silhouettes_match_one_placement_at_a_time():
-    """``_instanced_silhouettes`` (all placements of a prototype in one
-    NumPy pass, #158) gives the same edges as ``_instance_silhouette``,
-    placement by placement — rotated, mirrored, scaled, and culled."""
-    import numpy as np
-    from core.group import Group
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        vp = win.viewport
-        protos = [_prisma(12), _prisma(7, r=0.5, h=3.0)]
-        gs = []
-        for k in range(14):
-            m = QMatrix4x4()
-            m.translate(2.5 * k, (k % 3) * 1.7, 0.2 * k)
-            m.rotate(23.0 * k, 0.1 * (k % 2), 0.3, 1.0)
-            m.scale(-1 if k % 4 == 1 else 1, 1.0 + 0.1 * k, 0.6 + 0.2 * (k % 3))
-            g = Group(protos[k % 2], name=f"P{k}")
-            g.xform = m
-            vp.scene.groups.append(g)
-            gs.append(g)
-        vp.scene.version += 1
-
-        def rows(raw):
-            a = np.frombuffer(raw, np.float32).reshape(-1, 6)
-            return sorted(map(tuple, np.round(a, 3)))
-
-        for eye in (V(20, -15, 8), V(-6, 9, 3), V(4, 1, 30)):
-            got, rest = vp._instanced_silhouettes(gs, eye, None)
-            assert rest == []
-            ref = b"".join(vp._instance_silhouette(g, eye, None) for g in gs)
-            assert rows(got) == rows(ref) and len(rows(got)) > 0
-        # with a cull: a plane keeping x < 10 only
-        planes = [(-1.0, 0.0, 0.0, 10.0)]
-        got, _ = vp._instanced_silhouettes(gs, V(5, -20, 5), planes)
-        ref = b"".join(vp._instance_silhouette(g, V(5, -20, 5), planes)
-                       for g in gs)
-        assert rows(got) == rows(ref)
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
 
 
 def test_the_placements_signature_survives_an_orbit_and_follows_an_edit():

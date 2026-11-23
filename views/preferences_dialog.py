@@ -637,7 +637,7 @@ class PreferencesDialog(QDialog):
 
         # Soft sun shadows (#1281): off by default, they cost the graphics
         # card more on every frame while the sun casts shadows.
-        from views.viewport import SOFT_SHADOW_SPREAD
+        from views.document_interaction import SOFT_SHADOW_SPREAD
         row = QHBoxLayout()
         self._soft_shadows = QCheckBox(tr("Soft sun shadows"))
         self._soft_shadows.setToolTip(tr(
@@ -733,15 +733,8 @@ class PreferencesDialog(QDialog):
                 "Takes effect at the next start."))
         form.addRow("", self._rust)
         from core import renderer_settings
-        self._renderer = QComboBox()
-        self._renderer.addItem(tr("OpenGL"), "opengl")
-        self._renderer.addItem(tr("Metal via wgpu (experimental)"), "wgpu")
-        self._renderer.setCurrentIndex(max(0, self._renderer.findData(
-            _gs.value(renderer_settings.SETTING, renderer_settings.DEFAULT_RENDERER, st))))
-        self._renderer.setToolTip(tr("Applies to documents opened after this change."))
-        form.addRow(tr("Viewport renderer:"), self._renderer)
         cap = renderer_settings.capability()
-        self._renderer_status = QLabel(renderer_settings.status_text(st=st))
+        self._renderer_status = QLabel(renderer_settings.status_text())
         self._renderer_status.setWordWrap(True)
         form.addRow(tr("Available renderer:"), self._renderer_status)
         form.addRow(tr("Runtime:"), QLabel(
@@ -1322,7 +1315,7 @@ class PreferencesDialog(QDialog):
         if self._glass is not None:
             self._glass.setChecked(True)
         pick(self._rest, "fade")
-        from views.viewport import EDIT_REST_FADE
+        from views.document_interaction import EDIT_REST_FADE
         self._rest_fade.setValue(round(EDIT_REST_FADE * 100))
         self._autosave.setChecked(True)
         self._autosave_min.setValue(5)
@@ -1346,8 +1339,6 @@ class PreferencesDialog(QDialog):
         pick(self._icon_px, default_toolbar_icon_px())
         pick(self._ext_menus, "auto")
         pick(self._platform, AUTO)
-        from core import renderer_settings
-        pick(self._renderer, renderer_settings.DEFAULT_RENDERER)
         if self._rust.isEnabled():
             self._rust.setChecked(_native.DEFAULT == "1")
 
@@ -1420,8 +1411,6 @@ class PreferencesDialog(QDialog):
         self._save_figure(st)
         apply_undo_steps(self._window, self._undo_steps.value(), st)
         _gs.set_value("platform", self._platform.currentData(), st)
-        from core import renderer_settings
-        _gs.set_value(renderer_settings.SETTING, self._renderer.currentData(), st)
         if self._rust.isEnabled() and apply_rust_engine(
                 self._rust.isChecked(), st):
             QMessageBox.information(

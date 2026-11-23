@@ -40,12 +40,8 @@ def _box(mesh, x0=0.0, y0=0.0, s=1.0, h=1.0):
 
 
 def _paints(vp) -> None:
-    """The viewport renders an image where a GL context exists. Where the
-    offscreen platform has none — the release runner: «QOpenGLWidget:
-    Failed to create context», and the AppImage job of v0.4.6 fell on
-    exactly this line — the model-side assertions around it are what
-    the test is for, so it just does not paint."""
-    if getattr(vp, "_gl", None) is None or not vp.isValid():
+    """Render the document on platforms that can create a native surface."""
+    if not vp.keys_stand_in._can_create_surface():
         return
     img = vp.render_image(160, 120, overlays=False)
     assert img is not None and not img.isNull()
@@ -181,24 +177,26 @@ def test_ghost_pass_draws_and_unhide_selected_brings_them_back():
         vp.scene.select([g, face])
         win._on_hide()
         assert g.hidden and face.attrs.get("hidden")
-        if getattr(vp, "_gl", None) is None or not vp.isValid():
-            # The ghost pass builds GL buffers; the release runner has no
-            # context (the second thing the v0.4.6 AppImage job fell on).
-            pytest.skip("no OpenGL context on this platform")
-        assert not vp._sync_hidden_ghosts()             # view off: nothing
+        if not vp.keys_stand_in._can_create_surface():
+            pytest.skip("the Qt platform has no native GPU surface")
+        from tests.controller_surface import live_image
+        from views.wgpu_scene import OBJECT_HIDDEN
+        live_image(vp)
+        assert vp.keys_stand_in.packed.reveal_hidden == (False, False)
         win._act_hidden_objects.setChecked(True)
         win._act_hidden_geometry.setChecked(True)
-        assert vp.scene.show_hidden_objects and vp.scene.show_hidden_geometry
-        assert vp._sync_hidden_ghosts()
-        n_vcol, n_edges = vp._ghost_counts
-        assert n_vcol == 6 * 2 * 3 + 2 * 3          # the box's faces + one face
-        assert n_edges == 12 * 2                     # the object's edges, dotted
-        _paints(vp)
+        live_image(vp)
+        packed = vp.keys_stand_in.packed
+        assert packed.reveal_hidden == (True, True)
+        assert any(row["info"][2] & OBJECT_HIDDEN for row in packed.instances)
+        assert sum(packed.hidden_commands["count"]) > 0
         # selectable again → Unhide ▸ Selected
         vp.scene.select([g, face])
         win._on_unhide_selected()
         assert not g.hidden and not face.attrs.get("hidden")
-        assert not vp._sync_hidden_ghosts()
+        live_image(vp)
+        packed = vp.keys_stand_in.packed
+        assert not any(row["info"][2] & OBJECT_HIDDEN for row in packed.instances)
     finally:
         win._saved_version = vp.scene.version
         win.close()

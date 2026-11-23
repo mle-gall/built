@@ -7,8 +7,8 @@ from PySide6.QtCore import QUrl
 from georef.datum import SceneDatum
 from georef.tile_fetcher import TileFetcher
 from georef.tiles import PRESETS, TileCache, TileLayer
-import views.viewport as viewport_module
-from views.viewport import Viewport
+import views.document_interaction as viewport_module
+from tests.controller_surface import ControllerSurface as Viewport
 
 
 class _QueuedTimer:
@@ -40,8 +40,12 @@ def test_missing_tiles_leave_paint_before_starting_network(monkeypatch):
     fetcher = _Fetcher()
     monkeypatch.setattr(viewport, "_ensure_tile_fetcher", lambda: fetcher)
 
-    x, y = layer.flat_tiles(datum)[0]
-    assert viewport._tile_texture(layer, x, y) is None
+    from types import SimpleNamespace
+    from views.wgpu_references import sync
+    display = SimpleNamespace(source_viewport=viewport, renderer=None,
+                              packed=SimpleNamespace(origin=(0., 0., 0.)),
+                              _shared=SimpleNamespace())
+    sync(display, {})
     assert fetcher.requests == []
     assert len(_QueuedTimer.callbacks) == 1
 

@@ -88,7 +88,7 @@ def test_clipping_set_by_hand_wins():
 def test_unknown_bounds_are_cached_and_empty_groups_do_not_block_fit(empty):
     from types import SimpleNamespace as NS
     from core.mesh import Mesh
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     mesh = Mesh()
     if not empty:
         mesh.add_face([V(0, 0, 0), V(1, 0, 0), V(0, 1, 0)])
@@ -120,7 +120,7 @@ def test_unknown_bounds_are_cached_and_empty_groups_do_not_block_fit(empty):
 @pytest.mark.parametrize('two_point', [False, True])
 def test_depth_fit_keeps_all_editing_rays_exact(two_point):
     from types import SimpleNamespace as NS
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     c = camera()
     c.two_point = two_point
     vp = NS(camera=c, width=lambda: 1124, height=lambda: 835)
@@ -155,65 +155,3 @@ def test_metal_view_fits_the_shown_box_and_refuses_a_mesh_preview():
     source.scene.guides = [object()]
     WgpuView._fit_depth(view)
     assert c.near_plane() == .1
-
-
-@pytest.fixture
-def gl_view():
-    if sys.platform != 'darwin' or os.environ.get('QT_QPA_PLATFORM') != 'cocoa':
-        pytest.skip('GL raster checks require Cocoa GL')
-    from views.main_window import MainWindow
-    win = MainWindow()
-    win.resize(700, 700)
-    win.show()
-    QApplication.processEvents()
-    vp = win.viewport
-    if not vp.isValid():
-        win.close()
-        pytest.skip('requires Cocoa GL')
-    try:
-        yield vp
-    finally:
-        win._saved_content = vp.scene.content_version
-        win.close()
-
-
-@pytest.mark.parametrize('fit', [True, False])
-def test_gl_thin_plates_never_show_their_back_face(gl_view, monkeypatch, fit):
-    """The plates of tests/test_metal_thin_walls.py on the GL view, faces
-    only (the outline is not what fights). Without the fit (``fit=False``)
-    the table is the trunk's, reported but not asserted."""
-    from PySide6.QtGui import QImage
-    import tests.test_metal_thin_walls as plates
-    vp = gl_view
-    vp.scene.show_axes = False
-    vp.scene.display_style.edges = vp.scene.display_style.profiles = False
-    if not fit:
-        monkeypatch.setattr(vp, '_fit_scene_depth',
-                            lambda: setattr(vp.camera, '_depth_range', None))
-
-    def shot(distance, t, yaw, **kw):
-        scene = plates.plate_scene(distance, t, **kw)
-        vp.scene.mesh.clear()
-        for f in scene.loose_mesh.faces:
-            vp.scene.mesh.add_face([getattr(v, "position", v) for v in f.vertices])
-        vp.scene.version += 1
-        cam = plates.camera_at(distance, yaw)
-        for name in ('target', 'distance', 'yaw', 'pitch'):
-            setattr(vp.camera, name, getattr(cam, name))
-        image = vp.render_image(256, 256, overlays=False).convertToFormat(QImage.Format_RGB32)
-        return np.frombuffer(image.constBits(), np.uint8).reshape(256, 256, 4)[..., 2::-1].astype(int)
-
-    table = {}
-    for t in plates.THICKNESS_MM:
-        for d in plates.DISTANCE_M:
-            total = 0
-            for yaw in (-37.0, -37.01):
-                front = shot(d, t / 1000, yaw, bottom=False)
-                back = shot(d, t / 1000, yaw, top=False)
-                both = shot(d, t / 1000, yaw)
-                total += plates.count_back(front, back, both)
-            table[t, d] = total
-    if os.environ.get('THIN_WALLS_REPORT'):
-        print(f'\nGL back-colour pixels, fit={fit}', table)
-    if fit:
-        assert all(v == 0 for v in table.values()), table

@@ -19,7 +19,8 @@ if QApplication.instance() is None:
 
 from core.scene import Scene  # noqa: E402
 from formats import igz  # noqa: E402
-from views.viewport import Viewport, _parse_length_field  # noqa: E402
+from views.document_interaction import _parse_length_field
+from tests.controller_surface import ControllerSurface as Viewport
 
 
 @pytest.mark.parametrize("typed", ["9" * 400, "9" * 400 + ";1", "1;" + "9" * 400,

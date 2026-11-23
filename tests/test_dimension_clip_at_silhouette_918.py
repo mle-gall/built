@@ -14,6 +14,7 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from tests.controller_surface import live_image
 import pytest
 from ingetrazo_core import Vec3 as V
 from PySide6.QtWidgets import QApplication
@@ -51,9 +52,8 @@ def win():
         w.show()
         for _ in range(5):
             _app.processEvents()
-        if getattr(w.viewport, "_gl", None) is None \
-                or not w.viewport.isValid():
-            pytest.skip("no OpenGL context on this platform")
+        if not w.viewport.keys_stand_in._can_create_surface():
+            pytest.skip("the Qt platform has no native GPU surface")
         yield w
     finally:
         w._saved_version = w.viewport.scene.version
@@ -72,9 +72,7 @@ def _seen_length(vp, x_edge, left=False):
     else:
         _box(sc.mesh, x_edge, -0.1, 0, 3, 0.1, 3)
     sc.version += 1
-    vp.grabFramebuffer()
-    if getattr(vp, "_depth_snap", None) is None:
-        pytest.skip("this GL context gives no depth read-back")
+    live_image(vp)
     pen = _Pen()
     vp._draw_occluded_segment(pen, V(-2, 2, 1), V(2, 2, 1))
     return pen.length()

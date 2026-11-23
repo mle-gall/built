@@ -145,7 +145,7 @@ def _viewport_with_a_cut():
     from core.history import History, PlaceSectionPlaneCommand
     from core.section import SectionPlane
     from tests.test_pushpull_ux import _cube
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport(None)
     hist = History(vp.scene)
     _cube(vp.scene, hist, size=4.0, height=3.0)

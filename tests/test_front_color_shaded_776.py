@@ -53,8 +53,8 @@ def win():
         w.show()
         _app.processEvents()
         vp = w.viewport
-        if getattr(vp, "_gl", None) is None or not vp.isValid():
-            pytest.skip("no OpenGL context on this platform")
+        if not vp.keys_stand_in._can_create_surface():
+            pytest.skip("the Qt platform has no native GPU surface")
         yield w
     finally:
         w._saved_version = w.viewport.scene.version
@@ -147,7 +147,7 @@ def test_a_group_takes_it_and_a_painted_group_keeps_its_paint(win):
 
 def test_the_stock_white_bakes_nothing_new():
     from core.style import Style
-    from views.viewport import _front_tint
+    from views.document_interaction import _front_tint
     assert _front_tint(Style()) is None
     assert _front_tint(Style(face_mode="hidden_line",
                              front_color=(1, 0, 0))) is None

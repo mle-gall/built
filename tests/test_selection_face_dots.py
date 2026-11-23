@@ -26,15 +26,14 @@ def _viewport():
         app = QApplication([])
     elif not isinstance(app, QApplication):
         pytest.skip("another Qt application flavour is already running")
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport(None)
     vp.resize(800, 600)
     return vp
 
 
 def test_dot_colour_switches_on_orange_and_red_surfaces():
-    from views.viewport import (SELECTION_DOT_ALT_COLOR, SELECTION_DOT_COLOR,
-                                selection_dot_color)
+    from views.document_interaction import SELECTION_DOT_ALT_COLOR, SELECTION_DOT_COLOR, selection_dot_color
     assert selection_dot_color((0.96, 0.95, 0.925)) == SELECTION_DOT_COLOR
     assert selection_dot_color((0.62, 0.70, 0.78)) == SELECTION_DOT_COLOR
     assert selection_dot_color(None) == SELECTION_DOT_COLOR
@@ -45,7 +44,7 @@ def test_dot_colour_switches_on_orange_and_red_surfaces():
 
 
 def test_each_side_is_judged_against_its_own_paint():
-    from views.viewport import SELECTION_DOT_ALT_COLOR, SELECTION_DOT_COLOR
+    from views.document_interaction import SELECTION_DOT_ALT_COLOR, SELECTION_DOT_COLOR
     vp = _viewport()
     face = vp.scene.mesh.add_face([V(0, 0), V(1, 0), V(1, 1), V(0, 1)])
     # Default cream front, default blue-grey back: orange on both.
@@ -66,10 +65,11 @@ def test_selected_faces_are_split_into_runs_per_dot_colour():
     orange.attrs["color"] = (0.95, 0.45, 0.16)
     vp.scene.selection.update({plain, orange})
     vp.scene.version += 1
-    vp.show()
-    vp.grab()                                           # forces a GL frame
-    if vp._sel_faces_vbo is None:
-        pytest.skip("no GL context in this environment")
-    spans = vp._sel_faces_spans
-    assert len(spans) == 2
-    assert sum(n for *_c, _s, n in spans) == vp._sel_faces_count
+    from types import SimpleNamespace
+    from views.wgpu_scene import pack_scene, VERTEX
+    from views.wgpu_parity import face_marks
+    view = SimpleNamespace(scene=vp.scene, source_viewport=vp, camera=vp.camera,
+                           packed=pack_scene(vp.scene))
+    rgba = face_marks(view, [plain, orange]).view(VERTEX)['color']
+    assert len(rgba) == 12
+    assert len(set(map(tuple, rgba))) == 2

@@ -271,7 +271,7 @@ def _ring_area(f):
 
 def test_the_matte_light_is_the_viewport_s():
     from core.vista_caras import MATTE_LIGHT
-    from views.viewport import Viewport
+    from tests.controller_surface import ControllerSurface as Viewport
     light = Viewport._LIGHT
     assert np.allclose(MATTE_LIGHT, [light.x(), light.y(), light.z()])
 
@@ -1786,11 +1786,10 @@ def test_the_picture_of_the_selection_shows_the_selection_alone():
         vp.scene.selection.add(b)
         win._saved_version = vp.scene.version
         seen = []
-        real = vp.render_image
-
         def render(*args, **kw):
+            from PySide6.QtGui import QImage
             seen.append((a.hidden, b.hidden))
-            return real(*args, **kw)
+            return QImage(40, 30, QImage.Format_RGB32)
 
         vp.render_image = render
         text, _n = win.view_svg_builder().build(
